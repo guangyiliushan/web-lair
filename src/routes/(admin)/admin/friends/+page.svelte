@@ -230,8 +230,8 @@
 					<Input id="friend-desc" bind:value={formDescription} />
 				</div>
 				<div class="grid gap-1.5">
-					<label class="text-sm font-medium">类型</label>
-					<button type="button" class="flex h-10 w-full items-center justify-between gap-2 rounded-sm border bg-surface-card pl-3 pr-2 text-left text-sm hover:bg-muted/50">
+					<label for="friend-type" class="text-sm font-medium">类型</label>
+					<button id="friend-type" type="button" class="flex h-10 w-full items-center justify-between gap-2 rounded-sm border bg-surface-card pl-3 pr-2 text-left text-sm hover:bg-muted/50">
 						<span>{formType}</span>
 						<IconChevronDown class="size-4 shrink-0 text-muted-foreground" />
 					</button>

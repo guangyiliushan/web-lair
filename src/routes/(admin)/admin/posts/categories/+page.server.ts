@@ -42,7 +42,7 @@ export const actions: Actions = {
 		if (!name) return fail(400, { error: '分类名称不能为空' });
 		if (!slug) return fail(400, { error: 'Slug 不能为空' });
 
-		await db.insert(categories).values({ id: getSnowflake(), name, slug, type: 0 });
+		await db.insert(categories).values({ id: getSnowflake().nextId(), name, slug, type: 0 });
 		return { success: true };
 	},
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Button } from '$lib/components/ui/button';
 	import { Empty } from '$lib/components/ui/empty';
 	import * as MasterDetail from '$lib/components/admin/master-detail';
 	import IconTag from '@tabler/icons-svelte-runes/icons/tag';

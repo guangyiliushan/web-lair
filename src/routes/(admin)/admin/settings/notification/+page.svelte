@@ -41,12 +41,13 @@
 				<div class="space-y-4 rounded-lg border p-4">
 					<!-- emailEnabled -->
 					<div class="flex items-center justify-between gap-4">
-						<label class="text-sm">启用邮件通知</label>
+						<label for="notif-emailEnabled" class="text-sm">启用邮件通知</label>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.notification.emailEnabled)}
 							aria-label="启用邮件通知"
+						id="notif-emailEnabled"
 							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.emailEnabled}
 							class:bg-surface-inset={!s.notification.emailEnabled}
@@ -110,12 +111,13 @@
 
 					<!-- smtpTls -->
 					<div class="flex items-center justify-between gap-4">
-						<label class="text-sm">SMTP TLS</label>
+						<label for="notif-smtpTls" class="text-sm">SMTP TLS</label>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.notification.smtpTls)}
 							aria-label="SMTP TLS"
+						id="notif-smtpTls"
 							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.smtpTls}
 							class:bg-surface-inset={!s.notification.smtpTls}
@@ -147,12 +149,13 @@
 				<div class="space-y-4 rounded-lg border p-4">
 					<!-- barkEnabled -->
 					<div class="flex items-center justify-between gap-4">
-						<label class="text-sm">启用 Bark 推送</label>
+						<label for="notif-barkEnabled" class="text-sm">启用 Bark 推送</label>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.notification.barkEnabled)}
 							aria-label="启用 Bark 推送"
+						id="notif-barkEnabled"
 							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.barkEnabled}
 							class:bg-surface-inset={!s.notification.barkEnabled}
@@ -178,12 +181,13 @@
 
 					<!-- barkCommentNotify -->
 					<div class="flex items-center justify-between gap-4">
-						<label class="text-sm">评论通知</label>
+						<label for="notif-barkCommentNotify" class="text-sm">评论通知</label>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.notification.barkCommentNotify)}
 							aria-label="评论通知"
+						id="notif-barkCommentNotify"
 							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.barkCommentNotify}
 							class:bg-surface-inset={!s.notification.barkCommentNotify}
@@ -197,12 +201,13 @@
 
 					<!-- barkRateLimitNotify -->
 					<div class="flex items-center justify-between gap-4">
-						<label class="text-sm">触发频率限制时通知</label>
+						<label for="notif-barkRateLimitNotify" class="text-sm">触发频率限制时通知</label>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.notification.barkRateLimitNotify)}
 							aria-label="触发频率限制时通知"
+						id="notif-barkRateLimitNotify"
 							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.barkRateLimitNotify}
 							class:bg-surface-inset={!s.notification.barkRateLimitNotify}

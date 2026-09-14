@@ -35,12 +35,13 @@
 				<div class="space-y-4 rounded-lg border p-4">
 					<!-- baiduEnabled -->
 					<div class="flex items-center justify-between gap-4">
-						<label class="text-sm">启用百度推送</label>
+						<label for="search-baiduEnabled" class="text-sm">启用百度推送</label>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.search.baiduEnabled)}
 							aria-label="启用百度推送"
+						id="search-baiduEnabled"
 							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.search.baiduEnabled}
 							class:bg-surface-inset={!s.search.baiduEnabled}
@@ -66,12 +67,13 @@
 				<div class="space-y-4 rounded-lg border p-4">
 					<!-- bingEnabled -->
 					<div class="flex items-center justify-between gap-4">
-						<label class="text-sm">启用 Bing 推送</label>
+						<label for="search-bingEnabled" class="text-sm">启用 Bing 推送</label>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.search.bingEnabled)}
 							aria-label="启用 Bing 推送"
+						id="search-bingEnabled"
 							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.search.bingEnabled}
 							class:bg-surface-inset={!s.search.bingEnabled}
