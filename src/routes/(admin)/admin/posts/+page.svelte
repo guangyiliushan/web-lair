@@ -153,7 +153,6 @@
 			selectedIds = [...selectedIds, id];
 		}
 	}
-
 </script>
 
 <svelte:head>
@@ -175,17 +174,22 @@
 				onchange={toggleSelectAll}
 			/>
 		</label>
-		<form class="relative flex h-full min-w-0 flex-1 items-center self-stretch" onsubmit={(e) => e.preventDefault()}>
-			<IconSearch class="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+		<form
+			class="relative flex h-full min-w-0 flex-1 items-center self-stretch"
+			onsubmit={(e) => e.preventDefault()}
+		>
+			<IconSearch
+				class="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
+			/>
 			<input
 				type="text"
 				placeholder="搜索标题或正文"
-				class="h-7 w-full border-0 bg-transparent pl-8 pr-0 text-xs outline-none placeholder:text-muted-foreground focus:ring-0"
+				class="h-7 w-full border-0 bg-transparent pr-0 pl-8 text-xs outline-none placeholder:text-muted-foreground focus:ring-0"
 				bind:value={searchQuery}
 			/>
 		</form>
 		<!-- 数据列占位 — 与表格 w-44 对齐 -->
-			<div class="hidden w-44 xl:block"></div>
+		<div class="hidden w-44 xl:block"></div>
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
@@ -236,9 +240,13 @@
 		<!-- 操作列占位 — 与表格 w-20 对齐 -->
 		<div class="w-20"></div>
 		<!-- 分隔符和刷新按钮：绝对定位，不参与 flex 布局 -->
-		<div class="absolute right-0 top-0 flex h-full items-center pr-2">
+		<div class="absolute top-0 right-0 flex h-full items-center pr-2">
 			<Separator orientation="vertical" class="h-3.5" />
-			<RefreshButton onclick={() => { /* TODO: refresh data */ }} />
+			<RefreshButton
+				onclick={() => {
+					/* TODO: refresh data */
+				}}
+			/>
 		</div>
 	</div>
 
@@ -250,7 +258,7 @@
 				<p class="text-sm text-muted-foreground">还没有创建任何博文，点击上方按钮开始创作吧</p>
 			</div>
 			<div class="mt-4">
-				<Button href="/admin/posts/new">
+				<Button href="/admin/posts/edit">
 					<IconPlus data-icon="inline-start" />
 					新建博文
 				</Button>
@@ -273,17 +281,25 @@
 							<Table.Cell class="max-w-0 whitespace-normal">
 								<div class="flex min-w-0 flex-col gap-1">
 									<a
-										href="/admin/posts/{post.id}/edit"
-										class="block max-w-lg font-medium hover:text-primary lg:truncate line-clamp-2 lg:line-clamp-none"
+										href="/admin/posts/edit?id={post.id}"
+										class="line-clamp-2 block max-w-lg font-medium hover:text-primary lg:line-clamp-none lg:truncate"
 									>
 										{post.title}
 									</a>
 									<!-- 紧凑模式元信息行：lg 以下显示，sm 以下含时间 -->
-									<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground sm:gap-x-3 xl:hidden">
+									<div
+										class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground sm:gap-x-3 xl:hidden"
+									>
 										<span class="font-mono">{post.category}</span>
-										<span class="inline-flex items-center gap-1"><IconEye class="size-3" />{post.views}</span>
-										<span class="inline-flex items-center gap-1"><IconMessage class="size-3" />{post.comments}</span>
-										<span class="inline-flex items-center gap-1"><IconThumbUp class="size-3" />{post.likes}</span>
+										<span class="inline-flex items-center gap-1"
+											><IconEye class="size-3" />{post.views}</span
+										>
+										<span class="inline-flex items-center gap-1"
+											><IconMessage class="size-3" />{post.comments}</span
+										>
+										<span class="inline-flex items-center gap-1"
+											><IconThumbUp class="size-3" />{post.likes}</span
+										>
 										<span class="sm:hidden">{post.updatedAt}</span>
 									</div>
 								</div>
@@ -311,104 +327,98 @@
 								{post.updatedAt}
 							</Table.Cell>
 							<Table.Cell class="w-20 text-right">
-										<div class="flex items-center justify-end gap-1">
-											<Button
-												variant="ghost"
-												size="icon"
-											class="size-8"
-											onclick={() => window.open(`/${post.slug}`, '_blank')}
-										>
-											<IconExternalLink class="size-4" />
-										</Button>
-										<Button
-											variant="ghost"
-											size="icon"
-											class="size-8"
-											href="/admin/posts/{post.id}/edit"
-										>
-											<IconPencil class="size-4" />
-										</Button>
-										<!-- 桌面/平板：三点菜单 -->
-										<span class="hidden sm:contents">
-											<DropdownMenu.Root>
-												<DropdownMenu.Trigger>
-													{#snippet child({ props })}
-														<Button variant="ghost" size="icon" class="size-8" {...props}>
-															<IconDots class="size-4" />
-														</Button>
-													{/snippet}
-												</DropdownMenu.Trigger>
-												<DropdownMenu.Content align="end">
-													<DropdownMenu.Group>
-														<DropdownMenu.Item>
-															{#snippet child({ props })}
-																<a href="/admin/posts/{post.id}/edit" {...props}>
-																	<IconPencil data-icon="inline-start" />
-																	编辑
-																</a>
-															{/snippet}
-														</DropdownMenu.Item>
-														<DropdownMenu.Item
-															onclick={() => window.open(`/${post.slug}`, '_blank')}
-														>
-															<IconExternalLink data-icon="inline-start" />
-															在新窗口打开
-															<DropdownMenu.Shortcut>⌘↵</DropdownMenu.Shortcut>
-														</DropdownMenu.Item>
-													</DropdownMenu.Group>
-													<DropdownMenu.Separator />
-													<DropdownMenu.CheckboxItem checked={post.status === 'published'}>
-														已发布
-													</DropdownMenu.CheckboxItem>
-													<DropdownMenu.CheckboxItem checked={false}>
-														<IconPin data-icon="inline-start" />
-														置顶
-													</DropdownMenu.CheckboxItem>
-													<DropdownMenu.Sub>
-														<DropdownMenu.SubTrigger>
-															修改分类
-														</DropdownMenu.SubTrigger>
-														<DropdownMenu.SubContent>
-															<DropdownMenu.Item>Technology</DropdownMenu.Item>
-															<DropdownMenu.Item>Programming</DropdownMenu.Item>
-															<DropdownMenu.Item>Experience</DropdownMenu.Item>
-														</DropdownMenu.SubContent>
-													</DropdownMenu.Sub>
-													<DropdownMenu.Separator />
-													<DropdownMenu.Group>
-														<DropdownMenu.Item>
-															<IconCopy data-icon="inline-start" />
-															复制链接
-														</DropdownMenu.Item>
-														<DropdownMenu.Item>
-															<IconHash data-icon="inline-start" />
-															复制 ID
-														</DropdownMenu.Item>
-														<DropdownMenu.Item>
-															复制 slug
-														</DropdownMenu.Item>
-													</DropdownMenu.Group>
-													<DropdownMenu.Separator />
-													<DropdownMenu.Group>
-														<DropdownMenu.Item variant="destructive">
-															<IconTrash data-icon="inline-start" />
-															删除
-															<DropdownMenu.Shortcut>⌫</DropdownMenu.Shortcut>
-														</DropdownMenu.Item>
-													</DropdownMenu.Group>
-												</DropdownMenu.Content>
-											</DropdownMenu.Root>
-										</span>
-										<!-- 移动端：删除按钮替代三点菜单 -->
-										<Button variant="ghost" size="icon" class="size-8 sm:hidden" aria-label="删除">
-											<IconTrash class="size-4" />
-										</Button>
-									</div>
-								</Table.Cell>
-								</Table.Row>
-							{/each}
-						</Table.Body>
-					</Table.Root>
-				</div>
-			{/if}
+								<div class="flex items-center justify-end gap-1">
+									<Button
+										variant="ghost"
+										size="icon"
+										class="size-8"
+										onclick={() => window.open(`/${post.slug}`, '_blank')}
+									>
+										<IconExternalLink class="size-4" />
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon"
+										class="size-8"
+										href="/admin/posts/edit?id={post.id}"
+									>
+										<IconPencil class="size-4" />
+									</Button>
+									<!-- 桌面/平板：三点菜单 -->
+									<span class="hidden sm:contents">
+										<DropdownMenu.Root>
+											<DropdownMenu.Trigger>
+												{#snippet child({ props })}
+													<Button variant="ghost" size="icon" class="size-8" {...props}>
+														<IconDots class="size-4" />
+													</Button>
+												{/snippet}
+											</DropdownMenu.Trigger>
+											<DropdownMenu.Content align="end">
+												<DropdownMenu.Group>
+													<DropdownMenu.Item>
+														{#snippet child({ props })}
+															<a href="/admin/posts/edit?id={post.id}" {...props}>
+																<IconPencil data-icon="inline-start" />
+																编辑
+															</a>
+														{/snippet}
+													</DropdownMenu.Item>
+													<DropdownMenu.Item onclick={() => window.open(`/${post.slug}`, '_blank')}>
+														<IconExternalLink data-icon="inline-start" />
+														在新窗口打开
+														<DropdownMenu.Shortcut>⌘↵</DropdownMenu.Shortcut>
+													</DropdownMenu.Item>
+												</DropdownMenu.Group>
+												<DropdownMenu.Separator />
+												<DropdownMenu.CheckboxItem checked={post.status === 'published'}>
+													已发布
+												</DropdownMenu.CheckboxItem>
+												<DropdownMenu.CheckboxItem checked={false}>
+													<IconPin data-icon="inline-start" />
+													置顶
+												</DropdownMenu.CheckboxItem>
+												<DropdownMenu.Sub>
+													<DropdownMenu.SubTrigger>修改分类</DropdownMenu.SubTrigger>
+													<DropdownMenu.SubContent>
+														<DropdownMenu.Item>Technology</DropdownMenu.Item>
+														<DropdownMenu.Item>Programming</DropdownMenu.Item>
+														<DropdownMenu.Item>Experience</DropdownMenu.Item>
+													</DropdownMenu.SubContent>
+												</DropdownMenu.Sub>
+												<DropdownMenu.Separator />
+												<DropdownMenu.Group>
+													<DropdownMenu.Item>
+														<IconCopy data-icon="inline-start" />
+														复制链接
+													</DropdownMenu.Item>
+													<DropdownMenu.Item>
+														<IconHash data-icon="inline-start" />
+														复制 ID
+													</DropdownMenu.Item>
+													<DropdownMenu.Item>复制 slug</DropdownMenu.Item>
+												</DropdownMenu.Group>
+												<DropdownMenu.Separator />
+												<DropdownMenu.Group>
+													<DropdownMenu.Item variant="destructive">
+														<IconTrash data-icon="inline-start" />
+														删除
+														<DropdownMenu.Shortcut>⌫</DropdownMenu.Shortcut>
+													</DropdownMenu.Item>
+												</DropdownMenu.Group>
+											</DropdownMenu.Content>
+										</DropdownMenu.Root>
+									</span>
+									<!-- 移动端：删除按钮替代三点菜单 -->
+									<Button variant="ghost" size="icon" class="size-8 sm:hidden" aria-label="删除">
+										<IconTrash class="size-4" />
+									</Button>
+								</div>
+							</Table.Cell>
+						</Table.Row>
+					{/each}
+				</Table.Body>
+			</Table.Root>
+		</div>
+	{/if}
 </div>

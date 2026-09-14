@@ -56,28 +56,28 @@
 			title: '博文',
 			count: 167,
 			icon: IconArticle,
-			writeHref: '/admin/posts/new',
+			writeHref: '/admin/posts/edit',
 			manageHref: '/admin/posts'
 		},
 		{
 			title: '日记',
 			count: 188,
 			icon: IconPencil,
-			writeHref: '/admin/notes/new?type=diary',
+			writeHref: '/admin/notes?type=diary',
 			manageHref: '/admin/notes?type=diary'
 		},
 		{
 			title: '速记',
 			count: 88,
 			icon: IconNotebook,
-			writeHref: '/admin/notes/new?type=quick',
+			writeHref: '/admin/notes?type=quick',
 			manageHref: '/admin/notes?type=quick'
 		},
 		{
 			title: '说说',
 			count: 38,
 			icon: IconQuote,
-			writeHref: '/admin/says/new',
+			writeHref: '/admin/says',
 			manageHref: '/admin/says'
 		}
 	];
