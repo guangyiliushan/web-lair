@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { m } from '$lib/paraglide/messages';
 	import { cn } from '$lib/utils';
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
@@ -412,7 +413,7 @@
 		className
 	)}
 	role="toolbar"
-	aria-label="编辑器工具栏"
+	aria-label={m.toolbar_editor()}
 >
 	<!-- ═══════════ 块类型下拉 (Tier 0) ═══════════ -->
 	<DropdownMenu.Root>
@@ -452,8 +453,8 @@
 			size="icon-sm"
 			onclick={() => dispatchCmd(UNDO_COMMAND)}
 			onmousedown={preventSelectionLoss}
-			aria-label="撤销"
-			title="撤销 (⌘Z)"
+			aria-label={m.toolbar_undo()}
+			title={`${m.toolbar_undo()} (⌘Z)`}
 		>
 			<IconArrowBackUp data-icon="inline-start" />
 		</Button>
@@ -462,8 +463,8 @@
 			size="icon-sm"
 			onclick={() => dispatchCmd(REDO_COMMAND)}
 			onmousedown={preventSelectionLoss}
-			aria-label="重做"
-			title="重做 (⌘⇧Z)"
+			aria-label={m.toolbar_redo()}
+			title={`${m.toolbar_redo()} (⌘⇧Z)`}
 		>
 			<IconArrowForwardUp data-icon="inline-start" />
 		</Button>
@@ -478,8 +479,8 @@
 		onclick={() => formatText('bold')}
 		onmousedown={preventSelectionLoss}
 		aria-pressed={toolbarState.isBold}
-		aria-label="粗体"
-		title="粗体 (⌘B)"
+		aria-label={m.toolbar_bold()}
+		title={`${m.toolbar_bold()} (⌘B)`}
 	>
 		<IconBold data-icon="inline-start" />
 	</Button>
@@ -489,8 +490,8 @@
 		onclick={() => formatText('italic')}
 		onmousedown={preventSelectionLoss}
 		aria-pressed={toolbarState.isItalic}
-		aria-label="斜体"
-		title="斜体 (⌘I)"
+		aria-label={m.toolbar_italic()}
+		title={`${m.toolbar_italic()} (⌘I)`}
 	>
 		<IconItalic data-icon="inline-start" />
 	</Button>
@@ -502,8 +503,8 @@
 			onclick={() => formatText('underline')}
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.isUnderline}
-			aria-label="下划线"
-			title="下划线 (⌘U)"
+			aria-label={m.toolbar_underline()}
+			title={`${m.toolbar_underline()} (⌘U)`}
 		>
 			<IconUnderline data-icon="inline-start" />
 		</Button>
@@ -513,8 +514,8 @@
 			onclick={() => formatText('strikethrough')}
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.isStrikethrough}
-			aria-label="删除线"
-			title="删除线"
+			aria-label={m.toolbar_strikethrough()}
+			title={m.toolbar_strikethrough()}
 		>
 			<IconStrikethrough data-icon="inline-start" />
 		</Button>
@@ -527,8 +528,8 @@
 			onclick={() => formatText('code')}
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.isCode}
-			aria-label="行内代码"
-			title="行内代码"
+			aria-label={m.toolbar_inline_code()}
+			title={m.toolbar_inline_code()}
 		>
 			<IconCode data-icon="inline-start" />
 		</Button>
@@ -542,8 +543,8 @@
 			onclick={() => formatText('highlight')}
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.isHighlight}
-			aria-label="高亮"
-			title="高亮"
+			aria-label={m.toolbar_highlight()}
+			title={m.toolbar_highlight()}
 		>
 			<IconHighlight data-icon="inline-start" />
 		</Button>
@@ -557,8 +558,8 @@
 		size="icon-sm"
 		onclick={handleInsertLink}
 		onmousedown={preventSelectionLoss}
-		aria-label="插入链接"
-		title="插入链接 (⌘K)"
+		aria-label={m.toolbar_link()}
+		title={`${m.toolbar_link()} (⌘K)`}
 	>
 		<IconLink data-icon="inline-start" />
 	</Button>
@@ -568,7 +569,7 @@
 		onclick={handleInsertImage}
 		onmousedown={preventSelectionLoss}
 		disabled={toolbarState.inTable}
-		aria-label="插入图片"
+		aria-label={m.toolbar_image()}
 		title={toolbarState.inTable ? '表格内不可插入图片' : '插入图片'}
 	>
 		<IconPhoto data-icon="inline-start" />
@@ -584,8 +585,8 @@
 			onclick={() => toggleBulletList(editor!)}
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.blockType === 'bullet'}
-			aria-label="无序列表"
-			title="无序列表"
+			aria-label={m.toolbar_ul()}
+			title={m.toolbar_ul()}
 		>
 			<IconList data-icon="inline-start" />
 		</Button>
@@ -595,8 +596,8 @@
 			onclick={() => toggleOrderedList(editor!)}
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.blockType === 'number'}
-			aria-label="有序列表"
-			title="有序列表"
+			aria-label={m.toolbar_ol()}
+			title={m.toolbar_ol()}
 		>
 			<IconListNumbers data-icon="inline-start" />
 		</Button>
@@ -605,8 +606,8 @@
 			size="icon-sm"
 			onclick={() => applyBlockType('check')}
 			onmousedown={preventSelectionLoss}
-			aria-label="待办列表"
-			title="待办列表"
+			aria-label={m.toolbar_todo()}
+			title={m.toolbar_todo()}
 		>
 			<IconListCheck data-icon="inline-start" />
 		</Button>
@@ -622,8 +623,8 @@
 			onclick={() => setAlignment('left')}
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.alignment === 'left'}
-			aria-label="左对齐"
-			title="左对齐"
+			aria-label={m.toolbar_align_left()}
+			title={m.toolbar_align_left()}
 		>
 			<IconAlignLeft data-icon="inline-start" />
 		</Button>
@@ -633,8 +634,8 @@
 			onclick={() => setAlignment('center')}
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.alignment === 'center'}
-			aria-label="居中"
-			title="居中"
+			aria-label={m.toolbar_align_center()}
+			title={m.toolbar_align_center()}
 		>
 			<IconAlignCenter data-icon="inline-start" />
 		</Button>
@@ -644,8 +645,8 @@
 			onclick={() => setAlignment('right')}
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.alignment === 'right'}
-			aria-label="右对齐"
-			title="右对齐"
+			aria-label={m.toolbar_align_right()}
+			title={m.toolbar_align_right()}
 		>
 			<IconAlignRight data-icon="inline-start" />
 		</Button>
@@ -655,8 +656,8 @@
 			onclick={() => setAlignment('justify')}
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.alignment === 'justify'}
-			aria-label="两端对齐"
-			title="两端对齐"
+			aria-label={m.toolbar_align_justify()}
+			title={m.toolbar_align_justify()}
 		>
 			<IconAlignJustified data-icon="inline-start" />
 		</Button>
@@ -671,8 +672,8 @@
 			size="icon-sm"
 			onclick={() => applyBlockType('quote')}
 			onmousedown={preventSelectionLoss}
-			aria-label="引用"
-			title="引用"
+			aria-label={m.toolbar_quote()}
+			title={m.toolbar_quote()}
 		>
 			<IconBlockquote data-icon="inline-start" />
 		</Button>
@@ -682,7 +683,7 @@
 			onclick={() => insertHorizontalRule(editor!)}
 			onmousedown={preventSelectionLoss}
 			disabled={toolbarState.inTable}
-			aria-label="分割线"
+			aria-label={m.toolbar_hr()}
 			title={toolbarState.inTable ? '表格内不可插入分割线' : '分割线'}
 		>
 			<IconSeparator data-icon="inline-start" />
@@ -692,8 +693,8 @@
 			size="icon-sm"
 			onclick={handleInsertTable}
 			onmousedown={preventSelectionLoss}
-			aria-label="插入表格"
-			title="插入表格"
+			aria-label={m.toolbar_table()}
+			title={m.toolbar_table()}
 		>
 			<IconTable data-icon="inline-start" />
 		</Button>
@@ -707,7 +708,7 @@
 			onclick={() => insertCodeBlock(editor!)}
 			onmousedown={preventSelectionLoss}
 			disabled={toolbarState.inTable}
-			aria-label="代码块"
+			aria-label={m.toolbar_code_block()}
 			title={toolbarState.inTable ? '表格内不可插入代码块' : '代码块'}
 		>
 			<IconCodeDots data-icon="inline-start" />
@@ -722,7 +723,7 @@
 						{...props}
 						onmousedown={preventSelectionLoss}
 						disabled={toolbarState.inTable}
-						aria-label="Callout"
+						aria-label={m.toolbar_callout()}
 						title={toolbarState.inTable ? '表格内不可插入 Callout' : 'Callout'}
 					>
 						<IconInfoCircle data-icon="inline-start" />
@@ -747,8 +748,8 @@
 			size="icon-sm"
 			onclick={() => insertTag(editor!)}
 			onmousedown={preventSelectionLoss}
-			aria-label="插入标签"
-			title="插入标签"
+			aria-label={m.toolbar_tag()}
+			title={m.toolbar_tag()}
 		>
 			<IconTag data-icon="inline-start" />
 		</Button>
@@ -766,8 +767,8 @@
 						size="icon-sm"
 						{...props}
 						onmousedown={preventSelectionLoss}
-						aria-label="更多"
-						title="更多"
+						aria-label={m.toolbar_more()}
+						title={m.toolbar_more()}
 					>
 						<IconDots data-icon="inline-start" />
 					</Button>
@@ -807,8 +808,8 @@
 		size="icon-sm"
 		onclick={openDebug}
 		onmousedown={preventSelectionLoss}
-		aria-label="调试 · 导出 Editor State"
-		title="调试 · 导出 Editor State"
+		aria-label={m.toolbar_debug()}
+		title={m.toolbar_debug()}
 	>
 		<IconBug data-icon="inline-start" />
 	</Button>

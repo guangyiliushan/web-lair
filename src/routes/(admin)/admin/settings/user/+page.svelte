@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { Button } from '$lib/components/ui/button';
+	import * as Field from '$lib/components/ui/field/index.js';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import IconMail from '@tabler/icons-svelte-runes/icons/mail';
@@ -51,28 +52,28 @@
 				</div>
 			</div>
 		</div>
-		<div class="grid gap-4 md:grid-cols-2">
-			<label class="grid gap-1.5 text-sm">
-				<span class="font-medium">昵称</span>
-				<Input type="text" value={s.user.nickname} />
-			</label>
-			<label class="grid gap-1.5 text-sm">
-				<span class="font-medium">用户名</span>
-				<Input type="text" value={s.user.username} />
-			</label>
-			<label class="grid gap-1.5 text-sm">
-				<span class="font-medium">邮箱</span>
-				<Input type="email" value={s.user.email} />
-			</label>
-			<label class="grid gap-1.5 text-sm">
-				<span class="font-medium">站点</span>
-				<Input type="text" value={s.user.site} />
-			</label>
-		</div>
-		<label class="grid gap-1.5 text-sm">
-			<span class="font-medium">头像</span>
-			<Input type="text" value={s.user.avatar} />
-		</label>
+		<Field.Group class="grid gap-4 md:grid-cols-2">
+			<Field.Field>
+				<Field.Label for="user-nickname">昵称</Field.Label>
+				<Input id="user-nickname" type="text" value={s.user.nickname} />
+			</Field.Field>
+			<Field.Field>
+				<Field.Label for="user-username">用户名</Field.Label>
+				<Input id="user-username" type="text" value={s.user.username} />
+			</Field.Field>
+			<Field.Field>
+				<Field.Label for="user-email">邮箱</Field.Label>
+				<Input id="user-email" type="email" value={s.user.email} />
+			</Field.Field>
+			<Field.Field>
+				<Field.Label for="user-site">站点</Field.Label>
+				<Input id="user-site" type="text" value={s.user.site} />
+			</Field.Field>
+			<Field.Field>
+				<Field.Label for="user-avatar">头像</Field.Label>
+				<Input id="user-avatar" type="text" value={s.user.avatar} />
+			</Field.Field>
+		</Field.Group>
 		<label class="grid gap-1.5 text-sm">
 			<span class="font-medium">介绍</span>
 			<Textarea class="min-h-24" value={s.user.bio} />

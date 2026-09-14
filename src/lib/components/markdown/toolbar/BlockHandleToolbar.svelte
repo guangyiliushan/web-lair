@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { m } from '$lib/paraglide/messages';
 	import { onMount } from 'svelte';
 	import { cn } from '$lib/utils';
 	import { Button } from '$lib/components/ui/button';
@@ -233,13 +234,13 @@
 	)}
 	style="top: {top}px; left: {left}px;"
 	role="toolbar"
-	aria-label="Block actions"
+	aria-label={m.toolbar_block_actions()}
 	tabindex="-1"
 	onmouseenter={onHandleEnter}
 	onmouseleave={onHandleLeave}
 >
 	<!-- Add Block Button -->
-	<Button variant="ghost" size="icon-sm" aria-label="Add block" onclick={handleAddBlock}>
+	<Button variant="ghost" size="icon-sm" aria-label={m.toolbar_add_block()} onclick={handleAddBlock}>
 		<IconPlus data-icon="inline-start" />
 	</Button>
 
@@ -252,7 +253,7 @@
 		}}
 	>
 		<DropdownMenu.Trigger
-			aria-label="Block actions"
+			aria-label={m.toolbar_block_actions()}
 			class={cn(
 				'inline-flex size-6 cursor-pointer items-center justify-center rounded border-none bg-transparent text-[color-mix(in_srgb,var(--rc-text)_35%,transparent)] transition-colors hover:bg-[color-mix(in_srgb,var(--rc-text)_8%,transparent)] hover:text-[color-mix(in_srgb,var(--rc-text)_70%,transparent)]'
 			)}

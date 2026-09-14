@@ -48,7 +48,7 @@
 						type="button"
 						role="switch"
 						aria-checked={Boolean(s.content[item.key as keyof typeof s.content])}
-						aria-label="切换"
+						aria-label={item.label}
 						class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 						class:bg-accent={s.content[item.key as keyof typeof s.content]}
 						class:bg-surface-inset={!s.content[item.key as keyof typeof s.content]}
@@ -85,7 +85,7 @@
 						{#each s.content.blockedKeywords as kw (kw)}
 							<Badge variant="secondary" class="gap-1">
 								{kw}
-								<button type="button" class="inline-flex size-3 items-center" aria-label="移除 {kw}"><IconX class="size-3" /></button>
+								<button type="button" class="relative inline-flex size-3 items-center after:absolute after:-inset-2" aria-label="移除 {kw}"><IconX class="size-3" /></button>
 							</Badge>
 						{/each}
 					</div>
@@ -99,7 +99,7 @@
 						{#each s.content.blockedIps as ip (ip)}
 							<Badge variant="secondary" class="gap-1">
 								{ip}
-								<button type="button" class="inline-flex size-3 items-center" aria-label="移除 {ip}"><IconX class="size-3" /></button>
+								<button type="button" class="relative inline-flex size-3 items-center after:absolute after:-inset-2" aria-label="移除 {ip}"><IconX class="size-3" /></button>
 							</Badge>
 						{/each}
 					</div>
@@ -128,7 +128,7 @@
 						type="button"
 						role="switch"
 						aria-checked={Boolean(s.content[item.key as keyof typeof s.content])}
-						aria-label="切换"
+						aria-label={item.label}
 						class="outline-hidden relative inline-flex h-5 min-w-9 shrink-0 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 						class:bg-accent={s.content[item.key as keyof typeof s.content]}
 						class:bg-surface-inset={!s.content[item.key as keyof typeof s.content]}

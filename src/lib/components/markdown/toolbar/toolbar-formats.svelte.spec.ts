@@ -3,6 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import ToolbarTestHost from './ToolbarTestHost.svelte';
 
+// Pin the UI locale: overwriteGetLocale runs in the browser iframe, unlike
+// node-side setupFiles. Official escape hatch per paraglidejs.com/strategy.
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
+overwriteGetLocale(() => 'zh-cn');
+
+
 // Regression: top toolbar format buttons lost the editor selection and did
 // nothing, while the floating toolbar applied the same format correctly.
 describe('editor toolbar character formats', () => {

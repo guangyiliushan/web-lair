@@ -371,15 +371,15 @@
 													</DropdownMenu.Item>
 												</DropdownMenu.Group>
 												<DropdownMenu.Separator />
-												<DropdownMenu.CheckboxItem checked={post.status === 'published'}>
+												<DropdownMenu.CheckboxItem disabled checked={post.status === 'published'}>
 													已发布
 												</DropdownMenu.CheckboxItem>
-												<DropdownMenu.CheckboxItem checked={false}>
+												<DropdownMenu.CheckboxItem disabled checked={false}>
 													<IconPin data-icon="inline-start" />
 													置顶
 												</DropdownMenu.CheckboxItem>
 												<DropdownMenu.Sub>
-													<DropdownMenu.SubTrigger>修改分类</DropdownMenu.SubTrigger>
+													<DropdownMenu.SubTrigger disabled>修改分类</DropdownMenu.SubTrigger>
 													<DropdownMenu.SubContent>
 														<DropdownMenu.Item>Technology</DropdownMenu.Item>
 														<DropdownMenu.Item>Programming</DropdownMenu.Item>
@@ -388,19 +388,19 @@
 												</DropdownMenu.Sub>
 												<DropdownMenu.Separator />
 												<DropdownMenu.Group>
-													<DropdownMenu.Item>
+													<DropdownMenu.Item disabled title="即将推出">
 														<IconCopy data-icon="inline-start" />
 														复制链接
 													</DropdownMenu.Item>
-													<DropdownMenu.Item>
+													<DropdownMenu.Item disabled title="即将推出">
 														<IconHash data-icon="inline-start" />
 														复制 ID
 													</DropdownMenu.Item>
-													<DropdownMenu.Item>复制 slug</DropdownMenu.Item>
+													<DropdownMenu.Item disabled title="即将推出">复制 slug</DropdownMenu.Item>
 												</DropdownMenu.Group>
 												<DropdownMenu.Separator />
 												<DropdownMenu.Group>
-													<DropdownMenu.Item variant="destructive">
+													<DropdownMenu.Item variant="destructive" disabled title="即将推出">
 														<IconTrash data-icon="inline-start" />
 														删除
 														<DropdownMenu.Shortcut>⌫</DropdownMenu.Shortcut>
@@ -410,7 +410,7 @@
 										</DropdownMenu.Root>
 									</span>
 									<!-- 移动端：删除按钮替代三点菜单 -->
-									<Button variant="ghost" size="icon" class="size-8 sm:hidden" aria-label="删除">
+									<Button variant="ghost" size="icon" class="size-8 sm:hidden" aria-label="删除" disabled>
 										<IconTrash class="size-4" />
 									</Button>
 								</div>

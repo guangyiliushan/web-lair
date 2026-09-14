@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { ActionData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import * as Card from '$lib/components/ui/card';
 	import * as Field from '$lib/components/ui/field';
 	import { Input } from '$lib/components/ui/input';
@@ -12,10 +13,10 @@
 </script>
 
 <div class="flex w-full flex-col items-center justify-center">
-	<Card.Root class="w-full max-w-md text-center">
+		<Card.Root class="w-full max-w-md text-center">
 		<Card.Header>
-			<Card.Title class="text-2xl">Reset your password</Card.Title>
-			<Card.Description>Enter your email address and we'll send you a reset link.</Card.Description>
+			<Card.Title class="text-2xl">{m.auth_forgot_title()}</Card.Title>
+			<Card.Description>{m.auth_forgot_description()}</Card.Description>
 		</Card.Header>
 		<Card.Content>
 			{#if form?.message}
@@ -34,33 +35,33 @@
 					role="status"
 				>
 					<IconMail class="size-4 shrink-0" />
-					<span>If an account with that email exists, we've sent a reset link.</span>
+					<span>{m.auth_forgot_success()}</span>
 				</div>
 			{/if}
 
 			<form method="post" action="?/sendReset" use:enhance>
 				<Field.FieldGroup>
 					<Field.Field>
-						<Field.FieldLabel for="email">Email</Field.FieldLabel>
+						<Field.FieldLabel for="email">{m.auth_email()}</Field.FieldLabel>
 						<Input
 							id="email"
 							name="email"
 							type="email"
 							autocomplete="email"
-							placeholder="you@example.com"
+							placeholder={m.auth_email_placeholder()}
 							required
 						/>
 					</Field.Field>
 					<Button type="submit" class="w-full">
 						<IconMail data-icon="inline-start" />
-						Send reset link
+						{m.auth_send_reset()}
 					</Button>
 				</Field.FieldGroup>
 			</form>
 		</Card.Content>
 		<Card.Footer class="justify-center">
 			<a href="/login" class="text-sm text-muted-foreground underline-offset-2 hover:underline">
-				Back to login
+				{m.auth_back_to_login()}
 			</a>
 		</Card.Footer>
 	</Card.Root>

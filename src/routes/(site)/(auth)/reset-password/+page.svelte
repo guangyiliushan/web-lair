@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { ActionData, PageServerData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import * as Card from '$lib/components/ui/card';
 	import * as Field from '$lib/components/ui/field';
 	import { Input } from '$lib/components/ui/input';
@@ -15,8 +16,8 @@
 <div class="flex w-full flex-col items-center justify-center">
 	<Card.Root class="w-full max-w-md">
 		<Card.Header class="text-center">
-			<Card.Title class="text-2xl">Set new password</Card.Title>
-			<Card.Description>Enter your new password below.</Card.Description>
+			<Card.Title class="text-2xl">{m.auth_reset_title()}</Card.Title>
+			<Card.Description>{m.auth_reset_description()}</Card.Description>
 		</Card.Header>
 		<Card.Content>
 			{#if form?.message}
@@ -33,18 +34,18 @@
 				<input type="hidden" name="token" value={data.token} />
 				<Field.FieldGroup>
 					<Field.Field>
-						<Field.FieldLabel for="password">New Password</Field.FieldLabel>
+						<Field.FieldLabel for="password">{m.auth_new_password()}</Field.FieldLabel>
 						<Input
 							id="password"
 							name="password"
 							type="password"
 							autocomplete="new-password"
-							placeholder="At least 8 characters"
+							placeholder={m.auth_password_hint()}
 							required
 						/>
 					</Field.Field>
 					<Field.Field>
-						<Field.FieldLabel for="confirmPassword">Confirm Password</Field.FieldLabel>
+						<Field.FieldLabel for="confirmPassword">{m.auth_confirm_password()}</Field.FieldLabel>
 						<Input
 							id="confirmPassword"
 							name="confirmPassword"
@@ -55,7 +56,7 @@
 					</Field.Field>
 					<Button type="submit" class="w-full">
 						<IconLock data-icon="inline-start" />
-						Reset password
+						{m.auth_reset_title()}
 					</Button>
 				</Field.FieldGroup>
 			</form>
@@ -66,7 +67,7 @@
 				class="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-2 hover:underline"
 			>
 				<IconArrowLeft class="size-4" />
-				Back to login
+				{m.auth_back_to_login()}
 			</a>
 		</Card.Footer>
 	</Card.Root>

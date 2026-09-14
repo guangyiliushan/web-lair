@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { ActionData, PageData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import * as Card from '$lib/components/ui/card';
 	import * as Field from '$lib/components/ui/field';
 	import { Input } from '$lib/components/ui/input';
@@ -25,9 +26,9 @@
 			>
 				<IconShieldLock class="size-6" />
 			</div>
-			<Card.Title class="text-2xl">Initial Setup</Card.Title>
+			<Card.Title class="text-2xl">{m.auth_setup_title()}</Card.Title>
 			<Card.Description>
-				No admin account found. Create the first admin account to get started.
+				{m.auth_setup_description()}
 			</Card.Description>
 		</Card.Header>
 		<Card.Content>
@@ -70,34 +71,34 @@
 			<form method="post" action="?/setup" use:enhance>
 				<Field.FieldGroup>
 					<Field.Field>
-						<Field.FieldLabel for="name">Display Name</Field.FieldLabel>
+						<Field.FieldLabel for="name">{m.auth_setup_display_name()}</Field.FieldLabel>
 						<Input id="name" name="name" type="text" autocomplete="name" placeholder="Admin" />
 					</Field.Field>
 					<Field.Field>
-						<Field.FieldLabel for="email">Admin Email</Field.FieldLabel>
+						<Field.FieldLabel for="email">{m.auth_admin_email()}</Field.FieldLabel>
 						<Input
 							id="email"
 							name="email"
 							type="email"
 							autocomplete="email"
-							placeholder="owner@example.com"
+							placeholder={m.auth_email_placeholder()}
 							required
 						/>
 					</Field.Field>
 					<Field.Field>
-						<Field.FieldLabel for="password">Password</Field.FieldLabel>
+						<Field.FieldLabel for="password">{m.auth_password()}</Field.FieldLabel>
 						<Input
 							id="password"
 							name="password"
 							type="password"
 							autocomplete="new-password"
-							placeholder="Choose a strong password"
+							placeholder={m.auth_password_hint()}
 							required
 						/>
 					</Field.Field>
 					{#if data.setupTokenConfigured}
 						<Field.Field>
-							<Field.FieldLabel for="setupToken">Setup Token</Field.FieldLabel>
+							<Field.FieldLabel for="setupToken">{m.auth_setup_token()}</Field.FieldLabel>
 							<Input
 								id="setupToken"
 								name="setupToken"
@@ -114,14 +115,13 @@
 						disabled={!data.allowedEmailsConfigured || !data.setupTokenConfigured}
 					>
 						<IconMail data-icon="inline-start" />
-						Create Admin Account
+						{m.auth_setup_create()}
 					</Button>
 				</Field.FieldGroup>
 			</form>
 
 			<p class="mt-4 text-center text-xs text-muted-foreground">
-				This page is only available when no admin account exists. It will be disabled after the
-				first admin is created.
+				{m.auth_setup_note()}
 			</p>
 		</Card.Content>
 	</Card.Root>

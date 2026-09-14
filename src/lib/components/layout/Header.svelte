@@ -173,7 +173,7 @@
 					<button
 						onclick={toggleMenu}
 						aria-expanded={menuOpen}
-						aria-label={menuOpen ? m.close_menu() : m.open_menu()}
+						aria-label={menuOpen ? m.ui_close_menu() : m.ui_open_menu()}
 						class="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
 					>
 						{#if menuOpen}

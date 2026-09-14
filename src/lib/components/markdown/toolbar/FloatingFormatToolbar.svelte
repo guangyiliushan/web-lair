@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import type { LexicalEditor } from 'lexical';
 	import {
@@ -92,7 +93,7 @@
 		class="fixed z-50 flex items-center gap-0.5 rounded-xl border border-border bg-background/95 p-1 shadow-lg backdrop-blur"
 		style="top: {top}px; left: {left}px; transform: translateX(-50%);"
 		role="toolbar"
-		aria-label="文本格式"
+		aria-label={m.toolbar_text_formats()}
 		tabindex="-1"
 		onmousedown={(e) => e.preventDefault()}
 	>
@@ -102,8 +103,8 @@
 			size="icon-sm"
 			onclick={() => formatTextWithFocus(editor, 'bold')}
 			aria-pressed={isActive('isBold')}
-			aria-label="粗体"
-			title="粗体 (⌘B)"
+			aria-label={m.toolbar_bold()}
+			title={`${m.toolbar_bold()} (⌘B)`}
 		>
 			<IconBold data-icon="inline-start" />
 		</Button>
@@ -112,8 +113,8 @@
 			size="icon-sm"
 			onclick={() => formatTextWithFocus(editor, 'italic')}
 			aria-pressed={isActive('isItalic')}
-			aria-label="斜体"
-			title="斜体 (⌘I)"
+			aria-label={m.toolbar_italic()}
+			title={`${m.toolbar_italic()} (⌘I)`}
 		>
 			<IconItalic data-icon="inline-start" />
 		</Button>
@@ -122,8 +123,8 @@
 			size="icon-sm"
 			onclick={() => formatTextWithFocus(editor, 'underline')}
 			aria-pressed={isActive('isUnderline')}
-			aria-label="下划线"
-			title="下划线 (⌘U)"
+			aria-label={m.toolbar_underline()}
+			title={`${m.toolbar_underline()} (⌘U)`}
 		>
 			<IconUnderline data-icon="inline-start" />
 		</Button>
@@ -132,8 +133,8 @@
 			size="icon-sm"
 			onclick={() => formatTextWithFocus(editor, 'strikethrough')}
 			aria-pressed={isActive('isStrikethrough')}
-			aria-label="删除线"
-			title="删除线"
+			aria-label={m.toolbar_strikethrough()}
+			title={m.toolbar_strikethrough()}
 		>
 			<IconStrikethrough data-icon="inline-start" />
 		</Button>
@@ -147,8 +148,8 @@
 			size="icon-sm"
 			onclick={() => formatTextWithFocus(editor, 'superscript')}
 			aria-pressed={isActive('isSuperscript')}
-			aria-label="上标"
-			title="上标"
+			aria-label={m.toolbar_superscript()}
+			title={m.toolbar_superscript()}
 		>
 			<IconSuperscript data-icon="inline-start" />
 		</Button>
@@ -157,8 +158,8 @@
 			size="icon-sm"
 			onclick={() => formatTextWithFocus(editor, 'subscript')}
 			aria-pressed={isActive('isSubscript')}
-			aria-label="下标"
-			title="下标"
+			aria-label={m.toolbar_subscript()}
+			title={m.toolbar_subscript()}
 		>
 			<IconSubscript data-icon="inline-start" />
 		</Button>
@@ -172,8 +173,8 @@
 			size="icon-sm"
 			onclick={() => formatTextWithFocus(editor, 'code')}
 			aria-pressed={isActive('isCode')}
-			aria-label="行内代码"
-			title="行内代码"
+			aria-label={m.toolbar_inline_code()}
+			title={m.toolbar_inline_code()}
 		>
 			<IconCode data-icon="inline-start" />
 		</Button>
@@ -182,8 +183,8 @@
 			size="icon-sm"
 			onclick={() => formatTextWithFocus(editor, 'highlight')}
 			aria-pressed={isActive('isHighlight')}
-			aria-label="高亮"
-			title="高亮"
+			aria-label={m.toolbar_highlight()}
+			title={m.toolbar_highlight()}
 		>
 			<IconHighlight data-icon="inline-start" />
 		</Button>
@@ -191,8 +192,8 @@
 			variant="ghost"
 			size="icon-sm"
 			onclick={handleInsertLink}
-			aria-label="插入链接"
-			title="插入链接"
+			aria-label={m.toolbar_link()}
+			title={m.toolbar_link()}
 		>
 			<IconLink data-icon="inline-start" />
 		</Button>

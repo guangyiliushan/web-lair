@@ -5,6 +5,7 @@
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import { cn } from '$lib/utils';
 	import type { Component } from 'svelte';
+	import { m } from '$lib/paraglide/messages';
 	// Icon lookup table — all icons used by admin header actions
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
 	import IconCategory from '@tabler/icons-svelte-runes/icons/category';
@@ -71,7 +72,7 @@
 
 	// ── 优先使用显式 props，fallback 到 page.data（各页面 load 函数注入）──
 	const pageTitle = $derived(
-		title ?? page.data.headerTitle ?? '管理后台'
+		title ?? page.data.headerTitle ?? m.admin_header_title()
 	);
 
 	const pageActions = $derived(
@@ -83,7 +84,7 @@
 		if (raw === undefined) {
 			return [
 				{
-					label: '访问站点',
+					label: m.admin_header_visit_site(),
 					icon: IconExternalLink,
 					variant: 'ghost',
 					size: 'sm',

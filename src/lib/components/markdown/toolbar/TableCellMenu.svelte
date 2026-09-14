@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { m } from '$lib/paraglide/messages';
 	import type { LexicalEditor } from 'lexical';
 	import { Button } from '$lib/components/ui/button';
 	import {
@@ -73,15 +74,15 @@
 		class="fixed z-50 flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-md"
 		style="top: {top}px; left: {left}px; transform: translateX(-50%);"
 		role="toolbar"
-		aria-label="表格操作"
+		aria-label={m.toolbar_table_menu()}
 	>
 		<Button
 			variant="ghost"
 			size="icon-sm"
 			onclick={() => tableInsertRow(editor!, false)}
 			onmousedown={preventSelectionLoss}
-			aria-label="在上方插入行"
-			title="在上方插入行"
+			aria-label={m.toolbar_insert_row_above()}
+			title={m.toolbar_insert_row_above()}
 		>
 			<IconRowInsertTop data-icon="inline-start" />
 		</Button>
@@ -90,8 +91,8 @@
 			size="icon-sm"
 			onclick={() => tableInsertRow(editor!, true)}
 			onmousedown={preventSelectionLoss}
-			aria-label="在下方插入行"
-			title="在下方插入行"
+			aria-label={m.toolbar_insert_row_below()}
+			title={m.toolbar_insert_row_below()}
 		>
 			<IconRowInsertBottom data-icon="inline-start" />
 		</Button>
@@ -100,8 +101,8 @@
 			size="icon-sm"
 			onclick={() => tableInsertColumn(editor!, false)}
 			onmousedown={preventSelectionLoss}
-			aria-label="在左侧插入列"
-			title="在左侧插入列"
+			aria-label={m.toolbar_insert_col_left()}
+			title={m.toolbar_insert_col_left()}
 		>
 			<IconColumnInsertLeft data-icon="inline-start" />
 		</Button>
@@ -110,8 +111,8 @@
 			size="icon-sm"
 			onclick={() => tableInsertColumn(editor!, true)}
 			onmousedown={preventSelectionLoss}
-			aria-label="在右侧插入列"
-			title="在右侧插入列"
+			aria-label={m.toolbar_insert_col_right()}
+			title={m.toolbar_insert_col_right()}
 		>
 			<IconColumnInsertRight data-icon="inline-start" />
 		</Button>
@@ -120,8 +121,8 @@
 			size="icon-sm"
 			onclick={() => tableToggleHeader(editor!)}
 			onmousedown={preventSelectionLoss}
-			aria-label="切换表头"
-			title="切换表头"
+			aria-label={m.toolbar_toggle_header()}
+			title={m.toolbar_toggle_header()}
 		>
 			<IconTableOptions data-icon="inline-start" />
 		</Button>
@@ -130,8 +131,8 @@
 			size="icon-sm"
 			onclick={() => tableDeleteRow(editor!)}
 			onmousedown={preventSelectionLoss}
-			aria-label="删除行"
-			title="删除行"
+			aria-label={m.toolbar_delete_row()}
+			title={m.toolbar_delete_row()}
 		>
 			<IconTrash data-icon="inline-start" />
 		</Button>
@@ -140,8 +141,8 @@
 			size="icon-sm"
 			onclick={() => tableDeleteColumn(editor!)}
 			onmousedown={preventSelectionLoss}
-			aria-label="删除列"
-			title="删除列"
+			aria-label={m.toolbar_delete_col()}
+			title={m.toolbar_delete_col()}
 		>
 			<IconTrash data-icon="inline-start" />
 		</Button>

@@ -93,7 +93,7 @@
 		<div class="flex h-10 shrink-0 items-center border-b pl-2">
 			<form class="relative flex h-full min-w-0 flex-1 items-center self-stretch" onsubmit={(e) => e.preventDefault()}>
 				<IconSearch class="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-				<input type="text" placeholder="搜索标题或正文" class="h-7 w-full border-0 bg-transparent pl-8 pr-0 text-xs outline-none placeholder:text-muted-foreground focus:ring-0" bind:value={searchQuery} />
+				<input type="text" aria-label="搜索标题或正文" placeholder="搜索标题或正文" class="h-7 w-full border-0 bg-transparent pl-8 pr-0 text-xs outline-none placeholder:text-muted-foreground focus:ring-0" bind:value={searchQuery} />
 			</form>
 		</div>
 

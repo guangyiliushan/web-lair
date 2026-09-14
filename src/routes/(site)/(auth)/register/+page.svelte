@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { ActionData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import * as Card from '$lib/components/ui/card';
 	import * as Field from '$lib/components/ui/field';
 	import { Input } from '$lib/components/ui/input';
@@ -14,8 +15,8 @@
 <div class="flex w-full flex-col items-center justify-center">
 	<Card.Root class="w-full max-w-md">
 		<Card.Header class="text-center">
-			<Card.Title class="text-2xl">Create your account</Card.Title>
-			<Card.Description>Join the community and start reading</Card.Description>
+			<Card.Title class="text-2xl">{m.auth_register_title()}</Card.Title>
+			<Card.Description>{m.auth_register_description()}</Card.Description>
 		</Card.Header>
 		<Card.Content>
 			{#if form?.message}
@@ -31,61 +32,61 @@
 			<form method="post" action="?/signUp" use:enhance>
 				<Field.FieldGroup>
 					<Field.Field>
-						<Field.FieldLabel for="name">Name</Field.FieldLabel>
+						<Field.FieldLabel for="name">{m.auth_name()}</Field.FieldLabel>
 						<Input
 							id="name"
 							name="name"
 							type="text"
 							autocomplete="name"
-							placeholder="Your name"
+							placeholder={m.auth_name_placeholder()}
 							required
 						/>
 					</Field.Field>
 					<Field.Field>
-						<Field.FieldLabel for="email">Email</Field.FieldLabel>
+						<Field.FieldLabel for="email">{m.auth_email()}</Field.FieldLabel>
 						<Input
 							id="email"
 							name="email"
 							type="email"
 							autocomplete="email"
-							placeholder="you@example.com"
+							placeholder={m.auth_email_placeholder()}
 							required
 						/>
 					</Field.Field>
 					<Field.Field>
-						<Field.FieldLabel for="password">Password</Field.FieldLabel>
+						<Field.FieldLabel for="password">{m.auth_password()}</Field.FieldLabel>
 						<Input
 							id="password"
 							name="password"
 							type="password"
 							autocomplete="new-password"
-							placeholder="At least 8 characters"
+							placeholder={m.auth_password_hint()}
 							required
 						/>
-						<Field.FieldDescription>Must be at least 8 characters</Field.FieldDescription>
+						<Field.FieldDescription>{m.auth_password_hint()}</Field.FieldDescription>
 					</Field.Field>
 					<Field.Field>
-						<Field.FieldLabel for="confirmPassword">Confirm Password</Field.FieldLabel>
+						<Field.FieldLabel for="confirmPassword">{m.auth_confirm_password()}</Field.FieldLabel>
 						<Input
 							id="confirmPassword"
 							name="confirmPassword"
 							type="password"
 							autocomplete="new-password"
-							placeholder="Repeat your password"
+							placeholder={m.auth_confirm_placeholder()}
 							required
 						/>
 					</Field.Field>
 					<Button type="submit" class="w-full">
 						<IconMail data-icon="inline-start" />
-						Create account
+						{m.auth_create_account()}
 					</Button>
 				</Field.FieldGroup>
 			</form>
 		</Card.Content>
 		<Card.Footer class="justify-center">
 			<p class="text-sm text-muted-foreground">
-				Already have an account?
-				<a href="/login" class="font-medium underline-offset-2 hover:underline"> Sign in </a>
+				{m.auth_have_account()}
+				<a href="/login" class="font-medium underline-offset-2 hover:underline"> {m.nav_sign_in()} </a>
 			</p>
 		</Card.Footer>
 	</Card.Root>

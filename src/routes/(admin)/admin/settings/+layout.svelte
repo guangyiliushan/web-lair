@@ -15,23 +15,24 @@
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
 	import { cn } from '$lib/utils';
 	import type { Component, Snippet } from 'svelte';
+	import { m } from '$lib/paraglide/messages';
 
 	let { children }: { children: Snippet } = $props();
 
 	type SectionId = 'user' | 'site' | 'content' | 'notification' | 'search' | 'storage' | 'ai' | 'integrations' | 'system' | 'account' | 'meta-preset';
 
 	const sections: { id: SectionId; label: string; desc: string; icon: Component }[] = [
-		{ id: 'user', label: '用户', desc: '个人资料', icon: IconUser },
-		{ id: 'site', label: 'Site', desc: 'Site URL, SEO', icon: IconSettings },
-		{ id: 'content', label: 'Content', desc: 'Comments, friend links', icon: IconMail },
-		{ id: 'notification', label: 'Notifications', desc: 'Email, Bark push', icon: IconMail },
-		{ id: 'search', label: 'Search push', desc: 'Search engines, full-text search', icon: IconSearch },
-		{ id: 'storage', label: 'Storage', desc: 'Backup, image hosting, comment image uploads', icon: IconDatabase },
-		{ id: 'ai', label: 'AI', desc: 'AI summary, writing assistant', icon: IconSparkles },
-		{ id: 'integrations', label: 'Third-party integrations', desc: 'GitHub, TMDB, Bangumi, etc.', icon: IconPuzzle },
-		{ id: 'system', label: 'System', desc: 'Admin settings, feature toggles', icon: IconSettings },
-		{ id: 'account', label: '账号安全', desc: '登录、认证、凭证', icon: IconShield },
-		{ id: 'meta-preset', label: 'Meta 预设', desc: '预设模板', icon: IconList }
+		{ id: 'user', label: m.admin_settings_user(), desc: m.admin_settings_user_desc(), icon: IconUser },
+		{ id: 'site', label: m.admin_settings_site(), desc: m.admin_settings_site_desc(), icon: IconSettings },
+		{ id: 'content', label: m.admin_settings_content(), desc: m.admin_settings_content_desc(), icon: IconMail },
+		{ id: 'notification', label: m.admin_settings_notification(), desc: m.admin_settings_notification_desc(), icon: IconMail },
+		{ id: 'search', label: m.admin_settings_search(), desc: m.admin_settings_search_desc(), icon: IconSearch },
+		{ id: 'storage', label: m.admin_settings_storage(), desc: m.admin_settings_storage_desc(), icon: IconDatabase },
+		{ id: 'ai', label: m.admin_settings_ai(), desc: m.admin_settings_ai_desc(), icon: IconSparkles },
+		{ id: 'integrations', label: m.admin_settings_integrations(), desc: m.admin_settings_integrations_desc(), icon: IconPuzzle },
+		{ id: 'system', label: m.admin_settings_system(), desc: m.admin_settings_system_desc(), icon: IconSettings },
+		{ id: 'account', label: m.admin_settings_account(), desc: m.admin_settings_account_desc(), icon: IconShield },
+		{ id: 'meta-preset', label: m.admin_settings_meta_preset(), desc: m.admin_settings_meta_preset_desc(), icon: IconList }
 	];
 
 	const isRoot = $derived(page.url.pathname === '/admin/settings');
@@ -50,7 +51,7 @@
 </script>
 
 <svelte:head>
-	<title>设定 - Lair Admin</title>
+	<title>{m.admin_settings_title()} - Lair Admin</title>
 </svelte:head>
 
 <!-- Mobile: flat layout -->
@@ -58,8 +59,8 @@
 	{#if isRoot}
 		<div class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
 			<IconSettings class="size-4 shrink-0 text-muted-foreground" />
-			<h2 class="truncate text-sm font-semibold">设定</h2>
-			<span class="ml-auto text-xs tabular-nums text-muted-foreground">{sections.length} 个</span>
+			<h2 class="truncate text-sm font-semibold">{m.admin_settings_title()}</h2>
+			<span class="ml-auto text-xs tabular-nums text-muted-foreground">{m.admin_settings_count({ count: sections.length })}</span>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			{#each sections as section (section.id)}
@@ -88,7 +89,7 @@
 				size="icon"
 				class="size-8"
 				onclick={() => goto('/admin/settings')}
-				aria-label="返回设置列表"
+				aria-label={m.admin_settings_back()}
 			>
 				<IconArrowLeft data-icon="inline-start" />
 			</Button>
@@ -107,7 +108,7 @@
 <MasterDetail.Root>
 	<!-- 侧边栏导航 -->
 	<MasterDetail.Pane side="master" class="w-80 shrink-0">
-		<MasterDetail.Header icon={IconSettings} title="设定" count={sections.length} />
+		<MasterDetail.Header icon={IconSettings} title={m.admin_settings_title()} count={sections.length} />
 		<MasterDetail.List>
 			{#each sections as section (section.id)}
 				<MasterDetail.Item

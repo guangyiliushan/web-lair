@@ -8,9 +8,9 @@
 	import { IconSunHigh, IconMoonStars, IconDeviceDesktop } from '@tabler/icons-svelte-runes';
 
 	const themes = [
-		{ value: 'light' as const, label: m.theme_light, icon: IconSunHigh },
-		{ value: 'dark' as const, label: m.theme_dark, icon: IconMoonStars },
-		{ value: 'system' as const, label: m.theme_system, icon: IconDeviceDesktop }
+		{ value: 'light' as const, label: m.ui_theme_light, icon: IconSunHigh },
+		{ value: 'dark' as const, label: m.ui_theme_dark, icon: IconMoonStars },
+		{ value: 'system' as const, label: m.ui_theme_system, icon: IconDeviceDesktop }
 	] as const;
 
 	let current = $derived(themeStore.value);
@@ -31,7 +31,7 @@
 						{@const merged = mergeProps(tooltipProps, dropdownProps, {
 							class: 'size-9 rounded-full'
 						})}
-						<Button variant="ghost" size="icon" aria-label={m.toggle_theme()} {...merged}>
+						<Button variant="ghost" size="icon" aria-label={m.ui_toggle_theme()} {...merged}>
 							<IconSunHigh
 								data-icon="inline-start"
 								class="scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90"
@@ -44,7 +44,7 @@
 					{/snippet}
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content align="end" sideOffset={8}>
-					<DropdownMenu.Label>{m.toggle_theme()}</DropdownMenu.Label>
+					<DropdownMenu.Label>{m.ui_toggle_theme()}</DropdownMenu.Label>
 					<DropdownMenu.Separator />
 					<DropdownMenu.RadioGroup value={current} onValueChange={setTheme}>
 						{#each themes as { value, label, icon } (value)}
@@ -60,6 +60,6 @@
 		{/snippet}
 	</Tooltip.Trigger>
 	<Tooltip.Content>
-		{m.toggle_theme()}
+		{m.ui_toggle_theme()}
 	</Tooltip.Content>
 </Tooltip.Root>

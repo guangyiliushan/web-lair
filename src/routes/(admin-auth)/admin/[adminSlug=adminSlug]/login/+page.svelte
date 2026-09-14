@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { ActionData, PageData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import * as Card from '$lib/components/ui/card';
 	import * as Field from '$lib/components/ui/field';
 	import { Input } from '$lib/components/ui/input';
@@ -24,9 +25,9 @@
 			>
 				<IconShieldLock class="size-6" />
 			</div>
-			<Card.Title class="text-2xl">Admin Access</Card.Title>
+			<Card.Title class="text-2xl">{m.auth_admin_title()}</Card.Title>
 			<Card.Description>
-				Only the allowlisted owner account can establish an admin session.
+				{m.auth_admin_description()}
 			</Card.Description>
 		</Card.Header>
 		<Card.Content>
@@ -45,37 +46,36 @@
 
 				<Field.FieldGroup>
 					<Field.Field>
-						<Field.FieldLabel for="email">Admin Email</Field.FieldLabel>
+						<Field.FieldLabel for="email">{m.auth_admin_email()}</Field.FieldLabel>
 						<Input
 							id="email"
 							name="email"
 							type="email"
 							autocomplete="email"
-							placeholder="owner@example.com"
+							placeholder={m.auth_email_placeholder()}
 							required
 						/>
 					</Field.Field>
 					<Field.Field>
-						<Field.FieldLabel for="password">Password</Field.FieldLabel>
+						<Field.FieldLabel for="password">{m.auth_password()}</Field.FieldLabel>
 						<Input
 							id="password"
 							name="password"
 							type="password"
 							autocomplete="current-password"
-							placeholder="Your password"
+							placeholder={m.auth_password_placeholder()}
 							required
 						/>
 					</Field.Field>
 					<Button type="submit" class="w-full">
 						<IconMail data-icon="inline-start" />
-						Establish Admin Session
+						{m.auth_establish_session()}
 					</Button>
 				</Field.FieldGroup>
 			</form>
 
 			<p class="mt-4 text-center text-xs text-muted-foreground">
-				Use this entry only for privileged admin access. Standard site login does not grant admin
-				privileges.
+				{m.auth_admin_note()}
 			</p>
 		</Card.Content>
 	</Card.Root>

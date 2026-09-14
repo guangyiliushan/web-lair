@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
 	import type { ActionData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import * as Card from '$lib/components/ui/card';
 	import * as Field from '$lib/components/ui/field';
 	import { Input } from '$lib/components/ui/input';
@@ -23,8 +24,8 @@
 <div class="flex w-full flex-col items-center justify-center">
 	<Card.Root class="w-full max-w-md">
 		<Card.Header class="text-center">
-			<Card.Title class="text-2xl">Welcome back</Card.Title>
-			<Card.Description>Sign in to your account to continue</Card.Description>
+			<Card.Title class="text-2xl">{m.auth_login_title()}</Card.Title>
+			<Card.Description>{m.auth_login_description()}</Card.Description>
 		</Card.Header>
 		<Card.Content>
 			{#if form?.message}
@@ -40,30 +41,30 @@
 			<form method="post" action="?/signIn" use:enhance>
 				<Field.FieldGroup>
 					<Field.Field>
-						<Field.FieldLabel for="email">Email</Field.FieldLabel>
+						<Field.FieldLabel for="email">{m.auth_email()}</Field.FieldLabel>
 						<Input
 							id="email"
 							name="email"
 							type="email"
 							autocomplete="email"
-							placeholder="you@example.com"
+							placeholder={m.auth_email_placeholder()}
 							required
 						/>
 					</Field.Field>
 					<Field.Field>
-						<Field.FieldLabel for="password">Password</Field.FieldLabel>
+						<Field.FieldLabel for="password">{m.auth_password()}</Field.FieldLabel>
 						<Input
 							id="password"
 							name="password"
 							type="password"
 							autocomplete="current-password"
-							placeholder="Your password"
+							placeholder={m.auth_password_placeholder()}
 							required
 						/>
 					</Field.Field>
 					<Button type="submit" class="w-full">
 						<IconMail data-icon="inline-start" />
-						Sign in with Email
+						{m.auth_sign_in_email()}
 					</Button>
 				</Field.FieldGroup>
 			</form>
@@ -73,7 +74,7 @@
 					href="/forgot-password"
 					class="text-sm text-muted-foreground underline-offset-2 hover:underline"
 				>
-					Forgot password?
+					{m.auth_forgot_password()}
 				</a>
 			</div>
 
@@ -82,7 +83,7 @@
 				<span
 					class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-3 text-xs text-muted-foreground"
 				>
-					or continue with
+					{m.auth_or_continue_with()}
 				</span>
 			</div>
 
@@ -101,9 +102,9 @@
 		</Card.Content>
 		<Card.Footer class="justify-center">
 			<p class="text-sm text-muted-foreground">
-				Don't have an account?
+				{m.auth_no_account()}
 				<a href="/register{redirectParam}" class="font-medium underline-offset-2 hover:underline">
-					Sign up
+					{m.auth_sign_up_link()}
 				</a>
 			</p>
 		</Card.Footer>

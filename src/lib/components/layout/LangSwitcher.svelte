@@ -22,13 +22,13 @@
 	<DropdownMenu.Trigger>
 		{#snippet child({ props })}
 			{@const merged = { ...props, class: 'size-9 rounded-full' }}
-			<Button variant="ghost" size="icon" aria-label={m.language()} {...merged}>
+			<Button variant="ghost" size="icon" aria-label={m.ui_language()} {...merged}>
 				<IconLanguage data-icon="inline-start" />
 			</Button>
 		{/snippet}
 	</DropdownMenu.Trigger>
 	<DropdownMenu.Content align="end" sideOffset={8}>
-		<DropdownMenu.Label>{m.language()}</DropdownMenu.Label>
+		<DropdownMenu.Label>{m.ui_language()}</DropdownMenu.Label>
 		<DropdownMenu.Separator />
 		<DropdownMenu.RadioGroup value={getLocale()} onValueChange={switchLocale}>
 			{#each locales as { value, label } (value)}

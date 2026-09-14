@@ -25,26 +25,27 @@
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 	import { page } from '$app/state';
 	import { AdminHeader } from '$lib/components/admin';
+	import { m } from '$lib/paraglide/messages';
 
 	let { children, data }: LayoutProps = $props();
 
 	const navItems = [
-		{ title: '仪表盘', href: '/admin', icon: IconDashboard },
-		{ title: '博文', href: '/admin/posts', icon: IconArticle },
-		{ title: '手记', href: '/admin/notes', icon: IconNotebook },
-		{ title: '评论', href: '/admin/comments', icon: IconMessage },
-		{ title: '草稿箱', href: '/admin/drafts', icon: IconPencil },
-		{ title: '页面', href: '/admin/pages', icon: IconFileText },
-		{ title: '读者', href: '/admin/readers', icon: IconEye },
-		{ title: '说说', href: '/admin/says', icon: IconQuote },
-		{ title: '备忘录', href: '/admin/memos', icon: IconWriting },
-		{ title: '项目', href: '/admin/projects', icon: IconFolders },
-		{ title: '朋友们', href: '/admin/friends', icon: IconUsers },
-		{ title: 'AI', href: '/admin/ai', icon: IconSparkles },
-		{ title: '数据', href: '/admin/analytics', icon: IconChartBar },
-		{ title: '设定', href: '/admin/settings', icon: IconSettings },
-		{ title: '附加功能', href: '/admin/addons', icon: IconPuzzle },
-		{ title: '维护', href: '/admin/maintenance', icon: IconTool }
+		{ title: m.admin_nav_dashboard(), href: '/admin', icon: IconDashboard },
+		{ title: m.admin_nav_posts(), href: '/admin/posts', icon: IconArticle },
+		{ title: m.admin_nav_notes(), href: '/admin/notes', icon: IconNotebook },
+		{ title: m.admin_nav_comments(), href: '/admin/comments', icon: IconMessage },
+		{ title: m.admin_nav_drafts(), href: '/admin/drafts', icon: IconPencil },
+		{ title: m.admin_nav_pages(), href: '/admin/pages', icon: IconFileText },
+		{ title: m.admin_nav_readers(), href: '/admin/readers', icon: IconEye },
+		{ title: m.admin_nav_says(), href: '/admin/says', icon: IconQuote },
+		{ title: m.admin_nav_memos(), href: '/admin/memos', icon: IconWriting },
+		{ title: m.admin_nav_projects(), href: '/admin/projects', icon: IconFolders },
+		{ title: m.admin_nav_friends(), href: '/admin/friends', icon: IconUsers },
+		{ title: m.admin_nav_ai(), href: '/admin/ai', icon: IconSparkles },
+		{ title: m.admin_nav_analytics(), href: '/admin/analytics', icon: IconChartBar },
+		{ title: m.admin_nav_settings(), href: '/admin/settings', icon: IconSettings },
+		{ title: m.admin_nav_addons(), href: '/admin/addons', icon: IconPuzzle },
+		{ title: m.admin_nav_maintenance(), href: '/admin/maintenance', icon: IconTool }
 	];
 
 	const user = $derived(data.auth?.user);
@@ -85,16 +86,16 @@
 							{/snippet}
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content align="end" side="right" class="w-56">
-							<DropdownMenu.Label>我的账号</DropdownMenu.Label>
+							<DropdownMenu.Label>{m.admin_user_my_account()}</DropdownMenu.Label>
 							<DropdownMenu.Separator />
 							<DropdownMenu.Group>
 								<DropdownMenu.Item>
 									<IconUser data-icon="inline-start" />
-									个人资料
+									{m.admin_user_profile()}
 								</DropdownMenu.Item>
 								<DropdownMenu.Item onclick={() => window.open('/', '_blank')}>
 									<IconExternalLink data-icon="inline-start" />
-									访问站点
+									{m.admin_user_visit_site()}
 								</DropdownMenu.Item>
 							</DropdownMenu.Group>
 							<DropdownMenu.Separator />
@@ -106,7 +107,7 @@
 									}}
 								>
 									<IconLogout data-icon="inline-start" />
-									退出登录
+									{m.admin_user_sign_out()}
 								</DropdownMenu.Item>
 							</form>
 						</DropdownMenu.Content>
