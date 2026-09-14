@@ -38,3 +38,6 @@ project.inlang/cache/
 .gemini/
 .opencode/
 .trae/
+
+# Local tool directories
+.zcode/
