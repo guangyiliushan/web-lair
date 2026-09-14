@@ -54,14 +54,12 @@
 	let codeModeText = $state('');
 
 	// ── 代码模式行号 gutter ──
-	let gutterEl: HTMLElement | null = $state(null);
-	let codeTextarea: HTMLTextAreaElement | null = $state(null);
 	const lineNumbers = $derived(
 		Array.from({ length: codeModeText.split('\n').length }, (_, i) => i + 1)
 	);
-	function syncGutter() {
-		if (gutterEl && codeTextarea) gutterEl.scrollTop = codeTextarea.scrollTop;
-	}
+	// Auto-grow with content so the page is the only scroll container
+	// (leading-6 = 24px per line + py-3 = 24px + 2px slack, floor at 192px).
+	const codeHeight = $derived(Math.max(192, lineNumbers.length * 24 + 26));
 
 	function handleEditorReady(e: LexicalEditor) {
 		editor = e;
@@ -160,37 +158,35 @@
 		<TableCellMenu {editor} />
 	{/if}
 
-	<!-- Editor area -->
-	<div class="min-h-0 flex-1">
-		{#if codeMode}
-			<!-- 代码模式：纯文本编辑（无框视觉 + 行号 gutter，字体/行高/内边距与富文本一致） -->
-			<div
-				class={cn(
-					'flex h-full min-h-48 w-full overflow-hidden',
-					!borderless && 'rounded-lg border border-border bg-background'
-				)}
-			>
+		<!-- Editor area -->
+		<div class="min-h-0 flex-1">
+			{#if codeMode}
+				<!-- 代码模式：纯文本编辑（无框视觉 + 行号 gutter，随内容自动增高，由页面统一滚动） -->
 				<div
-					bind:this={gutterEl}
-					aria-hidden="true"
-					class="w-10 shrink-0 overflow-hidden py-3 pr-2 text-right font-mono text-sm leading-6 text-muted-foreground/50 select-none"
+					class={cn(
+						'flex min-h-48 w-full overflow-hidden',
+						!borderless && 'rounded-lg border border-border bg-background'
+					)}
+					style="height: {codeHeight}px"
 				>
-					{#each lineNumbers as n (n)}
-						<div>{n}</div>
-					{/each}
+					<div
+						aria-hidden="true"
+						class="w-10 shrink-0 overflow-hidden py-3 pr-2 text-right font-mono text-sm leading-6 text-muted-foreground/50 select-none"
+					>
+						{#each lineNumbers as n (n)}
+							<div>{n}</div>
+						{/each}
+					</div>
+					<textarea
+						bind:value={codeModeText}
+						oninput={onCodeModeInput}
+						{placeholder}
+						spellcheck="false"
+						wrap="off"
+						class="min-h-48 w-full flex-1 resize-none overflow-y-hidden bg-transparent px-3 py-3 font-mono text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/50"
+					></textarea>
 				</div>
-				<textarea
-					bind:this={codeTextarea}
-					bind:value={codeModeText}
-					oninput={onCodeModeInput}
-					onscroll={syncGutter}
-					{placeholder}
-					spellcheck="false"
-					wrap="off"
-					class="h-full min-h-48 w-full flex-1 resize-none bg-transparent px-3 py-3 font-mono text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/50"
-				></textarea>
-			</div>
-		{:else}
+			{:else}
 			<!-- 富文本模式：Lexical 编辑器 -->
 			<div
 				use:lexicalEditor={{
