@@ -6,7 +6,6 @@ import {
 	$isNodeSelection,
 	$createParagraphNode,
 	$createTextNode,
-	FORMAT_TEXT_COMMAND,
 	FORMAT_ELEMENT_COMMAND,
 	SELECTION_CHANGE_COMMAND,
 	CLEAR_EDITOR_COMMAND,
@@ -250,7 +249,6 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 
 // ── 导出供 toolbar 使用 ──
 export {
-	FORMAT_TEXT_COMMAND,
 	FORMAT_ELEMENT_COMMAND,
 	SELECTION_CHANGE_COMMAND,
 	CLEAR_EDITOR_COMMAND,

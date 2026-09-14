@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import type { LexicalEditor, TextFormatType } from 'lexical';
-	import { FORMAT_TEXT_COMMAND } from '$lib/components/markdown/editor/lexical-action';
+	import type { LexicalEditor } from 'lexical';
 	import {
+		emptyToolbarState,
+		formatTextWithFocus,
 		insertLink,
 		readToolbarState,
 		getSelectionRect,
@@ -33,18 +34,7 @@
 	let left = $state(0);
 
 	// ── 格式状态 ──
-	let toolbarState = $state<ToolbarState>({
-		isBold: false,
-		isItalic: false,
-		isUnderline: false,
-		isStrikethrough: false,
-		isSuperscript: false,
-		isSubscript: false,
-		isCode: false,
-		isHighlight: false,
-		blockType: 'paragraph',
-		alignment: ''
-	});
+	let toolbarState = $state<ToolbarState>(emptyToolbarState());
 
 	// ── 监听选区变化 ──
 	$effect(() => {
@@ -82,13 +72,6 @@
 		};
 	});
 
-	// ── 点击按钮后保持编辑器焦点 ──
-	function formatAndFocus(format: TextFormatType) {
-		editor?.dispatchCommand(FORMAT_TEXT_COMMAND, format);
-		// 保持编辑器焦点——不在此处 blur
-		editor?.focus();
-	}
-
 	function handleInsertLink() {
 		if (!editor) return;
 		const url = window.prompt('输入链接地址:', 'https://');
@@ -117,7 +100,7 @@
 		<Button
 			variant={isActive('isBold') ? 'secondary' : 'ghost'}
 			size="icon-sm"
-			onclick={() => formatAndFocus('bold')}
+			onclick={() => formatTextWithFocus(editor, 'bold')}
 			aria-pressed={isActive('isBold')}
 			aria-label="粗体"
 			title="粗体 (⌘B)"
@@ -127,7 +110,7 @@
 		<Button
 			variant={isActive('isItalic') ? 'secondary' : 'ghost'}
 			size="icon-sm"
-			onclick={() => formatAndFocus('italic')}
+			onclick={() => formatTextWithFocus(editor, 'italic')}
 			aria-pressed={isActive('isItalic')}
 			aria-label="斜体"
 			title="斜体 (⌘I)"
@@ -137,7 +120,7 @@
 		<Button
 			variant={isActive('isUnderline') ? 'secondary' : 'ghost'}
 			size="icon-sm"
-			onclick={() => formatAndFocus('underline')}
+			onclick={() => formatTextWithFocus(editor, 'underline')}
 			aria-pressed={isActive('isUnderline')}
 			aria-label="下划线"
 			title="下划线 (⌘U)"
@@ -147,7 +130,7 @@
 		<Button
 			variant={isActive('isStrikethrough') ? 'secondary' : 'ghost'}
 			size="icon-sm"
-			onclick={() => formatAndFocus('strikethrough')}
+			onclick={() => formatTextWithFocus(editor, 'strikethrough')}
 			aria-pressed={isActive('isStrikethrough')}
 			aria-label="删除线"
 			title="删除线"
@@ -162,7 +145,7 @@
 		<Button
 			variant={isActive('isSuperscript') ? 'secondary' : 'ghost'}
 			size="icon-sm"
-			onclick={() => formatAndFocus('superscript')}
+			onclick={() => formatTextWithFocus(editor, 'superscript')}
 			aria-pressed={isActive('isSuperscript')}
 			aria-label="上标"
 			title="上标"
@@ -172,7 +155,7 @@
 		<Button
 			variant={isActive('isSubscript') ? 'secondary' : 'ghost'}
 			size="icon-sm"
-			onclick={() => formatAndFocus('subscript')}
+			onclick={() => formatTextWithFocus(editor, 'subscript')}
 			aria-pressed={isActive('isSubscript')}
 			aria-label="下标"
 			title="下标"
@@ -187,7 +170,7 @@
 		<Button
 			variant={isActive('isCode') ? 'secondary' : 'ghost'}
 			size="icon-sm"
-			onclick={() => formatAndFocus('code')}
+			onclick={() => formatTextWithFocus(editor, 'code')}
 			aria-pressed={isActive('isCode')}
 			aria-label="行内代码"
 			title="行内代码"
@@ -197,7 +180,7 @@
 		<Button
 			variant={isActive('isHighlight') ? 'secondary' : 'ghost'}
 			size="icon-sm"
-			onclick={() => formatAndFocus('highlight')}
+			onclick={() => formatTextWithFocus(editor, 'highlight')}
 			aria-pressed={isActive('isHighlight')}
 			aria-label="高亮"
 			title="高亮"

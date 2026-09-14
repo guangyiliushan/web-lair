@@ -44,16 +44,16 @@
 	}
 
 	const TURN_INTO_ITEMS: TurnIntoItem[] = [
-		{ key: 'paragraph', label: 'Text', icon: IconArticle },
-		{ key: 'h1', label: 'Heading 1', icon: IconHeading1 },
-		{ key: 'h2', label: 'Heading 2', icon: IconHeading2 },
-		{ key: 'h3', label: 'Heading 3', icon: IconHeading3 },
-		{ key: 'bullet', label: 'Bullet List', icon: IconList },
-		{ key: 'numbered', label: 'Numbered List', icon: IconListNumbers },
-		{ key: 'todo', label: 'To-do', icon: IconListCheck },
-		{ key: 'quote', label: 'Quote', icon: IconBlockquote },
-		{ key: 'divider', label: 'Divider', icon: IconSeparator },
-		{ key: 'code', label: 'Code', icon: IconCodeDots }
+		{ key: 'paragraph', label: '文本', icon: IconArticle },
+		{ key: 'h1', label: '标题 1', icon: IconHeading1 },
+		{ key: 'h2', label: '标题 2', icon: IconHeading2 },
+		{ key: 'h3', label: '标题 3', icon: IconHeading3 },
+		{ key: 'bullet', label: '无序列表', icon: IconList },
+		{ key: 'numbered', label: '有序列表', icon: IconListNumbers },
+		{ key: 'todo', label: '待办列表', icon: IconListCheck },
+		{ key: 'quote', label: '引用', icon: IconBlockquote },
+		{ key: 'divider', label: '分割线', icon: IconSeparator },
+		{ key: 'code', label: '代码块', icon: IconCodeDots }
 	];
 
 	// ── Props ──
@@ -262,7 +262,7 @@
 		<DropdownMenu.Content align="start" side="bottom" sideOffset={4} class="w-48">
 			<!-- TURN INTO -->
 			<DropdownMenu.Group>
-				<DropdownMenu.Label>TURN INTO</DropdownMenu.Label>
+				<DropdownMenu.Label>转换为</DropdownMenu.Label>
 				{#each TURN_INTO_ITEMS as item (item.key)}
 					<DropdownMenu.Item onclick={() => handleTurnInto(item.key)}>
 						<item.icon />
@@ -275,18 +275,18 @@
 
 			<!-- ACTIONS -->
 			<DropdownMenu.Group>
-				<DropdownMenu.Label>ACTIONS</DropdownMenu.Label>
+				<DropdownMenu.Label>操作</DropdownMenu.Label>
 				<DropdownMenu.Item onclick={handleDuplicate}>
 					<IconCopy />
-					Duplicate
+					复制块
 				</DropdownMenu.Item>
 				<DropdownMenu.Item onclick={handleMoveUp}>
 					<IconArrowUp />
-					Move Up
+					上移
 				</DropdownMenu.Item>
 				<DropdownMenu.Item onclick={handleMoveDown}>
 					<IconArrowDown />
-					Move Down
+					下移
 				</DropdownMenu.Item>
 			</DropdownMenu.Group>
 
@@ -295,7 +295,7 @@
 			<!-- Delete (destructive) -->
 			<DropdownMenu.Item variant="destructive" onclick={handleDelete}>
 				<IconTrash />
-				Delete
+				删除
 			</DropdownMenu.Item>
 		</DropdownMenu.Content>
 	</DropdownMenu.Root>

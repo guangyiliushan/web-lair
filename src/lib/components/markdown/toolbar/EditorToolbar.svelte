@@ -5,7 +5,6 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import type { LexicalEditor, TextFormatType, LexicalCommand, ElementFormatType } from 'lexical';
 	import {
-		FORMAT_TEXT_COMMAND,
 		FORMAT_ELEMENT_COMMAND,
 		UNDO_COMMAND,
 		REDO_COMMAND
@@ -25,6 +24,8 @@
 		insertCheckList,
 		insertMath,
 		applyParagraph,
+		emptyToolbarState,
+		formatTextWithFocus,
 		readToolbarState,
 		type ToolbarState
 	} from '$lib/components/markdown/editor/lexical-helpers';
@@ -125,18 +126,7 @@
 	});
 
 	// ── 工具栏状态 ──
-	let toolbarState = $state<ToolbarState>({
-		isBold: false,
-		isItalic: false,
-		isUnderline: false,
-		isStrikethrough: false,
-		isSuperscript: false,
-		isSubscript: false,
-		isCode: false,
-		isHighlight: false,
-		blockType: 'paragraph',
-		alignment: ''
-	});
+	let toolbarState = $state<ToolbarState>(emptyToolbarState());
 
 	let debugOpen = $state(false);
 	let debugJson = $state('');
@@ -158,7 +148,7 @@
 		editor?.dispatchCommand(cmd, payload);
 	}
 	function formatText(format: TextFormatType) {
-		editor?.dispatchCommand(FORMAT_TEXT_COMMAND, format);
+		formatTextWithFocus(editor, format);
 	}
 	function setAlignment(align: ElementFormatType) {
 		editor?.dispatchCommand(FORMAT_ELEMENT_COMMAND, align);
@@ -245,6 +235,7 @@
 		action: () => void;
 		/** 工具栏可见的最低断点；bp < minBp 时进溢出菜单，99 = 永远溢出 */
 		minBp: BpLevel | 99;
+		disabled?: () => boolean;
 	}
 
 	interface OverflowGroupDef {
@@ -344,6 +335,7 @@
 					label: '分割线',
 					icon: IconSeparator,
 					action: () => insertHorizontalRule(editor!),
+					disabled: () => toolbarState.inTable,
 					minBp: 2
 				},
 				{ id: 'table', label: '插入表格', icon: IconTable, action: handleInsertTable, minBp: 2 }
@@ -353,12 +345,20 @@
 			heading: '插入',
 			items: [
 				{ id: 'link', label: '链接', icon: IconLink, action: handleInsertLink, minBp: 0 },
-				{ id: 'image', label: '图片', icon: IconPhoto, action: handleInsertImage, minBp: 0 },
+				{
+					id: 'image',
+					label: '图片',
+					icon: IconPhoto,
+					action: handleInsertImage,
+					disabled: () => toolbarState.inTable,
+					minBp: 0
+				},
 				{
 					id: 'codeBlock',
 					label: '代码块',
 					icon: IconCodeDots,
 					action: () => insertCodeBlock(editor!),
+					disabled: () => toolbarState.inTable,
 					minBp: 3
 				},
 				{
@@ -366,6 +366,7 @@
 					label: 'Callout · 信息',
 					icon: IconInfoCircle,
 					action: () => insertAlert(editor!, 'info'),
+					disabled: () => toolbarState.inTable,
 					minBp: 3
 				},
 				{
@@ -373,6 +374,7 @@
 					label: 'Callout · 提示',
 					icon: IconBulb,
 					action: () => insertAlert(editor!, 'tip'),
+					disabled: () => toolbarState.inTable,
 					minBp: 3
 				},
 				{
@@ -380,6 +382,7 @@
 					label: 'Callout · 警告',
 					icon: IconAlertTriangle,
 					action: () => insertAlert(editor!, 'warning'),
+					disabled: () => toolbarState.inTable,
 					minBp: 3
 				},
 				{ id: 'tag', label: '标签', icon: IconTag, action: () => insertTag(editor!), minBp: 3 },
@@ -564,8 +567,9 @@
 		size="icon-sm"
 		onclick={handleInsertImage}
 		onmousedown={preventSelectionLoss}
+		disabled={toolbarState.inTable}
 		aria-label="插入图片"
-		title="插入图片"
+		title={toolbarState.inTable ? '表格内不可插入图片' : '插入图片'}
 	>
 		<IconPhoto data-icon="inline-start" />
 	</Button>
@@ -677,8 +681,9 @@
 			size="icon-sm"
 			onclick={() => insertHorizontalRule(editor!)}
 			onmousedown={preventSelectionLoss}
+			disabled={toolbarState.inTable}
 			aria-label="分割线"
-			title="分割线"
+			title={toolbarState.inTable ? '表格内不可插入分割线' : '分割线'}
 		>
 			<IconSeparator data-icon="inline-start" />
 		</Button>
@@ -701,8 +706,9 @@
 			size="icon-sm"
 			onclick={() => insertCodeBlock(editor!)}
 			onmousedown={preventSelectionLoss}
+			disabled={toolbarState.inTable}
 			aria-label="代码块"
-			title="代码块"
+			title={toolbarState.inTable ? '表格内不可插入代码块' : '代码块'}
 		>
 			<IconCodeDots data-icon="inline-start" />
 		</Button>
@@ -715,8 +721,9 @@
 						size="icon-sm"
 						{...props}
 						onmousedown={preventSelectionLoss}
+						disabled={toolbarState.inTable}
 						aria-label="Callout"
-						title="Callout"
+						title={toolbarState.inTable ? '表格内不可插入 Callout' : 'Callout'}
 					>
 						<IconInfoCircle data-icon="inline-start" />
 					</Button>
@@ -775,7 +782,12 @@
 						<DropdownMenu.GroupHeading>{group.heading}</DropdownMenu.GroupHeading>
 						{#each group.items as item (item.id)}
 							{@const ItemIcon = item.icon}
-							<DropdownMenu.Item onclick={item.action}>
+							{@const itemDisabled = item.disabled?.() ?? false}
+							<DropdownMenu.Item
+								onclick={item.action}
+								disabled={itemDisabled}
+								title={itemDisabled ? '表格内不可插入' : item.label}
+							>
 								<ItemIcon data-icon="inline-start" />
 								{item.label}
 								{#if item.shortcut}

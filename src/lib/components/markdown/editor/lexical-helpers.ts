@@ -2,6 +2,8 @@ import {
 	type LexicalEditor,
 	type ElementFormatType,
 	type LexicalNode,
+	type TextFormatType,
+	FORMAT_TEXT_COMMAND,
 	$getSelection,
 	$isRangeSelection,
 	$isElementNode,
@@ -18,7 +20,7 @@ import {
 	INSERT_CHECK_LIST_COMMAND,
 	REMOVE_LIST_COMMAND
 } from '@lexical/list';
-import { INSERT_TABLE_COMMAND } from '@lexical/table';
+import { INSERT_TABLE_COMMAND, $isTableNode } from '@lexical/table';
 import { $createLinkNode } from '@lexical/link';
 import { $createCodeNode } from '@lexical/code';
 import { INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/extension';
@@ -263,6 +265,36 @@ export function insertAlert(editor: LexicalEditor, type: AlertType = DEFAULT_ALE
 	});
 }
 
+// Toolbar character formatting shared by the top and floating toolbars.
+
+/** Initial toolbar state; keeps the shape in one place. */
+export function emptyToolbarState(): ToolbarState {
+	return {
+		isBold: false,
+		isItalic: false,
+		isUnderline: false,
+		isStrikethrough: false,
+		isSuperscript: false,
+		isSubscript: false,
+		isCode: false,
+		isHighlight: false,
+		blockType: 'paragraph',
+		alignment: '',
+		inTable: false
+	};
+}
+
+/**
+ * Apply a character format and return focus to the editor.
+ * Clicking a toolbar button otherwise leaves the selection unusable
+ * and the format is silently dropped.
+ */
+export function formatTextWithFocus(editor: LexicalEditor | null, format: TextFormatType): void {
+	if (!editor) return;
+	editor.dispatchCommand(FORMAT_TEXT_COMMAND, format);
+	editor.focus();
+}
+
 // ── 工具栏状态读取（封装 $ 前缀函数，避免 .svelte 文件直接导入）──
 
 /** 工具栏需要追踪的格式状态 */
@@ -278,6 +310,8 @@ export interface ToolbarState {
 	blockType: 'paragraph' | 'h1' | 'h2' | 'h3' | 'bullet' | 'number' | 'check' | 'quote';
 	/** 当前块级元素的对齐方式 */
 	alignment: ElementFormatType | '';
+	/** 光标是否在表格单元格内(块级插入应禁用) */
+	inTable: boolean;
 }
 
 /**
@@ -288,18 +322,7 @@ export interface ToolbarState {
  */
 export function readToolbarState(): ToolbarState {
 	const selection = $getSelection();
-	const state: ToolbarState = {
-		isBold: false,
-		isItalic: false,
-		isUnderline: false,
-		isStrikethrough: false,
-		isSuperscript: false,
-		isSubscript: false,
-		isCode: false,
-		isHighlight: false,
-		blockType: 'paragraph',
-		alignment: ''
-	};
+	const state = emptyToolbarState();
 
 	if ($isRangeSelection(selection)) {
 		state.isBold = selection.hasFormat('bold');
@@ -310,6 +333,16 @@ export function readToolbarState(): ToolbarState {
 		state.isSubscript = selection.hasFormat('subscript');
 		state.isCode = selection.hasFormat('code');
 		state.isHighlight = selection.hasFormat('highlight');
+
+		// 从锚点向上找表格祖先(块级插入在表格内应禁用)
+		let tableNode: LexicalNode | null = selection.anchor.getNode();
+		while (tableNode) {
+			if ($isTableNode(tableNode)) {
+				state.inTable = true;
+				break;
+			}
+			tableNode = tableNode.getParent();
+		}
 
 		// 读取当前块的对齐方式
 		const anchorNode = selection.anchor.getNode();
