@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderMarkdownToHtmlSync } from '../editor/markdown-config';
+import { renderMarkdownToHtmlSync } from './markdown-config';
 
 /**
  * 渲染管线回归：验证 remark-tag 与 remark-directive（callout）
