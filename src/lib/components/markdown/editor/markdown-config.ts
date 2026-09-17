@@ -106,7 +106,17 @@ export function buildSanitizeSchema(): Schema {
 			...defaultSchema.attributes,
 			// 允许所有元素携带 class/style/id 与 data-*（KaTeX/Shiki/自定义组件依赖）
 			'*': [...(defaultSchema.attributes?.['*'] ?? []), 'className', 'style', 'id', 'data*'],
-			a: [...(defaultSchema.attributes?.a ?? []), 'target', 'rel', 'className'],
+			// hast-util-sanitize 的 findDefinition 只取第一个同名条目:
+			// defaultSchema 对 a 的受限条目 ['className','data-footnote-backref']
+			// 匹配失败时返回空数组并短路 '*' 兜底,必须先移除再追加裸 className。
+			a: [
+				...(defaultSchema.attributes?.a ?? []).filter(
+					(entry) => !(Array.isArray(entry) && entry[0] === 'className')
+				),
+				'target',
+				'rel',
+				'className'
+			],
 			img: [...(defaultSchema.attributes?.img ?? []), 'loading', 'className', 'width', 'height'],
 			code: [...(defaultSchema.attributes?.code ?? []), 'className'],
 			pre: [...(defaultSchema.attributes?.pre ?? []), 'className'],
