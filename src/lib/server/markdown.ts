@@ -12,9 +12,12 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
 import { remarkContainerDirective } from '$lib/components/markdown/plugins/remark-directive';
-import { remarkSpoilerInline } from '$lib/components/markdown/plugins/remark-spoiler-inline';
+import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
+import { remarkMark } from '$lib/components/markdown/plugins/remark-mark';
+import { remarkMathGuard } from '$lib/components/markdown/plugins/remark-math-guard';
 import { remarkMention } from '$lib/components/markdown/plugins/remark-mention';
 import { remarkTag } from '$lib/components/markdown/plugins/remark-tag';
+import { attentionHandlers } from '$lib/components/markdown/plugins/attention-marker';
 import { rehypeMermaid } from '$lib/components/markdown/plugins/rehype-mermaid';
 import { buildSanitizeSchema } from '$lib/components/markdown';
 
@@ -49,13 +52,15 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			.use(remarkParse)
 			.use(remarkGfm)
 			.use(remarkMath)
+			.use(remarkMathGuard)
 			.use(remarkDirective)
 			.use(remarkContainerDirective)
-			.use(remarkSpoilerInline)
+			.use(remarkSpoiler)
+			.use(remarkMark)
 			.use(remarkMention)
 			.use(remarkTag)
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload 限制
-			.use(remarkRehype as any, { allowDangerousHtml: true })
+			.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload
 			.use(rehypeKatex as any, {
 				throwOnError: false,

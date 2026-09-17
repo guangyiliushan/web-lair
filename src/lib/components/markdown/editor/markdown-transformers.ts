@@ -563,6 +563,12 @@ export const subscriptTransformer: TextMatchTransformer = {
 	type: 'text-match'
 };
 
+// ── Mark：`==x==` ↔ 高亮格式（规范 §2 #5）──
+//
+// 无需自定义 transformer:@lexical/markdown 0.46 核心TRANSFORMERS 已含
+// HIGHLIGHT text-format（tag '==' ↔ highlight format）,导入、导出与
+// 贴靠语义由核心提供;渲染端由 remark-mark(micromark attention)解析。
+
 // ── 聚合 ──
 
 /**

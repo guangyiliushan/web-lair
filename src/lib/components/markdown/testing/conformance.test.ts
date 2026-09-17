@@ -4,8 +4,8 @@ import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { conformanceCases } from './conformance-cases';
 
 /**
- * Conformance 双管线测试:同一用例集必须同时通过
- * 客户端轻量管线与服务器全量管线。
+ * Dual-pipeline conformance test: the same case set must pass on both the
+ * client light pipeline and the full server pipeline.
  */
 
 function assertCase(html: string, input: string, contains: string[], notContains?: string[]) {

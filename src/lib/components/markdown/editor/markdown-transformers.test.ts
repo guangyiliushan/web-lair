@@ -215,6 +215,23 @@ describe('phase 1-6 新增能力 roundtrip', () => {
 	});
 });
 
+describe('mark transformer (==x== <-> highlight)', () => {
+	it('roundtrips ==mark== syntax', () => {
+		expect(roundtrip('前 ==高亮== 后')).toBe('前 ==高亮== 后');
+	});
+
+	it('preserves nested formats inside marks', () => {
+		// 核心 transformer 会规范化包裹顺序(mark 外层、粗体内层),语义等价
+		const out = roundtrip('==**粗体高亮**==');
+		expect(out).toBe('**==粗体高亮==**');
+	});
+
+	it('keeps plain == untouched in editor roundtrip', () => {
+		// 编辑器侧不做贴靠判定(渲染端 micromark 保证),纯文本原样往返
+		expect(roundtrip('a == b == c')).toBe('a == b == c');
+	});
+});
+
 describe('alert json <-> markdown helpers', () => {
 	it('converts markdown to alert json and back', () => {
 		const json = markdownToAlertJson('- 项一\n- 项二\n\n段落');

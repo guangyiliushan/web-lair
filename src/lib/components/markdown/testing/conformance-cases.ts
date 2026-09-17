@@ -1,31 +1,35 @@
 /**
- * Conformance 用例集 — 对应《分层 Markdown 语法规范 v0.3》§4/§5/§9。
+ * Conformance case set -- maps the layered markdown spec v0.3 (4/5/9).
  *
- * 每条用例在服务端管线(src/lib/server/markdown.ts)与客户端轻量管线
- * (markdown-config.ts)上运行,输出必须一致满足断言。
+ * Every case runs on both the server pipeline (src/lib/server/markdown.ts)
+ * and the client light pipeline (markdown-config.ts); both outputs must
+ * satisfy the assertions.
  *
- * 断言采用 contains/notContains 而非整段 HTML 快照:两条管线的代码高亮
- * 输出不同(Shiki vs 纯文本),最小公集断言足以锁定行为且对实现细节鲁棒。
+ * Assertions use contains/notContains instead of full HTML snapshots: the
+ * two pipelines differ in code-highlighting output (Shiki vs plain text),
+ * and smallest-common-subset assertions lock behavior while staying robust
+ * to implementation details.
  *
- * 维护约定:迁移批次先在此追加目标行为用例(红),实现后转绿(红→绿)。
- * id 稳定不变,规范章节写在 spec 字段。
+ * Maintenance: migration batches append target-behavior cases here first
+ * (red); implementations turn them green. ids are stable and the spec
+ * section lives in the `spec` field.
  */
 
 export interface ConformanceCase {
-	/** 稳定 id,格式 <层>-<条目>-<slug> */
+	/** stable id, shaped <layer>-<item>-<slug> */
 	id: string;
-	/** 对应规范章节,如 "§4.2" */
+	/** the spec section it maps to, e.g. "§4.2" */
 	spec: string;
-	/** 输入 markdown 源 */
+	/** input markdown source */
 	input: string;
-	/** 渲染输出必须包含的片段 */
+	/** fragments the rendered output must contain */
 	contains: string[];
-	/** 渲染输出必须不包含的片段 */
+	/** fragments the rendered output must not contain */
 	notContains?: string[];
 }
 
 export const conformanceCases: ConformanceCase[] = [
-	// ── L0 基座 ──
+	// L0 base
 	{
 		id: 'l0-basic-emphasis',
 		spec: '§1',
@@ -52,7 +56,7 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['<pre', '<code']
 	},
 
-	// ── L1 基座(GFM)──
+	// L1 base (GFM)
 	{
 		id: 'l1-strikethrough',
 		spec: '§1',
@@ -84,7 +88,7 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['脚注内容']
 	},
 
-	// ── L2 行内 ──
+	// L2 inline
 	{
 		id: 'l2-math-inline',
 		spec: '§2 #2',
@@ -123,7 +127,154 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['<span class="tag">tag</span>']
 	},
 
-	// ── L2 块级 ──
+	// L2 inline: ==mark== (micromark attention)
+	{
+		id: 'l2-mark-basic',
+		spec: '§2 #5',
+		input: '高亮 ==重点== 结束',
+		contains: ['<mark>重点</mark>']
+	},
+	{
+		id: 'l2-mark-flanking-space-separated',
+		spec: '§4.3',
+		input: 'a == b == c',
+		contains: ['a == b == c'],
+		notContains: ['<mark>']
+	},
+	{
+		id: 'l2-mark-flanking-plus-increment',
+		spec: '§4.3',
+		input: 'i++ == ++i',
+		contains: ['i++ == ++i'],
+		notContains: ['<mark>']
+	},
+	{
+		id: 'l2-mark-flanking-punctuation-boundary',
+		spec: '§4.3',
+		input: '这是（==重点==）注意',
+		contains: ['<mark>重点</mark>']
+	},
+	{
+		id: 'l2-mark-escape',
+		spec: '§4.4',
+		input: '字面 \\=\\=x\\=\\= 不高亮',
+		contains: ['==x=='],
+		notContains: ['<mark>']
+	},
+	{
+		id: 'l2-mark-inside-math-disabled',
+		spec: '§4.2',
+		input: '$a == b$',
+		contains: ['katex'],
+		notContains: ['<mark>']
+	},
+	{
+		id: 'l2-mark-inside-inline-code-disabled',
+		spec: '§4.2',
+		input: '行内代码 `==x==` 不解析',
+		contains: ['<code>==x==</code>'],
+		notContains: ['<mark>']
+	},
+	{
+		id: 'l2-mark-table-cell-allowed',
+		spec: '§4.2',
+		input: '| a | ==b== |\n| --- | --- |',
+		contains: ['<mark>b</mark>']
+	},
+	{
+		id: 'l2-mark-nested-with-emphasis',
+		spec: '§4.1',
+		input: '==*斜体加亮*==',
+		// lock the full nested structure: a missing wrapper or wrong order must fail
+		contains: ['<mark><em>斜体加亮</em></mark>']
+	},
+	{
+		id: 'l2-mark-odd-markers-stay-literal',
+		spec: '§2 #5',
+		input: '三个 === 定界符保持字面',
+		contains: ['==='],
+		notContains: ['<mark>']
+	},
+
+	// L2 inline: ||spoiler|| guards (micromark attention)
+	{
+		id: 'l2-spoiler-flanking-space-separated',
+		spec: '§4.3',
+		input: 'a || b || c',
+		contains: ['a || b || c'],
+		notContains: ['class="spoiler"']
+	},
+	{
+		id: 'l2-spoiler-escape',
+		spec: '§4.4',
+		input: '字面 \\|\\|x\\|\\| 不剧透',
+		contains: ['||x||'],
+		notContains: ['class="spoiler"']
+	},
+	{
+		id: 'l2-spoiler-inside-math-disabled',
+		spec: '§4.2',
+		input: '$‖x‖ 与 a || b$',
+		contains: ['katex'],
+		notContains: ['class="spoiler"']
+	},
+	{
+		// 4.2 table-cell ban on `||` in practice: a bare `||` is consumed by the
+		// GFM table structure as a cell delimiter (not a spoiler concern); what can
+		// enter cell inline content is the escaped form `\|\|`, which must stay
+		// literal and never become a spoiler.
+		id: 'l2-spoiler-table-cell-disabled',
+		spec: '§4.2',
+		input: '| a | x \\|\\|剧透\\|\\| y |\n| --- | --- |',
+		notContains: ['class="spoiler"'],
+		contains: ['||剧透||']
+	},
+	{
+		id: 'l2-spoiler-odd-markers-stay-literal',
+		spec: '§2 #6',
+		input: '三个 ||| 定界符保持字面',
+		contains: ['|||'],
+		notContains: ['class="spoiler"']
+	},
+
+	// L2 inline: math guard (2 #2)
+	{
+		id: 'l2-math-guard-price-pair',
+		spec: '§2 #2',
+		input: '价格 $5,成本 $3 均为字面',
+		notContains: ['katex'],
+		contains: ['$5']
+	},
+	{
+		id: 'l2-math-guard-letter-before-opener',
+		spec: '§2 #2',
+		input: '字母后$x+y$保持字面',
+		notContains: ['katex'],
+		contains: ['$x+y$']
+	},
+	{
+		id: 'l2-math-guard-digit-after-closer',
+		spec: '§2 #2',
+		input: '$1+1$2 后跟数字保持字面',
+		notContains: ['katex'],
+		contains: ['$1+1$']
+	},
+	{
+		id: 'l2-math-guard-underscore-before-opener',
+		spec: '§2 #2',
+		input: '变量 tail_$x$ 保持字面',
+		notContains: ['katex'],
+		contains: ['$x$']
+	},
+	{
+		id: 'l2-math-guard-unicode-digit-after-closer',
+		spec: '§2 #2',
+		input: '$x$１ 全角数字保持字面',
+		notContains: ['katex'],
+		contains: ['$x$']
+	},
+
+	// L2 block
 	{
 		id: 'l2-callout-info',
 		spec: '§3.1(遗留 :::info)',
@@ -143,7 +294,7 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['<sup>2</sup>', '<sub>1</sub>']
 	},
 
-	// ── §5 错误恢复 ──
+	// 5 error recovery
 	{
 		id: 'l5-unknown-container-renders-content',
 		spec: '§5',
