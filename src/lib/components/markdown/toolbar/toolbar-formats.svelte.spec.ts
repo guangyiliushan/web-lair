@@ -8,7 +8,6 @@ import ToolbarTestHost from './ToolbarTestHost.svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
-
 // Regression: top toolbar format buttons lost the editor selection and did
 // nothing, while the floating toolbar applied the same format correctly.
 describe('editor toolbar character formats', () => {
@@ -44,7 +43,6 @@ describe('editor toolbar character formats', () => {
 				placeholder: '输入正文...'
 			});
 
-			const user = userEvent.setup();
 			const body = page.getByRole('textbox', { name: '输入正文...' });
 			await expect.element(body).toBeInTheDocument();
 			const toolbar = page.getByRole('toolbar', { name: '编辑器工具栏' });

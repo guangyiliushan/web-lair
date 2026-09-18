@@ -240,7 +240,12 @@
 	onmouseleave={onHandleLeave}
 >
 	<!-- Add Block Button -->
-	<Button variant="ghost" size="icon-sm" aria-label={m.toolbar_add_block()} onclick={handleAddBlock}>
+	<Button
+		variant="ghost"
+		size="icon-sm"
+		aria-label={m.toolbar_add_block()}
+		onclick={handleAddBlock}
+	>
 		<IconPlus data-icon="inline-start" />
 	</Button>
 

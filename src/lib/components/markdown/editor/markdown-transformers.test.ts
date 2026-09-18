@@ -50,27 +50,27 @@ describe('markdown transformers roundtrip', () => {
 	});
 
 	it('preserves headings, paragraphs, tags and alert containers', () => {
-		const md = '# 标题\n\n正文 #tag#\n\n:::info\n- 项一\n- 项二\n:::';
+		const md = '# 标题\n\n正文 <tag>标签</tag>\n\n:::info\n- 项一\n- 项二\n:::';
 		const out = roundtrip(md);
 
 		expect(out).toContain('# 标题');
-		expect(out).toContain('#tag#');
+		expect(out).toContain('<tag>标签</tag>');
 		expect(out).toContain(':::info');
 		expect(out).toContain('- 项一');
 		expect(out).toContain('- 项二');
 	});
 
 	it('is stable on a second roundtrip (idempotent)', () => {
-		const md = '# 标题\n\n正文 #tag#\n\n:::info\n- 项一\n- 项二\n:::';
+		const md = '# 标题\n\n正文 <tag>标签</tag>\n\n:::info\n- 项一\n- 项二\n:::';
 		const once = roundtrip(md);
 		const twice = roundtrip(once);
 		expect(twice).toBe(once);
 	});
 
-	it('exports TagNode as #text#', () => {
-		const out = roundtrip('前文 #svelte# 后文');
-		expect(out).toContain('#svelte#');
-		expect(out).not.toContain('前文 #svelte# 后文 #svelte#');
+	it('exports TagNode as <tag>…</tag> exactly once', () => {
+		const out = roundtrip('前文 <tag>svelte</tag> 后文');
+		expect(out).toContain('<tag>svelte</tag>');
+		expect(out.match(/<tag>svelte<\/tag>/g)).toHaveLength(1);
 	});
 
 	it('exports alert with its type intact', () => {
@@ -94,9 +94,9 @@ describe('markdown transformers roundtrip', () => {
 	});
 
 	it('handles multiple tags in one paragraph', () => {
-		const out = roundtrip('同时使用 #alpha# 与 #beta#');
-		expect(out).toContain('#alpha#');
-		expect(out).toContain('#beta#');
+		const out = roundtrip('同时使用 <tag>alpha</tag> 与 <tag>beta</tag>');
+		expect(out).toContain('<tag>alpha</tag>');
+		expect(out).toContain('<tag>beta</tag>');
 	});
 });
 
@@ -189,7 +189,7 @@ describe('phase 1-6 新增能力 roundtrip', () => {
 		const md = [
 			'# 大标题',
 			'',
-			'正文 #tag# 与 <sup>上标</sup>',
+			'正文 <tag>标签</tag> 与 <sup>上标</sup>',
 			'',
 			'- [ ] 待办',
 			'',
@@ -221,13 +221,13 @@ describe('mark transformer (==x== <-> highlight)', () => {
 	});
 
 	it('preserves nested formats inside marks', () => {
-		// 核心 transformer 会规范化包裹顺序(mark 外层、粗体内层),语义等价
+		// the core transformer normalizes the nesting order (mark outer, bold inner)
 		const out = roundtrip('==**粗体高亮**==');
 		expect(out).toBe('**==粗体高亮==**');
 	});
 
 	it('keeps plain == untouched in editor roundtrip', () => {
-		// 编辑器侧不做贴靠判定(渲染端 micromark 保证),纯文本原样往返
+		// the editor does no flanking checks (micromark guarantees them when rendering)
 		expect(roundtrip('a == b == c')).toBe('a == b == c');
 	});
 });

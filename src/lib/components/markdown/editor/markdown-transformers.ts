@@ -4,7 +4,7 @@
  * Lexical 的 markdown 往返（$convertToMarkdownString / $convertFromMarkdownString）
  * 只认识已注册 Transformer 的节点——缺少 Transformer 的自定义节点在往返中会丢失。
  *
- * 本模块为 TagNode（`#text#`）与 AlertNode（`:::info ... :::`）提供：
+ * 本模块为 TagNode（`<tag>x</tag>`）与 AlertNode（`:::info ... :::`）提供：
  * - 导出（Lexical 树 → Markdown）
  * - 导入（Markdown → Lexical 树）
  * - Alert 嵌套内容的 editorState JSON ↔ Markdown 互转助手
@@ -67,27 +67,28 @@ import type { AlertType } from '$lib/components/markdown/alert/alert-types';
 import { DEFAULT_ALERT_TYPE } from '$lib/components/markdown/alert/alert-types';
 import { EDITOR_THEME, NESTED_EDITOR_NODES } from '$lib/components/markdown/editor/editor-shared';
 
-// ── Tag：`#内容#` → TagNode ──
+// ── Tag: `<tag>x</tag>` ↔ TagNode (4.5 whitelist element) ──
 
 /**
- * 行内标签 Transformer。
+ * Inline tag transformer.
  *
- * 语法约束（有意为之，见设计文档 §8）：
- * - 标签内容不允许空白符与 `#`，不允许跨行
- * - 与标题语法不冲突：HEADING 要求 `#` 后跟空格，而标签内容首字符非空白
+ * Spec v0.3 retires the `#content#` syntax (the "explicitly absent" list of
+ * spec 2) in favour of the 4.5 whitelist `<tag>` inline element; the render
+ * side keeps it through the raw-HTML whitelist and the site layer (L3) styles
+ * it with element selectors.
  */
 export const tagTransformer: TextMatchTransformer = {
 	dependencies: [TagNode],
-	importRegExp: /#([^#\s]+)#/,
-	regExp: /#([^#\s]+)#$/,
-	trigger: '#',
+	importRegExp: /<tag>([^<]+)<\/tag>/,
+	regExp: /<tag>([^<]+)<\/tag>$/,
+	trigger: '>',
 	replace: (textNode, match) => {
 		const tagNode = $createTagNode(match[1]);
 		textNode.replace(tagNode);
 	},
 	export: (node) => {
 		if (!$isTagNode(node)) return null;
-		return `#${node.getTextContent()}#`;
+		return `<tag>${node.getTextContent()}</tag>`;
 	},
 	type: 'text-match'
 };
@@ -563,11 +564,10 @@ export const subscriptTransformer: TextMatchTransformer = {
 	type: 'text-match'
 };
 
-// ── Mark：`==x==` ↔ 高亮格式（规范 §2 #5）──
-//
-// 无需自定义 transformer:@lexical/markdown 0.46 核心TRANSFORMERS 已含
-// HIGHLIGHT text-format（tag '==' ↔ highlight format）,导入、导出与
-// 贴靠语义由核心提供;渲染端由 remark-mark(micromark attention)解析。
+// ── Mark: `==x==` ↔ highlight format (spec §2 #5) ──
+// No custom transformer needed: the core TRANSFORMERS in @lexical/markdown 0.46
+// already ship the HIGHLIGHT text format (`==` ↔ highlight) — import, export and
+// flanking included; the render side uses remark-mark (micromark attention).
 
 // ── 聚合 ──
 

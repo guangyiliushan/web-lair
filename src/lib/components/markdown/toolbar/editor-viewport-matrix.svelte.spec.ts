@@ -8,7 +8,6 @@ import ToolbarTestHost from './ToolbarTestHost.svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
-
 /**
  * Layout invariants across a representative device-viewport matrix.
  *

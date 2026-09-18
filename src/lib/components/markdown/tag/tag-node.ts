@@ -54,6 +54,18 @@ export class TagNode extends TextNode {
 
 	static importDOM(): DOMConversionMap | null {
 		return {
+			// render-side form: the <tag> inline element (4.5 whitelist)
+			tag: () => {
+				return {
+					conversion: (element) => {
+						const text = element.textContent ?? '';
+						const tagNode = $createTagNode(text);
+						return { node: tagNode };
+					},
+					priority: 1
+				};
+			},
+			// 兼容旧导出的编辑器内部形态 span.rich-editor-tag
 			span: (node) => {
 				const el = node as HTMLElement;
 				if (el.classList.contains('rich-editor-tag')) {

@@ -22,8 +22,33 @@ import type { BlockContent } from 'mdast';
  * 由后续 rehype-raw 解析为 HAST。
  */
 export const remarkContainerDirective: Plugin<[], Root> = () => {
-	return (tree) => {
+	return (tree, file) => {
+		const source = String(file.value ?? '');
+
 		visit(tree, (node, index, parent) => {
+			// Unregistered text/leaf directives are restored to their literal
+			// source. The closed L2 set has no text/leaf directives at all
+			// (spec 2), and micromark-extension-directive otherwise happily parses
+			// a bare `:word` out of ordinary prose (`12:30`, `说明:内容`) into an
+			// unrendered node — which silently swallowed the text after the colon
+			// (spec 5: content is never swallowed).
+			if (node.type === 'textDirective' || node.type === 'leafDirective') {
+				if (!parent || index == null) return;
+				// Parsed directives always carry positions; the guard is defensive.
+				const { start, end } = node.position ?? {};
+				if (start?.offset == null || end?.offset == null) return;
+				const literal = { type: 'text' as const, value: source.slice(start.offset, end.offset) };
+				const replacement = (node.type === 'leafDirective'
+					? // leaf directives sit at block level, so keep a paragraph
+						{ type: 'paragraph', children: [literal] }
+					: literal) as unknown as { type: string };
+				// `parent.children` is a union of node lists (root / phrasing / table
+				// cell ...), which defeats the overloaded splice; mutate through a
+				// widened view instead.
+				(parent.children as unknown as Array<{ type: string }>).splice(index, 1, replacement);
+				return index + 1;
+			}
+
 			if (node.type !== 'containerDirective' || !parent || index == null) return;
 
 			const directive = node as unknown as ContainerDirective;

@@ -15,8 +15,11 @@ import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
 import { remarkMark } from '$lib/components/markdown/plugins/remark-mark';
 import { remarkMathGuard } from '$lib/components/markdown/plugins/remark-math-guard';
 import { remarkMention } from '$lib/components/markdown/plugins/remark-mention';
-import { remarkTag } from '$lib/components/markdown/plugins/remark-tag';
 import { attentionHandlers } from '$lib/components/markdown/plugins/attention-marker';
+import {
+	rehypeMarkMdastImages,
+	rehypeRawHtmlWhitelist
+} from '$lib/components/markdown/plugins/rehype-raw-html-whitelist';
 
 import type { Schema } from 'hast-util-sanitize';
 
@@ -89,44 +92,88 @@ export interface MarkdownRendererProps {
 // ── rehype-sanitize schema ──
 
 /**
- * 构建 rehype-sanitize schema。
+ * Builds the rehype-sanitize schema (spec 4.5, tightened).
  *
- * 在 defaultSchema 基础上扩展：
- * - KaTeX 输出的 MathML 标签和属性
- * - Shiki 高亮输出的 data-* 属性
- * - 自定义组件（spoiler/mermaid/mention/tag/callout）的 class
- * - 图片 loading 属性
+ * On top of defaultSchema:
+ * - the global attribute surface is className/id only (class is pipeline
+ *   output, never user input); style and data-* are narrowed to per-element
+ *   allowlists
+ * - style is kept for: span (KaTeX output) and code (Shiki output)
+ * - data-* allowlist (derived from auditing the real pipeline output): Shiki
+ *   (data-rehype-pretty-code-figure/-language/-theme/-line) and GFM
+ *   footnotes (data-footnote-ref/-notes/-backref)
+ * - the 4.5 whitelist elements carry their closed attribute key sets
+ *   (kbd/mark/tag/details/video/audio/...)
+ * - protocols: href allows the mention token schemes (@gh/@tw/@tg); src
+ *   drops data: (the `!` syntax is the only image entry point)
  *
- * 注意：hast-util-sanitize v5 使用 hast **属性名**（如 className），
- * 而非 HTML 属性名（class）；'data*' 为特殊值，放行全部 data-* 属性。
+ * hast-util-sanitize's findDefinition takes only the first entry with a
+ * given name, so the restricted tuple in defaultSchema must be removed before
+ * appending a bare className (see the a element).
  *
- * 该 schema 同时用于服务端管线和客户端轻量管线。
+ * The same schema serves both the server and the client light pipeline.
  */
 export function buildSanitizeSchema(): Schema {
+	// hast-util-sanitize's findDefinition takes the FIRST entry with a matching
+	// name, so a restricted `className` tuple inherited from defaultSchema
+	// (a: ['className','data-footnote-backref'], code: [['className', {}]],
+	// section: ['className','footnotes']) shadows any bare `className` appended
+	// later. Drop those tuples before appending the permissive entry.
+	const withoutClassNameTuple = (entry: unknown): boolean =>
+		!(Array.isArray(entry) && entry[0] === 'className');
 	return {
 		...defaultSchema,
 		attributes: {
 			...defaultSchema.attributes,
-			// 允许所有元素携带 class/style/id 与 data-*（KaTeX/Shiki/自定义组件依赖）
-			'*': [...(defaultSchema.attributes?.['*'] ?? []), 'className', 'style', 'id', 'data*'],
-			// hast-util-sanitize 的 findDefinition 只取第一个同名条目:
-			// defaultSchema 对 a 的受限条目 ['className','data-footnote-backref']
-			// 匹配失败时返回空数组并短路 '*' 兜底,必须先移除再追加裸 className。
+			'*': [...(defaultSchema.attributes?.['*'] ?? []), 'className', 'id'],
 			a: [
-				...(defaultSchema.attributes?.a ?? []).filter(
-					(entry) => !(Array.isArray(entry) && entry[0] === 'className')
-				),
+				...(defaultSchema.attributes?.a ?? []).filter(withoutClassNameTuple),
 				'target',
 				'rel',
 				'className'
 			],
 			img: [...(defaultSchema.attributes?.img ?? []), 'loading', 'className', 'width', 'height'],
-			code: [...(defaultSchema.attributes?.code ?? []), 'className'],
-			pre: [...(defaultSchema.attributes?.pre ?? []), 'className'],
-			span: [...(defaultSchema.attributes?.span ?? []), 'className', 'style', 'ariaHidden'],
-			div: [...(defaultSchema.attributes?.div ?? []), 'className', 'style'],
-			figure: [...(defaultSchema.attributes?.figure ?? []), 'className'],
-			figcaption: [...(defaultSchema.attributes?.figcaption ?? []), 'className'],
+			code: [
+				...(defaultSchema.attributes?.code ?? []).filter(withoutClassNameTuple),
+				'className',
+				'dataLanguage',
+				'dataTheme',
+				'style'
+			],
+			pre: [...(defaultSchema.attributes?.pre ?? []), 'className', 'dataRehypePrettyCodeFigure'],
+			figure: [
+				...(defaultSchema.attributes?.figure ?? []),
+				'className',
+				'dataRehypePrettyCodeFigure',
+				'dataLanguage',
+				'dataTheme'
+			],
+			figcaption: [
+				...(defaultSchema.attributes?.figcaption ?? []),
+				'className',
+				'dataRehypePrettyCodeCaption'
+			],
+			span: [
+				...(defaultSchema.attributes?.span ?? []),
+				'className',
+				'style',
+				'dataLine',
+				'ariaHidden'
+			],
+			div: [...(defaultSchema.attributes?.div ?? []), 'className'],
+			sup: [...(defaultSchema.attributes?.sup ?? []), 'dataFootnoteRef'],
+			section: [
+				...(defaultSchema.attributes?.section ?? []).filter(withoutClassNameTuple),
+				'dataFootnotes',
+				'className'
+			],
+			// 4.5 whitelist element attribute key sets
+			details: ['open', 'id', 'className'],
+			abbr: ['title'],
+			time: ['datetime'],
+			source: ['src', 'type'],
+			video: ['src', 'poster', 'width', 'height', 'muted', 'loop', 'preload', 'className'],
+			audio: ['src', 'width', 'height', 'muted', 'loop', 'preload', 'className'],
 			// KaTeX 输出的 MathML 标签属性
 			math: ['xmlns', 'display'],
 			annotation: ['encoding'],
@@ -138,8 +185,9 @@ export function buildSanitizeSchema(): Schema {
 			...(defaultSchema.tagNames ?? []),
 			'figure',
 			'figcaption',
-			// §4.5 原始 HTML 白名单中 defaultSchema 未收录的元素
+			// 4.5 raw-HTML whitelist elements missing from defaultSchema
 			'mark',
+			'abbr',
 			'tag',
 			'audio',
 			'video',
@@ -174,8 +222,12 @@ export function buildSanitizeSchema(): Schema {
 		],
 		protocols: {
 			...defaultSchema.protocols,
-			src: ['http', 'https', 'data'],
-			href: ['http', 'https', 'mailto']
+			src: ['http', 'https'],
+			// poster is an image context on video/audio: keep it http(s)-only too,
+			// otherwise `data:`/`javascript:` would flow back in after src was closed
+			poster: ['http', 'https'],
+			// 3.5: mention token schemes must be explicitly allowed, otherwise the sanitizer drops href="@gh:x"
+			href: ['http', 'https', 'mailto', '@gh', '@tw', '@tg']
 		}
 	};
 }
@@ -208,12 +260,13 @@ function getLightProcessor(): MarkdownProcessor {
 		.use(remarkSpoiler)
 		.use(remarkMark)
 		.use(remarkMention)
-		.use(remarkTag)
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload 限制
 		.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload
 		.use(rehypeKatex as any, { throwOnError: false })
+		.use(rehypeMarkMdastImages)
 		.use(rehypeRaw)
+		.use(rehypeRawHtmlWhitelist)
 		.use(rehypeSanitize, buildSanitizeSchema())
 		.use(rehypeStringify);
 	lightProcessor = p;

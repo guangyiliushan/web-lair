@@ -270,8 +270,8 @@
 		filter: none;
 	}
 
-	/* ── 行内标签（#text# → span.tag）── 与编辑器 .rich-editor-tag 视觉一致 */
-	.tag {
+	/* ── 行内标签（<tag> 元素，规范 §4.5）── 与编辑器 .rich-editor-tag 视觉一致 */
+	tag {
 		display: inline-block;
 		vertical-align: baseline;
 		padding-inline: 0.75em;

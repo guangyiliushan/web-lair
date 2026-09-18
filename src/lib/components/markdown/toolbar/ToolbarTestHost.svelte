@@ -14,6 +14,12 @@
 
 <TooltipProvider>
 	<div class="flex h-screen min-h-0 w-full flex-col px-3">
-		<MarkdownEditor {initialMarkdown} {placeholder} showToolbar stickyToolbar={false} class="min-h-0 flex-1" />
+		<MarkdownEditor
+			{initialMarkdown}
+			{placeholder}
+			showToolbar
+			stickyToolbar={false}
+			class="min-h-0 flex-1"
+		/>
 	</div>
 </TooltipProvider>

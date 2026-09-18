@@ -16,8 +16,11 @@ import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
 import { remarkMark } from '$lib/components/markdown/plugins/remark-mark';
 import { remarkMathGuard } from '$lib/components/markdown/plugins/remark-math-guard';
 import { remarkMention } from '$lib/components/markdown/plugins/remark-mention';
-import { remarkTag } from '$lib/components/markdown/plugins/remark-tag';
 import { attentionHandlers } from '$lib/components/markdown/plugins/attention-marker';
+import {
+	rehypeMarkMdastImages,
+	rehypeRawHtmlWhitelist
+} from '$lib/components/markdown/plugins/rehype-raw-html-whitelist';
 import { rehypeMermaid } from '$lib/components/markdown/plugins/rehype-mermaid';
 import { buildSanitizeSchema } from '$lib/components/markdown';
 
@@ -58,7 +61,6 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			.use(remarkSpoiler)
 			.use(remarkMark)
 			.use(remarkMention)
-			.use(remarkTag)
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload 限制
 			.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload
@@ -75,7 +77,9 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 				keepBackground: false
 			})
 			.use(rehypeMermaid)
+			.use(rehypeMarkMdastImages)
 			.use(rehypeRaw)
+			.use(rehypeRawHtmlWhitelist)
 			.use(rehypeSanitize, buildSanitizeSchema())
 			.use(rehypeStringify);
 

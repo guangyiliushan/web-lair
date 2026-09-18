@@ -158,35 +158,35 @@
 		<TableCellMenu {editor} />
 	{/if}
 
-		<!-- Editor area -->
-		<div class="min-h-0 flex-1">
-			{#if codeMode}
-				<!-- 代码模式：纯文本编辑（无框视觉 + 行号 gutter，随内容自动增高，由页面统一滚动） -->
+	<!-- Editor area -->
+	<div class="min-h-0 flex-1">
+		{#if codeMode}
+			<!-- 代码模式：纯文本编辑（无框视觉 + 行号 gutter，随内容自动增高，由页面统一滚动） -->
+			<div
+				class={cn(
+					'flex min-h-48 w-full overflow-hidden',
+					!borderless && 'rounded-lg border border-border bg-background'
+				)}
+				style="height: {codeHeight}px"
+			>
 				<div
-					class={cn(
-						'flex min-h-48 w-full overflow-hidden',
-						!borderless && 'rounded-lg border border-border bg-background'
-					)}
-					style="height: {codeHeight}px"
+					aria-hidden="true"
+					class="w-10 shrink-0 overflow-hidden py-3 pr-2 text-right font-mono text-sm leading-6 text-muted-foreground/50 select-none"
 				>
-					<div
-						aria-hidden="true"
-						class="w-10 shrink-0 overflow-hidden py-3 pr-2 text-right font-mono text-sm leading-6 text-muted-foreground/50 select-none"
-					>
-						{#each lineNumbers as n (n)}
-							<div>{n}</div>
-						{/each}
-					</div>
-					<textarea
-						bind:value={codeModeText}
-						oninput={onCodeModeInput}
-						{placeholder}
-						spellcheck="false"
-						wrap="off"
-						class="min-h-48 w-full flex-1 resize-none overflow-y-hidden bg-transparent px-3 py-3 font-mono text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/50"
-					></textarea>
+					{#each lineNumbers as n (n)}
+						<div>{n}</div>
+					{/each}
 				</div>
-			{:else}
+				<textarea
+					bind:value={codeModeText}
+					oninput={onCodeModeInput}
+					{placeholder}
+					spellcheck="false"
+					wrap="off"
+					class="min-h-48 w-full flex-1 resize-none overflow-y-hidden bg-transparent px-3 py-3 font-mono text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/50"
+				></textarea>
+			</div>
+		{:else}
 			<!-- 富文本模式：Lexical 编辑器 -->
 			<div
 				use:lexicalEditor={{

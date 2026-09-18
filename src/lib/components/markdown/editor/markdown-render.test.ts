@@ -2,27 +2,32 @@ import { describe, it, expect } from 'vitest';
 import { renderMarkdownToHtmlSync } from './markdown-config';
 
 /**
- * 渲染管线回归：验证 remark-tag 与 remark-directive（callout）
- * 在客户端轻量管线（含 sanitize）中的最终 HTML 输出。
+ * Render-pipeline regression: final HTML of the client light pipeline
+ * (sanitize included) for mention (micromark) and remark-directive
+ * (callouts).
  */
 describe('rendered html output', () => {
-	it('renders #tag# as span.tag', () => {
-		const html = renderMarkdownToHtmlSync('正文 #tag# 后文');
-		expect(html).toContain('<span class="tag">tag</span>');
+	it('renders <tag> element through the raw-html whitelist', () => {
+		const html = renderMarkdownToHtmlSync('正文 <tag>标签</tag> 后文');
+		expect(html).toContain('<tag>标签</tag>');
 		expect(html).toContain('正文 ');
 		expect(html).toContain(' 后文');
 	});
 
-	it('renders multiple tags in one paragraph', () => {
-		const html = renderMarkdownToHtmlSync('#alpha# 与 #beta#');
-		expect(html).toContain('<span class="tag">alpha</span>');
-		expect(html).toContain('<span class="tag">beta</span>');
+	it('escapes html special characters inside whitelisted elements', () => {
+		const html = renderMarkdownToHtmlSync('<tag>a<b</tag>');
+		// rehype-stringify escapes `<` as the numeric entity `&#x3C;`; both forms
+		// decode to the same character, so accept either
+		expect(html).toMatch(/a(&lt;|&#x3C;)b/);
+		expect(html).not.toContain('<tag>a<b</tag>');
 	});
 
-	it('escapes html special characters in tag content', () => {
-		const html = renderMarkdownToHtmlSync('#a<b&c#');
-		expect(html).toContain('<span class="tag">a&#x3C;b&#x26;c</span>');
-		expect(html).not.toContain('<span class="tag">a<b&c</span>');
+	it('renders @gh: mention as token link', () => {
+		const html = renderMarkdownToHtmlSync('找 @gh:octocat 看看');
+		// attribute order is a hast serialization detail
+		expect(html).toContain('class="mention"');
+		expect(html).toContain('href="@gh:octocat"');
+		expect(html).toContain('>@gh:octocat</a>');
 	});
 
 	it('renders :::info as callout with nested list preserved', () => {

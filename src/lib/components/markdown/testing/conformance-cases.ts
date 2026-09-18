@@ -115,16 +115,13 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['<span class="spoiler">隐藏内容</span>']
 	},
 	{
-		id: 'l2-mention-gh',
-		spec: '§2 #4',
-		input: '找 GH@octocat 看看',
-		contains: ['class="mention"', 'octocat']
-	},
-	{
-		id: 'l2-tag',
-		spec: '§2(遗留 #x#)',
-		input: '标记 #tag# 结束',
-		contains: ['<span class="tag">tag</span>']
+		// The "explicitly absent" list of spec 2 retires the #x# syntax; tags move
+		// to the 4.5 whitelist <tag> element, styled by the site layer (L3) via
+		// element selectors — the renderer adds no class
+		id: 'l2-tag-html-element',
+		spec: '§4.5',
+		input: '标记 <tag>重要</tag> 结束',
+		contains: ['<tag>重要</tag>']
 	},
 
 	// L2 inline: ==mark== (micromark attention)
@@ -272,6 +269,153 @@ export const conformanceCases: ConformanceCase[] = [
 		input: '$x$１ 全角数字保持字面',
 		notContains: ['katex'],
 		contains: ['$x$']
+	},
+
+	// L2 inline: mention (§2 #4 / §3.5)
+	{
+		id: 'l2-mention-bare-gh',
+		spec: '§2 #4',
+		input: '找 @gh:octocat 看看',
+		// attribute order is a hast serialization detail — assert the parts
+		contains: ['class="mention"', 'href="@gh:octocat"', '>@gh:octocat</a>']
+	},
+	{
+		id: 'l2-mention-link-form',
+		spec: '§3.5',
+		input: '[自定义名](@gh:Innei) 链接式',
+		contains: ['href="@gh:Innei"', '自定义名']
+	},
+	{
+		id: 'l2-mention-platforms',
+		spec: '§2 #4',
+		input: '@tw:jack 与 @tg:ann',
+		contains: ['href="@tw:jack"', 'href="@tg:ann"']
+	},
+	{
+		id: 'l2-mention-unknown-platform-literal',
+		spec: '§5',
+		input: '未知平台 @ft:someone 保持字面',
+		notContains: ['class="mention"'],
+		contains: ['@ft:someone']
+	},
+	{
+		id: 'l2-mention-needs-boundary',
+		spec: '§2 #4',
+		input: '字母后@gh:x 不触发',
+		contains: ['@gh:x'],
+		notContains: ['class="mention"']
+	},
+	{
+		id: 'l2-mention-after-punctuation',
+		spec: '§2 #4',
+		input: '（@gh:x）标点后触发',
+		contains: ['href="@gh:x"']
+	},
+	{
+		id: 'l2-mention-email-unaffected',
+		spec: '§2 #4',
+		input: '邮件 foo@example.com 正常',
+		notContains: ['class="mention"'],
+		contains: ['foo@example.com']
+	},
+	{
+		// regex semantics of the plan's `{1,40}`: the first 40 characters form
+		// the mention, everything beyond stays literal text
+		id: 'l2-mention-username-max-40',
+		spec: '§2 #4',
+		input: '@gh:' + 'a'.repeat(41),
+		contains: ['href="@gh:' + 'a'.repeat(40) + '"'],
+		notContains: ['href="@gh:' + 'a'.repeat(41) + '"']
+	},
+	{
+		// inside a link label a mention must stay literal — an anchor nested in
+		// the label would truncate the outer link (port of the official
+		// autolink-literal `previousUnbalanced` guard)
+		id: 'l2-mention-inside-link-label-literal',
+		spec: '§2 #4',
+		input: '[见 @gh:x 说明](https://example.com)',
+		contains: ['href="https://example.com"', '>见 @gh:x 说明</a>'],
+		notContains: ['class="mention"']
+	},
+
+	// §4.5 raw-HTML whitelist and stripping
+	{
+		id: 'l45-whitelist-kbd-kept',
+		spec: '§4.5',
+		input: '按 <kbd>Ctrl</kbd> 键',
+		contains: ['<kbd>Ctrl</kbd>']
+	},
+	{
+		id: 'l45-whitelist-details-kept',
+		spec: '§4.5',
+		input: '<details open><summary>展开</summary>内容</details>',
+		contains: ['<details', '<summary>展开</summary>', '内容']
+	},
+	{
+		id: 'l45-raw-img-stripped',
+		spec: '§4.5',
+		input: '前面 <img src="https://evil.example/x.png" onerror="alert(1)"> 后面',
+		notContains: ['<img', 'onerror'],
+		contains: ['前面', '后面']
+	},
+	{
+		id: 'l45-script-stripped',
+		spec: '§6',
+		input: '安全 <script>alert(1)</script> 通过',
+		notContains: ['<script', 'alert'],
+		contains: ['安全', '通过']
+	},
+	{
+		id: 'l45-iframe-stripped',
+		spec: '§4.5',
+		input: '<iframe src="https://evil.example"></iframe>内容',
+		notContains: ['<iframe'],
+		contains: ['内容']
+	},
+	{
+		id: 'l45-style-tag-stripped',
+		spec: '§4.5',
+		input: '<style>p{color:red}</style>文本',
+		notContains: ['<style', 'color:red'],
+		contains: ['文本']
+	},
+	{
+		id: 'l45-event-handler-stripped',
+		spec: '§4.5',
+		input: '<kbd onmouseover="alert(1)">x</kbd>',
+		notContains: ['onmouseover', 'alert'],
+		contains: ['<kbd', 'x']
+	},
+	{
+		id: 'l45-javascript-href-blocked',
+		spec: '§6',
+		input: '[链接](javascript:alert(1)) 保持安全',
+		notContains: ['javascript:'],
+		contains: ['链接']
+	},
+	{
+		id: 'l45-data-src-blocked',
+		spec: '§4.5',
+		input: '![x](data:image/png;base64,AAAA)',
+		notContains: ['data:image'],
+		contains: ['x']
+	},
+	{
+		id: 'l45-unknown-tag-unwrapped',
+		spec: '§4.5',
+		input: '<custom-el>剥壳保文本</custom-el>',
+		notContains: ['<custom-el>'],
+		contains: ['剥壳保文本']
+	},
+	{
+		// micromark-extension-directive parses a bare `:word` out of ordinary
+		// prose; the closed L2 set has no text/leaf directives, so the literal
+		// source must come back (spec 5: content is never swallowed)
+		id: 'l5-text-directive-restored-literal',
+		spec: '§5',
+		input: '说明:内容 与 12:30 保持字面',
+		contains: ['说明:内容', '12:30'],
+		notContains: ['<div']
 	},
 
 	// L2 block
