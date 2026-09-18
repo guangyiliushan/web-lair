@@ -4,12 +4,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import type { LexicalEditor, TextFormatType, LexicalCommand, ElementFormatType } from 'lexical';
-	import {
-		FORMAT_ELEMENT_COMMAND,
-		UNDO_COMMAND,
-		REDO_COMMAND
-	} from '$lib/components/markdown/editor/lexical-action';
+	import type { LexicalEditor, TextFormatType, LexicalCommand } from 'lexical';
+	import { UNDO_COMMAND, REDO_COMMAND } from '$lib/components/markdown/editor/lexical-action';
 	import {
 		toggleHeading,
 		toggleBulletList,
@@ -51,10 +47,6 @@
 	import IconList from '@tabler/icons-svelte-runes/icons/list';
 	import IconListNumbers from '@tabler/icons-svelte-runes/icons/list-numbers';
 	import IconListCheck from '@tabler/icons-svelte-runes/icons/list-check';
-	import IconAlignLeft from '@tabler/icons-svelte-runes/icons/align-left';
-	import IconAlignCenter from '@tabler/icons-svelte-runes/icons/align-center';
-	import IconAlignRight from '@tabler/icons-svelte-runes/icons/align-right';
-	import IconAlignJustified from '@tabler/icons-svelte-runes/icons/align-justified';
 	import IconBlockquote from '@tabler/icons-svelte-runes/icons/blockquote';
 	import IconSeparator from '@tabler/icons-svelte-runes/icons/separator';
 	import IconTable from '@tabler/icons-svelte-runes/icons/table';
@@ -157,9 +149,6 @@
 	}
 	function formatText(format: TextFormatType) {
 		formatTextWithFocus(editor, format);
-	}
-	function setAlignment(align: ElementFormatType) {
-		editor?.dispatchCommand(FORMAT_ELEMENT_COMMAND, align);
 	}
 	function preventSelectionLoss(e: MouseEvent) {
 		e.preventDefault();
@@ -611,56 +600,6 @@
 			title={m.toolbar_todo()}
 		>
 			<IconListCheck data-icon="inline-start" />
-		</Button>
-	{/if}
-
-	<!-- ═══════════ 对齐（互斥）(Tier 3: lg+) ═══════════ -->
-	{#if bp >= 3}
-		<Separator orientation="vertical" decorative class={sepClass} />
-
-		<Button
-			variant={toolbarState.alignment === 'left' ? 'secondary' : 'ghost'}
-			size="icon-sm"
-			onclick={() => setAlignment('left')}
-			onmousedown={preventSelectionLoss}
-			aria-pressed={toolbarState.alignment === 'left'}
-			aria-label={m.toolbar_align_left()}
-			title={m.toolbar_align_left()}
-		>
-			<IconAlignLeft data-icon="inline-start" />
-		</Button>
-		<Button
-			variant={toolbarState.alignment === 'center' ? 'secondary' : 'ghost'}
-			size="icon-sm"
-			onclick={() => setAlignment('center')}
-			onmousedown={preventSelectionLoss}
-			aria-pressed={toolbarState.alignment === 'center'}
-			aria-label={m.toolbar_align_center()}
-			title={m.toolbar_align_center()}
-		>
-			<IconAlignCenter data-icon="inline-start" />
-		</Button>
-		<Button
-			variant={toolbarState.alignment === 'right' ? 'secondary' : 'ghost'}
-			size="icon-sm"
-			onclick={() => setAlignment('right')}
-			onmousedown={preventSelectionLoss}
-			aria-pressed={toolbarState.alignment === 'right'}
-			aria-label={m.toolbar_align_right()}
-			title={m.toolbar_align_right()}
-		>
-			<IconAlignRight data-icon="inline-start" />
-		</Button>
-		<Button
-			variant={toolbarState.alignment === 'justify' ? 'secondary' : 'ghost'}
-			size="icon-sm"
-			onclick={() => setAlignment('justify')}
-			onmousedown={preventSelectionLoss}
-			aria-pressed={toolbarState.alignment === 'justify'}
-			aria-label={m.toolbar_align_justify()}
-			title={m.toolbar_align_justify()}
-		>
-			<IconAlignJustified data-icon="inline-start" />
 		</Button>
 	{/if}
 

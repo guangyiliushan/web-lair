@@ -76,10 +76,18 @@ const RAW_ATTRS: Record<string, readonly string[]> = {
 	abbr: ['title']
 };
 
+/** Per-tag attr sets, precomputed once (the filter runs per element). */
+const RAW_ATTR_SETS = new Map<string, Set<string>>(
+	Object.entries(RAW_ATTRS).map(([tag, list]) => [tag, new Set(list)])
+);
+const NO_RAW_ATTRS: ReadonlySet<string> = new Set();
+
 export const rehypeMarkPipelineNodes: Plugin<[], HastRoot> = () => {
 	return (tree) => {
 		visit(tree, 'element', (node: Element) => {
-			node.properties = { ...node.properties, [PROVENANCE_KEY]: PROVENANCE_TOKEN };
+			// The tree is freshly built here, so mutating in place is safe.
+			if (node.properties) node.properties[PROVENANCE_KEY] = PROVENANCE_TOKEN;
+			else node.properties = { [PROVENANCE_KEY]: PROVENANCE_TOKEN };
 		});
 	};
 };
@@ -116,7 +124,7 @@ export const rehypeRawHtmlWhitelist: Plugin<[], HastRoot> = () => {
 				return;
 			}
 
-			const allowed = new Set(RAW_ATTRS[tag] ?? []);
+			const allowed = RAW_ATTR_SETS.get(tag) ?? NO_RAW_ATTRS;
 			for (const key of Object.keys(node.properties ?? {})) {
 				if (key !== 'id' && !allowed.has(key)) delete node.properties?.[key];
 			}

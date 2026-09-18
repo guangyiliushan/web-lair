@@ -12,6 +12,8 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
 import { remarkContainerDirective } from '$lib/components/markdown/plugins/remark-directive';
+import { remarkImageAttr } from '$lib/components/markdown/plugins/remark-image-attr';
+import { rehypeHeadingAnchors } from '$lib/components/markdown/plugins/rehype-heading-anchors';
 import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
 import { remarkMark } from '$lib/components/markdown/plugins/remark-mark';
 import { remarkMathGuard } from '$lib/components/markdown/plugins/remark-math-guard';
@@ -63,6 +65,7 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			.use(remarkMark)
 			.use(remarkMention)
 			.use(remarkAlert)
+			.use(remarkImageAttr)
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload 限制
 			.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload
@@ -83,6 +86,9 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			.use(rehypeRaw)
 			.use(rehypeRawHtmlWhitelist)
 			.use(rehypeSanitize, buildSanitizeSchema())
+			// ids and anchors are generated after the sanitizer: it clobbers id
+			// attributes and cannot tell pipeline ids from raw ones (spec 3.6)
+			.use(rehypeHeadingAnchors)
 			.use(rehypeStringify);
 
 		// rehype-pretty-code 在首次 run 时异步初始化 Shiki

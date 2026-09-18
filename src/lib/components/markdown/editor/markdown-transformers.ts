@@ -20,7 +20,6 @@ import {
 	$getRoot,
 	$isElementNode,
 	$isTextNode,
-	type ElementFormatType,
 	type LexicalEditor,
 	type LexicalNode,
 	type SerializedLexicalNode
@@ -136,13 +135,15 @@ export const imageTransformer: ElementTransformer = {
 	dependencies: [ImageNode],
 	export: (node) => {
 		if (!$isImageNode(node)) return null;
-		return `![${node.__alt}](${node.__src})`;
+		const tail = node.__tailAttrs ? ` {${node.__tailAttrs}}` : '';
+		return `![${node.__alt}](${node.__src})${tail}`;
 	},
-	regExp: /^!\[([^\]]*)\]\(([^)\s]+)\)$/,
+	regExp: /^!\[([^\]]*)\]\(([^)\s]+)\)(?:\s+\{([^}]*)\})?$/,
 	replace: (parentNode, _children, match, isImport) => {
 		const alt = match[1] ?? '';
 		const src = match[2] ?? '';
-		const image = $createImageNode(src, alt);
+		const tail = (match[3] ?? '').trim();
+		const image = $createImageNode(src, alt, tail);
 		parentNode.replace(image);
 		// 打字路径且图片位于文末时，补一个空段落承接光标
 		if (!isImport && !image.getNextSibling()) {
@@ -196,7 +197,7 @@ function tableCellToMarkdown(
  * 等行内语法会保持字面。因此借 temp editor 完整解析，
  * 再按规格树在真实编辑器中重建（跨编辑器不传递节点实例）。
  */
-function inlineMarkdownToSpecs(markdown: string): AlignedNodeSpec[] {
+function inlineMarkdownToSpecs(markdown: string): SpecNode[] {
 	const editor = getNestedTempEditor();
 	editor.update(
 		() => {
@@ -422,12 +423,7 @@ export const alertTransformer: MultilineElementTransformer = {
 	type: 'multiline-element'
 };
 
-// ── Align：`:::center ... :::` ↔ 块级对齐格式 ──
-
-/** 支持对齐指令的对齐方式（与 FORMAT_ELEMENT_COMMAND 的对齐值一致） */
-const ALIGN_FORMATS: readonly string[] = ['left', 'center', 'right', 'justify'];
-const ALIGN_START_REGEX = /^:::(left|center|right|justify)\s*$/;
-const ALIGN_END_REGEX = /^:::\s*$/;
+// ── Spec-tree transfer helpers (shared by the spec-based transformers) ──
 
 /**
  * 跨编辑器节点传输的中间表示（纯 JSON 数据）。
@@ -435,13 +431,13 @@ const ALIGN_END_REGEX = /^:::\s*$/;
  * 因此 temp editor 侧只采集 (class, json) 规格树，
  * 真实节点在目标编辑器的 update 上下文中按规格重建。
  */
-interface AlignedNodeSpec {
+interface SpecNode {
 	klass: typeof LexicalNode;
 	json: SerializedLexicalNode;
-	children: AlignedNodeSpec[];
+	children: SpecNode[];
 }
 
-function specTreeFromNode(node: LexicalNode): AlignedNodeSpec {
+function specTreeFromNode(node: LexicalNode): SpecNode {
 	return {
 		klass: node.constructor as typeof LexicalNode,
 		json: node.exportJSON(),
@@ -449,104 +445,13 @@ function specTreeFromNode(node: LexicalNode): AlignedNodeSpec {
 	};
 }
 
-function nodeFromSpecTree(spec: AlignedNodeSpec): LexicalNode {
+function nodeFromSpecTree(spec: SpecNode): LexicalNode {
 	const clone = spec.klass.importJSON(spec.json);
 	if ($isElementNode(clone) && spec.children.length > 0) {
 		clone.append(...spec.children.map(nodeFromSpecTree));
 	}
 	return clone;
 }
-
-/**
- * 解析内部 markdown 为带对齐格式的块规格树序列。
- *
- * 复用嵌套 temp editor（同 markdownToAlertJson 模式）解析并设置对齐格式；
- * 供真实编辑器在 update 上下文中按规格重建节点。
- * 嵌套子块（标题/引用/列表）的语法由 NESTED_EDITOR_TRANSFORMERS 完整解析。
- */
-function markdownToAlignedBlockSpecs(markdown: string, align: string): AlignedNodeSpec[] {
-	const editor = getNestedTempEditor();
-	editor.update(
-		() => {
-			const root = $getRoot();
-			root.clear();
-			try {
-				$convertFromMarkdownString(markdown, NESTED_EDITOR_TRANSFORMERS);
-			} catch {
-				root.clear();
-				const p = $createParagraphNode();
-				p.append($createTextNode(markdown));
-				root.append(p);
-			}
-			for (const child of root.getChildren()) {
-				if ($isElementNode(child)) child.setFormat(align as ElementFormatType);
-			}
-		},
-		{ discrete: true }
-	);
-	// read 上下文只采集 JSON 数据（创建节点在 read 中会被 Lexical 拒绝）
-	return editor.getEditorState().read(() => $getRoot().getChildren().map(specTreeFromNode));
-}
-
-/**
- * 单个块节点 → 内部 markdown（temp editor 全量导出，保留标题/引用/列表语法）。
- *
- * 关键：必须先在**真实编辑器的 read 上下文**（即 export 回调所处上下文）采集
- * JSON 规格，再进入 temp editor 重建——若在 temp editor 的 update 内对本
- * 编辑器之外的节点调用 exportJSON/getChildren，其内部 getLatest() 会按 key
- * 在当前活跃编辑器（temp）的 node map 中解析：key 冲突时静默取到错误节点，
- * 不冲突时 invariant 报错导致 temp update 回滚、读到陈旧状态。
- */
-function alignedBlockToMarkdown(node: LexicalNode): string {
-	const spec = specTreeFromNode(node);
-	const editor = getNestedTempEditor();
-	editor.update(
-		() => {
-			const root = $getRoot();
-			root.clear();
-			root.append(nodeFromSpecTree(spec));
-		},
-		{ discrete: true }
-	);
-	return editor.getEditorState().read(() => $convertToMarkdownString(NESTED_EDITOR_TRANSFORMERS));
-}
-
-/**
- * 对齐容器 Transformer。
- *
- * markdown 无原生对齐语法，采用容器指令持久化块级对齐（与渲染端
- * remark-directive 插件约定）：
- *
- * :::center
- * 内容（任意顶层块语法）
- * :::
- *
- * - 导入：解析内部 markdown 为块序列并应用 text-align 格式。
- * - 导出：顶层块带 left/center/right/justify 格式时包回指令。
- *
- * 已知限制：指令内部不支持再嵌套 :::（alert/align），表格行会降级为文本。
- */
-export const alignTransformer: MultilineElementTransformer = {
-	dependencies: [],
-	regExpStart: ALIGN_START_REGEX,
-	regExpEnd: ALIGN_END_REGEX,
-	replace: (rootNode, children, startMatch, _endMatch, linesInBetween, isImport) => {
-		if (!isImport || children) return false;
-		const align = startMatch[1];
-		const inner = (linesInBetween ?? []).join('\n').trim();
-		if (!inner) return false;
-		for (const spec of markdownToAlignedBlockSpecs(inner, align)) {
-			rootNode.append(nodeFromSpecTree(spec));
-		}
-	},
-	export: (node) => {
-		if (!$isElementNode(node)) return null;
-		const format = node.getFormatType();
-		if (!format || !ALIGN_FORMATS.includes(format)) return null;
-		return `:::${format}\n${alignedBlockToMarkdown(node)}\n:::`;
-	},
-	type: 'multiline-element'
-};
 
 // ── Sup/Sub：`<sup>x</sup>` / `<sub>x</sub>` ↔ 上标/下标格式 ──
 
@@ -600,7 +505,7 @@ export const subscriptTransformer: TextMatchTransformer = {
 
 /**
  * 编辑器完整 transformer 列表：核心语法 + Tag + Alert + HR + Image + Table
- * + Align + Sup/Sub。
+ * + Sup/Sub。
  *
  * 顺序约定：自定义 transformer 在前（multiline 导入逐 transformer 尝试，
  * text-match 导出逐 transformer 尝试，靠前者优先），核心 TRANSFORMERS 在后。
@@ -611,7 +516,6 @@ export const EDITOR_TRANSFORMERS: Transformer[] = [
 	hrTransformer,
 	imageTransformer,
 	tableTransformer,
-	alignTransformer,
 	superscriptTransformer,
 	subscriptTransformer,
 	...TRANSFORMERS

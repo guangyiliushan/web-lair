@@ -121,7 +121,7 @@ describe('standard markdown (L0/L1) paints', () => {
 		expect(getComputedStyle(root.querySelector('del')!).textDecorationLine).toContain(
 			'line-through'
 		);
-		const a = root.querySelector('a')!;
+		const a = root.querySelector('a:not(.md-anchor)')!;
 		expect(a.getAttribute('href')).toBe('https://example.com');
 		expect(a.textContent).toBe('链接');
 	});
@@ -281,5 +281,24 @@ describe('custom extensions (L2 migration state) paint', () => {
 		expect(root.querySelector('[style]')).toBeNull();
 		expect(root.querySelector('.md-grid')).not.toBeNull();
 		expect(root.querySelector('.md-grid')!.getAttribute('data-cols')).toBe('2');
+	});
+
+	it('heading anchors paint and carry encoded hrefs (spec 3.6)', () => {
+		const root = mountMarkdown('# 中文标题');
+		const h1 = root.querySelector('h1') as HTMLElement;
+		expect(h1.id).toBe('中文标题');
+		const anchor = h1.querySelector('a.md-anchor') as HTMLAnchorElement;
+		expect(anchor.getAttribute('href')).toBe('#%E4%B8%AD%E6%96%87%E6%A0%87%E9%A2%98');
+		// layout.css hides the anchor until the heading is hovered
+		expect(getComputedStyle(anchor).opacity).toBe('0');
+	});
+
+	it('image tail size paints as attributes (spec 2 #7)', () => {
+		const root = mountHtml(
+			renderMarkdownToHtmlSync('![a](https://example.com/a.png) {width=480 height=320}')
+		);
+		const img = root.querySelector('img') as HTMLImageElement;
+		expect(img.getAttribute('width')).toBe('480');
+		expect(img.getAttribute('height')).toBe('320');
 	});
 });

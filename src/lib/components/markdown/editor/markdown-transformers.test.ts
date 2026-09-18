@@ -1,8 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { createEditor, type LexicalEditor } from 'lexical';
+import { createEditor, $getRoot, type LexicalEditor } from 'lexical';
 import { $convertFromMarkdownString, $convertToMarkdownString } from '@lexical/markdown';
 import { TagNode } from '$lib/components/markdown/tag/tag-node';
 import { AlertNode } from '$lib/components/markdown/alert/alert-node';
+import {
+	ImageNode,
+	$isImageNode,
+	type SerializedImageNode
+} from '$lib/components/markdown/image/image-node';
 import { EDITOR_NODES } from './editor-nodes';
 import {
 	EDITOR_TRANSFORMERS,
@@ -169,33 +174,22 @@ describe('phase 1-6 新增能力 roundtrip', () => {
 		expect(out).toContain('a\\|b');
 	});
 
-	it('roundtrips alignment directive', () => {
-		const md = ':::center\n居中的内容\n:::';
-		const out = roundtrip(md);
+	it('keeps retired alignment directive text as plain text (batch 4b)', () => {
+		const out = roundtrip(':::center\n居中的内容\n:::');
 		expect(out).toContain(':::center');
 		expect(out).toContain('居中的内容');
 	});
 
-	it('roundtrips alignment directive wrapping a heading', () => {
-		const md = ':::center\n# 居中标题\n:::';
-		const out = roundtrip(md);
-		expect(out).toContain(':::center');
-		expect(out).toContain('# 居中标题');
-	});
-
-	it('keeps aligned block content intact when followed by an alert (temp editor reuse)', () => {
-		const out = roundtrip(':::center\n居中的内容\n:::\n\n> [!NOTE]\n> 提示内容');
-		const centerBlock = out.match(/:::center\n([\s\S]*?)\n:::/)?.[1] ?? '';
-		// 对齐块内容不能被后续 alert 的 temp editor 解析结果污染
-		expect(centerBlock).toBe('居中的内容');
+	it('keeps block content intact when followed by an alert (temp editor reuse)', () => {
+		const out = roundtrip('普通段落内容\n\n> [!NOTE]\n> 提示内容');
+		expect(out).toContain('普通段落内容');
 		expect(out).toContain('> [!note]');
 		expect(out).toContain('提示内容');
 	});
 
-	it('keeps aligned block content intact when followed by a table (temp editor reuse)', () => {
-		const out = roundtrip(':::center\n居中的内容\n:::\n\n| A | B |\n| --- | --- |\n| 1 | 2 |');
-		const centerBlock = out.match(/:::center\n([\s\S]*?)\n:::/)?.[1] ?? '';
-		expect(centerBlock).toBe('居中的内容');
+	it('keeps block content intact when followed by a table (temp editor reuse)', () => {
+		const out = roundtrip('普通段落内容\n\n| A | B |\n| --- | --- |\n| 1 | 2 |');
+		expect(out).toContain('普通段落内容');
 		expect(out).toContain('| A | B |');
 		expect(out).toContain('| 1 | 2 |');
 	});
@@ -279,5 +273,35 @@ describe('alert json <-> markdown helpers', () => {
 	it('returns empty string for invalid json', () => {
 		expect(alertJsonToMarkdown('not-json')).toBe('');
 		expect(alertJsonToMarkdown('')).toBe('');
+	});
+
+	it('re-emits the image tail attribute on export', () => {
+		const out = roundtrip('![a](https://example.com/a.png) {width=480 height=320}');
+		expect(out).toContain('![a](https://example.com/a.png) {width=480 height=320}');
+	});
+
+	it('imports a tail-attributed image line as an ImageNode', () => {
+		const editor: LexicalEditor = createEditor({
+			namespace: 'markdown-transformers-test',
+			nodes: EDITOR_NODES,
+			onError: (error: Error) => {
+				throw error;
+			}
+		});
+		editor.update(
+			() => {
+				$convertFromMarkdownString(
+					'![a](https://example.com/a.png) {width=480}',
+					EDITOR_TRANSFORMERS
+				);
+			},
+			{ discrete: true }
+		);
+		editor.getEditorState().read(() => {
+			const first = $getRoot().getFirstChild();
+			expect($isImageNode(first)).toBe(true);
+			const serialized: SerializedImageNode = (first as ImageNode).exportJSON();
+			expect(serialized.tailAttrs).toBe('width=480');
+		});
 	});
 });

@@ -2,14 +2,15 @@ import type { Plugin } from 'unified';
 import type { Root, Paragraph } from 'mdast';
 import { visit } from 'unist-util-visit';
 import type { ContainerDirective } from 'mdast-util-directive';
+import { warnOnce } from './plugin-warnings';
 
 /**
  * Directive containers (spec 3.2) — the closed registry is
  * `grid | tabs | tab | details`, plus the `spoiler` block-spoiler sugar that
  * renders as `<details>`. Unregistered names keep their content and warn once
- * (spec 5). Retired with batch 4a (render side): gallery, banner. The
- * alignment directives (left/center/right/justify) still take their own
- * branch until batch 4b retires them together with the editor side.
+ * (spec 5). Retired with batch 4: gallery, banner (4a) and the alignment
+ * directives left/center/right/justify (4b) — the latter now take the
+ * unregistered path.
  *
  * Every container renders through hName/hProperties only — this plugin never
  * builds raw HTML strings. The provenance pass
@@ -32,20 +33,6 @@ const DETAILS_KEYS = new Set(['summary', 'open']);
 const SPOILER_KEYS = new Set(['label']);
 const TAB_KEYS = new Set(['label']);
 const TABS_KEYS = new Set<string>([]);
-
-/**
- * Warnings are logged once per cause and capped in total: SSR renders the
- * same tree repeatedly, and the dedupe keys can contain author-provided text
- * (container names, parameter values), so an unbounded set would let a
- * hostile document grow memory and log volume.
- */
-const WARN_LIMIT = 100;
-const warnedKeys = new Set<string>();
-function warnOnce(key: string, message: string): void {
-	if (warnedKeys.has(key) || warnedKeys.size >= WARN_LIMIT) return;
-	warnedKeys.add(key);
-	console.warn(`[markdown] ${message}`);
-}
 
 function warnUnknownKeys(name: string, allowed: Set<string>, attributes: Attributes): void {
 	for (const key of Object.keys(attributes ?? {})) {
@@ -141,16 +128,6 @@ export const remarkContainerDirective: Plugin<[], Root> = () => {
 			const directive = node as unknown as ContainerDirective;
 			const name = directive.name;
 			const attributes = directive.attributes;
-
-			// Alignment directives are retired in batch 4b; until then they take
-			// this branch. Note their style is stripped by the sanitize schema
-			// (div@style is not allowed), so the render is already a no-op today.
-			if (['left', 'center', 'right', 'justify'].includes(name)) {
-				const data = directive.data ?? (directive.data = {});
-				data.hName = 'div';
-				data.hProperties = { style: `text-align: ${name};` };
-				return;
-			}
 
 			if (name === 'grid') {
 				const data = directive.data ?? (directive.data = {});

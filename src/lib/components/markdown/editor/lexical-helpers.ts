@@ -1,12 +1,10 @@
 import {
 	type LexicalEditor,
-	type ElementFormatType,
 	type LexicalNode,
 	type TextFormatType,
 	FORMAT_TEXT_COMMAND,
 	$getSelection,
 	$isRangeSelection,
-	$isElementNode,
 	$isRootOrShadowRoot,
 	$createParagraphNode,
 	$createTextNode
@@ -279,7 +277,6 @@ export function emptyToolbarState(): ToolbarState {
 		isCode: false,
 		isHighlight: false,
 		blockType: 'paragraph',
-		alignment: '',
 		inTable: false
 	};
 }
@@ -308,8 +305,6 @@ export interface ToolbarState {
 	isCode: boolean;
 	isHighlight: boolean;
 	blockType: 'paragraph' | 'h1' | 'h2' | 'h3' | 'bullet' | 'number' | 'check' | 'quote';
-	/** 当前块级元素的对齐方式 */
-	alignment: ElementFormatType | '';
 	/** 光标是否在表格单元格内(块级插入应禁用) */
 	inTable: boolean;
 }
@@ -342,16 +337,6 @@ export function readToolbarState(): ToolbarState {
 				break;
 			}
 			tableNode = tableNode.getParent();
-		}
-
-		// 读取当前块的对齐方式
-		const anchorNode = selection.anchor.getNode();
-		let el = anchorNode;
-		while (el.getParent() !== null && $isElementNode(el.getParent())) {
-			el = el.getParent()!;
-		}
-		if ($isElementNode(el)) {
-			state.alignment = el.getFormatType() || '';
 		}
 	}
 

@@ -455,6 +455,31 @@
 		border-style: dashed;
 	}
 
+	/* ── Heading anchors (spec 3.6) ── */
+	.md-anchor {
+		margin-inline-end: 0.35em;
+		color: var(--muted-foreground);
+		opacity: 0;
+		text-decoration: none;
+		transition: opacity 0.15s ease;
+	}
+	h1:hover > .md-anchor,
+	h2:hover > .md-anchor,
+	h3:hover > .md-anchor,
+	h4:hover > .md-anchor,
+	h5:hover > .md-anchor,
+	h6:hover > .md-anchor {
+		opacity: 1;
+	}
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		scroll-margin-top: 4rem;
+	}
+
 	.mermaid {
 		background: var(--muted);
 		border-radius: var(--radius-lg);

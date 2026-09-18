@@ -658,10 +658,142 @@ export const conformanceCases: ConformanceCase[] = [
 		notContains: ['class="box"']
 	},
 	{
+		// closed wrapper with blank lines around the pipeline content
+		id: 'l45-raw-closed-wrapper-keeps-pipeline-content',
+		spec: '§4.5',
+		input: '<div class="w">\n\n![alt](https://example.com/keep.png)\n\n</div>',
+		contains: ['<img', 'keep.png'],
+		notContains: ['class="w"']
+	},
+	{
+		// inline raw span must lose its shell without touching the pipeline strong
+		id: 'l45-raw-inline-span-keeps-pipeline-strong',
+		spec: '§4.5',
+		input: 'text <span>**bold** more</span> end',
+		contains: ['<strong>bold</strong>'],
+		notContains: ['<span', '**']
+	},
+	{
+		// a token-shaped forgery on an allowed element still strips its class
+		id: 'l45-forged-token-on-allowed-element',
+		spec: '§4.5',
+		input: '<kbd data-md-x="md1forged" class="x">Ctrl</kbd>',
+		contains: ['<kbd>', 'Ctrl'],
+		notContains: ['class=']
+	},
+	{
 		id: 'l45-raw-wrapper-nested-raw-still-stripped',
 		spec: '§4.5',
 		input: '<div class="box">\n\n<b>bold-raw</b>',
 		contains: ['bold-raw'],
 		notContains: ['<b>', 'class="box"']
+	},
+	{
+		id: 'l2-container-retired-align-content-kept',
+		spec: '§3.2+§5',
+		input: ':::center\n居中内容\n:::',
+		contains: ['居中内容'],
+		notContains: ['style=']
+	},
+	// ── Image tail attributes (spec 2 #7, batch 4b) ──
+	{
+		// spec 2 #7: `{` must be preceded by whitespace — the glued form stays literal
+		id: 'l2-image-tail-whitespace-required',
+		spec: '§2',
+		input: '![a](https://example.com/a.png){width=480}',
+		contains: ['{width=480}'],
+		notContains: ['width="480"']
+	},
+	{
+		id: 'l2-image-tail-size',
+		spec: '§2',
+		input: '![a](https://example.com/a.png) {width=480 height=320}',
+		contains: ['<img', 'width="480"', 'height="320"'],
+		notContains: ['{width']
+	},
+	{
+		id: 'l2-image-tail-type-consumed',
+		spec: '§2',
+		input: '![a](https://example.com/a.png) {type=image}',
+		contains: ['<img'],
+		notContains: ['{type', 'type="image"']
+	},
+	{
+		id: 'l2-image-tail-unknown-key-ignored',
+		spec: '§2',
+		input: '![a](https://example.com/a.png) {width=480 bogus=1}',
+		contains: ['width="480"'],
+		notContains: ['bogus']
+	},
+	// ── Heading id / slug / anchors (spec 3.6, batch 4b) ──
+	{
+		id: 'l2-heading-custom-id',
+		spec: '§3.6',
+		input: '## 标题 {#custom-id}',
+		contains: ['<h2 id="custom-id"', 'href="#custom-id"'],
+		notContains: ['{#custom-id}']
+	},
+	{
+		// a {#id} inside an inline element is not a heading tail (spec 3.6):
+		// the link text must survive and the id falls back to the slug
+		id: 'l2-heading-tail-inside-link-not-extracted',
+		spec: '§3.6',
+		input: '## A [b {#x}](https://example.com)',
+		contains: ['b {#x}', 'href="https://example.com"', 'id="A-b-x"'],
+		notContains: ['id="x"']
+	},
+	{
+		id: 'l2-heading-tail-inside-code-not-extracted',
+		spec: '§3.6',
+		input: '## A `c {#x}`',
+		contains: ['<code>c {#x}</code>'],
+		notContains: ['id="x"']
+	},
+	{
+		// setext headings are indistinguishable from ATX at the hast layer —
+		// the tail is parsed here too (documented deviation, see the record)
+		id: 'l2-heading-setext-tail-id-deviation',
+		spec: '§3.6',
+		input: '标题 {#sid}\n========',
+		contains: ['id="sid"']
+	},
+	{
+		id: 'l2-heading-empty-slug-fallback',
+		spec: '§3.6',
+		input: '## !!!',
+		contains: ['id="section"', 'href="#section"']
+	},
+	{
+		// five-digit sizes fail the pixel-count cap and stay unused
+		id: 'l2-image-tail-width-cap',
+		spec: '§2',
+		input: '![a](https://example.com/a.png) {width=99999}',
+		contains: ['<img'],
+		notContains: ['width="99999"']
+	},
+	{
+		id: 'l2-heading-no-space-stays-literal',
+		spec: '§3.6',
+		input: '## 标题{#id}',
+		contains: ['{#id}'],
+		notContains: ['id="id"']
+	},
+	{
+		id: 'l2-heading-auto-slug',
+		spec: '§3.6',
+		input: '## Hello, World!',
+		contains: ['id="Hello-World"']
+	},
+	{
+		id: 'l2-heading-duplicate-suffix',
+		spec: '§3.6',
+		input: '## 标题\n\n## 标题',
+		contains: ['id="标题"', 'id="标题-2"']
+	},
+	{
+		id: 'l2-heading-id-url-encoded-href',
+		spec: '§3.6',
+		input: '## 中文标题',
+		contains: ['id="中文标题"', 'href="#%E4%B8%AD%E6%96%87%E6%A0%87%E9%A2%98"']
 	}
 ];

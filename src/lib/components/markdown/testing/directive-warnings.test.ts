@@ -36,3 +36,17 @@ it('warns when tabs contains a non-tab block and renders it in place', () => {
 	expect(html).toContain('散落内容');
 	expect(warn.mock.calls.some((call) => String(call[0]).includes('tabs'))).toBe(true);
 });
+
+it('warns when a tab is used outside tabs and keeps the content', () => {
+	const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+	const html = renderMarkdownToHtmlSync(':::tab{label="x"}\n面板\n:::');
+	expect(html).toContain('面板');
+	expect(warn.mock.calls.some((call) => String(call[0]).includes('only valid inside'))).toBe(true);
+});
+
+it('warns for unknown keys on tab containers', () => {
+	const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+	const html = renderMarkdownToHtmlSync('::::tabs\n:::tab{label="x" bogus="1"}\n面板\n:::\n::::');
+	expect(html).toContain('面板');
+	expect(warn.mock.calls.some((call) => String(call[0]).includes('bogus'))).toBe(true);
+});
