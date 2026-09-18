@@ -99,7 +99,7 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 		node.setAttribute('contenteditable', 'true');
 	}
 
-	// 注册 Markdown 快捷输入（# / > / - / ``` / 1. / <tag> / :::info 等自动转换）
+	// 注册 Markdown 快捷输入（# / > / - / ``` / 1. / <tag> 等自动转换）
 	const transformers = optionsRef.current.transformers ?? EDITOR_TRANSFORMERS;
 	const unregisterMarkdownShortcuts = registerMarkdownShortcuts(editor, transformers);
 

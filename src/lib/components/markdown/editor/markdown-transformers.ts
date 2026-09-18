@@ -4,7 +4,7 @@
  * Lexical 的 markdown 往返（$convertToMarkdownString / $convertFromMarkdownString）
  * 只认识已注册 Transformer 的节点——缺少 Transformer 的自定义节点在往返中会丢失。
  *
- * 本模块为 TagNode（`<tag>x</tag>`）与 AlertNode（`:::info ... :::`）提供：
+ * 本模块为 TagNode（`<tag>x</tag>`）与 AlertNode（`> [!NOTE] …`）提供：
  * - 导出（Lexical 树 → Markdown）
  * - 导入（Markdown → Lexical 树）
  * - Alert 嵌套内容的 editorState JSON ↔ Markdown 互转助手
@@ -63,8 +63,7 @@ import {
 	$createAlertNode,
 	$isAlertNode
 } from '$lib/components/markdown/alert/alert-node';
-import type { AlertType } from '$lib/components/markdown/alert/alert-types';
-import { DEFAULT_ALERT_TYPE } from '$lib/components/markdown/alert/alert-types';
+import { parseAlertMarker } from '$lib/components/markdown/alert/alert-types';
 import { EDITOR_THEME, NESTED_EDITOR_NODES } from '$lib/components/markdown/editor/editor-shared';
 
 // ── Tag: `<tag>x</tag>` ↔ TagNode (4.5 whitelist element) ──
@@ -298,12 +297,14 @@ export const tableTransformer: MultilineElementTransformer = {
 	type: 'multiline-element'
 };
 
-// ── Alert：`:::info ... :::` → AlertNode ──
+// ── Alert: `> [!NOTE] title …` → AlertNode(spec §3.1)──
 
-/** Alert 容器起始行，如 `:::info` / `:::tip` / `:::warning` */
-const ALERT_START_REGEX = /^:::(info|tip|warning)\s*$/;
-/** Alert 容器结束行 `:::` */
-const ALERT_END_REGEX = /^:::\s*$/;
+/** A line opening a blockquote alert; the marker itself is parsed in the handler. */
+const ALERT_START_REGEX = /^>\s?\[!/;
+/** A line that is not part of the blockquote ends the alert. */
+const ALERT_END_REGEX = /^(?!>)/;
+/** Prefix stripped from every body line before the nested editor parses it. */
+const QUOTE_PREFIX_REGEX = /^>\s?/;
 
 /**
  * 嵌套编辑器内容使用的 transformer 子集。
@@ -368,29 +369,55 @@ export function alertJsonToMarkdown(json: string): string {
 }
 
 /**
- * Alert 容器 Transformer（多行块）。
+ * Alert Transformer（多行块，spec §3.1 的 blockquote 载体）。
  *
- * - 导入：`:::info` 行与 `:::` 行之间的内容（linesInBetween）作为 markdown
- *   解析进嵌套编辑器 JSON，生成 AlertNode。
- * - 导出：将嵌套 JSON 反解为 markdown，包回 `:::type ... :::` 围栏。
+ * - 导入走 handleImportAfterStartMatch：marker 行起、连续 `>` 行止；停止时
+ *   **不消费**那条非 `>` 行，它在文档里保持为独立块。注意与渲染端的分歧：
+ *   CommonMark 懒续行会把该行并入引用（成为告警正文），编辑器则留在块外——
+ *   两侧都不丢内容，但归属不同。
+ *   正文（剥 `> ` 前缀）经嵌套编辑器 JSON 往返；标题存 AlertNode.__title，
+ *   导出时回到 marker 行。
+ * - 导出：`> [!type] title` + 逐行 `> ` 前缀。
  *
- * 已知限制：内容中若出现行首 `:::` 会提前终止容器（与代码围栏同理）。
+ * 已知限制：alert 内不再支持嵌套 alert（嵌套编辑器不注册本 transformer），
+ * 与编辑器「防无限嵌套」约定一致。
  */
 export const alertTransformer: MultilineElementTransformer = {
 	dependencies: [AlertNode],
 	regExpStart: ALERT_START_REGEX,
-	regExpEnd: ALERT_END_REGEX,
-	replace: (rootNode, children, startMatch, _endMatch, linesInBetween, isImport) => {
-		// 仅处理 markdown 导入；编辑器内打字快捷输入不触发（多行块需要显式插入）
-		if (!isImport || children) return false;
-		const type = (startMatch[1] ?? DEFAULT_ALERT_TYPE) as AlertType;
-		const markdown = (linesInBetween ?? []).join('\n').trim();
-		rootNode.append($createAlertNode(type, markdownToAlertJson(markdown)));
+	regExpEnd: { regExp: ALERT_END_REGEX, optional: true },
+	handleImportAfterStartMatch({ lines, rootNode, startLineIndex }) {
+		const parsed = parseAlertMarker((lines[startLineIndex] ?? '').replace(QUOTE_PREFIX_REGEX, ''));
+		if (!parsed) return null; // unknown marker → the core quote transformer takes it
+		const { type } = parsed;
+		const title = parsed.rest.trim();
+		const bodyLines: string[] = [];
+		let i = startLineIndex + 1;
+		while (i < lines.length && lines[i].startsWith('>')) {
+			bodyLines.push(lines[i].replace(QUOTE_PREFIX_REGEX, ''));
+			i++;
+		}
+		rootNode.append(
+			$createAlertNode(type, markdownToAlertJson(bodyLines.join('\n').trim()), title)
+		);
+		// Return the last consumed line; the terminating line stays in the document.
+		return [true, i - 1];
+	},
+	replace: () => {
+		// Import is handled by handleImportAfterStartMatch; typing shortcuts do not
+		// create alerts (multi-line blocks need an explicit insert).
+		return false;
 	},
 	export: (node) => {
 		if (!$isAlertNode(node)) return null;
+		const header = `> [!${node.__alertType}]${node.__title ? ` ${node.__title}` : ''}`;
 		const inner = alertJsonToMarkdown(node.__jsonContent);
-		return `:::${node.__alertType}\n${inner}\n:::`;
+		if (!inner) return header;
+		const body = inner
+			.split('\n')
+			.map((line) => (line ? `> ${line}` : '>'))
+			.join('\n');
+		return `${header}\n${body}`;
 	},
 	type: 'multiline-element'
 };

@@ -37,10 +37,16 @@ function roundtrip(markdown: string): string {
 	return out;
 }
 
-/** 从导出的 markdown 中提取 callout 容器内容，用于验证嵌套 JSON 转换 */
+/** Extracts the alert body (the `>` lines after the marker line) from an export. */
 function extractAlertMarkdown(exported: string): string {
-	const match = exported.match(/:::(?:info|tip|warning)\n([\s\S]*?)\n:::/);
-	return match?.[1] ?? '';
+	const lines = exported.split('\n');
+	const start = lines.findIndex((line) => /^> \[![a-z]+\]/.test(line));
+	if (start === -1) return '';
+	return lines
+		.slice(start + 1)
+		.filter((line) => line.startsWith('>'))
+		.map((line) => line.replace(/^>\s?/, ''))
+		.join('\n');
 }
 
 describe('markdown transformers roundtrip', () => {
@@ -49,19 +55,19 @@ describe('markdown transformers roundtrip', () => {
 		expect(alertTransformer.dependencies).toEqual([AlertNode]);
 	});
 
-	it('preserves headings, paragraphs, tags and alert containers', () => {
-		const md = '# 标题\n\n正文 <tag>标签</tag>\n\n:::info\n- 项一\n- 项二\n:::';
+	it('preserves headings, paragraphs, tags and alerts', () => {
+		const md = '# 标题\n\n正文 <tag>标签</tag>\n\n> [!NOTE]\n> - 项一\n> - 项二';
 		const out = roundtrip(md);
 
 		expect(out).toContain('# 标题');
 		expect(out).toContain('<tag>标签</tag>');
-		expect(out).toContain(':::info');
+		expect(out).toContain('> [!note]');
 		expect(out).toContain('- 项一');
 		expect(out).toContain('- 项二');
 	});
 
 	it('is stable on a second roundtrip (idempotent)', () => {
-		const md = '# 标题\n\n正文 <tag>标签</tag>\n\n:::info\n- 项一\n- 项二\n:::';
+		const md = '# 标题\n\n正文 <tag>标签</tag>\n\n> [!NOTE]\n> - 项一\n> - 项二';
 		const once = roundtrip(md);
 		const twice = roundtrip(once);
 		expect(twice).toBe(once);
@@ -73,15 +79,38 @@ describe('markdown transformers roundtrip', () => {
 		expect(out.match(/<tag>svelte<\/tag>/g)).toHaveLength(1);
 	});
 
-	it('exports alert with its type intact', () => {
-		const out = roundtrip(':::warning\n注意内容\n:::');
-		expect(out).toContain(':::warning');
-		expect(out).toContain('注意内容');
-		expect(out).toContain(':::');
+	it('roundtrips the five alert types with an optional title, normalizing case', () => {
+		for (const type of ['NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION']) {
+			const out = roundtrip(`> [!${type}] 自定义标题\n> 正文内容`);
+			expect(out).toContain(`> [!${type.toLowerCase()}] 自定义标题`);
+			expect(out).toContain('> 正文内容');
+		}
 	});
 
-	it('keeps nested lists and headings inside alert containers', () => {
-		const out = roundtrip(':::tip\n### 小节\n\n- a\n- b\n:::');
+	it('keeps a nested quote inside the alert body', () => {
+		const out = roundtrip('> [!TIP]\n> > 嵌套引用');
+		expect(extractAlertMarkdown(out)).toContain('> 嵌套引用');
+	});
+
+	it('keeps a non-quote line after the alert (no lazy-continuation swallow)', () => {
+		const out = roundtrip('> [!NOTE] 标题\n> 正文\n懒续行');
+		expect(out).toContain('懒续行');
+		expect(out).toContain('> 正文');
+	});
+
+	it('handles an alert at end of input without a terminator', () => {
+		const out = roundtrip('> [!NOTE]\n> 结尾内容');
+		expect(out).toContain('> [!note]');
+		expect(out).toContain('结尾内容');
+	});
+
+	it('leaves unknown markers to the plain quote transformer', () => {
+		const out = roundtrip('> [!UNKNOWN] 未知');
+		expect(out).toContain('> [!UNKNOWN] 未知');
+	});
+
+	it('keeps nested lists and headings inside alerts', () => {
+		const out = roundtrip('> [!TIP]\n> ### 小节\n>\n> - a\n> - b');
 		const inner = extractAlertMarkdown(out);
 		expect(inner).toContain('### 小节');
 		expect(inner).toContain('- a');
@@ -155,11 +184,11 @@ describe('phase 1-6 新增能力 roundtrip', () => {
 	});
 
 	it('keeps aligned block content intact when followed by an alert (temp editor reuse)', () => {
-		const out = roundtrip(':::center\n居中的内容\n:::\n\n:::info\n提示内容\n:::');
+		const out = roundtrip(':::center\n居中的内容\n:::\n\n> [!NOTE]\n> 提示内容');
 		const centerBlock = out.match(/:::center\n([\s\S]*?)\n:::/)?.[1] ?? '';
 		// 对齐块内容不能被后续 alert 的 temp editor 解析结果污染
 		expect(centerBlock).toBe('居中的内容');
-		expect(out).toContain(':::info');
+		expect(out).toContain('> [!note]');
 		expect(out).toContain('提示内容');
 	});
 
@@ -197,9 +226,8 @@ describe('phase 1-6 新增能力 roundtrip', () => {
 			'居中段落',
 			':::',
 			'',
-			':::info',
-			'提示内容',
-			':::',
+			'> [!NOTE]',
+			'> 提示内容',
 			'',
 			'| A | B |',
 			'| --- | --- |',

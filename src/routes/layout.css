@@ -282,16 +282,16 @@
 		color: var(--foreground);
 	}
 
-	/* ── Callout 容器（:::info/tip/warning → div.callout）──
+	/* ── Alerts（> [!NOTE] 等 → div.alert，规范 §3.1；唯一告警语法）──
 	   与编辑器 .rich-editor-alert 对齐：左侧强调条 + 仅右侧圆角 */
-	.callout {
+	.alert {
 		position: relative;
 		margin-block: 1rem;
 		padding: 1rem 1rem 1rem 1.25rem;
 		border-radius: 0 var(--radius-md) var(--radius-md) 0;
 		background-color: color-mix(in oklab, var(--muted) 40%, transparent);
 	}
-	.callout::before {
+	.alert::before {
 		content: '';
 		position: absolute;
 		top: 0;
@@ -300,29 +300,60 @@
 		width: 0.25rem;
 		border-radius: inherit;
 	}
-	.callout > *:first-child {
+	.alert > *:first-child {
 		margin-top: 0;
 	}
-	.callout > *:last-child {
+	.alert > *:last-child {
 		margin-bottom: 0;
 	}
-	.callout-info::before {
+	.alert-title {
+		margin-bottom: 0.25rem;
+		font-weight: 600;
+	}
+	.alert-note::before {
 		background-color: hsl(207 65% 65%);
 	}
-	.callout-tip::before {
+	.alert-note .alert-title {
+		color: hsl(207 65% 60%);
+	}
+	.alert-tip::before {
 		background-color: hsl(120 50% 55%);
 	}
-	.callout-warning::before {
+	.alert-tip .alert-title {
+		color: hsl(120 45% 45%);
+	}
+	.alert-important::before {
+		background-color: hsl(280 60% 65%);
+	}
+	.alert-important .alert-title {
+		color: hsl(280 55% 62%);
+	}
+	.alert-warning::before {
 		background-color: hsl(25 65% 55%);
 	}
-	.dark .callout-info {
+	.alert-warning .alert-title {
+		color: hsl(25 65% 50%);
+	}
+	.alert-caution::before {
+		background-color: hsl(0 65% 60%);
+	}
+	.alert-caution .alert-title {
+		color: hsl(0 60% 55%);
+	}
+	.dark .alert-note {
 		background-color: hsl(210 50% 12% / 0.85);
 	}
-	.dark .callout-tip {
+	.dark .alert-tip {
 		background-color: hsl(120 30% 10% / 0.85);
 	}
-	.dark .callout-warning {
+	.dark .alert-important {
+		background-color: hsl(280 40% 12% / 0.85);
+	}
+	.dark .alert-warning {
 		background-color: hsl(30 40% 12% / 0.85);
+	}
+	.dark .alert-caution {
+		background-color: hsl(0 40% 12% / 0.85);
 	}
 
 	.mermaid {

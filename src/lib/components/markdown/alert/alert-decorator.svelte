@@ -7,24 +7,27 @@
 	import { isAlertNode } from '$lib/components/markdown/editor/lexical-helpers';
 	import { AlertNode } from './alert-node';
 	import type { AlertType } from './alert-types';
-	import { ALERT_LABELS } from './alert-types';
+	import { ALERT_LABELS, ALERT_TYPES } from './alert-types';
 	import { registerExitBlock } from './exit-block';
 
 	// ── Icons ──
 	import IconInfoCircle from '@tabler/icons-svelte-runes/icons/info-circle';
 	import IconBulb from '@tabler/icons-svelte-runes/icons/bulb';
+	import IconAlertCircle from '@tabler/icons-svelte-runes/icons/alert-circle';
 	import IconAlertTriangle from '@tabler/icons-svelte-runes/icons/alert-triangle';
+	import IconAlertOctagon from '@tabler/icons-svelte-runes/icons/alert-octagon';
 	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
 
 	// ── Props ──
 	type Props = {
 		nodeKey: string;
 		alertType: AlertType;
+		title: string;
 		initialContent: string;
 		parentEditor: LexicalEditor;
 	};
 
-	let { nodeKey, alertType, initialContent, parentEditor }: Props = $props();
+	let { nodeKey, alertType, title, initialContent, parentEditor }: Props = $props();
 
 	// ── 状态 ──
 	let nestedEditor: LexicalEditor | null = $state(null);
@@ -82,11 +85,15 @@
 	let isCleaned = false;
 
 	// ── 类型选项 ──
-	const TYPE_OPTIONS: { type: AlertType; label: string; icon: typeof IconInfoCircle }[] = [
-		{ type: 'info', label: ALERT_LABELS.info, icon: IconInfoCircle },
-		{ type: 'tip', label: ALERT_LABELS.tip, icon: IconBulb },
-		{ type: 'warning', label: ALERT_LABELS.warning, icon: IconAlertTriangle }
-	];
+	const ALERT_ICONS: Record<AlertType, typeof IconInfoCircle> = {
+		note: IconInfoCircle,
+		tip: IconBulb,
+		important: IconAlertCircle,
+		warning: IconAlertTriangle,
+		caution: IconAlertOctagon
+	};
+	const TYPE_OPTIONS: { type: AlertType; label: string; icon: typeof IconInfoCircle }[] =
+		ALERT_TYPES.map((type) => ({ type, label: ALERT_LABELS[type], icon: ALERT_ICONS[type] }));
 
 	const currentOption = $derived(
 		TYPE_OPTIONS.find((o) => o.type === currentAlertType) ?? TYPE_OPTIONS[0]
@@ -220,7 +227,7 @@
 			bind:this={headerEl}
 			role="toolbar"
 			tabindex="-1"
-			aria-label="Callout type"
+			aria-label="Alert type"
 			onmouseenter={onHeaderEnter}
 			onmouseleave={onHeaderLeave}
 		>
@@ -234,6 +241,7 @@
 				<CurrentOptionIcon class="rich-editor-alert-icon" aria-hidden="true" />
 				<span class="rich-editor-alert-label">{currentOption.label}</span>
 				<IconChevronDown class="rich-editor-alert-chevron" aria-hidden="true" />
+				{#if title}<span class="rich-editor-alert-title">{title}</span>{/if}
 			</button>
 			<!-- 类型切换下拉菜单 -->
 			{#if dropdownOpen}

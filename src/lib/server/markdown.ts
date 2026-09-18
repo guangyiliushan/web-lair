@@ -16,6 +16,7 @@ import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
 import { remarkMark } from '$lib/components/markdown/plugins/remark-mark';
 import { remarkMathGuard } from '$lib/components/markdown/plugins/remark-math-guard';
 import { remarkMention } from '$lib/components/markdown/plugins/remark-mention';
+import { remarkAlert } from '$lib/components/markdown/plugins/remark-alert';
 import { attentionHandlers } from '$lib/components/markdown/plugins/attention-marker';
 import {
 	rehypeMarkMdastImages,
@@ -61,6 +62,7 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			.use(remarkSpoiler)
 			.use(remarkMark)
 			.use(remarkMention)
+			.use(remarkAlert)
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload 限制
 			.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload

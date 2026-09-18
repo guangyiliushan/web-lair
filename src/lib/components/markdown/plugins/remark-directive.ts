@@ -11,12 +11,9 @@ import type { BlockContent } from 'mdast';
  * - :::spoiler\n隐藏内容\n:::          → <div class="spoiler-container">隐藏内容</div>
  * - :::gallery\n![img](url)\n:::        → <div class="gallery">...</div>
  * - :::banner{variant="info"}\n文本\n::: → <div class="banner banner-info">文本</div>
- * - :::info\n任意嵌套 Markdown\n:::      → <div class="callout callout-info">…</div>
- * - :::tip / :::warning                  → <div class="callout callout-tip|warning">…</div>
  *
- * info/tip/warning（callout）通过 data.hName/hProperties 转换为 hast 元素，
- * 嵌套子节点（列表/标题/代码块等）由 remark-rehype 正常递归渲染——
- * 这是 remark-directive 官方推荐做法，避免手工拼接 HTML 丢失嵌套内容。
+ * `:::info/tip/warning` callouts were retired in batch 3 (alerts are the only
+ * alert syntax per spec 3.1); they now take the unknown-container path.
  *
  * 其余指令（spoiler/gallery/banner）沿用「替换为 mdast html 节点」的旧路径，
  * 由后续 rehype-raw 解析为 HAST。
@@ -54,13 +51,11 @@ export const remarkContainerDirective: Plugin<[], Root> = () => {
 			const directive = node as unknown as ContainerDirective;
 			const name = directive.name;
 
-			// ── callout 类指令：保留嵌套子节点 ──
-			if (['info', 'tip', 'warning'].includes(name)) {
-				const data = directive.data ?? (directive.data = {});
-				data.hName = 'div';
-				data.hProperties = { class: `callout callout-${name}` };
-				return; // 不替换节点，子节点走正常渲染管线
-			}
+			// ── callouts retired ──
+			// Spec 3.1 makes GitHub-style blockquote alerts the only alert syntax.
+			// `:::info`/`:::tip`/`:::warning` are no longer registered: they fall
+			// through to the unknown-container path below, so their content keeps
+			// rendering (5) without alert styling. Seed content migrates in batch 8.
 
 			// ── 对齐指令（编辑器 :::center 等 语法）：保留嵌套子节点 ──
 			if (['left', 'center', 'right', 'justify'].includes(name)) {

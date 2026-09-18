@@ -217,14 +217,17 @@ describe('custom extensions (L2 migration state) paint', () => {
 		expect(bad.textContent).toContain('安全');
 	});
 
-	it('callout container paints with its accent styling (legacy :::info)', () => {
-		const root = mountHtml(renderMarkdownToHtmlSync(':::info\n提示内容\n:::'));
-		const callout = root.querySelector('.callout');
-		expect(callout?.classList.contains('callout-info')).toBe(true);
-		expect(callout!.textContent).toContain('提示内容');
-		// layout.css: .callout { border-radius: 0 var(--radius-md) … } — the
-		// squared top-left corner is the painted signature of the accent bar
-		expect(getComputedStyle(callout!).borderTopLeftRadius).toBe('0px');
+	it('alert container paints with its accent styling and title (spec 3.1)', () => {
+		const root = mountHtml(renderMarkdownToHtmlSync('> [!NOTE] 标题行\n> 提示内容'));
+		const alert = root.querySelector('.alert');
+		expect(alert?.classList.contains('alert-note')).toBe(true);
+		expect(alert!.textContent).toContain('提示内容');
+		// layout.css: .alert { border-radius: 0 var(--radius-md) … } — the squared
+		// top-left corner is the painted signature of the accent bar
+		expect(getComputedStyle(alert!).borderTopLeftRadius).toBe('0px');
+		const title = root.querySelector('.alert-title');
+		expect(title?.textContent).toBe('标题行');
+		expect(getComputedStyle(title!).fontWeight).toBe('600');
 	});
 
 	it('spoiler/mark/math stay inert inside inline code', () => {

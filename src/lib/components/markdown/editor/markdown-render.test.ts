@@ -4,7 +4,7 @@ import { renderMarkdownToHtmlSync } from './markdown-config';
 /**
  * Render-pipeline regression: final HTML of the client light pipeline
  * (sanitize included) for mention (micromark) and remark-directive
- * (callouts).
+ * (alerts).
  */
 describe('rendered html output', () => {
 	it('renders <tag> element through the raw-html whitelist', () => {
@@ -30,16 +30,20 @@ describe('rendered html output', () => {
 		expect(html).toContain('>@gh:octocat</a>');
 	});
 
-	it('renders :::info as callout with nested list preserved', () => {
-		const html = renderMarkdownToHtmlSync(':::info\n- 项一\n- 项二\n:::');
-		expect(html).toContain('callout callout-info');
+	it('renders > [!NOTE] alert with nested list preserved', () => {
+		const html = renderMarkdownToHtmlSync('> [!NOTE]\n> - 项一\n> - 项二');
+		expect(html).toContain('alert alert-note');
 		expect(html).toContain('<li>项一</li>');
 		expect(html).toContain('<li>项二</li>');
 	});
 
-	it('renders :::tip and :::warning callouts', () => {
-		expect(renderMarkdownToHtmlSync(':::tip\n内容\n:::')).toContain('callout-tip');
-		expect(renderMarkdownToHtmlSync(':::warning\n内容\n:::')).toContain('callout-warning');
+	it('renders the five alert types and the title line', () => {
+		expect(renderMarkdownToHtmlSync('> [!TIP] 标题\n> 内容')).toContain(
+			'<p class="alert-title">标题</p>'
+		);
+		expect(renderMarkdownToHtmlSync('> [!IMPORTANT]\n> 内容')).toContain('alert-important');
+		expect(renderMarkdownToHtmlSync('> [!WARNING]\n> 内容')).toContain('alert-warning');
+		expect(renderMarkdownToHtmlSync('> [!CAUTION]\n> 内容')).toContain('alert-caution');
 	});
 
 	it('keeps legacy spoiler/gallery/banner directives working', () => {

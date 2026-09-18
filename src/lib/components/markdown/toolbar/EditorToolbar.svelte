@@ -62,6 +62,13 @@
 	import IconInfoCircle from '@tabler/icons-svelte-runes/icons/info-circle';
 	import IconBulb from '@tabler/icons-svelte-runes/icons/bulb';
 	import IconAlertTriangle from '@tabler/icons-svelte-runes/icons/alert-triangle';
+	import IconAlertCircle from '@tabler/icons-svelte-runes/icons/alert-circle';
+	import IconAlertOctagon from '@tabler/icons-svelte-runes/icons/alert-octagon';
+	import {
+		ALERT_LABELS,
+		ALERT_TYPES,
+		type AlertType
+	} from '$lib/components/markdown/alert/alert-types';
 	import IconMath from '@tabler/icons-svelte-runes/icons/math';
 	import IconBug from '@tabler/icons-svelte-runes/icons/bug';
 	import IconDots from '@tabler/icons-svelte-runes/icons/dots';
@@ -244,6 +251,14 @@
 		items: OverflowItemDef[];
 	}
 
+	const ALERT_ICONS: Record<AlertType, typeof IconArticle> = {
+		note: IconInfoCircle,
+		tip: IconBulb,
+		important: IconAlertCircle,
+		warning: IconAlertTriangle,
+		caution: IconAlertOctagon
+	};
+
 	const ALL_OVERFLOW_GROUPS: OverflowGroupDef[] = [
 		{
 			heading: '文本格式',
@@ -362,30 +377,16 @@
 					disabled: () => toolbarState.inTable,
 					minBp: 3
 				},
-				{
-					id: 'calloutInfo',
-					label: 'Callout · 信息',
-					icon: IconInfoCircle,
-					action: () => insertAlert(editor!, 'info'),
-					disabled: () => toolbarState.inTable,
-					minBp: 3
-				},
-				{
-					id: 'calloutTip',
-					label: 'Callout · 提示',
-					icon: IconBulb,
-					action: () => insertAlert(editor!, 'tip'),
-					disabled: () => toolbarState.inTable,
-					minBp: 3
-				},
-				{
-					id: 'calloutWarning',
-					label: 'Callout · 警告',
-					icon: IconAlertTriangle,
-					action: () => insertAlert(editor!, 'warning'),
-					disabled: () => toolbarState.inTable,
-					minBp: 3
-				},
+				...ALERT_TYPES.map(
+					(type): OverflowItemDef => ({
+						id: `callout-${type}`,
+						label: `Callout · ${ALERT_LABELS[type]}`,
+						icon: ALERT_ICONS[type],
+						action: () => insertAlert(editor!, type),
+						disabled: () => toolbarState.inTable,
+						minBp: 3
+					})
+				),
 				{ id: 'tag', label: '标签', icon: IconTag, action: () => insertTag(editor!), minBp: 3 },
 				{ id: 'formula', label: '公式', icon: IconMath, action: handleInsertMath, minBp: 4 }
 			]
@@ -731,15 +732,12 @@
 				{/snippet}
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content align="start" class="w-36">
-				<DropdownMenu.Item onclick={() => insertAlert(editor!, 'info')}>
-					<IconInfoCircle data-icon="inline-start" />信息
-				</DropdownMenu.Item>
-				<DropdownMenu.Item onclick={() => insertAlert(editor!, 'tip')}>
-					<IconBulb data-icon="inline-start" />提示
-				</DropdownMenu.Item>
-				<DropdownMenu.Item onclick={() => insertAlert(editor!, 'warning')}>
-					<IconAlertTriangle data-icon="inline-start" />警告
-				</DropdownMenu.Item>
+				{#each ALERT_TYPES as type (type)}
+					{@const Icon = ALERT_ICONS[type]}
+					<DropdownMenu.Item onclick={() => insertAlert(editor!, type)}>
+						<Icon data-icon="inline-start" />{ALERT_LABELS[type]}
+					</DropdownMenu.Item>
+				{/each}
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 

@@ -15,19 +15,27 @@ type MountedDecoratorHandle = Record<string, unknown>;
 export interface SerializedAlertNode extends SerializedLexicalNode {
 	type: 'alert';
 	alertType: AlertType;
+	title: string;
 	jsonContent: string;
 }
 
 export class AlertNode extends DecoratorNode<HTMLElement> {
 	__alertType: AlertType;
+	__title: string;
 	__jsonContent: string;
 	/** @internal Svelte 组件句柄，不参与序列化 */
 	__svelteComp: MountedDecoratorHandle | null = null;
 
-	constructor(alertType: AlertType = DEFAULT_ALERT_TYPE, jsonContent?: string, key?: NodeKey) {
+	constructor(
+		alertType: AlertType = DEFAULT_ALERT_TYPE,
+		jsonContent?: string,
+		title = '',
+		key?: NodeKey
+	) {
 		super(key);
 		this.__alertType = alertType;
 		this.__jsonContent = jsonContent ?? createDefaultAlertContent();
+		this.__title = title;
 	}
 
 	static getType(): string {
@@ -35,12 +43,12 @@ export class AlertNode extends DecoratorNode<HTMLElement> {
 	}
 
 	static clone(node: AlertNode): AlertNode {
-		return new AlertNode(node.__alertType, node.__jsonContent, node.__key);
+		return new AlertNode(node.__alertType, node.__jsonContent, node.__title, node.__key);
 	}
 
 	static importJSON(serialized: SerializedLexicalNode & Record<string, unknown>): AlertNode {
 		const s = serialized as unknown as SerializedAlertNode;
-		return new AlertNode(s.alertType, s.jsonContent);
+		return new AlertNode(s.alertType, s.jsonContent, s.title ?? '');
 	}
 
 	exportJSON(): SerializedAlertNode {
@@ -48,6 +56,7 @@ export class AlertNode extends DecoratorNode<HTMLElement> {
 			...super.exportJSON(),
 			type: 'alert',
 			alertType: this.__alertType,
+			title: this.__title,
 			jsonContent: this.__jsonContent
 		};
 	}
@@ -89,6 +98,7 @@ export class AlertNode extends DecoratorNode<HTMLElement> {
 				props: {
 					nodeKey: this.__key,
 					alertType: this.__alertType,
+					title: this.__title,
 					initialContent: this.__jsonContent,
 					parentEditor: editor
 				},
@@ -132,8 +142,8 @@ export class AlertNode extends DecoratorNode<HTMLElement> {
 	}
 }
 
-export function $createAlertNode(type?: AlertType, content?: string): AlertNode {
-	return new AlertNode(type, content);
+export function $createAlertNode(type?: AlertType, content?: string, title?: string): AlertNode {
+	return new AlertNode(type, content, title);
 }
 
 export function $isAlertNode(node: unknown): node is AlertNode {

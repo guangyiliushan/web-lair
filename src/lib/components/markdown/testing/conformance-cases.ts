@@ -420,16 +420,62 @@ export const conformanceCases: ConformanceCase[] = [
 
 	// L2 block
 	{
-		id: 'l2-callout-info',
-		spec: '§3.1(遗留 :::info)',
-		input: ':::info\n提示内容\n:::',
-		contains: ['callout-info', '提示内容']
+		id: 'l2-alert-note-basic',
+		spec: '§3.1',
+		input: '> [!NOTE]\n> 提示内容',
+		contains: ['alert alert-note', '提示内容']
 	},
 	{
-		id: 'l2-callout-nested-markdown',
+		id: 'l2-alert-title',
 		spec: '§3.1',
-		input: ':::info\n- 项一\n- 项二\n:::',
-		contains: ['<li>项一</li>', '<li>项二</li>']
+		input: '> [!TIP] 自定义标题\n> 正文',
+		contains: ['alert alert-tip', '<p class="alert-title">自定义标题</p>', '正文']
+	},
+	{
+		id: 'l2-alert-nested-markdown',
+		spec: '§3.1',
+		input: '> [!WARNING]\n> - 项一\n> - 项二\n>\n> **粗体**',
+		contains: ['alert alert-warning', '<li>项一</li>', '<li>项二</li>', '<strong>粗体</strong>']
+	},
+	{
+		id: 'l2-alert-nested-quote',
+		spec: '§3.1',
+		input: '> [!IMPORTANT] 标题\n> > 嵌套引用',
+		contains: ['alert alert-important', '<blockquote>', '嵌套引用']
+	},
+	{
+		id: 'l2-alert-case-insensitive',
+		spec: '§3.1',
+		input: '> [!Caution] 小写\n> 内容',
+		contains: ['alert alert-caution', '小写']
+	},
+	{
+		// hard break (two trailing spaces) must split title from body as well
+		id: 'l2-alert-hard-break-title',
+		spec: '§3.1',
+		input: '> [!NOTE] 标题  \n> 正文',
+		contains: ['<p class="alert-title">标题</p>', '<p>正文</p>']
+	},
+	{
+		// spec 3.1 fixed migration mapping: error/danger -> CAUTION, success -> TIP
+		id: 'l2-alert-alias-danger',
+		spec: '§3.1',
+		input: '> [!DANGER] 旧别名\n> 内容',
+		contains: ['alert alert-caution', '旧别名']
+	},
+	{
+		id: 'l2-alert-unknown-marker-fallback',
+		spec: '§5',
+		input: '> [!UNKNOWN] 未知标记\n> 正文',
+		contains: ['<blockquote>', '[!UNKNOWN] 未知标记'],
+		notContains: ['alert']
+	},
+	{
+		id: 'l2-alert-plain-quote-untouched',
+		spec: '§3.1',
+		input: '> 普通引用内容',
+		contains: ['<blockquote>', '普通引用内容'],
+		notContains: ['alert']
 	},
 	{
 		id: 'l2-html-sup-sub',

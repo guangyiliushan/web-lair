@@ -195,26 +195,38 @@
 	@apply absolute top-0 bottom-0 left-0 w-1 rounded;
 }
 
-/* 强调条颜色（按类型） */
-.rich-editor-alert-info::before {
+/* 强调条颜色（按类型，5 种，spec §3.1） */
+.rich-editor-alert-note::before {
 	background-color: hsl(207 65% 65%);
 }
 .rich-editor-alert-tip::before {
 	background-color: hsl(120 50% 55%);
 }
+.rich-editor-alert-important::before {
+	background-color: hsl(280 60% 65%);
+}
 .rich-editor-alert-warning::before {
 	background-color: hsl(25 65% 55%);
 }
+.rich-editor-alert-caution::before {
+	background-color: hsl(0 65% 60%);
+}
 
 /* Dark 模式背景（参考 rich-alert 使用实色背景） */
-.dark .rich-editor-alert-info {
+.dark .rich-editor-alert-note {
 	background-color: hsl(210 50% 12% / 0.85);
 }
 .dark .rich-editor-alert-tip {
 	background-color: hsl(120 30% 10% / 0.85);
 }
+.dark .rich-editor-alert-important {
+	background-color: hsl(280 40% 12% / 0.85);
+}
 .dark .rich-editor-alert-warning {
 	background-color: hsl(30 40% 12% / 0.85);
+}
+.dark .rich-editor-alert-caution {
+	background-color: hsl(0 40% 12% / 0.85);
 }
 
 .rich-editor-alert-host {
@@ -250,14 +262,20 @@
 }
 
 /* Header 类型颜色 */
-.rich-editor-alert-header-info .rich-editor-alert-type-btn {
+.rich-editor-alert-header-note .rich-editor-alert-type-btn {
 	color: hsl(207 65% 65%);
 }
 .rich-editor-alert-header-tip .rich-editor-alert-type-btn {
 	color: hsl(120 50% 55%);
 }
+.rich-editor-alert-header-important .rich-editor-alert-type-btn {
+	color: hsl(280 60% 65%);
+}
 .rich-editor-alert-header-warning .rich-editor-alert-type-btn {
 	color: hsl(25 65% 55%);
+}
+.rich-editor-alert-header-caution .rich-editor-alert-type-btn {
+	color: hsl(0 65% 60%);
 }
 
 /* 图标 */
@@ -268,6 +286,13 @@
 /* 标签文字 */
 .rich-editor-alert-label {
 	@apply whitespace-nowrap;
+}
+
+/* 自定义标题（marker 行文本，spec §3.1） */
+.rich-editor-alert-title {
+	@apply ml-2 truncate text-sm font-semibold;
+	color: inherit;
+	opacity: 0.85;
 }
 
 /* Chevron */
@@ -310,14 +335,20 @@
 }
 
 /* 下拉菜单图标颜色（按类型） */
-.rich-editor-alert-option-icon-info {
+.rich-editor-alert-option-icon-note {
 	color: hsl(207 65% 65%);
 }
 .rich-editor-alert-option-icon-tip {
 	color: hsl(120 50% 55%);
 }
+.rich-editor-alert-option-icon-important {
+	color: hsl(280 60% 65%);
+}
 .rich-editor-alert-option-icon-warning {
 	color: hsl(25 65% 55%);
+}
+.rich-editor-alert-option-icon-caution {
+	color: hsl(0 65% 60%);
 }
 
 .rich-editor-alert-option-icon {
