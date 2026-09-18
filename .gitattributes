@@ -1,0 +1,5 @@
+# Normalise line endings: commits store LF, checkouts write LF on every
+# platform. core.autocrlf=input only normalises on `git add`, so without
+# these rules CRLF working copies keep producing phantom `modified` entries
+# with zero content diff (25 files were flagged that way during batch 4).
+* text=auto eol=lf
