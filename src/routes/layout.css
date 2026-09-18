@@ -270,7 +270,7 @@
 		filter: none;
 	}
 
-	/* ── 行内标签（<tag> 元素，规范 §4.5）── 与编辑器 .rich-editor-tag 视觉一致 */
+	/* ── Inline tag (<tag> element, spec 4.5) — matches the editor .rich-editor-tag look */
 	tag {
 		display: inline-block;
 		vertical-align: baseline;
@@ -282,8 +282,8 @@
 		color: var(--foreground);
 	}
 
-	/* ── Alerts（> [!NOTE] 等 → div.alert，规范 §3.1；唯一告警语法）──
-	   与编辑器 .rich-editor-alert 对齐：左侧强调条 + 仅右侧圆角 */
+	/* ── Alerts (> [!NOTE] etc. → div.alert, spec 3.1; the only alert syntax) ──
+	   matches the editor .rich-editor-alert: left accent bar, right-only rounding */
 	.alert {
 		position: relative;
 		margin-block: 1rem;
@@ -356,7 +356,7 @@
 		background-color: hsl(0 40% 12% / 0.85);
 	}
 
-	/* ── L2 容器（规范 §3.2）：grid / tabs / details ── */
+	/* ── L2 containers (spec 3.2): grid / tabs / details ── */
 	.md-grid {
 		display: grid;
 		gap: 1rem;

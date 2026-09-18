@@ -503,7 +503,7 @@ export const conformanceCases: ConformanceCase[] = [
 		input: ':::info\n孤儿容器内容',
 		contains: ['孤儿容器内容']
 	},
-	// ── L2 容器(§3.2,批 4a:grid/tabs/tab/details;退役 gallery/banner)──
+	// ── L2 containers (spec 3.2, batch 4a: grid/tabs/tab/details; gallery and banner retired) ──
 	{
 		id: 'l2-grid-basic',
 		spec: '§3.2',
@@ -576,7 +576,7 @@ export const conformanceCases: ConformanceCase[] = [
 		input: ':::whatever\n内容保留\n:::',
 		contains: ['内容保留']
 	},
-	// ── §4.5 raw/pipeline 来源区分(批 4a)──
+	// ── 4.5 raw/pipeline origin split (batch 4a) ──
 	{
 		// the forged token value cannot match the runtime random token
 		id: 'l45-raw-class-style-stripped',
