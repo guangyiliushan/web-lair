@@ -19,7 +19,7 @@ import { remarkMention } from '$lib/components/markdown/plugins/remark-mention';
 import { remarkAlert } from '$lib/components/markdown/plugins/remark-alert';
 import { attentionHandlers } from '$lib/components/markdown/plugins/attention-marker';
 import {
-	rehypeMarkMdastImages,
+	rehypeMarkPipelineNodes,
 	rehypeRawHtmlWhitelist
 } from '$lib/components/markdown/plugins/rehype-raw-html-whitelist';
 import { rehypeMermaid } from '$lib/components/markdown/plugins/rehype-mermaid';
@@ -79,7 +79,7 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 				keepBackground: false
 			})
 			.use(rehypeMermaid)
-			.use(rehypeMarkMdastImages)
+			.use(rehypeMarkPipelineNodes)
 			.use(rehypeRaw)
 			.use(rehypeRawHtmlWhitelist)
 			.use(rehypeSanitize, buildSanitizeSchema())

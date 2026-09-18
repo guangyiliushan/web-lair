@@ -46,7 +46,13 @@ describe('rendered html output', () => {
 		expect(renderMarkdownToHtmlSync('> [!CAUTION]\n> 内容')).toContain('alert-caution');
 	});
 
-	it('keeps legacy spoiler/gallery/banner directives working', () => {
-		expect(renderMarkdownToHtmlSync(':::spoiler\n隐藏内容\n:::')).toContain('spoiler-container');
+	it('renders :::spoiler as a block spoiler (details) and keeps retired containers content', () => {
+		const spoiler = renderMarkdownToHtmlSync(':::spoiler\n隐藏内容\n:::');
+		expect(spoiler).toContain('<details');
+		expect(spoiler).toContain('<summary>剧透</summary>');
+		expect(spoiler).toContain('隐藏内容');
+		const retired = renderMarkdownToHtmlSync(':::gallery\n![a](https://example.com/a.png)\n:::');
+		expect(retired).toContain('<img');
+		expect(retired).not.toContain('class="gallery"');
 	});
 });

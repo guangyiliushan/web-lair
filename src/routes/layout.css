@@ -356,6 +356,105 @@
 		background-color: hsl(0 40% 12% / 0.85);
 	}
 
+	/* ── L2 容器（规范 §3.2）：grid / tabs / details ── */
+	.md-grid {
+		display: grid;
+		gap: 1rem;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+		margin-block: 1rem;
+	}
+	.md-grid > * {
+		margin-block: 0;
+	}
+	.md-grid[data-cols='1'] {
+		grid-template-columns: repeat(1, minmax(0, 1fr));
+	}
+	.md-grid[data-cols='2'] {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.md-grid[data-cols='3'] {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+	.md-grid[data-cols='4'] {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+	.md-grid[data-cols='5'] {
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+	}
+	.md-grid[data-cols='6'] {
+		grid-template-columns: repeat(6, minmax(0, 1fr));
+	}
+	.md-grid[data-gap='0'] {
+		gap: 0;
+	}
+	.md-grid[data-gap='4'] {
+		gap: 0.25rem;
+	}
+	.md-grid[data-gap='8'] {
+		gap: 0.5rem;
+	}
+	.md-grid[data-gap='12'] {
+		gap: 0.75rem;
+	}
+	.md-grid[data-gap='16'] {
+		gap: 1rem;
+	}
+	.md-grid[data-layout='masonry'] {
+		display: block;
+		columns: 2;
+		column-gap: 1rem;
+	}
+	.md-grid[data-layout='masonry'] > * {
+		break-inside: avoid;
+		margin-block-end: 1rem;
+	}
+	.md-grid[data-layout='carousel'] {
+		display: flex;
+		overflow-x: auto;
+		scroll-snap-type: x mandatory;
+	}
+	.md-grid[data-layout='carousel'] > * {
+		flex: 0 0 auto;
+		scroll-snap-align: start;
+	}
+	.md-grid[data-type='images'] img {
+		display: block;
+		width: 100%;
+		height: auto;
+		border-radius: var(--radius-md);
+	}
+	.md-tabs {
+		margin-block: 1rem;
+	}
+	.md-tab {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		padding: 0.75rem 1rem;
+	}
+	.md-tab + .md-tab {
+		margin-top: 0.5rem;
+	}
+	.md-tab-label {
+		margin: 0 0 0.5rem;
+		font-weight: 600;
+	}
+	.md-details {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		margin-block: 1rem;
+		padding: 0.5rem 0.75rem;
+	}
+	.md-details > summary {
+		cursor: pointer;
+		font-weight: 600;
+	}
+	.md-details[open] > summary {
+		margin-bottom: 0.5rem;
+	}
+	.md-spoiler {
+		border-style: dashed;
+	}
+
 	.mermaid {
 		background: var(--muted);
 		border-radius: var(--radius-lg);

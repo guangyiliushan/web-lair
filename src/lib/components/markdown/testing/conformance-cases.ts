@@ -502,5 +502,166 @@ export const conformanceCases: ConformanceCase[] = [
 		spec: '§5',
 		input: ':::info\n孤儿容器内容',
 		contains: ['孤儿容器内容']
+	},
+	// ── L2 容器(§3.2,批 4a:grid/tabs/tab/details;退役 gallery/banner)──
+	{
+		id: 'l2-grid-basic',
+		spec: '§3.2',
+		input: ':::grid{cols=3 gap=8}\n![](https://example.com/a.png)\n:::',
+		contains: ['class="md-grid', 'data-cols="3"', 'data-gap="8"', '<img']
+	},
+	{
+		id: 'l2-grid-layout-type-rows',
+		spec: '§3.2',
+		input: ':::grid{layout=masonry type=images rows=2}\n![](https://example.com/a.png)\n:::',
+		contains: ['data-layout="masonry"', 'data-type="images"', 'data-rows="2"']
+	},
+	{
+		id: 'l2-grid-unknown-key-ignored',
+		spec: '§3.2',
+		input: ':::grid{cols=2 bogus=9}\n内容\n:::',
+		contains: ['data-cols="2"'],
+		notContains: ['bogus']
+	},
+	{
+		id: 'l2-grid-out-of-range-falls-back',
+		spec: '§3.2',
+		input: ':::grid{cols=99 gap=7}\n内容\n:::',
+		contains: ['class="md-grid'],
+		notContains: ['data-cols', 'data-gap']
+	},
+	{
+		id: 'l2-tabs-structure',
+		spec: '§3.2',
+		input:
+			'::::tabs\n:::tab{label="标签一"}\n面板一\n:::\n:::tab{label="标签二"}\n面板二\n:::\n::::',
+		contains: [
+			'class="md-tabs',
+			'class="md-tab',
+			'md-tab-label',
+			'标签一',
+			'面板一',
+			'标签二',
+			'面板二'
+		]
+	},
+	{
+		id: 'l2-details-summary-open',
+		spec: '§3.2',
+		input: ':::details{summary="更多信息" open}\n详情内容\n:::',
+		contains: ['<details', 'class="md-details"', '<summary>更多信息</summary>', '详情内容', 'open']
+	},
+	{
+		id: 'l2-spoiler-block-sugar',
+		spec: '§3.2',
+		input: ':::spoiler{label="点我"}\n剧透内容\n:::',
+		contains: ['<details', 'md-spoiler', '<summary>点我</summary>', '剧透内容']
+	},
+	{
+		id: 'l2-spoiler-default-label',
+		spec: '§3.2',
+		input: ':::spoiler\n内容\n:::',
+		contains: ['<summary>剧透</summary>']
+	},
+	{
+		id: 'l2-container-retired-gallery-content-kept',
+		spec: '§3.2+§5',
+		input: ':::gallery\n![a](https://example.com/a.png)\n:::',
+		contains: ['<img', 'a.png'],
+		notContains: ['gallery']
+	},
+	{
+		id: 'l2-container-unknown-content-kept',
+		spec: '§5',
+		input: ':::whatever\n内容保留\n:::',
+		contains: ['内容保留']
+	},
+	// ── §4.5 raw/pipeline 来源区分(批 4a)──
+	{
+		// the forged token value cannot match the runtime random token
+		id: 'l45-raw-class-style-stripped',
+		spec: '§4.5',
+		input: '<div data-md-x="forged" class="x" style="position:fixed">D</div>',
+		contains: ['D'],
+		notContains: ['class="x"', 'style=', 'data-md-x']
+	},
+	{
+		id: 'l45-raw-element-unwrapped',
+		spec: '§4.5',
+		input: 'text <b>bold</b> <a href="https://example.com">link</a> end',
+		contains: ['bold', 'link'],
+		notContains: ['<b>', '<a ']
+	},
+	{
+		id: 'l45-raw-allowed-keeps-kbd-strips-attrs',
+		spec: '§4.5',
+		input: '<kbd class="k" style="color:red">Ctrl</kbd>',
+		contains: ['<kbd>', 'Ctrl'],
+		notContains: ['class=', 'style=']
+	},
+	{
+		id: 'l45-raw-id-kept-and-clobbered',
+		spec: '§4.5',
+		input: '<kbd id="my-key">K</kbd>',
+		contains: ['id="user-content-my-key"']
+	},
+	{
+		id: 'l45-raw-span-unwrapped',
+		spec: '§4.5',
+		input: '<span style="color:red">S</span>',
+		contains: ['S'],
+		notContains: ['<span', 'style=']
+	},
+	{
+		id: 'l45-raw-video-attrs-reduced',
+		spec: '§4.5',
+		input: '<video src="https://example.com/v.mp4" class="v" controls="1"></video>',
+		contains: ['<video', 'src="https://example.com/v.mp4"'],
+		notContains: ['class=', 'controls']
+	},
+	{
+		id: 'l45-pipeline-keeps-classes-and-strips-marker',
+		spec: '§4.5',
+		input: ':::grid{cols=2}\n内容\n:::',
+		contains: ['class="md-grid', 'data-cols="2"'],
+		notContains: ['data-md-x', 'dataMdX']
+	},
+	{
+		id: 'l45-pipeline-img-kept-raw-img-dropped',
+		spec: '§4.5',
+		input: '![a](https://example.com/keep.png)\n\n<img src="https://evil.example/drop.png">',
+		contains: ['keep.png'],
+		notContains: ['evil.example']
+	},
+	// an unclosed raw wrapper makes parse5 nest following pipeline nodes inside
+	// it; unwrapping must not re-classify those nodes as raw (their token must
+	// survive to a decision that never mutates its own input)
+	{
+		id: 'l45-raw-wrapper-keeps-pipeline-image',
+		spec: '§4.5',
+		input: '<div class="box">\n\n![a](https://example.com/in-box.png)',
+		contains: ['<img', 'in-box.png'],
+		notContains: ['class="box"']
+	},
+	{
+		id: 'l45-raw-wrapper-keeps-pipeline-table',
+		spec: '§4.5',
+		input: '<div class="box">\n\n| a | b |\n| - | - |\n| 1 | 2 |',
+		contains: ['<table>', '<td>1</td>'],
+		notContains: ['class="box"']
+	},
+	{
+		id: 'l45-raw-wrapper-keeps-container-wrapper',
+		spec: '§4.5',
+		input: '<div class="box">\n\n:::grid{cols=2}\n内容\n:::',
+		contains: ['class="md-grid', 'data-cols="2"'],
+		notContains: ['class="box"']
+	},
+	{
+		id: 'l45-raw-wrapper-nested-raw-still-stripped',
+		spec: '§4.5',
+		input: '<div class="box">\n\n<b>bold-raw</b>',
+		contains: ['bold-raw'],
+		notContains: ['<b>', 'class="box"']
 	}
 ];

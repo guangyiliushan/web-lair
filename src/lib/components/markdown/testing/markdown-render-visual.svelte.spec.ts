@@ -236,4 +236,50 @@ describe('custom extensions (L2 migration state) paint', () => {
 		expect(root.querySelector('mark')).toBeNull();
 		expect(root.querySelector('.katex')).toBeNull();
 	});
+
+	it('grid paints as a css grid with the requested column count (spec 3.2)', () => {
+		const root = mountHtml(
+			renderMarkdownToHtmlSync(
+				':::grid{cols=3}\n![](https://example.com/a.png)\n![](https://example.com/b.png)\n:::'
+			)
+		);
+		const grid = root.querySelector('.md-grid') as HTMLElement | null;
+		expect(grid).not.toBeNull();
+		expect(getComputedStyle(grid!).display).toBe('grid');
+		expect(getComputedStyle(grid!).gridTemplateColumns.split(' ').length).toBe(3);
+	});
+
+	it('details paints closed by default and open when asked (spec 3.2)', () => {
+		const closed = mountHtml(renderMarkdownToHtmlSync(':::spoiler\n隐藏内容\n:::'));
+		const d1 = closed.querySelector('details') as HTMLDetailsElement | null;
+		expect(d1).not.toBeNull();
+		expect(d1!.open).toBe(false);
+		expect(d1!.querySelector('summary')?.textContent).toBe('剧透');
+		const opened = mountHtml(
+			renderMarkdownToHtmlSync(':::details{summary="更多" open}\n内容\n:::')
+		);
+		const d2 = opened.querySelector('details') as HTMLDetailsElement | null;
+		expect(d2!.open).toBe(true);
+	});
+
+	it('tabs paints its label and panel structure (spec 3.2)', () => {
+		const root = mountHtml(
+			renderMarkdownToHtmlSync('::::tabs\n:::tab{label="一"}\n面板一\n:::\n::::')
+		);
+		expect(root.querySelector('.md-tabs')).not.toBeNull();
+		expect(root.querySelector('.md-tab-label')?.textContent).toBe('一');
+		expect(root.textContent).toContain('面板一');
+	});
+
+	it('raw html gets the 4.5 closed set end to end, pipeline output keeps its classes (spec 4.5)', () => {
+		const root = mountHtml(
+			renderMarkdownToHtmlSync(
+				'<div class="raw-x" style="position:fixed">R</div>\n\n:::grid{cols=2}\n内容\n:::'
+			)
+		);
+		expect(root.querySelector('.raw-x')).toBeNull();
+		expect(root.querySelector('[style]')).toBeNull();
+		expect(root.querySelector('.md-grid')).not.toBeNull();
+		expect(root.querySelector('.md-grid')!.getAttribute('data-cols')).toBe('2');
+	});
 });

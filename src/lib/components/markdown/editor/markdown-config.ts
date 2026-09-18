@@ -18,7 +18,7 @@ import { remarkMention } from '$lib/components/markdown/plugins/remark-mention';
 import { remarkAlert } from '$lib/components/markdown/plugins/remark-alert';
 import { attentionHandlers } from '$lib/components/markdown/plugins/attention-marker';
 import {
-	rehypeMarkMdastImages,
+	rehypeMarkPipelineNodes,
 	rehypeRawHtmlWhitelist
 } from '$lib/components/markdown/plugins/rehype-raw-html-whitelist';
 
@@ -161,7 +161,18 @@ export function buildSanitizeSchema(): Schema {
 				'dataLine',
 				'ariaHidden'
 			],
-			div: [...(defaultSchema.attributes?.div ?? []), 'className'],
+			div: [
+				...(defaultSchema.attributes?.div ?? []),
+				'className',
+				// 3.2 container parameters (pipeline output only; raw content cannot
+				// forge them — the provenance pass strips raw attributes)
+				'dataCols',
+				'dataRows',
+				'dataGap',
+				'dataLayout',
+				'dataType',
+				'dataLabel'
+			],
 			sup: [...(defaultSchema.attributes?.sup ?? []), 'dataFootnoteRef'],
 			section: [
 				...(defaultSchema.attributes?.section ?? []).filter(withoutClassNameTuple),
@@ -173,8 +184,11 @@ export function buildSanitizeSchema(): Schema {
 			abbr: ['title'],
 			time: ['datetime'],
 			source: ['src', 'type'],
-			video: ['src', 'poster', 'width', 'height', 'muted', 'loop', 'preload', 'className'],
-			audio: ['src', 'width', 'height', 'muted', 'loop', 'preload', 'className'],
+			// video/audio carry no className: raw-side class is stripped before
+			// sanitize (spec 4.5 list) and the pipeline emits none — keep this list
+			// identical to RAW_ATTRS in rehype-raw-html-whitelist.ts
+			video: ['src', 'poster', 'width', 'height', 'muted', 'loop', 'preload'],
+			audio: ['src', 'width', 'height', 'muted', 'loop', 'preload'],
 			// KaTeX 输出的 MathML 标签属性
 			math: ['xmlns', 'display'],
 			annotation: ['encoding'],
@@ -266,7 +280,7 @@ function getLightProcessor(): MarkdownProcessor {
 		.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload
 		.use(rehypeKatex as any, { throwOnError: false })
-		.use(rehypeMarkMdastImages)
+		.use(rehypeMarkPipelineNodes)
 		.use(rehypeRaw)
 		.use(rehypeRawHtmlWhitelist)
 		.use(rehypeSanitize, buildSanitizeSchema())
