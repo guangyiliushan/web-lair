@@ -28,6 +28,7 @@
 	} from '$lib/components/markdown/editor/lexical-helpers';
 	import EditorDebugDialog from './EditorDebugDialog.svelte';
 	import ImageInsertDialog from './ImageInsertDialog.svelte';
+	import CodeBlockInsertDialog from './CodeBlockInsertDialog.svelte';
 
 	// ── 图标 ──
 	import IconH1 from '@tabler/icons-svelte-runes/icons/h-1';
@@ -132,6 +133,7 @@
 	let debugJson = $state('');
 
 	let imageDialogOpen = $state(false);
+	let codeDialogOpen = $state(false);
 
 	$effect(() => {
 		if (!editor) return;
@@ -199,6 +201,16 @@
 	function handleInsertImage() {
 		if (!editor) return;
 		imageDialogOpen = true;
+	}
+
+	function handleInsertCodeBlock() {
+		if (!editor) return;
+		codeDialogOpen = true;
+	}
+
+	function handleCodeBlockInsert(language: string) {
+		if (!editor) return;
+		insertCodeBlock(editor, language);
 	}
 
 	function handleImageInsert(url: string, alt: string) {
@@ -362,7 +374,7 @@
 					id: 'codeBlock',
 					label: '代码块',
 					icon: IconCodeDots,
-					action: () => insertCodeBlock(editor!),
+					action: handleInsertCodeBlock,
 					disabled: () => toolbarState.inTable,
 					minBp: 3
 				},
@@ -645,7 +657,7 @@
 		<Button
 			variant="ghost"
 			size="icon-sm"
-			onclick={() => insertCodeBlock(editor!)}
+			onclick={handleInsertCodeBlock}
 			onmousedown={preventSelectionLoss}
 			disabled={toolbarState.inTable}
 			aria-label={m.toolbar_code_block()}
@@ -754,3 +766,4 @@
 
 <EditorDebugDialog bind:open={debugOpen} editorStateJson={debugJson} />
 <ImageInsertDialog bind:open={imageDialogOpen} onInsert={handleImageInsert} />
+<CodeBlockInsertDialog bind:open={codeDialogOpen} onInsert={handleCodeBlockInsert} />
