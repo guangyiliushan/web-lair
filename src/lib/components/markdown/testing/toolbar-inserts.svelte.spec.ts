@@ -24,11 +24,9 @@ async function mountEditor(initial = '') {
 const toolbar = () => page.getByRole('toolbar', { name: '编辑器工具栏' });
 
 describe('toolbar insert buttons', () => {
-	it('inserts a code block', async () => {
-		const { screen } = await mountEditor('前文');
-		await toolbar().getByRole('button', { name: '代码块' }).click();
-		await expect.poll(() => readSaved(screen.container)).toContain('```');
-	});
+	// The code-block button opens the language picker since the dialog landed
+	// (its insert contract lives in toolbar-code-dialog.svelte.spec.ts); this
+	// spec keeps the direct-insert pathways.
 
 	it('inserts a link through the prompt', async () => {
 		const { screen } = await mountEditor('前文');

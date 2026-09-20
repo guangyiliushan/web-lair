@@ -188,13 +188,14 @@ export function insertTable(
  */
 export function insertCodeBlock(editor: LexicalEditor, language: string = '') {
 	editor.update(() => {
-		const selection = $getSelection();
-		if (!$isRangeSelection(selection)) return;
 		const codeNode = $createCodeNode(language);
 		codeNode.append($createTextNode(''));
-		// block nodes must land at the nearest root: selection.insertNodes on a
-		// paragraph-embedded selection silently drops them (this was the
-		// "code block button does nothing" defect)
+		// Block nodes must land at the nearest root — selection.insertNodes on
+		// a paragraph-embedded selection silently drops them. The utility
+		// resolves the insertion point itself (selection, previous selection,
+		// or the root's end), so there is deliberately no range-selection
+		// guard here: with one, the button silently no-ops whenever the
+		// editor's selection has not settled yet (observed under load).
 		$insertNodeToNearestRoot(codeNode);
 	});
 }
@@ -260,10 +261,8 @@ export { $createAlertNode, $isAlertNode };
  */
 export function insertAlert(editor: LexicalEditor, type: AlertType = DEFAULT_ALERT_TYPE) {
 	editor.update(() => {
-		const selection = $getSelection();
-		if (!$isRangeSelection(selection)) return;
 		const alertNode = $createAlertNode(type, createDefaultAlertContent());
-		// same root-level contract as the code block insert
+		// same root-level contract as the code block insert (no selection guard)
 		$insertNodeToNearestRoot(alertNode);
 	});
 }
