@@ -20,7 +20,7 @@ const resourceCount = (pattern: RegExp) =>
 	performance.getEntriesByType('resource').filter((entry) => pattern.test(entry.name)).length;
 // vite serves the lazy chunk from /node_modules/.vite/deps/; the spec's own
 // module path also contains "mermaid", so match the deps directory alone
-const CHUNK = /\/deps\/mermaid/;
+const CHUNK = /[/]deps[/]mermaid|mermaid[.]core|mermaid@/;
 const BEACON = /127\.0\.0\.1:9/;
 
 /** The token colour as the implementation resolves it (canvas pixels). */
@@ -43,6 +43,12 @@ const DIRECTIVE = fence(
 	'%%{init: {"htmlLabels": true, "securityLevel": "loose"}}%%\ngraph TD;\n  A[x] --> B;'
 );
 const IMAGE_SHAPE = fence('graph LR;\n  A@{ img: "//127.0.0.1:9/shape.png", label: "i" } --> B;');
+const FRONTMATTER_HTML = fence(
+	'---\nconfig:\n  htmlLabels: true\n---\ngraph TD;\n  A["<img src=//127.0.0.1:9/fm.png>"] --> B[ok];'
+);
+const FRONTMATTER_CSS = fence(
+	'---\nconfig:\n  themeCSS: "#zz-frontmatter-css { fill: rgb(1,2,3) }"\n---\ngraph TD;\n  A[x] --> B;'
+);
 const BROKEN = fence('graph TD;\n  A[oops --> ;');
 
 async function mountRenderer(source: string) {
@@ -64,6 +70,9 @@ describe('mermaid execution (client)', () => {
 		const before = resourceCount(CHUNK);
 		const plain = await mountRenderer('just text, no diagram');
 		expect(plain.container.querySelector('.mermaid')).toBeNull();
+		// a bounded wait, not a poll: a poll cannot prove a negative, and an
+		// import that was going to happen lands in resource timing within a
+		// couple of frames
 		await new Promise((resolve) => setTimeout(resolve, 250));
 		expect(resourceCount(CHUNK) - before).toBe(0);
 
@@ -103,7 +112,10 @@ describe('mermaid execution (client)', () => {
 		// the strict/loose discriminator: only loose binds the click handler
 		const click = await mountRenderer(CLICK);
 		await waitForSettled(click.container);
-		for (const anchor of settled(click.container)!.querySelectorAll('a')) {
+		const anchors = [...settled(click.container)!.querySelectorAll('a')];
+		// the anchor must exist, otherwise the href checks below are vacuous
+		expect(anchors.length).toBeGreaterThan(0);
+		for (const anchor of anchors) {
 			expect(anchor.getAttribute('href') ?? '').not.toContain('javascript:');
 			expect(anchor.getAttribute('xlink:href') ?? '').not.toContain('javascript:');
 		}
@@ -112,6 +124,24 @@ describe('mermaid execution (client)', () => {
 		const directive = await mountRenderer(DIRECTIVE);
 		await waitForSettled(directive.container);
 		expect(settled(directive.container)!.querySelector('foreignObject')).toBeNull();
+
+		// the second config channel: YAML frontmatter `config:` - mermaid
+		// deprecated directives in favour of it, so both must be stripped
+		const fmBeacons = resourceCount(BEACON);
+		const frontmatter = await mountRenderer(FRONTMATTER_HTML);
+		await waitForSettled(frontmatter.container);
+		expect(
+			settled(frontmatter.container)!.querySelector('img, image, script, foreignObject')
+		).toBeNull();
+		expect(resourceCount(BEACON) - fmBeacons).toBe(0);
+
+		const css = await mountRenderer(FRONTMATTER_CSS);
+		await waitForSettled(css.container);
+		expect(
+			[...document.querySelectorAll('style')].some((node) =>
+				(node.textContent ?? '').includes('zz-frontmatter-css')
+			)
+		).toBe(false);
 	});
 
 	it('re-renders with the token palette when the theme flips', async () => {

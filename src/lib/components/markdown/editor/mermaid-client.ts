@@ -13,12 +13,18 @@
  *   layers close the surface instead:
  *   1. `htmlLabels: false` renders labels as SVG `text` - no foreignObject
  *      for ordinary diagrams;
- *   2. `%%{init: ...}%%` directives are stripped from the source before
- *      rendering, so a diagram cannot flip `htmlLabels` back on or inject
- *      `themeCSS` (directives are per-diagram config, not content);
+ *   2. per-diagram config is stripped from the source before rendering.
+ *      There are TWO channels and both must go: mermaid deprecated
+ *      `%%{init: ...}%%` directives in favour of the YAML frontmatter
+ *      `config:` block, so closing only the deprecated one leaves the
+ *      official one open (measured: a frontmatter `htmlLabels: true` plus a
+ *      label `img` issued real requests). Stripping both is what makes "a
+ *      diagram cannot flip `htmlLabels` back on or inject `themeCSS`" true;
  *   3. sources carrying `@{ img: ... }` node syntax are not rendered at all:
  *      that shape loads a remote image while rendering, which would bypass
  *      the spec's "images only through `!`" rule (4.5).
+ *   The request-count invariant (zero third-party requests for the covered
+ *   hostile forms) is pinned in mermaid-exec.svelte.spec.ts.
  * - The palette comes from the site's own CSS tokens through `theme: 'base'`
  *   plus an explicit variable map, so diagrams sit in the same colours as
  *   the surrounding content instead of mermaid's stock palette.
@@ -36,6 +42,12 @@ let renderChain: Promise<void> = Promise.resolve();
 
 /** `%%{ init: ... }%%` is a single line; inner braces are allowed. */
 const DIRECTIVE = /%%\{[\s\S]*?\}%%/g;
+/**
+ * The YAML frontmatter block, mirroring mermaid's own `frontMatterRegex`
+ * (leading `---` line, content, closing `---` line). Anchored: a `---` line
+ * anywhere else is diagram content.
+ */
+const FRONTMATTER = /^[ \t]*-{3}[ \t]*\r?\n[\s\S]*?\r?\n-{3}[ \t]*\r?\n+/;
 /** The v11+ node syntax that fetches a remote image while rendering. */
 const IMAGE_SHAPE = /@\{[^}]*\bimg\s*:/;
 
@@ -116,7 +128,7 @@ async function renderDiagrams(elements: HTMLElement[]): Promise<void> {
 			element.setAttribute('data-md-error', 'image-shape');
 			continue;
 		}
-		element.textContent = source.replace(DIRECTIVE, '');
+		element.textContent = source.replace(FRONTMATTER, '').replace(DIRECTIVE, '');
 	}
 	const runnable = live.filter((element) => !element.hasAttribute('data-md-error'));
 	if (runnable.length === 0) return;
@@ -125,14 +137,12 @@ async function renderDiagrams(elements: HTMLElement[]): Promise<void> {
 	// left by a failed render, or mermaid's error svg) rolls back to the raw
 	// source so "degrade to the raw text" is true rather than aspirational
 	for (const element of runnable) {
-		if (element.hasAttribute('data-md-error')) continue;
 		const settled =
 			element.children.length === 1 &&
 			element.firstElementChild?.tagName.toLowerCase() === 'svg' &&
 			element.querySelector('[aria-roledescription="error"]') === null;
 		if (!settled) {
 			element.textContent = element.getAttribute('data-md-source') ?? '';
-			element.removeAttribute('data-processed');
 			element.setAttribute('data-md-error', 'render');
 			console.warn('[markdown] mermaid diagram failed - raw source kept (spec 5)');
 		}
