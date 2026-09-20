@@ -15,6 +15,9 @@ import { visit } from 'unist-util-visit';
  * Violating inlineMath nodes are restored to the literal source text per 5
  * (sliced from the original via position offsets, preserving escaping).
  *
+ * `\(…\)` (spec 2 #2) is exempt: it is the unambiguous spelling the guard's
+ * heuristics exist to avoid, so its nodes are left alone.
+ *
  * Block `$$` formulas are bounded by line boundaries -- the guard holds
  * trivially and is not applied.
  */
@@ -39,6 +42,13 @@ export const remarkMathGuard: Plugin<[], Root> = () => {
 			const { start, end } = node.position ?? {};
 			if (start?.offset == null || end?.offset == null) return;
 
+			const rawSlice = source.slice(start.offset, end.offset);
+			// the unambiguous spelling is exempt from the `$` heuristics.
+			// Char codes (92 = backslash, 40 = left paren) rather than a string
+			// literal: this check has already been mangled once by layered
+			// escaping between the source file and the running transform.
+			if (rawSlice.charCodeAt(0) === 92 && rawSlice.charCodeAt(1) === 40) return;
+
 			const charBefore = start.offset > 0 ? source[start.offset - 1] : undefined;
 			const charAfter = end.offset < source.length ? source[end.offset] : undefined;
 
@@ -48,7 +58,7 @@ export const remarkMathGuard: Plugin<[], Root> = () => {
 
 			const literal: Text = {
 				type: 'text',
-				value: source.slice(start.offset, end.offset)
+				value: rawSlice
 			};
 			parent.children.splice(index, 1, literal);
 			return index + 1;

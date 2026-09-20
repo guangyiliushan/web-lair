@@ -733,26 +733,39 @@ export const conformanceCases: ConformanceCase[] = [
 		notContains: ['figcaption', 'title="x"']
 	},
 	{
-		// \(…\) renders as inline math, the spec 2 #2 unambiguous equivalent
+		// documented asymmetry: the closer search does not honour an inner
+		// escaped backslash, so `\(a\)` is math whose content ends with a
+		// stray backslash (KaTeX degrades it to red text per 5). Registered;
+		// the even case (`\(x\)`) stays literal.
+		id: 'l2-math-paren-odd-escape-is-math',
+		spec: '§2 #2/§4.4',
+		input: '\\(a\\\\\\)',
+		contains: ['katex']
+	},
+	{
+		// the payload matters: an empty KaTeX box also contains "katex"
 		id: 'l2-math-paren-inline',
 		spec: '§2 #2',
 		input: '前文 \\(x^2\\) 后文',
-		contains: ['katex'],
-		notContains: ['\\(']
+		contains: ['application/x-tex">x^2<'],
+		notContains: ['(x^2)']
 	},
 	{
-		id: 'l2-math-paren-display',
+		// `\[…\]` is not implemented: a display math node is block-level in
+		// mdast while the brackets sit inside a paragraph (registered as a spec
+		// question). The escape chain therefore leaves it literal.
+		id: 'l2-math-bracket-form-literal',
 		spec: '§2 #2',
-		input: '\\[\\sum_i x_i\\]',
-		contains: ['katex-display'],
-		notContains: ['\\[']
+		input: '前文 \\[x\\] 后文',
+		contains: ['[x]'],
+		notContains: ['katex']
 	},
 	{
 		// no closer → the core escape wins and the parenthesis stays literal
 		id: 'l2-math-paren-unmatched-literal',
 		spec: '§2 #2',
 		input: 'a \\( b',
-		contains: ['('],
+		contains: ['a ( b'],
 		notContains: ['katex']
 	},
 	{
@@ -760,24 +773,50 @@ export const conformanceCases: ConformanceCase[] = [
 		id: 'l2-math-paren-escaped-literal',
 		spec: '§2 #2/§4.4',
 		input: '\\\\(x\\\\)',
-		contains: ['('],
-		notContains: ['katex', 'math-inline']
+		contains: ['\\(x\\)'],
+		notContains: ['katex']
 	},
 	{
 		// code spans isolate the syntax (4.2)
 		id: 'l2-math-paren-inside-code-disabled',
 		spec: '§2 #2/§4.2',
 		input: '`\\(x\\)`',
-		contains: ['<code>'],
+		contains: ['<code>\\(x\\)</code>'],
 		notContains: ['katex']
 	},
 	{
-		// the two spellings render identically (same mdast shape)
+		// both spellings render, with the payload of each (a digit after the
+		// paren form is fine: the `$` heuristics do not apply to it)
 		id: 'l2-math-paren-equals-dollar',
 		spec: '§2 #2',
-		input: '\\(y\\) 与 $y$',
-		contains: ['katex'],
-		notContains: ['\\(']
+		input: '\\(p\\) 与 $q$',
+		contains: ['application/x-tex">p<', 'application/x-tex">q<']
+	},
+	{
+		// the guard exempts the unambiguous spelling: a digit after the closer
+		// must not corrupt the formula (it used to restore the source from the
+		// wrong offset and eat the opening marker)
+		id: 'l2-math-paren-digit-after-closer-kept',
+		spec: '§2 #2',
+		input: '文本\\(x\\)2',
+		contains: ['application/x-tex">x<'],
+		notContains: ['x\\)2']
+	},
+	{
+		// and a letter before the opener does not switch it off either
+		id: 'l2-math-paren-letter-before-opener-kept',
+		spec: '§2 #2',
+		input: '文本a\\(x\\)',
+		contains: ['application/x-tex">x<']
+	},
+	{
+		// empty content renders an empty formula (allowed; no closer needed)
+		id: 'l2-math-paren-empty-content',
+		spec: '§2 #2',
+		input: '前\\(\\)后',
+		// an empty formula is not math: no content means the escapes stay literal
+		contains: ['()'],
+		notContains: ['katex']
 	},
 	// ── L2 容器(§3.2,批 4a:grid/tabs/tab/details;退役 gallery/banner)──
 	{
