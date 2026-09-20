@@ -51,6 +51,15 @@ export const rehypeCodeMeta: Plugin<[], HastRoot> = () => {
 			const meta = readMeta(node);
 			if (!meta) return;
 
+			// line numbering is on by default; this marker is consumed by the
+			// line pass (after pretty-code renames the pre, it lives on the figure)
+			if (meta.linenosOff) {
+				const classList = Array.isArray(node.properties?.className)
+					? node.properties.className
+					: [];
+				node.properties = { ...node.properties, className: [...classList, 'md-linenos-off'] };
+			}
+
 			if (!meta.collapsed) {
 				if (meta.title) {
 					parent.children.splice(index, 0, titleLine(meta.title));

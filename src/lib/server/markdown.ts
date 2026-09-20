@@ -28,6 +28,7 @@ import {
 	rehypeRawHtmlWhitelist
 } from '$lib/components/markdown/plugins/rehype-raw-html-whitelist';
 import { rehypeMermaid } from '$lib/components/markdown/plugins/rehype-mermaid';
+import { rehypeCodeLines } from '$lib/components/markdown/plugins/rehype-code-lines';
 import { buildSanitizeSchema } from '$lib/components/markdown';
 
 /**
@@ -94,6 +95,9 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 				},
 				keepBackground: false
 			})
+			// line structure + numbering + collapsed previews (spec 3.3) — after
+			// pretty-code, which owns the server line spans
+			.use(rehypeCodeLines)
 			.use(rehypeMarkPipelineNodes)
 			.use(rehypeRaw)
 			.use(rehypeRawHtmlWhitelist)

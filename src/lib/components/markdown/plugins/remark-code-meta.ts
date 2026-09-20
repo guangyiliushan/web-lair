@@ -7,8 +7,8 @@ import { warnOnce } from './plugin-warnings';
  * Code-fence info strings (spec 3.3): ```ts {collapsed=10 title="…" linenos=off}
  *
  * Closed key set: `collapsed` (bare = fully collapsed, `=N` = collapse to line
- * N), `linenos=off` (accepted — the renderer has no line numbers yet, nothing
- * to turn off) and `title="…"`; whitespace before a brace block is allowed
+ * N), `linenos=off` (line numbers render by default — spec 3.3 defines this
+ * key as the opt-out) and `title="…"`; whitespace before a brace block is allowed
  * (the spec example uses it). Unknown keys warn once.
  *
  * EVERY brace block is consumed: parsing only the first one would leave a
@@ -27,6 +27,8 @@ export interface CodeMeta {
 	/** false = expanded; true = all collapsed; number = collapse to line N. */
 	collapsed: true | number | false;
 	title?: string;
+	/** `linenos=off`: the renderer numbers lines by default (spec 3.3). */
+	linenosOff?: boolean;
 }
 
 const BRACE_REGEX = /\s*\{([^}]*)\}/g;
@@ -60,7 +62,7 @@ export const remarkCodeMeta: Plugin<[], Root> = () => {
 								`code: "${token}" is not a line count — ignored (spec 3.3)`
 							);
 					} else if (token === 'linenos=off') {
-						// accepted; the renderer shows no line numbers yet (recorded)
+						parsed.linenosOff = true;
 					} else {
 						warnOnce(
 							`code-meta:${token}`,

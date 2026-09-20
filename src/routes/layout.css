@@ -484,6 +484,27 @@
 		font-size: 0.875rem;
 		margin-block: 0.25rem 0;
 	}
+	/* ── Code line numbers and collapse previews (spec 3.3) ── */
+	.md-code-linenos {
+		counter-reset: md-code-line;
+	}
+	.md-code-linenos .md-code-line {
+		display: block;
+	}
+	.md-code-linenos .md-code-line::before {
+		counter-increment: md-code-line;
+		content: counter(md-code-line);
+		display: inline-block;
+		width: 2.5em;
+		margin-inline-end: 1em;
+		text-align: end;
+		color: var(--muted-foreground);
+		user-select: none;
+	}
+	/* collapsed=N previews the first N lines while the details is closed */
+	.md-code-preview:not([open]) .md-code-line-hidden {
+		display: none;
+	}
 	@media print {
 		/* spec 7: collapsed blocks are force-expanded when printing */
 		.md-code-collapsed > summary {
@@ -494,6 +515,10 @@
 		}
 		/* legacy engines without ::details-content support */
 		.md-code-collapsed:not([open]) > *:not(summary) {
+			display: block;
+		}
+		/* preview hiding applies to the stylesheet only, never to paper */
+		.md-code-preview .md-code-line-hidden {
 			display: block;
 		}
 	}

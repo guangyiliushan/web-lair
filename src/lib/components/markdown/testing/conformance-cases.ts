@@ -663,6 +663,31 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['<pre class="mermaid">', 'graph TD; A-- B'],
 		notContains: ['language-mermaid']
 	},
+	{
+		// line numbers are ON by default (spec 3.3: the only key is linenos=off)
+		id: 'l2-code-linenos-default',
+		spec: '§3.3',
+		input: '```ts\nconst a = 1;\nconst b = 2;\n```',
+		contains: ['md-code-linenos', 'md-code-line']
+	},
+	{
+		// `linenos=off` opts out: the line structure stays (styling hook), the
+		// numbering class and its marker are gone from the output
+		id: 'l2-code-linenos-off',
+		spec: '§3.3',
+		input: '```ts {linenos=off}\nconst a = 1;\n```',
+		contains: ['md-code-line'],
+		notContains: ['md-code-linenos', 'md-linenos-off']
+	},
+	{
+		// collapsed=N previews the first N lines in the collapsed state: lines
+		// beyond N carry a marker class that the stylesheet hides while closed
+		id: 'l2-code-collapse-preview',
+		spec: '§3.3',
+		input: '```ts {collapsed=2}\nconst a = 1;\nconst b = 2;\nconst c = 3;\n```',
+		contains: ['md-code-preview', 'md-code-line-hidden'],
+		notContains: ['md-linenos-off']
+	},
 	// ── L2 容器(§3.2,批 4a:grid/tabs/tab/details;退役 gallery/banner)──
 	{
 		id: 'l2-grid-basic',

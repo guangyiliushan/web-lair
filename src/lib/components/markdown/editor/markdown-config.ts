@@ -16,6 +16,7 @@ import { remarkCodeMeta } from '$lib/components/markdown/plugins/remark-code-met
 import { remarkImageEmbed } from '$lib/components/markdown/plugins/remark-image-embed';
 import { rehypeCodeMeta } from '$lib/components/markdown/plugins/rehype-code-meta';
 import { rehypeMermaid } from '$lib/components/markdown/plugins/rehype-mermaid';
+import { rehypeCodeLines } from '$lib/components/markdown/plugins/rehype-code-lines';
 import { rehypeHeadingAnchors } from '$lib/components/markdown/plugins/rehype-heading-anchors';
 import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
 import { remarkMark } from '$lib/components/markdown/plugins/remark-mark';
@@ -294,6 +295,7 @@ function getLightProcessor(): MarkdownProcessor {
 		.use(rehypeKatex as any, { throwOnError: false })
 		.use(rehypeCodeMeta)
 		.use(rehypeMermaid)
+		.use(rehypeCodeLines)
 		.use(rehypeMarkPipelineNodes)
 		.use(rehypeRaw)
 		.use(rehypeRawHtmlWhitelist)

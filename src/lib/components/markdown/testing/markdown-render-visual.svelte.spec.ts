@@ -307,6 +307,21 @@ describe('custom extensions (L2 migration state) paint', () => {
 		expect(titled.querySelector('.md-code-title')?.textContent).toBe('核心逻辑');
 	});
 
+	it('previews the first N lines of a collapsed=N block (spec 3.3)', () => {
+		const root = mountHtml(
+			renderMarkdownToHtmlSync('```ts {collapsed=2}\nconst a = 1;\nconst b = 2;\nconst c = 3;\n```')
+		);
+		const details = root.querySelector('details.md-code-preview') as HTMLDetailsElement;
+		expect(details).not.toBeNull();
+		expect(root.querySelector('pre.md-code-linenos')).not.toBeNull();
+		const lines = details.querySelectorAll('.md-code-line');
+		expect(lines).toHaveLength(3);
+		expect(getComputedStyle(lines[0]).display).not.toBe('none');
+		expect(getComputedStyle(lines[2]).display).toBe('none');
+		details.open = true;
+		expect(getComputedStyle(lines[2]).display).not.toBe('none');
+	});
+
 	it('embed placeholder cards keep a working no-JS link (spec 3.4/7)', () => {
 		const root = mountHtml(renderMarkdownToHtmlSync('![repo](https://github.com/foo/bar)'));
 		const card = root.querySelector('a.embed-card') as HTMLAnchorElement;
