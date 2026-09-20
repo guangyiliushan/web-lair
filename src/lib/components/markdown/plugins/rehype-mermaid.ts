@@ -1,6 +1,7 @@
 import type { Plugin } from 'unified';
 import type { Root, Element } from 'hast';
 import { visit } from 'unist-util-visit';
+import { classList } from './hast-class';
 
 /**
  * rehype-mermaid: turns `language-mermaid` code blocks into `<pre class="mermaid">`
@@ -29,13 +30,7 @@ export const rehypeMermaid: Plugin<[], Root> = () => {
 			);
 			if (!child) return;
 
-			const className = child.properties?.className;
-			const classList = Array.isArray(className)
-				? className
-				: typeof className === 'string'
-					? [className]
-					: [];
-			if (!classList.includes('language-mermaid')) return;
+			if (!classList(child).includes('language-mermaid')) return;
 
 			// 提取代码内容
 			const codeContent = (child.children ?? [])

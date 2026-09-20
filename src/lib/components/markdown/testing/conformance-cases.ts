@@ -668,7 +668,7 @@ export const conformanceCases: ConformanceCase[] = [
 		id: 'l2-code-linenos-default',
 		spec: '§3.3',
 		input: '```ts\nconst a = 1;\nconst b = 2;\n```',
-		contains: ['md-code-linenos', 'md-code-line']
+		contains: ['class="md-code-line"', 'md-code-linenos']
 	},
 	{
 		// `linenos=off` opts out: the line structure stays (styling hook), the
@@ -676,8 +676,10 @@ export const conformanceCases: ConformanceCase[] = [
 		id: 'l2-code-linenos-off',
 		spec: '§3.3',
 		input: '```ts {linenos=off}\nconst a = 1;\n```',
-		contains: ['md-code-line'],
-		notContains: ['md-code-linenos', 'md-linenos-off']
+		// the off-marker is kept: it is the off-state evidence and keeps the
+		// line pass idempotent
+		contains: ['class="md-code-line"', 'md-linenos-off'],
+		notContains: ['md-code-linenos"']
 	},
 	{
 		// collapsed=N previews the first N lines in the collapsed state: lines
@@ -685,8 +687,50 @@ export const conformanceCases: ConformanceCase[] = [
 		id: 'l2-code-collapse-preview',
 		spec: '§3.3',
 		input: '```ts {collapsed=2}\nconst a = 1;\nconst b = 2;\nconst c = 3;\n```',
-		contains: ['md-code-preview', 'md-code-line-hidden'],
-		notContains: ['md-linenos-off']
+		// the preview is keyed on the data attribute (the CSS hook), not a class
+		contains: ['data-md-collapse="2"', 'class="md-code-line md-code-line-hidden"'],
+		notContains: ['md-code-preview', 'md-linenos-off']
+	},
+	{
+		// the combination exercises the preview limit and the off-marker together
+		id: 'l2-code-collapse-with-linenos-off',
+		spec: '§3.3',
+		input: '```ts {collapsed=1 linenos=off}\nconst a = 1;\nconst b = 2;\n```',
+		contains: ['class="md-code-line md-code-line-hidden"', 'md-linenos-off'],
+		notContains: ['md-code-linenos"']
+	},
+	{
+		// bare `collapsed` is a FULL collapse: no data attribute, no preview
+		id: 'l2-code-collapse-bare-has-no-preview',
+		spec: '§3.3',
+		input: '```ts {collapsed}\nconst a = 1;\nconst b = 2;\n```',
+		contains: ['md-code-collapsed'],
+		notContains: ['md-code-line-hidden', 'data-md-collapse']
+	},
+	{
+		// N beyond the line count previews everything (nothing hidden)
+		id: 'l2-code-collapse-over-line-count',
+		spec: '§3.3',
+		input: '```ts {collapsed=9}\nconst a = 1;\nconst b = 2;\n```',
+		contains: ['md-code-linenos', 'data-md-collapse="9"'],
+		notContains: ['md-code-line-hidden']
+	},
+	{
+		// an empty fence still carries one line span on both pipelines
+		id: 'l2-code-empty-fence-line',
+		spec: '§3.3',
+		input: '```ts\n```',
+		contains: ['class="md-code-line"']
+	},
+	{
+		// info-string keys outside the brace block are not part of the closed
+		// set: they are stripped so pretty-code cannot render a server-only
+		// caption (double-pipeline drift)
+		id: 'l2-code-meta-bare-stripped',
+		spec: '§3.3',
+		input: '```ts title="x"\nconst a = 1;\n```',
+		contains: ['class="md-code-line"'],
+		notContains: ['figcaption', 'title="x"']
 	},
 	// ── L2 容器(§3.2,批 4a:grid/tabs/tab/details;退役 gallery/banner)──
 	{

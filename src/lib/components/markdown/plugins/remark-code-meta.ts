@@ -32,6 +32,8 @@ export interface CodeMeta {
 }
 
 const BRACE_REGEX = /\s*\{([^}]*)\}/g;
+/** Upper bound for `collapsed=N`; beyond it the fence meta is rejected. */
+const MAX_COLLAPSE_LINES = 9999;
 const TITLE_REGEX = /title="([^"]*)"/;
 
 export const remarkCodeMeta: Plugin<[], Root> = () => {
@@ -39,6 +41,18 @@ export const remarkCodeMeta: Plugin<[], Root> = () => {
 		visit(tree, 'code', (node: Code) => {
 			const meta = node.meta ?? '';
 			const blocks = [...meta.matchAll(BRACE_REGEX)];
+			// Anything outside the brace blocks is not part of the closed key set.
+			// Strip it before the early return: leaving it in node.meta hands it
+			// to rehype-pretty-code, which renders server-only captions (a
+			// double-pipeline drift).
+			const leftover = meta.replace(BRACE_REGEX, '').trim();
+			if (leftover) {
+				warnOnce(
+					`code-meta-bare:${leftover}`,
+					`code: info-string keys outside the brace block are ignored (spec 3.3): "${leftover}"`
+				);
+			}
+			node.meta = '';
 			if (blocks.length === 0) return;
 
 			const parsed: CodeMeta = { collapsed: false };
@@ -55,7 +69,13 @@ export const remarkCodeMeta: Plugin<[], Root> = () => {
 					} else if (token.startsWith('collapsed=')) {
 						const rawValue = token.slice('collapsed='.length);
 						const line = Number(rawValue);
-						if (/^\d+$/.test(rawValue) && line > 0) parsed.collapsed = line;
+						if (
+							/^\d+$/.test(rawValue) &&
+							Number.isSafeInteger(line) &&
+							line > 0 &&
+							line <= MAX_COLLAPSE_LINES
+						)
+							parsed.collapsed = line;
 						else
 							warnOnce(
 								`code-meta-collapsed:${token}`,
@@ -76,7 +96,6 @@ export const remarkCodeMeta: Plugin<[], Root> = () => {
 				...(node.data ?? {}),
 				hProperties: { ...(node.data?.hProperties ?? {}), [META_ATTR]: JSON.stringify(parsed) }
 			};
-			node.meta = meta.replace(BRACE_REGEX, '').trim();
 		});
 	};
 };

@@ -485,11 +485,14 @@
 		margin-block: 0.25rem 0;
 	}
 	/* ── Code line numbers and collapse previews (spec 3.3) ── */
+	.md-code-line {
+		/* Unconditional: the light pipeline splits plain-text code into these
+		   spans, so block display is what keeps any code block multi-line —
+		   scoping it to the numbering class glued `linenos=off` blocks. */
+		display: block;
+	}
 	.md-code-linenos {
 		counter-reset: md-code-line;
-	}
-	.md-code-linenos .md-code-line {
-		display: block;
 	}
 	.md-code-linenos .md-code-line::before {
 		counter-increment: md-code-line;
@@ -501,8 +504,14 @@
 		color: var(--muted-foreground);
 		user-select: none;
 	}
-	/* collapsed=N previews the first N lines while the details is closed */
-	.md-code-preview:not([open]) .md-code-line-hidden {
+	/* collapsed=N previews its first N lines on screen. The closed details'
+	   content is otherwise hidden by the UA's ::details-content rule, so the
+	   preview has to reveal the content and then hide the lines beyond N.
+	   Keyed on data-md-collapse: bare `collapsed` is a full collapse. */
+	.md-code-collapsed[data-md-collapse]:not([open])::details-content {
+		content-visibility: visible;
+	}
+	.md-code-collapsed[data-md-collapse]:not([open]) .md-code-line-hidden {
 		display: none;
 	}
 	@media print {
@@ -517,8 +526,9 @@
 		.md-code-collapsed:not([open]) > *:not(summary) {
 			display: block;
 		}
-		/* preview hiding applies to the stylesheet only, never to paper */
-		.md-code-preview .md-code-line-hidden {
+		/* the screen hiding rule again: equal specificity, later in source, so
+		   paper gets every line (spec 7) */
+		.md-code-collapsed[data-md-collapse]:not([open]) .md-code-line-hidden {
 			display: block;
 		}
 	}

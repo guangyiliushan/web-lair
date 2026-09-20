@@ -2,6 +2,7 @@ import type { Plugin } from 'unified';
 import type { Root as HastRoot, Element } from 'hast';
 import { visit, SKIP } from 'unist-util-visit';
 import { META_ATTR, type CodeMeta } from './remark-code-meta';
+import { addClass } from './hast-class';
 
 /**
  * Code-fence info-string rendering (spec 3.3) — runs BEFORE rehype-pretty-code
@@ -14,8 +15,8 @@ import { META_ATTR, type CodeMeta } from './remark-code-meta';
  * - `title` without `collapsed`: a small caption line above the block
  * - `collapsed` / `collapsed=N`: the block is wrapped in a native
  *   `<details class="md-code-collapsed">` whose summary carries the title
- *   (`代码` when absent); `=N` rides as `data-md-collapse` for the client
- *   enhancement that renders the partial preview
+ *   (`代码` when absent); `=N` rides as `data-md-collapse`, which the
+ *   stylesheet keys the partial preview on
  * - the transport attribute is consumed here and deleted; it is read before
  *   rehype-raw runs (raw content can never smuggle it) and it is not in the
  *   sanitize schema either
@@ -53,12 +54,7 @@ export const rehypeCodeMeta: Plugin<[], HastRoot> = () => {
 
 			// line numbering is on by default; this marker is consumed by the
 			// line pass (after pretty-code renames the pre, it lives on the figure)
-			if (meta.linenosOff) {
-				const classList = Array.isArray(node.properties?.className)
-					? node.properties.className
-					: [];
-				node.properties = { ...node.properties, className: [...classList, 'md-linenos-off'] };
-			}
+			if (meta.linenosOff) addClass(node, 'md-linenos-off');
 
 			if (!meta.collapsed) {
 				if (meta.title) {

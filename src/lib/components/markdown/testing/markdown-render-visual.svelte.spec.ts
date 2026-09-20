@@ -311,15 +311,33 @@ describe('custom extensions (L2 migration state) paint', () => {
 		const root = mountHtml(
 			renderMarkdownToHtmlSync('```ts {collapsed=2}\nconst a = 1;\nconst b = 2;\nconst c = 3;\n```')
 		);
-		const details = root.querySelector('details.md-code-preview') as HTMLDetailsElement;
+		const details = root.querySelector('details[data-md-collapse="2"]') as HTMLDetailsElement;
 		expect(details).not.toBeNull();
 		expect(root.querySelector('pre.md-code-linenos')).not.toBeNull();
 		const lines = details.querySelectorAll('.md-code-line');
 		expect(lines).toHaveLength(3);
-		expect(getComputedStyle(lines[0]).display).not.toBe('none');
+		// painted, not merely styled: the closed details must actually reveal its
+		// content for the preview (rect-based, so a content-visibility hiding of
+		// the whole block fails here)
+		expect(getComputedStyle(lines[0]).display).toBe('block');
+		expect(lines[0].getBoundingClientRect().height).toBeGreaterThan(0);
 		expect(getComputedStyle(lines[2]).display).toBe('none');
+		expect(lines[2].getBoundingClientRect().height).toBe(0);
 		details.open = true;
-		expect(getComputedStyle(lines[2]).display).not.toBe('none');
+		expect(lines[2].getBoundingClientRect().height).toBeGreaterThan(0);
+	});
+
+	it('keeps a linenos=off block multi-line (light-pipeline regression)', () => {
+		const root = mountHtml(
+			renderMarkdownToHtmlSync('```ts {linenos=off}\nconst a = 1;\nconst b = 2;\n```')
+		);
+		const lines = root.querySelectorAll('.md-code-line');
+		expect(lines).toHaveLength(2);
+		expect(getComputedStyle(lines[0]).display).toBe('block');
+		const first = lines[0].getBoundingClientRect();
+		const second = lines[1].getBoundingClientRect();
+		expect(first.height).toBeGreaterThan(0);
+		expect(second.top).toBeGreaterThanOrEqual(first.bottom - 1);
 	});
 
 	it('embed placeholder cards keep a working no-JS link (spec 3.4/7)', () => {
