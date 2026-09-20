@@ -49,6 +49,30 @@ const FRONTMATTER_HTML = fence(
 const FRONTMATTER_CSS = fence(
 	'---\nconfig:\n  themeCSS: "#zz-frontmatter-css { fill: rgb(1,2,3) }"\n---\ngraph TD;\n  A[x] --> B;'
 );
+// The six frontmatter shapes an independent re-review measured as leaking
+// past the first closure (fo=2/img=1/beacon=2): indented block,
+// directive-prefixed (newline and glued), and 0x0C/0x0B at the opener or
+// closer. All must strip to the same closed state.
+const LEAKY_SHAPES = [
+	fence(
+		'  ---\n  config:\n    htmlLabels: true\n  ---\n  graph TD;\n  A["<img src=//127.0.0.1:9/ind.png>"] --> B;'
+	),
+	fence(
+		'%%{init: {"theme":"base"}}%%\n---\nconfig:\n  htmlLabels: true\n---\ngraph TD;\n  A["<img src=//127.0.0.1:9/nl.png>"] --> B;'
+	),
+	fence(
+		'%%{init: {"theme":"base"}}%%---\nconfig:\n  htmlLabels: true\n---\ngraph TD;\n  A["<img src=//127.0.0.1:9/glued.png>"] --> B;'
+	),
+	fence(
+		'---\u000C\nconfig:\n  htmlLabels: true\n---\ngraph TD;\n  A["<img src=//127.0.0.1:9/ff.png>"] --> B;'
+	),
+	fence(
+		'---\u000B\nconfig:\n  htmlLabels: true\n---\ngraph TD;\n  A["<img src=//127.0.0.1:9/vt.png>"] --> B;'
+	),
+	fence(
+		'---\nconfig:\n  htmlLabels: true\n---\u000C\ngraph TD;\n  A["<img src=//127.0.0.1:9/cff.png>"] --> B;'
+	)
+];
 const BROKEN = fence('graph TD;\n  A[oops --> ;');
 
 async function mountRenderer(source: string) {
@@ -137,11 +161,25 @@ describe('mermaid execution (client)', () => {
 
 		const css = await mountRenderer(FRONTMATTER_CSS);
 		await waitForSettled(css.container);
+		// scoped to this mount: mermaid injects themeCSS into the svg itself
 		expect(
-			[...document.querySelectorAll('style')].some((node) =>
+			[...css.container.querySelectorAll('style')].some((node) =>
 				(node.textContent ?? '').includes('zz-frontmatter-css')
 			)
 		).toBe(false);
+	});
+
+	it('strips the config channels in every shape the re-review measured open', async () => {
+		for (const [index, shape] of LEAKY_SHAPES.entries()) {
+			const beacons = resourceCount(BEACON);
+			const screen = await mountRenderer(shape);
+			await waitForSettled(screen.container);
+			expect(
+				settled(screen.container)!.querySelector('img, image, script, foreignObject'),
+				`shape ${index}`
+			).toBeNull();
+			expect(resourceCount(BEACON) - beacons, `shape ${index}`).toBe(0);
+		}
 	});
 
 	it('re-renders with the token palette when the theme flips', async () => {
