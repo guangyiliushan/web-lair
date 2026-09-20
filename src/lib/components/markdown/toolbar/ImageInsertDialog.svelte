@@ -26,14 +26,13 @@
 		previewFailed = false;
 	});
 
-	// 打开时重置表单
-	$effect(() => {
-		if (open) {
-			url = '';
-			alt = '';
-			previewFailed = false;
-		}
-	});
+	// 打开时重置表单(经 Dialog 的 open-change 回调;Svelte 文档不建议在 $effect 中改状态)
+	function handleOpenChange(next: boolean) {
+		if (!next) return;
+		url = '';
+		alt = '';
+		previewFailed = false;
+	}
 
 	function handleInsert() {
 		if (!canInsert) return;
@@ -42,7 +41,7 @@
 	}
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root bind:open onOpenChange={handleOpenChange}>
 	<Dialog.Portal>
 		<Dialog.Overlay />
 		<Dialog.Content class="sm:max-w-md">

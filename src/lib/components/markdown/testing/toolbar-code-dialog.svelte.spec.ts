@@ -49,4 +49,13 @@ describe('code block language picker', () => {
 		await page.getByRole('option', { name: '纯文本' }).click();
 		await expect.poll(() => readSaved(screen.container)).toMatch(/```\n/);
 	});
+
+	it('sanitises free-form languages to a single info token', async () => {
+		const { screen } = await mountEditor('前文');
+		await toolbar().getByRole('button', { name: '代码块' }).click();
+		await expect.element(page.getByRole('dialog')).toBeInTheDocument();
+		await page.getByRole('combobox').fill('a b`c');
+		await page.getByRole('option', { name: /abc/ }).click();
+		await expect.poll(() => readSaved(screen.container)).toContain('```abc');
+	});
 });

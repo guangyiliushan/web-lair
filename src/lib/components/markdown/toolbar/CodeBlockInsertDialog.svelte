@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Command from '$lib/components/ui/command';
 	import { m } from '$lib/paraglide/messages';
-	import { CODE_LANGUAGES } from './code-languages';
+	import { CODE_LANGUAGES, sanitizeLanguage } from './code-languages';
 
 	let {
 		open = $bindable(),
@@ -13,10 +13,12 @@
 
 	let query = $state('');
 
-	// reset the search whenever the dialog opens (mirrors ImageInsertDialog)
-	$effect(() => {
-		if (open) query = '';
-	});
+	// Reset on the open transition rather than in an $effect: the Svelte docs
+	// discourage updating state inside effects; dialog roots expose their own
+	// open-change callback for exactly this.
+	function handleOpenChange(next: boolean) {
+		if (next) query = '';
+	}
 
 	function pick(language: string) {
 		onInsert(language);
@@ -24,14 +26,24 @@
 	}
 
 	// The free-form entry appears only when nothing else matches: any
-	// identifier is a valid fence language (spec 3.3).
+	// identifier is a valid fence language (spec 3.3), but it must survive as
+	// a single info token — sanitize before offering it.
+	const customLanguage = $derived(sanitizeLanguage(query));
 	const showCustom = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		return q.length > 0 && !CODE_LANGUAGES.some((language) => language.includes(q));
+		return (
+			customLanguage.length > 0 &&
+			!CODE_LANGUAGES.some((language) => language.includes(q) || language === customLanguage)
+		);
 	});
 </script>
 
-<Command.Dialog bind:open title={m.code_block_title()} description={m.code_block_description()}>
+<Command.Dialog
+	bind:open
+	onOpenChange={handleOpenChange}
+	title={m.code_block_title()}
+	description={m.code_block_description()}
+>
 	<!-- the search text lives on Command.Input (the root's `value` is the
 	     selected item, not the query) -->
 	<Command.Input bind:value={query} placeholder={m.code_block_search()} />
@@ -49,8 +61,10 @@
 		</Command.Group>
 		{#if showCustom}
 			<Command.Group heading={m.code_block_group_custom()}>
-				<Command.Item value={query.trim()} onSelect={() => pick(query.trim())}>
-					{m.code_block_use_custom({ language: query.trim() })}
+				<!-- value keeps the raw query so the built-in filter matches it;
+				     the inserted language is the sanitised form shown in the text -->
+				<Command.Item value={query.trim()} onSelect={() => pick(customLanguage)}>
+					{m.code_block_use_custom({ language: customLanguage })}
 				</Command.Item>
 			</Command.Group>
 		{/if}

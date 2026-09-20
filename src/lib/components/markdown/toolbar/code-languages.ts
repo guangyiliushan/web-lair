@@ -53,3 +53,15 @@ export const CODE_LANGUAGES: readonly string[] = [
 	'makefile',
 	'tex'
 ];
+
+/**
+ * Fence info strings must survive as a single token: strip whitespace,
+ * backticks, control characters and anything outside the identifier range so
+ * a free-form entry can never break the fence or the saved markdown.
+ */
+export function sanitizeLanguage(input: string): string {
+	return input
+		.trim()
+		.replace(/[^A-Za-z0-9_+#.-]/g, '')
+		.slice(0, 32);
+}
