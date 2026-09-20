@@ -569,7 +569,91 @@ export const conformanceCases: ConformanceCase[] = [
 		input: ':::info\n孤儿容器内容',
 		contains: ['孤儿容器内容']
 	},
-	// ── L2 containers (spec 3.2, batch 4a: grid/tabs/tab/details; gallery and banner retired) ──
+	// ── 嵌入判定(§3.4 ①-⑤,批 6)──
+	{
+		id: 'l2-embed-extension-image',
+		spec: '§3.4 ③',
+		input: '![](https://example.com/pic.webp?w=100#x)',
+		contains: ['<img', 'pic.webp'],
+		notContains: ['embed-card']
+	},
+	{
+		id: 'l2-embed-provider-card',
+		spec: '§3.4 ④',
+		input: '![repo](https://github.com/foo/bar)',
+		contains: [
+			'class="embed-card',
+			'data-embed="gh-repo"',
+			'data-url="https://github.com/foo/bar"'
+		],
+		notContains: ['<img']
+	},
+	{
+		id: 'l2-embed-generic-card-zero-request',
+		spec: '§3.4 ⑤',
+		input: '![我的站点](https://unknown.example/page)',
+		contains: ['class="embed-card', 'data-embed="generic"', '我的站点'],
+		notContains: ['<img']
+	},
+	{
+		id: 'l2-embed-tail-type-wins',
+		spec: '§3.4 ①',
+		input: '![x](https://github.com/foo/bar) {type=image}',
+		contains: ['<img'],
+		notContains: ['embed-card']
+	},
+	{
+		id: 'l2-embed-container-images-wins',
+		spec: '§3.4 ②',
+		input: ':::grid{type=images}\n![x](https://github.com/foo/bar)\n:::',
+		contains: ['<img'],
+		notContains: ['embed-card']
+	},
+	{
+		// an image inside a link stays an image: replacing it would nest
+		// anchors and parse5 empties the outer link (batch 2 precedent)
+		id: 'l2-embed-image-inside-link-stays-image',
+		spec: '§3.4',
+		input: '[![x](https://github.com/foo/bar)](https://example.com)',
+		contains: ['<a href="https://example.com"', '<img'],
+		notContains: ['embed-card']
+	},
+	{
+		id: 'l2-embed-container-masonry-images',
+		spec: '§3.4 ②',
+		input: ':::grid{layout=masonry}\n![x](https://github.com/foo/bar)\n:::',
+		contains: ['<img'],
+		notContains: ['embed-card']
+	},
+	{
+		id: 'l2-embed-container-carousel-images',
+		spec: '§3.4 ②',
+		input: ':::grid{layout=carousel}\n![x](https://github.com/foo/bar)\n:::',
+		contains: ['<img'],
+		notContains: ['embed-card']
+	},
+	{
+		id: 'l2-embed-plain-link-untouched',
+		spec: '§3.4',
+		input: '[文本](https://github.com/foo/bar)',
+		contains: ['<a href="https://github.com/foo/bar"'],
+		notContains: ['embed-card']
+	},
+	{
+		id: 'l2-embed-bare-url-untouched',
+		spec: '§3.4',
+		input: 'https://github.com/foo/bar',
+		contains: ['<a href="https://github.com/foo/bar"'],
+		notContains: ['embed-card']
+	},
+	{
+		id: 'l2-embed-mx-space-relative',
+		spec: '§3.4 ④',
+		input: '![站内](/posts/hello-world)',
+		contains: ['data-embed="mx-space"'],
+		notContains: ['<img']
+	},
+	// ── L2 容器(§3.2,批 4a:grid/tabs/tab/details;退役 gallery/banner)──
 	{
 		id: 'l2-grid-basic',
 		spec: '§3.2',

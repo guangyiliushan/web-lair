@@ -307,6 +307,16 @@ describe('custom extensions (L2 migration state) paint', () => {
 		expect(titled.querySelector('.md-code-title')?.textContent).toBe('核心逻辑');
 	});
 
+	it('embed placeholder cards keep a working no-JS link (spec 3.4/7)', () => {
+		const root = mountHtml(renderMarkdownToHtmlSync('![repo](https://github.com/foo/bar)'));
+		const card = root.querySelector('a.embed-card') as HTMLAnchorElement;
+		expect(card).not.toBeNull();
+		expect(card.getAttribute('data-embed')).toBe('gh-repo');
+		expect(card.getAttribute('data-url')).toBe('https://github.com/foo/bar');
+		expect(card.getAttribute('href')).toBe('https://github.com/foo/bar');
+		expect(card.textContent).toContain('repo');
+	});
+
 	it('image tail size paints as attributes (spec 2 #7)', () => {
 		const root = mountHtml(
 			renderMarkdownToHtmlSync('![a](https://example.com/a.png) {width=480 height=320}')

@@ -14,6 +14,7 @@ import rehypeStringify from 'rehype-stringify';
 import { remarkContainerDirective } from '$lib/components/markdown/plugins/remark-directive';
 import { remarkImageAttr } from '$lib/components/markdown/plugins/remark-image-attr';
 import { remarkCodeMeta } from '$lib/components/markdown/plugins/remark-code-meta';
+import { remarkImageEmbed } from '$lib/components/markdown/plugins/remark-image-embed';
 import { rehypeCodeMeta } from '$lib/components/markdown/plugins/rehype-code-meta';
 import { rehypeHeadingAnchors } from '$lib/components/markdown/plugins/rehype-heading-anchors';
 import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
@@ -69,6 +70,7 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			.use(remarkAlert)
 			.use(remarkImageAttr)
 			.use(remarkCodeMeta)
+			.use(remarkImageEmbed)
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload 限制
 			.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload

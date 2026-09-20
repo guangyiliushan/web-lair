@@ -13,6 +13,7 @@ import rehypeStringify from 'rehype-stringify';
 import { remarkContainerDirective } from '$lib/components/markdown/plugins/remark-directive';
 import { remarkImageAttr } from '$lib/components/markdown/plugins/remark-image-attr';
 import { remarkCodeMeta } from '$lib/components/markdown/plugins/remark-code-meta';
+import { remarkImageEmbed } from '$lib/components/markdown/plugins/remark-image-embed';
 import { rehypeCodeMeta } from '$lib/components/markdown/plugins/rehype-code-meta';
 import { rehypeHeadingAnchors } from '$lib/components/markdown/plugins/rehype-heading-anchors';
 import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
@@ -135,7 +136,10 @@ export function buildSanitizeSchema(): Schema {
 				...(defaultSchema.attributes?.a ?? []).filter(withoutClassNameTuple),
 				'target',
 				'rel',
-				'className'
+				'className',
+				// 3.4 embed placeholder cards (pipeline output only)
+				'dataEmbed',
+				'dataUrl'
 			],
 			img: [...(defaultSchema.attributes?.img ?? []), 'loading', 'className', 'width', 'height'],
 			code: [
@@ -282,6 +286,7 @@ function getLightProcessor(): MarkdownProcessor {
 		.use(remarkAlert)
 		.use(remarkImageAttr)
 		.use(remarkCodeMeta)
+		.use(remarkImageEmbed)
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload 限制
 		.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload
