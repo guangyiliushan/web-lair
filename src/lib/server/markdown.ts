@@ -13,6 +13,8 @@ import rehypeSanitize from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
 import { remarkContainerDirective } from '$lib/components/markdown/plugins/remark-directive';
 import { remarkImageAttr } from '$lib/components/markdown/plugins/remark-image-attr';
+import { remarkCodeMeta } from '$lib/components/markdown/plugins/remark-code-meta';
+import { rehypeCodeMeta } from '$lib/components/markdown/plugins/rehype-code-meta';
 import { rehypeHeadingAnchors } from '$lib/components/markdown/plugins/rehype-heading-anchors';
 import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
 import { remarkMark } from '$lib/components/markdown/plugins/remark-mark';
@@ -66,6 +68,7 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			.use(remarkMention)
 			.use(remarkAlert)
 			.use(remarkImageAttr)
+			.use(remarkCodeMeta)
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload 限制
 			.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload
@@ -73,6 +76,9 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 				throwOnError: false,
 				output: 'htmlAndMathml'
 			})
+			// code info-string rendering runs before rehype-pretty-code so the
+			// transport attribute never has to survive that pass (3.3)
+			.use(rehypeCodeMeta)
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-pretty-code Options 类型兼容
 			.use(rehypePrettyCode as any, {
 				theme: {

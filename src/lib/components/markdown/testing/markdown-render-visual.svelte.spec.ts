@@ -293,6 +293,20 @@ describe('custom extensions (L2 migration state) paint', () => {
 		expect(getComputedStyle(anchor).opacity).toBe('0');
 	});
 
+	it('code info-string blocks paint collapsed with a titled summary (spec 3.3)', () => {
+		const collapsed = mountHtml(
+			renderMarkdownToHtmlSync('```ts {collapsed title="核心逻辑"}\nhello\n```')
+		);
+		const details = collapsed.querySelector('details.md-code-collapsed') as HTMLDetailsElement;
+		expect(details).not.toBeNull();
+		expect(details.open).toBe(false);
+		expect(details.querySelector('summary')?.textContent).toBe('核心逻辑');
+		expect(details.textContent).toContain('hello');
+
+		const titled = mountHtml(renderMarkdownToHtmlSync('```ts {title="核心逻辑"}\nhello\n```'));
+		expect(titled.querySelector('.md-code-title')?.textContent).toBe('核心逻辑');
+	});
+
 	it('image tail size paints as attributes (spec 2 #7)', () => {
 		const root = mountHtml(
 			renderMarkdownToHtmlSync('![a](https://example.com/a.png) {width=480 height=320}')

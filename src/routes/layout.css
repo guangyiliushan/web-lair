@@ -455,6 +455,39 @@
 		border-style: dashed;
 	}
 
+	/* ── Code info-string rendering (spec 3.3) ── */
+	.md-code-collapsed {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		margin-block: 1rem;
+	}
+	.md-code-collapsed > summary {
+		cursor: pointer;
+		padding: 0.5rem 0.75rem;
+		font-weight: 600;
+	}
+	.md-code-collapsed > *:not(summary) {
+		margin: 0;
+	}
+	.md-code-title {
+		color: var(--muted-foreground);
+		font-size: 0.875rem;
+		margin-block: 0.25rem 0;
+	}
+	@media print {
+		/* spec 7: collapsed blocks are force-expanded when printing */
+		.md-code-collapsed > summary {
+			display: none;
+		}
+		.md-code-collapsed::details-content {
+			content-visibility: visible;
+		}
+		/* legacy engines without ::details-content support */
+		.md-code-collapsed:not([open]) > *:not(summary) {
+			display: block;
+		}
+	}
+
 	/* ── Heading anchors (spec 3.6) ── */
 	.md-anchor {
 		margin-inline-end: 0.35em;

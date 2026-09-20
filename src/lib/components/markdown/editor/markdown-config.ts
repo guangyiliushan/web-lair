@@ -12,6 +12,8 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
 import { remarkContainerDirective } from '$lib/components/markdown/plugins/remark-directive';
 import { remarkImageAttr } from '$lib/components/markdown/plugins/remark-image-attr';
+import { remarkCodeMeta } from '$lib/components/markdown/plugins/remark-code-meta';
+import { rehypeCodeMeta } from '$lib/components/markdown/plugins/rehype-code-meta';
 import { rehypeHeadingAnchors } from '$lib/components/markdown/plugins/rehype-heading-anchors';
 import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
 import { remarkMark } from '$lib/components/markdown/plugins/remark-mark';
@@ -182,7 +184,7 @@ export function buildSanitizeSchema(): Schema {
 				'className'
 			],
 			// 4.5 whitelist element attribute key sets
-			details: ['open', 'id', 'className'],
+			details: ['open', 'id', 'className', 'dataMdCollapse'],
 			abbr: ['title'],
 			time: ['datetime'],
 			source: ['src', 'type'],
@@ -279,10 +281,12 @@ function getLightProcessor(): MarkdownProcessor {
 		.use(remarkMention)
 		.use(remarkAlert)
 		.use(remarkImageAttr)
+		.use(remarkCodeMeta)
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload 限制
 		.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload
 		.use(rehypeKatex as any, { throwOnError: false })
+		.use(rehypeCodeMeta)
 		.use(rehypeMarkPipelineNodes)
 		.use(rehypeRaw)
 		.use(rehypeRawHtmlWhitelist)

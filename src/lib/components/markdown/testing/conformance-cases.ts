@@ -497,6 +497,72 @@ export const conformanceCases: ConformanceCase[] = [
 		input: '```nosuchlang\nplain text\n```',
 		contains: ['<pre', 'plain text']
 	},
+	// ── 代码围栏信息串(§3.3,批 5)──
+	{
+		id: 'l2-code-meta-collapsed',
+		spec: '§3.3',
+		input: '```ts {collapsed}\nhello\n```',
+		contains: ['<details', 'md-code-collapsed', 'hello'],
+		notContains: ['{collapsed']
+	},
+	{
+		id: 'l2-code-meta-collapsed-to-line',
+		spec: '§3.3',
+		input: '```ts {collapsed=10}\nhello\n```',
+		contains: ['<details', 'data-md-collapse="10"'],
+		notContains: ['{collapsed']
+	},
+	{
+		id: 'l2-code-meta-title',
+		spec: '§3.3',
+		input: '```ts {title="核心逻辑"}\nhello\n```',
+		contains: ['核心逻辑', 'hello'],
+		notContains: ['{title']
+	},
+	{
+		id: 'l2-code-meta-title-collapsed-summary',
+		spec: '§3.3',
+		input: '```ts {collapsed title="核心逻辑"}\nhello\n```',
+		contains: ['<summary>核心逻辑</summary>', 'hello']
+	},
+	{
+		// EVERY brace block is consumed: a second block must not leak to
+		// pretty-code as a server-only caption (double-pipeline drift)
+		id: 'l2-code-meta-residual-block-consumed',
+		spec: '§3.3',
+		input: '```ts {collapsed} {title="X"}\nhello\n```',
+		contains: ['<summary>X</summary>', 'hello'],
+		notContains: ['figcaption']
+	},
+	{
+		id: 'l2-code-meta-empty-title-falls-back',
+		spec: '§3.3',
+		input: '```ts {collapsed title=""}\nhello\n```',
+		contains: ['<summary>代码</summary>']
+	},
+	{
+		// `=N` accepts decimal digits only: an 0x-prefixed form is rejected
+		// with a warning and the block stays expanded
+		id: 'l2-code-meta-collapsed-non-decimal',
+		spec: '§3.3',
+		input: '```ts {collapsed=0x1f}\nhello\n```',
+		contains: ['hello'],
+		notContains: ['md-code-collapsed', '{collapsed']
+	},
+	{
+		id: 'l2-code-meta-unknown-key-ignored',
+		spec: '§3.3',
+		input: '```ts {bogus=1}\nhello\n```',
+		contains: ['hello'],
+		notContains: ['bogus', '{bogus']
+	},
+	{
+		id: 'l2-code-meta-plain-fence-untouched',
+		spec: '§3.3',
+		input: '```ts\nhello\n```',
+		contains: ['<pre', 'hello'],
+		notContains: ['md-code-collapsed']
+	},
 	{
 		id: 'l5-content-never-swallowed',
 		spec: '§5',
