@@ -13,10 +13,10 @@ import { classList } from './hast-class';
  * pass matches only exists before it. Both pipelines register the pass at the
  * same position (server/markdown.ts, markdown-config.ts).
  *
- * The client execution side (loading mermaid.js and running
- * `mermaid.run({ querySelector: '.mermaid' })`) is a recorded follow-up; when
- * it lands it must pin `securityLevel: 'strict'` (spec 6: untrusted input).
- * Until then the mount point renders the raw diagram source as plain text.
+ * The client execution side lives in editor/mermaid-client.ts (lazy import,
+ * `htmlLabels: false` + directive stripping for spec 6, palette from the
+ * theme tokens); mermaid-exec.svelte.spec.ts pins the behaviour. Without
+ * javascript the mount point renders the raw diagram source as plain text.
  */
 export const rehypeMermaid: Plugin<[], Root> = () => {
 	return (tree) => {

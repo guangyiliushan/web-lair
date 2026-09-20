@@ -7,7 +7,7 @@
 	} from '$lib/components/markdown/editor/markdown-config';
 	import EmbedCard from '$lib/components/markdown/embed/EmbedCard.svelte';
 	import type { EmbedProviderId } from '$lib/components/markdown/embed/registry';
-	import { scheduleMermaidRender, scheduleMermaidRerender } from './mermaid-client';
+	import { scheduleMermaidRender } from './mermaid-client';
 	import { themeStore } from '$lib/stores/theme.svelte';
 
 	let {
@@ -58,12 +58,13 @@
 	});
 
 	// A theme flip re-renders the diagrams (their palette is baked at render
-	// time); the first run finds nothing archived and is a no-op.
+	// time); the archive filter keeps the first run and same-flush content
+	// swaps from queueing anything.
 	$effect(() => {
 		void themeStore.resolved;
 		const article = articleEl;
 		if (!article) return;
-		scheduleMermaidRerender(article);
+		scheduleMermaidRender([...article.querySelectorAll<HTMLElement>('.mermaid[data-md-source]')]);
 	});
 	onDestroy(() => {
 		for (const instance of cardInstances) unmount(instance);

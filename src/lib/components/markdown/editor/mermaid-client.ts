@@ -4,28 +4,40 @@
  * SVGs in the browser. Everything here runs client-side only.
  *
  * Design notes:
- * - The library is imported lazily, once per session, only when a diagram
- *   exists on the page (~500 KB gzipped stays out of every other page).
- * - `securityLevel: 'strict'` (mermaid's default, pinned explicitly): labels
- *   are sanitised, no click handlers, no HTML in labels. The hostile-label
- *   case is pinned in the browser spec.
+ * - The library is imported lazily, only when a diagram exists on the page -
+ *   pages without diagrams never pay for the chunk.
+ * - Content is untrusted (spec 6). `securityLevel: 'strict'` is pinned, but
+ *   on mermaid 12 the name overstates it: it strips event handlers and click
+ *   callbacks while DOMPurify's default allowlist still keeps elements like
+ *   `img` inside html labels - and a kept `img` issues a real request. Three
+ *   layers close the surface instead:
+ *   1. `htmlLabels: false` renders labels as SVG `text` - no foreignObject
+ *      for ordinary diagrams;
+ *   2. `%%{init: ...}%%` directives are stripped from the source before
+ *      rendering, so a diagram cannot flip `htmlLabels` back on or inject
+ *      `themeCSS` (directives are per-diagram config, not content);
+ *   3. sources carrying `@{ img: ... }` node syntax are not rendered at all:
+ *      that shape loads a remote image while rendering, which would bypass
+ *      the spec's "images only through `!`" rule (4.5).
  * - The palette comes from the site's own CSS tokens through `theme: 'base'`
- *   plus an explicit variable map, so diagrams sit in the same colours as the
- *   surrounding content instead of mermaid's stock palette.
+ *   plus an explicit variable map, so diagrams sit in the same colours as
+ *   the surrounding content instead of mermaid's stock palette.
  * - mermaid replaces the element's content with the SVG, so the source is
  *   archived on `data-md-source` before the first render; a theme flip
  *   restores it and renders again.
+ * - After a run every element is checked for the settled shape (exactly one
+ *   svg child, no mermaid error svg); anything else rolls back to the raw
+ *   source with a `data-md-error` mark instead of mermaid's scaffolding.
  * - Renders are serialised through one chain: a rebuild (content update) and
  *   a theme flip must not interleave inside mermaid.
  */
 
-let mermaidModule: Promise<typeof import('mermaid').default> | null = null;
 let renderChain: Promise<void> = Promise.resolve();
 
-function loadMermaid(): Promise<typeof import('mermaid').default> {
-	mermaidModule ??= import('mermaid').then((module) => module.default);
-	return mermaidModule;
-}
+/** `%%{ init: ... }%%` is a single line; inner braces are allowed. */
+const DIRECTIVE = /%%\{[\s\S]*?\}%%/g;
+/** The v11+ node syntax that fetches a remote image while rendering. */
+const IMAGE_SHAPE = /@\{[^}]*\bimg\s*:/;
 
 /**
  * The theme contract is the shadcn-svelte one: semantic tokens declared in
@@ -38,18 +50,16 @@ function loadMermaid(): Promise<typeof import('mermaid').default> {
  * Neither getComputedStyle nor the canvas fillStyle getter normalises the
  * format, so the conversion goes through actual pixels: fill a 1x1 canvas
  * and read the bytes back - format-agnostic for whatever a future theme
- * stores in the tokens. Values the browser cannot parse pass through
- * unchanged (mermaid then degrades on its own terms).
+ * stores in the tokens. A value the browser rejects is handed on unchanged
+ * (mermaid then degrades on its own terms).
  */
-function toSrgb(color: string): string {
+function toSrgb(value: string): string {
 	const canvas = document.createElement('canvas');
 	const context = canvas.getContext('2d');
-	if (!context) return color;
-	context.fillStyle = '#000000';
-	context.fillStyle = color;
-	if (context.fillStyle === '#000000' && !/^#?0{3,6}$|^black$/i.test(color.trim())) {
-		return color;
-	}
+	if (!context) return value;
+	const before = context.fillStyle;
+	context.fillStyle = value;
+	if (context.fillStyle === before) return value;
 	context.fillRect(0, 0, 1, 1);
 	const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
 	if (a === 0) return 'transparent';
@@ -80,41 +90,60 @@ function themeVariables(): Record<string, string> {
 }
 
 async function renderDiagrams(elements: HTMLElement[]): Promise<void> {
-	if (elements.length === 0) return;
-	const mermaid = await loadMermaid();
+	// nodes detached by a newer render ({@html} swapped the article) are not
+	// worth rendering; the last batch always carries the live nodes
+	const live = elements.filter((element) => element.isConnected);
+	if (live.length === 0) return;
+	const mermaid = (await import('mermaid')).default;
 	mermaid.initialize({
 		startOnLoad: false,
 		securityLevel: 'strict',
+		htmlLabels: false,
+		logLevel: 'error',
 		theme: 'base',
 		themeVariables: themeVariables()
 	});
-	for (const element of elements) {
-		const archived = element.getAttribute('data-md-source');
-		if (archived !== null) {
-			// re-render: restore the source the first render replaced, and
-			// drop the marker mermaid leaves behind - `run()` skips elements
-			// that already carry `data-processed`, silently
-			element.textContent = archived;
+	for (const element of live) {
+		// clear the marker mermaid leaves behind: `run()` skips elements
+		// that already carry `data-processed`, silently
+		element.removeAttribute('data-processed');
+		const source = element.getAttribute('data-md-source') ?? element.textContent ?? '';
+		if (element.getAttribute('data-md-source') === null) {
+			element.setAttribute('data-md-source', source);
+		}
+		if (IMAGE_SHAPE.test(source)) {
+			element.textContent = source;
+			element.setAttribute('data-md-error', 'image-shape');
+			continue;
+		}
+		element.textContent = source.replace(DIRECTIVE, '');
+	}
+	const runnable = live.filter((element) => !element.hasAttribute('data-md-error'));
+	if (runnable.length === 0) return;
+	await mermaid.run({ nodes: runnable, suppressErrors: true });
+	// the settled shape is exactly one svg child; anything else (scaffolding
+	// left by a failed render, or mermaid's error svg) rolls back to the raw
+	// source so "degrade to the raw text" is true rather than aspirational
+	for (const element of runnable) {
+		if (element.hasAttribute('data-md-error')) continue;
+		const settled =
+			element.children.length === 1 &&
+			element.firstElementChild?.tagName.toLowerCase() === 'svg' &&
+			element.querySelector('[aria-roledescription="error"]') === null;
+		if (!settled) {
+			element.textContent = element.getAttribute('data-md-source') ?? '';
 			element.removeAttribute('data-processed');
-		} else {
-			element.setAttribute('data-md-source', element.textContent ?? '');
+			element.setAttribute('data-md-error', 'render');
+			console.warn('[markdown] mermaid diagram failed - raw source kept (spec 5)');
 		}
 	}
-	await mermaid.run({ nodes: elements, suppressErrors: true });
 }
 
 /** Mirrors the mount layer: upgrades every `.mermaid` mount point found. */
 export function scheduleMermaidRender(elements: HTMLElement[]): void {
 	renderChain = renderChain
 		.then(() => renderDiagrams(elements))
-		.catch(() => {
-			// degrade: the raw source text stays in place (spec 5)
+		.catch((error) => {
+			console.warn('[markdown] mermaid render failed', error);
 		});
-}
-
-/** Re-renders diagrams that already produced an SVG (used on theme flips). */
-export function scheduleMermaidRerender(article: Element): void {
-	const rendered = [...article.querySelectorAll<HTMLElement>('.mermaid[data-md-source]')];
-	if (rendered.length === 0) return;
-	scheduleMermaidRender(rendered);
 }

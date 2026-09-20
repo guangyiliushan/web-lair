@@ -311,7 +311,7 @@ function getLightProcessor(): MarkdownProcessor {
 }
 
 /**
- * 客户端同步渲染（无 Shiki 代码高亮、无 Mermaid 渲染）。
+ * 客户端同步渲染（无 Shiki 代码高亮；Mermaid 仅输出挂载点，执行端在 MarkdownRenderer 客户端）。
  *
  * 用于：
  * - MarkdownRenderer 的客户端渲染模式（当未传入 html prop 时）
