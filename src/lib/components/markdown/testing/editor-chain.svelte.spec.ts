@@ -36,10 +36,12 @@ describe('editor full chain (edit → WYSIWYG → save)', () => {
 		await ed.click();
 		await user.keyboard('{End}');
 		await user.keyboard('X');
-		await new Promise((resolve) => setTimeout(resolve, 80));
 
 		// save: the serialised markdown carries every construct back out
-		const saved = screen.container.querySelector('[data-latest-markdown]')?.textContent ?? '';
+		const readSaved = () =>
+			screen.container.querySelector('[data-latest-markdown]')?.textContent ?? '';
+		await expect.poll(readSaved).toContain('X');
+		const saved = readSaved();
 		expect(saved).toContain('> [!NOTE]');
 		expect(saved).toContain('==高亮==');
 		expect(saved).toContain('||剧透||');

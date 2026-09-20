@@ -103,6 +103,12 @@
 			labels.forEach((label, index) => {
 				label.addEventListener('click', () => activate(index));
 				label.addEventListener('keydown', (event) => {
+					// Enter/Space activate the focused tab (ARIA tabs pattern)
+					if (event.key === 'Enter' || event.key === ' ') {
+						event.preventDefault();
+						activate(index, true);
+						return;
+					}
 					let next: number;
 					if (event.key === 'ArrowRight') next = (index + 1) % count;
 					else if (event.key === 'ArrowLeft') next = (index - 1 + count) % count;

@@ -69,4 +69,17 @@ describe('tabs ARIA enhancement (spec 3.2/7)', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(labels[0].getAttribute('aria-selected')).toBe('true');
 	});
+
+	it('activates the focused tab with Enter and Space', async () => {
+		const host = await mountTabs();
+		const labels = host.querySelectorAll<HTMLElement>('[role="tab"]');
+		labels[1].focus();
+		labels[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(labels[1].getAttribute('aria-selected')).toBe('true');
+		labels[0].focus();
+		labels[0].dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(labels[0].getAttribute('aria-selected')).toBe('true');
+	});
 });

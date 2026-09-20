@@ -3,19 +3,27 @@ import type { Root, Element } from 'hast';
 import { visit } from 'unist-util-visit';
 
 /**
- * rehype-mermaid：将 language-mermaid 代码块转换为 <pre class="mermaid"> 挂载点。
+ * rehype-mermaid: turns `language-mermaid` code blocks into `<pre class="mermaid">`
+ * mount points.
  *
- * 必须在 rehype-pretty-code 之后运行（否则 Shiki 会高亮 mermaid 代码）。
- * 客户端需加载 mermaid.js 并执行 mermaid.run({ querySelector: '.mermaid' })。
+ * It MUST run BEFORE rehype-pretty-code: pretty-code rebuilds the block (it
+ * renames the pre to a figure and creates a fresh pre inside, dropping the
+ * language class), so the pristine `pre > code.language-mermaid` shape this
+ * pass matches only exists before it. Both pipelines register the pass at the
+ * same position (server/markdown.ts, markdown-config.ts).
  *
- * V1 标记为可选：若页面未加载 mermaid.js，则显示原始代码文本。
+ * The client execution side (loading mermaid.js and running
+ * `mermaid.run({ querySelector: '.mermaid' })`) is a recorded follow-up; when
+ * it lands it must pin `securityLevel: 'strict'` (spec 6: untrusted input).
+ * Until then the mount point renders the raw diagram source as plain text.
  */
 export const rehypeMermaid: Plugin<[], Root> = () => {
 	return (tree) => {
 		visit(tree, 'element', (node: Element) => {
 			if (node.tagName !== 'pre') return;
 
-			// rehype-pretty-code 可能将代码块包裹在 figure 中，检查直接子节点
+			// The pass runs before pretty-code, so the direct `pre > code` child
+			// is the original shape; check it as-is.
 			const child = node.children?.find(
 				(c): c is Element => c.type === 'element' && c.tagName === 'code'
 			);

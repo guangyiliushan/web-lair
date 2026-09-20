@@ -68,7 +68,7 @@ describe('favicon proxy (spec 6)', () => {
 		await expect(request('https://github.com/')).rejects.toMatchObject({ status: 403 });
 	});
 
-	it('fetches allowlisted favicons with the no-redirect contract and cache headers', async () => {
+	it('fetches allowlisted favicons with the manual-redirect contract and cache headers', async () => {
 		publicLookup();
 		fetchMock.mockResolvedValue(imageResponse());
 		const response = await request('https://www.github.com/foo/bar');
@@ -77,8 +77,8 @@ describe('favicon proxy (spec 6)', () => {
 		expect(response.headers.get('cache-control')).toContain('max-age=86400');
 		expect(response.headers.get('referrer-policy')).toBe('no-referrer');
 		const call = fetchMock.mock.calls[0];
-		expect(call[0]).toBe('https://github.com/favicon.ico');
-		expect(call[1].redirect).toBe('error');
+		expect(String(call[0])).toBe('https://github.com/favicon.ico');
+		expect(call[1].redirect).toBe('manual');
 	});
 
 	it('rejects non-image content types and oversize bodies', async () => {
@@ -100,5 +100,48 @@ describe('favicon proxy (spec 6)', () => {
 			)
 		);
 		await expect(request('https://github.com/')).rejects.toMatchObject({ status: 502 });
+	});
+
+	it('follows redirects manually, re-validating every hop', async () => {
+		publicLookup();
+		fetchMock.mockResolvedValueOnce(
+			new Response(null, {
+				status: 301,
+				headers: { location: 'https://gist.github.com/favicon.ico' }
+			})
+		);
+		fetchMock.mockResolvedValueOnce(imageResponse());
+		const response = await handleFaviconRequest(
+			new URL('https://site/api/favicon?url=https%3A%2F%2Fgithub.com%2F')
+		);
+		expect(response.status).toBe(200);
+		expect(String(fetchMock.mock.calls[1][0])).toBe('https://gist.github.com/favicon.ico');
+		expect((fetchMock.mock.calls[1][1] as RequestInit).redirect).toBe('manual');
+	});
+
+	it('rejects redirects that leave the allowlist or https', async () => {
+		publicLookup();
+		fetchMock.mockResolvedValueOnce(
+			new Response(null, { status: 302, headers: { location: 'https://evil.example/favicon.ico' } })
+		);
+		await expect(
+			handleFaviconRequest(new URL('https://site/api/favicon?url=https%3A%2F%2Fgithub.com%2F'))
+		).rejects.toMatchObject({ status: 403 });
+		fetchMock.mockResolvedValueOnce(
+			new Response(null, { status: 302, headers: { location: 'http://github.com/favicon.ico' } })
+		);
+		await expect(
+			handleFaviconRequest(new URL('https://site/api/favicon?url=https%3A%2F%2Fgithub.com%2F'))
+		).rejects.toMatchObject({ status: 403 });
+	});
+
+	it('stops after too many redirects', async () => {
+		publicLookup();
+		fetchMock.mockResolvedValue(
+			new Response(null, { status: 301, headers: { location: 'https://github.com/favicon.ico' } })
+		);
+		await expect(
+			handleFaviconRequest(new URL('https://site/api/favicon?url=https%3A%2F%2Fgithub.com%2F'))
+		).rejects.toMatchObject({ status: 502 });
 	});
 });

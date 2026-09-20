@@ -40,8 +40,9 @@
 	// ── 监听选区变化 ──
 	$effect(() => {
 		if (!editor) return;
+		const activeEditor = editor;
 
-		const unregister = editor.registerUpdateListener(({ editorState }) => {
+		const unregister = activeEditor.registerUpdateListener(({ editorState }) => {
 			editorState.read(() => {
 				toolbarState = readToolbarState();
 			});
@@ -58,8 +59,9 @@
 			const toolbarH = 36; // 预估工具栏高度
 			top = rect.top - toolbarH - 10;
 			left = rect.left + rect.width / 2;
-			// 上方空间不足则放到下方
-			if (top < 8) {
+			// 上方空间不足、或会盖住编辑器上沿之外的区域(如顶部工具栏)则放到下方
+			const editorTop = activeEditor.getRootElement()?.getBoundingClientRect().top ?? 8;
+			if (top < 8 || top < editorTop) {
 				top = rect.bottom + 10;
 			}
 			visible = true;

@@ -12,7 +12,10 @@ import { canonicalHost, EMBED_PROVIDER_DOMAINS } from '$lib/components/markdown/
  * - SSRF: the hostname is resolved first and every non-global range is
  *   rejected (node:net BlockList covers private, loopback, link-local,
  *   CGNAT, TEST-NET, multicast, reserved, IPv6 ULA and v4-mapped forms);
- *   redirects are not followed (`redirect: 'error'`). Residual DNS-rebinding
+ *   redirects are followed manually (up to three hops), and every hop is
+ *   re-validated — https only, registry allowlist, non-private DNS — before
+ *   it is requested, because allowlisted hosts legitimately redirect their
+ *   /favicon.ico (bilibili, themoviedb, …). Residual DNS-rebinding
  *   risk (resolve-then-connect TOCTOU) is a registered hardening item —
  *   the fetch is HTTPS with certificate validation, which is what keeps it
  *   unexploitable for allowlisted hosts.
@@ -94,6 +97,45 @@ export function isPrivateAddress(address: string): boolean {
 	return BLOCKED_RANGES.check(clean, lower.includes(':') ? 'ipv6' : 'ipv4');
 }
 
+const MAX_REDIRECTS = 3;
+
+async function resolvesPublic(host: string): Promise<boolean> {
+	const addresses = await dns.lookup(host, { all: true }).catch(() => []);
+	return addresses.length > 0 && !addresses.some((entry) => isPrivateAddress(entry.address));
+}
+
+/**
+ * Fetches the favicon, following redirects manually: `redirect: 'follow'`
+ * would make the final target unvalidated, and `redirect: 'error'` breaks
+ * hosts that legitimately 301 their /favicon.ico. Each hop is re-checked
+ * (https, allowlist, non-private DNS) before it is requested.
+ */
+async function fetchFavicon(host: string, signal: AbortSignal): Promise<Response> {
+	let target = new URL(`https://${host}/favicon.ico`);
+	for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+		const response = await fetch(target, {
+			signal,
+			redirect: 'manual',
+			headers: { accept: 'image/*' }
+		});
+		if (response.status < 300 || response.status >= 400) return response;
+		const location = response.headers.get('location');
+		if (!location) throw error(502, 'redirect without location');
+		let next: URL;
+		try {
+			next = new URL(location, target);
+		} catch {
+			throw error(502, 'invalid redirect target');
+		}
+		if (next.protocol !== 'https:') throw error(403, 'redirected off https');
+		const nextHost = canonicalHost(next.hostname);
+		if (!EMBED_PROVIDER_DOMAINS.has(nextHost)) throw error(403, 'redirected outside the allowlist');
+		if (!(await resolvesPublic(nextHost))) throw error(403, 'blocked redirect address');
+		target = next;
+	}
+	throw error(502, 'too many redirects');
+}
+
 export async function handleFaviconRequest(requestUrl: URL): Promise<Response> {
 	const target = requestUrl.searchParams.get('url');
 	if (!target) throw error(400, 'missing url');
@@ -122,11 +164,7 @@ export async function handleFaviconRequest(requestUrl: URL): Promise<Response> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 	try {
-		const response = await fetch(`https://${host}/favicon.ico`, {
-			signal: controller.signal,
-			redirect: 'error',
-			headers: { accept: 'image/*' }
-		});
+		const response = await fetchFavicon(host, controller.signal);
 		if (!response.ok || !response.body) throw error(502, 'upstream error');
 
 		const contentType = (response.headers.get('content-type') ?? '')
