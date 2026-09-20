@@ -7,6 +7,8 @@
 	} from '$lib/components/markdown/editor/markdown-config';
 	import EmbedCard from '$lib/components/markdown/embed/EmbedCard.svelte';
 	import type { EmbedProviderId } from '$lib/components/markdown/embed/registry';
+	import { scheduleMermaidRender, scheduleMermaidRerender } from './mermaid-client';
+	import { themeStore } from '$lib/stores/theme.svelte';
 
 	let {
 		source,
@@ -51,6 +53,17 @@
 			anchor.replaceWith(host);
 			cardInstances.push(mount(EmbedCard, { target: host, props: { provider, url, title } }));
 		}
+		// mermaid diagrams (spec 3.3/7): lazy import + render, raw text degrades
+		scheduleMermaidRender([...article.querySelectorAll<HTMLElement>('.mermaid')]);
+	});
+
+	// A theme flip re-renders the diagrams (their palette is baked at render
+	// time); the first run finds nothing archived and is a no-op.
+	$effect(() => {
+		void themeStore.resolved;
+		const article = articleEl;
+		if (!article) return;
+		scheduleMermaidRerender(article);
 	});
 	onDestroy(() => {
 		for (const instance of cardInstances) unmount(instance);
