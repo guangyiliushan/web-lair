@@ -4,6 +4,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import IconPhoto from '@tabler/icons-svelte-runes/icons/photo';
+	import { m } from '$lib/paraglide/messages';
 
 	type Props = {
 		open: boolean;
@@ -14,29 +15,32 @@
 
 	let url = $state('');
 	let alt = $state('');
-	let previewFailed = $state(false);
+	/** The URL whose preview last failed — derived state instead of an $effect. */
+	let failedUrl = $state<string | null>(null);
 
+	const previewUrl = $derived(url.trim());
+	const previewFailed = $derived(previewUrl !== '' && failedUrl === previewUrl);
 	const canInsert = $derived(
-		url.trim().length > 0 && /^(https?:\/\/|data:image\/|\/)/.test(url.trim())
+		previewUrl.length > 0 && /^(https?:\/\/|data:image\/|\/)/.test(previewUrl)
 	);
 
-	// URL 变化时重置预览失败状态
-	$effect(() => {
-		void url;
-		previewFailed = false;
-	});
-
-	// 打开时重置表单(经 Dialog 的 open-change 回调;Svelte 文档不建议在 $effect 中改状态)
-	function handleOpenChange(next: boolean) {
-		if (!next) return;
+	function reset() {
 		url = '';
 		alt = '';
-		previewFailed = false;
+		failedUrl = null;
+	}
+
+	// Reset through the CLOSE path (escape / overlay / close button / insert):
+	// bits-ui only fires onOpenChange for its own close paths, never for a
+	// programmatic open from the toolbar.
+	function handleOpenChange(next: boolean) {
+		if (!next) reset();
 	}
 
 	function handleInsert() {
 		if (!canInsert) return;
 		onInsert(url.trim(), alt.trim());
+		reset();
 		open = false;
 	}
 </script>
@@ -48,14 +52,14 @@
 			<Dialog.Header>
 				<Dialog.Title class="flex items-center gap-2">
 					<IconPhoto class="size-4" />
-					插入图片
+					{m.image_dialog_title()}
 				</Dialog.Title>
-				<Dialog.Description>输入图片地址，编辑器内将直接渲染预览。</Dialog.Description>
+				<Dialog.Description>{m.image_dialog_description()}</Dialog.Description>
 			</Dialog.Header>
 
 			<div class="flex flex-col gap-4">
 				<div class="flex flex-col gap-2">
-					<Label for="image-url">图片地址</Label>
+					<Label for="image-url">{m.image_url_label()}</Label>
 					<Input
 						id="image-url"
 						placeholder="https://example.com/image.png"
@@ -69,10 +73,10 @@
 					/>
 				</div>
 				<div class="flex flex-col gap-2">
-					<Label for="image-alt">图片描述（可选）</Label>
+					<Label for="image-alt">{m.image_alt_label()}</Label>
 					<Input
 						id="image-alt"
-						placeholder="描述这张图片"
+						placeholder={m.image_alt_placeholder()}
 						bind:value={alt}
 						onkeydown={(e) => {
 							if (e.key === 'Enter') {
@@ -82,27 +86,28 @@
 						}}
 					/>
 				</div>
-				{#if url.trim() && !previewFailed}
+				{#if previewUrl && !previewFailed}
 					<div
 						class="flex max-h-48 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/30 p-2"
 					>
 						<img
-							src={url.trim()}
+							src={previewUrl}
 							{alt}
 							class="max-h-40 max-w-full rounded object-contain"
-							onerror={() => (previewFailed = true)}
+							onerror={() => (failedUrl = previewUrl)}
+							onload={() => (failedUrl = null)}
 						/>
 					</div>
 				{:else if previewFailed}
-					<p class="text-xs text-muted-foreground">预览加载失败，请检查图片地址是否有效。</p>
+					<p class="text-xs text-muted-foreground">{m.image_preview_failed()}</p>
 				{/if}
 			</div>
 
 			<Dialog.Footer>
-				<Button variant="outline" onclick={() => (open = false)}>取消</Button>
+				<Button variant="outline" onclick={() => (open = false)}>{m.image_cancel()}</Button>
 				<Button disabled={!canInsert} onclick={handleInsert}>
 					<IconPhoto data-icon="inline-start" />
-					插入
+					{m.image_insert()}
 				</Button>
 			</Dialog.Footer>
 		</Dialog.Content>

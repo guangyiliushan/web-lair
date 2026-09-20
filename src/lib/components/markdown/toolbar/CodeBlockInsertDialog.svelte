@@ -13,34 +13,43 @@
 
 	let query = $state('');
 
-	// Reset on the open transition rather than in an $effect: the Svelte docs
-	// discourage updating state inside effects; dialog roots expose their own
-	// open-change callback for exactly this.
+	function reset() {
+		query = '';
+	}
+
+	// Reset through the CLOSE path (escape / overlay / close button / pick):
+	// bits-ui only fires onOpenChange for its own close paths, never for a
+	// programmatic open from the toolbar, so an open-side reset would be dead
+	// code. Still callback-driven — the Svelte docs discourage state updates
+	// inside effects.
 	function handleOpenChange(next: boolean) {
-		if (next) query = '';
+		if (!next) reset();
 	}
 
 	function pick(language: string) {
 		onInsert(language);
+		reset();
 		open = false;
 	}
 
 	// The free-form entry appears only when nothing else matches: any
 	// identifier is a valid fence language (spec 3.3), but it must survive as
-	// a single info token — sanitize before offering it.
+	// a single info token — sanitize before offering it. The guard mirrors the
+	// actual command filter below (same substring predicate), so the entry can
+	// never be hidden while nothing else matches.
 	const customLanguage = $derived(sanitizeLanguage(query));
-	const showCustom = $derived.by(() => {
-		const q = query.trim().toLowerCase();
-		return (
-			customLanguage.length > 0 &&
-			!CODE_LANGUAGES.some((language) => language.includes(q) || language === customLanguage)
-		);
-	});
+	const showCustom = $derived(
+		query.trim().length > 0 &&
+			!CODE_LANGUAGES.some((language) =>
+				language.toLowerCase().includes(query.trim().toLowerCase())
+			)
+	);
 </script>
 
 <Command.Dialog
 	bind:open
 	onOpenChange={handleOpenChange}
+	filter={(value, search) => (value.toLowerCase().includes(search.trim().toLowerCase()) ? 1 : 0)}
 	title={m.code_block_title()}
 	description={m.code_block_description()}
 >

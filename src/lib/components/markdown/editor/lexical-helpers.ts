@@ -5,7 +5,6 @@ import {
 	FORMAT_TEXT_COMMAND,
 	$getSelection,
 	$isRangeSelection,
-	$isRootOrShadowRoot,
 	$createParagraphNode,
 	$createTextNode
 } from 'lexical';
@@ -42,13 +41,9 @@ import type { AlertType } from '$lib/components/markdown/alert/alert-types';
 function $getTopLevelBlockFromSelection(): LexicalNode | null {
 	const selection = $getSelection();
 	if (!$isRangeSelection(selection)) return null;
-	let node: LexicalNode = selection.anchor.getNode();
-	let parent = node.getParent();
-	while (parent && !$isRootOrShadowRoot(parent)) {
-		node = parent;
-		parent = node.getParent();
-	}
-	return node;
+	// The official node method does the same walk (LexicalNode#getTopLevelElement)
+	const anchor = selection.anchor.getNode();
+	return anchor.getTopLevelElement() ?? anchor;
 }
 
 /**
@@ -152,14 +147,9 @@ export function insertLink(editor: LexicalEditor, url: string) {
  */
 export function insertImage(editor: LexicalEditor, url: string, alt: string = '') {
 	editor.update(() => {
-		const selection = $getSelection();
-		if (!$isRangeSelection(selection)) return;
-		const image = $createImageNode(url, alt);
-		selection.insertNodes([image]);
-		// 插入后补一个空段落承接光标（ImageNode 不可编辑）
-		if (!image.getNextSibling()) {
-			image.insertAfter($createParagraphNode());
-		}
+		// Same root-level contract as the other block inserts; the utility
+		// appends the caret-carrying paragraph itself.
+		$insertNodeToNearestRoot($createImageNode(url, alt));
 	});
 }
 
@@ -187,16 +177,15 @@ export function insertTable(
  * 使用 Lexical 原生 CodeNode，编辑器内即可见代码块样式。
  */
 export function insertCodeBlock(editor: LexicalEditor, language: string = '') {
-	editor.update(() => {
-		const codeNode = $createCodeNode(language);
-		codeNode.append($createTextNode(''));
-		// Block nodes must land at the nearest root — selection.insertNodes on
-		// a paragraph-embedded selection silently drops them. The utility
-		// resolves the insertion point itself (selection, previous selection,
-		// or the root's end), so there is deliberately no range-selection
-		// guard here: with one, the button silently no-ops whenever the
-		// editor's selection has not settled yet (observed under load).
-		$insertNodeToNearestRoot(codeNode);
+	// focus() so typing lands in the editor right after the dialog closes;
+	// the official utility resolves the insertion point itself (selection,
+	// previous selection, or the root's end) — no range-selection guard, the
+	// caret goes straight into the fresh fence (the table plugin's own
+	// pattern: $insertNodeToNearestRoot + select the node).
+	editor.focus(() => {
+		editor.update(() => {
+			$insertNodeToNearestRoot($createCodeNode(language)).selectStart();
+		});
 	});
 }
 

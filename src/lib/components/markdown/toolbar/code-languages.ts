@@ -55,13 +55,15 @@ export const CODE_LANGUAGES: readonly string[] = [
 ];
 
 /**
- * Fence info strings must survive as a single token: strip whitespace,
- * backticks, control characters and anything outside the identifier range so
- * a free-form entry can never break the fence or the saved markdown.
+ * Fence info strings must survive as a single token. The allowed set matches
+ * the editor's own code importer (`CODE_START_REGEX` accepts `[\w-]` around
+ * the fence): allowing anything wider (e.g. `+`, `#`, `.` for C++/C#) would
+ * round-trip badly — the export writes the language, the importer then keeps
+ * only `[\w-]` and spills the rest into the code body.
  */
 export function sanitizeLanguage(input: string): string {
 	return input
 		.trim()
-		.replace(/[^A-Za-z0-9_+#.-]/g, '')
+		.replace(/[^A-Za-z0-9_-]/g, '')
 		.slice(0, 32);
 }
