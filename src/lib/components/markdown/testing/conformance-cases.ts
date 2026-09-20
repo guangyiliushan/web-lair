@@ -732,6 +732,53 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['class="md-code-line"'],
 		notContains: ['figcaption', 'title="x"']
 	},
+	{
+		// \(…\) renders as inline math, the spec 2 #2 unambiguous equivalent
+		id: 'l2-math-paren-inline',
+		spec: '§2 #2',
+		input: '前文 \\(x^2\\) 后文',
+		contains: ['katex'],
+		notContains: ['\\(']
+	},
+	{
+		id: 'l2-math-paren-display',
+		spec: '§2 #2',
+		input: '\\[\\sum_i x_i\\]',
+		contains: ['katex-display'],
+		notContains: ['\\[']
+	},
+	{
+		// no closer → the core escape wins and the parenthesis stays literal
+		id: 'l2-math-paren-unmatched-literal',
+		spec: '§2 #2',
+		input: 'a \\( b',
+		contains: ['('],
+		notContains: ['katex']
+	},
+	{
+		// an escaped backslash keeps everything literal
+		id: 'l2-math-paren-escaped-literal',
+		spec: '§2 #2/§4.4',
+		input: '\\\\(x\\\\)',
+		contains: ['('],
+		notContains: ['katex', 'math-inline']
+	},
+	{
+		// code spans isolate the syntax (4.2)
+		id: 'l2-math-paren-inside-code-disabled',
+		spec: '§2 #2/§4.2',
+		input: '`\\(x\\)`',
+		contains: ['<code>'],
+		notContains: ['katex']
+	},
+	{
+		// the two spellings render identically (same mdast shape)
+		id: 'l2-math-paren-equals-dollar',
+		spec: '§2 #2',
+		input: '\\(y\\) 与 $y$',
+		contains: ['katex'],
+		notContains: ['\\(']
+	},
 	// ── L2 容器(§3.2,批 4a:grid/tabs/tab/details;退役 gallery/banner)──
 	{
 		id: 'l2-grid-basic',

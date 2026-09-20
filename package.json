@@ -108,6 +108,7 @@
 		"micromark-util-chunked": "^2.0.1",
 		"micromark-util-classify-character": "^2.0.1",
 		"micromark-util-resolve-all": "^2.0.1",
+		"micromark-util-symbol": "^2.0.1",
 		"mode-watcher": "^1.1.0",
 		"rehype-katex": "^7.0.1",
 		"rehype-pretty-code": "^0.14.4",

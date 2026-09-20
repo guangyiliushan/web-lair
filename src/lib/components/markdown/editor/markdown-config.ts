@@ -21,6 +21,7 @@ import { rehypeHeadingAnchors } from '$lib/components/markdown/plugins/rehype-he
 import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
 import { remarkMark } from '$lib/components/markdown/plugins/remark-mark';
 import { remarkMathGuard } from '$lib/components/markdown/plugins/remark-math-guard';
+import { remarkMathParen } from '$lib/components/markdown/plugins/remark-math-paren';
 import { remarkMention } from '$lib/components/markdown/plugins/remark-mention';
 import { remarkAlert } from '$lib/components/markdown/plugins/remark-alert';
 import { attentionHandlers } from '$lib/components/markdown/plugins/attention-marker';
@@ -279,6 +280,7 @@ function getLightProcessor(): MarkdownProcessor {
 		.use(remarkParse)
 		.use(remarkGfm)
 		.use(remarkMath)
+		.use(remarkMathParen)
 		.use(remarkMathGuard)
 		.use(remarkDirective)
 		.use(remarkContainerDirective)
