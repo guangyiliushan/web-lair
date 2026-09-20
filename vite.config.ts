@@ -42,7 +42,11 @@ export default defineConfig({
 						]
 					},
 					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
-					exclude: ['src/lib/server/**']
+					exclude: ['src/lib/server/**'],
+					// Browser interactions need headroom when the machine is
+					// loaded (concurrent suites, review probes): the 15 s
+					// default turns slow-but-correct runs into false negatives.
+					testTimeout: 30000
 				}
 			},
 			{
