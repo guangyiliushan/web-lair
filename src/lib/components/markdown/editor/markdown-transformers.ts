@@ -411,7 +411,7 @@ export const alertTransformer: MultilineElementTransformer = {
 	},
 	export: (node) => {
 		if (!$isAlertNode(node)) return null;
-		const header = `> [!${node.__alertType}]${node.__title ? ` ${node.__title}` : ''}`;
+		const header = `> [!${node.__alertType.toUpperCase()}]${node.__title ? ` ${node.__title}` : ''}`;
 		const inner = alertJsonToMarkdown(node.__jsonContent);
 		if (!inner) return header;
 		const body = inner

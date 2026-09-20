@@ -653,6 +653,16 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['data-embed="mx-space"'],
 		notContains: ['<img']
 	},
+	{
+		// The mermaid pass must see the pristine `pre > code.language-mermaid`
+		// node: rehype-pretty-code rebuilds the block and drops the language
+		// class, which is why the pass runs before it (and on both pipelines)
+		id: 'l2-code-mermaid-mount-point',
+		spec: '§3.3',
+		input: '```mermaid\ngraph TD; A-- B\n```',
+		contains: ['<pre class="mermaid">', 'graph TD; A-- B'],
+		notContains: ['language-mermaid']
+	},
 	// ── L2 容器(§3.2,批 4a:grid/tabs/tab/details;退役 gallery/banner)──
 	{
 		id: 'l2-grid-basic',

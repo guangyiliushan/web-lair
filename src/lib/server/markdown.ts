@@ -81,6 +81,11 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			// code info-string rendering runs before rehype-pretty-code so the
 			// transport attribute never has to survive that pass (3.3)
 			.use(rehypeCodeMeta)
+			// the mermaid pass must see the pristine pre > code.language-mermaid
+			// node: rehype-pretty-code rebuilds the block and drops the language
+			// class, so it is registered before pretty-code (both pipelines
+			// register it at this position, spec 3.3)
+			.use(rehypeMermaid)
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-pretty-code Options 类型兼容
 			.use(rehypePrettyCode as any, {
 				theme: {
@@ -89,7 +94,6 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 				},
 				keepBackground: false
 			})
-			.use(rehypeMermaid)
 			.use(rehypeMarkPipelineNodes)
 			.use(rehypeRaw)
 			.use(rehypeRawHtmlWhitelist)

@@ -45,7 +45,7 @@ function roundtrip(markdown: string): string {
 /** Extracts the alert body (the `>` lines after the marker line) from an export. */
 function extractAlertMarkdown(exported: string): string {
 	const lines = exported.split('\n');
-	const start = lines.findIndex((line) => /^> \[![a-z]+\]/.test(line));
+	const start = lines.findIndex((line) => /^> \[![a-zA-Z]+\]/.test(line));
 	if (start === -1) return '';
 	return lines
 		.slice(start + 1)
@@ -66,7 +66,7 @@ describe('markdown transformers roundtrip', () => {
 
 		expect(out).toContain('# 标题');
 		expect(out).toContain('<tag>标签</tag>');
-		expect(out).toContain('> [!note]');
+		expect(out).toContain('> [!NOTE]');
 		expect(out).toContain('- 项一');
 		expect(out).toContain('- 项二');
 	});
@@ -87,7 +87,8 @@ describe('markdown transformers roundtrip', () => {
 	it('roundtrips the five alert types with an optional title, normalizing case', () => {
 		for (const type of ['NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION']) {
 			const out = roundtrip(`> [!${type}] 自定义标题\n> 正文内容`);
-			expect(out).toContain(`> [!${type.toLowerCase()}] 自定义标题`);
+			// the canonical saved form is the spec's upper-case marker
+			expect(out).toContain(`> [!${type}] 自定义标题`);
 			expect(out).toContain('> 正文内容');
 		}
 	});
@@ -105,7 +106,7 @@ describe('markdown transformers roundtrip', () => {
 
 	it('handles an alert at end of input without a terminator', () => {
 		const out = roundtrip('> [!NOTE]\n> 结尾内容');
-		expect(out).toContain('> [!note]');
+		expect(out).toContain('> [!NOTE]');
 		expect(out).toContain('结尾内容');
 	});
 
@@ -183,7 +184,7 @@ describe('phase 1-6 新增能力 roundtrip', () => {
 	it('keeps block content intact when followed by an alert (temp editor reuse)', () => {
 		const out = roundtrip('普通段落内容\n\n> [!NOTE]\n> 提示内容');
 		expect(out).toContain('普通段落内容');
-		expect(out).toContain('> [!note]');
+		expect(out).toContain('> [!NOTE]');
 		expect(out).toContain('提示内容');
 	});
 

@@ -15,6 +15,7 @@ import { remarkImageAttr } from '$lib/components/markdown/plugins/remark-image-a
 import { remarkCodeMeta } from '$lib/components/markdown/plugins/remark-code-meta';
 import { remarkImageEmbed } from '$lib/components/markdown/plugins/remark-image-embed';
 import { rehypeCodeMeta } from '$lib/components/markdown/plugins/rehype-code-meta';
+import { rehypeMermaid } from '$lib/components/markdown/plugins/rehype-mermaid';
 import { rehypeHeadingAnchors } from '$lib/components/markdown/plugins/rehype-heading-anchors';
 import { remarkSpoiler } from '$lib/components/markdown/plugins/remark-spoiler';
 import { remarkMark } from '$lib/components/markdown/plugins/remark-mark';
@@ -263,9 +264,9 @@ type MarkdownProcessor = Processor<MdastRoot, MdastRoot, HastRoot, HastRoot, str
 /**
  * 客户端轻量 processor 单例。
  *
- * 不包含 rehype-pretty-code（Shiki）和 rehype-mermaid：
- * - Shiki 需要异步初始化，不适合同步预览场景
- * - Mermaid 需要客户端脚本，预览中显示原始代码即可
+ * 不包含 rehype-pretty-code（Shiki）：需要异步初始化，不适合同步预览场景。
+ * rehype-mermaid 包含在内（且与服务器端同位置、在 pretty-code 之前）：
+ * 未加载 mermaid.js 时挂载点显示原始代码文本，双管线 DOM 因此保持一致。
  *
  * rehype-katex 和所有 remark 插件都是同步的，processSync() 可用。
  */
@@ -292,6 +293,7 @@ function getLightProcessor(): MarkdownProcessor {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload
 		.use(rehypeKatex as any, { throwOnError: false })
 		.use(rehypeCodeMeta)
+		.use(rehypeMermaid)
 		.use(rehypeMarkPipelineNodes)
 		.use(rehypeRaw)
 		.use(rehypeRawHtmlWhitelist)
