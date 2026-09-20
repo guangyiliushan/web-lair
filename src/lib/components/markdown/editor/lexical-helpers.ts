@@ -23,6 +23,7 @@ import { $createLinkNode } from '@lexical/link';
 import { $createCodeNode } from '@lexical/code';
 import { INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/extension';
 import { $setBlocksType } from '@lexical/selection';
+import { $insertNodeToNearestRoot } from '@lexical/utils';
 import { $createTagNode } from '$lib/components/markdown/tag/tag-node';
 import { $createAlertNode, $isAlertNode } from '$lib/components/markdown/alert/alert-node';
 import { $createImageNode } from '$lib/components/markdown/image/image-node';
@@ -191,7 +192,10 @@ export function insertCodeBlock(editor: LexicalEditor, language: string = '') {
 		if (!$isRangeSelection(selection)) return;
 		const codeNode = $createCodeNode(language);
 		codeNode.append($createTextNode(''));
-		selection.insertNodes([codeNode]);
+		// block nodes must land at the nearest root: selection.insertNodes on a
+		// paragraph-embedded selection silently drops them (this was the
+		// "code block button does nothing" defect)
+		$insertNodeToNearestRoot(codeNode);
 	});
 }
 
@@ -259,7 +263,8 @@ export function insertAlert(editor: LexicalEditor, type: AlertType = DEFAULT_ALE
 		const selection = $getSelection();
 		if (!$isRangeSelection(selection)) return;
 		const alertNode = $createAlertNode(type, createDefaultAlertContent());
-		selection.insertNodes([alertNode]);
+		// same root-level contract as the code block insert
+		$insertNodeToNearestRoot(alertNode);
 	});
 }
 
