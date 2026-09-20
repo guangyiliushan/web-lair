@@ -56,12 +56,18 @@ export const EMBED_PROVIDER_IDS: readonly EmbedProviderId[] = [
 
 interface EmbedProvider {
 	id: EmbedProviderId;
+	/** Canonical domains this provider may match (the proxy allowlist source). */
+	domains: readonly string[];
 	match(url: URL): boolean;
 }
 
-/** Canonical host: lowercase, leading `www.` removed. */
+/**
+ * Canonical host for registry matching — lowercased with a leading `www.`
+ * removed. Exported (as canonicalHost below) so the favicon proxy applies
+ * the exact same rule.
+ */
 function host(url: URL): string {
-	return url.hostname.toLowerCase().replace(/^www\./, '');
+	return canonicalHost(url.hostname);
 }
 
 function segments(url: URL): string[] {
@@ -101,26 +107,32 @@ export const EMBED_PROVIDERS: readonly EmbedProvider[] = [
 	// GitHub family — specific shapes before the two-segment repo fallback.
 	{
 		id: 'gh-commit',
+		domains: ['github.com'],
 		match: (url) => isGithub(url) && segments(url)[2] === 'commit' && !!segments(url)[3]
 	},
 	{
 		id: 'gh-pr',
+		domains: ['github.com'],
 		match: (url) => isGithub(url) && segments(url)[2] === 'pull' && numeric(segments(url)[3])
 	},
 	{
 		id: 'gh-issue',
+		domains: ['github.com'],
 		match: (url) => isGithub(url) && segments(url)[2] === 'issues' && numeric(segments(url)[3])
 	},
 	{
 		id: 'gh-discussion',
+		domains: ['github.com'],
 		match: (url) => isGithub(url) && segments(url)[2] === 'discussions' && numeric(segments(url)[3])
 	},
 	{
 		id: 'gh-file',
+		domains: ['github.com'],
 		match: (url) => isGithub(url) && segments(url)[2] === 'blob' && segments(url).length >= 5
 	},
 	{
 		id: 'gh-repo',
+		domains: ['github.com'],
 		match: (url) =>
 			isGithub(url) &&
 			segments(url).length === 2 &&
@@ -128,10 +140,12 @@ export const EMBED_PROVIDERS: readonly EmbedProvider[] = [
 	},
 	{
 		id: 'gh-gist',
+		domains: ['gist.github.com'],
 		match: (url) => host(url) === 'gist.github.com' && segments(url).length >= 2
 	},
 	{
 		id: 'tweet',
+		domains: ['x.com', 'twitter.com'],
 		match: (url) =>
 			(host(url) === 'x.com' || host(url) === 'twitter.com') &&
 			segments(url)[1] === 'status' &&
@@ -139,6 +153,7 @@ export const EMBED_PROVIDERS: readonly EmbedProvider[] = [
 	},
 	{
 		id: 'youtube',
+		domains: ['youtube.com', 'youtu.be'],
 		match: (url) =>
 			host(url) === 'youtube.com'
 				? url.pathname === '/watch' && url.searchParams.has('v')
@@ -146,6 +161,7 @@ export const EMBED_PROVIDERS: readonly EmbedProvider[] = [
 	},
 	{
 		id: 'bilibili',
+		domains: ['bilibili.com'],
 		match: (url) =>
 			host(url) === 'bilibili.com' &&
 			segments(url)[0] === 'video' &&
@@ -153,34 +169,56 @@ export const EMBED_PROVIDERS: readonly EmbedProvider[] = [
 	},
 	{
 		id: 'codesandbox',
+		domains: ['codesandbox.io'],
 		match: (url) => host(url) === 'codesandbox.io' && segments(url)[0] === 's' && !!segments(url)[1]
 	},
 	{
 		id: 'arxiv',
+		domains: ['arxiv.org'],
 		match: (url) => host(url) === 'arxiv.org' && segments(url)[0] === 'abs' && !!segments(url)[1]
 	},
 	{
 		// the spec table is domain-only for tmdb
 		id: 'tmdb',
+		domains: ['themoviedb.org'],
 		match: (url) => host(url) === 'themoviedb.org' && segments(url).length >= 2
 	},
 	{
 		id: 'bangumi',
+		domains: ['bgm.tv'],
 		match: (url) =>
 			host(url) === 'bgm.tv' && segments(url)[0] === 'subject' && numeric(segments(url)[1])
 	},
 	{
 		// the spec table is domain-only for the music providers
 		id: 'qq-music',
+		domains: ['y.qq.com'],
 		match: (url) => host(url) === 'y.qq.com'
 	},
 	{
 		id: 'netease-music',
+		domains: ['music.163.com'],
 		match: (url) => host(url) === 'music.163.com'
 	},
 	{
 		id: 'leetcode',
+		domains: ['leetcode.cn'],
 		match: (url) =>
 			host(url) === 'leetcode.cn' && segments(url)[0] === 'problems' && !!segments(url)[1]
 	}
 ];
+
+/**
+ * The favicon proxy's allowlist, DERIVED from each provider's `domains`
+ * declaration (spec 6: server-side fetching only ever touches registry
+ * domains). A unit test locks the derivation against the positive cases, so
+ * adding a provider without declaring its domains fails the suite.
+ */
+export const EMBED_PROVIDER_DOMAINS: ReadonlySet<string> = new Set(
+	EMBED_PROVIDERS.flatMap((provider) => provider.domains)
+);
+
+/** Shared canonicalisation: lowercase host with a leading `www.` removed. */
+export function canonicalHost(hostname: string): string {
+	return hostname.toLowerCase().replace(/^www\./, '');
+}

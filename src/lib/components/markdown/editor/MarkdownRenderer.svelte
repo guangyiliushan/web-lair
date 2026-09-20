@@ -1,9 +1,12 @@
 <script lang="ts">
+	import { onDestroy, mount, unmount } from 'svelte';
 	import { cn } from '$lib/utils';
 	import {
 		renderMarkdownToHtmlSync,
 		type MarkdownRendererProps
 	} from '$lib/components/markdown/editor/markdown-config';
+	import EmbedCard from '$lib/components/markdown/embed/EmbedCard.svelte';
+	import type { EmbedProviderId } from '$lib/components/markdown/embed/registry';
 
 	let {
 		source,
@@ -17,12 +20,110 @@
 	// 否则客户端同步渲染（无 Shiki 高亮）
 	const renderedHtml = $derived(htmlProp ?? (source ? renderMarkdownToHtmlSync(source) : ''));
 	const isEmpty = $derived(!renderedHtml);
+
+	// Client enhancement (spec 3.4/7): upgrade every placeholder anchor to a
+	// card component. SSR and no-JS keep the anchors themselves, so the
+	// fallback stays a working plain link.
+	let articleEl: HTMLElement | undefined = $state();
+	const cardInstances: Array<ReturnType<typeof mount>> = [];
+	let uid = '';
+
+	// The enhancement is reactive: `{@html}` swaps the article's children
+	// whenever the rendered HTML changes, so the effect re-runs after every
+	// such update — previously-mounted cards are unmounted first, the fresh
+	// nodes are enhanced and the new anchors upgraded again.
+	$effect(() => {
+		void renderedHtml;
+		const article = articleEl;
+		if (!article) return;
+		for (const instance of cardInstances) unmount(instance);
+		cardInstances.length = 0;
+		uid ||= Math.random().toString(36).slice(2, 8);
+		enhanceTabs(article, uid);
+		for (const anchor of article.querySelectorAll('a.embed-card')) {
+			// The data-embed attribute is pipeline output from the closed registry
+			const provider = (anchor.getAttribute('data-embed') ?? 'generic') as
+				| EmbedProviderId
+				| 'generic';
+			const url = anchor.getAttribute('data-url') ?? anchor.getAttribute('href') ?? '';
+			const title = anchor.textContent?.trim() || url;
+			const host = document.createElement('div');
+			anchor.replaceWith(host);
+			cardInstances.push(mount(EmbedCard, { target: host, props: { provider, url, title } }));
+		}
+	});
+	onDestroy(() => {
+		for (const instance of cardInstances) unmount(instance);
+		cardInstances.length = 0;
+	});
+
+	/**
+	 * Tabs enhancement (spec 3.2): ARIA tablist with arrow/Home/End keys. The
+	 * no-JS state stays all-panels-expanded with visible labels; this only
+	 * collapses them once scripting is available. Listeners live on nodes that
+	 * are removed with the article, so no manual teardown is needed.
+	 */
+	function enhanceTabs(article: HTMLElement, uid: string): void {
+		article.querySelectorAll('.md-tabs').forEach((tabs, tabsIndex) => {
+			const panels = Array.from(tabs.children).filter(
+				(child): child is HTMLElement =>
+					child instanceof HTMLElement && child.classList.contains('md-tab')
+			);
+			const labels = panels
+				.map((panel) =>
+					Array.from(panel.children).find(
+						(child): child is HTMLElement =>
+							child instanceof HTMLElement && child.classList.contains('md-tab-label')
+					)
+				)
+				.filter((label): label is HTMLElement => label !== undefined);
+			if (panels.length === 0 || labels.length !== panels.length) return;
+
+			tabs.setAttribute('role', 'tablist');
+
+			const activate = (activeIndex: number, focus = false) => {
+				panels.forEach((panel, index) => {
+					const label = labels[index];
+					const active = index === activeIndex;
+					const panelId = `md-tab-${uid}-${tabsIndex}-${index}`;
+					panel.id = panelId;
+					label.id = `${panelId}-label`;
+					label.setAttribute('role', 'tab');
+					label.setAttribute('aria-selected', String(active));
+					label.setAttribute('aria-controls', panelId);
+					label.tabIndex = active ? 0 : -1;
+					panel.setAttribute('role', 'tabpanel');
+					panel.setAttribute('aria-labelledby', label.id);
+					panel.toggleAttribute('hidden', !active);
+				});
+				if (focus) labels[activeIndex].focus();
+			};
+
+			const count = panels.length;
+			labels.forEach((label, index) => {
+				label.addEventListener('click', () => activate(index));
+				label.addEventListener('keydown', (event) => {
+					let next: number;
+					if (event.key === 'ArrowRight') next = (index + 1) % count;
+					else if (event.key === 'ArrowLeft') next = (index - 1 + count) % count;
+					else if (event.key === 'Home') next = 0;
+					else if (event.key === 'End') next = count - 1;
+					else return;
+					event.preventDefault();
+					activate(next, true);
+				});
+			});
+
+			activate(0);
+		});
+	}
 </script>
 
 {#if isEmpty}
 	{@render children?.()}
 {:else}
 	<article
+		bind:this={articleEl}
 		class={cn(
 			prose && 'prose max-w-none',
 			'markdown-body',

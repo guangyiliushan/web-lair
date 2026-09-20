@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { decideImage, imageExtension } from '$lib/components/markdown/embed/resolve';
-import { EMBED_PROVIDER_IDS } from '$lib/components/markdown/embed/registry';
+import {
+	canonicalHost,
+	EMBED_PROVIDER_DOMAINS,
+	EMBED_PROVIDER_IDS
+} from '$lib/components/markdown/embed/registry';
 
 const providerOf = (url: string) => {
 	const decision = decideImage({ url });
@@ -108,5 +112,15 @@ describe('spec 3.4 embed decision', () => {
 			kind: 'embed',
 			provider: 'gh-repo'
 		});
+	});
+
+	it('derives the proxy allowlist from every provider declaration', () => {
+		for (const url of Object.keys(POSITIVES)) {
+			if (url.startsWith('/')) continue; // mx-space has no public domain
+			const host = canonicalHost(new URL(url).hostname);
+			expect(EMBED_PROVIDER_DOMAINS.has(host), `${url} is missing from the proxy allowlist`).toBe(
+				true
+			);
+		}
 	});
 });
