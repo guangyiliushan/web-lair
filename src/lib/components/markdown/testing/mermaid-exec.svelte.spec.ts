@@ -53,6 +53,14 @@ const FRONTMATTER_CSS = fence(
 // past the first closure (fo=2/img=1/beacon=2): indented block,
 // directive-prefixed (newline and glued), and 0x0C/0x0B at the opener or
 // closer. All must strip to the same closed state.
+// chained blocks: the strip must reach a TRUE fixpoint - mermaid itself
+// extracts one frontmatter block, so a capped loop of N leaks the N+1th
+const chained = (blocks: number, name: string) =>
+	'---\nconfig:\n  htmlLabels: true\n---\n'.repeat(blocks) +
+	'graph TD;\n  A["<img src=//127.0.0.1:9/' +
+	name +
+	'>"] --> B;';
+
 const LEAKY_SHAPES = [
 	fence(
 		'  ---\n  config:\n    htmlLabels: true\n  ---\n  graph TD;\n  A["<img src=//127.0.0.1:9/ind.png>"] --> B;'
@@ -71,7 +79,9 @@ const LEAKY_SHAPES = [
 	),
 	fence(
 		'---\nconfig:\n  htmlLabels: true\n---\u000C\ngraph TD;\n  A["<img src=//127.0.0.1:9/cff.png>"] --> B;'
-	)
+	),
+	fence(chained(7, 'chain.png')),
+	fence('%%{init: {"theme":"base"}}%%\n' + chained(6, 'dchain.png'))
 ];
 const BROKEN = fence('graph TD;\n  A[oops --> ;');
 
@@ -173,7 +183,12 @@ describe('mermaid execution (client)', () => {
 		for (const [index, shape] of LEAKY_SHAPES.entries()) {
 			const beacons = resourceCount(BEACON);
 			const screen = await mountRenderer(shape);
-			await waitForSettled(screen.container);
+			await expect
+				.poll(() => settled(screen.container) !== null, {
+					timeout: 15_000,
+					message: `shape ${index}`
+				})
+				.toBe(true);
 			expect(
 				settled(screen.container)!.querySelector('img, image, script, foreignObject'),
 				`shape ${index}`

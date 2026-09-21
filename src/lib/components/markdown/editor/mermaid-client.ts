@@ -80,24 +80,28 @@ function mermaidView(source: string): string {
  * directive glued to a frontmatter block hides the block from the anchored
  * regex until the directive is gone). Runs on `mermaidView` text so a shape
  * cannot be invisible here and still reach mermaid as config.
+ *
+ * Iterates to a TRUE fixpoint - a bounded loop is not enough: mermaid itself
+ * extracts one frontmatter block, so with a cap of N, N+1 chained blocks
+ * leak the last one. Both operations only ever remove text, so the loop
+ * terminates; the cap below (500) exists only so a pathological input cannot
+ * spin, and hitting it refuses the render instead of leaking (`null`).
  */
-function stripConfigChannels(source: string): string {
-	let text = source;
-	for (let i = 0; i < 6; i += 1) {
-		const normalized = mermaidView(text);
-		const match = normalized.match(FRONTMATTER);
+const MAX_LAYERS = 500;
+
+function stripConfigChannels(source: string): string | null {
+	let text = mermaidView(source);
+	for (let i = 0; i < MAX_LAYERS; i += 1) {
+		const match = text.match(FRONTMATTER);
 		if (match) {
-			text = normalized.slice(match[0].length);
+			text = mermaidView(text.slice(match[0].length));
 			continue;
 		}
 		const stripped = text.replace(DIRECTIVE, '');
-		if (stripped !== text) {
-			text = stripped;
-			continue;
-		}
-		break;
+		if (stripped === text) return text;
+		text = mermaidView(stripped);
 	}
-	return mermaidView(text);
+	return null;
 }
 
 /**
@@ -177,7 +181,14 @@ async function renderDiagrams(elements: HTMLElement[]): Promise<void> {
 			element.setAttribute('data-md-error', 'image-shape');
 			continue;
 		}
-		element.textContent = stripConfigChannels(source);
+		const cleaned = stripConfigChannels(source);
+		if (cleaned === null) {
+			// hundreds of config layers: not content - keep the raw text (5)
+			element.textContent = source;
+			element.setAttribute('data-md-error', 'config-layers');
+			continue;
+		}
+		element.textContent = cleaned;
 	}
 	const runnable = live.filter((element) => !element.hasAttribute('data-md-error'));
 	if (runnable.length === 0) return;
