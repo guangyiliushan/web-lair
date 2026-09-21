@@ -8,6 +8,7 @@
 	import EmbedCard from '$lib/components/markdown/embed/EmbedCard.svelte';
 	import type { EmbedProviderId } from '$lib/components/markdown/embed/registry';
 	import { scheduleMermaidRender } from './mermaid-client';
+	import { m } from '$lib/paraglide/messages';
 	import { themeStore } from '$lib/stores/theme.svelte';
 
 	let {
@@ -42,6 +43,7 @@
 		cardInstances.length = 0;
 		uid ||= Math.random().toString(36).slice(2, 8);
 		enhanceTabs(article, uid);
+		enhanceCarousels(article);
 		for (const anchor of article.querySelectorAll('a.embed-card')) {
 			// The data-embed attribute is pipeline output from the closed registry
 			const provider = (anchor.getAttribute('data-embed') ?? 'generic') as
@@ -77,6 +79,18 @@
 	 * collapses them once scripting is available. Listeners live on nodes that
 	 * are removed with the article, so no manual teardown is needed.
 	 */
+	function enhanceCarousels(article: HTMLElement): void {
+		article.querySelectorAll<HTMLElement>('[data-layout="carousel"]').forEach((carousel) => {
+			if (carousel.hasAttribute('tabindex')) return;
+			// zero-JS scrolling is native once focusable; the ARIA surface is
+			// static, so no scripting is required for the piece to work (7)
+			carousel.setAttribute('tabindex', '0');
+			carousel.setAttribute('role', 'region');
+			carousel.setAttribute('aria-roledescription', m.md_carousel());
+			carousel.setAttribute('aria-label', m.md_carousel_label());
+		});
+	}
+
 	function enhanceTabs(article: HTMLElement, uid: string): void {
 		article.querySelectorAll('.md-tabs').forEach((tabs, tabsIndex) => {
 			const panels = Array.from(tabs.children).filter(

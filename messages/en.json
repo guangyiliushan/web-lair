@@ -137,6 +137,8 @@
 	"code_block_use_custom": "Use “{language}” as the language",
 	"image_dialog_title": "Insert image",
 	"image_dialog_description": "Paste an image URL — the editor renders a live preview.",
+	"md_carousel": "Carousel",
+	"md_carousel_label": "Image carousel",
 	"image_url_label": "Image URL",
 	"image_alt_label": "Alt text (optional)",
 	"image_alt_placeholder": "Describe this image",
