@@ -23,6 +23,7 @@
 		applyParagraph,
 		emptyToolbarState,
 		formatTextWithFocus,
+		toggleSpoiler,
 		readToolbarState,
 		type ToolbarState
 	} from '$lib/components/markdown/editor/lexical-helpers';
@@ -43,6 +44,7 @@
 	import IconCode from '@tabler/icons-svelte-runes/icons/code';
 	import IconCodeDots from '@tabler/icons-svelte-runes/icons/code-dots';
 	import IconHighlight from '@tabler/icons-svelte-runes/icons/highlight';
+	import IconEyeOff from '@tabler/icons-svelte-runes/icons/eye-off';
 	import IconLink from '@tabler/icons-svelte-runes/icons/link';
 	import IconPhoto from '@tabler/icons-svelte-runes/icons/photo';
 	import IconList from '@tabler/icons-svelte-runes/icons/list';
@@ -284,6 +286,13 @@
 					label: '高亮',
 					icon: IconHighlight,
 					action: () => formatText('highlight'),
+					minBp: 3
+				},
+				{
+					id: 'spoiler',
+					label: '剧透',
+					icon: IconEyeOff,
+					action: () => toggleSpoiler(editor!),
 					minBp: 3
 				},
 				{
@@ -549,6 +558,21 @@
 			title={m.toolbar_highlight()}
 		>
 			<IconHighlight data-icon="inline-start" />
+		</Button>
+	{/if}
+
+	<!-- ═══════════ 剧透 (Tier 3: lg+) ═══════════ -->
+	{#if bp >= 3}
+		<Button
+			variant={toolbarState.isSpoiler ? 'secondary' : 'ghost'}
+			size="icon-sm"
+			onclick={() => toggleSpoiler(editor!)}
+			onmousedown={preventSelectionLoss}
+			aria-pressed={toolbarState.isSpoiler}
+			aria-label={m.toolbar_spoiler()}
+			title={m.toolbar_spoiler()}
+		>
+			<IconEyeOff data-icon="inline-start" />
 		</Button>
 	{/if}
 

@@ -58,6 +58,16 @@ import {
 } from '$lib/components/markdown/image/image-node';
 import { TagNode, $createTagNode, $isTagNode } from '$lib/components/markdown/tag/tag-node';
 import {
+	SpoilerNode,
+	$createSpoilerNode,
+	$isSpoilerNode
+} from '$lib/components/markdown/spoiler/spoiler-node';
+import {
+	MentionNode,
+	$createMentionNode,
+	$isMentionNode
+} from '$lib/components/markdown/mention/mention-node';
+import {
 	AlertNode,
 	$createAlertNode,
 	$isAlertNode
@@ -81,6 +91,8 @@ export const tagTransformer: TextMatchTransformer = {
 	regExp: /<tag>([^<]+)<\/tag>$/,
 	trigger: '>',
 	replace: (textNode, match) => {
+		// inline code binds tighter than text-match transformers (4.2)
+		if (textNode.hasFormat('code')) return;
 		const tagNode = $createTagNode(match[1]);
 		textNode.replace(tagNode);
 	},
@@ -88,6 +100,61 @@ export const tagTransformer: TextMatchTransformer = {
 		if (!$isTagNode(node)) return null;
 		return `<tag>${node.getTextContent()}</tag>`;
 	},
+	type: 'text-match'
+};
+
+// ── Spoiler: `||x||` ↔ SpoilerNode (2 #6) ──
+
+/** Import form: run-guarded (no `|`/escape adjacent), non-space flanking. */
+const SPOILER_IMPORT = /(?<![|\\])[|]{2}(?=\S)([^|]*?\S)[|]{2}(?![|])/;
+const SPOILER_LIVE = /(?<![|\\])[|]{2}(?=\S)([^|]*?\S)[|]{2}(?![|])$/;
+
+export const spoilerTransformer: TextMatchTransformer = {
+	dependencies: [SpoilerNode],
+	importRegExp: SPOILER_IMPORT,
+	regExp: SPOILER_LIVE,
+	trigger: '|',
+	replace: (textNode, match) => {
+		if (textNode.hasFormat('code')) return;
+		// Inverse of exportFormat's escaping, keeping the round trip stable.
+		const inner = match[1].replace(/\\([*_`~\\])/g, '$1');
+		const node = $createSpoilerNode(inner);
+		node.setFormat(textNode.getFormat());
+		textNode.replace(node);
+	},
+	export: (node, _exportChildren, exportFormat) => {
+		if (!$isSpoilerNode(node)) return null;
+		// Canonical serialization: exportFormat applies the core's escaping,
+		// code-span delimiters and nest order, matching what the render side
+		// expects (batch A review, F3). Formatted spoilers still re-import
+		// without their formats — registered, see batch-A review register.
+		return '||' + exportFormat(node, node.getTextContent()) + '||';
+	},
+	type: 'text-match'
+};
+
+// ── Mention: `@gh:user` ↔ MentionNode (2 #4) ──
+
+/** Boundary: line start, whitespace or punctuation (render-side mirror). The
+ * escape guard intentionally over-blocks a spaced backslash (`\ \@`) — registered. */
+const MENTION_IMPORT = /(?<!\\)(?<=^|[\s\p{P}\p{S}])@(?:gh|tw|tg):[A-Za-z0-9_]{1,40}/u;
+/** Live form commits on the terminator space, which replace() re-inserts. */
+const MENTION_LIVE = /(?<!\\)(?<=^|[\s\p{P}\p{S}])@(?:gh|tw|tg):[A-Za-z0-9_]{1,40} $/u;
+
+export const mentionTransformer: TextMatchTransformer = {
+	dependencies: [MentionNode],
+	importRegExp: MENTION_IMPORT,
+	regExp: MENTION_LIVE,
+	trigger: ' ',
+	replace: (textNode, match) => {
+		if (textNode.hasFormat('code')) return;
+		// the live form commits on a space; the import form must not gain one
+		const terminator = match[0].endsWith(' ') ? ' ' : '';
+		const node = $createMentionNode(match[0].trimEnd());
+		textNode.replace(node);
+		if (terminator) node.insertAfter($createTextNode(terminator));
+	},
+	export: (node) => ($isMentionNode(node) ? node.getTextContent() : null),
 	type: 'text-match'
 };
 
@@ -314,7 +381,12 @@ const QUOTE_PREFIX_REGEX = /^>\s?/;
  * 因此 alert 内部的 markdown 使用标准 transformer 解析。
  * HR 节点已注册（见 NESTED_EDITOR_NODES），补上其 transformer 保证 `---` 往返。
  */
-export const NESTED_EDITOR_TRANSFORMERS: Transformer[] = [...TRANSFORMERS, hrTransformer];
+export const NESTED_EDITOR_TRANSFORMERS: Transformer[] = [
+	...TRANSFORMERS,
+	hrTransformer,
+	spoilerTransformer,
+	mentionTransformer
+];
 
 // 复用的临时嵌套编辑器（headless，无 DOM）。
 // 每次导出新建编辑器开销过大，这里模块级缓存一个实例（见设计文档 §8 升级点标注）。
@@ -512,6 +584,8 @@ export const subscriptTransformer: TextMatchTransformer = {
  */
 export const EDITOR_TRANSFORMERS: Transformer[] = [
 	tagTransformer,
+	spoilerTransformer,
+	mentionTransformer,
 	alertTransformer,
 	hrTransformer,
 	imageTransformer,

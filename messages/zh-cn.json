@@ -109,6 +109,7 @@
 	"toolbar_strikethrough": "删除线",
 	"toolbar_inline_code": "行内代码",
 	"toolbar_highlight": "高亮",
+	"toolbar_spoiler": "剧透",
 	"toolbar_superscript": "上标",
 	"toolbar_subscript": "下标",
 	"toolbar_undo": "撤销",

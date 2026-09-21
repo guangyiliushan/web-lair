@@ -5,6 +5,8 @@ import { CodeNode, CodeHighlightNode } from '@lexical/code';
 import { HorizontalRuleNode } from '@lexical/extension';
 import { TableNode, TableRowNode, TableCellNode } from '@lexical/table';
 import { TagNode } from '$lib/components/markdown/tag/tag-node';
+import { SpoilerNode } from '$lib/components/markdown/spoiler/spoiler-node';
+import { MentionNode } from '$lib/components/markdown/mention/mention-node';
 import { AlertNode } from '$lib/components/markdown/alert/alert-node';
 import { ImageNode } from '$lib/components/markdown/image/image-node';
 
@@ -23,5 +25,7 @@ export const EDITOR_NODES = [
 	TableCellNode,
 	TagNode,
 	AlertNode,
-	ImageNode
+	ImageNode,
+	SpoilerNode,
+	MentionNode
 ];

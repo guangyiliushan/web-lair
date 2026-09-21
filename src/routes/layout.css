@@ -269,6 +269,16 @@
 	.spoiler:hover {
 		filter: none;
 	}
+	/* Mention pill: shared by the render side's <a class=mention> and the
+		editor's MentionNode, so one rule styles both. */
+	.mention {
+		border-radius: 999px;
+		background: var(--muted);
+		padding-inline: 0.4em;
+		font-size: 0.95em;
+		color: var(--foreground);
+		text-decoration: none;
+	}
 
 	/* ── Inline tag (<tag> element, spec 4.5) — matches the editor .rich-editor-tag look */
 	tag {

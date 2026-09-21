@@ -23,7 +23,7 @@ import { $createCodeNode } from '@lexical/code';
 import { INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/extension';
 import { $setBlocksType } from '@lexical/selection';
 import { $insertNodeToNearestRoot } from '@lexical/utils';
-import { $createTagNode } from '$lib/components/markdown/tag/tag-node';
+import { $createTagNode, $isTagNode } from '$lib/components/markdown/tag/tag-node';
 import { $createAlertNode, $isAlertNode } from '$lib/components/markdown/alert/alert-node';
 import { $createImageNode } from '$lib/components/markdown/image/image-node';
 import {
@@ -244,6 +244,88 @@ export function insertTag(editor: LexicalEditor) {
 
 export { $createAlertNode, $isAlertNode };
 
+import { $isTextNode } from 'lexical';
+import { $createSpoilerNode, $isSpoilerNode } from '$lib/components/markdown/spoiler/spoiler-node';
+import { $isMentionNode } from '$lib/components/markdown/mention/mention-node';
+
+/**
+ * Toggle the spoiler node over the current selection (batch A).
+ * - caret inside a spoiler: unwrap that node;
+ * - a selection covering only spoilers: unwrap them all;
+ * - a mixed selection: tokens (mention/tag) stay untouched and each text
+ *   node converts individually;
+ * - otherwise the selection text becomes one spoiler, keeping the first
+ *   covered text node's format flags.
+ */
+export function toggleSpoiler(editor: LexicalEditor) {
+	editor.update(() => {
+		const selection = $getSelection();
+		if (!$isRangeSelection(selection)) return;
+		const unwrap = (node: ReturnType<typeof $createSpoilerNode>) => {
+			const plain = $createTextNode(node.getTextContent());
+			plain.setFormat(node.getFormat());
+			node.replace(plain);
+		};
+		if (selection.isCollapsed()) {
+			const node = selection.anchor.getNode();
+			if ($isSpoilerNode(node)) unwrap(node);
+			return;
+		}
+		const covered = selection.getNodes();
+		const isToken = (node: unknown) => $isMentionNode(node) || $isTagNode(node);
+		const texts = covered.filter($isTextNode).filter((node) => !isToken(node));
+		if (texts.length === 0) return;
+		if (texts.every($isSpoilerNode)) {
+			for (const node of texts) unwrap(node);
+			return;
+		}
+		// splitText + replace: the same mechanism the markdown importer proves
+		// out. insertNodes() would flatten a non-token TextNode subclass.
+		const isStartPoint = (point: unknown) =>
+			(selection.isBackward() ? selection.focus : selection.anchor) === point;
+		for (const node of texts) {
+			if ($isSpoilerNode(node)) continue;
+			const size = node.getTextContentSize();
+			const offsets = [selection.anchor, selection.focus]
+				.filter((point) => point.type === 'text' && point.key === node.getKey())
+				.map((point) => Math.min(Math.max(point.offset, 0), size));
+			let start = 0;
+			let end = size;
+			if (offsets.length === 2) {
+				start = Math.min(offsets[0], offsets[1]);
+				end = Math.max(offsets[0], offsets[1]);
+			} else if (offsets.length === 1) {
+				if (
+					isStartPoint(
+						selection.anchor.type === 'text' && selection.anchor.key === node.getKey()
+							? selection.anchor
+							: selection.focus
+					)
+				) {
+					start = offsets[0];
+				} else {
+					end = offsets[0];
+				}
+			}
+			if (start >= end) continue;
+			if (start === 0 && end === size) {
+				const spoiler = $createSpoilerNode(node.getTextContent());
+				spoiler.setFormat(node.getFormat());
+				node.replace(spoiler);
+			} else {
+				const pieces = node.splitText(start, end);
+				// Lexical's TextNode.splitText skips the zero-length leading segment
+				// when start === 0, so the selected piece shifts one index left.
+				const middle = start === 0 ? pieces[0] : pieces[1];
+				const spoiler = $createSpoilerNode(middle.getTextContent());
+				spoiler.setFormat(middle.getFormat());
+				middle.replace(spoiler);
+			}
+		}
+	});
+	editor.focus();
+}
+
 /**
  * 插入 Alert/Callout 结构化块（DecoratorNode）。
  * 替代原来的 markdown 文本 Callout 插入方式。
@@ -269,6 +351,7 @@ export function emptyToolbarState(): ToolbarState {
 		isSubscript: false,
 		isCode: false,
 		isHighlight: false,
+		isSpoiler: false,
 		blockType: 'paragraph',
 		inTable: false
 	};
@@ -297,6 +380,7 @@ export interface ToolbarState {
 	isSubscript: boolean;
 	isCode: boolean;
 	isHighlight: boolean;
+	isSpoiler: boolean;
 	blockType: 'paragraph' | 'h1' | 'h2' | 'h3' | 'bullet' | 'number' | 'check' | 'quote';
 	/** 光标是否在表格单元格内(块级插入应禁用) */
 	inTable: boolean;
@@ -321,6 +405,8 @@ export function readToolbarState(): ToolbarState {
 		state.isSubscript = selection.hasFormat('subscript');
 		state.isCode = selection.hasFormat('code');
 		state.isHighlight = selection.hasFormat('highlight');
+		state.isSpoiler =
+			$isSpoilerNode(selection.anchor.getNode()) || $isSpoilerNode(selection.focus.getNode());
 
 		// 从锚点向上找表格祖先(块级插入在表格内应禁用)
 		let tableNode: LexicalNode | null = selection.anchor.getNode();

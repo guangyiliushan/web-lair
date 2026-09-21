@@ -11,6 +11,92 @@ overwriteGetLocale(() => 'zh-cn');
 // Regression: top toolbar format buttons lost the editor selection and did
 // nothing, while the floating toolbar applied the same format correctly.
 describe('editor toolbar character formats', () => {
+	it('toggles spoiler on the selection via the top toolbar', async () => {
+		// wide enough that the button lives in the bar, not the overflow
+		await page.viewport(1280, 720);
+		await render(ToolbarTestHost, {
+			initialMarkdown: '隐藏内容',
+			placeholder: '输入正文...'
+		});
+
+		const user = userEvent.setup();
+		const body = page.getByRole('textbox', { name: '输入正文...' });
+		await expect.element(body).toBeInTheDocument();
+
+		await body.click();
+		await user.keyboard('{End}');
+		await user.keyboard('{Shift>}{Home}{/Shift}');
+		await page
+			.getByRole('toolbar', { name: '编辑器工具栏' })
+			.getByRole('button', { name: '剧透' })
+			.click();
+		await expect.poll(() => document.querySelectorAll('.spoiler').length).toBeGreaterThan(0);
+
+		// caret inside the spoiler: a second press unwraps it
+		await page.getByText('隐藏内容').click();
+		await page
+			.getByRole('toolbar', { name: '编辑器工具栏' })
+			.getByRole('button', { name: '剧透' })
+			.click();
+		await expect.poll(() => document.querySelectorAll('.spoiler').length).toBe(0);
+	});
+
+	it('converts typed mention and spoiler syntax live (trigger paths)', async () => {
+		await page.viewport(1280, 720);
+		await render(ToolbarTestHost, {
+			initialMarkdown: '',
+			placeholder: '输入正文...'
+		});
+		const body = page.getByRole('textbox', { name: '输入正文...' });
+		await expect.element(body).toBeInTheDocument();
+		await body.click();
+		await userEvent.keyboard('@gh:someone{Space}');
+		await expect.poll(() => document.querySelectorAll('.mention').length).toBeGreaterThan(0);
+		await userEvent.keyboard('||abc||');
+		await expect.poll(() => document.querySelectorAll('.spoiler').length).toBeGreaterThan(0);
+	});
+
+	it('marks the spoiler button pressed (aria-pressed) while the caret is inside', async () => {
+		await page.viewport(1280, 720);
+		await render(ToolbarTestHost, {
+			initialMarkdown: '||隐藏|| 尾部',
+			placeholder: '输入正文...'
+		});
+		await expect.poll(() => document.querySelectorAll('.spoiler').length).toBeGreaterThan(0);
+		const btn = page
+			.getByRole('toolbar', { name: '编辑器工具栏' })
+			.getByRole('button', { name: '剧透' });
+		await page.getByText('隐藏').click();
+		await expect.poll(async () => (await btn.element()).getAttribute('aria-pressed')).toBe('true');
+		await page.getByText('尾部').click();
+		await expect.poll(async () => (await btn.element()).getAttribute('aria-pressed')).toBe('false');
+	});
+
+	it('renders imported spoiler and mention as editor nodes', async () => {
+		await page.viewport(1280, 720);
+		await render(ToolbarTestHost, {
+			initialMarkdown: '||隐藏|| 与 @gh:someone 在此',
+			placeholder: '输入正文...'
+		});
+		await expect.element(page.getByRole('textbox', { name: '输入正文...' })).toBeInTheDocument();
+		await expect.poll(() => document.querySelectorAll('.spoiler').length).toBeGreaterThan(0);
+		await expect.poll(() => document.querySelectorAll('.mention').length).toBeGreaterThan(0);
+	});
+
+	it('imports spoiler syntax inside an alert body', async () => {
+		await page.viewport(1280, 720);
+		await render(ToolbarTestHost, {
+			initialMarkdown: '> [!NOTE]\n> 含 ||藏|| 剧透',
+			placeholder: '输入正文...'
+		});
+		await expect
+			.poll(() => document.querySelectorAll('.rich-editor-alert-host').length)
+			.toBeGreaterThan(0);
+		await expect
+			.poll(() => document.querySelectorAll('.rich-editor-alert-host .spoiler').length)
+			.toBeGreaterThan(0);
+	});
+
 	it('applies bold via the top toolbar to the current selection', async () => {
 		await render(ToolbarTestHost, {
 			initialMarkdown: 'hello world',
@@ -99,6 +185,8 @@ describe('editor toolbar character formats', () => {
 				await userEvent.click(moreBtn);
 				const menu = page.getByRole('menu');
 				await expect.element(menu).toBeInTheDocument();
+				// the spoiler row must exist in the narrow-viewport overflow path (batch A review)
+				await expect.element(menu.getByRole('menuitem', { name: '剧透' })).toBeInTheDocument();
 
 				const menuEl = await menu.element();
 				const r = menuEl.getBoundingClientRect();

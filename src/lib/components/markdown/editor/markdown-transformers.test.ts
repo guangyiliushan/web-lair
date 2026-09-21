@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { createEditor, $getRoot, type LexicalEditor } from 'lexical';
+import {
+	createEditor,
+	$getRoot,
+	$createParagraphNode,
+	$setSelection,
+	type ElementNode,
+	type LexicalEditor,
+	type TextNode
+} from 'lexical';
 import { $convertFromMarkdownString, $convertToMarkdownString } from '@lexical/markdown';
 import { TagNode } from '$lib/components/markdown/tag/tag-node';
 import { AlertNode } from '$lib/components/markdown/alert/alert-node';
@@ -9,6 +17,8 @@ import {
 	type SerializedImageNode
 } from '$lib/components/markdown/image/image-node';
 import { EDITOR_NODES } from './editor-nodes';
+import { $createSpoilerNode } from '$lib/components/markdown/spoiler/spoiler-node';
+import { toggleSpoiler } from '$lib/components/markdown/editor/lexical-helpers';
 import {
 	EDITOR_TRANSFORMERS,
 	tagTransformer,
@@ -53,6 +63,201 @@ function extractAlertMarkdown(exported: string): string {
 		.map((line) => line.replace(/^>\s?/, ''))
 		.join('\n');
 }
+
+/** Node types present after importing markdown (recursive JSON walk). */
+function treeTypes(markdown: string): string[] {
+	const editor: LexicalEditor = createEditor({
+		namespace: 'markdown-transformers-types',
+		nodes: EDITOR_NODES,
+		onError: (error: Error) => {
+			throw error;
+		}
+	});
+	editor.update(
+		() => {
+			$convertFromMarkdownString(markdown, EDITOR_TRANSFORMERS);
+		},
+		{ discrete: true }
+	);
+	const types: string[] = [];
+	editor.getEditorState().read(() => {
+		const walk = (node: unknown): void => {
+			if (
+				node &&
+				typeof node === 'object' &&
+				typeof (node as { getType?: unknown }).getType === 'function'
+			) {
+				types.push((node as { getType: () => string }).getType());
+				const children = (node as { getChildren?: () => unknown[] }).getChildren?.() ?? [];
+				for (const child of children) walk(child);
+			}
+		};
+		walk($getRoot());
+	});
+	return types;
+}
+
+describe('spoiler node roundtrip (batch A)', () => {
+	it('converts ||x|| into a spoiler node and roundtrips exactly', () => {
+		expect(treeTypes('||x||')).toContain('spoiler');
+		expect(roundtrip('||x||')).toBe('||x||');
+	});
+
+	it('keeps escaped markers literal', () => {
+		expect(treeTypes('\\|\\|x\\|\\|')).not.toContain('spoiler');
+		const once = roundtrip('\\|\\|x\\|\\|');
+		expect(roundtrip(once)).toBe(once);
+	});
+
+	it('does not convert empty, spaced or triple-run pairs', () => {
+		expect(treeTypes('||||')).not.toContain('spoiler');
+		expect(roundtrip('|| x ||')).toBe('|| x ||');
+		expect(roundtrip('||x ||')).toBe('||x ||');
+		expect(treeTypes('|||x|||')).not.toContain('spoiler');
+		expect(roundtrip('|||x|||')).toBe('|||x|||');
+	});
+
+	it('handles two pairs on one line', () => {
+		expect(treeTypes('||a|| 与 ||b||').filter((t) => t === 'spoiler')).toHaveLength(2);
+		expect(roundtrip('||a|| 与 ||b||')).toBe('||a|| 与 ||b||');
+	});
+
+	it('never converts inside inline code format', () => {
+		expect(treeTypes('`||x||`')).not.toContain('spoiler');
+		expect(roundtrip('`||x||`')).toBe('`||x||`');
+	});
+
+	it('escapes literal format characters and keeps the escape stable (review F3)', () => {
+		expect(roundtrip('||a*b*c||')).toBe('||a\\*b\\*c||');
+		// second pass: the escape is undone on import and re-applied on export
+		expect(roundtrip('||a\\*b\\*c||')).toBe('||a\\*b\\*c||');
+	});
+
+	it('serializes a formatted spoiler with core-canonical syntax (review F3)', () => {
+		// core order: bold outside strikethrough (MarkdownTransformers 0.46)
+		const editor: LexicalEditor = createEditor({
+			namespace: 'markdown-transformers-test',
+			nodes: EDITOR_NODES,
+			onError: (error: Error) => {
+				throw error;
+			}
+		});
+		editor.update(
+			() => {
+				const paragraph = $createParagraphNode();
+				const spoiler = $createSpoilerNode('z');
+				spoiler.setFormat('bold');
+				spoiler.toggleFormat('strikethrough');
+				paragraph.append(spoiler);
+				$getRoot().append(paragraph);
+			},
+			{ discrete: true }
+		);
+		editor.getEditorState().read(() => {
+			expect($convertToMarkdownString(EDITOR_TRANSFORMERS)).toBe('||**~~z~~**||');
+		});
+	});
+});
+
+describe('toggleSpoiler piece selection (batch A review F1)', () => {
+	async function toggle(md: string, from: number, to: number): Promise<string> {
+		const editor: LexicalEditor = createEditor({
+			namespace: 'markdown-transformers-test',
+			nodes: EDITOR_NODES,
+			onError: (error: Error) => {
+				throw error;
+			}
+		});
+		editor.update(
+			() => {
+				$convertFromMarkdownString(md, EDITOR_TRANSFORMERS);
+			},
+			{ discrete: true }
+		);
+		editor.update(
+			() => {
+				const paragraph = $getRoot().getFirstChild() as ElementNode;
+				const text = paragraph.getChildren()[0] as TextNode;
+				$setSelection(text.select(from, to));
+			},
+			{ discrete: true }
+		);
+		toggleSpoiler(editor);
+		const readOut = () => {
+			let out = '';
+			editor.getEditorState().read(() => {
+				out = $convertToMarkdownString(EDITOR_TRANSFORMERS);
+			});
+			return out;
+		};
+		// toggleSpoiler's update commits asynchronously (no discrete flag); flush one macrotask
+		// before reading, mirroring how the toolbar measures state via polls.
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		return readOut();
+	}
+
+	it('wraps the selected prefix when the selection starts at offset 0', async () => {
+		expect(await toggle('abcdef', 0, 2)).toBe('||ab||cdef');
+		expect(await toggle('abcdef', 2, 4)).toBe('ab||cd||ef');
+		expect(await toggle('abcdef', 0, 6)).toBe('||abcdef||');
+	});
+});
+
+describe('mention node roundtrip (batch A)', () => {
+	it('converts @gh:user and roundtrips exactly', () => {
+		expect(treeTypes('@gh:some_one')).toContain('mention');
+		expect(roundtrip('@gh:some_one')).toBe('@gh:some_one');
+	});
+
+	it('keeps unknown platforms and malformed forms literal', () => {
+		expect(treeTypes('@ft:someone')).not.toContain('mention');
+		expect(treeTypes('@gh:')).not.toContain('mention');
+		// render-side semantics: the username stops at the space, so a partial
+		// mention plus literal text is the correct conversion
+		expect(treeTypes('@gh:a b')).toContain('mention');
+		expect(roundtrip('@gh:a b')).toBe('@gh:a b');
+	});
+
+	it('mirrors the boundary rule: line start, whitespace or punctuation only', () => {
+		expect(treeTypes('中文@gh:x')).not.toContain('mention');
+		expect(treeTypes('a@gh:x')).not.toContain('mention');
+		expect(treeTypes('见 @gh:x 和, @tw:y')).toContain('mention');
+		expect(treeTypes('(@gh:x)')).toContain('mention');
+	});
+
+	it('caps the username at 40 characters, the rest stays literal', () => {
+		const editor: LexicalEditor = createEditor({
+			namespace: 'markdown-transformers-test',
+			nodes: EDITOR_NODES,
+			onError: (error: Error) => {
+				throw error;
+			}
+		});
+		editor.update(
+			() => {
+				$convertFromMarkdownString('@gh:' + 'u'.repeat(45), EDITOR_TRANSFORMERS);
+			},
+			{ discrete: true }
+		);
+		editor.getEditorState().read(() => {
+			const paragraph = $getRoot().getFirstChild() as ElementNode;
+			const children = paragraph.getChildren();
+			expect(children[0].getType()).toBe('mention');
+			expect(children[0].getTextContent()).toBe('@gh:' + 'u'.repeat(40));
+			expect(children[1].getType()).toBe('text');
+			expect(children[1].getTextContent()).toBe('uuuuu');
+		});
+	});
+
+	it('never converts inside inline code format', () => {
+		expect(treeTypes('`@gh:x`')).not.toContain('mention');
+		expect(roundtrip('`@gh:x`')).toBe('`@gh:x`');
+	});
+
+	it('never converts an escaped mention (review F4)', () => {
+		expect(treeTypes('\\@gh:user')).not.toContain('mention');
+	});
+});
 
 describe('markdown transformers roundtrip', () => {
 	it('resolves transformer dependencies under editor-nodes-first import order', () => {

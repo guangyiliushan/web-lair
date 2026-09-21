@@ -4,6 +4,8 @@ import { ListNode, ListItemNode } from '@lexical/list';
 import { LinkNode } from '@lexical/link';
 import { CodeNode, CodeHighlightNode } from '@lexical/code';
 import { HorizontalRuleNode } from '@lexical/extension';
+import { SpoilerNode } from '$lib/components/markdown/spoiler/spoiler-node';
+import { MentionNode } from '$lib/components/markdown/mention/mention-node';
 
 /**
  * 嵌套编辑器节点子集与 Theme 配置。
@@ -23,7 +25,9 @@ export const NESTED_EDITOR_NODES = [
 	CodeNode,
 	CodeHighlightNode,
 	LinkNode,
-	HorizontalRuleNode
+	HorizontalRuleNode,
+	SpoilerNode,
+	MentionNode
 ];
 
 /**
