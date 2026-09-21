@@ -16,6 +16,7 @@ import {
 	type TextFormatType
 } from 'lexical';
 import { registerRichText } from '@lexical/rich-text';
+import { $isDecoratorNode } from 'lexical';
 import { registerHistory, createEmptyHistoryState } from '@lexical/history';
 import {
 	registerMarkdownShortcuts,
@@ -169,6 +170,13 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 				}
 			} else {
 				root.clear();
+				root.append($createParagraphNode());
+			}
+			// A block decorator as the last root child leaves the caret nowhere to
+			// land (its host is contentEditable=false, and nothing follows it):
+			// guarantee an editable paragraph at the end of the document.
+			const lastChild = root.getLastChild();
+			if (lastChild && $isDecoratorNode(lastChild) && !lastChild.isInline()) {
 				root.append($createParagraphNode());
 			}
 		},

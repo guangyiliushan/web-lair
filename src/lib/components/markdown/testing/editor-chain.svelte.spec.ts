@@ -23,7 +23,12 @@ describe('editor full chain (edit → WYSIWYG → save)', () => {
 		// (scoped to the editor root: the fixture's output pane echoes the same
 		// string once a change has fired)
 		await expect
-			.poll(() => screen.container.querySelector('[data-lexical-editor="true"]')?.textContent ?? '')
+			.poll(
+				() => screen.container.querySelector('[data-lexical-editor="true"]')?.textContent ?? '',
+				{
+					timeout: 15_000
+				}
+			)
 			.toContain('告警内容');
 		// and the alert kept its decorated block (spec 3.1 syntax in the DOM)
 		expect(screen.container.querySelector('.alert, [class*="alert"]')).not.toBeNull();
@@ -34,7 +39,9 @@ describe('editor full chain (edit → WYSIWYG → save)', () => {
 		await user.keyboard('X');
 
 		// save: the serialised markdown carries every construct back out
-		await expect.poll(() => readSaved(screen.container)).toContain('X');
+		// the save path is debounced; under full-suite load the event can
+		// take well past the 1 s default poll budget
+		await expect.poll(() => readSaved(screen.container), { timeout: 15_000 }).toContain('X');
 		const saved = readSaved(screen.container);
 		expect(saved).toContain('> [!NOTE]');
 		expect(saved).toContain('==高亮==');

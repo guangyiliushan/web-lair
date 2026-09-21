@@ -424,3 +424,18 @@
 	background-color: color-mix(in oklab, currentColor 10%, transparent);
 	white-space: nowrap;
 }
+
+/* ── 嵌入卡与 mermaid(批 C)── */
+
+.rich-editor-embed-host {
+	padding: 6px 0;
+}
+
+.rich-editor-mermaid-host {
+	padding: 8px 0;
+}
+
+.rich-editor-mermaid-host .mermaid {
+	display: flex;
+	justify-content: center;
+}

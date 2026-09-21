@@ -13,6 +13,8 @@ import { InlineMathNode } from '$lib/components/markdown/math/inline-math-node';
 import { BlockMathNode } from '$lib/components/markdown/math/block-math-node';
 import { FootnoteRefNode } from '$lib/components/markdown/footnote/footnote-ref-node';
 import { FootnoteInlineNode } from '$lib/components/markdown/footnote/footnote-inline-node';
+import { EmbedNode } from '$lib/components/markdown/embed/embed-node';
+import { MermaidNode } from '$lib/components/markdown/editor/mermaid-block-node';
 
 /** 编辑器节点注册列表（自定义节点见 editor-shared.ts 的拆分说明） */
 export const EDITOR_NODES = [
@@ -35,5 +37,7 @@ export const EDITOR_NODES = [
 	InlineMathNode,
 	BlockMathNode,
 	FootnoteRefNode,
-	FootnoteInlineNode
+	FootnoteInlineNode,
+	EmbedNode,
+	MermaidNode
 ];

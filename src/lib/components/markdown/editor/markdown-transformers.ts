@@ -81,6 +81,12 @@ import {
 	footnoteRefTransformer,
 	footnoteInlineTransformer
 } from '$lib/components/markdown/footnote/footnote-transformers';
+import { decideImage } from '$lib/components/markdown/embed/resolve';
+import { $createEmbedNode } from '$lib/components/markdown/embed/embed-node';
+import {
+	embedTransformer,
+	mermaidTransformer
+} from '$lib/components/markdown/editor/embed-mermaid-transformers';
 import { parseAlertMarker } from '$lib/components/markdown/alert/alert-types';
 import { EDITOR_THEME, NESTED_EDITOR_NODES } from '$lib/components/markdown/editor/editor-shared';
 
@@ -219,6 +225,15 @@ export const imageTransformer: ElementTransformer = {
 		const alt = match[1] ?? '';
 		const src = match[2] ?? '';
 		const tail = (match[3] ?? '').trim();
+		const decision = decideImage({ url: src, tailAttrs: tail || undefined });
+		if (decision.kind === 'embed') {
+			// spec 3.4: a provider or generic card instead of an image
+			const embed = $createEmbedNode(src, alt, decision.provider, tail);
+			parentNode.replace(embed);
+			// no caret nudge: this transformer only ever runs on import (the same
+			// pre-existing characteristic as the image path below)
+			return;
+		}
 		const image = $createImageNode(src, alt, tail);
 		parentNode.replace(image);
 		// 打字路径且图片位于文末时，补一个空段落承接光标
@@ -399,7 +414,9 @@ export const NESTED_EDITOR_TRANSFORMERS: Transformer[] = [
 	mathParenTransformer,
 	mathBlockTransformer,
 	footnoteRefTransformer,
-	footnoteInlineTransformer
+	footnoteInlineTransformer,
+	embedTransformer,
+	mermaidTransformer
 ];
 
 // 复用的临时嵌套编辑器（headless，无 DOM）。
@@ -611,5 +628,7 @@ export const EDITOR_TRANSFORMERS: Transformer[] = [
 	mathBlockTransformer,
 	footnoteRefTransformer,
 	footnoteInlineTransformer,
+	embedTransformer,
+	mermaidTransformer,
 	...TRANSFORMERS
 ];

@@ -536,6 +536,47 @@ describe('live-form trigger regexes (batch B)', () => {
 	});
 });
 
+describe('embed cards and mermaid in the editor (batch C)', () => {
+	it('converts a provider URL image into an embed card node', () => {
+		const md = '![sveltejs/svelte](https://github.com/sveltejs/svelte)';
+		expect(treeTypes(md)).toContain('embed');
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('keeps tail attributes on an embed card through the roundtrip', () => {
+		const md = '![t](https://example.com/x) {width=100}';
+		expect(treeTypes(md)).toContain('embed');
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('converts an unmatched non-image URL into a generic embed card', () => {
+		expect(treeTypes('![示例站点](https://example.com/some/page)')).toContain('embed');
+	});
+
+	it('keeps real images as image nodes', () => {
+		const md = '![图](https://example.com/a.png)';
+		expect(treeTypes(md)).toContain('image');
+		expect(treeTypes(md)).not.toContain('embed');
+	});
+
+	it('converts a mermaid fence into a mermaid node and roundtrips', () => {
+		const md = ['```mermaid', 'flowchart LR', '	A --> B', '```'].join(String.fromCharCode(10));
+		expect(treeTypes(md)).toContain('mermaid');
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('imports unterminated mermaid fences as diagrams (render pipeline parity)', () => {
+		const md = ['```mermaid', 'flowchart LR', '	A --> B'].join(String.fromCharCode(10));
+		expect(treeTypes(md)).toContain('mermaid');
+	});
+
+	it('keeps other fenced languages as code nodes', () => {
+		const md = ['```ts', 'const x = 1;', '```'].join(String.fromCharCode(10));
+		expect(treeTypes(md)).toContain('code');
+		expect(treeTypes(md)).not.toContain('mermaid');
+	});
+});
+
 describe('alert json <-> markdown helpers', () => {
 	it('converts markdown to alert json and back', () => {
 		const json = markdownToAlertJson('- 项一\n- 项二\n\n段落');
