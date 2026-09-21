@@ -81,9 +81,10 @@
 	 */
 	function enhanceCarousels(article: HTMLElement): void {
 		article.querySelectorAll<HTMLElement>('[data-layout="carousel"]').forEach((carousel) => {
-			if (carousel.hasAttribute('tabindex')) return;
-			// zero-JS scrolling is native once focusable; the ARIA surface is
-			// static, so no scripting is required for the piece to work (7)
+			// Scrolling itself needs no scripting (native overflow); the
+			// attributes set here are the static ARIA surface 7 asks for and
+			// are simply absent with scripting off - the same trade the tabs
+			// enhancer makes.
 			carousel.setAttribute('tabindex', '0');
 			carousel.setAttribute('role', 'region');
 			carousel.setAttribute('aria-roledescription', m.md_carousel());

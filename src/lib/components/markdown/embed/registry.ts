@@ -9,7 +9,7 @@
  * spec table itself is domain-only (tmdb, qq-music, netease-music). Adding a
  * provider requires amending the spec table and passing the conflict audit,
  * so this list is the single source shared by the decision function, the
- * tests and (later) the favicon proxy allowlist.
+ * tests and the favicon proxy allowlist.
  */
 
 export type EmbedProviderId =

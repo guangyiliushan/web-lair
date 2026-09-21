@@ -105,6 +105,8 @@ describe('embed card mounting (spec 3.4/7)', () => {
 			expect(sandbox).not.toContain('allow-top-navigation');
 			expect(sandbox).not.toContain('allow-popups-to-escape-sandbox');
 			expect(iframe!.getAttribute('referrerpolicy')).toBe('no-referrer');
+			// the accepted trade: no resize handshake without widgets.js
+			expect(getComputedStyle(iframe!).height).toBe('550px');
 		} finally {
 			unmountFns.pop()?.();
 		}
@@ -133,8 +135,8 @@ describe('embed card mounting (spec 3.4/7)', () => {
 				expect(hostEn.querySelector('button.embed-load')).toBeNull();
 			} finally {
 				unmountFns.pop()?.();
+				overwriteGetLocale(() => 'zh-cn');
 			}
-			overwriteGetLocale(() => 'zh-cn');
 		} finally {
 			unmountFns.pop()?.();
 		}

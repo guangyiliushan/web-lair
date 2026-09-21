@@ -832,6 +832,13 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['data-layout="masonry"', 'data-type="images"', 'data-rows="2"']
 	},
 	{
+		id: 'l2-grid-space-form-disabled',
+		spec: '§3.2',
+		input: '::: grid {cols=3}\n![x](https://example.com/a.png)\n:::',
+		contains: [':::', '<p>'],
+		notContains: ['md-grid']
+	},
+	{
 		id: 'l2-grid-unknown-key-ignored',
 		spec: '§3.2',
 		input: ':::grid{cols=2 bogus=9}\n内容\n:::',

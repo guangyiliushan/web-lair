@@ -37,24 +37,25 @@ describe('grid layouts (spec 3.2 / 7)', () => {
 
 	it('flows masonry through CSS columns with the requested count', async () => {
 		const host = await mountRenderer(
-			':::grid{cols=3 layout=masonry}\n![](https://example.com/a.png)\n\n![](https://example.com/b.png)\n:::'
+			':::grid{cols=3 gap=8 layout=masonry}\n![](https://example.com/a.png)\n\n![](https://example.com/b.png)\n:::'
 		);
 		const grid = gridOf(host);
 		expect(styleOf(grid).columnCount).toBe('3');
-		expect(styleOf(grid).columnGap).toBe('16px');
+		expect(styleOf(grid).columnGap).toBe('8px');
 		const item = grid.querySelector('p, img')!.closest('*')!;
 		expect(styleOf(item).breakInside).toBe('avoid');
 	});
 
 	it('turns carousel into a snap-scrolling strip sized by cols', async () => {
 		const host = await mountRenderer(
-			':::grid{cols=3 layout=carousel}\n![](https://example.com/a.png)\n\n![](https://example.com/b.png)\n:::'
+			':::grid{cols=3 gap=8 layout=carousel}\n![](https://example.com/a.png)\n\n![](https://example.com/b.png)\n:::'
 		);
 		const grid = gridOf(host);
 		const style = styleOf(grid);
 		expect(style.display).toBe('flex');
 		expect(style.overflowX).toBe('auto');
 		expect(style.scrollSnapType).toContain('x mandatory');
+		expect(style.gap).toBe('8px');
 		const items = Array.from(grid.children) as HTMLElement[];
 		expect(items.length).toBeGreaterThan(0);
 		expect(styleOf(items[0]).scrollSnapAlign).toBe('start');
@@ -62,6 +63,14 @@ describe('grid layouts (spec 3.2 / 7)', () => {
 		const ratio = items[0].getBoundingClientRect().width / grid.getBoundingClientRect().width;
 		expect(ratio).toBeGreaterThan(0.25);
 		expect(ratio).toBeLessThan(0.4);
+	});
+
+	it('a shorter closing fence does not close a deeper container', async () => {
+		const host = await mountRenderer(':::details{summary="s"}\n甲\n::\n乙\n:::');
+		const details = host.querySelector('details, .md-details');
+		expect(details).not.toBeNull();
+		expect(details!.textContent).toContain('甲');
+		expect(details!.textContent).toContain('乙');
 	});
 
 	it('gives the carousel its ARIA surface from the mount layer', async () => {

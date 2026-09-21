@@ -21,6 +21,7 @@
 		type EmbedProviderId
 	} from '$lib/components/markdown/embed/registry';
 	import { m } from '$lib/paraglide/messages';
+	import { cn } from '$lib/utils';
 
 	let {
 		provider,
@@ -70,7 +71,7 @@
 			return bv ? `https://player.bilibili.com/player.html?bvid=${bv}` : null;
 		}
 		if (provider === 'tweet') {
-			const id = url.match(/status(?:es)?\/(\d+)/)?.[1];
+			const id = url.match(/status\/(\d+)/)?.[1];
 			return id ? `https://platform.twitter.com/embed/Tweet.html?id=${id}&dnt=true` : null;
 		}
 		return null;
@@ -105,7 +106,7 @@
 	<iframe
 		bind:this={iframeEl}
 		tabindex="-1"
-		class="embed-iframe {provider === 'tweet' ? 'embed-iframe-tweet' : ''}"
+		class={cn('embed-iframe', provider === 'tweet' && 'embed-iframe-tweet')}
 		{src}
 		{title}
 		loading="lazy"
@@ -202,7 +203,6 @@
 	}
 	/* no widgets.js means no resize handshake: a fixed height for tweets */
 	.embed-iframe-tweet {
-		aspect-ratio: auto;
 		height: 550px;
 	}
 	@media (prefers-reduced-motion: reduce) {
