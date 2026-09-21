@@ -5,11 +5,9 @@ import {
 	type NodeKey,
 	type SerializedLexicalNode
 } from 'lexical';
-import { mount, unmount } from 'svelte';
+import { mountDecorator } from '$lib/components/markdown/editor/decorator-mount';
 import EmbedCard from './EmbedCard.svelte';
 import type { EmbedProviderId } from './registry';
-
-type MountedDecoratorHandle = Record<string, unknown>;
 
 export interface SerializedEmbedNode extends SerializedLexicalNode {
 	type: 'embed';
@@ -31,8 +29,6 @@ export class EmbedNode extends DecoratorNode<HTMLElement> {
 	__title: string;
 	__provider: EmbedProviderId | 'generic';
 	__tail: string;
-	/** @internal Svelte component handle; not serialised. */
-	__svelteComp: MountedDecoratorHandle | null = null;
 
 	static getType(): string {
 		return 'embed';
@@ -109,25 +105,18 @@ export class EmbedNode extends DecoratorNode<HTMLElement> {
 
 	decorate(editor: LexicalEditor, config: EditorConfig): HTMLElement {
 		void config;
-		if (this.__svelteComp) {
-			try {
-				unmount(this.__svelteComp);
-			} catch {
-				// ignore stale unmounts
-			}
-			this.__svelteComp = null;
-		}
 		const container = document.createElement('div');
-		try {
-			this.__svelteComp = mount(EmbedCard, {
-				target: container,
-				props: { provider: this.__provider, url: this.__url, title: this.__title },
-				intro: false
-			});
-		} catch (error) {
-			console.error('EmbedNode: failed to mount EmbedCard', error);
-			container.textContent = this.__url;
-		}
+		mountDecorator(
+			this,
+			EmbedCard,
+			container,
+			{
+				provider: this.__provider,
+				url: this.__url,
+				title: this.__title
+			},
+			'⚠ 嵌入卡加载失败，按 Backspace 删除此块'
+		);
 		const hostEl = editor.getElementByKey(this.__key);
 		if (hostEl) {
 			hostEl.textContent = '';

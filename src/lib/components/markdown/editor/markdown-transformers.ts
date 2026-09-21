@@ -87,6 +87,11 @@ import {
 	embedTransformer,
 	mermaidTransformer
 } from '$lib/components/markdown/editor/embed-mermaid-transformers';
+import { detailsTransformer } from '$lib/components/markdown/details/details-transformers';
+import {
+	tabsTransformer,
+	gridTransformer
+} from '$lib/components/markdown/grid/container-transformers';
 import { parseAlertMarker } from '$lib/components/markdown/alert/alert-types';
 import { EDITOR_THEME, NESTED_EDITOR_NODES } from '$lib/components/markdown/editor/editor-shared';
 
@@ -416,7 +421,10 @@ export const NESTED_EDITOR_TRANSFORMERS: Transformer[] = [
 	footnoteRefTransformer,
 	footnoteInlineTransformer,
 	embedTransformer,
-	mermaidTransformer
+	mermaidTransformer,
+	detailsTransformer,
+	tabsTransformer,
+	gridTransformer
 ];
 
 // 复用的临时嵌套编辑器（headless，无 DOM）。
@@ -436,24 +444,41 @@ function getNestedTempEditor(): LexicalEditor {
 }
 
 /** Markdown → Alert 嵌套编辑器 editorState JSON（解析失败时降级为纯文本段落） */
+/** Guards reentrancy: a container transformer runs this while the shared
+ * temp editor is mid-update, which would swallow nested fences. */
+let nestedTempDepth = 0;
+
 export function markdownToAlertJson(markdown: string): string {
-	const editor = getNestedTempEditor();
-	editor.update(
-		() => {
-			const root = $getRoot();
-			root.clear();
-			try {
-				$convertFromMarkdownString(markdown, NESTED_EDITOR_TRANSFORMERS);
-			} catch {
+	const editor =
+		nestedTempDepth > 0
+			? createEditor({
+					namespace: 'markdown-nested-oneoff',
+					nodes: NESTED_EDITOR_NODES,
+					theme: EDITOR_THEME,
+					onError: (error: Error) => console.error('One-off nested editor error:', error)
+				})
+			: getNestedTempEditor();
+	nestedTempDepth += 1;
+	try {
+		editor.update(
+			() => {
+				const root = $getRoot();
 				root.clear();
-				const p = $createParagraphNode();
-				p.append($createTextNode(markdown));
-				root.append(p);
-			}
-		},
-		{ discrete: true }
-	);
-	return JSON.stringify(editor.getEditorState().toJSON());
+				try {
+					$convertFromMarkdownString(markdown, NESTED_EDITOR_TRANSFORMERS);
+				} catch {
+					root.clear();
+					const p = $createParagraphNode();
+					p.append($createTextNode(markdown));
+					root.append(p);
+				}
+			},
+			{ discrete: true }
+		);
+		return JSON.stringify(editor.getEditorState().toJSON());
+	} finally {
+		nestedTempDepth -= 1;
+	}
 }
 
 /** Alert 嵌套编辑器 editorState JSON → Markdown（JSON 非法时返回空串） */
@@ -630,5 +655,8 @@ export const EDITOR_TRANSFORMERS: Transformer[] = [
 	footnoteInlineTransformer,
 	embedTransformer,
 	mermaidTransformer,
+	detailsTransformer,
+	tabsTransformer,
+	gridTransformer,
 	...TRANSFORMERS
 ];

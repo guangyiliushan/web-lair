@@ -577,6 +577,123 @@ describe('embed cards and mermaid in the editor (batch C)', () => {
 	});
 });
 
+describe('containers in the editor (batch D)', () => {
+	it('converts a details directive into a details node and roundtrips', () => {
+		const md = [':::details{summary="更多信息"}', '详情内容', ':::'].join(String.fromCharCode(10));
+		expect(treeTypes(md)).toContain('details');
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('converts the spoiler sugar into a details node and roundtrips', () => {
+		const md = [':::spoiler{label="点我"}', '剧透内容', ':::'].join(String.fromCharCode(10));
+		expect(treeTypes(md)).toContain('details');
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('keeps the open flag and the default summary through the roundtrip', () => {
+		const md = [':::details{summary="展开" open}', '内容', ':::'].join(String.fromCharCode(10));
+		expect(roundtrip(md)).toBe(md);
+		const bare = [':::details', '内容', ':::'].join(String.fromCharCode(10));
+		expect(roundtrip(bare)).toBe(bare);
+		expect(treeTypes(bare)).toContain('details');
+	});
+
+	it('converts a tabs block with tab children and roundtrips', () => {
+		const md = [
+			'::::tabs',
+			':::tab{label="第一个标签"}',
+			'第一页内容。',
+			':::',
+			':::tab{label="第二个标签"}',
+			'第二页内容。',
+			':::',
+			'::::'
+		].join(String.fromCharCode(10));
+		expect(treeTypes(md)).toContain('tabs');
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('does not invent an open flag from a quoted value (batch D fix)', () => {
+		const md = [':::details{summary="See open door"}', '内容', ':::'].join(String.fromCharCode(10));
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('treats any open form as open and keeps the source bytes (batch D fix)', () => {
+		const md = [':::details{summary="x" open=true}', '内容', ':::'].join(String.fromCharCode(10));
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('preserves out-of-range and unknown grid keys (batch D fix)', () => {
+		const md = [':::grid{cols=99 gap=7 bogus=9}', '内容', ':::'].join(String.fromCharCode(10));
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('preserves unknown details keys (batch D fix)', () => {
+		const md = [':::details{label="甲"}', '内容', ':::'].join(String.fromCharCode(10));
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('accepts a grid without braces (batch D fix)', () => {
+		const md = [':::grid', '内容', ':::'].join(String.fromCharCode(10));
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('keeps both nested containers in one alert body (batch D fix)', () => {
+		const md = [
+			'> [!NOTE] 标题',
+			'> :::grid{cols=2}',
+			'> 甲',
+			'> :::',
+			'> :::grid{cols=3}',
+			'> 乙',
+			'> :::'
+		].join(String.fromCharCode(10));
+		expect(treeTypes(md)).toContain('alert');
+		const out = roundtrip(md);
+		expect(out).toContain(':::grid{cols=2}');
+		expect(out).toContain(':::grid{cols=3}');
+		expect(out).toContain('甲');
+		expect(out).toContain('乙');
+	});
+
+	it('converts a grid block with parameters and roundtrips', () => {
+		const md = [
+			':::grid{cols=2 gap=8 layout=grid type=images}',
+			'![图一](https://example.com/a.png)',
+			'![图二](https://example.com/b.png)',
+			':::'
+		].join(String.fromCharCode(10));
+		expect(treeTypes(md)).toContain('grid');
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('nests a container inside an alert body through the reentrant path', () => {
+		const md = ['> [!NOTE] 标题', '> :::grid{cols=2}', '> 内容', '> :::'].join(
+			String.fromCharCode(10)
+		);
+		expect(treeTypes(md)).toContain('alert');
+		expect(roundtrip(md)).toBe(md);
+	});
+
+	it('keeps the legacy space dialect literal (render parity)', () => {
+		const legacyGrid = [':::grid {cols=2}', '内容', ':::'].join(String.fromCharCode(10));
+		expect(treeTypes(legacyGrid)).not.toContain('grid');
+		expect(roundtrip(legacyGrid)).toBe(legacyGrid);
+		const legacyDetails = [':::details summary="旧形态"', '内容', ':::'].join(
+			String.fromCharCode(10)
+		);
+		expect(treeTypes(legacyDetails)).not.toContain('details');
+	});
+
+	it('keeps retired or unknown directives literal', () => {
+		const center = [':::center', '居中内容', ':::'].join(String.fromCharCode(10));
+		expect(treeTypes(center)).not.toContain('details');
+		expect(roundtrip(center)).toBe(center);
+		const unknown = [':::whatever', '内容', ':::'].join(String.fromCharCode(10));
+		expect(treeTypes(unknown)).not.toContain('details');
+	});
+});
+
 describe('alert json <-> markdown helpers', () => {
 	it('converts markdown to alert json and back', () => {
 		const json = markdownToAlertJson('- 项一\n- 项二\n\n段落');
