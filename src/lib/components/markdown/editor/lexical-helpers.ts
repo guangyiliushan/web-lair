@@ -216,14 +216,16 @@ export function insertMath(editor: LexicalEditor, latex: string) {
 	editor.update(() => {
 		const selection = $getSelection();
 		if (!$isRangeSelection(selection)) return;
-		const paragraph = $createParagraphNode();
-		paragraph.append($createTextNode(`$$ ${latex} $$`));
+		const node = $createBlockMathNode(latex);
 		const block = $getTopLevelBlockFromSelection();
 		if (block) {
-			block.insertAfter(paragraph);
+			block.insertAfter(node);
 		} else {
-			selection.insertNodes([paragraph]);
+			$getRoot().append(node);
 		}
+		// decorator nodes have no select(): leave a paragraph for the caret
+		const paragraph = $createParagraphNode();
+		node.insertAfter(paragraph);
 		paragraph.select();
 	});
 }
@@ -244,9 +246,14 @@ export function insertTag(editor: LexicalEditor) {
 
 export { $createAlertNode, $isAlertNode };
 
-import { $isTextNode } from 'lexical';
+import { $getNodeByKey, $getRoot, $isTextNode } from 'lexical';
 import { $createSpoilerNode, $isSpoilerNode } from '$lib/components/markdown/spoiler/spoiler-node';
 import { $isMentionNode } from '$lib/components/markdown/mention/mention-node';
+import {
+	$createBlockMathNode,
+	$isBlockMathNode
+} from '$lib/components/markdown/math/block-math-node';
+import { $isInlineMathNode } from '$lib/components/markdown/math/inline-math-node';
 
 /**
  * Toggle the spoiler node over the current selection (batch A).
@@ -335,6 +342,27 @@ export function insertAlert(editor: LexicalEditor, type: AlertType = DEFAULT_ALE
 		const alertNode = $createAlertNode(type, createDefaultAlertContent());
 		// same root-level contract as the code block insert (no selection guard)
 		$insertNodeToNearestRoot(alertNode);
+	});
+}
+
+/** Reads an inline/block math node for the click-to-edit dialog (batch B). */
+export function getMathNodeInfo(
+	editor: LexicalEditor,
+	key: string
+): { latex: string; displayMode: boolean } | null {
+	return editor.getEditorState().read(() => {
+		const node = $getNodeByKey(key);
+		if ($isInlineMathNode(node)) return { latex: node.getLatex(), displayMode: false };
+		if ($isBlockMathNode(node)) return { latex: node.getLatex(), displayMode: true };
+		return null;
+	});
+}
+
+/** Applies the dialog's LaTeX back onto the math node (batch B). */
+export function updateMathNode(editor: LexicalEditor, key: string, latex: string): void {
+	editor.update(() => {
+		const node = $getNodeByKey(key);
+		if ($isInlineMathNode(node) || $isBlockMathNode(node)) node.setLatex(latex);
 	});
 }
 

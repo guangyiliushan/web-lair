@@ -20,6 +20,14 @@ import { EDITOR_NODES } from './editor-nodes';
 import { $createSpoilerNode } from '$lib/components/markdown/spoiler/spoiler-node';
 import { toggleSpoiler } from '$lib/components/markdown/editor/lexical-helpers';
 import {
+	mathInlineTransformer,
+	mathParenTransformer
+} from '$lib/components/markdown/math/math-transformers';
+import {
+	footnoteRefTransformer,
+	footnoteInlineTransformer
+} from '$lib/components/markdown/footnote/footnote-transformers';
+import {
 	EDITOR_TRANSFORMERS,
 	tagTransformer,
 	alertTransformer,
@@ -457,6 +465,74 @@ describe('mark transformer (==x== <-> highlight)', () => {
 	it('keeps plain == untouched in editor roundtrip', () => {
 		// the editor does no flanking checks (micromark guarantees them when rendering)
 		expect(roundtrip('a == b == c')).toBe('a == b == c');
+	});
+});
+
+describe('math and footnote nodes (batch B)', () => {
+	it('converts $x$ into an inline math node and roundtrips', () => {
+		expect(treeTypes('$x$')).toContain('inline-math');
+		expect(roundtrip('$x$')).toBe('$x$');
+	});
+
+	it('keeps the paren notation on export (no source rewriting)', () => {
+		expect(treeTypes('\\(x\\)')).toContain('inline-math');
+		expect(roundtrip('\\(x\\)')).toBe('\\(x\\)');
+	});
+
+	it('accepts padded math content like micromark and keeps it byte-stable', () => {
+		expect(treeTypes('公式 $ x $ 结束')).toContain('inline-math');
+		expect(roundtrip('公式 $ x $ 结束')).toBe('公式 $ x $ 结束');
+		expect(roundtrip('$$ x $$')).toBe('$$ x $$');
+		expect(roundtrip('公式 \\( x \\) 结束')).toBe('公式 \\( x \\) 结束');
+	});
+
+	it('converts a standalone $$x$$ paragraph into a block math node', () => {
+		expect(treeTypes('$$x$$')).toContain('block-math');
+		expect(roundtrip('$$x$$')).toBe('$$x$$');
+	});
+
+	it('mirrors the render guards: price-like and glued forms stay literal', () => {
+		expect(treeTypes('价格 $5 和 $6 元')).not.toContain('inline-math');
+		expect(treeTypes('a$b$')).not.toContain('inline-math');
+		expect(treeTypes('a$b$1')).not.toContain('inline-math');
+		expect(roundtrip('价格 $5 和 $6 元')).toBe('价格 $5 和 $6 元');
+	});
+
+	it('converts footnote refs into a node and keeps the definition line stable', () => {
+		expect(treeTypes('正文[^note] 结束')).toContain('footnote-ref');
+		expect(treeTypes('[^note]: 定义文本')).not.toContain('footnote-ref');
+		expect(roundtrip('正文[^note] 结束\n\n[^note]: 定义文本')).toBe(
+			'正文[^note] 结束\n\n[^note]: 定义文本'
+		);
+	});
+
+	it('converts inline footnotes into a node and roundtrips', () => {
+		expect(treeTypes('文末^[行内脚注] 之后')).toContain('footnote-inline');
+		expect(roundtrip('文末^[行内脚注] 之后')).toBe('文末^[行内脚注] 之后');
+	});
+
+	it('keeps the double-backslash paren form literal', () => {
+		expect(treeTypes('\\\\(x\\\\)')).not.toContain('inline-math');
+	});
+
+	it('leaves escaped math and footnote openers literal', () => {
+		expect(treeTypes('\\$x\\$')).not.toContain('inline-math');
+		expect(treeTypes('\\[^a]')).not.toContain('footnote-ref');
+	});
+});
+
+describe('live-form trigger regexes (batch B)', () => {
+	it('pins math live forms and their guards', () => {
+		expect(mathInlineTransformer.regExp?.test('$x$')).toBe(true);
+		expect(mathInlineTransformer.regExp?.test('价格 $5 元')).toBe(false);
+		expect(mathParenTransformer.regExp?.test('\\(x\\)')).toBe(true);
+	});
+
+	it('pins footnote live forms and the escape guard', () => {
+		expect(footnoteRefTransformer.regExp?.test('[^a]')).toBe(true);
+		expect(footnoteRefTransformer.regExp?.test('\\[^a]')).toBe(false);
+		expect(footnoteInlineTransformer.regExp?.test('^[行内]')).toBe(true);
+		expect(footnoteInlineTransformer.regExp?.test('x^[行内]')).toBe(true);
 	});
 });
 

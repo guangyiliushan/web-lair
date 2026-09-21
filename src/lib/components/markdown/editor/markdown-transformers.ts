@@ -72,6 +72,15 @@ import {
 	$createAlertNode,
 	$isAlertNode
 } from '$lib/components/markdown/alert/alert-node';
+import {
+	mathInlineTransformer,
+	mathParenTransformer,
+	mathBlockTransformer
+} from '$lib/components/markdown/math/math-transformers';
+import {
+	footnoteRefTransformer,
+	footnoteInlineTransformer
+} from '$lib/components/markdown/footnote/footnote-transformers';
 import { parseAlertMarker } from '$lib/components/markdown/alert/alert-types';
 import { EDITOR_THEME, NESTED_EDITOR_NODES } from '$lib/components/markdown/editor/editor-shared';
 
@@ -385,7 +394,12 @@ export const NESTED_EDITOR_TRANSFORMERS: Transformer[] = [
 	...TRANSFORMERS,
 	hrTransformer,
 	spoilerTransformer,
-	mentionTransformer
+	mentionTransformer,
+	mathInlineTransformer,
+	mathParenTransformer,
+	mathBlockTransformer,
+	footnoteRefTransformer,
+	footnoteInlineTransformer
 ];
 
 // 复用的临时嵌套编辑器（headless，无 DOM）。
@@ -592,5 +606,10 @@ export const EDITOR_TRANSFORMERS: Transformer[] = [
 	tableTransformer,
 	superscriptTransformer,
 	subscriptTransformer,
+	mathInlineTransformer,
+	mathParenTransformer,
+	mathBlockTransformer,
+	footnoteRefTransformer,
+	footnoteInlineTransformer,
 	...TRANSFORMERS
 ];

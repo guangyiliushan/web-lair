@@ -47,6 +47,11 @@ export default defineConfig({
 					// loaded (concurrent suites, review probes): the 15 s
 					// default turns slow-but-correct runs into false negatives.
 					testTimeout: 30000
+				},
+				// Lazy imports (KaTeX, mermaid) otherwise trigger a dep-optimizer pass
+				// mid-test under full-suite load, blowing the 30 s test timeout.
+				optimizeDeps: {
+					include: ['katex', 'mermaid']
 				}
 			},
 			{

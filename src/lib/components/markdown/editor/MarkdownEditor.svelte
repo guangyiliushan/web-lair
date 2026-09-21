@@ -16,16 +16,14 @@
 	// Lexical 编辑器全局样式（由 PostCSS 处理 @apply / Tailwind 指令）
 	import '$lib/components/markdown/editor/lexical-editor.css';
 
-	import {
-		$getRoot as getLexicalRoot,
-		$createParagraphNode as createLexicalParagraph,
-		$createTextNode as createLexicalText
-	} from 'lexical';
-	import {
-		$convertToMarkdownString as convertToMarkdown,
-		$convertFromMarkdownString as convertFromMarkdown
-	} from '@lexical/markdown';
+	import { $convertToMarkdownString as convertToMarkdown } from '@lexical/markdown';
 	import { EDITOR_TRANSFORMERS } from '$lib/components/markdown/editor/markdown-transformers';
+	import { getMathNodeInfo, updateMathNode } from '$lib/components/markdown/editor/lexical-helpers';
+	import MathEditDialog from '$lib/components/markdown/toolbar/MathEditDialog.svelte';
+	import {
+		MATH_EDIT_EVENT,
+		type MathEditEventDetail
+	} from '$lib/components/markdown/math/math-render';
 
 	let {
 		value,
@@ -52,6 +50,8 @@
 	let editor: LexicalEditor | null = $state(null);
 	let codeMode = $state(false);
 	let codeModeText = $state('');
+	/** Code-mode edits handed to the rebuilt editor after leaving code mode. */
+	let pendingMarkdown = $state<string | null>(null);
 
 	// ── 代码模式行号 gutter ──
 	const lineNumbers = $derived(
@@ -63,6 +63,7 @@
 
 	function handleEditorReady(e: LexicalEditor) {
 		editor = e;
+		pendingMarkdown = null;
 	}
 
 	// ── Block Handle Toolbar: portal to document.body ──
@@ -103,23 +104,9 @@
 				codeModeText = convertToMarkdown(EDITOR_TRANSFORMERS);
 			});
 		} else {
-			// 退出代码模式：将编辑后的 markdown 解析回 Lexical 节点树
-			editor?.update(
-				() => {
-					const root = getLexicalRoot();
-					root.clear();
-					try {
-						convertFromMarkdown(codeModeText, EDITOR_TRANSFORMERS);
-					} catch {
-						// 解析失败时作为纯文本回退
-						root.clear();
-						const p = createLexicalParagraph();
-						p.append(createLexicalText(codeModeText));
-						root.append(p);
-					}
-				},
-				{ discrete: true }
-			);
+			// exit: the codeMode branch rebuilds the rich editor; the old instance's
+			// update is a no-op. Hand the source to the rebuild path instead.
+			pendingMarkdown = codeModeText;
 		}
 		codeMode = !codeMode;
 	}
@@ -134,6 +121,33 @@
 			plainText: target.value,
 			isEmpty: !target.value.trim()
 		});
+	}
+
+	// ── 数学编辑（批 B）：点击公式打开编辑对话框 ──
+	let mathDialogOpen = $state(false);
+	let mathNodeKey = $state<string | null>(null);
+	let mathLatex = $state('');
+	let mathDisplayMode = $state(false);
+
+	$effect(() => {
+		const rootEl = editor?.getRootElement();
+		if (!rootEl) return;
+		const onMathEdit = (event: Event) => {
+			const detail = (event as CustomEvent<MathEditEventDetail>).detail;
+			if (!detail?.key || !editor) return;
+			const info = getMathNodeInfo(editor, detail.key);
+			if (!info) return;
+			mathNodeKey = detail.key;
+			mathLatex = info.latex;
+			mathDisplayMode = info.displayMode;
+			mathDialogOpen = true;
+		};
+		rootEl.addEventListener(MATH_EDIT_EVENT, onMathEdit);
+		return () => rootEl.removeEventListener(MATH_EDIT_EVENT, onMathEdit);
+	});
+
+	function handleMathSave(latex: string) {
+		if (editor && mathNodeKey) updateMathNode(editor, mathNodeKey, latex);
 	}
 </script>
 
@@ -190,7 +204,7 @@
 			<!-- 富文本模式：Lexical 编辑器 -->
 			<div
 				use:lexicalEditor={{
-					initialMarkdown: value ?? initialMarkdown,
+					initialMarkdown: pendingMarkdown ?? value ?? initialMarkdown,
 					editable,
 					placeholder,
 					autofocus,
@@ -213,4 +227,11 @@
 			></div>
 		{/if}
 	</div>
+
+	<MathEditDialog
+		bind:open={mathDialogOpen}
+		initialLatex={mathLatex}
+		displayMode={mathDisplayMode}
+		onSave={handleMathSave}
+	/>
 </div>

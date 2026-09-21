@@ -6,6 +6,10 @@ import { CodeNode, CodeHighlightNode } from '@lexical/code';
 import { HorizontalRuleNode } from '@lexical/extension';
 import { SpoilerNode } from '$lib/components/markdown/spoiler/spoiler-node';
 import { MentionNode } from '$lib/components/markdown/mention/mention-node';
+import { InlineMathNode } from '$lib/components/markdown/math/inline-math-node';
+import { BlockMathNode } from '$lib/components/markdown/math/block-math-node';
+import { FootnoteRefNode } from '$lib/components/markdown/footnote/footnote-ref-node';
+import { FootnoteInlineNode } from '$lib/components/markdown/footnote/footnote-inline-node';
 
 /**
  * 嵌套编辑器节点子集与 Theme 配置。
@@ -27,7 +31,11 @@ export const NESTED_EDITOR_NODES = [
 	LinkNode,
 	HorizontalRuleNode,
 	SpoilerNode,
-	MentionNode
+	MentionNode,
+	InlineMathNode,
+	BlockMathNode,
+	FootnoteRefNode,
+	FootnoteInlineNode
 ];
 
 /**
