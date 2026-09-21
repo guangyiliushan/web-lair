@@ -3,10 +3,17 @@
 	 * Embed card component (spec 3.4) — mounted over the placeholder anchors
 	 * produced by remark-image-embed. Everything renders from the URL itself:
 	 * no data fetch, no third-party script, no request until a facade click
-	 * (spec 6). Facades (youtube, bilibili) build their embed source from the
-	 * URL and mount a sandboxed iframe only after the explicit click; every
-	 * other provider stays a readable link card (tweet's real widget needs a
-	 * third-party script — a recorded follow-up).
+	 * (spec 6). Facades (youtube, bilibili, tweet) build their embed source
+	 * from the URL and mount a sandboxed iframe only after the explicit
+	 * click; every other provider stays a readable link card.
+	 *
+	 * The tweet facade loads platform.twitter.com/embed/Tweet.html directly -
+	 * the same document the official widgets.js renders into its frame, but
+	 * without injecting Twitter's script into this page (the script route
+	 * would run third-party JS in the main world; the iframe stays sandboxed
+	 * and dnt=true). The frame gets a fixed height: without widgets.js there
+	 * is no resize handshake, so short tweets leave some empty space - the
+	 * accepted trade for keeping the no-third-party-script contract.
 	 */
 	import {
 		canonicalHost,
@@ -51,6 +58,10 @@
 			const bv = url.match(/\/video\/(BV[0-9A-Za-z]+)/)?.[1];
 			return bv ? `https://player.bilibili.com/player.html?bvid=${bv}` : null;
 		}
+		if (provider === 'tweet') {
+			const id = url.match(/status(?:es)?\/(\d+)/)?.[1];
+			return id ? `https://platform.twitter.com/embed/Tweet.html?id=${id}&dnt=true` : null;
+		}
 		return null;
 	}
 	const src = $derived(facadeSrc());
@@ -83,10 +94,11 @@
 	<iframe
 		bind:this={iframeEl}
 		tabindex="-1"
-		class="embed-iframe"
+		class="embed-iframe {provider === 'tweet' ? 'embed-iframe-tweet' : ''}"
 		{src}
 		{title}
 		loading="lazy"
+		referrerpolicy="no-referrer"
 		sandbox="allow-scripts allow-same-origin allow-presentation"
 		allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
 	></iframe>
@@ -174,6 +186,11 @@
 		margin-block: 1rem;
 		opacity: 1;
 		transition: opacity 0.2s ease-out;
+	}
+	/* no widgets.js means no resize handshake: a fixed height for tweets */
+	.embed-iframe-tweet {
+		aspect-ratio: auto;
+		height: 550px;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.embed-iframe {

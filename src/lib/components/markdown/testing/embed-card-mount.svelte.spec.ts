@@ -59,6 +59,54 @@ describe('embed card mounting (spec 3.4/7)', () => {
 		}
 	});
 
+	it('extracts the id from the /i/web/status form too', async () => {
+		const host = await mountRenderer('![t](https://x.com/i/web/status/42)');
+		try {
+			const loadButton = host.querySelector('button.embed-load') as HTMLButtonElement | null;
+			expect(loadButton).not.toBeNull();
+			loadButton!.click();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(host.querySelector('iframe')?.getAttribute('src')).toContain('id=42&');
+		} finally {
+			unmountFns.pop()?.();
+		}
+	});
+
+	it('offers the tweet facade and loads the embed iframe only on click', async () => {
+		const host = await mountRenderer('![t](https://x.com/someone/status/1234567890)');
+		try {
+			expect(host.querySelector('.embed-card-mount')).not.toBeNull();
+			expect(host.querySelector('iframe')).toBeNull();
+			// nothing may contact twitter before the explicit click (spec 6)
+			expect(
+				performance
+					.getEntriesByType('resource')
+					.some((entry) => entry.name.includes('platform.twitter.com'))
+			).toBe(false);
+			const loadButton = host.querySelector('button.embed-load') as HTMLButtonElement | null;
+			expect(
+				loadButton,
+				'a tweet facade must offer an explicit click-to-load control'
+			).not.toBeNull();
+			loadButton!.click();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			const iframe = host.querySelector('iframe');
+			expect(iframe).not.toBeNull();
+			const src = iframe!.getAttribute('src') ?? '';
+			expect(src).toContain('platform.twitter.com/embed/Tweet.html');
+			expect(src).toContain('id=1234567890');
+			expect(src).toContain('dnt=true');
+			const sandbox = iframe!.getAttribute('sandbox') ?? '';
+			expect(sandbox).toContain('allow-scripts');
+			// nothing may let the frame navigate or pop out of the page
+			expect(sandbox).not.toContain('allow-top-navigation');
+			expect(sandbox).not.toContain('allow-popups-to-escape-sandbox');
+			expect(iframe!.getAttribute('referrerpolicy')).toBe('no-referrer');
+		} finally {
+			unmountFns.pop()?.();
+		}
+	});
+
 	it('keeps generic cards free of iframes and favicon fetches', async () => {
 		const host = await mountRenderer('![站点](https://unknown.example/page)');
 		try {

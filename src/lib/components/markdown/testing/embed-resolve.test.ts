@@ -22,6 +22,7 @@ const POSITIVES: Record<string, string> = {
 	'https://gist.github.com/user/9f8e7d': 'gh-gist',
 	'https://x.com/user/status/123456': 'tweet',
 	'https://twitter.com/user/status/123456': 'tweet',
+	'https://x.com/i/web/status/42': 'tweet',
 	'https://www.youtube.com/watch?v=dQw4w9WgXcQ': 'youtube',
 	'https://youtu.be/dQw4w9WgXcQ': 'youtube',
 	'https://www.bilibili.com/video/BV1xx411c7mD': 'bilibili',

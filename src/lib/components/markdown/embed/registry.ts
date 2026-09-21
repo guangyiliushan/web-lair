@@ -146,10 +146,14 @@ export const EMBED_PROVIDERS: readonly EmbedProvider[] = [
 	{
 		id: 'tweet',
 		domains: ['x.com', 'twitter.com'],
-		match: (url) =>
-			(host(url) === 'x.com' || host(url) === 'twitter.com') &&
-			segments(url)[1] === 'status' &&
-			numeric(segments(url)[2])
+		// spec 3.4: `/.../status/{id}` - `status` may sit after any prefix
+		// (the /i/web/status/<id> share form is the common one)
+		match: (url) => {
+			if (host(url) !== 'x.com' && host(url) !== 'twitter.com') return false;
+			const segmentsOf = segments(url);
+			const at = segmentsOf.indexOf('status');
+			return at >= 0 && numeric(segmentsOf[at + 1]);
+		}
 	},
 	{
 		id: 'youtube',
