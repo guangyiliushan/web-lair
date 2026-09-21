@@ -20,6 +20,7 @@
 		EMBED_PROVIDER_DOMAINS,
 		type EmbedProviderId
 	} from '$lib/components/markdown/embed/registry';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		provider,
@@ -27,15 +28,20 @@
 		title
 	}: { provider: EmbedProviderId | 'generic'; url: string; title: string } = $props();
 
-	const PROVIDER_LABELS = {
-		'gh-repo': 'GitHub 仓库',
-		'gh-commit': 'GitHub 提交',
-		'gh-pr': 'GitHub PR',
-		'gh-issue': 'GitHub Issue',
-		'gh-discussion': 'GitHub 讨论',
-		'gh-file': 'GitHub 文件',
-		'gh-gist': 'GitHub Gist',
-		tweet: '推文',
+	/**
+	 * Badges carry the brand name only (Q13: the type suffix lives nowhere
+	 * visible); functional text - the generic and own-site labels, the load
+	 * button - goes through paraglide.
+	 */
+	const PROVIDER_BRANDS = {
+		'gh-repo': 'GitHub',
+		'gh-commit': 'GitHub',
+		'gh-pr': 'GitHub',
+		'gh-issue': 'GitHub',
+		'gh-discussion': 'GitHub',
+		'gh-file': 'GitHub',
+		'gh-gist': 'GitHub',
+		tweet: 'X',
 		youtube: 'YouTube',
 		bilibili: '哔哩哔哩',
 		codesandbox: 'CodeSandbox',
@@ -44,10 +50,15 @@
 		bangumi: 'Bangumi',
 		'qq-music': 'QQ 音乐',
 		'netease-music': '网易云音乐',
-		leetcode: 'LeetCode',
-		'mx-space': '站内'
-	} satisfies Record<EmbedProviderId, string>;
-	const label = $derived(provider === 'generic' ? '链接' : PROVIDER_LABELS[provider]);
+		leetcode: 'LeetCode'
+	} satisfies Record<Exclude<EmbedProviderId, 'mx-space'>, string>;
+	const label = $derived(
+		provider === 'generic'
+			? m.md_embed_link()
+			: provider === 'mx-space'
+				? m.md_embed_own_site()
+				: PROVIDER_BRANDS[provider]
+	);
 
 	function facadeSrc(): string | null {
 		if (provider === 'youtube') {
@@ -132,7 +143,9 @@
 		</div>
 		<a class="embed-link" href={url} target="_blank" rel="noopener noreferrer">{url}</a>
 		{#if src}
-			<button type="button" class="embed-load" onclick={() => (loaded = true)}>点击加载</button>
+			<button type="button" class="embed-load" onclick={() => (loaded = true)}
+				>{m.md_embed_load()}</button
+			>
 		{/if}
 	</div>
 {/if}

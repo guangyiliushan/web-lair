@@ -3,6 +3,9 @@ import { mount, unmount } from 'svelte';
 import MarkdownRenderer from '$lib/components/markdown/editor/MarkdownRenderer.svelte';
 import LifecycleFixture from '$lib/components/markdown/testing/embed-lifecycle-fixture.svelte';
 
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
+overwriteGetLocale(() => 'zh-cn');
+
 // Browser-project spec: mounts the real Svelte component (not a raw HTML
 // string) so the client-side enhancement layer is exercised end to end —
 // placeholder anchors must be upgraded to card components, facades must not
@@ -102,6 +105,36 @@ describe('embed card mounting (spec 3.4/7)', () => {
 			expect(sandbox).not.toContain('allow-top-navigation');
 			expect(sandbox).not.toContain('allow-popups-to-escape-sandbox');
 			expect(iframe!.getAttribute('referrerpolicy')).toBe('no-referrer');
+		} finally {
+			unmountFns.pop()?.();
+		}
+	});
+
+	it('badges carry the brand name, functional text follows the locale', async () => {
+		const host = await mountRenderer(
+			'![a](https://github.com/foo/bar)\n\n![b](https://x.com/u/status/1)\n\n![c](https://unknown.example/p)'
+		);
+		try {
+			const badges = [...host.querySelectorAll('.embed-badge')].map((b) => b.textContent);
+			// brand names only (Q13), no functional suffixes
+			expect(badges).toContain('GitHub');
+			expect(badges).toContain('X');
+			expect(badges.join(' ')).not.toContain('仓库');
+			// the generic card's label is functional text, localised
+			expect(badges).toContain('链接');
+			const loadButton = host.querySelector('button.embed-load');
+			expect(loadButton?.textContent).toBe('点击加载');
+
+			// functional text follows the locale; brands do not
+			overwriteGetLocale(() => 'en');
+			const hostEn = await mountRenderer('![c](https://unknown.example/p)');
+			try {
+				expect(hostEn.querySelector('.embed-badge')?.textContent).toBe('Link');
+				expect(hostEn.querySelector('button.embed-load')).toBeNull();
+			} finally {
+				unmountFns.pop()?.();
+			}
+			overwriteGetLocale(() => 'zh-cn');
 		} finally {
 			unmountFns.pop()?.();
 		}
