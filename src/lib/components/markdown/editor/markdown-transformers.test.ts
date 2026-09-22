@@ -32,7 +32,9 @@ import {
 	tagTransformer,
 	alertTransformer,
 	alertJsonToMarkdown,
-	markdownToAlertJson
+	markdownToAlertJson,
+	normalizeChecklistMarkers,
+	$unescapeImportedText
 } from './markdown-transformers';
 
 /**
@@ -49,7 +51,8 @@ function roundtrip(markdown: string): string {
 	});
 	editor.update(
 		() => {
-			$convertFromMarkdownString(markdown, EDITOR_TRANSFORMERS);
+			$convertFromMarkdownString(normalizeChecklistMarkers(markdown), EDITOR_TRANSFORMERS);
+			$unescapeImportedText();
 		},
 		{ discrete: true }
 	);
@@ -83,7 +86,8 @@ function treeTypes(markdown: string): string[] {
 	});
 	editor.update(
 		() => {
-			$convertFromMarkdownString(markdown, EDITOR_TRANSFORMERS);
+			$convertFromMarkdownString(normalizeChecklistMarkers(markdown), EDITOR_TRANSFORMERS);
+			$unescapeImportedText();
 		},
 		{ discrete: true }
 	);
@@ -420,6 +424,27 @@ describe('phase 1-6 新增能力 roundtrip', () => {
 		const out = roundtrip(md);
 		expect(out).toContain('- [ ] 待办事项');
 		expect(out).toContain('- [x] 已完成');
+
+		// 结构断言:导入必须产出 checklist 节点。核心 TRANSFORMERS 漏掉
+		// CHECK_LIST 时,`- [ ] x` 被 UNORDERED_LIST 抢先消费,退化为普通
+		// 列表 + 字面 "[ ]" 文本——导出结果恰好仍包含原字符串,上面的
+		// toContain 断言区分不了这两种情况,必须直接检查树结构。
+		const editor: LexicalEditor = createEditor({
+			namespace: 'markdown-transformers-checklist-import',
+			nodes: EDITOR_NODES,
+			onError: (error: Error) => {
+				throw error;
+			}
+		});
+		editor.update(
+			() => {
+				$convertFromMarkdownString(md, EDITOR_TRANSFORMERS);
+			},
+			{ discrete: true }
+		);
+		const json = JSON.stringify(editor.getEditorState().toJSON());
+		expect(json).toContain('"listType":"check"');
+		expect(json).not.toContain('[ ] 待办事项');
 	});
 
 	it('is stable on a second roundtrip for the full feature matrix', () => {
@@ -691,6 +716,70 @@ describe('containers in the editor (batch D)', () => {
 		expect(roundtrip(center)).toBe(center);
 		const unknown = [':::whatever', '内容', ':::'].join(String.fromCharCode(10));
 		expect(treeTypes(unknown)).not.toContain('details');
+	});
+});
+
+describe('import escape symmetry (fixpoint)', () => {
+	/** The editor text after the production import path (convert + unescape). */
+	function textOf(markdown: string): string {
+		const editor: LexicalEditor = createEditor({
+			namespace: 'markdown-fixpoint',
+			nodes: EDITOR_NODES,
+			onError: (error: Error) => {
+				throw error;
+			}
+		});
+		editor.update(
+			() => {
+				$convertFromMarkdownString(normalizeChecklistMarkers(markdown), EDITOR_TRANSFORMERS);
+				$unescapeImportedText();
+			},
+			{ discrete: true }
+		);
+		return editor.getEditorState().read(() => $getRoot().getTextContent());
+	}
+
+	it('shows escaped punctuation unescaped in the editor text', () => {
+		expect(textOf('a\\_b')).toContain('a_b');
+		expect(textOf('a\\_b')).not.toContain('\\_');
+	});
+
+	it('reaches a fixpoint after the first export', () => {
+		for (const src of ['a_b', 'a*b', 'lead $$int_0^1$$ tail', 'snake_case word']) {
+			const first = roundtrip(src);
+			const second = roundtrip(first);
+			expect(second, `no fixpoint for ${src}`).toBe(first);
+		}
+	});
+
+	it('preserves the uppercase [X] checked state (marker normalized to [x])', () => {
+		// the core compares match[3] === 'x' case-sensitively, so [X] would
+		// silently import as unchecked; we lowercase list markers on import —
+		// the CHECKED STATE survives, only the marker style is canonicalized
+		const once = roundtrip('- [X] upper');
+		expect(once).toBe('- [x] upper');
+		expect(roundtrip(once)).toBe(once);
+	});
+
+	it('documents the upstream 2-space list-indent limitation (pin)', () => {
+		// Upstream importText uses LIST_INDENT_SIZE=4 (markdown core); a
+		// 2-space nested list is flattened on import and the export emits the
+		// flat form. Pinned as a known limitation — the render side keeps the
+		// nesting because remark follows the GFM content column.
+		const src = '- a' + String.fromCharCode(10) + '  - b';
+		const once = roundtrip(src);
+		expect(once).toContain('- a');
+		expect(once).not.toContain('  - b');
+	});
+
+	it('keeps code spans stable (fixpoint, upstream normalizes once)', () => {
+		// The core unescapes formatted text on import (the markdown importText
+		// path ends with unescapeText), so a backslash inside a codespan is
+		// normalized away once by upstream and then stays stable. Assert the
+		// fixpoint — byte-identity is not reachable without patching the core.
+		const md = '`a\\_b`';
+		const first = roundtrip(md);
+		expect(roundtrip(first)).toBe(first);
 	});
 });
 

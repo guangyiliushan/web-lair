@@ -26,6 +26,7 @@ import {
 } from 'lexical';
 import {
 	TRANSFORMERS,
+	CHECK_LIST,
 	isTableRowDivider,
 	$convertFromMarkdownString,
 	$convertToMarkdownString,
@@ -300,7 +301,8 @@ function inlineMarkdownToSpecs(markdown: string): SpecNode[] {
 			const root = $getRoot();
 			root.clear();
 			try {
-				$convertFromMarkdownString(markdown, NESTED_EDITOR_TRANSFORMERS);
+				$convertFromMarkdownString(normalizeChecklistMarkers(markdown), NESTED_EDITOR_TRANSFORMERS);
+				$unescapeImportedText();
 			} catch {
 				root.clear();
 				const p = $createParagraphNode();
@@ -410,7 +412,66 @@ const QUOTE_PREFIX_REGEX = /^>\s?/;
  * 因此 alert 内部的 markdown 使用标准 transformer 解析。
  * HR 节点已注册（见 NESTED_EDITOR_NODES），补上其 transformer 保证 `---` 往返。
  */
+/**
+ * Counterpart of the core markdown export's safety escaping: the exporter
+ * escapes markdown-significant punctuation (`a_b` -> `a\_b`) but the core's
+ * plain-text import path never unescapes it, so repeated save/load cycles
+ * re-escape the accumulated backslashes (no fixpoint). This mirrors the core's
+ * own unescapeText rule (MarkdownImport text path) and skips code so literal
+ * backslashes inside code spans/blocks stay intact.
+ */
+/**
+ * The core's CHECK_LIST regex matches `[X]` case-insensitively
+ * (CHECKLIST_REGEX has /i) but its checked-state comparison is
+ * `match[3] === 'x'` — case-sensitive — so an uppercase box silently
+ * imports as unchecked and the next export rewrites `- [X]` to
+ * `- [ ]`. Lowercase the marker on list lines before importing.
+ */
+export function normalizeChecklistMarkers(markdown: string): string {
+	// No regex here on purpose: the core's CHECK_LIST shape needs a
+	// whitespace class that is awkward to spell in a literal and easy to
+	// mangle across tooling layers; plain string ops are exact.
+	const lineBreak = String.fromCharCode(10);
+	const upper = String.fromCharCode(91) + 'X' + String.fromCharCode(93);
+	const lower = String.fromCharCode(91) + 'x' + String.fromCharCode(93);
+	return markdown
+		.split(lineBreak)
+		.map((line) => {
+			const trimmed = line.trimStart();
+			const hasMarker =
+				trimmed.startsWith('- ' + upper) ||
+				trimmed.startsWith('* ' + upper) ||
+				trimmed.startsWith('+ ' + upper);
+			if (!hasMarker) return line;
+			const at = line.indexOf(upper);
+			if (at === -1) return line;
+			return line.slice(0, at) + lower + line.slice(at + upper.length);
+		})
+		.join(lineBreak);
+}
+
+export function $unescapeImportedText(): void {
+	const unescape = (text: string) => text.replace(/\\([!-/:-@[-`{-~])/g, '$1');
+	for (const node of $getRoot().getAllTextNodes()) {
+		// Skip inline code (a text node with the 'code' format bit) and code
+		// blocks/code-highlight children: backslash escapes are literal there
+		// on the render side, so they must stay literal here too.
+		if (node.hasFormat('code')) continue;
+		const parent = node.getParent();
+		if (parent && (parent.getType() === 'code' || parent.getType() === 'code-highlight')) continue;
+		const text = node.getTextContent();
+		const next = unescape(text);
+		if (next !== text) node.setTextContent(next);
+	}
+}
+
 export const NESTED_EDITOR_TRANSFORMERS: Transformer[] = [
+	// 自定义 transformer 必须先于核心 TRANSFORMERS(导入逐个尝试,靠前者
+	// 优先):CHECK_LIST 排在 ...TRANSFORMERS 之后会被 UNORDERED_LIST 抢先
+	// 消费 `- [ ]`(等于没修);mermaidTransformer 同理会被核心 CODE 抢先,
+	// 容器正文内的 ```mermaid 会导入成普通代码块。
+	CHECK_LIST,
+	mermaidTransformer,
 	...TRANSFORMERS,
 	hrTransformer,
 	spoilerTransformer,
@@ -421,7 +482,6 @@ export const NESTED_EDITOR_TRANSFORMERS: Transformer[] = [
 	footnoteRefTransformer,
 	footnoteInlineTransformer,
 	embedTransformer,
-	mermaidTransformer,
 	detailsTransformer,
 	tabsTransformer,
 	gridTransformer
@@ -465,7 +525,11 @@ export function markdownToAlertJson(markdown: string): string {
 				const root = $getRoot();
 				root.clear();
 				try {
-					$convertFromMarkdownString(markdown, NESTED_EDITOR_TRANSFORMERS);
+					$convertFromMarkdownString(
+						normalizeChecklistMarkers(markdown),
+						NESTED_EDITOR_TRANSFORMERS
+					);
+					$unescapeImportedText();
 				} catch {
 					root.clear();
 					const p = $createParagraphNode();
@@ -658,5 +722,9 @@ export const EDITOR_TRANSFORMERS: Transformer[] = [
 	detailsTransformer,
 	tabsTransformer,
 	gridTransformer,
+	// 0.46 核心导出了 CHECK_LIST 但没有把它放进 TRANSFORMERS——缺失时
+	// `- [ ] x` 会被 UNORDERED_LIST 抢先消费，复选框退化为字面 `[ ]` 文本。
+	// 须先于 UNORDERED_LIST 尝试，故置于 ...TRANSFORMERS 之前。
+	CHECK_LIST,
 	...TRANSFORMERS
 ];

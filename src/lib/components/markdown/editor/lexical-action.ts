@@ -37,7 +37,11 @@ import { INSERT_HORIZONTAL_RULE_COMMAND, $createHorizontalRuleNode } from '@lexi
 import { $isAlertNode } from '$lib/components/markdown/alert/alert-node';
 import { EDITOR_NODES } from '$lib/components/markdown/editor/editor-nodes';
 import { EDITOR_THEME } from '$lib/components/markdown/editor/editor-shared';
-import { EDITOR_TRANSFORMERS } from '$lib/components/markdown/editor/markdown-transformers';
+import {
+	EDITOR_TRANSFORMERS,
+	$unescapeImportedText,
+	normalizeChecklistMarkers
+} from '$lib/components/markdown/editor/markdown-transformers';
 
 export interface LexicalActionOptions {
 	/** 初始 markdown（当无 editorState 时使用） */
@@ -161,7 +165,8 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 			const md = optionsRef.current.initialMarkdown;
 			if (md) {
 				try {
-					$convertFromMarkdownString(md, transformers);
+					$convertFromMarkdownString(normalizeChecklistMarkers(md), transformers);
+					$unescapeImportedText();
 				} catch {
 					root.clear();
 					const p = $createParagraphNode();
