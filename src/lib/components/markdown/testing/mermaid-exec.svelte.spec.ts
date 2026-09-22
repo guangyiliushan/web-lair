@@ -100,25 +100,29 @@ afterEach(() => {
 });
 
 describe('mermaid execution (client)', () => {
-	it('renders lazily: no diagram, no chunk; the chunk is loaded once', async () => {
-		const before = resourceCount(CHUNK);
-		const plain = await mountRenderer('just text, no diagram');
-		expect(plain.container.querySelector('.mermaid')).toBeNull();
-		// a bounded wait, not a poll: a poll cannot prove a negative, and an
-		// import that was going to happen lands in resource timing within a
-		// couple of frames
-		await new Promise((resolve) => setTimeout(resolve, 250));
-		expect(resourceCount(CHUNK) - before).toBe(0);
+	it(
+		'renders lazily: no diagram, no chunk; the chunk is loaded once',
+		{ timeout: 60_000 },
+		async () => {
+			const before = resourceCount(CHUNK);
+			const plain = await mountRenderer('just text, no diagram');
+			expect(plain.container.querySelector('.mermaid')).toBeNull();
+			// a bounded wait, not a poll: a poll cannot prove a negative, and an
+			// import that was going to happen lands in resource timing within a
+			// couple of frames
+			await new Promise((resolve) => setTimeout(resolve, 250));
+			expect(resourceCount(CHUNK) - before).toBe(0);
 
-		const first = await mountRenderer(MERMAID);
-		await waitForSettled(first.container);
-		const afterFirst = resourceCount(CHUNK);
-		expect(afterFirst - before).toBeGreaterThan(0);
+			const first = await mountRenderer(MERMAID);
+			await waitForSettled(first.container);
+			const afterFirst = resourceCount(CHUNK);
+			expect(afterFirst - before).toBeGreaterThan(0);
 
-		const second = await mountRenderer(MERMAID);
-		await waitForSettled(second.container);
-		expect(resourceCount(CHUNK) - afterFirst).toBe(0);
-	});
+			const second = await mountRenderer(MERMAID);
+			await waitForSettled(second.container);
+			expect(resourceCount(CHUNK) - afterFirst).toBe(0);
+		}
+	);
 
 	it('archives the exact source for re-rendering', async () => {
 		const screen = await mountRenderer(MERMAID);

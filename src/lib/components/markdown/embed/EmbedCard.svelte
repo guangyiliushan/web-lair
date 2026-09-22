@@ -28,6 +28,8 @@
 	} from '$lib/components/markdown/embed/registry';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
+	import { Badge } from '$lib/components/ui/badge';
+	import * as Avatar from '$lib/components/ui/avatar';
 	import { languageColor } from '$lib/components/markdown/embed/language-colors';
 	import { m } from '$lib/paraglide/messages';
 	import { cn } from '$lib/utils';
@@ -226,6 +228,11 @@
 	// locked by embed-card-rich.spec); what is SAVED stays the markdown alt —
 	// the edit row edits the visible title and only writes it back on change
 	const displayTitle = $derived(meta?.title || title);
+
+	// Avatar fallback initial (shadcn Avatar always pairs Image with Fallback)
+	const avatarInitial = $derived(
+		(meta?.repoName ?? meta?.title ?? '?').trim().charAt(0).toUpperCase() || '?'
+	);
 </script>
 
 {#if loaded && src}
@@ -246,14 +253,13 @@
 			<div class="embed-tint" aria-hidden="true"></div>
 			<div class="embed-spotlight" aria-hidden="true"></div>
 		{/if}
-		{#if meta?.avatarUrl}
-			<img
-				class="embed-avatar"
-				src={meta.avatarUrl}
-				alt=""
-				loading="lazy"
-				referrerpolicy="no-referrer"
-			/>
+		{#if meta}
+			<Avatar.Root class="embed-avatar size-10">
+				{#if meta.avatarUrl}
+					<Avatar.Image src={meta.avatarUrl} alt="" referrerpolicy="no-referrer" />
+				{/if}
+				<Avatar.Fallback>{avatarInitial}</Avatar.Fallback>
+			</Avatar.Root>
 		{/if}
 		<div class="embed-card-head">
 			{#if faviconSrc}
@@ -278,7 +284,7 @@
 					/>
 				</svg>
 			{/if}
-			<span class="embed-badge">{label}</span>
+			<Badge variant="secondary" class="embed-badge">{label}</Badge>
 		</div>
 		<span class="embed-title">{displayTitle}</span>
 		{#if meta?.description}
@@ -286,28 +292,28 @@
 		{/if}
 		<div class="embed-meta">
 			{#if meta?.kind === 'repo' && meta.language}
-				<span class="embed-chip">
+				<Badge variant="outline" class="embed-chip">
 					<span class="embed-lang-dot" style="background: {langColor}"></span>
 					{meta.language}
-				</span>
+				</Badge>
 			{/if}
 			{#if meta?.kind === 'repo' && typeof meta.stars === 'number'}
-				<span class="embed-chip">★ {meta.stars.toLocaleString()}</span>
+				<Badge variant="outline" class="embed-chip">★ {meta.stars.toLocaleString()}</Badge>
 			{/if}
 			{#if (meta?.kind === 'commit' || meta?.kind === 'pr') && typeof meta.additions === 'number'}
-				<span class="embed-chip embed-additions">+{meta.additions}</span>
+				<Badge variant="outline" class="embed-chip">+{meta.additions}</Badge>
 			{/if}
 			{#if (meta?.kind === 'commit' || meta?.kind === 'pr') && typeof meta.deletions === 'number'}
-				<span class="embed-chip embed-deletions">-{meta.deletions}</span>
+				<Badge variant="outline" class="embed-chip">-{meta.deletions}</Badge>
 			{/if}
 			{#if meta?.sha}
-				<span class="embed-chip">{meta.sha}</span>
+				<Badge variant="outline" class="embed-chip">{meta.sha}</Badge>
 			{/if}
 			{#if meta?.repoName}
-				<span class="embed-chip">{meta.repoName}</span>
+				<Badge variant="outline" class="embed-chip">{meta.repoName}</Badge>
 			{/if}
 			{#if meta?.kind === 'issue' && meta.state}
-				<span class="embed-chip">{meta.state}</span>
+				<Badge variant="outline" class="embed-chip">{meta.state}</Badge>
 			{/if}
 			<a class="embed-link" href={url} target="_blank" rel="noopener noreferrer">{url}</a>
 			{#if editable && !editing}
@@ -380,9 +386,9 @@
 	.embed-favicon-default {
 		color: var(--muted-foreground);
 	}
+	/* layout only: Badge owns the chrome */
 	.embed-badge {
-		font-size: 0.75rem;
-		color: var(--muted-foreground);
+		flex: none;
 	}
 	.embed-title {
 		font-weight: 600;
@@ -475,14 +481,11 @@
 	.embed-enriched:hover .embed-spotlight {
 		opacity: 1;
 	}
+	/* layout only: the Avatar primitives own shape and clipping */
 	.embed-avatar {
 		position: absolute;
 		top: 0.75rem;
 		right: 1rem;
-		width: 2.5rem;
-		height: 2.5rem;
-		border-radius: 50%;
-		object-fit: cover;
 	}
 	.embed-desc {
 		margin: 0;
@@ -490,26 +493,15 @@
 		color: var(--muted-foreground);
 		line-height: 1.5;
 	}
+	/* layout only: Badge owns the chrome */
 	.embed-chip {
 		flex: none;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		font-size: 0.8125rem;
-		font-family: var(--font-mono, monospace);
-		color: var(--muted-foreground);
 	}
 	.embed-lang-dot {
 		width: 0.6rem;
 		height: 0.6rem;
 		border-radius: 50%;
 		flex: none;
-	}
-	.embed-additions {
-		color: var(--chart-2, #22c55e);
-	}
-	.embed-deletions {
-		color: var(--chart-5, #ef4444);
 	}
 	.embed-iframe {
 		display: block;
@@ -518,8 +510,6 @@
 		border: 0;
 		border-radius: var(--radius-md);
 		margin-block: 1rem;
-		opacity: 1;
-		transition: opacity 0.2s ease-out;
 	}
 	/* no widgets.js means no resize handshake: a fixed height for tweets */
 	.embed-iframe-tweet {

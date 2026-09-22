@@ -11,9 +11,14 @@ describe('editor link safety (render-side parity)', () => {
 		expect(isSafeLinkUrl('tel:+123')).toBe(true);
 	});
 
-	it('rejects script and data protocols', () => {
+	it('accepts site-relative paths and anchors (render-side parity)', () => {
+		expect(isSafeLinkUrl('/posts/hello-world')).toBe(true);
+		expect(isSafeLinkUrl('#section-2')).toBe(true);
+	});
+
+	it('rejects script, data and protocol-relative shapes', () => {
 		expect(isSafeLinkUrl('javascript:alert(1)')).toBe(false);
 		expect(isSafeLinkUrl('daTa:text/html,x')).toBe(false);
-		expect(isSafeLinkUrl('/relative/path')).toBe(false);
+		expect(isSafeLinkUrl('//evil.example/x')).toBe(false);
 	});
 });

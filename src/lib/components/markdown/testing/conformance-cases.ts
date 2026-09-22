@@ -648,6 +648,12 @@ export const conformanceCases: ConformanceCase[] = [
 		notContains: ['embed-card']
 	},
 	{
+		id: 'l2-link-relative',
+		spec: '3.4',
+		input: '[站内](/posts/hello-world) 链接',
+		contains: ['<a href="/posts/hello-world">站内</a>']
+	},
+	{
 		id: 'l2-embed-lair-relative',
 		spec: '§3.4 ④',
 		input: '![站内](/posts/hello-world)',

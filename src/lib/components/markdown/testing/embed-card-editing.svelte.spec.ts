@@ -54,7 +54,6 @@ describe('embed card editing', () => {
 		await mountHost();
 		hostEl().click();
 		await expect.poll(() => hostEl().getAttribute('data-selected'), { timeout: 5000 }).toBe('true');
-		const user = userEvent.setup();
 		// 焦点在编辑器上(NodeSelection 与编辑器焦点);直接按键
 		await page.getByRole('textbox', { name: '输入正文...' }).click();
 		// 重新选中(点击正文可能重置选区)

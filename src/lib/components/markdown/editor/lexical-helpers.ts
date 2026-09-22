@@ -130,8 +130,15 @@ export function insertHorizontalRule(editor: LexicalEditor) {
  * 插入链接。选中文本包裹为 LinkNode（WYSIWYG），
  * 未选中时以 URL 为文本创建链接。
  */
-/** Link schemes allowed by the render-side sanitize schema (markdown-config). */
-const SAFE_LINK_SCHEME = /^(https?:|mailto:|tel:)/i;
+/**
+ * Link shapes accepted by the editor's insert/display paths, aligned with
+ * the render side: absolute http(s)/mailto/tel, site-rooted relative paths
+ * (single slash: `/posts/...`) and `#` anchors all survive sanitize, so the
+ * editor accepts them too. Two deliberate carve-outs stay out of the
+ * insert path: protocol-relative `//host` and everything with a script or
+ * data scheme (the render side strips those regardless).
+ */
+const SAFE_LINK_SCHEME = /^(https?:|mailto:|tel:|\/(?!\/)|#)/i;
 export function isSafeLinkUrl(url: string): boolean {
 	return SAFE_LINK_SCHEME.test(url.trim());
 }
