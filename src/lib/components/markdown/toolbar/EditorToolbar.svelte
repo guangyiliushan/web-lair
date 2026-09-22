@@ -12,7 +12,6 @@
 		toggleOrderedList,
 		toggleBlockquote,
 		insertHorizontalRule,
-		insertLink,
 		insertImage,
 		insertTable,
 		insertCodeBlock,
@@ -27,6 +26,7 @@
 		readToolbarState,
 		type ToolbarState
 	} from '$lib/components/markdown/editor/lexical-helpers';
+	import { openLinkEditor } from './link-editor-channel';
 	import EditorDebugDialog from './EditorDebugDialog.svelte';
 	import ImageInsertDialog from './ImageInsertDialog.svelte';
 	import CodeBlockInsertDialog from './CodeBlockInsertDialog.svelte';
@@ -196,8 +196,9 @@
 
 	function handleInsertLink() {
 		if (!editor) return;
-		const url = window.prompt('输入链接地址:', 'https://');
-		if (url) insertLink(editor, url.trim());
+		// 原位编辑浮层接管(window.prompt 在内嵌浏览器/自动化环境不可用,
+		// 且打断编辑上下文);选区语义由 LinkHoverEditor 内部处理。
+		openLinkEditor();
 	}
 
 	function handleInsertImage() {

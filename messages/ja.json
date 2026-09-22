@@ -253,5 +253,13 @@
 	"admin_settings_account": "アカウントセキュリティ",
 	"admin_settings_account_desc": "ログイン、認証、認証情報",
 	"admin_settings_meta_preset": "Metaプリセット",
-	"admin_settings_meta_preset_desc": "プリセットテンプレート"
+	"admin_settings_meta_preset_desc": "プリセットテンプレート",
+	"md_link_edit": "リンクを編集",
+	"md_link_remove": "リンクを削除",
+	"md_link_apply": "適用",
+	"md_link_cancel": "キャンセル",
+	"md_link_url": "リンクURL",
+	"md_link_toolbar": "リンク",
+	"md_embed_edit": "編集",
+	"md_embed_edit_title": "タイトルテキスト"
 }

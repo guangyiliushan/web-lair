@@ -130,7 +130,14 @@ export function insertHorizontalRule(editor: LexicalEditor) {
  * 插入链接。选中文本包裹为 LinkNode（WYSIWYG），
  * 未选中时以 URL 为文本创建链接。
  */
+/** Link schemes allowed by the render-side sanitize schema (markdown-config). */
+const SAFE_LINK_SCHEME = /^(https?:|mailto:|tel:)/i;
+export function isSafeLinkUrl(url: string): boolean {
+	return SAFE_LINK_SCHEME.test(url.trim());
+}
+
 export function insertLink(editor: LexicalEditor, url: string) {
+	if (!isSafeLinkUrl(url)) return;
 	editor.update(() => {
 		const selection = $getSelection();
 		if (!$isRangeSelection(selection)) return;

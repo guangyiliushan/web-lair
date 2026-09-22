@@ -64,10 +64,6 @@ export class InlineMathNode extends DecoratorNode<HTMLElement> {
 		return this.__latex;
 	}
 
-	getForm(): MathForm {
-		return this.__form;
-	}
-
 	setLatex(latex: string): void {
 		this.getWritable().__latex = latex;
 	}

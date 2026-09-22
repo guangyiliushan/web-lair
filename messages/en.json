@@ -253,5 +253,13 @@
 	"admin_settings_account": "Account Security",
 	"admin_settings_account_desc": "Login, auth, credentials",
 	"admin_settings_meta_preset": "Meta Presets",
-	"admin_settings_meta_preset_desc": "Preset templates"
+	"admin_settings_meta_preset_desc": "Preset templates",
+	"md_link_edit": "Edit link",
+	"md_link_remove": "Remove link",
+	"md_link_apply": "Apply",
+	"md_link_cancel": "Cancel",
+	"md_link_url": "Link URL",
+	"md_link_toolbar": "Link",
+	"md_embed_edit": "Edit",
+	"md_embed_edit_title": "Title text"
 }

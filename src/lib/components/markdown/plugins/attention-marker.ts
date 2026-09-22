@@ -277,18 +277,45 @@ type ToHastState = {
 	all(node: Parents): Array<ElementContent>;
 };
 
-/** remark-rehype hast handler factory: spoiler -> span.spoiler, mark -> mark */
-export function createAttentionHandler(tagName: string, className?: string) {
-	return (_state: ToHastState, node: Parents): Element => ({
-		type: 'element',
-		tagName,
-		properties: className ? { className: [className] } : {},
-		children: _state.all(node)
-	});
+function collectText(node: Parents): string {
+	let out = '';
+	for (const child of node.children) {
+		if (child.type === 'text') out += child.value;
+		else if ('children' in child) out += collectText(child as Parents);
+	}
+	return out;
+}
+
+/**
+ * remark-rehype hast handler factory: spoiler -> span.spoiler, mark -> mark.
+ * `titleFromText` puts the raw content into a `title` attribute so masked
+ * spoilers reveal their text on hover before the style transition runs
+ * (Shiro parity: `<del class="spoiler" title="...">`).
+ */
+export function createAttentionHandler(
+	tagName: string,
+	className?: string,
+	options?: { titleFromText?: boolean }
+) {
+	return (_state: ToHastState, node: Parents): Element => {
+		const properties: Element['properties'] = className ? { className: [className] } : {};
+		if (options?.titleFromText) {
+			const text = collectText(node).trim();
+			if (text) properties.title = text;
+			// keyboard reachability: :focus reveals the mask (spec 4.5 a11y intent)
+			properties.tabIndex = 0;
+		}
+		return {
+			type: 'element',
+			tagName,
+			properties,
+			children: _state.all(node)
+		};
+	};
 }
 
 /** remark-rehype handlers shared by both pipelines */
 export const attentionHandlers = {
-	spoiler: createAttentionHandler('span', 'spoiler'),
+	spoiler: createAttentionHandler('span', 'spoiler', { titleFromText: true }),
 	mark: createAttentionHandler('mark')
 };

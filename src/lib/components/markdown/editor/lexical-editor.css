@@ -71,6 +71,19 @@
 .rich-editor-ul {
 	@apply my-2 list-disc pl-6;
 }
+/* 嵌套层与顶层同为 disc(Shiro/prose 口径),层级感由缩进表达;
+   marker 统一淡化一档(Shiro 实测 ::marker color = 50% 透明)。 */
+.rich-editor-ul li::marker,
+.rich-editor-ol li::marker {
+	color: color-mix(in oklch, currentColor 50%, transparent);
+}
+/* Lexical 导入嵌套列表产生「空宿主 li」(无直接内容、仅含子列表)——它的
+   marker 会渲染成悬空点、并让有序编号错位。隐藏宿主 marker,层级感由
+   子列表缩进表达(发布端 DOM 无此形态,无需同步)。直接子级限定:含
+   文本 span 的正常 li(:has(> *:not(ul,ol)) 命中)不受影响。 */
+.rich-editor-li:has(> ul, > ol):not(:has(> *:not(ul, ol))) {
+	list-style: none;
+}
 .rich-editor-ol {
 	@apply my-2 list-decimal pl-6;
 }
@@ -162,7 +175,8 @@
 	@apply max-w-full rounded-lg;
 }
 /* 键盘/点击选中态（NodeSelection，由 lexical-action.ts 标记 data-selected） */
-.rich-editor-image[data-selected] {
+.rich-editor-image[data-selected],
+.rich-editor-embed-host[data-selected] {
 	outline: 2px solid hsl(var(--primary));
 	outline-offset: 2px;
 }

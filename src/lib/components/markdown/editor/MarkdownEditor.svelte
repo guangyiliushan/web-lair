@@ -12,6 +12,7 @@
 	import BlockHandleToolbar from '$lib/components/markdown/toolbar/BlockHandleToolbar.svelte';
 	import CodeModeToggle from '$lib/components/markdown/toolbar/CodeModeToggle.svelte';
 	import TableCellMenu from '$lib/components/markdown/toolbar/TableCellMenu.svelte';
+	import LinkHoverEditor from '$lib/components/markdown/toolbar/LinkHoverEditor.svelte';
 
 	// Lexical 编辑器全局样式（由 PostCSS 处理 @apply / Tailwind 指令）
 	import '$lib/components/markdown/editor/lexical-editor.css';
@@ -170,6 +171,9 @@
 
 		<!-- 浮动表格菜单：光标进入表格单元格时出现 -->
 		<TableCellMenu {editor} />
+
+		<!-- 链接原位编辑浮层：光标落入链接内时出现 -->
+		<LinkHoverEditor {editor} />
 	{/if}
 
 	<!-- Editor area -->

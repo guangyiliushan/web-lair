@@ -81,7 +81,7 @@ function numeric(value: string | undefined): boolean {
 const isGithub = (url: URL) => host(url) === 'github.com';
 
 /** github.com top-level paths that are not repositories (gh-repo guard). */
-const GITHUB_RESERVED = new Set([
+export const GITHUB_RESERVED = new Set([
 	'orgs',
 	'users',
 	'settings',
@@ -223,6 +223,22 @@ export const EMBED_PROVIDER_DOMAINS: ReadonlySet<string> = new Set(
 );
 
 /** Shared canonicalisation: lowercase host with a leading `www.` removed. */
+/** Maps a URL to its provider id via the registry matchers — the same
+ * source of truth the render side (decideImage consumers) uses. */
+export function resolveProviderId(url: string): EmbedProviderId | 'generic' {
+	let parsed: URL;
+	try {
+		parsed = new URL(url);
+	} catch {
+		return 'generic';
+	}
+	// matchers take a parsed URL (same contract as resolve.ts matchWebProvider)
+	for (const provider of EMBED_PROVIDERS) {
+		if (provider.match(parsed)) return provider.id;
+	}
+	return 'generic';
+}
+
 export function canonicalHost(hostname: string): string {
 	return hostname.toLowerCase().replace(/^www\./, '');
 }

@@ -112,7 +112,8 @@ export const conformanceCases: ConformanceCase[] = [
 		id: 'l2-spoiler-inline',
 		spec: '§2 #6',
 		input: '剧透 ||隐藏内容|| 结束',
-		contains: ['<span class="spoiler">隐藏内容</span>']
+		// title = 原文提示(hover tooltip,Shiro 对齐);tabindex 提供键盘可达(:focus 揭示)
+		contains: ['<span class="spoiler" title="隐藏内容" tabindex="0">隐藏内容</span>']
 	},
 	{
 		// The "explicitly absent" list of spec 2 retires the #x# syntax; tags move

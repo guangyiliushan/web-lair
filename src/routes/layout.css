@@ -262,12 +262,97 @@
 		background: transparent;
 	}
 
+	/* Spoiler: Shiro-style same-color masking (text merged into a neutral
+	   block), hover fades the block away over 0.5s to reveal the content.
+	   Shared by the render side's <span class=spoiler> and the editor's
+	   SpoilerNode, so one rule styles both. */
 	.spoiler {
-		filter: invert(25%);
-		transition: filter 0.2s;
+		border-radius: 3px;
+		background-color: var(--muted-foreground);
+		color: var(--muted-foreground);
+		transition:
+			background-color 0.5s,
+			color 0.5s;
 	}
-	.spoiler:hover {
-		filter: none;
+	.spoiler:hover,
+	.spoiler:focus {
+		background-color: transparent;
+		color: inherit;
+	}
+	/* ── 行内链接磁吸(批 3a)──
+	   JS 侧 link-magnet.ts 在 hover 时打 data-magnet 并写入 --mx/--my(链接
+	   内像素坐标)。视觉全部由 absolute 伪元素承载:文本保持 inline 流,排版
+	   零影响(比常驻 inline-block 方案更安全);气泡走 backdrop-blur 渐显,
+	   箭头为 tabler external-link 的 mask 内联 SVG(MIT)。仅发布渲染容器
+	   生效——编辑器遵守零偏移守则,由 LinkHoverEditor 承担交互。 */
+	.markdown-body a[data-magnet] {
+		position: relative;
+		text-decoration-color: color-mix(in oklch, var(--primary) 60%, transparent);
+		transition: text-decoration-color 0.2s ease-out;
+	}
+	.markdown-body a[data-magnet]:hover {
+		text-decoration-color: transparent;
+	}
+	.markdown-body a[data-magnet]::before {
+		content: '';
+		position: absolute;
+		left: -0.5rem;
+		right: -0.5rem;
+		top: 0;
+		bottom: 0;
+		z-index: -1;
+		border-radius: 0.5rem;
+		background: color-mix(in oklch, var(--primary) 30%, transparent);
+		backdrop-filter: blur(4px);
+		opacity: 0;
+		transform: scale(0.92);
+		transform-origin: var(--mx, 50%) var(--my, 50%);
+		transition:
+			opacity 0.2s ease-out,
+			transform 0.2s ease-out;
+		pointer-events: none;
+	}
+	.markdown-body a[data-magnet]:hover::before {
+		opacity: 1;
+		transform: scale(1);
+	}
+	.markdown-body a[data-magnet]::after {
+		content: '';
+		position: absolute;
+		right: -0.85em;
+		top: 0.1em;
+		width: 0.65em;
+		height: 0.65em;
+		background-color: currentColor;
+		opacity: 0.7;
+		-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6'/%3E%3Cpath d='M11 13l9 -9'/%3E%3Cpath d='M15 4h5v5'/%3E%3C/svg%3E");
+		mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6'/%3E%3Cpath d='M11 13l9 -9'/%3E%3Cpath d='M15 4h5v5'/%3E%3C/svg%3E");
+		-webkit-mask-size: contain;
+		mask-size: contain;
+		-webkit-mask-repeat: no-repeat;
+		mask-repeat: no-repeat;
+		pointer-events: none;
+	}
+	@media print {
+		/* mask reveals in print: the blocks must not print as solid bars (spec 7) */
+		.spoiler {
+			background-color: transparent;
+			color: inherit;
+		}
+		.markdown-body a[data-magnet]::after {
+			display: none;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.markdown-body a[data-magnet]::before {
+			transition: none;
+		}
+	}
+	@media (hover: none) {
+		.markdown-body a[data-magnet]::before,
+		.markdown-body a[data-magnet]::after {
+			display: none;
+		}
 	}
 	/* Mention pill: shared by the render side's <a class=mention> and the
 		editor's MentionNode, so one rule styles both. */

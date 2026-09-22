@@ -170,7 +170,9 @@ export function buildSanitizeSchema(): Schema {
 				'className',
 				'style',
 				'dataLine',
-				'ariaHidden'
+				'ariaHidden',
+				// spoiler 原文提示(管线产物,来自 attention handler)
+				'title'
 			],
 			div: [
 				...(defaultSchema.attributes?.div ?? []),

@@ -7,6 +7,7 @@
 	} from '$lib/components/markdown/editor/markdown-config';
 	import EmbedCard from '$lib/components/markdown/embed/EmbedCard.svelte';
 	import type { EmbedProviderId } from '$lib/components/markdown/embed/registry';
+	import { attachMagnetLinks } from '$lib/components/markdown/link-magnet';
 	import { scheduleMermaidRender } from './mermaid-client';
 	import { m } from '$lib/paraglide/messages';
 	import { themeStore } from '$lib/stores/theme.svelte';
@@ -29,6 +30,7 @@
 	// fallback stays a working plain link.
 	let articleEl: HTMLElement | undefined = $state();
 	const cardInstances: Array<ReturnType<typeof mount>> = [];
+	let detachMagnet: (() => void) | null = null;
 	let uid = '';
 
 	// The enhancement is reactive: `{@html}` swaps the article's children
@@ -41,6 +43,8 @@
 		if (!article) return;
 		for (const instance of cardInstances) unmount(instance);
 		cardInstances.length = 0;
+		detachMagnet?.();
+		detachMagnet = null;
 		uid ||= Math.random().toString(36).slice(2, 8);
 		enhanceTabs(article, uid);
 		enhanceCarousels(article);
@@ -57,6 +61,10 @@
 		}
 		// mermaid diagrams (spec 3.3/7): lazy import + render, raw text degrades
 		scheduleMermaidRender([...article.querySelectorAll<HTMLElement>('.mermaid')]);
+		// inline-link magnet hover (publish side only; the editor keeps
+		// zero-offset text and uses LinkHoverEditor instead). The returned
+		// cleanup runs both on the next {@html} swap and on destroy.
+		detachMagnet = attachMagnetLinks(article);
 	});
 
 	// A theme flip re-renders the diagrams (their palette is baked at render
@@ -71,6 +79,8 @@
 	onDestroy(() => {
 		for (const instance of cardInstances) unmount(instance);
 		cardInstances.length = 0;
+		detachMagnet?.();
+		detachMagnet = null;
 	});
 
 	/**

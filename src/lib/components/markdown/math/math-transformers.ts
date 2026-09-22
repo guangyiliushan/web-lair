@@ -45,9 +45,6 @@ export const mathParenTransformer: TextMatchTransformer = {
 		if (!inner.trim()) return;
 		textNode.replace($createInlineMathNode(inner, 'paren'));
 	},
-	// Serialization is form-agnostic: the first matching exporter (the dollar
-	// one) writes both forms through getTextContent().
-	export: (node) => ($isInlineMathNode(node) ? node.getTextContent() : null),
 	type: 'text-match'
 };
 

@@ -32,13 +32,14 @@ let localeStore: {
 	init(): void;
 };
 
-// The dynamic import of the Svelte module can exceed the 10s default hook
-// timeout while the whole suite runs in parallel; give this hook room so the
-// gate stays deterministic under load.
+// The dynamic import of the Svelte module compiles it in-flight; idle this
+// file runs in ~1.1s, but under a loaded suite run the hook has exceeded 30s
+// (measured 2026-09-22 while four parallel vitest instances ran). Give the
+// hook generous room so the gate stays deterministic under load.
 beforeAll(async () => {
 	const mod = await import('./locale.svelte');
 	localeStore = mod.localeStore;
-}, 30_000);
+}, 60_000);
 
 describe('LocaleStore', () => {
 	beforeEach(() => {

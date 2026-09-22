@@ -253,5 +253,13 @@
 	"admin_settings_account": "账号安全",
 	"admin_settings_account_desc": "登录、认证、凭证",
 	"admin_settings_meta_preset": "Meta 预设",
-	"admin_settings_meta_preset_desc": "预设模板"
+	"admin_settings_meta_preset_desc": "预设模板",
+	"md_link_edit": "编辑链接",
+	"md_link_remove": "移除链接",
+	"md_link_apply": "应用",
+	"md_link_cancel": "取消",
+	"md_link_url": "链接地址",
+	"md_link_toolbar": "链接",
+	"md_embed_edit": "编辑",
+	"md_embed_edit_title": "标题文本"
 }

@@ -53,15 +53,17 @@ describe('markdown rendered output paints correctly', () => {
 		expect(getComputedStyle(mark!).backgroundColor).toBe('rgb(255, 255, 0)');
 	});
 
-	it('||spoiler|| paints with the app spoiler filter', () => {
+	it('||spoiler|| paints with the app spoiler mask', () => {
 		const root = mountHtml(renderMarkdownToHtmlSync('剧透 ||隐藏内容|| 结束'));
 		const spoiler = root.querySelector('span.spoiler');
 		expect(spoiler, '||隐藏内容|| must produce span.spoiler').not.toBeNull();
 		expect(spoiler!.textContent).toBe('隐藏内容');
-		// layout.css: .spoiler { filter: invert(25%) }, hover restores — the
-		// spoiler must start obscured and become readable only on hover
-		// (Chrome serializes the percentage as a 0..1 factor)
-		expect(getComputedStyle(spoiler!).filter).toBe('invert(0.25)');
+		// layout.css: Shiro-style same-color masking — background and color
+		// share one muted tone so the text merges into a block; hover/focus
+		// fades the block away. Assert the mask contract, not a token value.
+		const mask = getComputedStyle(spoiler!);
+		expect(mask.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+		expect(mask.backgroundColor).toBe(mask.color);
 	});
 
 	it('==*emphasis*== keeps nested structure and paints both effects', () => {

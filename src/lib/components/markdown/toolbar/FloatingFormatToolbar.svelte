@@ -5,11 +5,11 @@
 	import {
 		emptyToolbarState,
 		formatTextWithFocus,
-		insertLink,
 		readToolbarState,
 		getSelectionRect,
 		type ToolbarState
 	} from '$lib/components/markdown/editor/lexical-helpers';
+	import { openLinkEditor } from './link-editor-channel';
 
 	// ── 图标 ──
 	import IconBold from '@tabler/icons-svelte-runes/icons/bold';
@@ -77,11 +77,8 @@
 
 	function handleInsertLink() {
 		if (!editor) return;
-		const url = window.prompt('输入链接地址:', 'https://');
-		if (url) {
-			insertLink(editor, url.trim());
-			editor.focus();
-		}
+		// 原位编辑浮层接管(与顶部工具栏同一通道)
+		openLinkEditor();
 	}
 
 	// ── 辅助：active 态按钮 ──
