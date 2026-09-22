@@ -18,25 +18,29 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe('parseGithubTarget', () => {
 	it('maps the four enriched shapes to api.github.com endpoints', () => {
-		expect(parseGithubTarget('https://github.com/vuejs/core')).toEqual({
+		expect(parseGithubTarget('https://github.com/example-org/example-repo')).toEqual({
 			kind: 'repo',
-			owner: 'vuejs',
-			repo: 'core',
-			apiUrl: 'https://api.github.com/repos/vuejs/core'
+			owner: 'example-org',
+			repo: 'example-repo',
+			apiUrl: 'https://api.github.com/repos/example-org/example-repo'
 		});
 		expect(
 			parseGithubTarget(
-				'https://github.com/vuejs/vitepress/commit/71eb11f72e60706a546b756dc3fd72d06e2ae4e2'
+				'https://github.com/example-org/example-repo/commit/a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0'
 			)
 		).toMatchObject({
 			kind: 'commit',
-			sha: '71eb11f72e60706a546b756dc3fd72d06e2ae4e2'
+			sha: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0'
 		});
-		expect(parseGithubTarget('https://github.com/Innei/Shiro/pull/129')).toMatchObject({
-			kind: 'pr',
-			number: 129
-		});
-		expect(parseGithubTarget('https://github.com/Innei/Shiro/issues/12')).toMatchObject({
+		expect(parseGithubTarget('https://github.com/example-org/example-repo/pull/129')).toMatchObject(
+			{
+				kind: 'pr',
+				number: 129
+			}
+		);
+		expect(
+			parseGithubTarget('https://github.com/example-org/example-repo/issues/12')
+		).toMatchObject({
 			kind: 'issue',
 			number: 12
 		});
@@ -61,31 +65,35 @@ describe('handleEmbedMetaRequest', () => {
 	it('projects only whitelisted repo fields and sets cache headers', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(
 			jsonResponse({
-				full_name: 'vuejs/core',
+				full_name: 'example-org/example-repo',
 				description: 'Vue core',
 				stargazers_count: 48000,
 				language: 'TypeScript',
-				html_url: 'https://github.com/vuejs/core',
+				html_url: 'https://github.com/example-org/example-repo',
 				owner: { avatar_url: 'https://avatars.githubusercontent.com/u/6128107' },
 				secret_injected_field: 'must-not-leak'
 			})
 		);
 		vi.stubGlobal('fetch', fetchMock);
 
-		const res = await handleEmbedMetaRequest(requestFor('https://github.com/vuejs/core'));
+		const res = await handleEmbedMetaRequest(
+			requestFor('https://github.com/example-org/example-repo')
+		);
 		expect(res.status).toBe(200);
 		expect(res.headers.get('cache-control')).toBe('public, max-age=3600');
 		const body = await res.json();
 		expect(body).toEqual({
 			kind: 'repo',
-			title: 'vuejs/core',
+			title: 'example-org/example-repo',
 			description: 'Vue core',
 			stars: 48000,
 			language: 'TypeScript',
 			avatarUrl: 'https://avatars.githubusercontent.com/u/6128107'
 		});
 		expect(fetchMock).toHaveBeenCalledOnce();
-		expect(fetchMock.mock.calls[0][0]).toBe('https://api.github.com/repos/vuejs/core');
+		expect(fetchMock.mock.calls[0][0]).toBe(
+			'https://api.github.com/repos/example-org/example-repo'
+		);
 	});
 
 	it('takes the first line of commit messages and the diff stats', async () => {
@@ -102,7 +110,7 @@ describe('handleEmbedMetaRequest', () => {
 		);
 		const res = await handleEmbedMetaRequest(
 			requestFor(
-				'https://github.com/vuejs/vitepress/commit/71eb11f72e60706a546b756dc3fd72d06e2ae4e2'
+				'https://github.com/example-org/example-repo/commit/a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0'
 			)
 		);
 		const body = await res.json();
@@ -111,9 +119,9 @@ describe('handleEmbedMetaRequest', () => {
 			title: 'fix: something',
 			additions: 9,
 			deletions: 10,
-			sha: '71eb11f',
+			sha: 'a1b2c3d',
 			avatarUrl: 'https://avatars.githubusercontent.com/u/1',
-			repoName: 'vuejs/vitepress'
+			repoName: 'example-org/example-repo'
 		});
 	});
 

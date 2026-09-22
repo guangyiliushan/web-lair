@@ -88,9 +88,15 @@ test.describe('EditorToolbar', () => {
 			});
 			if ((await sidebar.getAttribute('data-state')) === 'expanded') {
 				await sidebarTrigger.click();
-				await page.waitForTimeout(500);
 			}
 			await expect(toolbar).toBeVisible({ timeout: 10000 });
+			// wait for the toolbar's own measured width (the ResizeObserver input),
+			// not a fixed sleep: the breakpoint cascade needs the real layout to settle
+			await expect
+				.poll(async () => toolbar.evaluate((el) => el.getBoundingClientRect().width), {
+					timeout: 15000
+				})
+				.toBeGreaterThan(900);
 
 			// At 1280px with the sidebar collapsed, the toolbar has enough
 			// width for bp >= 3 (>=900px)

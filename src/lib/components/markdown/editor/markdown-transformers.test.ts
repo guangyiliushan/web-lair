@@ -563,7 +563,7 @@ describe('live-form trigger regexes (batch B)', () => {
 
 describe('embed cards and mermaid in the editor (batch C)', () => {
 	it('converts a provider URL image into an embed card node', () => {
-		const md = '![sveltejs/svelte](https://github.com/sveltejs/svelte)';
+		const md = '![example-org/example-repo](https://github.com/example-org/example-repo)';
 		expect(treeTypes(md)).toContain('embed');
 		expect(roundtrip(md)).toBe(md);
 	});

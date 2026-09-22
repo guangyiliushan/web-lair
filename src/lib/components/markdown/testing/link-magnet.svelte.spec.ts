@@ -14,7 +14,7 @@ overwriteGetLocale(() => 'zh-cn');
 
 const MD_WITH_LINKS = [
 	'访问 [Svelte 官网](https://svelte.dev) 与 [文档](https://developer.mozilla.org) 了解更多。',
-	'![sveltejs/svelte](https://github.com/sveltejs/svelte)'
+	'![example-org/example-repo](https://github.com/example-org/example-repo)'
 ].join('\n\n');
 
 afterEach(() => {

@@ -23,11 +23,11 @@ describe('rendered html output', () => {
 	});
 
 	it('renders @gh: mention as token link', () => {
-		const html = renderMarkdownToHtmlSync('找 @gh:octocat 看看');
+		const html = renderMarkdownToHtmlSync('找 @gh:someone 看看');
 		// attribute order is a hast serialization detail
 		expect(html).toContain('class="mention"');
-		expect(html).toContain('href="@gh:octocat"');
-		expect(html).toContain('>@gh:octocat</a>');
+		expect(html).toContain('href="@gh:someone"');
+		expect(html).toContain('>@gh:someone</a>');
 	});
 
 	it('renders > [!NOTE] alert with nested list preserved', () => {

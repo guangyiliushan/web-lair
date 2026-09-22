@@ -58,7 +58,7 @@ describe('markdown rendered output paints correctly', () => {
 		const spoiler = root.querySelector('span.spoiler');
 		expect(spoiler, '||隐藏内容|| must produce span.spoiler').not.toBeNull();
 		expect(spoiler!.textContent).toBe('隐藏内容');
-		// layout.css: Shiro-style same-color masking — background and color
+		// layout.css: same-color masking — background and color
 		// share one muted tone so the text merges into a block; hover/focus
 		// fades the block away. Assert the mask contract, not a token value.
 		const mask = getComputedStyle(spoiler!);
@@ -176,11 +176,11 @@ describe('custom extensions (L2 migration state) paint', () => {
 	});
 
 	it('mention renders as a token link (batch 2 — currently in flight)', () => {
-		const root = mountHtml(renderMarkdownToHtmlSync('找 @gh:octocat 看看'));
+		const root = mountHtml(renderMarkdownToHtmlSync('找 @gh:someone 看看'));
 		const a = root.querySelector('a');
-		expect(a, '@gh:octocat must become a token link').not.toBeNull();
-		expect(a!.getAttribute('href')).toBe('@gh:octocat');
-		expect(a!.textContent).toBe('@gh:octocat');
+		expect(a, '@gh:someone must become a token link').not.toBeNull();
+		expect(a!.getAttribute('href')).toBe('@gh:someone');
+		expect(a!.textContent).toBe('@gh:someone');
 	});
 
 	it('retired #x# syntax stays literal (batch 2 retirement)', () => {

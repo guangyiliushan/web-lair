@@ -12,7 +12,7 @@ describe('embed cards and mermaid in the editor DOM (batch C)', () => {
 	it('renders a provider URL as an embed card', async () => {
 		await page.viewport(1280, 720);
 		await render(ToolbarTestHost, {
-			initialMarkdown: '![sveltejs/svelte](https://github.com/sveltejs/svelte)',
+			initialMarkdown: '![example-org/example-repo](https://github.com/example-org/example-repo)',
 			placeholder: '输入正文...'
 		});
 		await expect

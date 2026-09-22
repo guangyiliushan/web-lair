@@ -71,8 +71,8 @@
 .rich-editor-ul {
 	@apply my-2 list-disc pl-6;
 }
-/* 嵌套层与顶层同为 disc(Shiro/prose 口径),层级感由缩进表达;
-   marker 统一淡化一档(Shiro 实测 ::marker color = 50% 透明)。 */
+/* 嵌套层与顶层同为 disc(与正文 prose 同口径),层级感由缩进表达;
+   marker 统一淡化一档(::marker color = 半透明 currentColor)。 */
 .rich-editor-ul li::marker,
 .rich-editor-ol li::marker {
 	color: color-mix(in oklch, currentColor 50%, transparent);

@@ -262,7 +262,7 @@
 		background: transparent;
 	}
 
-	/* Spoiler: Shiro-style same-color masking (text merged into a neutral
+	/* Spoiler: same-color masking (text merged into a neutral
 	   block), hover fades the block away over 0.5s to reveal the content.
 	   Shared by the render side's <span class=spoiler> and the editor's
 	   SpoilerNode, so one rule styles both. */

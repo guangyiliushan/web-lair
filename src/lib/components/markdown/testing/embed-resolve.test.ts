@@ -23,8 +23,8 @@ const POSITIVES: Record<string, string> = {
 	'https://x.com/user/status/123456': 'tweet',
 	'https://twitter.com/user/status/123456': 'tweet',
 	'https://x.com/i/web/status/42': 'tweet',
-	'https://www.youtube.com/watch?v=dQw4w9WgXcQ': 'youtube',
-	'https://youtu.be/dQw4w9WgXcQ': 'youtube',
+	'https://www.youtube.com/watch?v=aaaaaaaaaaa': 'youtube',
+	'https://youtu.be/aaaaaaaaaaa': 'youtube',
 	'https://www.bilibili.com/video/BV1xx411c7mD': 'bilibili',
 	'https://codesandbox.io/s/abc123': 'codesandbox',
 	'https://arxiv.org/abs/2401.00001': 'arxiv',
@@ -33,9 +33,9 @@ const POSITIVES: Record<string, string> = {
 	'https://y.qq.com/n/ryqq/songDetail/abc': 'qq-music',
 	'https://music.163.com/song?id=123': 'netease-music',
 	'https://leetcode.cn/problems/two-sum/': 'leetcode',
-	'/posts/hello-world': 'mx-space',
-	'/notes/some-note': 'mx-space',
-	'/thinking/42': 'mx-space'
+	'/posts/hello-world': 'lair',
+	'/notes/some-note': 'lair',
+	'/thinking/42': 'lair'
 };
 
 const NEGATIVES = [
@@ -117,7 +117,7 @@ describe('spec 3.4 embed decision', () => {
 
 	it('derives the proxy allowlist from every provider declaration', () => {
 		for (const url of Object.keys(POSITIVES)) {
-			if (url.startsWith('/')) continue; // mx-space has no public domain
+			if (url.startsWith('/')) continue; // lair has no public domain
 			const host = canonicalHost(new URL(url).hostname);
 			expect(EMBED_PROVIDER_DOMAINS.has(host), `${url} is missing from the proxy allowlist`).toBe(
 				true

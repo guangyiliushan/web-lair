@@ -173,11 +173,11 @@
 		'qq-music': 'QQ 音乐',
 		'netease-music': '网易云音乐',
 		leetcode: 'LeetCode'
-	} satisfies Record<Exclude<EmbedProviderId, 'mx-space'>, string>;
+	} satisfies Record<Exclude<EmbedProviderId, 'lair'>, string>;
 	const label = $derived(
 		provider === 'generic'
 			? m.md_embed_link()
-			: provider === 'mx-space'
+			: provider === 'lair'
 				? m.md_embed_own_site()
 				: PROVIDER_BRANDS[provider]
 	);

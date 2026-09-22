@@ -15,7 +15,7 @@ overwriteGetLocale(() => 'zh-cn');
 const MD = [
 	'段落开始',
 	'',
-	'![sveltejs/svelte](https://github.com/sveltejs/svelte)',
+	'![example-org/example-repo](https://github.com/example-org/example-repo)',
 	'',
 	'段落结束'
 ].join('\n');
@@ -77,7 +77,7 @@ describe('embed card editing', () => {
 			.poll(() => hostEl().querySelector('.embed-edit-row input') !== null, { timeout: 5000 })
 			.toBe(true);
 		const input = hostEl().querySelector('.embed-edit-row input') as HTMLInputElement;
-		input.value = 'https://github.com/vuejs/core';
+		input.value = 'https://github.com/example-org/example-repo';
 		input.dispatchEvent(new Event('input', { bubbles: true }));
 		const apply = [...hostEl().querySelectorAll('button')].find(
 			(b) => b.textContent.trim() === '应用'
@@ -90,7 +90,7 @@ describe('embed card editing', () => {
 				() => (hostEl().querySelector('a.embed-link') as HTMLAnchorElement)?.getAttribute('href'),
 				{ timeout: 5000 }
 			)
-			.toBe('https://github.com/vuejs/core');
+			.toBe('https://github.com/example-org/example-repo');
 
 		// 导出(代码模式)含新 URL
 		await page.getByRole('button', { name: '切换到代码模式' }).click();
@@ -98,9 +98,9 @@ describe('embed card editing', () => {
 			.poll(() => document.querySelector('textarea') !== null, { timeout: 5000 })
 			.toBe(true);
 		const ta = document.querySelector('textarea') as HTMLTextAreaElement;
-		expect(ta.value).toContain('(https://github.com/vuejs/core)');
+		expect(ta.value).toContain('(https://github.com/example-org/example-repo)');
 		// alt 文本未改则保留原值
-		expect(ta.value).toContain('![sveltejs/svelte]');
+		expect(ta.value).toContain('![example-org/example-repo]');
 		void screen;
 	});
 
@@ -114,7 +114,7 @@ describe('embed card editing', () => {
 			.poll(() => hostEl().querySelector('.embed-edit-row input') !== null, { timeout: 5000 })
 			.toBe(true);
 		const input = hostEl().querySelector('.embed-edit-row input') as HTMLInputElement;
-		input.value = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+		input.value = 'https://www.youtube.com/watch?v=aaaaaaaaaaa';
 		input.dispatchEvent(new Event('input', { bubbles: true }));
 		const apply = [...hostEl().querySelectorAll('button')].find(
 			(b) => b.textContent.trim() === '应用'

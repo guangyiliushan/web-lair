@@ -45,7 +45,7 @@ const IMAGE_EXTENSIONS = new Set([
 	'ico'
 ]);
 
-/** Site-internal card paths (spec 3.4: mx-space posts / notes / thinking). */
+/** Site-internal card paths (spec 3.4: lair posts / notes / thinking). */
 const SITE_EMBED_PATH_REGEX = /^\/(posts|notes|thinking)\//;
 
 export function imageExtension(url: string): string | null {
@@ -87,7 +87,7 @@ export function decideImage(context: ImageDecisionContext): ImageDecision {
 		const provider = matchWebProvider(parsed);
 		if (provider) return { kind: 'embed', provider };
 	} else if (SITE_EMBED_PATH_REGEX.test(context.url)) {
-		return { kind: 'embed', provider: 'mx-space' };
+		return { kind: 'embed', provider: 'lair' };
 	}
 	return { kind: 'embed', provider: 'generic' };
 }

@@ -112,7 +112,7 @@ export const conformanceCases: ConformanceCase[] = [
 		id: 'l2-spoiler-inline',
 		spec: '§2 #6',
 		input: '剧透 ||隐藏内容|| 结束',
-		// title = 原文提示(hover tooltip,Shiro 对齐);tabindex 提供键盘可达(:focus 揭示)
+		// title = 原文提示(hover tooltip);tabindex 提供键盘可达(:focus 揭示)
 		contains: ['<span class="spoiler" title="隐藏内容" tabindex="0">隐藏内容</span>']
 	},
 	{
@@ -276,15 +276,15 @@ export const conformanceCases: ConformanceCase[] = [
 	{
 		id: 'l2-mention-bare-gh',
 		spec: '§2 #4',
-		input: '找 @gh:octocat 看看',
+		input: '找 @gh:someone 看看',
 		// attribute order is a hast serialization detail — assert the parts
-		contains: ['class="mention"', 'href="@gh:octocat"', '>@gh:octocat</a>']
+		contains: ['class="mention"', 'href="@gh:someone"', '>@gh:someone</a>']
 	},
 	{
 		id: 'l2-mention-link-form',
 		spec: '§3.5',
-		input: '[自定义名](@gh:Innei) 链接式',
-		contains: ['href="@gh:Innei"', '自定义名']
+		input: '[自定义名](@gh:someone) 链接式',
+		contains: ['href="@gh:someone"', '自定义名']
 	},
 	{
 		id: 'l2-mention-platforms',
@@ -648,10 +648,10 @@ export const conformanceCases: ConformanceCase[] = [
 		notContains: ['embed-card']
 	},
 	{
-		id: 'l2-embed-mx-space-relative',
+		id: 'l2-embed-lair-relative',
 		spec: '§3.4 ④',
 		input: '![站内](/posts/hello-world)',
-		contains: ['data-embed="mx-space"'],
+		contains: ['data-embed="lair"'],
 		notContains: ['<img']
 	},
 	{

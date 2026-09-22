@@ -45,7 +45,7 @@ describe('embed card mounting (spec 3.4/7)', () => {
 	});
 
 	it('does not create an iframe before a facade click', async () => {
-		const host = await mountRenderer('![video](https://youtu.be/dQw4w9WgXcQ)');
+		const host = await mountRenderer('![video](https://youtu.be/aaaaaaaaaaa)');
 		try {
 			expect(host.querySelector('.embed-card-mount')).not.toBeNull();
 			expect(host.querySelector('iframe')).toBeNull();
@@ -55,7 +55,7 @@ describe('embed card mounting (spec 3.4/7)', () => {
 			await new Promise((resolve) => setTimeout(resolve, 0));
 			const iframe = host.querySelector('iframe');
 			expect(iframe).not.toBeNull();
-			expect(iframe!.getAttribute('src')).toContain('youtube.com/embed/dQw4w9WgXcQ');
+			expect(iframe!.getAttribute('src')).toContain('youtube.com/embed/aaaaaaaaaaa');
 			expect(iframe!.getAttribute('sandbox')).toContain('allow-scripts');
 		} finally {
 			unmountFns.pop()?.();

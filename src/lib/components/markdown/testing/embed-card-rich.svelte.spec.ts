@@ -11,9 +11,9 @@ overwriteGetLocale(() => 'zh-cn');
  * the static card, and every non-GitHub provider stays zero-request.
  */
 
-const REPO_MD = '![sveltejs/svelte](https://github.com/sveltejs/svelte)';
+const REPO_MD = '![example-org/example-repo](https://github.com/example-org/example-repo)';
 const COMMIT_MD =
-	'![commit](https://github.com/vuejs/vitepress/commit/71eb11f72e60706a546b756dc3fd72d06e2ae4e2)';
+	'![commit](https://github.com/example-org/example-repo/commit/a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0)';
 
 function mountRenderer(source: string): { destroy: () => void } {
 	const host = document.createElement('div');
@@ -40,12 +40,12 @@ describe('embed card github enrichment', () => {
 		const fetchMock = vi.fn().mockResolvedValue(
 			jsonResponse({
 				kind: 'repo',
-				title: 'sveltejs/svelte',
-				description: 'Cybernetically enhanced web apps',
+				title: 'example-org/example-repo',
+				description: 'An example repository used in tests',
 				stars: 82000,
 				language: 'JavaScript',
 				avatarUrl: 'https://avatars.githubusercontent.com/u/23617959',
-				htmlUrl: 'https://github.com/sveltejs/svelte'
+				htmlUrl: 'https://github.com/example-org/example-repo'
 			})
 		);
 		vi.stubGlobal('fetch', fetchMock);
@@ -59,7 +59,7 @@ describe('embed card github enrichment', () => {
 				.toBeGreaterThan(0);
 
 			const card = document.querySelector('.embed-enriched') as HTMLElement;
-			expect(card.querySelector('.embed-desc')?.textContent).toContain('Cybernetically');
+			expect(card.querySelector('.embed-desc')?.textContent).toContain('An example repository');
 			expect([...card.querySelectorAll('.embed-chip')].map((c) => c.textContent)).toContain(
 				'★ 82,000'
 			);
@@ -81,12 +81,12 @@ describe('embed card github enrichment', () => {
 			vi.fn().mockResolvedValue(
 				jsonResponse({
 					kind: 'commit',
-					title: 'fix(theme): fix theme without fonts emitting inter (#2588)',
+					title: 'fix: example commit subject (#1234)',
 					additions: 9,
 					deletions: 10,
-					sha: '71eb11f',
+					sha: 'a1b2c3d',
 					avatarUrl: 'https://avatars.githubusercontent.com/u/40380293',
-					repoName: 'vuejs/vitepress'
+					repoName: 'example-org/example-repo'
 				})
 			)
 		);
@@ -102,10 +102,10 @@ describe('embed card github enrichment', () => {
 			);
 			expect(chips).toContain('+9');
 			expect(chips).toContain('-10');
-			expect(chips).toContain('71eb11f');
-			expect(chips).toContain('vuejs/vitepress');
+			expect(chips).toContain('a1b2c3d');
+			expect(chips).toContain('example-org/example-repo');
 			expect(document.querySelector('.embed-enriched .embed-title')?.textContent).toContain(
-				'fix(theme)'
+				'fix: example commit'
 			);
 		} finally {
 			renderer.destroy();
@@ -124,7 +124,7 @@ describe('embed card github enrichment', () => {
 			await new Promise((r) => setTimeout(r, 300));
 			expect(document.querySelectorAll('.embed-enriched').length).toBe(0);
 			expect(document.querySelector('.embed-card-mount .embed-title')?.textContent).toContain(
-				'sveltejs/svelte'
+				'example-org/example-repo'
 			);
 		} finally {
 			renderer.destroy();

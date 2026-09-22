@@ -290,7 +290,7 @@ function collectText(node: Parents): string {
  * remark-rehype hast handler factory: spoiler -> span.spoiler, mark -> mark.
  * `titleFromText` puts the raw content into a `title` attribute so masked
  * spoilers reveal their text on hover before the style transition runs
- * (Shiro parity: `<del class="spoiler" title="...">`).
+ * (the mask carries the raw content as its title tooltip).
  */
 export function createAttentionHandler(
 	tagName: string,

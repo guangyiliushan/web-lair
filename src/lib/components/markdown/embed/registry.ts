@@ -1,6 +1,6 @@
 /**
  * Embed provider registry (spec 3.4) — the closed v1 set: 17 providers with
- * public domains matched here, plus `mx-space` (no public domain; it matches
+ * public domains matched here, plus `lair` (no public domain; it matches
  * the site's own relative paths in resolve.ts — see EMBED_PROVIDER_IDS for
  * the full 18-id enumeration).
  *
@@ -30,9 +30,9 @@ export type EmbedProviderId =
 	| 'qq-music'
 	| 'netease-music'
 	| 'leetcode'
-	| 'mx-space';
+	| 'lair';
 
-/** The full closed enumeration, including the resolve-side mx-space id. */
+/** The full closed enumeration, including the resolve-side lair id. */
 export const EMBED_PROVIDER_IDS: readonly EmbedProviderId[] = [
 	'gh-repo',
 	'gh-commit',
@@ -51,7 +51,7 @@ export const EMBED_PROVIDER_IDS: readonly EmbedProviderId[] = [
 	'qq-music',
 	'netease-music',
 	'leetcode',
-	'mx-space'
+	'lair'
 ];
 
 interface EmbedProvider {

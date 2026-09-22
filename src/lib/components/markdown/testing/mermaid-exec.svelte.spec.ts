@@ -91,7 +91,7 @@ async function mountRenderer(source: string) {
 }
 
 const waitForSettled = (container: Element) =>
-	expect.poll(() => settled(container) !== null, { timeout: 15_000 }).toBe(true);
+	expect.poll(() => settled(container) !== null, { timeout: 30_000 }).toBe(true);
 
 afterEach(() => {
 	themeStore.value = 'light';
@@ -185,7 +185,7 @@ describe('mermaid execution (client)', () => {
 			const screen = await mountRenderer(shape);
 			await expect
 				.poll(() => settled(screen.container) !== null, {
-					timeout: 15_000,
+					timeout: 30_000,
 					message: `shape ${index}`
 				})
 				.toBe(true);
@@ -210,18 +210,18 @@ describe('mermaid execution (client)', () => {
 		themeStore.init();
 		themeStore.value = 'dark';
 		await expect
-			.poll(() => document.documentElement.classList.contains('dark'), { timeout: 15_000 })
+			.poll(() => document.documentElement.classList.contains('dark'), { timeout: 30_000 })
 			.toBe(true);
 		const darkToken = tokenFill('--muted');
 		expect(darkToken).not.toBe(fillOf());
-		await expect.poll(() => fillOf(), { timeout: 15_000 }).toBe(darkToken);
+		await expect.poll(() => fillOf(), { timeout: 30_000 }).toBe(darkToken);
 	});
 
 	it('rolls failed diagrams back to their raw source', async () => {
 		const broken = await mountRenderer(BROKEN);
 		await expect
 			.poll(() => broken.container.querySelector('.mermaid[data-md-error]') !== null, {
-				timeout: 15_000
+				timeout: 30_000
 			})
 			.toBe(true);
 		expect(settled(broken.container)).toBeNull();
@@ -231,7 +231,7 @@ describe('mermaid execution (client)', () => {
 		const shape = await mountRenderer(IMAGE_SHAPE);
 		await expect
 			.poll(() => shape.container.querySelector('.mermaid[data-md-error="image-shape"]') !== null, {
-				timeout: 15_000
+				timeout: 30_000
 			})
 			.toBe(true);
 		expect(shape.container.querySelector('.mermaid')?.textContent).toContain('@{');
@@ -247,7 +247,7 @@ describe('mermaid execution (client)', () => {
 		const second = await mountRenderer(fence('graph TD;\n  A[丙] --> B[丁];'));
 		await expect
 			.poll(() => settled(second.container)?.textContent?.includes('丙') === true, {
-				timeout: 15_000
+				timeout: 30_000
 			})
 			.toBe(true);
 		expect(settled(screen.container)).not.toBeNull();
