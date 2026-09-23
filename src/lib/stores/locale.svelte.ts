@@ -1,8 +1,6 @@
-import { setLocale, getLocale, locales } from '$lib/paraglide/runtime';
+import { setLocale, locales } from '$lib/paraglide/runtime';
 
 type LocaleTag = (typeof locales)[number];
-
-const STORAGE_KEY = 'locale';
 
 export const localeLabels: Record<string, string> = {
 	en: 'English',
@@ -10,45 +8,24 @@ export const localeLabels: Record<string, string> = {
 	ja: '日本語'
 };
 
+/**
+ * The one place the UI switches locale.
+ *
+ * The preference lives in paraglide's cookie (`PARAGLIDE_LOCALE`): `setLocale`
+ * writes it and reloads, so the server renders the next page in the new locale
+ * and `<html lang>` follows. A second copy in localStorage used to live here
+ * and was re-applied on every boot; once `getLocale()` was pinned client-side
+ * the two could never agree, so that re-application reloaded forever. The
+ * cookie is the single source of truth now.
+ */
 class LocaleStore {
-	#initialized = false;
-
-	get current(): string {
-		return getLocale();
-	}
-
 	get available(): readonly string[] {
 		return locales;
 	}
 
 	switchTo(locale: string): void {
 		if (!locales.includes(locale as LocaleTag)) return;
-		if (this.#initialized) {
-			this.#persist(locale);
-		}
 		setLocale(locale as LocaleTag);
-	}
-
-	init(): void {
-		if (this.#initialized) return;
-		this.#initialized = true;
-
-		const stored = this.#readStored();
-		const current = getLocale();
-
-		if (stored && stored !== current && locales.includes(stored as LocaleTag)) {
-			setLocale(stored as LocaleTag);
-		}
-	}
-
-	#readStored(): string | null {
-		if (typeof window === 'undefined') return null;
-		return window.localStorage.getItem(STORAGE_KEY);
-	}
-
-	#persist(locale: string): void {
-		if (typeof window === 'undefined') return;
-		window.localStorage.setItem(STORAGE_KEY, locale);
 	}
 }
 

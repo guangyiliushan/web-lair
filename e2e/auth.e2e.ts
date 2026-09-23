@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { zhCnLocale } from './locale-fixture';
 
-// The app pins its locale to zh-cn client-side (hooks.client.ts, "admin i18n
-// audit phase A2"), so pages always render the zh-cn message set. Titles live
-// in shadcn Card.Title - a div with data-slot="card-title", not an h2.
+// The app default is the project base locale (en): the client-side pin that
+// used to force zh-cn was removed with the locale-switch fix. These assertions
+// read the zh-cn message set, so this file pins it explicitly. Titles live in
+// shadcn Card.Title - a div with data-slot="card-title", not an h2.
+test.use(zhCnLocale);
+
 test.describe('Auth pages', () => {
 	test('login page renders', async ({ page }) => {
 		await page.goto('/login');

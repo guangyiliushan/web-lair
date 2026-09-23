@@ -17,7 +17,14 @@ export default defineConfig({
 		sveltekit(),
 		paraglideVitePlugin({
 			project: './project.inlang',
-			outdir: './src/lib/paraglide'
+			outdir: './src/lib/paraglide',
+			// Explicit strategy, in priority order: cookie = the user's own
+			// choice (also the server-visible source of truth), preferredLanguage
+			// = first-visit detection from the browser (navigator.languages /
+			// Accept-Language), baseLocale = fallback. The compiler default also
+			// includes `globalVariable`, which the docs call testing/quick-start
+			// only and warn about for server-side cross-request issues.
+			strategy: ['cookie', 'preferredLanguage', 'baseLocale']
 		})
 	],
 	test: {

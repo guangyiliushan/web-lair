@@ -12,15 +12,33 @@ import { env } from '$env/dynamic/private';
 import { getAdminSessionContext, issueAdminSessionCookie } from '$lib/server/security/admin-cookie';
 import { tryTailscaleAutoLogin } from '$lib/server/security/tailscale-auth';
 
-const handleParaglide: Handle = ({ event, resolve }) =>
-	paraglideMiddleware(event.request, ({ request, locale }) => {
+const handleParaglide: Handle = async ({ event, resolve }) =>
+	paraglideMiddleware(event.request, async ({ request, locale }) => {
 		event.request = request;
 
-		return resolve(event, {
+		const response = await resolve(event, {
 			transformPageChunk: ({ html }) =>
-				html
-					.replace('%paraglide.lang%', locale)
-					.replace('%paraglide.dir%', getTextDirection(locale))
+				html.replace('%lang%', locale).replace('%dir%', getTextDirection(locale))
+		});
+
+		// The rendered page depends on the locale cookie and - on a first visit
+		// with no cookie yet - on Accept-Language, so a shared cache has to key
+		// on both (MDN: Vary). Rebuild the response instead of mutating it:
+		// Headers can be immutable on some runtimes.
+		if (!response.headers.get('content-type')?.includes('text/html')) return response;
+		const headers = new Headers(response.headers);
+		const tokens = (headers.get('vary') ?? '')
+			.split(',')
+			.map((token) => token.trim())
+			.filter(Boolean);
+		for (const required of ['Cookie', 'Accept-Language']) {
+			if (!tokens.includes(required)) tokens.push(required);
+		}
+		headers.set('vary', tokens.join(', '));
+		return new Response(response.body, {
+			status: response.status,
+			statusText: response.statusText,
+			headers
 		});
 	});
 

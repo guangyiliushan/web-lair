@@ -1,4 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { zhCnLocale } from './locale-fixture';
+
+// The toolbar's aria-labels come from the zh-cn message set (编辑器工具栏 /
+// 粗体 / 插入链接 ...), so this file pins zh-cn explicitly: the app default is
+// the project base locale (en) since the client-side locale pin was removed.
+test.use(zhCnLocale);
 
 const VIEWPORTS = {
 	mobile: { width: 375, height: 812 },
@@ -79,16 +85,20 @@ test.describe('EditorToolbar', () => {
 
 			const toolbar = page.locator('[role="toolbar"][aria-label="编辑器工具栏"]');
 
-			// Deterministic width: wait for hydration, then collapse the sidebar so
-			// the toolbar reaches bp >= 3 (otherwise it sits on the bp boundary).
+			// Deterministic width: collapse the sidebar so the toolbar reaches
+			// bp >= 3 (otherwise it sits on the bp boundary). The trigger is in
+			// the SSR HTML before SvelteKit attaches its handlers, so under load
+			// the first click can be swallowed (measured 2026-09-23: a swallowed
+			// click left the toolbar at 896 px and the >900 poll timed out) -
+			// retry until the sidebar state actually flips.
 			const sidebar = page.locator('[data-slot="sidebar"]');
 			const sidebarTrigger = page.locator('[data-slot="sidebar-trigger"]');
-			await expect(sidebar).toHaveAttribute('data-state', /(expanded|collapsed)/, {
-				timeout: 15000
-			});
-			if ((await sidebar.getAttribute('data-state')) === 'expanded') {
-				await sidebarTrigger.click();
-			}
+			await expect(async () => {
+				if ((await sidebar.getAttribute('data-state')) !== 'collapsed') {
+					await sidebarTrigger.click();
+				}
+				await expect(sidebar).toHaveAttribute('data-state', 'collapsed', { timeout: 2000 });
+			}).toPass({ timeout: 20000 });
 			await expect(toolbar).toBeVisible({ timeout: 10000 });
 			// wait for the toolbar's own measured width (the ResizeObserver input),
 			// not a fixed sleep: the breakpoint cascade needs the real layout to settle

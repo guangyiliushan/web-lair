@@ -26,6 +26,8 @@
 	import { page } from '$app/state';
 	import { AdminHeader } from '$lib/components/admin';
 	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
+	import { localeStore, localeLabels } from '$lib/stores/locale.svelte';
 
 	let { children, data }: LayoutProps = $props();
 
@@ -54,6 +56,10 @@
 	const email = $derived(user?.email ?? '');
 	const avatarSrc = $derived(profile?.avatarUrl ?? user?.image ?? '');
 	const avatarFallback = $derived(displayName.charAt(0).toUpperCase());
+	const localeOptions = localeStore.available.map((tag) => ({
+		value: tag,
+		label: localeLabels[tag] ?? tag
+	}));
 </script>
 
 <Sidebar.Provider>
@@ -99,6 +105,16 @@
 								</DropdownMenu.Item>
 							</DropdownMenu.Group>
 							<DropdownMenu.Separator />
+							<DropdownMenu.Label>{m.ui_language()}</DropdownMenu.Label>
+							<DropdownMenu.RadioGroup
+								value={getLocale()}
+								onValueChange={(value) => localeStore.switchTo(value)}
+							>
+								{#each localeOptions as { value, label } (value)}
+									<DropdownMenu.RadioItem {value}>{label}</DropdownMenu.RadioItem>
+								{/each}
+							</DropdownMenu.RadioGroup>
+							<DropdownMenu.Separator />
 							<form method="post" action="/auth/sign-out">
 								<DropdownMenu.Item
 									class="text-destructive focus:text-destructive"
@@ -142,7 +158,7 @@
 		<Sidebar.Rail />
 	</Sidebar.Root>
 
-	<Sidebar.Inset class="flex min-h-screen flex-col overflow-x-clip min-w-0">
+	<Sidebar.Inset class="flex min-h-screen min-w-0 flex-col overflow-x-clip">
 		<AdminHeader />
 
 		<main class="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
