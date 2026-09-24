@@ -642,7 +642,7 @@ CREATE INDEX "notes_nid_desc_idx" ON "notes" USING btree ("nid");--> statement-b
 CREATE INDEX "notes_modified_at_idx" ON "notes" USING btree ("modified_at");--> statement-breakpoint
 CREATE INDEX "notes_created_at_idx" ON "notes" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "notes_topic_id_idx" ON "notes" USING btree ("topic_id");--> statement-breakpoint
-CREATE INDEX CONCURRENTLY "notes_published_public_created_idx" ON "notes" USING btree ("is_published","created_at" DESC NULLS LAST,"public_at");--> statement-breakpoint
+CREATE INDEX "notes_published_public_created_idx" ON "notes" USING btree ("is_published","created_at" DESC NULLS LAST,"public_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "pages_slug_uniq" ON "pages" USING btree ("slug");--> statement-breakpoint
 CREATE INDEX "pages_sort_order_idx" ON "pages" USING btree ("sort_order");--> statement-breakpoint
 CREATE UNIQUE INDEX "post_related_posts_pk" ON "post_related_posts" USING btree ("post_id","related_post_id");--> statement-breakpoint
@@ -651,9 +651,9 @@ CREATE UNIQUE INDEX "posts_slug_uniq" ON "posts" USING btree ("slug");--> statem
 CREATE INDEX "posts_modified_at_idx" ON "posts" USING btree ("modified_at");--> statement-breakpoint
 CREATE INDEX "posts_created_at_idx" ON "posts" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "posts_category_id_idx" ON "posts" USING btree ("category_id");--> statement-breakpoint
-CREATE INDEX CONCURRENTLY "posts_published_created_at_idx" ON "posts" USING btree ("is_published","pin_at" DESC NULLS LAST,"created_at" DESC NULLS LAST);--> statement-breakpoint
-CREATE INDEX CONCURRENTLY "posts_category_published_created_idx" ON "posts" USING btree ("category_id","is_published","pin_at" DESC NULLS LAST,"created_at" DESC NULLS LAST);--> statement-breakpoint
-CREATE INDEX CONCURRENTLY "posts_tags_gin_idx" ON "posts" USING gin ("tags");--> statement-breakpoint
+CREATE INDEX "posts_published_created_at_idx" ON "posts" USING btree ("is_published","pin_at" DESC NULLS LAST,"created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "posts_category_published_created_idx" ON "posts" USING btree ("category_id","is_published","pin_at" DESC NULLS LAST,"created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "posts_tags_gin_idx" ON "posts" USING gin ("tags");--> statement-breakpoint
 CREATE UNIQUE INDEX "projects_name_uniq" ON "projects" USING btree ("name");--> statement-breakpoint
 CREATE INDEX "quotes_created_at_idx" ON "quotes" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "recent_items_ref_idx" ON "recent_items" USING btree ("ref_type","ref_id");--> statement-breakpoint

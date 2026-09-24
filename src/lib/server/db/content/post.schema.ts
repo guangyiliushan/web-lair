@@ -45,16 +45,14 @@ export const posts = pgTable(
 		index('posts_created_at_idx').on(table.createdAt),
 		index('posts_category_id_idx').on(table.categoryId),
 		index('posts_published_created_at_idx')
-			.on(table.isPublished, table.pinAt.desc().nullsLast(), table.createdAt.desc())
-			.concurrently(),
+			.on(table.isPublished, table.pinAt.desc().nullsLast(), table.createdAt.desc()),
 		index('posts_category_published_created_idx')
 			.on(
 				table.categoryId,
 				table.isPublished,
 				table.pinAt.desc().nullsLast(),
 				table.createdAt.desc()
-			)
-			.concurrently(),
-		index('posts_tags_gin_idx').using('gin', table.tags).concurrently()
+			),
+		index('posts_tags_gin_idx').using('gin', table.tags)
 	]
 );

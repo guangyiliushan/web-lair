@@ -53,6 +53,5 @@ export const notes = pgTable(
 		index('notes_topic_id_idx').on(table.topicId),
 		index('notes_published_public_created_idx')
 			.on(table.isPublished, table.createdAt.desc(), table.publicAt)
-			.concurrently()
 	]
 );
