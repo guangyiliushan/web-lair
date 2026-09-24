@@ -2,9 +2,20 @@ import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { passkey } from '@better-auth/passkey';
-import { admin as adminPlugin, lastLoginMethod } from 'better-auth/plugins';
-import { ac, adminRole, ownerRole, userRole } from '$lib/server/auth/permissions';
+import { admin as adminPlugin, lastLoginMethod, organization } from 'better-auth/plugins';
+import {
+	ac,
+	adminRole,
+	moderatorRole,
+	orgAdminRole,
+	orgMemberRole,
+	orgOwnerRole,
+	ownerRole,
+	reviewerRole,
+	userRole
+} from '$lib/server/auth/permissions';
 import { tailscaleSignIn } from '$lib/server/auth/tailscale-plugin';
+import { getSiteOrganizationId } from '$lib/server/auth/site-organization';
 import { env } from '$env/dynamic/private';
 import { getRequestEvent } from '$app/server';
 import { db } from '$lib/server/db';
@@ -77,6 +88,17 @@ export const auth = betterAuth({
 					});
 				}
 			}
+		},
+		session: {
+			create: {
+				// B2 (ledger §4.22): pin every session to the site organization so
+				// org-scoped checks (comment review) need no separate activate step.
+				before: async (session) => {
+					const siteOrganizationId = await getSiteOrganizationId();
+					if (!siteOrganizationId) return;
+					return { data: { ...session, activeOrganizationId: siteOrganizationId } };
+				}
+			}
 		}
 	},
 
@@ -91,6 +113,28 @@ export const auth = betterAuth({
 		}),
 		// Official "last method used" tracking; cookie mode, no schema change.
 		lastLoginMethod(),
+		// Content collaboration (B2): owner / reviewer / moderator roles plus the
+		// `comment` resource. The site organization is created by /admin/setup
+		// and pinned onto every session by the database hook above.
+		organization({
+			ac,
+			roles: {
+				owner: orgOwnerRole,
+				admin: orgAdminRole,
+				member: orgMemberRole,
+				reviewer: reviewerRole,
+				moderator: moderatorRole
+			},
+			creatorRole: 'owner',
+			allowUserToCreateOrganization: false,
+			requireEmailVerificationOnInvitation: true,
+			// No mailer yet (ledger §4.27): invitations are bypassed with
+			// auth.api.addMember; this placeholder keeps sends explicit instead
+			// of silently dropping them.
+			sendInvitationEmail: async ({ email }) => {
+				console.warn(`[organization] invitation for ${email} was not sent (no mailer configured)`);
+			}
+		}),
 		passkey({
 			rpID: deriveRpId(env.ORIGIN),
 			rpName: 'Web Lair',

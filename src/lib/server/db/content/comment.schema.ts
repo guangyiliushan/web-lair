@@ -1,22 +1,48 @@
+import { sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import { boolean, index, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+	boolean,
+	check,
+	index,
+	integer,
+	jsonb,
+	pgTable,
+	text,
+	timestamp
+} from 'drizzle-orm/pg-core';
 import { user } from '../auth.schema';
+import { notes } from './note.schema';
+import { pages } from './page.schema';
+import { posts } from './post.schema';
 
 /**
- * Self-referential thread structure plus polymorphic ref to content (Post/Note/Page/Recently).
+ * Comment threads with an exclusive-arc target (ledger §9.5/§11-A2): exactly
+ * one of post_id / note_id / page_id is set, enforced by CHECK
+ * (num_nonnulls(...) = 1) instead of the old ref_type/ref_id pair.
+ *
+ * Two axes are kept separate on purpose (ledger §4.16): `state` is the
+ * moderation decision (pending/approved/rejected) while `is_deleted` /
+ * `deleted_at` express removal.
+ *
+ * Types: the arc columns stay `text` until P1 converts the library to uuid
+ * (§11-D); `reader_id` / `reviewed_by` point at the auth tables and therefore
+ * remain text permanently (§9.6 exception).
  */
 export const comments = pgTable(
 	'comments',
 	{
 		id: text('id').primaryKey().notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-		refType: text('ref_type').notNull(),
-		refId: text('ref_id').notNull(),
+		postId: text('post_id').references(() => posts.id, { onDelete: 'cascade' }),
+		noteId: text('note_id').references(() => notes.id, { onDelete: 'cascade' }),
+		pageId: text('page_id').references(() => pages.id, { onDelete: 'cascade' }),
 		author: text('author'),
 		mail: text('mail'),
 		url: text('url'),
 		text: text('text').notNull(),
-		state: integer('state').notNull().default(0),
+		state: text('state').notNull().default('pending'),
+		reviewedBy: text('reviewed_by').references(() => user.id, { onDelete: 'set null' }),
+		reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
 		parentCommentId: text('parent_comment_id').references((): AnyPgColumn => comments.id, {
 			onDelete: 'cascade'
 		}),
@@ -34,24 +60,31 @@ export const comments = pgTable(
 		isWhisper: boolean('is_whisper').notNull().default(false),
 		avatar: text('avatar'),
 		authProvider: text('auth_provider'),
-		meta: text('meta'),
-		readerId: text('reader_id').references(() => user.id, {
-			onDelete: 'set null'
-		}),
+		meta: jsonb('meta').$type<Record<string, unknown> | null>(),
+		readerId: text('reader_id').references(() => user.id, { onDelete: 'set null' }),
 		editedAt: timestamp('edited_at', { withTimezone: true }),
 		anchor: jsonb('anchor').$type<Record<string, unknown> | null>(),
 		isOwnerReply: boolean('is_owner_reply').notNull().default(false),
 		countryCode: text('country_code')
 	},
 	(table) => [
-		index('comments_thread_idx').on(
-			table.refType,
-			table.refId,
-			table.parentCommentId,
-			table.pin,
-			table.createdAt
+		check(
+			'comments_ref_exclusive_check',
+			sql`num_nonnulls(${table.postId}, ${table.noteId}, ${table.pageId}) = 1`
 		),
+		check('comments_state_check', sql`${table.state} in ('pending', 'approved', 'rejected')`),
+		index('comments_post_thread_idx')
+			.on(table.postId, table.parentCommentId, table.pin, table.createdAt)
+			.where(sql`${table.postId} is not null`),
 		index('comments_root_idx').on(table.rootCommentId, table.createdAt),
-		index('comments_reader_idx').on(table.readerId)
+		index('comments_reader_idx').on(table.readerId),
+		// Self-referential FK cascade needs a leading index on the child column (§11-A2).
+		index('comments_parent_idx')
+			.on(table.parentCommentId)
+			.where(sql`${table.parentCommentId} is not null`),
+		// Review queue lists only the pending state - partial index (§9.5).
+		index('comments_review_idx')
+			.on(table.state, table.createdAt)
+			.where(sql`${table.state} = 'pending'`)
 	]
 );

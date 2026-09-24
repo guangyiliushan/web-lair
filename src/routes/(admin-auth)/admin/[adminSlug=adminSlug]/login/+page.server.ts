@@ -6,7 +6,8 @@ import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { session as authSession } from '$lib/server/db/auth.schema';
 import { ADMIN_BASE_PATH, getAdminConfig } from '$lib/server/config/admin';
-import { hasAnyAdminCapability } from '$lib/server/authz';
+import { getUserRole, hasAnyAdminCapability } from '$lib/server/authz';
+import { isSiteOrganizationMember } from '$lib/server/auth/site-organization';
 import { safeRedirect } from '$lib/server/safe-redirect';
 import type { Session } from 'better-auth';
 
@@ -43,7 +44,7 @@ export const load: PageServerLoad = async (event) => {
 	});
 
 	// PRG landing spot: an authenticated admin-capable session skips the form.
-	if (event.locals.session && hasAnyAdminCapability(event.locals.user)) {
+	if (event.locals.session && (await hasAnyAdminCapability(event.locals.user))) {
 		redirect(302, redirectTo);
 	}
 
@@ -75,8 +76,14 @@ export const actions: Actions = {
 				}
 			});
 
-			// Roles replaced the email allowlist + the admin_account table (ledger Q13/§4.10).
-			if (!hasAnyAdminCapability(result.user) || !result.user.emailVerified) {
+			// Roles replaced the email allowlist + the admin_account table (ledger
+			// Q13/§4.10). Organization members (reviewers, B2) are admitted by
+			// membership: the session this sign-in just created is not visible in
+			// the request headers yet, so the capability itself is re-checked with
+			// the real cookie by the /admin guard and the comment queue.
+			const admitted =
+				getUserRole(result.user) !== null || (await isSiteOrganizationMember(result.user.id));
+			if (!admitted || !result.user.emailVerified) {
 				return fail(403, { message: 'This account cannot access admin', redirectTo });
 			}
 

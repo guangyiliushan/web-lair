@@ -112,13 +112,16 @@ CREATE TABLE "categories" (
 CREATE TABLE "comments" (
 	"id" text PRIMARY KEY NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"ref_type" text NOT NULL,
-	"ref_id" text NOT NULL,
+	"post_id" text,
+	"note_id" text,
+	"page_id" text,
 	"author" text,
 	"mail" text,
 	"url" text,
 	"text" text NOT NULL,
-	"state" integer DEFAULT 0 NOT NULL,
+	"state" text DEFAULT 'pending' NOT NULL,
+	"reviewed_by" text,
+	"reviewed_at" timestamp with time zone,
 	"parent_comment_id" text,
 	"root_comment_id" text,
 	"reply_count" integer DEFAULT 0 NOT NULL,
@@ -132,12 +135,14 @@ CREATE TABLE "comments" (
 	"is_whisper" boolean DEFAULT false NOT NULL,
 	"avatar" text,
 	"auth_provider" text,
-	"meta" text,
+	"meta" jsonb,
 	"reader_id" text,
 	"edited_at" timestamp with time zone,
 	"anchor" jsonb,
 	"is_owner_reply" boolean DEFAULT false NOT NULL,
-	"country_code" text
+	"country_code" text,
+	CONSTRAINT "comments_ref_exclusive_check" CHECK (num_nonnulls("comments"."post_id", "comments"."note_id", "comments"."page_id") = 1),
+	CONSTRAINT "comments_state_check" CHECK ("comments"."state" in ('pending', 'approved', 'rejected'))
 );
 --> statement-breakpoint
 CREATE TABLE "draft_histories" (
@@ -486,6 +491,35 @@ CREATE TABLE "account" (
 	"updated_at" timestamp NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "invitation" (
+	"id" text PRIMARY KEY NOT NULL,
+	"organization_id" text NOT NULL,
+	"email" text NOT NULL,
+	"role" text,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"expires_at" timestamp NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"inviter_id" text NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "member" (
+	"id" text PRIMARY KEY NOT NULL,
+	"organization_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"role" text DEFAULT 'member' NOT NULL,
+	"created_at" timestamp NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "organization" (
+	"id" text PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"slug" text NOT NULL,
+	"logo" text,
+	"created_at" timestamp NOT NULL,
+	"metadata" text,
+	CONSTRAINT "organization_slug_unique" UNIQUE("slug")
+);
+--> statement-breakpoint
 CREATE TABLE "passkey" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
@@ -510,6 +544,7 @@ CREATE TABLE "session" (
 	"user_agent" text,
 	"user_id" text NOT NULL,
 	"impersonated_by" text,
+	"active_organization_id" text,
 	CONSTRAINT "session_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
@@ -539,6 +574,10 @@ CREATE TABLE "verification" (
 --> statement-breakpoint
 ALTER TABLE "user_profiles" ADD CONSTRAINT "user_profiles_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ai_insights" ADD CONSTRAINT "ai_insights_source_insights_id_ai_insights_id_fk" FOREIGN KEY ("source_insights_id") REFERENCES "public"."ai_insights"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_note_id_notes_id_fk" FOREIGN KEY ("note_id") REFERENCES "public"."notes"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_page_id_pages_id_fk" FOREIGN KEY ("page_id") REFERENCES "public"."pages"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_reviewed_by_user_id_fk" FOREIGN KEY ("reviewed_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_parent_comment_id_comments_id_fk" FOREIGN KEY ("parent_comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_root_comment_id_comments_id_fk" FOREIGN KEY ("root_comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_reader_id_user_id_fk" FOREIGN KEY ("reader_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -553,6 +592,10 @@ ALTER TABLE "file_references" ADD CONSTRAINT "file_references_uploaded_by_user_i
 ALTER TABLE "poll_vote_options" ADD CONSTRAINT "poll_vote_options_vote_id_poll_votes_id_fk" FOREIGN KEY ("vote_id") REFERENCES "public"."poll_votes"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "webhook_events" ADD CONSTRAINT "webhook_events_hook_id_webhooks_id_fk" FOREIGN KEY ("hook_id") REFERENCES "public"."webhooks"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "invitation" ADD CONSTRAINT "invitation_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "invitation" ADD CONSTRAINT "invitation_inviter_id_user_id_fk" FOREIGN KEY ("inviter_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "member" ADD CONSTRAINT "member_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "member" ADD CONSTRAINT "member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "passkey" ADD CONSTRAINT "passkey_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "ai_agent_conversations_session_idx" ON "ai_agent_conversations" USING btree ("session_id");--> statement-breakpoint
@@ -567,9 +610,11 @@ CREATE UNIQUE INDEX "meta_presets_name_uniq" ON "meta_presets" USING btree ("nam
 CREATE UNIQUE INDEX "options_name_uniq" ON "options" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "categories_name_uniq" ON "categories" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "categories_slug_uniq" ON "categories" USING btree ("slug");--> statement-breakpoint
-CREATE INDEX "comments_thread_idx" ON "comments" USING btree ("ref_type","ref_id","parent_comment_id","pin","created_at");--> statement-breakpoint
+CREATE INDEX "comments_post_thread_idx" ON "comments" USING btree ("post_id","parent_comment_id","pin","created_at") WHERE "comments"."post_id" is not null;--> statement-breakpoint
 CREATE INDEX "comments_root_idx" ON "comments" USING btree ("root_comment_id","created_at");--> statement-breakpoint
 CREATE INDEX "comments_reader_idx" ON "comments" USING btree ("reader_id");--> statement-breakpoint
+CREATE INDEX "comments_parent_idx" ON "comments" USING btree ("parent_comment_id") WHERE "comments"."parent_comment_id" is not null;--> statement-breakpoint
+CREATE INDEX "comments_review_idx" ON "comments" USING btree ("state","created_at") WHERE "comments"."state" = 'pending';--> statement-breakpoint
 CREATE UNIQUE INDEX "draft_histories_draft_version_uniq" ON "draft_histories" USING btree ("draft_id","version");--> statement-breakpoint
 CREATE INDEX "drafts_ref_idx" ON "drafts" USING btree ("ref_type","ref_id") WHERE "drafts"."ref_id" is not null;--> statement-breakpoint
 CREATE INDEX "drafts_updated_at_idx" ON "drafts" USING btree ("updated_at");--> statement-breakpoint
@@ -635,6 +680,10 @@ CREATE INDEX "webhook_events_hook_id_idx" ON "webhook_events" USING btree ("hook
 CREATE INDEX "webhook_events_created_at_idx" ON "webhook_events" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "webhooks_is_enabled_idx" ON "webhooks" USING btree ("is_enabled");--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "invitation_organizationId_idx" ON "invitation" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX "invitation_email_idx" ON "invitation" USING btree ("email");--> statement-breakpoint
+CREATE INDEX "member_organizationId_idx" ON "member" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX "member_userId_idx" ON "member" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "passkey_userId_idx" ON "passkey" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "passkey_credentialID_idx" ON "passkey" USING btree ("credential_id");--> statement-breakpoint
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint

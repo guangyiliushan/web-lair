@@ -1,11 +1,18 @@
 import { error, redirect } from '@sveltejs/kit';
 import { getRequestEvent } from '$app/server';
-import { getAdminConfig } from '$lib/server/config/admin';
+import { ADMIN_BASE_PATH, getAdminConfig } from '$lib/server/config/admin';
 import { isAdminRole, type AdminRole } from '$lib/server/auth/owner';
+import { auth } from '$lib/server/auth';
 
 export interface AdminContext {
 	userId: string;
 	role: AdminRole;
+}
+
+/** Org-side workspace context: a member holding the comment-review capability (B2). */
+export interface ReviewerContext {
+	userId: string;
+	role: 'reviewer';
 }
 
 /** Minimal shape shared by better-auth's `User` and the drizzle row. */
@@ -21,13 +28,38 @@ export function getUserRole(user: SessionUser | null | undefined): AdminRole | n
 }
 
 /**
- * B1: owner and admin both see the /admin workspace (ledger Q15). B2 widens
- * this with the organization-plugin capacity, which is why the guard is named
- * after the capability rather than a single role.
+ * B2 (ledger §4.21): entering the /admin shell needs a site role or any
+ * backend capability inside the site organization. Which pages a capability
+ * holder without a site role may open is decided per page - see
+ * `requireAdminWorkspace`.
  */
-export function hasAnyAdminCapability(user: SessionUser | null | undefined): boolean {
-	return getUserRole(user) !== null;
+export async function hasAnyAdminCapability(
+	user: SessionUser | null | undefined
+): Promise<boolean> {
+	if (getUserRole(user) !== null) return true;
+	return can.reviewComment();
 }
+
+/**
+ * The single entry point for comment permissions (ledger §4.15): wraps the
+ * organization plugin's `hasPermission` endpoint. Fails closed - no session,
+ * not a member, no active organization, or a plugin error all resolve to
+ * `false`.
+ */
+export const can = {
+	async reviewComment(): Promise<boolean> {
+		const { request } = getRequestEvent();
+		try {
+			const { success } = await auth.api.hasPermission({
+				headers: request.headers,
+				body: { permissions: { comment: ['review'] } }
+			});
+			return Boolean(success);
+		} catch {
+			return false;
+		}
+	}
+};
 
 export function adminContextFor(user: SessionUser | null | undefined): AdminContext | null {
 	const role = getUserRole(user);
@@ -53,18 +85,55 @@ export function requireVerifiedUser() {
 	return user;
 }
 
-/** Guard for the /admin workspace: signed in with owner or admin role. */
-export function requireAdminWorkspace(): AdminContext {
+/**
+ * Guard for the /admin workspace. B2 (ledger §4.21): the shell admits any
+ * capability holder, but only onto the pages their capability covers - the
+ * comment queue - while every other page stays owner/admin. Page and action
+ * guards re-check the specific permission; see `requireCommentReviewer`.
+ */
+export async function requireAdminWorkspace(): Promise<AdminContext | ReviewerContext> {
+	const { url } = getRequestEvent();
+	const commentsPath = `${ADMIN_BASE_PATH}/comments`;
+	const isCommentsPath =
+		url.pathname === commentsPath || url.pathname.startsWith(`${commentsPath}/`);
+	if (isCommentsPath) {
+		const user = await requireCommentReviewer();
+		return { userId: user.id, role: 'reviewer' };
+	}
+	return requireAdminRole();
+}
+
+/** Owner/admin only - the guard for every non-comment admin page. */
+export async function requireAdminRole(): Promise<AdminContext> {
 	const { locals, url } = getRequestEvent();
 	const config = getAdminConfig();
-	const context = adminContextFor(locals.user);
-
-	if (!locals.session || !context) {
-		const redirectTo = url.pathname + url.search;
-		redirect(303, `${config.loginPath}?redirectTo=${encodeURIComponent(redirectTo)}`);
+	const redirectTo = `${config.loginPath}?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
+	if (!locals.session || !locals.user) {
+		redirect(303, redirectTo);
 	}
+	const context = adminContextFor(locals.user);
+	if (context) return context;
+	// Capability holders without a site role get sent to the one page they can use.
+	if (await can.reviewComment()) {
+		redirect(303, `${ADMIN_BASE_PATH}/comments`);
+	}
+	redirect(303, redirectTo);
+}
 
-	return context;
+/** Comment queue guard: `comment: ['review']` capability (B2, ledger §4.15). */
+export async function requireCommentReviewer() {
+	const { locals, url } = getRequestEvent();
+	const config = getAdminConfig();
+	if (!locals.session || !locals.user) {
+		redirect(
+			303,
+			`${config.loginPath}?redirectTo=${encodeURIComponent(url.pathname + url.search)}`
+		);
+	}
+	if (!(await can.reviewComment())) {
+		error(403, { message: 'Comment review permission required.' });
+	}
+	return locals.user;
 }
 
 /** Guard for owner-only operations (the role is unique by app-layer convention). */

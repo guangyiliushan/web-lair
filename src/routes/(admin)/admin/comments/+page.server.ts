@@ -1,73 +1,85 @@
-import type { PageServerLoad } from './$types';
+import { fail } from '@sveltejs/kit';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { db } from '$lib/server/db';
+import { comments } from '$lib/server/db/content/comment.schema';
+import { posts } from '$lib/server/db/content/post.schema';
+import { can, requireCommentReviewer } from '$lib/server/authz';
+import type { Actions, PageServerLoad } from './$types';
 
-interface CommentItem {
-	id: string;
-	author: string;
-	avatar: string;
-	content: string;
-	targetTitle: string;
-	targetUrl: string;
-	ip: string;
-	status: 'unread' | 'read' | 'awaiting' | 'whisper' | 'junk';
-	createdAt: string;
+const STATES = ['pending', 'approved', 'rejected'] as const;
+type ReviewState = (typeof STATES)[number];
+
+function parseState(value: string | null): ReviewState {
+	return (STATES as readonly string[]).includes(value ?? '') ? (value as ReviewState) : 'pending';
 }
 
-export const load: PageServerLoad = async () => {
-	const comments: CommentItem[] = [
-		{
-			id: '1',
-			author: 'Alice',
-			avatar: '',
-			content: '这是一条测试评论，内容很有深度。',
-			targetTitle: '如何搭建个人博客',
-			targetUrl: '/posts/how-to-blog',
-			ip: '127.0.0.1',
-			status: 'unread',
-			createdAt: '2026/07/17 11:30'
-		},
-		{
-			id: '2',
-			author: 'Bob',
-			avatar: '',
-			content: '写得不错，学习了！',
-			targetTitle: 'Svelte 5 入门指南',
-			targetUrl: '/posts/svelte5-guide',
-			ip: '192.168.1.1',
-			status: 'read',
-			createdAt: '2026/07/16 09:15'
-		},
-		{
-			id: '3',
-			author: 'Charlie',
-			avatar: '',
-			content: '请问能详细讲一下这部分吗？',
-			targetTitle: '如何搭建个人博客',
-			targetUrl: '/posts/how-to-blog',
-			ip: '10.0.0.1',
-			status: 'awaiting',
-			createdAt: '2026/07/16 14:20'
-		}
-	];
+export const load: PageServerLoad = async (event) => {
+	await requireCommentReviewer();
+	const state = parseState(event.url.searchParams.get('state'));
 
-	const tabs = [
-		{ id: 'all', label: '全部' },
-		{ id: 'unread', label: '未读' },
-		{ id: 'awaiting', label: '待回复' },
-		{ id: 'whisper', label: '悄悄话' },
-		{ id: 'read', label: '已读' },
-		{ id: 'junk', label: '垃圾' }
-	] as const;
+	const entries = await db
+		.select({
+			id: comments.id,
+			author: comments.author,
+			text: comments.text,
+			state: comments.state,
+			ip: comments.ip,
+			createdAt: comments.createdAt,
+			reviewedAt: comments.reviewedAt,
+			postId: comments.postId,
+			postTitle: posts.title,
+			postSlug: posts.slug
+		})
+		.from(comments)
+		.leftJoin(posts, eq(comments.postId, posts.id))
+		.where(and(eq(comments.state, state), eq(comments.isDeleted, false)))
+		.orderBy(desc(comments.createdAt))
+		.limit(200);
 
-	return {
-		comments,
-		tabs,
-		counts: {
-			all: 3,
-			unread: 1,
-			awaiting: 1,
-			whisper: 0,
-			read: 1,
-			junk: 0
+	const grouped = await db
+		.select({ state: comments.state, count: sql<number>`count(*)::int` })
+		.from(comments)
+		.where(eq(comments.isDeleted, false))
+		.groupBy(comments.state);
+
+	const counts: Record<ReviewState, number> = { pending: 0, approved: 0, rejected: 0 };
+	for (const row of grouped) {
+		if ((STATES as readonly string[]).includes(row.state)) {
+			counts[row.state as ReviewState] = row.count;
 		}
-	};
+	}
+
+	return { state, entries, counts };
+};
+
+export const actions: Actions = {
+	review: async (event) => {
+		// Form actions do not re-run the layout guard, so the permission is
+		// checked here again: page guard + action guard (defense in depth).
+		const reviewer = await requireCommentReviewer();
+		const form = await event.request.formData();
+		const decision = form.get('decision')?.toString();
+		const ids = form
+			.getAll('ids')
+			.map((value) => value.toString())
+			.filter(Boolean);
+
+		if ((decision !== 'approve' && decision !== 'reject') || ids.length === 0) {
+			return fail(400, { message: 'Select at least one comment first.' });
+		}
+		if (!(await can.reviewComment())) {
+			return fail(403, { message: 'Comment review permission required.' });
+		}
+
+		// Only pending rows flip: the conditional update keeps a repeated submit
+		// (double click, replay) from overwriting an existing decision.
+		const state = decision === 'approve' ? 'approved' : 'rejected';
+		const updated = await db
+			.update(comments)
+			.set({ state, reviewedBy: reviewer.id, reviewedAt: new Date() })
+			.where(and(inArray(comments.id, ids), eq(comments.state, 'pending')))
+			.returning({ id: comments.id });
+
+		return { reviewed: updated.length, decision };
+	}
 };

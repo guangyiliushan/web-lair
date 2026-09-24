@@ -7,6 +7,7 @@ import { user } from '$lib/server/db/auth.schema';
 import { eq } from 'drizzle-orm';
 import { getAdminConfig } from '$lib/server/config/admin';
 import { claimOwnerRole, hasAnyAdminAccount } from '$lib/server/auth/owner';
+import { ensureSiteOrganization } from '$lib/server/auth/site-organization-bootstrap';
 import { APIError } from 'better-auth/api';
 
 function verifySetupToken(formToken: string): string | null {
@@ -88,6 +89,19 @@ export const actions: Actions = {
 
 		// signUpEmail returns { token: null } while requireEmailVerification is on.
 		// The session cookie itself comes from the sveltekitCookies plugin.
+		// B2 (ledger §4.22): create the site organization and make the owner its
+		// owner-member. Idempotent; failure is reported instead of continuing -
+		// without it every org-scoped permission check would deny the owner.
+		try {
+			await ensureSiteOrganization(result.user.id);
+		} catch (caught) {
+			console.error('[setup] site organization bootstrap failed:', caught);
+			return fail(500, {
+				message:
+					'Owner created, but the site organization could not be initialized. Check the server logs, then repair with `pnpm db:ensure-org`.'
+			});
+		}
+
 		try {
 			await auth.api.signInEmail({
 				body: {
