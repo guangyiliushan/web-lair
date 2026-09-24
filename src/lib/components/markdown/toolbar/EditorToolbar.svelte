@@ -4,7 +4,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import type { LexicalEditor, TextFormatType, LexicalCommand } from 'lexical';
+	import type { LexicalEditor, TextFormatType, AnyLexicalCommand } from 'lexical';
 	import { UNDO_COMMAND, REDO_COMMAND } from '$lib/components/markdown/editor/lexical-action';
 	import {
 		toggleHeading,
@@ -148,7 +148,7 @@
 	});
 
 	// ── 通用工具函数 ──
-	function dispatchCmd(cmd: LexicalCommand<unknown>, payload?: unknown) {
+	function dispatchCmd(cmd: AnyLexicalCommand, payload?: unknown) {
 		editor?.dispatchCommand(cmd, payload);
 	}
 	function formatText(format: TextFormatType) {

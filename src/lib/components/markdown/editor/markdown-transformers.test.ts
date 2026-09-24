@@ -761,15 +761,15 @@ describe('import escape symmetry (fixpoint)', () => {
 		expect(roundtrip(once)).toBe(once);
 	});
 
-	it('documents the upstream 2-space list-indent limitation (pin)', () => {
-		// Upstream importText uses LIST_INDENT_SIZE=4 (markdown core); a
-		// 2-space nested list is flattened on import and the export emits the
-		// flat form. Pinned as a known limitation — the render side keeps the
-		// nesting because remark follows the GFM content column.
+	it('preserves 2-space nested lists on roundtrip (upstream ≥0.51 keeps nesting)', () => {
+		// Up to 0.50 the markdown import flattened a 2-space nested list
+		// (LIST_INDENT_SIZE=4 on import) and the export emitted the flat form.
+		// 0.51 keeps the nesting and canonicalizes the marker column to the
+		// 4-space LIST_INDENT_SIZE on export; the roundtrip is then stable.
 		const src = '- a' + String.fromCharCode(10) + '  - b';
 		const once = roundtrip(src);
-		expect(once).toContain('- a');
-		expect(once).not.toContain('  - b');
+		expect(once).toBe('- a' + String.fromCharCode(10) + '    - b');
+		expect(roundtrip(once)).toBe(once);
 	});
 
 	it('keeps code spans stable (fixpoint, upstream normalizes once)', () => {

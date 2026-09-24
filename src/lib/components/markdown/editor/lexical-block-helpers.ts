@@ -1,6 +1,6 @@
 import {
 	type LexicalEditor,
-	type LexicalCommand,
+	type AnyLexicalCommand,
 	type ElementNode,
 	type LexicalNode,
 	$getRoot,
@@ -20,7 +20,7 @@ import {
 import { INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/extension';
 import { $setBlocksType } from '@lexical/selection';
 
-type BlockCommandMap = Record<string, LexicalCommand<unknown>>;
+type BlockCommandMap = Record<string, AnyLexicalCommand>;
 type BlockCreatorMap = Record<string, () => ElementNode>;
 
 // ── Block Handle 辅助函数 ──
