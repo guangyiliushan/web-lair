@@ -51,7 +51,10 @@ export const notes = pgTable(
 		index('notes_modified_at_idx').on(table.modifiedAt),
 		index('notes_created_at_idx').on(table.createdAt),
 		index('notes_topic_id_idx').on(table.topicId),
-		index('notes_published_public_created_idx')
-			.on(table.isPublished, table.createdAt.desc(), table.publicAt)
+		index('notes_published_public_created_idx').on(
+			table.isPublished,
+			table.createdAt.desc(),
+			table.publicAt
+		)
 	]
 );
