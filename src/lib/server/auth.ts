@@ -46,7 +46,7 @@ export const auth = betterAuth({
 	},
 
 	emailVerification: {
-		sendVerificationEmail: async ({ user, url }) => {
+		sendVerificationEmail: async ({ url }) => {
 			devLogMail('Verify email link', url);
 		}
 	},

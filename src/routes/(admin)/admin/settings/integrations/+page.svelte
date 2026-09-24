@@ -1,13 +1,10 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
-	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 
 	let { data }: PageProps = $props();
 	let s = $derived(data.settings);
 </script>
-
-a
 
 <svelte:head>
 	<title>第三方集成 - Lair Admin</title>

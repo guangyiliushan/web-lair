@@ -1,6 +1,5 @@
-// For more info, see https://github.com/storybookjs/eslint-plugin-storybook#configuration-flat-config-format
-import storybook from 'eslint-plugin-storybook';
-
+// NOTE: eslint-plugin-storybook is installed but not yet wired into this flat config —
+// add `storybook.configs['flat/recommended']` below when the stories are lint-clean.
 import prettier from 'eslint-config-prettier';
 import path from 'node:path';
 import { includeIgnoreFile } from '@eslint/compat';

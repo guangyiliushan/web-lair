@@ -133,7 +133,7 @@
 		<Table.Root>
 			<Table.Header class="sticky top-0 z-10 bg-muted/50">
 				<Table.Row class="text-xs text-muted-foreground uppercase hover:bg-transparent">
-					{#each columns as col}
+					{#each columns as col (col)}
 						<Table.Head class={col === '操作' ? 'text-right' : ''}>{col}</Table.Head>
 					{/each}
 				</Table.Row>

@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import type { PageData, ActionData } from './$types';
+	import type { PageData } from './$types';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Separator } from '$lib/components/ui/separator';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Empty } from '$lib/components/ui/empty';
 	import * as MasterDetail from '$lib/components/admin/master-detail';
@@ -18,7 +16,7 @@
 	import { cn } from '$lib/utils';
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
 
-	let { data }: { data: PageData; form: ActionData } = $props();
+	let { data }: { data: PageData } = $props();
 
 	let selectedId = $state<string | null>(page.url.searchParams.get('id'));
 
