@@ -32,7 +32,7 @@
 		"@eslint/compat": "^2.1.1",
 		"@eslint/js": "^10.0.1",
 		"@fontsource-variable/jetbrains-mono": "^5.3.0",
-		"@inlang/paraglide-js": "^2.15.2",
+		"@inlang/paraglide-js": "^2.25.4",
 		"@internationalized/date": "^3.12.4",
 		"@playwright/test": "^1.63.0",
 		"@storybook/addon-a11y": "^10.6.0",
