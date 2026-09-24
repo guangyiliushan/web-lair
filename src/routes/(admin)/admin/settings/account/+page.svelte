@@ -68,12 +68,17 @@
 		<div class="space-y-3">
 			{#each devices as device (device.id)}
 				<div
-				class="flex items-center gap-3 rounded-lg border bg-background p-3 {device.current ? 'border-emerald-500/30' : ''}"
-			>
-					<div class="flex-1 min-w-0">
+					class="flex items-center gap-3 rounded-lg border bg-background p-3 {device.current
+						? 'border-emerald-500/30'
+						: ''}"
+				>
+					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-2">
 							<span class="truncate text-sm font-medium">{device.name}</span>
-							<Badge variant={device.current ? 'default' : 'secondary'} class={device.current ? 'bg-emerald-500 hover:bg-emerald-500 text-emerald-50' : ''}>
+							<Badge
+								variant={device.current ? 'default' : 'secondary'}
+								class={device.current ? 'bg-emerald-500 text-emerald-50 hover:bg-emerald-500' : ''}
+							>
 								{device.current ? '当前' : '其他'}
 							</Badge>
 						</div>
@@ -83,7 +88,7 @@
 							<div>{device.time}</div>
 						</div>
 					</div>
-					<Button variant="ghost" size="sm" class="text-destructive shrink-0">
+					<Button variant="ghost" size="sm" class="shrink-0 text-destructive">
 						{device.current ? '退出' : '踢掉'}
 					</Button>
 				</div>
@@ -151,11 +156,7 @@
 				<IconBrandGithub class="size-5" />
 				<span class="text-sm font-medium">GitHub</span>
 				<label class="relative inline-flex cursor-pointer items-center">
-					<input
-						type="checkbox"
-						class="peer sr-only"
-						bind:checked={s.account.github.enabled}
-					/>
+					<input type="checkbox" class="peer sr-only" bind:checked={s.account.github.enabled} />
 					<div
 						class="h-5 w-9 rounded-full bg-border transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
 					></div>
@@ -167,12 +168,25 @@
 			<div class="space-y-3">
 				<div class="grid gap-2 sm:grid-cols-2">
 					<div>
-						<label class="mb-1 block text-xs text-muted-foreground" for="github-client-id">Client ID</label>
-						<Input id="github-client-id" bind:value={s.account.github.clientId} placeholder="GitHub OAuth App Client ID" />
+						<label class="mb-1 block text-xs text-muted-foreground" for="github-client-id"
+							>Client ID</label
+						>
+						<Input
+							id="github-client-id"
+							bind:value={s.account.github.clientId}
+							placeholder="GitHub OAuth App Client ID"
+						/>
 					</div>
 					<div>
-						<label class="mb-1 block text-xs text-muted-foreground" for="github-client-secret">Client Secret</label>
-						<Input id="github-client-secret" type="password" bind:value={s.account.github.clientSecret} placeholder="GitHub OAuth App Client Secret" />
+						<label class="mb-1 block text-xs text-muted-foreground" for="github-client-secret"
+							>Client Secret</label
+						>
+						<Input
+							id="github-client-secret"
+							type="password"
+							bind:value={s.account.github.clientSecret}
+							placeholder="GitHub OAuth App Client Secret"
+						/>
 					</div>
 				</div>
 				<div>
@@ -211,11 +225,7 @@
 				<IconBrandGoogle class="size-5" />
 				<span class="text-sm font-medium">Google</span>
 				<label class="relative inline-flex cursor-pointer items-center">
-					<input
-						type="checkbox"
-						class="peer sr-only"
-						bind:checked={s.account.google.enabled}
-					/>
+					<input type="checkbox" class="peer sr-only" bind:checked={s.account.google.enabled} />
 					<div
 						class="h-5 w-9 rounded-full bg-border transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
 					></div>
@@ -227,12 +237,25 @@
 			<div class="space-y-3">
 				<div class="grid gap-2 sm:grid-cols-2">
 					<div>
-						<label class="mb-1 block text-xs text-muted-foreground" for="google-client-id">Client ID</label>
-						<Input id="google-client-id" bind:value={s.account.google.clientId} placeholder="Google OAuth Client ID" />
+						<label class="mb-1 block text-xs text-muted-foreground" for="google-client-id"
+							>Client ID</label
+						>
+						<Input
+							id="google-client-id"
+							bind:value={s.account.google.clientId}
+							placeholder="Google OAuth Client ID"
+						/>
 					</div>
 					<div>
-						<label class="mb-1 block text-xs text-muted-foreground" for="google-client-secret">Client Secret</label>
-						<Input id="google-client-secret" type="password" bind:value={s.account.google.clientSecret} placeholder="Google OAuth Client Secret" />
+						<label class="mb-1 block text-xs text-muted-foreground" for="google-client-secret"
+							>Client Secret</label
+						>
+						<Input
+							id="google-client-secret"
+							type="password"
+							bind:value={s.account.google.clientSecret}
+							placeholder="Google OAuth Client Secret"
+						/>
 					</div>
 				</div>
 				<div>

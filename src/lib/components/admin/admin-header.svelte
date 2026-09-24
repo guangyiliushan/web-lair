@@ -30,24 +30,24 @@
 	// ── Icon name → component mapping ──
 	const ICON_MAP: Record<string, Component> = {
 		'arrow-left': IconArrowLeft,
-		'category': IconCategory,
+		category: IconCategory,
 		'external-link': IconExternalLink,
-		'eye': IconEye,
+		eye: IconEye,
 		'file-text': IconFileText,
-		'folders': IconFolders,
-		'message': IconMessage,
-		'notebook': IconNotebook,
-		'pencil': IconPencil,
-		'plus': IconPlus,
-		'puzzle': IconPuzzle,
-		'settings': IconSettings,
-		'sparkles': IconSparkles,
-		'tag': IconTag,
-		'tool': IconTool,
-		'upload': IconUpload,
+		folders: IconFolders,
+		message: IconMessage,
+		notebook: IconNotebook,
+		pencil: IconPencil,
+		plus: IconPlus,
+		puzzle: IconPuzzle,
+		settings: IconSettings,
+		sparkles: IconSparkles,
+		tag: IconTag,
+		tool: IconTool,
+		upload: IconUpload,
 		'user-plus': IconUserPlus,
-		'users': IconUsers,
-		'writing': IconWriting
+		users: IconUsers,
+		writing: IconWriting
 	};
 
 	// ── Internal resolved action type (always uses Component) ──
@@ -71,13 +71,9 @@
 	let { title, actions, class: className }: Props = $props();
 
 	// ── 优先使用显式 props，fallback 到 page.data（各页面 load 函数注入）──
-	const pageTitle = $derived(
-		title ?? page.data.headerTitle ?? m.admin_header_title()
-	);
+	const pageTitle = $derived(title ?? page.data.headerTitle ?? m.admin_header_title());
 
-	const pageActions = $derived(
-		actions ?? resolveFromPageData(page.data.headerActions)
-	);
+	const pageActions = $derived(actions ?? resolveFromPageData(page.data.headerActions));
 
 	function resolveFromPageData(raw: typeof page.data.headerActions): ResolvedAction[] {
 		// `undefined` = page didn't specify → use default "访问站点"
@@ -98,7 +94,7 @@
 			icon: ICON_MAP[a.iconName] ?? IconExternalLink,
 			variant: a.variant ?? 'ghost',
 			size: a.size ?? 'sm',
-			href: a.href,
+			href: a.href
 		}));
 	}
 </script>

@@ -32,7 +32,7 @@
 	</div>
 	<div class="flex shrink-0 items-center gap-2">
 		{#if count !== undefined}
-			<span class="text-xs tabular-nums text-muted-foreground">{count} 个</span>
+			<span class="text-xs text-muted-foreground tabular-nums">{count} 个</span>
 		{/if}
 		{@render children?.()}
 	</div>

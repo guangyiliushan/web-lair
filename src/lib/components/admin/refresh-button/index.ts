@@ -1,6 +1,3 @@
 import Root from './refresh-button.svelte';
 
-export {
-	Root,
-	Root as RefreshButton
-};
+export { Root, Root as RefreshButton };

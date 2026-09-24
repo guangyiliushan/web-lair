@@ -34,7 +34,6 @@
 
 	<div class="min-h-0 flex-1 overflow-auto">
 		<div class="space-y-8 p-6">
-
 			<!-- Email 通知 -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">邮件通知</h3>
@@ -47,13 +46,13 @@
 							role="switch"
 							aria-checked={Boolean(s.notification.emailEnabled)}
 							aria-label="启用邮件通知"
-						id="notif-emailEnabled"
-							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
+							id="notif-emailEnabled"
+							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.emailEnabled}
 							class:bg-surface-inset={!s.notification.emailEnabled}
 						>
 							<span
-								class="shadow-xs block size-4 rounded-full bg-white transition-transform"
+								class="block size-4 rounded-full bg-white shadow-xs transition-transform"
 								class:translate-x-4={s.notification.emailEnabled}
 							></span>
 						</button>
@@ -82,31 +81,53 @@
 					<!-- senderEmail -->
 					<div class="space-y-1.5">
 						<label for="notif-senderEmail" class="text-sm">发件人邮箱</label>
-						<Input id="notif-senderEmail" bind:value={s.notification.senderEmail} placeholder="noreply@example.com" />
+						<Input
+							id="notif-senderEmail"
+							bind:value={s.notification.senderEmail}
+							placeholder="noreply@example.com"
+						/>
 					</div>
 
 					<!-- smtpUser -->
 					<div class="space-y-1.5">
 						<label for="notif-smtpUser" class="text-sm">SMTP 用户名</label>
-						<Input id="notif-smtpUser" bind:value={s.notification.smtpUser} placeholder="smtp 用户名" />
+						<Input
+							id="notif-smtpUser"
+							bind:value={s.notification.smtpUser}
+							placeholder="smtp 用户名"
+						/>
 					</div>
 
 					<!-- smtpPass -->
 					<div class="space-y-1.5">
 						<label for="notif-smtpPass" class="text-sm">SMTP 密码</label>
-						<Input id="notif-smtpPass" type="password" bind:value={s.notification.smtpPass} placeholder="smtp 密码" />
+						<Input
+							id="notif-smtpPass"
+							type="password"
+							bind:value={s.notification.smtpPass}
+							placeholder="smtp 密码"
+						/>
 					</div>
 
 					<!-- smtpHost -->
 					<div class="space-y-1.5">
 						<label for="notif-smtpHost" class="text-sm">SMTP 服务器</label>
-						<Input id="notif-smtpHost" bind:value={s.notification.smtpHost} placeholder="smtp.example.com" />
+						<Input
+							id="notif-smtpHost"
+							bind:value={s.notification.smtpHost}
+							placeholder="smtp.example.com"
+						/>
 					</div>
 
 					<!-- smtpPort -->
 					<div class="space-y-1.5">
 						<label for="notif-smtpPort" class="text-sm">SMTP 端口</label>
-						<Input id="notif-smtpPort" type="number" bind:value={s.notification.smtpPort} placeholder="587" />
+						<Input
+							id="notif-smtpPort"
+							type="number"
+							bind:value={s.notification.smtpPort}
+							placeholder="587"
+						/>
 					</div>
 
 					<!-- smtpTls -->
@@ -117,13 +138,13 @@
 							role="switch"
 							aria-checked={Boolean(s.notification.smtpTls)}
 							aria-label="SMTP TLS"
-						id="notif-smtpTls"
-							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
+							id="notif-smtpTls"
+							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.smtpTls}
 							class:bg-surface-inset={!s.notification.smtpTls}
 						>
 							<span
-								class="shadow-xs block size-4 rounded-full bg-white transition-transform"
+								class="block size-4 rounded-full bg-white shadow-xs transition-transform"
 								class:translate-x-4={s.notification.smtpTls}
 							></span>
 						</button>
@@ -132,13 +153,23 @@
 					<!-- rateLimit -->
 					<div class="space-y-1.5">
 						<label for="notif-rateLimit" class="text-sm">频率限制（条/小时）</label>
-						<Input id="notif-rateLimit" type="number" bind:value={s.notification.rateLimit} placeholder="10" />
+						<Input
+							id="notif-rateLimit"
+							type="number"
+							bind:value={s.notification.rateLimit}
+							placeholder="10"
+						/>
 					</div>
 
 					<!-- retryCount -->
 					<div class="space-y-1.5">
 						<label for="notif-retryCount" class="text-sm">重试次数</label>
-						<Input id="notif-retryCount" type="number" bind:value={s.notification.retryCount} placeholder="3" />
+						<Input
+							id="notif-retryCount"
+							type="number"
+							bind:value={s.notification.retryCount}
+							placeholder="3"
+						/>
 					</div>
 				</div>
 			</section>
@@ -155,13 +186,13 @@
 							role="switch"
 							aria-checked={Boolean(s.notification.barkEnabled)}
 							aria-label="启用 Bark 推送"
-						id="notif-barkEnabled"
-							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
+							id="notif-barkEnabled"
+							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.barkEnabled}
 							class:bg-surface-inset={!s.notification.barkEnabled}
 						>
 							<span
-								class="shadow-xs block size-4 rounded-full bg-white transition-transform"
+								class="block size-4 rounded-full bg-white shadow-xs transition-transform"
 								class:translate-x-4={s.notification.barkEnabled}
 							></span>
 						</button>
@@ -170,13 +201,22 @@
 					<!-- barkKey -->
 					<div class="space-y-1.5">
 						<label for="notif-barkKey" class="text-sm">Bark Key</label>
-						<Input id="notif-barkKey" type="password" bind:value={s.notification.barkKey} placeholder="Bark 设备 Key" />
+						<Input
+							id="notif-barkKey"
+							type="password"
+							bind:value={s.notification.barkKey}
+							placeholder="Bark 设备 Key"
+						/>
 					</div>
 
 					<!-- barkServer -->
 					<div class="space-y-1.5">
 						<label for="notif-barkServer" class="text-sm">Bark 服务器</label>
-						<Input id="notif-barkServer" bind:value={s.notification.barkServer} placeholder="https://api.day.app" />
+						<Input
+							id="notif-barkServer"
+							bind:value={s.notification.barkServer}
+							placeholder="https://api.day.app"
+						/>
 					</div>
 
 					<!-- barkCommentNotify -->
@@ -187,13 +227,13 @@
 							role="switch"
 							aria-checked={Boolean(s.notification.barkCommentNotify)}
 							aria-label="评论通知"
-						id="notif-barkCommentNotify"
-							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
+							id="notif-barkCommentNotify"
+							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.barkCommentNotify}
 							class:bg-surface-inset={!s.notification.barkCommentNotify}
 						>
 							<span
-								class="shadow-xs block size-4 rounded-full bg-white transition-transform"
+								class="block size-4 rounded-full bg-white shadow-xs transition-transform"
 								class:translate-x-4={s.notification.barkCommentNotify}
 							></span>
 						</button>
@@ -207,20 +247,19 @@
 							role="switch"
 							aria-checked={Boolean(s.notification.barkRateLimitNotify)}
 							aria-label="触发频率限制时通知"
-						id="notif-barkRateLimitNotify"
-							class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
+							id="notif-barkRateLimitNotify"
+							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.barkRateLimitNotify}
 							class:bg-surface-inset={!s.notification.barkRateLimitNotify}
 						>
 							<span
-								class="shadow-xs block size-4 rounded-full bg-white transition-transform"
+								class="block size-4 rounded-full bg-white shadow-xs transition-transform"
 								class:translate-x-4={s.notification.barkRateLimitNotify}
 							></span>
 						</button>
 					</div>
 				</div>
 			</section>
-
 		</div>
 	</div>
 </div>

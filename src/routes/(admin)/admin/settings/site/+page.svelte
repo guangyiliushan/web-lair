@@ -22,33 +22,29 @@
 			</div>
 		</header>
 		<div class="space-y-5">
-			{#each [
-				['Frontend URL', 'frontendUrl'],
-				['Admin dashboard URL', 'adminUrl'],
-				['API URL', 'apiUrl'],
-				['Gateway URL', 'gatewayUrl']
-			] as [label, key] (key)}
+			{#each [['Frontend URL', 'frontendUrl'], ['Admin dashboard URL', 'adminUrl'], ['API URL', 'apiUrl'], ['Gateway URL', 'gatewayUrl']] as [label, key] (key)}
 				<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
 					<div class="md:pt-1.5"><div class="text-sm">{label}</div></div>
-					<div class="min-w-0"><Input type="text" value={s.site[key as keyof typeof s.site] as string} /></div>
+					<div class="min-w-0">
+						<Input type="text" value={s.site[key as keyof typeof s.site] as string} />
+					</div>
 				</div>
 			{/each}
 		</div>
 	</section>
 	<section class="space-y-4">
 		<header class="flex flex-wrap items-start justify-between gap-3">
-			<div class="min-w-0"><h2 class="inline-flex items-center gap-2 text-base font-medium">SEO</h2></div>
+			<div class="min-w-0">
+				<h2 class="inline-flex items-center gap-2 text-base font-medium">SEO</h2>
+			</div>
 		</header>
 		<div class="space-y-5">
-			{#each [
-				['Site title', 'title'],
-				['Site description', 'description'],
-				['Light icon URL', 'lightIcon'],
-				['Dark icon URL', 'darkIcon']
-			] as [label, key] (key)}
+			{#each [['Site title', 'title'], ['Site description', 'description'], ['Light icon URL', 'lightIcon'], ['Dark icon URL', 'darkIcon']] as [label, key] (key)}
 				<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
 					<div class="md:pt-1.5"><div class="text-sm">{label}</div></div>
-					<div class="min-w-0"><Input type="text" value={s.site[key as keyof typeof s.site] as string} /></div>
+					<div class="min-w-0">
+						<Input type="text" value={s.site[key as keyof typeof s.site] as string} />
+					</div>
 				</div>
 			{/each}
 			<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
@@ -59,7 +55,11 @@
 							{#each s.site.keywords as kw (kw)}
 								<Badge variant="secondary" class="gap-1">
 									{kw}
-									<button type="button" class="inline-flex size-3 items-center" aria-label="移除 {kw}"><IconX class="size-3" /></button>
+									<button
+										type="button"
+										class="inline-flex size-3 items-center"
+										aria-label="移除 {kw}"><IconX class="size-3" /></button
+									>
 								</Badge>
 							{/each}
 						</div>

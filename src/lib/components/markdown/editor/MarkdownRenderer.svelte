@@ -51,8 +51,7 @@
 		for (const anchor of article.querySelectorAll('a.embed-card')) {
 			// The data-embed attribute is pipeline output from the closed registry
 			const provider = (anchor.getAttribute('data-embed') ?? 'generic') as
-				| EmbedProviderId
-				| 'generic';
+				EmbedProviderId | 'generic';
 			const url = anchor.getAttribute('data-url') ?? anchor.getAttribute('href') ?? '';
 			const title = anchor.textContent?.trim() || url;
 			const host = document.createElement('div');

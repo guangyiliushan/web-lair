@@ -19,7 +19,7 @@
 	}
 
 	const items: Memo[] = [
-		{ id: '1', content: 'adsa', upVotes: 0, downVotes: 0, createdAt: '2026/07/17 17:07' },
+		{ id: '1', content: 'adsa', upVotes: 0, downVotes: 0, createdAt: '2026/07/17 17:07' }
 	];
 
 	let addDialogOpen = $state(false);
@@ -69,9 +69,11 @@
 			{:else}
 				{#each items as item (item.id)}
 					<article class="group px-4 py-5 transition-colors hover:bg-muted/50">
-						<p class="whitespace-pre-wrap wrap-break-word text-base leading-7">{item.content}</p>
+						<p class="text-base leading-7 wrap-break-word whitespace-pre-wrap">{item.content}</p>
 						<footer class="mt-4 flex flex-wrap items-center justify-between gap-3">
-							<div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+							<div
+								class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground"
+							>
 								<time>{item.createdAt}</time>
 								<span class="inline-flex items-center gap-2">
 									<span class="inline-flex items-center gap-1">
@@ -85,8 +87,15 @@
 									</span>
 								</span>
 							</div>
-							<div class="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-								<Button variant="outline" size="sm" class="h-8 gap-1 px-2 text-xs" aria-label="编辑速记">
+							<div
+								class="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
+							>
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-8 gap-1 px-2 text-xs"
+									aria-label="编辑速记"
+								>
 									<IconPencil class="size-3.5" />
 									<span class="hidden sm:inline">编辑</span>
 								</Button>
@@ -116,7 +125,13 @@
 <!-- 写一条速记对话框 -->
 <Dialog.Root bind:open={addDialogOpen}>
 	<Dialog.Content class="sm:max-w-lg">
-		<form class="flex flex-col" onsubmit={(e) => { e.preventDefault(); handleSave(); }}>
+		<form
+			class="flex flex-col"
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleSave();
+			}}
+		>
 			<div class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
 				<Dialog.Title>写一条速记</Dialog.Title>
 				<Dialog.Close>
@@ -132,7 +147,12 @@
 					<span class="text-sm font-medium">
 						内容 <span class="text-destructive">*</span>
 					</span>
-					<Textarea class="min-h-36" placeholder="写点什么，或粘贴一个链接..." required bind:value={formContent} />
+					<Textarea
+						class="min-h-36"
+						placeholder="写点什么，或粘贴一个链接..."
+						required
+						bind:value={formContent}
+					/>
 				</label>
 			</div>
 			<div class="flex shrink-0 items-center justify-end gap-2 border-t px-4 py-2">

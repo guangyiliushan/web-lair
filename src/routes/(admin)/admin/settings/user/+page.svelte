@@ -33,7 +33,9 @@
 				type="button"
 			>
 				<img alt="" class="size-full object-cover" src={s.user.avatar} />
-				<span class="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+				<span
+					class="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
+				>
 					<IconCamera class="size-5 text-white" />
 				</span>
 			</button>

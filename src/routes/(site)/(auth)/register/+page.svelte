@@ -86,7 +86,9 @@
 		<Card.Footer class="justify-center">
 			<p class="text-sm text-muted-foreground">
 				{m.auth_have_account()}
-				<a href="/login" class="font-medium underline-offset-2 hover:underline"> {m.nav_sign_in()} </a>
+				<a href="/login" class="font-medium underline-offset-2 hover:underline">
+					{m.nav_sign_in()}
+				</a>
 			</p>
 		</Card.Footer>
 	</Card.Root>

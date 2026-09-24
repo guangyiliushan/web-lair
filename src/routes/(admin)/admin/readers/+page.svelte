@@ -35,8 +35,8 @@
 			verified: true,
 			joinedAt: '11 天前',
 			lastLogin: '5 小时前',
-			updatedAt: '从未登录',
-		},
+			updatedAt: '从未登录'
+		}
 	];
 
 	const roleFilters = ['all', 'owner', 'reader'] as const;
@@ -49,7 +49,7 @@
 	const roleCounts = $derived({
 		all: readers.length,
 		owner: readers.filter((r) => r.role === 'owner').length,
-		reader: readers.filter((r) => r.role === 'reader').length,
+		reader: readers.filter((r) => r.role === 'reader').length
 	});
 
 	const filteredReaders = $derived(
@@ -80,13 +80,18 @@
 			{#each roleFilters as role (role)}
 				<button
 					type="button"
-					class="inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-xs transition-colors {selectedRole === role
+					class="inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-xs transition-colors {selectedRole ===
+					role
 						? 'border-foreground bg-foreground text-background'
 						: 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'}"
 					onclick={() => (selectedRole = role)}
 				>
 					<span>{roleLabels[role]}</span>
-					<span class="tabular-nums {selectedRole === role ? 'text-background/70' : 'text-muted-foreground'}">{roleCounts[role]}</span>
+					<span
+						class="tabular-nums {selectedRole === role
+							? 'text-background/70'
+							: 'text-muted-foreground'}">{roleCounts[role]}</span
+					>
 				</button>
 			{/each}
 		</div>
@@ -94,11 +99,13 @@
 		<!-- 搜索栏 -->
 		<div class="flex shrink-0 items-center gap-2 border-b px-4 py-3">
 			<div class="relative min-w-0 flex-1">
-				<IconSearch class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+				<IconSearch
+					class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+				/>
 				<input
 					type="text"
 					placeholder="搜索读者"
-					class="h-8 w-full rounded-sm border border-border bg-surface-card pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/15"
+					class="bg-surface-card h-8 w-full rounded-sm border border-border pr-3 pl-9 text-sm transition-colors outline-none placeholder:text-muted-foreground focus:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/15"
 					bind:value={searchQuery}
 				/>
 			</div>
@@ -114,7 +121,10 @@
 				</div>
 			{:else}
 				{#each filteredReaders as reader (reader.id)}
-					<MasterDetail.Item selected={selectedReaderId === reader.id} onclick={() => (selectedReaderId = reader.id)}>
+					<MasterDetail.Item
+						selected={selectedReaderId === reader.id}
+						onclick={() => (selectedReaderId = reader.id)}
+					>
 						<img
 							alt=""
 							class="size-10 shrink-0 rounded-full object-cover ring-1 ring-border"
@@ -124,7 +134,10 @@
 							<div class="flex items-center gap-1.5">
 								<span class="truncate text-sm font-medium">{reader.name}</span>
 								{#if reader.role === 'owner'}
-									<span class="flex size-4 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-500" title="站长">
+									<span
+										class="flex size-4 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-500"
+										title="站长"
+									>
 										<IconCrown class="size-2.5" />
 									</span>
 								{/if}
@@ -159,14 +172,19 @@
 					/>
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-2">
-							<h3 class="truncate text-base font-semibold leading-tight">{reader.name}</h3>
+							<h3 class="truncate text-base leading-tight font-semibold">{reader.name}</h3>
 							{#if reader.role === 'owner'}
-								<span class="flex size-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-500" title="站长">
+								<span
+									class="flex size-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-500"
+									title="站长"
+								>
 									<IconCrown class="size-3" />
 								</span>
 							{/if}
 						</div>
-						<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+						<div
+							class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+						>
 							<span class="truncate">@{reader.username}</span>
 							<span class="truncate">{reader.email}</span>
 							{#if reader.verified}
@@ -183,13 +201,19 @@
 					<div class="flex flex-col gap-6">
 						<!-- 身份信息 -->
 						<section class="flex flex-col gap-3">
-							<h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">身份</h3>
+							<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+								身份
+							</h3>
 							<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 								<div class="rounded-md border p-3">
 									<div class="text-xs text-muted-foreground">ID</div>
 									<div class="mt-1 flex items-center gap-2">
 										<code class="min-w-0 truncate text-sm">{reader.id}</code>
-										<button class="shrink-0 text-muted-foreground transition-colors hover:text-foreground" title="复制 ID" type="button">
+										<button
+											class="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+											title="复制 ID"
+											type="button"
+										>
 											<IconCopy class="size-4" />
 										</button>
 									</div>
@@ -221,7 +245,9 @@
 
 						<!-- 活动信息 -->
 						<section class="flex flex-col gap-3">
-							<h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">活动</h3>
+							<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+								活动
+							</h3>
 							<div class="divide-y rounded-md border px-3">
 								<div class="flex items-baseline justify-between gap-4 py-2">
 									<span class="shrink-0 text-xs text-muted-foreground">加入时间</span>
@@ -251,7 +277,13 @@
 						撤销站长
 					</Button>
 					<div class="flex-1"></div>
-					<Button variant="outline" size="sm" class="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={reader.role === 'owner'} title={reader.role === 'owner' ? '无法封禁站长' : ''}>
+					<Button
+						variant="outline"
+						size="sm"
+						class="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+						disabled={reader.role === 'owner'}
+						title={reader.role === 'owner' ? '无法封禁站长' : ''}
+					>
 						<IconBan class="size-4" />
 						封禁
 					</Button>

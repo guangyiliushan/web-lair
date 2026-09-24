@@ -388,16 +388,14 @@
 					disabled: () => toolbarState.inTable,
 					minBp: 3
 				},
-				...ALERT_TYPES.map(
-					(type): OverflowItemDef => ({
-						id: `callout-${type}`,
-						label: `Callout · ${ALERT_LABELS[type]}`,
-						icon: ALERT_ICONS[type],
-						action: () => insertAlert(editor!, type),
-						disabled: () => toolbarState.inTable,
-						minBp: 3
-					})
-				),
+				...ALERT_TYPES.map((type): OverflowItemDef => ({
+					id: `callout-${type}`,
+					label: `Callout · ${ALERT_LABELS[type]}`,
+					icon: ALERT_ICONS[type],
+					action: () => insertAlert(editor!, type),
+					disabled: () => toolbarState.inTable,
+					minBp: 3
+				})),
 				{ id: 'tag', label: '标签', icon: IconTag, action: () => insertTag(editor!), minBp: 3 },
 				{ id: 'formula', label: '公式', icon: IconMath, action: handleInsertMath, minBp: 4 }
 			]

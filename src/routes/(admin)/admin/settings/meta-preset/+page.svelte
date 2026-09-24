@@ -56,11 +56,7 @@
 					</div>
 					<div class="shrink-0">
 						<label class="relative inline-flex cursor-pointer items-center">
-							<input
-								type="checkbox"
-								class="peer sr-only"
-								bind:checked={preset.enabled}
-							/>
+							<input type="checkbox" class="peer sr-only" bind:checked={preset.enabled} />
 							<div
 								class="h-5 w-9 rounded-full bg-border transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
 							></div>

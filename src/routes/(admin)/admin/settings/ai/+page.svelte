@@ -5,7 +5,7 @@
 	import * as Select from '$lib/components/ui/select';
 	import IconSettings from '@tabler/icons-svelte-runes/icons/settings';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
-	
+
 	let { data }: PageProps = $props();
 	let s = $derived(data.settings);
 </script>
@@ -19,7 +19,9 @@
 		<header class="flex flex-wrap items-start justify-between gap-3">
 			<div class="min-w-0">
 				<h2 class="inline-flex items-center gap-2 text-base font-medium">AI 服务商</h2>
-				<p class="mt-1 text-xs text-muted-foreground">配置 AI 服务提供商、密钥、Endpoint 与默认模型。</p>
+				<p class="mt-1 text-xs text-muted-foreground">
+					配置 AI 服务提供商、密钥、Endpoint 与默认模型。
+				</p>
 			</div>
 			<div class="flex shrink-0 items-center gap-2">
 				<Button type="button" variant="outline" size="sm">
@@ -37,7 +39,9 @@
 	<section class="space-y-4">
 		<header>
 			<h2 class="inline-flex items-center gap-2 text-base font-medium">AI 摘要</h2>
-			<p class="mt-1 text-xs text-muted-foreground">为文章自动生成摘要，可指定目标语言与触发时机。</p>
+			<p class="mt-1 text-xs text-muted-foreground">
+				为文章自动生成摘要，可指定目标语言与触发时机。
+			</p>
 		</header>
 		<div class="space-y-4">
 			<label class="flex items-center justify-between gap-4 text-sm">
@@ -46,25 +50,20 @@
 					type="button"
 					role="switch"
 					aria-checked={s.ai.summaryEnabled}
-				aria-label="切换"
-				class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
+					aria-label="切换"
+					class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 					class:bg-accent={s.ai.summaryEnabled}
 					class:bg-surface-inset={!s.ai.summaryEnabled}
 					onclick={() => (s.ai.summaryEnabled = !s.ai.summaryEnabled)}
 				>
-					<span class="shadow-xs block size-4 rounded-full bg-white transition-transform" class:translate-x-4={s.ai.summaryEnabled}></span>
+					<span
+						class="block size-4 rounded-full bg-white shadow-xs transition-transform"
+						class:translate-x-4={s.ai.summaryEnabled}
+					></span>
 				</button>
 			</label>
 
-			{#each [
-				['摘要功能', 'summaryProvider'],
-				['精读生成', 'deepReadProvider'],
-				['精读翻译', 'deepReadTranslateProvider'],
-				['翻译功能', 'translateProvider'],
-				['翻译审稿', 'translateReviewProvider'],
-				['写作助手', 'writingProvider'],
-				['评论审核', 'commentReviewProvider']
-			] as [label, providerKey] (providerKey)}
+			{#each [['摘要功能', 'summaryProvider'], ['精读生成', 'deepReadProvider'], ['精读翻译', 'deepReadTranslateProvider'], ['翻译功能', 'translateProvider'], ['翻译审稿', 'translateReviewProvider'], ['写作助手', 'writingProvider'], ['评论审核', 'commentReviewProvider']] as [label, providerKey] (providerKey)}
 				<div class="grid items-center gap-2 text-sm md:grid-cols-[12rem_minmax(0,1fr)]">
 					<div><div class="font-medium">{label}</div></div>
 					<div class="grid items-center gap-2 md:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]">
@@ -84,7 +83,8 @@
 				<div class="space-y-2">
 					<div class="flex gap-2">
 						<Input disabled maxlength={2} placeholder="如 en, ja, ko" />
-						<Button type="button" disabled variant="outline" size="sm" class="shrink-0">新增</Button>
+						<Button type="button" disabled variant="outline" size="sm" class="shrink-0">新增</Button
+						>
 					</div>
 				</div>
 			</label>

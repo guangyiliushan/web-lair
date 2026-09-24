@@ -30,8 +30,7 @@ export interface ImageDecisionContext {
 }
 
 export type ImageDecision =
-	| { kind: 'image' }
-	| { kind: 'embed'; provider: EmbedProviderId | 'generic' };
+	{ kind: 'image' } | { kind: 'embed'; provider: EmbedProviderId | 'generic' };
 
 const IMAGE_EXTENSIONS = new Set([
 	'png',

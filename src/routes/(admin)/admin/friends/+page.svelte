@@ -31,8 +31,8 @@
 			url: 'example.com',
 			type: '朋友',
 			email: '-',
-			createdAt: '2026/07/17',
-		},
+			createdAt: '2026/07/17'
+		}
 	];
 
 	const states = ['friends', 'pending', 'outdated', 'rejected', 'banned'] as const;
@@ -41,7 +41,7 @@
 		pending: '待审核',
 		outdated: '过时的',
 		rejected: '已拒绝',
-		banned: '封禁的',
+		banned: '封禁的'
 	};
 
 	let activeState = $state('friends');
@@ -109,13 +109,18 @@
 			{#each states as state (state)}
 				<button
 					type="button"
-					class="inline-flex h-8 items-center gap-2 rounded-xs px-3 text-sm transition-colors {activeState === state
+					class="inline-flex h-8 items-center gap-2 rounded-xs px-3 text-sm transition-colors {activeState ===
+					state
 						? 'bg-foreground text-background'
 						: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
 					onclick={() => (activeState = state)}
 				>
 					{stateLabels[state]}
-					<span class="rounded-full px-1.5 py-0.5 text-xs {activeState === state ? 'bg-background/20' : 'bg-muted'}">
+					<span
+						class="rounded-full px-1.5 py-0.5 text-xs {activeState === state
+							? 'bg-background/20'
+							: 'bg-muted'}"
+					>
 						{activeState === state ? friends.length : 0}
 					</span>
 				</button>
@@ -127,7 +132,7 @@
 	<div class="min-h-0 flex-1 overflow-auto">
 		<Table.Root>
 			<Table.Header class="sticky top-0 z-10 bg-muted/50">
-				<Table.Row class="text-xs uppercase text-muted-foreground hover:bg-transparent">
+				<Table.Row class="text-xs text-muted-foreground uppercase hover:bg-transparent">
 					{#each columns as col}
 						<Table.Head class={col === '操作' ? 'text-right' : ''}>{col}</Table.Head>
 					{/each}
@@ -146,10 +151,17 @@
 							<!-- 名称 -->
 							<Table.Cell>
 								<div class="flex items-center gap-3">
-									<div class="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
+									<div
+										class="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground"
+									>
 										{avatarText(friend.name)}
 									</div>
-									<a class="font-medium hover:underline" href="http://{friend.url}" rel="noreferrer" target="_blank">
+									<a
+										class="font-medium hover:underline"
+										href="http://{friend.url}"
+										rel="noreferrer"
+										target="_blank"
+									>
 										{friend.name}
 										<IconExternalLink class="ml-1 inline size-3" />
 									</a>
@@ -161,7 +173,12 @@
 							</Table.Cell>
 							<!-- 网址 -->
 							<Table.Cell class="max-w-[18rem]">
-								<a class="truncate text-muted-foreground hover:underline" href="http://{friend.url}" rel="noreferrer" target="_blank">
+								<a
+									class="truncate text-muted-foreground hover:underline"
+									href="http://{friend.url}"
+									rel="noreferrer"
+									target="_blank"
+								>
 									{friend.url}
 								</a>
 							</Table.Cell>
@@ -172,7 +189,9 @@
 								<span class="text-muted-foreground/70">{friend.email}</span>
 							</Table.Cell>
 							<!-- 创建时间 -->
-							<Table.Cell class="whitespace-nowrap text-muted-foreground">{friend.createdAt}</Table.Cell>
+							<Table.Cell class="whitespace-nowrap text-muted-foreground"
+								>{friend.createdAt}</Table.Cell
+							>
 							<!-- 操作 -->
 							<Table.Cell class="text-right">
 								<div class="flex justify-end gap-1">
@@ -180,7 +199,11 @@
 										<IconPencil class="size-3.5" />
 										编辑
 									</Button>
-									<Button variant="outline" size="sm" class="h-8 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive">
+									<Button
+										variant="outline"
+										size="sm"
+										class="h-8 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+									>
 										<IconTrash class="size-3.5" />
 										移除
 									</Button>
@@ -197,7 +220,13 @@
 <!-- 新增友链对话框 -->
 <Dialog.Root bind:open={addDialogOpen}>
 	<Dialog.Content class="sm:max-w-lg">
-		<form class="flex flex-col" onsubmit={(e) => { e.preventDefault(); addDialogOpen = false; }}>
+		<form
+			class="flex flex-col"
+			onsubmit={(e) => {
+				e.preventDefault();
+				addDialogOpen = false;
+			}}
+		>
 			<div class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
 				<Dialog.Title>新增友链</Dialog.Title>
 				<Dialog.Close>
@@ -231,7 +260,11 @@
 				</div>
 				<div class="grid gap-1.5">
 					<label for="friend-type" class="text-sm font-medium">类型</label>
-					<button id="friend-type" type="button" class="flex h-10 w-full items-center justify-between gap-2 rounded-sm border bg-surface-card pl-3 pr-2 text-left text-sm hover:bg-muted/50">
+					<button
+						id="friend-type"
+						type="button"
+						class="bg-surface-card flex h-10 w-full items-center justify-between gap-2 rounded-sm border pr-2 pl-3 text-left text-sm hover:bg-muted/50"
+					>
 						<span>{formType}</span>
 						<IconChevronDown class="size-4 shrink-0 text-muted-foreground" />
 					</button>

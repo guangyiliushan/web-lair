@@ -21,7 +21,11 @@
 	];
 
 	const friendLinkToggles: { key: string; label: string; description: string }[] = [
-		{ key: 'allowFriendApps', label: '允许友链申请', description: '开启后外部用户可提交友链申请。' },
+		{
+			key: 'allowFriendApps',
+			label: '允许友链申请',
+			description: '开启后外部用户可提交友链申请。'
+		},
 		{ key: 'allowSubPathFriends', label: '允许子路径友链', description: '允许友链指向子路径。' },
 		{ key: 'internalizeAvatars', label: '本地化头像', description: '将友链头像缓存到本地存储。' }
 	];
@@ -49,12 +53,12 @@
 						role="switch"
 						aria-checked={Boolean(s.content[item.key as keyof typeof s.content])}
 						aria-label={item.label}
-						class="outline-hidden relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
+						class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 						class:bg-accent={s.content[item.key as keyof typeof s.content]}
 						class:bg-surface-inset={!s.content[item.key as keyof typeof s.content]}
 					>
 						<span
-							class="shadow-xs block size-4 rounded-full bg-white transition-transform"
+							class="block size-4 rounded-full bg-white shadow-xs transition-transform"
 							class:translate-x-4={s.content[item.key as keyof typeof s.content]}
 						></span>
 					</button>
@@ -80,12 +84,16 @@
 			{/if}
 			<div class="flex items-center justify-between gap-4">
 				<span class="text-sm">屏蔽词</span>
-				<div class="min-w-0 max-w-[60%] flex-1">
+				<div class="max-w-[60%] min-w-0 flex-1">
 					<div class="flex flex-wrap gap-2">
 						{#each s.content.blockedKeywords as kw (kw)}
 							<Badge variant="secondary" class="gap-1">
 								{kw}
-								<button type="button" class="relative inline-flex size-3 items-center after:absolute after:-inset-2" aria-label="移除 {kw}"><IconX class="size-3" /></button>
+								<button
+									type="button"
+									class="relative inline-flex size-3 items-center after:absolute after:-inset-2"
+									aria-label="移除 {kw}"><IconX class="size-3" /></button
+								>
 							</Badge>
 						{/each}
 					</div>
@@ -94,12 +102,16 @@
 			</div>
 			<div class="flex items-center justify-between gap-4">
 				<span class="text-sm">屏蔽 IP</span>
-				<div class="min-w-0 max-w-[60%] flex-1">
+				<div class="max-w-[60%] min-w-0 flex-1">
 					<div class="flex flex-wrap gap-2">
 						{#each s.content.blockedIps as ip (ip)}
 							<Badge variant="secondary" class="gap-1">
 								{ip}
-								<button type="button" class="relative inline-flex size-3 items-center after:absolute after:-inset-2" aria-label="移除 {ip}"><IconX class="size-3" /></button>
+								<button
+									type="button"
+									class="relative inline-flex size-3 items-center after:absolute after:-inset-2"
+									aria-label="移除 {ip}"><IconX class="size-3" /></button
+								>
 							</Badge>
 						{/each}
 					</div>
@@ -129,12 +141,12 @@
 						role="switch"
 						aria-checked={Boolean(s.content[item.key as keyof typeof s.content])}
 						aria-label={item.label}
-						class="outline-hidden relative inline-flex h-5 min-w-9 shrink-0 items-center rounded-full px-0.5 transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
+						class="relative inline-flex h-5 min-w-9 shrink-0 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 						class:bg-accent={s.content[item.key as keyof typeof s.content]}
 						class:bg-surface-inset={!s.content[item.key as keyof typeof s.content]}
 					>
 						<span
-							class="shadow-xs block size-4 rounded-full bg-white transition-transform"
+							class="block size-4 rounded-full bg-white shadow-xs transition-transform"
 							class:translate-x-4={s.content[item.key as keyof typeof s.content]}
 						></span>
 					</button>

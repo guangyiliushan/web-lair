@@ -65,8 +65,7 @@
 						id="math-latex"
 						class="min-h-24 w-full rounded-md border border-border bg-transparent px-3 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
 						placeholder={'e^{i\\pi} + 1 = 0'}
-						bind:value={latex}
-					></textarea>
+						bind:value={latex}></textarea>
 				</div>
 				{#if hasInvalidChar}
 					<p class="text-xs text-destructive">{m.math_latex_invalid()}</p>

@@ -36,8 +36,7 @@ export const remarkImageEmbed: Plugin<[], Root> = () => {
 			const directive = node as unknown as ContainerDirective;
 			if (directive.name !== 'grid') return;
 			const props = directive.data?.hProperties as
-				| { dataType?: string; dataLayout?: string }
-				| undefined;
+				{ dataType?: string; dataLayout?: string } | undefined;
 			const imageMode =
 				props?.dataType === 'images' ||
 				props?.dataLayout === 'masonry' ||

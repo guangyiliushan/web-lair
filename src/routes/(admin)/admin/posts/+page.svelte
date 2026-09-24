@@ -410,7 +410,13 @@
 										</DropdownMenu.Root>
 									</span>
 									<!-- 移动端：删除按钮替代三点菜单 -->
-									<Button variant="ghost" size="icon" class="size-8 sm:hidden" aria-label="删除" disabled>
+									<Button
+										variant="ghost"
+										size="icon"
+										class="size-8 sm:hidden"
+										aria-label="删除"
+										disabled
+									>
 										<IconTrash class="size-4" />
 									</Button>
 								</div>

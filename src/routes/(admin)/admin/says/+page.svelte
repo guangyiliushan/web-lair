@@ -28,35 +28,40 @@
 		},
 		{
 			id: '2',
-			content: '以前啊，我们都向往着，可以拥有更好的未来；现在啊，我们回头看，曾经的岁月竟然就是我们的巅峰了。',
+			content:
+				'以前啊，我们都向往着，可以拥有更好的未来；现在啊，我们回头看，曾经的岁月竟然就是我们的巅峰了。',
 			author: '',
 			source: '你也走了很远的路吧',
 			createdAt: '3年前'
 		},
 		{
 			id: '3',
-			content: '我们今天生活的时代是一个慕强的时代，作为弱者是很痛苦的，因为周边的人都比你强。狮子和兔子，兔子想说话，狮子说，你的牙齿呢，你闭嘴。可是狮子在大象面前，狮子又变成了那个弱者。一个慕强的人，生活在恐惧之中，因为他生怕自己不够强。接受有限性，才能过得充足，才能原谅别人的不足。人最大的功课就是和解，跟他人和解，跟自己和解，跟命运和解。',
+			content:
+				'我们今天生活的时代是一个慕强的时代，作为弱者是很痛苦的，因为周边的人都比你强。狮子和兔子，兔子想说话，狮子说，你的牙齿呢，你闭嘴。可是狮子在大象面前，狮子又变成了那个弱者。一个慕强的人，生活在恐惧之中，因为他生怕自己不够强。接受有限性，才能过得充足，才能原谅别人的不足。人最大的功课就是和解，跟他人和解，跟自己和解，跟命运和解。',
 			author: '罗翔',
 			source: '如何在阅读中超越有限的今生',
 			createdAt: '3年前'
 		},
 		{
 			id: '4',
-			content: '世事无常，生命是短暂的，我们都活在生死边缘，哪怕只有一天，一刹那，我们都想要活下去。',
+			content:
+				'世事无常，生命是短暂的，我们都活在生死边缘，哪怕只有一天，一刹那，我们都想要活下去。',
 			author: '铃芽户缔',
 			source: '',
 			createdAt: '3年前'
 		},
 		{
 			id: '5',
-			content: '每逢你想要批评任何人的时候，你就记住，这个世界上所有的人，并不是个个都有过你拥有的那些优越条件。',
+			content:
+				'每逢你想要批评任何人的时候，你就记住，这个世界上所有的人，并不是个个都有过你拥有的那些优越条件。',
 			author: '弗朗西斯·斯科特·菲茨杰拉德',
 			source: '了不起的盖茨比',
 			createdAt: '4年前'
 		},
 		{
 			id: '6',
-			content: '生活不可能像你想象得那么好，但也不会像你想象得那么糟。我觉得人的脆弱和坚强都超乎自己的想象。有时，我可能脆弱得一句话就泪流满面；有时，也发现自己咬着牙走了很长的路。',
+			content:
+				'生活不可能像你想象得那么好，但也不会像你想象得那么糟。我觉得人的脆弱和坚强都超乎自己的想象。有时，我可能脆弱得一句话就泪流满面；有时，也发现自己咬着牙走了很长的路。',
 			author: '莫泊桑',
 			source: '一生',
 			createdAt: '4年前'
@@ -91,12 +96,14 @@
 	<!-- 页面头部 -->
 	<header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
 		<div class="flex min-w-0 items-center gap-2.5">
-			<span class="inline-flex size-6 shrink-0 items-center justify-center border bg-muted text-muted-foreground">
+			<span
+				class="inline-flex size-6 shrink-0 items-center justify-center border bg-muted text-muted-foreground"
+			>
 				<IconQuote class="size-4" />
 			</span>
 			<div class="flex min-w-0 items-baseline gap-2">
 				<h1 class="truncate text-base font-semibold">一言</h1>
-				<span class="shrink-0 text-xs tabular-nums text-muted-foreground">{says.length} 条</span>
+				<span class="shrink-0 text-xs text-muted-foreground tabular-nums">{says.length} 条</span>
 			</div>
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
@@ -110,7 +117,13 @@
 	<!-- 添加一言对话框 -->
 	<Dialog.Root bind:open={addDialogOpen}>
 		<Dialog.Content class="sm:max-w-lg">
-			<form class="flex flex-col" onsubmit={(e) => { e.preventDefault(); handleAdd(); }}>
+			<form
+				class="flex flex-col"
+				onsubmit={(e) => {
+					e.preventDefault();
+					handleAdd();
+				}}
+			>
 				<Dialog.Header>
 					<div class="flex items-center justify-between gap-3">
 						<Dialog.Title>添加一言</Dialog.Title>
@@ -177,7 +190,9 @@
 							<IconQuote class="mt-0.5 size-5 shrink-0 text-muted-foreground" />
 							<div class="min-w-0 flex-1">
 								<p class="text-base leading-relaxed">{say.content}</p>
-								<div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+								<div
+									class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground"
+								>
 									{#if say.author}
 										<span>{say.author}</span>
 									{/if}
@@ -187,8 +202,15 @@
 									<time class="text-muted-foreground/70">{say.createdAt}</time>
 								</div>
 							</div>
-							<div class="flex shrink-0 items-start gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-								<Button variant="outline" size="sm" class="h-8 gap-1 px-2 text-xs" href="/admin/says/{say.id}/edit">
+							<div
+								class="flex shrink-0 items-start gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+							>
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-8 gap-1 px-2 text-xs"
+									href="/admin/says/{say.id}/edit"
+								>
 									<IconPencil class="size-3.5" />
 									<span class="hidden sm:inline">编辑</span>
 								</Button>

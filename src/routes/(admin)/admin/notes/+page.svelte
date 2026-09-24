@@ -22,25 +22,123 @@
 	import IconMoodSmile from '@tabler/icons-svelte-runes/icons/mood-smile';
 
 	const notes = [
-		{ id: '211', title: '26y: Health, Changes in the AI Industry, and Personal Reflection', slug: 'three-years-after-graduation-reflections-on-health-ai-industry-and-life', series: '', mood: '', weather: '', reads: 332, likes: 12, updatedAt: '2天前' },
-		{ id: '210', title: 'Wrinkles in Monotony', slug: 'wrinkles-in-monotony', series: '生活随笔', mood: '', weather: '', reads: 739, likes: 28, updatedAt: '1周前' },
-		{ id: '208', title: 'Spring Festival on the Keyboard', slug: 'spring-festival-on-the-keyboard', series: '', mood: '', weather: '', reads: 1330, likes: 45, updatedAt: '2周前' },
-		{ id: '207', title: 'Spring Festival Memories as the Flavor Fades', slug: 'fading-spring-festival-memories', series: '生活随笔', mood: '', weather: 'Overcast', reads: 887, likes: 31, updatedAt: '3周前' },
-		{ id: '206', title: 'Just Working: Work and Life in the AI Era', slug: 'just-going-to-work-ai-era-work-and-life', series: '技术思考', mood: 'Mixed Emotions', weather: '', reads: 2300, likes: 67, updatedAt: '1个月前' },
-		{ id: '205', title: '2025 - Still on the Road, Beyond the Radius', slug: '2025-still-on-the-road-beyond-the-radius', series: '', mood: '', weather: '', reads: 2300, likes: 89, updatedAt: '1个月前' },
-		{ id: '204', title: 'Seeking Survival in Stability', slug: 'seeking-survival-in-stability', series: '技术思考', mood: '', weather: '', reads: 2700, likes: 102, updatedAt: '2个月前' },
-		{ id: '200', title: 'Finding an Exit Between Anxiety and Creativity', slug: 'finding-outlet-between-anxiety-and-creativity', series: '', mood: 'Anxious', weather: '', reads: 2500, likes: 56, updatedAt: '2个月前' },
-		{ id: '199', title: 'A Five-Day Journey on the Edge of the Equator', slug: 'five-day-travel-diary-at-the-edge-of-the-equator-singapore', series: '旅行', mood: 'Happy', weather: 'Sunny', reads: 1600, likes: 73, updatedAt: '3个月前' },
-		{ id: '198', title: 'The Interweaving of Calmness and Busyness', slug: 'interweaving-of-calm-and-busy-life', series: '', mood: '', weather: '', reads: 1000, likes: 18, updatedAt: '3个月前' }
+		{
+			id: '211',
+			title: '26y: Health, Changes in the AI Industry, and Personal Reflection',
+			slug: 'three-years-after-graduation-reflections-on-health-ai-industry-and-life',
+			series: '',
+			mood: '',
+			weather: '',
+			reads: 332,
+			likes: 12,
+			updatedAt: '2天前'
+		},
+		{
+			id: '210',
+			title: 'Wrinkles in Monotony',
+			slug: 'wrinkles-in-monotony',
+			series: '生活随笔',
+			mood: '',
+			weather: '',
+			reads: 739,
+			likes: 28,
+			updatedAt: '1周前'
+		},
+		{
+			id: '208',
+			title: 'Spring Festival on the Keyboard',
+			slug: 'spring-festival-on-the-keyboard',
+			series: '',
+			mood: '',
+			weather: '',
+			reads: 1330,
+			likes: 45,
+			updatedAt: '2周前'
+		},
+		{
+			id: '207',
+			title: 'Spring Festival Memories as the Flavor Fades',
+			slug: 'fading-spring-festival-memories',
+			series: '生活随笔',
+			mood: '',
+			weather: 'Overcast',
+			reads: 887,
+			likes: 31,
+			updatedAt: '3周前'
+		},
+		{
+			id: '206',
+			title: 'Just Working: Work and Life in the AI Era',
+			slug: 'just-going-to-work-ai-era-work-and-life',
+			series: '技术思考',
+			mood: 'Mixed Emotions',
+			weather: '',
+			reads: 2300,
+			likes: 67,
+			updatedAt: '1个月前'
+		},
+		{
+			id: '205',
+			title: '2025 - Still on the Road, Beyond the Radius',
+			slug: '2025-still-on-the-road-beyond-the-radius',
+			series: '',
+			mood: '',
+			weather: '',
+			reads: 2300,
+			likes: 89,
+			updatedAt: '1个月前'
+		},
+		{
+			id: '204',
+			title: 'Seeking Survival in Stability',
+			slug: 'seeking-survival-in-stability',
+			series: '技术思考',
+			mood: '',
+			weather: '',
+			reads: 2700,
+			likes: 102,
+			updatedAt: '2个月前'
+		},
+		{
+			id: '200',
+			title: 'Finding an Exit Between Anxiety and Creativity',
+			slug: 'finding-outlet-between-anxiety-and-creativity',
+			series: '',
+			mood: 'Anxious',
+			weather: '',
+			reads: 2500,
+			likes: 56,
+			updatedAt: '2个月前'
+		},
+		{
+			id: '199',
+			title: 'A Five-Day Journey on the Edge of the Equator',
+			slug: 'five-day-travel-diary-at-the-edge-of-the-equator-singapore',
+			series: '旅行',
+			mood: 'Happy',
+			weather: 'Sunny',
+			reads: 1600,
+			likes: 73,
+			updatedAt: '3个月前'
+		},
+		{
+			id: '198',
+			title: 'The Interweaving of Calmness and Busyness',
+			slug: 'interweaving-of-calm-and-busy-life',
+			series: '',
+			mood: '',
+			weather: '',
+			reads: 1000,
+			likes: 18,
+			updatedAt: '3个月前'
+		}
 	];
 
 	let searchQuery = $state('');
 	let selectedIds = $state<string[]>([]);
 
 	const filteredNotes = $derived(
-		notes.filter((note) =>
-			note.title.toLowerCase().includes(searchQuery.toLowerCase())
-		)
+		notes.filter((note) => note.title.toLowerCase().includes(searchQuery.toLowerCase()))
 	);
 
 	const allSelected = $derived(
@@ -48,8 +146,11 @@
 	);
 
 	function toggleSelectAll() {
-		if (allSelected) { selectedIds = []; }
-		else { selectedIds = filteredNotes.map((n) => n.id); }
+		if (allSelected) {
+			selectedIds = [];
+		} else {
+			selectedIds = filteredNotes.map((n) => n.id);
+		}
 	}
 
 	function toggleSelect(id: string) {
@@ -76,20 +177,42 @@
 	<div class="relative flex h-10 shrink-0 items-center border-b">
 		<label
 			class="hidden w-10 shrink-0 cursor-pointer items-center justify-center pl-2 text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
-			title="全选" aria-label="全选"
+			title="全选"
+			aria-label="全选"
 		>
-			<input type="checkbox" class="size-4 rounded border-border bg-transparent" checked={allSelected} onchange={toggleSelectAll} />
+			<input
+				type="checkbox"
+				class="size-4 rounded border-border bg-transparent"
+				checked={allSelected}
+				onchange={toggleSelectAll}
+			/>
 		</label>
-		<form class="relative flex h-full min-w-0 flex-1 items-center self-stretch" onsubmit={(e) => e.preventDefault()}>
-			<IconSearch class="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-			<input type="text" aria-label="搜索标题或正文" placeholder="搜索标题或正文" class="h-7 w-full border-0 bg-transparent pl-8 pr-0 text-xs outline-none placeholder:text-muted-foreground focus:ring-0" bind:value={searchQuery} />
+		<form
+			class="relative flex h-full min-w-0 flex-1 items-center self-stretch"
+			onsubmit={(e) => e.preventDefault()}
+		>
+			<IconSearch
+				class="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
+			/>
+			<input
+				type="text"
+				aria-label="搜索标题或正文"
+				placeholder="搜索标题或正文"
+				class="h-7 w-full border-0 bg-transparent pr-0 pl-8 text-xs outline-none placeholder:text-muted-foreground focus:ring-0"
+				bind:value={searchQuery}
+			/>
 		</form>
 		<!-- 数据列占位 — 与表格 w-44 对齐 -->
 		<div class="hidden w-44 xl:block"></div>
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
-				<Button {...props} variant="ghost" size="sm" class="hidden w-24 justify-between text-xs font-normal text-muted-foreground hover:text-foreground sm:inline-flex">
+					<Button
+						{...props}
+						variant="ghost"
+						size="sm"
+						class="hidden w-24 justify-between text-xs font-normal text-muted-foreground hover:text-foreground sm:inline-flex"
+					>
 						<span class="truncate">全部专栏</span>
 						<IconChevronDown class="size-3.5 shrink-0 text-muted-foreground" />
 					</Button>
@@ -107,7 +230,12 @@
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
-				<Button {...props} variant="ghost" size="sm" class="hidden w-28 justify-center text-xs font-normal text-muted-foreground hover:text-foreground sm:inline-flex">
+					<Button
+						{...props}
+						variant="ghost"
+						size="sm"
+						class="hidden w-28 justify-center text-xs font-normal text-muted-foreground hover:text-foreground sm:inline-flex"
+					>
 						<IconArrowUpDown class="size-3.5" />
 						<span class="truncate">创建时间</span>
 						<IconArrowDown class="size-3" />
@@ -125,9 +253,13 @@
 		<!-- 操作列占位 — 与表格 w-20 对齐 -->
 		<div class="w-20"></div>
 		<!-- 分隔符和刷新按钮：绝对定位，不参与 flex 布局 -->
-		<div class="absolute right-0 top-0 flex h-full items-center pr-2">
+		<div class="absolute top-0 right-0 flex h-full items-center pr-2">
 			<Separator orientation="vertical" class="h-3.5" />
-			<RefreshButton onclick={() => { /* TODO */ }} />
+			<RefreshButton
+				onclick={() => {
+					/* TODO */
+				}}
+			/>
 		</div>
 	</div>
 
@@ -146,25 +278,44 @@
 					{#each filteredNotes as note (note.id)}
 						<Table.Row class="group border-border">
 							<Table.Cell class="hidden w-10 sm:table-cell">
-								<input type="checkbox" class="size-4 rounded border-border bg-transparent" checked={selectedIds.includes(note.id)} onchange={() => toggleSelect(note.id)} />
+								<input
+									type="checkbox"
+									class="size-4 rounded border-border bg-transparent"
+									checked={selectedIds.includes(note.id)}
+									onchange={() => toggleSelect(note.id)}
+								/>
 							</Table.Cell>
 							<Table.Cell class="max-w-0 whitespace-normal">
 								<div class="flex min-w-0 flex-col gap-1">
-									<a href="/admin/notes/{note.id}/edit" class="block max-w-lg font-medium hover:text-primary line-clamp-2">{note.title}</a>
+									<a
+										href="/admin/notes/{note.id}/edit"
+										class="line-clamp-2 block max-w-lg font-medium hover:text-primary"
+										>{note.title}</a
+									>
 									<!-- 紧凑模式元信息行：lg 以下显示，sm 以下含时间 -->
-									<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground sm:gap-x-3 xl:hidden">
+									<div
+										class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground sm:gap-x-3 xl:hidden"
+									>
 										{#if note.series}
 											<span class="font-mono">{note.series}</span>
 										{:else}
 											<span class="text-muted-foreground/60">-</span>
 										{/if}
-										<span class="inline-flex items-center gap-1"><IconBook class="size-3" />{fmt(note.reads)}</span>
-										<span class="inline-flex items-center gap-1"><IconHeart class="size-3" />{fmt(note.likes)}</span>
+										<span class="inline-flex items-center gap-1"
+											><IconBook class="size-3" />{fmt(note.reads)}</span
+										>
+										<span class="inline-flex items-center gap-1"
+											><IconHeart class="size-3" />{fmt(note.likes)}</span
+										>
 										{#if note.weather}
-											<span class="inline-flex items-center gap-1"><IconCloudRain class="size-3" />{note.weather}</span>
+											<span class="inline-flex items-center gap-1"
+												><IconCloudRain class="size-3" />{note.weather}</span
+											>
 										{/if}
 										{#if note.mood}
-											<span class="inline-flex items-center gap-1"><IconMoodSmile class="size-3" />{note.mood}</span>
+											<span class="inline-flex items-center gap-1"
+												><IconMoodSmile class="size-3" />{note.mood}</span
+											>
 										{/if}
 										<span class="sm:hidden">{note.updatedAt}</span>
 									</div>
@@ -201,13 +352,27 @@
 									<span class="text-xs text-muted-foreground">—</span>
 								{/if}
 							</Table.Cell>
-							<Table.Cell class="hidden w-28 text-muted-foreground sm:table-cell">{note.updatedAt}</Table.Cell>
+							<Table.Cell class="hidden w-28 text-muted-foreground sm:table-cell"
+								>{note.updatedAt}</Table.Cell
+							>
 							<Table.Cell class="w-20 text-right">
 								<div class="flex items-center justify-end gap-1">
-									<Button variant="ghost" size="icon" class="size-8" href="/admin/notes/{note.id}/edit" aria-label="编辑">
+									<Button
+										variant="ghost"
+										size="icon"
+										class="size-8"
+										href="/admin/notes/{note.id}/edit"
+										aria-label="编辑"
+									>
 										<IconPencil class="size-4" />
 									</Button>
-									<Button variant="ghost" size="icon" class="size-8" onclick={() => window.open(`/notes/${note.slug}`, '_blank')} aria-label="在新窗口打开">
+									<Button
+										variant="ghost"
+										size="icon"
+										class="size-8"
+										onclick={() => window.open(`/notes/${note.slug}`, '_blank')}
+										aria-label="在新窗口打开"
+									>
 										<IconExternalLink class="size-4" />
 									</Button>
 									<!-- 桌面/平板：三点菜单 -->
@@ -215,28 +380,48 @@
 										<DropdownMenu.Root>
 											<DropdownMenu.Trigger>
 												{#snippet child({ props })}
-													<Button variant="ghost" size="icon" class="size-8" {...props} aria-label="更多操作"><IconDots class="size-4" /></Button>
+													<Button
+														variant="ghost"
+														size="icon"
+														class="size-8"
+														{...props}
+														aria-label="更多操作"><IconDots class="size-4" /></Button
+													>
 												{/snippet}
 											</DropdownMenu.Trigger>
 											<DropdownMenu.Content align="end">
 												<DropdownMenu.Group>
 													<DropdownMenu.Item>
 														{#snippet child({ props })}
-															<a href="/admin/notes/{note.id}/edit" {...props}><IconPencil data-icon="inline-start" />编辑</a>
+															<a href="/admin/notes/{note.id}/edit" {...props}
+																><IconPencil data-icon="inline-start" />编辑</a
+															>
 														{/snippet}
 													</DropdownMenu.Item>
-													<DropdownMenu.Item onclick={() => window.open(`/notes/${note.slug}`, '_blank')}>
-														<IconExternalLink data-icon="inline-start" />在新窗口打开<DropdownMenu.Shortcut>⌘↵</DropdownMenu.Shortcut>
+													<DropdownMenu.Item
+														onclick={() => window.open(`/notes/${note.slug}`, '_blank')}
+													>
+														<IconExternalLink
+															data-icon="inline-start"
+														/>在新窗口打开<DropdownMenu.Shortcut>⌘↵</DropdownMenu.Shortcut>
 													</DropdownMenu.Item>
 												</DropdownMenu.Group>
 												<DropdownMenu.Separator />
 												<DropdownMenu.Group>
-													<DropdownMenu.Item><IconCopy data-icon="inline-start" />复制链接</DropdownMenu.Item>
-													<DropdownMenu.Item><IconHash data-icon="inline-start" />复制 ID</DropdownMenu.Item>
+													<DropdownMenu.Item
+														><IconCopy data-icon="inline-start" />复制链接</DropdownMenu.Item
+													>
+													<DropdownMenu.Item
+														><IconHash data-icon="inline-start" />复制 ID</DropdownMenu.Item
+													>
 												</DropdownMenu.Group>
 												<DropdownMenu.Separator />
 												<DropdownMenu.Group>
-													<DropdownMenu.Item variant="destructive"><IconTrash data-icon="inline-start" />删除<DropdownMenu.Shortcut>⌫</DropdownMenu.Shortcut></DropdownMenu.Item>
+													<DropdownMenu.Item variant="destructive"
+														><IconTrash data-icon="inline-start" />删除<DropdownMenu.Shortcut
+															>⌫</DropdownMenu.Shortcut
+														></DropdownMenu.Item
+													>
 												</DropdownMenu.Group>
 											</DropdownMenu.Content>
 										</DropdownMenu.Root>

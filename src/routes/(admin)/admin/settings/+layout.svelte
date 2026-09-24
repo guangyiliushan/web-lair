@@ -19,20 +19,86 @@
 
 	let { children }: { children: Snippet } = $props();
 
-	type SectionId = 'user' | 'site' | 'content' | 'notification' | 'search' | 'storage' | 'ai' | 'integrations' | 'system' | 'account' | 'meta-preset';
+	type SectionId =
+		| 'user'
+		| 'site'
+		| 'content'
+		| 'notification'
+		| 'search'
+		| 'storage'
+		| 'ai'
+		| 'integrations'
+		| 'system'
+		| 'account'
+		| 'meta-preset';
 
 	const sections: { id: SectionId; label: string; desc: string; icon: Component }[] = [
-		{ id: 'user', label: m.admin_settings_user(), desc: m.admin_settings_user_desc(), icon: IconUser },
-		{ id: 'site', label: m.admin_settings_site(), desc: m.admin_settings_site_desc(), icon: IconSettings },
-		{ id: 'content', label: m.admin_settings_content(), desc: m.admin_settings_content_desc(), icon: IconMail },
-		{ id: 'notification', label: m.admin_settings_notification(), desc: m.admin_settings_notification_desc(), icon: IconMail },
-		{ id: 'search', label: m.admin_settings_search(), desc: m.admin_settings_search_desc(), icon: IconSearch },
-		{ id: 'storage', label: m.admin_settings_storage(), desc: m.admin_settings_storage_desc(), icon: IconDatabase },
-		{ id: 'ai', label: m.admin_settings_ai(), desc: m.admin_settings_ai_desc(), icon: IconSparkles },
-		{ id: 'integrations', label: m.admin_settings_integrations(), desc: m.admin_settings_integrations_desc(), icon: IconPuzzle },
-		{ id: 'system', label: m.admin_settings_system(), desc: m.admin_settings_system_desc(), icon: IconSettings },
-		{ id: 'account', label: m.admin_settings_account(), desc: m.admin_settings_account_desc(), icon: IconShield },
-		{ id: 'meta-preset', label: m.admin_settings_meta_preset(), desc: m.admin_settings_meta_preset_desc(), icon: IconList }
+		{
+			id: 'user',
+			label: m.admin_settings_user(),
+			desc: m.admin_settings_user_desc(),
+			icon: IconUser
+		},
+		{
+			id: 'site',
+			label: m.admin_settings_site(),
+			desc: m.admin_settings_site_desc(),
+			icon: IconSettings
+		},
+		{
+			id: 'content',
+			label: m.admin_settings_content(),
+			desc: m.admin_settings_content_desc(),
+			icon: IconMail
+		},
+		{
+			id: 'notification',
+			label: m.admin_settings_notification(),
+			desc: m.admin_settings_notification_desc(),
+			icon: IconMail
+		},
+		{
+			id: 'search',
+			label: m.admin_settings_search(),
+			desc: m.admin_settings_search_desc(),
+			icon: IconSearch
+		},
+		{
+			id: 'storage',
+			label: m.admin_settings_storage(),
+			desc: m.admin_settings_storage_desc(),
+			icon: IconDatabase
+		},
+		{
+			id: 'ai',
+			label: m.admin_settings_ai(),
+			desc: m.admin_settings_ai_desc(),
+			icon: IconSparkles
+		},
+		{
+			id: 'integrations',
+			label: m.admin_settings_integrations(),
+			desc: m.admin_settings_integrations_desc(),
+			icon: IconPuzzle
+		},
+		{
+			id: 'system',
+			label: m.admin_settings_system(),
+			desc: m.admin_settings_system_desc(),
+			icon: IconSettings
+		},
+		{
+			id: 'account',
+			label: m.admin_settings_account(),
+			desc: m.admin_settings_account_desc(),
+			icon: IconShield
+		},
+		{
+			id: 'meta-preset',
+			label: m.admin_settings_meta_preset(),
+			desc: m.admin_settings_meta_preset_desc(),
+			icon: IconList
+		}
 	];
 
 	const isRoot = $derived(page.url.pathname === '/admin/settings');
@@ -60,7 +126,9 @@
 		<div class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
 			<IconSettings class="size-4 shrink-0 text-muted-foreground" />
 			<h2 class="truncate text-sm font-semibold">{m.admin_settings_title()}</h2>
-			<span class="ml-auto text-xs tabular-nums text-muted-foreground">{m.admin_settings_count({ count: sections.length })}</span>
+			<span class="ml-auto text-xs text-muted-foreground tabular-nums"
+				>{m.admin_settings_count({ count: sections.length })}</span
+			>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			{#each sections as section (section.id)}
@@ -72,7 +140,11 @@
 					)}
 					onclick={() => goto(sectionHref(section.id))}
 				>
-					<span class="flex size-9 shrink-0 items-center justify-center rounded {isActive(section.id) ? 'bg-muted-foreground/15' : 'bg-muted'}">
+					<span
+						class="flex size-9 shrink-0 items-center justify-center rounded {isActive(section.id)
+							? 'bg-muted-foreground/15'
+							: 'bg-muted'}"
+					>
 						<section.icon class="size-4" />
 					</span>
 					<span class="min-w-0 flex-1">
@@ -105,41 +177,50 @@
 
 <!-- Desktop: MasterDetail -->
 <div class="hidden min-h-0 flex-1 sm:flex">
-<MasterDetail.Root>
-	<!-- 侧边栏导航 -->
-	<MasterDetail.Pane side="master" class="w-80 shrink-0">
-		<MasterDetail.Header icon={IconSettings} title={m.admin_settings_title()} count={sections.length} />
-		<MasterDetail.List>
-			{#each sections as section (section.id)}
-				<MasterDetail.Item
-					selected={isActive(section.id)}
-					onclick={() => goto(sectionHref(section.id))}
-				>
-					<span class="flex size-9 shrink-0 items-center justify-center rounded {isActive(section.id) ? 'bg-muted-foreground/15' : 'bg-muted'}">
-						<section.icon class="size-4" />
-					</span>
-					<span class="min-w-0 flex-1">
-						<span class="block truncate text-sm font-medium">{section.label}</span>
-						<span class="mt-0.5 block truncate text-xs text-muted-foreground">{section.desc}</span>
-					</span>
-				</MasterDetail.Item>
-			{/each}
-		</MasterDetail.List>
-	</MasterDetail.Pane>
+	<MasterDetail.Root>
+		<!-- 侧边栏导航 -->
+		<MasterDetail.Pane side="master" class="w-80 shrink-0">
+			<MasterDetail.Header
+				icon={IconSettings}
+				title={m.admin_settings_title()}
+				count={sections.length}
+			/>
+			<MasterDetail.List>
+				{#each sections as section (section.id)}
+					<MasterDetail.Item
+						selected={isActive(section.id)}
+						onclick={() => goto(sectionHref(section.id))}
+					>
+						<span
+							class="flex size-9 shrink-0 items-center justify-center rounded {isActive(section.id)
+								? 'bg-muted-foreground/15'
+								: 'bg-muted'}"
+						>
+							<section.icon class="size-4" />
+						</span>
+						<span class="min-w-0 flex-1">
+							<span class="block truncate text-sm font-medium">{section.label}</span>
+							<span class="mt-0.5 block truncate text-xs text-muted-foreground">{section.desc}</span
+							>
+						</span>
+					</MasterDetail.Item>
+				{/each}
+			</MasterDetail.List>
+		</MasterDetail.Pane>
 
-	<!-- 内容区 -->
-	<MasterDetail.Pane side="detail">
-		{#if !isRoot}
-			<div class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-				<h1 class="truncate text-sm font-medium">{activeSection()?.label ?? ''}</h1>
-				<span class="text-xs text-muted-foreground">{activeSection()?.desc ?? ''}</span>
+		<!-- 内容区 -->
+		<MasterDetail.Pane side="detail">
+			{#if !isRoot}
+				<div class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+					<h1 class="truncate text-sm font-medium">{activeSection()?.label ?? ''}</h1>
+					<span class="text-xs text-muted-foreground">{activeSection()?.desc ?? ''}</span>
+				</div>
+			{/if}
+			<div class="min-h-0 flex-1 overflow-auto">
+				<div class="min-h-full p-4">
+					{@render children()}
+				</div>
 			</div>
-		{/if}
-		<div class="min-h-0 flex-1 overflow-auto">
-			<div class="min-h-full p-4">
-				{@render children()}
-			</div>
-		</div>
-	</MasterDetail.Pane>
-</MasterDetail.Root>
+		</MasterDetail.Pane>
+	</MasterDetail.Root>
 </div>

@@ -13,7 +13,7 @@
 </script>
 
 <div class="flex w-full flex-col items-center justify-center">
-		<Card.Root class="w-full max-w-md text-center">
+	<Card.Root class="w-full max-w-md text-center">
 		<Card.Header>
 			<Card.Title class="text-2xl">{m.auth_forgot_title()}</Card.Title>
 			<Card.Description>{m.auth_forgot_description()}</Card.Description>

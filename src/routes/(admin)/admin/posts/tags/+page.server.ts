@@ -13,13 +13,11 @@ export const load: PageServerLoad = async () => {
 		.groupBy(sql`unnest(${posts.tags})`)
 		.orderBy(sql`unnest(${posts.tags})`);
 
-	const allTags = [...new Set(rows.map((r) => r.name).filter(Boolean))].map(
-		(name, i) => ({
-			id: `tag-${i}`,
-			name,
-			slug: name.toLowerCase().replace(/\s+/g, '-')
-		})
-	);
+	const allTags = [...new Set(rows.map((r) => r.name).filter(Boolean))].map((name, i) => ({
+		id: `tag-${i}`,
+		name,
+		slug: name.toLowerCase().replace(/\s+/g, '-')
+	}));
 
 	return { headerTitle: '标签', tags: allTags };
 };
