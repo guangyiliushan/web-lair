@@ -1,8 +1,8 @@
 import type { LayoutServerLoad } from './$types';
-import { requireAdminOwner } from '$lib/server/authz';
+import { requireAdminWorkspace } from '$lib/server/authz';
 
 export const load: LayoutServerLoad = async (event) => {
-	await requireAdminOwner();
+	await requireAdminWorkspace();
 
 	return {
 		auth: {

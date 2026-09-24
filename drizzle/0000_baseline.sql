@@ -1,76 +1,21 @@
-CREATE TABLE "api_keys" (
-	"id" text PRIMARY KEY NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone,
-	"user_id" text,
-	"reference_id" text,
-	"config_id" text,
-	"name" text,
-	"key" text NOT NULL,
-	"start" text,
-	"prefix" text,
-	"enabled" boolean DEFAULT true NOT NULL,
-	"rate_limit_enabled" boolean DEFAULT false NOT NULL,
-	"rate_limit_time_window" integer,
-	"rate_limit_max" integer,
-	"request_count" integer DEFAULT 0 NOT NULL,
-	"remaining" integer,
-	"refill_interval" integer,
-	"refill_amount" integer,
-	"expires_at" timestamp with time zone,
-	"last_refill_at" timestamp with time zone,
-	"last_request" timestamp with time zone,
-	"permissions" jsonb,
-	"metadata" jsonb
-);
---> statement-breakpoint
-CREATE TABLE "device_codes" (
-	"id" text PRIMARY KEY NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone,
-	"device_code" text NOT NULL,
-	"user_code" text NOT NULL,
-	"user_id" text,
-	"expires_at" timestamp with time zone NOT NULL,
-	"status" text NOT NULL,
-	"last_polled_at" timestamp with time zone,
-	"polling_interval" integer,
-	"client_id" text,
-	"scope" text
-);
---> statement-breakpoint
-CREATE TABLE "owner_profiles" (
-	"id" text PRIMARY KEY NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"user_id" text NOT NULL,
-	"mail" text,
-	"url" text,
-	"introduce" text,
-	"last_login_ip" text,
-	"last_login_time" timestamp with time zone,
-	"social_ids" jsonb
-);
---> statement-breakpoint
 CREATE TABLE "user_profiles" (
 	"user_id" text PRIMARY KEY NOT NULL,
 	"display_name" text NOT NULL,
 	"slug" text NOT NULL,
 	"bio" text,
 	"avatar_url" text,
-	"email_notifications" boolean DEFAULT true NOT NULL,
-	"public_profile" boolean DEFAULT false NOT NULL,
-	"show_online_status" boolean DEFAULT false NOT NULL,
+	"links" jsonb,
+	"email_notifications_enabled" boolean DEFAULT true NOT NULL,
+	"profile_public" boolean DEFAULT false NOT NULL,
+	"online_status_public" boolean DEFAULT false NOT NULL,
 	"status" text DEFAULT 'active' NOT NULL,
+	"deleted_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "user_profiles_slug_unique" UNIQUE("slug")
-);
---> statement-breakpoint
-CREATE TABLE "admin_account" (
-	"id" text PRIMARY KEY NOT NULL,
-	"user_id" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "admin_account_user_id_unique" UNIQUE("user_id")
+	CONSTRAINT "user_profiles_slug_unique" UNIQUE("slug"),
+	CONSTRAINT "user_profiles_status_check" CHECK ("user_profiles"."status" in ('active', 'deleted')),
+	CONSTRAINT "user_profiles_deleted_at_check" CHECK (("user_profiles"."status" = 'deleted') = ("user_profiles"."deleted_at" is not null)),
+	CONSTRAINT "user_profiles_links_is_array_check" CHECK ("user_profiles"."links" is null or jsonb_typeof("user_profiles"."links") = 'array')
 );
 --> statement-breakpoint
 CREATE TABLE "ai_agent_conversations" (
@@ -564,6 +509,7 @@ CREATE TABLE "session" (
 	"ip_address" text,
 	"user_agent" text,
 	"user_id" text NOT NULL,
+	"impersonated_by" text,
 	CONSTRAINT "session_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
@@ -575,6 +521,10 @@ CREATE TABLE "user" (
 	"image" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"role" text,
+	"banned" boolean DEFAULT false,
+	"ban_reason" text,
+	"ban_expires" timestamp,
 	CONSTRAINT "user_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
@@ -587,12 +537,7 @@ CREATE TABLE "verification" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_reference_id_user_id_fk" FOREIGN KEY ("reference_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "device_codes" ADD CONSTRAINT "device_codes_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "owner_profiles" ADD CONSTRAINT "owner_profiles_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_profiles" ADD CONSTRAINT "user_profiles_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "admin_account" ADD CONSTRAINT "admin_account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ai_insights" ADD CONSTRAINT "ai_insights_source_insights_id_ai_insights_id_fk" FOREIGN KEY ("source_insights_id") REFERENCES "public"."ai_insights"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_parent_comment_id_comments_id_fk" FOREIGN KEY ("parent_comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_root_comment_id_comments_id_fk" FOREIGN KEY ("root_comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -610,12 +555,6 @@ ALTER TABLE "webhook_events" ADD CONSTRAINT "webhook_events_hook_id_webhooks_id_
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "passkey" ADD CONSTRAINT "passkey_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX "api_keys_key_uniq" ON "api_keys" USING btree ("key");--> statement-breakpoint
-CREATE INDEX "api_keys_user_id_idx" ON "api_keys" USING btree ("user_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "device_codes_device_code_uniq" ON "device_codes" USING btree ("device_code");--> statement-breakpoint
-CREATE UNIQUE INDEX "device_codes_user_code_uniq" ON "device_codes" USING btree ("user_code");--> statement-breakpoint
-CREATE INDEX "device_codes_expires_at_idx" ON "device_codes" USING btree ("expires_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "owner_profiles_user_id_uniq" ON "owner_profiles" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "ai_agent_conversations_session_idx" ON "ai_agent_conversations" USING btree ("session_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "ai_insights_ref_lang_uniq" ON "ai_insights" USING btree ("ref_id","lang");--> statement-breakpoint
 CREATE INDEX "ai_summaries_ref_id_idx" ON "ai_summaries" USING btree ("ref_id");--> statement-breakpoint

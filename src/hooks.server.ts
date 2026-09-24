@@ -1,5 +1,6 @@
 import { sequence } from '@sveltejs/kit/hooks';
 import { building } from '$app/environment';
+import { redirect } from '@sveltejs/kit';
 import { auth } from '$lib/server/auth';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import type { Handle } from '@sveltejs/kit';
@@ -8,9 +9,9 @@ import { paraglideMiddleware } from '$lib/paraglide/server';
 import { db } from '$lib/server/db';
 import { userProfiles } from '$lib/server/db/account/user-profile.schema';
 import { eq } from 'drizzle-orm';
-import { env } from '$env/dynamic/private';
-import { getAdminSessionContext, issueAdminSessionCookie } from '$lib/server/security/admin-cookie';
-import { tryTailscaleAutoLogin } from '$lib/server/security/tailscale-auth';
+import { adminContextFor } from '$lib/server/authz';
+import { ADMIN_BASE_PATH, getAdminConfig } from '$lib/server/config/admin';
+import { shouldAttemptTailscaleSignIn } from '$lib/server/security/tailscale-auth';
 
 const handleParaglide: Handle = async ({ event, resolve }) =>
 	paraglideMiddleware(event.request, async ({ request, locale }) => {
@@ -42,6 +43,14 @@ const handleParaglide: Handle = async ({ event, resolve }) =>
 		});
 	});
 
+function clientAddress(event: Parameters<Handle>[0]['event']): string {
+	try {
+		return event.getClientAddress() ?? '';
+	} catch {
+		return '';
+	}
+}
+
 const handleBetterAuth: Handle = async ({ event, resolve }) => {
 	const session = await auth.api.getSession({ headers: event.request.headers });
 	event.locals.admin = null;
@@ -51,18 +60,14 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 			where: eq(userProfiles.userId, session.user.id)
 		});
 
-		if (profile?.status === 'suspended') {
-			return new Response('Account suspended', { status: 403 });
+		if (profile?.status === 'deleted') {
+			return new Response('Account deleted', { status: 403 });
 		}
 
 		event.locals.session = session.session;
 		event.locals.user = session.user;
-		event.locals.admin = getAdminSessionContext(
-			event.cookies,
-			session.user,
-			session.session,
-			env.BETTER_AUTH_SECRET
-		);
+		// Roles come from the better-auth admin plugin; the workspace guard reads this.
+		event.locals.admin = adminContextFor(session.user);
 		if (profile) {
 			event.locals.profile = {
 				displayName: profile.displayName,
@@ -74,37 +79,22 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	// Tailscale 自动登录：在 /admin 路径下无 Better Auth session 时尝试
-	if (!session && event.url.pathname.startsWith('/admin')) {
-		const autoLogin = await tryTailscaleAutoLogin();
-		if (autoLogin) {
-			event.locals.user = autoLogin.user;
-			event.locals.session = autoLogin.session;
+	// Tailnet sign-in: with no session, hand /admin off to the official plugin
+	// endpoint, which resolves the identity and issues a real session + cookie.
+	// No session row is ever inserted here (ledger §4.27 洞②).
+	if (!session && event.url.pathname.startsWith(ADMIN_BASE_PATH)) {
+		const { loginPath } = getAdminConfig();
+		const isLoginPage = event.url.pathname.startsWith(loginPath);
+		const isSetupPage = event.url.pathname.startsWith(`${ADMIN_BASE_PATH}/setup`);
 
-			issueAdminSessionCookie(
-				event.cookies,
-				autoLogin.user,
-				autoLogin.session,
-				env.BETTER_AUTH_SECRET
+		if (!isLoginPage && !isSetupPage) {
+			const shouldSignIn = shouldAttemptTailscaleSignIn(
+				clientAddress(event),
+				event.request.headers
 			);
-			event.locals.admin = getAdminSessionContext(
-				event.cookies,
-				autoLogin.user,
-				autoLogin.session,
-				env.BETTER_AUTH_SECRET
-			);
-
-			const profile = await db.query.userProfiles.findFirst({
-				where: eq(userProfiles.userId, autoLogin.user.id)
-			});
-			if (profile) {
-				event.locals.profile = {
-					displayName: profile.displayName,
-					slug: profile.slug,
-					bio: profile.bio,
-					avatarUrl: profile.avatarUrl,
-					status: profile.status
-				};
+			if (shouldSignIn) {
+				const returnTo = event.url.pathname + event.url.search;
+				redirect(303, `/api/auth/tailscale-sign-in?returnTo=${encodeURIComponent(returnTo)}`);
 			}
 		}
 	}

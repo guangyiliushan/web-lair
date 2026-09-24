@@ -10,13 +10,12 @@ declare global {
 				slug: string;
 				bio: string | null;
 				avatarUrl: string | null;
-				status: 'active' | 'suspended' | 'deleted';
+				status: 'active' | 'deleted';
 			};
+			/** Derived from the better-auth admin-plugin role; null when not owner/admin. */
 			admin?: {
 				userId: string;
-				sessionId: string;
-				issuedAt: number;
-				expiresAt: number;
+				role: 'owner' | 'admin';
 			} | null;
 		}
 		interface PageData {

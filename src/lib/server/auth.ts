@@ -2,6 +2,9 @@ import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { passkey } from '@better-auth/passkey';
+import { admin as adminPlugin, lastLoginMethod } from 'better-auth/plugins';
+import { ac, adminRole, ownerRole, userRole } from '$lib/server/auth/permissions';
+import { tailscaleSignIn } from '$lib/server/auth/tailscale-plugin';
 import { env } from '$env/dynamic/private';
 import { getRequestEvent } from '$app/server';
 import { db } from '$lib/server/db';
@@ -78,11 +81,23 @@ export const auth = betterAuth({
 	},
 
 	plugins: [
+		// Site-wide roles (owner / admin / user). The role column is plugin-owned;
+		// "exactly one owner" is an application-layer invariant (auth/owner.ts).
+		adminPlugin({
+			ac,
+			roles: { owner: ownerRole, admin: adminRole, user: userRole },
+			defaultRole: 'user',
+			adminRoles: ['owner', 'admin']
+		}),
+		// Official "last method used" tracking; cookie mode, no schema change.
+		lastLoginMethod(),
 		passkey({
 			rpID: deriveRpId(env.ORIGIN),
 			rpName: 'Web Lair',
 			origin: env.ORIGIN
 		}),
+		// Tailnet sign-in that issues a real better-auth session (B1).
+		tailscaleSignIn(),
 		sveltekitCookies(getRequestEvent) // make sure this is the last plugin in the array
 	]
 });

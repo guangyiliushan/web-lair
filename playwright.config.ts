@@ -7,7 +7,10 @@ export default defineConfig({
 		port: 4173,
 		// a cold production build alone takes ~50s on this machine; the
 		// default 60s readiness timeout kills the webServer mid-build
-		timeout: 300_000
+		timeout: 300_000,
+		// `preview` is a production build, so the loopback sign-in source has to
+		// be switched on explicitly (see security/tailscale-auth.ts)
+		env: { TAILSCALE_ALLOW_LOOPBACK: 'true' }
 	},
 	testDir: 'e2e',
 	testMatch: '**/*.e2e.{ts,js}'

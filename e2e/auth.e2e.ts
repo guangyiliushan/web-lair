@@ -45,30 +45,16 @@ test.describe('Auth pages', () => {
 });
 
 test.describe('Route protection', () => {
-	// localhost counts as a trusted (tailscale) origin, so /admin auto-logs-in
-	// in the e2e environment (hooks.server.ts -> tryTailscaleAutoLogin). The
-	// unauthenticated branch of requireAdminOwner is unreachable from here and
-	// needs unit-level coverage instead.
+	// localhost is the "local operator" identity source: hooks.server.ts hands
+	// /admin to the better-auth tailscale-sign-in endpoint, which issues a real
+	// session (TAILSCALE_ALLOW_LOOPBACK=true in the playwright webServer env).
+	//
+	// The untrusted branch no longer needs a spoofed x-real-ip header - that
+	// header is not trusted at all any more (ledger §4.27 洞①). It is covered
+	// by unit tests in src/lib/server/security/identity.test.ts.
 	test('admin area auto-authenticates the trusted localhost origin', async ({ page }) => {
 		await page.goto('/admin');
 		await expect(page.getByRole('link', { name: '仪表盘' })).toBeVisible({ timeout: 10000 });
-	});
-
-	// The local e2e environment is a trusted (tailscale/localhost) origin, so
-	// /admin auto-logs-in. Spoofing a non-trusted client IP exercises the
-	// unauthenticated branch of requireAdminOwner (verified live: 303 to the
-	// configured admin login with redirectTo). Scoped to this block only.
-	test.describe('untrusted origin', () => {
-		test.use({ extraHTTPHeaders: { 'x-real-ip': '203.0.113.7' } });
-
-		test('an untrusted origin is redirected to the admin login with redirectTo', async ({
-			page
-		}) => {
-			await page.goto('/admin');
-			await expect(page).toHaveURL(/\/admin\/[^/]+\/login\?redirectTo=%2Fadmin/, {
-				timeout: 10000
-			});
-		});
 	});
 
 	test('login page is accessible for unauthenticated users', async ({ page }) => {

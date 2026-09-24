@@ -4,13 +4,11 @@ import { APIError } from 'better-auth/api';
 import { ne, eq, and } from 'drizzle-orm';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
-import { adminAccounts } from '$lib/server/db/account/admin-account.schema';
 import { session as authSession } from '$lib/server/db/auth.schema';
-import { ADMIN_BASE_PATH, getAdminConfig, isAllowedAdminEmail } from '$lib/server/config/admin';
-import { issueAdminSessionCookie } from '$lib/server/security/admin-cookie';
+import { ADMIN_BASE_PATH, getAdminConfig } from '$lib/server/config/admin';
+import { hasAnyAdminCapability } from '$lib/server/authz';
 import { safeRedirect } from '$lib/server/safe-redirect';
-import type { Session, User } from 'better-auth';
-import { env } from '$env/dynamic/private';
+import type { Session } from 'better-auth';
 
 function assertAdminSlug(slug: string) {
 	const config = getAdminConfig();
@@ -31,16 +29,6 @@ function getSessionId(session: Session | undefined): string | null {
 	return typeof maybeId === 'string' && maybeId.length > 0 ? maybeId : null;
 }
 
-async function isAdminAccount(userId: string): Promise<boolean> {
-	const rows = await db
-		.select({ userId: adminAccounts.userId })
-		.from(adminAccounts)
-		.where(eq(adminAccounts.userId, userId))
-		.limit(1);
-
-	return rows.length > 0;
-}
-
 async function pruneOtherSessions(userId: string, currentSessionId: string) {
 	await db
 		.delete(authSession)
@@ -54,7 +42,8 @@ export const load: PageServerLoad = async (event) => {
 		allowedPrefix: ADMIN_BASE_PATH
 	});
 
-	if (event.locals.admin) {
+	// PRG landing spot: an authenticated admin-capable session skips the form.
+	if (event.locals.session && hasAnyAdminCapability(event.locals.user)) {
 		redirect(302, redirectTo);
 	}
 
@@ -77,10 +66,6 @@ export const actions: Actions = {
 			return fail(400, { message: 'Email and password are required', redirectTo });
 		}
 
-		if (!isAllowedAdminEmail(email, config)) {
-			return fail(400, { message: 'Invalid email or password', redirectTo });
-		}
-
 		try {
 			const result = await auth.api.signInEmail({
 				body: {
@@ -90,11 +75,8 @@ export const actions: Actions = {
 				}
 			});
 
-			if (!isAllowedAdminEmail(result.user.email, config) || !result.user.emailVerified) {
-				return fail(403, { message: 'This account cannot access admin', redirectTo });
-			}
-
-			if (!(await isAdminAccount(result.user.id))) {
+			// Roles replaced the email allowlist + the admin_account table (ledger Q13/§4.10).
+			if (!hasAnyAdminCapability(result.user) || !result.user.emailVerified) {
 				return fail(403, { message: 'This account cannot access admin', redirectTo });
 			}
 
@@ -108,12 +90,6 @@ export const actions: Actions = {
 			}
 
 			await pruneOtherSessions(result.user.id, sessionId);
-			issueAdminSessionCookie(
-				event.cookies,
-				result.user as User,
-				sessionRow as Session,
-				env.BETTER_AUTH_SECRET
-			);
 		} catch (caught) {
 			if (caught instanceof APIError) {
 				return fail(400, {

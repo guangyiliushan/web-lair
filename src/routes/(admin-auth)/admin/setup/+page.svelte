@@ -32,19 +32,6 @@
 			</Card.Description>
 		</Card.Header>
 		<Card.Content>
-			{#if !data.allowedEmailsConfigured}
-				<div
-					class="mb-6 flex items-start gap-2 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-					role="alert"
-				>
-					<IconAlertTriangle class="mt-0.5 size-4 shrink-0" />
-					<span>
-						<strong>ADMIN_ALLOWED_EMAILS</strong> is not configured. Add allowed admin emails to your
-						environment variables before proceeding.
-					</span>
-				</div>
-			{/if}
-
 			{#if !data.setupTokenConfigured}
 				<div
 					class="mb-6 flex items-start gap-2 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300"
@@ -109,11 +96,7 @@
 							/>
 						</Field.Field>
 					{/if}
-					<Button
-						type="submit"
-						class="w-full"
-						disabled={!data.allowedEmailsConfigured || !data.setupTokenConfigured}
-					>
+					<Button type="submit" class="w-full" disabled={!data.setupTokenConfigured}>
 						<IconMail data-icon="inline-start" />
 						{m.auth_setup_create()}
 					</Button>

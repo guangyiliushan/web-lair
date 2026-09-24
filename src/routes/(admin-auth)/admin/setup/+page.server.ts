@@ -1,22 +1,10 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { timingSafeEqual } from 'node:crypto';
 import type { Actions, PageServerLoad } from './$types';
-import { db } from '$lib/server/db';
-import { adminAccounts } from '$lib/server/db/account/admin-account.schema';
-import { ownerProfiles } from '$lib/server/db/account/owner-profile.schema';
-import { user, session as authSession } from '$lib/server/db/auth.schema';
 import { auth } from '$lib/server/auth';
-import { eq } from 'drizzle-orm';
-import { getAdminConfig, isAllowedAdminEmail } from '$lib/server/config/admin';
-import { issueAdminSessionCookie } from '$lib/server/security/admin-cookie';
-import { env } from '$env/dynamic/private';
-import type { Session, User } from 'better-auth';
+import { getAdminConfig } from '$lib/server/config/admin';
+import { claimOwnerRole, hasAnyAdminAccount } from '$lib/server/auth/owner';
 import { APIError } from 'better-auth/api';
-
-async function hasAnyAdmin(): Promise<boolean> {
-	const rows = await db.select({ id: adminAccounts.id }).from(adminAccounts).limit(1);
-	return rows.length > 0;
-}
 
 function verifySetupToken(formToken: string): string | null {
 	const config = getAdminConfig();
@@ -38,21 +26,20 @@ function verifySetupToken(formToken: string): string | null {
 }
 
 export const load: PageServerLoad = async () => {
-	if (await hasAnyAdmin()) {
+	if (await hasAnyAdminAccount()) {
 		redirect(303, '/admin');
 	}
 
 	const config = getAdminConfig();
 
 	return {
-		allowedEmailsConfigured: config.allowedEmails.length > 0,
 		setupTokenConfigured: config.setupToken.length > 0
 	};
 };
 
 export const actions: Actions = {
 	setup: async (event) => {
-		if (await hasAnyAdmin()) {
+		if (await hasAnyAdminAccount()) {
 			return fail(403, { message: 'Admin already exists.' });
 		}
 
@@ -66,10 +53,6 @@ export const actions: Actions = {
 			return fail(400, { message: 'Email and password are required.' });
 		}
 
-		if (!isAllowedAdminEmail(email)) {
-			return fail(400, { message: 'Email is not in the admin allowlist.' });
-		}
-
 		// Verify setup token
 		const tokenError = verifySetupToken(formSetupToken);
 		if (tokenError) {
@@ -81,57 +64,23 @@ export const actions: Actions = {
 			body: { email, password, name }
 		});
 
-		// Use transaction for email verification + admin grants
-		await db.transaction(async (tx) => {
-			await tx.update(user).set({ emailVerified: true }).where(eq(user.id, result.user.id));
+		// Bootstrap: the first account becomes the site owner. The claim is a
+		// conditional UPDATE, so a concurrent setup cannot mint a second owner.
+		const claimed = await claimOwnerRole(result.user.id);
+		if (!claimed) {
+			return fail(403, { message: 'Admin already exists.' });
+		}
 
-			await tx
-				.insert(adminAccounts)
-				.values({
-					id: crypto.randomUUID(),
-					userId: result.user.id
-				})
-				.onConflictDoNothing();
-
-			await tx
-				.insert(ownerProfiles)
-				.values({
-					id: crypto.randomUUID(),
-					userId: result.user.id,
-					mail: email
-				})
-				.onConflictDoNothing();
-		});
-
-		// Re-check admin status after transaction
-		// (handles race conditions where another request also created admin)
-		await hasAnyAdmin();
-
-		// Sign in to create a new session
-		// (signUpEmail returns { token: null } when requireEmailVerification is true)
+		// signUpEmail returns { token: null } while requireEmailVerification is on.
+		// The session cookie itself comes from the sveltekitCookies plugin.
 		try {
-			const signInResult = await auth.api.signInEmail({
+			await auth.api.signInEmail({
 				body: {
 					email,
 					password,
 					callbackURL: '/admin'
 				}
 			});
-
-			const sessionRow = await db.query.session.findFirst({
-				where: eq(authSession.token, signInResult.token)
-			});
-
-			if (!sessionRow) {
-				return fail(500, { message: 'Failed to establish admin session.' });
-			}
-
-			issueAdminSessionCookie(
-				event.cookies,
-				result.user as User,
-				sessionRow as Session,
-				env.BETTER_AUTH_SECRET
-			);
 		} catch (caught) {
 			if (caught instanceof APIError) {
 				return fail(500, {

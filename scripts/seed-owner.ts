@@ -4,18 +4,19 @@
 //   2. pnpm db:seed-owner
 //
 // 环境变量:
-//   OWNER_EMAIL     — admin 邮箱（默认取 ADMIN_ALLOWED_EMAILS 第一项；必须在白名单中）
+//   OWNER_EMAIL     — 站长（site owner）邮箱，必填
 //   OWNER_PASSWORD  — 密码（最少 8 位）
 //   OWNER_NAME      — 显示名称（默认 "Admin"）
 //   ORIGIN          — SvelteKit server 地址（默认 http://localhost:5173）
 //   DATABASE_URL    — PostgreSQL 连接串
-//   ADMIN_ALLOWED_EMAILS — 逗号分隔的管理员邮箱白名单
+//
+// 角色来自 better-auth 的 admin 插件；owner 唯一性由应用层保证（Step 5 的条件更新），
+// 因此脚本幂等：重复执行不会产生第二个 owner。
 
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { user } from '../src/lib/server/db/auth.schema';
-import { adminAccounts } from '../src/lib/server/db/account/admin-account.schema';
 
 const FETCH_TIMEOUT_MS = 10_000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -35,22 +36,13 @@ function requireEnv(name: string, value: string | undefined): string {
 // ── 解析环境变量 ──
 const ORIGIN = process.env.ORIGIN || 'http://localhost:5173';
 const NAME = process.env.OWNER_NAME || 'Admin';
-
-// OWNER_EMAIL 未设置时，回退到 ADMIN_ALLOWED_EMAILS 的第一个条目
-const allowedEmails = (process.env.ADMIN_ALLOWED_EMAILS ?? '')
-	.split(',')
-	.map((e: string) => e.trim().toLowerCase())
-	.filter(Boolean);
-
-const EMAIL = (process.env.OWNER_EMAIL ?? allowedEmails[0] ?? '').trim().toLowerCase();
-
-// requireEnv 返回 string 类型，避免跨函数边界时 narrowing 丢失
+const EMAIL = (process.env.OWNER_EMAIL ?? '').trim().toLowerCase();
 const PASSWORD = requireEnv('OWNER_PASSWORD', process.env.OWNER_PASSWORD);
 const DB_URL = requireEnv('DATABASE_URL', process.env.DATABASE_URL);
 
 // ── 校验 ──
 if (!EMAIL) {
-	console.error('✗ OWNER_EMAIL or ADMIN_ALLOWED_EMAILS is required.');
+	console.error('✗ OWNER_EMAIL is required.');
 	process.exit(1);
 }
 if (!EMAIL_RE.test(EMAIL)) {
@@ -59,10 +51,6 @@ if (!EMAIL_RE.test(EMAIL)) {
 }
 if (PASSWORD.length < 8) {
 	console.error('✗ OWNER_PASSWORD must be at least 8 characters.');
-	process.exit(1);
-}
-if (allowedEmails.length > 0 && !allowedEmails.includes(EMAIL)) {
-	console.error(`✗ OWNER_EMAIL (${EMAIL}) is not in ADMIN_ALLOWED_EMAILS.`);
 	process.exit(1);
 }
 
@@ -136,21 +124,23 @@ async function main() {
 			console.log('→ emailVerified already true, skipping.');
 		}
 
-		// ── Step 5: 插入 admin_account（幂等，依赖 userId 唯一约束）──
-		const [existingAdmin] = await db
-			.select({ id: adminAccounts.id })
-			.from(adminAccounts)
-			.where(eq(adminAccounts.userId, u.id))
-			.limit(1);
+		// ── Step 5: 认领 owner 角色（原子条件更新，幂等）──
+		// 只有"当前没有其它 owner"时才成功；已是 owner 的账户重跑也返回成功。
+		const claimed = await db
+			.update(user)
+			.set({ role: 'owner', emailVerified: true })
+			.where(
+				and(
+					eq(user.id, u.id),
+					sql`not exists (select 1 from "user" as owner_row where owner_row.role = 'owner' and owner_row.id <> ${user.id})`
+				)
+			)
+			.returning({ id: user.id });
 
-		if (existingAdmin) {
-			console.log('→ admin_account entry already exists, skipping.');
+		if (claimed.length > 0) {
+			console.log('✓ role = owner');
 		} else {
-			await db
-				.insert(adminAccounts)
-				.values({ id: crypto.randomUUID(), userId: u.id })
-				.onConflictDoNothing();
-			console.log('✓ admin_account entry created.');
+			console.log('→ another account is already the site owner, skipping.');
 		}
 
 		console.log('\n✔ Done! Owner account is ready.');
