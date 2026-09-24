@@ -2,6 +2,9 @@ import { fail, redirect } from '@sveltejs/kit';
 import { timingSafeEqual } from 'node:crypto';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
+import { db } from '$lib/server/db';
+import { user } from '$lib/server/db/auth.schema';
+import { eq } from 'drizzle-orm';
 import { getAdminConfig } from '$lib/server/config/admin';
 import { claimOwnerRole, hasAnyAdminAccount } from '$lib/server/auth/owner';
 import { APIError } from 'better-auth/api';
@@ -59,15 +62,27 @@ export const actions: Actions = {
 			return fail(403, { message: tokenError });
 		}
 
-		// Create user via Better Auth API
-		const result = await auth.api.signUpEmail({
-			body: { email, password, name }
-		});
+		// Create user via Better Auth API (APIError -> form error, no 500 page)
+		let result;
+		try {
+			result = await auth.api.signUpEmail({
+				body: { email, password, name }
+			});
+		} catch (caught) {
+			if (caught instanceof APIError) {
+				return fail(400, { message: caught.message || 'Could not create the account.' });
+			}
+			throw caught;
+		}
 
-		// Bootstrap: the first account becomes the site owner. The claim is a
-		// conditional UPDATE, so a concurrent setup cannot mint a second owner.
+		// Bootstrap: the first account becomes the site owner. The claim takes an
+		// advisory lock (two concurrent setups cannot both win) plus a conditional
+		// UPDATE (idempotent for our own row) - see auth/owner-claim.ts.
 		const claimed = await claimOwnerRole(result.user.id);
 		if (!claimed) {
+			// Raced with another bootstrap: drop the account we just created so it
+			// cannot linger as an orphan (no owner, no way in). Cascades to its profile.
+			await db.delete(user).where(eq(user.id, result.user.id));
 			return fail(403, { message: 'Admin already exists.' });
 		}
 

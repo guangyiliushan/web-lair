@@ -1,6 +1,7 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/auth.schema';
+import { noOtherOwner, ownerClaimLock } from './owner-claim';
 
 export type AdminRole = 'owner' | 'admin';
 
@@ -28,24 +29,20 @@ export async function hasAnyAdminAccount(): Promise<boolean> {
 }
 
 /**
- * Claims the owner slot atomically: the UPDATE only matches while no *other*
- * row is already owner, so two concurrent bootstraps cannot both win.
+ * Claims the owner slot. The advisory lock serialises concurrent claims (two
+ * bootstraps at once cannot both win); the conditional UPDATE keeps a repeated
+ * call idempotent for the caller's own row. Both pieces live in `owner-claim.ts`
+ * and are shared with `scripts/seed-owner.ts` so the two entry points cannot
+ * drift apart.
  */
 export async function claimOwnerRole(userId: string): Promise<boolean> {
-	const rows = await db
-		.update(user)
-		.set({ role: 'owner', emailVerified: true })
-		.where(
-			and(
-				eq(user.id, userId),
-				sql`not exists (select 1 from "user" as owner_row where owner_row.role = 'owner' and owner_row.id <> ${user.id})`
-			)
-		)
-		.returning({ id: user.id });
-	return rows.length > 0;
-}
-
-/** Direct role grant (seeding, tests). Prefer claimOwnerRole for the owner slot. */
-export async function grantAdminRole(userId: string, role: AdminRole): Promise<void> {
-	await db.update(user).set({ role, emailVerified: true }).where(eq(user.id, userId));
+	return db.transaction(async (tx) => {
+		await tx.execute(ownerClaimLock());
+		const rows = await tx
+			.update(user)
+			.set({ role: 'owner', emailVerified: true })
+			.where(and(eq(user.id, userId), noOtherOwner(userId)))
+			.returning({ id: user.id });
+		return rows.length > 0;
+	});
 }

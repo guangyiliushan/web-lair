@@ -102,4 +102,4 @@
 {/if}
 
 <!-- Hidden form bound for programmatic sign-out -->
-<form id="user-nav-sign-out" method="post" action="/auth/sign-out" class="hidden"></form>
+<form id="user-nav-sign-out" method="post" action="/api/auth/sign-out" class="hidden"></form>

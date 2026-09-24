@@ -24,7 +24,8 @@
 		"build-storybook": "storybook build",
 		"auth:schema": "npx auth@1.7.5 generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes",
 		"db:seed-owner": "tsx --env-file=.env scripts/seed-owner.ts",
-		"db:seed-demo": "tsx --env-file=.env scripts/seed-demo.ts"
+		"db:seed-demo": "tsx --env-file=.env scripts/seed-demo.ts",
+		"db:verify-owner": "tsx --env-file=.env scripts/verify-owner-uniqueness.ts"
 	},
 	"devDependencies": {
 		"@chromatic-com/storybook": "^5.3.1",

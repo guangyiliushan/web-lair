@@ -10,7 +10,7 @@ import { db } from '$lib/server/db';
 import { userProfiles } from '$lib/server/db/account/user-profile.schema';
 import { eq } from 'drizzle-orm';
 import { adminContextFor } from '$lib/server/authz';
-import { ADMIN_BASE_PATH, getAdminConfig } from '$lib/server/config/admin';
+import { ADMIN_BASE_PATH, getAdminConfig, isAdminPath } from '$lib/server/config/admin';
 import { shouldAttemptTailscaleSignIn } from '$lib/server/security/tailscale-auth';
 
 const handleParaglide: Handle = async ({ event, resolve }) =>
@@ -60,7 +60,9 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 			where: eq(userProfiles.userId, session.user.id)
 		});
 
-		if (profile?.status === 'deleted') {
+		// Block the app surface for soft-deleted accounts, but keep /api/* reachable
+		// so the session can still be terminated (sign-out, password change, ...).
+		if (profile?.status === 'deleted' && !event.url.pathname.startsWith('/api/')) {
 			return new Response('Account deleted', { status: 403 });
 		}
 
@@ -82,7 +84,7 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 	// Tailnet sign-in: with no session, hand /admin off to the official plugin
 	// endpoint, which resolves the identity and issues a real session + cookie.
 	// No session row is ever inserted here (ledger §4.27 洞②).
-	if (!session && event.url.pathname.startsWith(ADMIN_BASE_PATH)) {
+	if (!session && isAdminPath(event.url.pathname)) {
 		const { loginPath } = getAdminConfig();
 		const isLoginPage = event.url.pathname.startsWith(loginPath);
 		const isSetupPage = event.url.pathname.startsWith(`${ADMIN_BASE_PATH}/setup`);

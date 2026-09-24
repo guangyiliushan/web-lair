@@ -115,7 +115,7 @@
 								{/each}
 							</DropdownMenu.RadioGroup>
 							<DropdownMenu.Separator />
-							<form method="post" action="/auth/sign-out">
+							<form method="post" action="/api/auth/sign-out">
 								<DropdownMenu.Item
 									class="text-destructive focus:text-destructive"
 									onclick={(e) => {

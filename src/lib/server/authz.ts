@@ -26,7 +26,7 @@ export function getUserRole(user: SessionUser | null | undefined): AdminRole | n
  * after the capability rather than a single role.
  */
 export function hasAnyAdminCapability(user: SessionUser | null | undefined): boolean {
-	return isAdminRole(user?.role);
+	return getUserRole(user) !== null;
 }
 
 export function adminContextFor(user: SessionUser | null | undefined): AdminContext | null {
@@ -44,6 +44,7 @@ export function requireUser() {
 	return locals.user;
 }
 
+/** Reserved for flows that need a verified email but no admin role (B2+). */
 export function requireVerifiedUser() {
 	const user = requireUser();
 	if (!user.emailVerified) {

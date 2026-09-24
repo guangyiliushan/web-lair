@@ -19,6 +19,15 @@ export interface AdminConfig {
 	setupToken: string;
 }
 
+/**
+ * True for the admin base path itself and anything below it.
+ * A bare `startsWith('/admin')` would also match unrelated routes such as
+ * `/administrator`.
+ */
+export function isAdminPath(pathname: string): boolean {
+	return pathname === ADMIN_BASE_PATH || pathname.startsWith(`${ADMIN_BASE_PATH}/`);
+}
+
 export function getAdminConfig(): AdminConfig {
 	const loginSlug = normalizeSlug(env.ADMIN_LOGIN_SLUG, DEFAULT_ADMIN_LOGIN_SLUG);
 	const loginPath = `${ADMIN_BASE_PATH}/${loginSlug}/login`;

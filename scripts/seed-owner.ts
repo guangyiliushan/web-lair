@@ -15,8 +15,9 @@
 
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { user } from '../src/lib/server/db/auth.schema';
+import { noOtherOwner, ownerClaimLock } from '../src/lib/server/auth/owner-claim';
 
 const FETCH_TIMEOUT_MS = 10_000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -124,23 +125,25 @@ async function main() {
 			console.log('→ emailVerified already true, skipping.');
 		}
 
-		// ── Step 5: 认领 owner 角色（原子条件更新，幂等）──
-		// 只有"当前没有其它 owner"时才成功；已是 owner 的账户重跑也返回成功。
-		const claimed = await db
-			.update(user)
-			.set({ role: 'owner', emailVerified: true })
-			.where(
-				and(
-					eq(user.id, u.id),
-					sql`not exists (select 1 from "user" as owner_row where owner_row.role = 'owner' and owner_row.id <> ${user.id})`
-				)
-			)
-			.returning({ id: user.id });
+		// ── Step 5: 认领 owner 角色（咨询锁 + 条件更新，幂等）──
+		// 锁与谓词来自 src/lib/server/auth/owner-claim.ts，与 app 侧 claimOwnerRole 同源。
+		const claimed = await db.transaction(async (tx) => {
+			await tx.execute(ownerClaimLock());
+			const rows = await tx
+				.update(user)
+				.set({ role: 'owner', emailVerified: true })
+				.where(and(eq(user.id, u.id), noOtherOwner(u.id)))
+				.returning({ id: user.id });
+			return rows.length > 0;
+		});
 
-		if (claimed.length > 0) {
+		if (claimed) {
 			console.log('✓ role = owner');
 		} else {
-			console.log('→ another account is already the site owner, skipping.');
+			console.error(
+				'✗ another account is already the site owner — this account was NOT granted owner.'
+			);
+			process.exitCode = 1;
 		}
 
 		console.log('\n✔ Done! Owner account is ready.');

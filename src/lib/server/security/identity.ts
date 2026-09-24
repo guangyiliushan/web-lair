@@ -108,8 +108,13 @@ export function resolveIdentity(probe: IdentityProbe): TailscaleIdentity | null 
 
 	if (isLoopbackAddress(ip)) {
 		const headerLogin = probe.headers.get(SERVE_LOGIN_HEADER)?.trim().toLowerCase() ?? null;
-		if (headerLogin && isTrustedLogin(headerLogin, probe.trustedLogins)) {
-			return { kind: 'tailnet', source: 'serve-header', login: headerLogin, node: null };
+		if (headerLogin) {
+			// A serve header means the connection was proxied by `tailscale serve`, so
+			// the plain-loopback shortcut must NOT apply here: falling through would
+			// let every proxied peer (allowlisted or not) in as the local operator.
+			return isTrustedLogin(headerLogin, probe.trustedLogins)
+				? { kind: 'tailnet', source: 'serve-header', login: headerLogin, node: null }
+				: null;
 		}
 		if (probe.allowLoopback) {
 			return { kind: 'local', source: 'loopback', login: null, node: null };
@@ -123,6 +128,32 @@ export function resolveIdentity(probe: IdentityProbe): TailscaleIdentity | null 
 	if (!resolved || !isTrustedLogin(resolved.login, probe.trustedLogins)) return null;
 
 	return { kind: 'tailnet', source: 'whois', login: resolved.login, node: resolved.node };
+}
+
+/**
+ * Same-origin check for state-changing navigations.
+ *
+ * better-auth's `originCheckMiddleware` returns immediately for GET/HEAD/OPTIONS
+ * (verified against 1.7.5 dist), so an endpoint that signs a session in via GET
+ * has to validate the attempt itself - the same way the framework does for POSTs
+ * (Fetch Metadata). `Sec-Fetch-Site` is sent by all current browsers; older ones
+ * fall back to a same-origin `Referer`. Without either signal the request is
+ * refused: fail closed.
+ */
+export function isTrustedNavigation(
+	headers: Headers,
+	expectedOrigin: string | null | undefined
+): boolean {
+	const site = headers.get('sec-fetch-site')?.trim().toLowerCase();
+	if (site) return site === 'same-origin' || site === 'none';
+
+	const referer = headers.get('referer');
+	if (!referer || !expectedOrigin) return false;
+	try {
+		return new URL(referer).origin === new URL(expectedOrigin).origin;
+	} catch {
+		return false;
+	}
 }
 
 /** Whether a request is worth handing to the sign-in endpoint at all. */

@@ -13,7 +13,7 @@ export type { TailscaleIdentity, WhoIsResult } from './identity';
 const WHOIS_TIMEOUT_MS = 3_000;
 const WHOIS_CACHE_TTL_MS = 60_000;
 
-/** ip -> {at, result}; measured 16-23 ms per call, the cache is for burst traffic. */
+/** ip -> {at, result}; ~24 ms per call idle, up to ~0.17 s under load (measured). */
 const whoisCache = new Map<string, { at: number; result: WhoIsResult | null }>();
 
 /**
@@ -62,7 +62,25 @@ export function whoisLookup(address: string): WhoIsResult | null {
 
 /** Loopback sign-in is implicit in `vite dev`; elsewhere it must be switched on. */
 export function isLoopbackSignInAllowed(): boolean {
-	return import.meta.env.DEV || env.TAILSCALE_ALLOW_LOOPBACK === 'true';
+	const explicitlyEnabled = env.TAILSCALE_ALLOW_LOOPBACK === 'true';
+	if (explicitlyEnabled && !import.meta.env.DEV) warnLoopbackOnce();
+	return import.meta.env.DEV || explicitlyEnabled;
+}
+
+let warnedAboutLoopback = false;
+
+/**
+ * One-off warning: with the flag on, *any* request reaching this process over
+ * plain loopback signs in as the site owner - so the app must stay bound to
+ * 127.0.0.1 and must never be exposed through `tailscale serve` / Funnel
+ * (Funnel traffic carries no identity header and would count as local).
+ */
+function warnLoopbackOnce() {
+	if (warnedAboutLoopback) return;
+	warnedAboutLoopback = true;
+	console.warn(
+		'[tailscale-auth] TAILSCALE_ALLOW_LOOPBACK is enabled: loopback requests sign in as the site owner. Keep the app bound to 127.0.0.1 and do not expose it through tailscale serve / Funnel.'
+	);
 }
 
 /** Dev-only escape hatch; the DEV guard is what ledger §4.27 洞③ asked for. */

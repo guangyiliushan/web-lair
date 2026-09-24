@@ -4,6 +4,7 @@ import {
 	isLoopbackAddress,
 	isTailscaleAddress,
 	isTrustedLogin,
+	isTrustedNavigation,
 	normalizeAddress,
 	parseTrustedLogins,
 	resolveIdentity,
@@ -215,5 +216,65 @@ describe('shouldAttemptSignIn', () => {
 				allowLoopback: false
 			})
 		).toBe(true);
+	});
+});
+
+describe('isTrustedNavigation (GET endpoints that change state)', () => {
+	const origin = 'http://localhost:5173';
+
+	it('accepts same-origin and browser-typed navigations', () => {
+		expect(isTrustedNavigation(new Headers({ 'sec-fetch-site': 'same-origin' }), origin)).toBe(
+			true
+		);
+		expect(isTrustedNavigation(new Headers({ 'sec-fetch-site': 'none' }), origin)).toBe(true);
+		expect(isTrustedNavigation(new Headers({ 'Sec-Fetch-Site': 'SAME-ORIGIN' }), origin)).toBe(
+			true
+		);
+	});
+
+	it('refuses cross-site, same-site and malformed fetch metadata', () => {
+		for (const site of ['cross-site', 'same-site', 'nonsense']) {
+			expect(isTrustedNavigation(new Headers({ 'sec-fetch-site': site }), origin)).toBe(false);
+		}
+	});
+
+	it('falls back to a same-origin referer when fetch metadata is absent', () => {
+		expect(
+			isTrustedNavigation(new Headers({ referer: 'http://localhost:5173/admin' }), origin)
+		).toBe(true);
+		expect(isTrustedNavigation(new Headers({ referer: 'http://evil.example/admin' }), origin)).toBe(
+			false
+		);
+		expect(isTrustedNavigation(new Headers({ referer: 'not a url' }), origin)).toBe(false);
+	});
+
+	it('refuses when neither signal is present (fail closed)', () => {
+		expect(isTrustedNavigation(new Headers(), origin)).toBe(false);
+		expect(isTrustedNavigation(new Headers({ referer: 'http://localhost:5173/' }), null)).toBe(
+			false
+		);
+	});
+});
+
+describe('serve header vs loopback trust', () => {
+	const base = { trustedLogins: TRUSTED, allowLoopback: true };
+
+	it('does not fall back to loopback when an untrusted serve header is present', () => {
+		expect(
+			resolveIdentity({
+				...base,
+				clientAddress: '127.0.0.1',
+				headers: new Headers({ [SERVE_LOGIN_HEADER]: 'stranger@github' })
+			})
+		).toBeNull();
+	});
+
+	it('still allows plain loopback when no serve header is present', () => {
+		expect(resolveIdentity({ ...base, clientAddress: '127.0.0.1', headers: noHeaders() })).toEqual({
+			kind: 'local',
+			source: 'loopback',
+			login: null,
+			node: null
+		});
 	});
 });
