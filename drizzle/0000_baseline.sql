@@ -142,7 +142,8 @@ CREATE TABLE "comments" (
 	"is_owner_reply" boolean DEFAULT false NOT NULL,
 	"country_code" text,
 	CONSTRAINT "comments_ref_exclusive_check" CHECK (num_nonnulls("comments"."post_id", "comments"."note_id", "comments"."page_id") = 1),
-	CONSTRAINT "comments_state_check" CHECK ("comments"."state" in ('pending', 'approved', 'rejected'))
+	CONSTRAINT "comments_state_check" CHECK ("comments"."state" in ('pending', 'approved', 'rejected')),
+	CONSTRAINT "comments_deleted_at_check" CHECK (("comments"."is_deleted") = ("comments"."deleted_at" is not null))
 );
 --> statement-breakpoint
 CREATE TABLE "draft_histories" (
@@ -614,6 +615,9 @@ CREATE INDEX "comments_post_thread_idx" ON "comments" USING btree ("post_id","pa
 CREATE INDEX "comments_root_idx" ON "comments" USING btree ("root_comment_id","created_at");--> statement-breakpoint
 CREATE INDEX "comments_reader_idx" ON "comments" USING btree ("reader_id");--> statement-breakpoint
 CREATE INDEX "comments_parent_idx" ON "comments" USING btree ("parent_comment_id") WHERE "comments"."parent_comment_id" is not null;--> statement-breakpoint
+CREATE INDEX "comments_note_idx" ON "comments" USING btree ("note_id") WHERE "comments"."note_id" is not null;--> statement-breakpoint
+CREATE INDEX "comments_page_idx" ON "comments" USING btree ("page_id") WHERE "comments"."page_id" is not null;--> statement-breakpoint
+CREATE INDEX "comments_reviewed_by_idx" ON "comments" USING btree ("reviewed_by") WHERE "comments"."reviewed_by" is not null;--> statement-breakpoint
 CREATE INDEX "comments_review_idx" ON "comments" USING btree ("state","created_at") WHERE "comments"."state" = 'pending';--> statement-breakpoint
 CREATE UNIQUE INDEX "draft_histories_draft_version_uniq" ON "draft_histories" USING btree ("draft_id","version");--> statement-breakpoint
 CREATE INDEX "drafts_ref_idx" ON "drafts" USING btree ("ref_type","ref_id") WHERE "drafts"."ref_id" is not null;--> statement-breakpoint

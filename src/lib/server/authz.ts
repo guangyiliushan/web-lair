@@ -9,12 +9,6 @@ export interface AdminContext {
 	role: AdminRole;
 }
 
-/** Org-side workspace context: a member holding the comment-review capability (B2). */
-export interface ReviewerContext {
-	userId: string;
-	role: 'reviewer';
-}
-
 /** Minimal shape shared by better-auth's `User` and the drizzle row. */
 interface SessionUser {
 	id: string;
@@ -27,11 +21,20 @@ export function getUserRole(user: SessionUser | null | undefined): AdminRole | n
 	return isAdminRole(user?.role) ? user.role : null;
 }
 
+export function adminContextFor(user: SessionUser | null | undefined): AdminContext | null {
+	const role = getUserRole(user);
+	if (!user || !role) return null;
+	return { userId: user.id, role };
+}
+
 /**
  * B2 (ledger §4.21): entering the /admin shell needs a site role or any
  * backend capability inside the site organization. Which pages a capability
  * holder without a site role may open is decided per page - see
  * `requireAdminWorkspace`.
+ *
+ * NOTE: this is async - always `await` it. The promise object itself is
+ * truthy, so a forgotten await fails open (B2.1 review fix, F5).
  */
 export async function hasAnyAdminCapability(
 	user: SessionUser | null | undefined
@@ -41,48 +44,72 @@ export async function hasAnyAdminCapability(
 }
 
 /**
+ * Per-request memo for capability checks (B2.1 review fix): the layout guard,
+ * the page load and the action all ask the same question, and every
+ * `hasPermission` call costs a session lookup + member lookup. Keyed by the
+ * request event object, so the map dies with the request.
+ */
+const commentCapabilityCache = new WeakMap<object, Map<string, Promise<boolean>>>();
+
+/** The comment actions declared on the shared access-control statement. */
+type CommentAction = 'review' | 'approve' | 'reject' | 'delete';
+
+async function commentCapability(actions: readonly CommentAction[]): Promise<boolean> {
+	const event = getRequestEvent();
+	const key = actions.join(',');
+	let perEvent = commentCapabilityCache.get(event);
+	if (!perEvent) {
+		perEvent = new Map();
+		commentCapabilityCache.set(event, perEvent);
+	}
+	const cached = perEvent.get(key);
+	if (cached) return cached;
+	const pending = (async () => {
+		try {
+			const { success } = await auth.api.hasPermission({
+				headers: event.request.headers,
+				body: { permissions: { comment: [...actions] } }
+			});
+			return Boolean(success);
+		} catch (error) {
+			// Fail closed, but leave the reason in the log: "no session", "not a
+			// member", "no active organization" and plugin errors all land here
+			// and the 403 alone cannot tell them apart (B2.1 review fix).
+			console.warn(
+				'[authz] comment permission check failed; denying',
+				key,
+				error instanceof Error ? error.message : error
+			);
+			return false;
+		}
+	})();
+	perEvent.set(key, pending);
+	return pending;
+}
+
+/**
  * The single entry point for comment permissions (ledger §4.15): wraps the
  * organization plugin's `hasPermission` endpoint. Fails closed - no session,
  * not a member, no active organization, or a plugin error all resolve to
- * `false`.
+ * `false` (with the reason logged).
  */
 export const can = {
-	async reviewComment(): Promise<boolean> {
-		const { request } = getRequestEvent();
-		try {
-			const { success } = await auth.api.hasPermission({
-				headers: request.headers,
-				body: { permissions: { comment: ['review'] } }
-			});
-			return Boolean(success);
-		} catch {
-			return false;
-		}
-	}
+	reviewComment: () => commentCapability(['review']),
+	approveComment: () => commentCapability(['approve']),
+	rejectComment: () => commentCapability(['reject'])
 };
 
-export function adminContextFor(user: SessionUser | null | undefined): AdminContext | null {
-	const role = getUserRole(user);
-	if (!user || !role) return null;
-	return { userId: user.id, role };
+function redirectToLogin(pathname: string, search = ''): never {
+	const config = getAdminConfig();
+	redirect(303, `${config.loginPath}?redirectTo=${encodeURIComponent(pathname + search)}`);
 }
 
 export function requireUser() {
 	const { locals, url } = getRequestEvent();
 	if (!locals.user) {
-		const redirectTo = url.pathname + url.search;
-		redirect(303, `/login?redirectTo=${encodeURIComponent(redirectTo)}`);
+		redirect(303, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`);
 	}
 	return locals.user;
-}
-
-/** Reserved for flows that need a verified email but no admin role (B2+). */
-export function requireVerifiedUser() {
-	const user = requireUser();
-	if (!user.emailVerified) {
-		redirect(303, '/verify-email');
-	}
-	return user;
 }
 
 /**
@@ -91,70 +118,40 @@ export function requireVerifiedUser() {
  * comment queue - while every other page stays owner/admin. Page and action
  * guards re-check the specific permission; see `requireCommentReviewer`.
  */
-export async function requireAdminWorkspace(): Promise<AdminContext | ReviewerContext> {
+export async function requireAdminWorkspace(): Promise<void> {
 	const { url } = getRequestEvent();
 	const commentsPath = `${ADMIN_BASE_PATH}/comments`;
 	const isCommentsPath =
 		url.pathname === commentsPath || url.pathname.startsWith(`${commentsPath}/`);
 	if (isCommentsPath) {
-		const user = await requireCommentReviewer();
-		return { userId: user.id, role: 'reviewer' };
+		await requireCommentReviewer();
+		return;
 	}
-	return requireAdminRole();
+	await requireAdminRole();
 }
 
 /** Owner/admin only - the guard for every non-comment admin page. */
-export async function requireAdminRole(): Promise<AdminContext> {
+export async function requireAdminRole(): Promise<void> {
 	const { locals, url } = getRequestEvent();
-	const config = getAdminConfig();
-	const redirectTo = `${config.loginPath}?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
 	if (!locals.session || !locals.user) {
-		redirect(303, redirectTo);
+		redirectToLogin(url.pathname, url.search);
 	}
-	const context = adminContextFor(locals.user);
-	if (context) return context;
+	if (adminContextFor(locals.user)) return;
 	// Capability holders without a site role get sent to the one page they can use.
 	if (await can.reviewComment()) {
 		redirect(303, `${ADMIN_BASE_PATH}/comments`);
 	}
-	redirect(303, redirectTo);
+	redirectToLogin(url.pathname, url.search);
 }
 
 /** Comment queue guard: `comment: ['review']` capability (B2, ledger §4.15). */
 export async function requireCommentReviewer() {
 	const { locals, url } = getRequestEvent();
-	const config = getAdminConfig();
 	if (!locals.session || !locals.user) {
-		redirect(
-			303,
-			`${config.loginPath}?redirectTo=${encodeURIComponent(url.pathname + url.search)}`
-		);
+		redirectToLogin(url.pathname, url.search);
 	}
 	if (!(await can.reviewComment())) {
 		error(403, { message: 'Comment review permission required.' });
 	}
-	return locals.user;
-}
-
-/** Guard for owner-only operations (the role is unique by app-layer convention). */
-export async function requireAdminOwner() {
-	const { locals, url } = getRequestEvent();
-
-	if (!locals.user) {
-		const config = getAdminConfig();
-		redirect(
-			303,
-			`${config.loginPath}?redirectTo=${encodeURIComponent(url.pathname + url.search)}`
-		);
-	}
-
-	if (!locals.user.emailVerified) {
-		redirect(303, '/verify-email');
-	}
-
-	if (getUserRole(locals.user) !== 'owner') {
-		error(403, { message: 'Admin access required.' });
-	}
-
 	return locals.user;
 }

@@ -73,6 +73,11 @@ export const comments = pgTable(
 			sql`num_nonnulls(${table.postId}, ${table.noteId}, ${table.pageId}) = 1`
 		),
 		check('comments_state_check', sql`${table.state} in ('pending', 'approved', 'rejected')`),
+		// The two removal markers must agree (mirrors user_profiles.deleted_at).
+		check(
+			'comments_deleted_at_check',
+			sql`(${table.isDeleted}) = (${table.deletedAt} is not null)`
+		),
 		index('comments_post_thread_idx')
 			.on(table.postId, table.parentCommentId, table.pin, table.createdAt)
 			.where(sql`${table.postId} is not null`),
@@ -82,6 +87,17 @@ export const comments = pgTable(
 		index('comments_parent_idx')
 			.on(table.parentCommentId)
 			.where(sql`${table.parentCommentId} is not null`),
+		// Every CASCADE / SET NULL FK on this table gets a partial leading index
+		// (§11-A2): deleting a note/page or a user must not scan the table.
+		index('comments_note_idx')
+			.on(table.noteId)
+			.where(sql`${table.noteId} is not null`),
+		index('comments_page_idx')
+			.on(table.pageId)
+			.where(sql`${table.pageId} is not null`),
+		index('comments_reviewed_by_idx')
+			.on(table.reviewedBy)
+			.where(sql`${table.reviewedBy} is not null`),
 		// Review queue lists only the pending state - partial index (§9.5).
 		index('comments_review_idx')
 			.on(table.state, table.createdAt)

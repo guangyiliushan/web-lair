@@ -2,11 +2,12 @@ import { and, eq } from 'drizzle-orm';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { member } from '$lib/server/db/auth.schema';
+import { getSiteOrganizationId, invalidateSiteOrganizationCache } from './site-organization';
 import {
-	getSiteOrganizationId,
-	invalidateSiteOrganizationCache,
-	SITE_ORGANIZATION_SLUG
-} from './site-organization';
+	SITE_ORGANIZATION_NAME,
+	SITE_ORGANIZATION_SLUG,
+	siteMemberLock
+} from './site-organization.shared';
 
 /**
  * Idempotently bootstrap the single site organization (ledger §4.22, B2).
@@ -31,7 +32,7 @@ export async function ensureSiteOrganization(ownerUserId: string): Promise<strin
 	}
 
 	const created = await auth.api.createOrganization({
-		body: { name: 'Web Lair', slug: SITE_ORGANIZATION_SLUG, userId: ownerUserId }
+		body: { name: SITE_ORGANIZATION_NAME, slug: SITE_ORGANIZATION_SLUG, userId: ownerUserId }
 	});
 	invalidateSiteOrganizationCache();
 	await ensureOwnerMembership(created.id, ownerUserId);
@@ -43,15 +44,22 @@ export async function ensureSiteOrganization(ownerUserId: string): Promise<strin
  * crash between the two writes of a previous bootstrap). `addMember` is
  * another server-only endpoint (registered without an HTTP path), so this
  * cannot be driven from outside the process.
+ *
+ * The generated `member` table cannot carry our unique index (ledger §4.7),
+ * so "exactly one owner membership" is enforced at the explicit-lock tier of
+ * §12-1: the same advisory lock the repair script takes (B2.1 review fix).
  */
 async function ensureOwnerMembership(organizationId: string, userId: string) {
-	const rows = await db
-		.select({ id: member.id })
-		.from(member)
-		.where(and(eq(member.organizationId, organizationId), eq(member.userId, userId)))
-		.limit(1);
-	if (rows.length > 0) return;
-	await auth.api.addMember({
-		body: { userId, organizationId, role: 'owner' }
+	await db.transaction(async (tx) => {
+		await tx.execute(siteMemberLock());
+		const rows = await tx
+			.select({ id: member.id })
+			.from(member)
+			.where(and(eq(member.organizationId, organizationId), eq(member.userId, userId)))
+			.limit(1);
+		if (rows.length > 0) return;
+		await auth.api.addMember({
+			body: { userId, organizationId, role: 'owner' }
+		});
 	});
 }

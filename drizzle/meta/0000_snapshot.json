@@ -1,5 +1,5 @@
 {
-  "id": "38dc9360-b66d-452e-93df-1345cd0b393b",
+  "id": "0ea8c2fd-14bd-4b74-8cff-ad6b07a56e7e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1183,6 +1183,54 @@
           "method": "btree",
           "with": {}
         },
+        "comments_note_idx": {
+          "name": "comments_note_idx",
+          "columns": [
+            {
+              "expression": "note_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"comments\".\"note_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "comments_page_idx": {
+          "name": "comments_page_idx",
+          "columns": [
+            {
+              "expression": "page_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"comments\".\"page_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "comments_reviewed_by_idx": {
+          "name": "comments_reviewed_by_idx",
+          "columns": [
+            {
+              "expression": "reviewed_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"comments\".\"reviewed_by\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "comments_review_idx": {
           "name": "comments_review_idx",
           "columns": [
@@ -1310,6 +1358,10 @@
         "comments_state_check": {
           "name": "comments_state_check",
           "value": "\"comments\".\"state\" in ('pending', 'approved', 'rejected')"
+        },
+        "comments_deleted_at_check": {
+          "name": "comments_deleted_at_check",
+          "value": "(\"comments\".\"is_deleted\") = (\"comments\".\"deleted_at\" is not null)"
         }
       },
       "isRLSEnabled": false

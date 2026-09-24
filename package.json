@@ -26,7 +26,8 @@
 		"db:seed-owner": "tsx --env-file=.env scripts/seed-owner.ts",
 		"db:seed-demo": "tsx --env-file=.env scripts/seed-demo.ts",
 		"db:verify-owner": "tsx --env-file=.env scripts/verify-owner-uniqueness.ts",
-		"db:ensure-org": "tsx --env-file=.env scripts/ensure-site-org.ts"
+		"db:ensure-org": "tsx --env-file=.env scripts/ensure-site-org.ts",
+		"db:verify-review": "tsx --env-file=.env scripts/verify-review-idempotency.ts"
 	},
 	"devDependencies": {
 		"@chromatic-com/storybook": "^5.3.1",

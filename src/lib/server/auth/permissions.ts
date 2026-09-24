@@ -44,15 +44,22 @@ export const userRole = ac.newRole({
 	session: []
 });
 
-/** Organization owner (site-org creator): org defaults + full comment control. */
+/**
+ * Organization owner (site-org creator): org defaults + full comment control.
+ * The destructive `organization` statements are stripped: a single-org site
+ * cannot recreate the organization, so update/delete stay closed even though
+ * `disableOrganizationDeletion` already guards the delete endpoint (B2.1 fix).
+ */
 export const orgOwnerRole = ac.newRole({
 	...orgOwnerAc.statements,
+	organization: [],
 	comment: ['review', 'approve', 'reject', 'delete']
 });
 
-/** Organization admin: org-admin defaults + full comment control. */
+/** Organization admin: org-admin defaults + full comment control (same strip). */
 export const orgAdminRole = ac.newRole({
 	...orgAdminAc.statements,
+	organization: [],
 	comment: ['review', 'approve', 'reject', 'delete']
 });
 

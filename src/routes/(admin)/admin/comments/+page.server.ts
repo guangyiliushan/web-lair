@@ -59,25 +59,35 @@ export const actions: Actions = {
 		const reviewer = await requireCommentReviewer();
 		const form = await event.request.formData();
 		const decision = form.get('decision')?.toString();
+		if (decision !== 'approve' && decision !== 'reject') {
+			return fail(400, { message: 'Unknown review decision.' });
+		}
+		// Same cap as the list query: one request must not flip the whole table.
 		const ids = form
 			.getAll('ids')
 			.map((value) => value.toString())
-			.filter(Boolean);
-
-		if ((decision !== 'approve' && decision !== 'reject') || ids.length === 0) {
+			.filter(Boolean)
+			.slice(0, 200);
+		if (ids.length === 0) {
 			return fail(400, { message: 'Select at least one comment first.' });
 		}
-		if (!(await can.reviewComment())) {
+		// The capability is checked per decision, not by the coarse review
+		// marker (B2.1 review fix: declared actions and enforced actions match).
+		const allowed = decision === 'approve' ? await can.approveComment() : await can.rejectComment();
+		if (!allowed) {
 			return fail(403, { message: 'Comment review permission required.' });
 		}
 
-		// Only pending rows flip: the conditional update keeps a repeated submit
-		// (double click, replay) from overwriting an existing decision.
+		// Only pending, non-deleted rows flip: the conditional update keeps a
+		// repeated submit (double click, replay) from overwriting a decision,
+		// and keeps the writable set identical to the visible one.
 		const state = decision === 'approve' ? 'approved' : 'rejected';
 		const updated = await db
 			.update(comments)
 			.set({ state, reviewedBy: reviewer.id, reviewedAt: new Date() })
-			.where(and(inArray(comments.id, ids), eq(comments.state, 'pending')))
+			.where(
+				and(inArray(comments.id, ids), eq(comments.state, 'pending'), eq(comments.isDeleted, false))
+			)
 			.returning({ id: comments.id });
 
 		return { reviewed: updated.length, decision };

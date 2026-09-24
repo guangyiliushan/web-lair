@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
+import { SITE_ORGANIZATION_SLUG } from './site-organization.shared';
 
 /**
  * The single site organization (ledger §4.22, B2). Every session is fixed to
@@ -14,9 +15,9 @@ import { db } from '$lib/server/db';
  * impossible to run (the plugin's tables do not exist until it has run).
  * Table name `organization` is the official plugin default (no modelName
  * override in `auth.ts`); column names are the generator's snake_case.
+ * Slug/name constants live in `site-organization.shared.ts` (zero-dependency:
+ * the repair script imports them from a plain tsx process).
  */
-export const SITE_ORGANIZATION_SLUG = 'web-lair';
-
 let cachedId: string | null = null;
 
 export async function getSiteOrganizationId(): Promise<string | null> {

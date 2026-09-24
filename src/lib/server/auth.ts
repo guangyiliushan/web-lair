@@ -46,6 +46,17 @@ function devLogMail(label: string, url: string) {
 	}
 }
 
+let warnedAboutMissingSiteOrganization = false;
+
+/** One-off note: before /admin/setup has run there simply is no organization. */
+function warnMissingSiteOrganizationOnce() {
+	if (warnedAboutMissingSiteOrganization) return;
+	warnedAboutMissingSiteOrganization = true;
+	console.warn(
+		'[site-organization] no site organization yet; sessions created before setup stay unpinned.'
+	);
+}
+
 export const auth = betterAuth({
 	baseURL: env.ORIGIN,
 	secret: env.BETTER_AUTH_SECRET,
@@ -93,10 +104,24 @@ export const auth = betterAuth({
 			create: {
 				// B2 (ledger §4.22): pin every session to the site organization so
 				// org-scoped checks (comment review) need no separate activate step.
+				// Auth is the critical path: a lookup failure must degrade to an
+				// unpinned session (permission checks stay fail-closed) instead of
+				// taking every sign-in down with it (B2.1 review fix).
 				before: async (session) => {
-					const siteOrganizationId = await getSiteOrganizationId();
-					if (!siteOrganizationId) return;
-					return { data: { ...session, activeOrganizationId: siteOrganizationId } };
+					try {
+						const siteOrganizationId = await getSiteOrganizationId();
+						if (!siteOrganizationId) {
+							warnMissingSiteOrganizationOnce();
+							return;
+						}
+						return { data: { ...session, activeOrganizationId: siteOrganizationId } };
+					} catch (error) {
+						console.warn(
+							'[site-organization] lookup failed; session left unpinned',
+							error instanceof Error ? error.message : error
+						);
+						return;
+					}
 				}
 			}
 		}
@@ -128,11 +153,17 @@ export const auth = betterAuth({
 			creatorRole: 'owner',
 			allowUserToCreateOrganization: false,
 			requireEmailVerificationOnInvitation: true,
+			// The site owns exactly one organization and nothing can recreate it:
+			// keep the destructive endpoint closed (the matching statements are
+			// also stripped from the org roles in permissions.ts) - B2.1 review fix.
+			disableOrganizationDeletion: true,
 			// No mailer yet (ledger §4.27): invitations are bypassed with
-			// auth.api.addMember; this placeholder keeps sends explicit instead
-			// of silently dropping them.
-			sendInvitationEmail: async ({ email }) => {
-				console.warn(`[organization] invitation for ${email} was not sent (no mailer configured)`);
+			// auth.api.addMember; if the plugin's invite endpoint is ever hit the
+			// invitation row still lands in the DB, so log enough to trace it.
+			sendInvitationEmail: async ({ email, id, organization }) => {
+				console.warn(
+					`[org-invite] invitation ${id} for ${email} (org ${organization.id}) was not sent: no mailer configured`
+				);
 			}
 		}),
 		passkey({
