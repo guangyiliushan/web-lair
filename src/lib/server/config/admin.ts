@@ -16,6 +16,7 @@ function normalizeSlug(value: string | undefined, fallback: string): string {
 export interface AdminConfig {
 	loginPath: string;
 	loginSlug: string;
+	twoFactorPath: string;
 	setupToken: string;
 }
 
@@ -35,6 +36,7 @@ export function getAdminConfig(): AdminConfig {
 	return {
 		loginPath,
 		loginSlug,
+		twoFactorPath: `${ADMIN_BASE_PATH}/${loginSlug}/two-factor`,
 		setupToken: env.ADMIN_SETUP_TOKEN?.trim() || ''
 	};
 }

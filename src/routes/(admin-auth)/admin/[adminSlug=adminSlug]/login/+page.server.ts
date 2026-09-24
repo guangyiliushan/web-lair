@@ -1,15 +1,12 @@
 import { fail, redirect, error } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { APIError } from 'better-auth/api';
-import { ne, eq, and } from 'drizzle-orm';
 import { auth } from '$lib/server/auth';
-import { db } from '$lib/server/db';
-import { session as authSession } from '$lib/server/db/auth.schema';
 import { ADMIN_BASE_PATH, getAdminConfig } from '$lib/server/config/admin';
 import { getUserRole, hasAnyAdminCapability } from '$lib/server/authz';
 import { isSiteOrganizationMember } from '$lib/server/auth/site-organization';
+import { findSessionIdByToken, pruneOtherSessions } from '$lib/server/auth/sessions';
 import { safeRedirect } from '$lib/server/safe-redirect';
-import type { Session } from 'better-auth';
 
 function assertAdminSlug(slug: string) {
 	const config = getAdminConfig();
@@ -19,21 +16,6 @@ function assertAdminSlug(slug: string) {
 	}
 
 	return config;
-}
-
-function getSessionId(session: Session | undefined): string | null {
-	if (!session) {
-		return null;
-	}
-
-	const maybeId = (session as Session & { id?: string }).id;
-	return typeof maybeId === 'string' && maybeId.length > 0 ? maybeId : null;
-}
-
-async function pruneOtherSessions(userId: string, currentSessionId: string) {
-	await db
-		.delete(authSession)
-		.where(and(eq(authSession.userId, userId), ne(authSession.id, currentSessionId)));
 }
 
 export const load: PageServerLoad = async (event) => {
@@ -67,6 +49,10 @@ export const actions: Actions = {
 			return fail(400, { message: 'Email and password are required', redirectTo });
 		}
 
+		// Assigned on every path that reaches the check below: the catch either
+		// returns a form error or rethrows (both non-APIError and APIError cases).
+		let twoFactorRequired: boolean;
+
 		try {
 			const result = await auth.api.signInEmail({
 				body: {
@@ -76,27 +62,31 @@ export const actions: Actions = {
 				}
 			});
 
-			// Roles replaced the email allowlist + the admin_account table (ledger
-			// Q13/§4.10). Organization members (reviewers, B2) are admitted by
-			// membership: the session this sign-in just created is not visible in
-			// the request headers yet, so the capability itself is re-checked with
-			// the real cookie by the /admin guard and the comment queue.
-			const admitted =
-				getUserRole(result.user) !== null || (await isSiteOrganizationMember(result.user.id));
-			if (!admitted || !result.user.emailVerified) {
-				return fail(403, { message: 'This account cannot access admin', redirectTo });
+			// B3: a 2FA-enabled account gets no session here - the plugin deletes the
+			// session it just created and answers with a challenge instead, so the
+			// response carries no user/token. Admission is decided after verification
+			// on the two-factor page; the challenge cookie (10 min) does the routing.
+			twoFactorRequired = Boolean((result as { twoFactorRedirect?: boolean }).twoFactorRedirect);
+
+			if (!twoFactorRequired) {
+				// Roles replaced the email allowlist + the admin_account table (ledger
+				// Q13/§4.10). Organization members (reviewers, B2) are admitted by
+				// membership: the session this sign-in just created is not visible in
+				// the request headers yet, so the capability itself is re-checked with
+				// the real cookie by the /admin guard and the comment queue.
+				const admitted =
+					getUserRole(result.user) !== null || (await isSiteOrganizationMember(result.user.id));
+				if (!admitted || !result.user.emailVerified) {
+					return fail(403, { message: 'This account cannot access admin', redirectTo });
+				}
+
+				const sessionId = await findSessionIdByToken(result.token);
+				if (!sessionId) {
+					return fail(500, { message: 'Failed to establish admin session', redirectTo });
+				}
+
+				await pruneOtherSessions(result.user.id, sessionId);
 			}
-
-			const sessionRow = await db.query.session.findFirst({
-				where: eq(authSession.token, result.token)
-			});
-
-			const sessionId = getSessionId(sessionRow as Session | undefined);
-			if (!sessionRow || !sessionId) {
-				return fail(500, { message: 'Failed to establish admin session', redirectTo });
-			}
-
-			await pruneOtherSessions(result.user.id, sessionId);
 		} catch (caught) {
 			if (caught instanceof APIError) {
 				return fail(400, {
@@ -106,6 +96,10 @@ export const actions: Actions = {
 			}
 
 			return fail(500, { message: 'An unexpected error occurred', redirectTo });
+		}
+
+		if (twoFactorRequired) {
+			redirect(302, `${config.twoFactorPath}?redirectTo=${encodeURIComponent(redirectTo)}`);
 		}
 
 		redirect(302, `${config.loginPath}?redirectTo=${encodeURIComponent(redirectTo)}`);

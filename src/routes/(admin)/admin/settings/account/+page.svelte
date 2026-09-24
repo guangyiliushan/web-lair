@@ -1,6 +1,10 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
+	import IconShieldLock from '@tabler/icons-svelte-runes/icons/shield-lock';
+	import IconAlertCircle from '@tabler/icons-svelte-runes/icons/alert-circle';
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Separator from '$lib/components/ui/separator';
@@ -14,7 +18,18 @@
 	import IconBrandGithub from '@tabler/icons-svelte-runes/icons/brand-github';
 	import IconBrandGoogle from '@tabler/icons-svelte-runes/icons/brand-google';
 
-	let { data }: PageProps = $props();
+	let { data, form }: PageProps = $props();
+
+	// The action payloads are a union (enable / activate / disable / regenerate);
+	// this loose view keeps the template readable.
+	const actionForm = $derived(
+		form as {
+			message?: string | null;
+			totpURI?: string;
+			backupCodes?: string[];
+			step?: string;
+		} | null
+	);
 	let s = $derived(data.settings);
 
 	const devices = [
@@ -56,6 +71,112 @@
 </script>
 
 <div class="space-y-8">
+	<!-- Section: 两步验证（真实功能 · B3）-->
+	<section>
+		<div class="mb-4 flex items-center justify-between">
+			<div class="flex items-center gap-2">
+				<IconShieldLock class="size-5 text-muted-foreground" />
+				<h3 class="text-base font-semibold">{m.admin_settings_2fa_title()}</h3>
+			</div>
+			<Badge variant={data.twoFactorEnabled ? 'default' : 'secondary'}>
+				{data.twoFactorEnabled
+					? m.admin_settings_2fa_status_on()
+					: m.admin_settings_2fa_status_off()}
+			</Badge>
+		</div>
+		<p class="mb-3 text-sm text-muted-foreground">{m.admin_settings_2fa_desc()}</p>
+
+		{#if actionForm?.message}
+			<div class="mb-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm" role="status">
+				<IconAlertCircle class="size-4 shrink-0" />
+				<span>{actionForm.message}</span>
+			</div>
+		{/if}
+
+		{#if actionForm?.totpURI}
+			<div class="space-y-3 rounded-lg border bg-background p-3">
+				<p class="text-sm">{m.admin_settings_2fa_scan_hint()}</p>
+				<div class="space-y-1">
+					<div class="text-xs text-muted-foreground">{m.admin_settings_2fa_secret()}</div>
+					<code class="block rounded bg-muted px-2 py-1 text-xs break-all"
+						>{actionForm.totpURI}</code
+					>
+				</div>
+				{#if actionForm?.backupCodes?.length}
+					<div class="space-y-1">
+						<div class="text-xs text-muted-foreground">{m.admin_settings_2fa_backup_codes()}</div>
+						<div class="grid grid-cols-2 gap-1">
+							{#each actionForm.backupCodes as backupCode (backupCode)}
+								<code class="rounded bg-muted px-2 py-1 text-xs">{backupCode}</code>
+							{/each}
+						</div>
+					</div>
+				{/if}
+				<form method="post" action="?/activate" use:enhance class="flex items-end gap-2">
+					<Input
+						name="code"
+						type="text"
+						inputmode="numeric"
+						autocomplete="one-time-code"
+						placeholder="123456"
+						required
+					/>
+					<Button type="submit" size="sm">
+						<IconKey data-icon="inline-start" />
+						{m.admin_settings_2fa_activate()}
+					</Button>
+				</form>
+			</div>
+		{/if}
+
+		{#if data.twoFactorEnabled}
+			<div class="flex flex-wrap items-end gap-2">
+				<form
+					method="post"
+					action="?/regenerateBackupCodes"
+					use:enhance
+					class="flex items-end gap-2"
+				>
+					<Input
+						name="password"
+						type="password"
+						autocomplete="current-password"
+						placeholder={m.admin_settings_2fa_password()}
+						required
+					/>
+					<Button type="submit" variant="outline" size="sm">
+						{m.admin_settings_2fa_regenerate()}
+					</Button>
+				</form>
+				<form method="post" action="?/disable" use:enhance class="flex items-end gap-2">
+					<Input
+						name="password"
+						type="password"
+						autocomplete="current-password"
+						placeholder={m.admin_settings_2fa_password()}
+						required
+					/>
+					<Button type="submit" variant="outline" size="sm" class="text-destructive">
+						{m.admin_settings_2fa_disable()}
+					</Button>
+				</form>
+			</div>
+		{:else}
+			<form method="post" action="?/enable" use:enhance class="flex items-end gap-2">
+				<Input
+					name="password"
+					type="password"
+					autocomplete="current-password"
+					placeholder={m.admin_settings_2fa_password()}
+					required
+				/>
+				<Button type="submit" size="sm">{m.admin_settings_2fa_enable()}</Button>
+			</form>
+		{/if}
+	</section>
+
+	<Separator.Root />
+
 	<!-- Section: 登录设备 -->
 	<section>
 		<div class="mb-4 flex items-center justify-between">

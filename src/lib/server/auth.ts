@@ -2,7 +2,12 @@ import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { passkey } from '@better-auth/passkey';
-import { admin as adminPlugin, lastLoginMethod, organization } from 'better-auth/plugins';
+import {
+	admin as adminPlugin,
+	lastLoginMethod,
+	organization,
+	twoFactor
+} from 'better-auth/plugins';
 import {
 	ac,
 	adminRole,
@@ -171,6 +176,11 @@ export const auth = betterAuth({
 			rpName: 'Web Lair',
 			origin: env.ORIGIN
 		}),
+		// TOTP second factor for owner/admin accounts (B3, ledger §4.24).
+		// The plugin's challenge hook only covers /sign-in/email|username|phone-number,
+		// so GitHub OAuth, passkey and the Tailnet endpoint stay outside the gate;
+		// that is the registered bypass set, not an accident (verified in 1.7.5 dist).
+		twoFactor({ issuer: 'Web Lair' }),
 		// Tailnet sign-in that issues a real better-auth session (B1).
 		tailscaleSignIn(),
 		sveltekitCookies(getRequestEvent) // make sure this is the last plugin in the array
