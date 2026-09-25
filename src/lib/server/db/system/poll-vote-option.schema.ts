@@ -1,10 +1,10 @@
-import { index, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { pollVotes } from './poll-vote.schema';
 
 export const pollVoteOptions = pgTable(
 	'poll_vote_options',
 	{
-		voteId: text('vote_id')
+		voteId: uuid('vote_id')
 			.notNull()
 			.references(() => pollVotes.id, { onDelete: 'cascade' }),
 		optionId: text('option_id').notNull()

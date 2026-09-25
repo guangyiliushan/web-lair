@@ -7,15 +7,20 @@ import {
 	pgTable,
 	text,
 	timestamp,
-	uniqueIndex
+	uniqueIndex,
+	uuid
 } from 'drizzle-orm/pg-core';
 import { topics } from './topic.schema';
 
 export const notes = pgTable(
 	'notes',
 	{
-		id: text('id').primaryKey().notNull(),
+		id: uuid('id')
+			.primaryKey()
+			.default(sql`uuidv7()`)
+			.notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).$onUpdate(() => new Date()),
 		nid: integer('nid').notNull().generatedByDefaultAsIdentity(),
 		title: text('title'),
 		slug: text('slug'),
@@ -37,10 +42,9 @@ export const notes = pgTable(
 		location: text('location'),
 		readCount: integer('read_count').notNull().default(0),
 		likeCount: integer('like_count').notNull().default(0),
-		topicId: text('topic_id').references(() => topics.id, {
+		topicId: uuid('topic_id').references(() => topics.id, {
 			onDelete: 'set null'
-		}),
-		modifiedAt: timestamp('modified_at', { withTimezone: true })
+		})
 	},
 	(table) => [
 		uniqueIndex('notes_nid_uniq').on(table.nid),
@@ -48,7 +52,7 @@ export const notes = pgTable(
 			.on(table.slug)
 			.where(sql`${table.slug} is not null`),
 		index('notes_nid_desc_idx').on(table.nid),
-		index('notes_modified_at_idx').on(table.modifiedAt),
+		index('notes_updated_at_idx').on(table.updatedAt),
 		index('notes_created_at_idx').on(table.createdAt),
 		index('notes_topic_id_idx').on(table.topicId),
 		index('notes_published_public_created_idx').on(

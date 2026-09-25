@@ -16,13 +16,14 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import { categories } from '../src/lib/server/db/content/category.schema';
 import { posts } from '../src/lib/server/db/content/post.schema';
-import { getSnowflake } from '../src/lib/server/snowflake';
+import { postTags, tags } from '../src/lib/server/db/content/tag.schema';
 
 const CATEGORY_SLUG = 'demo';
 const CATEGORY_NAME = '示例';
 const POST_SLUG = 'markdown-syntax-demo';
 const POST_TITLE = 'Markdown 语法演示';
 const POST_SUMMARY = '站点支持的全部 Markdown 语法;删除本文章不影响站点,种子脚本不会把它找回。';
+const POST_TAGS = ['演示', 'markdown'];
 
 const force = process.argv.includes('--force');
 
@@ -38,7 +39,6 @@ const content = readFileSync(join(here, 'seed-demo', 'demo-post.md'), 'utf8').tr
 async function main(): Promise<void> {
 	const client = postgres(DATABASE_URL as string);
 	const db = drizzle(client);
-	const sf = getSnowflake();
 
 	// 分类:按 slug 查,缺则建(--force 不改分类)
 	const existingCategory = await db
@@ -51,10 +51,11 @@ async function main(): Promise<void> {
 		categoryId = existingCategory[0].id;
 		console.log(`- category "${CATEGORY_SLUG}" exists, reusing (${categoryId})`);
 	} else {
-		categoryId = sf.nextId();
-		await db
+		const [created] = await db
 			.insert(categories)
-			.values({ id: categoryId, name: CATEGORY_NAME, slug: CATEGORY_SLUG, type: 0 });
+			.values({ name: CATEGORY_NAME, slug: CATEGORY_SLUG })
+			.returning({ id: categories.id });
+		categoryId = created.id;
 		console.log(`+ category "${CATEGORY_NAME}" created (${categoryId})`);
 	}
 
@@ -66,27 +67,47 @@ async function main(): Promise<void> {
 		} else {
 			await db
 				.update(posts)
-				.set({ title: POST_TITLE, content, summary: POST_SUMMARY, modifiedAt: new Date() })
+				.set({ title: POST_TITLE, content, summary: POST_SUMMARY, updatedAt: new Date() })
 				.where(eq(posts.slug, POST_SLUG));
 			console.log(`~ post "${POST_SLUG}" rewritten (--force)`);
 		}
 	} else {
-		await db.insert(posts).values({
-			id: sf.nextId(),
-			title: POST_TITLE,
-			slug: POST_SLUG,
-			content,
-			contentFormat: 'markdown',
-			summary: POST_SUMMARY,
-			tags: ['演示', 'markdown'],
-			categoryId,
-			isPublished: true
-		});
+		const [created] = await db
+			.insert(posts)
+			.values({
+				title: POST_TITLE,
+				slug: POST_SLUG,
+				content,
+				contentFormat: 'markdown',
+				summary: POST_SUMMARY,
+				categoryId,
+				status: 'published',
+				publishedAt: new Date()
+			})
+			.returning({ id: posts.id });
+		await syncTags(db, created.id, POST_TAGS);
 		console.log(`+ post "${POST_SLUG}" created`);
 	}
 
 	await client.end();
 	console.log('done.');
+}
+
+async function syncTags(
+	db: ReturnType<typeof drizzle>,
+	postId: string,
+	names: string[]
+): Promise<void> {
+	await db.delete(postTags).where(eq(postTags.postId, postId));
+	for (const name of names) {
+		const slug = name.toLowerCase().replace(/\s+/g, '-');
+		const [tag] = await db
+			.insert(tags)
+			.values({ name, slug })
+			.onConflictDoUpdate({ target: tags.slug, set: { name } })
+			.returning({ id: tags.id });
+		await db.insert(postTags).values({ postId, tagId: tag.id }).onConflictDoNothing();
+	}
 }
 
 main().catch((error: unknown) => {

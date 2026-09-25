@@ -19,7 +19,7 @@ CREATE TABLE "user_profiles" (
 );
 --> statement-breakpoint
 CREATE TABLE "ai_agent_conversations" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"session_id" text NOT NULL,
 	"model" text,
 	"provider_id" text,
@@ -29,64 +29,50 @@ CREATE TABLE "ai_agent_conversations" (
 	"updated_at" timestamp with time zone
 );
 --> statement-breakpoint
-CREATE TABLE "ai_insights" (
-	"id" text PRIMARY KEY NOT NULL,
+CREATE TABLE "insights" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"ref_id" text NOT NULL,
+	"ref_id" uuid NOT NULL,
 	"lang" text NOT NULL,
 	"hash" text NOT NULL,
 	"content" text NOT NULL,
 	"is_translation" boolean DEFAULT false NOT NULL,
-	"source_insights_id" text,
+	"source_insights_id" uuid,
 	"source_lang" text,
 	"model_info" jsonb
 );
 --> statement-breakpoint
-CREATE TABLE "ai_summaries" (
-	"id" text PRIMARY KEY NOT NULL,
+CREATE TABLE "summaries" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"hash" text NOT NULL,
 	"summary" text NOT NULL,
-	"ref_id" text NOT NULL,
-	"lang" text
+	"ref_id" uuid NOT NULL,
+	"lang" text,
+	CONSTRAINT "summaries_ref_lang_uniq" UNIQUE NULLS NOT DISTINCT("ref_id","lang")
 );
 --> statement-breakpoint
-CREATE TABLE "ai_translations" (
-	"id" text PRIMARY KEY NOT NULL,
+CREATE TABLE "translations" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"hash" text NOT NULL,
-	"ref_id" text NOT NULL,
-	"ref_type" text NOT NULL,
-	"lang" text NOT NULL,
-	"source_lang" text NOT NULL,
+	"updated_at" timestamp with time zone,
+	"source_post_id" uuid NOT NULL,
+	"target_lang" text NOT NULL,
 	"title" text NOT NULL,
-	"text" text NOT NULL,
-	"subtitle" text,
-	"summary" text,
-	"tags" text[] DEFAULT '{}'::text[] NOT NULL,
-	"source_modified_at" timestamp with time zone,
-	"ai_model" text,
-	"ai_provider" text,
-	"content_format" text,
 	"content" text,
-	"source_block_snapshots" jsonb,
-	"source_meta_hashes" jsonb
-);
---> statement-breakpoint
-CREATE TABLE "translation_entries" (
-	"id" text PRIMARY KEY NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"key_path" text NOT NULL,
-	"lang" text NOT NULL,
-	"key_type" text NOT NULL,
-	"lookup_key" text NOT NULL,
-	"source_text" text NOT NULL,
-	"translated_text" text NOT NULL,
-	"source_updated_at" timestamp with time zone
+	"summary" text,
+	"content_format" text DEFAULT 'markdown' NOT NULL,
+	"origin" text NOT NULL,
+	"model" text,
+	"source_hash" text,
+	"status" text DEFAULT 'draft' NOT NULL,
+	CONSTRAINT "translations_target_lang_check" CHECK ("translations"."target_lang" in ('en', 'zh-cn', 'ja')),
+	CONSTRAINT "translations_origin_check" CHECK ("translations"."origin" in ('human', 'ai', 'machine')),
+	CONSTRAINT "translations_status_check" CHECK ("translations"."status" in ('draft', 'accepted', 'discarded'))
 );
 --> statement-breakpoint
 CREATE TABLE "meta_presets" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone,
 	"name" text NOT NULL,
@@ -96,25 +82,26 @@ CREATE TABLE "meta_presets" (
 );
 --> statement-breakpoint
 CREATE TABLE "options" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"name" text NOT NULL,
 	"value" jsonb
 );
 --> statement-breakpoint
 CREATE TABLE "categories" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
-	"type" integer DEFAULT 0 NOT NULL
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"description" text
 );
 --> statement-breakpoint
 CREATE TABLE "comments" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"post_id" text,
-	"note_id" text,
-	"page_id" text,
+	"post_id" uuid,
+	"note_id" uuid,
+	"page_id" uuid,
 	"author" text,
 	"mail" text,
 	"url" text,
@@ -122,8 +109,8 @@ CREATE TABLE "comments" (
 	"state" text DEFAULT 'pending' NOT NULL,
 	"reviewed_by" text,
 	"reviewed_at" timestamp with time zone,
-	"parent_comment_id" text,
-	"root_comment_id" text,
+	"parent_comment_id" uuid,
+	"root_comment_id" uuid,
 	"reply_count" integer DEFAULT 0 NOT NULL,
 	"latest_reply_at" timestamp with time zone,
 	"is_deleted" boolean DEFAULT false NOT NULL,
@@ -146,41 +133,26 @@ CREATE TABLE "comments" (
 	CONSTRAINT "comments_deleted_at_check" CHECK (("comments"."is_deleted") = ("comments"."deleted_at" is not null))
 );
 --> statement-breakpoint
-CREATE TABLE "draft_histories" (
-	"id" text PRIMARY KEY NOT NULL,
-	"draft_id" text NOT NULL,
-	"version" integer NOT NULL,
-	"title" text NOT NULL,
-	"text" text,
-	"content" text,
-	"content_format" text NOT NULL,
-	"type_specific_data" jsonb,
-	"saved_at" timestamp with time zone NOT NULL,
-	"is_full_snapshot" boolean NOT NULL,
-	"ref_version" integer,
-	"base_version" integer
-);
---> statement-breakpoint
 CREATE TABLE "drafts" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone,
 	"ref_type" text NOT NULL,
-	"ref_id" text,
+	"ref_id" uuid,
 	"title" text DEFAULT '' NOT NULL,
-	"text" text DEFAULT '' NOT NULL,
+	"slug" text,
+	"category_id" uuid,
+	"tags" text[] DEFAULT '{}'::text[] NOT NULL,
 	"content" text,
-	"content_format" text NOT NULL,
-	"images" jsonb,
-	"meta" jsonb,
-	"type_specific_data" jsonb,
-	"history" jsonb,
+	"content_format" text DEFAULT 'markdown' NOT NULL,
+	"summary" text,
 	"version" integer DEFAULT 1 NOT NULL,
-	"published_version" integer
+	"base_version" integer,
+	"author" text
 );
 --> statement-breakpoint
 CREATE TABLE "links" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"name" text NOT NULL,
 	"url" text NOT NULL,
@@ -191,9 +163,17 @@ CREATE TABLE "links" (
 	"email" text
 );
 --> statement-breakpoint
-CREATE TABLE "notes" (
-	"id" text PRIMARY KEY NOT NULL,
+CREATE TABLE "memos" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
+	"content" text NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "notes" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
 	"nid" integer GENERATED BY DEFAULT AS IDENTITY (sequence name "notes_nid_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
 	"title" text,
 	"slug" text,
@@ -212,13 +192,13 @@ CREATE TABLE "notes" (
 	"location" text,
 	"read_count" integer DEFAULT 0 NOT NULL,
 	"like_count" integer DEFAULT 0 NOT NULL,
-	"topic_id" text,
-	"modified_at" timestamp with time zone
+	"topic_id" uuid
 );
 --> statement-breakpoint
 CREATE TABLE "pages" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
 	"title" text NOT NULL,
 	"slug" text NOT NULL,
 	"subtitle" text,
@@ -227,40 +207,60 @@ CREATE TABLE "pages" (
 	"content_format" text NOT NULL,
 	"images" jsonb,
 	"meta" jsonb,
-	"sort_order" integer DEFAULT 1 NOT NULL,
-	"modified_at" timestamp with time zone
+	"sort_order" integer DEFAULT 1 NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "post_related_posts" (
-	"post_id" text NOT NULL,
-	"related_post_id" text NOT NULL,
-	"position" integer DEFAULT 0 NOT NULL
+	"post_id" uuid NOT NULL,
+	"related_post_id" uuid NOT NULL,
+	"position" integer DEFAULT 0 NOT NULL,
+	CONSTRAINT "post_related_posts_post_id_related_post_id_pk" PRIMARY KEY("post_id","related_post_id")
+);
+--> statement-breakpoint
+CREATE TABLE "post_revisions" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"post_id" uuid NOT NULL,
+	"version" integer NOT NULL,
+	"title" text NOT NULL,
+	"content" text,
+	"summary" text,
+	"source" text NOT NULL,
+	"author" text,
+	CONSTRAINT "post_revisions_source_check" CHECK ("post_revisions"."source" in ('publish'))
 );
 --> statement-breakpoint
 CREATE TABLE "posts" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
 	"title" text NOT NULL,
 	"slug" text NOT NULL,
-	"text" text,
 	"content" text,
-	"content_format" text NOT NULL,
+	"content_format" text DEFAULT 'markdown' NOT NULL,
 	"summary" text,
 	"images" jsonb,
 	"meta" jsonb,
-	"tags" text[] DEFAULT '{}'::text[] NOT NULL,
-	"modified_at" timestamp with time zone,
-	"category_id" text NOT NULL,
+	"status" text DEFAULT 'draft' NOT NULL,
+	"published_at" timestamp with time zone,
+	"version" integer DEFAULT 0 NOT NULL,
+	"lang" text DEFAULT 'en' NOT NULL,
+	"translation_group" uuid DEFAULT uuidv7() NOT NULL,
+	"translated_from_post_id" uuid,
+	"translation_origin" text,
+	"category_id" uuid NOT NULL,
 	"copyright" boolean DEFAULT true NOT NULL,
-	"is_published" boolean DEFAULT true NOT NULL,
 	"read_count" integer DEFAULT 0 NOT NULL,
 	"like_count" integer DEFAULT 0 NOT NULL,
 	"pin_at" timestamp with time zone,
-	"pin_order" integer
+	CONSTRAINT "posts_status_check" CHECK ("posts"."status" in ('draft', 'scheduled', 'published', 'trash')),
+	CONSTRAINT "posts_content_format_check" CHECK ("posts"."content_format" in ('markdown')),
+	CONSTRAINT "posts_lang_check" CHECK ("posts"."lang" in ('en', 'zh-cn', 'ja')),
+	CONSTRAINT "posts_translation_origin_check" CHECK ("posts"."translation_origin" in ('human', 'ai', 'machine'))
 );
 --> statement-breakpoint
 CREATE TABLE "projects" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"name" text NOT NULL,
 	"preview_url" text,
@@ -273,7 +273,7 @@ CREATE TABLE "projects" (
 );
 --> statement-breakpoint
 CREATE TABLE "quotes" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"text" text NOT NULL,
 	"source" text,
@@ -281,22 +281,22 @@ CREATE TABLE "quotes" (
 );
 --> statement-breakpoint
 CREATE TABLE "recent_items" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"content" text DEFAULT '' NOT NULL,
 	"type" text NOT NULL,
 	"metadata" jsonb,
 	"ref_type" text,
-	"ref_id" text,
+	"ref_id" uuid,
 	"comments_index" integer DEFAULT 0 NOT NULL,
 	"allow_comment" boolean DEFAULT true NOT NULL,
-	"modified_at" timestamp with time zone,
+	"updated_at" timestamp with time zone,
 	"up" integer DEFAULT 0 NOT NULL,
 	"down" integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "snippets" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone,
 	"type" text,
@@ -313,8 +313,23 @@ CREATE TABLE "snippets" (
 	"compiled_code" text
 );
 --> statement-breakpoint
+CREATE TABLE "post_tags" (
+	"post_id" uuid NOT NULL,
+	"tag_id" uuid NOT NULL,
+	CONSTRAINT "post_tags_post_id_tag_id_pk" PRIMARY KEY("post_id","tag_id")
+);
+--> statement-breakpoint
+CREATE TABLE "tags" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
+	"slug" text NOT NULL,
+	"name" text NOT NULL,
+	"description" text
+);
+--> statement-breakpoint
 CREATE TABLE "topics" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
@@ -324,14 +339,14 @@ CREATE TABLE "topics" (
 );
 --> statement-breakpoint
 CREATE TABLE "activities" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"type" integer,
 	"payload" jsonb
 );
 --> statement-breakpoint
 CREATE TABLE "analytics" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"visited_at" timestamp with time zone NOT NULL,
 	"ip" text,
 	"user_agent" jsonb,
@@ -341,7 +356,7 @@ CREATE TABLE "analytics" (
 );
 --> statement-breakpoint
 CREATE TABLE "enrichment_captures" (
-	"enrichment_id" text PRIMARY KEY NOT NULL,
+	"enrichment_id" uuid PRIMARY KEY NOT NULL,
 	"object_key" text NOT NULL,
 	"bytes" integer NOT NULL,
 	"width" integer NOT NULL,
@@ -353,7 +368,7 @@ CREATE TABLE "enrichment_captures" (
 );
 --> statement-breakpoint
 CREATE TABLE "enrichment_cache" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"provider" varchar(64) NOT NULL,
 	"external_id" varchar(256) NOT NULL,
 	"url" text NOT NULL,
@@ -368,37 +383,37 @@ CREATE TABLE "enrichment_cache" (
 );
 --> statement-breakpoint
 CREATE TABLE "file_references" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"file_url" text NOT NULL,
 	"file_name" text NOT NULL,
 	"status" text NOT NULL,
-	"ref_id" text,
+	"ref_id" uuid,
 	"ref_type" text,
 	"s3_object_key" text,
 	"reader_id" text,
 	"uploaded_by" text,
 	"mime_type" text,
 	"byte_size" bigint,
-	"detached_at" timestamp
+	"detached_at" timestamp with time zone
 );
 --> statement-breakpoint
 CREATE TABLE "poll_vote_options" (
-	"vote_id" text NOT NULL,
+	"vote_id" uuid NOT NULL,
 	"option_id" text NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "poll_votes" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"poll_id" text NOT NULL,
 	"voter_fingerprint" text NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "search_documents" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"ref_type" text NOT NULL,
-	"ref_id" text NOT NULL,
+	"ref_id" uuid NOT NULL,
 	"lang" text NOT NULL,
 	"source_hash" text DEFAULT '' NOT NULL,
 	"title" text NOT NULL,
@@ -414,11 +429,11 @@ CREATE TABLE "search_documents" (
 	"public_at" timestamp with time zone,
 	"has_password" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"modified_at" timestamp with time zone
+	"updated_at" timestamp with time zone
 );
 --> statement-breakpoint
 CREATE TABLE "serverless_logs" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"function_id" text,
 	"reference" text NOT NULL,
@@ -432,21 +447,23 @@ CREATE TABLE "serverless_logs" (
 );
 --> statement-breakpoint
 CREATE TABLE "serverless_storages" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"namespace" text NOT NULL,
 	"key" text NOT NULL,
 	"value" jsonb NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "slug_trackers" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"slug" text NOT NULL,
 	"type" text NOT NULL,
-	"target_id" text NOT NULL
+	"lang" text DEFAULT 'en' NOT NULL,
+	"target_id" uuid NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "subscriptions" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"email" text NOT NULL,
 	"cancel_token" text NOT NULL,
@@ -455,20 +472,20 @@ CREATE TABLE "subscriptions" (
 );
 --> statement-breakpoint
 CREATE TABLE "webhook_events" (
-	"id" text PRIMARY KEY NOT NULL,
-	"created_at" timestamp with time zone,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"headers" jsonb,
 	"payload" jsonb,
 	"event" text,
 	"response" jsonb,
 	"success" boolean,
-	"hook_id" text NOT NULL,
+	"hook_id" uuid NOT NULL,
 	"status" integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "webhooks" (
-	"id" text PRIMARY KEY NOT NULL,
-	"created_at" timestamp with time zone,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"payload_url" text NOT NULL,
 	"events" text[] NOT NULL,
 	"is_enabled" boolean DEFAULT true NOT NULL,
@@ -585,7 +602,8 @@ CREATE TABLE "verification" (
 );
 --> statement-breakpoint
 ALTER TABLE "user_profiles" ADD CONSTRAINT "user_profiles_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "ai_insights" ADD CONSTRAINT "ai_insights_source_insights_id_ai_insights_id_fk" FOREIGN KEY ("source_insights_id") REFERENCES "public"."ai_insights"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "insights" ADD CONSTRAINT "insights_source_insights_id_insights_id_fk" FOREIGN KEY ("source_insights_id") REFERENCES "public"."insights"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "translations" ADD CONSTRAINT "translations_source_post_id_posts_id_fk" FOREIGN KEY ("source_post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_note_id_notes_id_fk" FOREIGN KEY ("note_id") REFERENCES "public"."notes"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_page_id_pages_id_fk" FOREIGN KEY ("page_id") REFERENCES "public"."pages"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -593,11 +611,17 @@ ALTER TABLE "comments" ADD CONSTRAINT "comments_reviewed_by_user_id_fk" FOREIGN 
 ALTER TABLE "comments" ADD CONSTRAINT "comments_parent_comment_id_comments_id_fk" FOREIGN KEY ("parent_comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_root_comment_id_comments_id_fk" FOREIGN KEY ("root_comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_reader_id_user_id_fk" FOREIGN KEY ("reader_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "draft_histories" ADD CONSTRAINT "draft_histories_draft_id_drafts_id_fk" FOREIGN KEY ("draft_id") REFERENCES "public"."drafts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "drafts" ADD CONSTRAINT "drafts_category_id_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."categories"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "drafts" ADD CONSTRAINT "drafts_author_user_id_fk" FOREIGN KEY ("author") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notes" ADD CONSTRAINT "notes_topic_id_topics_id_fk" FOREIGN KEY ("topic_id") REFERENCES "public"."topics"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_related_posts" ADD CONSTRAINT "post_related_posts_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_related_posts" ADD CONSTRAINT "post_related_posts_related_post_id_posts_id_fk" FOREIGN KEY ("related_post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "post_revisions" ADD CONSTRAINT "post_revisions_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "post_revisions" ADD CONSTRAINT "post_revisions_author_user_id_fk" FOREIGN KEY ("author") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_translated_from_post_id_posts_id_fk" FOREIGN KEY ("translated_from_post_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_category_id_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."categories"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "post_tags" ADD CONSTRAINT "post_tags_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "post_tags" ADD CONSTRAINT "post_tags_tag_id_tags_id_fk" FOREIGN KEY ("tag_id") REFERENCES "public"."tags"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "enrichment_captures" ADD CONSTRAINT "enrichment_captures_enrichment_id_enrichment_cache_id_fk" FOREIGN KEY ("enrichment_id") REFERENCES "public"."enrichment_cache"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "file_references" ADD CONSTRAINT "file_references_reader_id_user_id_fk" FOREIGN KEY ("reader_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "file_references" ADD CONSTRAINT "file_references_uploaded_by_user_id_fk" FOREIGN KEY ("uploaded_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -612,13 +636,9 @@ ALTER TABLE "passkey" ADD CONSTRAINT "passkey_user_id_user_id_fk" FOREIGN KEY ("
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "two_factor" ADD CONSTRAINT "two_factor_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "ai_agent_conversations_session_idx" ON "ai_agent_conversations" USING btree ("session_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "ai_insights_ref_lang_uniq" ON "ai_insights" USING btree ("ref_id","lang");--> statement-breakpoint
-CREATE INDEX "ai_summaries_ref_id_idx" ON "ai_summaries" USING btree ("ref_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "ai_translations_ref_lang_uniq" ON "ai_translations" USING btree ("ref_id","ref_type","lang");--> statement-breakpoint
-CREATE INDEX "ai_translations_ref_id_idx" ON "ai_translations" USING btree ("ref_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "translation_entries_key_uniq" ON "translation_entries" USING btree ("key_path","lang","key_type","lookup_key");--> statement-breakpoint
-CREATE INDEX "translation_entries_path_lang_idx" ON "translation_entries" USING btree ("key_path","lang");--> statement-breakpoint
-CREATE INDEX "translation_entries_lookup_key_idx" ON "translation_entries" USING btree ("lookup_key");--> statement-breakpoint
+CREATE UNIQUE INDEX "insights_ref_lang_uniq" ON "insights" USING btree ("ref_id","lang");--> statement-breakpoint
+CREATE INDEX "insights_source_insights_idx" ON "insights" USING btree ("source_insights_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "translations_active_uniq" ON "translations" USING btree ("source_post_id","target_lang") WHERE "translations"."status" <> 'discarded';--> statement-breakpoint
 CREATE UNIQUE INDEX "meta_presets_name_uniq" ON "meta_presets" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "options_name_uniq" ON "options" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "categories_name_uniq" ON "categories" USING btree ("name");--> statement-breakpoint
@@ -631,29 +651,28 @@ CREATE INDEX "comments_note_idx" ON "comments" USING btree ("note_id") WHERE "co
 CREATE INDEX "comments_page_idx" ON "comments" USING btree ("page_id") WHERE "comments"."page_id" is not null;--> statement-breakpoint
 CREATE INDEX "comments_reviewed_by_idx" ON "comments" USING btree ("reviewed_by") WHERE "comments"."reviewed_by" is not null;--> statement-breakpoint
 CREATE INDEX "comments_review_idx" ON "comments" USING btree ("state","created_at") WHERE "comments"."state" = 'pending';--> statement-breakpoint
-CREATE UNIQUE INDEX "draft_histories_draft_version_uniq" ON "draft_histories" USING btree ("draft_id","version");--> statement-breakpoint
-CREATE INDEX "drafts_ref_idx" ON "drafts" USING btree ("ref_type","ref_id") WHERE "drafts"."ref_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "drafts_ref_uniq" ON "drafts" USING btree ("ref_type","ref_id") WHERE "drafts"."ref_id" is not null;--> statement-breakpoint
 CREATE INDEX "drafts_updated_at_idx" ON "drafts" USING btree ("updated_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "links_name_uniq" ON "links" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "links_url_uniq" ON "links" USING btree ("url");--> statement-breakpoint
 CREATE UNIQUE INDEX "notes_nid_uniq" ON "notes" USING btree ("nid");--> statement-breakpoint
 CREATE UNIQUE INDEX "notes_slug_uniq" ON "notes" USING btree ("slug") WHERE "notes"."slug" is not null;--> statement-breakpoint
 CREATE INDEX "notes_nid_desc_idx" ON "notes" USING btree ("nid");--> statement-breakpoint
-CREATE INDEX "notes_modified_at_idx" ON "notes" USING btree ("modified_at");--> statement-breakpoint
+CREATE INDEX "notes_updated_at_idx" ON "notes" USING btree ("updated_at");--> statement-breakpoint
 CREATE INDEX "notes_created_at_idx" ON "notes" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "notes_topic_id_idx" ON "notes" USING btree ("topic_id");--> statement-breakpoint
 CREATE INDEX "notes_published_public_created_idx" ON "notes" USING btree ("is_published","created_at" DESC NULLS LAST,"public_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "pages_slug_uniq" ON "pages" USING btree ("slug");--> statement-breakpoint
 CREATE INDEX "pages_sort_order_idx" ON "pages" USING btree ("sort_order");--> statement-breakpoint
-CREATE UNIQUE INDEX "post_related_posts_pk" ON "post_related_posts" USING btree ("post_id","related_post_id");--> statement-breakpoint
 CREATE INDEX "post_related_posts_related_idx" ON "post_related_posts" USING btree ("related_post_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "posts_slug_uniq" ON "posts" USING btree ("slug");--> statement-breakpoint
-CREATE INDEX "posts_modified_at_idx" ON "posts" USING btree ("modified_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "post_revisions_post_version_uniq" ON "post_revisions" USING btree ("post_id","version");--> statement-breakpoint
+CREATE UNIQUE INDEX "posts_lang_slug_uniq" ON "posts" USING btree ("lang","slug");--> statement-breakpoint
+CREATE UNIQUE INDEX "posts_translation_group_lang_uniq" ON "posts" USING btree ("translation_group","lang");--> statement-breakpoint
+CREATE INDEX "posts_updated_at_idx" ON "posts" USING btree ("updated_at");--> statement-breakpoint
 CREATE INDEX "posts_created_at_idx" ON "posts" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "posts_category_id_idx" ON "posts" USING btree ("category_id");--> statement-breakpoint
-CREATE INDEX "posts_published_created_at_idx" ON "posts" USING btree ("is_published","pin_at" DESC NULLS LAST,"created_at" DESC NULLS LAST);--> statement-breakpoint
-CREATE INDEX "posts_category_published_created_idx" ON "posts" USING btree ("category_id","is_published","pin_at" DESC NULLS LAST,"created_at" DESC NULLS LAST);--> statement-breakpoint
-CREATE INDEX "posts_tags_gin_idx" ON "posts" USING gin ("tags");--> statement-breakpoint
+CREATE INDEX "posts_status_pin_published_idx" ON "posts" USING btree ("lang","status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "posts_category_status_published_idx" ON "posts" USING btree ("category_id","lang","status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE UNIQUE INDEX "projects_name_uniq" ON "projects" USING btree ("name");--> statement-breakpoint
 CREATE INDEX "quotes_created_at_idx" ON "quotes" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "recent_items_ref_idx" ON "recent_items" USING btree ("ref_type","ref_id");--> statement-breakpoint
@@ -662,6 +681,8 @@ CREATE INDEX "snippets_path_prefix_idx" ON "snippets" USING btree ("path");--> s
 CREATE INDEX "snippets_type_idx" ON "snippets" USING btree ("type");--> statement-breakpoint
 CREATE UNIQUE INDEX "snippets_path_idx" ON "snippets" USING btree ("path") WHERE "snippets"."method" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX "snippets_path_method_idx" ON "snippets" USING btree ("path","method") WHERE "snippets"."method" is not null;--> statement-breakpoint
+CREATE INDEX "post_tags_tag_idx" ON "post_tags" USING btree ("tag_id","post_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "tags_slug_uniq" ON "tags" USING btree ("slug");--> statement-breakpoint
 CREATE UNIQUE INDEX "topics_name_uniq" ON "topics" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "topics_slug_uniq" ON "topics" USING btree ("slug");--> statement-breakpoint
 CREATE INDEX "activities_created_at_idx" ON "activities" USING btree ("created_at");--> statement-breakpoint
@@ -676,6 +697,7 @@ CREATE INDEX "file_references_file_url_idx" ON "file_references" USING btree ("f
 CREATE INDEX "file_references_ref_idx" ON "file_references" USING btree ("ref_id","ref_type");--> statement-breakpoint
 CREATE INDEX "file_references_status_created_idx" ON "file_references" USING btree ("status","created_at");--> statement-breakpoint
 CREATE INDEX "file_references_reader_status_created_idx" ON "file_references" USING btree ("reader_id","status","created_at");--> statement-breakpoint
+CREATE INDEX "file_references_uploaded_by_idx" ON "file_references" USING btree ("uploaded_by");--> statement-breakpoint
 CREATE INDEX "file_references_status_detached_idx" ON "file_references" USING btree ("status","detached_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "poll_vote_options_pk" ON "poll_vote_options" USING btree ("vote_id","option_id");--> statement-breakpoint
 CREATE INDEX "poll_vote_options_option_idx" ON "poll_vote_options" USING btree ("option_id");--> statement-breakpoint
@@ -688,8 +710,8 @@ CREATE INDEX "serverless_logs_created_at_idx" ON "serverless_logs" USING btree (
 CREATE INDEX "serverless_logs_function_idx" ON "serverless_logs" USING btree ("function_id","created_at");--> statement-breakpoint
 CREATE INDEX "serverless_logs_reference_idx" ON "serverless_logs" USING btree ("reference","name","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "serverless_storages_ns_key_uniq" ON "serverless_storages" USING btree ("namespace","key");--> statement-breakpoint
+CREATE INDEX "slug_trackers_type_lang_slug_idx" ON "slug_trackers" USING btree ("type","lang","slug");--> statement-breakpoint
 CREATE INDEX "slug_trackers_type_target_idx" ON "slug_trackers" USING btree ("type","target_id");--> statement-breakpoint
-CREATE INDEX "slug_trackers_slug_type_idx" ON "slug_trackers" USING btree ("slug","type");--> statement-breakpoint
 CREATE UNIQUE INDEX "subscriptions_email_uniq" ON "subscriptions" USING btree ("email");--> statement-breakpoint
 CREATE UNIQUE INDEX "subscriptions_cancel_token_uniq" ON "subscriptions" USING btree ("cancel_token");--> statement-breakpoint
 CREATE INDEX "webhook_events_hook_id_idx" ON "webhook_events" USING btree ("hook_id");--> statement-breakpoint

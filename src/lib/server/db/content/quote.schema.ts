@@ -1,9 +1,13 @@
-import { index, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 export const quotes = pgTable(
 	'quotes',
 	{
-		id: text('id').primaryKey().notNull(),
+		id: uuid('id')
+			.primaryKey()
+			.default(sql`uuidv7()`)
+			.notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 		text: text('text').notNull(),
 		source: text('source'),

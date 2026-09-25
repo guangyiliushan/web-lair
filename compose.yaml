@@ -1,6 +1,7 @@
 services:
   db:
-    image: postgres
+    # pinned: uuidv7() defaults require PostgreSQL 18 (ledger §9.6)
+    image: postgres:18
     restart: always
     ports:
       - '5432:5432'

@@ -1,9 +1,13 @@
-import { jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 export const options = pgTable(
 	'options',
 	{
-		id: text('id').primaryKey().notNull(),
+		id: uuid('id')
+			.primaryKey()
+			.default(sql`uuidv7()`)
+			.notNull(),
 		name: text('name').notNull(),
 		value: jsonb('value').$type<unknown>()
 	},

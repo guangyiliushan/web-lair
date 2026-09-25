@@ -9,9 +9,14 @@ import { expect, test } from '@playwright/test';
  *
  * The localhost origin auto-authenticates as the site owner (see auth.e2e.ts /
  * TAILSCALE_ALLOW_LOOPBACK in the playwright webServer env).
+ *
+ * P1 note: business ids are uuid now (uuidv7), so the fixtures use fixed
+ * well-formed uuids instead of the old text ids.
  */
-const ACTIVE = 'e2e-review-comment-1';
-const EXTRA = 'e2e-review-comment-2';
+const CATEGORY = '00000000-0000-7000-8000-000000000010';
+const POST = '00000000-0000-7000-8000-000000000011';
+const ACTIVE = '00000000-0000-7000-8000-000000000001';
+const EXTRA = '00000000-0000-7000-8000-000000000002';
 
 function psql(sql: string): string {
 	return execFileSync(
@@ -26,20 +31,20 @@ test.describe.configure({ mode: 'serial' });
 test.beforeAll(() => {
 	psql(`delete from comments where id in ('${ACTIVE}', '${EXTRA}')`);
 	psql(
-		`insert into categories (id, name, slug) values ('e2e-review-cat', 'E2E', 'e2e-review-cat') on conflict (id) do nothing`
+		`insert into categories (id, name, slug) values ('${CATEGORY}', 'E2E', 'e2e-review-cat') on conflict (id) do nothing`
 	);
 	psql(
-		`insert into posts (id, title, slug, content_format, category_id) values ('e2e-review-post', 'E2E post', 'e2e-review-post', 'markdown', 'e2e-review-cat') on conflict (id) do nothing`
+		`insert into posts (id, title, slug, content_format, category_id) values ('${POST}', 'E2E post', 'e2e-review-post', 'markdown', '${CATEGORY}') on conflict (id) do nothing`
 	);
 	psql(
-		`insert into comments (id, post_id, author, text, state) values ('${ACTIVE}', 'e2e-review-post', 'E2E', 'pending item from e2e', 'pending'), ('${EXTRA}', 'e2e-review-post', 'E2E', 'second pending item', 'pending')`
+		`insert into comments (id, post_id, author, text, state) values ('${ACTIVE}', '${POST}', 'E2E', 'pending item from e2e', 'pending'), ('${EXTRA}', '${POST}', 'E2E', 'second pending item', 'pending')`
 	);
 });
 
 test.afterAll(() => {
 	psql(`delete from comments where id in ('${ACTIVE}', '${EXTRA}')`);
-	psql(`delete from posts where id = 'e2e-review-post'`);
-	psql(`delete from categories where id = 'e2e-review-cat'`);
+	psql(`delete from posts where id = '${POST}'`);
+	psql(`delete from categories where id = '${CATEGORY}'`);
 });
 
 test('the owner approves a pending comment from the queue', async ({ page }) => {

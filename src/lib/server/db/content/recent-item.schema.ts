@@ -1,4 +1,14 @@
-import { boolean, index, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+	boolean,
+	index,
+	integer,
+	jsonb,
+	pgTable,
+	text,
+	timestamp,
+	uuid
+} from 'drizzle-orm/pg-core';
 
 /**
  * Polymorphic content reference (`Post` | `Note` | `Page` | `Recently`).
@@ -7,16 +17,19 @@ import { boolean, index, integer, jsonb, pgTable, text, timestamp } from 'drizzl
 export const recentItems = pgTable(
 	'recent_items',
 	{
-		id: text('id').primaryKey().notNull(),
+		id: uuid('id')
+			.primaryKey()
+			.default(sql`uuidv7()`)
+			.notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 		content: text('content').notNull().default(''),
 		type: text('type').notNull(),
 		metadata: jsonb('metadata').$type<Record<string, unknown> | null>(),
 		refType: text('ref_type'),
-		refId: text('ref_id'),
+		refId: uuid('ref_id'),
 		commentsIndex: integer('comments_index').notNull().default(0),
 		allowComment: boolean('allow_comment').notNull().default(true),
-		modifiedAt: timestamp('modified_at', { withTimezone: true }),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).$onUpdate(() => new Date()),
 		up: integer('up').notNull().default(0),
 		down: integer('down').notNull().default(0)
 	},

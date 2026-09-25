@@ -1,10 +1,24 @@
-import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+	index,
+	integer,
+	jsonb,
+	pgTable,
+	text,
+	timestamp,
+	uniqueIndex,
+	uuid
+} from 'drizzle-orm/pg-core';
 
 export const pages = pgTable(
 	'pages',
 	{
-		id: text('id').primaryKey().notNull(),
+		id: uuid('id')
+			.primaryKey()
+			.default(sql`uuidv7()`)
+			.notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).$onUpdate(() => new Date()),
 		title: text('title').notNull(),
 		slug: text('slug').notNull(),
 		subtitle: text('subtitle'),
@@ -13,8 +27,7 @@ export const pages = pgTable(
 		contentFormat: text('content_format').notNull(),
 		images: jsonb('images').$type<unknown[]>(),
 		meta: jsonb('meta').$type<Record<string, unknown>>(),
-		sortOrder: integer('sort_order').notNull().default(1),
-		modifiedAt: timestamp('modified_at', { withTimezone: true })
+		sortOrder: integer('sort_order').notNull().default(1)
 	},
 	(table) => [
 		uniqueIndex('pages_slug_uniq').on(table.slug),

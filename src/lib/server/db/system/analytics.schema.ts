@@ -1,9 +1,13 @@
-import { index, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 export const analytics = pgTable(
 	'analytics',
 	{
-		id: text('id').primaryKey().notNull(),
+		id: uuid('id')
+			.primaryKey()
+			.default(sql`uuidv7()`)
+			.notNull(),
 		visitedAt: timestamp('visited_at', { withTimezone: true }).notNull(),
 		ip: text('ip'),
 		userAgent: jsonb('user_agent').$type<Record<string, unknown> | null>(),

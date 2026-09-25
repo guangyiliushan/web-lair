@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
-import { posts, categories } from '$lib/server/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { posts, categories, postTags, tags } from '$lib/server/db/schema';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
 
 export interface CategoryPostItem {
@@ -32,17 +32,33 @@ export const load: PageServerLoad = async ({ params }) => {
 	if (!cat) throw error(404, 'Category not found');
 
 	// ── Fetch published posts in this category ──
-	const postRows = await db.query.posts.findMany({
-		where: and(eq(posts.categoryId, cat.id), eq(posts.isPublished, true)),
-		orderBy: desc(posts.createdAt),
-		columns: {
-			id: true,
-			title: true,
-			slug: true,
-			createdAt: true,
-			tags: true
-		}
-	});
+	// Visibility: published only (the lazy scheduled check lands in P3).
+	const postRows = await db
+		.select({
+			id: posts.id,
+			title: posts.title,
+			slug: posts.slug,
+			createdAt: posts.createdAt
+		})
+		.from(posts)
+		.where(and(eq(posts.categoryId, cat.id), eq(posts.status, 'published')))
+		.orderBy(desc(posts.createdAt));
+
+	// ── Tags per post (post_tags replaced the posts.tags array in P1) ──
+	const postIds = postRows.map((p) => p.id);
+	const tagRows = postIds.length
+		? await db
+				.select({ postId: postTags.postId, name: tags.name })
+				.from(postTags)
+				.innerJoin(tags, eq(postTags.tagId, tags.id))
+				.where(inArray(postTags.postId, postIds))
+		: [];
+	const tagsByPost = new Map<string, string[]>();
+	for (const row of tagRows) {
+		const list = tagsByPost.get(row.postId) ?? [];
+		list.push(row.name);
+		tagsByPost.set(row.postId, list);
+	}
 
 	// ── Assemble posts with tags ──
 	const assembled: CategoryPostItem[] = postRows.map((p) => ({
@@ -51,7 +67,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		date: p.createdAt
 			? new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 			: '',
-		tags: p.tags ?? []
+		tags: tagsByPost.get(p.id) ?? []
 	}));
 
 	// ── Group by year ──
@@ -75,13 +91,13 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	// ── Tag counts within this category ──
 	const tagCounts = new Map<string, number>();
-	for (const p of postRows) {
-		for (const tag of p.tags ?? []) {
+	for (const p of assembled) {
+		for (const tag of p.tags) {
 			tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
 		}
 	}
 
-	const tags: CategoryTagCount[] = [...tagCounts.entries()]
+	const tagList: CategoryTagCount[] = [...tagCounts.entries()]
 		.map(([name, count]) => ({ name, slug: name.toLowerCase().replace(/\s+/g, '-'), count }))
 		.sort((a, b) => b.count - a.count);
 
@@ -99,6 +115,6 @@ export const load: PageServerLoad = async ({ params }) => {
 		totalCount: postRows.length,
 		earliestYear,
 		years: sortedYears,
-		tags
+		tags: tagList
 	};
 };

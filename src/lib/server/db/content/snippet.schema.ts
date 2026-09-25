@@ -1,12 +1,15 @@
 import { sql } from 'drizzle-orm';
-import { boolean, index, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 export const snippets = pgTable(
 	'snippets',
 	{
-		id: text('id').primaryKey().notNull(),
+		id: uuid('id')
+			.primaryKey()
+			.default(sql`uuidv7()`)
+			.notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-		updatedAt: timestamp('updated_at', { withTimezone: true }),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).$onUpdate(() => new Date()),
 		type: text('type'),
 		isPrivate: boolean('is_private').notNull().default(false),
 		raw: text('raw').notNull(),

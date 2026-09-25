@@ -1,23 +1,21 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { posts } from '$lib/server/db/content';
+import { postTags, tags } from '$lib/server/db/content';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
-	// Tags are stored as text arrays on posts — aggregate unique tags
+	// Tags are a real entity table since P1; the relation lives in post_tags.
 	const rows = await db
 		.select({
-			name: sql<string>`unnest(${posts.tags})`.mapWith(String)
+			id: tags.id,
+			name: tags.name,
+			slug: tags.slug,
+			count: sql<number>`count(${postTags.postId})`.mapWith(Number)
 		})
-		.from(posts)
-		.groupBy(sql`unnest(${posts.tags})`)
-		.orderBy(sql`unnest(${posts.tags})`);
+		.from(tags)
+		.leftJoin(postTags, eq(postTags.tagId, tags.id))
+		.groupBy(tags.id, tags.name, tags.slug)
+		.orderBy(tags.name);
 
-	const allTags = [...new Set(rows.map((r) => r.name).filter(Boolean))].map((name, i) => ({
-		id: `tag-${i}`,
-		name,
-		slug: name.toLowerCase().replace(/\s+/g, '-')
-	}));
-
-	return { headerTitle: '标签', tags: allTags };
+	return { headerTitle: '标签', tags: rows };
 };

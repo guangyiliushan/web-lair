@@ -1,12 +1,15 @@
 import { sql } from 'drizzle-orm';
-import { jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 export const metaPresets = pgTable(
 	'meta_presets',
 	{
-		id: text('id').primaryKey().notNull(),
+		id: uuid('id')
+			.primaryKey()
+			.default(sql`uuidv7()`)
+			.notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-		updatedAt: timestamp('updated_at', { withTimezone: true }),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).$onUpdate(() => new Date()),
 		name: text('name').notNull(),
 		contentType: text('content_type'),
 		description: text('description'),

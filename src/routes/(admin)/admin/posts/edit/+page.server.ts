@@ -1,10 +1,35 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { categories, posts } from '$lib/server/db/content';
-import { getSnowflake } from '$lib/server/snowflake';
+import { categories, postTags, posts, tags } from '$lib/server/db/content';
 import { parseTags, validatePostForm } from '$lib/server/services/posts';
 import type { PageServerLoad, Actions } from './$types';
+
+/** The editor still speaks a publish boolean; P1 maps it onto the status machine. */
+const DEFAULT_LANG = 'en';
+
+async function loadTagNames(postId: string): Promise<string[]> {
+	const rows = await db
+		.select({ name: tags.name })
+		.from(postTags)
+		.innerJoin(tags, eq(postTags.tagId, tags.id))
+		.where(eq(postTags.postId, postId))
+		.orderBy(tags.name);
+	return rows.map((r) => r.name);
+}
+
+async function syncPostTags(postId: string, names: string[]) {
+	await db.delete(postTags).where(eq(postTags.postId, postId));
+	for (const name of names) {
+		const slug = name.toLowerCase().replace(/\s+/g, '-');
+		const [tag] = await db
+			.insert(tags)
+			.values({ name, slug })
+			.onConflictDoUpdate({ target: tags.slug, set: { name } })
+			.returning({ id: tags.id });
+		await db.insert(postTags).values({ postId, tagId: tag.id }).onConflictDoNothing();
+	}
+}
 
 export const load: PageServerLoad = async ({ url }) => {
 	const allCategories = await db
@@ -24,16 +49,20 @@ export const load: PageServerLoad = async ({ url }) => {
 				categoryId: posts.categoryId,
 				summary: posts.summary,
 				content: posts.content,
-				tags: posts.tags,
-				isPublished: posts.isPublished,
+				status: posts.status,
 				createdAt: posts.createdAt,
-				modifiedAt: posts.modifiedAt
+				updatedAt: posts.updatedAt
 			})
 			.from(posts)
 			.where(eq(posts.id, id))
 			.limit(1);
 		if (!row) error(404, '文章不存在');
-		post = { ...row, tags: row.tags.join(',') };
+		const tagNames = await loadTagNames(row.id);
+		post = {
+			...row,
+			isPublished: row.status === 'published',
+			tags: tagNames.join(',')
+		};
 	}
 
 	return {
@@ -67,9 +96,12 @@ export const actions: Actions = {
 			return fail(400, { errors, values });
 		}
 
-		// Slug uniqueness check, excluding the post itself on update.
+		// Slug uniqueness inside the default language (P2 adds the language
+		// picker), excluding the post itself on update.
 		const slugOwner = await db.query.posts.findFirst({
-			where: id ? and(eq(posts.slug, values.slug), ne(posts.id, id)) : eq(posts.slug, values.slug),
+			where: id
+				? and(eq(posts.lang, DEFAULT_LANG), eq(posts.slug, values.slug), ne(posts.id, id))
+				: and(eq(posts.lang, DEFAULT_LANG), eq(posts.slug, values.slug)),
 			columns: { id: true }
 		});
 		if (slugOwner) {
@@ -79,7 +111,7 @@ export const actions: Actions = {
 			});
 		}
 
-		const tags = parseTags(tagsRaw);
+		const tagNames = parseTags(tagsRaw);
 		const now = new Date();
 
 		let postId: string;
@@ -92,30 +124,35 @@ export const actions: Actions = {
 					categoryId: values.categoryId,
 					content: values.content,
 					summary: values.summary || null,
-					tags,
-					isPublished: values.isPublished,
-					modifiedAt: now
+					status: values.isPublished ? 'published' : 'draft',
+					updatedAt: now,
+					// First publish stamps published_at; later saves keep it (§9.8).
+					...(values.isPublished ? { publishedAt: sql`coalesce(${posts.publishedAt}, now())` } : {})
 				})
 				.where(eq(posts.id, id))
 				.returning({ id: posts.id });
 			if (updated.length === 0) error(404, '文章不存在');
 			postId = updated[0].id;
 		} else {
-			postId = getSnowflake().nextId().toString();
-			await db.insert(posts).values({
-				id: postId,
-				title: values.title,
-				slug: values.slug,
-				categoryId: values.categoryId,
-				content: values.content,
-				contentFormat: 'markdown',
-				summary: values.summary || null,
-				tags,
-				isPublished: values.isPublished,
-				createdAt: now,
-				modifiedAt: now
-			});
+			const [created] = await db
+				.insert(posts)
+				.values({
+					title: values.title,
+					slug: values.slug,
+					categoryId: values.categoryId,
+					content: values.content,
+					contentFormat: 'markdown',
+					summary: values.summary || null,
+					status: values.isPublished ? 'published' : 'draft',
+					publishedAt: values.isPublished ? now : null,
+					createdAt: now,
+					updatedAt: now
+				})
+				.returning({ id: posts.id });
+			postId = created.id;
 		}
+
+		await syncPostTags(postId, tagNames);
 
 		throw redirect(303, `/admin/posts/edit?id=${postId}&saved=1`);
 	}

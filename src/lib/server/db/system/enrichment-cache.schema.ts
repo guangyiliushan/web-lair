@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
 	index,
 	integer,
@@ -6,13 +7,17 @@ import {
 	text,
 	timestamp,
 	uniqueIndex,
+	uuid,
 	varchar
 } from 'drizzle-orm/pg-core';
 
 export const enrichmentCache = pgTable(
 	'enrichment_cache',
 	{
-		id: text('id').primaryKey().notNull(),
+		id: uuid('id')
+			.primaryKey()
+			.default(sql`uuidv7()`)
+			.notNull(),
 		provider: varchar('provider', { length: 64 }).notNull(),
 		externalId: varchar('external_id', { length: 256 }).notNull(),
 		url: text('url').notNull(),

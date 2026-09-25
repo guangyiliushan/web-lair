@@ -2,7 +2,6 @@ import { fail } from '@sveltejs/kit';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { categories, posts } from '$lib/server/db/content';
-import { getSnowflake } from '$lib/server/snowflake';
 import type { PageServerLoad, Actions } from './$types';
 
 export const load: PageServerLoad = async () => {
@@ -10,8 +9,7 @@ export const load: PageServerLoad = async () => {
 		.select({
 			id: categories.id,
 			name: categories.name,
-			slug: categories.slug,
-			type: categories.type
+			slug: categories.slug
 		})
 		.from(categories)
 		.orderBy(categories.name);
@@ -42,7 +40,7 @@ export const actions: Actions = {
 		if (!name) return fail(400, { error: '分类名称不能为空' });
 		if (!slug) return fail(400, { error: 'Slug 不能为空' });
 
-		await db.insert(categories).values({ id: getSnowflake().nextId(), name, slug, type: 0 });
+		await db.insert(categories).values({ name, slug });
 		return { success: true };
 	},
 

@@ -1,4 +1,4 @@
-import { index, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { enrichmentCache } from './enrichment-cache.schema';
 
 export interface EnrichmentImagePalette {
@@ -9,7 +9,7 @@ export interface EnrichmentImagePalette {
 export const enrichmentCaptures = pgTable(
 	'enrichment_captures',
 	{
-		enrichmentId: text('enrichment_id')
+		enrichmentId: uuid('enrichment_id')
 			.primaryKey()
 			.notNull()
 			.references(() => enrichmentCache.id, { onDelete: 'cascade' }),

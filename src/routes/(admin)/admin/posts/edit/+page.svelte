@@ -56,7 +56,7 @@
 	applyPost(data.post);
 	let baseline = $state(JSON.stringify(currentFields()));
 
-	const postKey = $derived(data.post ? `${data.post.id}@${data.post.modifiedAt ?? ''}` : 'new');
+	const postKey = $derived(data.post ? `${data.post.id}@${data.post.updatedAt ?? ''}` : 'new');
 	// svelte-ignore state_referenced_locally
 	let loadedKey = $state(postKey);
 
@@ -135,7 +135,7 @@
 					{#if data.post}
 						<span class="truncate">
 							{data.post.isPublished ? '已发布' : '草稿'} · 修改于
-							{formatDateTime(new Date(data.post.modifiedAt ?? data.post.createdAt), {
+							{formatDateTime(new Date(data.post.updatedAt ?? data.post.createdAt), {
 								dateStyle: 'short',
 								timeStyle: 'short'
 							})}

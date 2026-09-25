@@ -8,7 +8,8 @@ import {
 	jsonb,
 	pgTable,
 	text,
-	timestamp
+	timestamp,
+	uuid
 } from 'drizzle-orm/pg-core';
 import { user } from '../auth.schema';
 import { notes } from './note.schema';
@@ -24,18 +25,21 @@ import { posts } from './post.schema';
  * moderation decision (pending/approved/rejected) while `is_deleted` /
  * `deleted_at` express removal.
  *
- * Types: the arc columns stay `text` until P1 converts the library to uuid
- * (§11-D); `reader_id` / `reviewed_by` point at the auth tables and therefore
- * remain text permanently (§9.6 exception).
+ * Types (P1): the arc columns are uuid like their targets; `reader_id` /
+ * `reviewed_by` point at the auth tables and therefore remain text
+ * permanently (§9.6 exception).
  */
 export const comments = pgTable(
 	'comments',
 	{
-		id: text('id').primaryKey().notNull(),
+		id: uuid('id')
+			.primaryKey()
+			.default(sql`uuidv7()`)
+			.notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-		postId: text('post_id').references(() => posts.id, { onDelete: 'cascade' }),
-		noteId: text('note_id').references(() => notes.id, { onDelete: 'cascade' }),
-		pageId: text('page_id').references(() => pages.id, { onDelete: 'cascade' }),
+		postId: uuid('post_id').references(() => posts.id, { onDelete: 'cascade' }),
+		noteId: uuid('note_id').references(() => notes.id, { onDelete: 'cascade' }),
+		pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }),
 		author: text('author'),
 		mail: text('mail'),
 		url: text('url'),
@@ -43,10 +47,10 @@ export const comments = pgTable(
 		state: text('state').notNull().default('pending'),
 		reviewedBy: text('reviewed_by').references(() => user.id, { onDelete: 'set null' }),
 		reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
-		parentCommentId: text('parent_comment_id').references((): AnyPgColumn => comments.id, {
+		parentCommentId: uuid('parent_comment_id').references((): AnyPgColumn => comments.id, {
 			onDelete: 'cascade'
 		}),
-		rootCommentId: text('root_comment_id').references((): AnyPgColumn => comments.id, {
+		rootCommentId: uuid('root_comment_id').references((): AnyPgColumn => comments.id, {
 			onDelete: 'cascade'
 		}),
 		replyCount: integer('reply_count').notNull().default(0),

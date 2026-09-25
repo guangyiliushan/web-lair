@@ -1,27 +1,42 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { user } from '../auth.schema';
+import { categories } from './category.schema';
 
+/**
+ * Drafts are the unpublished working copy of a post (edit isolation, ledger
+ * §9.2/§9.3/§9.10): one row per target (`unique(ref_type, ref_id)` partial),
+ * upserted by autosave/save, published by the publish transaction, discarded
+ * explicitly. `ref_id` stays polymorphic (posts/notes/pages); `author` points
+ * at the auth table and remains text (§9.6 exception).
+ */
 export const drafts = pgTable(
 	'drafts',
 	{
-		id: text('id').primaryKey().notNull(),
+		id: uuid('id')
+			.primaryKey()
+			.default(sql`uuidv7()`)
+			.notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-		updatedAt: timestamp('updated_at', { withTimezone: true }),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).$onUpdate(() => new Date()),
 		refType: text('ref_type').notNull(),
-		refId: text('ref_id'),
+		refId: uuid('ref_id'),
 		title: text('title').notNull().default(''),
-		text: text('text').notNull().default(''),
+		slug: text('slug'),
+		categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
+		tags: text('tags')
+			.array()
+			.notNull()
+			.default(sql`'{}'::text[]`),
 		content: text('content'),
-		contentFormat: text('content_format').notNull(),
-		images: jsonb('images').$type<unknown[]>(),
-		meta: jsonb('meta').$type<Record<string, unknown>>(),
-		typeSpecificData: jsonb('type_specific_data').$type<Record<string, unknown> | null>(),
-		history: jsonb('history').$type<unknown[] | null>(),
+		contentFormat: text('content_format').notNull().default('markdown'),
+		summary: text('summary'),
 		version: integer('version').notNull().default(1),
-		publishedVersion: integer('published_version')
+		baseVersion: integer('base_version'),
+		author: text('author').references(() => user.id, { onDelete: 'set null' })
 	},
 	(table) => [
-		index('drafts_ref_idx')
+		uniqueIndex('drafts_ref_uniq')
 			.on(table.refType, table.refId)
 			.where(sql`${table.refId} is not null`),
 		index('drafts_updated_at_idx').on(table.updatedAt)
