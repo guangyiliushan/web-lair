@@ -30,6 +30,27 @@
 			step?: string;
 		} | null
 	);
+
+	// The activation flow spans two submits (enable -> activate). The secret and
+	// the one-time codes arrive with the first response and must survive a failed
+	// activation, so they live in local state instead of being re-read from the
+	// current payload - the old template dropped the secret on the first wrong
+	// code and never rendered regenerated codes at all (B3.1 review). A
+	// `step: 'done'` payload ends the flow and clears them.
+	let pendingTotpURI = $state<string | null>(null);
+	let pendingBackupCodes = $state<string[]>([]);
+
+	$effect(() => {
+		const payload = actionForm;
+		if (!payload) return;
+		if (payload.totpURI) pendingTotpURI = payload.totpURI;
+		if (payload.backupCodes?.length) pendingBackupCodes = payload.backupCodes;
+		if (payload.step === 'done') {
+			pendingTotpURI = null;
+			pendingBackupCodes = [];
+		}
+	});
+
 	let s = $derived(data.settings);
 
 	const devices = [
@@ -93,25 +114,13 @@
 			</div>
 		{/if}
 
-		{#if actionForm?.totpURI}
+		{#if pendingTotpURI}
 			<div class="space-y-3 rounded-lg border bg-background p-3">
 				<p class="text-sm">{m.admin_settings_2fa_scan_hint()}</p>
 				<div class="space-y-1">
 					<div class="text-xs text-muted-foreground">{m.admin_settings_2fa_secret()}</div>
-					<code class="block rounded bg-muted px-2 py-1 text-xs break-all"
-						>{actionForm.totpURI}</code
-					>
+					<code class="block rounded bg-muted px-2 py-1 text-xs break-all">{pendingTotpURI}</code>
 				</div>
-				{#if actionForm?.backupCodes?.length}
-					<div class="space-y-1">
-						<div class="text-xs text-muted-foreground">{m.admin_settings_2fa_backup_codes()}</div>
-						<div class="grid grid-cols-2 gap-1">
-							{#each actionForm.backupCodes as backupCode (backupCode)}
-								<code class="rounded bg-muted px-2 py-1 text-xs">{backupCode}</code>
-							{/each}
-						</div>
-					</div>
-				{/if}
 				<form method="post" action="?/activate" use:enhance class="flex items-end gap-2">
 					<Input
 						name="code"
@@ -126,6 +135,17 @@
 						{m.admin_settings_2fa_activate()}
 					</Button>
 				</form>
+			</div>
+		{/if}
+
+		{#if pendingBackupCodes.length}
+			<div class="space-y-2 rounded-lg border bg-background p-3">
+				<div class="text-xs text-muted-foreground">{m.admin_settings_2fa_backup_codes()}</div>
+				<div class="grid grid-cols-2 gap-1">
+					{#each pendingBackupCodes as backupCode (backupCode)}
+						<code class="rounded bg-muted px-2 py-1 text-xs">{backupCode}</code>
+					{/each}
+				</div>
 			</div>
 		{/if}
 
@@ -161,7 +181,7 @@
 					</Button>
 				</form>
 			</div>
-		{:else}
+		{:else if !pendingTotpURI}
 			<form method="post" action="?/enable" use:enhance class="flex items-end gap-2">
 				<Input
 					name="password"

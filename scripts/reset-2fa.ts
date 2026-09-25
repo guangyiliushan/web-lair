@@ -1,18 +1,23 @@
 // scripts/reset-2fa.ts
 //
-// 恢复兜底（台账 §4.24）：备份码与认证器都丢失时，关闭某账号的两步验证。
-// 只动官方表的官方列 + 插件自有表，不做任何结构变更。
+// Emergency recovery (ledger §4.24 / §4.35): when both the authenticator and
+// the backup codes are lost, disable two-step verification for one account and
+// clear every trace of the factor:
+//   - flip `user.two_factor_enabled` to false and delete the `two_factor` row
+//   - revoke ALL sessions of the account (a stolen cookie must not survive a reset)
+//   - drop the pending `2fa-*` / `trust-device-*` verification rows
+// All writes run in one transaction; the state is read back before reporting.
 //
-// 用法：
+// Usage:
 //   pnpm db:reset-2fa owner@example.com
-//   （省略参数时回退到 .env 的 OWNER_EMAIL）
+//   (omitting the argument falls back to .env OWNER_EMAIL)
 //
-// 环境变量：DATABASE_URL（必填）、OWNER_EMAIL（可选回退）
+// Env: DATABASE_URL (required), OWNER_EMAIL (optional fallback)
 
 import postgres from 'postgres';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { user } from '../src/lib/server/db/auth.schema';
+import { session, twoFactor, user } from '../src/lib/server/db/auth.schema';
 
 const DB_URL = process.env.DATABASE_URL;
 if (!DB_URL) {
@@ -44,26 +49,45 @@ async function main() {
 		}
 
 		const target = rows[0];
-		const secrets =
-			await pg`select count(*)::int as count from "two_factor" where "user_id" = ${target.id}`;
+		const secretCount = await db.$count(twoFactor, eq(twoFactor.userId, target.id));
+		const sessionCount = await db.$count(session, eq(session.userId, target.id));
 
 		console.log(
-			`→ ${email}: twoFactorEnabled=${target.twoFactorEnabled}, secrets=${secrets[0]?.count ?? 0}`
+			`→ ${email} (user ${target.id}): twoFactorEnabled=${target.twoFactorEnabled}, secrets=${secretCount}, sessions=${sessionCount}`
 		);
-		if (!target.twoFactorEnabled && (secrets[0]?.count ?? 0) === 0) {
+		if (!target.twoFactorEnabled && secretCount === 0) {
 			console.log('→ nothing to reset.');
 			return;
 		}
 
-		await db.update(user).set({ twoFactorEnabled: false }).where(eq(user.id, target.id));
-		await pg`delete from "two_factor" where "user_id" = ${target.id}`;
+		await db.transaction(async (tx) => {
+			await tx.update(user).set({ twoFactorEnabled: false }).where(eq(user.id, target.id));
+			await tx.delete(twoFactor).where(eq(twoFactor.userId, target.id));
+			// A stolen session must not outlive the reset.
+			await tx.delete(session).where(eq(session.userId, target.id));
+			// Challenge and trust-device rows are keyed by random identifiers, not
+			// by user, so they cannot be narrowed to this account; the two patterns
+			// only touch this plugin's rows, and every matched row expires on its
+			// own anyway.
+			await tx.execute(
+				sql`delete from "verification" where "identifier" like '2fa-%' or "identifier" like 'trust-device-%'`
+			);
+		});
 
-		const after =
-			await pg`select count(*)::int as count from "two_factor" where "user_id" = ${target.id}`;
+		const after = await db
+			.select({ twoFactorEnabled: user.twoFactorEnabled })
+			.from(user)
+			.where(eq(user.id, target.id))
+			.limit(1);
+		const secretsAfter = await db.$count(twoFactor, eq(twoFactor.userId, target.id));
+		const sessionsAfter = await db.$count(session, eq(session.userId, target.id));
+
 		console.log(
-			`✓ two-step verification disabled for ${email} (twoFactorEnabled=false, secrets=${after[0]?.count ?? 0})`
+			`✓ Reset at ${new Date().toISOString()}: user=${target.id} twoFactorEnabled=${after[0]?.twoFactorEnabled}, secrets=${secretsAfter}, sessions=${sessionsAfter}`
 		);
-		console.log('  Log in with the password, then re-enable 2FA from /admin/settings/account.');
+		console.log(
+			'  All sessions were revoked. Sign in with the password, then re-enable 2FA from /admin/settings/account.'
+		);
 	} catch (error) {
 		console.error('✗ Unexpected error:', error);
 		process.exitCode = 1;

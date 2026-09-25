@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 
 export const ADMIN_BASE_PATH = '/admin';
@@ -39,6 +40,20 @@ export function getAdminConfig(): AdminConfig {
 		twoFactorPath: `${ADMIN_BASE_PATH}/${loginSlug}/two-factor`,
 		setupToken: env.ADMIN_SETUP_TOKEN?.trim() || ''
 	};
+}
+
+/**
+ * 404 for any admin-auth slug other than the configured one (the login and
+ * two-factor pages share this; it used to be copy-pasted into both).
+ */
+export function assertAdminSlug(slug: string): AdminConfig {
+	const config = getAdminConfig();
+
+	if (slug !== config.loginSlug) {
+		error(404, 'Not found');
+	}
+
+	return config;
 }
 
 export function safeAdminRedirectTarget(target: string | null | undefined): string {

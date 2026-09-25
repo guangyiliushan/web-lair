@@ -1,22 +1,12 @@
-import { fail, redirect, error } from '@sveltejs/kit';
+import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { APIError } from 'better-auth/api';
 import { auth } from '$lib/server/auth';
-import { ADMIN_BASE_PATH, getAdminConfig } from '$lib/server/config/admin';
+import { ADMIN_BASE_PATH, assertAdminSlug } from '$lib/server/config/admin';
 import { getUserRole, hasAnyAdminCapability } from '$lib/server/authz';
 import { isSiteOrganizationMember } from '$lib/server/auth/site-organization';
-import { findSessionIdByToken, pruneOtherSessions } from '$lib/server/auth/sessions';
+import { pruneOtherSessions } from '$lib/server/auth/sessions';
 import { safeRedirect } from '$lib/server/safe-redirect';
-
-function assertAdminSlug(slug: string) {
-	const config = getAdminConfig();
-
-	if (slug !== config.loginSlug) {
-		error(404, 'Not found');
-	}
-
-	return config;
-}
 
 export const load: PageServerLoad = async (event) => {
 	assertAdminSlug(event.params.adminSlug);
@@ -49,8 +39,8 @@ export const actions: Actions = {
 			return fail(400, { message: 'Email and password are required', redirectTo });
 		}
 
-		// Assigned on every path that reaches the check below: the catch either
-		// returns a form error or rethrows (both non-APIError and APIError cases).
+		// Set on every path that exits the try: the catch below returns a form
+		// error for both APIError and unexpected failures.
 		let twoFactorRequired: boolean;
 
 		try {
@@ -80,12 +70,11 @@ export const actions: Actions = {
 					return fail(403, { message: 'This account cannot access admin', redirectTo });
 				}
 
-				const sessionId = await findSessionIdByToken(result.token);
-				if (!sessionId) {
+				if (!result.token) {
 					return fail(500, { message: 'Failed to establish admin session', redirectTo });
 				}
 
-				await pruneOtherSessions(result.user.id, sessionId);
+				await pruneOtherSessions(result.user.id, result.token);
 			}
 		} catch (caught) {
 			if (caught instanceof APIError) {

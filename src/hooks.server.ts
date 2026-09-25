@@ -85,11 +85,15 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 	// endpoint, which resolves the identity and issues a real session + cookie.
 	// No session row is ever inserted here (ledger §4.27 洞②).
 	if (!session && isAdminPath(event.url.pathname)) {
-		const { loginPath } = getAdminConfig();
+		const { loginPath, twoFactorPath } = getAdminConfig();
 		const isLoginPage = event.url.pathname.startsWith(loginPath);
 		const isSetupPage = event.url.pathname.startsWith(`${ADMIN_BASE_PATH}/setup`);
+		// The 2FA challenge page is where the second factor is enforced:
+		// auto-signing in through the Tailnet hand-off here would silently skip
+		// it for the owner's trusted devices (B3.1 review).
+		const isTwoFactorPage = event.url.pathname.startsWith(twoFactorPath);
 
-		if (!isLoginPage && !isSetupPage) {
+		if (!isLoginPage && !isSetupPage && !isTwoFactorPage) {
 			const shouldSignIn = shouldAttemptTailscaleSignIn(
 				clientAddress(event),
 				event.request.headers

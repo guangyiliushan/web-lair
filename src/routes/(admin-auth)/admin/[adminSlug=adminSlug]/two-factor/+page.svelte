@@ -15,6 +15,22 @@
 	// The form toggles between the authenticator code and a backup code; the
 	// choice is re-sent on every submit so the action knows which endpoint to use.
 	let useBackupCode = $state(false);
+
+	// better-auth collapses its 2FA failures into messages that 1.7.5 does not
+	// even carry (APIError.from(status, string) -> message === ''), so the action
+	// classifies them and the page owns the localized copy (B3.1 review).
+	const ERROR_MESSAGES: Record<string, () => string> = {
+		invalid_code: m.auth_2fa_error_invalid_code,
+		expired: m.auth_2fa_error_expired,
+		locked: m.auth_2fa_error_locked
+	};
+
+	const actionForm = $derived(form as { message?: string | null; errorCode?: string } | null);
+	const errorText = $derived(
+		actionForm?.errorCode
+			? (ERROR_MESSAGES[actionForm.errorCode]?.() ?? actionForm?.message)
+			: actionForm?.message
+	);
 </script>
 
 <svelte:head>
@@ -33,13 +49,13 @@
 			<Card.Description>{m.auth_2fa_description()}</Card.Description>
 		</Card.Header>
 		<Card.Content>
-			{#if form?.message}
+			{#if errorText}
 				<div
 					class="mb-6 flex items-center gap-2 rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive"
 					role="alert"
 				>
 					<IconAlertCircle class="size-4 shrink-0" />
-					<span>{form.message}</span>
+					<span>{errorText}</span>
 				</div>
 			{/if}
 
@@ -55,7 +71,7 @@
 							id="code"
 							name="code"
 							type="text"
-							inputmode="numeric"
+							inputmode={useBackupCode ? 'text' : 'numeric'}
 							autocomplete="one-time-code"
 							placeholder={useBackupCode
 								? m.auth_2fa_backup_placeholder()
@@ -77,6 +93,14 @@
 					</Button>
 				</Field.FieldGroup>
 			</form>
+			<div class="mt-4 text-center text-sm">
+				<a
+					class="text-muted-foreground hover:text-foreground hover:underline"
+					href={data.loginPath}
+				>
+					{m.auth_2fa_back_to_login()}
+				</a>
+			</div>
 		</Card.Content>
 	</Card.Root>
 </div>
