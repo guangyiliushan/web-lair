@@ -2,21 +2,14 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { options } from '$lib/server/db/config';
+import { AI_FUNCTIONS, type AiFunction } from '$lib/utils/ai-meta';
 
 /** Site languages (same set as the posts `lang` CHECK, ledger §9.16). */
 export const OPTION_LANGS = ['en', 'zh-cn', 'ja'] as const;
 export type OptionLang = (typeof OPTION_LANGS)[number];
 
-/** AI feature slots for `ai.assignments` (ai-line plan §5.1). */
-export const AI_FUNCTIONS = [
-	'summary',
-	'translation',
-	'translation_review',
-	'comment_review',
-	'chat',
-	'assistant'
-] as const;
-export type AiFunction = (typeof AI_FUNCTIONS)[number];
+/** AI feature slots for `ai.assignments` (ai-line plan §5.1) - shared with the UI. */
+export { AI_FUNCTIONS, type AiFunction };
 
 interface RegistryEntry {
 	schema: z.ZodType;
