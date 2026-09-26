@@ -39,6 +39,13 @@ export const drafts = pgTable(
 		uniqueIndex('drafts_ref_uniq')
 			.on(table.refType, table.refId)
 			.where(sql`${table.refId} is not null`),
-		index('drafts_updated_at_idx').on(table.updatedAt)
+		index('drafts_updated_at_idx').on(table.updatedAt),
+		// §11-A2: SET NULL FKs need leading (partial) indexes (P1.1 review).
+		index('drafts_author_idx')
+			.on(table.author)
+			.where(sql`${table.author} is not null`),
+		index('drafts_category_idx')
+			.on(table.categoryId)
+			.where(sql`${table.categoryId} is not null`)
 	]
 );

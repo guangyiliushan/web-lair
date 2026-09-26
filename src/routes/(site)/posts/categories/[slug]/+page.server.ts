@@ -3,6 +3,7 @@ import { db } from '$lib/server/db';
 import { posts, categories, postTags, tags } from '$lib/server/db/schema';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
+import { tagSlug } from '$lib/utils/slug';
 
 export interface CategoryPostItem {
 	slug: string;
@@ -48,16 +49,20 @@ export const load: PageServerLoad = async ({ params }) => {
 	const postIds = postRows.map((p) => p.id);
 	const tagRows = postIds.length
 		? await db
-				.select({ postId: postTags.postId, name: tags.name })
+				.select({ postId: postTags.postId, name: tags.name, slug: tags.slug })
 				.from(postTags)
 				.innerJoin(tags, eq(postTags.tagId, tags.id))
 				.where(inArray(postTags.postId, postIds))
 		: [];
 	const tagsByPost = new Map<string, string[]>();
+	// The stored slug is the link identity (§9.4 allows hand-edited slugs);
+	// recomputing it from the name would 404 once the two diverge (P1.1 review).
+	const tagSlugs = new Map<string, string>();
 	for (const row of tagRows) {
 		const list = tagsByPost.get(row.postId) ?? [];
 		list.push(row.name);
 		tagsByPost.set(row.postId, list);
+		if (!tagSlugs.has(row.name)) tagSlugs.set(row.name, row.slug);
 	}
 
 	// ── Assemble posts with tags ──
@@ -71,13 +76,15 @@ export const load: PageServerLoad = async ({ params }) => {
 	}));
 
 	// ── Group by year ──
+	// Year comes from the raw createdAt, not the display string: `new Date('Mar 1')`
+	// silently resolves to 2001 (P1.1 review - every group showed as 2001).
 	const byYear = new Map<number, CategoryPostItem[]>();
-	for (const p of assembled) {
-		// Extract year from the post date (first 4 chars of date string, or current year as fallback)
-		const year = p.date ? new Date(p.date).getFullYear() : new Date().getFullYear();
+	assembled.forEach((item, index) => {
+		const createdAt = postRows[index].createdAt;
+		const year = createdAt ? new Date(createdAt).getFullYear() : new Date().getFullYear();
 		if (!byYear.has(year)) byYear.set(year, []);
-		byYear.get(year)!.push(p);
-	}
+		byYear.get(year)!.push(item);
+	});
 
 	// Fallback: if no date parsed, use current year
 	if (byYear.size === 0 && assembled.length > 0) {
@@ -98,7 +105,7 @@ export const load: PageServerLoad = async ({ params }) => {
 	}
 
 	const tagList: CategoryTagCount[] = [...tagCounts.entries()]
-		.map(([name, count]) => ({ name, slug: name.toLowerCase().replace(/\s+/g, '-'), count }))
+		.map(([name, count]) => ({ name, slug: tagSlugs.get(name) ?? tagSlug(name), count }))
 		.sort((a, b) => b.count - a.count);
 
 	// ── Earliest year for display ──

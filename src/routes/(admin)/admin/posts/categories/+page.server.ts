@@ -2,6 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { categories, posts } from '$lib/server/db/content';
+import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
 
 export const load: PageServerLoad = async () => {
@@ -50,7 +51,7 @@ export const actions: Actions = {
 		const name = formData.get('name')?.toString().trim();
 		const slug = formData.get('slug')?.toString().trim().toLowerCase();
 
-		if (!id) return fail(400, { error: '缺少分类 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: '缺少分类 ID' });
 		if (!name) return fail(400, { error: '分类名称不能为空' });
 
 		await db.update(categories).set({ name, slug }).where(eq(categories.id, id));
@@ -60,7 +61,7 @@ export const actions: Actions = {
 	delete: async ({ request }) => {
 		const formData = await request.formData();
 		const id = formData.get('id')?.toString();
-		if (!id) return fail(400, { error: '缺少分类 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: '缺少分类 ID' });
 		await db.delete(categories).where(eq(categories.id, id));
 		return { success: true };
 	}

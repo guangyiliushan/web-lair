@@ -13,10 +13,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { categories } from '../src/lib/server/db/content/category.schema';
 import { posts } from '../src/lib/server/db/content/post.schema';
 import { postTags, tags } from '../src/lib/server/db/content/tag.schema';
+import { tagSlug } from '../src/lib/utils/slug';
 
 const CATEGORY_SLUG = 'demo';
 const CATEGORY_NAME = '示例';
@@ -100,11 +101,13 @@ async function syncTags(
 ): Promise<void> {
 	await db.delete(postTags).where(eq(postTags.postId, postId));
 	for (const name of names) {
-		const slug = name.toLowerCase().replace(/\s+/g, '-');
+		const slug = tagSlug(name);
+		// First-writer-wins on the display name (same rule as the editor path):
+		// case/space variants must not rename an existing tag site-wide.
 		const [tag] = await db
 			.insert(tags)
 			.values({ name, slug })
-			.onConflictDoUpdate({ target: tags.slug, set: { name } })
+			.onConflictDoUpdate({ target: tags.slug, set: { name: sql`${tags.name}` } })
 			.returning({ id: tags.id });
 		await db.insert(postTags).values({ postId, tagId: tag.id }).onConflictDoNothing();
 	}

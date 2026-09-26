@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { check, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+	check,
+	index,
+	integer,
+	pgTable,
+	text,
+	timestamp,
+	uniqueIndex,
+	uuid
+} from 'drizzle-orm/pg-core';
 import { user } from '../auth.schema';
 import { posts } from './post.schema';
 
@@ -28,6 +37,10 @@ export const postRevisions = pgTable(
 	},
 	(table) => [
 		uniqueIndex('post_revisions_post_version_uniq').on(table.postId, table.version),
-		check('post_revisions_source_check', sql`${table.source} in ('publish')`)
+		check('post_revisions_source_check', sql`${table.source} in ('publish')`),
+		// §11-A2: SET NULL FK on the auth table (P1.1 review).
+		index('post_revisions_author_idx')
+			.on(table.author)
+			.where(sql`${table.author} is not null`)
 	]
 );

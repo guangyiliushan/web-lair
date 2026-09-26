@@ -4,6 +4,7 @@ import { db } from '$lib/server/db';
 import { comments } from '$lib/server/db/content/comment.schema';
 import { posts } from '$lib/server/db/content/post.schema';
 import { can, requireCommentReviewer } from '$lib/server/authz';
+import { isUuid } from '$lib/utils/uuid';
 import type { Actions, PageServerLoad } from './$types';
 
 const STATES = ['pending', 'approved', 'rejected'] as const;
@@ -63,10 +64,12 @@ export const actions: Actions = {
 			return fail(400, { message: 'Unknown review decision.' });
 		}
 		// Same cap as the list query: one request must not flip the whole table.
+		// Non-uuid values are dropped before they reach the uuid column (PG
+		// would raise 22P02 → 500; P1.1 review).
 		const ids = form
 			.getAll('ids')
 			.map((value) => value.toString())
-			.filter(Boolean)
+			.filter(isUuid)
 			.slice(0, 200);
 		if (ids.length === 0) {
 			return fail(400, { message: 'Select at least one comment first.' });

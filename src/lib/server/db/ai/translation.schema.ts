@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { posts } from '../content/post.schema';
 
 /**
@@ -35,6 +35,9 @@ export const translations = pgTable(
 		check('translations_status_check', sql`${table.status} in ('draft', 'accepted', 'discarded')`),
 		uniqueIndex('translations_active_uniq')
 			.on(table.sourcePostId, table.targetLang)
-			.where(sql`${table.status} <> 'discarded'`)
+			.where(sql`${table.status} <> 'discarded'`),
+		// Plain leading index: the partial unique above cannot serve the FK's
+		// referential checks for discarded rows (P1.1 review).
+		index('translations_source_idx').on(table.sourcePostId)
 	]
 );

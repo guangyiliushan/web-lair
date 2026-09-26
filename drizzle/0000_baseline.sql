@@ -639,6 +639,7 @@ CREATE INDEX "ai_agent_conversations_session_idx" ON "ai_agent_conversations" US
 CREATE UNIQUE INDEX "insights_ref_lang_uniq" ON "insights" USING btree ("ref_id","lang");--> statement-breakpoint
 CREATE INDEX "insights_source_insights_idx" ON "insights" USING btree ("source_insights_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "translations_active_uniq" ON "translations" USING btree ("source_post_id","target_lang") WHERE "translations"."status" <> 'discarded';--> statement-breakpoint
+CREATE INDEX "translations_source_idx" ON "translations" USING btree ("source_post_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "meta_presets_name_uniq" ON "meta_presets" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "options_name_uniq" ON "options" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "categories_name_uniq" ON "categories" USING btree ("name");--> statement-breakpoint
@@ -653,6 +654,8 @@ CREATE INDEX "comments_reviewed_by_idx" ON "comments" USING btree ("reviewed_by"
 CREATE INDEX "comments_review_idx" ON "comments" USING btree ("state","created_at") WHERE "comments"."state" = 'pending';--> statement-breakpoint
 CREATE UNIQUE INDEX "drafts_ref_uniq" ON "drafts" USING btree ("ref_type","ref_id") WHERE "drafts"."ref_id" is not null;--> statement-breakpoint
 CREATE INDEX "drafts_updated_at_idx" ON "drafts" USING btree ("updated_at");--> statement-breakpoint
+CREATE INDEX "drafts_author_idx" ON "drafts" USING btree ("author") WHERE "drafts"."author" is not null;--> statement-breakpoint
+CREATE INDEX "drafts_category_idx" ON "drafts" USING btree ("category_id") WHERE "drafts"."category_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "links_name_uniq" ON "links" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "links_url_uniq" ON "links" USING btree ("url");--> statement-breakpoint
 CREATE UNIQUE INDEX "notes_nid_uniq" ON "notes" USING btree ("nid");--> statement-breakpoint
@@ -666,6 +669,7 @@ CREATE UNIQUE INDEX "pages_slug_uniq" ON "pages" USING btree ("slug");--> statem
 CREATE INDEX "pages_sort_order_idx" ON "pages" USING btree ("sort_order");--> statement-breakpoint
 CREATE INDEX "post_related_posts_related_idx" ON "post_related_posts" USING btree ("related_post_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "post_revisions_post_version_uniq" ON "post_revisions" USING btree ("post_id","version");--> statement-breakpoint
+CREATE INDEX "post_revisions_author_idx" ON "post_revisions" USING btree ("author") WHERE "post_revisions"."author" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "posts_lang_slug_uniq" ON "posts" USING btree ("lang","slug");--> statement-breakpoint
 CREATE UNIQUE INDEX "posts_translation_group_lang_uniq" ON "posts" USING btree ("translation_group","lang");--> statement-breakpoint
 CREATE INDEX "posts_updated_at_idx" ON "posts" USING btree ("updated_at");--> statement-breakpoint
@@ -673,6 +677,7 @@ CREATE INDEX "posts_created_at_idx" ON "posts" USING btree ("created_at");--> st
 CREATE INDEX "posts_category_id_idx" ON "posts" USING btree ("category_id");--> statement-breakpoint
 CREATE INDEX "posts_status_pin_published_idx" ON "posts" USING btree ("lang","status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "posts_category_status_published_idx" ON "posts" USING btree ("category_id","lang","status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "posts_translated_from_idx" ON "posts" USING btree ("translated_from_post_id") WHERE "posts"."translated_from_post_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "projects_name_uniq" ON "projects" USING btree ("name");--> statement-breakpoint
 CREATE INDEX "quotes_created_at_idx" ON "quotes" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "recent_items_ref_idx" ON "recent_items" USING btree ("ref_type","ref_id");--> statement-breakpoint

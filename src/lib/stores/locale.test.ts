@@ -1,29 +1,22 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockSetLocale = vi.fn();
-const mockAvailableTags: string[] = ['en', 'zh-cn', 'ja'];
+// Hoisted mocks so the module under test can be imported statically: the old
+// TDZ-driven dynamic import also paid the Svelte compile cost inside a hook,
+// which then needed a growing timeout under load (P1.1 review).
+const { mockSetLocale, lsGetItem, lsSetItem } = vi.hoisted(() => ({
+	mockSetLocale: vi.fn(),
+	lsGetItem: vi.fn(),
+	lsSetItem: vi.fn()
+}));
 
 vi.mock('$lib/paraglide/runtime', () => ({
 	setLocale: mockSetLocale,
-	locales: mockAvailableTags
+	locales: ['en', 'zh-cn', 'ja']
 }));
 
-const lsSetItem = vi.fn();
-vi.stubGlobal('window', { localStorage: { getItem: vi.fn(), setItem: lsSetItem } });
+vi.stubGlobal('window', { localStorage: { getItem: lsGetItem, setItem: lsSetItem } });
 
-let localeStore: {
-	available: readonly string[];
-	switchTo(l: string): void;
-};
-
-// The dynamic import of the Svelte module compiles it in-flight; idle this
-// file runs in ~1.1s, but under a loaded suite run the hook has exceeded 30s
-// (measured 2026-09-22 while four parallel vitest instances ran). Give the
-// hook generous room so the gate stays deterministic under load.
-beforeAll(async () => {
-	const mod = await import('./locale.svelte');
-	localeStore = mod.localeStore;
-}, 60_000);
+import { localeStore } from './locale.svelte';
 
 describe('LocaleStore', () => {
 	beforeEach(() => {
@@ -47,9 +40,11 @@ describe('LocaleStore', () => {
 
 	// Teeth for the single source of truth: the cookie (written by paraglide)
 	// is the preference. A second copy in localStorage is what used to disagree
-	// with the resolved locale and reload forever.
+	// with the resolved locale and reload forever - so both the write side and
+	// the (removed) read side must stay untouched.
 	it('keeps no second copy of the preference', () => {
 		localeStore.switchTo('ja');
 		expect(lsSetItem).not.toHaveBeenCalled();
+		expect(lsGetItem).not.toHaveBeenCalled();
 	});
 });

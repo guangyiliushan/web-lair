@@ -84,6 +84,10 @@ export const posts = pgTable(
 			table.status,
 			table.pinAt.desc().nullsLast(),
 			table.publishedAt.desc()
-		)
+		),
+		// §11-A2: a SET NULL FK needs a leading (partial) index (P1.1 review).
+		index('posts_translated_from_idx')
+			.on(table.translatedFromPostId)
+			.where(sql`${table.translatedFromPostId} is not null`)
 	]
 );

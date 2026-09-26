@@ -14,3 +14,13 @@ export function normalizeSlug(value: string): string {
 		.replace(/-{2,}/g, '-')
 		.replace(/^-+|-+$/g, '');
 }
+
+/**
+ * Tag slug rule, single-sourced (P1.1 review): lowercase + collapse whitespace
+ * to hyphens. Deliberately NOT `normalizeSlug` - that one strips CJK, while
+ * tag names are allowed to be non-ASCII (§9.4). Keep this exact behaviour when
+ * calling it anywhere; the derived value is the tag's storage slug.
+ */
+export function tagSlug(name: string): string {
+	return name.toLowerCase().replace(/\s+/g, '-');
+}

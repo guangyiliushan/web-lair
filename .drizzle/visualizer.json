@@ -1,47 +1,331 @@
 [
-	{ "id": "api_keys", "position": { "x": 930, "y": 11760 } },
-	{ "id": "device_codes", "position": { "x": 930, "y": 13000 } },
-	{ "id": "owner_profiles", "position": { "x": 930, "y": 13800 } },
-	{ "id": "user_profiles", "position": { "x": 930, "y": 14400 } },
-	{ "id": "admin_account", "position": { "x": 930, "y": 15080 } },
-	{ "id": "ai_agent_conversations", "position": { "x": 50, "y": 50 } },
-	{ "id": "ai_insights", "position": { "x": 50, "y": 570 } },
-	{ "id": "ai_summaries", "position": { "x": 50, "y": 1240 } },
-	{ "id": "ai_translations", "position": { "x": 50, "y": 1680 } },
-	{ "id": "translation_entries", "position": { "x": 50, "y": 2680 } },
-	{ "id": "meta_presets", "position": { "x": 50, "y": 3320 } },
-	{ "id": "options", "position": { "x": 50, "y": 3800 } },
-	{ "id": "categories", "position": { "x": 50, "y": 9800 } },
-	{ "id": "comments", "position": { "x": 930, "y": 15440 } },
-	{ "id": "draft_histories", "position": { "x": 490, "y": 4180 } },
-	{ "id": "drafts", "position": { "x": 50, "y": 4120 } },
-	{ "id": "links", "position": { "x": 50, "y": 5840 } },
-	{ "id": "notes", "position": { "x": 490, "y": 4900 } },
-	{ "id": "pages", "position": { "x": 50, "y": 6440 } },
-	{ "id": "post_related_posts", "position": { "x": 930, "y": 9800 } },
-	{ "id": "posts", "position": { "x": 490, "y": 9400 } },
-	{ "id": "projects", "position": { "x": 50, "y": 7160 } },
-	{ "id": "quotes", "position": { "x": 50, "y": 7760 } },
-	{ "id": "recent_items", "position": { "x": 50, "y": 8160 } },
-	{ "id": "snippets", "position": { "x": 50, "y": 8880 } },
-	{ "id": "topics", "position": { "x": 50, "y": 5320 } },
-	{ "id": "activities", "position": { "x": 50, "y": 10240 } },
-	{ "id": "analytics", "position": { "x": 50, "y": 10600 } },
-	{ "id": "enrichment_captures", "position": { "x": 490, "y": 11260 } },
-	{ "id": "enrichment_cache", "position": { "x": 50, "y": 11200 } },
-	{ "id": "file_references", "position": { "x": 930, "y": 16990 } },
-	{ "id": "poll_vote_options", "position": { "x": 490, "y": 11940 } },
-	{ "id": "poll_votes", "position": { "x": 50, "y": 11920 } },
-	{ "id": "search_documents", "position": { "x": 50, "y": 12320 } },
-	{ "id": "serverless_logs", "position": { "x": 50, "y": 13360 } },
-	{ "id": "serverless_storages", "position": { "x": 50, "y": 14080 } },
-	{ "id": "slug_trackers", "position": { "x": 50, "y": 14440 } },
-	{ "id": "subscriptions", "position": { "x": 50, "y": 14840 } },
-	{ "id": "webhook_events", "position": { "x": 490, "y": 15240 } },
-	{ "id": "webhooks", "position": { "x": 50, "y": 15320 } },
-	{ "id": "account", "position": { "x": 50, "y": 15800 } },
-	{ "id": "passkey", "position": { "x": 930, "y": 17950 } },
-	{ "id": "session", "position": { "x": 930, "y": 18710 } },
-	{ "id": "user", "position": { "x": 490, "y": 15900 } },
-	{ "id": "verification", "position": { "x": 50, "y": 16600 } }
+	{
+		"id": "user_profiles",
+		"position": {
+			"x": 930,
+			"y": 14400
+		}
+	},
+	{
+		"id": "ai_agent_conversations",
+		"position": {
+			"x": 50,
+			"y": 50
+		}
+	},
+	{
+		"id": "meta_presets",
+		"position": {
+			"x": 50,
+			"y": 3320
+		}
+	},
+	{
+		"id": "options",
+		"position": {
+			"x": 50,
+			"y": 3800
+		}
+	},
+	{
+		"id": "categories",
+		"position": {
+			"x": 50,
+			"y": 9800
+		}
+	},
+	{
+		"id": "comments",
+		"position": {
+			"x": 930,
+			"y": 15440
+		}
+	},
+	{
+		"id": "drafts",
+		"position": {
+			"x": 50,
+			"y": 4120
+		}
+	},
+	{
+		"id": "links",
+		"position": {
+			"x": 50,
+			"y": 5840
+		}
+	},
+	{
+		"id": "notes",
+		"position": {
+			"x": 490,
+			"y": 4900
+		}
+	},
+	{
+		"id": "pages",
+		"position": {
+			"x": 50,
+			"y": 6440
+		}
+	},
+	{
+		"id": "post_related_posts",
+		"position": {
+			"x": 930,
+			"y": 9800
+		}
+	},
+	{
+		"id": "posts",
+		"position": {
+			"x": 490,
+			"y": 9400
+		}
+	},
+	{
+		"id": "projects",
+		"position": {
+			"x": 50,
+			"y": 7160
+		}
+	},
+	{
+		"id": "quotes",
+		"position": {
+			"x": 50,
+			"y": 7760
+		}
+	},
+	{
+		"id": "recent_items",
+		"position": {
+			"x": 50,
+			"y": 8160
+		}
+	},
+	{
+		"id": "snippets",
+		"position": {
+			"x": 50,
+			"y": 8880
+		}
+	},
+	{
+		"id": "topics",
+		"position": {
+			"x": 50,
+			"y": 5320
+		}
+	},
+	{
+		"id": "activities",
+		"position": {
+			"x": 50,
+			"y": 10240
+		}
+	},
+	{
+		"id": "analytics",
+		"position": {
+			"x": 50,
+			"y": 10600
+		}
+	},
+	{
+		"id": "enrichment_captures",
+		"position": {
+			"x": 490,
+			"y": 11260
+		}
+	},
+	{
+		"id": "enrichment_cache",
+		"position": {
+			"x": 50,
+			"y": 11200
+		}
+	},
+	{
+		"id": "file_references",
+		"position": {
+			"x": 930,
+			"y": 16990
+		}
+	},
+	{
+		"id": "poll_vote_options",
+		"position": {
+			"x": 490,
+			"y": 11940
+		}
+	},
+	{
+		"id": "poll_votes",
+		"position": {
+			"x": 50,
+			"y": 11920
+		}
+	},
+	{
+		"id": "search_documents",
+		"position": {
+			"x": 50,
+			"y": 12320
+		}
+	},
+	{
+		"id": "serverless_logs",
+		"position": {
+			"x": 50,
+			"y": 13360
+		}
+	},
+	{
+		"id": "serverless_storages",
+		"position": {
+			"x": 50,
+			"y": 14080
+		}
+	},
+	{
+		"id": "slug_trackers",
+		"position": {
+			"x": 50,
+			"y": 14440
+		}
+	},
+	{
+		"id": "subscriptions",
+		"position": {
+			"x": 50,
+			"y": 14840
+		}
+	},
+	{
+		"id": "webhook_events",
+		"position": {
+			"x": 490,
+			"y": 15240
+		}
+	},
+	{
+		"id": "webhooks",
+		"position": {
+			"x": 50,
+			"y": 15320
+		}
+	},
+	{
+		"id": "account",
+		"position": {
+			"x": 50,
+			"y": 15800
+		}
+	},
+	{
+		"id": "passkey",
+		"position": {
+			"x": 930,
+			"y": 17950
+		}
+	},
+	{
+		"id": "session",
+		"position": {
+			"x": 930,
+			"y": 18710
+		}
+	},
+	{
+		"id": "user",
+		"position": {
+			"x": 490,
+			"y": 15900
+		}
+	},
+	{
+		"id": "verification",
+		"position": {
+			"x": 50,
+			"y": 16600
+		}
+	},
+	{
+		"id": "insights",
+		"position": {
+			"x": 2400,
+			"y": 50
+		}
+	},
+	{
+		"id": "invitation",
+		"position": {
+			"x": 2400,
+			"y": 610
+		}
+	},
+	{
+		"id": "member",
+		"position": {
+			"x": 2400,
+			"y": 1170
+		}
+	},
+	{
+		"id": "memos",
+		"position": {
+			"x": 2400,
+			"y": 1730
+		}
+	},
+	{
+		"id": "organization",
+		"position": {
+			"x": 2400,
+			"y": 2290
+		}
+	},
+	{
+		"id": "post_revisions",
+		"position": {
+			"x": 2400,
+			"y": 2850
+		}
+	},
+	{
+		"id": "post_tags",
+		"position": {
+			"x": 2400,
+			"y": 3410
+		}
+	},
+	{
+		"id": "summaries",
+		"position": {
+			"x": 2400,
+			"y": 3970
+		}
+	},
+	{
+		"id": "tags",
+		"position": {
+			"x": 2400,
+			"y": 4530
+		}
+	},
+	{
+		"id": "translations",
+		"position": {
+			"x": 2400,
+			"y": 5090
+		}
+	},
+	{
+		"id": "two_factor",
+		"position": {
+			"x": 2400,
+			"y": 5650
+		}
+	}
 ]

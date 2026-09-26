@@ -1,5 +1,5 @@
 {
-  "id": "aa4e164f-f4b5-4fd2-b563-5aaa2a15cc9b",
+  "id": "90a3dd8e-f311-4697-8390-5475ddbbdfcb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -509,6 +509,21 @@
           ],
           "isUnique": true,
           "where": "\"translations\".\"status\" <> 'discarded'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "translations_source_idx": {
+          "name": "translations_source_idx",
+          "columns": [
+            {
+              "expression": "source_post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1360,6 +1375,38 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "drafts_author_idx": {
+          "name": "drafts_author_idx",
+          "columns": [
+            {
+              "expression": "author",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"drafts\".\"author\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "drafts_category_idx": {
+          "name": "drafts_category_idx",
+          "columns": [
+            {
+              "expression": "category_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"drafts\".\"category_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2114,6 +2161,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "post_revisions_author_idx": {
+          "name": "post_revisions_author_idx",
+          "columns": [
+            {
+              "expression": "author",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"post_revisions\".\"author\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2458,6 +2521,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "posts_translated_from_idx": {
+          "name": "posts_translated_from_idx",
+          "columns": [
+            {
+              "expression": "translated_from_post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"posts\".\"translated_from_post_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}

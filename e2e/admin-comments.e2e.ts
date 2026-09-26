@@ -30,11 +30,15 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(() => {
 	psql(`delete from comments where id in ('${ACTIVE}', '${EXTRA}')`);
+	// Clean by natural keys as well: posts now carry unique(lang, slug), so a
+	// leftover row with the same slug would collide on insert (P1.1 review).
+	psql(`delete from posts where slug = 'e2e-review-post'`);
+	psql(`delete from categories where slug = 'e2e-review-cat'`);
 	psql(
-		`insert into categories (id, name, slug) values ('${CATEGORY}', 'E2E', 'e2e-review-cat') on conflict (id) do nothing`
+		`insert into categories (id, name, slug) values ('${CATEGORY}', 'E2E', 'e2e-review-cat') on conflict (slug) do nothing`
 	);
 	psql(
-		`insert into posts (id, title, slug, content_format, category_id) values ('${POST}', 'E2E post', 'e2e-review-post', 'markdown', '${CATEGORY}') on conflict (id) do nothing`
+		`insert into posts (id, title, slug, content_format, category_id, status) values ('${POST}', 'E2E post', 'e2e-review-post', 'markdown', '${CATEGORY}', 'published') on conflict (id) do nothing`
 	);
 	psql(
 		`insert into comments (id, post_id, author, text, state) values ('${ACTIVE}', '${POST}', 'E2E', 'pending item from e2e', 'pending'), ('${EXTRA}', '${POST}', 'E2E', 'second pending item', 'pending')`
