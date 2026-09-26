@@ -2,6 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { categories, posts } from '$lib/server/db/content';
+import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
 
@@ -62,7 +63,26 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const id = formData.get('id')?.toString();
 		if (!id || !isUuid(id)) return fail(400, { error: '缺少分类 ID' });
-		await db.delete(categories).where(eq(categories.id, id));
+
+		// P2 (§9.8): deleting a category that still owns posts answers 409 with
+		// a readable message instead of hitting the RESTRICT FK as a 500.
+		const [total] = await db
+			.select({ count: sql<number>`count(*)`.mapWith(Number) })
+			.from(posts)
+			.where(eq(posts.categoryId, id));
+		if ((total?.count ?? 0) > 0) {
+			return fail(409, { error: `该分类下仍有 ${total.count} 篇文章，无法删除` });
+		}
+
+		try {
+			await db.delete(categories).where(eq(categories.id, id));
+		} catch (caught) {
+			// Backstop for the count-then-delete race: the FK stays the arbiter.
+			if (pgErrorCode(caught) === '23503') {
+				return fail(409, { error: '该分类下仍有文章，无法删除' });
+			}
+			throw caught;
+		}
 		return { success: true };
 	}
 };

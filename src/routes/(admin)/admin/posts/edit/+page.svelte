@@ -1,15 +1,19 @@
 <script lang="ts">
-	import { tick } from 'svelte';
-	import { enhance } from '$app/forms';
-	import { replaceState } from '$app/navigation';
+	import { tick, untrack } from 'svelte';
+	import { enhance, deserialize } from '$app/forms';
+	import { invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
+	import type { ActionResult } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
 	import * as Select from '$lib/components/ui/select';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Button } from '$lib/components/ui/button';
+	import { Badge } from '$lib/components/ui/badge';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import * as Alert from '$lib/components/ui/alert';
 	import { MarkdownEditor } from '$lib/components/markdown';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import { normalizeSlug } from '$lib/utils/slug';
@@ -20,9 +24,17 @@
 	import IconFileDescription from '@tabler/icons-svelte-runes/icons/file-description';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconX from '@tabler/icons-svelte-runes/icons/x';
+	import IconSend from '@tabler/icons-svelte-runes/icons/send';
+	import IconLanguage from '@tabler/icons-svelte-runes/icons/language';
+	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
+	import IconCloudUpload from '@tabler/icons-svelte-runes/icons/cloud-upload';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
+	const AUTOSAVE_DEBOUNCE_MS = 2500;
+	const THROTTLE_RETRY_MS = 12_000;
+
+	// ── Editor state ─────────────────────────────────────────────────────
 	let title = $state('');
 	let slug = $state('');
 	let slugTouched = $state(false);
@@ -30,65 +42,261 @@
 	let summary = $state('');
 	let tags = $state('');
 	let contentMarkdown = $state('');
-	let isPublished = $state(true);
+	let lang = $state<string>(untrack(() => data.defaultLang));
+
+	let postId = $state<string | null>(null);
+	let draftId = $state<string | null>(null);
+	let draftVersion = $state<number | null>(null);
+
+	// `savedSnapshot` mirrors the last payload the server acknowledged; the
+	// dirty test and the publish flush both compare against it.
+	let savedSnapshot = $state('');
+	let lastSeen = $state('');
+	let lastSavedAt = $state<Date | null>(null);
+	type SaveState =
+		'idle' | 'saved' | 'saving' | 'dirty' | 'throttled' | 'conflict' | 'error' | 'needs-category';
+	let saveState = $state<SaveState>('idle');
+	let saveError = $state<string | null>(null);
+	let conflictMessage = $state<string | null>(null);
+	let inFlight = false;
+	let pendingResave = false;
+	let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+
 	let slugDialogOpen = $state(false);
 	let settingsOpen = $state(false);
-	let justSaved = $state(false);
+	let translationOpen = $state(false);
+	let translationLang = $state('');
+	let publishing = $state(false);
+	let publishErrors = $state<Record<string, string>>({});
+	let flash = $state<string | null>(null);
 
-	function applyPost(p: typeof data.post) {
-		title = p?.title ?? '';
-		slug = p?.slug ?? '';
-		slugTouched = !!p?.slug;
-		categoryId = p?.categoryId ?? '';
-		summary = p?.summary ?? '';
-		tags = p?.tags ?? '';
-		contentMarkdown = p?.content ?? '';
-		isPublished = p?.isPublished ?? true;
+	/**
+	 * Shared handler for the publish/discard/createTranslation forms: on
+	 * failure the messages surface in the editor banners; on success/redirect
+	 * the default update() runs (so navigations and redirects land).
+	 */
+	type FormResultInput = {
+		result: ActionResult;
+		update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+	};
+	const formResultHandler =
+		() =>
+		async ({ result, update }: FormResultInput) => {
+			if (result.type === 'failure') {
+				const d = (result.data ?? {}) as { message?: string; errors?: Record<string, string> };
+				publishing = false;
+				publishErrors = { ...(d.errors ?? {}) };
+				if (d.message) publishErrors = { ...publishErrors, form: d.message };
+				// A publish-side base conflict also freezes publishes until reload.
+				if (result.status === 409) conflictMessage = d.message ?? conflictMessage;
+			} else {
+				await update();
+			}
+		};
+
+	function currentPayload(): string {
+		return JSON.stringify([title, slug, categoryId, summary, tags, contentMarkdown]);
 	}
 
-	function currentFields() {
-		return { title, slug, categoryId, summary, tags, content: contentMarkdown, isPublished };
+	function isDirty(): boolean {
+		return currentPayload() !== savedSnapshot;
 	}
 
-	// Initialize once from load data so the editor mounts with content.
-	// Later data changes flow through the postKey effect below.
-	// svelte-ignore state_referenced_locally
-	applyPost(data.post);
-	let baseline = $state(JSON.stringify(currentFields()));
+	/** Narrowing-proof state readers ($state writes elsewhere confuse tsc). */
+	function isSettledState(state: SaveState): boolean {
+		return state === 'saved' || state === 'idle';
+	}
+	function isBlockingConflict(): boolean {
+		return saveState === 'conflict';
+	}
 
-	const postKey = $derived(data.post ? `${data.post.id}@${data.post.updatedAt ?? ''}` : 'new');
-	// svelte-ignore state_referenced_locally
-	let loadedKey = $state(postKey);
+	function applyAll() {
+		const draft = data.draft;
+		const post = data.post;
+		title = draft?.title ?? post?.title ?? '';
+		const loadedSlug = draft ? (draft.slug ?? '') : post && !post.placeholder ? post.slug : '';
+		slug = loadedSlug;
+		slugTouched = !!loadedSlug;
+		categoryId = draft?.categoryId ?? post?.categoryId ?? '';
+		summary = draft?.summary ?? post?.summary ?? '';
+		tags = draft?.tags ?? post?.tags ?? '';
+		contentMarkdown = draft?.content ?? post?.content ?? '';
+		lang = post?.lang ?? data.defaultLang;
+		postId = post?.id ?? null;
+		draftId = draft?.id ?? null;
+		draftVersion = draft?.version ?? null;
+		saveState = 'idle';
+		saveError = null;
+		conflictMessage = null;
+		publishErrors = {};
+		lastSavedAt = null;
+		const snapshot = currentPayload();
+		savedSnapshot = snapshot;
+		lastSeen = snapshot;
+	}
 
-	const dirty = $derived(JSON.stringify(currentFields()) !== baseline);
+	// Initialize from the load data (intentional first apply).
+	applyAll();
 
-	// Repopulate fields when a different post version loads (e.g. after save).
+	const dataKey = $derived(
+		`${data.post?.id ?? 'new'}@${data.post?.version ?? 0}@${data.draft?.id ?? ''}@${data.draft?.version ?? 0}`
+	);
+	let loadedKey = $state(untrack(() => dataKey));
 	$effect(() => {
-		if (loadedKey === postKey) return;
-		loadedKey = postKey;
-		if (!data.post) return;
-		applyPost(data.post);
-		baseline = JSON.stringify(currentFields());
+		if (dataKey === loadedKey) return;
+		loadedKey = dataKey;
+		applyAll();
 	});
 
-	// Show a transient saved notice when redirected back with ?saved=1.
+	// ── Dirty tracking + autosave scheduling ─────────────────────────────
 	$effect(() => {
-		if (page.url.searchParams.get('saved') !== '1') return;
-		justSaved = true;
-		setTimeout(() => (justSaved = false), 3000);
-		const url = new URL(page.url);
-		url.searchParams.delete('saved');
-		replaceState(url.pathname + url.search, {});
+		const current = currentPayload();
+		if (current === lastSeen) return;
+		lastSeen = current;
+		onFieldsChanged();
 	});
+
+	function onFieldsChanged() {
+		// Frozen after a conflict until the editor reloads the server state.
+		if (saveState === 'conflict') return;
+		if (publishErrors && Object.keys(publishErrors).length > 0) publishErrors = {};
+		if (!postId && !draftId && !categoryId) {
+			saveState = 'needs-category';
+			return;
+		}
+		saveState = 'dirty';
+		scheduleAutosave();
+	}
+
+	function scheduleAutosave() {
+		if (autosaveTimer) clearTimeout(autosaveTimer);
+		autosaveTimer = setTimeout(() => {
+			autosaveTimer = null;
+			if (saveState === 'conflict') return;
+			void runSave(true);
+		}, AUTOSAVE_DEBOUNCE_MS);
+	}
+
+	async function runSave(autosave: boolean): Promise<boolean> {
+		if (inFlight) {
+			pendingResave = true;
+			return false;
+		}
+		inFlight = true;
+		saveState = 'saving';
+		const snapshotAtSubmit = currentPayload();
+		try {
+			const fd = new FormData();
+			fd.set('autosave', autosave ? '1' : '0');
+			fd.set('title', title);
+			fd.set('slug', slug);
+			fd.set('categoryId', categoryId);
+			fd.set('summary', summary);
+			fd.set('tags', tags);
+			fd.set('content', contentMarkdown);
+			if (postId) fd.set('id', postId);
+			if (draftId) fd.set('draftId', draftId);
+			if (draftVersion != null) fd.set('draftVersion', String(draftVersion));
+			if (!postId) fd.set('lang', lang);
+
+			const response = await fetch('?/save', {
+				method: 'POST',
+				body: fd,
+				headers: { 'x-sveltekit-action': 'true' }
+			});
+			const result = deserialize(await response.text());
+			if (result.type === 'success') {
+				const d = result.data as {
+					saved: boolean;
+					reason?: 'unchanged' | 'throttled';
+					draftId: string;
+					draftVersion: number;
+					postId: string | null;
+					updatedAt?: Date | string | null;
+				};
+				draftId = d.draftId;
+				draftVersion = d.draftVersion;
+				if (d.postId && d.postId !== postId) {
+					postId = d.postId;
+					// First save of a new article: anchor the URL to the row.
+					replaceState(`/admin/posts/edit?id=${d.postId}${page.url.search}`, {});
+				}
+				if (d.saved || d.reason === 'unchanged') {
+					savedSnapshot = snapshotAtSubmit;
+					lastSavedAt = new Date();
+					saveState = currentPayload() === savedSnapshot ? 'saved' : 'dirty';
+				} else if (d.reason === 'throttled') {
+					saveState = 'throttled';
+					scheduleRetry();
+				}
+			} else if (result.type === 'failure') {
+				const d = (result.data ?? {}) as { message?: string; needsCategory?: boolean };
+				if (result.status === 409) {
+					saveState = 'conflict';
+					conflictMessage = d.message ?? '内容已在其他窗口更新';
+				} else if (result.status === 400 && d.needsCategory) {
+					saveState = 'needs-category';
+				} else {
+					saveState = 'error';
+					saveError = d.message ?? '保存失败';
+				}
+			} else {
+				saveState = 'error';
+				saveError = '网络异常，稍后将重试';
+				scheduleRetry();
+			}
+		} catch {
+			saveState = 'error';
+			saveError = '网络异常，稍后将重试';
+			scheduleRetry();
+		} finally {
+			inFlight = false;
+			if (pendingResave) {
+				pendingResave = false;
+				if (saveState !== 'conflict') scheduleAutosave();
+			} else if (saveState === 'saved' && currentPayload() !== savedSnapshot) {
+				scheduleAutosave();
+			}
+		}
+		return isSettledState(saveState);
+	}
+
+	function scheduleRetry() {
+		if (autosaveTimer) clearTimeout(autosaveTimer);
+		autosaveTimer = setTimeout(() => {
+			autosaveTimer = null;
+			if (saveState === 'conflict') return;
+			void runSave(true);
+		}, THROTTLE_RETRY_MS);
+	}
+
+	async function reloadFromServer() {
+		await invalidateAll();
+		applyAll();
+	}
+
+	async function onPublish() {
+		if (saveState === 'conflict' || publishing) return;
+		publishing = true;
+		try {
+			if (!draftId || isDirty()) {
+				const ok = await runSave(false);
+				if (!ok && !draftId) return; // the save itself reported why
+				if (isBlockingConflict()) return;
+			}
+			await tick();
+			const publishForm = document.getElementById('publish-form');
+			if (publishForm instanceof HTMLFormElement) publishForm.requestSubmit();
+		} finally {
+			publishing = false;
+		}
+	}
 
 	// Slugs accept lowercase letters, digits and hyphens only.
 	function onTitleInput(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		title = input.value;
-		// Keep a manual or loaded slug untouched.
-		if (!slugTouched) {
-			slug = normalizeSlug(title.replace(/[^a-z0-9]+/g, '-'));
-		}
+		if (!slugTouched) slug = normalizeSlug(title.replace(/[^a-z0-9]+/g, '-'));
 	}
 
 	function onSlugInput(e: Event) {
@@ -97,61 +305,169 @@
 		slug = normalizeSlug(input.value);
 	}
 
+	// Transient banners for ?published=1 / ?discarded=1 / ?translation=1.
+	$effect(() => {
+		const params = page.url.searchParams;
+		let message: string | null = null;
+		if (params.get('published') === '1') message = '已发布';
+		else if (params.get('discarded') === '1') message = '草稿已丢弃';
+		else if (params.get('translation') === '1') message = '翻译草稿已创建';
+		if (!message) return;
+		flash = message;
+		const timer = setTimeout(() => (flash = null), 3500);
+		const url = new URL(page.url);
+		for (const key of ['published', 'discarded', 'translation']) url.searchParams.delete(key);
+		replaceState(url.pathname + url.search, {});
+		return () => clearTimeout(timer);
+	});
+
 	const formErrorMessages = $derived(
 		form?.errors ? (Object.values(form.errors).filter(Boolean) as string[]) : []
 	);
+	const publishErrorMessages = $derived(Object.values(publishErrors).filter(Boolean));
+	const activeErrors = $derived(
+		publishErrorMessages.length > 0 ? publishErrorMessages : formErrorMessages
+	);
+
+	const saveLabel = $derived.by(() => {
+		switch (saveState) {
+			case 'saving':
+				return '保存中…';
+			case 'saved':
+				return lastSavedAt
+					? `已保存 ${formatDateTime(lastSavedAt, { timeStyle: 'medium' })}`
+					: '已保存';
+			case 'dirty':
+				return '未保存的修改';
+			case 'throttled':
+				return '自动保存节流中，稍后重试…';
+			case 'needs-category':
+				return '选定分类后开始自动保存';
+			case 'conflict':
+				return '冲突：服务端已有更新';
+			case 'error':
+				return saveError ?? '保存失败';
+			default:
+				return null;
+		}
+	});
+
+	const statusText = $derived.by(() => {
+		if (!data.post) return '新文章';
+		if (data.source) {
+			const pending = data.post.status === 'draft' && data.post.version === 0;
+			return `译文${pending ? '（待翻译）' : ''} · 源《${data.source.title}》`;
+		}
+		if (data.post.status === 'published') return '已发布';
+		if (data.post.status === 'scheduled') return '定时发布';
+		if (data.post.status === 'trash') return '回收站';
+		return '草稿';
+	});
+
+	const occupiedLangs = $derived(
+		new Set([data.post?.lang ?? '', ...(data.siblings ?? []).map((s) => s.lang)])
+	);
+
+	let beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
+	$effect(() => {
+		beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+			if (isDirty() && saveState !== 'conflict') {
+				e.preventDefault();
+				e.returnValue = '';
+			}
+		};
+		window.addEventListener('beforeunload', beforeUnloadHandler);
+		return () => {
+			if (beforeUnloadHandler) window.removeEventListener('beforeunload', beforeUnloadHandler);
+			if (autosaveTimer) clearTimeout(autosaveTimer);
+		};
+	});
 </script>
 
 <svelte:head>
 	<title>{title ? `${title} - Lair Admin` : 'New Post - Lair Admin'}</title>
 </svelte:head>
 
-<svelte:window
-	onbeforeunload={(e) => {
-		if (dirty) {
-			e.preventDefault();
-			e.returnValue = '';
-		}
-	}}
-/>
+<div class="flex h-full min-h-0 min-w-0 flex-col">
+	<!-- Publish/discard/translation live in their own forms; the visible
+	     controls trigger them (publish flushes the draft first). -->
+	<form
+		id="publish-form"
+		method="POST"
+		action="?/publish"
+		use:enhance={formResultHandler}
+		class="hidden"
+	>
+		<input type="hidden" name="draftId" value={draftId ?? ''} />
+	</form>
+	<form
+		id="discard-form"
+		method="POST"
+		action="?/discard"
+		use:enhance={formResultHandler}
+		class="hidden"
+	>
+		<input type="hidden" name="draftId" value={draftId ?? ''} />
+	</form>
+	<form
+		id="translation-form"
+		method="POST"
+		action="?/createTranslation"
+		use:enhance={formResultHandler}
+		class="hidden"
+	>
+		<input type="hidden" name="id" value={postId ?? ''} />
+		<input type="hidden" name="lang" value={translationLang} />
+	</form>
 
-<form method="POST" use:enhance id="post-form" class="flex h-full min-h-0 min-w-0 flex-col">
-	{#if data.post}
-		<input type="hidden" name="id" value={data.post.id} />
-	{/if}
 	<!-- Main content area -->
 	<main class="flex min-h-full min-w-0 flex-col bg-background">
 		<!-- Header area: title + slug + separator -->
 		<div class="mx-auto w-full max-w-5xl shrink-0 px-3 pt-8">
 			<!-- Status bar -->
 			<div
-				class="group mb-3 flex min-h-7 items-center justify-between opacity-60 transition-opacity duration-200 hover:opacity-100"
+				class="group mb-3 flex min-h-7 items-center justify-between gap-3 opacity-60 transition-opacity duration-200 hover:opacity-100"
 			>
 				<div class="flex min-w-0 items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
 					<span
 						aria-hidden="true"
-						class="inline-block size-1.5 shrink-0 rounded-full bg-emerald-500"
+						class="inline-block size-1.5 shrink-0 rounded-full {saveState === 'conflict'
+							? 'bg-destructive'
+							: 'bg-emerald-500'}"
 					></span>
-					{#if data.post}
-						<span class="truncate">
-							{data.post.isPublished ? '已发布' : '草稿'} · 修改于
+					<span class="truncate">
+						{statusText}
+						{#if data.post}
+							· 修改于
 							{formatDateTime(new Date(data.post.updatedAt ?? data.post.createdAt), {
 								dateStyle: 'short',
 								timeStyle: 'short'
 							})}
-						</span>
-					{:else}
-						<span class="truncate">草稿 · 新文章</span>
+						{/if}
+					</span>
+					{#if data.post && !data.post.placeholder && data.post.status !== 'draft'}
+						{#if data.draft}
+							<Badge variant="secondary" class="shrink-0">有未发布改动</Badge>
+						{/if}
 					{/if}
-					{#if justSaved}
+					{#if flash}
 						<span
 							class="shrink-0 rounded-sm bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400"
 						>
-							已保存
+							{flash}
 						</span>
 					{/if}
 				</div>
-				<div class="flex shrink-0 items-center gap-1">
+				<div class="flex shrink-0 items-center gap-2">
+					{#if saveLabel}
+						<span
+							class="truncate text-xs {saveState === 'conflict'
+								? 'text-destructive'
+								: 'text-neutral-500 dark:text-neutral-400'}"
+						>
+							{saveLabel}
+						</span>
+					{/if}
 					<!-- Settings button -->
 					<button
 						type="button"
@@ -162,23 +478,60 @@
 					>
 						<IconSettings class="size-3.5" />
 					</button>
-
-					<!-- Save button; publish state is set in the settings sheet -->
-					<Button type="submit" size="sm" class="h-7 gap-1 px-2.5 text-xs">
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						class="h-7 gap-1 px-2.5 text-xs"
+						onclick={() => void runSave(false)}
+						disabled={saveState === 'saving' || saveState === 'conflict'}
+					>
 						<IconDeviceFloppy class="size-3" />
-						保存
+						保存草稿
+					</Button>
+					<Button
+						type="button"
+						size="sm"
+						class="h-7 gap-1 px-2.5 text-xs"
+						onclick={() => void onPublish()}
+						disabled={publishing || saveState === 'conflict'}
+					>
+						<IconCloudUpload class="size-3" />
+						发布
 					</Button>
 				</div>
 			</div>
 
-			<!-- Form-level error banner -->
-			{#if formErrorMessages.length > 0}
+			<!-- Conflict banner -->
+			{#if saveState === 'conflict'}
+				<Alert.Root variant="destructive" class="mb-3">
+					<Alert.Description>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<span
+								>{conflictMessage ??
+									'内容已在其他窗口更新'}——编辑已暂停，请先载入服务端最新内容。</span
+							>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onclick={() => void reloadFromServer()}
+							>
+								载入服务端最新
+							</Button>
+						</div>
+					</Alert.Description>
+				</Alert.Root>
+			{/if}
+
+			<!-- Validation / save error banner -->
+			{#if activeErrors.length > 0}
 				<div
 					role="alert"
 					class="mb-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
 				>
-					<span class="shrink-0 font-medium">保存失败:</span>
-					<span class="min-w-0">{formErrorMessages.join('；')}</span>
+					<span class="shrink-0 font-medium">无法完成:</span>
+					<span class="min-w-0">{activeErrors.join('；')}</span>
 				</div>
 			{/if}
 
@@ -188,7 +541,6 @@
 					name="title"
 					class="w-full border-0 bg-transparent px-0 py-0 text-3xl font-semibold tracking-tight text-neutral-950 outline-none placeholder:font-medium placeholder:text-neutral-300 dark:text-neutral-50 dark:placeholder:text-neutral-700"
 					placeholder="输入标题..."
-					required
 					bind:value={title}
 					oninput={onTitleInput}
 				/>
@@ -204,7 +556,7 @@
 						<IconPencil class="size-3 shrink-0" />
 					</button>
 					{#if title && !slug}
-						<span class="text-xs text-destructive">请手动填写英文 slug</span>
+						<span class="text-xs text-destructive">发布前需要填写英文 slug</span>
 					{/if}
 				</div>
 			</div>
@@ -215,12 +567,9 @@
 		<!-- Editor area -->
 		<div class="flex min-h-0 flex-1 flex-col">
 			<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col px-3">
-				{#key postKey}
-					<!-- Remount reads server data directly: template updates run before
-						the postKey effect, so contentMarkdown still holds the previous
-						post's content at remount time. -->
+				{#key loadedKey}
 					<MarkdownEditor
-						initialMarkdown={data.post?.content ?? contentMarkdown}
+						initialMarkdown={contentMarkdown}
 						placeholder="输入正文..."
 						stickyToolbar={true}
 						borderless={true}
@@ -233,15 +582,7 @@
 			</div>
 		</div>
 	</main>
-
-	<!-- Hidden fields -->
-	<input type="hidden" name="content" value={contentMarkdown} />
-	<input type="hidden" name="slug" value={slug} />
-	<input type="hidden" name="categoryId" value={categoryId} />
-	<input type="hidden" name="summary" value={summary} />
-	<input type="hidden" name="tags" value={tags} />
-	<input type="hidden" name="isPublished" value={String(isPublished)} />
-</form>
+</div>
 
 <!-- Slug Dialog -->
 <Dialog.Root open={slugDialogOpen} onOpenChange={(v) => (slugDialogOpen = v)}>
@@ -262,12 +603,7 @@
 				/>
 				<p class="mt-1.5 text-xs text-muted-foreground">仅限小写英文、数字和连字符</p>
 				{#if slug}
-					<p class="mt-1.5 font-mono text-xs text-muted-foreground">
-						预览: /posts/{slug}
-					</p>
-				{/if}
-				{#if form?.errors?.slug}
-					<p class="mt-1 text-sm text-destructive">{form.errors.slug}</p>
+					<p class="mt-1.5 font-mono text-xs text-muted-foreground">预览: /posts/{slug}</p>
 				{/if}
 			</div>
 			<Dialog.Footer>
@@ -293,7 +629,32 @@
 					<span class="sr-only">关闭</span>
 				</Sheet.Close>
 			</Sheet.Header>
-			<div class="flex flex-col gap-5 px-6 py-4">
+			<div class="flex flex-col gap-5 overflow-y-auto px-6 py-4">
+				<!-- Language -->
+				<div class="flex flex-col gap-1.5">
+					<label for="settings-lang" class="flex items-center gap-1.5 text-sm font-medium">
+						<IconLanguage class="size-4 text-muted-foreground" />
+						语言
+					</label>
+					{#if postId}
+						<div class="flex items-center gap-2 text-sm">
+							<Badge variant="outline">{lang}</Badge>
+							<span class="text-xs text-muted-foreground">创建后不可更改</span>
+						</div>
+					{:else}
+						<Select.Root type="single" bind:value={lang as never}>
+							<Select.Trigger id="settings-lang" class="w-full">{lang}</Select.Trigger>
+							<Select.Portal>
+								<Select.Content class="z-[60]">
+									{#each data.langs as l (l)}
+										<Select.Item value={l}>{l}</Select.Item>
+									{/each}
+								</Select.Content>
+							</Select.Portal>
+						</Select.Root>
+					{/if}
+				</div>
+
 				<!-- Category -->
 				<div class="flex flex-col gap-1.5">
 					<label for="settings-category" class="flex items-center gap-1.5 text-sm font-medium">
@@ -317,8 +678,11 @@
 							</Select.Content>
 						</Select.Portal>
 					</Select.Root>
-					{#if form?.errors?.categoryId}
-						<p class="text-sm text-destructive">{form.errors.categoryId}</p>
+					{#if !postId && !categoryId}
+						<p class="text-xs text-muted-foreground">选定分类后即可自动保存。</p>
+					{/if}
+					{#if publishErrors.categoryId}
+						<p class="text-sm text-destructive">{publishErrors.categoryId}</p>
 					{/if}
 				</div>
 
@@ -329,7 +693,7 @@
 						标签
 					</label>
 					<Input id="settings-tags" placeholder="svelte, typescript, tutorial" bind:value={tags} />
-					<p class="text-xs text-muted-foreground">逗号分隔。</p>
+					<p class="text-xs text-muted-foreground">逗号分隔；发布时同步到标签库。</p>
 				</div>
 
 				<!-- Summary -->
@@ -340,49 +704,128 @@
 					</label>
 					<Textarea
 						id="settings-summary"
-						placeholder="文章简短描述..."
+						placeholder="文章简短描述...（可留空；AI 摘要采纳随 P2/P3 钩子）"
 						bind:value={summary}
 						rows={4}
 					/>
 				</div>
 
-				<!-- Publish toggle -->
-				<div class="flex items-center justify-between">
-					<span class="text-sm font-medium" id="publish-status-label">发布状态</span>
-					<button
-						type="button"
-						role="switch"
-						aria-checked={isPublished}
-						aria-labelledby="publish-status-label"
-						class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors {isPublished
-							? 'bg-primary'
-							: 'bg-muted'}"
-						onclick={() => (isPublished = !isPublished)}
-					>
-						<span
-							class="inline-block size-4 rounded-full bg-white shadow-sm transition-transform {isPublished
-								? 'translate-x-4.5'
-								: 'translate-x-0.5'}"
-						></span>
-					</button>
+				<!-- Translation family -->
+				<div class="flex flex-col gap-2">
+					<div class="flex items-center gap-1.5 text-sm font-medium">
+						<IconLanguage class="size-4 text-muted-foreground" />
+						多语言版本
+					</div>
+					{#if data.siblings.length > 0}
+						<div class="flex flex-wrap gap-1.5">
+							{#each data.siblings as s (s.id)}
+								<Badge variant={s.status === 'published' ? 'default' : 'outline'}>
+									{s.lang}·{s.status === 'published' ? '已发布' : '草稿'}
+								</Badge>
+							{/each}
+						</div>
+					{:else}
+						<p class="text-xs text-muted-foreground">暂无其他语言版本。</p>
+					{/if}
+					{#if postId}
+						<Button
+							type="button"
+							variant="outline"
+							class="w-full"
+							onclick={() => {
+								translationLang = '';
+								translationOpen = true;
+							}}
+						>
+							<IconLanguage class="size-4" />
+							创建翻译
+						</Button>
+					{/if}
 				</div>
 
-				<!-- Save as draft: forces isPublished off before submitting the form -->
-				<Button
-					type="button"
-					variant="outline"
-					class="w-full"
-					onclick={async () => {
-						isPublished = false;
-						await tick();
-						const formEl = document.getElementById('post-form');
-						if (formEl instanceof HTMLFormElement) formEl.requestSubmit();
-					}}
-				>
-					<IconDeviceFloppy class="size-4" />
-					保存为草稿
-				</Button>
+				<!-- Danger zone -->
+				{#if draftId}
+					<AlertDialog.Root>
+						<AlertDialog.Trigger>
+							{#snippet child({ props })}
+								<Button
+									variant="outline"
+									class="w-full border-destructive/30 text-destructive"
+									{...props}
+								>
+									<IconTrash class="size-4" />
+									丢弃草稿
+								</Button>
+							{/snippet}
+						</AlertDialog.Trigger>
+						<AlertDialog.Content>
+							<AlertDialog.Header>
+								<AlertDialog.Title>丢弃未发布的改动？</AlertDialog.Title>
+								<AlertDialog.Description>
+									{draftId
+										? '将删除当前草稿。若是从未发布过的新文章，连占位记录一并删除。此操作不可撤销。'
+										: ''}
+								</AlertDialog.Description>
+							</AlertDialog.Header>
+							<AlertDialog.Footer>
+								<AlertDialog.Cancel>取消</AlertDialog.Cancel>
+								<AlertDialog.Action
+									onclick={() => {
+										const f = document.getElementById('discard-form');
+										if (f instanceof HTMLFormElement) f.requestSubmit();
+									}}
+								>
+									丢弃
+								</AlertDialog.Action>
+							</AlertDialog.Footer>
+						</AlertDialog.Content>
+					</AlertDialog.Root>
+				{/if}
 			</div>
 		</Sheet.Content>
 	</Sheet.Portal>
 </Sheet.Root>
+
+<!-- Translation dialog -->
+<Dialog.Root open={translationOpen} onOpenChange={(v) => (translationOpen = v)}>
+	<Dialog.Portal>
+		<Dialog.Overlay />
+		<Dialog.Content class="sm:max-w-md">
+			<Dialog.Header>
+				<Dialog.Title>创建翻译</Dialog.Title>
+				<Dialog.Description>
+					复制当前文章的标题/正文/摘要为新草稿（同组、slug 留空），再逐段翻译并发布。
+				</Dialog.Description>
+			</Dialog.Header>
+			<div class="flex flex-col gap-3 px-6 pb-2">
+				<Select.Root type="single" bind:value={translationLang as never}>
+					<Select.Trigger class="w-full">
+						{translationLang || '选择目标语言'}
+					</Select.Trigger>
+					<Select.Portal>
+						<Select.Content class="z-[60]">
+							{#each data.langs as l (l)}
+								<Select.Item value={l} disabled={occupiedLangs.has(l)}>
+									{l}{occupiedLangs.has(l) ? '（已存在）' : ''}
+								</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Portal>
+				</Select.Root>
+			</div>
+			<Dialog.Footer>
+				<Dialog.Close>取消</Dialog.Close>
+				<Button
+					disabled={!translationLang || occupiedLangs.has(translationLang)}
+					onclick={() => {
+						const f = document.getElementById('translation-form');
+						if (f instanceof HTMLFormElement) f.requestSubmit();
+					}}
+				>
+					<IconSend class="size-4" />
+					创建
+				</Button>
+			</Dialog.Footer>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

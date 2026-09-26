@@ -13,7 +13,7 @@ export interface PostFormInput {
 
 export type PostFormErrors = Partial<Record<keyof PostFormInput, string>>;
 
-const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** Validate a post form; returns field-keyed errors, empty means valid. */
 export function validatePostForm(input: PostFormInput): PostFormErrors {
