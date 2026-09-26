@@ -14,6 +14,13 @@ import {
 } from 'drizzle-orm/pg-core';
 import { categories } from './category.schema';
 
+/** AI-line meta contract (AI-1, ledger §14.3): per-post translation / AI settings. */
+export interface PostsMeta {
+	translate?: { mode?: 'auto' | 'review' | 'manual'; targets?: string[] };
+	aiGen?: { level: 'none' | 'assist' | 'generated' };
+	[key: string]: unknown;
+}
+
 /**
  * Posts are multi-language (ledger §9.16): `lang` + `translation_group` +
  * `unique(lang, slug)` + `unique(translation_group, lang)`; the default
@@ -35,7 +42,7 @@ export const posts = pgTable(
 		contentFormat: text('content_format').notNull().default('markdown'),
 		summary: text('summary'),
 		images: jsonb('images').$type<string[] | null>(),
-		meta: jsonb('meta').$type<Record<string, unknown> | null>(),
+		meta: jsonb('meta').$type<PostsMeta | null>(),
 		status: text('status').notNull().default('draft'),
 		publishedAt: timestamp('published_at', { withTimezone: true }),
 		version: integer('version').notNull().default(0),
@@ -88,6 +95,12 @@ export const posts = pgTable(
 		// §11-A2: a SET NULL FK needs a leading (partial) index (P1.1 review).
 		index('posts_translated_from_idx')
 			.on(table.translatedFromPostId)
-			.where(sql`${table.translatedFromPostId} is not null`)
+			.where(sql`${table.translatedFromPostId} is not null`),
+		// AI-1 §14.4 R7: exactly one source row per translation group
+		// (fail-closed DB backstop); "at least one source" and "no chained
+		// translations" stay application-level checks + test nails.
+		uniqueIndex('posts_group_source_uniq')
+			.on(table.translationGroup)
+			.where(sql`${table.translatedFromPostId} is null`)
 	]
 );

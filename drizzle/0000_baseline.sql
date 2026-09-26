@@ -20,55 +20,60 @@ CREATE TABLE "user_profiles" (
 --> statement-breakpoint
 CREATE TABLE "ai_agent_conversations" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
-	"session_id" text NOT NULL,
-	"model" text,
-	"provider_id" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
+	"user_id" text,
 	"title" text,
-	"messages" jsonb DEFAULT '[]'::jsonb NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone
+	"summary" text,
+	"archived_at" timestamp with time zone
 );
 --> statement-breakpoint
-CREATE TABLE "insights" (
-	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"ref_id" uuid NOT NULL,
-	"lang" text NOT NULL,
-	"hash" text NOT NULL,
-	"content" text NOT NULL,
-	"is_translation" boolean DEFAULT false NOT NULL,
-	"source_insights_id" uuid,
-	"source_lang" text,
-	"model_info" jsonb
-);
---> statement-breakpoint
-CREATE TABLE "summaries" (
-	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"hash" text NOT NULL,
-	"summary" text NOT NULL,
-	"ref_id" uuid NOT NULL,
-	"lang" text,
-	CONSTRAINT "summaries_ref_lang_uniq" UNIQUE NULLS NOT DISTINCT("ref_id","lang")
-);
---> statement-breakpoint
-CREATE TABLE "translations" (
+CREATE TABLE "ai_agent_memories" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone,
-	"source_post_id" uuid NOT NULL,
-	"target_lang" text NOT NULL,
-	"title" text NOT NULL,
-	"content" text,
-	"summary" text,
-	"content_format" text DEFAULT 'markdown' NOT NULL,
-	"origin" text NOT NULL,
+	"content" text NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "ai_agent_messages" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"conversation_id" uuid NOT NULL,
+	"seq" integer NOT NULL,
+	"role" text NOT NULL,
+	"content" jsonb NOT NULL,
 	"model" text,
-	"source_hash" text,
-	"status" text DEFAULT 'draft' NOT NULL,
-	CONSTRAINT "translations_target_lang_check" CHECK ("translations"."target_lang" in ('en', 'zh-cn', 'ja')),
-	CONSTRAINT "translations_origin_check" CHECK ("translations"."origin" in ('human', 'ai', 'machine')),
-	CONSTRAINT "translations_status_check" CHECK ("translations"."status" in ('draft', 'accepted', 'discarded'))
+	CONSTRAINT "ai_agent_messages_role_check" CHECK ("ai_agent_messages"."role" in ('system', 'user', 'assistant', 'tool'))
+);
+--> statement-breakpoint
+CREATE TABLE "ai_providers" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
+	"name" text NOT NULL,
+	"kind" text NOT NULL,
+	"base_url" text,
+	"api_key_env" text,
+	"models" jsonb,
+	"enabled" boolean DEFAULT true NOT NULL,
+	CONSTRAINT "ai_providers_kind_check" CHECK ("ai_providers"."kind" in ('openai-compatible', 'deepl', 'custom'))
+);
+--> statement-breakpoint
+CREATE TABLE "ai_usage" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"task" text NOT NULL,
+	"provider" text NOT NULL,
+	"model" text NOT NULL,
+	"input_tokens" integer,
+	"output_tokens" integer,
+	"cost_estimate" numeric(12, 6),
+	"related_type" text,
+	"related_id" uuid,
+	"status" text NOT NULL,
+	"duration_ms" integer,
+	CONSTRAINT "ai_usage_task_check" CHECK ("ai_usage"."task" in ('summary', 'translation', 'translation_review', 'comment_review', 'chat', 'assistant', 'editor', 'other')),
+	CONSTRAINT "ai_usage_status_check" CHECK ("ai_usage"."status" in ('success', 'failure'))
 );
 --> statement-breakpoint
 CREATE TABLE "meta_presets" (
@@ -94,6 +99,21 @@ CREATE TABLE "categories" (
 	"slug" text NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"description" text
+);
+--> statement-breakpoint
+CREATE TABLE "comment_moderation_events" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"comment_id" uuid NOT NULL,
+	"source" text NOT NULL,
+	"rule_id" text,
+	"model" text,
+	"score" numeric,
+	"outcome" text NOT NULL,
+	"applied" boolean DEFAULT false NOT NULL,
+	"detail" jsonb,
+	CONSTRAINT "comment_moderation_events_source_check" CHECK ("comment_moderation_events"."source" in ('rule', 'ai')),
+	CONSTRAINT "comment_moderation_events_outcome_check" CHECK ("comment_moderation_events"."outcome" in ('allow', 'hold', 'block'))
 );
 --> statement-breakpoint
 CREATE TABLE "comments" (
@@ -149,6 +169,23 @@ CREATE TABLE "drafts" (
 	"version" integer DEFAULT 1 NOT NULL,
 	"base_version" integer,
 	"author" text
+);
+--> statement-breakpoint
+CREATE TABLE "glossary_terms" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
+	"source_lang" text NOT NULL,
+	"term" text NOT NULL,
+	"target_lang" text NOT NULL,
+	"translation" text NOT NULL,
+	"note" text,
+	"case_sensitive" boolean DEFAULT false NOT NULL,
+	"enabled" boolean DEFAULT true NOT NULL,
+	"origin" text NOT NULL,
+	CONSTRAINT "glossary_terms_source_lang_check" CHECK ("glossary_terms"."source_lang" in ('en', 'zh-cn', 'ja')),
+	CONSTRAINT "glossary_terms_target_lang_check" CHECK ("glossary_terms"."target_lang" in ('en', 'zh-cn', 'ja')),
+	CONSTRAINT "glossary_terms_origin_check" CHECK ("glossary_terms"."origin" in ('manual', 'captured'))
 );
 --> statement-breakpoint
 CREATE TABLE "links" (
@@ -313,6 +350,18 @@ CREATE TABLE "snippets" (
 	"compiled_code" text
 );
 --> statement-breakpoint
+CREATE TABLE "summaries" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"post_id" uuid NOT NULL,
+	"lang" text NOT NULL,
+	"source_hash" text NOT NULL,
+	"summary" text NOT NULL,
+	"model" text,
+	"adopted_at" timestamp with time zone,
+	CONSTRAINT "summaries_lang_check" CHECK ("summaries"."lang" in ('en', 'zh-cn', 'ja'))
+);
+--> statement-breakpoint
 CREATE TABLE "post_tags" (
 	"post_id" uuid NOT NULL,
 	"tag_id" uuid NOT NULL,
@@ -336,6 +385,30 @@ CREATE TABLE "topics" (
 	"description" text DEFAULT '' NOT NULL,
 	"introduce" text,
 	"icon" text
+);
+--> statement-breakpoint
+CREATE TABLE "translations" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
+	"source_post_id" uuid NOT NULL,
+	"target_lang" text NOT NULL,
+	"title" text NOT NULL,
+	"content" text,
+	"summary" text,
+	"content_format" text DEFAULT 'markdown' NOT NULL,
+	"origin" text NOT NULL,
+	"model" text,
+	"source_hash" text,
+	"status" text DEFAULT 'draft' NOT NULL,
+	"score" numeric,
+	"reviewed_by" text,
+	"reviewed_at" timestamp with time zone,
+	"target_post_id" uuid,
+	"error" text,
+	CONSTRAINT "translations_target_lang_check" CHECK ("translations"."target_lang" in ('en', 'zh-cn', 'ja')),
+	CONSTRAINT "translations_origin_check" CHECK ("translations"."origin" in ('human', 'ai', 'machine')),
+	CONSTRAINT "translations_status_check" CHECK ("translations"."status" in ('draft', 'accepted', 'discarded'))
 );
 --> statement-breakpoint
 CREATE TABLE "activities" (
@@ -602,8 +675,9 @@ CREATE TABLE "verification" (
 );
 --> statement-breakpoint
 ALTER TABLE "user_profiles" ADD CONSTRAINT "user_profiles_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "insights" ADD CONSTRAINT "insights_source_insights_id_insights_id_fk" FOREIGN KEY ("source_insights_id") REFERENCES "public"."insights"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "translations" ADD CONSTRAINT "translations_source_post_id_posts_id_fk" FOREIGN KEY ("source_post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_agent_conversations" ADD CONSTRAINT "ai_agent_conversations_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_agent_messages" ADD CONSTRAINT "ai_agent_messages_conversation_id_ai_agent_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."ai_agent_conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comment_moderation_events" ADD CONSTRAINT "comment_moderation_events_comment_id_comments_id_fk" FOREIGN KEY ("comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_note_id_notes_id_fk" FOREIGN KEY ("note_id") REFERENCES "public"."notes"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_page_id_pages_id_fk" FOREIGN KEY ("page_id") REFERENCES "public"."pages"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -620,8 +694,12 @@ ALTER TABLE "post_revisions" ADD CONSTRAINT "post_revisions_post_id_posts_id_fk"
 ALTER TABLE "post_revisions" ADD CONSTRAINT "post_revisions_author_user_id_fk" FOREIGN KEY ("author") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_translated_from_post_id_posts_id_fk" FOREIGN KEY ("translated_from_post_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_category_id_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."categories"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "summaries" ADD CONSTRAINT "summaries_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_tags" ADD CONSTRAINT "post_tags_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_tags" ADD CONSTRAINT "post_tags_tag_id_tags_id_fk" FOREIGN KEY ("tag_id") REFERENCES "public"."tags"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "translations" ADD CONSTRAINT "translations_source_post_id_posts_id_fk" FOREIGN KEY ("source_post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "translations" ADD CONSTRAINT "translations_reviewed_by_user_id_fk" FOREIGN KEY ("reviewed_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "translations" ADD CONSTRAINT "translations_target_post_id_posts_id_fk" FOREIGN KEY ("target_post_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "enrichment_captures" ADD CONSTRAINT "enrichment_captures_enrichment_id_enrichment_cache_id_fk" FOREIGN KEY ("enrichment_id") REFERENCES "public"."enrichment_cache"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "file_references" ADD CONSTRAINT "file_references_reader_id_user_id_fk" FOREIGN KEY ("reader_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "file_references" ADD CONSTRAINT "file_references_uploaded_by_user_id_fk" FOREIGN KEY ("uploaded_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -635,15 +713,16 @@ ALTER TABLE "member" ADD CONSTRAINT "member_user_id_user_id_fk" FOREIGN KEY ("us
 ALTER TABLE "passkey" ADD CONSTRAINT "passkey_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "two_factor" ADD CONSTRAINT "two_factor_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "ai_agent_conversations_session_idx" ON "ai_agent_conversations" USING btree ("session_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "insights_ref_lang_uniq" ON "insights" USING btree ("ref_id","lang");--> statement-breakpoint
-CREATE INDEX "insights_source_insights_idx" ON "insights" USING btree ("source_insights_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "translations_active_uniq" ON "translations" USING btree ("source_post_id","target_lang") WHERE "translations"."status" <> 'discarded';--> statement-breakpoint
-CREATE INDEX "translations_source_idx" ON "translations" USING btree ("source_post_id");--> statement-breakpoint
+CREATE INDEX "ai_agent_conversations_user_idx" ON "ai_agent_conversations" USING btree ("user_id") WHERE "ai_agent_conversations"."user_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "ai_agent_messages_seq_uniq" ON "ai_agent_messages" USING btree ("conversation_id","seq");--> statement-breakpoint
+CREATE UNIQUE INDEX "ai_providers_name_uniq" ON "ai_providers" USING btree ("name");--> statement-breakpoint
+CREATE INDEX "ai_usage_created_idx" ON "ai_usage" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "ai_usage_task_idx" ON "ai_usage" USING btree ("task","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "meta_presets_name_uniq" ON "meta_presets" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "options_name_uniq" ON "options" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "categories_name_uniq" ON "categories" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "categories_slug_uniq" ON "categories" USING btree ("slug");--> statement-breakpoint
+CREATE INDEX "comment_moderation_events_comment_idx" ON "comment_moderation_events" USING btree ("comment_id");--> statement-breakpoint
 CREATE INDEX "comments_post_thread_idx" ON "comments" USING btree ("post_id","parent_comment_id","pin","created_at") WHERE "comments"."post_id" is not null;--> statement-breakpoint
 CREATE INDEX "comments_root_idx" ON "comments" USING btree ("root_comment_id","created_at");--> statement-breakpoint
 CREATE INDEX "comments_reader_idx" ON "comments" USING btree ("reader_id");--> statement-breakpoint
@@ -656,6 +735,8 @@ CREATE UNIQUE INDEX "drafts_ref_uniq" ON "drafts" USING btree ("ref_type","ref_i
 CREATE INDEX "drafts_updated_at_idx" ON "drafts" USING btree ("updated_at");--> statement-breakpoint
 CREATE INDEX "drafts_author_idx" ON "drafts" USING btree ("author") WHERE "drafts"."author" is not null;--> statement-breakpoint
 CREATE INDEX "drafts_category_idx" ON "drafts" USING btree ("category_id") WHERE "drafts"."category_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "glossary_terms_uniq" ON "glossary_terms" USING btree ("source_lang","term","target_lang");--> statement-breakpoint
+CREATE INDEX "glossary_terms_lookup_idx" ON "glossary_terms" USING btree ("source_lang","target_lang","enabled");--> statement-breakpoint
 CREATE UNIQUE INDEX "links_name_uniq" ON "links" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "links_url_uniq" ON "links" USING btree ("url");--> statement-breakpoint
 CREATE UNIQUE INDEX "notes_nid_uniq" ON "notes" USING btree ("nid");--> statement-breakpoint
@@ -678,6 +759,7 @@ CREATE INDEX "posts_category_id_idx" ON "posts" USING btree ("category_id");--> 
 CREATE INDEX "posts_status_pin_published_idx" ON "posts" USING btree ("lang","status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "posts_category_status_published_idx" ON "posts" USING btree ("category_id","lang","status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "posts_translated_from_idx" ON "posts" USING btree ("translated_from_post_id") WHERE "posts"."translated_from_post_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "posts_group_source_uniq" ON "posts" USING btree ("translation_group") WHERE "posts"."translated_from_post_id" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX "projects_name_uniq" ON "projects" USING btree ("name");--> statement-breakpoint
 CREATE INDEX "quotes_created_at_idx" ON "quotes" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "recent_items_ref_idx" ON "recent_items" USING btree ("ref_type","ref_id");--> statement-breakpoint
@@ -686,10 +768,16 @@ CREATE INDEX "snippets_path_prefix_idx" ON "snippets" USING btree ("path");--> s
 CREATE INDEX "snippets_type_idx" ON "snippets" USING btree ("type");--> statement-breakpoint
 CREATE UNIQUE INDEX "snippets_path_idx" ON "snippets" USING btree ("path") WHERE "snippets"."method" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX "snippets_path_method_idx" ON "snippets" USING btree ("path","method") WHERE "snippets"."method" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "summaries_post_lang_hash_uniq" ON "summaries" USING btree ("post_id","lang","source_hash");--> statement-breakpoint
+CREATE UNIQUE INDEX "summaries_adopted_uniq" ON "summaries" USING btree ("post_id","lang") WHERE "summaries"."adopted_at" is not null;--> statement-breakpoint
 CREATE INDEX "post_tags_tag_idx" ON "post_tags" USING btree ("tag_id","post_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "tags_slug_uniq" ON "tags" USING btree ("slug");--> statement-breakpoint
 CREATE UNIQUE INDEX "topics_name_uniq" ON "topics" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "topics_slug_uniq" ON "topics" USING btree ("slug");--> statement-breakpoint
+CREATE UNIQUE INDEX "translations_draft_uniq" ON "translations" USING btree ("source_post_id","target_lang") WHERE "translations"."status" = 'draft';--> statement-breakpoint
+CREATE INDEX "translations_source_idx" ON "translations" USING btree ("source_post_id");--> statement-breakpoint
+CREATE INDEX "translations_target_post_idx" ON "translations" USING btree ("target_post_id") WHERE "translations"."target_post_id" is not null;--> statement-breakpoint
+CREATE INDEX "translations_reviewed_by_idx" ON "translations" USING btree ("reviewed_by") WHERE "translations"."reviewed_by" is not null;--> statement-breakpoint
 CREATE INDEX "activities_created_at_idx" ON "activities" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "analytics_visited_at_idx" ON "analytics" USING btree ("visited_at");--> statement-breakpoint
 CREATE INDEX "analytics_visited_at_path_idx" ON "analytics" USING btree ("visited_at","path");--> statement-breakpoint

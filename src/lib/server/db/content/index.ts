@@ -1,6 +1,8 @@
 export * from './category.schema';
+export * from './comment-moderation-event.schema';
 export * from './comment.schema';
 export * from './draft.schema';
+export * from './glossary-term.schema';
 export * from './link.schema';
 export * from './memo.schema';
 export * from './note.schema';
@@ -12,5 +14,7 @@ export * from './project.schema';
 export * from './quote.schema';
 export * from './recent-item.schema';
 export * from './snippet.schema';
+export * from './summary.schema';
 export * from './tag.schema';
 export * from './topic.schema';
+export * from './translation.schema';

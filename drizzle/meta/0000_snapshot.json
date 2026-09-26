@@ -1,5 +1,5 @@
 {
-  "id": "90a3dd8e-f311-4697-8390-5475ddbbdfcb",
+  "id": "0f4e03e7-0c67-44cc-ab82-ba42dc09473b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -147,37 +147,6 @@
           "notNull": true,
           "default": "uuidv7()"
         },
-        "session_id": {
-          "name": "session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "provider_id": {
-          "name": "provider_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "messages": {
-          "name": "messages",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -190,145 +159,57 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
-        }
-      },
-      "indexes": {
-        "ai_agent_conversations_session_idx": {
-          "name": "ai_agent_conversations_session_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.insights": {
-      "name": "insights",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuidv7()"
         },
-        "created_at": {
-          "name": "created_at",
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archived_at": {
+          "name": "archived_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "ref_id": {
-          "name": "ref_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lang": {
-          "name": "lang",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "hash": {
-          "name": "hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content": {
-          "name": "content",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "is_translation": {
-          "name": "is_translation",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "source_insights_id": {
-          "name": "source_insights_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source_lang": {
-          "name": "source_lang",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "model_info": {
-          "name": "model_info",
-          "type": "jsonb",
-          "primaryKey": false,
           "notNull": false
         }
       },
       "indexes": {
-        "insights_ref_lang_uniq": {
-          "name": "insights_ref_lang_uniq",
+        "ai_agent_conversations_user_idx": {
+          "name": "ai_agent_conversations_user_idx",
           "columns": [
             {
-              "expression": "ref_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "lang",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "insights_source_insights_idx": {
-          "name": "insights_source_insights_idx",
-          "columns": [
-            {
-              "expression": "source_insights_id",
+              "expression": "user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
+          "where": "\"ai_agent_conversations\".\"user_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
         }
       },
       "foreignKeys": {
-        "insights_source_insights_id_insights_id_fk": {
-          "name": "insights_source_insights_id_insights_id_fk",
-          "tableFrom": "insights",
-          "tableTo": "insights",
+        "ai_agent_conversations_user_id_user_id_fk": {
+          "name": "ai_agent_conversations_user_id_user_id_fk",
+          "tableFrom": "ai_agent_conversations",
+          "tableTo": "user",
           "columnsFrom": [
-            "source_insights_id"
+            "user_id"
           ],
           "columnsTo": [
             "id"
@@ -343,68 +224,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.summaries": {
-      "name": "summaries",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuidv7()"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "hash": {
-          "name": "hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "summary": {
-          "name": "summary",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ref_id": {
-          "name": "ref_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lang": {
-          "name": "lang",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "summaries_ref_lang_uniq": {
-          "name": "summaries_ref_lang_uniq",
-          "nullsNotDistinct": true,
-          "columns": [
-            "ref_id",
-            "lang"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.translations": {
-      "name": "translations",
+    "public.ai_agent_memories": {
+      "name": "ai_agent_memories",
       "schema": "",
       "columns": {
         "id": {
@@ -427,46 +248,60 @@
           "primaryKey": false,
           "notNull": false
         },
-        "source_post_id": {
-          "name": "source_post_id",
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ai_agent_messages": {
+      "name": "ai_agent_messages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "conversation_id": {
+          "name": "conversation_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "target_lang": {
-          "name": "target_lang",
-          "type": "text",
+        "seq": {
+          "name": "seq",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
-        "title": {
-          "name": "title",
+        "role": {
+          "name": "role",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
         "content": {
           "name": "content",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "summary": {
-          "name": "summary",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "content_format": {
-          "name": "content_format",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'markdown'"
-        },
-        "origin": {
-          "name": "origin",
-          "type": "text",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true
         },
@@ -475,67 +310,38 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "source_hash": {
-          "name": "source_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'draft'"
         }
       },
       "indexes": {
-        "translations_active_uniq": {
-          "name": "translations_active_uniq",
+        "ai_agent_messages_seq_uniq": {
+          "name": "ai_agent_messages_seq_uniq",
           "columns": [
             {
-              "expression": "source_post_id",
+              "expression": "conversation_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "target_lang",
+              "expression": "seq",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
-          "where": "\"translations\".\"status\" <> 'discarded'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "translations_source_idx": {
-          "name": "translations_source_idx",
-          "columns": [
-            {
-              "expression": "source_post_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
         }
       },
       "foreignKeys": {
-        "translations_source_post_id_posts_id_fk": {
-          "name": "translations_source_post_id_posts_id_fk",
-          "tableFrom": "translations",
-          "tableTo": "posts",
+        "ai_agent_messages_conversation_id_ai_agent_conversations_id_fk": {
+          "name": "ai_agent_messages_conversation_id_ai_agent_conversations_id_fk",
+          "tableFrom": "ai_agent_messages",
+          "tableTo": "ai_agent_conversations",
           "columnsFrom": [
-            "source_post_id"
+            "conversation_id"
           ],
           "columnsTo": [
             "id"
@@ -548,17 +354,233 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "translations_target_lang_check": {
-          "name": "translations_target_lang_check",
-          "value": "\"translations\".\"target_lang\" in ('en', 'zh-cn', 'ja')"
+        "ai_agent_messages_role_check": {
+          "name": "ai_agent_messages_role_check",
+          "value": "\"ai_agent_messages\".\"role\" in ('system', 'user', 'assistant', 'tool')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.ai_providers": {
+      "name": "ai_providers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
         },
-        "translations_origin_check": {
-          "name": "translations_origin_check",
-          "value": "\"translations\".\"origin\" in ('human', 'ai', 'machine')"
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         },
-        "translations_status_check": {
-          "name": "translations_status_check",
-          "value": "\"translations\".\"status\" in ('draft', 'accepted', 'discarded')"
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_url": {
+          "name": "base_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "api_key_env": {
+          "name": "api_key_env",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "models": {
+          "name": "models",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {
+        "ai_providers_name_uniq": {
+          "name": "ai_providers_name_uniq",
+          "columns": [
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "ai_providers_kind_check": {
+          "name": "ai_providers_kind_check",
+          "value": "\"ai_providers\".\"kind\" in ('openai-compatible', 'deepl', 'custom')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.ai_usage": {
+      "name": "ai_usage",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "task": {
+          "name": "task",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "input_tokens": {
+          "name": "input_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "output_tokens": {
+          "name": "output_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cost_estimate": {
+          "name": "cost_estimate",
+          "type": "numeric(12, 6)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "related_type": {
+          "name": "related_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "related_id": {
+          "name": "related_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "ai_usage_created_idx": {
+          "name": "ai_usage_created_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ai_usage_task_idx": {
+          "name": "ai_usage_task_idx",
+          "columns": [
+            {
+              "expression": "task",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "ai_usage_task_check": {
+          "name": "ai_usage_task_check",
+          "value": "\"ai_usage\".\"task\" in ('summary', 'translation', 'translation_review', 'comment_review', 'chat', 'assistant', 'editor', 'other')"
+        },
+        "ai_usage_status_check": {
+          "name": "ai_usage_status_check",
+          "value": "\"ai_usage\".\"status\" in ('success', 'failure')"
         }
       },
       "isRLSEnabled": false
@@ -766,6 +788,121 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.comment_moderation_events": {
+      "name": "comment_moderation_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "comment_id": {
+          "name": "comment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rule_id": {
+          "name": "rule_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "score": {
+          "name": "score",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "applied": {
+          "name": "applied",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "detail": {
+          "name": "detail",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "comment_moderation_events_comment_idx": {
+          "name": "comment_moderation_events_comment_idx",
+          "columns": [
+            {
+              "expression": "comment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "comment_moderation_events_comment_id_comments_id_fk": {
+          "name": "comment_moderation_events_comment_id_comments_id_fk",
+          "tableFrom": "comment_moderation_events",
+          "tableTo": "comments",
+          "columnsFrom": [
+            "comment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "comment_moderation_events_source_check": {
+          "name": "comment_moderation_events_source_check",
+          "value": "\"comment_moderation_events\".\"source\" in ('rule', 'ai')"
+        },
+        "comment_moderation_events_outcome_check": {
+          "name": "comment_moderation_events_outcome_check",
+          "value": "\"comment_moderation_events\".\"outcome\" in ('allow', 'hold', 'block')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.comments": {
@@ -1441,6 +1578,157 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.glossary_terms": {
+      "name": "glossary_terms",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_lang": {
+          "name": "source_lang",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "term": {
+          "name": "term",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_lang": {
+          "name": "target_lang",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "translation": {
+          "name": "translation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "case_sensitive": {
+          "name": "case_sensitive",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "glossary_terms_uniq": {
+          "name": "glossary_terms_uniq",
+          "columns": [
+            {
+              "expression": "source_lang",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "term",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "target_lang",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "glossary_terms_lookup_idx": {
+          "name": "glossary_terms_lookup_idx",
+          "columns": [
+            {
+              "expression": "source_lang",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "target_lang",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "enabled",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "glossary_terms_source_lang_check": {
+          "name": "glossary_terms_source_lang_check",
+          "value": "\"glossary_terms\".\"source_lang\" in ('en', 'zh-cn', 'ja')"
+        },
+        "glossary_terms_target_lang_check": {
+          "name": "glossary_terms_target_lang_check",
+          "value": "\"glossary_terms\".\"target_lang\" in ('en', 'zh-cn', 'ja')"
+        },
+        "glossary_terms_origin_check": {
+          "name": "glossary_terms_origin_check",
+          "value": "\"glossary_terms\".\"origin\" in ('manual', 'captured')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.links": {
@@ -2540,6 +2828,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "posts_group_source_uniq": {
+          "name": "posts_group_source_uniq",
+          "columns": [
+            {
+              "expression": "translation_group",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"posts\".\"translated_from_post_id\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -3051,6 +3355,138 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.summaries": {
+      "name": "summaries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lang": {
+          "name": "lang",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_hash": {
+          "name": "source_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "adopted_at": {
+          "name": "adopted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "summaries_post_lang_hash_uniq": {
+          "name": "summaries_post_lang_hash_uniq",
+          "columns": [
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lang",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "summaries_adopted_uniq": {
+          "name": "summaries_adopted_uniq",
+          "columns": [
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lang",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"summaries\".\"adopted_at\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "summaries_post_id_posts_id_fk": {
+          "name": "summaries_post_id_posts_id_fk",
+          "tableFrom": "summaries",
+          "tableTo": "posts",
+          "columnsFrom": [
+            "post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "summaries_lang_check": {
+          "name": "summaries_lang_check",
+          "value": "\"summaries\".\"lang\" in ('en', 'zh-cn', 'ja')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.post_tags": {
       "name": "post_tags",
       "schema": "",
@@ -3287,6 +3723,254 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.translations": {
+      "name": "translations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_post_id": {
+          "name": "source_post_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_lang": {
+          "name": "target_lang",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_format": {
+          "name": "content_format",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'markdown'"
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_hash": {
+          "name": "source_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "score": {
+          "name": "score",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_by": {
+          "name": "reviewed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_at": {
+          "name": "reviewed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_post_id": {
+          "name": "target_post_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "translations_draft_uniq": {
+          "name": "translations_draft_uniq",
+          "columns": [
+            {
+              "expression": "source_post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "target_lang",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"translations\".\"status\" = 'draft'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "translations_source_idx": {
+          "name": "translations_source_idx",
+          "columns": [
+            {
+              "expression": "source_post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "translations_target_post_idx": {
+          "name": "translations_target_post_idx",
+          "columns": [
+            {
+              "expression": "target_post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"translations\".\"target_post_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "translations_reviewed_by_idx": {
+          "name": "translations_reviewed_by_idx",
+          "columns": [
+            {
+              "expression": "reviewed_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"translations\".\"reviewed_by\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "translations_source_post_id_posts_id_fk": {
+          "name": "translations_source_post_id_posts_id_fk",
+          "tableFrom": "translations",
+          "tableTo": "posts",
+          "columnsFrom": [
+            "source_post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "translations_reviewed_by_user_id_fk": {
+          "name": "translations_reviewed_by_user_id_fk",
+          "tableFrom": "translations",
+          "tableTo": "user",
+          "columnsFrom": [
+            "reviewed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "translations_target_post_id_posts_id_fk": {
+          "name": "translations_target_post_id_posts_id_fk",
+          "tableFrom": "translations",
+          "tableTo": "posts",
+          "columnsFrom": [
+            "target_post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "translations_target_lang_check": {
+          "name": "translations_target_lang_check",
+          "value": "\"translations\".\"target_lang\" in ('en', 'zh-cn', 'ja')"
+        },
+        "translations_origin_check": {
+          "name": "translations_origin_check",
+          "value": "\"translations\".\"origin\" in ('human', 'ai', 'machine')"
+        },
+        "translations_status_check": {
+          "name": "translations_status_check",
+          "value": "\"translations\".\"status\" in ('draft', 'accepted', 'discarded')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.activities": {
