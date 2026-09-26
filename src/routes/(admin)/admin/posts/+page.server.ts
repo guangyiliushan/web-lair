@@ -15,7 +15,10 @@ export const load: PageServerLoad = async ({ url }) => {
 	const statusRaw = url.searchParams.get('status') ?? '';
 	const categoryRaw = url.searchParams.get('category') ?? '';
 	const keyword = (url.searchParams.get('keyword') ?? '').trim();
-	const page = Math.max(1, Number(url.searchParams.get('page') ?? '1') || 1);
+	// Number() accepts Infinity / 1e999 and the DB offset does not (a read-only
+	// probe turned ?page=Infinity into a 500; review finding).
+	const rawPage = Number(url.searchParams.get('page') ?? '1');
+	const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? Math.min(rawPage, 10_000) : 1;
 
 	// P2: the list reads the real table; a post with a pending drafts row
 	// carries the "有未发布改动" badge.

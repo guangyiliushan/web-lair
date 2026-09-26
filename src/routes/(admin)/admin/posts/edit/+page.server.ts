@@ -140,16 +140,24 @@ export const actions: Actions = {
 		const autosave = form.get('autosave') === '1';
 		if (rawId && !isUuid(rawId)) return fail(400, { message: '文章标识无效' });
 		if (draftId && !isUuid(draftId)) return fail(400, { message: '草稿标识无效' });
+		// Malformed category ids must never reach the uuid column (22P02 → 500;
+		// the P1.1 guard this rewrite had dropped - review finding).
+		const categoryIdRaw = str(form, 'categoryId').trim();
+		if (categoryIdRaw && !isUuid(categoryIdRaw)) {
+			return fail(400, { message: '分类标识无效' });
+		}
 
 		const result = await saveDraftWork({
 			draftId: draftId || null,
 			postId: rawId || null,
-			expectedVersion: versionRaw ? Number(versionRaw) : null,
+			// A non-numeric version is treated as "not provided" (Number('abc') is
+			// NaN, which used to make every save a permanent 409; review finding).
+			expectedVersion: /^\d+$/.test(versionRaw) ? Number(versionRaw) : null,
 			lang: (OPTION_LANGS as readonly string[]).includes(langRaw) ? langRaw : null,
 			payload: {
 				title: str(form, 'title'),
 				slug: str(form, 'slug').trim().toLowerCase(),
-				categoryId: str(form, 'categoryId').trim(),
+				categoryId: categoryIdRaw,
 				summary: str(form, 'summary'),
 				tags: str(form, 'tags'),
 				content: str(form, 'content')
@@ -168,13 +176,22 @@ export const actions: Actions = {
 					updatedAt: result.updatedAt
 				};
 			case 'unchanged':
-			case 'throttled':
 				return {
 					saved: false,
 					reason: result.kind,
 					draftId: result.draftId,
 					draftVersion: result.version,
 					postId: result.postId || null
+				};
+			case 'throttled':
+				return {
+					saved: false,
+					reason: result.kind,
+					draftId: result.draftId,
+					draftVersion: result.version,
+					postId: result.postId || null,
+					// The client schedules its retry from this hint.
+					retryAfterMs: result.retryAfterMs
 				};
 			case 'needs-category':
 				return fail(400, { message: '请先选择分类，选定后即可自动保存', needsCategory: true });
@@ -185,12 +202,6 @@ export const actions: Actions = {
 					conflict: true,
 					server: result.server,
 					message: '内容已在其他窗口更新，请以服务端为准刷新后再编辑'
-				});
-			case 'duplicate':
-				return fail(409, {
-					conflict: true,
-					server: { draftId: null, version: 0 },
-					message: '草稿已存在，请刷新'
 				});
 		}
 	},
@@ -216,6 +227,8 @@ export const actions: Actions = {
 				});
 			case 'slug-taken':
 				return fail(400, { errors: { slug: '该 Slug 已被其他文章使用' } });
+			case 'busy':
+				return fail(409, { message: '并发操作冲突，请稍后重试' });
 			case 'not-found':
 				return fail(404, { message: '草稿不存在' });
 		}
@@ -233,6 +246,7 @@ export const actions: Actions = {
 
 		const result = await discardDraft(draftId);
 		if (result.kind === 'not-found') return fail(404, { message: '草稿不存在' });
+		if (result.kind === 'busy') return fail(409, { message: '并发操作冲突，请稍后重试' });
 		if (result.removedPlaceholder) throw redirect(303, '/admin/posts?discarded=1');
 		if (result.postId) throw redirect(303, `/admin/posts/edit?id=${result.postId}&discarded=1`);
 		throw redirect(303, '/admin/posts?discarded=1');
@@ -261,6 +275,8 @@ export const actions: Actions = {
 				return fail(400, { message: '不能为同语言创建翻译' });
 			case 'lang-exists':
 				return fail(400, { message: '该语言版本已存在' });
+			case 'not-source':
+				return fail(400, { message: '请从源语言版本创建翻译' });
 			case 'not-found':
 				return fail(404, { message: '文章不存在' });
 		}

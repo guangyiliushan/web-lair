@@ -83,6 +83,12 @@ describe('editor actions (P2)', () => {
 		expect(badId.result).toMatchObject({ status: 400 });
 		const badDraft = await callAction('save', { draftId: 'nope' });
 		expect(badDraft.result).toMatchObject({ status: 400 });
+		// The P1.1 category guard the rewrite had dropped (P2 review finding).
+		const badCategory = await callAction('save', { categoryId: 'not-a-uuid' });
+		expect(badCategory.result).toMatchObject({
+			status: 400,
+			data: { message: '分类标识无效' }
+		});
 		expect(saveMock).not.toHaveBeenCalled();
 
 		const badPublish = await callAction('publish', { draftId: 'nope' });
@@ -91,6 +97,24 @@ describe('editor actions (P2)', () => {
 		expect(badDiscard.result).toMatchObject({ status: 400 });
 		const badTranslate = await callAction('createTranslation', { id: 'nope', lang: 'zh-cn' });
 		expect(badTranslate.result).toMatchObject({ status: 400 });
+	});
+
+	it('stops the action when the guard rejects (no service call)', async () => {
+		for (const name of ['save', 'publish', 'discard', 'createTranslation']) {
+			guardMock.mockImplementationOnce(() => {
+				throw Object.assign(new Error('redirect'), { status: 303, location: '/login' });
+			});
+			const { thrown } = await callAction(name, {
+				id: POST_ID,
+				draftId: DRAFT_ID,
+				lang: 'zh-cn'
+			});
+			expect(thrown?.status).toBe(303);
+		}
+		expect(saveMock).not.toHaveBeenCalled();
+		expect(publishMock).not.toHaveBeenCalled();
+		expect(discardMock).not.toHaveBeenCalled();
+		expect(translateMock).not.toHaveBeenCalled();
 	});
 
 	it('maps the save form into the service call (lang filtered by the allowlist)', async () => {
@@ -109,7 +133,7 @@ describe('editor actions (P2)', () => {
 			lang: 'xx-bogus',
 			title: 'T',
 			slug: 'S',
-			categoryId: 'cat',
+			categoryId: DRAFT_ID,
 			summary: 'm',
 			tags: 'a,b',
 			content: 'C'
@@ -133,15 +157,35 @@ describe('editor actions (P2)', () => {
 		);
 	});
 
-	it('answers unchanged and throttled saves without error', async () => {
+	it('forwards the autosave flag and treats a non-numeric version as absent', async () => {
+		saveMock.mockResolvedValue({
+			kind: 'saved',
+			draftId: DRAFT_ID,
+			version: 2,
+			postId: POST_ID,
+			updatedAt: new Date()
+		});
+		await callAction('save', { draftId: DRAFT_ID, autosave: '0', draftVersion: 'abc' });
+		expect(saveMock).toHaveBeenCalledWith(
+			expect.objectContaining({ autosave: false, expectedVersion: null })
+		);
+	});
+
+	it('answers unchanged and throttled saves without error (retry hint included)', async () => {
 		saveMock.mockResolvedValue({
 			kind: 'throttled',
 			draftId: DRAFT_ID,
 			version: 2,
-			postId: POST_ID
+			postId: POST_ID,
+			retryAfterMs: 5000
 		});
 		const throttled = await callAction('save', { draftId: DRAFT_ID, autosave: '1' });
-		expect(throttled.result).toMatchObject({ saved: false, reason: 'throttled', draftVersion: 2 });
+		expect(throttled.result).toMatchObject({
+			saved: false,
+			reason: 'throttled',
+			draftVersion: 2,
+			retryAfterMs: 5000
+		});
 
 		saveMock.mockResolvedValue({
 			kind: 'unchanged',
@@ -170,6 +214,31 @@ describe('editor actions (P2)', () => {
 			status: 400,
 			data: expect.objectContaining({ needsCategory: true })
 		});
+	});
+
+	it('maps busy conflicts and not-found results', async () => {
+		publishMock.mockResolvedValue({ kind: 'busy' });
+		const publishBusy = await callAction('publish', { draftId: DRAFT_ID });
+		expect(publishBusy.result).toMatchObject({ status: 409 });
+
+		discardMock.mockResolvedValue({ kind: 'busy' });
+		const discardBusy = await callAction('discard', { draftId: DRAFT_ID });
+		expect(discardBusy.result).toMatchObject({ status: 409 });
+
+		saveMock.mockResolvedValue({ kind: 'not-found' });
+		expect((await callAction('save', { draftId: DRAFT_ID })).result).toMatchObject({ status: 404 });
+		publishMock.mockResolvedValue({ kind: 'not-found' });
+		expect((await callAction('publish', { draftId: DRAFT_ID })).result).toMatchObject({
+			status: 404
+		});
+		discardMock.mockResolvedValue({ kind: 'not-found' });
+		expect((await callAction('discard', { draftId: DRAFT_ID })).result).toMatchObject({
+			status: 404
+		});
+		translateMock.mockResolvedValue({ kind: 'not-found' });
+		expect(
+			(await callAction('createTranslation', { id: POST_ID, lang: 'zh-cn' })).result
+		).toMatchObject({ status: 404 });
 	});
 
 	it('publishes with a redirect and translates failures into responses', async () => {
@@ -222,6 +291,11 @@ describe('editor actions (P2)', () => {
 		translateMock.mockResolvedValue({ kind: 'lang-exists' });
 		const exists = await callAction('createTranslation', { id: POST_ID, lang: 'zh-cn' });
 		expect(exists.result).toMatchObject({ status: 400 });
+
+		// R7 禁链式: only a group source may spawn a translation (P2 review fix).
+		translateMock.mockResolvedValue({ kind: 'not-source' });
+		const chained = await callAction('createTranslation', { id: POST_ID, lang: 'zh-cn' });
+		expect(chained.result).toMatchObject({ status: 400 });
 
 		translateMock.mockResolvedValue({
 			kind: 'created',

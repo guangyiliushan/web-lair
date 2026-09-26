@@ -61,6 +61,7 @@ export const actions: Actions = {
 
 		const result = await discardDraft(draftId);
 		if (result.kind === 'not-found') return fail(404, { message: '草稿不存在' });
+		if (result.kind === 'busy') return fail(409, { message: '并发操作冲突，请稍后重试' });
 		throw redirect(303, '/admin/drafts?discarded=1');
 	}
 } satisfies Actions;

@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
+import { requireAdminRole } from '$lib/server/authz';
 import { categories, posts } from '$lib/server/db/content';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isUuid } from '$lib/utils/uuid';
@@ -35,6 +36,7 @@ export const load: PageServerLoad = async () => {
 
 export const actions: Actions = {
 	create: async ({ request }) => {
+		await requireAdminRole();
 		const formData = await request.formData();
 		const name = formData.get('name')?.toString().trim();
 		const slug = formData.get('slug')?.toString().trim().toLowerCase();
@@ -47,6 +49,7 @@ export const actions: Actions = {
 	},
 
 	update: async ({ request }) => {
+		await requireAdminRole();
 		const formData = await request.formData();
 		const id = formData.get('id')?.toString();
 		const name = formData.get('name')?.toString().trim();
@@ -60,18 +63,33 @@ export const actions: Actions = {
 	},
 
 	delete: async ({ request }) => {
+		await requireAdminRole();
 		const formData = await request.formData();
 		const id = formData.get('id')?.toString();
 		if (!id || !isUuid(id)) return fail(400, { error: '缺少分类 ID' });
 
 		// P2 (§9.8): deleting a category that still owns posts answers 409 with
-		// a readable message instead of hitting the RESTRICT FK as a 500.
-		const [total] = await db
-			.select({ count: sql<number>`count(*)`.mapWith(Number) })
+		// a readable message instead of hitting the RESTRICT FK as a 500. The
+		// placeholder rows of abandoned new articles are counted separately so
+		// the message can point at the drafts page (review finding).
+		const [counts] = await db
+			.select({
+				total: sql<number>`count(*)`.mapWith(Number),
+				placeholders:
+					sql<number>`count(*) filter (where ${posts.version} = 0 and ${posts.status} = 'draft')`.mapWith(
+						Number
+					)
+			})
 			.from(posts)
 			.where(eq(posts.categoryId, id));
-		if ((total?.count ?? 0) > 0) {
-			return fail(409, { error: `该分类下仍有 ${total.count} 篇文章，无法删除` });
+		if ((counts?.total ?? 0) > 0) {
+			const total = counts.total;
+			const placeholders = counts.placeholders ?? 0;
+			const error =
+				placeholders === total
+					? `该分类下仅有 ${total} 个未发布的新建占位，请先在草稿箱丢弃后再删除`
+					: `该分类下仍有 ${total} 篇文章，无法删除`;
+			return fail(409, { error });
 		}
 
 		try {

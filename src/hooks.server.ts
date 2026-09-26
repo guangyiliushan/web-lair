@@ -3,7 +3,7 @@ import { building } from '$app/environment';
 import { redirect } from '@sveltejs/kit';
 import { auth } from '$lib/server/auth';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { getTextDirection } from '$lib/paraglide/runtime';
 import { paraglideMiddleware } from '$lib/paraglide/server';
 import { db } from '$lib/server/db';
@@ -109,3 +109,17 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 };
 
 export const handle: Handle = sequence(handleParaglide, handleBetterAuth);
+
+/**
+ * P2 review finding: Kit's default error hook logs the raw error, and every
+ * drizzle failure is a DrizzleQueryError whose message embeds the SQL plus its
+ * bound parameters - i.e. draft titles and bodies would land in the server log.
+ * Log a status + route id + PG code only, and answer with a generic message.
+ */
+export const handleError: HandleServerError = ({ error, event, status, message }) => {
+	const code =
+		(error as { cause?: { code?: string }; code?: string } | null)?.cause?.code ??
+		(error as { code?: string } | null)?.code;
+	console.warn('[error]', status, event.route.id ?? '-', code ?? message ?? '-');
+	return { message: '服务器内部错误' };
+};

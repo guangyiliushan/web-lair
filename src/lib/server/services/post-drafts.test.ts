@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { drafts, postRevisions, postTags, posts } from '$lib/server/db/content';
+import { drafts, postRevisions, postTags, posts, tags } from '$lib/server/db/content';
 import { slugTrackers } from '$lib/server/db/system';
 
 /**
  * Service-level tests for the P2 draft flow (ledger §9.10 / §9.14.2-3):
  * autosave semantics (hash / throttle / optimistic lock), the publish
- * transaction (revision + slug tracker + tags + draft removal, base check)
- * and discard/createTranslation. The db module is mocked with a small
- * in-memory executor; schema objects are real so tables can be told apart.
+ * transaction (posts+drafts row locks, revision + slug tracker + tags + draft
+ * removal, base check) and discard/createTranslation. The db module is mocked
+ * with a small in-memory executor that records the table of every write, the
+ * lock clauses and transaction usage - the assertions deliberately pin those
+ * so removing a lock/transaction turns the suite red (mutation teeth, P2
+ * review finding).
  */
 const { dbMock, state } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -15,9 +18,11 @@ const { dbMock, state } = vi.hoisted(() => ({
 		selectQueue: [] as unknown[][],
 		insertResults: [] as unknown[][],
 		updateResults: [] as unknown[][],
+		deleteResults: [] as unknown[][],
 		updates: [] as { table: unknown; values: Record<string, unknown> }[],
 		deletes: [] as { table: unknown }[],
 		inserts: [] as { table: unknown; values: Record<string, unknown> }[],
+		forCalls: [] as unknown[],
 		failWith: undefined as unknown
 	}
 }));
@@ -30,6 +35,7 @@ import {
 	createTranslationDraft,
 	discardDraft,
 	draftHash,
+	draftsForPosts,
 	isPlaceholderSlug,
 	publishDraft,
 	saveDraftWork,
@@ -43,6 +49,13 @@ function makeChain(result: unknown[]) {
 			get(_target, prop) {
 				if (prop === 'then') {
 					return (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
+				}
+				// Record lock clauses so dropping .for('update') fails the suite.
+				if (prop === 'for') {
+					return (strength: unknown) => {
+						state.forCalls.push(strength);
+						return self;
+					};
 				}
 				return () => self;
 			}
@@ -89,10 +102,12 @@ function makeExecutors() {
 		delete: vi.fn((table: unknown) => ({
 			where: () => ({
 				returning: async () => {
+					if (state.failWith) throw state.failWith;
 					state.deletes.push({ table });
-					return [];
+					return state.deleteResults.shift() ?? [{ id: 'deleted' }];
 				},
-				then: (resolve: (value: unknown) => unknown) => {
+				then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
+					if (state.failWith) return Promise.reject(state.failWith).catch(reject);
 					state.deletes.push({ table });
 					return Promise.resolve([]).then(resolve);
 				}
@@ -131,6 +146,25 @@ function payload(overrides: Record<string, string> = {}) {
 	};
 }
 
+function resetState(withTransaction = true) {
+	state.selectQueue = [];
+	state.insertResults = [];
+	state.updateResults = [];
+	state.deleteResults = [];
+	state.updates = [];
+	state.inserts = [];
+	state.deletes = [];
+	state.forCalls = [];
+	state.failWith = undefined;
+	const executors = makeExecutors();
+	Object.assign(dbMock, {
+		...executors,
+		...(withTransaction
+			? { transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(executors)) }
+			: {})
+	});
+}
+
 describe('post-drafts helpers', () => {
 	it('mints placeholder slugs and recognises them', () => {
 		expect(tempSlug()).toMatch(/^draft-[0-9a-f]{10}$/);
@@ -143,22 +177,25 @@ describe('post-drafts helpers', () => {
 		expect(draftHash(payload())).not.toBe(draftHash(payload({ content: 'Other' })));
 		expect(draftHash(payload({ tags: 't1,t2' }))).toBe(draftHash(payload({ tags: 't1, t2' })));
 	});
+
+	it('pins the throttle window (server-side contract)', () => {
+		expect(DRAFT_THROTTLE_MS).toBe(30_000);
+	});
+
+	it('draftsForPosts short-circuits empty input and filters by ref id', async () => {
+		resetState();
+		await expect(draftsForPosts([])).resolves.toEqual(new Set());
+		expect(dbMock.select).not.toHaveBeenCalled();
+
+		state.selectQueue = [[{ refId: 'a' }, { refId: null }, { refId: 'b' }]];
+		const found = await draftsForPosts(['a', 'b']);
+		expect(found).toEqual(new Set(['a', 'b']));
+	});
 });
 
 describe('saveDraftWork', () => {
 	beforeEach(() => {
-		state.selectQueue = [];
-		state.insertResults = [];
-		state.updateResults = [];
-		state.updates = [];
-		state.inserts = [];
-		state.deletes = [];
-		state.failWith = undefined;
-		const executors = makeExecutors();
-		Object.assign(dbMock, {
-			...executors,
-			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(executors))
-		});
+		resetState();
 	});
 
 	it('refuses a brand-new article without a category', async () => {
@@ -195,6 +232,7 @@ describe('saveDraftWork', () => {
 			postId: 'post-9',
 			version: 1
 		});
+		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
 		expect(state.inserts[0].table).toBe(posts);
 		expect(state.inserts[0].values).toMatchObject({
 			lang: 'zh-cn',
@@ -231,6 +269,27 @@ describe('saveDraftWork', () => {
 		expect(state.inserts[0].values).toMatchObject({ refId: 'post-1', baseVersion: 5 });
 	});
 
+	it('translates a concurrent draft creation (23505) into a conflict', async () => {
+		state.selectQueue = [
+			[], // loadDraftByPostId: none yet
+			[{ id: 'post-1', version: 5 }],
+			[{ ...BASE_DRAFT }] // the other tab's row, re-read in the catch
+		];
+		state.failWith = Object.assign(new Error('dup'), { cause: { code: '23505' } });
+		const result = await saveDraftWork({
+			draftId: null,
+			postId: 'post-1',
+			expectedVersion: null,
+			payload: payload(),
+			author: null,
+			autosave: true
+		});
+		expect(result).toMatchObject({
+			kind: 'conflict',
+			server: { draftId: 'draft-1', version: 3 }
+		});
+	});
+
 	it('skips identical payloads (hash 不变不写)', async () => {
 		const draft = {
 			...BASE_DRAFT,
@@ -261,7 +320,7 @@ describe('saveDraftWork', () => {
 		expect(state.updates).toHaveLength(0);
 	});
 
-	it('throttles autosaves within the server window but lets manual saves through', async () => {
+	it('throttles autosaves within the server window and lets manual saves through', async () => {
 		const fresh = { ...BASE_DRAFT, updatedAt: new Date(), content: 'Current' };
 		state.selectQueue = [[fresh]];
 		const throttled = await saveDraftWork({
@@ -272,12 +331,16 @@ describe('saveDraftWork', () => {
 			author: null,
 			autosave: true
 		});
-		expect(throttled).toEqual({
+		expect(throttled).toMatchObject({
 			kind: 'throttled',
 			draftId: 'draft-1',
 			version: 3,
 			postId: 'post-1'
 		});
+		if (throttled.kind === 'throttled') {
+			expect(throttled.retryAfterMs).toBeGreaterThan(0);
+			expect(throttled.retryAfterMs).toBeLessThanOrEqual(DRAFT_THROTTLE_MS);
+		}
 		expect(state.updates).toHaveLength(0);
 
 		state.selectQueue = [[fresh]];
@@ -292,6 +355,23 @@ describe('saveDraftWork', () => {
 		});
 		expect(manual).toMatchObject({ kind: 'saved', version: 4 });
 		expect(state.updates[0].values).toMatchObject({ version: 4, content: 'Something else' });
+		// Saving must never touch the posts rows - only the working copy does.
+		expect(state.updates.every((u) => u.table === drafts)).toBe(true);
+	});
+
+	it('lets the save through once the throttle window elapsed', async () => {
+		const stale = { ...BASE_DRAFT, updatedAt: new Date(Date.now() - 31_000) };
+		state.selectQueue = [[stale]];
+		state.updateResults = [[{ id: 'draft-1', version: 4, updatedAt: new Date() }]];
+		const result = await saveDraftWork({
+			draftId: 'draft-1',
+			postId: null,
+			expectedVersion: stale.version,
+			payload: payload({ content: 'After the window' }),
+			author: null,
+			autosave: true
+		});
+		expect(result).toMatchObject({ kind: 'saved', version: 4 });
 	});
 
 	it('answers a version conflict without writing', async () => {
@@ -342,48 +422,63 @@ describe('saveDraftWork', () => {
 
 describe('publishDraft', () => {
 	beforeEach(() => {
-		state.selectQueue = [];
-		state.insertResults = [];
-		state.updateResults = [];
-		state.updates = [];
-		state.inserts = [];
-		state.deletes = [];
-		state.failWith = undefined;
-		const executors = makeExecutors();
-		Object.assign(dbMock, {
-			...executors,
-			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(executors))
-		});
+		resetState();
 	});
 
-	it('fails validation before any write', async () => {
+	it('fails validation before any write (full message snapshot)', async () => {
 		state.selectQueue = [
-			[{ ...BASE_DRAFT, title: '  ', slug: null, content: null }],
+			[{ ...BASE_DRAFT, title: '  ', slug: null, content: null, categoryId: null }],
 			[{ id: 'post-1', version: 2 }]
 		];
 		const result = await publishDraft('draft-1', 'user-1');
-		expect(result.kind).toBe('invalid');
-		if (result.kind === 'invalid') {
-			expect(result.errors).toMatchObject({
-				title: expect.any(String),
-				slug: expect.any(String),
-				content: expect.any(String)
-			});
-		}
+		expect(result).toEqual({
+			kind: 'invalid',
+			errors: {
+				title: '标题不能为空',
+				slug: 'Slug 不能为空',
+				categoryId: '请选择分类',
+				content: '正文不能为空'
+			}
+		});
+		expect(dbMock.transaction).not.toHaveBeenCalled();
 		expect(state.updates).toHaveLength(0);
 	});
 
-	it('publishes inside one transaction: revision, tracker, tags, draft removal', async () => {
+	it('rejects a malformed slug and the reserved draft- prefix', async () => {
+		state.selectQueue = [[{ ...BASE_DRAFT, slug: 'Bad Slug' }], [{ id: 'post-1', version: 2 }]];
+		const bad = await publishDraft('draft-1', null);
+		expect(bad).toMatchObject({
+			kind: 'invalid',
+			errors: { slug: 'Slug 仅允许小写英文、数字和连字符' }
+		});
+
+		state.selectQueue = [
+			[{ ...BASE_DRAFT, slug: 'draft-abcdef1234' }],
+			[{ id: 'post-1', version: 2 }]
+		];
+		const reserved = await publishDraft('draft-1', null);
+		expect(reserved).toMatchObject({
+			kind: 'invalid',
+			errors: { slug: '该 Slug 前缀由系统占位保留，请更换' }
+		});
+	});
+
+	it('publishes the freshly locked rows: revision, tracker, tags, draft removal', async () => {
 		const draft = { ...BASE_DRAFT, slug: 'new-slug', baseVersion: 2 };
 		state.selectQueue = [
-			[draft], // loadDraftById
+			[draft], // loadDraftById (outer snapshot)
 			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }], // posts lookup
 			[{ id: 'cat-1' }], // category check
-			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }] // locked row
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }], // locked posts row
+			[{ ...draft, content: 'Locked newest' }] // locked draft row (in-tx re-read)
 		];
 		state.insertResults = [[{ id: 't1' }], []]; // tags upsert, postTags insert
 		const result = await publishDraft('draft-1', 'user-1');
 		expect(result).toEqual({ kind: 'published', postId: 'post-1', version: 3 });
+		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
+		// Both rows are locked, in the posts → drafts order (deadlock avoidance).
+		expect(state.forCalls).toEqual(['update', 'update']);
+		expect(state.selectQueue).toHaveLength(0);
 
 		const tracker = state.inserts.find((i) => i.table === slugTrackers);
 		expect(tracker?.values).toEqual({
@@ -398,19 +493,46 @@ describe('publishDraft', () => {
 			title: 'Old title',
 			slug: 'new-slug',
 			status: 'published',
-			version: 3
+			version: 3,
+			// Content comes from the row locked inside the transaction, not the
+			// outer snapshot (lost-update guard).
+			content: 'Locked newest',
+			contentFormat: 'markdown',
+			summary: null
 		});
+
+		const tagUpsert = state.inserts.find((i) => i.table === tags);
+		expect(tagUpsert?.values).toEqual({ name: 't1', slug: 't1' });
+		const junction = state.inserts.find((i) => i.table === postTags);
+		expect(junction?.values).toEqual({ postId: 'post-1', tagId: 't1' });
 
 		const revision = state.inserts.find((i) => i.table === postRevisions);
 		expect(revision?.values).toMatchObject({
 			postId: 'post-1',
 			version: 3,
 			source: 'publish',
-			author: 'user-1'
+			author: 'user-1',
+			content: 'Locked newest'
 		});
 
 		expect(state.deletes.some((d) => d.table === drafts)).toBe(true);
 		expect(state.deletes.some((d) => d.table === postTags)).toBe(true);
+	});
+
+	it('publishes a user slug that keeps the same name (no tracker)', async () => {
+		const draft = { ...BASE_DRAFT, slug: 'old-slug', baseVersion: 2 };
+		state.selectQueue = [
+			[draft],
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'zh-cn' }],
+			[{ id: 'cat-1' }],
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'zh-cn' }],
+			[{ ...draft }]
+		];
+		state.insertResults = [[{ id: 't1' }], []];
+		await publishDraft('draft-1', null);
+		expect(state.inserts.find((i) => i.table === slugTrackers)).toBeUndefined();
+		// Lang comes from the locked posts row, not a literal.
+		expect(state.forCalls).toEqual(['update', 'update']);
 	});
 
 	it('does not record a tracker for placeholder slugs', async () => {
@@ -419,7 +541,8 @@ describe('publishDraft', () => {
 			[draft],
 			[{ id: 'post-1', version: 0, slug: 'draft-aaaaaaaaaa', lang: 'en' }],
 			[{ id: 'cat-1' }],
-			[{ id: 'post-1', version: 0, slug: 'draft-aaaaaaaaaa', lang: 'en' }]
+			[{ id: 'post-1', version: 0, slug: 'draft-aaaaaaaaaa', lang: 'en' }],
+			[{ ...draft }]
 		];
 		state.insertResults = [[{ id: 't1' }], []];
 		await publishDraft('draft-1', null);
@@ -432,12 +555,27 @@ describe('publishDraft', () => {
 			[draft],
 			[{ id: 'post-1', version: 4, slug: 'old-slug', lang: 'en' }],
 			[{ id: 'cat-1' }],
-			[{ id: 'post-1', version: 4, slug: 'old-slug', lang: 'en' }]
+			[{ id: 'post-1', version: 4, slug: 'old-slug', lang: 'en' }],
+			[{ ...draft }]
 		];
 		const result = await publishDraft('draft-1', null);
 		expect(result).toEqual({ kind: 'conflict', server: { version: 4 } });
 		expect(state.updates).toHaveLength(0);
 		expect(state.deletes).toHaveLength(0);
+	});
+
+	it('stops when the working copy vanished inside the transaction', async () => {
+		const draft = { ...BASE_DRAFT, baseVersion: 2 };
+		state.selectQueue = [
+			[draft],
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }],
+			[{ id: 'cat-1' }],
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }],
+			[] // the draft row is gone (published/discarded concurrently)
+		];
+		const result = await publishDraft('draft-1', null);
+		expect(result).toEqual({ kind: 'not-found' });
+		expect(state.updates).toHaveLength(0);
 	});
 
 	it('translates a 23505 race into slug-taken', async () => {
@@ -446,34 +584,43 @@ describe('publishDraft', () => {
 			[draft],
 			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }],
 			[{ id: 'cat-1' }],
-			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }]
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }],
+			[{ ...draft }]
 		];
 		state.failWith = Object.assign(new Error('dup'), { cause: { code: '23505' } });
 		const result = await publishDraft('draft-1', null);
 		expect(result).toEqual({ kind: 'slug-taken' });
 	});
+
+	it('reports a deadlock as busy (40P01)', async () => {
+		const draft = { ...BASE_DRAFT, baseVersion: 2 };
+		state.selectQueue = [
+			[draft],
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }],
+			[{ id: 'cat-1' }],
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }],
+			[{ ...draft }]
+		];
+		state.failWith = Object.assign(new Error('deadlock'), { cause: { code: '40P01' } });
+		const result = await publishDraft('draft-1', null);
+		expect(result).toEqual({ kind: 'busy' });
+	});
 });
 
 describe('discardDraft', () => {
 	beforeEach(() => {
-		state.selectQueue = [];
-		state.insertResults = [];
-		state.updates = [];
-		state.inserts = [];
-		state.deletes = [];
-		state.failWith = undefined;
-		const executors = makeExecutors();
-		Object.assign(dbMock, {
-			...executors,
-			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(executors))
-		});
+		resetState();
 	});
 
 	it('removes a never-published placeholder together with its draft', async () => {
 		state.selectQueue = [[{ ...BASE_DRAFT }], [{ id: 'post-1', status: 'draft', version: 0 }]];
 		const result = await discardDraft('draft-1');
 		expect(result).toEqual({ kind: 'discarded', postId: 'post-1', removedPlaceholder: true });
+		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
+		// The seed row is locked before the working copy is removed.
+		expect(state.forCalls).toEqual(['update']);
 		expect(state.deletes.map((d) => d.table)).toEqual([drafts, posts]);
+		expect(state.selectQueue).toHaveLength(0);
 	});
 
 	it('keeps a published post when only its working copy is discarded', async () => {
@@ -482,29 +629,54 @@ describe('discardDraft', () => {
 		expect(result).toEqual({ kind: 'discarded', postId: 'post-1', removedPlaceholder: false });
 		expect(state.deletes.map((d) => d.table)).toEqual([drafts]);
 	});
+
+	it('answers not-found when the draft vanished before the delete', async () => {
+		state.selectQueue = [[{ ...BASE_DRAFT }], [{ id: 'post-1', status: 'published', version: 4 }]];
+		state.deleteResults = [[]];
+		const result = await discardDraft('draft-1');
+		expect(result).toEqual({ kind: 'not-found' });
+		expect(state.deletes.map((d) => d.table)).toEqual([drafts]);
+	});
+
+	it('answers plain not-found when the draft does not exist', async () => {
+		state.selectQueue = [[]];
+		const result = await discardDraft('draft-1');
+		expect(result).toEqual({ kind: 'not-found' });
+		expect(state.deletes).toHaveLength(0);
+	});
+
+	it('reports a deadlock as busy (40P01)', async () => {
+		state.selectQueue = [[{ ...BASE_DRAFT }], [{ id: 'post-1', status: 'published', version: 4 }]];
+		state.failWith = Object.assign(new Error('deadlock'), { cause: { code: '40P01' } });
+		const result = await discardDraft('draft-1');
+		expect(result).toEqual({ kind: 'busy' });
+	});
 });
 
 describe('createTranslationDraft', () => {
 	beforeEach(() => {
-		state.selectQueue = [];
-		state.insertResults = [];
-		state.updates = [];
-		state.inserts = [];
-		state.deletes = [];
-		state.failWith = undefined;
-		const executors = makeExecutors();
-		Object.assign(dbMock, {
-			...executors,
-			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(executors))
-		});
+		resetState();
 	});
 
-	it('rejects the same language and existing siblings', async () => {
+	it('rejects the same language, chained translations and existing siblings', async () => {
 		state.selectQueue = [[{ id: 'post-1', lang: 'en' }]];
 		expect((await createTranslationDraft('post-1', 'en', null)).kind).toBe('same-lang');
 
+		state.selectQueue = [[{ id: 'post-1', lang: 'zh-cn', translatedFromPostId: 'post-9' }]];
+		expect((await createTranslationDraft('post-1', 'ja', null)).kind).toBe('not-source');
+
 		state.selectQueue = [[{ id: 'post-1', lang: 'en' }], [{ id: 'post-2' }]];
 		expect((await createTranslationDraft('post-1', 'zh-cn', null)).kind).toBe('lang-exists');
+	});
+
+	it('translates a concurrent duplicate (23505) into lang-exists', async () => {
+		state.selectQueue = [
+			[{ id: 'post-1', lang: 'en', translatedFromPostId: null, translationGroup: 'group-1' }],
+			[]
+		];
+		state.failWith = Object.assign(new Error('dup'), { cause: { code: '23505' } });
+		const result = await createTranslationDraft('post-1', 'zh-cn', null);
+		expect(result).toEqual({ kind: 'lang-exists' });
 	});
 
 	it('copies the prefill into the new draft (§9.20.4)', async () => {
@@ -518,7 +690,8 @@ describe('createTranslationDraft', () => {
 					summary: 'Source summary',
 					contentFormat: 'markdown',
 					categoryId: 'cat-1',
-					translationGroup: 'group-1'
+					translationGroup: 'group-1',
+					translatedFromPostId: null
 				}
 			],
 			[]
@@ -526,6 +699,7 @@ describe('createTranslationDraft', () => {
 		state.insertResults = [[{ id: 'post-9' }], []];
 		const result = await createTranslationDraft('post-1', 'zh-cn', 'user-1');
 		expect(result).toEqual({ kind: 'created', postId: 'post-9' });
+		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
 
 		const created = state.inserts.find((i) => i.table === posts);
 		expect(created?.values).toMatchObject({
@@ -545,6 +719,3 @@ describe('createTranslationDraft', () => {
 		});
 	});
 });
-
-// DRAFT_THROTTLE_MS is part of the public contract (client retry timing).
-void DRAFT_THROTTLE_MS;

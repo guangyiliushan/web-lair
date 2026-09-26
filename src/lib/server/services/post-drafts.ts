@@ -64,18 +64,14 @@ export function draftHash(payload: DraftPayload): string {
 	return hashNormalized(normalizePayload(payload));
 }
 
+/**
+ * Hash the exact write set (single source of truth): any change that
+ * `draftUpdateSet` persists is by construction part of the hash, so a new
+ * editable field can never silently skip the "unchanged" fast path.
+ */
 function hashNormalized(value: NormalizedDraft): string {
 	return createHash('sha256')
-		.update(
-			JSON.stringify([
-				value.title,
-				value.slug,
-				value.categoryId,
-				value.summary,
-				value.tags,
-				value.content
-			])
-		)
+		.update(JSON.stringify(draftUpdateSet(value)))
 		.digest('hex');
 }
 
@@ -129,14 +125,13 @@ export async function loadDraftByPostId(postId: string): Promise<DraftRow | null
 export type SaveDraftResult =
 	| { kind: 'saved'; draftId: string; version: number; postId: string; updatedAt: Date | null }
 	| { kind: 'unchanged'; draftId: string; version: number; postId: string }
-	| { kind: 'throttled'; draftId: string; version: number; postId: string }
+	| { kind: 'throttled'; draftId: string; version: number; postId: string; retryAfterMs: number }
 	| {
 			kind: 'conflict';
 			server: { draftId: string | null; version: number; updatedAt: Date | null };
 	  }
 	| { kind: 'needs-category' }
-	| { kind: 'not-found' }
-	| { kind: 'duplicate' };
+	| { kind: 'not-found' };
 
 export interface SaveDraftInput {
 	/** Draft row address (preferred once the client has one). */
@@ -292,10 +287,18 @@ async function updateExistingDraft(
 	}
 
 	// Autosave throttle: at most one write per draft per 30s (§9.10). Manual
-	// saves bypass it; the client retries while still dirty.
+	// saves bypass it; the client retries while still dirty using the
+	// `retryAfterMs` hint we return here (never guess the window length).
 	const lastWrite = draft.updatedAt?.getTime() ?? 0;
-	if (input.autosave && Date.now() - lastWrite < DRAFT_THROTTLE_MS) {
-		return { kind: 'throttled', draftId: draft.id, version: draft.version, postId };
+	const elapsed = Date.now() - lastWrite;
+	if (input.autosave && elapsed < DRAFT_THROTTLE_MS) {
+		return {
+			kind: 'throttled',
+			draftId: draft.id,
+			version: draft.version,
+			postId,
+			retryAfterMs: DRAFT_THROTTLE_MS - elapsed
+		};
 	}
 
 	// Optimistic lock: the client's base version must still be current.
@@ -341,7 +344,9 @@ export type PublishResult =
 	| { kind: 'conflict'; server: { version: number } }
 	| { kind: 'not-found' }
 	| { kind: 'invalid'; errors: Record<string, string> }
-	| { kind: 'slug-taken' };
+	| { kind: 'slug-taken' }
+	/** Deadlock/serialization failure between concurrent admin actions. */
+	| { kind: 'busy' };
 
 export async function publishDraft(
 	draftId: string,
@@ -360,6 +365,8 @@ export async function publishDraft(
 	if (!title) errors.title = '标题不能为空';
 	if (!slug) errors.slug = 'Slug 不能为空';
 	else if (!SLUG_RE.test(slug)) errors.slug = 'Slug 仅允许小写英文、数字和连字符';
+	else if (slug.startsWith(PLACEHOLDER_SLUG_PREFIX))
+		errors.slug = '该 Slug 前缀由系统占位保留，请更换';
 	if (!categoryId) errors.categoryId = '请选择分类';
 	if (!(draft.content ?? '').trim()) errors.content = '正文不能为空';
 	if (Object.keys(errors).length > 0) return { kind: 'invalid', errors };
@@ -383,14 +390,42 @@ export async function publishDraft(
 				.for('update');
 			if (!locked) return { kind: 'not-found' as const };
 
+			// Lock the working copy too, in the SAME order as discardDraft
+			// (posts → drafts) so the two admin actions cannot deadlock, and
+			// publish the locked rows: a concurrent save that lands between the
+			// outer snapshot and this transaction must not be silently lost.
+			const [lockedDraft] = await tx
+				.select()
+				.from(drafts)
+				.where(and(eq(drafts.id, draft.id), eq(drafts.refType, 'post')))
+				.limit(1)
+				.for('update');
+			if (!lockedDraft) return { kind: 'not-found' as const };
+
 			// Optimistic base check: fail when the article moved on meanwhile
 			// (another tab published), never silently overwrite (§9.10, 情景16).
-			if (locked.version !== draft.baseVersion) {
+			if (locked.version !== lockedDraft.baseVersion) {
 				return { kind: 'conflict' as const, server: { version: locked.version } };
 			}
 
+			const finalTitle = lockedDraft.title.trim();
+			const finalSlug = (lockedDraft.slug ?? '').trim();
+			const finalCategoryId = lockedDraft.categoryId ?? '';
+			if (!finalTitle || !finalSlug || !finalCategoryId || !(lockedDraft.content ?? '').trim()) {
+				return {
+					kind: 'invalid' as const,
+					errors: { form: '草稿内容已变化，请刷新后重试' } as Record<string, string>
+				};
+			}
+			if (!SLUG_RE.test(finalSlug) || finalSlug.startsWith(PLACEHOLDER_SLUG_PREFIX)) {
+				return {
+					kind: 'invalid' as const,
+					errors: { slug: 'Slug 格式无效' } as Record<string, string>
+				};
+			}
+
 			// Slug change inside the same language: keep the old slug resolvable.
-			if (locked.slug !== slug && !isPlaceholderSlug(locked.slug)) {
+			if (locked.slug !== finalSlug && !isPlaceholderSlug(locked.slug)) {
 				await tx.insert(slugTrackers).values({
 					slug: locked.slug,
 					type: 'post',
@@ -403,12 +438,12 @@ export async function publishDraft(
 			await tx
 				.update(posts)
 				.set({
-					title,
-					slug,
-					categoryId,
-					content: draft.content,
-					contentFormat: draft.contentFormat,
-					summary: draft.summary,
+					title: finalTitle,
+					slug: finalSlug,
+					categoryId: finalCategoryId,
+					content: lockedDraft.content,
+					contentFormat: lockedDraft.contentFormat,
+					summary: lockedDraft.summary,
 					status: 'published',
 					publishedAt: sql`coalesce(${posts.publishedAt}, now())`,
 					version: nextVersion,
@@ -419,16 +454,16 @@ export async function publishDraft(
 			await tx.insert(postRevisions).values({
 				postId: locked.id,
 				version: nextVersion,
-				title,
-				content: draft.content,
-				summary: draft.summary,
+				title: finalTitle,
+				content: lockedDraft.content,
+				summary: lockedDraft.summary,
 				source: 'publish',
 				author: author ?? null
 			});
 
-			await syncPostTags(tx, locked.id, draft.tags ?? []);
+			await syncPostTags(tx, locked.id, lockedDraft.tags ?? []);
 
-			await tx.delete(drafts).where(eq(drafts.id, draft.id));
+			await tx.delete(drafts).where(eq(drafts.id, lockedDraft.id));
 
 			return { kind: 'published' as const, postId: locked.id, version: nextVersion };
 		});
@@ -436,6 +471,8 @@ export async function publishDraft(
 		const code = pgErrorCode(caught);
 		if (code === '23505') return { kind: 'slug-taken' };
 		if (code === '23503') return { kind: 'invalid', errors: { categoryId: '分类不存在' } };
+		// Deadlock/serialization failures are retryable admin-action conflicts.
+		if (code === '40P01' || code === '40001') return { kind: 'busy' };
 		throw caught;
 	}
 }
@@ -443,34 +480,58 @@ export async function publishDraft(
 /* ── Discard (§9.14.3) ───────────────────────────────────────────────── */
 
 export type DiscardResult =
-	{ kind: 'discarded'; postId: string | null; removedPlaceholder: boolean } | { kind: 'not-found' };
+	| { kind: 'discarded'; postId: string | null; removedPlaceholder: boolean }
+	| { kind: 'not-found' }
+	/** Deadlock/serialization failure between concurrent admin actions. */
+	| { kind: 'busy' };
 
 export async function discardDraft(draftId: string): Promise<DiscardResult> {
-	return db.transaction(async (tx) => {
-		const [draft] = await tx
-			.select()
-			.from(drafts)
-			.where(and(eq(drafts.id, draftId), eq(drafts.refType, 'post')))
-			.limit(1);
-		if (!draft) return { kind: 'not-found' as const };
-
-		await tx.delete(drafts).where(eq(drafts.id, draft.id));
-
-		let removedPlaceholder = false;
-		if (draft.refId) {
-			const [post] = await tx
-				.select({ id: posts.id, status: posts.status, version: posts.version })
-				.from(posts)
-				.where(eq(posts.id, draft.refId))
+	try {
+		return await db.transaction(async (tx) => {
+			const [draft] = await tx
+				.select()
+				.from(drafts)
+				.where(and(eq(drafts.id, draftId), eq(drafts.refType, 'post')))
 				.limit(1);
-			// A never-published placeholder goes with its draft (§9.14.3).
-			if (post && post.version === 0 && post.status === 'draft') {
-				await tx.delete(posts).where(eq(posts.id, post.id));
-				removedPlaceholder = true;
+			if (!draft) return { kind: 'not-found' as const };
+
+			if (draft.refId) {
+				// Lock order matches publishDraft (posts → drafts) so a publish
+				// and a discard on the same target cannot deadlock; the seed row
+				// is then re-checked on the locked post, not check-then-act.
+				const [post] = await tx
+					.select({ id: posts.id, status: posts.status, version: posts.version })
+					.from(posts)
+					.where(eq(posts.id, draft.refId))
+					.limit(1)
+					.for('update');
+				const deleted = await tx
+					.delete(drafts)
+					.where(eq(drafts.id, draft.id))
+					.returning({ id: drafts.id });
+				// The draft vanished under us (published concurrently).
+				if (deleted.length === 0) return { kind: 'not-found' as const };
+				let removedPlaceholder = false;
+				// A never-published placeholder goes with its draft (§9.14.3).
+				if (post && post.version === 0 && post.status === 'draft') {
+					await tx.delete(posts).where(eq(posts.id, post.id));
+					removedPlaceholder = true;
+				}
+				return { kind: 'discarded' as const, postId: draft.refId, removedPlaceholder };
 			}
-		}
-		return { kind: 'discarded' as const, postId: draft.refId, removedPlaceholder };
-	});
+
+			const deleted = await tx
+				.delete(drafts)
+				.where(eq(drafts.id, draft.id))
+				.returning({ id: drafts.id });
+			if (deleted.length === 0) return { kind: 'not-found' as const };
+			return { kind: 'discarded' as const, postId: null, removedPlaceholder: false };
+		});
+	} catch (caught) {
+		const code = pgErrorCode(caught);
+		if (code === '40P01' || code === '40001') return { kind: 'busy' };
+		throw caught;
+	}
 }
 
 /* ── Create translation (§9.20.4) ────────────────────────────────────── */
@@ -479,7 +540,9 @@ export type CreateTranslationResult =
 	| { kind: 'created'; postId: string }
 	| { kind: 'not-found' }
 	| { kind: 'same-lang' }
-	| { kind: 'lang-exists' };
+	| { kind: 'lang-exists' }
+	/** R7 禁链式: only a group source can spawn a translation. */
+	| { kind: 'not-source' };
 
 export async function createTranslationDraft(
 	sourceId: string,
@@ -489,6 +552,9 @@ export async function createTranslationDraft(
 	const [source] = await db.select().from(posts).where(eq(posts.id, sourceId)).limit(1);
 	if (!source) return { kind: 'not-found' };
 	if (source.lang === lang) return { kind: 'same-lang' };
+	// R7 (ledger §14.4): translations always point at the group source; the
+	// partial unique index cannot see this, it is an application-level rule.
+	if (source.translatedFromPostId) return { kind: 'not-source' };
 
 	const [sibling] = await db
 		.select({ id: posts.id })
@@ -497,42 +563,50 @@ export async function createTranslationDraft(
 		.limit(1);
 	if (sibling) return { kind: 'lang-exists' };
 
-	return db.transaction(async (tx) => {
-		const [created] = await tx
-			.insert(posts)
-			.values({
-				// Copy prefill (§9.20.4): title/content/summary ride in the draft
-				// row; the placeholder keeps the identity columns only.
+	try {
+		return await db.transaction(async (tx) => {
+			const [created] = await tx
+				.insert(posts)
+				.values({
+					// Copy prefill (§9.20.4): title/content/summary ride in the draft
+					// row; the placeholder keeps the identity columns only.
+					title: source.title,
+					slug: tempSlug(),
+					lang,
+					translationGroup: source.translationGroup,
+					translatedFromPostId: source.id,
+					categoryId: source.categoryId,
+					status: 'draft',
+					version: 0,
+					updatedAt: new Date()
+				})
+				.returning({ id: posts.id });
+
+			await tx.insert(drafts).values({
+				refType: 'post',
+				refId: created.id,
 				title: source.title,
-				slug: tempSlug(),
-				lang,
-				translationGroup: source.translationGroup,
-				translatedFromPostId: source.id,
+				slug: null,
 				categoryId: source.categoryId,
-				status: 'draft',
-				version: 0,
+				tags: [],
+				content: source.content,
+				contentFormat: source.contentFormat ?? 'markdown',
+				summary: source.summary,
+				version: 1,
+				baseVersion: 0,
+				author: author ?? null,
 				updatedAt: new Date()
-			})
-			.returning({ id: posts.id });
+			});
 
-		await tx.insert(drafts).values({
-			refType: 'post',
-			refId: created.id,
-			title: source.title,
-			slug: null,
-			categoryId: source.categoryId,
-			tags: [],
-			content: source.content,
-			contentFormat: source.contentFormat ?? 'markdown',
-			summary: source.summary,
-			version: 1,
-			baseVersion: 0,
-			author: author ?? null,
-			updatedAt: new Date()
+			return { kind: 'created' as const, postId: created.id };
 		});
-
-		return { kind: 'created' as const, postId: created.id };
-	});
+	} catch (caught) {
+		// Concurrent duplicate: (translation_group, lang) is the arbiter. A temp
+		// slug collision would be mislabelled, but its odds are negligible and
+		// the retry is harmless (the user sees "该语言版本已存在").
+		if (pgErrorCode(caught) === '23505') return { kind: 'lang-exists' };
+		throw caught;
+	}
 }
 
 /* ── Read helpers for the lists ──────────────────────────────────────── */

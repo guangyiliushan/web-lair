@@ -39,13 +39,21 @@ function cleanup() {
 	psql(`delete from posts where slug like 'e2e-writing%' or title ilike 'e2e writing%'`);
 }
 
-test.describe.configure({ mode: 'serial', timeout: 180_000 });
+// Long serial chain: keep the per-test budget above the sum of the inner
+// waits with headroom for a loaded machine (the old 180s was ~15s short of the
+// worst case; review finding). NOTE: this spec owns fixed fixture ids on the
+// shared dev database - never run it twice concurrently (each run would see
+// the other's rows and both would fail).
+test.describe.configure({ mode: 'serial', timeout: 300_000 });
 
 test.beforeAll(() => {
 	cleanup();
-	psql(`delete from categories where slug = 'e2e-editor-cat'`);
+	// Idempotent fixture (P2 review finding): a leftover row under either key
+	// used to make the fixed-id insert fail with categories_pkey and turn the
+	// whole serial file red before a single test ran.
+	psql(`delete from categories where id = '${CATEGORY}' or slug = 'e2e-editor-cat'`);
 	psql(
-		`insert into categories (id, name, slug) values ('${CATEGORY}', '${CATEGORY_NAME}', 'e2e-editor-cat')`
+		`insert into categories (id, name, slug) values ('${CATEGORY}', '${CATEGORY_NAME}', 'e2e-editor-cat') on conflict (id) do update set name = excluded.name, slug = excluded.slug`
 	);
 });
 
@@ -63,9 +71,19 @@ async function pickCategory(page: Page) {
 		}
 		await expect(page.locator('#settings-category')).toBeVisible({ timeout: 10000 });
 	}).toPass({ timeout: 20000 });
-	await page.locator('#settings-category').click();
-	await page.locator('[data-slot="select-item"]').filter({ hasText: CATEGORY_NAME }).click();
-	await expect(page.locator('#settings-category')).toContainText(CATEGORY_NAME);
+	// Retry the whole pick until the trigger shows the selection: under a
+	// loaded machine the first clicks can be swallowed (exactly this step
+	// timed out at 180s in a concurrent full-suite run - review finding).
+	await expect(async () => {
+		await page.locator('#settings-category').click();
+		await page
+			.locator('[data-slot="select-item"]')
+			.filter({ hasText: CATEGORY_NAME })
+			.click({ timeout: 3000 });
+		await expect(page.locator('#settings-category')).toContainText(CATEGORY_NAME, {
+			timeout: 2000
+		});
+	}).toPass({ timeout: 25000 });
 	await page.keyboard.press('Escape');
 }
 
@@ -224,6 +242,25 @@ test('a stale tab hits the 409 conflict banner and can reload the server state',
 	});
 	await pageA.close();
 	await pageB.close();
+});
+
+test('admin lists reflect pending changes', async ({ page }) => {
+	// Gate P2 names the admin list regression; the badge column is the only
+	// consumer of draftsForPosts - pin it here (review finding).
+	await page.goto('/admin/posts');
+	const row = page.getByRole('row').filter({ hasText: TITLE });
+	await expect(row.first()).toBeVisible({ timeout: 10000 });
+	await expect(row.first().getByText('有未发布改动')).toBeVisible();
+
+	await page.goto('/admin/posts?status=published');
+	await expect(page.getByRole('row').filter({ hasText: TITLE }).first()).toBeVisible({
+		timeout: 10000
+	});
+
+	await page.goto('/admin/drafts');
+	await expect(page.getByRole('row').filter({ hasText: TITLE }).first()).toBeVisible({
+		timeout: 10000
+	});
 });
 
 test('discards the working copy from the drafts page', async ({ page }) => {

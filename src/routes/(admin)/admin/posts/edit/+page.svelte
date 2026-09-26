@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
 	import { enhance, deserialize } from '$app/forms';
-	import { invalidateAll, replaceState } from '$app/navigation';
+	import { afterNavigate, invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { ActionResult } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
@@ -69,6 +69,9 @@
 	let publishing = $state(false);
 	let publishErrors = $state<Record<string, string>>({});
 	let flash = $state<string | null>(null);
+	/** Set when an action answers with a redirect instead of data (session). */
+	let reauthUrl = $state<string | null>(null);
+	let flashTimer: ReturnType<typeof setTimeout> | null = null;
 
 	/**
 	 * Shared handler for the publish/discard/createTranslation forms: on
@@ -90,6 +93,11 @@
 				// A publish-side base conflict also freezes publishes until reload.
 				if (result.status === 409) conflictMessage = d.message ?? conflictMessage;
 			} else {
+				// A same-route redirect keeps component state: close the dialogs
+				// explicitly or the translation/settings panels stay open over
+				// the freshly created page (review probe finding).
+				translationOpen = false;
+				settingsOpen = false;
 				await update();
 			}
 		};
@@ -105,9 +113,6 @@
 	/** Narrowing-proof state readers ($state writes elsewhere confuse tsc). */
 	function isSettledState(state: SaveState): boolean {
 		return state === 'saved' || state === 'idle';
-	}
-	function isBlockingConflict(): boolean {
-		return saveState === 'conflict';
 	}
 
 	function applyAll() {
@@ -129,6 +134,7 @@
 		saveError = null;
 		conflictMessage = null;
 		publishErrors = {};
+		reauthUrl = null;
 		lastSavedAt = null;
 		const snapshot = currentPayload();
 		savedSnapshot = snapshot;
@@ -165,16 +171,17 @@
 			return;
 		}
 		saveState = 'dirty';
-		scheduleAutosave();
+		scheduleSave(AUTOSAVE_DEBOUNCE_MS);
 	}
 
-	function scheduleAutosave() {
+	/** One scheduler for both the debounce and the throttle/error retry. */
+	function scheduleSave(delayMs: number) {
 		if (autosaveTimer) clearTimeout(autosaveTimer);
 		autosaveTimer = setTimeout(() => {
 			autosaveTimer = null;
 			if (saveState === 'conflict') return;
 			void runSave(true);
-		}, AUTOSAVE_DEBOUNCE_MS);
+		}, delayMs);
 	}
 
 	async function runSave(autosave: boolean): Promise<boolean> {
@@ -202,18 +209,28 @@
 			const response = await fetch('?/save', {
 				method: 'POST',
 				body: fd,
-				headers: { 'x-sveltekit-action': 'true' }
+				// The JSON action protocol is selected by Accept negotiation; the
+				// x-sveltekit-action header is only a bypass switch (probe finding).
+				headers: { 'x-sveltekit-action': 'true', accept: 'application/json' }
 			});
 			const result = deserialize(await response.text());
-			if (result.type === 'success') {
+			if (result.type === 'redirect') {
+				// A guard bounced us (session expired): stop the retry loop and
+				// offer a re-login instead of blaming the network forever.
+				saveState = 'error';
+				saveError = '登录已失效，请重新登录后继续（修改尚未保存）';
+				reauthUrl = result.location ?? null;
+			} else if (result.type === 'success') {
 				const d = result.data as {
 					saved: boolean;
 					reason?: 'unchanged' | 'throttled';
 					draftId: string;
 					draftVersion: number;
 					postId: string | null;
+					retryAfterMs?: number;
 					updatedAt?: Date | string | null;
 				};
+				reauthUrl = null;
 				draftId = d.draftId;
 				draftVersion = d.draftVersion;
 				if (d.postId && d.postId !== postId) {
@@ -227,7 +244,12 @@
 					saveState = currentPayload() === savedSnapshot ? 'saved' : 'dirty';
 				} else if (d.reason === 'throttled') {
 					saveState = 'throttled';
-					scheduleRetry();
+					// Retry when the server window has actually elapsed.
+					const wait =
+						typeof d.retryAfterMs === 'number' && d.retryAfterMs > 0
+							? d.retryAfterMs + 1500
+							: THROTTLE_RETRY_MS;
+					scheduleSave(wait);
 				}
 			} else if (result.type === 'failure') {
 				const d = (result.data ?? {}) as { message?: string; needsCategory?: boolean };
@@ -243,31 +265,22 @@
 			} else {
 				saveState = 'error';
 				saveError = '网络异常，稍后将重试';
-				scheduleRetry();
+				scheduleSave(THROTTLE_RETRY_MS);
 			}
 		} catch {
 			saveState = 'error';
 			saveError = '网络异常，稍后将重试';
-			scheduleRetry();
+			scheduleSave(THROTTLE_RETRY_MS);
 		} finally {
 			inFlight = false;
 			if (pendingResave) {
 				pendingResave = false;
-				if (saveState !== 'conflict') scheduleAutosave();
+				if (saveState !== 'conflict') scheduleSave(AUTOSAVE_DEBOUNCE_MS);
 			} else if (saveState === 'saved' && currentPayload() !== savedSnapshot) {
-				scheduleAutosave();
+				scheduleSave(AUTOSAVE_DEBOUNCE_MS);
 			}
 		}
 		return isSettledState(saveState);
-	}
-
-	function scheduleRetry() {
-		if (autosaveTimer) clearTimeout(autosaveTimer);
-		autosaveTimer = setTimeout(() => {
-			autosaveTimer = null;
-			if (saveState === 'conflict') return;
-			void runSave(true);
-		}, THROTTLE_RETRY_MS);
 	}
 
 	async function reloadFromServer() {
@@ -280,9 +293,11 @@
 		publishing = true;
 		try {
 			if (!draftId || isDirty()) {
+				// Only publish once the working copy is actually persisted: an
+				// error / throttled / in-flight save must abort the publish or we
+				// would ship the server's stale draft and silently drop edits.
 				const ok = await runSave(false);
-				if (!ok && !draftId) return; // the save itself reported why
-				if (isBlockingConflict()) return;
+				if (!ok) return;
 			}
 			await tick();
 			const publishForm = document.getElementById('publish-form');
@@ -306,7 +321,9 @@
 	}
 
 	// Transient banners for ?published=1 / ?discarded=1 / ?translation=1.
-	$effect(() => {
+	// afterNavigate (not $effect) - replaceState throws before the router is
+	// initialized, which a hard load of such a URL used to hit (dev probe).
+	afterNavigate(() => {
 		const params = page.url.searchParams;
 		let message: string | null = null;
 		if (params.get('published') === '1') message = '已发布';
@@ -314,11 +331,11 @@
 		else if (params.get('translation') === '1') message = '翻译草稿已创建';
 		if (!message) return;
 		flash = message;
-		const timer = setTimeout(() => (flash = null), 3500);
+		if (flashTimer) clearTimeout(flashTimer);
+		flashTimer = setTimeout(() => (flash = null), 3500);
 		const url = new URL(page.url);
 		for (const key of ['published', 'discarded', 'translation']) url.searchParams.delete(key);
 		replaceState(url.pathname + url.search, {});
-		return () => clearTimeout(timer);
 	});
 
 	const formErrorMessages = $derived(
@@ -380,6 +397,7 @@
 		return () => {
 			if (beforeUnloadHandler) window.removeEventListener('beforeunload', beforeUnloadHandler);
 			if (autosaveTimer) clearTimeout(autosaveTimer);
+			if (flashTimer) clearTimeout(flashTimer);
 		};
 	});
 </script>
@@ -524,6 +542,25 @@
 				</Alert.Root>
 			{/if}
 
+			<!-- Expired-session banner: an action answered with a redirect. -->
+			{#if saveState === 'error' && reauthUrl}
+				<Alert.Root variant="destructive" class="mb-3">
+					<Alert.Description>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<span>{saveError ?? '登录状态已失效'}</span>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onclick={() => window.location.assign(reauthUrl ?? '/')}
+							>
+								重新登录
+							</Button>
+						</div>
+					</Alert.Description>
+				</Alert.Root>
+			{/if}
+
 			<!-- Validation / save error banner -->
 			{#if activeErrors.length > 0}
 				<div
@@ -607,7 +644,11 @@
 				{/if}
 			</div>
 			<Dialog.Footer>
-				<Dialog.Close>取消</Dialog.Close>
+				<Dialog.Close>
+					{#snippet child({ props })}
+						<Button variant="outline" {...props}>取消</Button>
+					{/snippet}
+				</Dialog.Close>
 				<Button onclick={() => (slugDialogOpen = false)}>确定</Button>
 			</Dialog.Footer>
 		</Dialog.Content>
@@ -814,7 +855,11 @@
 				</Select.Root>
 			</div>
 			<Dialog.Footer>
-				<Dialog.Close>取消</Dialog.Close>
+				<Dialog.Close>
+					{#snippet child({ props })}
+						<Button variant="outline" {...props}>取消</Button>
+					{/snippet}
+				</Dialog.Close>
 				<Button
 					disabled={!translationLang || occupiedLangs.has(translationLang)}
 					onclick={() => {
