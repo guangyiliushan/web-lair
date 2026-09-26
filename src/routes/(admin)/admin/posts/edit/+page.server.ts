@@ -5,6 +5,7 @@ import { categories, postTags, posts, tags } from '$lib/server/db/content';
 import { parseTags, validatePostForm } from '$lib/server/services/posts';
 import { isUuid } from '$lib/utils/uuid';
 import { tagSlug } from '$lib/utils/slug';
+import { pgErrorCode } from '$lib/server/db/pg-error';
 import type { PageServerLoad, Actions } from './$types';
 
 /** The editor still speaks a publish boolean; P1 maps it onto the status machine. */
@@ -14,12 +15,6 @@ const DEFAULT_LANG = 'en';
 type EditorErrors = Partial<
 	Record<'title' | 'slug' | 'categoryId' | 'summary' | 'content' | 'form', string>
 >;
-
-/** drizzle wraps driver errors (DrizzleQueryError); the PG code lives on the cause. */
-function pgErrorCode(caught: unknown): string | undefined {
-	const err = caught as { code?: string; cause?: { code?: string } } | null;
-	return err?.code ?? err?.cause?.code;
-}
 
 async function loadTagNames(postId: string): Promise<string[]> {
 	const rows = await db

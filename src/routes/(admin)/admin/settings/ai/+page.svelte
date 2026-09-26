@@ -90,25 +90,37 @@
 	let budget = $state(untrack(() => ({ ...data.budget })));
 	let alertRatiosText = $state('');
 	let styleGuideText = $state('');
+	// True while one of the four block forms holds unsaved edits. The resync
+	// effect below must not clobber that state when an unrelated enhance (e.g.
+	// another row's "test connection") refreshes the load data (AI-2.1 review).
+	let dirty = $state(false);
 
 	// Re-sync the local copies whenever a load hands us new data (a save, a
-	// provider delete cascade, …) so the form never shows stale values.
+	// provider delete cascade, …) so the form never shows stale values - but
+	// never while a form is dirty.
 	$effect(() => {
+		// Read the sockets first so the effect stays subscribed even when the
+		// dirty branch below returns early.
+		const freshAssignments = data.assignments;
+		const freshModeration = data.moderation;
+		const freshBudget = data.budget;
+		const freshStyleGuide = data.styleGuide;
+		if (dirty) return;
 		const nextProviders: Record<string, string> = {};
 		const nextModels: Record<string, string> = {};
 		for (const fn of AI_FUNCTIONS) {
-			nextProviders[fn] = data.assignments[fn]?.provider ?? '';
-			nextModels[fn] = data.assignments[fn]?.model ?? '';
+			nextProviders[fn] = freshAssignments[fn]?.provider ?? '';
+			nextModels[fn] = freshAssignments[fn]?.model ?? '';
 		}
 		assignProviders = nextProviders;
 		assignModels = nextModels;
-		mod = { ...data.moderation };
-		modKeywords = data.moderation.keywords.join('\n');
-		modRegexes = data.moderation.regexes.join('\n');
-		modTrusted = data.moderation.trustedUsers.join('\n');
-		budget = { ...data.budget };
-		alertRatiosText = data.budget.alertRatios.join(', ');
-		styleGuideText = data.styleGuide.text;
+		mod = { ...freshModeration };
+		modKeywords = freshModeration.keywords.join('\n');
+		modRegexes = freshModeration.regexes.join('\n');
+		modTrusted = freshModeration.trustedUsers.join('\n');
+		budget = { ...freshBudget };
+		alertRatiosText = freshBudget.alertRatios.join(', ');
+		styleGuideText = freshStyleGuide.text;
 	});
 
 	const kindPlaceholder: Record<string, string> = {
@@ -233,11 +245,27 @@
 				未分配的功能位视为关闭——AI 是扩展能力，不阻塞任何主流程。
 			</p>
 		</header>
-		<form method="post" action="?/saveAssignments" use:enhance class="flex flex-col gap-4">
+		<form
+			method="post"
+			action="?/saveAssignments"
+			class="flex flex-col gap-4"
+			oninput={() => (dirty = true)}
+			onchange={() => (dirty = true)}
+			use:enhance={() =>
+				async ({ result, update }) => {
+					if (result.type === 'success') dirty = false;
+					await update();
+				}}
+		>
 			{#each AI_FUNCTIONS as fn (fn)}
 				<div class="grid items-center gap-3 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)]">
 					<div class="text-sm font-medium">{AI_FUNCTION_LABELS[fn]}</div>
-					<Select.Root type="single" name={`assign_${fn}`} bind:value={assignProviders[fn]}>
+					<Select.Root
+						type="single"
+						name={`assign_${fn}`}
+						bind:value={assignProviders[fn]}
+						onValueChange={() => (dirty = true)}
+					>
 						<Select.Trigger class="w-full">
 							{assignProviders[fn] || '不指定'}
 						</Select.Trigger>
@@ -288,8 +316,14 @@
 		<form
 			method="post"
 			action="?/saveModeration"
-			use:enhance
 			class="flex flex-col gap-4 rounded-lg border p-4"
+			oninput={() => (dirty = true)}
+			onchange={() => (dirty = true)}
+			use:enhance={() =>
+				async ({ result, update }) => {
+					if (result.type === 'success') dirty = false;
+					await update();
+				}}
 		>
 			<h3 class="text-sm font-semibold">评论分诊（审核）</h3>
 			<div class="flex flex-col gap-3">
@@ -298,14 +332,24 @@
 						<div class="text-sm font-medium">启用 AI 分诊</div>
 						<div class="text-xs text-muted-foreground">默认关闭；影子期先观察再放权。</div>
 					</div>
-					<Switch name="enabled" bind:checked={mod.enabled} aria-label="启用 AI 分诊" />
+					<Switch
+						name="enabled"
+						bind:checked={mod.enabled}
+						onCheckedChange={() => (dirty = true)}
+						aria-label="启用 AI 分诊"
+					/>
 				</div>
 				<div class="flex items-center justify-between gap-4">
 					<div>
 						<div class="text-sm font-medium">影子模式</div>
 						<div class="text-xs text-muted-foreground">只记录不执行（applied=false）。</div>
 					</div>
-					<Switch name="shadowMode" bind:checked={mod.shadowMode} aria-label="影子模式" />
+					<Switch
+						name="shadowMode"
+						bind:checked={mod.shadowMode}
+						onCheckedChange={() => (dirty = true)}
+						aria-label="影子模式"
+					/>
 				</div>
 				<div class="flex items-center justify-between gap-4">
 					<div>
@@ -315,6 +359,7 @@
 					<Switch
 						name="firstCommentHold"
 						bind:checked={mod.firstCommentHold}
+						onCheckedChange={() => (dirty = true)}
 						aria-label="首评必审"
 					/>
 				</div>
@@ -380,8 +425,14 @@
 		<form
 			method="post"
 			action="?/saveBudget"
-			use:enhance
 			class="flex flex-col gap-4 rounded-lg border p-4"
+			oninput={() => (dirty = true)}
+			onchange={() => (dirty = true)}
+			use:enhance={() =>
+				async ({ result, update }) => {
+					if (result.type === 'success') dirty = false;
+					await update();
+				}}
 		>
 			<h3 class="text-sm font-semibold">用量预算</h3>
 			<div class="grid gap-3 sm:grid-cols-3">
@@ -413,6 +464,7 @@
 						bind:value={alertRatiosText}
 						placeholder="0.8, 0.9, 1"
 					/>
+					<Field.Description>留空 = 默认 0.8, 0.9, 1</Field.Description>
 				</Field.Field>
 			</div>
 			<div class="flex items-center justify-between gap-4">
@@ -425,6 +477,7 @@
 				<Switch
 					name="pauseAutoOnExceed"
 					bind:checked={budget.pauseAutoOnExceed}
+					onCheckedChange={() => (dirty = true)}
 					aria-label="超限停自动"
 				/>
 			</div>
@@ -440,8 +493,14 @@
 		<form
 			method="post"
 			action="?/saveStyleGuide"
-			use:enhance
 			class="flex flex-col gap-4 rounded-lg border p-4"
+			oninput={() => (dirty = true)}
+			onchange={() => (dirty = true)}
+			use:enhance={() =>
+				async ({ result, update }) => {
+					if (result.type === 'success') dirty = false;
+					await update();
+				}}
 		>
 			<h3 class="text-sm font-semibold">写作风格指南</h3>
 			<Field.Field>
@@ -535,7 +594,9 @@
 							placeholder={kindPlaceholder[fieldKind] ?? ''}
 							aria-invalid={providerErrors?.baseUrl ? true : undefined}
 						/>
-						<Field.Description>留空使用默认端点（OpenAI / DeepL）。</Field.Description>
+						<Field.Description
+							>仅支持 http(s) 链接；留空使用默认端点（OpenAI / DeepL）。</Field.Description
+						>
 						{#if providerErrors?.baseUrl}
 							<Field.Error>{providerErrors.baseUrl}</Field.Error>
 						{/if}
@@ -546,11 +607,12 @@
 							id="provider-env"
 							name="apiKeyEnv"
 							bind:value={fieldApiKeyEnv}
-							placeholder="OPENAI_API_KEY"
+							placeholder="AI_OPENAI_KEY"
 							aria-invalid={providerErrors?.apiKeyEnv ? true : undefined}
 						/>
 						<Field.Description>
-							只填变量名（.env）；值永不落库、永不经由页面传输。留空 = 不需要密钥。
+							只填变量名（.env），需以 AI_ 开头（如
+							AI_OPENAI_KEY，与本站其它密钥隔离）；值永不落库、永不经由页面传输。留空 = 不需要密钥。
 						</Field.Description>
 						{#if providerErrors?.apiKeyEnv}
 							<Field.Error>{providerErrors.apiKeyEnv}</Field.Error>

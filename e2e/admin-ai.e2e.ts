@@ -76,7 +76,7 @@ test('creates a provider, probes it, and lists it', async ({ page }) => {
 	}).toPass({ timeout: 20000 });
 
 	await dialog.getByLabel('名称').fill(PROVIDER);
-	await dialog.getByLabel('密钥环境变量名').fill('E2E_MISSING_KEY');
+	await dialog.getByLabel('密钥环境变量名').fill('AI_E2E_MISSING_KEY');
 	await dialog.getByLabel('模型列表').fill('e2e-model-a');
 	await dialog.getByRole('button', { name: '保存' }).click();
 
@@ -85,10 +85,10 @@ test('creates a provider, probes it, and lists it', async ({ page }) => {
 
 	// The connection probe reports the missing env var instead of calling out.
 	await expect(async () => {
-		if (!(await byText(page, /E2E_MISSING_KEY 未设置/).isVisible())) {
+		if (!(await byText(page, /AI_E2E_MISSING_KEY 未设置/).isVisible())) {
 			await page.getByRole('button', { name: '测试连接' }).click();
 		}
-		await expect(byText(page, /E2E_MISSING_KEY 未设置/)).toBeVisible();
+		await expect(byText(page, /AI_E2E_MISSING_KEY 未设置/)).toBeVisible();
 	}).toPass({ timeout: 20000 });
 });
 

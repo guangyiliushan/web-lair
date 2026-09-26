@@ -49,6 +49,39 @@ describe('provider input schema', () => {
 		expect(errors.apiKeyEnv).toBeTruthy();
 	});
 
+	it('enforces the AI_ key namespace and http(s) URLs', () => {
+		const wrongEnv = providerInputSchema.safeParse({
+			name: 'x',
+			kind: 'custom',
+			baseUrl: '',
+			apiKeyEnv: 'OPENAI_API_KEY',
+			modelsText: '',
+			enabled: true
+		});
+		expect(wrongEnv.success).toBe(false);
+		if (!wrongEnv.success) {
+			expect(providerFieldErrors(wrongEnv.error).apiKeyEnv).toContain('AI_');
+		}
+		const wrongScheme = providerInputSchema.safeParse({
+			name: 'x',
+			kind: 'custom',
+			baseUrl: 'file:///etc/passwd',
+			apiKeyEnv: '',
+			modelsText: '',
+			enabled: true
+		});
+		expect(wrongScheme.success).toBe(false);
+		const goodScheme = providerInputSchema.safeParse({
+			name: 'x',
+			kind: 'custom',
+			baseUrl: 'http://127.0.0.1:8080',
+			apiKeyEnv: 'AI_LOCAL',
+			modelsText: '',
+			enabled: true
+		});
+		expect(goodScheme.success).toBe(true);
+	});
+
 	it('parses the models textarea (lines, commas, dedupe)', () => {
 		expect(parseModelsText(' a\nb, a \n\n')).toEqual(['a', 'b']);
 		expect(parseModelsText('   ')).toBeNull();
@@ -69,12 +102,12 @@ describe('testProviderConnection', () => {
 	it('reports a missing env value before any fetch', async () => {
 		const fetchImpl = vi.fn();
 		const result = await testProviderConnection(
-			{ kind: 'openai-compatible', baseUrl: null, apiKeyEnv: 'OPENAI_API_KEY' },
+			{ kind: 'openai-compatible', baseUrl: null, apiKeyEnv: 'AI_OPENAI_KEY' },
 			noKey,
 			fetchImpl as never
 		);
 		expect(result.ok).toBe(false);
-		expect(result.message).toContain('OPENAI_API_KEY');
+		expect(result.message).toContain('AI_OPENAI_KEY');
 		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
@@ -85,13 +118,43 @@ describe('testProviderConnection', () => {
 			return new Response('{}', { status: 200 });
 		});
 		const result = await testProviderConnection(
-			{ kind: 'openai-compatible', baseUrl: 'https://x.test/v1/', apiKeyEnv: 'K' },
+			{ kind: 'openai-compatible', baseUrl: 'https://x.test/v1/', apiKeyEnv: 'AI_K' },
 			() => 'sk-1',
 			fetchImpl as never
 		);
 		expect(result.ok).toBe(true);
 		expect(seen[0].url).toBe('https://x.test/v1/models');
 		expect(seen[0].init?.headers).toMatchObject({ authorization: 'Bearer sk-1' });
+	});
+
+	it('falls back to the official endpoints, sign headers and the missing-name branch', async () => {
+		const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+		const seen: { url: string; init?: RequestInit }[] = [];
+		const recording = vi.fn(async (url: string, init?: RequestInit) => {
+			seen.push({ url, init });
+			return new Response('{}', { status: 200 });
+		});
+		await testProviderConnection(
+			{ kind: 'openai-compatible', baseUrl: null, apiKeyEnv: 'AI_K' },
+			() => 'sk',
+			recording as never
+		);
+		await testProviderConnection(
+			{ kind: 'deepl', baseUrl: null, apiKeyEnv: 'AI_K' },
+			() => 'dk',
+			recording as never
+		);
+		expect(seen[0].url).toBe('https://api.openai.com/v1/models');
+		expect(seen[1].url).toBe('https://api.deepl.com/v2/usage');
+		expect(seen[1].init?.headers).toMatchObject({ authorization: 'DeepL-Auth-Key dk' });
+
+		const noName = await testProviderConnection(
+			{ kind: 'openai-compatible', baseUrl: null, apiKeyEnv: null },
+			noKey,
+			fetchImpl as never
+		);
+		expect(noName).toEqual({ ok: false, message: '未配置密钥环境变量' });
+		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
 	it('reports the HTTP status and hits /usage for deepl', async () => {
@@ -101,7 +164,7 @@ describe('testProviderConnection', () => {
 			return new Response('nope', { status: 401 });
 		});
 		const result = await testProviderConnection(
-			{ kind: 'deepl', baseUrl: null, apiKeyEnv: 'DEEPL_KEY' },
+			{ kind: 'deepl', baseUrl: null, apiKeyEnv: 'AI_DEEPL_KEY' },
 			() => 'k',
 			fetchImpl as never
 		);

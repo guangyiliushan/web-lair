@@ -91,21 +91,6 @@ export const load: LayoutServerLoad = async () => {
 				deleteSpamImages: true,
 				mimeWhitelist: ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 			},
-			ai: {
-				summaryEnabled: false,
-				summaryAutoCreate: false,
-				summaryAutoUpdate: false,
-				summaryMinLength: 100,
-				deepReadEnabled: false,
-				deepReadAutoCreate: false,
-				deepReadAutoUpdate: false,
-				deepReadAutoTranslate: false,
-				deepReadMinLength: 300,
-				translateEnabled: false,
-				translateAuto: false,
-				translateReview: false,
-				translateReviewThreshold: 85
-			},
 			integrations: {
 				github: { enabled: true, token: '' },
 				tmdb: { enabled: false, apiKey: '' },

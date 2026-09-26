@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AI_PROVIDER_KINDS, type AiProviderKind } from '$lib/utils/ai-meta';
 
-const envNamePattern = /^[A-Z][A-Z0-9_]*$/;
+const envNamePattern = /^AI_[A-Z0-9_]+$/;
 
 /**
  * Raw form contract for the provider dialog. The transform strips empty
@@ -16,12 +16,20 @@ export const providerInputSchema = z
 			.string()
 			.trim()
 			.max(300, 'URL 过长')
-			.refine((v) => v === '' || URL.canParse(v), 'Base URL 不是合法 URL'),
+			// http(s) only: the schema is the first gate against file:/javascript:
+			// and other schemes (AI-2.1 review - the probe fetches this URL).
+			.refine(
+				(v) => v === '' || (URL.canParse(v) && /^https?:\/\//i.test(v)),
+				'Base URL 需为 http(s) 链接'
+			),
 		apiKeyEnv: z
 			.string()
 			.trim()
 			.max(80, '变量名过长')
-			.refine((v) => v === '' || envNamePattern.test(v), '应形如 OPENAI_API_KEY'),
+			// Namespaced allowlist: AI keys must live under AI_*, so the probe
+			// can never be pointed at BETTER_AUTH_SECRET / POSTGRES_PASSWORD
+			// and ship their values to an arbitrary endpoint (AI-2.1 review).
+			.refine((v) => v === '' || envNamePattern.test(v), '应以 AI_ 开头（如 AI_OPENAI_KEY）'),
 		modelsText: z.string().max(2000, '模型列表过长'),
 		enabled: z.boolean()
 	})

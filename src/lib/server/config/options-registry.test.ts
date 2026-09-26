@@ -114,6 +114,22 @@ describe('options registry (AI-1.1)', () => {
 		expect(state.insertCalls).toHaveLength(0);
 	});
 
+	it('enforces the allow < block ordering on thresholds', async () => {
+		await expect(
+			setOption('comments.moderation', {
+				enabled: true,
+				shadowMode: true,
+				keywords: [],
+				regexes: [],
+				linkThreshold: 2,
+				firstCommentHold: true,
+				trustedUsers: [],
+				thresholds: { allow: 0.99, block: 0.5 }
+			})
+		).rejects.toThrow(/放行阈值需小于拦截阈值/);
+		expect(state.insertCalls).toHaveLength(0);
+	});
+
 	it('upserts a validated value keyed by name', async () => {
 		await setOption('site.default_lang', 'ja');
 		expect(state.insertCalls).toHaveLength(1);

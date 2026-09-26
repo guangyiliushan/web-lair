@@ -252,13 +252,6 @@
 		}
 	},
 	{
-		"id": "insights",
-		"position": {
-			"x": 2400,
-			"y": 50
-		}
-	},
-	{
 		"id": "invitation",
 		"position": {
 			"x": 2400,
@@ -326,6 +319,48 @@
 		"position": {
 			"x": 2400,
 			"y": 5650
+		}
+	},
+	{
+		"id": "ai_agent_messages",
+		"position": {
+			"x": 50,
+			"y": 610
+		}
+	},
+	{
+		"id": "ai_agent_memories",
+		"position": {
+			"x": 50,
+			"y": 1170
+		}
+	},
+	{
+		"id": "ai_usage",
+		"position": {
+			"x": 50,
+			"y": 1730
+		}
+	},
+	{
+		"id": "ai_providers",
+		"position": {
+			"x": 50,
+			"y": 2290
+		}
+	},
+	{
+		"id": "glossary_terms",
+		"position": {
+			"x": 2400,
+			"y": 6210
+		}
+	},
+	{
+		"id": "comment_moderation_events",
+		"position": {
+			"x": 930,
+			"y": 16560
 		}
 	}
 ]

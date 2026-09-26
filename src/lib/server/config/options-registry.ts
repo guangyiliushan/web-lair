@@ -2,27 +2,26 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { options } from '$lib/server/db/config';
-import { AI_FUNCTIONS, type AiFunction } from '$lib/utils/ai-meta';
+import { AI_FUNCTIONS } from '$lib/utils/ai-meta';
 
 /** Site languages (same set as the posts `lang` CHECK, ledger §9.16). */
 export const OPTION_LANGS = ['en', 'zh-cn', 'ja'] as const;
-export type OptionLang = (typeof OPTION_LANGS)[number];
-
-/** AI feature slots for `ai.assignments` (ai-line plan §5.1) - shared with the UI. */
-export { AI_FUNCTIONS, type AiFunction };
 
 interface RegistryEntry {
 	schema: z.ZodType;
 	default: unknown;
 }
 
+/** Accepts the db client or a transaction - registry writes join caller transactions. */
+type RegistryExecutor = Pick<typeof db, 'select' | 'insert'>;
+
 /**
  * Options registry (AI-1.1, ai-line plan §5.1): the single source of truth
  * for behaviour settings stored in the `options` KV table. `getOption` /
  * `setOption` are the only entry points - writes validate, unknown keys are
  * rejected, and every key ships a schema plus its default value. Defaults
- * mirror the ai-line plan §3.3 ledger. No caching yet (config reads are rare;
- * add one only when a real hot path shows up).
+ * mirror the ai-line plan §3.3 ledger; the AI-2.1 review batch moved the
+ * numeric bounds here so route handlers cannot drift from the contract.
  */
 export const optionRegistry = {
 	'site.languages': {
@@ -52,7 +51,7 @@ export const optionRegistry = {
 		default: { monthly: 0, currency: 'USD', alertRatios: [0.8, 0.9, 1], pauseAutoOnExceed: true }
 	},
 	'ai.styleGuide': {
-		schema: z.object({ text: z.string() }),
+		schema: z.object({ text: z.string().max(20000, '风格指南过长（≤20000 字）') }),
 		default: { text: '' }
 	},
 	'comments.moderation': {
@@ -61,10 +60,16 @@ export const optionRegistry = {
 			shadowMode: z.boolean(),
 			keywords: z.array(z.string()),
 			regexes: z.array(z.string()),
-			linkThreshold: z.number().int().nonnegative(),
+			linkThreshold: z.number('必须为数字').int('必须为整数').nonnegative('不能小于 0'),
 			firstCommentHold: z.boolean(),
 			trustedUsers: z.array(z.string()),
-			thresholds: z.object({ allow: z.number(), block: z.number() })
+			thresholds: z
+				.object({
+					allow: z.number('必须为数字').min(0, '必须在 0–1 之间').max(1, '必须在 0–1 之间'),
+					block: z.number('必须为数字').min(0, '必须在 0–1 之间').max(1, '必须在 0–1 之间')
+				})
+				// AI-2.1: cross-field order - "allow first, block above it".
+				.refine((t) => t.allow < t.block, '放行阈值需小于拦截阈值')
 		}),
 		// Per §3.3: rules first, AI off until enabled, shadow mode on, the
 		// WordPress-style link threshold, first comments held for review.
@@ -97,9 +102,12 @@ function entryFor(key: string): RegistryEntry {
  * logs and falls back to the default too - the site must not break on a bad
  * settings row (AI is an extension layer, §14.1).
  */
-export async function getOption<K extends OptionKey>(key: K): Promise<OptionValue<K>> {
+export async function getOption<K extends OptionKey>(
+	key: K,
+	executor: RegistryExecutor = db
+): Promise<OptionValue<K>> {
 	const entry = entryFor(key);
-	const rows = await db
+	const rows = await executor
 		.select({ value: options.value })
 		.from(options)
 		.where(eq(options.name, key))
@@ -114,10 +122,14 @@ export async function getOption<K extends OptionKey>(key: K): Promise<OptionValu
 }
 
 /** Validate and upsert a value. Throws on invalid input or unknown keys. */
-export async function setOption<K extends OptionKey>(key: K, value: OptionValue<K>): Promise<void> {
+export async function setOption<K extends OptionKey>(
+	key: K,
+	value: OptionValue<K>,
+	executor: RegistryExecutor = db
+): Promise<void> {
 	const entry = entryFor(key);
 	const parsed = entry.schema.parse(value); // ZodError on invalid input
-	await db
+	await executor
 		.insert(options)
 		.values({ name: key, value: parsed })
 		.onConflictDoUpdate({ target: options.name, set: { value: parsed } });
