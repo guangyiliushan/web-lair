@@ -1,5 +1,5 @@
 {
-  "id": "0f4e03e7-0c67-44cc-ab82-ba42dc09473b",
+  "id": "b25f71e6-d07c-4343-a790-7440e67163bc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1831,8 +1831,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.memos": {
-      "name": "memos",
+    "public.moments": {
+      "name": "moments",
       "schema": "",
       "columns": {
         "id": {
@@ -1849,25 +1849,127 @@
           "notNull": true,
           "default": "now()"
         },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ref_type": {
+          "name": "ref_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ref_id": {
+          "name": "ref_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
-        "content": {
-          "name": "content",
-          "type": "text",
+        "up": {
+          "name": "up",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": 0
+        },
+        "down": {
+          "name": "down",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
-      "indexes": {},
+      "indexes": {
+        "moments_ref_idx": {
+          "name": "moments_ref_idx",
+          "columns": [
+            {
+              "expression": "ref_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ref_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "moments_created_at_idx": {
+          "name": "moments_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "moments_type_created_idx": {
+          "name": "moments_type_created_idx",
+          "columns": [
+            {
+              "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "moments_type_check": {
+          "name": "moments_type_check",
+          "value": "\"moments\".\"type\" in ('life', 'tech', 'media', 'other')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.notes": {
@@ -1891,6 +1993,32 @@
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lang": {
+          "name": "lang",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'en'"
+        },
+        "translation_group": {
+          "name": "translation_group",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "translated_from_note_id": {
+          "name": "translated_from_note_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "translation_origin": {
+          "name": "translation_origin",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -2036,13 +2164,20 @@
             }
           ],
           "isUnique": true,
+          "where": "\"notes\".\"translated_from_note_id\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "notes_slug_uniq": {
-          "name": "notes_slug_uniq",
+        "notes_lang_slug_uniq": {
+          "name": "notes_lang_slug_uniq",
           "columns": [
+            {
+              "expression": "lang",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "slug",
               "isExpression": false,
@@ -2051,7 +2186,59 @@
             }
           ],
           "isUnique": true,
-          "where": "\"notes\".\"slug\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notes_translation_group_lang_uniq": {
+          "name": "notes_translation_group_lang_uniq",
+          "columns": [
+            {
+              "expression": "translation_group",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lang",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notes_group_source_uniq": {
+          "name": "notes_group_source_uniq",
+          "columns": [
+            {
+              "expression": "translation_group",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"notes\".\"translated_from_note_id\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notes_translated_from_idx": {
+          "name": "notes_translated_from_idx",
+          "columns": [
+            {
+              "expression": "translated_from_note_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"notes\".\"translated_from_note_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2145,6 +2332,19 @@
         }
       },
       "foreignKeys": {
+        "notes_translated_from_note_id_notes_id_fk": {
+          "name": "notes_translated_from_note_id_notes_id_fk",
+          "tableFrom": "notes",
+          "tableTo": "notes",
+          "columnsFrom": [
+            "translated_from_note_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
         "notes_topic_id_topics_id_fk": {
           "name": "notes_topic_id_topics_id_fk",
           "tableFrom": "notes",
@@ -2162,7 +2362,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "notes_lang_check": {
+          "name": "notes_lang_check",
+          "value": "\"notes\".\"lang\" in ('en', 'zh-cn', 'ja')"
+        },
+        "notes_translation_origin_check": {
+          "name": "notes_translation_origin_check",
+          "value": "\"notes\".\"translation_origin\" in ('human', 'ai', 'machine')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.pages": {
@@ -3006,8 +3215,14 @@
           "notNull": true,
           "default": "now()"
         },
-        "text": {
-          "name": "text",
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content": {
+          "name": "content",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -3028,135 +3243,6 @@
       "indexes": {
         "quotes_created_at_idx": {
           "name": "quotes_created_at_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.recent_items": {
-      "name": "recent_items",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuidv7()"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "content": {
-          "name": "content",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ref_type": {
-          "name": "ref_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ref_id": {
-          "name": "ref_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "comments_index": {
-          "name": "comments_index",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "allow_comment": {
-          "name": "allow_comment",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "up": {
-          "name": "up",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "down": {
-          "name": "down",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        }
-      },
-      "indexes": {
-        "recent_items_ref_idx": {
-          "name": "recent_items_ref_idx",
-          "columns": [
-            {
-              "expression": "ref_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ref_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "recent_items_created_at_idx": {
-          "name": "recent_items_created_at_idx",
           "columns": [
             {
               "expression": "created_at",
@@ -3636,6 +3722,61 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.thoughts": {
+      "name": "thoughts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "thoughts_created_at_idx": {
+          "name": "thoughts_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.topics": {
       "name": "topics",
       "schema": "",
@@ -3753,7 +3894,13 @@
           "name": "source_post_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "source_note_id": {
+          "name": "source_note_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "target_lang": {
           "name": "target_lang",
@@ -3835,6 +3982,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "target_note_id": {
+          "name": "target_note_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "error": {
           "name": "error",
           "type": "text",
@@ -3843,8 +3996,8 @@
         }
       },
       "indexes": {
-        "translations_draft_uniq": {
-          "name": "translations_draft_uniq",
+        "translations_draft_post_uniq": {
+          "name": "translations_draft_post_uniq",
           "columns": [
             {
               "expression": "source_post_id",
@@ -3860,13 +4013,35 @@
             }
           ],
           "isUnique": true,
-          "where": "\"translations\".\"status\" = 'draft'",
+          "where": "\"translations\".\"status\" = 'draft' and \"translations\".\"source_post_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "translations_source_idx": {
-          "name": "translations_source_idx",
+        "translations_draft_note_uniq": {
+          "name": "translations_draft_note_uniq",
+          "columns": [
+            {
+              "expression": "source_note_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "target_lang",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"translations\".\"status\" = 'draft' and \"translations\".\"source_note_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "translations_source_post_idx": {
+          "name": "translations_source_post_idx",
           "columns": [
             {
               "expression": "source_post_id",
@@ -3876,6 +4051,23 @@
             }
           ],
           "isUnique": false,
+          "where": "\"translations\".\"source_post_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "translations_source_note_idx": {
+          "name": "translations_source_note_idx",
+          "columns": [
+            {
+              "expression": "source_note_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"translations\".\"source_note_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3892,6 +4084,22 @@
           ],
           "isUnique": false,
           "where": "\"translations\".\"target_post_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "translations_target_note_idx": {
+          "name": "translations_target_note_idx",
+          "columns": [
+            {
+              "expression": "target_note_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"translations\".\"target_note_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3927,6 +4135,19 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
+        "translations_source_note_id_notes_id_fk": {
+          "name": "translations_source_note_id_notes_id_fk",
+          "tableFrom": "translations",
+          "tableTo": "notes",
+          "columnsFrom": [
+            "source_note_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
         "translations_reviewed_by_user_id_fk": {
           "name": "translations_reviewed_by_user_id_fk",
           "tableFrom": "translations",
@@ -3952,12 +4173,33 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "translations_target_note_id_notes_id_fk": {
+          "name": "translations_target_note_id_notes_id_fk",
+          "tableFrom": "translations",
+          "tableTo": "notes",
+          "columnsFrom": [
+            "target_note_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "translations_source_arc_check": {
+          "name": "translations_source_arc_check",
+          "value": "num_nonnulls(\"translations\".\"source_post_id\", \"translations\".\"source_note_id\") = 1"
+        },
+        "translations_target_arc_check": {
+          "name": "translations_target_arc_check",
+          "value": "num_nonnulls(\"translations\".\"target_post_id\", \"translations\".\"target_note_id\") <= 1"
+        },
         "translations_target_lang_check": {
           "name": "translations_target_lang_check",
           "value": "\"translations\".\"target_lang\" in ('en', 'zh-cn', 'ja')"
