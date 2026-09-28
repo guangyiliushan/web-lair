@@ -8,6 +8,13 @@
       "when": 1790592008571,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790594127591,
+      "tag": "0001_addons_removal",
+      "breakpoints": true
     }
   ]
 }

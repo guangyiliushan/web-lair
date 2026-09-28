@@ -2,7 +2,6 @@
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"admin_header_title": "Admin",
 	"admin_header_visit_site": "Visit Site",
-	"admin_nav_addons": "Add-ons",
 	"admin_nav_ai": "AI",
 	"admin_nav_analytics": "Analytics",
 	"admin_nav_comments": "Comments",

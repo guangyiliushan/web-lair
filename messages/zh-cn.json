@@ -2,7 +2,6 @@
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"admin_header_title": "管理后台",
 	"admin_header_visit_site": "访问站点",
-	"admin_nav_addons": "附加功能",
 	"admin_nav_ai": "AI",
 	"admin_nav_analytics": "数据",
 	"admin_nav_comments": "评论",

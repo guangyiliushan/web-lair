@@ -17,7 +17,6 @@
 	import IconSparkles from '@tabler/icons-svelte-runes/icons/sparkles';
 	import IconChartBar from '@tabler/icons-svelte-runes/icons/chart-bar';
 	import IconSettings from '@tabler/icons-svelte-runes/icons/settings';
-	import IconPuzzle from '@tabler/icons-svelte-runes/icons/puzzle';
 	import IconTool from '@tabler/icons-svelte-runes/icons/tool';
 	import IconChevronRight from '@tabler/icons-svelte-runes/icons/chevron-right';
 	import IconLogout from '@tabler/icons-svelte-runes/icons/logout';
@@ -46,7 +45,6 @@
 		{ title: m.admin_nav_ai(), href: '/admin/ai', icon: IconSparkles },
 		{ title: m.admin_nav_analytics(), href: '/admin/analytics', icon: IconChartBar },
 		{ title: m.admin_nav_settings(), href: '/admin/settings', icon: IconSettings },
-		{ title: m.admin_nav_addons(), href: '/admin/addons', icon: IconPuzzle },
 		{ title: m.admin_nav_maintenance(), href: '/admin/maintenance', icon: IconTool }
 	];
 

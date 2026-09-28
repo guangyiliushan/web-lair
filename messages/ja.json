@@ -2,7 +2,6 @@
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"admin_header_title": "管理",
 	"admin_header_visit_site": "サイトを見る",
-	"admin_nav_addons": "アドオン",
 	"admin_nav_ai": "AI",
 	"admin_nav_analytics": "アナリティクス",
 	"admin_nav_comments": "コメント",

@@ -6,8 +6,6 @@ export * from './file-reference.schema';
 export * from './poll-vote-option.schema';
 export * from './poll-vote.schema';
 export * from './search-document.schema';
-export * from './serverless-log.schema';
-export * from './serverless-storage.schema';
 export * from './slug-tracker.schema';
 export * from './subscription.schema';
 export * from './webhook-event.schema';

@@ -13,7 +13,6 @@ export * from './post.schema';
 export * from './project.schema';
 export * from './quote.schema';
 export * from './recent-item.schema';
-export * from './snippet.schema';
 export * from './summary.schema';
 export * from './tag.schema';
 export * from './topic.schema';
