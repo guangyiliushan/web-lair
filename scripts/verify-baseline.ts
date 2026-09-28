@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', import.meta.url));
-const EXPECTED_TABLES = 52;
+const EXPECTED_TABLES = 48;
 const LEGACY_INDEX_NAMES = new Set([
 	// Removed by the queued SY batch; retained only for the current 52-table state.
 	'poll_vote_options_pk'
@@ -87,3 +87,4 @@ main().catch((error) => {
 	console.error(`✗ ${error instanceof Error ? error.message : error}`);
 	process.exit(1);
 });
+

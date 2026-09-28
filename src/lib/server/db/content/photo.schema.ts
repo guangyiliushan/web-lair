@@ -14,8 +14,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { files } from './file.schema';
 import { tags } from './tag.schema';
-
-export type LocalizedText = Partial<Record<'en' | 'zh-cn' | 'ja', string>>;
+import type { LocalizedText } from './page.schema';
 
 /** Photo gallery entity (storage line §3.3): 1:1 with a files row. */
 export const photos = pgTable(
