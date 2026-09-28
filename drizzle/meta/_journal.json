@@ -5,36 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1790592008571,
+      "when": 1790595604118,
       "tag": "0000_baseline",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1790594127591,
-      "tag": "0001_addons_removal",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1790594295952,
-      "tag": "0002_jobs_tables",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1790594785963,
-      "tag": "0003_system_tables",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1790595374515,
-      "tag": "0004_storage_tables",
       "breakpoints": true
     }
   ]
