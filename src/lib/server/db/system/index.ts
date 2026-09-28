@@ -3,6 +3,8 @@ export * from './analytics.schema';
 export * from './enrichment-capture.schema';
 export * from './enrichment-cache.schema';
 export * from './file-reference.schema';
+export * from './job-run.schema';
+export * from './job-schedule.schema';
 export * from './poll-vote-option.schema';
 export * from './poll-vote.schema';
 export * from './search-document.schema';

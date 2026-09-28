@@ -15,6 +15,13 @@
       "when": 1790594127591,
       "tag": "0001_addons_removal",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790594295952,
+      "tag": "0002_jobs_tables",
+      "breakpoints": true
     }
   ]
 }
