@@ -98,7 +98,7 @@
 		}
 	},
 	{
-		"id": "recent_items",
+		"id": "moments",
 		"position": {
 			"x": 50,
 			"y": 8160
@@ -266,7 +266,7 @@
 		}
 	},
 	{
-		"id": "memos",
+		"id": "thoughts",
 		"position": {
 			"x": 2400,
 			"y": 1730
