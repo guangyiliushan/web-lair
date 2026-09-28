@@ -235,16 +235,23 @@ CREATE TABLE "notes" (
 CREATE TABLE "pages" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone,
-	"title" text NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"slug" text NOT NULL,
-	"subtitle" text,
-	"text" text,
-	"content" text,
+	"title" jsonb NOT NULL,
+	"description" jsonb,
+	"icon" text,
+	"external_url" text,
+	"status" text DEFAULT 'visible' NOT NULL,
+	"sort_order" integer DEFAULT 1 NOT NULL,
+	"is_default" boolean DEFAULT false NOT NULL,
+	"content" jsonb,
 	"content_format" text NOT NULL,
-	"images" jsonb,
-	"meta" jsonb,
-	"sort_order" integer DEFAULT 1 NOT NULL
+	CONSTRAINT "pages_status_check" CHECK ("pages"."status" in ('visible', 'hidden')),
+	CONSTRAINT "pages_external_url_check" CHECK ("pages"."external_url" is null or "pages"."external_url" ~ '^https?://'),
+	CONSTRAINT "pages_title_object_check" CHECK (jsonb_typeof("pages"."title") = 'object'),
+	CONSTRAINT "pages_description_object_check" CHECK ("pages"."description" is null or jsonb_typeof("pages"."description") = 'object'),
+	CONSTRAINT "pages_content_object_check" CHECK ("pages"."content" is null or jsonb_typeof("pages"."content") = 'object'),
+	CONSTRAINT "pages_content_format_check" CHECK ("pages"."content_format" in ('markdown'))
 );
 --> statement-breakpoint
 CREATE TABLE "post_related_posts" (

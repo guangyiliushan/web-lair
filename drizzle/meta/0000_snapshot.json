@@ -1,5 +1,5 @@
 {
-  "id": "0f4e03e7-0c67-44cc-ab82-ba42dc09473b",
+  "id": "4c93d185-1ec8-42b8-a2e4-cadedeb8fe1a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -2187,13 +2187,8 @@
           "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "now()"
         },
         "slug": {
           "name": "slug",
@@ -2201,21 +2196,54 @@
           "primaryKey": false,
           "notNull": true
         },
-        "subtitle": {
-          "name": "subtitle",
+        "title": {
+          "name": "title",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "icon": {
+          "name": "icon",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "text": {
-          "name": "text",
+        "external_url": {
+          "name": "external_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'visible'"
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "is_default": {
+          "name": "is_default",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "content": {
           "name": "content",
-          "type": "text",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -2224,25 +2252,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "images": {
-          "name": "images",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "meta": {
-          "name": "meta",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
         }
       },
       "indexes": {
@@ -2281,7 +2290,32 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "pages_status_check": {
+          "name": "pages_status_check",
+          "value": "\"pages\".\"status\" in ('visible', 'hidden')"
+        },
+        "pages_external_url_check": {
+          "name": "pages_external_url_check",
+          "value": "\"pages\".\"external_url\" is null or \"pages\".\"external_url\" ~ '^https?://'"
+        },
+        "pages_title_object_check": {
+          "name": "pages_title_object_check",
+          "value": "jsonb_typeof(\"pages\".\"title\") = 'object'"
+        },
+        "pages_description_object_check": {
+          "name": "pages_description_object_check",
+          "value": "\"pages\".\"description\" is null or jsonb_typeof(\"pages\".\"description\") = 'object'"
+        },
+        "pages_content_object_check": {
+          "name": "pages_content_object_check",
+          "value": "\"pages\".\"content\" is null or jsonb_typeof(\"pages\".\"content\") = 'object'"
+        },
+        "pages_content_format_check": {
+          "name": "pages_content_format_check",
+          "value": "\"pages\".\"content_format\" in ('markdown')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.post_related_posts": {

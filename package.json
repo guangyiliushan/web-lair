@@ -28,7 +28,10 @@
 		"db:verify-owner": "tsx --env-file=.env scripts/verify-owner-uniqueness.ts",
 		"db:reset-2fa": "tsx --env-file=.env scripts/reset-2fa.ts",
 		"db:ensure-org": "tsx --env-file=.env scripts/ensure-site-org.ts",
-		"db:verify-review": "tsx --env-file=.env scripts/verify-review-idempotency.ts"
+		"db:verify-review": "tsx --env-file=.env scripts/verify-review-idempotency.ts",
+		"db:verify-baseline": "tsx --env-file=.env scripts/verify-baseline.ts",
+		"db:ensure-pages": "tsx --env-file=.env scripts/ensure-pages.ts",
+		"db:verify-pages": "tsx --env-file=.env scripts/verify-pages.ts"
 	},
 	"devDependencies": {
 		"@chromatic-com/storybook": "^5.3.1",
