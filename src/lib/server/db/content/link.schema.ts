@@ -118,7 +118,7 @@ export const links = pgTable(
 		),
 		check(
 			'links_ring_check',
-			sql`${table.recentChecks} is null or (jsonb_typeof(${table.recentChecks}) = 'array' and jsonb_array_length(${table.recentChecks}) <= 10)`
+			sql`${table.recentChecks} is null or (case when jsonb_typeof(${table.recentChecks}) = 'array' then jsonb_array_length(${table.recentChecks}) <= 10 else false end)`
 		),
 		check(
 			'links_streak_check',
@@ -126,4 +126,3 @@ export const links = pgTable(
 		)
 	]
 );
-

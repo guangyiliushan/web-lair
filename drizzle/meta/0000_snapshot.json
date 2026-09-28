@@ -1,5 +1,5 @@
 {
-  "id": "4f883d9b-32e3-4262-9ec9-6a1290e089b5",
+  "id": "891473d7-4b83-4862-93fa-5ea0383f25b5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -2192,7 +2192,7 @@
         },
         "links_ring_check": {
           "name": "links_ring_check",
-          "value": "\"links\".\"recent_checks\" is null or (jsonb_typeof(\"links\".\"recent_checks\") = 'array' and jsonb_array_length(\"links\".\"recent_checks\") <= 10)"
+          "value": "\"links\".\"recent_checks\" is null or (case when jsonb_typeof(\"links\".\"recent_checks\") = 'array' then jsonb_array_length(\"links\".\"recent_checks\") <= 10 else false end)"
         },
         "links_streak_check": {
           "name": "links_streak_check",
@@ -2965,7 +2965,15 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "photo_tags_photo_id_tag_id_pk": {
+          "name": "photo_tags_photo_id_tag_id_pk",
+          "columns": [
+            "photo_id",
+            "tag_id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -3046,19 +3054,19 @@
         },
         "f_number": {
           "name": "f_number",
-          "type": "text",
+          "type": "numeric",
           "primaryKey": false,
           "notNull": false
         },
         "focal_length_mm": {
           "name": "focal_length_mm",
-          "type": "text",
+          "type": "numeric",
           "primaryKey": false,
           "notNull": false
         },
         "exposure_time_s": {
           "name": "exposure_time_s",
-          "type": "text",
+          "type": "numeric",
           "primaryKey": false,
           "notNull": false
         },
@@ -3070,19 +3078,19 @@
         },
         "latitude": {
           "name": "latitude",
-          "type": "text",
+          "type": "numeric(9, 6)",
           "primaryKey": false,
           "notNull": false
         },
         "longitude": {
           "name": "longitude",
-          "type": "text",
+          "type": "numeric(9, 6)",
           "primaryKey": false,
           "notNull": false
         },
         "altitude_m": {
           "name": "altitude_m",
-          "type": "text",
+          "type": "numeric",
           "primaryKey": false,
           "notNull": false
         },
@@ -3143,7 +3151,7 @@
             {
               "expression": "taken_at",
               "isExpression": false,
-              "asc": true,
+              "asc": false,
               "nulls": "last"
             }
           ],
@@ -3174,7 +3182,7 @@
       "checkConstraints": {
         "photos_coords_check": {
           "name": "photos_coords_check",
-          "value": "(\"photos\".\"latitude\" is null) = (\"photos\".\"longitude\" is null)"
+          "value": "(\"photos\".\"latitude\" is null) = (\"photos\".\"longitude\" is null) and (\"photos\".\"latitude\" is null or (\"photos\".\"latitude\" between -90 and 90 and \"photos\".\"longitude\" between -180 and 180))"
         },
         "photos_title_shape_check": {
           "name": "photos_title_shape_check",
@@ -3955,7 +3963,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "where": "\"projects\".\"external_id\" is not null",
           "concurrently": false,
           "method": "btree",
@@ -3977,7 +3985,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "where": "\"projects\".\"external_id\" is null",
           "concurrently": false,
           "method": "btree",
@@ -5056,7 +5064,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "provider": {
           "name": "provider",
@@ -5137,8 +5145,8 @@
           "method": "btree",
           "with": {}
         },
-        "enrichment_captures_source_idx": {
-          "name": "enrichment_captures_source_idx",
+        "enrichment_captures_source_uniq": {
+          "name": "enrichment_captures_source_uniq",
           "columns": [
             {
               "expression": "provider",
@@ -5153,7 +5161,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -5477,21 +5485,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "job_schedules_enabled_idx": {
-          "name": "job_schedules_enabled_idx",
-          "columns": [
-            {
-              "expression": "is_enabled",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {},
@@ -5719,11 +5712,11 @@
         },
         "subscriptions_verified_at_check": {
           "name": "subscriptions_verified_at_check",
-          "value": "(\"subscriptions\".\"status\" = 'subscribed') = (\"subscriptions\".\"verified_at\" is not null)"
+          "value": "(\"subscriptions\".\"status\" = 'pending') = (\"subscriptions\".\"verified_at\" is null)"
         },
         "subscriptions_unsubscribed_at_check": {
           "name": "subscriptions_unsubscribed_at_check",
-          "value": "(\"subscriptions\".\"status\" = 'unsubscribed') = (\"subscriptions\".\"unsubscribed_at\" is not null)"
+          "value": "\"subscriptions\".\"status\" <> 'unsubscribed' or \"subscriptions\".\"unsubscribed_at\" is not null"
         }
       },
       "isRLSEnabled": false
@@ -5773,7 +5766,7 @@
         },
         "response_code": {
           "name": "response_code",
-          "type": "text",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -5917,23 +5910,7 @@
           "default": true
         }
       },
-      "indexes": {
-        "webhooks_is_enabled_idx": {
-          "name": "webhooks_is_enabled_idx",
-          "columns": [
-            {
-              "expression": "is_enabled",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

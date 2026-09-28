@@ -1,13 +1,5 @@
 import { sql } from 'drizzle-orm';
-import {
-	check,
-	index,
-	pgTable,
-	primaryKey,
-	text,
-	timestamp,
-	uuid
-} from 'drizzle-orm/pg-core';
+import { check, index, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { files } from '../content/file.schema';
 
 export type FileRefType = 'post' | 'note' | 'page' | 'comment';

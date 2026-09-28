@@ -1,12 +1,13 @@
 import { sql } from 'drizzle-orm';
 import {
-	bigint,
 	boolean,
 	check,
 	index,
 	integer,
 	jsonb,
+	numeric,
 	pgTable,
+	primaryKey,
 	text,
 	timestamp,
 	uniqueIndex,
@@ -39,21 +40,24 @@ export const photos = pgTable(
 		cameraMake: text('camera_make'),
 		cameraModel: text('camera_model'),
 		lensModel: text('lens_model'),
-		fNumber: text('f_number'),
-		focalLengthMm: text('focal_length_mm'),
-		exposureTimeS: text('exposure_time_s'),
+		fNumber: numeric('f_number'),
+		focalLengthMm: numeric('focal_length_mm'),
+		exposureTimeS: numeric('exposure_time_s'),
 		iso: integer('iso'),
-		latitude: text('latitude'),
-		longitude: text('longitude'),
-		altitudeM: text('altitude_m'),
+		latitude: numeric('latitude', { precision: 9, scale: 6 }),
+		longitude: numeric('longitude', { precision: 9, scale: 6 }),
+		altitudeM: numeric('altitude_m'),
 		exif: jsonb('exif').$type<Record<string, unknown>>(),
 		isVisible: boolean('is_visible').notNull().default(true)
 	},
 	(table) => [
 		uniqueIndex('photos_slug_uniq').on(table.slug),
 		uniqueIndex('photos_file_id_uniq').on(table.fileId),
-		index('photos_visible_taken_idx').on(table.isVisible, table.takenAt),
-		check('photos_coords_check', sql`(${table.latitude} is null) = (${table.longitude} is null)`),
+		index('photos_visible_taken_idx').on(table.isVisible, table.takenAt.desc()),
+		check(
+			'photos_coords_check',
+			sql`(${table.latitude} is null) = (${table.longitude} is null) and (${table.latitude} is null or (${table.latitude} between -90 and 90 and ${table.longitude} between -180 and 180))`
+		),
 		check(
 			'photos_title_shape_check',
 			sql`${table.title} is null or jsonb_typeof(${table.title}) = 'object'`
@@ -77,7 +81,7 @@ export const photoTags = pgTable(
 			.references(() => tags.id, { onDelete: 'cascade' })
 	},
 	(table) => [
-		sql`PRIMARY KEY (${table.photoId}, ${table.tagId})`,
+		primaryKey({ columns: [table.photoId, table.tagId] }),
 		index('photo_tags_tag_idx').on(table.tagId, table.photoId)
 	]
 );

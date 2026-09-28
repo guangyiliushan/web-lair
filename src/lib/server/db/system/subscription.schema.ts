@@ -30,14 +30,15 @@ export const subscriptions = pgTable(
 			sql`${table.status} in ('pending', 'subscribed', 'unsubscribed')`
 		),
 		check('subscriptions_lang_check', sql`${table.lang} in ('en', 'zh-cn', 'ja')`),
-		// status transitions require matching timestamps.
+		// Monotonic timestamps: pending => verified_at null; non-pending => verified_at set;
+		// unsubscribed => unsubscribed_at set (history may keep it after resubscribe).
 		check(
 			'subscriptions_verified_at_check',
-			sql`(${table.status} = 'subscribed') = (${table.verifiedAt} is not null)`
+			sql`(${table.status} = 'pending') = (${table.verifiedAt} is null)`
 		),
 		check(
 			'subscriptions_unsubscribed_at_check',
-			sql`(${table.status} = 'unsubscribed') = (${table.unsubscribedAt} is not null)`
+			sql`${table.status} <> 'unsubscribed' or ${table.unsubscribedAt} is not null`
 		)
 	]
 );

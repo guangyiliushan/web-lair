@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 /** Webhook endpoint registry (platform §D.2): T1 delivery targets. */
 export const webhooks = pgTable(
@@ -20,8 +20,5 @@ export const webhooks = pgTable(
 		secret: text('secret').notNull(),
 		isEnabled: boolean('is_enabled').notNull().default(true)
 	},
-	(table) => [
-		index('webhooks_is_enabled_idx').on(table.isEnabled),
-		check('webhooks_payload_url_check', sql`${table.payloadUrl} ~ '^https?://'`)
-	]
+	(table) => [check('webhooks_payload_url_check', sql`${table.payloadUrl} ~ '^https?://'`)]
 );

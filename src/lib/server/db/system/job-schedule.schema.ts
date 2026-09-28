@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 /** Schedule definitions (jobs line §3.2): cron + timezone + enabled flag. */
 export const jobSchedules = pgTable(
@@ -20,8 +20,5 @@ export const jobSchedules = pgTable(
 		isEnabled: boolean('is_enabled').notNull().default(true),
 		lastDueAt: timestamp('last_due_at', { withTimezone: true })
 	},
-	(table) => [
-		uniqueIndex('job_schedules_job_cron_expr_uniq').on(table.job, table.cronExpr),
-		index('job_schedules_enabled_idx').on(table.isEnabled)
-	]
+	(table) => [uniqueIndex('job_schedules_job_cron_expr_uniq').on(table.job, table.cronExpr)]
 );

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { check, index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { webhooks } from './webhook.schema';
 
 export type WebhookDeliveryStatus = 'queued' | 'succeeded' | 'failed';
@@ -22,7 +22,7 @@ export const webhookDeliveries = pgTable(
 		event: text('event').notNull(),
 		payload: jsonb('payload').$type<Record<string, unknown>>(),
 		status: text('status').notNull().default('queued'),
-		responseCode: text('response_code'),
+		responseCode: integer('response_code'),
 		error: text('error'),
 		deliveredAt: timestamp('delivered_at', { withTimezone: true })
 	},

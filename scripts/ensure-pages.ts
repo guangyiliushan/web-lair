@@ -81,7 +81,19 @@ async function main(): Promise<void> {
 			order by slug
 		`;
 		if (rows.length !== SEED_PAGES.length) {
-			throw new Error(`Expected ${SEED_PAGES.length} protected defaults, found ${rows.length}.`);
+			const detail = await sql`
+				select slug, is_default, status
+				from pages
+				where slug in ('about', 'about-site')
+				order by slug
+			`;
+			const present =
+				detail
+					.map((row) => `${row.slug}(is_default=${row.is_default}, status=${row.status})`)
+					.join(', ') || 'none';
+			throw new Error(
+				`Expected ${SEED_PAGES.length} protected defaults, found ${rows.length}. Present: ${present}.`
+			);
 		}
 		console.log(`✓ ensured pages: ${rows.map((row) => row.slug).join(', ')}`);
 	} finally {

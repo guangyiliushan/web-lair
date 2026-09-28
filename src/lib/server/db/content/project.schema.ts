@@ -7,6 +7,7 @@ import {
 	pgTable,
 	text,
 	timestamp,
+	uniqueIndex,
 	uuid,
 	varchar
 } from 'drizzle-orm/pg-core';
@@ -57,10 +58,10 @@ export const projects = pgTable(
 		lastErrorKind: text('last_error_kind')
 	},
 	(table) => [
-		index('projects_extid_uniq')
+		uniqueIndex('projects_extid_uniq')
 			.on(table.provider, table.externalId)
 			.where(sql`${table.externalId} is not null`),
-		index('projects_url_uniq')
+		uniqueIndex('projects_url_uniq')
 			.on(table.provider, table.projectUrl)
 			.where(sql`${table.externalId} is null`),
 		index('projects_status_sort_idx').on(table.status, table.sortOrder),

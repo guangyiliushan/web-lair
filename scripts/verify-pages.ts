@@ -54,15 +54,19 @@ function fail(message: string): never {
 }
 
 function routeSegments(): string[] {
+	let entries;
 	try {
-		return readdirSync(SITE_ROUTES, { withFileTypes: true })
-			.filter(
-				(entry) => entry.isDirectory() && !entry.name.startsWith('(') && !entry.name.startsWith('[')
-			)
-			.map((entry) => entry.name);
-	} catch {
-		return [];
+		entries = readdirSync(SITE_ROUTES, { withFileTypes: true });
+	} catch (error) {
+		fail(
+			`cannot read site routes dir: ${SITE_ROUTES} (${error instanceof Error ? error.message : error})`
+		);
 	}
+	return entries
+		.filter(
+			(entry) => entry.isDirectory() && !entry.name.startsWith('(') && !entry.name.startsWith('[')
+		)
+		.map((entry) => entry.name);
 }
 
 function assertTitleHasLocale(title: unknown, slug: string): void {
@@ -112,11 +116,8 @@ async function main(): Promise<void> {
 		for (const row of rows) {
 			const slug: string = row.slug;
 			if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) fail(`invalid page slug: ${slug}`);
-			if (
-				(RESERVED_SLUGS.has(slug) && !['about', 'about-site'].includes(slug)) ||
-				routeNames.includes(slug)
-			) {
-				fail(`reserved or code-route slug: ${slug}`);
+			if (RESERVED_SLUGS.has(slug) && !['about', 'about-site'].includes(slug)) {
+				fail(`reserved slug: ${slug}`);
 			}
 			if (row.external_url !== null && !/^https?:\/\//.test(row.external_url)) {
 				fail(`invalid external_url for ${slug}`);
@@ -125,12 +126,19 @@ async function main(): Promise<void> {
 			if (row.content_format !== 'markdown') fail(`invalid content_format for ${slug}`);
 			assertTitleHasLocale(row.title, slug);
 			if (row.is_default) defaults.add(slug);
-			if (routeNames.includes(slug)) warnings.push(`code route shadows page row: /${slug}`);
+			if (routeNames.includes(slug))
+				warnings.push(
+					`code route shadows page row: /${slug} (file wins; confirm the row is still wanted)`
+				);
 		}
 
 		for (const slug of ['about', 'about-site']) {
 			if (!defaults.has(slug)) fail(`missing protected default page: ${slug}`);
 		}
+		if (defaults.size !== 2)
+			fail(
+				`expected exactly 2 protected defaults, found ${defaults.size}: ${[...defaults].join(', ')}`
+			);
 
 		if (warnings.length > 0) console.warn(`⚠ ${warnings.join('; ')}`);
 		console.log(`✓ verified pages (${rows.length} rows, ${defaults.size} defaults)`);

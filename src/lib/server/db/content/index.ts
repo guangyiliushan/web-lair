@@ -19,4 +19,3 @@ export * from './tag.schema';
 export * from './thought.schema';
 export * from './topic.schema';
 export * from './translation.schema';
-

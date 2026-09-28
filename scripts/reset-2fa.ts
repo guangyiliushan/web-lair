@@ -19,7 +19,7 @@ import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { session, twoFactor, user } from '../src/lib/server/db/auth.schema';
 
-const DB_URL = process.env.DATABASE_URL;
+const DB_URL = process.env.DATABASE_URL ?? '';
 if (!DB_URL) {
 	console.error('✗ DATABASE_URL is required.');
 	process.exit(1);

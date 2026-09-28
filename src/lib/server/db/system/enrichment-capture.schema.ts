@@ -6,6 +6,7 @@ import {
 	pgTable,
 	text,
 	timestamp,
+	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
 
@@ -20,7 +21,7 @@ export const enrichmentCaptures = pgTable(
 	{
 		id: uuid('id')
 			.primaryKey()
-			.default(sql`gen_random_uuid()`)
+			.default(sql`uuidv7()`)
 			.notNull(),
 		provider: text('provider').notNull(),
 		sourceUrl: text('source_url').notNull(),
@@ -35,6 +36,6 @@ export const enrichmentCaptures = pgTable(
 	},
 	(table) => [
 		index('enrichment_captures_lru_idx').on(table.lastAccessedAt.asc()),
-		index('enrichment_captures_source_idx').on(table.provider, table.sourceUrl)
+		uniqueIndex('enrichment_captures_source_uniq').on(table.provider, table.sourceUrl)
 	]
 );

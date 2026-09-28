@@ -228,7 +228,7 @@ CREATE TABLE "links" (
 	CONSTRAINT "links_https_check" CHECK ("links"."url" like 'https://%' and ("links"."backlink_url" is null or "links"."backlink_url" like 'https://%')),
 	CONSTRAINT "links_lost_since_check" CHECK (("links"."status" = 'outdated') = ("links"."lost_since" is not null)),
 	CONSTRAINT "links_backlink_required_check" CHECK ("links"."status" in ('rejected', 'banned') or "links"."backlink_url" is not null),
-	CONSTRAINT "links_ring_check" CHECK ("links"."recent_checks" is null or (jsonb_typeof("links"."recent_checks") = 'array' and jsonb_array_length("links"."recent_checks") <= 10)),
+	CONSTRAINT "links_ring_check" CHECK ("links"."recent_checks" is null or (case when jsonb_typeof("links"."recent_checks") = 'array' then jsonb_array_length("links"."recent_checks") <= 10 else false end)),
 	CONSTRAINT "links_streak_check" CHECK ("links"."fail_streak" >= 0 and "links"."backlink_missing_streak" >= 0)
 );
 --> statement-breakpoint
@@ -301,7 +301,8 @@ CREATE TABLE "pages" (
 --> statement-breakpoint
 CREATE TABLE "photo_tags" (
 	"photo_id" uuid NOT NULL,
-	"tag_id" uuid NOT NULL
+	"tag_id" uuid NOT NULL,
+	CONSTRAINT "photo_tags_photo_id_tag_id_pk" PRIMARY KEY("photo_id","tag_id")
 );
 --> statement-breakpoint
 CREATE TABLE "photos" (
@@ -316,16 +317,16 @@ CREATE TABLE "photos" (
 	"camera_make" text,
 	"camera_model" text,
 	"lens_model" text,
-	"f_number" text,
-	"focal_length_mm" text,
-	"exposure_time_s" text,
+	"f_number" numeric,
+	"focal_length_mm" numeric,
+	"exposure_time_s" numeric,
 	"iso" integer,
-	"latitude" text,
-	"longitude" text,
-	"altitude_m" text,
+	"latitude" numeric(9, 6),
+	"longitude" numeric(9, 6),
+	"altitude_m" numeric,
 	"exif" jsonb,
 	"is_visible" boolean DEFAULT true NOT NULL,
-	CONSTRAINT "photos_coords_check" CHECK (("photos"."latitude" is null) = ("photos"."longitude" is null)),
+	CONSTRAINT "photos_coords_check" CHECK (("photos"."latitude" is null) = ("photos"."longitude" is null) and ("photos"."latitude" is null or ("photos"."latitude" between -90 and 90 and "photos"."longitude" between -180 and 180))),
 	CONSTRAINT "photos_title_shape_check" CHECK ("photos"."title" is null or jsonb_typeof("photos"."title") = 'object'),
 	CONSTRAINT "photos_description_shape_check" CHECK ("photos"."description" is null or jsonb_typeof("photos"."description") = 'object')
 );
@@ -501,7 +502,7 @@ CREATE TABLE "activities" (
 );
 --> statement-breakpoint
 CREATE TABLE "enrichment_captures" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"provider" text NOT NULL,
 	"source_url" text NOT NULL,
 	"object_key" text NOT NULL,
@@ -571,8 +572,8 @@ CREATE TABLE "subscriptions" (
 	"unsubscribed_at" timestamp with time zone,
 	CONSTRAINT "subscriptions_status_check" CHECK ("subscriptions"."status" in ('pending', 'subscribed', 'unsubscribed')),
 	CONSTRAINT "subscriptions_lang_check" CHECK ("subscriptions"."lang" in ('en', 'zh-cn', 'ja')),
-	CONSTRAINT "subscriptions_verified_at_check" CHECK (("subscriptions"."status" = 'subscribed') = ("subscriptions"."verified_at" is not null)),
-	CONSTRAINT "subscriptions_unsubscribed_at_check" CHECK (("subscriptions"."status" = 'unsubscribed') = ("subscriptions"."unsubscribed_at" is not null))
+	CONSTRAINT "subscriptions_verified_at_check" CHECK (("subscriptions"."status" = 'pending') = ("subscriptions"."verified_at" is null)),
+	CONSTRAINT "subscriptions_unsubscribed_at_check" CHECK ("subscriptions"."status" <> 'unsubscribed' or "subscriptions"."unsubscribed_at" is not null)
 );
 --> statement-breakpoint
 CREATE TABLE "webhook_deliveries" (
@@ -582,7 +583,7 @@ CREATE TABLE "webhook_deliveries" (
 	"event" text NOT NULL,
 	"payload" jsonb,
 	"status" text DEFAULT 'queued' NOT NULL,
-	"response_code" text,
+	"response_code" integer,
 	"error" text,
 	"delivered_at" timestamp with time zone,
 	CONSTRAINT "webhook_deliveries_status_check" CHECK ("webhook_deliveries"."status" in ('queued', 'succeeded', 'failed'))
@@ -806,7 +807,7 @@ CREATE INDEX "pages_sort_order_idx" ON "pages" USING btree ("sort_order");--> st
 CREATE INDEX "photo_tags_tag_idx" ON "photo_tags" USING btree ("tag_id","photo_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "photos_slug_uniq" ON "photos" USING btree ("slug");--> statement-breakpoint
 CREATE UNIQUE INDEX "photos_file_id_uniq" ON "photos" USING btree ("file_id");--> statement-breakpoint
-CREATE INDEX "photos_visible_taken_idx" ON "photos" USING btree ("is_visible","taken_at");--> statement-breakpoint
+CREATE INDEX "photos_visible_taken_idx" ON "photos" USING btree ("is_visible","taken_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "post_related_posts_related_idx" ON "post_related_posts" USING btree ("related_post_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "post_revisions_post_version_uniq" ON "post_revisions" USING btree ("post_id","version");--> statement-breakpoint
 CREATE INDEX "post_revisions_author_idx" ON "post_revisions" USING btree ("author") WHERE "post_revisions"."author" is not null;--> statement-breakpoint
@@ -819,8 +820,8 @@ CREATE INDEX "posts_status_pin_published_idx" ON "posts" USING btree ("lang","st
 CREATE INDEX "posts_category_status_published_idx" ON "posts" USING btree ("category_id","lang","status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "posts_translated_from_idx" ON "posts" USING btree ("translated_from_post_id") WHERE "posts"."translated_from_post_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "posts_group_source_uniq" ON "posts" USING btree ("translation_group") WHERE "posts"."translated_from_post_id" is null;--> statement-breakpoint
-CREATE INDEX "projects_extid_uniq" ON "projects" USING btree ("provider","external_id") WHERE "projects"."external_id" is not null;--> statement-breakpoint
-CREATE INDEX "projects_url_uniq" ON "projects" USING btree ("provider","project_url") WHERE "projects"."external_id" is null;--> statement-breakpoint
+CREATE UNIQUE INDEX "projects_extid_uniq" ON "projects" USING btree ("provider","external_id") WHERE "projects"."external_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "projects_url_uniq" ON "projects" USING btree ("provider","project_url") WHERE "projects"."external_id" is null;--> statement-breakpoint
 CREATE INDEX "projects_status_sort_idx" ON "projects" USING btree ("status","sort_order");--> statement-breakpoint
 CREATE INDEX "projects_review_idx" ON "projects" USING btree ("created_at") WHERE "projects"."status" = 'pending';--> statement-breakpoint
 CREATE INDEX "quotes_created_at_idx" ON "quotes" USING btree ("created_at");--> statement-breakpoint
@@ -843,20 +844,18 @@ CREATE INDEX "activities_event_created_idx" ON "activities" USING btree ("event"
 CREATE INDEX "activities_ref_created_idx" ON "activities" USING btree ("ref_type","ref_id","created_at") WHERE "activities"."ref_id" is not null;--> statement-breakpoint
 CREATE INDEX "activities_actor_idx" ON "activities" USING btree ("actor_id") WHERE "activities"."actor_id" is not null;--> statement-breakpoint
 CREATE INDEX "enrichment_captures_lru_idx" ON "enrichment_captures" USING btree ("last_accessed_at");--> statement-breakpoint
-CREATE INDEX "enrichment_captures_source_idx" ON "enrichment_captures" USING btree ("provider","source_url");--> statement-breakpoint
+CREATE UNIQUE INDEX "enrichment_captures_source_uniq" ON "enrichment_captures" USING btree ("provider","source_url");--> statement-breakpoint
 CREATE INDEX "file_references_ref_idx" ON "file_references" USING btree ("ref_type","ref_id");--> statement-breakpoint
 CREATE INDEX "job_runs_job_started_at_idx" ON "job_runs" USING btree ("job","started_at");--> statement-breakpoint
 CREATE INDEX "job_runs_status_created_at_idx" ON "job_runs" USING btree ("status","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "job_runs_job_queued_uniq" ON "job_runs" USING btree ("job") WHERE "job_runs"."status" = 'queued';--> statement-breakpoint
 CREATE UNIQUE INDEX "job_schedules_job_cron_expr_uniq" ON "job_schedules" USING btree ("job","cron_expr");--> statement-breakpoint
-CREATE INDEX "job_schedules_enabled_idx" ON "job_schedules" USING btree ("is_enabled");--> statement-breakpoint
 CREATE INDEX "slug_trackers_type_lang_slug_idx" ON "slug_trackers" USING btree ("type","lang","slug");--> statement-breakpoint
 CREATE INDEX "slug_trackers_type_target_idx" ON "slug_trackers" USING btree ("type","target_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "subscriptions_email_uniq" ON "subscriptions" USING btree ("email");--> statement-breakpoint
 CREATE UNIQUE INDEX "subscriptions_token_uniq" ON "subscriptions" USING btree ("token");--> statement-breakpoint
 CREATE INDEX "webhook_deliveries_status_created_at_idx" ON "webhook_deliveries" USING btree ("status","created_at");--> statement-breakpoint
 CREATE INDEX "webhook_deliveries_webhook_id_created_at_idx" ON "webhook_deliveries" USING btree ("webhook_id","created_at");--> statement-breakpoint
-CREATE INDEX "webhooks_is_enabled_idx" ON "webhooks" USING btree ("is_enabled");--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "invitation_organizationId_idx" ON "invitation" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "invitation_email_idx" ON "invitation" USING btree ("email");--> statement-breakpoint
