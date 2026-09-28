@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const MESSAGES_DIR = join(ROOT, 'messages');
 const PARAGLIDE_OUT = join(ROOT, 'src', 'lib', 'paraglide');
+// Bare `paraglide-js compile` defaults here; generated output too (walk skip).
+const PARAGLIDE_CLI_OUT = join(ROOT, 'src', 'paraglide');
 const SELF = fileURLToPath(import.meta.url);
 const SOURCE_EXTENSIONS = ['.svelte', '.ts', '.js'];
 const SKIP_DIRS = new Set(['node_modules', '.svelte-kit']);
@@ -38,9 +40,10 @@ function* walkSources(dir: string): Generator<string> {
 		const fullPath = join(dir, entry);
 		const stat = statSync(fullPath);
 		if (stat.isDirectory()) {
-			// Generated output: its JSDoc examples call m.hello() and other keys
-			// that intentionally do not exist in this project's messages.
-			if (fullPath === PARAGLIDE_OUT) continue;
+			// Generated output (vite plugin + bare CLI): their JSDoc examples call
+			// m.hello() and other keys that intentionally do not exist in this
+			// project's messages.
+			if (fullPath === PARAGLIDE_OUT || fullPath === PARAGLIDE_CLI_OUT) continue;
 			if (!SKIP_DIRS.has(entry)) yield* walkSources(fullPath);
 		} else if (SOURCE_EXTENSIONS.some((ext) => entry.endsWith(ext))) {
 			if (fullPath !== SELF) yield fullPath;

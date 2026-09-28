@@ -39,8 +39,6 @@
 	"admin_settings_count": "{count} 个",
 	"admin_settings_integrations": "第三方集成",
 	"admin_settings_integrations_desc": "GitHub、TMDB、Bangumi 等",
-	"admin_settings_meta_preset": "Meta 预设",
-	"admin_settings_meta_preset_desc": "预设模板",
 	"admin_settings_notification": "通知",
 	"admin_settings_notification_desc": "邮件与 Bark 推送",
 	"admin_settings_search": "搜索",

@@ -39,8 +39,6 @@
 	"admin_settings_count": "{count} items",
 	"admin_settings_integrations": "Integrations",
 	"admin_settings_integrations_desc": "GitHub, TMDB, Bangumi, etc.",
-	"admin_settings_meta_preset": "Meta Presets",
-	"admin_settings_meta_preset_desc": "Preset templates",
 	"admin_settings_notification": "Notifications",
 	"admin_settings_notification_desc": "Email and Bark push",
 	"admin_settings_search": "Search",

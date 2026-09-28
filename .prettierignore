@@ -12,3 +12,7 @@ bun.lockb
 # inlang SDK generated (rewritten on every paraglide compile)
 project.inlang/README.md
 project.inlang/.meta.json
+
+# paraglide CLI output (bare `paraglide-js compile`; the app runs the vite
+# plugin into src/lib/paraglide, which stays prettier-checked)
+/src/paraglide/

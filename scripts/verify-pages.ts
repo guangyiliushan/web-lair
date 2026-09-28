@@ -2,6 +2,7 @@ import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
+import { DEFAULT_PAGE_SLUGS } from './_shared/pages';
 
 const DB_URL = process.env.DATABASE_URL;
 if (!DB_URL) {
@@ -34,6 +35,7 @@ const EXPECTED_CHECKS = [
 	'pages_content_object_check',
 	'pages_content_format_check'
 ];
+const DEFAULT_SLUG_SET: ReadonlySet<string> = new Set(DEFAULT_PAGE_SLUGS);
 const RESERVED_SLUGS = new Set([
 	'about',
 	'about-site',
@@ -116,7 +118,7 @@ async function main(): Promise<void> {
 		for (const row of rows) {
 			const slug: string = row.slug;
 			if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) fail(`invalid page slug: ${slug}`);
-			if (RESERVED_SLUGS.has(slug) && !['about', 'about-site'].includes(slug)) {
+			if (RESERVED_SLUGS.has(slug) && !DEFAULT_SLUG_SET.has(slug)) {
 				fail(`reserved slug: ${slug}`);
 			}
 			if (row.external_url !== null && !/^https?:\/\//.test(row.external_url)) {
@@ -132,10 +134,10 @@ async function main(): Promise<void> {
 				);
 		}
 
-		for (const slug of ['about', 'about-site']) {
+		for (const slug of DEFAULT_PAGE_SLUGS) {
 			if (!defaults.has(slug)) fail(`missing protected default page: ${slug}`);
 		}
-		if (defaults.size !== 2)
+		if (defaults.size !== DEFAULT_PAGE_SLUGS.length)
 			fail(
 				`expected exactly 2 protected defaults, found ${defaults.size}: ${[...defaults].join(', ')}`
 			);

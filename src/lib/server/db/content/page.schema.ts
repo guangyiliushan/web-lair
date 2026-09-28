@@ -11,12 +11,9 @@ import {
 	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
+import type { LocalizedMarkdown, LocalizedText } from './localized';
 
-export type PageLocale = 'en' | 'zh-cn' | 'ja';
-
-/** Database shape only; the service layer guarantees title has one locale. */
-export type LocalizedText = Partial<Record<PageLocale, string>>;
-export type LocalizedMarkdown = Partial<Record<PageLocale, string>>;
+export type { LocalizedMarkdown, LocalizedText, PageLocale } from './localized';
 
 /**
  * Page registry (pages line P0): md rows drive `(site)/[slug]`; rows without

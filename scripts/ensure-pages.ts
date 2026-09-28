@@ -1,4 +1,5 @@
 import postgres from 'postgres';
+import { DEFAULT_PAGE_SLUGS, SEED_PAGES } from './_shared/pages';
 
 const DB_URL = process.env.DATABASE_URL;
 if (!DB_URL) {
@@ -6,53 +7,30 @@ if (!DB_URL) {
 	process.exit(1);
 }
 
-type LocalizedText = Partial<Record<'en' | 'zh-cn' | 'ja', string>>;
-
-type SeedPage = {
-	slug: string;
-	title: LocalizedText;
-	description: LocalizedText;
-	markdown: LocalizedText;
-};
-
-const SEED_PAGES: SeedPage[] = [
-	{
-		slug: 'about',
-		title: { en: 'About Me', 'zh-cn': '关于我', ja: '自己紹介' },
-		description: {
-			en: 'A short introduction to the author.',
-			'zh-cn': '作者的简短介绍。',
-			ja: '運営者の紹介です。'
-		},
-		markdown: {
-			en: '# About Me\n\nThis page is ready to edit.',
-			'zh-cn': '# 关于我\n\n这个页面可以直接编辑。',
-			ja: '# 自己紹介\n\nこのページは編集できます。'
-		}
-	},
-	{
-		slug: 'about-site',
-		title: { en: 'About This Project', 'zh-cn': '关于本项目', ja: 'このプロジェクトについて' },
-		description: {
-			en: 'What Web Lair is and how it is built.',
-			'zh-cn': 'Web Lair 是什么，以及它如何构建。',
-			ja: 'Web Lair の概要と構成です。'
-		},
-		markdown: {
-			en: '# About This Project\n\nWeb Lair is a self-hosted publishing project.',
-			'zh-cn': '# 关于本项目\n\nWeb Lair 是一个自托管发布项目。',
-			ja: '# このプロジェクトについて\n\nWeb Lair はセルフホストの公開プロジェクトです。'
-		}
-	}
-];
+const DRY_RUN = process.argv.includes('--dry-run');
 
 /**
  * Seeds only the two protected defaults. Re-running never overwrites user
- * edits; editability is owned by the P5 admin/editor flow.
+ * edits; editability is owned by the P5 admin/editor flow. `--dry-run` prints
+ * what would be ensured (and what is already present) without writing.
  */
 async function main(): Promise<void> {
 	const sql = postgres(DB_URL!, { max: 1 });
 	try {
+		const slugs = [...DEFAULT_PAGE_SLUGS];
+		if (DRY_RUN) {
+			const present = await sql`
+				select slug, is_default
+				from pages
+				where slug in ${sql(slugs)}
+				order by slug
+			`;
+			const state =
+				present.map((row) => `${row.slug}(is_default=${row.is_default})`).join(', ') || 'none';
+			console.log(`→ dry-run: would ensure ${slugs.join(', ')}; present: ${state}`);
+			return;
+		}
+
 		for (const seed of SEED_PAGES) {
 			await sql`
 				insert into pages (
@@ -65,7 +43,7 @@ async function main(): Promise<void> {
 					null,
 					null,
 					'visible',
-					${seed.slug === 'about' ? 1 : 2},
+					${DEFAULT_PAGE_SLUGS.indexOf(seed.slug) + 1},
 					true,
 					${sql.json(seed.markdown)},
 					'markdown'
@@ -77,14 +55,14 @@ async function main(): Promise<void> {
 		const rows = await sql`
 			select slug
 			from pages
-			where is_default and slug in ('about', 'about-site')
+			where is_default and slug in ${sql(slugs)}
 			order by slug
 		`;
 		if (rows.length !== SEED_PAGES.length) {
 			const detail = await sql`
 				select slug, is_default, status
 				from pages
-				where slug in ('about', 'about-site')
+				where slug in ${sql(slugs)}
 				order by slug
 			`;
 			const present =

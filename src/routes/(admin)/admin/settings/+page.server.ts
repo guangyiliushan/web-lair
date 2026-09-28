@@ -131,51 +131,7 @@ export const load: PageServerLoad = async () => {
 					clientSecret: '',
 					callbackUrl: 'http://127.0.0.1:2333/api/v3/auth/callback/google'
 				}
-			},
-			metaPreset: [
-				{
-					key: 'aiGen',
-					label: 'AI Involvement Disclosure',
-					type: 'checkbox',
-					scope: '通用',
-					builtin: true,
-					enabled: true,
-					description: 'Declare how much AI was involved during creation'
-				},
-				{
-					key: 'cover',
-					label: 'Cover image',
-					type: 'url',
-					scope: '通用',
-					builtin: true,
-					enabled: true
-				},
-				{
-					key: 'banner',
-					label: 'Banner',
-					type: 'object',
-					scope: '通用',
-					builtin: true,
-					enabled: true,
-					description: 'Notice banner displayed at the top of an article'
-				},
-				{
-					key: 'keywords',
-					label: 'SEO keywords',
-					type: 'tags',
-					scope: '通用',
-					builtin: true,
-					enabled: true
-				},
-				{
-					key: 'style',
-					label: 'Article style',
-					type: 'text',
-					scope: '通用',
-					builtin: true,
-					enabled: true
-				}
-			]
+			}
 		}
 	};
 };

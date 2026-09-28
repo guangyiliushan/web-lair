@@ -16,6 +16,8 @@ export const jobSchedules = pgTable(
 			.notNull(),
 		job: text('job').notNull(),
 		cronExpr: text('cron_expr').notNull(),
+		// DB fallback only; the app defaults tz from options `site.timezone`
+		// (jobs line §3.2) - this value covers out-of-band inserts.
 		tz: text('tz').notNull().default('UTC'),
 		isEnabled: boolean('is_enabled').notNull().default(true),
 		lastDueAt: timestamp('last_due_at', { withTimezone: true })

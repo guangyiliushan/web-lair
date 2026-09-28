@@ -11,7 +11,6 @@
 	import IconSparkles from '@tabler/icons-svelte-runes/icons/sparkles';
 	import IconPuzzle from '@tabler/icons-svelte-runes/icons/puzzle';
 	import IconShield from '@tabler/icons-svelte-runes/icons/shield';
-	import IconList from '@tabler/icons-svelte-runes/icons/list';
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
 	import { cn } from '$lib/utils';
 	import type { Component, Snippet } from 'svelte';
@@ -29,8 +28,7 @@
 		| 'ai'
 		| 'integrations'
 		| 'system'
-		| 'account'
-		| 'meta-preset';
+		| 'account';
 
 	const sections: { id: SectionId; label: string; desc: string; icon: Component }[] = [
 		{
@@ -92,12 +90,6 @@
 			label: m.admin_settings_account(),
 			desc: m.admin_settings_account_desc(),
 			icon: IconShield
-		},
-		{
-			id: 'meta-preset',
-			label: m.admin_settings_meta_preset(),
-			desc: m.admin_settings_meta_preset_desc(),
-			icon: IconList
 		}
 	];
 

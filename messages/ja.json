@@ -39,8 +39,6 @@
 	"admin_settings_count": "{count}件",
 	"admin_settings_integrations": "サードパーティ連携",
 	"admin_settings_integrations_desc": "GitHub、TMDB、Bangumiなど",
-	"admin_settings_meta_preset": "Metaプリセット",
-	"admin_settings_meta_preset_desc": "プリセットテンプレート",
 	"admin_settings_notification": "通知",
 	"admin_settings_notification_desc": "メールとBarkプッシュ",
 	"admin_settings_search": "検索",

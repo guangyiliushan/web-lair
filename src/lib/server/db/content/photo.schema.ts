@@ -15,7 +15,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { files } from './file.schema';
 import { tags } from './tag.schema';
-import type { LocalizedText } from './page.schema';
+import type { LocalizedText } from './localized';
 
 /** Photo gallery entity (storage line §3.3): 1:1 with a files row. */
 export const photos = pgTable(
