@@ -1,6 +1,5 @@
 export * from './activity.schema';
 export * from './enrichment-capture.schema';
-export * from './enrichment-cache.schema';
 export * from './file-reference.schema';
 export * from './job-run.schema';
 export * from './job-schedule.schema';

@@ -29,6 +29,13 @@
       "when": 1790594785963,
       "tag": "0003_system_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790595374515,
+      "tag": "0004_storage_tables",
+      "breakpoints": true
     }
   ]
 }

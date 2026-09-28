@@ -1,20 +1,31 @@
-import { index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { enrichmentCache } from './enrichment-cache.schema';
+import { sql } from 'drizzle-orm';
+import {
+	index,
+	integer,
+	jsonb,
+	pgTable,
+	text,
+	timestamp,
+	uuid
+} from 'drizzle-orm/pg-core';
 
 export interface EnrichmentImagePalette {
 	dominant: string;
 	swatches?: string[];
 }
 
+/** Enrichment capture blobs (storage line §3.5): decoupled from cache, LRU. */
 export const enrichmentCaptures = pgTable(
 	'enrichment_captures',
 	{
-		enrichmentId: uuid('enrichment_id')
+		id: uuid('id')
 			.primaryKey()
-			.notNull()
-			.references(() => enrichmentCache.id, { onDelete: 'cascade' }),
+			.default(sql`gen_random_uuid()`)
+			.notNull(),
+		provider: text('provider').notNull(),
+		sourceUrl: text('source_url').notNull(),
 		objectKey: text('object_key').notNull(),
-		bytes: integer('bytes').notNull(),
+		byteSize: integer('byte_size').notNull(),
 		width: integer('width').notNull(),
 		height: integer('height').notNull(),
 		thumbhash: text('thumbhash'),
@@ -22,5 +33,8 @@ export const enrichmentCaptures = pgTable(
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 		lastAccessedAt: timestamp('last_accessed_at', { withTimezone: true }).notNull().defaultNow()
 	},
-	(table) => [index('enrichment_captures_lru_idx').on(table.lastAccessedAt.asc())]
+	(table) => [
+		index('enrichment_captures_lru_idx').on(table.lastAccessedAt.asc()),
+		index('enrichment_captures_source_idx').on(table.provider, table.sourceUrl)
+	]
 );
