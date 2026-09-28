@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
-import { boolean, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
+/** Double opt-in subscription (platform §D.2): pending → subscribed → unsubscribed. */
 export const subscriptions = pgTable(
 	'subscriptions',
 	{
@@ -9,13 +10,34 @@ export const subscriptions = pgTable(
 			.default(sql`uuidv7()`)
 			.notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp('updated_at', { withTimezone: true })
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
 		email: text('email').notNull(),
-		cancelToken: text('cancel_token').notNull(),
-		status: integer('status').notNull(),
-		isVerified: boolean('is_verified').notNull().default(false)
+		status: text('status').notNull().default('pending'),
+		lang: text('lang').notNull().default('en'),
+		source: text('source'),
+		token: text('token').notNull(),
+		verifiedAt: timestamp('verified_at', { withTimezone: true }),
+		unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true })
 	},
 	(table) => [
 		uniqueIndex('subscriptions_email_uniq').on(table.email),
-		uniqueIndex('subscriptions_cancel_token_uniq').on(table.cancelToken)
+		uniqueIndex('subscriptions_token_uniq').on(table.token),
+		check(
+			'subscriptions_status_check',
+			sql`${table.status} in ('pending', 'subscribed', 'unsubscribed')`
+		),
+		check('subscriptions_lang_check', sql`${table.lang} in ('en', 'zh-cn', 'ja')`),
+		// status transitions require matching timestamps.
+		check(
+			'subscriptions_verified_at_check',
+			sql`(${table.status} = 'subscribed') = (${table.verifiedAt} is not null)`
+		),
+		check(
+			'subscriptions_unsubscribed_at_check',
+			sql`(${table.status} = 'unsubscribed') = (${table.unsubscribedAt} is not null)`
+		)
 	]
 );
