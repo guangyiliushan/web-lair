@@ -369,14 +369,28 @@ CREATE TABLE "posts" (
 CREATE TABLE "projects" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"name" text NOT NULL,
+	"description" text,
+	"provider" varchar(64) NOT NULL,
+	"external_id" varchar(256),
+	"full_name" text,
+	"project_url" text NOT NULL,
 	"preview_url" text,
 	"doc_url" text,
-	"project_url" text,
-	"images" text[],
-	"description" text NOT NULL,
 	"avatar" text,
-	"text" text
+	"language" text,
+	"stars" integer,
+	"pushed_at" timestamp with time zone,
+	"archived" boolean DEFAULT false NOT NULL,
+	"fork" boolean DEFAULT false NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"last_synced_at" timestamp with time zone,
+	"last_error_kind" text,
+	CONSTRAINT "projects_provider_check" CHECK ("projects"."provider" in ('github', 'gitlab', 'gitee', 'bitbucket', 'site', 'other')),
+	CONSTRAINT "projects_status_check" CHECK ("projects"."status" in ('pending', 'published', 'hidden', 'rejected')),
+	CONSTRAINT "projects_external_id_check" CHECK (("projects"."provider" in ('github', 'gitlab', 'gitee', 'bitbucket')) = ("projects"."external_id" is not null))
 );
 --> statement-breakpoint
 CREATE TABLE "quotes" (
@@ -786,7 +800,10 @@ CREATE INDEX "posts_status_pin_published_idx" ON "posts" USING btree ("lang","st
 CREATE INDEX "posts_category_status_published_idx" ON "posts" USING btree ("category_id","lang","status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "posts_translated_from_idx" ON "posts" USING btree ("translated_from_post_id") WHERE "posts"."translated_from_post_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "posts_group_source_uniq" ON "posts" USING btree ("translation_group") WHERE "posts"."translated_from_post_id" is null;--> statement-breakpoint
-CREATE UNIQUE INDEX "projects_name_uniq" ON "projects" USING btree ("name");--> statement-breakpoint
+CREATE INDEX "projects_extid_uniq" ON "projects" USING btree ("provider","external_id") WHERE "projects"."external_id" is not null;--> statement-breakpoint
+CREATE INDEX "projects_url_uniq" ON "projects" USING btree ("provider","project_url") WHERE "projects"."external_id" is null;--> statement-breakpoint
+CREATE INDEX "projects_status_sort_idx" ON "projects" USING btree ("status","sort_order");--> statement-breakpoint
+CREATE INDEX "projects_review_idx" ON "projects" USING btree ("created_at") WHERE "projects"."status" = 'pending';--> statement-breakpoint
 CREATE INDEX "quotes_created_at_idx" ON "quotes" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "recent_items_ref_idx" ON "recent_items" USING btree ("ref_type","ref_id");--> statement-breakpoint
 CREATE INDEX "recent_items_created_at_idx" ON "recent_items" USING btree ("created_at");--> statement-breakpoint
