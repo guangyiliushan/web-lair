@@ -41,7 +41,6 @@
 			{
 				title: m.footer_about(),
 				links: [
-					{ label: m.footer_about_site(), href: '/about' },
 					{ label: m.footer_about_me(), href: '/about/me' },
 					{ label: m.footer_about_project(), href: '/about/project', external: true }
 				]
