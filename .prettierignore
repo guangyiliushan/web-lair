@@ -9,6 +9,9 @@ bun.lockb
 /static/
 /drizzle/
 
+# dotenv example — prettier has no env parser (explicit --check on it errors)
+/.env.example
+
 # inlang SDK generated (rewritten on every paraglide compile)
 project.inlang/README.md
 project.inlang/.meta.json

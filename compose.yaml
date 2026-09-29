@@ -14,5 +14,47 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql
 
+  rustfs:
+    # pinned: RustFS 1.0.0 (GA 2026-09-16, ledger §21) — S3-compatible object storage.
+    # Loopback-only: 9000 (S3 API) serves this machine's app; 9001 (console) stays local (§21).
+    image: rustfs/rustfs:1.0.0
+    security_opt:
+      - 'no-new-privileges:true'
+    restart: always
+    ports:
+      - '127.0.0.1:9000:9000'
+      - '127.0.0.1:9001:9001'
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ':9000'
+      RUSTFS_CONSOLE_ADDRESS: ':9001'
+      RUSTFS_CONSOLE_ENABLE: 'true'
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_OBS_LOGGER_LEVEL: error
+    volumes:
+      - rustfsdata:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:9000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  valkey:
+    # pinned: Valkey 9.1.2 (2026-09-01, ledger §21) — fail-open cache layer
+    # (embed-meta + rate-limit counters). No persistence on purpose: a restart may
+    # reset counters — acceptable for a fail-open cache.
+    image: valkey/valkey:9.1.2
+    restart: always
+    ports:
+      - '127.0.0.1:6379:6379'
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
 volumes:
   pgdata:
+  rustfsdata:
