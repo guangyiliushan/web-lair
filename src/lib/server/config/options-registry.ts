@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
-import { db } from '$lib/server/db';
 import { options } from '$lib/server/db/config';
 import { AI_FUNCTIONS } from '$lib/utils/ai-meta';
 
@@ -13,7 +12,17 @@ interface RegistryEntry {
 }
 
 /** Accepts the db client or a transaction - registry writes join caller transactions. */
-type RegistryExecutor = Pick<typeof db, 'select' | 'insert'>;
+type AppDb = typeof import('$lib/server/db').db;
+type RegistryExecutor = Pick<AppDb, 'select' | 'insert'>;
+
+/**
+ * Lazy default executor: keeps this module importable from plain tsx scripts
+ * (the app `db` handle reads `$env/dynamic/private`, which exists only inside
+ * the SvelteKit runtime). Callers can inject their own executor instead.
+ */
+async function defaultExecutor(): Promise<RegistryExecutor> {
+	return (await import('$lib/server/db')).db;
+}
 
 /**
  * Options registry (AI-1.1, ai-line plan §5.1): the single source of truth
@@ -83,6 +92,16 @@ export const optionRegistry = {
 			trustedUsers: [],
 			thresholds: { allow: 0.9, block: 0.95 }
 		}
+	},
+	'media.purge': {
+		schema: z.object({
+			pendingDays: z.number('必须为数字').int('必须为整数').nonnegative('不能小于 0'),
+			detachedDays: z.number('必须为数字').int('必须为整数').nonnegative('不能小于 0')
+		}),
+		// Storage line §4.6: never-referenced `pending` blobs purge after a
+		// week, `detached` blobs after a month. Photos-linked files are exempt
+		// from auto-purge entirely (gallery files are never cleaned silently).
+		default: { pendingDays: 7, detachedDays: 30 }
 	}
 } as const satisfies Record<string, RegistryEntry>;
 
@@ -104,10 +123,11 @@ function entryFor(key: string): RegistryEntry {
  */
 export async function getOption<K extends OptionKey>(
 	key: K,
-	executor: RegistryExecutor = db
+	executor?: RegistryExecutor
 ): Promise<OptionValue<K>> {
 	const entry = entryFor(key);
-	const rows = await executor
+	const database = executor ?? (await defaultExecutor());
+	const rows = await database
 		.select({ value: options.value })
 		.from(options)
 		.where(eq(options.name, key))
@@ -125,11 +145,12 @@ export async function getOption<K extends OptionKey>(
 export async function setOption<K extends OptionKey>(
 	key: K,
 	value: OptionValue<K>,
-	executor: RegistryExecutor = db
+	executor?: RegistryExecutor
 ): Promise<void> {
 	const entry = entryFor(key);
 	const parsed = entry.schema.parse(value); // ZodError on invalid input
-	await executor
+	const database = executor ?? (await defaultExecutor());
+	await database
 		.insert(options)
 		.values({ name: key, value: parsed })
 		.onConflictDoUpdate({ target: options.name, set: { value: parsed } });

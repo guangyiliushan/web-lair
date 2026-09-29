@@ -35,7 +35,10 @@
 		"jobs:enqueue": "node --env-file=.env scripts/jobs-enqueue.ts",
 		"db:ensure-pages": "tsx --env-file=.env scripts/ensure-pages.ts",
 		"db:verify-pages": "tsx --env-file=.env scripts/verify-pages.ts",
-		"storage:smoke": "tsx --env-file=.env scripts/storage-smoke.ts"
+		"storage:smoke": "tsx --env-file=.env scripts/storage-smoke.ts",
+		"media:audit": "tsx --env-file=.env scripts/media-audit.ts",
+		"media:purge": "tsx --env-file=.env scripts/purge-media.ts",
+		"db:verify-media": "tsx --env-file=.env scripts/verify-media.ts"
 	},
 	"devDependencies": {
 		"@chromatic-com/storybook": "^5.3.1",

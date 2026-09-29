@@ -9,16 +9,21 @@ import decode from 'heic-decode';
 
 const HEIF_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'mif1', 'msf1']);
 
+/** Reads the ISO-BMFF major brand (bytes 8–12 of an `ftyp` box); null otherwise. */
+export function isoMediaBrand(bytes: Uint8Array): string | null {
+	if (bytes.byteLength < 12) return null;
+	const view = new DataView(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
+	if (view.getUint32(4) !== 0x66747970) return null; // 'ftyp'
+	return String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+}
+
 /**
  * Sniffs the ISO-BMFF `ftyp` box: HEVC-coded brands (heic/heix/hevc/hevx) and
  * HEIF-family brands (mif1/msf1) all route through the WASM decoder.
  */
 export function isHeic(bytes: Uint8Array): boolean {
-	if (bytes.byteLength < 12) return false;
-	const view = new DataView(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
-	if (view.getUint32(4) !== 0x66747970) return false; // 'ftyp'
-	const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
-	return HEIF_BRANDS.has(brand);
+	const brand = isoMediaBrand(bytes);
+	return brand !== null && HEIF_BRANDS.has(brand);
 }
 
 export interface DecodedHeic {
