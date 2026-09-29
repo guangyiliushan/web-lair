@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { webhooks } from './webhook.schema';
+// Explicit .ts specifier: the jobs drain loads this schema graph under plain
+// Node (type stripping); extensionless resolution does not exist there.
+import { webhooks } from './webhook.schema.ts';
 
 export type WebhookDeliveryStatus = 'queued' | 'succeeded' | 'failed';
 

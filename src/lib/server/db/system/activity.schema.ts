@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { check, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { user } from '../auth.schema';
+// Explicit .ts specifier: the jobs drain loads this schema graph under plain
+// Node (type stripping); extensionless resolution does not exist there.
+import { user } from '../auth.schema.ts';
 
 export type ActivityRefType =
 	| 'post'
