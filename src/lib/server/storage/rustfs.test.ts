@@ -75,7 +75,7 @@ describe('RustFsStorage', () => {
 		expect(headers.get('x-amz-content-sha256')).toBe(sha256Hex(payload));
 		expect(headers.get('content-type')).toBe('image/webp');
 		expect(headers.get('authorization')).toMatch(
-			/^AWS4-HMAC-SHA256 Credential=test-key\/20260929\/us-east-1\/s3\/aws4_request, SignedHeaders=[a-z0-9;-]+, Signature=[0-9a-f]{64}$/
+			/^AWS4-HMAC-SHA256 Credential=test-key\/20260929\/us-east-1\/s3\/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=[0-9a-f]{64}$/
 		);
 		expect(new TextDecoder().decode(call.init.body as Uint8Array)).toBe('hello');
 	});

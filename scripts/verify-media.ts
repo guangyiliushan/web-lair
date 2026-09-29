@@ -8,6 +8,7 @@ import { storageConfigFromEnv } from '../src/lib/server/storage/config';
 import { RustFsStorage } from '../src/lib/server/storage/rustfs';
 import {
 	deleteFile,
+	listFiles,
 	listPurgeCandidates,
 	purgeMedia,
 	runMediaAudit,
@@ -56,8 +57,17 @@ const brokenKey = `${brokenHash.slice(0, 2)}/${brokenHash}.jpg`;
 const draftTitle = `verify-media-broken-${stamp}`;
 
 let uploadedId: string | null = null;
+let uploadedKey: string | null = null;
 let refId: string | null = null;
-let baseline: number | null = null;
+
+/** Scoped probe-row counter: immune to concurrent activity on the live db. */
+async function probeRowCount(keys: string[]): Promise<number> {
+	const rows = await db
+		.select({ objectKey: schema.files.objectKey })
+		.from(schema.files)
+		.where(inArray(schema.files.objectKey, keys));
+	return rows.length;
+}
 
 async function cleanup(): Promise<void> {
 	// Best-effort: remove every probe row/object even when checks failed.
@@ -74,9 +84,6 @@ async function cleanup(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-	const before = await db.$count(schema.files);
-	baseline = before;
-
 	// -- T5: purge dry-run is read-only --------------------------------------
 	const dryRun = await purgeMedia({ dryRun: true }, deps);
 	check(
@@ -84,7 +91,6 @@ async function main(): Promise<void> {
 		dryRun.dryRun === true && dryRun.deleted.length === 0,
 		`candidates=${dryRun.candidates.length}`
 	);
-	check('purge dry-run leaves the registry untouched', (await db.$count(schema.files)) === before);
 
 	// -- upload pipeline roundtrip (live storage) ----------------------------
 	const png = await sharp({
@@ -97,6 +103,7 @@ async function main(): Promise<void> {
 		deps
 	);
 	uploadedId = uploaded.id;
+	uploadedKey = uploaded.objectKey;
 	check('upload returns a pending row', uploaded.status === 'pending' && !uploaded.deduplicated);
 	check('original object exists', (await storage.head(uploaded.objectKey)) !== null);
 	check('thumb variant exists', (await storage.head(`${uploaded.objectKey}@thumb`)) !== null);
@@ -186,7 +193,21 @@ async function main(): Promise<void> {
 		'purge excludes attached rows',
 		!dryRun2.candidates.some((candidate) => candidate.objectKey === missingKey)
 	);
-	check('purge dry-run again deletes nothing', (await db.$count(schema.files)) === before + 2);
+	check(
+		'purge dry-run again deletes nothing (probe rows still present)',
+		(await probeRowCount([orphanKey, missingKey])) === 2
+	);
+
+	// -- §6.1 "orphan" filter (admin list view) ------------------------------
+	const orphanView = await listFiles({ orphan: true }, deps);
+	check(
+		'listFiles({ orphan }) surfaces the constructed orphan',
+		orphanView.some((row) => row.objectKey === orphanKey)
+	);
+	check(
+		'listFiles({ orphan }) excludes healthy / attached rows',
+		!orphanView.some((row) => row.objectKey === missingKey)
+	);
 }
 
 try {
@@ -199,12 +220,9 @@ try {
 		failures += 1;
 		console.error('FAIL cleanup error:', error);
 	});
-	const after = await db.$count(schema.files).catch(() => -1);
-	check(
-		'registry back to baseline after cleanup',
-		baseline === null || after === baseline,
-		`before=${baseline} after=${after}`
-	);
+	const probes = [orphanKey, missingKey, ...(uploadedKey ? [uploadedKey] : [])];
+	const remaining = await probeRowCount(probes).catch(() => -1);
+	check('probe rows are gone after cleanup', remaining === 0, `remaining=${remaining}`);
 	console.log(`\nchecks=${checks} failures=${failures}`);
 	await sql.end();
 	process.exit(failures === 0 ? 0 : 1);

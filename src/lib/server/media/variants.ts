@@ -29,6 +29,23 @@ export interface ProcessedImage {
 }
 
 /**
+ * Header-only dimensions for pass-through formats (plan §4.3: GIF is stored
+ * and served as-is, so it never goes through `processImage`). Reads metadata
+ * only — no pixel decode.
+ */
+export async function readImageSize(
+	input: Uint8Array
+): Promise<{ width: number; height: number } | null> {
+	try {
+		const meta = await sharp(Buffer.from(input)).metadata();
+		if (!meta.width || !meta.height) return null;
+		return { width: meta.width, height: meta.height };
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Image pipeline for ST-1 (ledger §21): HEIC (WASM) and regular inputs are
  * normalised through one sharp chain that
  * - bakes EXIF Orientation into the pixels (`rotate()`), then

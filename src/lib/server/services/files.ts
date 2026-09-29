@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import { and, desc, eq, ilike, inArray, like, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, like, sql } from 'drizzle-orm';
 import { drafts, files, notes, photos, posts } from '$lib/server/db/content';
 import { fileReferences } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { getOption } from '$lib/server/config/options-registry';
 import type { ObjectStoragePort } from '$lib/server/storage/port';
-import { processImage } from '$lib/server/media/variants';
+import { processImage, readImageSize } from '$lib/server/media/variants';
 import {
 	MAX_BATCH_COUNT,
 	MAX_UPLOAD_BYTES,
@@ -146,7 +146,12 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 	if (existing) return { ...existing, deduplicated: true };
 
 	const objectKey = objectKeyFor(contentHash, sniffed.ext);
-	const processed = sniffed.kind === 'image' ? await processImage(input.bytes) : null;
+	// Plan §4.3: GIF is a pass-through format — no transcode; the original IS
+	// the public tier (GIF carries no EXIF, so there is nothing to strip).
+	// Only its header is read for dimensions; no variants are derived.
+	const isGif = sniffed.kind === 'image' && sniffed.ext === 'gif';
+	const processed = sniffed.kind === 'image' && !isGif ? await processImage(input.bytes) : null;
+	const gifSize = isGif ? await readImageSize(input.bytes) : null;
 
 	const putKeys: string[] = [];
 	const putObject = async (key: string, data: Uint8Array, contentType: string): Promise<void> => {
@@ -176,8 +181,8 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 				fileName: input.fileName,
 				mimeType: sniffed.mimeType,
 				byteSize: input.bytes.byteLength,
-				width: processed?.width ?? null,
-				height: processed?.height ?? null,
+				width: processed?.width ?? gifSize?.width ?? null,
+				height: processed?.height ?? gifSize?.height ?? null,
 				thumbhash: processed?.thumbhash ?? null,
 				palette: processed ? { ...processed.palette } : null,
 				uploadedBy: input.uploadedBy ?? null
@@ -188,6 +193,14 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 		if (pgErrorCode(cause) === '23505') {
 			const winner = await findFileByHash(contentHash, database);
 			if (winner) return { ...winner, deduplicated: true };
+		}
+		// Never compensate over a live winner. A raced duplicate whose INSERT
+		// failed with anything else (pool error, timeout, lost response) has
+		// the SAME content-addressed objects on disk as a row that now exists;
+		// deleting them would strand that row without bytes. Re-check before
+		// touching shared objects.
+		if (await findFileByHash(contentHash, database).catch(() => null)) {
+			throw cause;
 		}
 		await Promise.allSettled(putKeys.map((key) => storage.delete(key)));
 		throw cause;
@@ -239,13 +252,17 @@ export async function uploadFiles(
 // ---------------------------------------------------------------------------
 
 export const FILE_LIST_LIMIT = 200;
-/** Guard for the text-scanning audit phases (registered: grow with content). */
+/** Guard for the text-scanning audit phases (§11: paginate as content grows). */
 const SCAN_LIMIT = 2000;
 
 export interface FileListFilters {
 	kind?: UploadKind;
 	status?: string;
 	keyword?: string;
+	/** Only rows created at/after this instant (§6.1 time filter). */
+	since?: Date;
+	/** Only purgeable orphans: no refs, not a photo, past the media.purge TTL. */
+	orphan?: boolean;
 }
 
 export interface FileListRow {
@@ -277,6 +294,23 @@ export async function listFiles(
 	if (filters.status) conditions.push(eq(files.status, filters.status));
 	const keyword = filters.keyword?.trim();
 	if (keyword) conditions.push(ilike(files.fileName, `%${keyword}%`));
+	if (filters.since && !Number.isNaN(filters.since.getTime())) {
+		conditions.push(sql`${files.createdAt} >= ${filters.since}`);
+	}
+	if (filters.orphan) {
+		// §6.1 "游离" filter — the same criteria as listPurgeCandidates; keep
+		// the two in sync when the TTL semantics change.
+		const { pendingDays, detachedDays } = await getOption('media.purge', database);
+		conditions.push(
+			sql`${files.status} in ('pending', 'detached')`,
+			sql`(select count(*) from ${fileReferences} where ${fileReferences.fileId} = ${files.id}) = 0`,
+			sql`not exists (select 1 from ${photos} where ${photos.fileId} = ${files.id})`,
+			sql`(
+				(${files.status} = 'pending' and ${files.createdAt} <= now() - make_interval(days => ${pendingDays}))
+				or (${files.status} = 'detached' and coalesce(${files.detachedAt}, ${files.updatedAt}) <= now() - make_interval(days => ${detachedDays}))
+			)`
+		);
+	}
 
 	return database
 		.select({
@@ -308,6 +342,12 @@ export type DeleteFileResult =
  * Reference-guarded delete (§6.3): a file referenced by content or linked to
  * a photo is never removed silently. Objects go first and the registry row
  * last, so a partial failure stays retryable and the audit can see it.
+ *
+ * Known window (registered §11): the reference count and the row delete are
+ * not one transaction, so a `file_references` INSERT racing this check would
+ * be cascaded away by the delete. Nothing writes refs until ST-3 — that
+ * wiring must wrap the re-check and the row delete in a `FOR UPDATE`
+ * transaction before references go live.
  */
 export async function deleteFile(id: string, deps: FilesDeps = {}): Promise<DeleteFileResult> {
 	const { storage, database } = await resolveDeps(deps);
@@ -367,6 +407,9 @@ export async function listPurgeCandidates(deps: FilesDeps = {}): Promise<PurgeCa
 				sql`not exists (select 1 from ${photos} where ${photos.fileId} = ${files.id})`
 			)
 		)
+		// Oldest first so a capped sweep always considers the most overdue
+		// rows (registered §11: page through once the registry outgrows it).
+		.orderBy(asc(files.createdAt))
 		.limit(500);
 
 	const now = Date.now();
@@ -435,6 +478,8 @@ export interface MediaAuditReport {
 	/** ③ registry row exists but the object is absent from storage. */
 	missingObjects: MissingObject[];
 	scannedSources: { posts: number; drafts: number; notes: number };
+	/** True when any scan hit its row cap — results may be incomplete. */
+	truncated: boolean;
 }
 
 const I_KEY_PATTERN =
@@ -444,7 +489,8 @@ const I_KEY_PATTERN =
  * Read-only sweep (T6). Broken-link detection scans stored markdown for
  * `/i/<key>` mentions (variant suffixes stripped — the registry row is keyed
  * by the canonical key); the scan covers posts, drafts and notes within
- * SCAN_LIMIT rows per source.
+ * SCAN_LIMIT rows per source and reports `truncated` when any cap is hit.
+ * `pages` joins the sweep once its P0 remodel lands (registered §11).
  */
 export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditReport> {
 	const { storage, database } = await resolveDeps(deps);
@@ -497,11 +543,18 @@ export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditRep
 		if (!head) missingObjects.push(row);
 	}
 
+	const truncated =
+		postRows.length >= SCAN_LIMIT ||
+		draftRows.length >= SCAN_LIMIT ||
+		noteRows.length >= SCAN_LIMIT ||
+		registryRows.length >= SCAN_LIMIT;
+
 	return {
 		generatedAt: new Date().toISOString(),
 		orphans: await listPurgeCandidates(deps),
 		brokenLinks,
 		missingObjects,
-		scannedSources: { posts: postRows.length, drafts: draftRows.length, notes: noteRows.length }
+		scannedSources: { posts: postRows.length, drafts: draftRows.length, notes: noteRows.length },
+		truncated
 	};
 }

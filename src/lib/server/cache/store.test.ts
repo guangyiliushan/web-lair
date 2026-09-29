@@ -26,7 +26,7 @@ describe('MemoryCacheStore', () => {
 		const store = new MemoryCacheStore({ clock: () => now });
 		await store.set('k', { v: 1 }, 10);
 		expect(await store.get('k')).toEqual({ v: 1 });
-		now += 10_001;
+		now += 10_000; // boundary: entries expire AT the TTL, not after it
 		expect(await store.get('k')).toBeNull();
 	});
 
@@ -37,6 +37,16 @@ describe('MemoryCacheStore', () => {
 		expect(await store.incr('limits:x', 60)).toBe(2);
 		now += 60_001;
 		expect(await store.incr('limits:x', 60)).toBe(1); // new window
+	});
+
+	it('keeps a fixed window while increments continue (no sliding)', async () => {
+		let now = 1_000_000;
+		const store = new MemoryCacheStore({ clock: () => now });
+		expect(await store.incr('limits:y', 60)).toBe(1);
+		now += 30_000;
+		expect(await store.incr('limits:y', 60)).toBe(2);
+		now += 31_000; // 61s total: past the ORIGINAL window despite activity
+		expect(await store.incr('limits:y', 60)).toBe(1);
 	});
 });
 

@@ -58,7 +58,7 @@
 		attached: 'default',
 		detached: 'secondary'
 	};
-	const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.pdf,.zip,.txt,.md';
+	const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.tif,.tiff,.pdf,.zip,.txt,.md';
 
 	function formatBytes(bytes: number): string {
 		if (bytes < 1024) return `${bytes} B`;
@@ -66,8 +66,13 @@
 		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 	}
 
-	/** Public content URL: variants for images, the bare key for files. */
+	/**
+	 * Public content URL: webp `@full` for transcoded photos, the ORIGINAL
+	 * key for GIFs (plan §4.3 直通 — the original is the public tier) and for
+	 * attachments (public once registered; /i enforces the registry check).
+	 */
 	function publicUrl(row: FileRow): string {
+		if (row.mimeType === 'image/gif') return `/i/${row.objectKey}`;
 		return `/i/${row.objectKey}${row.mimeType.startsWith('image/') ? '@full' : ''}`;
 	}
 
@@ -172,6 +177,28 @@
 					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
 				/>
 			</label>
+			<label class="grid gap-1 text-xs text-muted-foreground">
+				时间
+				<select
+					name="since"
+					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+				>
+					<option value="" selected={data.filters.since === ''}>全部</option>
+					<option value="7d" selected={data.filters.since === '7d'}>近 7 天</option>
+					<option value="30d" selected={data.filters.since === '30d'}>近 30 天</option>
+					<option value="90d" selected={data.filters.since === '90d'}>近 90 天</option>
+				</select>
+			</label>
+			<label class="flex items-center gap-2 pb-2 text-xs text-muted-foreground">
+				<input
+					type="checkbox"
+					name="orphan"
+					value="1"
+					checked={data.filters.orphan}
+					class="size-4 rounded border"
+				/>
+				仅游离（超 TTL 孤儿）
+			</label>
 			<Button type="submit" variant="secondary" size="sm">筛选</Button>
 		</form>
 
@@ -205,7 +232,9 @@
 								<Table.Cell>
 									{#if row.mimeType.startsWith('image/')}
 										<img
-											src="/i/{row.objectKey}@thumb"
+											src={row.mimeType === 'image/gif'
+												? `/i/${row.objectKey}`
+												: `/i/${row.objectKey}@thumb`}
 											alt={row.fileName}
 											loading="lazy"
 											class="size-10 rounded-md border object-cover"

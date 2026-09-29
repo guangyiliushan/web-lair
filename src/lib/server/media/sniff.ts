@@ -87,8 +87,17 @@ const FAMILIES: Family[] = [
 	{
 		kind: 'image',
 		exts: ['heic', 'heif'],
-		mimeType: 'image/heic',
+		mimeFor: { heic: 'image/heic', heif: 'image/heif' },
+		// heic-decode handles both ISO-BMFF photo brands (plan §4.3).
 		magic: isHeic
+	},
+	{
+		kind: 'image',
+		// Plan §4.3: TIFF rides the native sharp pipeline (no WASM decoder).
+		exts: ['tif', 'tiff'],
+		mimeType: 'image/tiff',
+		magic: (bytes) =>
+			startsWith(bytes, [0x49, 0x49, 0x2a, 0x00]) || startsWith(bytes, [0x4d, 0x4d, 0x00, 0x2a])
 	},
 	{
 		kind: 'file',

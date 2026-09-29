@@ -11,6 +11,8 @@ const WEBP = bytes(ascii('RIFF'), [0, 0, 0, 0], ascii('WEBP'));
 const bmff = (brand: string) => bytes([0, 0, 0, 0x1c], ascii('ftyp'), ascii(brand));
 const PDF = bytes(ascii('%PDF-1.7'));
 const ZIP = bytes(ascii('PK'), [3, 4]);
+const TIFF = bytes([0x49, 0x49, 0x2a, 0x00], [0, 0]);
+const TIFF_BE = bytes([0x4d, 0x4d, 0x00, 0x2a], [0, 0]);
 
 describe('sniffUpload (plan §4.2 whitelist)', () => {
 	it('accepts each whitelisted family when extension and magic agree', () => {
@@ -52,7 +54,17 @@ describe('sniffUpload (plan §4.2 whitelist)', () => {
 		expect(sniffUpload('shot.heif', bmff('mif1'))).toEqual({
 			kind: 'image',
 			ext: 'heif',
-			mimeType: 'image/heic'
+			mimeType: 'image/heif'
+		});
+		expect(sniffUpload('scan.tif', TIFF)).toEqual({
+			kind: 'image',
+			ext: 'tif',
+			mimeType: 'image/tiff'
+		});
+		expect(sniffUpload('scan.tiff', TIFF_BE)).toEqual({
+			kind: 'image',
+			ext: 'tiff',
+			mimeType: 'image/tiff'
 		});
 		expect(sniffUpload('doc.pdf', PDF)).toEqual({
 			kind: 'file',
@@ -82,6 +94,7 @@ describe('sniffUpload (plan §4.2 whitelist)', () => {
 		expect(sniffUpload('fake.pdf', JPEG)).toBeNull();
 		expect(sniffUpload('sneaky.txt', PNG)).toBeNull(); // binary content in a text extension
 		expect(sniffUpload('shot.avif', bmff('heic'))).toBeNull();
+		expect(sniffUpload('fake.tiff', PNG)).toBeNull();
 	});
 
 	it('rejects missing extensions, empty files and unknown types', () => {

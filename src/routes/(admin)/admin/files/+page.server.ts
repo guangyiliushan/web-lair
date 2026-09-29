@@ -24,6 +24,8 @@ import type { PageServerLoad, Actions } from './$types';
 
 const KINDS = ['image', 'file'] as const;
 const STATUSES = ['pending', 'attached', 'detached'] as const;
+/** §6.1 time filter presets (URL state). */
+const SINCE_DAYS = { '7d': 7, '30d': 30, '90d': 90 } as const;
 
 /** Upload rate window (plan §7): generous for a single admin, still bounded. */
 const UPLOAD_RATE_LIMIT = { limit: 60, windowSeconds: 10 * 60 };
@@ -33,15 +35,25 @@ export const load: PageServerLoad = async ({ url }) => {
 	const kindParam = url.searchParams.get('kind');
 	const statusParam = url.searchParams.get('status');
 	const keyword = url.searchParams.get('keyword') ?? '';
+	const sinceParam = url.searchParams.get('since') ?? '';
+	const orphan = url.searchParams.get('orphan') === '1';
 	const kind = KINDS.find((value) => value === kindParam);
 	const status = STATUSES.find((value) => value === statusParam);
+	const sinceDays = SINCE_DAYS[sinceParam as keyof typeof SINCE_DAYS];
+	const since = sinceDays ? new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000) : undefined;
 
-	const files = await listFiles({ kind, status, keyword });
+	const files = await listFiles({ kind, status, keyword, since, orphan });
 
 	return {
 		headerTitle: '文件',
 		files,
-		filters: { kind: kind ?? '', status: status ?? '', keyword },
+		filters: {
+			kind: kind ?? '',
+			status: status ?? '',
+			keyword,
+			since: sinceDays ? sinceParam : '',
+			orphan
+		},
 		limits: { maxBytes: MAX_UPLOAD_BYTES, maxBatch: MAX_BATCH_COUNT }
 	};
 };
@@ -63,6 +75,11 @@ export const actions: Actions = {
 			.getAll('files')
 			.filter((entry): entry is File => entry instanceof File && entry.size > 0);
 		if (uploads.length === 0) return fail(400, { message: '请选择要上传的文件' });
+		// Reject oversized batches before copying bodies; the service keeps its
+		// own cap as the authoritative contract (batch-too-large, plan §4.2).
+		if (uploads.length > MAX_BATCH_COUNT) {
+			return fail(400, { message: `一次最多上传 ${MAX_BATCH_COUNT} 个文件` });
+		}
 
 		try {
 			const results = await uploadFiles(

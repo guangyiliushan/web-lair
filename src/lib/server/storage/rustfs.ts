@@ -104,8 +104,12 @@ export class RustFsStorage implements ObjectStoragePort {
 		path: string,
 		options: { payload?: Uint8Array; contentType?: string } = {}
 	): Promise<Response> {
+		const url = new URL(path, this.#config.endpoint);
 		const payloadHash = options.payload ? sha256Hex(options.payload) : EMPTY_PAYLOAD_SHA256;
-		const headers: Array<[string, string]> = [];
+		// S3 requires `host` in SignedHeaders (the AWS SigV4 vectors sign it
+		// too). The value is derived from the URL rather than sent as an
+		// explicit header — undici sets Host from the URL itself.
+		const headers: Array<[string, string]> = [['host', url.host]];
 		if (options.contentType) headers.push(['content-type', options.contentType]);
 		headers.push(['x-amz-content-sha256', payloadHash]);
 		const signed = signRequest(
@@ -123,7 +127,7 @@ export class RustFsStorage implements ObjectStoragePort {
 		const requestHeaders = new Headers();
 		for (const [name, value] of signed.headers) requestHeaders.append(name, value);
 		try {
-			return await this.#fetch(new URL(path, this.#config.endpoint), {
+			return await this.#fetch(url, {
 				method,
 				headers: requestHeaders,
 				// TS 5.7+ genericizes typed arrays; Node's fetch accepts any

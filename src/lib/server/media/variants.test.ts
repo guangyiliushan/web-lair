@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import { isHeic } from './heic';
-import { processImage } from './variants';
+import { processImage, readImageSize } from './variants';
 
 const HEIC_FIXTURE = new URL('./fixtures/example.heic', import.meta.url);
 
@@ -47,6 +47,19 @@ describe('processImage (ledger §21 pipeline)', () => {
 		expect([out.width, out.height]).toEqual([3000, 1500]);
 	});
 
+	it('does not generate a preview at exactly the 2560 boundary', async () => {
+		const out = await processImage(await solid(2560, 1280));
+		expect(out.variants.preview).toBeNull();
+		const full = await sharp(out.variants.full).metadata();
+		expect([full.width, full.height]).toEqual([2560, 1280]);
+	});
+
+	it('reads header-only dimensions for pass-through inputs (readImageSize)', async () => {
+		const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+		expect(await readImageSize(gif)).toEqual({ width: 1, height: 1 });
+		expect(await readImageSize(Uint8Array.from([1, 2, 3]))).toBeNull();
+	});
+
 	it('bakes EXIF orientation into the pixels and strips metadata from public variants', async () => {
 		const oriented = await sharp({
 			create: { width: 100, height: 60, channels: 3, background: { r: 51, g: 102, b: 170 } }
@@ -56,6 +69,13 @@ describe('processImage (ledger §21 pipeline)', () => {
 			.toBuffer();
 		const out = await processImage(oriented);
 		expect([out.width, out.height]).toEqual([60, 100]);
+		// The PIXELS must be rotated — asserting only out.width/height passes
+		// even when `.rotate()` is removed (those come from the metadata swap,
+		// not from the encoded variants).
+		const thumb = await sharp(out.variants.thumb).metadata();
+		expect([thumb.width, thumb.height]).toEqual([60, 100]);
+		const full = await sharp(out.variants.full).metadata();
+		expect([full.width, full.height]).toEqual([60, 100]);
 		for (const variant of [out.variants.thumb, out.variants.full]) {
 			const meta = await sharp(variant).metadata();
 			expect(meta.exif).toBeUndefined();

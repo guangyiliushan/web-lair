@@ -51,13 +51,14 @@ describe('options registry (AI-1.1)', () => {
 		});
 	});
 
-	it('ships exactly the six planned keys', () => {
+	it('ships exactly the planned keys (storage line adds media.purge)', () => {
 		expect([...optionKeys].sort()).toEqual(
 			[
 				'ai.assignments',
 				'ai.budget',
 				'ai.styleGuide',
 				'comments.moderation',
+				'media.purge',
 				'site.default_lang',
 				'site.languages'
 			].sort()
@@ -65,7 +66,7 @@ describe('options registry (AI-1.1)', () => {
 	});
 
 	it('falls back to defaults when no row exists (§3.3 ledger values)', async () => {
-		state.selectRows = [[], [], []];
+		state.selectRows = [[], [], [], []];
 		await expect(getOption('site.default_lang')).resolves.toBe('en');
 		await expect(getOption('site.languages')).resolves.toEqual({
 			enabled: ['en', 'zh-cn', 'ja']
@@ -76,6 +77,10 @@ describe('options registry (AI-1.1)', () => {
 			linkThreshold: 2,
 			firstCommentHold: true,
 			thresholds: { allow: 0.9, block: 0.95 }
+		});
+		await expect(getOption('media.purge')).resolves.toEqual({
+			pendingDays: 7,
+			detachedDays: 30
 		});
 	});
 
@@ -111,6 +116,14 @@ describe('options registry (AI-1.1)', () => {
 	it('rejects invalid values before touching the database', async () => {
 		await expect(setOption('site.default_lang', 'fr' as never)).rejects.toThrow();
 		await expect(setOption('comments.moderation', { enabled: true } as never)).rejects.toThrow();
+		expect(state.insertCalls).toHaveLength(0);
+	});
+
+	it('rejects negative or fractional media.purge TTLs', async () => {
+		await expect(setOption('media.purge', { pendingDays: -1, detachedDays: 30 })).rejects.toThrow();
+		await expect(
+			setOption('media.purge', { pendingDays: 7.5, detachedDays: 30 })
+		).rejects.toThrow();
 		expect(state.insertCalls).toHaveLength(0);
 	});
 

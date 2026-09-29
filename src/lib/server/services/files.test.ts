@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
+import { MAX_BATCH_COUNT, MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
+import { files as filesTable, photos as photosTable } from '$lib/server/db/content';
+import { fileReferences } from '$lib/server/db/system';
 import type { StoredObjectBody, StoredObjectHead } from '$lib/server/storage/port';
 
 const dbMock = vi.hoisted(() => ({
@@ -19,14 +21,18 @@ const storageMock = vi.hoisted(() => ({
 	ensureBucket: vi.fn<() => Promise<void>>(async () => {})
 }));
 const processImageMock = vi.hoisted(() => vi.fn());
+const readImageSizeMock = vi.hoisted(() => vi.fn());
 const getOptionMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$lib/server/storage', () => ({ getStorage: () => storageMock }));
-vi.mock('$lib/server/media/variants', () => ({ processImage: processImageMock }));
+vi.mock('$lib/server/media/variants', () => ({
+	processImage: processImageMock,
+	readImageSize: readImageSizeMock
+}));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: getOptionMock }));
 
-import { deleteFile, listPurgeCandidates, uploadFile, uploadFiles } from './files';
+import { deleteFile, listPurgeCandidates, purgeMedia, uploadFile, uploadFiles } from './files';
 
 const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0]);
 const HASH = createHash('sha256').update(JPEG).digest('hex');
@@ -96,6 +102,11 @@ beforeEach(() => {
 });
 
 describe('uploadFile', () => {
+	it('locks the plan §4.2 limits', () => {
+		expect(MAX_UPLOAD_BYTES).toBe(25 * 1024 * 1024);
+		expect(MAX_BATCH_COUNT).toBe(10);
+	});
+
 	it('rejects empty, oversized and unsupported uploads before touching db or storage', async () => {
 		await expect(
 			uploadFile({ fileName: 'x.jpg', bytes: new Uint8Array() }, { storage: storageMock })
@@ -127,6 +138,8 @@ describe('uploadFile', () => {
 		expect(result).toEqual({ ...EXISTING_ROW, deduplicated: true });
 		expect(storageMock.put).not.toHaveBeenCalled();
 		expect(dbMock.insert).not.toHaveBeenCalled();
+		const chain = dbMock.select.mock.results[0].value as { from: ReturnType<typeof vi.fn> };
+		expect(chain.from.mock.calls[0][0]).toBe(filesTable);
 	});
 
 	it('uploads original + variants then writes the registry row (zero orphans)', async () => {
@@ -160,6 +173,62 @@ describe('uploadFile', () => {
 			thumbhash: 'TH',
 			uploadedBy: 'u1'
 		});
+		expect(dbMock.insert.mock.calls[0][0]).toBe(filesTable);
+	});
+
+	it('uploads the preview variant when the pipeline produced one', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		processImageMock.mockResolvedValueOnce({
+			...PROCESSED,
+			variants: { ...PROCESSED.variants, preview: Buffer.from('preview') }
+		});
+		dbMock.insert.mockReturnValueOnce(
+			insertChain([{ ...EXISTING_ROW, width: 64, height: 32, status: 'pending' }])
+		);
+
+		await uploadFile({ fileName: 'photo.jpg', bytes: JPEG }, { storage: storageMock });
+
+		expect(storageMock.put.mock.calls.map((call) => call[0])).toEqual([
+			BASE_KEY,
+			`${BASE_KEY}@thumb`,
+			`${BASE_KEY}@preview`,
+			`${BASE_KEY}@full`
+		]);
+	});
+
+	it('stores GIFs as-is without variants (plan §4.3 pass-through)', async () => {
+		const GIF = Uint8Array.from('GIF89a', (char) => char.charCodeAt(0));
+		const gifHash = createHash('sha256').update(GIF).digest('hex');
+		const gifKey = `${gifHash.slice(0, 2)}/${gifHash}.gif`;
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		readImageSizeMock.mockResolvedValueOnce({ width: 12, height: 8 });
+		dbMock.insert.mockReturnValueOnce(
+			insertChain([{ ...EXISTING_ROW, width: 12, height: 8, status: 'pending' }])
+		);
+
+		await uploadFile({ fileName: 'fun.gif', bytes: GIF }, { storage: storageMock });
+
+		expect(processImageMock).not.toHaveBeenCalled();
+		expect(readImageSizeMock).toHaveBeenCalled();
+		expect(storageMock.put.mock.calls.map((call) => call[0])).toEqual([gifKey]);
+		const values = dbMock.insert.mock.results[0].value.values.mock.calls[0][0] as Record<
+			string,
+			unknown
+		>;
+		expect(values).toMatchObject({ width: 12, height: 8, thumbhash: null });
+	});
+
+	it('never writes the registry row when a PUT fails (zero orphans)', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		processImageMock.mockResolvedValueOnce(PROCESSED);
+		storageMock.put.mockRejectedValueOnce(new Error('storage down'));
+
+		await expect(
+			uploadFile({ fileName: 'photo.jpg', bytes: JPEG }, { storage: storageMock })
+		).rejects.toThrow('storage down');
+
+		expect(dbMock.insert).not.toHaveBeenCalled();
+		expect(storageMock.delete).not.toHaveBeenCalled(); // nothing was written
 	});
 
 	it('compensates by deleting uploaded objects when the registry write fails', async () => {
@@ -208,14 +277,24 @@ describe('uploadFiles', () => {
 		});
 	});
 
-	it('reports per item without aborting the batch', async () => {
+	it('continues past rejected items and still reports successes', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		processImageMock.mockResolvedValueOnce(PROCESSED);
+		dbMock.insert.mockReturnValueOnce(
+			insertChain([{ ...EXISTING_ROW, width: 64, height: 32, status: 'pending' }])
+		);
+
 		const results = await uploadFiles(
-			[{ fileName: 'payload.exe', bytes: Uint8Array.from([1, 2, 3]) }],
+			[
+				{ fileName: 'payload.exe', bytes: Uint8Array.from([1, 2, 3]) },
+				{ fileName: 'ok.jpg', bytes: JPEG }
+			],
 			{ storage: storageMock }
 		);
-		expect(results).toEqual([
-			{ fileName: 'payload.exe', ok: false, code: 'unsupported-type', message: expect.any(String) }
-		]);
+
+		expect(results).toHaveLength(2);
+		expect(results[0]).toMatchObject({ ok: false, code: 'unsupported-type' });
+		expect(results[1]).toMatchObject({ ok: true, file: { deduplicated: false } });
 	});
 });
 
@@ -235,6 +314,9 @@ describe('deleteFile', () => {
 			isPhoto: false
 		});
 		expect(storageMock.delete).not.toHaveBeenCalled();
+		// Guard queries must hit the right tables (refs vs photos).
+		expect(dbMock.$count.mock.calls[0][0]).toBe(fileReferences);
+		expect(dbMock.$count.mock.calls[1][0]).toBe(photosTable);
 
 		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'file-1', objectKey: BASE_KEY }]));
 		dbMock.$count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
@@ -313,6 +395,47 @@ describe('listPurgeCandidates', () => {
 
 		expect(candidates.map((candidate) => candidate.id)).toEqual(['a', 'c']);
 		expect(candidates[0].ageDays).toBe(8);
-		expect(getOptionMock).toHaveBeenCalledWith('media.purge', expect.anything());
+		expect(getOptionMock).toHaveBeenCalledWith('media.purge', dbMock);
+	});
+});
+
+describe('purgeMedia', () => {
+	const stalePending = {
+		id: 'a',
+		objectKey: 'aa/a.jpg',
+		fileName: 'a.jpg',
+		status: 'pending',
+		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+		detachedAt: null,
+		updatedAt: new Date()
+	};
+
+	it('dry-run reports candidates but deletes nothing', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([stalePending]));
+
+		const outcome = await purgeMedia({ dryRun: true }, { storage: storageMock });
+
+		expect(outcome.candidates.map((candidate) => candidate.id)).toEqual(['a']);
+		expect(outcome.deleted).toEqual([]);
+		expect(storageMock.delete).not.toHaveBeenCalled();
+		expect(dbMock.delete).not.toHaveBeenCalled();
+	});
+
+	it('execution deletes the objects and the row (references re-checked)', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([stalePending]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'a', objectKey: 'aa/a.jpg' }]));
+		dbMock.$count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+		dbMock.delete.mockReturnValueOnce(deleteChain());
+
+		const outcome = await purgeMedia({ dryRun: false }, { storage: storageMock });
+
+		expect(outcome.deleted).toEqual(['aa/a.jpg']);
+		expect(storageMock.delete.mock.calls.map((call) => call[0])).toEqual([
+			'aa/a.jpg',
+			'aa/a.jpg@thumb',
+			'aa/a.jpg@preview',
+			'aa/a.jpg@full'
+		]);
+		expect(dbMock.delete).toHaveBeenCalledTimes(1);
 	});
 });

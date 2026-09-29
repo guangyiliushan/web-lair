@@ -29,9 +29,12 @@ export class ValkeyCacheStore implements CacheStore {
 			this.#connecting = this.#client
 				.connect()
 				.then(() => undefined)
-				.catch((error: unknown) => {
+				.finally(() => {
+					// Clear on success too: after a later outage that exhausts the
+					// retry strategy the client reaches 'end', and the next call
+					// must start a fresh connect() to recover — awaiting a stale
+					// resolved promise would keep the cache degraded forever.
 					this.#connecting = null;
-					throw error;
 				});
 		}
 		await this.#connecting;
@@ -79,7 +82,11 @@ export class ValkeyCacheStore implements CacheStore {
 		await this.#ready();
 		const full = CACHE_PREFIX + key;
 		const count = await this.#client.incr(full);
-		if (count === 1) await this.#client.expire(full, windowSeconds);
+		// NX: only set the window TTL when the key has none. Besides keeping a
+		// fixed window across increments, this REPAIRS a counter whose EXPIRE
+		// was lost to a crash — a TTL-less counter would never reset
+		// (fail-closed), contradicting the fail-open contract.
+		await this.#client.expire(full, windowSeconds, 'NX');
 		return count;
 	}
 

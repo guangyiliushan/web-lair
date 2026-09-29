@@ -156,6 +156,17 @@ describe('handleEmbedMetaRequest', () => {
 		expect(fetchMock).toHaveBeenCalledOnce();
 	});
 
+	it('consults the injected store, not any process-global cache', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ full_name: 'a/b' }));
+		vi.stubGlobal('fetch', fetchMock);
+		// Two DIFFERENT stores must each miss — proving the injected store is
+		// the one consulted (an implementation falling back to a global store
+		// would serve the second call from cache and fetch only once).
+		await handleEmbedMetaRequest(requestFor('https://github.com/a/b'), { cache: freshStore() });
+		await handleEmbedMetaRequest(requestFor('https://github.com/a/b'), { cache: freshStore() });
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
 	it('degrades every upstream failure to 204 (never an error surface)', async () => {
 		for (const status of [404, 403, 429, 500]) {
 			vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status })));
