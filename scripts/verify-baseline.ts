@@ -35,7 +35,7 @@ if (unknownArgs.length > 0) {
 const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', import.meta.url));
 const JOURNAL_PATH = fileURLToPath(new URL('../drizzle/meta/_journal.json', import.meta.url));
 
-const EXPECTED = { tables: 48, indexes: 113, checks: 61, fks: 45, uuidv7: 36 };
+const EXPECTED = { tables: 48, indexes: 114, checks: 69, fks: 46, uuidv7: 36 };
 
 const EXPECTED_TABLE_NAMES: string[] = [
 	'account',
@@ -132,6 +132,12 @@ const RETIRED_TABLE_NAMES = [
 ];
 
 /** Composite-PK constraint names for junction tables. */
+const RETIRED_INDEX_NAMES = [
+	'notes_nid_desc_idx',
+	'notes_published_public_created_idx',
+	'notes_topic_id_idx'
+];
+
 const JUNCTION_PKS: Record<string, string> = {
 	photo_tags: 'photo_tags_photo_id_tag_id_pk',
 	post_related_posts: 'post_related_posts_post_id_related_post_id_pk',
@@ -141,6 +147,14 @@ const JUNCTION_PKS: Record<string, string> = {
 
 /** Constraint names that must be present (batch pins; curated). */
 const REQUIRED_CONSTRAINT_NAMES: string[] = [
+	'notes_status_check',
+	'notes_content_format_check',
+	'notes_mood_check',
+	'notes_weather_code_check',
+	'notes_temperature_c_check',
+	'notes_coordinates_check',
+	'drafts_ref_type_check',
+	'slug_trackers_type_check',
 	'activities_event_check',
 	'activities_ref_pair_check',
 	'activities_ref_type_check',
@@ -253,6 +267,19 @@ const PREDICATE_PINS: Array<[string, RegExp]> = [
 	[
 		'files_uploaded_by_idx',
 		/CREATE INDEX "files_uploaded_by_idx" .*WHERE "files"\."uploaded_by" is not null/
+	],
+	[
+		'notes_status_pin_published_idx',
+		/CREATE INDEX "notes_status_pin_published_idx" .*\("status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST\)/
+	],
+	[
+		'notes_topic_status_published_idx',
+		/CREATE INDEX "notes_topic_status_published_idx" .*\("topic_id","status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST\)/
+	],
+	['drafts_topic_idx', /CREATE INDEX "drafts_topic_idx" .*WHERE "drafts"\."topic_id" is not null/],
+	[
+		'comments_note_thread_idx',
+		/CREATE INDEX "comments_note_thread_idx" .*WHERE "comments"\."note_id" is not null/
 	]
 ];
 
@@ -265,7 +292,12 @@ const COLUMN_TYPE_PINS: Array<[string, string, string]> = [
 	['photos', 'altitude_m', 'numeric'],
 	['webhook_deliveries', 'response_code', 'integer'],
 	['files', 'byte_size', 'bigint'],
-	['enrichment_captures', 'byte_size', 'integer']
+	['enrichment_captures', 'byte_size', 'integer'],
+	['notes', 'weather_code', 'smallint'],
+	['notes', 'temperature_c', 'numeric'],
+	['drafts', 'weather_code', 'smallint'],
+	['drafts', 'temperature_c', 'numeric'],
+	['posts', 'allow_comment', 'boolean']
 ];
 
 /** Official generated-table exception for the FK leading-index rule. */
@@ -375,6 +407,36 @@ async function fileChecks(): Promise<void> {
 	for (const name of RETIRED_TABLE_NAMES) {
 		expect(!text.includes(`CREATE TABLE "${name}"`), `retired table still present: ${name}`);
 	}
+	for (const name of RETIRED_INDEX_NAMES)
+		expect(!indexByName.has(name), `retired index still present: ${name}`);
+
+	// notes v0.3 reshape pins (plan §7.1): retired / added columns + NOT NULL.
+	const notesBlock = tableBlocks.find((m) => m[1] === 'notes');
+	expect(notesBlock !== undefined, 'notes block missing from baseline');
+	const notesCols = tableColumns.get('notes') ?? [];
+	for (const gone of [
+		'text',
+		'images',
+		'password',
+		'is_published',
+		'public_at',
+		'bookmark',
+		'weather'
+	])
+		expect(!notesCols.includes(gone), `notes.${gone} should be retired`);
+	for (const added of [
+		'status',
+		'tz',
+		'weather_code',
+		'temperature_c',
+		'password_hash',
+		'allow_comment',
+		'pin_at',
+		'published_at'
+	])
+		expect(notesCols.includes(added), `notes.${added} missing`);
+	expect(/"title" text NOT NULL/.test(notesBlock![2]), 'notes.title must be NOT NULL');
+	expect(/"slug" text NOT NULL/.test(notesBlock![2]), 'notes.slug must be NOT NULL');
 
 	for (const def of indexDefs) {
 		if (OFFICIAL_GENERATED_TABLES.has(def.table)) continue;
@@ -568,8 +630,8 @@ async function dbChecks(): Promise<void> {
 		try {
 			// Fixtures.
 			const [src] =
-				await sql`insert into notes (content_format) values ('markdown') returning id, nid`;
-			await sql`insert into notes (content_format, lang, translated_from_note_id, nid) values ('markdown', 'ja', ${src.id}, ${src.nid})`;
+				await sql`insert into notes (content_format, title, slug) values ('markdown', 'c1v-src', 'c1v-src') returning id, nid`;
+			await sql`insert into notes (content_format, lang, title, slug, translated_from_note_id, nid) values ('markdown', 'ja', 'c1v-src-ja', 'c1v-src-ja', ${src.id}, ${src.nid})`;
 			await sql`insert into translations (source_note_id, target_lang, title, origin) values (${src.id}, 'en', 't', 'ai')`;
 			const [cat] =
 				await sql`insert into categories (name, slug) values ('c1-verify', 'c1-verify') returning id`;
@@ -577,7 +639,7 @@ async function dbChecks(): Promise<void> {
 				await sql`insert into posts (title, slug, category_id) values ('c1-verify', 'c1-verify-post', ${cat.id}) returning id`;
 			await sql`insert into translations (source_post_id, target_lang, title, origin) values (${post.id}, 'en', 't', 'ai')`;
 			await sql`insert into moments (type) select unnest(array['life', 'tech', 'media', 'other'])`;
-			await sql`insert into notes (content_format, lang) select 'markdown', x from unnest(array['en', 'zh-cn', 'ja']) as x`;
+			await sql`insert into notes (content_format, lang, title, slug) select 'markdown', x, 'c1v-lang-' || x, 'c1v-lang-' || x from unnest(array['en', 'zh-cn', 'ja']) as x`;
 			await sql`insert into translations (source_note_id, target_lang, title, origin) values (${src.id}, 'ja', 't', 'human')`;
 			await sql`insert into translations (source_note_id, target_lang, title, origin) values (${src.id}, 'zh-cn', 't', 'machine')`;
 			const [tag] = await sql`insert into tags (slug, name) values ('c1v-tag', 'c1v') returning id`;
@@ -600,6 +662,7 @@ async function dbChecks(): Promise<void> {
 do $$
 declare
 	c text;
+	m text;
 	s uuid := current_setting('c1.src')::uuid;
 	p uuid := current_setting('c1.post')::uuid;
 	tg uuid := current_setting('c1.tag')::uuid;
@@ -625,7 +688,7 @@ begin
 	end;
 
 	begin
-		insert into notes (content_format, lang) values ('markdown', 'xx');
+		insert into notes (content_format, lang, title, slug) values ('markdown', 'xx', 'c1v-xx', 'c1v-xx');
 		raise exception 'FAIL notes_lang_check accepted xx';
 	exception when check_violation then
 		get stacked diagnostics c = constraint_name;
@@ -633,7 +696,7 @@ begin
 	end;
 
 	begin
-		insert into notes (content_format, translation_origin) values ('markdown', 'x');
+		insert into notes (content_format, translation_origin, title, slug) values ('markdown', 'x', 'c1v-origin', 'c1v-origin');
 		raise exception 'FAIL notes_translation_origin_check accepted x';
 	exception when check_violation then
 		get stacked diagnostics c = constraint_name;
@@ -667,8 +730,8 @@ begin
 	end;
 
 	begin
-		insert into notes (content_format, lang, slug) values ('markdown', 'ja', 'c1-dup');
-		insert into notes (content_format, lang, slug) values ('markdown', 'ja', 'c1-dup');
+		insert into notes (content_format, lang, title, slug) values ('markdown', 'ja', 'c1v-dup', 'c1-dup');
+		insert into notes (content_format, lang, title, slug) values ('markdown', 'ja', 'c1v-dup', 'c1-dup');
 		raise exception 'FAIL notes_lang_slug_uniq accepted a duplicate (lang, slug)';
 	exception when unique_violation then
 		get stacked diagnostics c = constraint_name;
@@ -677,11 +740,11 @@ begin
 
 	begin
 		g := 'bbbb2222-0000-0000-0000-000000000001';
-		insert into notes (content_format, lang, translation_group) values ('markdown', 'zh-cn', g);
-		insert into notes (content_format, lang, translation_group, translated_from_note_id)
-			values ('markdown', 'ja', g, s);
-		insert into notes (content_format, lang, translation_group, translated_from_note_id)
-			values ('markdown', 'ja', g, s);
+		insert into notes (content_format, lang, translation_group, title, slug) values ('markdown', 'zh-cn', g, 'c1v-g2-zh', 'c1v-g2-zh');
+		insert into notes (content_format, lang, translation_group, translated_from_note_id, title, slug)
+			values ('markdown', 'ja', g, s, 'c1v-g2-ja-a', 'c1v-g2-ja-a');
+		insert into notes (content_format, lang, translation_group, translated_from_note_id, title, slug)
+			values ('markdown', 'ja', g, s, 'c1v-g2-ja-b', 'c1v-g2-ja-b');
 		raise exception 'FAIL notes_translation_group_lang_uniq accepted a duplicate (group, lang)';
 	exception when unique_violation then
 		get stacked diagnostics c = constraint_name;
@@ -690,8 +753,8 @@ begin
 
 	begin
 		g := 'bbbb2222-0000-0000-0000-000000000002';
-		insert into notes (content_format, lang, translation_group) values ('markdown', 'en', g);
-		insert into notes (content_format, lang, translation_group) values ('markdown', 'ja', g);
+		insert into notes (content_format, lang, translation_group, title, slug) values ('markdown', 'en', g, 'c1v-g3-en', 'c1v-g3-en');
+		insert into notes (content_format, lang, translation_group, title, slug) values ('markdown', 'ja', g, 'c1v-g3-ja', 'c1v-g3-ja');
 		raise exception 'FAIL notes_group_source_uniq accepted a second source';
 	exception when unique_violation then
 		get stacked diagnostics c = constraint_name;
@@ -700,7 +763,7 @@ begin
 
 	begin
 		select nid into src_nid from notes where id = s;
-		insert into notes (content_format, nid) values ('markdown', src_nid);
+		insert into notes (content_format, nid, title, slug) values ('markdown', src_nid, 'c1v-nid-dup', 'c1v-nid-dup');
 		raise exception 'FAIL notes_nid_uniq accepted a duplicate source nid';
 	exception when unique_violation then
 		get stacked diagnostics c = constraint_name;
@@ -808,6 +871,94 @@ begin
 		if c <> 'links_ring_check' then raise exception 'FAIL links ring: wrong constraint %', c; end if;
 	end;
 
+	-- notes v0.3 reshape teeth (plan §7.5)
+	begin
+		insert into notes (content_format, lang, title, slug, status)
+			values ('markdown', 'en', 'c1v-st', 'c1v-st', 'x');
+		raise exception 'FAIL notes_status_check accepted x';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'notes_status_check' then raise exception 'FAIL status: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into notes (content_format, lang, title, slug) values ('x', 'en', 'c1v-cf', 'c1v-cf');
+		raise exception 'FAIL notes_content_format_check accepted x';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'notes_content_format_check' then raise exception 'FAIL content_format: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into notes (content_format, lang, title, slug, mood) values ('markdown', 'en', 'c1v-md', 'c1v-md', 'x');
+		raise exception 'FAIL notes_mood_check accepted x';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'notes_mood_check' then raise exception 'FAIL mood: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into notes (content_format, lang, title, slug, weather_code) values ('markdown', 'en', 'c1v-wc', 'c1v-wc', 100);
+		raise exception 'FAIL notes_weather_code_check accepted 100';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'notes_weather_code_check' then raise exception 'FAIL weather_code: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into notes (content_format, lang, title, slug, temperature_c) values ('markdown', 'en', 'c1v-tc', 'c1v-tc', 100);
+		raise exception 'FAIL notes_temperature_c_check accepted 100';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'notes_temperature_c_check' then raise exception 'FAIL temperature: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into notes (content_format, lang, title, slug, coordinates)
+			values ('markdown', 'en', 'c1v-co', 'c1v-co', '{"latitude": 91, "longitude": 0}'::jsonb);
+		raise exception 'FAIL notes_coordinates_check accepted latitude 91';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'notes_coordinates_check' then raise exception 'FAIL coords range: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into notes (content_format, lang, title, slug, coordinates)
+			values ('markdown', 'en', 'c1v-co2', 'c1v-co2', '"oops"'::jsonb);
+		raise exception 'FAIL notes_coordinates_check accepted a non-object';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'notes_coordinates_check' then raise exception 'FAIL coords shape: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into notes (content_format, lang, slug) values ('markdown', 'en', 'c1v-nt');
+		raise exception 'FAIL notes accepted a row without title';
+	exception when not_null_violation then
+		get stacked diagnostics c = constraint_name;
+		get stacked diagnostics m = message_text;
+		if (c <> '' and c not like '%not_null') or m not like '%title%' then
+			raise exception 'FAIL title not-null: constraint=%, message=%', c, m;
+		end if;
+	end;
+
+	begin
+		insert into drafts (ref_type, title) values ('x', 'c1v');
+		raise exception 'FAIL drafts_ref_type_check accepted x';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'drafts_ref_type_check' then raise exception 'FAIL drafts ref_type: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into slug_trackers (slug, type, target_id)
+			values ('c1v-old', 'x', '00000000-0000-0000-0000-000000000000');
+		raise exception 'FAIL slug_trackers_type_check accepted x';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'slug_trackers_type_check' then raise exception 'FAIL tracker type: wrong constraint %', c; end if;
+	end;
+
 	-- Source-deletion trap (ledger §17): with >=2 translated rows in the group
 	-- the DB refuses deleting the source (SET NULL would collide with
 	-- notes_group_source_uniq). With exactly one translated row the delete
@@ -815,9 +966,9 @@ begin
 	-- registered behaviour, application-level group flow handles it first.
 	begin
 		g := 'bbbb2222-0000-0000-0000-000000000003';
-		insert into notes (content_format, lang, translation_group) values ('markdown', 'en', g) returning id into s2;
-		insert into notes (content_format, lang, translation_group, translated_from_note_id)
-			values ('markdown', 'ja', g, s2), ('markdown', 'zh-cn', g, s2);
+		insert into notes (content_format, lang, translation_group, title, slug) values ('markdown', 'en', g, 'c1v-del-en', 'c1v-del-en') returning id into s2;
+		insert into notes (content_format, lang, translation_group, translated_from_note_id, title, slug)
+			values ('markdown', 'ja', g, s2, 'c1v-del-ja', 'c1v-del-ja'), ('markdown', 'zh-cn', g, s2, 'c1v-del-zh', 'c1v-del-zh');
 		delete from notes where id = s2;
 		raise exception 'FAIL deleting a source with translations was allowed';
 	exception when unique_violation then

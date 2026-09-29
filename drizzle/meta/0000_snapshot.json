@@ -1,5 +1,5 @@
 {
-  "id": "891473d7-4b83-4862-93fa-5ea0383f25b5",
+  "id": "b712712e-07bc-4704-802e-149dc7d89ddc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1133,6 +1133,40 @@
           "method": "btree",
           "with": {}
         },
+        "comments_note_thread_idx": {
+          "name": "comments_note_thread_idx",
+          "columns": [
+            {
+              "expression": "note_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "parent_comment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "pin",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"comments\".\"note_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "comments_page_idx": {
           "name": "comments_page_idx",
           "columns": [
@@ -1399,6 +1433,42 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "topic_id": {
+          "name": "topic_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mood": {
+          "name": "mood",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weather_code": {
+          "name": "weather_code",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "temperature_c": {
+          "name": "temperature_c",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "coordinates": {
+          "name": "coordinates",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -1470,6 +1540,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "drafts_topic_idx": {
+          "name": "drafts_topic_idx",
+          "columns": [
+            {
+              "expression": "topic_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"drafts\".\"topic_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1498,12 +1584,30 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "drafts_topic_id_topics_id_fk": {
+          "name": "drafts_topic_id_topics_id_fk",
+          "tableFrom": "drafts",
+          "tableTo": "topics",
+          "columnsFrom": [
+            "topic_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "drafts_ref_type_check": {
+          "name": "drafts_ref_type_check",
+          "value": "\"drafts\".\"ref_type\" in ('post', 'page', 'note')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.files": {
@@ -2413,19 +2517,20 @@
           "name": "title",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "slug": {
           "name": "slug",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
-        "text": {
-          "name": "text",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "'draft'"
         },
         "content": {
           "name": "content",
@@ -2437,13 +2542,8 @@
           "name": "content_format",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
-        },
-        "images": {
-          "name": "images",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "'markdown'"
         },
         "meta": {
           "name": "meta",
@@ -2451,21 +2551,20 @@
           "primaryKey": false,
           "notNull": false
         },
-        "is_published": {
-          "name": "is_published",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "password": {
-          "name": "password",
+        "tz": {
+          "name": "tz",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "public_at": {
-          "name": "public_at",
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pin_at": {
+          "name": "pin_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -2476,18 +2575,17 @@
           "primaryKey": false,
           "notNull": false
         },
-        "weather": {
-          "name": "weather",
-          "type": "text",
+        "weather_code": {
+          "name": "weather_code",
+          "type": "smallint",
           "primaryKey": false,
           "notNull": false
         },
-        "bookmark": {
-          "name": "bookmark",
-          "type": "boolean",
+        "temperature_c": {
+          "name": "temperature_c",
+          "type": "numeric(4, 1)",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": false
         },
         "coordinates": {
           "name": "coordinates",
@@ -2500,6 +2598,19 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "allow_comment": {
+          "name": "allow_comment",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
         "read_count": {
           "name": "read_count",
@@ -2613,13 +2724,58 @@
           "method": "btree",
           "with": {}
         },
-        "notes_nid_desc_idx": {
-          "name": "notes_nid_desc_idx",
+        "notes_status_pin_published_idx": {
+          "name": "notes_status_pin_published_idx",
           "columns": [
             {
-              "expression": "nid",
+              "expression": "status",
               "isExpression": false,
               "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "pin_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "published_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notes_topic_status_published_idx": {
+          "name": "notes_topic_status_published_idx",
+          "columns": [
+            {
+              "expression": "topic_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "pin_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "published_at",
+              "isExpression": false,
+              "asc": false,
               "nulls": "last"
             }
           ],
@@ -2648,48 +2804,6 @@
           "columns": [
             {
               "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "notes_topic_id_idx": {
-          "name": "notes_topic_id_idx",
-          "columns": [
-            {
-              "expression": "topic_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "notes_published_public_created_idx": {
-          "name": "notes_published_public_created_idx",
-          "columns": [
-            {
-              "expression": "is_published",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "public_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2740,6 +2854,30 @@
         "notes_translation_origin_check": {
           "name": "notes_translation_origin_check",
           "value": "\"notes\".\"translation_origin\" in ('human', 'ai', 'machine')"
+        },
+        "notes_status_check": {
+          "name": "notes_status_check",
+          "value": "\"notes\".\"status\" in ('draft', 'private', 'scheduled', 'published', 'trash')"
+        },
+        "notes_content_format_check": {
+          "name": "notes_content_format_check",
+          "value": "\"notes\".\"content_format\" in ('markdown')"
+        },
+        "notes_mood_check": {
+          "name": "notes_mood_check",
+          "value": "\"notes\".\"mood\" is null or \"notes\".\"mood\" in ('very_bad', 'bad', 'neutral', 'good', 'very_good')"
+        },
+        "notes_weather_code_check": {
+          "name": "notes_weather_code_check",
+          "value": "\"notes\".\"weather_code\" is null or (\"notes\".\"weather_code\" between 0 and 99)"
+        },
+        "notes_temperature_c_check": {
+          "name": "notes_temperature_c_check",
+          "value": "\"notes\".\"temperature_c\" is null or (\"notes\".\"temperature_c\" between -99.9 and 99.9)"
+        },
+        "notes_coordinates_check": {
+          "name": "notes_coordinates_check",
+          "value": "\"notes\".\"coordinates\" is null or (jsonb_typeof(\"notes\".\"coordinates\") = 'object' and case when jsonb_typeof(\"notes\".\"coordinates\" -> 'latitude') = 'number' and jsonb_typeof(\"notes\".\"coordinates\" -> 'longitude') = 'number' then ((\"notes\".\"coordinates\" ->> 'latitude')::numeric between -90 and 90 and (\"notes\".\"coordinates\" ->> 'longitude')::numeric between -180 and 180) else false end)"
         }
       },
       "isRLSEnabled": false
@@ -3562,6 +3700,13 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "allow_comment": {
+          "name": "allow_comment",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         }
       },
       "indexes": {
@@ -4489,17 +4634,18 @@
           "notNull": true,
           "default": "''"
         },
-        "introduce": {
-          "name": "introduce",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "icon": {
           "name": "icon",
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
       "indexes": {
@@ -5592,7 +5738,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "slug_trackers_type_check": {
+          "name": "slug_trackers_type_check",
+          "value": "\"slug_trackers\".\"type\" in ('post', 'tag', 'note', 'photo')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.subscriptions": {

@@ -96,6 +96,10 @@ export const comments = pgTable(
 		index('comments_note_idx')
 			.on(table.noteId)
 			.where(sql`${table.noteId} is not null`),
+		// Notes-line v0.3 §7.3: note thread query shape (mirrors the post thread index).
+		index('comments_note_thread_idx')
+			.on(table.noteId, table.parentCommentId, table.pin, table.createdAt)
+			.where(sql`${table.noteId} is not null`),
 		index('comments_page_idx')
 			.on(table.pageId)
 			.where(sql`${table.pageId} is not null`),

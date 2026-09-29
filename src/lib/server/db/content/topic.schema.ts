@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 export const topics = pgTable(
 	'topics',
@@ -12,8 +12,8 @@ export const topics = pgTable(
 		name: text('name').notNull(),
 		slug: text('slug').notNull(),
 		description: text('description').notNull().default(''),
-		introduce: text('introduce'),
-		icon: text('icon')
+		icon: text('icon'),
+		sortOrder: integer('sort_order').notNull().default(0)
 	},
 	(table) => [
 		uniqueIndex('topics_name_uniq').on(table.name),

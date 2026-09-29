@@ -60,7 +60,8 @@ export const posts = pgTable(
 		copyright: boolean('copyright').notNull().default(true),
 		readCount: integer('read_count').notNull().default(0),
 		likeCount: integer('like_count').notNull().default(0),
-		pinAt: timestamp('pin_at', { withTimezone: true })
+		pinAt: timestamp('pin_at', { withTimezone: true }),
+		allowComment: boolean('allow_comment').notNull().default(true)
 	},
 	(table) => [
 		check(
