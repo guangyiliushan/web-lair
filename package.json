@@ -122,6 +122,7 @@
 		"fuji-recipes": "^1.0.2",
 		"hast-util-sanitize": "^5.0.2",
 		"heic-decode": "^2.1.0",
+		"iovalkey": "^0.4.0",
 		"katex": "^0.17.0",
 		"lexical": "^0.51.0",
 		"libheif-js": "^1.23.2",

@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import { error } from '@sveltejs/kit';
 import { canonicalHost, GITHUB_RESERVED } from '$lib/components/markdown/embed/registry';
+import { cached, type CacheStore } from '$lib/server/cache/store';
 
 /**
  * GitHub embed metadata proxy (batch 2a) — the metadata side of the rich
@@ -12,17 +14,16 @@ import { canonicalHost, GITHUB_RESERVED } from '$lib/components/markdown/embed/r
  *   issues — aligned with the registry matchers; everything else 404s
  *   before any request is made)
  * - rate limits: unauthenticated GitHub allows 60 req/h per IP; responses
- *   are cached in memory for an hour (per server process) and carry
- *   `cache-control: max-age=3600` so browsers share one fetch per URL.
- *   A GITHUB_TOKEN (optional) lifts the ceiling to 5000/h.
+ *   are cached for an hour (Valkey when VALKEY_URL is set, otherwise in the
+ *   process) and carry `cache-control: max-age=3600` so browsers share one
+ *   fetch per URL. A GITHUB_TOKEN (optional) lifts the ceiling to 5000/h.
  * - failure contract: every upstream failure (404, rate limit, timeout,
  *   network) answers 204 No Content — the client keeps the static card
  *   and never surfaces an error.
  * - payload: only the whitelist fields below ever leave this module.
  */
 const TIMEOUT_MS = 5000;
-const CACHE_TTL_MS = 60 * 60 * 1000;
-const CACHE_MAX = 500;
+const CACHE_TTL_SECONDS = 60 * 60;
 
 /** Card shapes this proxy enriches; every other provider stays zero-request. */
 export type GithubTarget =
@@ -159,37 +160,24 @@ function projectPayload(target: GithubTarget, json: unknown): EmbedMetaResponse 
 	};
 }
 
-interface CacheEntry {
-	payload: EmbedMetaResponse;
-	expiresAt: number;
-}
-const metaCache = new Map<string, CacheEntry>();
-
-/** Test hook: the in-memory cache is process-global by design. */
-export function clearEmbedMetaCache(): void {
-	metaCache.clear();
+export interface EmbedMetaOptions {
+	token?: string;
+	/** Cache store injection (tests); defaults to the process-wide store. */
+	cache?: CacheStore;
 }
 
-export async function handleEmbedMetaRequest(
-	requestUrl: URL,
-	options: { token?: string } = {}
-): Promise<Response> {
-	const target = parseGithubTarget(requestUrl.searchParams.get('url') ?? '');
-	if (requestUrl.searchParams.get('url') === null) throw error(400, 'missing url');
-	if (!target) throw error(403, 'not an enrichable github.com card url');
-
-	const cached = metaCache.get(target.apiUrl);
-	if (cached && cached.expiresAt > Date.now()) {
-		return new Response(JSON.stringify(cached.payload), { headers: metaHeaders() });
-	}
-
+/** Fetches + projects; every upstream failure returns null (the 204 path). */
+async function fetchEmbedPayload(
+	target: GithubTarget,
+	token: string | undefined
+): Promise<EmbedMetaResponse | null> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 	const headers: Record<string, string> = {
 		accept: 'application/vnd.github+json',
 		'x-github-api-version': '2022-11-28'
 	};
-	if (options.token) headers.authorization = `Bearer ${options.token}`;
+	if (token) headers.authorization = `Bearer ${token}`;
 	try {
 		const response = await fetch(target.apiUrl, {
 			signal: controller.signal,
@@ -198,27 +186,37 @@ export async function handleEmbedMetaRequest(
 		});
 		// Upstream failures (404, 403 rate limit, …) degrade to 204 — the
 		// client keeps the static card and never sees an error surface.
-		if (!response.ok) return new Response(null, { status: 204 });
+		if (!response.ok) return null;
 		const json: unknown = await response.json().catch(() => null);
-		if (!json || typeof json !== 'object') return new Response(null, { status: 204 });
+		if (!json || typeof json !== 'object') return null;
 		// Never expose private-repo metadata through the public proxy: a
 		// server-held token must not turn the endpoint into an oracle.
-		if ((json as Record<string, unknown>).private === true) {
-			return new Response(null, { status: 204 });
-		}
-		const payload = projectPayload(target, json);
-		metaCache.set(target.apiUrl, { payload, expiresAt: Date.now() + CACHE_TTL_MS });
-		// insertion-order eviction keeps the process cache bounded
-		if (metaCache.size > CACHE_MAX) {
-			const oldest = metaCache.keys().next().value;
-			if (oldest !== undefined) metaCache.delete(oldest);
-		}
-		return new Response(JSON.stringify(payload), { headers: metaHeaders() });
+		if ((json as Record<string, unknown>).private === true) return null;
+		return projectPayload(target, json);
 	} catch {
-		return new Response(null, { status: 204 });
+		return null;
 	} finally {
 		clearTimeout(timer);
 	}
+}
+
+export async function handleEmbedMetaRequest(
+	requestUrl: URL,
+	options: EmbedMetaOptions = {}
+): Promise<Response> {
+	const target = parseGithubTarget(requestUrl.searchParams.get('url') ?? '');
+	if (requestUrl.searchParams.get('url') === null) throw error(400, 'missing url');
+	if (!target) throw error(403, 'not an enrichable github.com card url');
+
+	// Ledger §21 / plan §7: metadata cache lives in the cache layer (Valkey in
+	// production, in-process otherwise); failures are never cached.
+	const store = options.cache ?? (await import('$lib/server/cache')).getCache();
+	const cacheKey = `embed:${createHash('sha1').update(target.apiUrl).digest('hex')}`;
+	const payload = await cached(store, cacheKey, CACHE_TTL_SECONDS, () =>
+		fetchEmbedPayload(target, options.token)
+	);
+	if (!payload) return new Response(null, { status: 204 });
+	return new Response(JSON.stringify(payload), { headers: metaHeaders() });
 }
 
 function metaHeaders(): Record<string, string> {

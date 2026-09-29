@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-	clearEmbedMetaCache,
-	handleEmbedMetaRequest,
-	parseGithubTarget
-} from '$lib/server/embed-meta';
+import { handleEmbedMetaRequest, parseGithubTarget } from '$lib/server/embed-meta';
+import { MemoryCacheStore } from '$lib/server/cache/memory';
+import type { CacheStore } from '$lib/server/cache/store';
 
 function requestFor(url: string): URL {
 	return new URL(`http://localhost/api/embed-meta?url=${encodeURIComponent(url)}`);
@@ -14,6 +12,28 @@ function jsonResponse(body: unknown, status = 200): Response {
 		status,
 		headers: { 'content-type': 'application/json' }
 	});
+}
+
+/** Fresh store per call: the cache is injected, never process-global here. */
+function freshStore(): CacheStore {
+	return new MemoryCacheStore();
+}
+
+function brokenStore(): CacheStore {
+	return {
+		get: vi.fn(async () => {
+			throw new Error('cache down');
+		}),
+		set: vi.fn(async () => {
+			throw new Error('cache down');
+		}),
+		del: vi.fn(async () => {
+			throw new Error('cache down');
+		}),
+		incr: vi.fn(async (): Promise<number> => {
+			throw new Error('cache down');
+		})
+	};
 }
 
 describe('parseGithubTarget', () => {
@@ -59,7 +79,6 @@ describe('parseGithubTarget', () => {
 describe('handleEmbedMetaRequest', () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
-		clearEmbedMetaCache();
 	});
 
 	it('projects only whitelisted repo fields and sets cache headers', async () => {
@@ -77,7 +96,8 @@ describe('handleEmbedMetaRequest', () => {
 		vi.stubGlobal('fetch', fetchMock);
 
 		const res = await handleEmbedMetaRequest(
-			requestFor('https://github.com/example-org/example-repo')
+			requestFor('https://github.com/example-org/example-repo'),
+			{ cache: freshStore() }
 		);
 		expect(res.status).toBe(200);
 		expect(res.headers.get('cache-control')).toBe('public, max-age=3600');
@@ -111,7 +131,8 @@ describe('handleEmbedMetaRequest', () => {
 		const res = await handleEmbedMetaRequest(
 			requestFor(
 				'https://github.com/example-org/example-repo/commit/a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0'
-			)
+			),
+			{ cache: freshStore() }
 		);
 		const body = await res.json();
 		expect(body).toEqual({
@@ -125,11 +146,12 @@ describe('handleEmbedMetaRequest', () => {
 		});
 	});
 
-	it('serves the second identical url from cache without refetching', async () => {
+	it('serves the second identical url from the injected cache without refetching', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ full_name: 'a/b' }));
 		vi.stubGlobal('fetch', fetchMock);
-		await handleEmbedMetaRequest(requestFor('https://github.com/a/b'));
-		const second = await handleEmbedMetaRequest(requestFor('https://github.com/a/b'));
+		const cache = freshStore();
+		await handleEmbedMetaRequest(requestFor('https://github.com/a/b'), { cache });
+		const second = await handleEmbedMetaRequest(requestFor('https://github.com/a/b'), { cache });
 		expect(second.status).toBe(200);
 		expect(fetchMock).toHaveBeenCalledOnce();
 	});
@@ -137,7 +159,9 @@ describe('handleEmbedMetaRequest', () => {
 	it('degrades every upstream failure to 204 (never an error surface)', async () => {
 		for (const status of [404, 403, 429, 500]) {
 			vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status })));
-			const res = await handleEmbedMetaRequest(requestFor('https://github.com/a/b'));
+			const res = await handleEmbedMetaRequest(requestFor('https://github.com/a/b'), {
+				cache: freshStore()
+			});
 			expect(res.status, `upstream ${status}`).toBe(204);
 		}
 	});
@@ -145,7 +169,10 @@ describe('handleEmbedMetaRequest', () => {
 	it('attaches the authorization header when a token is provided', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ full_name: 'a/b' }));
 		vi.stubGlobal('fetch', fetchMock);
-		await handleEmbedMetaRequest(requestFor('https://github.com/a/b'), { token: 't0k3n' });
+		await handleEmbedMetaRequest(requestFor('https://github.com/a/b'), {
+			token: 't0k3n',
+			cache: freshStore()
+		});
 		const init = fetchMock.mock.calls[0][1] as RequestInit;
 		expect((init.headers as Record<string, string>).authorization).toBe('Bearer t0k3n');
 	});
@@ -153,9 +180,13 @@ describe('handleEmbedMetaRequest', () => {
 	it('rejects non-github and non-enrichable urls before any fetch', async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal('fetch', fetchMock);
-		await expect(handleEmbedMetaRequest(requestFor('https://example.com/x'))).rejects.toThrow();
 		await expect(
-			handleEmbedMetaRequest(requestFor('https://github.com/a/b/blob/main/x.ts'))
+			handleEmbedMetaRequest(requestFor('https://example.com/x'), { cache: freshStore() })
+		).rejects.toThrow();
+		await expect(
+			handleEmbedMetaRequest(requestFor('https://github.com/a/b/blob/main/x.ts'), {
+				cache: freshStore()
+			})
 		).rejects.toThrow();
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
@@ -166,10 +197,21 @@ describe('handleEmbedMetaRequest', () => {
 			.mockResolvedValue(jsonResponse({ private: true, full_name: 'o/private-repo' }));
 		vi.stubGlobal('fetch', fetchSpy);
 		const url = requestFor('https://github.com/o/private-repo');
-		const res = await handleEmbedMetaRequest(url, {});
+		const cache = freshStore();
+		const res = await handleEmbedMetaRequest(url, { cache });
 		expect(res.status).toBe(204);
 		// uncached: a second request must hit upstream again, not replay a hit
-		await handleEmbedMetaRequest(url, {});
+		await handleEmbedMetaRequest(url, { cache });
 		expect(fetchSpy).toHaveBeenCalledTimes(2);
+	});
+
+	it('stays fully functional when the cache is dead (fail-open, T14)', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ full_name: 'a/b' }));
+		vi.stubGlobal('fetch', fetchMock);
+		const res = await handleEmbedMetaRequest(requestFor('https://github.com/a/b'), {
+			cache: brokenStore()
+		});
+		expect(res.status).toBe(200);
+		expect((await res.json()).title).toBe('a/b');
 	});
 });

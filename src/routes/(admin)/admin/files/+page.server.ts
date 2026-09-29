@@ -10,6 +10,8 @@ import {
 	UploadRejected
 } from '$lib/server/services/files';
 import { MAX_BATCH_COUNT, MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
+import { getCache } from '$lib/server/cache';
+import { rateLimit } from '$lib/server/cache/store';
 import type { PageServerLoad, Actions } from './$types';
 
 /**
@@ -22,6 +24,9 @@ import type { PageServerLoad, Actions } from './$types';
 
 const KINDS = ['image', 'file'] as const;
 const STATUSES = ['pending', 'attached', 'detached'] as const;
+
+/** Upload rate window (plan §7): generous for a single admin, still bounded. */
+const UPLOAD_RATE_LIMIT = { limit: 60, windowSeconds: 10 * 60 };
 
 export const load: PageServerLoad = async ({ url }) => {
 	await requireAdminRole();
@@ -44,6 +49,15 @@ export const load: PageServerLoad = async ({ url }) => {
 export const actions: Actions = {
 	upload: async ({ request, locals }) => {
 		await requireAdminRole();
+		// Fail-open counter (plan §7): a seatbelt against runaway POSTs, never
+		// a gate — a dead Valkey still lets every upload through.
+		const rate = await rateLimit(
+			getCache(),
+			`limits:upload:${locals.user?.id ?? 'anonymous'}`,
+			UPLOAD_RATE_LIMIT.limit,
+			UPLOAD_RATE_LIMIT.windowSeconds
+		);
+		if (!rate.allowed) return fail(429, { message: '上传过于频繁，请稍后再试' });
 		const form = await request.formData();
 		const uploads = form
 			.getAll('files')
