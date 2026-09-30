@@ -7,7 +7,10 @@
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconClock from '@tabler/icons-svelte-runes/icons/clock';
 	import IconGlobe from '@tabler/icons-svelte-runes/icons/globe';
-	import { commentTargetDisplay, type CommentTargetDisplay } from '$lib/utils/comment-target';
+	import {
+		commentTargetDisplay,
+		type CommentTargetDisplay
+	} from '$lib/components/admin/comment-target';
 
 	let { data, form }: PageProps = $props();
 
@@ -37,7 +40,7 @@
 		<span class="rounded-sm bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
 			{target.label}
 		</span>
-		{#if target.href}<IconExternalLink class="size-3" />{/if}
+		{#if target.href}<IconExternalLink class="size-3" aria-hidden="true" />{/if}
 		<span class="max-w-64 truncate">{target.title}</span>
 	{/snippet}
 	<!-- Review state tabs -->

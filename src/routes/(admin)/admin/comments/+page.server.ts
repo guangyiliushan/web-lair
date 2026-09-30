@@ -35,9 +35,11 @@ export const load: PageServerLoad = async (event) => {
 			postId: comments.postId,
 			postTitle: posts.title,
 			postSlug: posts.slug,
+			postLang: posts.lang,
 			noteId: comments.noteId,
 			noteTitle: notes.title,
 			noteSlug: notes.slug,
+			noteLang: notes.lang,
 			pageId: comments.pageId,
 			pageTitle: pages.title,
 			pageSlug: pages.slug

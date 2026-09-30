@@ -3,6 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { m } from '$lib/paraglide/messages';
+	import { COMMENT_MAX_LENGTH } from './types';
 
 	interface Props {
 		/** Form action to post to: '?/comment' (root) or '?/reply'. */
@@ -11,11 +12,13 @@
 		parentId?: string | null;
 		/** Denser layout for inline reply forms. */
 		compact?: boolean;
+		/** Focus the textarea on mount (inline replies opened by a click). */
+		autofocus?: boolean;
 		/** Present when the composer can be dismissed (inline reply). */
 		onCancel?: () => void;
 	}
 
-	let { action, parentId = null, compact = false, onCancel }: Props = $props();
+	let { action, parentId = null, compact = false, autofocus = false, onCancel }: Props = $props();
 	let submitting = $state(false);
 </script>
 
@@ -23,6 +26,7 @@
 	method="POST"
 	{action}
 	class="flex flex-col gap-2"
+	aria-busy={submitting}
 	use:enhance={() => {
 		submitting = true;
 		return async ({ result, update }) => {
@@ -43,10 +47,11 @@
 	<Textarea
 		name="text"
 		required
-		maxlength={2000}
+		maxlength={COMMENT_MAX_LENGTH}
 		rows={compact ? 2 : 3}
+		{autofocus}
 		placeholder={m.comment_composer_placeholder()}
-		aria-label={m.comment_composer_placeholder()}
+		aria-label={m.comment_composer_label()}
 	/>
 	<div class="flex items-center justify-end gap-2">
 		{#if onCancel}

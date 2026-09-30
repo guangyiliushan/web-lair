@@ -40,14 +40,18 @@ export class MemoryCacheStore implements CacheStore {
 	}
 
 	async incr(key: string, windowSeconds: number): Promise<number> {
-		const current = await this.get<number>(key);
-		if (current === null) {
-			this.#entries.set(key, { value: 1, expiresAt: this.#clock() + windowSeconds * 1000 });
+		// Fully synchronous read-modify-write: there must be NO await between
+		// the read and the write, otherwise concurrent submissions all read
+		// the same initial value and the window counter collapses (security
+		// review finding: 20 concurrent calls, limit=2 -> 20/20 allowed).
+		const now = this.#clock();
+		const entry = this.#entries.get(key);
+		if (!entry || entry.expiresAt <= now) {
+			this.#entries.set(key, { value: 1, expiresAt: now + windowSeconds * 1000 });
 			return 1;
 		}
-		const next = current + 1;
-		const entry = this.#entries.get(key);
-		if (entry) entry.value = next;
+		const next = (entry.value as number) + 1;
+		entry.value = next;
 		return next;
 	}
 }

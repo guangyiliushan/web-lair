@@ -1,5 +1,8 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import IconPin from '@tabler/icons-svelte-runes/icons/pin';
+	import * as Avatar from '$lib/components/ui/avatar';
+	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { m } from '$lib/paraglide/messages';
 	import { parseCommentText } from '$lib/utils/comment-text';
@@ -21,31 +24,36 @@
 	function toggleReply(id: string) {
 		openReplyId = openReplyId === id ? null : id;
 	}
+
+	/** Close the inline composer and hand focus back to its trigger (WCAG). */
+	async function closeReply(id: string) {
+		openReplyId = null;
+		await tick();
+		document.querySelector<HTMLElement>(`[data-reply-target="${id}"]`)?.focus();
+	}
+
+	function initialOf(name: string | null): string {
+		return (name ?? '?').slice(0, 1).toUpperCase();
+	}
 </script>
 
 {#snippet avatar(url: string | null, name: string | null)}
-	{#if url}
-		<img src={url} alt="" class="size-8 shrink-0 rounded-full object-cover" loading="lazy" />
-	{:else}
-		<span
-			aria-hidden="true"
-			class="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium"
-		>
-			{(name ?? '?').slice(0, 1).toUpperCase()}
-		</span>
-	{/if}
+	<Avatar.Root class="size-8">
+		{#if url}
+			<Avatar.Image src={url} alt="" loading="lazy" referrerpolicy="no-referrer" />
+		{/if}
+		<Avatar.Fallback>{initialOf(name)}</Avatar.Fallback>
+	</Avatar.Root>
 {/snippet}
 
 {#snippet ownerBadge()}
-	<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+	<Badge variant="outline" class="border-primary/40 text-primary">
 		{m.comment_owner_badge()}
-	</span>
+	</Badge>
 {/snippet}
 
 {#snippet pendingBadge()}
-	<span class="rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-		{m.comment_pending_badge()}
-	</span>
+	<Badge variant="secondary">{m.comment_pending_badge()}</Badge>
 {/snippet}
 
 {#snippet commentTime(value: Date)}
@@ -80,10 +88,10 @@
 					<span class="text-sm font-medium">{root.author ?? '?'}</span>
 					{#if root.isOwner}{@render ownerBadge()}{/if}
 					{#if root.pin}
-						<span class="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
-							<IconPin class="size-3" />
+						<Badge variant="secondary" class="gap-0.5">
+							<IconPin aria-hidden="true" />
 							{m.comment_pin_badge()}
-						</span>
+						</Badge>
 					{/if}
 					{@render commentTime(root.createdAt)}
 					{#if root.isPending}{@render pendingBadge()}{/if}
@@ -91,12 +99,14 @@
 				<div class="mt-1.5 text-sm leading-relaxed break-words">
 					{@render commentBody(root.text)}
 				</div>
-				{#if canComment}
+				{#if canComment && !root.isPending}
 					<div class="mt-1.5">
 						<Button
 							variant="ghost"
 							size="sm"
 							data-reply-target={root.id}
+							aria-expanded={openReplyId === root.id}
+							aria-label={m.comment_replying_to({ name: root.author ?? '?' })}
 							onclick={() => toggleReply(root.id)}
 						>
 							{m.comment_reply()}
@@ -108,7 +118,8 @@
 						action="?/reply"
 						parentId={root.id}
 						compact
-						onCancel={() => (openReplyId = null)}
+						autofocus
+						onCancel={() => closeReply(root.id)}
 					/>
 				{/if}
 			</div>
@@ -116,10 +127,10 @@
 	{/if}
 
 	{#if root.replies.length > 0}
-		<ul class="mt-3 ml-4 space-y-4 border-l border-border/40 pl-4 sm:ml-6">
+		<ul class="mt-3 ml-4 flex flex-col gap-4 border-l border-border/40 pl-4 sm:ml-6">
 			{#each root.replies as reply (reply.id)}
 				<li data-comment-id={reply.id}>
-					<div class="flex gap-3">
+					<article class="flex gap-3">
 						{@render avatar(reply.avatar, reply.author)}
 						<div class="min-w-0 flex-1">
 							<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -136,12 +147,14 @@
 							<div class="mt-1.5 text-sm leading-relaxed break-words">
 								{@render commentBody(reply.text)}
 							</div>
-							{#if canComment}
+							{#if canComment && !reply.isPending}
 								<div class="mt-1.5">
 									<Button
 										variant="ghost"
 										size="sm"
 										data-reply-target={reply.id}
+										aria-expanded={openReplyId === reply.id}
+										aria-label={m.comment_replying_to({ name: reply.author ?? '?' })}
 										onclick={() => toggleReply(reply.id)}
 									>
 										{m.comment_reply()}
@@ -153,11 +166,12 @@
 									action="?/reply"
 									parentId={reply.id}
 									compact
-									onCancel={() => (openReplyId = null)}
+									autofocus
+									onCancel={() => closeReply(reply.id)}
 								/>
 							{/if}
 						</div>
-					</div>
+					</article>
 				</li>
 			{/each}
 		</ul>

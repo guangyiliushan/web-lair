@@ -1,20 +1,36 @@
 import { execFileSync } from 'node:child_process';
-import { expect, test, type Browser, type Page, type Response } from '@playwright/test';
+import {
+	expect,
+	test,
+	type Browser,
+	type BrowserContext,
+	type Page,
+	type Response
+} from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
 
 /**
  * Comment P3a acceptance (pages plan T7): guest guidance, submit -> pending,
  * approved-only reading surface, two-level render, pin/owner badges, owner
- * auto-approve, the throttle window and the queue's post/note target display.
+ * auto-approve, the throttle window, the queue's post/note target display,
+ * the no-JS submit path and keyboard reachability.
+ *
  * Runs against the production preview, the live database and the Valkey
  * limiter; fixture rows are namespaced `e2e-cmt` and removed in teardown.
- * Reader accounts are created through the sign-up API (better-auth hashes the
- * password, SQL cannot).
+ * Preconditions: `web-lair-db-1` up (fixtures), `web-lair-valkey-1` up for
+ * the throttle case (skipped otherwise - fail-open makes it moot), port 4173
+ * free (do not run alongside another spec file's server).
+ *
+ * The file is a serial chain (reader -> owner approve -> ...): running single
+ * tests out of order will not see the earlier steps' data. Auth fixtures are
+ * memoised per account to keep the shared better-auth path-bucket limiter
+ * (3 per 10s per path) out of other spec files' way.
  */
 const ORIGIN = 'http://localhost:4173';
 const CATEGORY = '00000000-0000-7000-8000-0000000000c1';
 const POST = '00000000-0000-7000-8000-0000000000c2';
 const NOTE = '00000000-0000-7000-8000-0000000000c3';
+const NOCMT = '00000000-0000-7000-8000-0000000000c4';
 const C_APPROVED = '00000000-0000-7000-8000-0000000000d1';
 const C_REPLY = '00000000-0000-7000-8000-0000000000d2';
 const C_PENDING = '00000000-0000-7000-8000-0000000000d3';
@@ -33,6 +49,7 @@ const T_REJECTED = 'e2e-cmt 被拒绝的评论';
 const T_NOTE = 'e2e-cmt 笔记目标评论';
 const T_READER = 'e2e-cmt 读者提交的评论';
 const T_OWNER = 'e2e-cmt 站长的新评论';
+const T_NOJS = 'e2e-cmt 无脚本提交';
 const T_RL1 = 'e2e-cmt 节流一';
 const T_RL2 = 'e2e-cmt 节流二';
 const T_RL3 = 'e2e-cmt 节流三';
@@ -59,9 +76,23 @@ function valkeyDel(key: string) {
 	}
 }
 
+function valkeyAlive(): boolean {
+	try {
+		return (
+			execFileSync('docker', ['exec', 'web-lair-valkey-1', 'valkey-cli', 'PING'], {
+				encoding: 'utf8'
+			})
+				.trim()
+				.toUpperCase() === 'PONG'
+		);
+	} catch {
+		return false;
+	}
+}
+
 test.beforeAll(() => {
 	psql(`delete from comments where text like 'e2e-cmt%'`);
-	psql(`delete from comments where post_id = '${POST}' or note_id = '${NOTE}'`);
+	psql(`delete from comments where post_id in ('${POST}', '${NOCMT}') or note_id = '${NOTE}'`);
 	psql(`delete from posts where slug like 'e2e-cmt-%'`);
 	psql(`delete from notes where slug like 'e2e-cmt-%'`);
 	psql(`delete from categories where slug = 'e2e-cmt-cat'`);
@@ -71,9 +102,11 @@ test.beforeAll(() => {
 	);
 	psql(
 		`insert into posts (id, title, slug, lang, content, category_id, status, published_at)
-		 values ('${POST}', 'E2E 评论文章', 'e2e-cmt-post', 'zh-cn', '正文内容', '${CATEGORY}', 'published', now() - interval '1 hour')
+		 values ('${POST}', 'E2E 评论文章', 'e2e-cmt-post', 'zh-cn', '正文内容', '${CATEGORY}', 'published', now() - interval '1 hour'),
+		        ('${NOCMT}', 'E2E 禁止评论', 'e2e-cmt-nocmt', 'zh-cn', '正文内容', '${CATEGORY}', 'published', now() - interval '1 hour')
 		 on conflict (id) do nothing`
 	);
+	psql(`update posts set allow_comment = false where id = '${NOCMT}'`);
 	psql(
 		`insert into notes (id, lang, title, slug, status, published_at, content)
 		 values ('${NOTE}', 'zh-cn', 'E2E 评论笔记', 'e2e-cmt-note', 'published', now() - interval '1 hour', '笔记正文')
@@ -98,17 +131,19 @@ test.beforeAll(() => {
 	);
 });
 
-test.afterAll(() => {
+test.afterAll(async () => {
 	for (const email of [THROTTLE_EMAIL, READER_EMAIL]) {
 		const uid = psql(`select id from "user" where email = '${email}'`);
 		if (uid) valkeyDel(`wl:limits:comment:${uid}`);
 	}
 	psql(`delete from comments where text like 'e2e-cmt%'`);
-	psql(`delete from comments where post_id = '${POST}' or note_id = '${NOTE}'`);
+	psql(`delete from comments where post_id in ('${POST}', '${NOCMT}') or note_id = '${NOTE}'`);
 	psql(`delete from posts where slug like 'e2e-cmt-%'`);
 	psql(`delete from notes where slug like 'e2e-cmt-%'`);
 	psql(`delete from categories where slug = 'e2e-cmt-cat'`);
 	psql(`delete from "user" where email in ('${READER_EMAIL}', '${THROTTLE_EMAIL}')`);
+	await readerContext?.close();
+	await throttleContext?.close();
 });
 
 /* ── auth fixtures ──────────────────────────────────────────────────────── */
@@ -153,8 +188,7 @@ async function apiPost(
 }
 
 /** Sign-up + SQL-verify + explicit sign-in (spec §1 "已验证读者"). */
-async function createReader(browser: Browser, email: string) {
-	const context = await browser.newContext({ storageState: zhCnLocale.storageState });
+async function bootstrapReader(context: BrowserContext, email: string) {
 	const page = await context.newPage();
 	const signUp = await apiPost(page, '/api/auth/sign-up/email', {
 		email,
@@ -168,7 +202,30 @@ async function createReader(browser: Browser, email: string) {
 		password: READER_PASSWORD
 	});
 	expect(signIn.ok()).toBeTruthy();
-	return { context, page };
+	await page.close();
+}
+
+/**
+ * Memoised signed-in contexts: one auth round per account for the whole file
+ * keeps the shared path-bucket limiter quiet for other spec files.
+ */
+let readerContext: BrowserContext | null = null;
+let throttleContext: BrowserContext | null = null;
+
+async function readerPage(browser: Browser): Promise<Page> {
+	if (!readerContext) {
+		readerContext = await browser.newContext({ storageState: zhCnLocale.storageState });
+		await bootstrapReader(readerContext, READER_EMAIL);
+	}
+	return readerContext.newPage();
+}
+
+async function throttlePage(browser: Browser): Promise<Page> {
+	if (!throttleContext) {
+		throttleContext = await browser.newContext({ storageState: zhCnLocale.storageState });
+		await bootstrapReader(throttleContext, THROTTLE_EMAIL);
+	}
+	return throttleContext.newPage();
 }
 
 async function guestContext(browser: Browser) {
@@ -193,12 +250,19 @@ test('guest: approved only, two-level render, pin/owner badges, login prompt', a
 	await expect(page.locator('#comments textarea')).toHaveCount(0);
 });
 
+test('a thread with comments disabled renders no section at all', async ({ page }) => {
+	await page.goto('/zh-cn/posts/e2e-cmt-nocmt');
+	await expect(page.getByRole('heading', { name: 'E2E 禁止评论' })).toBeVisible();
+	await expect(page.locator('#comments')).toHaveCount(0);
+	await expect(page.locator('textarea')).toHaveCount(0);
+});
+
 test('reader submits -> pending with the own-pending badge; guests do not see it', async ({
 	browser
 }) => {
-	const { context, page } = await createReader(browser, READER_EMAIL);
+	const page = await readerPage(browser);
 	await page.goto(POST_PATH);
-	const textarea = page.getByRole('textbox', { name: '写下你的想法…' });
+	const textarea = page.getByRole('textbox', { name: '评论内容' });
 	await expect(textarea).toBeVisible();
 	await textarea.fill(T_READER);
 	await page.getByRole('button', { name: '发表' }).click();
@@ -213,7 +277,7 @@ test('reader submits -> pending with the own-pending badge; guests do not see it
 	await guestPage.goto(POST_PATH);
 	await expect(guestPage.getByText(T_READER)).toHaveCount(0);
 	await guest.close();
-	await context.close();
+	await page.close();
 });
 
 test('owner approves from the queue (post target) and the guest now sees it', async ({
@@ -223,11 +287,15 @@ test('owner approves from the queue (post target) and the guest now sees it', as
 	const ownerPage = await owner.newPage();
 	await ownerPage.goto('/admin/comments');
 	// Reaching the queue also proves the loopback owner session; the row shows
-	// the resolved post target (comment P3a queue enhancement).
+	// the resolved post target with a language-correct link (comment P3a
+	// queue enhancement).
 	const row = ownerPage.locator('label').filter({ hasText: T_READER });
 	await expect(row).toBeVisible({ timeout: 15000 });
 	await expect(row.getByText('博文')).toBeVisible();
-	await expect(row.getByText('E2E 评论文章')).toBeVisible();
+	await expect(row.getByRole('link', { name: /E2E 评论文章/ })).toHaveAttribute(
+		'href',
+		'/zh-cn/posts/e2e-cmt-post'
+	);
 
 	const commentId = psql(`select id from comments where text = '${T_READER}'`);
 	await ownerPage.locator(`input[name="ids"][value="${commentId}"]`).check();
@@ -251,7 +319,7 @@ test('the owners own comment auto-approves and is public immediately', async ({ 
 	await expect(ownerPage.getByRole('tab', { name: /待审/ })).toBeVisible({ timeout: 15000 });
 
 	await ownerPage.goto(POST_PATH);
-	await ownerPage.getByRole('textbox', { name: '写下你的想法…' }).fill(T_OWNER);
+	await ownerPage.getByRole('textbox', { name: '评论内容' }).fill(T_OWNER);
 	await ownerPage.getByRole('button', { name: '发表' }).click();
 	await expect(ownerPage.getByText('已发表。')).toBeVisible();
 	expect(psql(`select state from comments where text = '${T_OWNER}'`)).toBe('approved');
@@ -266,12 +334,61 @@ test('the owners own comment auto-approves and is public immediately', async ({ 
 	await owner.close();
 });
 
+test('no-JS: the native form submit works end to end (progressive enhancement)', async ({
+	browser
+}) => {
+	// Reuse the shared reader session's cookies in a scriptless context, so the
+	// auth buckets stay quiet.
+	await readerPage(browser);
+	const storage = await readerContext!.storageState();
+	const context = await browser.newContext({ storageState: storage, javaScriptEnabled: false });
+	const page = await context.newPage();
+	await page.goto(POST_PATH);
+	await page.getByRole('textbox', { name: '评论内容' }).fill(T_NOJS);
+	await page.getByRole('button', { name: '发表' }).click();
+	await expect(page.getByText('已提交，待审核。')).toBeVisible();
+	expect(psql(`select state from comments where text = '${T_NOJS}'`)).toBe('pending');
+	await context.close();
+});
+
+test('keyboard: the composer is reachable and operable without a mouse', async ({ browser }) => {
+	const page = await readerPage(browser);
+	await page.goto(POST_PATH);
+	const textarea = page.getByRole('textbox', { name: '评论内容' });
+	await expect(textarea).toBeVisible();
+
+	// Walk the tab order from the document start until the composer textarea
+	// receives focus (bounded so a broken order fails loudly instead of
+	// looping).
+	let reached = false;
+	for (let index = 0; index < 120 && !reached; index += 1) {
+		await page.keyboard.press('Tab');
+		reached = await textarea.evaluate((el) => el === document.activeElement);
+	}
+	expect(reached, 'tab order should reach the comment textarea').toBe(true);
+
+	// The next stop is the submit button; stepping back lets us type - no
+	// mouse involved. (Activation itself is covered by the submit + no-JS
+	// cases; this test pins the keyboard path's reachability.)
+	const submit = page.getByRole('button', { name: '发表' });
+	await page.keyboard.press('Tab');
+	expect(await submit.evaluate((el) => el === document.activeElement)).toBe(true);
+	await page.keyboard.press('Shift+Tab');
+	await page.keyboard.type('键盘可达');
+	await expect(textarea).toHaveValue('键盘可达');
+	await page.close();
+});
+
 test('throttle: two submissions pass, the third is refused inside the window', async ({
 	browser
 }) => {
-	const { context, page } = await createReader(browser, THROTTLE_EMAIL);
+	test.skip(
+		!valkeyAlive(),
+		'Valkey is not running - the limiter fails open and this case cannot hold'
+	);
+	const page = await throttlePage(browser);
 	await page.goto(POST_PATH);
-	const textarea = page.getByRole('textbox', { name: '写下你的想法…' });
+	const textarea = page.getByRole('textbox', { name: '评论内容' });
 
 	await textarea.fill(T_RL1);
 	await page.getByRole('button', { name: '发表' }).click();
@@ -296,7 +413,7 @@ test('throttle: two submissions pass, the third is refused inside the window', a
 			`select count(*) from comments c join "user" u on u.id = c.reader_id where u.email = '${THROTTLE_EMAIL}'`
 		)
 	).toBe('2');
-	await context.close();
+	await page.close();
 });
 
 test('the queue resolves the note target (the item absorbed from N1)', async ({ browser }) => {
@@ -306,6 +423,9 @@ test('the queue resolves the note target (the item absorbed from N1)', async ({ 
 	const row = ownerPage.locator('label').filter({ hasText: T_NOTE });
 	await expect(row).toBeVisible({ timeout: 15000 });
 	await expect(row.getByText('笔记', { exact: true })).toBeVisible();
-	await expect(row.getByText('E2E 评论笔记')).toBeVisible();
+	await expect(row.getByRole('link', { name: /E2E 评论笔记/ })).toHaveAttribute(
+		'href',
+		'/zh-cn/notes/e2e-cmt-note'
+	);
 	await owner.close();
 });

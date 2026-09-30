@@ -84,4 +84,41 @@ describe('parseCommentText', () => {
 		expect(segments.filter((segment) => segment.type === 'link')).toHaveLength(2);
 		expect(segments.map((segment) => segment.text).join('')).toBe(input);
 	});
+
+	it('downgrades confusable candidates (backslash / userinfo) to text', () => {
+		// Display-vs-target confusion vectors (security review).
+		const inputs = ['https://evil.com\\@trusted.com/x', 'https://trusted.com@evil.com/x'];
+		for (const input of inputs) {
+			const segments = parseCommentText(input);
+			expect(
+				segments.every((segment) => segment.type === 'text'),
+				input
+			).toBe(true);
+			expect(segments.map((segment) => segment.text).join(''), input).toBe(input);
+		}
+	});
+
+	it('downgrades loopback and private-network hosts to text', () => {
+		const inputs = [
+			'https://127.0.0.1/x',
+			'https://[::1]/',
+			'https://localhost/x',
+			'https://router.local/setup',
+			'https://192.168.1.1/admin',
+			'https://10.1.2.3/x',
+			'https://169.254.169.254/latest'
+		];
+		for (const input of inputs) {
+			expect(
+				parseCommentText(input).every((segment) => segment.type === 'text'),
+				input
+			).toBe(true);
+		}
+	});
+
+	it('still links normal public hosts, including mastodon-style handles', () => {
+		const [link] = parseCommentText('https://mastodon.social/@user');
+		expect(link.type).toBe('link');
+		expect(link.href).toBe('https://mastodon.social/@user');
+	});
 });

@@ -45,6 +45,17 @@ describe('MemoryCacheStore', () => {
 		now += 31_000; // 61s total: past the ORIGINAL window despite activity
 		expect(await store.incr('limits:y', 60)).toBe(1);
 	});
+
+	it('increments atomically under concurrency (security review finding)', async () => {
+		// Regression: incr() used to await get() between the read and the
+		// write, so 20 concurrent submissions all read count=0 and passed.
+		const store = new MemoryCacheStore();
+		const results = await Promise.all(
+			Array.from({ length: 20 }, () => rateLimit(store, 'limits:z', 2, 60))
+		);
+		expect(results.filter((result) => result.allowed)).toHaveLength(2);
+		expect(Math.max(...results.map((result) => result.count))).toBe(20);
+	});
 });
 
 describe('cached()', () => {

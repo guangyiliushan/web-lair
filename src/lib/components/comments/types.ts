@@ -6,6 +6,12 @@
  */
 export type CommentTargetType = 'post' | 'note' | 'page';
 
+/**
+ * Comment text bound (spec §1), shared so the server-side validation and the
+ * composer's `maxlength` cannot drift apart.
+ */
+export const COMMENT_MAX_LENGTH = 2000;
+
 export interface CommentView {
 	id: string;
 	text: string;
@@ -24,8 +30,7 @@ export interface ThreadReply extends CommentView {
 export interface ThreadRoot extends CommentView {
 	pin: boolean;
 	isDeleted: boolean;
-	/** Visible replies only (derived at read; reply_count column is not kept). */
-	replyCount: number;
+	/** Visible replies only, in display order. */
 	replies: ThreadReply[];
 }
 

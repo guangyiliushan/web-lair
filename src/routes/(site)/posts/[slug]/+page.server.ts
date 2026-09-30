@@ -6,7 +6,11 @@ import { db } from '$lib/server/db';
 import { categories, posts } from '$lib/server/db/content';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { requireUser } from '$lib/server/authz';
-import { loadThreads, submitComment } from '$lib/server/services/comments';
+import {
+	loadThreads,
+	resolveCommentPostTarget,
+	submitComment
+} from '$lib/server/services/comments';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import { formatDate } from '$lib/utils/i18n';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
@@ -110,23 +114,24 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 	const text = form.get('text')?.toString() ?? '';
 	const parentId = isReply ? (form.get('parentId')?.toString() ?? null) : null;
 
+	// One timestamp for the whole submission: target resolution and the
+	// service re-check must agree on the visibility boundary.
+	const now = new Date();
 	const lang = getLocale();
-	const [post] = await db
-		.select({ id: posts.id })
-		.from(posts)
-		.where(and(eq(posts.lang, lang), eq(posts.slug, event.params.slug), visiblePostCondition()))
-		.limit(1);
-	if (!post) return fail(404, { message: m.comment_error_unavailable() });
+	const targetId = await resolveCommentPostTarget(lang, event.params.slug, now);
+	if (!targetId) return fail(404, { message: m.comment_error_unavailable() });
 
 	const profile = event.locals.profile;
 	const result = await submitComment({
 		targetType: 'post',
-		targetId: post.id,
+		targetId,
+		lang,
 		parentId,
 		text,
 		user,
 		author: profile?.displayName ?? user.name ?? 'Reader',
-		avatar: profile?.avatarUrl ?? user.image ?? null
+		avatar: profile?.avatarUrl ?? user.image ?? null,
+		now
 	});
 
 	switch (result.kind) {
@@ -134,6 +139,8 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 			return { submitted: result.state };
 		case 'throttled':
 			return fail(429, { message: m.comment_throttled() });
+		case 'unverified':
+			return fail(403, { message: m.comment_verify_hint() });
 		case 'empty':
 		case 'too-long':
 		case 'unsupported-target':

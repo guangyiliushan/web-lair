@@ -20,7 +20,6 @@ function root(overrides: Partial<ThreadRoot> = {}): ThreadRoot {
 		createdAt: new Date('2026-09-29T12:00:00Z'),
 		pin: false,
 		isDeleted: false,
-		replyCount: 0,
 		replies: [],
 		...overrides
 	};
@@ -62,7 +61,8 @@ describe('CommentsSection', () => {
 		await render(CommentsSection, { ...BASE, threads: threadsPage([]) });
 		await expect.element(page.getByRole('heading', { name: /评论/ })).toBeInTheDocument();
 		await expect.element(page.getByText('还没有评论，来说点什么吧。')).toBeInTheDocument();
-		await expect.element(page.getByRole('textbox', { name: '写下你的想法…' })).toBeInTheDocument();
+		await expect.element(page.getByRole('textbox', { name: '评论内容' })).toBeInTheDocument();
+		expect(document.querySelector('#comments')?.getAttribute('data-comment-target')).toBe('post');
 	});
 
 	it('guides guests to sign in instead of showing the composer', async () => {
@@ -100,6 +100,24 @@ describe('CommentsSection', () => {
 		await expect.element(page.getByText('审核中')).toBeInTheDocument();
 		await expect.element(page.getByText('置顶')).toBeInTheDocument();
 		await expect.element(page.getByRole('heading', { name: /评论/ })).toHaveTextContent('(1)');
+	});
+
+	it('renders owner/pending badges on replies too', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([root({ replies: [reply({ isOwner: true, isPending: true })] })])
+		});
+		const item = document.querySelector('[data-comment-id="reply-1"]');
+		expect(item?.textContent).toContain('站长');
+		expect(item?.textContent).toContain('审核中');
+	});
+
+	it('hides the reply entry on pending rows (the server would refuse them)', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([root({ isPending: true })])
+		});
+		expect(document.querySelector('[data-reply-target="root-1"]')).toBeNull();
 	});
 
 	it('keeps the floor for a deleted root while its replies stay visible', async () => {
@@ -164,6 +182,9 @@ describe('CommentsSection', () => {
 		expect(
 			document.querySelector('input[name="parentId"]')?.closest('form')?.getAttribute('action')
 		).toBe('?/reply');
+		expect(
+			document.querySelector('[data-reply-target="root-1"]')?.getAttribute('aria-expanded')
+		).toBe('true');
 
 		await clickReplyTarget('reply-1');
 		await expect
@@ -182,6 +203,16 @@ describe('CommentsSection', () => {
 			form: { submitted: 'pending' }
 		});
 		await expect.element(page.getByText('已提交，待审核。')).toBeInTheDocument();
+	});
+
+	it('renders a failed submission as an alert', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([]),
+			form: { message: '提交失败' }
+		});
+		const alert = document.querySelector('[role="alert"]');
+		expect(alert?.textContent).toContain('提交失败');
 	});
 
 	it('shows the truncation note when the page was capped', async () => {
