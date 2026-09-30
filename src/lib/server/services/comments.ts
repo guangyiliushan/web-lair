@@ -227,7 +227,7 @@ export interface SubmitCommentInput {
 	parentId?: string | null;
 	text: string;
 	/** Signed-in reader; the route resolves the display-name snapshot. */
-	user: { id: string; role: unknown };
+	user: { id: string; role?: unknown };
 	author: string;
 	avatar: string | null;
 	/** Test seam: cache store override (defaults to the process-wide store). */

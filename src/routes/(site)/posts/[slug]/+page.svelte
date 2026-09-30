@@ -1,9 +1,10 @@
 <script lang="ts">
+	import { CommentsSection } from '$lib/components/comments';
 	import { MarkdownRenderer } from '$lib/components/markdown';
 	import { localizeHref } from '$lib/paraglide/runtime';
-	import type { PageData } from './$types';
+	import type { PageProps } from './$types';
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: PageProps = $props();
 </script>
 
 <svelte:head>
@@ -23,6 +24,17 @@
 	<div class="mt-8">
 		<MarkdownRenderer html={data.html} prose />
 	</div>
+
+	{#if data.discussion}
+		<CommentsSection
+			targetType="post"
+			threads={data.discussion}
+			canComment={data.viewer.canComment}
+			emailVerified={data.viewer.emailVerified}
+			loginUrl={data.viewer.loginUrl}
+			form={form ?? null}
+		/>
+	{/if}
 
 	<footer class="mt-16 border-t border-border/40 pt-5">
 		<a
