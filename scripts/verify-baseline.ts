@@ -34,6 +34,7 @@ if (unknownArgs.length > 0) {
 
 const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', import.meta.url));
 const JOURNAL_PATH = fileURLToPath(new URL('../drizzle/meta/_journal.json', import.meta.url));
+const VISUALIZER_PATH = fileURLToPath(new URL('../.drizzle/visualizer.json', import.meta.url));
 
 const EXPECTED = { tables: 48, indexes: 114, checks: 69, fks: 46, uuidv7: 36 };
 
@@ -392,6 +393,14 @@ const inlineUniques = [...text.matchAll(/CONSTRAINT "([a-z_0-9]+)" UNIQUE/g)].ma
 
 async function fileChecks(): Promise<void> {
 	sameSets([...tableColumns.keys()], EXPECTED_TABLE_NAMES, 'table set');
+	// .drizzle/visualizer.json is hand-maintained and has drifted twice (AI-1
+	// batch, 09-28 integration) - pin its id set to the baseline table set.
+	const visualizer = JSON.parse(readFileSync(VISUALIZER_PATH, 'utf8')) as Array<{ id: string }>;
+	sameSets(
+		visualizer.map((entry) => entry.id),
+		EXPECTED_TABLE_NAMES,
+		'.drizzle/visualizer.json ids vs baseline table set'
+	);
 	expect(tableBlocks.length === EXPECTED.tables, `table count = ${tableBlocks.length}`);
 	expect(indexDefs.length === EXPECTED.indexes, `index count = ${indexDefs.length}`);
 	expect(allChecks.length === EXPECTED.checks, `check count = ${allChecks.length}`);
