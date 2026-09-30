@@ -8,9 +8,12 @@ import type { StoredObjectBody, StoredObjectHead } from '$lib/server/storage/por
 const dbMock = vi.hoisted(() => ({
 	select: vi.fn(),
 	insert: vi.fn(),
+	update: vi.fn(),
 	delete: vi.fn(),
 	$count: vi.fn()
 }));
+/** Dedupe hits touch updated_at via db.update(files).set(...).where(...). */
+const updateChain = { set: vi.fn(() => ({ where: vi.fn(async () => {}) })) };
 const storageMock = vi.hoisted(() => ({
 	put: vi.fn<
 		(key: string, data: Uint8Array, options?: { contentType?: string }) => Promise<{ etag: string }>
@@ -106,6 +109,7 @@ beforeEach(() => {
 	getOptionMock.mockResolvedValue({ pendingDays: 7, detachedDays: 30 });
 	storageMock.put.mockResolvedValue({ etag: '"etag"' });
 	storageMock.delete.mockResolvedValue(undefined);
+	dbMock.update.mockReturnValue(updateChain);
 });
 
 describe('uploadFile', () => {
@@ -167,6 +171,10 @@ describe('uploadFile', () => {
 		expect(dbMock.insert).not.toHaveBeenCalled();
 		const chain = dbMock.select.mock.results[0].value as { from: ReturnType<typeof vi.fn> };
 		expect(chain.from.mock.calls[0][0]).toBe(filesTable);
+		// Round-3 ruling: the dedupe hit refreshes the last-event anchor.
+		expect(dbMock.update).toHaveBeenCalledTimes(1);
+		expect(dbMock.update.mock.calls[0][0]).toBe(filesTable);
+		expect(updateChain.set).toHaveBeenCalledWith({ updatedAt: expect.any(Date) });
 	});
 
 	it('uploads original + variants then writes the registry row (zero orphans)', async () => {
@@ -347,6 +355,25 @@ describe('uploadFiles', () => {
 		});
 	});
 
+	it('accepts a batch of exactly the cap (boundary)', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		processImageMock.mockResolvedValueOnce(PROCESSED);
+		dbMock.insert.mockReturnValueOnce(
+			insertChain([{ ...EXISTING_ROW, width: 64, height: 32, status: 'pending' }])
+		);
+		// Items 2..N dedupe against the freshly-registered row.
+		dbMock.select.mockReturnValue(selectChain([EXISTING_ROW]));
+
+		const inputs = Array.from({ length: MAX_BATCH_COUNT }, (_, index) => ({
+			fileName: `edge-${index}.jpg`,
+			bytes: JPEG
+		}));
+		const results = await uploadFiles(inputs, { storage: storageMock });
+
+		expect(results).toHaveLength(MAX_BATCH_COUNT);
+		expect(results.every((result) => result.ok)).toBe(true);
+	});
+
 	it('continues past rejected items and still reports successes', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		processImageMock.mockResolvedValueOnce(PROCESSED);
@@ -433,7 +460,7 @@ describe('listPurgeCandidates', () => {
 					status: 'pending',
 					createdAt: new Date(now - 8 * day),
 					detachedAt: null,
-					updatedAt: new Date(now)
+					updatedAt: new Date(now - 8 * day)
 				},
 				{
 					id: 'b',
@@ -442,7 +469,7 @@ describe('listPurgeCandidates', () => {
 					status: 'pending',
 					createdAt: new Date(now - 1 * day),
 					detachedAt: null,
-					updatedAt: new Date(now)
+					updatedAt: new Date(now - 1 * day)
 				},
 				{
 					id: 'c',
@@ -471,6 +498,31 @@ describe('listPurgeCandidates', () => {
 		expect(candidates[0].ageDays).toBe(8);
 		expect(getOptionMock).toHaveBeenCalledWith('media.purge', dbMock);
 	});
+
+	it('includes a candidate at exactly the TTL boundary (frozen clock)', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-01-08T00:00:00Z'));
+		try {
+			dbMock.select.mockReturnValueOnce(
+				selectChain([
+					{
+						id: 'edge',
+						objectKey: 'ee/edge.jpg',
+						fileName: 'edge.jpg',
+						status: 'pending',
+						createdAt: new Date('2026-01-01T00:00:00Z'),
+						detachedAt: null,
+						// Anchor = LAST event (round-3): exactly 7 days, inclusive.
+						updatedAt: new Date('2026-01-01T00:00:00Z')
+					}
+				])
+			);
+			const candidates = await listPurgeCandidates();
+			expect(candidates.map((candidate) => candidate.id)).toEqual(['edge']);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });
 
 describe('purgeMedia', () => {
@@ -481,7 +533,8 @@ describe('purgeMedia', () => {
 		status: 'pending',
 		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
 		detachedAt: null,
-		updatedAt: new Date()
+		// pending anchors on the LAST event since the round-3 ruling.
+		updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
 	};
 
 	it('dry-run reports candidates but deletes nothing', async () => {

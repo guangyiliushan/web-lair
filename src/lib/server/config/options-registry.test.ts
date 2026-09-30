@@ -119,8 +119,10 @@ describe('options registry (AI-1.1)', () => {
 		expect(state.insertCalls).toHaveLength(0);
 	});
 
-	it('rejects negative or fractional media.purge TTLs', async () => {
+	it('rejects non-positive or fractional media.purge TTLs', async () => {
 		await expect(setOption('media.purge', { pendingDays: -1, detachedDays: 30 })).rejects.toThrow();
+		await expect(setOption('media.purge', { pendingDays: 0, detachedDays: 30 })).rejects.toThrow();
+		await expect(setOption('media.purge', { pendingDays: 7, detachedDays: 0 })).rejects.toThrow();
 		await expect(
 			setOption('media.purge', { pendingDays: 7.5, detachedDays: 30 })
 		).rejects.toThrow();

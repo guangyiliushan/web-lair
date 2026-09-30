@@ -169,7 +169,9 @@ async function main(): Promise<void> {
 		mimeType: 'application/octet-stream',
 		byteSize: 12,
 		status: 'pending',
-		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+		// pending anchors on the LAST event (round-3): keep the probe stale.
+		updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
 	});
 	await db.insert(schema.drafts).values({
 		refType: 'post',
@@ -236,7 +238,8 @@ async function main(): Promise<void> {
 		mimeType: 'image/png',
 		byteSize: 1,
 		status: 'pending',
-		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+		updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
 	});
 	const [galleryFile] = await db
 		.select({ id: schema.files.id })
@@ -264,7 +267,8 @@ async function main(): Promise<void> {
 		mimeType: 'image/jpeg',
 		byteSize: 11,
 		status: 'pending',
-		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+		updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
 	});
 	await db.insert(schema.drafts).values({
 		refType: 'post',

@@ -32,7 +32,7 @@ import {
 /** Structural handle over the app db, mirroring the jobs-line pattern. */
 export type FilesDb = Pick<
 	typeof import('$lib/server/db').db,
-	'select' | 'insert' | 'delete' | '$count'
+	'select' | 'insert' | 'update' | 'delete' | '$count'
 >;
 
 export interface FilesDeps {
@@ -145,7 +145,13 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 	const { storage, database } = await resolveDeps(deps);
 	const contentHash = createHash('sha256').update(input.bytes).digest('hex');
 	const existing = await findFileByHash(contentHash, database);
-	if (existing) return { ...existing, deduplicated: true };
+	if (existing) {
+		// A dedupe hit is a USE: refresh the last-event anchor so the TTL
+		// purge (pending anchors on updated_at since the round-3 ruling)
+		// never deletes content that was handed out moments ago.
+		await database.update(files).set({ updatedAt: new Date() }).where(eq(files.id, existing.id));
+		return { ...existing, deduplicated: true };
+	}
 
 	const objectKey = objectKeyFor(contentHash, sniffed.ext);
 	// Plan §4.3: GIF is a pass-through format — no transcode; the original IS
@@ -309,13 +315,13 @@ const IN_GALLERY_SQL = sql<boolean>`exists (select 1 from ${photos} where ${phot
 
 /**
  * Expiry instant for a row under the current TTLs — the ordering key shared
- * by the purge sweep and the admin "orphan" view (a created_at ordering
- * starved long-detached rows behind newer ones; round-2 review).
+ * by the purge sweep and the admin "orphan" view. Anchor = LAST event
+ * (pending: updated_at, refreshed by dedupe hits; detached: detached_at).
  */
 function purgeExpiresAt(pendingDays: number, detachedDays: number) {
 	return sql`(case when ${files.status} = 'detached'
 		then coalesce(${files.detachedAt}, ${files.updatedAt}) + make_interval(days => ${detachedDays})
-		else ${files.createdAt} + make_interval(days => ${pendingDays}) end)`;
+		else ${files.updatedAt} + make_interval(days => ${pendingDays}) end)`;
 }
 
 export async function listFiles(
@@ -347,7 +353,7 @@ export async function listFiles(
 			sql`(select count(*) from ${fileReferences} where ${fileReferences.fileId} = ${files.id}) = 0`,
 			sql`not exists (select 1 from ${photos} where ${photos.fileId} = ${files.id})`,
 			sql`(
-				(${files.status} = 'pending' and ${files.createdAt} <= now() - make_interval(days => ${pendingDays}))
+				(${files.status} = 'pending' and ${files.updatedAt} <= now() - make_interval(days => ${pendingDays}))
 				or (${files.status} = 'detached' and coalesce(${files.detachedAt}, ${files.updatedAt}) <= now() - make_interval(days => ${detachedDays}))
 			)`
 		);
@@ -458,7 +464,7 @@ export async function listPurgeCandidates(deps: FilesDeps = {}): Promise<PurgeCa
 	const now = Date.now();
 	const candidates: PurgeCandidate[] = [];
 	for (const row of rows) {
-		const since = row.status === 'detached' ? (row.detachedAt ?? row.updatedAt) : row.createdAt;
+		const since = row.status === 'detached' ? (row.detachedAt ?? row.updatedAt) : row.updatedAt;
 		const ageDays = (now - new Date(since).getTime()) / DAY_MS;
 		const ttl = row.status === 'detached' ? detachedDays : pendingDays;
 		if (ageDays >= ttl) {

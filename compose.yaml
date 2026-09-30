@@ -4,7 +4,10 @@ services:
     image: postgres:18
     restart: always
     ports:
-      - '5432:5432'
+      # Loopback-only: Docker docs — omitting the host IP publishes the port
+      # to the outside world (rustfs/valkey follow the same rule). This is the
+      # §25 "5432 收内网" deployment item, executed 2026-09-30.
+      - '127.0.0.1:5432:5432'
     env_file:
       - .env
     environment:

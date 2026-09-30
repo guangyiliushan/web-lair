@@ -95,12 +95,15 @@ export const optionRegistry = {
 	},
 	'media.purge': {
 		schema: z.object({
-			pendingDays: z.number('必须为数字').int('必须为整数').nonnegative('不能小于 0'),
-			detachedDays: z.number('必须为数字').int('必须为整数').nonnegative('不能小于 0')
+			pendingDays: z.number('必须为数字').int('必须为整数').positive('必须大于 0'),
+			detachedDays: z.number('必须为数字').int('必须为整数').positive('必须大于 0')
 		}),
-		// Storage line §4.6: never-referenced `pending` blobs purge after a
-		// week, `detached` blobs after a month. Photos-linked files are exempt
-		// from auto-purge entirely (gallery files are never cleaned silently).
+		// Storage line §4.6: never-referenced `pending` blobs purge a week
+		// after their LAST event (dedupe hits refresh updated_at), `detached`
+		// blobs a month after detaching. Photos-linked files are exempt from
+		// auto-purge entirely (gallery files are never cleaned silently).
+		// Floor is 1 day (round-3 ruling): a destructive knob must not reach
+		// zero; an explicit instant-clean switch can be added if ever needed.
 		default: { pendingDays: 7, detachedDays: 30 }
 	}
 } as const satisfies Record<string, RegistryEntry>;
