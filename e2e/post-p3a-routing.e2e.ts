@@ -11,11 +11,13 @@ import { zhCnLocale } from './locale-fixture';
  *   /posts/X       -> 307 -> /en/posts/X (document requests canonicalise)
  *   /en            -> 404                (bare locale resolves to no route)
  *
- * plus the read-side minimum: list/detail on seeded rows, the missing-
- * language 404 hint, scheduled-in-future invisibility and a language switch
- * on a content page (which must be a single document navigation to the
- * localised URL). Fixtures live on the shared dev database under the
- * `e2e-p3a%` slug prefix and are cleaned in beforeAll/afterAll.
+ * plus the read-side minimum: list/detail on seeded rows (with language-leak,
+ * pinned-card and excerpt teeth), the missing-language 404 hint (filtered to
+ * visible languages only), scheduled-in-future invisibility, a language
+ * switch on a content page (exactly one document navigation) and the
+ * client-side canonicalisation of an SPA navigation to an unprefixed URL.
+ * Fixtures live on the shared dev database under the `e2e-p3a%` slug prefix
+ * and are cleaned in beforeAll/afterAll.
  */
 
 const CATEGORY_ID = '00000000-0000-7000-8000-0000000003a1';
@@ -23,9 +25,11 @@ const EN_ID = '00000000-0000-7000-8000-0000000003a2';
 const ZH_ID = '00000000-0000-7000-8000-0000000003a3';
 const ONLY_EN_ID = '00000000-0000-7000-8000-0000000003a4';
 const SCHEDULED_ID = '00000000-0000-7000-8000-0000000003a5';
+const ZH_DRAFT_ID = '00000000-0000-7000-8000-0000000003a6';
 const GROUP_MAIN = '00000000-0000-7000-8000-0000000003b0';
 const GROUP_ONLY_EN = '00000000-0000-7000-8000-0000000003b1';
 const GROUP_SCHEDULED = '00000000-0000-7000-8000-0000000003b2';
+const GROUP_ZH_DRAFT = '00000000-0000-7000-8000-0000000003b3';
 
 const SLUG_MAIN = 'e2e-p3a-post';
 const SLUG_ONLY_EN = 'e2e-p3a-only-en';
@@ -34,6 +38,8 @@ const TITLE_EN = 'E2E P3A English post';
 const TITLE_ZH = 'E2E P3A 中文文章';
 const TITLE_ONLY_EN = 'E2E P3A only english';
 const TITLE_SCHEDULED = 'E2E P3A scheduled future';
+const TITLE_ZH_DRAFT = 'E2E P3A 中文草稿';
+const BODY_TEXT = 'Hello world from P3-a.';
 
 function psql(sql: string): string {
 	return execFileSync(
@@ -61,8 +67,14 @@ test.beforeAll(() => {
 			`insert into posts (id, slug, title, content, lang, status, published_at, category_id, translation_group, translated_from_post_id, translation_origin) values`,
 			`('${ZH_ID}', '${SLUG_MAIN}', '${TITLE_ZH}', '中文正文段落。', 'zh-cn', 'published', now() - interval '1 day', '${CATEGORY_ID}', '${GROUP_MAIN}', '${EN_ID}', 'human')`,
 			`;`,
+			// Pinned (pin_at set) so the pinned-card extraction has teeth.
+			`insert into posts (id, slug, title, content, lang, status, published_at, category_id, translation_group, pin_at) values`,
+			`('${ONLY_EN_ID}', '${SLUG_ONLY_EN}', '${TITLE_ONLY_EN}', 'Only available in English.', 'en', 'published', now() - interval '3 days', '${CATEGORY_ID}', '${GROUP_ONLY_EN}', now())`,
+			`;`,
+			// A hidden (draft) translation of the same slug: the availability
+			// hint must not list it.
 			`insert into posts (id, slug, title, content, lang, status, published_at, category_id, translation_group) values`,
-			`('${ONLY_EN_ID}', '${SLUG_ONLY_EN}', '${TITLE_ONLY_EN}', 'Only available in English.', 'en', 'published', now() - interval '3 days', '${CATEGORY_ID}', '${GROUP_ONLY_EN}')`,
+			`('${ZH_DRAFT_ID}', '${SLUG_ONLY_EN}', '${TITLE_ZH_DRAFT}', '草稿。', 'zh-cn', 'draft', now() - interval '1 day', '${CATEGORY_ID}', '${GROUP_ZH_DRAFT}')`,
 			`;`,
 			`insert into posts (id, slug, title, content, lang, status, published_at, category_id, translation_group) values`,
 			`('${SCHEDULED_ID}', '${SLUG_SCHEDULED}', '${TITLE_SCHEDULED}', 'Not yet published.', 'en', 'scheduled', now() + interval '1 day', '${CATEGORY_ID}', '${GROUP_SCHEDULED}')`
@@ -94,17 +106,22 @@ test.describe('P3-a routing nails', () => {
 	test('the homepage serves 200 (cookie-driven, exempt)', async ({ page }) => {
 		const response = await page.goto('/');
 		expect(response?.status()).toBe(200);
+		await expect(page).toHaveURL('/');
+		expect(response?.request().redirectedFrom()).toBeNull();
 	});
 
 	test('/account serves 200 (tool page, exempt)', async ({ page }) => {
 		const response = await page.goto('/account');
 		expect(response?.status()).toBe(200);
+		await expect(page).toHaveURL('/account');
+		expect(response?.request().redirectedFrom()).toBeNull();
 	});
 
 	test('the canonical content URL renders the post', async ({ page }) => {
 		const response = await page.goto(`/en/posts/${SLUG_MAIN}`);
 		expect(response?.status()).toBe(200);
 		await expect(page.getByRole('heading', { name: TITLE_EN })).toBeVisible();
+		await expect(page.locator('article').first()).toContainText(BODY_TEXT);
 	});
 
 	test('an unprefixed content URL redirects to the canonical one (307)', async ({ page }) => {
@@ -131,26 +148,39 @@ test.describe('P3-a routing nails', () => {
 		}
 	});
 
+	test('a trailing-slash bare locale normalises then 404s', async ({ page }) => {
+		const response = await page.goto('/en/');
+		expect(response?.status()).toBe(404);
+		expect(response?.request().redirectedFrom()).not.toBeNull();
+	});
+
 	test('non-document requests to an unprefixed URL render, not redirect', async ({ request }) => {
 		// The middleware only canonicalises document requests (Sec-Fetch-Dest:
 		// document); plain fetches fall through to the de-localised route.
-		const response = await request.get(`/posts/${SLUG_MAIN}`);
+		// maxRedirects: 0 keeps the assertion honest — if the document guard
+		// were dropped this request would turn into a 307.
+		const response = await request.get(`/posts/${SLUG_MAIN}`, { maxRedirects: 0 });
 		expect(response.status()).toBe(200);
 	});
 });
 
 test.describe('P3-a read side', () => {
-	test('the list shows visible posts of the locale and hides scheduled ones', async ({ page }) => {
+	test('the list shows visible posts of the locale only, with pinned card', async ({ page }) => {
 		const response = await page.goto('/en/posts');
 		expect(response?.status()).toBe(200);
 		await expect(page.getByRole('heading', { name: 'Posts' })).toBeVisible();
 		await expect(page.getByRole('link', { name: TITLE_EN })).toBeVisible();
+		await expect(page.getByText(BODY_TEXT)).toBeVisible();
+		await expect(page.getByText('Pinned')).toBeVisible();
+		await expect(page.getByText(TITLE_ONLY_EN)).toHaveCount(1);
+		await expect(page.getByText(TITLE_ZH)).toHaveCount(0);
 		await expect(page.getByText(TITLE_SCHEDULED)).toHaveCount(0);
 	});
 
-	test('the Chinese list shows the Chinese translation', async ({ page }) => {
+	test('the Chinese list shows the Chinese translation only', async ({ page }) => {
 		await page.goto('/zh-cn/posts');
 		await expect(page.getByRole('link', { name: TITLE_ZH })).toBeVisible();
+		await expect(page.getByText(TITLE_EN)).toHaveCount(0);
 	});
 
 	test('a scheduled-in-future post is not readable yet', async ({ page }) => {
@@ -163,10 +193,21 @@ test.describe('P3-a read side', () => {
 		expect(response?.status()).toBe(404);
 		await expect(page.getByText('This page is available in:')).toBeVisible();
 		const english = page.getByRole('link', { name: 'English' });
-		await expect(english).toBeVisible();
+		await expect(english).toHaveAttribute('href', `/en/posts/${SLUG_ONLY_EN}`);
 		await english.click();
 		await expect(page).toHaveURL(`/en/posts/${SLUG_ONLY_EN}`);
 		await expect(page.getByRole('heading', { name: TITLE_ONLY_EN })).toBeVisible();
+	});
+
+	test('the availability hint only lists languages with a visible version', async ({ page }) => {
+		// The same slug has an en (visible) and a zh-cn (draft) row; asking
+		// for ja must show English only — a dropped visibility filter would
+		// leak the draft language into the hint.
+		const response = await page.goto(`/ja/posts/${SLUG_ONLY_EN}`);
+		expect(response?.status()).toBe(404);
+		await expect(page.getByRole('link', { name: 'English' })).toBeVisible();
+		await expect(page.getByRole('link', { name: '简体中文' })).toHaveCount(0);
+		await expect(page.getByText(TITLE_ZH_DRAFT)).toHaveCount(0);
 	});
 
 	test('a cookie language canonicalises the unprefixed URL (scenario 24)', async ({ browser }) => {
@@ -189,7 +230,27 @@ test.describe('P3-a read side', () => {
 		await expect(page).toHaveURL(`/zh-cn/posts/${SLUG_MAIN}`);
 		await expect.poll(() => page.evaluate(() => document.documentElement.lang)).toBe('zh-cn');
 		await expect(page.getByRole('heading', { name: TITLE_ZH })).toBeVisible();
-		await page.waitForTimeout(1500);
+		await page.waitForTimeout(2000);
+		expect(loads()).toBe(1);
+	});
+
+	test('an SPA navigation to an unprefixed URL re-canonicalises with one document load', async ({
+		page
+	}) => {
+		// The header's Posts link is unprefixed (/posts): the client router
+		// navigates without a request, afterNavigate then canonicalises to
+		// /en/posts via a full document load (root layout sync).
+		await page.goto(`/en/posts/${SLUG_MAIN}`);
+		const loads = documentLoads(page);
+
+		const postsLink = page.getByRole('banner').getByRole('link', { name: 'Posts' }).first();
+		await expect(async () => {
+			await postsLink.click();
+			await expect(page).toHaveURL('/en/posts', { timeout: 5000 });
+		}).toPass({ timeout: 20000 });
+
+		await expect(page.getByRole('heading', { name: 'Posts' })).toBeVisible();
+		await page.waitForTimeout(2000);
 		expect(loads()).toBe(1);
 	});
 });

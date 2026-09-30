@@ -54,12 +54,21 @@ export default defineConfig({
 			// the docs' prescribed treatment for routes with no i18n surface).
 			routeStrategies: [
 				{ match: '/', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
-				{ match: '/account', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
-				{ match: '/login', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
-				{ match: '/register', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
-				{ match: '/forgot-password', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
-				{ match: '/reset-password', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
-				{ match: '/verify-email', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
+				{ match: '/account/:path(.*)?', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
+				{ match: '/login/:path(.*)?', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
+				{ match: '/register/:path(.*)?', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
+				{
+					match: '/forgot-password/:path(.*)?',
+					strategy: ['cookie', 'preferredLanguage', 'baseLocale']
+				},
+				{
+					match: '/reset-password/:path(.*)?',
+					strategy: ['cookie', 'preferredLanguage', 'baseLocale']
+				},
+				{
+					match: '/verify-email/:path(.*)?',
+					strategy: ['cookie', 'preferredLanguage', 'baseLocale']
+				},
 				{ match: '/admin/:path(.*)?', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
 				{ match: '/api/:path(.*)?', exclude: true },
 				{ match: '/demo/:path(.*)?', exclude: true },

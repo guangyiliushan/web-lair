@@ -18,6 +18,9 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ params }) => {
 	const lang = getLocale();
 	const { slug } = params;
+	// One timestamp for both visibility checks, so a boundary post cannot be
+	// hidden for this language yet listed as available in the hint query.
+	const now = new Date();
 
 	const [row] = await db
 		.select({
@@ -29,14 +32,14 @@ export const load: PageServerLoad = async ({ params }) => {
 		})
 		.from(posts)
 		.innerJoin(categories, eq(posts.categoryId, categories.id))
-		.where(and(eq(posts.lang, lang), eq(posts.slug, slug), visiblePostCondition()))
+		.where(and(eq(posts.lang, lang), eq(posts.slug, slug), visiblePostCondition(now)))
 		.limit(1);
 
 	if (!row) {
 		const others = await db
 			.selectDistinct({ lang: posts.lang })
 			.from(posts)
-			.where(and(eq(posts.slug, slug), ne(posts.lang, lang), visiblePostCondition()));
+			.where(and(eq(posts.slug, slug), ne(posts.lang, lang), visiblePostCondition(now)));
 
 		const order = locales as readonly string[];
 		if (others.length > 0) {

@@ -116,7 +116,15 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 		return processor;
 	})();
 
-	return processorInitPromise;
+	try {
+		return await processorInitPromise;
+	} catch (error) {
+		// A transient initialisation failure (Shiki/plugin/fs) must not poison
+		// the singleton: keep the rejection observable for this call, but let
+		// the next request retry instead of 500-ing until a restart.
+		processorInitPromise = null;
+		throw error;
+	}
 }
 
 /**

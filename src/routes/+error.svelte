@@ -5,6 +5,7 @@
 
 	let status = $derived(page.status);
 	let message = $derived(page.error?.message ?? 'Something went wrong');
+	const available = $derived(page.error?.available ?? []);
 
 	const isNotFound = $derived(status === 404);
 	const isForbidden = $derived(status === 403);
@@ -25,7 +26,9 @@
 
 	const description = $derived(
 		isNotFound
-			? 'The page you are looking for does not exist or has been moved.'
+			? available.length > 0
+				? message
+				: 'The page you are looking for does not exist or has been moved.'
 			: isForbidden
 				? 'You do not have permission to access this page.'
 				: isUnauthorized
@@ -61,11 +64,11 @@
 			<p class="text-sm text-muted-foreground">{description}</p>
 		</div>
 
-		{#if page.error?.available?.length}
+		{#if available.length}
 			<div class="space-y-3">
 				<p class="text-sm text-muted-foreground">This page is available in:</p>
 				<ul class="flex flex-wrap justify-center gap-2">
-					{#each page.error.available as item (item.lang)}
+					{#each available as item (item.lang)}
 						<li>
 							<a
 								href={item.href}

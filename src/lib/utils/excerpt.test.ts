@@ -36,4 +36,40 @@ describe('plainTextExcerpt', () => {
 	it('returns an empty string for empty input', () => {
 		expect(plainTextExcerpt('')).toBe('');
 	});
+
+	it('strips blockquote and list markers', () => {
+		expect(plainTextExcerpt('> quoted\n- item\n1. item')).toBe('quoted item item');
+	});
+
+	it('strips strike-through markers', () => {
+		expect(plainTextExcerpt('a ~~b~~ c')).toBe('a b c');
+	});
+
+	it('handles one level of nested parentheses in link targets', () => {
+		expect(plainTextExcerpt('see [a](https://x.com/a_(b)) end')).toBe('see a end');
+	});
+
+	it('keeps text at exactly maxLength untouched', () => {
+		expect(plainTextExcerpt('x'.repeat(50), 50)).toBe('x'.repeat(50));
+	});
+
+	it('truncates at maxLength with a trailing ellipsis', () => {
+		expect(plainTextExcerpt('x'.repeat(51), 50)).toBe(`${'x'.repeat(50)}…`);
+	});
+
+	it('trims the truncated tail before appending the ellipsis', () => {
+		expect(plainTextExcerpt('aaa '.repeat(30), 12)).toBe('aaa aaa aaa…');
+	});
+
+	it('truncates long CJK text by characters', () => {
+		expect(plainTextExcerpt('中'.repeat(200), 50)).toBe(`${'中'.repeat(50)}…`);
+	});
+
+	it('uses a default budget of 160 characters', () => {
+		expect(plainTextExcerpt('a'.repeat(200))).toBe(`${'a'.repeat(160)}…`);
+	});
+
+	it('returns an empty string when only markers remain', () => {
+		expect(plainTextExcerpt('```\ncode\n```')).toBe('');
+	});
 });
