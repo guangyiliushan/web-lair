@@ -39,10 +39,6 @@ export class MemoryCacheStore implements CacheStore {
 		}
 	}
 
-	async del(key: string): Promise<void> {
-		this.#entries.delete(key);
-	}
-
 	async incr(key: string, windowSeconds: number): Promise<number> {
 		const current = await this.get<number>(key);
 		if (current === null) {

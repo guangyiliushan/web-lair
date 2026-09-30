@@ -11,9 +11,6 @@ function throwingStore(): CacheStore {
 		set: vi.fn(async () => {
 			throw new Error('cache down');
 		}),
-		del: vi.fn(async () => {
-			throw new Error('cache down');
-		}),
 		incr: vi.fn(async (): Promise<number> => {
 			throw new Error('cache down');
 		})
@@ -68,11 +65,20 @@ describe('cached()', () => {
 	});
 
 	it('does not cache null results (failures stay failures)', async () => {
-		const store = new MemoryCacheStore();
+		// A recording set() gives this teeth: MemoryCacheStore alone cannot
+		// distinguish "stored null" from "miss" (round-2 mutation m10).
+		const inner = new MemoryCacheStore();
+		const setSpy = vi.fn((key: string, value: unknown, ttl: number) => inner.set(key, value, ttl));
+		const store: CacheStore = {
+			get: (key) => inner.get(key),
+			set: setSpy,
+			incr: (key, ttl) => inner.incr(key, ttl)
+		};
 		const loader = vi.fn(async () => null);
 		await cached(store, 'a', 60, loader);
 		await cached(store, 'a', 60, loader);
 		expect(loader).toHaveBeenCalledTimes(2);
+		expect(setSpy).not.toHaveBeenCalled();
 	});
 });
 
@@ -94,7 +100,6 @@ describe('ValkeyCacheStore (fail-open against a dead endpoint)', () => {
 		const store = new ValkeyCacheStore('redis://127.0.0.1:6399');
 		expect(await store.get('k')).toBeNull();
 		await expect(store.set('k', 1, 60)).resolves.toBeUndefined();
-		await expect(store.del('k')).resolves.toBeUndefined();
 		await expect(store.incr('k', 60)).rejects.toThrow();
 		await store.quit();
 	});

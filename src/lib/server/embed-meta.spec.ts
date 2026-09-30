@@ -27,9 +27,6 @@ function brokenStore(): CacheStore {
 		set: vi.fn(async () => {
 			throw new Error('cache down');
 		}),
-		del: vi.fn(async () => {
-			throw new Error('cache down');
-		}),
 		incr: vi.fn(async (): Promise<number> => {
 			throw new Error('cache down');
 		})
@@ -164,6 +161,24 @@ describe('handleEmbedMetaRequest', () => {
 		// would serve the second call from cache and fetch only once).
 		await handleEmbedMetaRequest(requestFor('https://github.com/a/b'), { cache: freshStore() });
 		await handleEmbedMetaRequest(requestFor('https://github.com/a/b'), { cache: freshStore() });
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('scopes cache keys to the upstream URL', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(jsonResponse({ full_name: 'a/first' }))
+			.mockResolvedValueOnce(jsonResponse({ full_name: 'a/second' }));
+		vi.stubGlobal('fetch', fetchMock);
+		const cache = freshStore();
+		const first = await handleEmbedMetaRequest(requestFor('https://github.com/a/first'), {
+			cache
+		});
+		const second = await handleEmbedMetaRequest(requestFor('https://github.com/a/second'), {
+			cache
+		});
+		expect((await first.json()).title).toBe('a/first');
+		expect((await second.json()).title).toBe('a/second');
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 

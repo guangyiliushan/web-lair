@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq, ilike, inArray, like, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, like, sql } from 'drizzle-orm';
 import { drafts, files, notes, photos, posts } from '$lib/server/db/content';
+import type { FileStatus } from '$lib/server/db/content/file.schema';
 import { fileReferences } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { getOption } from '$lib/server/config/options-registry';
+import { VARIANT_NAMES, objectKeyFor, variantKeyFor } from '$lib/media/keys';
 import type { ObjectStoragePort } from '$lib/server/storage/port';
 import { processImage, readImageSize } from '$lib/server/media/variants';
 import {
@@ -72,22 +74,11 @@ export interface UploadedFile {
 	byteSize: number;
 	width: number | null;
 	height: number | null;
-	status: string;
+	status: FileStatus;
 	deduplicated: boolean;
 }
 
-const VARIANT_NAMES = ['thumb', 'preview', 'full'] as const;
-type VariantName = (typeof VARIANT_NAMES)[number];
-
-/** Content-addressed object key: `<sha[0:2]>/<sha256>.<ext>` (plan §3.1). */
-export function objectKeyFor(contentHash: string, ext: string): string {
-	return `${contentHash.slice(0, 2)}/${contentHash}.${ext}`;
-}
-
-/** Variant keys append the suffix to the canonical key (plan §3.1). */
-export function variantKeyFor(objectKey: string, variant: VariantName): string {
-	return `${objectKey}@${variant}`;
-}
+/** Object-key builders/parser live in `$lib/media/keys` (single source). */
 
 const ROW_FIELDS = {
 	id: files.id,
@@ -109,7 +100,18 @@ async function findFileByHash(
 		.from(files)
 		.where(eq(files.contentHash, contentHash))
 		.limit(1);
-	return row ?? null;
+	return row ? { ...row, status: row.status as FileStatus } : null;
+}
+
+/** True when a canonical object key is registered — the /i attachment gate. */
+export async function isRegisteredKey(objectKey: string, deps: FilesDeps = {}): Promise<boolean> {
+	const { database } = await resolveDeps(deps);
+	const [row] = await database
+		.select({ id: files.id })
+		.from(files)
+		.where(eq(files.objectKey, objectKey))
+		.limit(1);
+	return Boolean(row);
 }
 
 async function deleteObjectAndVariants(
@@ -188,19 +190,33 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 				uploadedBy: input.uploadedBy ?? null
 			})
 			.returning(ROW_FIELDS);
-		return { ...row!, deduplicated: false };
+		return { ...row!, status: row!.status as FileStatus, deduplicated: false };
 	} catch (cause) {
-		if (pgErrorCode(cause) === '23505') {
-			const winner = await findFileByHash(contentHash, database);
-			if (winner) return { ...winner, deduplicated: true };
-		}
-		// Never compensate over a live winner. A raced duplicate whose INSERT
-		// failed with anything else (pool error, timeout, lost response) has
-		// the SAME content-addressed objects on disk as a row that now exists;
-		// deleting them would strand that row without bytes. Re-check before
-		// touching shared objects.
-		if (await findFileByHash(contentHash, database).catch(() => null)) {
-			throw cause;
+		// Before touching content-addressed (SHARED) objects, re-check whether
+		// a row exists for this hash. Either the racing insert won (23505) or
+		// our own insert committed with a lost response — both mean the bytes
+		// are live. A re-check that CANNOT run (the same outage that broke the
+		// insert) must not be read as "no winner": a stranded object is
+		// recoverable, deleted shared bytes are not.
+		const recheck = await findFileByHash(contentHash, database).then(
+			(row): { state: 'row'; row: Omit<UploadedFile, 'deduplicated'> } | { state: 'none' } =>
+				row ? { state: 'row', row } : { state: 'none' },
+			(): { state: 'unavailable' } => ({ state: 'unavailable' })
+		);
+		if (recheck.state === 'unavailable') throw cause;
+		if (recheck.state === 'row') {
+			// Keys are shared only when the extension matches: the extension is
+			// part of the key identity, so a same-family different-ext loser
+			// (jpg vs jpeg, txt vs md) owns objects the winner does not
+			// reference — delete exactly those, keep the shared ones.
+			const winnerKeys = new Set([
+				recheck.row.objectKey,
+				...VARIANT_NAMES.map((name) => variantKeyFor(recheck.row.objectKey, name))
+			]);
+			await Promise.allSettled(
+				putKeys.filter((key) => !winnerKeys.has(key)).map((key) => storage.delete(key))
+			);
+			return { ...recheck.row, deduplicated: true };
 		}
 		await Promise.allSettled(putKeys.map((key) => storage.delete(key)));
 		throw cause;
@@ -236,10 +252,19 @@ export async function uploadFiles(
 					message: error.message
 				});
 			} else {
+				// Raw driver messages (SQL + bound params) never reach the UI or
+				// the logs — same policy as the global handleError. Keep a
+				// sanitized line server-side, surface only the PG code.
+				const code = pgErrorCode(error);
+				console.warn('[files] upload failed', {
+					fileName: input.fileName,
+					error: error instanceof Error ? error.name : typeof error,
+					code: code ?? null
+				});
 				results.push({
 					fileName: input.fileName,
 					ok: false,
-					message: error instanceof Error ? error.message : String(error)
+					message: code ? `upload failed (${code})` : 'upload failed'
 				});
 			}
 		}
@@ -257,7 +282,7 @@ const SCAN_LIMIT = 2000;
 
 export interface FileListFilters {
 	kind?: UploadKind;
-	status?: string;
+	status?: FileStatus;
 	keyword?: string;
 	/** Only rows created at/after this instant (§6.1 time filter). */
 	since?: Date;
@@ -273,15 +298,25 @@ export interface FileListRow {
 	byteSize: number;
 	width: number | null;
 	height: number | null;
-	status: string;
-	thumbhash: string | null;
+	status: FileStatus;
 	createdAt: Date;
 	refCount: number;
-	isPhoto: boolean;
+	isInGallery: boolean;
 }
 
 const REF_COUNT_SQL = sql<number>`(select count(*)::int from ${fileReferences} where ${fileReferences.fileId} = ${files.id})`;
-const IS_PHOTO_SQL = sql<boolean>`exists (select 1 from ${photos} where ${photos.fileId} = ${files.id})`;
+const IN_GALLERY_SQL = sql<boolean>`exists (select 1 from ${photos} where ${photos.fileId} = ${files.id})`;
+
+/**
+ * Expiry instant for a row under the current TTLs — the ordering key shared
+ * by the purge sweep and the admin "orphan" view (a created_at ordering
+ * starved long-detached rows behind newer ones; round-2 review).
+ */
+function purgeExpiresAt(pendingDays: number, detachedDays: number) {
+	return sql`(case when ${files.status} = 'detached'
+		then coalesce(${files.detachedAt}, ${files.updatedAt}) + make_interval(days => ${detachedDays})
+		else ${files.createdAt} + make_interval(days => ${pendingDays}) end)`;
+}
 
 export async function listFiles(
 	filters: FileListFilters = {},
@@ -293,10 +328,16 @@ export async function listFiles(
 	if (filters.kind === 'file') conditions.push(sql`${files.mimeType} not like 'image/%'`);
 	if (filters.status) conditions.push(eq(files.status, filters.status));
 	const keyword = filters.keyword?.trim();
-	if (keyword) conditions.push(ilike(files.fileName, `%${keyword}%`));
+	if (keyword) {
+		// Escape LIKE metacharacters so an operator typing `_`/`%` reads them
+		// literally instead of silently matching everything.
+		const pattern = `%${keyword.replace(/[\\%_]/g, '\\$&')}%`;
+		conditions.push(sql`${files.fileName} ilike ${pattern} escape '\\'`);
+	}
 	if (filters.since && !Number.isNaN(filters.since.getTime())) {
 		conditions.push(sql`${files.createdAt} >= ${filters.since}`);
 	}
+	let orphanOrder: ReturnType<typeof purgeExpiresAt> | null = null;
 	if (filters.orphan) {
 		// §6.1 "游离" filter — the same criteria as listPurgeCandidates; keep
 		// the two in sync when the TTL semantics change.
@@ -310,9 +351,10 @@ export async function listFiles(
 				or (${files.status} = 'detached' and coalesce(${files.detachedAt}, ${files.updatedAt}) <= now() - make_interval(days => ${detachedDays}))
 			)`
 		);
+		orphanOrder = purgeExpiresAt(pendingDays, detachedDays);
 	}
 
-	return database
+	const rows = await database
 		.select({
 			id: files.id,
 			objectKey: files.objectKey,
@@ -322,21 +364,21 @@ export async function listFiles(
 			width: files.width,
 			height: files.height,
 			status: files.status,
-			thumbhash: files.thumbhash,
 			createdAt: files.createdAt,
 			refCount: REF_COUNT_SQL,
-			isPhoto: IS_PHOTO_SQL
+			isInGallery: IN_GALLERY_SQL
 		})
 		.from(files)
 		.where(conditions.length > 0 ? and(...conditions) : undefined)
-		.orderBy(desc(files.createdAt))
+		.orderBy(orphanOrder ?? desc(files.createdAt))
 		.limit(FILE_LIST_LIMIT);
+	return rows.map((row) => ({ ...row, status: row.status as FileStatus }));
 }
 
 export type DeleteFileResult =
 	| { kind: 'ok'; objectKey: string }
 	| { kind: 'not-found' }
-	| { kind: 'referenced'; refCount: number; isPhoto: boolean };
+	| { kind: 'referenced'; refCount: number; isInGallery: boolean };
 
 /**
  * Reference-guarded delete (§6.3): a file referenced by content or linked to
@@ -363,7 +405,7 @@ export async function deleteFile(id: string, deps: FilesDeps = {}): Promise<Dele
 		database.$count(photos, eq(photos.fileId, id))
 	]);
 	if (refCount > 0 || photoCount > 0) {
-		return { kind: 'referenced', refCount, isPhoto: photoCount > 0 };
+		return { kind: 'referenced', refCount, isInGallery: photoCount > 0 };
 	}
 
 	await deleteObjectAndVariants(row.objectKey, storage);
@@ -375,7 +417,7 @@ export interface PurgeCandidate {
 	id: string;
 	objectKey: string;
 	fileName: string;
-	status: string;
+	status: FileStatus;
 	ageDays: number;
 }
 
@@ -407,9 +449,10 @@ export async function listPurgeCandidates(deps: FilesDeps = {}): Promise<PurgeCa
 				sql`not exists (select 1 from ${photos} where ${photos.fileId} = ${files.id})`
 			)
 		)
-		// Oldest first so a capped sweep always considers the most overdue
-		// rows (registered §11: page through once the registry outgrows it).
-		.orderBy(asc(files.createdAt))
+		// Most-overdue-first by true expiry instant (anchor + its TTL): a
+		// created_at ordering starved long-detached rows behind newer ones
+		// (round-2 review). §11: page once the registry outgrows the cap.
+		.orderBy(purgeExpiresAt(pendingDays, detachedDays))
 		.limit(500);
 
 	const now = Date.now();
@@ -423,7 +466,7 @@ export async function listPurgeCandidates(deps: FilesDeps = {}): Promise<PurgeCa
 				id: row.id,
 				objectKey: row.objectKey,
 				fileName: row.fileName,
-				status: row.status,
+				status: row.status as FileStatus,
 				ageDays: Math.floor(ageDays)
 			});
 		}
@@ -431,26 +474,61 @@ export async function listPurgeCandidates(deps: FilesDeps = {}): Promise<PurgeCa
 	return candidates;
 }
 
+export interface PurgeFailure {
+	objectKey: string;
+	/** Sanitized reason (error name only — never driver messages). */
+	reason: string;
+}
+
 export interface PurgeOutcome {
 	dryRun: boolean;
 	candidates: PurgeCandidate[];
+	/** Candidates skipped because stored content still mentions their key. */
+	skipped: string[];
+	/** Deletions that failed (objects kept, row kept — retryable). */
+	failed: PurgeFailure[];
 	deleted: string[];
+	/** True when the mention scan hit its row cap — the guard may be partial. */
+	scanTruncated: boolean;
 }
 
-/** `purge-media` (§4.6): dry-run first by contract; deletion re-checks refs. */
+/**
+ * `purge-media` (§4.6): dry-run first by contract; deletion re-checks
+ * references AND refuses keys still mentioned by stored content. Until the
+ * ST-3 reference scan backfills `file_references` (registered §11 hold), an
+ * md mention is the only signal a file is in use — dry-run output alone
+ * would otherwise mark freshly referenced uploads as orphans.
+ */
 export async function purgeMedia(
 	options: { dryRun: boolean },
 	deps: FilesDeps = {}
 ): Promise<PurgeOutcome> {
-	const candidates = await listPurgeCandidates(deps);
+	const { storage, database } = await resolveDeps(deps);
+	const candidates = await listPurgeCandidates({ storage, db: database });
+	const { mentions, truncated } = await scanMentions(database);
+	const mentioned = new Set(mentions.map((mention) => mention.key));
+
+	const skipped = candidates
+		.filter((candidate) => mentioned.has(candidate.objectKey))
+		.map((candidate) => candidate.objectKey);
 	const deleted: string[] = [];
+	const failed: PurgeFailure[] = [];
+
 	if (!options.dryRun) {
 		for (const candidate of candidates) {
-			const result = await deleteFile(candidate.id, deps);
-			if (result.kind === 'ok') deleted.push(candidate.objectKey);
+			if (mentioned.has(candidate.objectKey)) continue;
+			try {
+				const result = await deleteFile(candidate.id, { storage, db: database });
+				if (result.kind === 'ok') deleted.push(candidate.objectKey);
+			} catch (error) {
+				failed.push({
+					objectKey: candidate.objectKey,
+					reason: error instanceof Error ? error.name : 'unknown'
+				});
+			}
 		}
 	}
-	return { dryRun: options.dryRun, candidates, deleted };
+	return { dryRun: options.dryRun, candidates, skipped, failed, deleted, scanTruncated: truncated };
 }
 
 // ---------------------------------------------------------------------------
@@ -485,16 +563,18 @@ export interface MediaAuditReport {
 const I_KEY_PATTERN =
 	/\/i\/([0-9a-f]{2}\/[0-9a-f]{64}(?:\.[a-z0-9]{1,10})?)(?:@(?:thumb|preview|full))?/g;
 
-/**
- * Read-only sweep (T6). Broken-link detection scans stored markdown for
- * `/i/<key>` mentions (variant suffixes stripped — the registry row is keyed
- * by the canonical key); the scan covers posts, drafts and notes within
- * SCAN_LIMIT rows per source and reports `truncated` when any cap is hit.
- * `pages` joins the sweep once its P0 remodel lands (registered §11).
- */
-export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditReport> {
-	const { storage, database } = await resolveDeps(deps);
+interface MentionScan {
+	/** Every `/i/<key>` mention in stored content (variant suffix stripped). */
+	mentions: BrokenLink[];
+	counts: { posts: number; drafts: number; notes: number };
+	truncated: boolean;
+}
 
+/**
+ * Content mention scan shared by the read-only audit (check ②) and the
+ * purge guard. `pages` joins once its P0 remodel lands (§11 registration).
+ */
+async function scanMentions(database: FilesDb): Promise<MentionScan> {
 	const postRows = await database
 		.select({ id: posts.id, content: posts.content })
 		.from(posts)
@@ -521,14 +601,35 @@ export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditRep
 	collect('draft', draftRows);
 	collect('note', noteRows);
 
+	return {
+		mentions,
+		counts: { posts: postRows.length, drafts: draftRows.length, notes: noteRows.length },
+		truncated:
+			postRows.length >= SCAN_LIMIT ||
+			draftRows.length >= SCAN_LIMIT ||
+			noteRows.length >= SCAN_LIMIT
+	};
+}
+
+/**
+ * Read-only sweep (T6). Broken-link detection reuses the shared mention scan
+ * within SCAN_LIMIT rows per source; `truncated` reports any cap hit.
+ */
+export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditReport> {
+	const { storage, database } = await resolveDeps(deps);
+
+	const { mentions, counts, truncated: sourcesTruncated } = await scanMentions(database);
+
 	const keys = [...new Set(mentions.map((mention) => mention.key))];
 	let brokenLinks: BrokenLink[] = [];
 	if (keys.length > 0) {
+		// No LIMIT here: equality/IN against the unique object_key index. A cap
+		// used to silently turn existing keys into false broken links
+		// (round-2 review).
 		const known = await database
 			.select({ objectKey: files.objectKey })
 			.from(files)
-			.where(inArray(files.objectKey, keys))
-			.limit(SCAN_LIMIT);
+			.where(inArray(files.objectKey, keys));
 		const knownKeys = new Set(known.map((row) => row.objectKey));
 		brokenLinks = mentions.filter((mention) => !knownKeys.has(mention.key));
 	}
@@ -543,18 +644,12 @@ export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditRep
 		if (!head) missingObjects.push(row);
 	}
 
-	const truncated =
-		postRows.length >= SCAN_LIMIT ||
-		draftRows.length >= SCAN_LIMIT ||
-		noteRows.length >= SCAN_LIMIT ||
-		registryRows.length >= SCAN_LIMIT;
-
 	return {
 		generatedAt: new Date().toISOString(),
-		orphans: await listPurgeCandidates(deps),
+		orphans: await listPurgeCandidates({ storage, db: database }),
 		brokenLinks,
 		missingObjects,
-		scannedSources: { posts: postRows.length, drafts: draftRows.length, notes: noteRows.length },
-		truncated
+		scannedSources: counts,
+		truncated: sourcesTruncated || registryRows.length >= SCAN_LIMIT
 	};
 }

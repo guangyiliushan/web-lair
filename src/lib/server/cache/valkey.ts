@@ -4,9 +4,10 @@ import { CACHE_PREFIX, type CacheStore } from './store';
 /**
  * Valkey-backed store (iovalkey — the valkey.io-listed client that ships pure
  * JS and therefore runs everywhere, including Windows dev; ledger §21).
- * Degradation contract: get/set/del swallow infrastructure errors (miss /
+ * Degradation contract: get/set swallow infrastructure errors (miss /
  * no-op); `incr` rethrows so `rateLimit()` owns the fail-open decision. One
- * warning per process keeps an outage visible without flooding logs.
+ * warning per outage keeps an outage visible without flooding logs; a
+ * recovery line re-arms the warning for the next outage.
  */
 export class ValkeyCacheStore implements CacheStore {
 	readonly #client: Valkey;
@@ -49,9 +50,20 @@ export class ValkeyCacheStore implements CacheStore {
 		);
 	}
 
+	/**
+	 * Log one recovery line after an outage and re-arm warnings, so a later
+	 * (possibly different) failure is not hidden by the first one.
+	 */
+	#noteSuccess(): void {
+		if (!this.#warned) return;
+		this.#warned = false;
+		console.warn('[cache] Valkey connection recovered');
+	}
+
 	async get<T>(key: string): Promise<T | null> {
 		try {
 			await this.#ready();
+			this.#noteSuccess();
 			const raw = await this.#client.get(CACHE_PREFIX + key);
 			return raw === null ? null : (JSON.parse(raw) as T);
 		} catch (error) {
@@ -63,16 +75,8 @@ export class ValkeyCacheStore implements CacheStore {
 	async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
 		try {
 			await this.#ready();
+			this.#noteSuccess();
 			await this.#client.set(CACHE_PREFIX + key, JSON.stringify(value), 'EX', ttlSeconds);
-		} catch (error) {
-			this.#warn(error);
-		}
-	}
-
-	async del(key: string): Promise<void> {
-		try {
-			await this.#ready();
-			await this.#client.del(CACHE_PREFIX + key);
 		} catch (error) {
 			this.#warn(error);
 		}
@@ -80,6 +84,7 @@ export class ValkeyCacheStore implements CacheStore {
 
 	async incr(key: string, windowSeconds: number): Promise<number> {
 		await this.#ready();
+		this.#noteSuccess();
 		const full = CACHE_PREFIX + key;
 		const count = await this.#client.incr(full);
 		// NX: only set the window TTL when the key has none. Besides keeping a

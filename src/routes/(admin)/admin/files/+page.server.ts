@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { requireAdminRole } from '$lib/server/authz';
 import { isUuid } from '$lib/utils/uuid';
 import {
+	FILE_LIST_LIMIT,
 	deleteFile,
 	listFiles,
 	listPurgeCandidates,
@@ -47,6 +48,8 @@ export const load: PageServerLoad = async ({ url }) => {
 	return {
 		headerTitle: '文件',
 		files,
+		// The list is capped at FILE_LIST_LIMIT rows — surface it (round-2).
+		listTruncated: files.length >= FILE_LIST_LIMIT,
 		filters: {
 			kind: kind ?? '',
 			status: status ?? '',
@@ -80,6 +83,12 @@ export const actions: Actions = {
 		if (uploads.length > MAX_BATCH_COUNT) {
 			return fail(400, { message: `一次最多上传 ${MAX_BATCH_COUNT} 个文件` });
 		}
+		// Early reject oversized files before copying bodies; the service keeps
+		// the authoritative check (plan §4.2).
+		const oversized = uploads.find((file) => file.size > MAX_UPLOAD_BYTES);
+		if (oversized) {
+			return fail(400, { message: `${oversized.name} 超过单文件上限` });
+		}
 
 		try {
 			const results = await uploadFiles(
@@ -109,7 +118,7 @@ export const actions: Actions = {
 		if (result.kind === 'referenced') {
 			const parts: string[] = [];
 			if (result.refCount > 0) parts.push(`内容引用 ${result.refCount} 处`);
-			if (result.isPhoto) parts.push('图床引用');
+			if (result.isInGallery) parts.push('图床引用');
 			return fail(409, { message: `仍被引用（${parts.join('、')}），不能删除` });
 		}
 		throw redirect(303, '/admin/files?deleted=1');

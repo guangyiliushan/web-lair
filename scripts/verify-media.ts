@@ -6,6 +6,7 @@ import sharp from 'sharp';
 import * as schema from '../src/lib/server/db/schema';
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
 import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import { objectKeyFor, variantKeyFor } from '../src/lib/media/keys';
 import {
 	deleteFile,
 	listFiles,
@@ -51,10 +52,16 @@ const stamp = Date.now().toString(36);
 const orphanHash = sha256(`verify-media-orphan-${stamp}`);
 const missingHash = sha256(`verify-media-missing-${stamp}`);
 const brokenHash = sha256(`verify-media-broken-${stamp}`);
-const orphanKey = `${orphanHash.slice(0, 2)}/${orphanHash}.bin`;
-const missingKey = `${missingHash.slice(0, 2)}/${missingHash}.jpg`;
-const brokenKey = `${brokenHash.slice(0, 2)}/${brokenHash}.jpg`;
+const orphanKey = objectKeyFor(orphanHash, 'bin');
+const missingKey = objectKeyFor(missingHash, 'jpg');
+const brokenKey = objectKeyFor(brokenHash, 'jpg');
 const draftTitle = `verify-media-broken-${stamp}`;
+const galleryHash = sha256(`verify-media-gallery-${stamp}`);
+const galleryKey = objectKeyFor(galleryHash, 'png');
+const gallerySlug = `verify-media-gallery-${stamp}`;
+const guardHash = sha256(`verify-media-guard-${stamp}`);
+const guardKey = objectKeyFor(guardHash, 'jpg');
+const guardTitle = `verify-media-guard-${stamp}`;
 
 let uploadedId: string | null = null;
 let uploadedKey: string | null = null;
@@ -71,9 +78,15 @@ async function probeRowCount(keys: string[]): Promise<number> {
 
 async function cleanup(): Promise<void> {
 	// Best-effort: remove every probe row/object even when checks failed.
-	await db.delete(schema.files).where(inArray(schema.files.objectKey, [orphanKey, missingKey]));
-	await db.delete(schema.drafts).where(eq(schema.drafts.title, draftTitle));
+	// photos references files with NO ACTION — drop the gallery link first.
+	await db.delete(schema.photos).where(eq(schema.photos.slug, gallerySlug));
+	await db
+		.delete(schema.files)
+		.where(inArray(schema.files.objectKey, [orphanKey, missingKey, galleryKey, guardKey]));
+	await db.delete(schema.drafts).where(inArray(schema.drafts.title, [draftTitle, guardTitle]));
 	await storage.delete(orphanKey);
+	await storage.delete(galleryKey);
+	await storage.delete(guardKey);
 	if (refId) {
 		await db.delete(schema.fileReferences).where(eq(schema.fileReferences.refId, refId));
 	}
@@ -106,8 +119,14 @@ async function main(): Promise<void> {
 	uploadedKey = uploaded.objectKey;
 	check('upload returns a pending row', uploaded.status === 'pending' && !uploaded.deduplicated);
 	check('original object exists', (await storage.head(uploaded.objectKey)) !== null);
-	check('thumb variant exists', (await storage.head(`${uploaded.objectKey}@thumb`)) !== null);
-	check('full variant exists', (await storage.head(`${uploaded.objectKey}@full`)) !== null);
+	check(
+		'thumb variant exists',
+		(await storage.head(variantKeyFor(uploaded.objectKey, 'thumb'))) !== null
+	);
+	check(
+		'full variant exists',
+		(await storage.head(variantKeyFor(uploaded.objectKey, 'full'))) !== null
+	);
 
 	const duplicate = await uploadFile(
 		{ fileName: `verify-media-${stamp}-copy.png`, bytes: png, uploadedBy: null },
@@ -208,6 +227,65 @@ async function main(): Promise<void> {
 		'listFiles({ orphan }) excludes healthy / attached rows',
 		!orphanView.some((row) => row.objectKey === missingKey)
 	);
+
+	// -- §4.6/§6.1 photos exemption (query-layer guard) ----------------------
+	await db.insert(schema.files).values({
+		objectKey: galleryKey,
+		contentHash: galleryHash,
+		fileName: `verify-gallery-${stamp}.png`,
+		mimeType: 'image/png',
+		byteSize: 1,
+		status: 'pending',
+		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+	});
+	const [galleryFile] = await db
+		.select({ id: schema.files.id })
+		.from(schema.files)
+		.where(eq(schema.files.objectKey, galleryKey));
+	await db.insert(schema.photos).values({ fileId: galleryFile.id, slug: gallerySlug });
+	const guarded = await purgeMedia({ dryRun: true }, deps);
+	check(
+		'photos-linked file is never a purge candidate',
+		!guarded.candidates.some((candidate) => candidate.objectKey === galleryKey)
+	);
+	const orphanView2 = await listFiles({ orphan: true }, deps);
+	check(
+		'photos-linked file is hidden from the orphan view',
+		!orphanView2.some((row) => row.objectKey === galleryKey)
+	);
+	check('purge dry-run never touches objects', (await storage.head(orphanKey)) !== null);
+
+	// -- purge mention guard (§11 hold: refs backfill lands with ST-3) -------
+	await storage.put(guardKey, Buffer.from('guard-probe'), { contentType: 'image/jpeg' });
+	await db.insert(schema.files).values({
+		objectKey: guardKey,
+		contentHash: guardHash,
+		fileName: `verify-guard-${stamp}.jpg`,
+		mimeType: 'image/jpeg',
+		byteSize: 11,
+		status: 'pending',
+		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+	});
+	await db.insert(schema.drafts).values({
+		refType: 'post',
+		title: guardTitle,
+		content: `inline /i/${guardKey} reference`
+	});
+	const executed = await purgeMedia({ dryRun: false }, deps);
+	check(
+		'purge execution skips keys still mentioned by content',
+		executed.skipped.includes(guardKey)
+	);
+	check('mentioned file row survives execution', (await probeRowCount([guardKey])) === 1);
+	check(
+		'unmentioned orphan IS purged (execute)',
+		executed.deleted.includes(orphanKey) && (await probeRowCount([orphanKey])) === 0
+	);
+	check(
+		'purged row takes its objects with it',
+		(await storage.head(orphanKey)) === null &&
+			(await storage.head(variantKeyFor(orphanKey, 'thumb'))) === null
+	);
 }
 
 try {
@@ -220,9 +298,19 @@ try {
 		failures += 1;
 		console.error('FAIL cleanup error:', error);
 	});
-	const probes = [orphanKey, missingKey, ...(uploadedKey ? [uploadedKey] : [])];
+	const probes = [
+		orphanKey,
+		missingKey,
+		galleryKey,
+		guardKey,
+		...(uploadedKey ? [uploadedKey] : [])
+	];
 	const remaining = await probeRowCount(probes).catch(() => -1);
 	check('probe rows are gone after cleanup', remaining === 0, `remaining=${remaining}`);
+	const leftoverObjects = (
+		await Promise.all([orphanKey, galleryKey, guardKey].map((key) => storage.head(key)))
+	).filter((head) => head !== null).length;
+	check('probe objects are gone after cleanup', leftoverObjects === 0, `left=${leftoverObjects}`);
 	console.log(`\nchecks=${checks} failures=${failures}`);
 	await sql.end();
 	process.exit(failures === 0 ? 0 : 1);

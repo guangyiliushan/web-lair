@@ -9,7 +9,6 @@
 export interface CacheStore {
 	get<T>(key: string): Promise<T | null>;
 	set<T>(key: string, value: T, ttlSeconds: number): Promise<void>;
-	del(key: string): Promise<void>;
 	/**
 	 * Increment a windowed counter; the first increment starts the window.
 	 * Implementations MAY throw on infrastructure failure — `rateLimit`

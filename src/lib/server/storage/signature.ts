@@ -36,10 +36,8 @@ export interface SigV4Request {
 export interface SigV4SignedRequest {
 	/** Headers to send, including x-amz-date and authorization. */
 	headers: Array<[string, string]>;
-	amzDate: string;
 	canonicalRequest: string;
 	stringToSign: string;
-	signature: string;
 	authorization: string;
 }
 
@@ -171,10 +169,8 @@ export function signRequest(
 
 	return {
 		headers: [...headers, ['authorization', authorization]],
-		amzDate,
 		canonicalRequest,
 		stringToSign,
-		signature,
 		authorization
 	};
 }

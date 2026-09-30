@@ -4,15 +4,10 @@ const storageMock = vi.hoisted(() => ({
 	get: vi.fn(),
 	head: vi.fn()
 }));
-const dbMock = vi.hoisted(() => ({
-	select: vi.fn()
-}));
+const isRegisteredKeyMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$lib/server/storage', () => ({ getStorage: () => storageMock }));
-vi.mock('$lib/server/db', () => ({ db: dbMock }));
-vi.mock('$lib/server/db/content', () => ({
-	files: { id: 'files.id', objectKey: 'files.objectKey' }
-}));
+vi.mock('$lib/server/services/files', () => ({ isRegisteredKey: isRegisteredKeyMock }));
 
 import { GET, HEAD } from './[...key]/+server';
 
@@ -26,15 +21,6 @@ const GIF_KEY = `${SHA.slice(0, 2)}/${SHA}.gif`;
 const DOC_KEY = `${SHA.slice(0, 2)}/${SHA}.pdf`;
 const ADMIN_LOCALS = { admin: { userId: 'admin-1', role: 'owner' } };
 
-/** Chain satisfying db.select().from().where().limit(1) → rows. */
-function registryChain(rows: unknown[]) {
-	const chain: Record<string, unknown> = {};
-	chain.from = vi.fn(() => chain);
-	chain.where = vi.fn(() => chain);
-	chain.limit = vi.fn(async () => rows);
-	return chain;
-}
-
 function event(key: string, locals: unknown = {}) {
 	return { params: { key }, locals } as unknown as Parameters<typeof GET>[0];
 }
@@ -46,15 +32,16 @@ function bodyOf(text: string): ReadableStream<Uint8Array> {
 beforeEach(() => {
 	storageMock.get.mockReset();
 	storageMock.head.mockReset();
-	dbMock.select.mockReset();
+	isRegisteredKeyMock.mockReset();
 });
 
 describe('/i/<key> proxy (T9)', () => {
-	it('serves variant keys publicly with immutable caching + nosniff', async () => {
+	it('serves variant keys publicly with immutable caching + passthrough validators', async () => {
 		storageMock.get.mockResolvedValueOnce({
 			body: bodyOf('img'),
 			byteSize: 3,
-			contentType: 'image/webp'
+			contentType: 'image/webp',
+			etag: '"v1"'
 		});
 
 		const res = await GET(event(VARIANT_KEY));
@@ -64,8 +51,10 @@ describe('/i/<key> proxy (T9)', () => {
 		expect(res.headers.get('x-content-type-options')).toBe('nosniff');
 		expect(res.headers.get('content-length')).toBe('3');
 		expect(res.headers.get('content-type')).toBe('image/webp');
+		expect(res.headers.get('etag')).toBe('"v1"');
 		expect(await res.text()).toBe('img');
 		expect(storageMock.get).toHaveBeenCalledWith(VARIANT_KEY);
+		expect(isRegisteredKeyMock).not.toHaveBeenCalled();
 	});
 
 	it('serves every variant kind (@thumb/@preview/@full) under the same policy', async () => {
@@ -73,7 +62,8 @@ describe('/i/<key> proxy (T9)', () => {
 			storageMock.get.mockResolvedValueOnce({
 				body: bodyOf('x'),
 				byteSize: 1,
-				contentType: 'image/webp'
+				contentType: 'image/webp',
+				etag: null
 			});
 			const res = await GET(event(key));
 			expect(res.status).toBe(200);
@@ -81,7 +71,7 @@ describe('/i/<key> proxy (T9)', () => {
 		}
 	});
 
-	it('rejects malformed keys with 404 without touching storage', async () => {
+	it('rejects malformed keys with 404 without touching storage or the registry', async () => {
 		for (const key of [
 			'not-a-key',
 			'../../etc/passwd',
@@ -92,7 +82,7 @@ describe('/i/<key> proxy (T9)', () => {
 			await expect(GET(event(key))).rejects.toMatchObject({ status: 404 });
 		}
 		expect(storageMock.get).not.toHaveBeenCalled();
-		expect(dbMock.select).not.toHaveBeenCalled();
+		expect(isRegisteredKeyMock).not.toHaveBeenCalled();
 	});
 
 	it('hides photo originals from anonymous requests (no storage or registry probe)', async () => {
@@ -100,14 +90,15 @@ describe('/i/<key> proxy (T9)', () => {
 		await expect(HEAD(event(ORIGINAL_KEY))).rejects.toMatchObject({ status: 404 });
 		expect(storageMock.get).not.toHaveBeenCalled();
 		expect(storageMock.head).not.toHaveBeenCalled();
-		expect(dbMock.select).not.toHaveBeenCalled();
+		expect(isRegisteredKeyMock).not.toHaveBeenCalled();
 	});
 
 	it('serves photo originals to admins with private caching', async () => {
 		storageMock.get.mockResolvedValueOnce({
 			body: bodyOf('orig'),
 			byteSize: 4,
-			contentType: 'image/jpeg'
+			contentType: 'image/jpeg',
+			etag: null
 		});
 
 		const res = await GET(event(ORIGINAL_KEY, ADMIN_LOCALS));
@@ -121,7 +112,8 @@ describe('/i/<key> proxy (T9)', () => {
 		storageMock.get.mockResolvedValueOnce({
 			body: bodyOf('gif'),
 			byteSize: 3,
-			contentType: 'image/gif'
+			contentType: 'image/gif',
+			etag: null
 		});
 
 		const res = await GET(event(GIF_KEY));
@@ -129,15 +121,16 @@ describe('/i/<key> proxy (T9)', () => {
 		expect(res.status).toBe(200);
 		expect(res.headers.get('cache-control')).toContain('immutable');
 		expect(res.headers.get('content-type')).toBe('image/gif');
-		expect(dbMock.select).not.toHaveBeenCalled();
+		expect(isRegisteredKeyMock).not.toHaveBeenCalled();
 	});
 
 	it('serves registered attachments publicly as nosniff downloads', async () => {
-		dbMock.select.mockReturnValueOnce(registryChain([{ id: 'file-1' }]));
+		isRegisteredKeyMock.mockResolvedValueOnce(true);
 		storageMock.get.mockResolvedValueOnce({
 			body: bodyOf('%PDF-1.7'),
 			byteSize: 8,
-			contentType: 'application/pdf'
+			contentType: 'application/pdf',
+			etag: null
 		});
 
 		const res = await GET(event(DOC_KEY));
@@ -146,11 +139,12 @@ describe('/i/<key> proxy (T9)', () => {
 		expect(res.headers.get('cache-control')).toContain('immutable');
 		expect(res.headers.get('content-disposition')).toBe('attachment');
 		expect(res.headers.get('x-content-type-options')).toBe('nosniff');
-		expect(dbMock.select).toHaveBeenCalledTimes(1);
+		expect(isRegisteredKeyMock).toHaveBeenCalledTimes(1);
+		expect(isRegisteredKeyMock).toHaveBeenCalledWith(DOC_KEY);
 	});
 
 	it('404s unregistered attachments without touching storage', async () => {
-		dbMock.select.mockReturnValue(registryChain([]));
+		isRegisteredKeyMock.mockResolvedValue(false);
 
 		await expect(GET(event(DOC_KEY))).rejects.toMatchObject({ status: 404 });
 		await expect(HEAD(event(DOC_KEY))).rejects.toMatchObject({ status: 404 });
@@ -162,7 +156,8 @@ describe('/i/<key> proxy (T9)', () => {
 		storageMock.get.mockResolvedValueOnce({
 			body: bodyOf('%PDF'),
 			byteSize: 4,
-			contentType: 'application/pdf'
+			contentType: 'application/pdf',
+			etag: null
 		});
 
 		const res = await GET(event(DOC_KEY, ADMIN_LOCALS));
@@ -170,7 +165,7 @@ describe('/i/<key> proxy (T9)', () => {
 		expect(res.status).toBe(200);
 		expect(res.headers.get('cache-control')).toBe('private, no-store');
 		expect(res.headers.get('content-disposition')).toBe('attachment');
-		expect(dbMock.select).not.toHaveBeenCalled();
+		expect(isRegisteredKeyMock).not.toHaveBeenCalled();
 	});
 
 	it('maps missing objects to 404', async () => {
@@ -195,6 +190,20 @@ describe('/i/<key> proxy (T9)', () => {
 		expect(res.headers.get('etag')).toBe('"e"');
 		expect(res.headers.get('cache-control')).toContain('immutable');
 		expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+	});
+
+	it('HEAD omits content-length when the store did not report one', async () => {
+		storageMock.head.mockResolvedValueOnce({
+			key: VARIANT_KEY,
+			byteSize: null,
+			contentType: 'image/webp',
+			etag: null
+		});
+
+		const res = await HEAD(event(VARIANT_KEY));
+
+		expect(res.status).toBe(200);
+		expect(res.headers.get('content-length')).toBeNull();
 	});
 
 	it('HEAD maps missing objects to 404', async () => {

@@ -11,6 +11,13 @@ import {
 /** Request timeout for storage calls; ≤25MB uploads over loopback fit easily. */
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+/** Strict numeric header: absent or non-numeric → null (never 0 / NaN). */
+function numericHeader(value: string | null): number | null {
+	if (value === null) return null;
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
 interface RustFsStorageOptions {
 	fetchImpl?: typeof fetch;
 	clock?: () => Date;
@@ -72,11 +79,11 @@ export class RustFsStorage implements ObjectStoragePort {
 		if (!res.ok) throw await this.#toError(`get ${key}`, res);
 		if (!res.body)
 			throw new StorageError(`storage get ${key} failed: empty body`, res.status, null);
-		const length = res.headers.get('content-length');
 		return {
 			body: res.body,
-			byteSize: length === null ? null : Number(length),
-			contentType: res.headers.get('content-type')
+			byteSize: numericHeader(res.headers.get('content-length')),
+			contentType: res.headers.get('content-type'),
+			etag: res.headers.get('etag')
 		};
 	}
 
@@ -86,7 +93,7 @@ export class RustFsStorage implements ObjectStoragePort {
 		if (!res.ok) throw await this.#toError(`head ${key}`, res);
 		return {
 			key,
-			byteSize: Number(res.headers.get('content-length') ?? '0'),
+			byteSize: numericHeader(res.headers.get('content-length')),
 			contentType: res.headers.get('content-type'),
 			etag: res.headers.get('etag')
 		};

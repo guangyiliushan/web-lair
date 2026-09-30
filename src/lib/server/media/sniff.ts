@@ -46,9 +46,11 @@ function looksLikeText(bytes: Uint8Array): boolean {
 }
 
 /**
- * Whitelist (plan §4.2). Order matters: magic-bearing families first, the
- * extension-less text family last so binary content can never slip in as
- * "text". `heic`/`heif` share the WASM decode path (plan §4.3).
+ * Whitelist (plan §4.2). Order matters: magic-bearing families come first so
+ * known binary magics are rejected by their own family before the magic-less
+ * text family (txt/md) runs; unknown binaries rest on the NUL-heuristic in
+ * `looksLikeText` — structure is not validated, only binary-ness.
+ * `heic`/`heif` share the WASM decode path (plan §4.3).
  */
 const FAMILIES: Family[] = [
 	{

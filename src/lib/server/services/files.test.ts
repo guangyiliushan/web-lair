@@ -32,7 +32,14 @@ vi.mock('$lib/server/media/variants', () => ({
 }));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: getOptionMock }));
 
-import { deleteFile, listPurgeCandidates, purgeMedia, uploadFile, uploadFiles } from './files';
+import {
+	deleteFile,
+	isRegisteredKey,
+	listPurgeCandidates,
+	purgeMedia,
+	uploadFile,
+	uploadFiles
+} from './files';
 
 const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0]);
 const HASH = createHash('sha256').update(JPEG).digest('hex');
@@ -105,6 +112,26 @@ describe('uploadFile', () => {
 	it('locks the plan §4.2 limits', () => {
 		expect(MAX_UPLOAD_BYTES).toBe(25 * 1024 * 1024);
 		expect(MAX_BATCH_COUNT).toBe(10);
+	});
+
+	it('accepts an upload at exactly the size limit (boundary)', async () => {
+		const exact = new Uint8Array(MAX_UPLOAD_BYTES);
+		exact.set([0xff, 0xd8, 0xff, 0xe0]);
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		processImageMock.mockResolvedValueOnce({
+			...PROCESSED,
+			variants: { ...PROCESSED.variants }
+		});
+		dbMock.insert.mockReturnValueOnce(
+			insertChain([{ ...EXISTING_ROW, width: 64, height: 32, status: 'pending' }])
+		);
+
+		const result = await uploadFile(
+			{ fileName: 'edge.jpg', bytes: exact },
+			{ storage: storageMock }
+		);
+
+		expect(result.deduplicated).toBe(false);
 	});
 
 	it('rejects empty, oversized and unsupported uploads before touching db or storage', async () => {
@@ -209,7 +236,7 @@ describe('uploadFile', () => {
 		await uploadFile({ fileName: 'fun.gif', bytes: GIF }, { storage: storageMock });
 
 		expect(processImageMock).not.toHaveBeenCalled();
-		expect(readImageSizeMock).toHaveBeenCalled();
+		expect(readImageSizeMock).toHaveBeenCalledWith(GIF);
 		expect(storageMock.put.mock.calls.map((call) => call[0])).toEqual([gifKey]);
 		const values = dbMock.insert.mock.results[0].value.values.mock.calls[0][0] as Record<
 			string,
@@ -235,6 +262,9 @@ describe('uploadFile', () => {
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		processImageMock.mockResolvedValueOnce(PROCESSED);
 		dbMock.insert.mockReturnValueOnce(insertChain(new Error('db exploded')));
+		// The compensation re-check runs after the failed insert: no row →
+		// this attempt's objects are true orphans and get deleted.
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 
 		await expect(
 			uploadFile({ fileName: 'photo.jpg', bytes: JPEG }, { storage: storageMock })
@@ -260,8 +290,48 @@ describe('uploadFile', () => {
 		);
 
 		expect(result).toEqual({ ...EXISTING_ROW, deduplicated: true });
-		// The winner's objects are content-addressed and SHARED — deleting them
-		// would break the row that just won the race.
+		// The winner's objects are content-addressed and SHARED — same-extension
+		// attempts touch the same keys, so nothing may be deleted.
+		expect(storageMock.delete).not.toHaveBeenCalled();
+	});
+
+	it('deletes only extra keys when the winner landed under another extension', async () => {
+		const jpegWinner = { ...EXISTING_ROW, objectKey: `${HASH.slice(0, 2)}/${HASH}.jpeg` };
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		processImageMock.mockResolvedValueOnce(PROCESSED);
+		dbMock.insert.mockReturnValueOnce(insertChain(new Error('lost response')));
+		dbMock.select.mockReturnValueOnce(selectChain([jpegWinner]));
+
+		const result = await uploadFile(
+			{ fileName: 'photo.jpg', bytes: JPEG },
+			{ storage: storageMock }
+		);
+
+		// Extension is part of the key identity: our `.jpg` keys are NOT shared
+		// with the `.jpeg` winner, so all of them are cleaned up.
+		expect(result.objectKey).toBe(jpegWinner.objectKey);
+		expect(result.deduplicated).toBe(true);
+		expect(storageMock.delete.mock.calls.map((call) => call[0])).toEqual([
+			BASE_KEY,
+			`${BASE_KEY}@thumb`,
+			`${BASE_KEY}@full`
+		]);
+	});
+
+	it('keeps objects when the re-check cannot run (uncertain = do not delete)', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		processImageMock.mockResolvedValueOnce(PROCESSED);
+		dbMock.insert.mockReturnValueOnce(insertChain(new Error('db exploded')));
+		dbMock.select.mockImplementationOnce(() => {
+			throw new Error('select down');
+		});
+
+		await expect(
+			uploadFile({ fileName: 'photo.jpg', bytes: JPEG }, { storage: storageMock })
+		).rejects.toThrow('db exploded');
+
+		// A re-check that cannot run must not be read as "no winner": shared
+		// bytes stay (a stranded object is recoverable, deleted bytes are not).
 		expect(storageMock.delete).not.toHaveBeenCalled();
 	});
 });
@@ -311,7 +381,7 @@ describe('deleteFile', () => {
 		expect(await deleteFile('file-1', { storage: storageMock })).toEqual({
 			kind: 'referenced',
 			refCount: 1,
-			isPhoto: false
+			isInGallery: false
 		});
 		expect(storageMock.delete).not.toHaveBeenCalled();
 		// Guard queries must hit the right tables (refs vs photos).
@@ -323,7 +393,7 @@ describe('deleteFile', () => {
 		expect(await deleteFile('file-1', { storage: storageMock })).toEqual({
 			kind: 'referenced',
 			refCount: 0,
-			isPhoto: true
+			isInGallery: true
 		});
 	});
 
@@ -343,6 +413,10 @@ describe('deleteFile', () => {
 			`${BASE_KEY}@full`
 		]);
 		expect(dbMock.delete).toHaveBeenCalledTimes(1);
+		// Objects-first ordering is retryable: pin it (round-2 mutation m18).
+		const lastObjectDelete = storageMock.delete.mock.invocationCallOrder.at(-1) ?? -1;
+		expect(lastObjectDelete).toBeGreaterThan(0);
+		expect(lastObjectDelete).toBeLessThan(dbMock.delete.mock.invocationCallOrder[0]);
 	});
 });
 
@@ -412,17 +486,26 @@ describe('purgeMedia', () => {
 
 	it('dry-run reports candidates but deletes nothing', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([stalePending]));
+		// Mention scan: posts / drafts / notes (empty).
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 
 		const outcome = await purgeMedia({ dryRun: true }, { storage: storageMock });
 
 		expect(outcome.candidates.map((candidate) => candidate.id)).toEqual(['a']);
 		expect(outcome.deleted).toEqual([]);
+		expect(outcome.skipped).toEqual([]);
 		expect(storageMock.delete).not.toHaveBeenCalled();
 		expect(dbMock.delete).not.toHaveBeenCalled();
 	});
 
 	it('execution deletes the objects and the row (references re-checked)', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([stalePending]));
+		// Mention scan: posts / drafts / notes (empty → nothing is skipped).
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'a', objectKey: 'aa/a.jpg' }]));
 		dbMock.$count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
 		dbMock.delete.mockReturnValueOnce(deleteChain());
@@ -437,5 +520,38 @@ describe('purgeMedia', () => {
 			'aa/a.jpg@full'
 		]);
 		expect(dbMock.delete).toHaveBeenCalledTimes(1);
+	});
+
+	it('skips candidates still mentioned by stored content (execute)', async () => {
+		// The mention grammar requires a shasum-shaped key (64 hex chars).
+		const sha = 'a'.repeat(64);
+		const mentionedKey = `aa/${sha}.jpg`;
+		dbMock.select.mockReturnValueOnce(selectChain([{ ...stalePending, objectKey: mentionedKey }]));
+		// Mention scan: a draft body carries the candidate's key.
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(
+			selectChain([{ id: 'd1', content: `see /i/${mentionedKey} inline` }])
+		);
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+
+		const outcome = await purgeMedia({ dryRun: false }, { storage: storageMock });
+
+		expect(outcome.skipped).toEqual([mentionedKey]);
+		expect(outcome.deleted).toEqual([]);
+		expect(storageMock.delete).not.toHaveBeenCalled();
+		expect(dbMock.delete).not.toHaveBeenCalled();
+	});
+});
+
+describe('isRegisteredKey', () => {
+	it('answers by object-key lookup on the files table', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'file-1' }]));
+		expect(await isRegisteredKey(BASE_KEY, { storage: storageMock })).toBe(true);
+
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		expect(await isRegisteredKey(BASE_KEY, { storage: storageMock })).toBe(false);
+
+		const chain = dbMock.select.mock.results[0].value as { from: ReturnType<typeof vi.fn> };
+		expect(chain.from.mock.calls[0][0]).toBe(filesTable);
 	});
 });

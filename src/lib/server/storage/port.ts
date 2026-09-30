@@ -11,7 +11,8 @@ export interface PutOptions {
 
 export interface StoredObjectHead {
 	key: string;
-	byteSize: number;
+	/** null when the object store did not report a Content-Length. */
+	byteSize: number | null;
 	contentType: string | null;
 	etag: string | null;
 }
@@ -20,6 +21,7 @@ export interface StoredObjectBody {
 	body: ReadableStream<Uint8Array>;
 	byteSize: number | null;
 	contentType: string | null;
+	etag: string | null;
 }
 
 /** Non-2xx storage response the caller cannot treat as "absent". */

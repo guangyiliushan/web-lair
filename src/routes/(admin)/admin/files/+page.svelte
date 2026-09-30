@@ -6,6 +6,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Empty } from '$lib/components/ui/empty';
 	import { formatDateTime } from '$lib/utils/i18n';
+	import { variantKeyFor } from '$lib/media/keys';
 	import type { PageProps } from './$types';
 	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
@@ -31,6 +32,7 @@
 		orphans: Array<{ objectKey: string; fileName: string; status: string; ageDays: number }>;
 		brokenLinks: Array<{ refType: string; refId: string; key: string }>;
 		missingObjects: Array<{ objectKey: string; fileName: string }>;
+		truncated?: boolean;
 	};
 	type PurgeList = Array<{ objectKey: string; fileName: string; status: string; ageDays: number }>;
 
@@ -73,7 +75,7 @@
 	 */
 	function publicUrl(row: FileRow): string {
 		if (row.mimeType === 'image/gif') return `/i/${row.objectKey}`;
-		return `/i/${row.objectKey}${row.mimeType.startsWith('image/') ? '@full' : ''}`;
+		return `/i/${row.mimeType.startsWith('image/') ? variantKeyFor(row.objectKey, 'full') : row.objectKey}`;
 	}
 
 	async function copyUrl(row: FileRow): Promise<void> {
@@ -122,7 +124,9 @@
 	{/if}
 
 	<section class="rounded-xl border bg-background p-4">
-		<h2 class="mb-3 text-sm font-medium">上传（≤ {data.limits.maxBatch} 个/批，单文件 ≤ 25MB）</h2>
+		<h2 class="mb-3 text-sm font-medium">
+			上传（≤ {data.limits.maxBatch} 个/批，单文件 ≤ {data.limits.maxBytes / 1024 / 1024}MB）
+		</h2>
 		<form
 			method="POST"
 			action="?/upload"
@@ -202,6 +206,12 @@
 			<Button type="submit" variant="secondary" size="sm">筛选</Button>
 		</form>
 
+		{#if data.listTruncated}
+			<p class="text-xs text-muted-foreground">
+				仅显示前 {data.files.length} 条（达到上限，请用筛选缩小范围）。
+			</p>
+		{/if}
+
 		{#if data.files.length === 0}
 			<Empty class="py-12">
 				<div class="flex flex-col items-center gap-1">
@@ -234,7 +244,7 @@
 										<img
 											src={row.mimeType === 'image/gif'
 												? `/i/${row.objectKey}`
-												: `/i/${row.objectKey}@thumb`}
+												: `/i/${variantKeyFor(row.objectKey, 'thumb')}`}
 											alt={row.fileName}
 											loading="lazy"
 											class="size-10 rounded-md border object-cover"
@@ -264,7 +274,7 @@
 								</Table.Cell>
 								<Table.Cell class="hidden text-xs text-muted-foreground sm:table-cell">
 									{row.refCount}
-									{#if row.isPhoto}<IconPhoto class="ml-1 inline size-3.5" />{/if}
+									{#if row.isInGallery}<IconPhoto class="ml-1 inline size-3.5" />{/if}
 								</Table.Cell>
 								<Table.Cell class="hidden text-xs text-muted-foreground lg:table-cell">
 									{formatDateTime(new Date(row.createdAt), {
@@ -350,6 +360,11 @@
 					① 孤儿：{actionData.audit.orphans.length} · ② 破链：{actionData.audit.brokenLinks.length} ·
 					③ 对象缺失：{actionData.audit.missingObjects.length}
 				</p>
+				{#if actionData.audit.truncated}
+					<p class="text-xs text-amber-600 dark:text-amber-400">
+						注意：扫描达到行数上限，结果可能不完整。
+					</p>
+				{/if}
 				{#each actionData.audit.orphans as orphan (orphan.objectKey)}
 					<p class="text-xs text-muted-foreground">
 						① {orphan.objectKey}（{orphan.fileName}，{orphan.ageDays} 天）

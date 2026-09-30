@@ -127,6 +127,16 @@ describe('options registry (AI-1.1)', () => {
 		expect(state.insertCalls).toHaveLength(0);
 	});
 
+	it('accepts and persists a valid media.purge write (positive control)', async () => {
+		state.selectRows = [];
+		await setOption('media.purge', { pendingDays: 14, detachedDays: 60 });
+		expect(state.insertCalls).toHaveLength(1);
+		expect(state.insertCalls[0].values).toEqual({
+			name: 'media.purge',
+			value: { pendingDays: 14, detachedDays: 60 }
+		});
+	});
+
 	it('enforces the allow < block ordering on thresholds', async () => {
 		await expect(
 			setOption('comments.moderation', {

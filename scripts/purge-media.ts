@@ -32,8 +32,22 @@ for (const candidate of outcome.candidates) {
 		`    - ${candidate.objectKey}  (${candidate.fileName}, ${candidate.status}, ${candidate.ageDays}d)`
 	);
 }
+if (outcome.scanTruncated) {
+	console.log(
+		'WARNING: the content mention scan hit its row cap — the in-use guard may be partial.'
+	);
+}
+if (outcome.skipped.length > 0) {
+	console.log(`skipped (still mentioned by stored content): ${outcome.skipped.length}`);
+	for (const key of outcome.skipped) {
+		console.log(`    ~ ${key}`);
+	}
+}
 if (execute) {
 	console.log(`deleted: ${outcome.deleted.length}`);
+	for (const failure of outcome.failed) {
+		console.log(`FAILED ${failure.objectKey}: ${failure.reason}`);
+	}
 } else {
 	console.log('no changes (dry-run). Re-run with --yes to delete the candidates above.');
 }

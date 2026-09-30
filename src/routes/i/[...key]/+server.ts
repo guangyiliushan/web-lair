@@ -1,32 +1,28 @@
 import { error } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
-import { db } from '$lib/server/db';
-import { files } from '$lib/server/db/content';
+import { isRegisteredKey } from '$lib/server/services/files';
 import { getStorage } from '$lib/server/storage';
+import { KEY_PATTERN } from '$lib/media/keys';
 import type { RequestHandler } from './$types';
 
 /**
  * Content media proxy (ledger §21 / plan §4.4). RustFS is loopback-only —
  * everything public flows through `/i/<key>`:
  *
- * - key grammar: `<sha[0:2]>/<sha256>.<ext>` optionally suffixed with
- *   `@thumb` / `@preview` / `@full` (derived variants, plan §3.1). Anything
- *   else is a 404 before storage is touched.
+ * - the key grammar lives in `$lib/media/keys` (shared with the upload
+ *   pipeline; round-2 review). Anything that does not parse is a 404 before
+ *   storage is touched.
  * - variants are public and immutable (content-addressed, max-age one year).
  * - bare keys: `gif` serves publicly by design (plan §4.3 "GIF 直通" — the
  *   original IS the public tier and GIF carries no EXIF); attachments
- *   (`pdf/zip/txt/md`) serve publicly once a registry row exists, so content
- *   can link them; photo originals (the private archive, EXIF intact) stay
- *   admin-only, and anonymous requests see the same 404 as a missing object.
+ *   (`pdf/zip/txt/md`) serve publicly once registered (the registry check
+ *   lives in the files service, not the route); photo originals (the private
+ *   archive, EXIF intact) stay admin-only, and anonymous requests see the
+ *   same 404 as a missing object.
  *
- * Content-Length / Content-Type / ETag pass through from the object store.
- * (Plan §4.4 suggested reading Content-Length from the registry; variant
- * sizes are not tracked there, and the passthrough avoids a second round
- * trip. 410 semantics for purged-but-referenced keys need the registry and
- * stay registered as deferred.)
+ * Content-Length / Content-Type / ETag pass through from the object store in
+ * BOTH directions (round-2 review: ETag used to be HEAD-only). "Content-Length
+ * from the registry" and 410 semantics stay registered as deferred (§11).
  */
-
-const KEY_PATTERN = /^([0-9a-f]{2})\/\1[0-9a-f]{62}(\.[a-z0-9]{1,10})?(?:@(thumb|preview|full))?$/;
 
 /** Attachment extensions (plan §4.2) public via the registry, not by pattern. */
 const ATTACHMENT_EXTS = new Set(['pdf', 'zip', 'txt', 'md']);
@@ -42,15 +38,6 @@ interface Access {
 	attachment: boolean;
 }
 
-async function registryHasKey(objectKey: string): Promise<boolean> {
-	const [row] = await db
-		.select({ id: files.id })
-		.from(files)
-		.where(eq(files.objectKey, objectKey))
-		.limit(1);
-	return Boolean(row);
-}
-
 async function resolveAccess(params: { key?: string }, locals: App.Locals): Promise<Access> {
 	const match = KEY_PATTERN.exec(params.key ?? '');
 	if (!match) throw error(404, 'Not found');
@@ -60,7 +47,7 @@ async function resolveAccess(params: { key?: string }, locals: App.Locals): Prom
 	if (ext === 'gif') return { key: match[0], publicRead: true, attachment: false };
 	const isAttachment = ATTACHMENT_EXTS.has(ext);
 	if (locals.admin) return { key: match[0], publicRead: false, attachment: isAttachment };
-	if (isAttachment && (await registryHasKey(match[0]))) {
+	if (isAttachment && (await isRegisteredKey(match[0]))) {
 		return { key: match[0], publicRead: true, attachment: true };
 	}
 	throw error(404, 'Not found');
@@ -83,6 +70,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 	const headers = objectHeaders(access, object.contentType);
 	if (object.byteSize !== null) headers.set('content-length', String(object.byteSize));
+	if (object.etag) headers.set('etag', object.etag);
 	return new Response(object.body, { headers });
 };
 
@@ -93,7 +81,7 @@ export const HEAD: RequestHandler = async ({ params, locals }) => {
 	if (!object) throw error(404, 'Not found');
 
 	const headers = objectHeaders(access, object.contentType);
-	headers.set('content-length', String(object.byteSize));
+	if (object.byteSize !== null) headers.set('content-length', String(object.byteSize));
 	if (object.etag) headers.set('etag', object.etag);
 	return new Response(null, { headers });
 };

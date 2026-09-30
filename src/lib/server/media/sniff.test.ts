@@ -11,6 +11,7 @@ const WEBP = bytes(ascii('RIFF'), [0, 0, 0, 0], ascii('WEBP'));
 const bmff = (brand: string) => bytes([0, 0, 0, 0x1c], ascii('ftyp'), ascii(brand));
 const PDF = bytes(ascii('%PDF-1.7'));
 const ZIP = bytes(ascii('PK'), [3, 4]);
+const ZIP_EMPTY = bytes(ascii('PK'), [5, 6]);
 const TIFF = bytes([0x49, 0x49, 0x2a, 0x00], [0, 0]);
 const TIFF_BE = bytes([0x4d, 0x4d, 0x00, 0x2a], [0, 0]);
 
@@ -32,6 +33,11 @@ describe('sniffUpload (plan §4.2 whitelist)', () => {
 			mimeType: 'image/png'
 		});
 		expect(sniffUpload('fun.gif', GIF)).toEqual({
+			kind: 'image',
+			ext: 'gif',
+			mimeType: 'image/gif'
+		});
+		expect(sniffUpload('old.gif', bytes(ascii('GIF87a')))).toEqual({
 			kind: 'image',
 			ext: 'gif',
 			mimeType: 'image/gif'
@@ -72,6 +78,11 @@ describe('sniffUpload (plan §4.2 whitelist)', () => {
 			mimeType: 'application/pdf'
 		});
 		expect(sniffUpload('archive.zip', ZIP)).toEqual({
+			kind: 'file',
+			ext: 'zip',
+			mimeType: 'application/zip'
+		});
+		expect(sniffUpload('empty.zip', ZIP_EMPTY)).toEqual({
 			kind: 'file',
 			ext: 'zip',
 			mimeType: 'application/zip'
