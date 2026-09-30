@@ -2,6 +2,8 @@ import { fail } from '@sveltejs/kit';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { comments } from '$lib/server/db/content/comment.schema';
+import { notes } from '$lib/server/db/content/note.schema';
+import { pages } from '$lib/server/db/content/page.schema';
 import { posts } from '$lib/server/db/content/post.schema';
 import { can, requireCommentReviewer } from '$lib/server/authz';
 import { isUuid } from '$lib/utils/uuid';
@@ -18,6 +20,9 @@ export const load: PageServerLoad = async (event) => {
 	await requireCommentReviewer();
 	const state = parseState(event.url.searchParams.get('state'));
 
+	// Comment P3a queue enhancement (spec §9): resolve the exclusive-arc
+	// target for all three kinds so note/page rows stop falling into
+	// "其它目标"; quote/block context lands with P3b (anchors).
 	const entries = await db
 		.select({
 			id: comments.id,
@@ -29,10 +34,18 @@ export const load: PageServerLoad = async (event) => {
 			reviewedAt: comments.reviewedAt,
 			postId: comments.postId,
 			postTitle: posts.title,
-			postSlug: posts.slug
+			postSlug: posts.slug,
+			noteId: comments.noteId,
+			noteTitle: notes.title,
+			noteSlug: notes.slug,
+			pageId: comments.pageId,
+			pageTitle: pages.title,
+			pageSlug: pages.slug
 		})
 		.from(comments)
 		.leftJoin(posts, eq(comments.postId, posts.id))
+		.leftJoin(notes, eq(comments.noteId, notes.id))
+		.leftJoin(pages, eq(comments.pageId, pages.id))
 		.where(and(eq(comments.state, state), eq(comments.isDeleted, false)))
 		.orderBy(desc(comments.createdAt))
 		.limit(200);

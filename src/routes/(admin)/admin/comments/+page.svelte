@@ -7,6 +7,7 @@
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconClock from '@tabler/icons-svelte-runes/icons/clock';
 	import IconGlobe from '@tabler/icons-svelte-runes/icons/globe';
+	import { commentTargetDisplay, type CommentTargetDisplay } from '$lib/utils/comment-target';
 
 	let { data, form }: PageProps = $props();
 
@@ -32,6 +33,13 @@
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col bg-background">
+	{#snippet targetChip(target: CommentTargetDisplay)}
+		<span class="rounded-sm bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+			{target.label}
+		</span>
+		{#if target.href}<IconExternalLink class="size-3" />{/if}
+		<span class="max-w-64 truncate">{target.title}</span>
+	{/snippet}
 	<!-- Review state tabs -->
 	<div class="bg-surface-card flex h-12 shrink-0 items-stretch gap-2 border-b px-3">
 		{#each tabs as tab (tab.id)}
@@ -87,6 +95,7 @@
 		<form method="POST" action="?/review" class="flex min-h-0 flex-1 flex-col">
 			<div class="min-h-0 flex-1 overflow-auto">
 				{#each data.entries as entry (entry.id)}
+					{@const target = commentTargetDisplay(entry)}
 					<label
 						class="flex cursor-pointer items-start gap-3 border-b px-4 py-3.5 hover:bg-muted/50"
 					>
@@ -118,18 +127,21 @@
 										{entry.ip}
 									</span>
 								{/if}
-								{#if entry.postSlug}
-									<a
-										class="inline-flex items-center gap-1 hover:underline"
-										href={`/posts/${entry.postSlug}`}
-										target="_blank"
-										rel="noreferrer"
-									>
-										<IconExternalLink class="size-3" />
-										<span class="max-w-64 truncate">{entry.postTitle}</span>
-									</a>
-								{:else if entry.postId}
-									<span>博文 {entry.postId.slice(0, 8)}…</span>
+								{#if target}
+									{#if target.href}
+										<a
+											class="inline-flex items-center gap-1 hover:underline"
+											href={target.href}
+											target="_blank"
+											rel="noreferrer"
+										>
+											{@render targetChip(target)}
+										</a>
+									{:else}
+										<span class="inline-flex items-center gap-1">
+											{@render targetChip(target)}
+										</span>
+									{/if}
 								{:else}
 									<span>其它目标</span>
 								{/if}
