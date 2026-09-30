@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { afterNavigate } from '$app/navigation';
+	import { localeLabels } from '$lib/stores/locale.svelte';
 
 	let status = $derived(page.status);
 	let message = $derived(page.error?.message ?? 'Something went wrong');
@@ -59,6 +60,24 @@
 			<h1 class="text-2xl font-semibold tracking-tight">{heading}</h1>
 			<p class="text-sm text-muted-foreground">{description}</p>
 		</div>
+
+		{#if page.error?.available?.length}
+			<div class="space-y-3">
+				<p class="text-sm text-muted-foreground">This page is available in:</p>
+				<ul class="flex flex-wrap justify-center gap-2">
+					{#each page.error.available as item (item.lang)}
+						<li>
+							<a
+								href={item.href}
+								class="inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+							>
+								{localeLabels[item.lang] ?? item.lang}
+							</a>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 
 		<div class="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
 			<a

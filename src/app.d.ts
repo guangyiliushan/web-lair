@@ -43,6 +43,11 @@ declare global {
 				href?: string;
 			}>;
 		}
+		/** Custom error payload (P3-a): missing-language 404 hint data. */
+		interface Error {
+			message: string;
+			available?: Array<{ lang: string; href: string }>;
+		}
 	}
 }
 
