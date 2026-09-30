@@ -27,6 +27,7 @@
 	{action}
 	class="flex flex-col gap-2"
 	aria-busy={submitting}
+	data-slot="comment-composer"
 	use:enhance={() => {
 		submitting = true;
 		return async ({ result, update }) => {

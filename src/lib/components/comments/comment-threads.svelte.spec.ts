@@ -147,13 +147,16 @@ describe('CommentsSection', () => {
 	});
 
 	it('autolinks http(s) URLs with the hardened rel set and keeps exact text', async () => {
-		const text = '看这个 https://example.com/a 吧';
+		// Typed without the trailing slash: display keeps the typed text while
+		// the href carries the normalised form - a discriminator so swapping
+		// `segment.href` for `segment.text` cannot stay green (test review).
+		const text = '看这个 https://example.com 吧';
 		await render(CommentsSection, {
 			...BASE,
 			threads: threadsPage([root({ text })])
 		});
 		const anchor = document.querySelector('[data-comment-id="root-1"] a');
-		expect(anchor?.getAttribute('href')).toBe('https://example.com/a');
+		expect(anchor?.getAttribute('href')).toBe('https://example.com/');
 		expect(anchor?.getAttribute('target')).toBe('_blank');
 		const rel = anchor?.getAttribute('rel') ?? '';
 		for (const value of ['nofollow', 'ugc', 'noopener', 'noreferrer']) {

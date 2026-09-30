@@ -27,6 +27,7 @@
 	class="mt-16 border-t border-border/40 pt-8"
 	aria-labelledby="comments-title"
 	data-comment-target={targetType}
+	data-slot="comments-section"
 >
 	<h2 id="comments-title" class="text-lg font-medium">
 		{m.comment_title()}

@@ -1,13 +1,6 @@
-import { execFileSync } from 'node:child_process';
-import {
-	expect,
-	test,
-	type Browser,
-	type BrowserContext,
-	type Page,
-	type Response
-} from '@playwright/test';
+import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
+import { apiPost, psql, valkeyAlive, valkeyDel } from './support';
 
 /**
  * Comment P3a acceptance (pages plan T7): guest guidance, submit -> pending,
@@ -26,7 +19,6 @@ import { zhCnLocale } from './locale-fixture';
  * memoised per account to keep the shared better-auth path-bucket limiter
  * (3 per 10s per path) out of other spec files' way.
  */
-const ORIGIN = 'http://localhost:4173';
 const CATEGORY = '00000000-0000-7000-8000-0000000000c1';
 const POST = '00000000-0000-7000-8000-0000000000c2';
 const NOTE = '00000000-0000-7000-8000-0000000000c3';
@@ -54,41 +46,14 @@ const T_RL1 = 'e2e-cmt 节流一';
 const T_RL2 = 'e2e-cmt 节流二';
 const T_RL3 = 'e2e-cmt 节流三';
 
+/** Root-composer submit, scoped to the ?/comment form: with an inline reply
+ *  composer open, a page-level role locator would be ambiguous (UI review). */
+function rootSubmit(page: Page) {
+	return page.locator('form[action="?/comment"]').getByRole('button', { name: '发表' });
+}
+
 test.use(zhCnLocale);
 test.describe.configure({ mode: 'serial' });
-
-function psql(sql: string): string {
-	return execFileSync(
-		'docker',
-		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', 'local', '-tAc', sql],
-		{ encoding: 'utf8' }
-	).trim();
-}
-
-/** Throttle keys live in Valkey; drop them best-effort (container may be down). */
-function valkeyDel(key: string) {
-	try {
-		execFileSync('docker', ['exec', 'web-lair-valkey-1', 'valkey-cli', 'DEL', key], {
-			encoding: 'utf8'
-		});
-	} catch {
-		// fail-open by contract: no Valkey means the limiter was never engaged.
-	}
-}
-
-function valkeyAlive(): boolean {
-	try {
-		return (
-			execFileSync('docker', ['exec', 'web-lair-valkey-1', 'valkey-cli', 'PING'], {
-				encoding: 'utf8'
-			})
-				.trim()
-				.toUpperCase() === 'PONG'
-		);
-	} catch {
-		return false;
-	}
-}
 
 test.beforeAll(() => {
 	psql(`delete from comments where text like 'e2e-cmt%'`);
@@ -147,45 +112,6 @@ test.afterAll(async () => {
 });
 
 /* ── auth fixtures ──────────────────────────────────────────────────────── */
-
-/**
- * better-auth's rate limiter is active in the production preview and keys
- * buckets by path: /sign-in*|/sign-up* allow 3 per rolling 10s. Pace calls and
- * retry once on 429 so parallel spec files cannot flake each other.
- */
-const RATE_LIMITED = /^\/(sign-in|sign-up|change-password|change-email|two-factor)\//;
-const RATE_WINDOW_MS = 10_500;
-const RATE_MAX = 3;
-const rateGates = new Map<string, { count: number; last: number }>();
-
-async function apiPost(
-	page: Page,
-	path: string,
-	data: Record<string, unknown>,
-	attempt = 0
-): Promise<Response> {
-	const apiPath = path.replace(/^\/api\/auth/, '');
-	if (RATE_LIMITED.test(apiPath)) {
-		const now = Date.now();
-		const state = rateGates.get(apiPath) ?? { count: 0, last: 0 };
-		if (now - state.last >= RATE_WINDOW_MS) {
-			state.count = 0;
-		} else if (state.count >= RATE_MAX) {
-			await new Promise((resolve) => setTimeout(resolve, RATE_WINDOW_MS - (now - state.last)));
-			state.count = 0;
-		}
-		state.count += 1;
-		state.last = Date.now();
-		rateGates.set(apiPath, state);
-	}
-	const response = await page.request.post(path, { data, headers: { origin: ORIGIN } });
-	if (response.status() === 429 && attempt < 2) {
-		const retryAfter = Number(response.headers()['x-retry-after'] ?? 11);
-		await new Promise((resolve) => setTimeout(resolve, (retryAfter + 1) * 1000));
-		return apiPost(page, path, data, attempt + 1);
-	}
-	return response;
-}
 
 /** Sign-up + SQL-verify + explicit sign-in (spec §1 "已验证读者"). */
 async function bootstrapReader(context: BrowserContext, email: string) {
@@ -265,7 +191,7 @@ test('reader submits -> pending with the own-pending badge; guests do not see it
 	const textarea = page.getByRole('textbox', { name: '评论内容' });
 	await expect(textarea).toBeVisible();
 	await textarea.fill(T_READER);
-	await page.getByRole('button', { name: '发表' }).click();
+	await rootSubmit(page).click();
 	await expect(page.getByText('已提交，待审核。')).toBeVisible();
 
 	const ownItem = page.locator('[data-comment-id]').filter({ hasText: T_READER });
@@ -345,7 +271,7 @@ test('no-JS: the native form submit works end to end (progressive enhancement)',
 	const page = await context.newPage();
 	await page.goto(POST_PATH);
 	await page.getByRole('textbox', { name: '评论内容' }).fill(T_NOJS);
-	await page.getByRole('button', { name: '发表' }).click();
+	await rootSubmit(page).click();
 	await expect(page.getByText('已提交，待审核。')).toBeVisible();
 	expect(psql(`select state from comments where text = '${T_NOJS}'`)).toBe('pending');
 	await context.close();
@@ -370,7 +296,7 @@ test('keyboard: the composer is reachable and operable without a mouse', async (
 	// The next stop is the submit button; stepping back lets us type - no
 	// mouse involved. (Activation itself is covered by the submit + no-JS
 	// cases; this test pins the keyboard path's reachability.)
-	const submit = page.getByRole('button', { name: '发表' });
+	const submit = rootSubmit(page);
 	await page.keyboard.press('Tab');
 	expect(await submit.evaluate((el) => el === document.activeElement)).toBe(true);
 	await page.keyboard.press('Shift+Tab');
@@ -391,13 +317,13 @@ test('throttle: two submissions pass, the third is refused inside the window', a
 	const textarea = page.getByRole('textbox', { name: '评论内容' });
 
 	await textarea.fill(T_RL1);
-	await page.getByRole('button', { name: '发表' }).click();
+	await rootSubmit(page).click();
 	// The own pending row appearing is the completion signal (the flash alone
 	// can be left over from a previous submit).
 	await expect(page.getByText(T_RL1)).toBeVisible();
 
 	await textarea.fill(T_RL2);
-	await page.getByRole('button', { name: '发表' }).click();
+	await rootSubmit(page).click();
 	await expect(page.getByText(T_RL2)).toBeVisible();
 
 	// The prior update() resets the form; make sure this fill survived before
@@ -405,7 +331,7 @@ test('throttle: two submissions pass, the third is refused inside the window', a
 	// and nothing would reach the server.
 	await textarea.fill(T_RL3);
 	await expect(textarea).toHaveValue(T_RL3);
-	await page.getByRole('button', { name: '发表' }).click();
+	await rootSubmit(page).click();
 	await expect(page.getByText('发言太快了，请一分钟后再试。')).toBeVisible();
 
 	expect(

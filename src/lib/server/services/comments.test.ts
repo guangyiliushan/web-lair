@@ -40,6 +40,7 @@ import {
 	loadThreads,
 	submitComment,
 	visibleCommentCondition,
+	COMMENT_RATE_LIMIT,
 	THREAD_REPLY_LIMIT,
 	THREAD_ROOT_LIMIT,
 	type CommentRow
@@ -257,13 +258,24 @@ describe('assembleThreads', () => {
 });
 
 describe('loadThreads', () => {
+	it('pins the spec literals (grill Q6 / spec §1)', () => {
+		expect(THREAD_ROOT_LIMIT).toBe(200);
+		expect(THREAD_REPLY_LIMIT).toBe(500);
+		expect(COMMENT_MAX_LENGTH).toBe(2000);
+		expect(COMMENT_RATE_LIMIT).toEqual({ limit: 2, windowSeconds: 60 });
+	});
+
 	it('reads roots then replies, with the grill caps plus the probe row', async () => {
 		state.selectQueue = [
 			[row({ id: 'r1' })],
 			[row({ id: 'p1', parentCommentId: 'r1', rootCommentId: 'r1' })]
 		];
 		const page = await loadThreads({ targetType: 'post', targetId: TARGET, viewerId: null });
-		expect(state.limits).toEqual([THREAD_ROOT_LIMIT + 1, THREAD_REPLY_LIMIT + 1]);
+		// Literal caps, not the constants: a drifted constant must fail here.
+		expect(state.limits).toEqual([201, 501]);
+		// The roots query really is parent IS NULL (replies must not become
+		// roots in the assembly).
+		expect(render(state.wheres[0]?.[0]).sql).toContain('"comments"."parent_comment_id" is null');
 		expect(page.roots).toHaveLength(1);
 		expect(page.roots[0].replies).toHaveLength(1);
 	});

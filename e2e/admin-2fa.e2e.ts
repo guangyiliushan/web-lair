@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { apiPost, psql } from './support';
 
 /**
  * B3.1 acceptance for the admin 2FA challenge (TOTP + backup codes + reset).
@@ -15,7 +16,6 @@ import { expect, test, type Page } from '@playwright/test';
 const FIXTURE_EMAIL = 'e2e-2fa@example.com';
 const FIXTURE_PASSWORD = 'e2e-2fa-password-1';
 const FIXTURE_NAME = 'E2E 2FA';
-const ORIGIN = 'http://localhost:4173';
 
 function envValue(key: string): string {
 	const raw = readFileSync('.env', 'utf8');
@@ -36,14 +36,6 @@ const TWO_FACTOR_PATH = `/admin/${LOGIN_SLUG}/two-factor`;
  */
 const isAdminDestination = (url: URL) =>
 	url.pathname.startsWith('/admin') && !url.pathname.includes('/two-factor');
-
-function psql(sql: string): string {
-	return execFileSync(
-		'docker',
-		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', 'local', '-tAc', sql],
-		{ encoding: 'utf8' }
-	).trim();
-}
 
 function runResetScript(): string {
 	return execFileSync('pnpm', ['db:reset-2fa', FIXTURE_EMAIL], {
@@ -82,38 +74,6 @@ function totpCode(totpSecret: string, timestamp = Date.now()): string {
 		(digest[offset + 3] & 0xff);
 
 	return (code % 1_000_000).toString().padStart(6, '0');
-}
-
-/**
- * better-auth's rate limiter is ACTIVE in the production preview (`enabled`
- * defaults to isProduction) and, without a resolvable client IP, keys buckets
- * by path alone: /sign-in*|/sign-up*|/change-* allow 3 per rolling 10s chain
- * and the two-factor plugin allows 3 per 10s for /two-factor/* (probed: the
- * 4th rapid call answers 429 + X-Retry-After, reset needs ~10s idle).
- * Pace those calls with the same rule so a full run never trips the limiter.
- */
-const RATE_LIMITED = /^\/(sign-in|sign-up|change-password|change-email|two-factor)\//;
-const RATE_WINDOW_MS = 10_500;
-const RATE_MAX = 3;
-const rateGates = new Map<string, { count: number; last: number }>();
-
-async function apiPost(page: Page, path: string, data: Record<string, unknown>) {
-	const apiPath = path.replace(/^\/api\/auth/, '');
-	if (RATE_LIMITED.test(apiPath)) {
-		const now = Date.now();
-		const state = rateGates.get(apiPath) ?? { count: 0, last: 0 };
-		if (now - state.last >= RATE_WINDOW_MS) {
-			state.count = 0;
-		} else if (state.count >= RATE_MAX) {
-			// The limiter resets after a >=10s idle gap from the last request.
-			await new Promise((resolve) => setTimeout(resolve, RATE_WINDOW_MS - (now - state.last)));
-			state.count = 0;
-		}
-		state.count += 1;
-		state.last = Date.now();
-		rateGates.set(apiPath, state);
-	}
-	return page.request.post(path, { data, headers: { origin: ORIGIN } });
 }
 
 /** verify-totp through the API, with retries across a 30s window / 10s rate window. */

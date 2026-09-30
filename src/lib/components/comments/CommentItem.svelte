@@ -77,7 +77,11 @@
 	>
 {/snippet}
 
-<li class="border-b border-border/40 py-5 last:border-b-0" data-comment-id={root.id}>
+<li
+	class="border-b border-border/40 py-5 last:border-b-0"
+	data-comment-id={root.id}
+	data-slot="comment-item"
+>
 	{#if root.isDeleted}
 		<p class="text-sm text-muted-foreground italic">{m.comment_deleted()}</p>
 	{:else}
