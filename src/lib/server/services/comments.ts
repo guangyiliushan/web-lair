@@ -5,7 +5,21 @@ import { comments, posts } from '$lib/server/db/content';
 import { isAdminRole } from '$lib/server/auth/owner';
 import { rateLimit, type CacheStore } from '$lib/server/cache/store';
 import { isUuid } from '$lib/utils/uuid';
+import type {
+	CommentTargetType,
+	ThreadReply,
+	ThreadRoot,
+	ThreadsPage
+} from '$lib/components/comments/types';
 import { visiblePostCondition } from './post-visibility';
+
+export type {
+	CommentTargetType,
+	CommentView,
+	ThreadReply,
+	ThreadRoot,
+	ThreadsPage
+} from '$lib/components/comments/types';
 
 /**
  * Public comment threads (comment P3a, ledger §27 / spec §10): article-level
@@ -19,8 +33,6 @@ import { visiblePostCondition } from './post-visibility';
  * root with visible replies into a floor-keeping placeholder and drops
  * everything else.
  */
-
-export type CommentTargetType = 'post' | 'note' | 'page';
 
 /** Read caps (grill Q6): the root page doubles as the future "load more" unit. */
 export const THREAD_ROOT_LIMIT = 200;
@@ -75,35 +87,6 @@ export interface CommentRow {
 	readerId: string | null;
 	parentCommentId: string | null;
 	rootCommentId: string | null;
-}
-
-export interface CommentView {
-	id: string;
-	text: string;
-	author: string | null;
-	avatar: string | null;
-	isOwner: boolean;
-	isPending: boolean;
-	createdAt: Date;
-}
-
-export interface ThreadReply extends CommentView {
-	/** "回复 @作者" chip target; null when the parent is the root or hidden. */
-	replyToAuthor: string | null;
-}
-
-export interface ThreadRoot extends CommentView {
-	pin: boolean;
-	isDeleted: boolean;
-	/** Visible replies only (derived at read; reply_count column is not kept). */
-	replyCount: number;
-	replies: ThreadReply[];
-}
-
-export interface ThreadsPage {
-	roots: ThreadRoot[];
-	visibleCount: number;
-	truncated: boolean;
 }
 
 /**
