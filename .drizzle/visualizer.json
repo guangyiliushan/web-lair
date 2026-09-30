@@ -14,13 +14,6 @@
 		}
 	},
 	{
-		"id": "meta_presets",
-		"position": {
-			"x": 50,
-			"y": 3320
-		}
-	},
-	{
 		"id": "options",
 		"position": {
 			"x": 50,
@@ -105,13 +98,6 @@
 		}
 	},
 	{
-		"id": "snippets",
-		"position": {
-			"x": 50,
-			"y": 8880
-		}
-	},
-	{
 		"id": "topics",
 		"position": {
 			"x": 50,
@@ -126,13 +112,6 @@
 		}
 	},
 	{
-		"id": "analytics",
-		"position": {
-			"x": 50,
-			"y": 10600
-		}
-	},
-	{
 		"id": "enrichment_captures",
 		"position": {
 			"x": 490,
@@ -140,52 +119,10 @@
 		}
 	},
 	{
-		"id": "enrichment_cache",
-		"position": {
-			"x": 50,
-			"y": 11200
-		}
-	},
-	{
 		"id": "file_references",
 		"position": {
 			"x": 930,
 			"y": 16990
-		}
-	},
-	{
-		"id": "poll_vote_options",
-		"position": {
-			"x": 490,
-			"y": 11940
-		}
-	},
-	{
-		"id": "poll_votes",
-		"position": {
-			"x": 50,
-			"y": 11920
-		}
-	},
-	{
-		"id": "search_documents",
-		"position": {
-			"x": 50,
-			"y": 12320
-		}
-	},
-	{
-		"id": "serverless_logs",
-		"position": {
-			"x": 50,
-			"y": 13360
-		}
-	},
-	{
-		"id": "serverless_storages",
-		"position": {
-			"x": 50,
-			"y": 14080
 		}
 	},
 	{
@@ -200,13 +137,6 @@
 		"position": {
 			"x": 50,
 			"y": 14840
-		}
-	},
-	{
-		"id": "webhook_events",
-		"position": {
-			"x": 490,
-			"y": 15240
 		}
 	},
 	{
@@ -361,6 +291,48 @@
 		"position": {
 			"x": 930,
 			"y": 16560
+		}
+	},
+	{
+		"id": "files",
+		"position": {
+			"x": 2400,
+			"y": 6770
+		}
+	},
+	{
+		"id": "photos",
+		"position": {
+			"x": 2400,
+			"y": 7330
+		}
+	},
+	{
+		"id": "photo_tags",
+		"position": {
+			"x": 2400,
+			"y": 7890
+		}
+	},
+	{
+		"id": "job_runs",
+		"position": {
+			"x": 2400,
+			"y": 8450
+		}
+	},
+	{
+		"id": "job_schedules",
+		"position": {
+			"x": 2400,
+			"y": 9010
+		}
+	},
+	{
+		"id": "webhook_deliveries",
+		"position": {
+			"x": 2400,
+			"y": 9570
 		}
 	}
 ]
