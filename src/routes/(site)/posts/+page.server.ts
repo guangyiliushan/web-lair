@@ -1,110 +1,85 @@
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { getLocale } from '$lib/paraglide/runtime';
+import { db } from '$lib/server/db';
+import { categories, postTags, posts, tags } from '$lib/server/db/content';
+import { visiblePostCondition } from '$lib/server/services/post-visibility';
+import { plainTextExcerpt } from '$lib/utils/excerpt';
+import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad } from './$types';
 
-export interface PostItem {
-	slug: string;
-	title: string;
-	excerpt: string;
-	date: string;
-	category: string;
-	tags: string[];
-	views: number;
-	likes: number;
-	isPinned?: boolean;
-	translated?: { from: string; to: string };
-}
+const PAGE_SIZE = 10;
 
-export interface TagCount {
-	name: string;
-	count: number;
-}
+/**
+ * Public posts list (P3-a minimal read side, ledger §9.18): posts of the URL
+ * locale only, filtered by the shared visibility condition, pinned first.
+ * Sorting, filters and aggregates (categories/tags/timeline) are P3-b.
+ */
+export const load: PageServerLoad = async ({ url }) => {
+	const lang = getLocale();
+	const visible = and(eq(posts.lang, lang), visiblePostCondition());
 
-export const load: PageServerLoad = async () => {
-	const posts: PostItem[] = [
-		{
-			slug: 'ai-era-efficiency-paradox',
-			title:
-				'The Efficiency Paradox of the AI Era: When Increased Productivity Brings Fatigue Instead',
-			excerpt:
-				'Yesterday I saw an article about whether AI makes us feel fatigued. The more powerful our tools become, the more we seem to struggle with burnout.',
-			date: 'March 1, 2026',
-			category: 'Experience',
-			tags: ['ai', 'productivity'],
-			views: 2511,
-			likes: 20,
-			isPinned: true,
-			translated: { from: '中文', to: 'English' }
-		},
-		{
-			slug: 'decouple-hydration-from-react-ui',
-			title: 'Decoupling Hydration from the React UI: A Boundary Correction During SPA Startup',
-			excerpt:
-				'Cold-starting a React SPA often produces a specific visual glitch: business content flashes before hydration completes.',
-			date: '9 days ago',
-			category: 'Technology',
-			tags: ['React', 'SWR', 'Electron'],
-			views: 648,
-			likes: 11,
-			translated: { from: '中文', to: 'English' }
-		},
-		{
-			slug: 'nextjs-shell-hono-backend-migration',
-			title: "Hollowing Out Next.js: A Field Report on Migrating LobeHub's Backend to Hono",
-			excerpt:
-				'The task I was given sounded simple: fully extract Hono. The underlying challenge was decoupling a tightly-integrated Next.js application.',
-			date: '16 days ago',
-			category: 'Technology',
-			tags: ['Next.js', 'Hono'],
-			views: 794,
-			likes: 3,
-			translated: { from: '中文', to: 'English' }
-		},
-		{
-			slug: 'skill-first-blog-second',
-			title: 'Turning AI Sessions into Two Assets',
-			excerpt:
-				'When collaborating with AI on engineering tasks, you often hit a certain type of repetitive friction. What if each session produced reusable outputs?',
-			date: 'May 25, 2026',
-			category: 'Technology',
-			tags: ['ai', 'workflow', 'mxs'],
-			views: 1473,
-			likes: 5,
-			translated: { from: '中文', to: 'English' }
-		},
-		{
-			slug: 'lobehub-vite-route-module-prewarm',
-			title: "LobeHub's Vite Route Module Warmup Practice",
-			excerpt:
-				'In large SPAs, code splitting is essential, but it introduces another problem: a cold start penalty when navigating to new routes.',
-			date: 'May 23, 2026',
-			category: 'Technology',
-			tags: ['vite', 'performance'],
-			views: 572,
-			likes: 6,
-			translated: { from: '中文', to: 'English' }
-		}
-	];
+	const [totals] = await db.select({ total: count() }).from(posts).where(visible);
+	const total = totals?.total ?? 0;
+	const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+	const requested = Number.parseInt(url.searchParams.get('page') ?? '1', 10);
+	const page = Math.min(Math.max(Number.isNaN(requested) ? 1 : requested, 1), totalPages);
 
-	const pinnedPost = posts.find((p) => p.isPinned) ?? null;
-	const normalPosts = posts.filter((p) => !p.isPinned);
-	const totalCount = posts.length;
+	const rows = await db
+		.select({
+			id: posts.id,
+			slug: posts.slug,
+			title: posts.title,
+			summary: posts.summary,
+			content: posts.content,
+			publishedAt: posts.publishedAt,
+			pinAt: posts.pinAt,
+			readCount: posts.readCount,
+			likeCount: posts.likeCount,
+			categoryName: categories.name
+		})
+		.from(posts)
+		.innerJoin(categories, eq(posts.categoryId, categories.id))
+		.where(visible)
+		.orderBy(sql`${posts.pinAt} desc nulls last`, desc(posts.publishedAt))
+		.limit(PAGE_SIZE)
+		.offset((page - 1) * PAGE_SIZE);
 
-	const tags: TagCount[] = [
-		{ name: 'react', count: 48 },
-		{ name: 'typescript', count: 45 },
-		{ name: 'nextjs', count: 30 },
-		{ name: 'javascript', count: 28 },
-		{ name: 'css', count: 22 },
-		{ name: 'vue', count: 18 },
-		{ name: 'ai', count: 13 },
-		{ name: 'ssr', count: 11 },
-		{ name: 'refactor', count: 10 },
-		{ name: 'vercel', count: 10 }
-	];
+	const ids = rows.map((row) => row.id);
+	const tagRows = ids.length
+		? await db
+				.select({ postId: postTags.postId, name: tags.name })
+				.from(postTags)
+				.innerJoin(tags, eq(postTags.tagId, tags.id))
+				.where(inArray(postTags.postId, ids))
+				.orderBy(tags.name)
+		: [];
+	const tagsByPost = new Map<string, string[]>();
+	for (const row of tagRows) {
+		const list = tagsByPost.get(row.postId) ?? [];
+		list.push(row.name);
+		tagsByPost.set(row.postId, list);
+	}
+
+	const toCard = (row: (typeof rows)[number]) => ({
+		slug: row.slug,
+		title: row.title,
+		excerpt: row.summary?.trim() || plainTextExcerpt(row.content ?? ''),
+		date: row.publishedAt ? formatDate(row.publishedAt) : '',
+		category: row.categoryName,
+		tags: tagsByPost.get(row.id) ?? [],
+		views: row.readCount,
+		likes: row.likeCount
+	});
+
+	// The pinned card only exists on the first page — the ordering already
+	// puts pinned rows (pin_at not null) ahead of everything else.
+	const pinnedRow = page === 1 ? rows.find((row) => row.pinAt !== null) : undefined;
 
 	return {
-		pinnedPost,
-		posts: normalPosts,
-		totalCount,
-		tags
+		pinnedPost: pinnedRow ? toCard(pinnedRow) : null,
+		posts: rows.filter((row) => row !== pinnedRow).map(toCard),
+		total,
+		totalPages,
+		page
 	};
 };
