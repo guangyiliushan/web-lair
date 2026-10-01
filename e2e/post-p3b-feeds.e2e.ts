@@ -61,8 +61,19 @@ test.describe('P3-b distribution face', () => {
 
 		const etag = response.headers()['etag'];
 		expect(etag).toBeTruthy();
-		const fresh = await request.get('/sitemap.xml', { headers: { 'if-none-match': etag! } });
-		expect(fresh.status()).toBe(304);
+		// Parallel specs insert/delete fixture posts between requests, which
+		// legitimately changes the body (and therefore the ETag); re-read the
+		// validator instead of treating a 200 as a failure.
+		let status = 0;
+		let currentEtag = etag!;
+		for (let attempt = 0; attempt < 4 && status !== 304; attempt += 1) {
+			const fresh = await request.get('/sitemap.xml', {
+				headers: { 'if-none-match': currentEtag }
+			});
+			status = fresh.status();
+			currentEtag = fresh.headers()['etag']!;
+		}
+		expect(status).toBe(304);
 	});
 
 	test('the root sitemap serves document requests without redirecting', async ({ page }) => {
@@ -87,9 +98,16 @@ test.describe('P3-b distribution face', () => {
 	test('the bare rss alias redirects to the default-language feed (temporary)', async ({
 		request
 	}) => {
+		// Derive the expected target from the database so the pin follows
+		// `site.default_lang` instead of hard-coding the repository baseline.
+		const defaultLang =
+			(psql(`select value from options where name = 'site.default_lang'`) || '')
+				.replace(/["']/g, '')
+				.trim() || 'en';
+
 		const response = await request.get('/rss.xml', { maxRedirects: 0 });
 		expect(response.status()).toBe(302);
-		expect(response.headers()['location']).toBe('/en/rss.xml');
+		expect(response.headers()['location']).toBe(`/${defaultLang}/rss.xml`);
 	});
 
 	test('robots.txt advertises the sitemap from ORIGIN', async ({ request }) => {
@@ -117,7 +135,14 @@ test.describe('P3-b distribution face', () => {
 		const body = await response.text();
 		expect(body).toContain('<language>ja</language>');
 		const items = (body.match(/<item>/g) ?? []).length;
-		expect(items).toBe(Math.min(visible, 20));
+		if (visible === 0) {
+			// The repository baseline has no visible ja posts: pin the empty
+			// shape explicitly, then keep the parity check for when that changes.
+			expect(items).toBe(0);
+			expect(body).not.toContain('<item>');
+		} else {
+			expect(items).toBe(Math.min(visible, 20));
+		}
 		expect(body.trimEnd().endsWith('</rss>')).toBe(true);
 	});
 });

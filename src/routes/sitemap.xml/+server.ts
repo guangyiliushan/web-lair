@@ -3,7 +3,8 @@ import { localizeHref, locales } from '$lib/paraglide/runtime';
 import { db } from '$lib/server/db';
 import { posts } from '$lib/server/db/content';
 import { buildSitemap, type SitemapUrl } from '$lib/server/feeds';
-import { getOrigin } from '$lib/server/origin';
+import { ifModifiedSinceCovers, ifNoneMatchMatches } from '$lib/server/feeds/cache';
+import { getPublicOrigin } from '$lib/server/origin';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import type { RequestHandler } from './$types';
 
@@ -11,14 +12,19 @@ import type { RequestHandler } from './$types';
  * Single-file sitemap (P3-b, ledger §22): `/` + every visible post, each
  * language as its own <url> with published alternates (self included, slugs
  * per language). No changefreq/priority; lastmod only from a real
- * updated_at. Tags/categories stay out (thin pages) — the notes, pages,
- * projects and micro-content sources plug in here in their own batches.
+ * updated_at. Tags/categories stay out (thin pages), and /posts + /timeline
+ * wait on a follow-up decision (registered); the notes, pages and
+ * micro-content sources plug in here in their own batches.
+ *
+ * Ordering is pinned to (lang, slug) so the body — and therefore the strong
+ * ETag — is byte-stable across requests (review finding).
  *
  * Caching (R1-Q2): strong ETag = representation hash, Last-Modified = the
- * newest included updated_at, 304 on a matching If-None-Match.
+ * newest included updated_at, 304 on a matching If-None-Match (list/weak
+ * per RFC 9110 §13.1.2) or a covering If-Modified-Since when INM is absent.
  */
-export const GET: RequestHandler = async ({ request }) => {
-	const origin = getOrigin();
+export const GET: RequestHandler = async ({ request, url }) => {
+	const origin = getPublicOrigin() ?? url.origin;
 	const now = new Date();
 
 	const rows = await db
@@ -29,7 +35,8 @@ export const GET: RequestHandler = async ({ request }) => {
 			translationGroup: posts.translationGroup
 		})
 		.from(posts)
-		.where(visiblePostCondition(now));
+		.where(visiblePostCondition(now))
+		.orderBy(posts.lang, posts.slug);
 
 	// Visible versions per translation group drive the alternates sets.
 	const byGroup = new Map<string, { lang: string; slug: string }[]>();
@@ -70,7 +77,11 @@ export const GET: RequestHandler = async ({ request }) => {
 	if (latest) headers['last-modified'] = latest.toUTCString();
 
 	const ifNoneMatch = request.headers.get('if-none-match');
-	if (ifNoneMatch === etag || ifNoneMatch === '*') {
+	const notModified =
+		ifNoneMatchMatches(ifNoneMatch, etag) ||
+		(ifNoneMatch === null &&
+			ifModifiedSinceCovers(request.headers.get('if-modified-since'), latest));
+	if (notModified) {
 		return new Response(null, { status: 304, headers });
 	}
 	return new Response(body, { status: 200, headers });

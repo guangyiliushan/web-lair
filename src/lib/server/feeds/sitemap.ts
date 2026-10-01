@@ -37,7 +37,7 @@ export function buildSitemap(options: SitemapOptions): string {
 
 function buildUrl(url: SitemapUrl): string {
 	const lines = ['\t<url>', `\t\t<loc>${escapeXml(url.loc)}</loc>`];
-	if (url.lastmod !== undefined) lines.push(`\t\t<lastmod>${url.lastmod}</lastmod>`);
+	if (url.lastmod !== undefined) lines.push(`		<lastmod>${escapeXml(url.lastmod)}</lastmod>`);
 	for (const alternate of url.alternates ?? []) {
 		lines.push(
 			`\t\t<xhtml:link rel="alternate" hreflang="${escapeXml(alternate.hreflang)}" href="${escapeXml(alternate.href)}" />`

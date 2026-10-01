@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRssFeed, buildSitemap, cdata, escapeXml } from './index';
+import { buildRssFeed, buildSitemap, cdata, escapeXml, sanitizeXmlText } from './index';
 
 describe('escapeXml', () => {
 	it('escapes the five XML entities for text and attributes', () => {
@@ -13,6 +13,21 @@ describe('cdata', () => {
 	it('wraps payloads and splits a nested terminator', () => {
 		expect(cdata('<p>hi</p>')).toBe('<![CDATA[<p>hi</p>]]>');
 		expect(cdata('a ]]> b')).toBe('<![CDATA[a ]]]]><![CDATA[> b]]>');
+	});
+});
+
+describe('sanitizeXmlText', () => {
+	it('strips characters XML 1.0 cannot represent, in text and CDATA alike', () => {
+		// A form-feed pasted from a PDF used to make the whole feed
+		// non-well-formed (review finding).
+		expect(sanitizeXmlText('a\u0001b\u000Cc')).toBe('abc');
+		expect(escapeXml('a\u0000b & c')).toBe('ab &amp; c');
+		expect(cdata('<p>a\u000Bb</p>')).toBe('<![CDATA[<p>ab</p>]]>');
+	});
+
+	it('keeps the characters XML 1.0 allows (tabs, newlines, astral planes)', () => {
+		expect(sanitizeXmlText('keep\ttab\nnewline\rCR')).toBe('keep\ttab\nnewline\rCR');
+		expect(sanitizeXmlText('emoji \ud83c\udf89 ok')).toBe('emoji \ud83c\udf89 ok');
 	});
 });
 
@@ -102,5 +117,12 @@ describe('buildSitemap', () => {
 			urls: [{ loc: 'https://example.com/en/posts/a?x=1&y=2' }]
 		});
 		expect(sitemap).toContain('<loc>https://example.com/en/posts/a?x=1&amp;y=2</loc>');
+	});
+
+	it('escapes lastmod like every other interpolated value', () => {
+		const sitemap = buildSitemap({
+			urls: [{ loc: 'https://example.com/en/', lastmod: 'a<b&"c"' }]
+		});
+		expect(sitemap).toContain('<lastmod>a&lt;b&amp;&quot;c&quot;</lastmod>');
 	});
 });

@@ -7,8 +7,9 @@ import { getOption } from '$lib/server/config/options-registry';
 import { db } from '$lib/server/db';
 import { posts } from '$lib/server/db/content';
 import { buildRssFeed, type RssItem } from '$lib/server/feeds';
+import { ifModifiedSinceCovers, ifNoneMatchMatches } from '$lib/server/feeds/cache';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
-import { getOrigin } from '$lib/server/origin';
+import { getPublicOrigin } from '$lib/server/origin';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import { plainTextExcerpt } from '$lib/utils/excerpt';
 import type { RequestHandler } from './$types';
@@ -24,7 +25,12 @@ const ITEM_LIMIT = 20;
  * Scope (ledger §22): posts — notes join with N1 — latest 20, future-dated
  * items excluded by the shared visibility predicate, `urn:uuid` guids so
  * slug changes never re-deliver an item. Caching (R1-Q2): strong ETag =
- * representation hash + Last-Modified from the newest updated_at.
+ * representation hash + Last-Modified from the newest updated_at;
+ * conditional requests follow RFC 9110 §13.1 (weak If-None-Match
+ * comparison, If-Modified-Since honoured when INM is absent).
+ *
+ * The locale comes from the path: this endpoint is excluded from the i18n
+ * route strategy (locale-surfaces), so getLocale() is not available here.
  */
 export const GET: RequestHandler = async ({ url, request }) => {
 	const locale = localeFromPath(url.pathname);
@@ -33,7 +39,7 @@ export const GET: RequestHandler = async ({ url, request }) => {
 		redirect(302, `/${defaultLang}/rss.xml`);
 	}
 
-	const origin = getOrigin();
+	const origin = getPublicOrigin() ?? url.origin;
 	const now = new Date();
 
 	const rows = await db
@@ -48,7 +54,7 @@ export const GET: RequestHandler = async ({ url, request }) => {
 		})
 		.from(posts)
 		.where(and(eq(posts.lang, locale), visiblePostCondition(now)))
-		.orderBy(desc(posts.publishedAt))
+		.orderBy(desc(posts.publishedAt), desc(posts.id))
 		.limit(ITEM_LIMIT);
 
 	const items = (
@@ -76,7 +82,7 @@ export const GET: RequestHandler = async ({ url, request }) => {
 
 	const body = buildRssFeed({
 		lang: locale,
-		title: 'Lair',
+		title: 'Lair', // brand name — intentionally not localised (header logo)
 		description: m.footer_tagline({}, { locale }),
 		link: `${origin}${localizeHref('/posts', { locale })}`,
 		selfHref: `${origin}${localizeHref('/rss.xml', { locale })}`,
@@ -93,7 +99,11 @@ export const GET: RequestHandler = async ({ url, request }) => {
 	if (latest) headers['last-modified'] = latest.toUTCString();
 
 	const ifNoneMatch = request.headers.get('if-none-match');
-	if (ifNoneMatch === etag || ifNoneMatch === '*') {
+	const notModified =
+		ifNoneMatchMatches(ifNoneMatch, etag) ||
+		(ifNoneMatch === null &&
+			ifModifiedSinceCovers(request.headers.get('if-modified-since'), latest));
+	if (notModified) {
 		return new Response(null, { status: 304, headers });
 	}
 	return new Response(body, { status: 200, headers });

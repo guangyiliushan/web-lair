@@ -5,4 +5,4 @@ export {
 	type SitemapOptions,
 	type SitemapUrl
 } from './sitemap';
-export { cdata, escapeXml } from './xml';
+export { cdata, escapeXml, sanitizeXmlText } from './xml';

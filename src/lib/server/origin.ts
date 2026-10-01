@@ -1,12 +1,14 @@
 import { env } from '$env/dynamic/private';
 
 /**
- * Absolute-URL origin for feeds and robots.txt (P3-b detail pack #7; the
- * deploy batch pins the canonical host). Trailing slashes are stripped so
- * callers can concatenate paths directly.
+ * Public origin for absolute URLs (feeds, robots.txt, canonical/hreflang):
+ * the deploy batch pins ORIGIN to the canonical host. Returns null when it
+ * is unset so callers fall back to the request origin — `pnpm dev` without
+ * ORIGIN used to 500 the whole distribution surface (review finding).
+ * Normalised through URL so trailing slashes and stray paths are squeezed
+ * out, and a malformed value fails loudly at the point of use.
  */
-export function getOrigin(): string {
+export function getPublicOrigin(): string | null {
 	const origin = env.ORIGIN;
-	if (!origin) throw new Error('ORIGIN is not set');
-	return origin.replace(/\/+$/, '');
+	return origin ? new URL(origin).origin : null;
 }

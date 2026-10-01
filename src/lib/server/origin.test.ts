@@ -6,19 +6,19 @@ const { envState } = vi.hoisted(() => ({
 
 vi.mock('$env/dynamic/private', () => envState);
 
-import { getOrigin } from './origin';
+import { getPublicOrigin } from './origin';
 
-describe('getOrigin', () => {
+describe('getPublicOrigin', () => {
 	beforeEach(() => {
 		delete envState.env.ORIGIN;
 	});
 
-	it('returns the configured origin without trailing slashes', () => {
+	it('normalises the configured origin (trailing slashes, stray paths)', () => {
 		envState.env.ORIGIN = 'https://example.com///';
-		expect(getOrigin()).toBe('https://example.com');
+		expect(getPublicOrigin()).toBe('https://example.com');
 	});
 
-	it('throws when ORIGIN is missing', () => {
-		expect(() => getOrigin()).toThrow('ORIGIN is not set');
+	it('returns null when ORIGIN is missing so callers fall back to the request origin', () => {
+		expect(getPublicOrigin()).toBeNull();
 	});
 });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { routeStrategies, strategy, urlPatterns } from '$lib/paraglide/runtime';
+import {
+	isExcludedByRouteStrategy,
+	routeStrategies,
+	strategy,
+	urlPatterns
+} from '$lib/paraglide/runtime';
 import { cookieSurfaceMatches, excludedSurfaceMatches } from '$lib/config/locale-surfaces';
 
 /**
@@ -52,5 +57,21 @@ describe('paraglide runtime configuration', () => {
 			.filter((entry) => entry.exclude === true)
 			.map((entry) => entry.match);
 		expect(excluded).toEqual(excludedSurfaceMatches());
+	});
+
+	it('pins the runtime exclusion verdict for root files and per-language feeds', () => {
+		// Exact patterns also match the de-localised path, so the language
+		// feeds are excluded too — handlers there must take the locale from
+		// the path (getLocale() is unavailable; review finding).
+		for (const url of [
+			'http://localhost/sitemap.xml',
+			'http://localhost/robots.txt',
+			'http://localhost/rss.xml',
+			'http://localhost/en/rss.xml',
+			'http://localhost/ja/rss.xml'
+		]) {
+			expect(isExcludedByRouteStrategy(url), url).toBe(true);
+		}
+		expect(isExcludedByRouteStrategy('http://localhost/en/posts/hello')).toBe(false);
 	});
 });

@@ -51,8 +51,15 @@ export function cookieSurfaceMatches(): string[] {
 
 /**
  * Root endpoints whose requests skip the i18n middleware exactly (no
- * wildcard form): the two root files plus the bare feed alias — the feeds
- * themselves live inside the language segment (`/{lang}/rss.xml`).
+ * wildcard form): the two root files plus the feed alias (P3-b R2-Q2).
+ *
+ * Caveat (review finding, verified against the generated runtime): the
+ * middleware matches these patterns against the de-localised path, so
+ * `/{lang}/rss.xml` is skipped as well and the ambient locale stays at the
+ * base locale there. Feed handlers must read the locale from the request
+ * path (`localeFromPath`) and never call `getLocale()`. Dropping the bare
+ * `/rss.xml` entry would additionally let the middleware 307 the alias —
+ * its 302 is pinned by e2e and must stay.
  */
 export const ROOT_EXACT_EXCLUDES = ['/sitemap.xml', '/robots.txt', '/rss.xml'] as const;
 
