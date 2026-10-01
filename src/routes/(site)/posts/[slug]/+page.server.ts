@@ -81,7 +81,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 					href: localizeHref(`/posts/${slug}`, { locale: tag as (typeof locales)[number] })
 				}));
 			error(404, {
-				message: 'This post is not available in this language',
+				message: m.error_post_language_hint(),
 				available
 			});
 		}

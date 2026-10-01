@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { afterNavigate } from '$app/navigation';
+	import { m } from '$lib/paraglide/messages';
 	import { localeLabels } from '$lib/stores/locale.svelte';
 
 	let status = $derived(page.status);
-	let message = $derived(page.error?.message ?? 'Something went wrong');
+	let message = $derived(page.error?.message ?? m.error_generic_heading());
 	const available = $derived(page.error?.available ?? []);
 
 	const isNotFound = $derived(status === 404);
@@ -14,27 +15,27 @@
 
 	const heading = $derived(
 		isNotFound
-			? 'Page not found'
+			? m.error_404_heading()
 			: isForbidden
-				? 'Access denied'
+				? m.error_403_heading()
 				: isUnauthorized
-					? 'Login required'
+					? m.error_401_heading()
 					: isServerError
-						? 'Server error'
-						: 'Something went wrong'
+						? m.error_500_heading()
+						: m.error_generic_heading()
 	);
 
 	const description = $derived(
 		isNotFound
 			? available.length > 0
 				? message
-				: 'The page you are looking for does not exist or has been moved.'
+				: m.error_404_desc()
 			: isForbidden
-				? 'You do not have permission to access this page.'
+				? m.error_403_desc()
 				: isUnauthorized
-					? 'Please log in to access this page.'
+					? m.error_401_desc()
 					: isServerError
-						? 'An internal server error occurred. Please try again later.'
+						? m.error_500_desc()
 						: message
 	);
 
@@ -66,7 +67,7 @@
 
 		{#if available.length}
 			<div class="space-y-3">
-				<p class="text-sm text-muted-foreground">This page is available in:</p>
+				<p class="text-sm text-muted-foreground">{m.error_available_in()}</p>
 				<ul class="flex flex-wrap justify-center gap-2">
 					{#each available as item (item.lang)}
 						<li>
@@ -87,14 +88,14 @@
 				href="/"
 				class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
 			>
-				Back to home
+				{m.error_back_home()}
 			</a>
 			{#if isUnauthorized}
 				<a
 					href="/login"
 					class="inline-flex items-center rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
 				>
-					Go to login
+					{m.error_go_login()}
 				</a>
 			{/if}
 		</div>
