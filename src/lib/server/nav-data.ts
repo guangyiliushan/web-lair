@@ -1,47 +1,79 @@
+import { and, count, desc, eq } from 'drizzle-orm';
+import { getLocale } from '$lib/paraglide/runtime';
+import { db } from '$lib/server/db';
+import { categories, posts } from '$lib/server/db/content';
+import { visiblePostCondition } from '$lib/server/services/post-visibility';
+import { formatDate } from '$lib/utils/i18n';
 import type {
 	MegaMenuDynamicData,
 	NavChild,
 	TimelineActivityItem
 } from '$lib/config/navigation.config';
 
+const MEGA_CATEGORY_LIMIT = 5;
+const MEGA_RECENT_LIMIT = 4;
+
 /**
- * Load data for the Posts mega menu.
- * Replace the placeholder data with real DB queries when posts/categories tables exist.
+ * Load data for the Posts mega menu (P3-b): the locale's categories that
+ * carry visible posts (curated order) plus the latest visible posts. Hrefs
+ * stay neutral — the chrome renders them through `siteHref`.
  */
 export async function loadPostsMegaData(): Promise<MegaMenuDynamicData> {
-	// TODO: Replace with actual database queries
+	const lang = getLocale();
+	const now = new Date();
 
-	const leftItems: NavChild[] = [
-		{ labelKey: 'nav_categories_tech', href: '/categories/tech', badge: 12 },
-		{ labelKey: 'nav_categories_life', href: '/categories/life', badge: 8 },
-		{ labelKey: 'nav_categories_design', href: '/categories/design', badge: 5 },
-		{ labelKey: 'nav_categories_reading', href: '/categories/reading', badge: 3 }
-	];
+	const [categoryRows, recentRows, totalRows] = await Promise.all([
+		db
+			.select({ name: categories.name, slug: categories.slug, total: count(posts.id) })
+			.from(categories)
+			.innerJoin(
+				posts,
+				and(eq(posts.categoryId, categories.id), eq(posts.lang, lang), visiblePostCondition(now))
+			)
+			.groupBy(categories.id)
+			.orderBy(categories.sortOrder, categories.name)
+			.limit(MEGA_CATEGORY_LIMIT),
+		db
+			.select({ slug: posts.slug, title: posts.title, publishedAt: posts.publishedAt })
+			.from(posts)
+			.where(and(eq(posts.lang, lang), visiblePostCondition(now)))
+			.orderBy(desc(posts.publishedAt))
+			.limit(MEGA_RECENT_LIMIT),
+		db
+			.select({ total: count() })
+			.from(posts)
+			.where(and(eq(posts.lang, lang), visiblePostCondition(now)))
+	]);
 
-	const rightItems: NavChild[] = [
-		{ label: 'Getting Started with SvelteKit', href: '/posts/1', desc: 'Thursday, May 14, 2026' },
-		{ label: 'Building a Blog with Drizzle ORM', href: '/posts/2', desc: 'Tuesday, May 12, 2026' },
-		{
-			label: 'Design System with Tailwind CSS v4',
-			href: '/posts/3',
-			desc: 'Saturday, June 14, 2025'
-		},
-		{
-			label: 'Deploying to Vercel with GitHub Actions',
-			href: '/posts/4',
-			desc: 'Wednesday, May 1, 2024'
-		}
-	];
+	const leftItems: NavChild[] = categoryRows.map((row) => ({
+		label: row.name,
+		href: `/posts/categories/${row.slug}`,
+		badge: row.total
+	}));
 
-	return { leftItems, rightItems, footerSecondaryText: '28 posts' };
+	const rightItems: NavChild[] = recentRows.flatMap((row) =>
+		row.publishedAt
+			? [
+					{
+						label: row.title,
+						href: `/posts/${row.slug}`,
+						desc: formatDate(row.publishedAt)
+					}
+				]
+			: []
+	);
+
+	const total = totalRows[0]?.total ?? 0;
+
+	return { leftItems, rightItems, footerSecondaryText: `${total} posts` };
 }
 
 /**
  * Load data for the Notes mega menu.
- * Replace the placeholder data with real DB queries when notes/series tables exist.
+ * N1 (notes behavior batch) replaces the placeholder with real queries.
  */
 export async function loadNotesMegaData(): Promise<MegaMenuDynamicData> {
-	// TODO: Replace with actual database queries
+	// TODO: Replace with actual database queries (N1)
 
 	const leftItems: NavChild[] = [
 		{
@@ -104,39 +136,33 @@ export async function loadNotesMegaData(): Promise<MegaMenuDynamicData> {
 }
 
 /**
- * Load data for the Timeline mega menu.
- * Replace the placeholder data with real DB queries when posts/notes tables exist.
+ * Load data for the Timeline mega menu (P3-b): the latest visible posts as
+ * activity entries — notes join the stream with N1 (`/timeline?type=note`
+ * lands there too).
  */
 export async function loadTimelineMegaData(): Promise<MegaMenuDynamicData> {
-	// TODO: Replace with actual database queries
-	// Combine recent posts and notes sorted by date
+	const lang = getLocale();
+	const now = new Date();
 
-	const activities: TimelineActivityItem[] = [
-		{
-			title: 'Decoupling Hydration from the React UI: A Boundary Correction During SPA Startup',
-			href: '/posts/tech/hydration',
-			type: 'posts',
-			date: '8 days ago'
-		},
-		{
-			title: 'First Time in Tokyo: A Trip 26 Years in the Making',
-			href: '/notes/1',
-			type: 'notes',
-			date: '11 days ago'
-		},
-		{
-			title: "Hollowing Out Next.js: A Field Report on Migrating LobeHub's Backend to Hono",
-			href: '/posts/tech/nextjs-hono',
-			type: 'posts',
-			date: '14 days ago'
-		},
-		{
-			title: 'When Life Is Consumed by AI, I Start Reflecting on Loneliness and Love',
-			href: '/notes/2',
-			type: 'notes',
-			date: 'Tuesday, May 26, 2026'
-		}
-	];
+	const rows = await db
+		.select({ slug: posts.slug, title: posts.title, publishedAt: posts.publishedAt })
+		.from(posts)
+		.where(and(eq(posts.lang, lang), visiblePostCondition(now)))
+		.orderBy(desc(posts.publishedAt))
+		.limit(MEGA_RECENT_LIMIT);
 
-	return { leftItems: [], rightItems: [], timelineItems: activities };
+	const timelineItems: TimelineActivityItem[] = rows.flatMap((row) =>
+		row.publishedAt
+			? [
+					{
+						title: row.title,
+						href: `/posts/${row.slug}`,
+						type: 'posts' as const,
+						date: formatDate(row.publishedAt)
+					}
+				]
+			: []
+	);
+
+	return { leftItems: [], rightItems: [], timelineItems };
 }
