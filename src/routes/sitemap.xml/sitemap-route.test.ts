@@ -29,7 +29,7 @@ function makeChain(result: unknown[]) {
 				if (prop === 'then') {
 					return (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
 				}
-				return (..._args: unknown[]) => self;
+				return () => self;
 			}
 		}
 	);
