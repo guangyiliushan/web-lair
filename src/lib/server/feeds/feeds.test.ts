@@ -56,13 +56,14 @@ describe('buildRssFeed', () => {
 			description: 'Latest',
 			link: 'https://example.com/zh-cn/posts',
 			selfHref: 'https://example.com/zh-cn/rss.xml',
-			lastBuildDate: new Date('2026-09-30T12:00:00Z'),
 			items: []
 		});
 
 		expect(feed).toContain('<language>zh-cn</language>');
 		expect(feed).not.toContain('<item>');
 		expect(feed.trimEnd().endsWith('</rss>')).toBe(true);
+		// No reliable change signal in an empty feed: lastBuildDate stays out.
+		expect(feed).not.toContain('<lastBuildDate>');
 	});
 });
 

@@ -22,7 +22,8 @@ export interface RssFeedOptions {
 	link: string;
 	/** Absolute URL of this feed (atom:link rel=self). */
 	selfHref: string;
-	lastBuildDate: Date;
+	/** Omit when there is no reliable change signal (empty feed). */
+	lastBuildDate?: Date;
 	items: RssItem[];
 }
 
@@ -40,7 +41,9 @@ export function buildRssFeed(options: RssFeedOptions): string {
 		`\t\t<link>${escapeXml(options.link)}</link>`,
 		`\t\t<description>${escapeXml(options.description)}</description>`,
 		`\t\t<language>${escapeXml(options.lang)}</language>`,
-		`\t\t<lastBuildDate>${options.lastBuildDate.toUTCString()}</lastBuildDate>`,
+		...(options.lastBuildDate
+			? [`\t\t<lastBuildDate>${options.lastBuildDate.toUTCString()}</lastBuildDate>`]
+			: []),
 		`\t\t<atom:link href="${escapeXml(options.selfHref)}" rel="self" type="application/rss+xml" />`,
 		...options.items.map(buildItem),
 		'\t</channel>',
