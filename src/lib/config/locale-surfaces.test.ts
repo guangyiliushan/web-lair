@@ -21,7 +21,10 @@ describe('excludedSurfaceMatches', () => {
 		expect(excludedSurfaceMatches()).toEqual([
 			'/api/:path(.*)?',
 			'/demo/:path(.*)?',
-			'/i/:path(.*)?'
+			'/i/:path(.*)?',
+			'/sitemap.xml',
+			'/robots.txt',
+			'/rss.xml'
 		]);
 	});
 });

@@ -49,9 +49,16 @@ export function cookieSurfaceMatches(): string[] {
 	];
 }
 
+/**
+ * Root endpoints whose requests skip the i18n middleware exactly (no
+ * wildcard form): the two root files plus the bare feed alias — the feeds
+ * themselves live inside the language segment (`/{lang}/rss.xml`).
+ */
+export const ROOT_EXACT_EXCLUDES = ['/sitemap.xml', '/robots.txt', '/rss.xml'] as const;
+
 /** `routeStrategies` match patterns for the middleware skip list. */
 export function excludedSurfaceMatches(): string[] {
-	return EXCLUDED_SURFACE_TREES.map((path) => `${path}/:path(.*)?`);
+	return [...EXCLUDED_SURFACE_TREES.map((path) => `${path}/:path(.*)?`), ...ROOT_EXACT_EXCLUDES];
 }
 
 /** Runtime predicate for `siteHref`: does this pathname stay language-free? */
