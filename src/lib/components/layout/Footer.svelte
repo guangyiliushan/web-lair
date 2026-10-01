@@ -2,6 +2,7 @@
 	import { cn } from '$lib/utils';
 	import { Separator } from '$lib/components/ui/separator';
 	import { m } from '$lib/paraglide/messages';
+	import { siteHref } from '$lib/utils/href';
 	import LangSwitcher from '$lib/components/layout/LangSwitcher.svelte';
 	import ThemeToggle from '$lib/components/layout/ThemeToggle.svelte';
 	import { IconCodeCircle2, IconRss, IconExternalLink } from '@tabler/icons-svelte-runes';
@@ -124,7 +125,7 @@
 						{#each section.links as link (link.href)}
 							<li>
 								<a
-									href={link.href}
+									href={siteHref(link.href)}
 									class={cn(
 										'group inline-flex items-center gap-1 text-sm text-muted-foreground',
 										'transition-colors hover:text-primary',
@@ -161,7 +162,7 @@
 				class="flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground sm:justify-start"
 			>
 				<a
-					href="/rss.xml"
+					href={siteHref('/rss.xml')}
 					class="inline-flex items-center gap-1 rounded-sm transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<IconRss class="size-3" aria-hidden="true" />
@@ -169,14 +170,14 @@
 				</a>
 				<span aria-hidden="true">·</span>
 				<a
-					href="/sitemap.xml"
+					href={siteHref('/sitemap.xml')}
 					class="rounded-sm transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					{m.footer_sitemap()}
 				</a>
 				<span aria-hidden="true">·</span>
 				<a
-					href="/subscribe"
+					href={siteHref('/subscribe')}
 					class="rounded-sm transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					{m.footer_subscribe()}

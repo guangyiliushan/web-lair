@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { m } from '$lib/paraglide/messages';
+	import { siteHref } from '$lib/utils/href';
 	import * as Avatar from '$lib/components/ui/avatar';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import IconUser from '@tabler/icons-svelte-runes/icons/user';
@@ -62,13 +63,13 @@
 
 			<DropdownMenu.Group>
 				<DropdownMenu.Item>
-					<a href="/admin" class="flex items-center gap-1.5">
+					<a href={siteHref('/admin')} class="flex items-center gap-1.5">
 						<IconLayoutDashboard />
 						{m.nav_dashboard()}
 					</a>
 				</DropdownMenu.Item>
 				<DropdownMenu.Item>
-					<a href="/account" class="flex items-center gap-1.5">
+					<a href={siteHref('/account')} class="flex items-center gap-1.5">
 						<IconUserCircle />
 						{m.nav_account()}
 					</a>
@@ -93,7 +94,7 @@
 	</DropdownMenu.Root>
 {:else}
 	<a
-		href={loginHref}
+		href={siteHref(loginHref)}
 		class="inline-flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
 		aria-label={m.nav_sign_in()}
 	>

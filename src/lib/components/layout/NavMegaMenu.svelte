@@ -18,6 +18,7 @@
 	} from '$lib/config/navigation.config';
 	import type { Snippet } from 'svelte';
 	import { portal } from '$lib/actions/portal';
+	import { siteHref } from '$lib/utils/href';
 
 	interface Props {
 		menu: MegaMenu;
@@ -301,7 +302,7 @@
 								class="hover:text-foreground"
 								aria-label="Twitter"><IconBrandTwitter class="size-4" /></a
 							>
-							<a href="/rss.xml" class="hover:text-foreground" aria-label="RSS"
+							<a href={siteHref('/rss.xml')} class="hover:text-foreground" aria-label="RSS"
 								><IconRss class="size-4" /></a
 							>
 							<a
@@ -321,7 +322,7 @@
 						<div class="grid grid-cols-2 gap-x-4 gap-y-2">
 							{#each menu.columns[0].items as child (child.href)}
 								<a
-									href={child.href}
+									href={siteHref(child.href)}
 									role="menuitem"
 									class="rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/50 focus:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 								>
@@ -377,7 +378,7 @@
 								<div class="flex flex-col gap-0.5" role="group">
 									{#each leftItems as child (child.href)}
 										<a
-											href={child.href}
+											href={siteHref(child.href)}
 											role="menuitem"
 											class="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors hover:bg-muted/50 focus:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 										>
@@ -411,7 +412,7 @@
 							<div class="flex flex-col gap-2">
 								{#each rightItems as child (child.href)}
 									<a
-										href={child.href}
+										href={siteHref(child.href)}
 										role="menuitem"
 										class="block min-w-0 rounded-lg border border-transparent bg-muted/30 px-3 py-2.5 transition-colors hover:border-border hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 									>
@@ -456,7 +457,7 @@
 					<div class="flex gap-1">
 						{#each menu.columns[0].items as child (child.href)}
 							<a
-								href={child.href}
+								href={siteHref(child.href)}
 								role="menuitem"
 								class="flex flex-1 items-center justify-center gap-2 rounded px-3 py-2 text-sm whitespace-nowrap transition-colors hover:bg-muted/50 focus:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 							>
@@ -489,7 +490,7 @@
 												? ('nav_timeline_notes' as const)
 												: ('nav_timeline_memories' as const)}
 									<a
-										href={item.href}
+										href={siteHref(item.href)}
 										role="menuitem"
 										class="rounded bg-muted/30 px-2.5 py-2 transition-colors hover:bg-muted/50 focus:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 									>
@@ -521,7 +522,7 @@
 					>
 						{#each column.items as child (child.href)}
 							<a
-								href={child.href}
+								href={siteHref(child.href)}
 								role="menuitem"
 								class="flex items-start gap-3 rounded-lg px-2.5 py-2 text-sm transition-colors hover:bg-muted/50 focus:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 							>
@@ -560,7 +561,7 @@
 				<Separator class="my-2" role="separator" />
 				<div class="flex items-center justify-between px-2.5 py-1">
 					<a
-						href={menu.footer.href}
+						href={siteHref(menu.footer.href)}
 						role="menuitem"
 						class="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 					>
@@ -569,7 +570,7 @@
 					</a>
 					{#if footerSecondaryHref}
 						<a
-							href={footerSecondaryHref}
+							href={siteHref(footerSecondaryHref)}
 							role="menuitem"
 							class="text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 						>
@@ -579,7 +580,7 @@
 						<span class="text-xs text-muted-foreground">{footerSecondary}</span>
 					{:else if menu.footer.secondary}
 						<a
-							href={menu.footer.secondary.href}
+							href={siteHref(menu.footer.secondary.href)}
 							role="menuitem"
 							class="text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 						>

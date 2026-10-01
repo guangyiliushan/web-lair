@@ -1,4 +1,5 @@
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
+import { cookieSurfaceMatches, excludedSurfaceMatches } from './src/lib/config/locale-surfaces';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
@@ -8,6 +9,9 @@ import { fileURLToPath } from 'node:url';
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 const dirname =
 	typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
+
+/** Cookie-first chain for the exempt surfaces (ledger §9.18.1/§9.18.3). */
+const COOKIE_CHAIN = ['cookie', 'preferredLanguage', 'baseLocale'] as const;
 
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
@@ -52,27 +56,12 @@ export default defineConfig({
 			// cookie/detection instead of the URL; `exclude: true` skips the
 			// i18n middleware entirely (API, demos and the /i asset proxy —
 			// the docs' prescribed treatment for routes with no i18n surface).
+			// Both lists live in `src/lib/config/locale-surfaces.ts`, the same
+			// module the runtime link helper (`src/lib/utils/href.ts`) uses —
+			// middleware overrides and chrome links cannot drift apart (P3-b).
 			routeStrategies: [
-				{ match: '/', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
-				{ match: '/account/:path(.*)?', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
-				{ match: '/login/:path(.*)?', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
-				{ match: '/register/:path(.*)?', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
-				{
-					match: '/forgot-password/:path(.*)?',
-					strategy: ['cookie', 'preferredLanguage', 'baseLocale']
-				},
-				{
-					match: '/reset-password/:path(.*)?',
-					strategy: ['cookie', 'preferredLanguage', 'baseLocale']
-				},
-				{
-					match: '/verify-email/:path(.*)?',
-					strategy: ['cookie', 'preferredLanguage', 'baseLocale']
-				},
-				{ match: '/admin/:path(.*)?', strategy: ['cookie', 'preferredLanguage', 'baseLocale'] },
-				{ match: '/api/:path(.*)?', exclude: true },
-				{ match: '/demo/:path(.*)?', exclude: true },
-				{ match: '/i/:path(.*)?', exclude: true }
+				...cookieSurfaceMatches().map((match) => ({ match, strategy: [...COOKIE_CHAIN] })),
+				...excludedSurfaceMatches().map((match) => ({ match, exclude: true as const }))
 			]
 		})
 	],

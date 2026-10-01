@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
 	import { m } from '$lib/paraglide/messages';
+	import { deLocalizeHref } from '$lib/paraglide/runtime';
+	import { siteHref } from '$lib/utils/href';
 	import { page } from '$app/state';
 	import { IconCodeCircle2, IconMenu2, IconX, IconChevronDown } from '@tabler/icons-svelte-runes';
 	import { slide } from 'svelte/transition';
@@ -44,10 +46,12 @@
 
 	// ── Derived ──
 	const currentPath = $derived(page.url.pathname);
+	// Locale-prefixed URLs must still highlight their neutral nav item.
+	const neutralPath = $derived(deLocalizeHref(currentPath));
 
 	function isActive(path: string): boolean {
-		if (path === '/') return currentPath === '/' || !currentPath.startsWith('/en');
-		return currentPath.startsWith(path);
+		if (path === '/') return neutralPath === '/';
+		return neutralPath === path || neutralPath.startsWith(`${path}/`);
 	}
 
 	function getMobileChildren(item: (typeof navigationConfig)[number]): NavChild[] {
@@ -97,7 +101,7 @@
 		<!-- ══Top bar (always visible) ══-->
 		<div class="flex items-center justify-between px-4 py-2">
 			<!-- Logo -->
-			<a href="/" class="flex shrink-0 items-center gap-2 font-bold">
+			<a href={siteHref('/')} class="flex shrink-0 items-center gap-2 font-bold">
 				<IconCodeCircle2 class="size-6 text-primary" />
 				<span class="hidden sm:inline">Lair</span>
 			</a>
@@ -132,7 +136,7 @@
 								{:else}
 									<a
 										{...state.props}
-										href={item.href}
+										href={siteHref(item.href)}
 										class={cn(
 											'rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:text-primary',
 											isActive(item.href) ? 'bg-primary/10 text-primary' : 'text-muted-foreground'
@@ -145,7 +149,7 @@
 						</NavMegaMenu>
 					{:else}
 						<a
-							href={item.href}
+							href={siteHref(item.href)}
 							class={cn(
 								'rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:text-primary',
 								isActive(item.href) ? 'bg-primary/10 text-primary' : 'text-muted-foreground'
@@ -203,7 +207,7 @@
 											class="flex items-center justify-between rounded-lg transition-colors hover:bg-muted/50"
 										>
 											<a
-												href={item.href}
+												href={siteHref(item.href)}
 												onclick={closeMenu}
 												class={cn(
 													'flex-1 px-3 py-2.5 text-sm font-medium transition-colors hover:text-foreground',
@@ -234,7 +238,7 @@
 											>
 												{#each mobileChildren as child (child.href)}
 													<a
-														href={child.href}
+														href={siteHref(child.href)}
 														onclick={closeMenu}
 														class="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
 													>
@@ -248,7 +252,7 @@
 										{/if}
 									{:else}
 										<a
-											href={item.href}
+											href={siteHref(item.href)}
 											onclick={closeMenu}
 											class={cn(
 												'flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 hover:text-foreground',
@@ -268,7 +272,7 @@
 							<div class="flex flex-wrap justify-between gap-1 px-1">
 								{#each navigationConfig.find((i) => i.key === 'nav_more')!.children! as child (child.href)}
 									<a
-										href={child.href}
+										href={siteHref(child.href)}
 										onclick={closeMenu}
 										class="rounded-lg px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
 									>
@@ -300,14 +304,14 @@
 							</div>
 							<div class="mt-3 flex flex-col gap-0.5">
 								<a
-									href="/admin"
+									href={siteHref('/admin')}
 									onclick={closeMenu}
 									class="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
 								>
 									{m.nav_dashboard()}
 								</a>
 								<a
-									href="/account"
+									href={siteHref('/account')}
 									onclick={closeMenu}
 									class="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
 								>
@@ -316,7 +320,9 @@
 							</div>
 						{:else}
 							<a
-								href="/login?redirectTo={encodeURIComponent(page.url.pathname + page.url.search)}"
+								href={siteHref(
+									`/login?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`
+								)}
 								onclick={closeMenu}
 								class="flex items-center justify-center rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50"
 							>

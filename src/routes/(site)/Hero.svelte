@@ -4,6 +4,7 @@
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { mergeProps } from 'bits-ui';
 	import { m } from '$lib/paraglide/messages';
+	import { siteHref } from '$lib/utils/href';
 	import { motion } from '@humanspeak/svelte-motion';
 	import {
 		IconBrandGithub,
@@ -94,7 +95,7 @@
 								<Button
 									variant="ghost"
 									size="icon"
-									href={link.href}
+									href={siteHref(link.href)}
 									target="_blank"
 									rel="noopener noreferrer"
 									aria-label={link.ariaLabel}

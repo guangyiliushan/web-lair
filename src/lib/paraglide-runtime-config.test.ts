@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { routeStrategies, strategy, urlPatterns } from '$lib/paraglide/runtime';
+import { cookieSurfaceMatches, excludedSurfaceMatches } from '$lib/config/locale-surfaces';
 
 /**
  * Config-drift canary for the generated paraglide runtime (P3-a). The vite
@@ -9,6 +10,10 @@ import { routeStrategies, strategy, urlPatterns } from '$lib/paraglide/runtime';
  * regeneration through the bare `paraglide-js compile` CLI, which cannot
  * carry urlPatterns/routeStrategies — must not silently drop the url-first
  * chain, the prefix-all patterns or the route strategies.
+ *
+ * P3-b: the middleware overrides are derived from
+ * `$lib/config/locale-surfaces` (shared with the runtime link helper), so
+ * the generated runtime must match that module exactly — both directions.
  */
 describe('paraglide runtime configuration', () => {
 	it('chains the url strategy first', () => {
@@ -30,30 +35,22 @@ describe('paraglide runtime configuration', () => {
 		expect(localized['ja']).toContain('/ja/');
 	});
 
-	it('keeps the exempt surfaces and the middleware exclusions', () => {
+	it('derives the exempt surfaces from the shared locale-surfaces module', () => {
+		const expected = [...cookieSurfaceMatches(), ...excludedSurfaceMatches()];
 		const matches = routeStrategies.map((entry) => entry.match);
-		for (const expected of [
-			'/',
-			'/account/:path(.*)?',
-			'/login/:path(.*)?',
-			'/register/:path(.*)?',
-			'/forgot-password/:path(.*)?',
-			'/reset-password/:path(.*)?',
-			'/verify-email/:path(.*)?',
-			'/admin/:path(.*)?',
-			'/api/:path(.*)?',
-			'/demo/:path(.*)?',
-			'/i/:path(.*)?'
-		]) {
-			expect(matches).toContain(expected);
+
+		// Bidirectional check: no missing and no extra middleware overrides.
+		expect([...matches].sort()).toEqual([...expected].sort());
+
+		const cookieEntries = routeStrategies.filter((entry) => entry.exclude !== true);
+		expect(cookieEntries).not.toHaveLength(0);
+		for (const entry of cookieEntries) {
+			expect(entry.strategy, entry.match).toEqual(['cookie', 'preferredLanguage', 'baseLocale']);
 		}
 
 		const excluded = routeStrategies
 			.filter((entry) => entry.exclude === true)
 			.map((entry) => entry.match);
-		expect(excluded).toEqual(['/api/:path(.*)?', '/demo/:path(.*)?', '/i/:path(.*)?']);
-
-		const account = routeStrategies.find((entry) => entry.match === '/account/:path(.*)?');
-		expect(account?.strategy).toEqual(['cookie', 'preferredLanguage', 'baseLocale']);
+		expect(excluded).toEqual(excludedSurfaceMatches());
 	});
 });
