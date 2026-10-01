@@ -1,4 +1,4 @@
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { and, eq, ne } from 'drizzle-orm';
 import { getLocale, localizeHref, locales } from '$lib/paraglide/runtime';
 import { m } from '$lib/paraglide/messages';
@@ -12,6 +12,7 @@ import {
 	submitComment
 } from '$lib/server/services/comments';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
+import { findSlugTargetId } from '$lib/server/services/slug-resolver';
 import { formatDate } from '$lib/utils/i18n';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
 
@@ -19,8 +20,8 @@ import type { Actions, PageServerLoad, RequestEvent } from './$types';
  * Public post detail (P3-a read side + comment P3a threads): the post must
  * exist in the URL's locale and pass the shared visibility condition. A
  * missing language version is a 404 with a hint listing the languages that do
- * have the same slug — never an automatic fallback (ledger §9.16.5). The slug
- * fallback chain (slug_trackers) is P3-b.
+ * have the same slug — never an automatic fallback (ledger §9.16.5). A retired slug resolves through
+ * slug_trackers with a single 301 hop (P3-b).
  */
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const lang = getLocale();
@@ -45,6 +46,25 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		.limit(1);
 
 	if (!row) {
+		// Slug fallback chain (P3-b, ledger §9.16.5): a retired slug resolves
+		// through slug_trackers (single hop — trackers point at the row id, so
+		// chains cannot form). An invisible, missing or self-referencing target
+		// is a plain 404: never redirect into hidden content or a loop.
+		const trackedId = await findSlugTargetId('post', lang, slug);
+		if (trackedId) {
+			const [target] = await db
+				.select({ slug: posts.slug })
+				.from(posts)
+				.where(and(eq(posts.id, trackedId), eq(posts.lang, lang), visiblePostCondition(now)))
+				.limit(1);
+			if (target && target.slug !== slug) {
+				redirect(
+					301,
+					localizeHref(`/posts/${target.slug}`, { locale: lang as (typeof locales)[number] })
+				);
+			}
+		}
+
 		const others = await db
 			.selectDistinct({ lang: posts.lang })
 			.from(posts)
