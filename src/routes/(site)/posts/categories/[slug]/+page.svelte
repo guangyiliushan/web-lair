@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { PageServerData } from './$types';
+	import { SeoHead } from '$lib/components/seo';
+	import { siteHref } from '$lib/utils/href';
 
 	let { data }: { data: PageServerData } = $props();
 
@@ -18,6 +20,8 @@
 <svelte:head>
 	<title>{category.name} - Posts</title>
 </svelte:head>
+
+<SeoHead path={`/posts/categories/${category.slug}`} />
 
 <div class="mx-auto mt-14 max-w-3xl px-2 lg:mt-20 lg:px-0 2xl:max-w-4xl [&_header.prose]:mb-20">
 	<!-- ══ Header ══ -->
@@ -68,7 +72,7 @@
 				{@const postIndex = totalIndex + 1 + pi}
 				<li class="list-none" style="--li-index: {postIndex}; animation-delay: {postIndex * 50}ms">
 					<a
-						href="/posts/{post.slug}"
+						href={siteHref(`/posts/${post.slug}`)}
 						class="group -mx-3 grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-4 border-b border-foreground/5 px-3 py-3.5 transition-[background] duration-300 ease-out hover:bg-linear-to-r hover:from-transparent hover:via-primary/6 hover:to-transparent"
 					>
 						<span
@@ -109,7 +113,7 @@
 				{#each tags as tagItem (tagItem.slug)}
 					<li>
 						<a
-							href="/posts/tags/{tagItem.slug}"
+							href={siteHref(`/posts/tags/${tagItem.slug}`)}
 							class="inline-flex items-baseline rounded-full bg-muted px-2.5 py-0.5 text-xs text-foreground/65 transition-colors duration-150 hover:bg-primary/8 hover:text-primary"
 						>
 							<span>#{tagItem.name}</span>

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, sql } from 'drizzle-orm';
 import { getLocale } from '$lib/paraglide/runtime';
 import { db } from '$lib/server/db';
 import { categories, postTags, posts, tags } from '$lib/server/db/content';
@@ -40,7 +40,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		.from(posts)
 		.innerJoin(categories, eq(posts.categoryId, categories.id))
 		.where(visible)
-		.orderBy(sql`${posts.pinAt} desc nulls last`, desc(posts.publishedAt))
+		.orderBy(sql`${posts.pinAt} desc nulls last`, sql`${posts.publishedAt} desc nulls last`)
 		.limit(PAGE_SIZE)
 		.offset((page - 1) * PAGE_SIZE);
 

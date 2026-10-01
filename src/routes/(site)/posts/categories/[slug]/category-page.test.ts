@@ -17,6 +17,10 @@ const { dbMock, state } = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
+vi.mock('$lib/paraglide/runtime', () => ({
+	getLocale: () => 'en',
+	locales: ['en', 'zh-cn', 'ja']
+}));
 
 import { load } from './+page.server';
 
@@ -55,11 +59,12 @@ describe('site category page', () => {
 		});
 	});
 
-	it('filters posts to published only', async () => {
+	it('filters posts to the visible set of the current locale', async () => {
 		await load({ params: { slug: 'svelte' } } as never);
 		const { sql, params } = dialect.sqlToQuery(state.whereArgs[0] as never);
 		expect(sql).toContain('"posts"."status"');
-		expect(params).toContain('published');
+		expect(sql).toContain('"posts"."lang"');
+		expect(params).toEqual(expect.arrayContaining(['en', 'published', 'scheduled']));
 	});
 
 	it('groups by year and counts tags, using the stored tag slug for links', async () => {

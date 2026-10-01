@@ -4,6 +4,9 @@ import { posts, categories, postTags, tags } from '$lib/server/db/schema';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
 import { tagSlug } from '$lib/utils/slug';
+import { getLocale } from '$lib/paraglide/runtime';
+import { visiblePostCondition } from '$lib/server/services/post-visibility';
+import { formatDate } from '$lib/utils/i18n';
 
 export interface CategoryPostItem {
 	slug: string;
@@ -25,6 +28,9 @@ export interface YearGroup {
 }
 
 export const load: PageServerLoad = async ({ params }) => {
+	const lang = getLocale();
+	const now = new Date();
+
 	// ── Fetch category ──
 	const cat = await db.query.categories.findFirst({
 		where: eq(categories.slug, params.slug)
@@ -32,8 +38,8 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	if (!cat) throw error(404, 'Category not found');
 
-	// ── Fetch published posts in this category ──
-	// Visibility: published only (the lazy scheduled check lands in P3).
+	// ── Fetch visible posts for this locale (P3-b: locale filter + the ──
+	// shared visibility predicate replace the published-only filter).
 	const postRows = await db
 		.select({
 			id: posts.id,
@@ -42,7 +48,7 @@ export const load: PageServerLoad = async ({ params }) => {
 			createdAt: posts.createdAt
 		})
 		.from(posts)
-		.where(and(eq(posts.categoryId, cat.id), eq(posts.status, 'published')))
+		.where(and(eq(posts.categoryId, cat.id), eq(posts.lang, lang), visiblePostCondition(now)))
 		.orderBy(desc(posts.createdAt));
 
 	// ── Tags per post (post_tags replaced the posts.tags array in P1) ──
@@ -69,9 +75,7 @@ export const load: PageServerLoad = async ({ params }) => {
 	const assembled: CategoryPostItem[] = postRows.map((p) => ({
 		slug: p.slug,
 		title: p.title,
-		date: p.createdAt
-			? new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-			: '',
+		date: p.createdAt ? formatDate(new Date(p.createdAt), { month: 'short', day: 'numeric' }) : '',
 		tags: tagsByPost.get(p.id) ?? []
 	}));
 

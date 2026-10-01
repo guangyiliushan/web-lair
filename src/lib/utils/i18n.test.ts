@@ -19,6 +19,12 @@ describe('i18n formatting', () => {
 			expect(result).toContain('2026');
 		});
 
+		it('uses component options without mixing in dateStyle', async () => {
+			const { formatDate } = await import('./i18n');
+			const result = formatDate(new Date(2026, 0, 15, 12), { month: 'short', day: 'numeric' });
+			expect(result).toBe('Jan 15');
+		});
+
 		it('formats date in zh-cn locale', async () => {
 			mockGetLocale.mockReturnValue('zh-cn');
 			const { formatDate } = await import('./i18n');

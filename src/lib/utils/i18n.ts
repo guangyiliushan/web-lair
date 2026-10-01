@@ -18,9 +18,21 @@ function getRTF(locale: string): Intl.RelativeTimeFormat {
 	return formatter;
 }
 
+/** Intl forbids mixing `dateStyle` with individual date components. */
+const DATE_COMPONENT_KEYS = ['weekday', 'era', 'year', 'month', 'day'] as const;
+
+function hasDateComponents(options?: Intl.DateTimeFormatOptions): boolean {
+	return options !== undefined && DATE_COMPONENT_KEYS.some((key) => options[key] !== undefined);
+}
+
 export function formatDate(date: Date | number, options?: Intl.DateTimeFormatOptions): string {
 	const locale = getLocale();
-	return getDTF(locale, { dateStyle: 'long', ...options }).format(date);
+	// When the caller picks components (e.g. { month, day }) they define the
+	// format; otherwise default to the long date style.
+	const resolved: Intl.DateTimeFormatOptions = hasDateComponents(options)
+		? { ...options }
+		: { dateStyle: 'long', ...options };
+	return getDTF(locale, resolved).format(date);
 }
 
 export function formatDateTime(date: Date | number, options?: Intl.DateTimeFormatOptions): string {
