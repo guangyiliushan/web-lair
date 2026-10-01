@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { CommentsSection } from '$lib/components/comments';
 	import { MarkdownRenderer } from '$lib/components/markdown';
+	import { SeoHead } from '$lib/components/seo';
 	import { localizeHref } from '$lib/paraglide/runtime';
 	import type { PageProps } from './$types';
 
@@ -10,6 +11,8 @@
 <svelte:head>
 	<title>{data.post.title}</title>
 </svelte:head>
+
+<SeoHead path={data.seo.path} alternates={data.seo.alternates} />
 
 <article class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0">
 	<header class="border-b border-border/50 pb-6">

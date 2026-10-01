@@ -67,7 +67,8 @@ const postRow = {
 	content: '',
 	publishedAt: new Date('2026-09-30T00:00:00Z'),
 	categoryName: 'Cat',
-	allowComment: false
+	allowComment: false,
+	translationGroup: 'group-1'
 };
 
 describe('posts/[slug] load — slug fallback chain', () => {
@@ -78,13 +79,28 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		Object.assign(dbMock, { select: selectMock, selectDistinct: selectDistinctMock });
 	});
 
-	it('serves the post on a direct (locale, slug) hit without a tracker query', async () => {
-		state.selectResults = [[postRow]];
+	it('serves the post on a direct hit with the translation group hreflang set', async () => {
+		state.selectResults = [
+			[postRow],
+			[
+				{ lang: 'en', slug: 'current-slug' },
+				{ lang: 'zh-cn', slug: 'current-slug-zh' }
+			]
+		];
 
-		const data = (await load(makeEvent('current-slug'))) as { post: { slug: string } };
+		const data = (await load(makeEvent('current-slug'))) as {
+			post: { slug: string };
+			seo: { path: string; alternates: { lang: string; path: string }[] };
+		};
 
 		expect(data.post.slug).toBe('current-slug');
-		expect(selectMock).toHaveBeenCalledTimes(1);
+		expect(selectMock).toHaveBeenCalledTimes(2);
+		// hreflang set: the translation group's visible languages in locale order.
+		expect(data.seo.path).toBe('/posts/current-slug');
+		expect(data.seo.alternates).toEqual([
+			{ lang: 'en', path: '/posts/current-slug' },
+			{ lang: 'zh-cn', path: '/posts/current-slug-zh' }
+		]);
 	});
 
 	it('redirects a retired slug to the current one with a single 301 hop', async () => {

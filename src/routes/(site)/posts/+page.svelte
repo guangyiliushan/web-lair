@@ -2,6 +2,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import * as Pagination from '$lib/components/ui/pagination';
+	import { SeoHead } from '$lib/components/seo';
 	import { localizeHref } from '$lib/paraglide/runtime';
 	import { IconEye, IconHeart, IconArrowLeft, IconArrowRight } from '@tabler/icons-svelte-runes';
 	import type { PageData } from './$types';
@@ -10,7 +11,12 @@
 
 	const pinnedPost = $derived(data.pinnedPost);
 	const posts = $derived(data.posts);
+
+	// Paginated pages are self-canonical (P3-b R1-Q5).
+	const listPath = $derived(`/posts${data.page > 1 ? `?page=${data.page}` : ''}`);
 </script>
+
+<SeoHead path={listPath} />
 
 <div class="mx-auto mt-14 max-w-5xl px-4 lg:mt-20 lg:px-0 2xl:max-w-6xl">
 	<div class="min-w-0">

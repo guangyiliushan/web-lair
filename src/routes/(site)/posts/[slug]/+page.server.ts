@@ -38,7 +38,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			content: posts.content,
 			publishedAt: posts.publishedAt,
 			categoryName: categories.name,
-			allowComment: posts.allowComment
+			allowComment: posts.allowComment,
+			translationGroup: posts.translationGroup
 		})
 		.from(posts)
 		.innerJoin(categories, eq(posts.categoryId, categories.id))
@@ -87,6 +88,18 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		error(404, 'Not found');
 	}
 
+	// hreflang set (P3-b): every visible language of the same translation
+	// group, in locale order — self included; x-default stays deferred.
+	const localeOrder = locales as readonly string[];
+	const siblings = await db
+		.select({ lang: posts.lang, slug: posts.slug })
+		.from(posts)
+		.where(and(eq(posts.translationGroup, row.translationGroup), visiblePostCondition(now)));
+	const alternates = siblings
+		.filter((sibling) => localeOrder.includes(sibling.lang))
+		.sort((a, b) => localeOrder.indexOf(a.lang) - localeOrder.indexOf(b.lang))
+		.map((sibling) => ({ lang: sibling.lang, path: `/posts/${sibling.slug}` }));
+
 	const html = row.content ? await renderMarkdownToHtml(row.content) : '';
 
 	// Viewer state for the comment section (spec §1 "已验证读者"): guests get
@@ -100,6 +113,10 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		: `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
 
 	return {
+		seo: {
+			path: `/posts/${row.slug}`,
+			alternates
+		},
 		post: {
 			slug: row.slug,
 			title: row.title,
