@@ -230,7 +230,8 @@ export function normalizeCommentText(raw: string): string {
 	return raw.replace(FORMAT_CHARS, '').trim();
 }
 
-const AUTHOR_CONTROLS = /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+// \p{Cc} = C0/C1 controls; plus the bidi overrides and shortcut marks.
+const AUTHOR_CONTROLS = /[\p{Cc}\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
 export const COMMENT_AUTHOR_MAX = 64;
 
 export function normalizeCommentAuthor(raw: string): string {
