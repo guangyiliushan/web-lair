@@ -15,7 +15,8 @@ import { zhCnLocale } from './locale-fixture';
  * pinned-card and excerpt teeth), the missing-language 404 hint (filtered to
  * visible languages only), scheduled-in-future invisibility, a language
  * switch on a content page (exactly one document navigation) and the
- * client-side canonicalisation of an SPA navigation to an unprefixed URL.
+ * canonical chrome links (the SPA canonicalisation path now lives in the
+ * P3-b pages spec, exercised through an in-content relative link).
  * Fixtures live on the shared dev database under the `e2e-p3a%` slug prefix
  * and are cleaned in beforeAll/afterAll.
  */
@@ -191,7 +192,7 @@ test.describe('P3-a read side', () => {
 	test('a missing language version answers 404 with an availability hint', async ({ page }) => {
 		const response = await page.goto(`/zh-cn/posts/${SLUG_ONLY_EN}`);
 		expect(response?.status()).toBe(404);
-		await expect(page.getByText('This page is available in:')).toBeVisible();
+		await expect(page.getByText('此页面提供以下语言版本：')).toBeVisible();
 		const english = page.getByRole('link', { name: 'English' });
 		await expect(english).toHaveAttribute('href', `/en/posts/${SLUG_ONLY_EN}`);
 		await english.click();
@@ -234,16 +235,21 @@ test.describe('P3-a read side', () => {
 		expect(loads()).toBe(1);
 	});
 
-	test('an SPA navigation to an unprefixed URL re-canonicalises with one document load', async ({
+	test('the chrome Posts link is canonical: SPA navigation without a document load', async ({
 		page
 	}) => {
-		// The header's Posts link is unprefixed (/posts): the client router
-		// navigates without a request, afterNavigate then canonicalises to
-		// /en/posts via a full document load (root layout sync).
+		// P3-b unified the chrome links through siteHref: the header link now
+		// carries the locale, so clicking it is a plain SPA navigation. The
+		// remaining canonicalisation trigger (relative links inside article
+		// markdown) is covered by the P3-b pages spec.
 		await page.goto(`/en/posts/${SLUG_MAIN}`);
+		// Hydration beat: a pre-hydration click would be a native navigation
+		// (one document load) instead of a router-intercepted SPA navigation.
+		await page.waitForTimeout(1500);
 		const loads = documentLoads(page);
 
 		const postsLink = page.getByRole('banner').getByRole('link', { name: 'Posts' }).first();
+		await expect(postsLink).toHaveAttribute('href', '/en/posts');
 		await expect(async () => {
 			await postsLink.click();
 			await expect(page).toHaveURL('/en/posts', { timeout: 5000 });
@@ -251,6 +257,6 @@ test.describe('P3-a read side', () => {
 
 		await expect(page.getByRole('heading', { name: 'Posts' })).toBeVisible();
 		await page.waitForTimeout(2000);
-		expect(loads()).toBe(1);
+		expect(loads()).toBe(0);
 	});
 });
