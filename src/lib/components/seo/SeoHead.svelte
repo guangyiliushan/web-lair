@@ -24,8 +24,18 @@
 
 	let { path, alternates }: Props = $props();
 
+	/**
+	 * Absolute-URL origin: the (site) layout provides ORIGIN when configured
+	 * (single source shared with feeds/robots), otherwise the request origin
+	 * is the fallback. Review finding: page.url.origin alone can advertise an
+	 * internal host behind a proxy while the sitemap uses ORIGIN.
+	 */
+	const publicOrigin = $derived(
+		(page.data as { siteOrigin?: string | null }).siteOrigin ?? page.url.origin
+	);
+
 	function absolute(href: string): string {
-		return `${page.url.origin}${href}`;
+		return `${publicOrigin}${href}`;
 	}
 
 	const canonical = $derived(absolute(localizeHref(path)));

@@ -1,4 +1,5 @@
 import { and, count, desc, eq } from 'drizzle-orm';
+import { m } from '$lib/paraglide/messages';
 import { getLocale } from '$lib/paraglide/runtime';
 import { db } from '$lib/server/db';
 import { categories, posts } from '$lib/server/db/content';
@@ -65,7 +66,7 @@ export async function loadPostsMegaData(): Promise<MegaMenuDynamicData> {
 
 	const total = totalRows[0]?.total ?? 0;
 
-	return { leftItems, rightItems, footerSecondaryText: `${total} posts` };
+	return { leftItems, rightItems, footerSecondaryText: m.nav_posts_count({ count: total }) };
 }
 
 /**

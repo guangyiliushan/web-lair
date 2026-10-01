@@ -26,3 +26,14 @@ export function siteHref(href: string): string {
 	if (isLocaleFreePath(path)) return href;
 	return localizeHref(path) + suffix;
 }
+
+/**
+ * Active-state comparison for nav items (review finding): both sides are
+ * neutral paths (`deLocalizeHref` output). `/` matches exactly; everything
+ * else matches itself or a descendant (`/posts` → `/posts/x`), never a mere
+ * string prefix (`/posts-foo` must not light up `/posts`).
+ */
+export function isActivePath(neutralPath: string, href: string): boolean {
+	if (href === '/') return neutralPath === '/';
+	return neutralPath === href || neutralPath.startsWith(`${href}/`);
+}

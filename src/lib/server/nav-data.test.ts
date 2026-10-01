@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
  * Unit tests for the real mega-menu data (P3-b): the posts loader maps the
@@ -8,13 +9,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 const { dbMock, state } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
-	state: { selectResults: [] as unknown[][] }
+	state: {
+		selectResults: [] as unknown[][],
+		whereArgs: [] as unknown[],
+		joinArgs: [] as unknown[][]
+	}
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$lib/paraglide/runtime', () => ({
 	getLocale: () => 'en',
-	locales: ['en', 'zh-cn', 'ja']
+	locales: ['en', 'zh-cn', 'ja'],
+	// The generated messages module imports this; keep it present for the
+	// real nav_posts_count() call in the footer text (review finding).
+	experimentalStaticLocale: undefined
 }));
 
 import { loadPostsMegaData, loadTimelineMegaData } from './nav-data';
@@ -27,16 +35,24 @@ function makeChain(result: unknown[]) {
 				if (prop === 'then') {
 					return (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
 				}
-				return () => self;
+				return (...args: unknown[]) => {
+					if (prop === 'where') state.whereArgs.push(args[0]);
+					if (prop === 'innerJoin') state.joinArgs.push(args);
+					return self;
+				};
 			}
 		}
 	);
 	return self;
 }
 
+const dialect = new PgDialect();
+
 describe('nav-data loaders', () => {
 	beforeEach(() => {
 		state.selectResults = [];
+		state.whereArgs = [];
+		state.joinArgs = [];
 		Object.assign(dbMock, {
 			select: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
 		});
@@ -77,5 +93,33 @@ describe('nav-data loaders', () => {
 		expect(data.timelineItems).toEqual([
 			{ title: 'Post A', href: '/posts/a', type: 'posts', date: 'January 15, 2026' }
 		]);
+	});
+
+	it('pins the locale + visibility predicates on every mega query (review finding)', async () => {
+		state.selectResults = [[], [], [{ total: 0 }]];
+		await loadPostsMegaData();
+
+		// Categories query: the predicate sits in the posts JOIN condition.
+		expect(state.joinArgs).toHaveLength(1);
+		const joinSql = dialect.sqlToQuery(state.joinArgs[0]?.[1] as never).sql;
+		expect(joinSql).toContain('"posts"."lang"');
+		expect(joinSql).toContain('"posts"."status"');
+
+		// Recent + total queries: both are WHERE-guarded.
+		expect(state.whereArgs).toHaveLength(2);
+		for (const condition of state.whereArgs) {
+			const sql = dialect.sqlToQuery(condition as never).sql;
+			expect(sql).toContain('"posts"."lang"');
+			expect(sql).toContain('"posts"."status"');
+		}
+
+		// Timeline loader: same guard on its single query.
+		state.selectResults = [[]];
+		state.whereArgs = [];
+		await loadTimelineMegaData();
+		expect(state.whereArgs).toHaveLength(1);
+		const timelineSql = dialect.sqlToQuery(state.whereArgs[0] as never).sql;
+		expect(timelineSql).toContain('"posts"."lang"');
+		expect(timelineSql).toContain('"posts"."status"');
 	});
 });

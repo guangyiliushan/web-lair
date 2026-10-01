@@ -75,9 +75,9 @@ describe('site category page', () => {
 				{ id: 'p3', title: 'Three', slug: 'three', createdAt: new Date('2025-01-01T00:00:00Z') }
 			],
 			[
-				{ postId: 'p1', name: 'AI', slug: 'custom-slug' },
-				{ postId: 'p2', name: 'AI', slug: 'custom-slug' },
-				{ postId: 'p3', name: 'Web', slug: 'web' }
+				{ postId: 'p1', id: 'tag-ai', name: 'AI', slug: 'custom-slug' },
+				{ postId: 'p2', id: 'tag-ai', name: 'AI', slug: 'custom-slug' },
+				{ postId: 'p3', id: 'tag-web', name: 'Web', slug: 'web' }
 			]
 		];
 		const data = (await load({ params: { slug: 'svelte' } } as never)) as {
@@ -97,6 +97,24 @@ describe('site category page', () => {
 		expect(data.tags).toEqual([
 			{ name: 'AI', slug: 'custom-slug', count: 2 },
 			{ name: 'Web', slug: 'web', count: 1 }
+		]);
+	});
+
+	it('keeps same-name tags with different slugs as distinct chips (review finding)', async () => {
+		state.selectResults = [
+			[{ id: 'p1', title: 'One', slug: 'one', createdAt: new Date('2024-03-01T00:00:00Z') }],
+			[
+				{ postId: 'p1', id: 'tag-a', name: 'Rust', slug: 'rust' },
+				{ postId: 'p1', id: 'tag-b', name: 'Rust', slug: 'rust-lang' }
+			]
+		];
+		const data = (await load({ params: { slug: 'svelte' } } as never)) as {
+			tags: { name: string; slug: string; count: number }[];
+		};
+
+		expect(data.tags).toEqual([
+			{ name: 'Rust', slug: 'rust', count: 1 },
+			{ name: 'Rust', slug: 'rust-lang', count: 1 }
 		]);
 	});
 

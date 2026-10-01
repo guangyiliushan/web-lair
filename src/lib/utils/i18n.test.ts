@@ -54,6 +54,17 @@ describe('i18n formatting', () => {
 			const result = formatDateTime(new Date('2026-06-15T14:30:00'));
 			expect(result).toContain('2026');
 		});
+
+		it('uses time component options without mixing in timeStyle (review finding)', async () => {
+			const { formatDateTime } = await import('./i18n');
+			// Previously threw: timeStyle is exclusive with hour/minute components.
+			const result = formatDateTime(new Date(2026, 5, 15, 14, 30), {
+				hour: '2-digit',
+				minute: '2-digit'
+			});
+			expect(result).toContain('30');
+			expect(result).not.toContain('2026');
+		});
 	});
 
 	describe('formatNumber', () => {

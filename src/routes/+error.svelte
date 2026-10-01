@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { afterNavigate } from '$app/navigation';
 	import { m } from '$lib/paraglide/messages';
 	import { localeLabels } from '$lib/stores/locale.svelte';
+	import { siteHref } from '$lib/utils/href';
 
 	let status = $derived(page.status);
 	let message = $derived(page.error?.message ?? m.error_generic_heading());
@@ -36,18 +36,8 @@
 					? m.error_401_desc()
 					: isServerError
 						? m.error_500_desc()
-						: message
+						: m.error_generic_desc()
 	);
-
-	afterNavigate(() => {
-		// Ensure error pages are never indexed
-		if (typeof document !== 'undefined') {
-			const meta = document.querySelector('meta[name="robots"]');
-			if (meta) {
-				meta.setAttribute('content', 'noindex, nofollow');
-			}
-		}
-	});
 </script>
 
 <svelte:head>
@@ -85,14 +75,14 @@
 
 		<div class="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
 			<a
-				href="/"
+				href={siteHref('/')}
 				class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
 			>
 				{m.error_back_home()}
 			</a>
 			{#if isUnauthorized}
 				<a
-					href="/login"
+					href={siteHref('/login')}
 					class="inline-flex items-center rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
 				>
 					{m.error_go_login()}

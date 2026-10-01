@@ -3,7 +3,6 @@ import { db } from '$lib/server/db';
 import { posts, categories, postTags, tags } from '$lib/server/db/schema';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
-import { tagSlug } from '$lib/utils/slug';
 import { getLocale } from '$lib/paraglide/runtime';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import { formatDate } from '$lib/utils/i18n';
@@ -55,20 +54,21 @@ export const load: PageServerLoad = async ({ params }) => {
 	const postIds = postRows.map((p) => p.id);
 	const tagRows = postIds.length
 		? await db
-				.select({ postId: postTags.postId, name: tags.name, slug: tags.slug })
+				.select({ postId: postTags.postId, id: tags.id, name: tags.name, slug: tags.slug })
 				.from(postTags)
 				.innerJoin(tags, eq(postTags.tagId, tags.id))
 				.where(inArray(postTags.postId, postIds))
 		: [];
-	const tagsByPost = new Map<string, string[]>();
-	// The stored slug is the link identity (§9.4 allows hand-edited slugs);
-	// recomputing it from the name would 404 once the two diverge (P1.1 review).
-	const tagSlugs = new Map<string, string>();
+	// Keyed by tag id: same-name tags with different slugs are distinct rows
+	// and must stay distinct chips (P3-b review finding). The stored slug is
+	// the link identity (§9.4 allows hand-edited slugs).
+	const tagMeta = new Map<string, { name: string; slug: string }>();
+	const tagIdsByPost = new Map<string, string[]>();
 	for (const row of tagRows) {
-		const list = tagsByPost.get(row.postId) ?? [];
-		list.push(row.name);
-		tagsByPost.set(row.postId, list);
-		if (!tagSlugs.has(row.name)) tagSlugs.set(row.name, row.slug);
+		const ids = tagIdsByPost.get(row.postId) ?? [];
+		if (!ids.includes(row.id)) ids.push(row.id);
+		tagIdsByPost.set(row.postId, ids);
+		if (!tagMeta.has(row.id)) tagMeta.set(row.id, { name: row.name, slug: row.slug });
 	}
 
 	// ── Assemble posts with tags ──
@@ -76,7 +76,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		slug: p.slug,
 		title: p.title,
 		date: p.createdAt ? formatDate(new Date(p.createdAt), { month: 'short', day: 'numeric' }) : '',
-		tags: tagsByPost.get(p.id) ?? []
+		tags: [...new Set((tagIdsByPost.get(p.id) ?? []).map((id) => tagMeta.get(id)!.name))]
 	}));
 
 	// ── Group by year ──
@@ -100,16 +100,16 @@ export const load: PageServerLoad = async ({ params }) => {
 		.sort(([a], [b]) => b - a)
 		.map(([year, yposts]) => ({ year, count: yposts.length, posts: yposts }));
 
-	// ── Tag counts within this category ──
+	// ── Tag counts within this category (by tag id, see above) ──
 	const tagCounts = new Map<string, number>();
-	for (const p of assembled) {
-		for (const tag of p.tags) {
-			tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+	for (const ids of tagIdsByPost.values()) {
+		for (const id of ids) {
+			tagCounts.set(id, (tagCounts.get(id) ?? 0) + 1);
 		}
 	}
 
 	const tagList: CategoryTagCount[] = [...tagCounts.entries()]
-		.map(([name, count]) => ({ name, slug: tagSlugs.get(name) ?? tagSlug(name), count }))
+		.map(([id, count]) => ({ ...tagMeta.get(id)!, count }))
 		.sort((a, b) => b.count - a.count);
 
 	// ── Earliest year for display ──

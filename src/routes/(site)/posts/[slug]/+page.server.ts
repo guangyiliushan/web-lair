@@ -59,9 +59,13 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 				.where(and(eq(posts.id, trackedId), eq(posts.lang, lang), visiblePostCondition(now)))
 				.limit(1);
 			if (target && target.slug !== slug) {
+				// Preserve the original query string (tracking params etc.) —
+				// review finding: the bare-path redirect dropped it.
 				redirect(
 					301,
-					localizeHref(`/posts/${target.slug}`, { locale: lang as (typeof locales)[number] })
+					localizeHref(`/posts/${target.slug}${url.search}`, {
+						locale: lang as (typeof locales)[number]
+					})
 				);
 			}
 		}

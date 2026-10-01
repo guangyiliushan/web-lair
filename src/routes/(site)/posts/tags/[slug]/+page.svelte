@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { SeoHead } from '$lib/components/seo';
+	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
 	import type { PageServerData } from './$types';
 
@@ -14,7 +15,7 @@
 <div class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0 2xl:max-w-4xl">
 	<header>
 		<div class="mb-4 text-[10px] font-medium tracking-[4px] text-muted-foreground uppercase">
-			Tag
+			{m.posts_tag_heading()}
 		</div>
 
 		<div class="mb-2 flex items-baseline gap-3">
@@ -24,7 +25,7 @@
 				{posts.length}
 			</span>
 			<span class="text-sm text-muted-foreground">
-				{posts.length === 1 ? 'entry' : 'entries'}
+				{posts.length === 1 ? m.posts_tag_entry() : m.posts_tag_entries()}
 			</span>
 		</div>
 
@@ -54,7 +55,7 @@
 			{/each}
 		</ul>
 	{:else}
-		<p class="text-sm text-muted-foreground">No posts with this tag in this language yet.</p>
+		<p class="text-sm text-muted-foreground">{m.posts_tag_empty()}</p>
 	{/if}
 
 	<footer class="mt-10 flex justify-center border-t border-foreground/6 pt-6">
@@ -62,7 +63,7 @@
 			href={siteHref('/posts/tags')}
 			class="text-xs font-medium tracking-[2.5px] text-muted-foreground uppercase transition-colors hover:text-primary"
 		>
-			← All tags
+			{m.posts_tag_all()}
 		</a>
 	</footer>
 </div>

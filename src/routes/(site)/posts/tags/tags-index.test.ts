@@ -63,10 +63,13 @@ describe('tags index', () => {
 			{ name: 'Web', slug: 'web', total: 1 }
 		]);
 
-		// The visibility predicate lives in the posts JOIN condition (second join).
-		const condition = dialect.sqlToQuery(state.joinArgs[1]?.[1] as never);
-		expect(condition.sql).toContain('"posts"."lang"');
-		expect(condition.sql).toContain('"posts"."status"');
-		expect(condition.params).toEqual(expect.arrayContaining(['en', 'published', 'scheduled']));
+		// The visibility predicate lives in the posts JOIN condition; find it
+		// by content so a join reorder cannot fake a failure (review finding).
+		const postsJoin = state.joinArgs
+			.map((args) => dialect.sqlToQuery(args[1] as never))
+			.find((query) => query.sql.includes('"posts"."lang"'));
+		expect(postsJoin).toBeDefined();
+		expect(postsJoin!.sql).toContain('"posts"."status"');
+		expect(postsJoin!.params).toEqual(expect.arrayContaining(['en', 'published', 'scheduled']));
 	});
 });

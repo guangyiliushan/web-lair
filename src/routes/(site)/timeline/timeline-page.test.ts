@@ -73,6 +73,21 @@ describe('timeline page', () => {
 		expect(params).toEqual(expect.arrayContaining(['en', 'published', 'scheduled']));
 	});
 
+	it('streams the post stream for ?type=post', async () => {
+		state.selectResults = [[{ slug: 'p1', title: 'One', publishedAt: new Date(2026, 0, 15, 12) }]];
+
+		const data = (await load(makeEvent('post'))) as {
+			type: string;
+			items: { kind: string; slug: string; title: string; date: string }[];
+		};
+
+		expect(data.type).toBe('post');
+		expect(data.items).toEqual([
+			{ kind: 'post', slug: 'p1', title: 'One', date: 'January 15, 2026' }
+		]);
+		expect(dbMock.select).toHaveBeenCalledTimes(1);
+	});
+
 	it('renders the empty stream for ?type=note without querying', async () => {
 		const data = (await load(makeEvent('note'))) as { type: string; items: unknown[] };
 

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
  * Route-level tests for the posts/[slug] load (P3-b): the slug fallback
@@ -10,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 const { dbMock, state } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
-	state: { selectResults: [] as unknown[][] }
+	state: { selectResults: [] as unknown[][], whereArgs: [] as unknown[] }
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
@@ -42,21 +43,26 @@ function makeChain(result: unknown[]) {
 				if (prop === 'then') {
 					return (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
 				}
-				return () => self;
+				return (...args: unknown[]) => {
+					if (prop === 'where') state.whereArgs.push(args[0]);
+					return self;
+				};
 			}
 		}
 	);
 	return self;
 }
 
+const dialect = new PgDialect();
+
 const selectMock = vi.fn(() => makeChain(state.selectResults.shift() ?? []));
 const selectDistinctMock = vi.fn(() => makeChain(state.selectResults.shift() ?? []));
 
-function makeEvent(slug = 'old-slug') {
+function makeEvent(slug = 'old-slug', search = '') {
 	return {
 		locals: { user: null },
 		params: { slug },
-		url: new URL(`http://localhost/en/posts/${slug}`)
+		url: new URL(`http://localhost/en/posts/${slug}${search}`)
 	} as never;
 }
 
@@ -74,6 +80,7 @@ const postRow = {
 describe('posts/[slug] load — slug fallback chain', () => {
 	beforeEach(() => {
 		state.selectResults = [];
+		state.whereArgs = [];
 		selectMock.mockClear();
 		selectDistinctMock.mockClear();
 		Object.assign(dbMock, { select: selectMock, selectDistinct: selectDistinctMock });
@@ -113,6 +120,15 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		expect(selectMock).toHaveBeenCalledTimes(3);
 	});
 
+	it('preserves the query string on the 301 (review finding)', async () => {
+		state.selectResults = [[], [{ targetId: 'post-1' }], [{ slug: 'current-slug' }]];
+
+		await expect(load(makeEvent('old-slug', '?utm_source=newsletter'))).rejects.toMatchObject({
+			status: 301,
+			location: '/en/posts/current-slug?utm_source=newsletter'
+		});
+	});
+
 	it('404s when the tracked target is invisible or missing — never redirects', async () => {
 		state.selectResults = [[], [{ targetId: 'post-1' }], []];
 
@@ -134,6 +150,25 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		});
 	});
 
+	it('sorts and dedupes the available-languages hint (review finding)', async () => {
+		state.selectResults = [
+			[],
+			[],
+			[{ lang: 'ja' }, { lang: 'zh-cn' }, { lang: 'en' }, { lang: 'zh-cn' }]
+		];
+
+		await expect(load(makeEvent('multi'))).rejects.toMatchObject({
+			status: 404,
+			body: {
+				available: [
+					{ lang: 'en', href: '/en/posts/multi' },
+					{ lang: 'zh-cn', href: '/zh-cn/posts/multi' },
+					{ lang: 'ja', href: '/ja/posts/multi' }
+				]
+			}
+		});
+	});
+
 	it('404s plainly when neither tracker nor sibling language matches', async () => {
 		state.selectResults = [[], []];
 
@@ -141,5 +176,36 @@ describe('posts/[slug] load — slug fallback chain', () => {
 			status: 404,
 			body: { message: 'Not found' }
 		});
+	});
+
+	it('pins the SQL guards on every query of the fallback chain (review finding)', async () => {
+		// Direct hit: main query + siblings both carry locale + visibility guards.
+		state.selectResults = [[postRow], [{ lang: 'en', slug: 'current-slug' }]];
+		await load(makeEvent('current-slug'));
+		const mainSql = dialect.sqlToQuery(state.whereArgs[0] as never).sql;
+		expect(mainSql).toContain('"posts"."lang"');
+		expect(mainSql).toContain('"posts"."slug"');
+		expect(mainSql).toContain('"posts"."status"');
+		const siblingSql = dialect.sqlToQuery(state.whereArgs[1] as never).sql;
+		expect(siblingSql).toContain('"posts"."translation_group"');
+		expect(siblingSql).toContain('"posts"."status"');
+
+		// Retired slug: the redirect target stays inside the locale's visible set.
+		state.whereArgs = [];
+		state.selectResults = [[], [{ targetId: 'post-1' }], [{ slug: 'current-slug' }]];
+		await expect(load(makeEvent('old-slug'))).rejects.toMatchObject({ status: 301 });
+		const targetSql = dialect.sqlToQuery(state.whereArgs[2] as never).sql;
+		expect(targetSql).toContain('"posts"."id"');
+		expect(targetSql).toContain('"posts"."lang"');
+		expect(targetSql).toContain('"posts"."status"');
+
+		// Missing-language hint: same slug, other languages, visible only.
+		state.whereArgs = [];
+		state.selectResults = [[], [], [{ lang: 'zh-cn' }]];
+		await expect(load(makeEvent('old-slug'))).rejects.toMatchObject({ status: 404 });
+		const hintSql = dialect.sqlToQuery(state.whereArgs[2] as never).sql;
+		expect(hintSql).toContain('"posts"."slug"');
+		expect(hintSql).toContain('<>');
+		expect(hintSql).toContain('"posts"."status"');
 	});
 });

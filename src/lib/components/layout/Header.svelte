@@ -2,7 +2,7 @@
 	import { cn } from '$lib/utils';
 	import { m } from '$lib/paraglide/messages';
 	import { deLocalizeHref } from '$lib/paraglide/runtime';
-	import { siteHref } from '$lib/utils/href';
+	import { isActivePath, siteHref } from '$lib/utils/href';
 	import { page } from '$app/state';
 	import { IconCodeCircle2, IconMenu2, IconX, IconChevronDown } from '@tabler/icons-svelte-runes';
 	import { slide } from 'svelte/transition';
@@ -50,8 +50,7 @@
 	const neutralPath = $derived(deLocalizeHref(currentPath));
 
 	function isActive(path: string): boolean {
-		if (path === '/') return neutralPath === '/';
-		return neutralPath === path || neutralPath.startsWith(`${path}/`);
+		return isActivePath(neutralPath, path);
 	}
 
 	function getMobileChildren(item: (typeof navigationConfig)[number]): NavChild[] {
@@ -61,9 +60,9 @@
 		}
 		if (item.key === 'nav_timeline') {
 			return [
-				{ label: 'Posts', href: '/timeline?type=post' },
-				{ label: 'Notes', href: '/timeline?type=note' },
-				{ label: 'Thinking', href: '/timeline?type=thinking' }
+				{ label: m.nav_timeline_posts(), href: '/timeline?type=post' },
+				{ label: m.nav_timeline_notes(), href: '/timeline?type=note' },
+				{ label: m.nav_thinking(), href: '/timeline?type=thinking' }
 			];
 		}
 		if (item.key === 'nav_notes') {

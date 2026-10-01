@@ -25,6 +25,19 @@ function hasDateComponents(options?: Intl.DateTimeFormatOptions): boolean {
 	return options !== undefined && DATE_COMPONENT_KEYS.some((key) => options[key] !== undefined);
 }
 
+/** …and `timeStyle` with individual time components (review finding). */
+const TIME_COMPONENT_KEYS = [
+	'hour',
+	'minute',
+	'second',
+	'fractionalSecondDigits',
+	'timeZoneName'
+] as const;
+
+function hasTimeComponents(options?: Intl.DateTimeFormatOptions): boolean {
+	return options !== undefined && TIME_COMPONENT_KEYS.some((key) => options[key] !== undefined);
+}
+
 export function formatDate(date: Date | number, options?: Intl.DateTimeFormatOptions): string {
 	const locale = getLocale();
 	// When the caller picks components (e.g. { month, day }) they define the
@@ -37,7 +50,13 @@ export function formatDate(date: Date | number, options?: Intl.DateTimeFormatOpt
 
 export function formatDateTime(date: Date | number, options?: Intl.DateTimeFormatOptions): string {
 	const locale = getLocale();
-	return getDTF(locale, { dateStyle: 'long', timeStyle: 'short', ...options }).format(date);
+	// Same contract as formatDate: caller-picked components define the
+	// format; otherwise default to the long date + short time style.
+	const resolved: Intl.DateTimeFormatOptions =
+		hasDateComponents(options) || hasTimeComponents(options)
+			? { ...options }
+			: { dateStyle: 'long', timeStyle: 'short', ...options };
+	return getDTF(locale, resolved).format(date);
 }
 
 export function formatNumber(num: number, options?: Intl.NumberFormatOptions): string {

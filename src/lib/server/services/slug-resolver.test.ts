@@ -14,7 +14,7 @@ const { dbMock, state } = vi.hoisted(() => ({
 	state: {
 		selectResults: [] as unknown[][],
 		whereArgs: [] as unknown[],
-		orderArgs: [] as unknown[]
+		orderArgs: [] as unknown[][]
 	}
 }));
 
@@ -36,7 +36,7 @@ function makeChain(result: unknown[]) {
 						callIndex += 1;
 						state.whereArgs[callIndex] = args[0];
 					}
-					if (prop === 'orderBy') state.orderArgs.push(args[0]);
+					if (prop === 'orderBy') state.orderArgs.push(args);
 					return self;
 				};
 			}
@@ -69,10 +69,14 @@ describe('findSlugTargetId', () => {
 		expect(sql).toContain('"slug_trackers"."slug"');
 		expect(params).toEqual(expect.arrayContaining(['post', 'en', 'old-slug']));
 
-		// Deterministic when several rows share a slug: newest tracker wins.
-		const order = dialect.sqlToQuery(state.orderArgs[0] as never);
-		expect(order.sql).toContain('"slug_trackers"."created_at"');
-		expect(order.sql.toLowerCase()).toContain('desc');
+		// Deterministic when several rows share a slug: newest tracker wins,
+		// with the uuidv7 id as tiebreak (review finding).
+		const primary = dialect.sqlToQuery(state.orderArgs[0]?.[0] as never);
+		expect(primary.sql).toContain('"slug_trackers"."created_at"');
+		expect(primary.sql.toLowerCase()).toContain('desc');
+		const tiebreak = dialect.sqlToQuery(state.orderArgs[0]?.[1] as never);
+		expect(tiebreak.sql).toContain('"slug_trackers"."id"');
+		expect(tiebreak.sql.toLowerCase()).toContain('desc');
 	});
 
 	it('returns null when no tracker row exists', async () => {

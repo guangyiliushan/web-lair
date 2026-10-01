@@ -1,14 +1,15 @@
 <script lang="ts">
 	import { SeoHead } from '$lib/components/seo';
+	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
 	const filters = [
-		{ key: 'all', label: 'All', href: '/timeline' },
-		{ key: 'post', label: 'Posts', href: '/timeline?type=post' },
-		{ key: 'note', label: 'Notes', href: '/timeline?type=note' }
+		{ key: 'all', label: m.timeline_filter_all(), href: '/timeline' },
+		{ key: 'post', label: m.nav_timeline_posts(), href: '/timeline?type=post' },
+		{ key: 'note', label: m.nav_timeline_notes(), href: '/timeline?type=note' }
 	] as const;
 </script>
 
@@ -18,9 +19,9 @@
 <div class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0 2xl:max-w-4xl">
 	<header>
 		<div class="mb-4 text-[10px] font-medium tracking-[4px] text-muted-foreground uppercase">
-			Stream
+			{m.timeline_stream()}
 		</div>
-		<h1 class="text-[28px] leading-tight font-medium">Timeline</h1>
+		<h1 class="text-[28px] leading-tight font-medium">{m.nav_timeline()}</h1>
 		<div class="mt-6 mb-6 h-px w-8 bg-primary/70"></div>
 
 		<div class="mb-7 flex gap-1.5">
@@ -61,6 +62,6 @@
 			{/each}
 		</ul>
 	{:else}
-		<p class="text-sm text-muted-foreground">Nothing here yet.</p>
+		<p class="text-sm text-muted-foreground">{m.timeline_empty()}</p>
 	{/if}
 </div>

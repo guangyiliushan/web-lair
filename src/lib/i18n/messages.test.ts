@@ -207,6 +207,13 @@ describe('paraglide message contract', () => {
 		}
 	});
 
+	it('lists every key in sorted order in every locale file', () => {
+		for (const locale of LOCALES) {
+			const keys = Object.keys(readLocaleMessages(locale));
+			expect(keys, `${locale}.json`).toEqual([...keys].sort());
+		}
+	});
+
 	it('has a non-empty translation for every key in every locale', () => {
 		const empty: string[] = [];
 		for (const locale of LOCALES) {

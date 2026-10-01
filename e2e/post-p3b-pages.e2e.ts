@@ -136,9 +136,9 @@ test.describe('P3-b pages', () => {
 		page,
 		request
 	}) => {
-		const response = await request.get(`/en/posts/${SLUG_OLD}`, { maxRedirects: 0 });
+		const response = await request.get(`/en/posts/${SLUG_OLD}?utm_source=e2e`, { maxRedirects: 0 });
 		expect(response.status()).toBe(301);
-		expect(response.headers()['location']).toContain(`/en/posts/${SLUG1}`);
+		expect(response.headers()['location']).toBe(`/en/posts/${SLUG1}?utm_source=e2e`);
 
 		await page.goto(`/en/posts/${SLUG_OLD}`);
 		await expect(page).toHaveURL(`/en/posts/${SLUG1}`);

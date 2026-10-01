@@ -243,9 +243,12 @@ test.describe('P3-a read side', () => {
 		// remaining canonicalisation trigger (relative links inside article
 		// markdown) is covered by the P3-b pages spec.
 		await page.goto(`/en/posts/${SLUG_MAIN}`);
-		// Hydration beat: a pre-hydration click would be a native navigation
-		// (one document load) instead of a router-intercepted SPA navigation.
-		await page.waitForTimeout(1500);
+		// Hydration probe (review finding: a fixed sleep raced hydration under
+		// load): the language switcher only opens once handlers are live, so a
+		// successful open-and-close means the next click is router-intercepted.
+		await openSwitcher(page, 'Language');
+		await page.keyboard.press('Escape');
+		await expect(page.locator('[role="menuitemradio"]')).toHaveCount(0);
 		const loads = documentLoads(page);
 
 		const postsLink = page.getByRole('banner').getByRole('link', { name: 'Posts' }).first();

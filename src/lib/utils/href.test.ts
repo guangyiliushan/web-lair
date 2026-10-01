@@ -5,7 +5,7 @@ vi.mock('$lib/paraglide/runtime', () => ({
 	localizeHref: (href: string) => `/xx${href}`
 }));
 
-import { siteHref } from './href';
+import { isActivePath, siteHref } from './href';
 
 describe('siteHref', () => {
 	it('prefixes content paths via localizeHref', () => {
@@ -52,5 +52,22 @@ describe('siteHref', () => {
 		for (const href of ['/en/posts', '/zh-cn', '/ja/notes/x?page=2']) {
 			expect(siteHref(href), href).toBe(href);
 		}
+	});
+});
+
+describe('isActivePath', () => {
+	it('matches the exact path or a descendant', () => {
+		expect(isActivePath('/posts', '/posts')).toBe(true);
+		expect(isActivePath('/posts/hello', '/posts')).toBe(true);
+		expect(isActivePath('/timeline', '/posts')).toBe(false);
+	});
+
+	it('never treats a partial segment as active', () => {
+		expect(isActivePath('/posts-foo', '/posts')).toBe(false);
+	});
+
+	it('matches the home path exactly only', () => {
+		expect(isActivePath('/', '/')).toBe(true);
+		expect(isActivePath('/posts', '/')).toBe(false);
 	});
 });
