@@ -3,6 +3,8 @@ import { db } from '$lib/server/db';
 import { notes, topics } from '$lib/server/db/content';
 import { getOption } from '$lib/server/config/options-registry';
 import { firstImageFromMarkdown, plainTextExcerpt } from '$lib/utils/excerpt';
+import { noteDateLabel } from '$lib/utils/note-date';
+import { NOTE_PAGE_SIZE } from '$lib/utils/note-meta';
 import { visibleNoteCondition } from './note-visibility';
 
 /**
@@ -12,7 +14,8 @@ import { visibleNoteCondition } from './note-visibility';
  * back to `site.timezone`). Decisions: ledger §13.9 / notes plan §8.
  */
 
-export const NOTE_PAGE_SIZE = 12;
+/** Re-exported for existing consumers; the value lives in the UI-safe module. */
+export { NOTE_PAGE_SIZE };
 
 /** Belongs-to date: `(published_at at time zone coalesce(tz, $site))::date`. */
 function belongsToExpr(siteTz: string): SQL<unknown> {
@@ -62,6 +65,29 @@ export function toNoteCard(row: NoteCardSource): NoteCard | null {
 	};
 }
 
+/** Route-facing list row (shared projection for the list and topic pages). */
+export interface NoteListRow {
+	slug: string;
+	title: string;
+	locked: boolean;
+	excerpt: string | null;
+	image: string | null;
+	date: string;
+}
+
+/** Card to page-row projection: one place formats the belongs-to date (note
+ * `tz`, site-timezone fallback) and keeps gated content hidden. */
+export function toNoteRow(card: NoteCard, siteTz: string): NoteListRow {
+	return {
+		slug: card.slug,
+		title: card.title,
+		locked: card.locked,
+		excerpt: card.excerpt,
+		image: card.image,
+		date: noteDateLabel(card.publishedAt, card.tz, siteTz)
+	};
+}
+
 export interface NoteTopicOption {
 	id: string;
 	name: string;
@@ -76,6 +102,12 @@ export interface NotesListQuery {
 	/** Belongs-to year filter (derived with the note's tz; site tz fallback). */
 	year?: number | null;
 	topicSlug?: string | null;
+	/** Pre-resolved topic id: skips the slug lookup (topic pages pass it). */
+	topicId?: string | null;
+	/** Serve filter facets (the /notes list needs them; topic pages do not). */
+	facets?: boolean;
+	/** Caller-fetched site timezone; falls back to the options read. */
+	siteTz?: string;
 	now?: Date;
 }
 
@@ -93,18 +125,22 @@ export interface NotesListResult {
 /** List page query: cards (pin-first), totals, and the two filter facets. */
 export async function listNotes(query: NotesListQuery): Promise<NotesListResult> {
 	const now = query.now ?? new Date();
-	const siteTz = await getOption('site.timezone');
+	const siteTz = query.siteTz ?? (await getOption('site.timezone'));
 
 	let condition = and(eq(notes.lang, query.lang), visibleNoteCondition(now)) as SQL<unknown>;
 	// An unknown topic filter matches nothing (an empty list, not a silently
-	// dropped filter); a known one narrows by topic id.
+	// dropped filter); a known one narrows by topic id. A pre-resolved id
+	// skips the slug lookup (topic pages already resolved the topic).
 	let emptyTopic = false;
-	if (query.topicSlug) {
+	const resolvedTopicId = query.topicId ?? null;
+	if (resolvedTopicId) {
+		condition = and(condition, eq(notes.topicId, resolvedTopicId)) as SQL<unknown>;
+	} else if (query.topicSlug) {
 		const topic = await findTopicBySlug(query.topicSlug);
 		if (topic) condition = and(condition, eq(notes.topicId, topic.id)) as SQL<unknown>;
 		else emptyTopic = true;
 	}
-	if (typeof query.year === 'number')
+	if (typeof query.year === 'number' && Number.isFinite(query.year))
 		condition = and(
 			condition,
 			sql`date_part('year', ${belongsToExpr(siteTz)}) = ${query.year}`
@@ -145,9 +181,10 @@ export async function listNotes(query: NotesListQuery): Promise<NotesListResult>
 	}
 
 	// Facets: belongs-to years and per-language topic counts (only topics
-	// that actually carry visible notes are offered as filters).
-	const years = await listNoteYears(query.lang, now, siteTz);
-	const topicOptions = await listTopicOptions(query.lang, now);
+	// that actually carry visible notes are offered as filters). Topic pages
+	// set `facets: false` - they discard both.
+	const years = query.facets === false ? [] : await listNoteYears(query.lang, now, siteTz);
+	const topicOptions = query.facets === false ? [] : await listTopicOptions(query.lang, now);
 
 	return {
 		cards,
@@ -166,7 +203,12 @@ export async function listNoteYears(lang: string, now: Date, siteTz: string): Pr
 		.selectDistinct({ year: yearExpr })
 		.from(notes)
 		.where(and(eq(notes.lang, lang), visibleNoteCondition(now)))
-		.orderBy(desc(yearExpr));
+		// Order by the OUTPUT alias, not by re-rendering the expression: a
+		// SELECT DISTINCT requires ORDER BY expressions to appear in the select
+		// list, and re-rendering binds `$site` a second time under a different
+		// placeholder - PostgreSQL then rejects the whole query (review round 1,
+		// real-PG finding; mock tests could not see it).
+		.orderBy(sql`"year" desc`);
 	return rows.map((row) => row.year);
 }
 
@@ -230,8 +272,12 @@ export interface NoteDetailRow {
 	nid: number;
 	slug: string;
 	title: string;
-	/** Body markdown. The caller MUST NOT render it for locked rows without
-	 * a verified unlock (batch 4 gate); null when the row has no body. */
+	/**
+	 * Body markdown, shipped ONLY for open rows. A password-gated row keeps
+	 * `null` here even before the unlock check, so a forgotten gate cannot
+	 * leak the diary into SSR data - the gate renders the body through
+	 * `getNoteBody` after a verified unlock (review finding).
+	 */
 	content: string | null;
 	lang: string;
 	tz: string | null;
@@ -243,7 +289,8 @@ export interface NoteDetailRow {
 	publishedAt: Date;
 	pinAt: Date | null;
 	allowComment: boolean;
-	passwordHash: string | null;
+	/** True when a password gate is armed; the hash itself never travels with
+	 * page data - the gate reads it through `getNoteGateRecord`. */
 	locked: boolean;
 	translationGroup: string;
 	topic: { name: string; slug: string; icon: string | null } | null;
@@ -284,12 +331,13 @@ export async function findVisibleNote(
 		.limit(1);
 	if (!row || !row.publishedAt) return null;
 
+	const locked = row.passwordHash !== null;
 	return {
 		id: row.id,
 		nid: row.nid,
 		slug: row.slug,
 		title: row.title,
-		content: row.content,
+		content: locked ? null : row.content,
 		lang: row.lang,
 		tz: row.tz,
 		mood: row.mood,
@@ -300,13 +348,36 @@ export async function findVisibleNote(
 		publishedAt: row.publishedAt,
 		pinAt: row.pinAt,
 		allowComment: row.allowComment,
-		passwordHash: row.passwordHash,
-		locked: row.passwordHash !== null,
+		locked,
 		translationGroup: row.translationGroup,
 		topic: row.topicSlug
 			? { name: row.topicName ?? '', slug: row.topicSlug, icon: row.topicIcon }
 			: null
 	};
+}
+
+/** Gate-only read: the stored password hash for one note (ids resolve after
+ * `findVisibleNote` already accepted the row). Never spread into page data. */
+export async function getNoteGateRecord(
+	noteId: string
+): Promise<{ id: string; passwordHash: string | null } | null> {
+	const [row] = await db
+		.select({ id: notes.id, passwordHash: notes.passwordHash })
+		.from(notes)
+		.where(eq(notes.id, noteId))
+		.limit(1);
+	return row ?? null;
+}
+
+/** Body read for gated rows after a verified unlock (locked bodies stay out
+ * of `findVisibleNote` on purpose - see NoteDetailRow.content). */
+export async function getNoteBody(noteId: string): Promise<string | null> {
+	const [row] = await db
+		.select({ content: notes.content })
+		.from(notes)
+		.where(eq(notes.id, noteId))
+		.limit(1);
+	return row?.content ?? null;
 }
 
 /** Other languages that have the same slug visible (404 hint query). */

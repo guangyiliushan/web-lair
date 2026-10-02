@@ -2,14 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Route-level tests for the notes list page (N1): the locale + visibility
- * predicates have teeth, locked rows never ship derived content, the
- * unknown-topic filter degrades to an empty list with facets intact, and
- * the belongs-to year filter rides through date_part.
+ * Route-level tests for the notes list page (N1 + review round 1): the
+ * locale + visibility predicates have teeth, locked rows never ship derived
+ * content, ordering/limit/offset are observed (not just the WHERE text),
+ * the years facet orders by its output alias (the real-PG DISTINCT trap),
+ * the unknown-topic filter degrades to an empty list with facets intact,
+ * and the pinned card is picked on page one only.
  */
 const { dbMock, state } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
-	state: { selectResults: [] as unknown[][], whereArgs: [] as unknown[] }
+	state: {
+		selectResults: [] as unknown[][],
+		whereArgs: [] as unknown[],
+		orderArgs: [] as unknown[][],
+		limitArgs: [] as unknown[],
+		offsetArgs: [] as unknown[]
+	}
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
@@ -19,6 +27,7 @@ vi.mock('$lib/paraglide/runtime', () => ({
 	locales: ['en', 'zh-cn', 'ja']
 }));
 
+import { NOTE_PAGE_SIZE } from '$lib/server/services/notes';
 import { load } from './+page.server';
 
 function makeChain(result: unknown[]) {
@@ -31,6 +40,9 @@ function makeChain(result: unknown[]) {
 				}
 				return (...args: unknown[]) => {
 					if (prop === 'where') state.whereArgs.push(args[0]);
+					if (prop === 'orderBy') state.orderArgs.push(args);
+					if (prop === 'limit') state.limitArgs.push(args[0]);
+					if (prop === 'offset') state.offsetArgs.push(args[0]);
 					return self;
 				};
 			}
@@ -64,11 +76,23 @@ const gatedRow = {
 	passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$abc$def',
 	pinAt: null
 };
+const pinnedRow = {
+	slug: 'pinned-one',
+	title: 'Pinned',
+	publishedAt: new Date('2026-10-03T10:00:00Z'),
+	tz: null,
+	content: 'Body',
+	passwordHash: null,
+	pinAt: new Date('2026-10-04T00:00:00Z')
+};
 
 describe('notes list page', () => {
 	beforeEach(() => {
 		state.selectResults = [];
 		state.whereArgs = [];
+		state.orderArgs = [];
+		state.limitArgs = [];
+		state.offsetArgs = [];
 		Object.assign(dbMock, {
 			select: vi.fn(() => makeChain(state.selectResults.shift() ?? [])),
 			selectDistinct: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
@@ -109,9 +133,34 @@ describe('notes list page', () => {
 		expect(data.years).toEqual([2026]);
 		expect(data.topics).toEqual([topic]);
 
-		const { sql } = dialect.sqlToQuery(state.whereArgs[0] as never);
+		// Predicate teeth: locale + visibility + bound params on the count query.
+		const { sql, params } = dialect.sqlToQuery(state.whereArgs[0] as never);
 		expect(sql).toContain('"notes"."status"');
 		expect(sql).toContain('"notes"."lang"');
+		expect(params).toEqual(expect.arrayContaining(['en', 'published', 'scheduled']));
+
+		// Ordering teeth: pin DESC NULLS LAST, published DESC, id DESC.
+		const order = state.orderArgs[0] as unknown[];
+		expect(order).toHaveLength(3);
+		expect(dialect.sqlToQuery(order[0] as never).sql).toContain('desc nulls last');
+		expect(dialect.sqlToQuery(order[1] as never).sql).toContain('"notes"."published_at" desc');
+		expect(dialect.sqlToQuery(order[2] as never).sql).toContain('"notes"."id" desc');
+		expect(state.limitArgs).toContain(NOTE_PAGE_SIZE);
+		expect(state.offsetArgs).toEqual([0]);
+	});
+
+	it('orders the years facet by its output alias (DISTINCT trap tooth)', async () => {
+		state.selectResults = [[{ total: 0 }], [], [{ year: 2026 }], []];
+
+		await load(makeEvent());
+
+		const yearsOrder = state.orderArgs[1] as unknown[];
+		expect(yearsOrder).toHaveLength(1);
+		const yearsSql = dialect.sqlToQuery(yearsOrder[0] as never).sql;
+		expect(yearsSql).toBe('"year" desc');
+		// The re-rendered parameterized expression would bind $site twice and
+		// make PostgreSQL reject the whole query (real-PG review finding).
+		expect(yearsSql).not.toContain('coalesce');
 	});
 
 	it('narrows by topic when it exists', async () => {
@@ -137,12 +186,48 @@ describe('notes list page', () => {
 		expect(data.topics).toEqual([topic]);
 	});
 
-	it('applies the belongs-to year filter through date_part', async () => {
+	it('applies the belongs-to year filter through the tz-aware expression', async () => {
 		state.selectResults = [[{ total: 0 }], [], [{ year: 2025 }], []];
 
 		await load(makeEvent('?year=2025'));
 
-		const { sql } = dialect.sqlToQuery(state.whereArgs[0] as never);
+		const { sql, params } = dialect.sqlToQuery(state.whereArgs[0] as never);
 		expect(sql).toContain("date_part('year'");
+		expect(sql).toContain('at time zone coalesce');
+		expect(params).toContain(2025);
+	});
+
+	it('picks the pinned card on page one and excludes it from the list', async () => {
+		state.selectResults = [[{ total: 2 }], [openRow, pinnedRow], [{ year: 2026 }], [topic]];
+
+		const data = (await load(makeEvent())) as {
+			pinnedNote: { slug: string } | null;
+			notes: { slug: string }[];
+		};
+
+		expect(data.pinnedNote?.slug).toBe('pinned-one');
+		expect(data.notes.map((note) => note.slug)).toEqual(['open-one']);
+	});
+
+	it('clamps the requested page into the available range', async () => {
+		state.selectResults = [[{ total: 4 }], [openRow], [], []];
+		const high = (await load(makeEvent('?page=99'))) as { page: number };
+		expect(high.page).toBe(1);
+
+		state.selectResults = [[{ total: 4 }], [openRow], [], []];
+		const low = (await load(makeEvent('?page=0'))) as { page: number };
+		expect(low.page).toBe(1);
+	});
+
+	it('never picks a pinned card on later pages', async () => {
+		state.selectResults = [[{ total: 13 }], [openRow, pinnedRow], [], []];
+
+		const data = (await load(makeEvent('?page=2'))) as {
+			pinnedNote: unknown;
+			notes: unknown[];
+		};
+
+		expect(data.pinnedNote).toBeNull();
+		expect(data.notes).toHaveLength(2);
 	});
 });

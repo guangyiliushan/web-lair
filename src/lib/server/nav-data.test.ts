@@ -12,7 +12,8 @@ const { dbMock, state } = vi.hoisted(() => ({
 	state: {
 		selectResults: [] as unknown[][],
 		whereArgs: [] as unknown[],
-		joinArgs: [] as unknown[][]
+		joinArgs: [] as unknown[][],
+		limitArgs: [] as unknown[]
 	}
 }));
 
@@ -23,6 +24,9 @@ vi.mock('$lib/paraglide/runtime', () => ({
 	// The generated messages module imports this; keep it present for the
 	// real nav_posts_count() call in the footer text (review finding).
 	experimentalStaticLocale: undefined
+}));
+vi.mock('$lib/server/config/options-registry', () => ({
+	getOption: vi.fn(async () => 'UTC')
 }));
 
 import { loadNotesMegaData, loadPostsMegaData, loadTimelineMegaData } from './nav-data';
@@ -38,6 +42,7 @@ function makeChain(result: unknown[]) {
 				return (...args: unknown[]) => {
 					if (prop === 'where') state.whereArgs.push(args[0]);
 					if (prop === 'innerJoin') state.joinArgs.push(args);
+					if (prop === 'limit') state.limitArgs.push(args[0]);
 					return self;
 				};
 			}
@@ -53,6 +58,7 @@ describe('nav-data loaders', () => {
 		state.selectResults = [];
 		state.whereArgs = [];
 		state.joinArgs = [];
+		state.limitArgs = [];
 		Object.assign(dbMock, {
 			select: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
 		});
@@ -92,7 +98,7 @@ describe('nav-data loaders', () => {
 					title: 'Trip',
 					publishedAt: new Date(2026, 1, 1, 12),
 					tz: null,
-					locked: false
+					passwordHash: null
 				}
 			]
 		];
@@ -100,8 +106,14 @@ describe('nav-data loaders', () => {
 		const data = await loadTimelineMegaData();
 
 		expect(data.timelineItems).toEqual([
-			{ title: 'Trip', href: '/notes/trip', type: 'notes', date: 'February 1, 2026' },
-			{ title: 'Post A', href: '/posts/a', type: 'posts', date: 'January 15, 2026' }
+			{
+				title: 'Trip',
+				href: '/notes/trip',
+				type: 'notes',
+				locked: false,
+				date: 'February 1, 2026'
+			},
+			{ title: 'Post A', href: '/posts/a', type: 'posts', locked: false, date: 'January 15, 2026' }
 		]);
 	});
 
@@ -115,7 +127,7 @@ describe('nav-data loaders', () => {
 					title: 'Trip',
 					publishedAt: new Date(2026, 0, 15, 12),
 					tz: null,
-					locked: true
+					passwordHash: '$argon2id$stub'
 				}
 			],
 			[{ total: 7 }]
@@ -130,6 +142,45 @@ describe('nav-data loaders', () => {
 			{ label: 'Trip', href: '/notes/trip', desc: 'January 15, 2026', locked: true }
 		]);
 		expect(data.footerSecondaryText).toBe('7 notes');
+		// Recent notes are capped by the query limit (no post-slice).
+		expect(state.limitArgs).toContain(4);
+	});
+
+	it('slices the mega menu topic list to its limit', async () => {
+		state.selectResults = [
+			Array.from({ length: 6 }, (_, index) => ({
+				id: `t${index}`,
+				name: `Topic ${index}`,
+				slug: `topic-${index}`,
+				icon: null,
+				total: 1
+			})),
+			[],
+			[{ total: 0 }]
+		];
+
+		const data = await loadNotesMegaData();
+
+		expect(data.leftItems).toHaveLength(5);
+		expect(data.leftItems?.[0]).toEqual({
+			label: 'Topic 0',
+			href: '/notes/topics/topic-0',
+			iconName: undefined,
+			badge: 1
+		});
+	});
+
+	it('merges the timeline deterministically on equal timestamps', async () => {
+		const at = new Date(2026, 0, 15, 12);
+		state.selectResults = [
+			[{ slug: 'b', title: 'Post B', publishedAt: at }],
+			[{ id: 'n1', slug: 'a', title: 'Note A', publishedAt: at, tz: null, passwordHash: null }]
+		];
+
+		const data = await loadTimelineMegaData();
+
+		// Tie-break chain: time desc, then type ('notes' < 'posts'), then href.
+		expect(data.timelineItems?.map((item) => item.title)).toEqual(['Note A', 'Post B']);
 	});
 
 	it('pins the locale + visibility predicates on every mega query (review finding)', async () => {

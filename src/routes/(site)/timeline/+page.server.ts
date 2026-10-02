@@ -2,9 +2,11 @@ import { and, desc, eq } from 'drizzle-orm';
 import { getLocale } from '$lib/paraglide/runtime';
 import { db } from '$lib/server/db';
 import { posts } from '$lib/server/db/content';
+import { getOption } from '$lib/server/config/options-registry';
 import { listNoteSummaries } from '$lib/server/services/notes';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import { formatDate } from '$lib/utils/i18n';
+import { noteDateLabel } from '$lib/utils/note-date';
 import type { PageServerLoad } from './$types';
 
 export interface TimelineItem {
@@ -25,6 +27,7 @@ export interface TimelineItem {
 export const load: PageServerLoad = async ({ url }) => {
 	const lang = getLocale();
 	const now = new Date();
+	const siteTz = await getOption('site.timezone');
 	const requested = url.searchParams.get('type');
 	const type = requested === 'post' || requested === 'note' ? requested : 'all';
 
@@ -38,7 +41,7 @@ export const load: PageServerLoad = async ({ url }) => {
 					.orderBy(desc(posts.publishedAt), desc(posts.id));
 	const noteRows = type === 'post' ? [] : await listNoteSummaries(lang, { now });
 
-	const items: Array<Omit<TimelineItem, 'date'> & { publishedAt: Date }> = [
+	const items: Array<Omit<TimelineItem, 'date'> & { tz: string | null; publishedAt: Date }> = [
 		...postRows.flatMap((row) =>
 			row.publishedAt
 				? [
@@ -47,6 +50,7 @@ export const load: PageServerLoad = async ({ url }) => {
 							slug: row.slug,
 							title: row.title,
 							locked: false,
+							tz: null,
 							publishedAt: row.publishedAt
 						}
 					]
@@ -57,12 +61,24 @@ export const load: PageServerLoad = async ({ url }) => {
 			slug: row.slug,
 			title: row.title,
 			locked: row.locked,
+			tz: row.tz,
 			publishedAt: row.publishedAt
 		}))
-	].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime());
+	]
+		// Deterministic across equal timestamps (review finding): notes before
+		// posts, then slug - the concatenation order must not leak into output.
+		.sort(
+			(a, b) =>
+				b.publishedAt.getTime() - a.publishedAt.getTime() ||
+				a.kind.localeCompare(b.kind) ||
+				a.slug.localeCompare(b.slug)
+		);
 
 	return {
 		type,
-		items: items.map(({ publishedAt, ...item }) => ({ ...item, date: formatDate(publishedAt) }))
+		items: items.map(({ publishedAt, tz, ...item }) => ({
+			...item,
+			date: item.kind === 'note' ? noteDateLabel(publishedAt, tz, siteTz) : formatDate(publishedAt)
+		}))
 	};
 };

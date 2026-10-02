@@ -5,27 +5,15 @@
 	import NotePagination from '$lib/components/notes/NotePagination.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
-	import { IconLock } from '@tabler/icons-svelte-runes';
+	import { NOTE_PAGE_SIZE } from '$lib/utils/note-meta';
+	import { notesFilterHref } from '$lib/utils/note-links';
+	import LockMark from '$lib/components/notes/LockMark.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
 	// Paginated views are self-canonical; filters consolidate on `/notes` (P3-b).
 	const listPath = $derived(`/notes${data.page > 1 ? `?page=${data.page}` : ''}`);
-
-	function filteredHref(next: {
-		topic?: string | null;
-		year?: number | null;
-		page?: number;
-	}): string {
-		const topic = next.topic !== undefined ? next.topic : data.filters.topic;
-		const year = next.year !== undefined ? next.year : data.filters.year;
-		const query: string[] = [];
-		if (topic) query.push(`topic=${encodeURIComponent(topic)}`);
-		if (year !== null && year !== undefined) query.push(`year=${year}`);
-		if (next.page && next.page > 1) query.push(`page=${next.page}`);
-		return query.length > 0 ? `/notes?${query.join('&')}` : '/notes';
-	}
 
 	const chipBase = 'rounded-full px-3 py-1 text-xs whitespace-nowrap transition-colors';
 	const chipActive = `${chipBase} bg-primary/10 text-primary`;
@@ -43,14 +31,19 @@
 		<div class="mt-6 mb-6 h-px w-8 bg-primary/70"></div>
 
 		{#if data.topics.length > 0}
-			<div class="flex flex-wrap gap-1.5">
-				<a href={siteHref('/notes')} class={!data.filters.topic ? chipActive : chipIdle}>
+			<div class="flex flex-wrap gap-1.5" role="group" aria-label={m.notes_topic_heading()}>
+				<a
+					href={siteHref(notesFilterHref(data.filters, { topic: null }))}
+					class={!data.filters.topic ? chipActive : chipIdle}
+					aria-current={!data.filters.topic ? 'true' : undefined}
+				>
 					{m.notes_filter_all()}
 				</a>
 				{#each data.topics as topic (topic.slug)}
 					<a
-						href={siteHref(filteredHref({ topic: topic.slug }))}
+						href={siteHref(notesFilterHref(data.filters, { topic: topic.slug }))}
 						class={data.filters.topic === topic.slug ? chipActive : chipIdle}
+						aria-current={data.filters.topic === topic.slug ? 'true' : undefined}
 					>
 						{topic.name}<span class="ml-1 text-muted-foreground/50 tabular-nums">{topic.total}</span
 						>
@@ -58,18 +51,20 @@
 				{/each}
 			</div>
 		{/if}
-		{#if data.years.length > 1}
-			<div class="mt-1.5 flex flex-wrap gap-1.5">
+		{#if data.years.length > 1 || data.filters.year !== null}
+			<div class="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label={m.notes_filter_years()}>
 				<a
-					href={siteHref(filteredHref({ year: null }))}
+					href={siteHref(notesFilterHref(data.filters, { year: null }))}
 					class={!data.filters.year ? chipActive : chipIdle}
+					aria-current={!data.filters.year ? 'true' : undefined}
 				>
 					{m.notes_filter_all()}
 				</a>
 				{#each data.years as year (year)}
 					<a
-						href={siteHref(filteredHref({ year }))}
+						href={siteHref(notesFilterHref(data.filters, { year }))}
 						class={data.filters.year === year ? chipActive : chipIdle}
+						aria-current={data.filters.year === year ? 'true' : undefined}
 					>
 						{year}
 					</a>
@@ -89,11 +84,7 @@
 						<Card.Title class="flex items-center gap-2 text-lg font-medium">
 							{data.pinnedNote.title}
 							{#if data.pinnedNote.locked}
-								<IconLock
-									class="size-4 shrink-0 text-muted-foreground"
-									role="img"
-									aria-label={m.notes_locked()}
-								/>
+								<LockMark class="size-4 text-muted-foreground" />
 							{/if}
 						</Card.Title>
 					</Card.Header>
@@ -118,14 +109,19 @@
 		{#if data.notes.length > 0}
 			<NoteRows items={data.notes} />
 		{:else if !data.pinnedNote}
-			<p class="mt-10 text-sm text-muted-foreground">{m.notes_empty()}</p>
+			<p class="mt-10 text-sm text-muted-foreground">
+				{data.filters.topic || data.filters.year !== null
+					? m.notes_filter_empty()
+					: m.notes_empty()}
+			</p>
 		{/if}
 
 		<NotePagination
 			page={data.page}
 			totalPages={data.totalPages}
 			total={data.total}
-			href={(target) => filteredHref({ page: target })}
+			perPage={NOTE_PAGE_SIZE}
+			href={(target) => notesFilterHref(data.filters, { page: target })}
 		/>
 	</div>
 </div>

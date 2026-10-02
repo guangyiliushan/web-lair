@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the notes topic page (N1): unknown topics 404,
- * known ones render their visible notes for the locale.
+ * Route-level tests for the notes topic page (N1 + review round 1): unknown
+ * topics 404, known ones render their visible notes - with the topic passed
+ * pre-resolved (no duplicate slug lookup) and facets skipped (three queries
+ * total).
  */
 const { dbMock, state } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -52,10 +54,7 @@ function makeEvent(slug: string) {
 describe('notes topic page', () => {
 	beforeEach(() => {
 		state.selectResults = [];
-		Object.assign(dbMock, {
-			select: vi.fn(() => makeChain(state.selectResults.shift() ?? [])),
-			selectDistinct: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
-		});
+		Object.assign(dbMock, { select: vi.fn(() => makeChain(state.selectResults.shift() ?? [])) });
 	});
 
 	it('404s an unknown topic', async () => {
@@ -71,10 +70,8 @@ describe('notes topic page', () => {
 		expect(caught?.status).toBe(404);
 	});
 
-	it('renders a topic with its visible notes', async () => {
+	it('renders a topic with its visible notes (no facet queries)', async () => {
 		state.selectResults = [
-			[topicRow],
-			// listNotes resolves the topic again from the slug (single source).
 			[topicRow],
 			[{ total: 1 }],
 			[
@@ -87,9 +84,7 @@ describe('notes topic page', () => {
 					passwordHash: null,
 					pinAt: null
 				}
-			],
-			[],
-			[topicRow]
+			]
 		];
 
 		const data = (await load(makeEvent('travel'))) as {
@@ -106,5 +101,8 @@ describe('notes topic page', () => {
 		});
 		expect(data.notes).toHaveLength(1);
 		expect(data.total).toBe(1);
+		// Topic lookup + count + rows only: facets are skipped and the slug is
+		// not resolved a second time inside listNotes (review finding).
+		expect((dbMock.select as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(3);
 	});
 });

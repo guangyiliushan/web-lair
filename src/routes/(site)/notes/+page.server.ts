@@ -1,7 +1,6 @@
 import { getLocale } from '$lib/paraglide/runtime';
 import { getOption } from '$lib/server/config/options-registry';
-import { listNotes } from '$lib/server/services/notes';
-import { formatDate } from '$lib/utils/i18n';
+import { listNotes, toNoteRow } from '$lib/server/services/notes';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -24,29 +23,15 @@ export const load: PageServerLoad = async ({ url }) => {
 		page: Number.isNaN(pageParam) ? 1 : pageParam,
 		year,
 		topicSlug,
+		siteTz,
 		now
 	});
 
-	type Row = {
-		slug: string;
-		title: string;
-		locked: boolean;
-		excerpt: string | null;
-		image: string | null;
-		date: string;
-	};
-	const toRow = (card: (typeof result.cards)[number]): Row => ({
-		slug: card.slug,
-		title: card.title,
-		locked: card.locked,
-		excerpt: card.excerpt,
-		image: card.image,
-		date: formatDate(card.publishedAt, { timeZone: card.tz ?? siteTz })
-	});
-
 	const pinnedCard = result.page === 1 ? result.cards.find((card) => card.pinned) : undefined;
-	const pinnedNote = pinnedCard ? { ...toRow(pinnedCard), pinned: true } : null;
-	const notes = result.cards.filter((card) => card !== pinnedCard).map(toRow);
+	const pinnedNote = pinnedCard ? { ...toNoteRow(pinnedCard, siteTz), pinned: true } : null;
+	const notes = result.cards
+		.filter((card) => card !== pinnedCard)
+		.map((card) => toNoteRow(card, siteTz));
 
 	return {
 		notes,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeSlug, tagSlug, titleSlug, TITLE_SLUG_MAX } from './slug';
+import { normalizeSlug, tagSlug, titleSlug } from './slug';
 
 describe('normalizeSlug', () => {
 	it('lowercases and strips characters outside [a-z0-9-]', () => {
@@ -50,8 +50,10 @@ describe('titleSlug', () => {
 	});
 
 	it('caps the length and leaves no trailing hyphen after the cut', () => {
-		expect(titleSlug('a'.repeat(200)).length).toBe(TITLE_SLUG_MAX);
-		const cut = titleSlug(`${'a'.repeat(TITLE_SLUG_MAX - 1)} b`);
+		// Hardcode the reviewed cap (review finding): importing the constant
+		// would keep this green even if the value silently changed.
+		expect(titleSlug('a'.repeat(200)).length).toBe(120);
+		const cut = titleSlug(`${'a'.repeat(119)} b`);
 		expect(cut.endsWith('-')).toBe(false);
 	});
 

@@ -15,6 +15,9 @@
 export const NOTE_LANGS = ['en', 'zh-cn', 'ja'] as const;
 export type NoteLang = (typeof NOTE_LANGS)[number];
 
+/** Public notes list page size (client and server share it through this UI-safe module). */
+export const NOTE_PAGE_SIZE = 12;
+
 /* ── Statuses (mirror of `NOTES_STATUSES`, drift-guarded by test) ──────── */
 
 export const NOTE_STATUSES = ['draft', 'private', 'scheduled', 'published', 'trash'] as const;
@@ -41,7 +44,10 @@ export const NOTE_MOOD_LABELS: Record<NoteMood, Record<NoteLang, string>> = {
 	very_good: { en: 'Very good', 'zh-cn': '很好', ja: 'とても良い' }
 };
 
-/** Tabler icon names (kebab); the UI resolves them through the icon whitelist. */
+/**
+ * Tabler icon names (kebab) reserved for the mood UI; the icon-whitelist
+ * entries land with that UI (nav-icons.ts ships curated names only).
+ */
 export const NOTE_MOOD_ICONS: Record<NoteMood, string> = {
 	very_bad: 'mood-cry',
 	bad: 'mood-sad',
@@ -155,7 +161,10 @@ export function noteMoodLabel(mood: NoteMood, lang: NoteLang): string {
 /* ── Weather: WMO 4677 / Open-Meteo code subset (0-99 CHECK in DB) ─────── */
 
 export interface NoteWeatherEntry {
-	/** Tabler icon name (kebab); resolved through the icon whitelist. */
+	/**
+	 * Tabler icon name (kebab) reserved for the weather UI; the icon-whitelist
+	 * entries land with that UI (nav-icons.ts ships curated names only).
+	 */
 	icon: string;
 	labels: Record<NoteLang, string>;
 }

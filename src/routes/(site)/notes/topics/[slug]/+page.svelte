@@ -4,6 +4,7 @@
 	import NotePagination from '$lib/components/notes/NotePagination.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { navIcon } from '$lib/config/nav-icons';
+	import { NOTE_PAGE_SIZE } from '$lib/utils/note-meta';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -30,7 +31,7 @@
 		</div>
 		<h1 class="flex items-center gap-2.5 text-[28px] leading-tight font-medium">
 			{#if TopicIcon}
-				<TopicIcon class="size-6 shrink-0 text-muted-foreground" />
+				<TopicIcon class="size-6 shrink-0 text-muted-foreground" aria-hidden="true" />
 			{/if}
 			{data.topic.name}
 		</h1>
@@ -53,6 +54,7 @@
 		page={data.page}
 		totalPages={data.totalPages}
 		total={data.total}
+		perPage={NOTE_PAGE_SIZE}
 		href={pageHref}
 	/>
 </div>

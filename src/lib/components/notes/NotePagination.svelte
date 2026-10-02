@@ -9,11 +9,14 @@
 		page,
 		totalPages,
 		total,
+		perPage,
 		href
 	}: {
 		page: number;
 		totalPages: number;
 		total: number;
+		/** Items per page (NOTE_PAGE_SIZE from the UI-safe notes module). */
+		perPage: number;
 		/** Builds the link for a target page (filters preserved by the caller). */
 		href: (target: number) => string;
 	} = $props();
@@ -26,7 +29,7 @@
 
 {#if totalPages > 1}
 	<nav class="mt-20 border-t border-border/40 pt-5" aria-label="Pagination">
-		<Pagination.Root count={total} perPage={12} {page}>
+		<Pagination.Root count={total} {perPage} {page}>
 			<Pagination.Content class="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
 				<Pagination.Item class="list-none">
 					{#if page > 1}

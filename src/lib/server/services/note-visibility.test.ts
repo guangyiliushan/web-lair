@@ -85,6 +85,10 @@ describe('visibleNoteCondition', () => {
 		const query = new PgDialect().sqlToQuery(visibleNoteCondition(NOW));
 		expect(query.sql).toContain('"notes"."status" in');
 		expect(query.sql).toContain('"notes"."published_at" <=');
+		// Boolean-structure teeth (review finding): flipping the AND to OR
+		// must fail here, not only in the substring checks.
+		expect(query.sql).toContain(' and ');
+		expect(query.sql).not.toContain(' or ');
 		expect(query.params).toEqual([...VISIBLE_NOTE_STATUSES, NOW.toISOString()]);
 	});
 });
@@ -97,6 +101,9 @@ describe('feedableNoteCondition', () => {
 		expect(query.sql).toContain('"notes"."status" in');
 		expect(query.sql).toContain('"notes"."published_at" <=');
 		expect(query.sql).toContain('"notes"."password_hash" is null');
+		// Same boolean-structure teeth as the visibility condition.
+		expect(query.sql).toContain(' and ');
+		expect(query.sql).not.toContain(' or ');
 		expect(query.params).toEqual([...VISIBLE_NOTE_STATUSES, NOW.toISOString()]);
 	});
 });

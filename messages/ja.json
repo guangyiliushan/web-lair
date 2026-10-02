@@ -276,6 +276,8 @@
 	"notes_count": "{count} 件の手記",
 	"notes_empty": "手記はまだありません。",
 	"notes_filter_all": "すべて",
+	"notes_filter_empty": "条件に合う手記はありません。",
+	"notes_filter_years": "年",
 	"notes_kicker": "日記",
 	"notes_locked": "ロック中",
 	"notes_pinned": "ピン留め",

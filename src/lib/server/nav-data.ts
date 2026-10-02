@@ -3,9 +3,11 @@ import { m } from '$lib/paraglide/messages';
 import { getLocale } from '$lib/paraglide/runtime';
 import { db } from '$lib/server/db';
 import { categories, posts } from '$lib/server/db/content';
+import { getOption } from '$lib/server/config/options-registry';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import { countVisibleNotes, listNoteSummaries, listTopicOptions } from '$lib/server/services/notes';
 import { formatDate } from '$lib/utils/i18n';
+import { noteDateLabel } from '$lib/utils/note-date';
 import type {
 	MegaMenuDynamicData,
 	NavChild,
@@ -80,10 +82,11 @@ export async function loadNotesMegaData(): Promise<MegaMenuDynamicData> {
 	const lang = getLocale();
 	const now = new Date();
 
-	const [topics, recent, total] = await Promise.all([
+	const [topics, recent, total, siteTz] = await Promise.all([
 		listTopicOptions(lang, now),
 		listNoteSummaries(lang, { limit: MEGA_RECENT_LIMIT, now }),
-		countVisibleNotes(lang, now)
+		countVisibleNotes(lang, now),
+		getOption('site.timezone')
 	]);
 
 	const leftItems: NavChild[] = topics.slice(0, MEGA_TOPIC_LIMIT).map((row) => ({
@@ -96,7 +99,7 @@ export async function loadNotesMegaData(): Promise<MegaMenuDynamicData> {
 	const rightItems: NavChild[] = recent.map((row) => ({
 		label: row.title,
 		href: `/notes/${row.slug}`,
-		desc: formatDate(row.publishedAt, row.tz ? { timeZone: row.tz } : undefined),
+		desc: noteDateLabel(row.publishedAt, row.tz, siteTz),
 		locked: row.locked
 	}));
 
@@ -111,14 +114,15 @@ export async function loadTimelineMegaData(): Promise<MegaMenuDynamicData> {
 	const lang = getLocale();
 	const now = new Date();
 
-	const [postRows, noteRows] = await Promise.all([
+	const [postRows, noteRows, siteTz] = await Promise.all([
 		db
 			.select({ slug: posts.slug, title: posts.title, publishedAt: posts.publishedAt })
 			.from(posts)
 			.where(and(eq(posts.lang, lang), visiblePostCondition(now)))
 			.orderBy(desc(posts.publishedAt), desc(posts.id))
 			.limit(MEGA_RECENT_LIMIT),
-		listNoteSummaries(lang, { limit: MEGA_RECENT_LIMIT, now })
+		listNoteSummaries(lang, { limit: MEGA_RECENT_LIMIT, now }),
+		getOption('site.timezone')
 	]);
 
 	const merged = [
@@ -129,6 +133,8 @@ export async function loadTimelineMegaData(): Promise<MegaMenuDynamicData> {
 							title: row.title,
 							href: `/posts/${row.slug}`,
 							type: 'posts' as const,
+							locked: false,
+							tz: null,
 							publishedAt: row.publishedAt
 						}
 					]
@@ -138,17 +144,30 @@ export async function loadTimelineMegaData(): Promise<MegaMenuDynamicData> {
 			title: row.title,
 			href: `/notes/${row.slug}`,
 			type: 'notes' as const,
+			locked: row.locked,
+			tz: row.tz,
 			publishedAt: row.publishedAt
 		}))
 	]
-		.sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
+		// Deterministic across equal timestamps (review finding): notes first,
+		// then href - the concatenation order must not leak into the output.
+		.sort(
+			(a, b) =>
+				b.publishedAt.getTime() - a.publishedAt.getTime() ||
+				a.type.localeCompare(b.type) ||
+				a.href.localeCompare(b.href)
+		)
 		.slice(0, MEGA_RECENT_LIMIT);
 
 	const timelineItems: TimelineActivityItem[] = merged.map((item) => ({
 		title: item.title,
 		href: item.href,
 		type: item.type,
-		date: formatDate(item.publishedAt)
+		locked: item.locked,
+		date:
+			item.type === 'notes'
+				? noteDateLabel(item.publishedAt, item.tz, siteTz)
+				: formatDate(item.publishedAt)
 	}));
 
 	return { leftItems: [], rightItems: [], timelineItems };

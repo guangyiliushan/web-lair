@@ -1,8 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { getLocale } from '$lib/paraglide/runtime';
 import { getOption } from '$lib/server/config/options-registry';
-import { findTopicBySlug, listNotes } from '$lib/server/services/notes';
-import { formatDate } from '$lib/utils/i18n';
+import { findTopicBySlug, listNotes, toNoteRow } from '$lib/server/services/notes';
 import type { PageServerLoad } from './$types';
 
 /** Topic page (N1): one curated topic's visible notes for this locale. */
@@ -19,17 +18,13 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		lang,
 		page: Number.isNaN(pageParam) ? 1 : pageParam,
 		topicSlug: params.slug,
+		topicId: topic.id,
+		facets: false,
+		siteTz,
 		now
 	});
 
-	const notes = result.cards.map((card) => ({
-		slug: card.slug,
-		title: card.title,
-		locked: card.locked,
-		excerpt: card.excerpt,
-		image: card.image,
-		date: formatDate(card.publishedAt, { timeZone: card.tz ?? siteTz })
-	}));
+	const notes = result.cards.map((card) => toNoteRow(card, siteTz));
 
 	return {
 		topic: {

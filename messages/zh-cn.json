@@ -276,6 +276,8 @@
 	"notes_count": "{count} 篇手记",
 	"notes_empty": "还没有手记。",
 	"notes_filter_all": "全部",
+	"notes_filter_empty": "没有符合筛选的手记。",
+	"notes_filter_years": "年份",
 	"notes_kicker": "日记",
 	"notes_locked": "已加密",
 	"notes_pinned": "置顶",

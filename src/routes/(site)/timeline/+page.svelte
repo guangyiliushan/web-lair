@@ -2,7 +2,7 @@
 	import { SeoHead } from '$lib/components/seo';
 	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
-	import IconLock from '@tabler/icons-svelte-runes/icons/lock';
+	import LockMark from '$lib/components/notes/LockMark.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -55,11 +55,7 @@
 						>
 							<span class="min-w-0 truncate">{item.title}</span>
 							{#if item.locked}
-								<IconLock
-									class="size-3.5 shrink-0 text-muted-foreground/60"
-									role="img"
-									aria-label={m.notes_locked()}
-								/>
+								<LockMark class="size-3.5 text-muted-foreground/60" />
 							{/if}
 						</span>
 						<span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground/40 tabular-nums">

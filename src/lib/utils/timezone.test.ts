@@ -13,4 +13,11 @@ describe('isValidIanaTimeZone', () => {
 		expect(isValidIanaTimeZone('')).toBe(false);
 		expect(isValidIanaTimeZone(' Asia/Taipei ')).toBe(false);
 	});
+
+	it('rejects UTC-offset strings that Intl alone would accept (POSIX trap)', () => {
+		// PostgreSQL reads '+08:00' as a POSIX zone (sign flipped!) and rejects
+		// '+0800' outright - both pass Intl, so the validator must say no.
+		expect(isValidIanaTimeZone('+08:00')).toBe(false);
+		expect(isValidIanaTimeZone('-0500')).toBe(false);
+	});
 });

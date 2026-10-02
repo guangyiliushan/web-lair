@@ -276,6 +276,8 @@
 	"notes_count": "{count} notes",
 	"notes_empty": "No notes yet.",
 	"notes_filter_all": "All",
+	"notes_filter_empty": "No notes match these filters.",
+	"notes_filter_years": "Years",
 	"notes_kicker": "Journal",
 	"notes_locked": "Locked",
 	"notes_pinned": "Pinned",

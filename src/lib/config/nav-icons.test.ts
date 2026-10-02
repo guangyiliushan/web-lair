@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import IconNotebook from '@tabler/icons-svelte-runes/icons/notebook';
 import { NAV_ICON_NAMES, navIcon } from './nav-icons';
 
 describe('nav icon whitelist', () => {
@@ -18,5 +19,15 @@ describe('nav icon whitelist', () => {
 		expect(navIcon('no-such-icon')).toBeNull();
 		expect(navIcon(null)).toBeNull();
 		expect(navIcon(undefined)).toBeNull();
+	});
+
+	it('maps names to their exact components (swap guard)', () => {
+		expect(navIcon('notebook')).toBe(IconNotebook);
+	});
+
+	it('rejects prototype-chain keys', () => {
+		expect(navIcon('constructor')).toBeNull();
+		expect(navIcon('__proto__')).toBeNull();
+		expect(navIcon('hasOwnProperty')).toBeNull();
 	});
 });

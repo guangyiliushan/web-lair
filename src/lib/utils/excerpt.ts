@@ -29,7 +29,25 @@ export function firstImageFromMarkdown(markdown: string): string | null {
 	const source = markdown.replace(/```[\s\S]*?```/g, ' ');
 	const markdownImage = /!\[[^\]]*\]\(\s*<?([^)\s>]+)>?/.exec(source);
 	const htmlImage = /<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i.exec(source);
-	if (!markdownImage) return htmlImage?.[1] ?? null;
-	if (!htmlImage) return markdownImage[1];
-	return markdownImage.index < htmlImage.index ? markdownImage[1] : htmlImage[1];
+	const url = !markdownImage
+		? (htmlImage?.[1] ?? null)
+		: !htmlImage
+			? markdownImage[1]
+			: markdownImage.index < htmlImage.index
+				? markdownImage[1]
+				: htmlImage[1];
+	return url !== null && isSafeCoverUrl(url) ? url : null;
+}
+
+/**
+ * Cover URL policy (review finding): site-internal paths ('/...', never
+ * protocol-relative '//...') or https links. Keeps list page loads from
+ * becoming third-party requests (tracking pixels), `data:` payloads out of
+ * the response, and script-ish schemes away from an `img` src that later
+ * batches may reuse (og:image).
+ */
+export function isSafeCoverUrl(url: string): boolean {
+	if (url.startsWith('//')) return false;
+	if (url.startsWith('/')) return true;
+	return /^https:\/\//i.test(url);
 }

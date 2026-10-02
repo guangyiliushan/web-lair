@@ -62,8 +62,13 @@ export const NAV_ICON_WHITELIST: Record<string, Component> = {
 
 export const NAV_ICON_NAMES = Object.keys(NAV_ICON_WHITELIST);
 
-/** Resolve a stored icon name; unknown/null names yield null (no crash). */
+/**
+ * Resolve a stored icon name; unknown/null names yield null (no crash).
+ * `Object.hasOwn` guard: the whitelist is a plain object, so inherited keys
+ * like 'constructor' or '__proto__' must not resolve to truthy
+ * non-components (Svelte would treat them as component refs; review finding).
+ */
 export function navIcon(name: string | null | undefined): Component | null {
-	if (!name) return null;
-	return NAV_ICON_WHITELIST[name] ?? null;
+	if (!name || !Object.hasOwn(NAV_ICON_WHITELIST, name)) return null;
+	return NAV_ICON_WHITELIST[name];
 }

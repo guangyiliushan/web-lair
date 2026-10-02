@@ -14,6 +14,7 @@ import {
 	NOTE_STATUSES,
 	NOTE_WEATHER,
 	noteEmotionLabel,
+	noteMoodLabel,
 	noteWeatherIconName,
 	noteWeatherLabel
 } from './note-meta';
@@ -131,6 +132,13 @@ describe('note-meta registries', () => {
 		expect(noteWeatherLabel(null, 'en')).toBeNull();
 		expect(noteWeatherIconName(0)).toBe('sun');
 		expect(noteWeatherIconName(42)).toBeNull();
+	});
+
+	it('anchors reviewed translations (registry copy-paste guard)', () => {
+		expect(NOTE_EMOTION_LABELS.sad['zh-cn']).toBe('难过');
+		expect(NOTE_EMOTION_LABELS.happy.ja).toBe('うれしい');
+		expect(NOTE_MOOD_LABELS.very_good.en).toBe('Very good');
+		expect(noteMoodLabel('bad', 'zh-cn')).toBe('较差');
 	});
 
 	it('reserves the topics slug for the URL subtree', () => {

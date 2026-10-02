@@ -94,9 +94,12 @@ export interface NavChild {
 	href: string;
 	descKey?: I18nKey;
 	desc?: string; // Literal fallback for descriptions/dates
+	/** Static config only: components cannot cross the load serialisation
+	 * boundary - dynamic server items use `iconName` (nav-icons.ts). */
 	icon?: Component;
 	/** Whitelist icon for dynamic server data (see $lib/config/nav-icons). */
 	iconName?: string;
+	/** Static config only (same serialisation rule as `icon`). */
 	imageUrl?: string; // Thumbnail image (e.g., series icons)
 	badge?: string | number;
 	/** Password-gated note marker on dynamic items. */
@@ -150,6 +153,8 @@ export interface TimelineActivityItem {
 	href: string;
 	type: 'posts' | 'notes' | 'memories';
 	date: string;
+	/** Password-gated note marker (N1). */
+	locked?: boolean;
 }
 
 export interface MegaMenuCategory {
@@ -289,14 +294,10 @@ export const navigationConfig: NavItem[] = [
 			},
 			footer: {
 				labelKey: 'nav_notes_view_all',
-				href: '/notes',
-				secondary: { labelKey: 'nav_notes_all_series', href: '/notes' }
+				href: '/notes'
 			}
 		},
-		children: [
-			{ labelKey: 'nav_notes_view_all', href: '/notes' },
-			{ labelKey: 'nav_notes_all_series', href: '/notes' }
-		]
+		children: [{ labelKey: 'nav_notes_view_all', href: '/notes' }]
 	},
 	{
 		key: 'nav_timeline',

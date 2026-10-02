@@ -120,16 +120,17 @@ test.describe('P3-b pages', () => {
 		await expect(page.getByText(TITLE1_ZH)).toHaveCount(0);
 	});
 
-	test('the timeline streams the posts and the note filter shows the empty state', async ({
-		page
-	}) => {
+	test('the timeline streams the posts and the note filter renders', async ({ page }) => {
 		const response = await page.goto('/en/timeline');
 		expect(response?.status()).toBe(200);
 		await expect(page.getByRole('link', { name: TITLE1 })).toBeVisible();
 		await expect(page.getByRole('link', { name: TITLE2 })).toBeVisible();
 
+		// N1 wires the notes stream in: the note view may be empty or filled,
+		// so pin the shell instead of the transient empty state (the N1 e2e
+		// spec owns note-stream coverage now; review finding).
 		await page.goto('/en/timeline?type=note');
-		await expect(page.getByText('Nothing here yet.')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Timeline' })).toBeVisible();
 	});
 
 	test('a retired slug answers 301 to the current one and lands on it', async ({

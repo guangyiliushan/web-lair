@@ -103,4 +103,18 @@ describe('firstImageFromMarkdown', () => {
 		expect(firstImageFromMarkdown('no images here')).toBeNull();
 		expect(firstImageFromMarkdown('')).toBeNull();
 	});
+
+	it('rejects covers outside the site-internal / https policy', () => {
+		// Policy (review finding): visitor page loads must not turn into
+		// third-party requests, data: payloads or script-ish schemes.
+		expect(firstImageFromMarkdown('![x](javascript:alert(1))')).toBeNull();
+		expect(firstImageFromMarkdown('![x](//evil.example/p.png)')).toBeNull();
+		expect(firstImageFromMarkdown('![x](data:image/png;base64,AAA)')).toBeNull();
+		expect(firstImageFromMarkdown('![x](ftp://files.example/a.png)')).toBeNull();
+		expect(firstImageFromMarkdown('![x](http://plain.example/a.png)')).toBeNull();
+		expect(firstImageFromMarkdown('![x](https://cdn.example/a.png)')).toBe(
+			'https://cdn.example/a.png'
+		);
+		expect(firstImageFromMarkdown('![x](/i/abc.png)')).toBe('/i/abc.png');
+	});
 });

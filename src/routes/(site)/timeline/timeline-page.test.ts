@@ -19,6 +19,9 @@ vi.mock('$lib/paraglide/runtime', () => ({
 	getLocale: () => 'en',
 	locales: ['en', 'zh-cn', 'ja']
 }));
+vi.mock('$lib/server/config/options-registry', () => ({
+	getOption: vi.fn(async () => 'UTC')
+}));
 
 import { load } from './+page.server';
 
@@ -65,7 +68,7 @@ describe('timeline page', () => {
 					title: 'Trip',
 					publishedAt: new Date(2026, 1, 1, 12),
 					tz: null,
-					locked: true
+					passwordHash: '$argon2id$stub'
 				}
 			]
 		];
@@ -115,7 +118,7 @@ describe('timeline page', () => {
 					title: 'Trip',
 					publishedAt: new Date(2026, 1, 1, 12),
 					tz: null,
-					locked: true
+					passwordHash: '$argon2id$stub'
 				}
 			]
 		];
@@ -142,5 +145,18 @@ describe('timeline page', () => {
 
 		expect(data.type).toBe('all');
 		expect(dbMock.select).toHaveBeenCalledTimes(2);
+	});
+
+	it('orders equal timestamps deterministically (notes before posts)', async () => {
+		const at = new Date(2026, 0, 15, 12);
+		state.selectResults = [
+			[{ slug: 'p2', title: 'Post P', publishedAt: at }],
+			[{ id: 'n1', slug: 'p1', title: 'Note P', publishedAt: at, tz: null, passwordHash: null }]
+		];
+
+		const data = (await load(makeEvent())) as { items: { title: string }[] };
+
+		// Tie-break chain: time desc, then kind ('note' < 'post'), then slug.
+		expect(data.items.map((item) => item.title)).toEqual(['Note P', 'Post P']);
 	});
 });

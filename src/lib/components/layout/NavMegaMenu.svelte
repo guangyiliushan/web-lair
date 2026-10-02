@@ -3,10 +3,10 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Badge } from '$lib/components/ui/badge';
+	import LockMark from '$lib/components/notes/LockMark.svelte';
 	import {
 		IconChevronRight,
 		IconBrandTwitter,
-		IconLock,
 		IconRss,
 		IconMail,
 		IconBrandGithub
@@ -21,7 +21,6 @@
 	import { portal } from '$lib/actions/portal';
 	import { siteHref } from '$lib/utils/href';
 	import { navIcon } from '$lib/config/nav-icons';
-	import { m } from '$lib/paraglide/messages';
 
 	interface Props {
 		menu: MegaMenu;
@@ -397,11 +396,7 @@
 											{/if}
 											<span class="truncate">{labelOf(child)}</span>
 											{#if child.locked}
-												<IconLock
-													class="size-3.5 shrink-0 text-muted-foreground/70"
-													role="img"
-													aria-label={m.notes_locked()}
-												/>
+												<LockMark />
 											{/if}
 											{#if child.badge}
 												<Badge variant="secondary" class="ml-auto">{child.badge}</Badge>
@@ -432,11 +427,7 @@
 												{labelOf(child)}
 											</div>
 											{#if child.locked}
-												<IconLock
-													class="size-3.5 shrink-0 text-muted-foreground/70"
-													role="img"
-													aria-label={m.notes_locked()}
-												/>
+												<LockMark />
 											{/if}
 										</div>
 										{#if child.desc || child.descKey}
@@ -515,7 +506,10 @@
 										class="rounded bg-muted/30 px-2.5 py-2 transition-colors hover:bg-muted/50 focus:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 									>
 										<div class="flex items-center justify-between gap-2">
-											<div class="min-w-0 truncate text-sm leading-snug">{item.title}</div>
+											<div class="flex min-w-0 items-center gap-1.5">
+												<div class="min-w-0 truncate text-sm leading-snug">{item.title}</div>
+												{#if item.locked}<LockMark />{/if}
+											</div>
 											<span class="ml-2 shrink-0 text-xs text-muted-foreground"
 												>{tLabel(typeKey)}</span
 											>
