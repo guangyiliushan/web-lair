@@ -42,6 +42,8 @@ declare global {
 				size?: 'default' | 'sm' | 'lg' | 'icon';
 				href?: string;
 			}>;
+			/** Public origin for absolute head URLs ((site) layout; null → request origin). */
+			siteOrigin?: string | null;
 		}
 		/** Custom error payload (P3-a): missing-language 404 hint data. */
 		interface Error {

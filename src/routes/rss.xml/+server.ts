@@ -7,7 +7,7 @@ import { getOption } from '$lib/server/config/options-registry';
 import { db } from '$lib/server/db';
 import { posts } from '$lib/server/db/content';
 import { buildRssFeed, type RssItem } from '$lib/server/feeds';
-import { ifModifiedSinceCovers, ifNoneMatchMatches } from '$lib/server/feeds/cache';
+import { conditionalResponse } from '$lib/server/feeds/cache';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { getPublicOrigin } from '$lib/server/origin';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
@@ -26,8 +26,10 @@ const ITEM_LIMIT = 20;
  * items excluded by the shared visibility predicate, `urn:uuid` guids so
  * slug changes never re-deliver an item. Caching (R1-Q2): strong ETag =
  * representation hash + Last-Modified from the newest updated_at;
- * conditional requests follow RFC 9110 §13.1 (weak If-None-Match
- * comparison, If-Modified-Since honoured when INM is absent).
+ * conditional requests use the strong If-None-Match (weak list comparison,
+ * RFC 9110 §13.1.2). If-Modified-Since is intentionally not evaluated —
+ * Last-Modified is informational (max(updated_at) is not consistent under
+ * lazy visibility; second review round 2026-10-02).
  *
  * The locale comes from the path: this endpoint is excluded from the i18n
  * route strategy (locale-surfaces), so getLocale() is not available here.
@@ -63,14 +65,21 @@ export const GET: RequestHandler = async ({ url, request }) => {
 				// The visibility predicate already excludes unpublished rows;
 				// this guard only narrows the type.
 				if (!row.publishedAt) return null;
-				return {
-					title: row.title,
-					link: `${origin}${localizeHref(`/posts/${row.slug}`, { locale })}`,
-					guid: `urn:uuid:${row.id}`,
-					pubDate: row.publishedAt,
-					description: row.summary?.trim() || plainTextExcerpt(row.content ?? ''),
-					contentHtml: row.content ? await renderMarkdownToHtml(row.content) : undefined
-				};
+				try {
+					return {
+						title: row.title,
+						link: `${origin}${localizeHref(`/posts/${row.slug}`, { locale })}`,
+						guid: `urn:uuid:${row.id}`,
+						pubDate: row.publishedAt,
+						description: row.summary?.trim() || plainTextExcerpt(row.content ?? ''),
+						contentHtml: row.content ? await renderMarkdownToHtml(row.content) : undefined
+					};
+				} catch (error) {
+					// One broken item must not take the whole feed down
+					// (second review round): log and skip it.
+					console.warn('[rss] item render failed', row.id, error);
+					return null;
+				}
 			})
 		)
 	).filter((item): item is RssItem => item !== null);
@@ -91,22 +100,11 @@ export const GET: RequestHandler = async ({ url, request }) => {
 	});
 
 	const etag = `"${createHash('sha256').update(body).digest('hex').slice(0, 32)}"`;
-	const headers: Record<string, string> = {
-		'content-type': 'application/rss+xml; charset=utf-8',
-		'cache-control': 'public, max-age=300',
-		etag
-	};
-	if (latest) headers['last-modified'] = latest.toUTCString();
-
-	const ifNoneMatch = request.headers.get('if-none-match');
-	const notModified =
-		ifNoneMatchMatches(ifNoneMatch, etag) ||
-		(ifNoneMatch === null &&
-			ifModifiedSinceCovers(request.headers.get('if-modified-since'), latest));
-	if (notModified) {
-		return new Response(null, { status: 304, headers });
-	}
-	return new Response(body, { status: 200, headers });
+	return conditionalResponse(request, body, {
+		contentType: 'application/rss+xml; charset=utf-8',
+		etag,
+		lastModified: latest
+	});
 };
 
 /** First path segment when it is a locale tag (`/en/rss.xml` → `en`). */

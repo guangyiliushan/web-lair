@@ -67,8 +67,7 @@ describe('nav-data loaders', () => {
 			[
 				{ slug: 'a', title: 'Post A', publishedAt: new Date(2026, 0, 15, 12) },
 				{ slug: 'b', title: 'Post B', publishedAt: null }
-			],
-			[{ total: 4 }]
+			]
 		];
 
 		const data = await loadPostsMegaData();
@@ -96,7 +95,7 @@ describe('nav-data loaders', () => {
 	});
 
 	it('pins the locale + visibility predicates on every mega query (review finding)', async () => {
-		state.selectResults = [[], [], [{ total: 0 }]];
+		state.selectResults = [[], []];
 		await loadPostsMegaData();
 
 		// Categories query: the predicate sits in the posts JOIN condition.
@@ -105,8 +104,8 @@ describe('nav-data loaders', () => {
 		expect(joinSql).toContain('"posts"."lang"');
 		expect(joinSql).toContain('"posts"."status"');
 
-		// Recent + total queries: both are WHERE-guarded.
-		expect(state.whereArgs).toHaveLength(2);
+		// Recent query: WHERE-guarded (the aggregate carries the total).
+		expect(state.whereArgs).toHaveLength(1);
 		for (const condition of state.whereArgs) {
 			const sql = dialect.sqlToQuery(condition as never).sql;
 			expect(sql).toContain('"posts"."lang"');

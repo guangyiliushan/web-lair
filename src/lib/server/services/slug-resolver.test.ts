@@ -71,6 +71,7 @@ describe('findSlugTargetId', () => {
 
 		// Deterministic when several rows share a slug: newest tracker wins,
 		// with the uuidv7 id as tiebreak (review finding).
+		expect(state.orderArgs[0]).toHaveLength(2);
 		const primary = dialect.sqlToQuery(state.orderArgs[0]?.[0] as never);
 		expect(primary.sql).toContain('"slug_trackers"."created_at"');
 		expect(primary.sql.toLowerCase()).toContain('desc');

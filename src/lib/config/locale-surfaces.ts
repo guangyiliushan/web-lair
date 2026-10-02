@@ -59,7 +59,9 @@ export function cookieSurfaceMatches(): string[] {
  * base locale there. Feed handlers must read the locale from the request
  * path (`localeFromPath`) and never call `getLocale()`. Dropping the bare
  * `/rss.xml` entry would additionally let the middleware 307 the alias —
- * its 302 is pinned by e2e and must stay.
+ * its 302 is pinned by e2e and must stay. Routing still de-localises via
+ * `src/hooks.ts` (the `reroute` hook) — that is what makes `/{lang}/rss.xml`
+ * reach this endpoint as a 200 alias; keep both halves in place.
  */
 export const ROOT_EXACT_EXCLUDES = ['/sitemap.xml', '/robots.txt', '/rss.xml'] as const;
 

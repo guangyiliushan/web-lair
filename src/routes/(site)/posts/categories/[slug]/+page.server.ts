@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
-import { posts, categories, postTags, tags } from '$lib/server/db/schema';
+import { posts, categories, postTags, tags } from '$lib/server/db/content';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
 import { getLocale } from '$lib/paraglide/runtime';
@@ -110,7 +110,11 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	const tagList: CategoryTagCount[] = [...tagCounts.entries()]
 		.map(([id, count]) => ({ ...tagMeta.get(id)!, count }))
-		.sort((a, b) => b.count - a.count);
+		.sort(
+			(a, b) =>
+				b.count - a.count ||
+				(a.name === b.name ? a.slug.localeCompare(b.slug) : a.name.localeCompare(b.name))
+		);
 
 	// ── Earliest year for display ──
 	const earliestYear =

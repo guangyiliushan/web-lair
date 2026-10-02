@@ -95,6 +95,14 @@ test.describe('P3-b distribution face', () => {
 		expect(body).toContain('<language>en</language>');
 	});
 
+	test('a mismatching If-None-Match answers 200 with the full body', async ({ request }) => {
+		const response = await request.get('/sitemap.xml', {
+			headers: { 'if-none-match': '"different"' }
+		});
+		expect(response.status()).toBe(200);
+		expect(await response.text()).toContain('<urlset');
+	});
+
 	test('the bare rss alias redirects to the default-language feed (temporary)', async ({
 		request
 	}) => {

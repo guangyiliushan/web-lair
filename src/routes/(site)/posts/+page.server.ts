@@ -40,7 +40,13 @@ export const load: PageServerLoad = async ({ url }) => {
 		.from(posts)
 		.innerJoin(categories, eq(posts.categoryId, categories.id))
 		.where(visible)
-		.orderBy(sql`${posts.pinAt} desc nulls last`, sql`${posts.publishedAt} desc nulls last`)
+		// id tiebreak (review round 2): the only paginated read must not
+		// shuffle tied rows across pages.
+		.orderBy(
+			sql`${posts.pinAt} desc nulls last`,
+			sql`${posts.publishedAt} desc nulls last`,
+			sql`${posts.id} desc`
+		)
 		.limit(PAGE_SIZE)
 		.offset((page - 1) * PAGE_SIZE);
 

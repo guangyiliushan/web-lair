@@ -29,11 +29,12 @@ export function siteHref(href: string): string {
 
 /**
  * Active-state comparison for nav items (review finding): both sides are
- * neutral paths (`deLocalizeHref` output). `/` matches exactly; everything
+ * neutral paths (`deLocalizeHref` output) — `neutralPath` is the current
+ * location, `target` the nav item's path. `/` matches exactly; everything
  * else matches itself or a descendant (`/posts` → `/posts/x`), never a mere
  * string prefix (`/posts-foo` must not light up `/posts`).
  */
-export function isActivePath(neutralPath: string, href: string): boolean {
-	if (href === '/') return neutralPath === '/';
-	return neutralPath === href || neutralPath.startsWith(`${href}/`);
+export function isActivePath(neutralPath: string, target: string): boolean {
+	if (target === '/') return neutralPath === '/';
+	return neutralPath === target || neutralPath.startsWith(`${target}/`);
 }

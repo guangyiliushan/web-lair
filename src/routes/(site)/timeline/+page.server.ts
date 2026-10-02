@@ -25,7 +25,7 @@ export const load: PageServerLoad = async ({ url }) => {
 					.select({ slug: posts.slug, title: posts.title, publishedAt: posts.publishedAt })
 					.from(posts)
 					.where(and(eq(posts.lang, lang), visiblePostCondition(now)))
-					.orderBy(desc(posts.publishedAt));
+					.orderBy(desc(posts.publishedAt), desc(posts.id));
 
 	return {
 		type,

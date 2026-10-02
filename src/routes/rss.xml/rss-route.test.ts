@@ -8,20 +8,21 @@ import { plainTextExcerpt } from '$lib/utils/excerpt';
  * Route-level tests for /{lang}/rss.xml and the bare /rss.xml alias (P3-b):
  * urn:uuid guids, content:encoded bodies, the temporary 302 alias to the
  * default language, the strong-ETag cache contract (derived from the body,
- * RFC 9110 §13.1 conditional handling) and the empty-feed shape.
+ * INM-only conditional handling — review round 2) and the empty-feed shape.
  */
-const { dbMock, state } = vi.hoisted(() => ({
+const { dbMock, state, envState } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		selectResults: [] as unknown[][],
 		defaultLang: 'en',
 		orderArgs: [] as unknown[][],
 		limitArgs: [] as unknown[]
-	}
+	},
+	envState: { env: {} as Record<string, string | undefined> }
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
-vi.mock('$env/dynamic/private', () => ({ env: { ORIGIN: 'https://example.com' } }));
+vi.mock('$env/dynamic/private', () => envState);
 vi.mock('$lib/paraglide/runtime', () => ({
 	locales: ['en', 'zh-cn', 'ja'],
 	localizeHref: (href: string, options?: { locale?: string }) =>
@@ -34,7 +35,10 @@ vi.mock('$lib/server/config/options-registry', () => ({
 	getOption: vi.fn(async () => state.defaultLang)
 }));
 vi.mock('$lib/server/markdown', () => ({
-	renderMarkdownToHtml: vi.fn(async (md: string) => `<p>${md}</p>`)
+	renderMarkdownToHtml: vi.fn(async (md: string) => {
+		if (md === 'EXPLODE') throw new Error('boom');
+		return `<p>${md}</p>`;
+	})
 }));
 
 import { GET } from './+server';
@@ -83,6 +87,7 @@ describe('rss route', () => {
 		state.defaultLang = 'en';
 		state.orderArgs = [];
 		state.limitArgs = [];
+		envState.env.ORIGIN = 'https://example.com';
 		Object.assign(dbMock, {
 			select: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
 		});
@@ -116,6 +121,15 @@ describe('rss route', () => {
 		expect(response.headers.get('etag')).toBe(expectedEtag);
 	});
 
+	it('falls back to the request origin when ORIGIN is unset (pnpm dev)', async () => {
+		delete envState.env.ORIGIN;
+		state.selectResults = [[]];
+
+		const response = await GET(event('/en/rss.xml'));
+		const body = await response.text();
+		expect(body).toContain('href="http://localhost/en/rss.xml" rel="self"');
+	});
+
 	it('prefers a trimmed summary for the description when one exists', async () => {
 		state.selectResults = [
 			[{ ...helloRow, id: '019bfc4e-0000-7000-8000-000000000002', summary: '  Picked summary  ' }]
@@ -124,6 +138,26 @@ describe('rss route', () => {
 		const response = await GET(event('/en/rss.xml'));
 		const body = await response.text();
 		expect(body).toContain('<description>Picked summary</description>');
+	});
+
+	it('skips an item whose render fails instead of failing the whole feed (review round 2)', async () => {
+		state.selectResults = [
+			[
+				helloRow,
+				{
+					...helloRow,
+					id: '019bfc4e-0000-7000-8000-000000000009',
+					slug: 'boom',
+					content: 'EXPLODE'
+				}
+			]
+		];
+
+		const response = await GET(event('/en/rss.xml'));
+		expect(response.status).toBe(200);
+		const body = await response.text();
+		expect(body).toContain('urn:uuid:019bfc4e-0000-7000-8000-000000000001');
+		expect(body).not.toContain('urn:uuid:019bfc4e-0000-7000-8000-000000000009');
 	});
 
 	it('orders by published_at desc with an id tiebreak and clamps to the item limit', async () => {
@@ -164,7 +198,7 @@ describe('rss route', () => {
 		expect(body).not.toContain('<lastBuildDate>');
 	});
 
-	it('honours If-None-Match lists/weak validators and IMS when INM is absent', async () => {
+	it('honours If-None-Match lists/weak validators and never 304s on IMS alone', async () => {
 		state.selectResults = [[helloRow]];
 		const first = await GET(event('/en/rss.xml'));
 		const etag = first.headers.get('etag')!;
@@ -178,11 +212,13 @@ describe('rss route', () => {
 		const weakMatch = await GET(event('/en/rss.xml', { 'if-none-match': `W/${etag}` }));
 		expect(weakMatch.status).toBe(304);
 
+		// IMS alone never 304s: Last-Modified is informational (review round 2 —
+		// max(updated_at) is not a consistent last-modification date).
 		state.selectResults = [[helloRow]];
-		const imsHit = await GET(event('/en/rss.xml', { 'if-modified-since': lastModified }));
-		expect(imsHit.status).toBe(304);
+		const imsAlone = await GET(event('/en/rss.xml', { 'if-modified-since': lastModified }));
+		expect(imsAlone.status).toBe(200);
 
-		// INM present and mismatching wins over a covering IMS (RFC 9110 §13.1.3).
+		// A mismatching INM answers 200 even when an IMS is also present.
 		state.selectResults = [[helloRow]];
 		const inmWins = await GET(
 			event('/en/rss.xml', { 'if-none-match': '"different"', 'if-modified-since': lastModified })

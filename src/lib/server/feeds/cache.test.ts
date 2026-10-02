@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ifModifiedSinceCovers, ifNoneMatchMatches } from './cache';
+import { conditionalResponse, ifNoneMatchMatches } from './cache';
 
 describe('ifNoneMatchMatches', () => {
 	const etag = '"abc123"';
@@ -19,18 +19,56 @@ describe('ifNoneMatchMatches', () => {
 	});
 });
 
-describe('ifModifiedSinceCovers', () => {
-	const latest = new Date('2026-09-30T09:00:00Z');
+describe('conditionalResponse', () => {
+	const base = {
+		contentType: 'application/xml; charset=utf-8',
+		etag: '"abc123"',
+		lastModified: new Date('2026-09-30T09:00:00Z')
+	};
 
-	it('covers second-granularity equal-or-later instants', () => {
-		expect(ifModifiedSinceCovers('Wed, 30 Sep 2026 09:00:00 GMT', latest)).toBe(true);
-		expect(ifModifiedSinceCovers('Wed, 30 Sep 2026 09:00:01 GMT', latest)).toBe(true);
+	it('answers 304 without a body on a matching If-None-Match', async () => {
+		const response = conditionalResponse(
+			new Request('http://localhost/feed.xml', { headers: { 'if-none-match': base.etag } }),
+			'<feed/>',
+			base
+		);
+
+		expect(response.status).toBe(304);
+		expect(await response.text()).toBe('');
+		expect(response.headers.get('etag')).toBe(base.etag);
+		expect(response.headers.get('last-modified')).toBe('Wed, 30 Sep 2026 09:00:00 GMT');
+		expect(response.headers.get('cache-control')).toBe('public, max-age=300');
 	});
 
-	it('rejects earlier instants, junk and missing values', () => {
-		expect(ifModifiedSinceCovers('Wed, 30 Sep 2026 08:59:59 GMT', latest)).toBe(false);
-		expect(ifModifiedSinceCovers('not a date', latest)).toBe(false);
-		expect(ifModifiedSinceCovers(null, latest)).toBe(false);
-		expect(ifModifiedSinceCovers('Wed, 30 Sep 2026 09:00:00 GMT', null)).toBe(false);
+	it('answers 200 with the body when the validator differs or is absent', async () => {
+		const cases: Record<string, string>[] = [{}, { 'if-none-match': '"other"' }];
+		for (const headers of cases) {
+			const response = conditionalResponse(
+				new Request('http://localhost/feed.xml', { headers }),
+				'<feed/>',
+				base
+			);
+			expect(response.status).toBe(200);
+			expect(await response.text()).toBe('<feed/>');
+		}
+	});
+
+	it('never 304s on If-Modified-Since alone (LM is informational; review round 2)', () => {
+		const response = conditionalResponse(
+			new Request('http://localhost/feed.xml', {
+				headers: { 'if-modified-since': 'Wed, 30 Sep 2026 09:00:00 GMT' }
+			}),
+			'<feed/>',
+			base
+		);
+		expect(response.status).toBe(200);
+	});
+
+	it('omits Last-Modified when there is no reliable date', () => {
+		const response = conditionalResponse(new Request('http://localhost/feed.xml'), '<feed/>', {
+			...base,
+			lastModified: null
+		});
+		expect(response.headers.get('last-modified')).toBeNull();
 	});
 });

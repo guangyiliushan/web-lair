@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageServerData } from './$types';
 	import { SeoHead } from '$lib/components/seo';
+	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
 
 	let { data }: { data: PageServerData } = $props();
@@ -18,7 +19,7 @@
 </script>
 
 <svelte:head>
-	<title>{category.name} - Posts</title>
+	<title>{category.name} - {m.nav_posts()}</title>
 </svelte:head>
 
 <SeoHead path={`/posts/categories/${category.slug}`} />
@@ -27,7 +28,7 @@
 	<!-- ══ Header ══ -->
 	<header class="text-foreground">
 		<div class="mb-4 text-[10px] font-medium tracking-[4px] text-muted-foreground uppercase">
-			Category
+			{m.posts_category_heading()}
 		</div>
 
 		<div class="mb-2 flex items-baseline gap-3">
@@ -37,7 +38,9 @@
 				{totalCount}
 			</span>
 			<span class="text-sm text-muted-foreground">
-				articles{earliestYear ? ` · from ${earliestYear}` : ''}
+				{m.posts_category_articles()}{earliestYear
+					? ` · ${m.posts_category_since({ year: String(earliestYear) })}`
+					: ''}
 			</span>
 		</div>
 
@@ -63,7 +66,7 @@
 				</span>
 				<span class="text-[10px] tracking-wider text-muted-foreground/35">
 					{yearGroup.count}
-					{yearGroup.count === 1 ? 'entry' : 'entries'}
+					{yearGroup.count === 1 ? m.posts_tag_entry() : m.posts_tag_entries()}
 				</span>
 			</li>
 
@@ -76,7 +79,7 @@
 						class="group -mx-3 grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-4 border-b border-foreground/5 px-3 py-3.5 transition-[background] duration-300 ease-out hover:bg-linear-to-r hover:from-transparent hover:via-primary/6 hover:to-transparent"
 					>
 						<span
-							class="min-w-0 truncate text-sm font-normal text-foreground/85 transition-colors duration-200 group-hover:text-primary"
+							class="min-w-0 truncate text-sm font-normal text-foreground/85 transition-colors duration-200 group-hover:text-primary group-focus-visible:text-primary"
 						>
 							{post.title}
 						</span>
@@ -106,7 +109,7 @@
 	{#if tags.length > 0}
 		<section class="mt-7 border-t border-foreground/6 pt-4">
 			<div class="mb-2.5 text-[10px] font-medium tracking-[3px] text-muted-foreground uppercase">
-				Tags in this category
+				{m.posts_category_tags()}
 			</div>
 
 			<ul class="flex flex-wrap gap-1.5 p-0">
@@ -145,7 +148,7 @@
 				<path d="m16 12-4-4-4 4" />
 				<path d="M12 16V8" />
 			</svg>
-			<span>Back to top</span>
+			<span>{m.posts_back_to_top()}</span>
 		</button>
 	</div>
 </div>

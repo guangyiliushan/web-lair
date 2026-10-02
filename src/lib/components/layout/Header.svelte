@@ -59,10 +59,12 @@
 			return [...cats, { labelKey: 'nav_posts_view_all' as const, href: '/posts' }];
 		}
 		if (item.key === 'nav_timeline') {
+			// Only filters the timeline page actually implements — the legacy
+			// `?type=thinking` entry silently fell back to the full stream
+			// (second review round).
 			return [
 				{ label: m.nav_timeline_posts(), href: '/timeline?type=post' },
-				{ label: m.nav_timeline_notes(), href: '/timeline?type=note' },
-				{ label: m.nav_thinking(), href: '/timeline?type=thinking' }
+				{ label: m.nav_timeline_notes(), href: '/timeline?type=note' }
 			];
 		}
 		if (item.key === 'nav_notes') {

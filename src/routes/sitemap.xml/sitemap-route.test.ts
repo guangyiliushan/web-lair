@@ -6,20 +6,21 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 /**
  * Route-level tests for /sitemap.xml (P3-b): home + visible posts per
  * language, per-group alternates, lastmod only from updated_at, stable
- * (lang, slug) ordering and the strong-validator cache contract (ETag
- * derived from the body, 304 on matching conditional headers). The db
- * module is mocked with a queue of select results.
+ * (lang, slug) ordering, locale whitelisting and the strong-validator cache
+ * contract (ETag derived from the body). The db module is mocked with a
+ * queue of select results.
  */
-const { dbMock, state } = vi.hoisted(() => ({
+const { dbMock, state, envState } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		selectResults: [] as unknown[][],
 		orderArgs: [] as unknown[][]
-	}
+	},
+	envState: { env: {} as Record<string, string | undefined> }
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
-vi.mock('$env/dynamic/private', () => ({ env: { ORIGIN: 'https://example.com' } }));
+vi.mock('$env/dynamic/private', () => envState);
 vi.mock('$lib/paraglide/runtime', () => ({
 	locales: ['en', 'zh-cn', 'ja'],
 	localizeHref: (href: string, options?: { locale?: string }) =>
@@ -80,6 +81,7 @@ describe('sitemap route', () => {
 	beforeEach(() => {
 		state.selectResults = [[]];
 		state.orderArgs = [];
+		envState.env.ORIGIN = 'https://example.com';
 		Object.assign(dbMock, {
 			select: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
 		});
@@ -111,6 +113,34 @@ describe('sitemap route', () => {
 		expect(response.headers.get('etag')).toBe(expectedEtag);
 	});
 
+	it('falls back to the request origin when ORIGIN is unset (pnpm dev)', async () => {
+		delete envState.env.ORIGIN;
+		state.selectResults = [[]];
+
+		const response = await GET(event());
+		const body = await response.text();
+		expect(body).toContain('<loc>http://localhost/</loc>');
+	});
+
+	it('skips rows outside the configured locales (review round 2)', async () => {
+		state.selectResults = [
+			[
+				...groupRows,
+				{
+					lang: 'fr',
+					slug: 'bonjour',
+					updatedAt: new Date('2026-09-27T09:00:00Z'),
+					translationGroup: 'g3'
+				}
+			]
+		];
+
+		const response = await GET(event());
+		expect(response.status).toBe(200);
+		const body = await response.text();
+		expect(body).not.toContain('bonjour');
+	});
+
 	it('orders rows by (lang, slug) so the body — and ETag — stays byte-stable', async () => {
 		state.selectResults = [groupRows];
 		await GET(event());
@@ -123,7 +153,7 @@ describe('sitemap route', () => {
 		expect(orderSql.indexOf('"posts"."lang"')).toBeLessThan(orderSql.indexOf('"posts"."slug"'));
 	});
 
-	it('serves 304 on matching conditional headers and 200 otherwise', async () => {
+	it('serves 304 on matching If-None-Match and 200 otherwise (IMS never 304s)', async () => {
 		state.selectResults = [groupRows];
 		const first = await GET(event());
 		const etag = first.headers.get('etag')!;
@@ -138,9 +168,10 @@ describe('sitemap route', () => {
 		const weak = await GET(event({ 'if-none-match': `W/${etag}` }));
 		expect(weak.status).toBe(304);
 
+		// IMS alone never 304s: Last-Modified is informational (review round 2).
 		state.selectResults = [groupRows];
-		const imsHit = await GET(event({ 'if-modified-since': lastModified }));
-		expect(imsHit.status).toBe(304);
+		const imsAlone = await GET(event({ 'if-modified-since': lastModified }));
+		expect(imsAlone.status).toBe(200);
 
 		state.selectResults = [groupRows];
 		const changed = await GET(event({ 'if-none-match': '"different"' }));

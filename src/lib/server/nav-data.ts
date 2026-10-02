@@ -23,7 +23,11 @@ export async function loadPostsMegaData(): Promise<MegaMenuDynamicData> {
 	const lang = getLocale();
 	const now = new Date();
 
-	const [categoryRows, recentRows, totalRows] = await Promise.all([
+	// Two queries (second review round): the unfiltered category aggregate
+	// doubles as the locale total — every visible post has exactly one
+	// category (`category_id NOT NULL`, FK-restricted), so the dedicated
+	// COUNT query was redundant.
+	const [categoryRows, recentRows] = await Promise.all([
 		db
 			.select({ name: categories.name, slug: categories.slug, total: count(posts.id) })
 			.from(categories)
@@ -32,21 +36,16 @@ export async function loadPostsMegaData(): Promise<MegaMenuDynamicData> {
 				and(eq(posts.categoryId, categories.id), eq(posts.lang, lang), visiblePostCondition(now))
 			)
 			.groupBy(categories.id)
-			.orderBy(categories.sortOrder, categories.name)
-			.limit(MEGA_CATEGORY_LIMIT),
+			.orderBy(categories.sortOrder, categories.name),
 		db
 			.select({ slug: posts.slug, title: posts.title, publishedAt: posts.publishedAt })
 			.from(posts)
 			.where(and(eq(posts.lang, lang), visiblePostCondition(now)))
-			.orderBy(desc(posts.publishedAt))
-			.limit(MEGA_RECENT_LIMIT),
-		db
-			.select({ total: count() })
-			.from(posts)
-			.where(and(eq(posts.lang, lang), visiblePostCondition(now)))
+			.orderBy(desc(posts.publishedAt), desc(posts.id))
+			.limit(MEGA_RECENT_LIMIT)
 	]);
 
-	const leftItems: NavChild[] = categoryRows.map((row) => ({
+	const leftItems: NavChild[] = categoryRows.slice(0, MEGA_CATEGORY_LIMIT).map((row) => ({
 		label: row.name,
 		href: `/posts/categories/${row.slug}`,
 		badge: row.total
@@ -64,7 +63,7 @@ export async function loadPostsMegaData(): Promise<MegaMenuDynamicData> {
 			: []
 	);
 
-	const total = totalRows[0]?.total ?? 0;
+	const total = categoryRows.reduce((sum, row) => sum + row.total, 0);
 
 	return { leftItems, rightItems, footerSecondaryText: m.nav_posts_count({ count: total }) };
 }
@@ -149,7 +148,7 @@ export async function loadTimelineMegaData(): Promise<MegaMenuDynamicData> {
 		.select({ slug: posts.slug, title: posts.title, publishedAt: posts.publishedAt })
 		.from(posts)
 		.where(and(eq(posts.lang, lang), visiblePostCondition(now)))
-		.orderBy(desc(posts.publishedAt))
+		.orderBy(desc(posts.publishedAt), desc(posts.id))
 		.limit(MEGA_RECENT_LIMIT);
 
 	const timelineItems: TimelineActivityItem[] = rows.flatMap((row) =>

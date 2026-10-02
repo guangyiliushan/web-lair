@@ -145,6 +145,29 @@ test.describe('P3-b pages', () => {
 		await expect(page.getByRole('heading', { name: TITLE1 })).toBeVisible();
 	});
 
+	test('nav active state follows the de-localised path (review pin)', async ({ page }) => {
+		// `hover:text-primary` also contains the substring — match a standalone
+		// token only, or the inactive state would satisfy a naive regex.
+		const active = /(^|\s)text-primary(\s|$)/;
+
+		await page.goto(`/en/posts/${SLUG1}`);
+		const postsNav = page.getByRole('banner').getByRole('link', { name: 'Posts' }).first();
+		await expect(postsNav).toHaveClass(active);
+
+		// zh-cn: labels are localised — locate by href, and pin both directions
+		// (Pre-P3-b the header lit nothing here, or lit Home on every page).
+		await page.goto(`/zh-cn/posts/${SLUG1_ZH}`);
+		const zhNav = page.getByRole('navigation', { name: 'Main navigation' });
+		await expect(zhNav.locator('a[href="/zh-cn/posts"]').first()).toHaveClass(active);
+		await expect(zhNav.locator('a[href="/"]').first()).not.toHaveClass(active);
+	});
+
+	test('a missing post page is noindexed', async ({ page }) => {
+		const response = await page.goto('/en/posts/e2e-p3b-does-not-exist');
+		expect(response?.status()).toBe(404);
+		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
+	});
+
 	test('the detail head carries canonical + hreflang + feed autodiscovery', async ({ page }) => {
 		await page.goto(`/en/posts/${SLUG1}`);
 

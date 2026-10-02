@@ -1,5 +1,5 @@
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
-import { cookieSurfaceMatches, excludedSurfaceMatches } from './src/lib/config/locale-surfaces';
+import { cookieSurfaceMatches, excludedSurfaceMatches } from './src/lib/config/locale-surfaces.ts';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';

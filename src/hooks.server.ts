@@ -120,6 +120,12 @@ export const handleError: HandleServerError = ({ error, event, status, message }
 	const code =
 		(error as { cause?: { code?: string }; code?: string } | null)?.cause?.code ??
 		(error as { code?: string } | null)?.code;
-	console.warn('[error]', status, event.route.id ?? '-', code ?? message ?? '-');
+	console.warn(
+		'[error]',
+		status,
+		event.url.pathname,
+		event.route.id ?? '-',
+		code ?? message ?? '-'
+	);
 	return { message: '服务器内部错误' };
 };

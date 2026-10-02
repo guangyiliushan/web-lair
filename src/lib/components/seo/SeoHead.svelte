@@ -30,9 +30,7 @@
 	 * is the fallback. Review finding: page.url.origin alone can advertise an
 	 * internal host behind a proxy while the sitemap uses ORIGIN.
 	 */
-	const publicOrigin = $derived(
-		(page.data as { siteOrigin?: string | null }).siteOrigin ?? page.url.origin
-	);
+	const publicOrigin = $derived(page.data.siteOrigin ?? page.url.origin);
 
 	function absolute(href: string): string {
 		return `${publicOrigin}${href}`;
