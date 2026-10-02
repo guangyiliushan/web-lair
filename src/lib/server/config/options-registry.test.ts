@@ -60,14 +60,16 @@ describe('options registry (AI-1.1)', () => {
 				'comments.moderation',
 				'media.purge',
 				'site.default_lang',
-				'site.languages'
+				'site.languages',
+				'site.timezone'
 			].sort()
 		);
 	});
 
 	it('falls back to defaults when no row exists (§3.3 ledger values)', async () => {
-		state.selectRows = [[], [], [], []];
+		state.selectRows = [[], [], [], [], []];
 		await expect(getOption('site.default_lang')).resolves.toBe('en');
+		await expect(getOption('site.timezone')).resolves.toBe('UTC');
 		await expect(getOption('site.languages')).resolves.toEqual({
 			enabled: ['en', 'zh-cn', 'ja']
 		});
@@ -170,5 +172,18 @@ describe('options registry (AI-1.1)', () => {
 			name: 'ai.styleGuide',
 			value: { text: 'tone: dry' }
 		});
+	});
+
+	it('validates site.timezone as an IANA zone (default UTC)', async () => {
+		await expect(setOption('site.timezone', 'Asia/Taipei')).resolves.toBeUndefined();
+		expect(state.insertCalls[0].values).toEqual({
+			name: 'site.timezone',
+			value: 'Asia/Taipei'
+		});
+		await expect(setOption('site.timezone', 'Not/AZone' as never)).rejects.toThrow(
+			/无效的 IANA 时区名/
+		);
+		await expect(setOption('site.timezone', ' Asia/Taipei ' as never)).rejects.toThrow();
+		expect(state.insertCalls).toHaveLength(1);
 	});
 });

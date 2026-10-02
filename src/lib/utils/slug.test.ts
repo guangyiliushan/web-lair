@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeSlug, tagSlug } from './slug';
+import { normalizeSlug, tagSlug, titleSlug, TITLE_SLUG_MAX } from './slug';
 
 describe('normalizeSlug', () => {
 	it('lowercases and strips characters outside [a-z0-9-]', () => {
@@ -32,5 +32,30 @@ describe('tagSlug', () => {
 	it('does not trim or strip punctuation (exact legacy behaviour)', () => {
 		expect(tagSlug(' a b ')).toBe('-a-b-');
 		expect(tagSlug('C++ 11')).toBe('c++-11');
+	});
+});
+
+// Note title slugs keep CJK on purpose (notes plan v0.4 §8.3) - the three
+// slug rules coexist and must not be conflated.
+describe('titleSlug', () => {
+	it('lowercases, collapses separators and trims the edges', () => {
+		expect(titleSlug('Hello World!')).toBe('hello-world');
+		expect(titleSlug('A---B   C')).toBe('a-b-c');
+		expect(titleSlug('— 前夜 —')).toBe('前夜');
+	});
+
+	it('keeps CJK and mixed scripts', () => {
+		expect(titleSlug('你好，世界！')).toBe('你好-世界');
+		expect(titleSlug('AI 与 未来')).toBe('ai-与-未来');
+	});
+
+	it('caps the length and leaves no trailing hyphen after the cut', () => {
+		expect(titleSlug('a'.repeat(200)).length).toBe(TITLE_SLUG_MAX);
+		const cut = titleSlug(`${'a'.repeat(TITLE_SLUG_MAX - 1)} b`);
+		expect(cut.endsWith('-')).toBe(false);
+	});
+
+	it('yields an empty slug only for pure punctuation', () => {
+		expect(titleSlug('!!! ...')).toBe('');
 	});
 });

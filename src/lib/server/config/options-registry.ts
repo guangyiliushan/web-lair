@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { options } from '$lib/server/db/config';
 import { AI_FUNCTIONS } from '$lib/utils/ai-meta';
+import { isValidIanaTimeZone } from '$lib/utils/timezone';
 
 /** Site languages (same set as the posts `lang` CHECK, ledger §9.16). */
 export const OPTION_LANGS = ['en', 'zh-cn', 'ja'] as const;
@@ -40,6 +41,15 @@ export const optionRegistry = {
 	'site.default_lang': {
 		schema: z.enum(OPTION_LANGS),
 		default: 'en'
+	},
+	'site.timezone': {
+		// Ledger §13.9 / notes plan v0.4: IANA zone name. Validated by
+		// probing Intl (never supportedValuesOf - it omits 'UTC'). Notes
+		// fall back to this zone for the belongs-to date when their own
+		// `tz` is null; jobs reuse it as the `job_schedules.tz` default
+		// (ledger §24).
+		schema: z.string().refine(isValidIanaTimeZone, '无效的 IANA 时区名'),
+		default: 'UTC'
 	},
 	'ai.assignments': {
 		schema: z.partialRecord(

@@ -24,3 +24,21 @@ export function normalizeSlug(value: string): string {
 export function tagSlug(name: string): string {
 	return name.toLowerCase().replace(/\s+/g, '-');
 }
+
+/**
+ * Note title slug (notes plan v0.4 §8.3): unlike post slugs, Unicode letters
+ * and digits are KEPT (diary titles are usually Chinese) so note URLs stay
+ * readable. Lowercases Latin, collapses every run of whitespace/punctuation
+ * into one hyphen, caps the length and trims the edges; a pure-punctuation
+ * title still yields an empty slug, which publish validation rejects (posts
+ * behave the same).
+ */
+export const TITLE_SLUG_MAX = 120;
+
+export function titleSlug(title: string): string {
+	return title
+		.toLowerCase()
+		.replace(/[^\p{L}\p{N}]+/gu, '-')
+		.slice(0, TITLE_SLUG_MAX)
+		.replace(/^-+|-+$/g, '');
+}
