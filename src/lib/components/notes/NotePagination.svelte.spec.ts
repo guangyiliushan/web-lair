@@ -26,8 +26,9 @@ describe('NotePagination', () => {
 
 	it('links prev/next through the caller href targets', async () => {
 		await render(NotePagination, { page: 2, totalPages: 3, total: 12, perPage: 5, href });
-		expect(await linkHref(m.pagination_previous())).toContain('page=1');
-		expect(await linkHref(m.pagination_next())).toContain('page=3');
+		expect(await linkHref(m.pagination_previous())).toMatch(/[?&]page=1(?:&|$)/);
+		expect(await linkHref(m.pagination_next())).toMatch(/[?&]page=3(?:&|$)/);
+		expect(document.body.querySelector('nav[aria-label="Pagination"]')).not.toBeNull();
 		expect(document.body.textContent).toContain(
 			m.pagination_page({ page: String(2), total: String(3) })
 		);
@@ -38,7 +39,7 @@ describe('NotePagination', () => {
 		const prev = page.getByRole('button', { name: m.pagination_previous() });
 		await expect.element(prev).toBeInTheDocument();
 		expect((prev.element() as Element).hasAttribute('disabled')).toBe(true);
-		expect(await linkHref(m.pagination_next())).toContain('page=2');
+		expect(await linkHref(m.pagination_next())).toMatch(/[?&]page=2(?:&|$)/);
 	});
 
 	it('disables next on the last page', async () => {
@@ -46,6 +47,6 @@ describe('NotePagination', () => {
 		const next = page.getByRole('button', { name: m.pagination_next() });
 		await expect.element(next).toBeInTheDocument();
 		expect((next.element() as Element).hasAttribute('disabled')).toBe(true);
-		expect(await linkHref(m.pagination_previous())).toContain('page=1');
+		expect(await linkHref(m.pagination_previous())).toMatch(/[?&]page=1(?:&|$)/);
 	});
 });
