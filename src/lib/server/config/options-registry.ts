@@ -51,6 +51,13 @@ export const optionRegistry = {
 		schema: z.string().refine(isValidIanaTimeZone, '无效的 IANA 时区名'),
 		default: 'UTC'
 	},
+	'notes.gate': {
+		// Notes plan v0.4 §2.5 / ledger §13.9: TTL of the per-row unlock
+		// cookie (token crypto lives in services/note-gate.ts). Days only;
+		// the write side is the editor batch, no runtime writer yet.
+		schema: z.object({ ttlDays: z.number().int().min(1).max(365) }),
+		default: { ttlDays: 30 }
+	},
 	'ai.assignments': {
 		schema: z.partialRecord(
 			z.enum(AI_FUNCTIONS),

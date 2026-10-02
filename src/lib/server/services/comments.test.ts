@@ -562,11 +562,84 @@ describe('submitComment', () => {
 		await expect(submitComment(input())).rejects.toMatchObject({ cause: { code: '42P01' } });
 	});
 
-	it('fails closed on targets this batch does not serve yet', async () => {
+	it('fails closed on targets this batch does not serve yet (pages)', async () => {
 		const incr = vi.fn(async () => 1);
-		const result = await submitComment(input({ targetType: 'note', cache: fakeStore(incr) }));
+		const result = await submitComment(input({ targetType: 'page', cache: fakeStore(incr) }));
 		expect(result).toEqual({ kind: 'unsupported-target' });
 		expect(incr).not.toHaveBeenCalled();
 		expect(selectMock).not.toHaveBeenCalled();
+	});
+});
+
+describe('submitComment note targets (N1)', () => {
+	function noteInput(overrides: Record<string, unknown> = {}) {
+		return {
+			targetType: 'note' as const,
+			targetId: TARGET,
+			lang: 'en',
+			text: 'note comment',
+			user: READER,
+			author: 'Alice',
+			avatar: null,
+			cache: fakeStore(async () => 1),
+			now: new Date('2026-09-30T12:00:00Z'),
+			...overrides
+		};
+	}
+
+	it('stores a root comment against the note arc', async () => {
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'n-1', state: 'pending' }]];
+		const result = await submitComment(noteInput());
+		expect(result).toEqual({ kind: 'created', id: 'n-1', state: 'pending' });
+		expect(state.inserts[0].values).toMatchObject({ noteId: TARGET, readerId: VIEWER });
+		// Exclusive arc: the post column must stay untouched.
+		expect(state.inserts[0].values).not.toHaveProperty('postId');
+	});
+
+	it('refuses a note that is not commentable', async () => {
+		state.selectQueue = [[{ id: TARGET, allowComment: false }]];
+		expect(await submitComment(noteInput())).toEqual({ kind: 'target-unavailable' });
+		expect(state.inserts).toHaveLength(0);
+	});
+
+	it('refuses a password-gated note (the target query excludes it)', async () => {
+		// The service predicate adds `isNull(password_hash)`: a gated row
+		// never comes back from the target check at all.
+		state.selectQueue = [[]];
+		expect(await submitComment(noteInput())).toEqual({ kind: 'target-unavailable' });
+	});
+
+	it('derives reply pointers against the note arc', async () => {
+		state.selectQueue = [
+			[{ id: TARGET, allowComment: true }],
+			[{ id: PARENT, postId: null, noteId: TARGET, state: 'approved', isDeleted: false }]
+		];
+		state.insertResults = [[{ id: 'n-2', state: 'pending' }]];
+		await submitComment(noteInput({ parentId: PARENT }));
+		expect(state.inserts[0].values).toMatchObject({
+			noteId: TARGET,
+			parentCommentId: PARENT,
+			rootCommentId: PARENT
+		});
+	});
+
+	it('rejects a reply whose parent sits on a different note', async () => {
+		state.selectQueue = [
+			[{ id: TARGET, allowComment: true }],
+			[
+				{
+					id: PARENT,
+					postId: null,
+					noteId: '66666666-6666-6666-6666-666666666666',
+					state: 'approved',
+					isDeleted: false
+				}
+			]
+		];
+		expect(await submitComment(noteInput({ parentId: PARENT }))).toEqual({
+			kind: 'parent-unavailable'
+		});
+		expect(state.inserts).toHaveLength(0);
 	});
 });

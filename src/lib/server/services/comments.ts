@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import { db } from '$lib/server/db';
-import { comments, posts } from '$lib/server/db/content';
+import { comments, notes, posts } from '$lib/server/db/content';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isAdminRole } from '$lib/server/auth/owner';
 import { getCache } from '$lib/server/cache';
@@ -14,6 +14,7 @@ import {
 	type ThreadRoot,
 	type ThreadsPage
 } from '$lib/components/comments/types';
+import { visibleNoteCondition } from './note-visibility';
 import { visiblePostCondition } from './post-visibility';
 
 /**
@@ -266,6 +267,31 @@ export async function resolveCommentPostTarget(
 	return row?.id ?? null;
 }
 
+/**
+ * Resolve a commentable note id from a language + slug pair. Password-gated
+ * rows are never commentable (fail-closed): comment text must not attach to
+ * a diary whose body sits behind a gate, even while an unlock cookie exists.
+ */
+export async function resolveCommentNoteTarget(
+	lang: string,
+	slug: string,
+	now: Date = new Date()
+): Promise<string | null> {
+	const [row] = await db
+		.select({ id: notes.id })
+		.from(notes)
+		.where(
+			and(
+				eq(notes.lang, lang),
+				eq(notes.slug, slug),
+				visibleNoteCondition(now),
+				isNull(notes.passwordHash)
+			)
+		)
+		.limit(1);
+	return row?.id ?? null;
+}
+
 export interface SubmitCommentInput {
 	targetType: CommentTargetType;
 	/** Target row id, already resolved from the URL by the caller. */
@@ -308,17 +334,38 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	if (length < COMMENT_MIN_LENGTH) return { kind: 'empty' };
 	if (length > COMMENT_MAX_LENGTH) return { kind: 'too-long', max: COMMENT_MAX_LENGTH };
 
-	// Notes/pages mounts arrive with N1 / pages P1b; until then only posts
-	// validate here, fail-closed (spec §10 - the mount batches extend this).
-	if (input.targetType !== 'post') return { kind: 'unsupported-target' };
+	// Notes validate here since N1; pages arrive with pages P1b and stay
+	// fail-closed until then (spec §10 - the mount batches extend this).
+	if (input.targetType !== 'post' && input.targetType !== 'note')
+		return { kind: 'unsupported-target' };
 
 	if (!isUuid(input.targetId)) return { kind: 'target-unavailable' };
-	const [target] = await db
-		.select({ id: posts.id, allowComment: posts.allowComment })
-		.from(posts)
-		.where(and(eq(posts.id, input.targetId), eq(posts.lang, input.lang), visiblePostCondition(now)))
-		.limit(1);
-	if (!target || !target.allowComment) return { kind: 'target-unavailable' };
+	if (input.targetType === 'post') {
+		const [target] = await db
+			.select({ id: posts.id, allowComment: posts.allowComment })
+			.from(posts)
+			.where(
+				and(eq(posts.id, input.targetId), eq(posts.lang, input.lang), visiblePostCondition(now))
+			)
+			.limit(1);
+		if (!target || !target.allowComment) return { kind: 'target-unavailable' };
+	} else {
+		// Password-gated notes are never commentable, fail-closed: comment
+		// text must not attach to a diary whose body sits behind a gate.
+		const [target] = await db
+			.select({ id: notes.id, allowComment: notes.allowComment })
+			.from(notes)
+			.where(
+				and(
+					eq(notes.id, input.targetId),
+					eq(notes.lang, input.lang),
+					visibleNoteCondition(now),
+					isNull(notes.passwordHash)
+				)
+			)
+			.limit(1);
+		if (!target || !target.allowComment) return { kind: 'target-unavailable' };
+	}
 
 	let rootCommentId: string | null = null;
 	let parentCommentId: string | null = null;
@@ -328,6 +375,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 			.select({
 				id: comments.id,
 				postId: comments.postId,
+				noteId: comments.noteId,
 				state: comments.state,
 				isDeleted: comments.isDeleted,
 				rootCommentId: comments.rootCommentId
@@ -337,9 +385,11 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 			.limit(1);
 		// A reply needs an approved, undeleted parent on the same target - the
 		// same rows the public list shows (spec §6/§8).
+		const parentTargetId =
+			input.targetType === 'post' ? (parent?.postId ?? null) : (parent?.noteId ?? null);
 		if (
 			!parent ||
-			parent.postId !== input.targetId ||
+			parentTargetId !== input.targetId ||
 			parent.state !== 'approved' ||
 			parent.isDeleted
 		) {
@@ -375,22 +425,40 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	// Policy: ip/agent/location/country_code are never collected (spec §1);
 	// the display snapshot is sanitised and frozen at write time.
 	try {
-		const [created] = await db
-			.insert(comments)
-			.values({
-				postId: input.targetId,
-				readerId: input.user.id,
-				author: normalizeCommentAuthor(input.author),
-				avatar: normalizeCommentAvatar(input.avatar),
-				text,
-				state: autoApprove ? 'approved' : 'pending',
-				isOwnerReply: autoApprove,
-				parentCommentId,
-				rootCommentId,
-				reviewedBy: autoApprove ? input.user.id : null,
-				reviewedAt: autoApprove ? now : null
-			})
-			.returning({ id: comments.id, state: comments.state });
+		const [created] =
+			input.targetType === 'post'
+				? await db
+						.insert(comments)
+						.values({
+							postId: input.targetId,
+							readerId: input.user.id,
+							author: normalizeCommentAuthor(input.author),
+							avatar: normalizeCommentAvatar(input.avatar),
+							text,
+							state: autoApprove ? 'approved' : 'pending',
+							isOwnerReply: autoApprove,
+							parentCommentId,
+							rootCommentId,
+							reviewedBy: autoApprove ? input.user.id : null,
+							reviewedAt: autoApprove ? now : null
+						})
+						.returning({ id: comments.id, state: comments.state })
+				: await db
+						.insert(comments)
+						.values({
+							noteId: input.targetId,
+							readerId: input.user.id,
+							author: normalizeCommentAuthor(input.author),
+							avatar: normalizeCommentAvatar(input.avatar),
+							text,
+							state: autoApprove ? 'approved' : 'pending',
+							isOwnerReply: autoApprove,
+							parentCommentId,
+							rootCommentId,
+							reviewedBy: autoApprove ? input.user.id : null,
+							reviewedAt: autoApprove ? now : null
+						})
+						.returning({ id: comments.id, state: comments.state });
 		return { kind: 'created', id: created.id, state: created.state as 'pending' | 'approved' };
 	} catch (caught) {
 		// The target or parent row was hard-deleted between validation and

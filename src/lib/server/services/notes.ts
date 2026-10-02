@@ -282,6 +282,8 @@ export interface NoteDetailRow {
 	lang: string;
 	tz: string | null;
 	mood: string | null;
+	/** Emotion tokens from `meta.emotions` (closed Apple vocabulary). */
+	emotions: string[] | null;
 	weatherCode: number | null;
 	temperatureC: string | null;
 	coordinates: { latitude: number; longitude: number } | null;
@@ -320,6 +322,7 @@ export async function findVisibleNote(
 			pinAt: notes.pinAt,
 			allowComment: notes.allowComment,
 			passwordHash: notes.passwordHash,
+			meta: notes.meta,
 			translationGroup: notes.translationGroup,
 			topicName: topics.name,
 			topicSlug: topics.slug,
@@ -332,6 +335,10 @@ export async function findVisibleNote(
 	if (!row || !row.publishedAt) return null;
 
 	const locked = row.passwordHash !== null;
+	// Locked rows ship the public shell only (title/slug/topic/dates): the
+	// body AND the diary metadata (mood/weather/location/emotions/tz) are
+	// withheld until a verified unlock - SSR page data is visible in the
+	// HTML source, so "hidden by the UI" would not be hidden at all.
 	return {
 		id: row.id,
 		nid: row.nid,
@@ -339,12 +346,13 @@ export async function findVisibleNote(
 		title: row.title,
 		content: locked ? null : row.content,
 		lang: row.lang,
-		tz: row.tz,
-		mood: row.mood,
-		weatherCode: row.weatherCode,
-		temperatureC: row.temperatureC,
-		coordinates: row.coordinates,
-		location: row.location,
+		tz: locked ? null : row.tz,
+		mood: locked ? null : row.mood,
+		emotions: locked ? null : (row.meta?.emotions ?? null),
+		weatherCode: locked ? null : row.weatherCode,
+		temperatureC: locked ? null : row.temperatureC,
+		coordinates: locked ? null : row.coordinates,
+		location: locked ? null : row.location,
 		publishedAt: row.publishedAt,
 		pinAt: row.pinAt,
 		allowComment: row.allowComment,

@@ -59,6 +59,7 @@ describe('options registry (AI-1.1)', () => {
 				'ai.styleGuide',
 				'comments.moderation',
 				'media.purge',
+				'notes.gate',
 				'site.default_lang',
 				'site.languages',
 				'site.timezone'
