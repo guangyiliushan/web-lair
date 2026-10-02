@@ -14,9 +14,6 @@ import { visibleNoteCondition } from './note-visibility';
  * back to `site.timezone`). Decisions: ledger §13.9 / notes plan §8.
  */
 
-/** Re-exported for existing consumers; the value lives in the UI-safe module. */
-export { NOTE_PAGE_SIZE };
-
 /** Belongs-to date: `(published_at at time zone coalesce(tz, $site))::date`. */
 function belongsToExpr(siteTz: string): SQL<unknown> {
 	return sql`(${notes.publishedAt} at time zone coalesce(${notes.tz}, ${siteTz}))::date`;
@@ -198,16 +195,19 @@ export async function listNotes(query: NotesListQuery): Promise<NotesListResult>
 
 /** Belongs-to years present among a language's visible notes (newest first). */
 export async function listNoteYears(lang: string, now: Date, siteTz: string): Promise<number[]> {
-	const yearExpr = sql<number>`date_part('year', ${belongsToExpr(siteTz)})::int`;
+	// `.as('year')` is load-bearing: drizzle emits ` as "name"` only for
+	// SQL.Aliased, and a plain sql field leaves `order by "year"` referencing
+	// a select-list column that does not exist (42703 on real PG - review
+	// round 2; the earlier mock tests could not see the render-level bug).
+	const yearExpr = sql<number>`date_part('year', ${belongsToExpr(siteTz)})::int`.as('year');
 	const rows = await db
 		.selectDistinct({ year: yearExpr })
 		.from(notes)
 		.where(and(eq(notes.lang, lang), visibleNoteCondition(now)))
-		// Order by the OUTPUT alias, not by re-rendering the expression: a
-		// SELECT DISTINCT requires ORDER BY expressions to appear in the select
-		// list, and re-rendering binds `$site` a second time under a different
-		// placeholder - PostgreSQL then rejects the whole query (review round 1,
-		// real-PG finding; mock tests could not see it).
+		// Order by the OUTPUT alias: a SELECT DISTINCT requires ORDER BY
+		// expressions to appear in the select list (hence the `.as('year')`
+		// above), and re-rendering the parameterized expression instead would
+		// bind `$site` twice (review rounds 1-2, real-PG findings).
 		.orderBy(sql`"year" desc`);
 	return rows.map((row) => row.year);
 }

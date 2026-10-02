@@ -67,6 +67,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	]
 		// Deterministic across equal timestamps (review finding): notes before
 		// posts, then slug - the concatenation order must not leak into output.
+		// Mirror of the mega-menu tie-break (nav-data.ts loadTimelineMegaData).
 		.sort(
 			(a, b) =>
 				b.publishedAt.getTime() - a.publishedAt.getTime() ||

@@ -33,7 +33,7 @@ export function tagSlug(name: string): string {
  * title still yields an empty slug, which publish validation rejects (posts
  * behave the same).
  */
-export const TITLE_SLUG_MAX = 120;
+const TITLE_SLUG_MAX = 120;
 
 export function titleSlug(title: string): string {
 	return title

@@ -127,8 +127,9 @@ test.describe('P3-b pages', () => {
 		await expect(page.getByRole('link', { name: TITLE2 })).toBeVisible();
 
 		// N1 wires the notes stream in: the note view may be empty or filled,
-		// so pin the shell instead of the transient empty state (the N1 e2e
-		// spec owns note-stream coverage now; review finding).
+		// so pin the shell instead of the transient empty state. The dedicated
+		// notes e2e spec lands with the N1 public-page batches (batch 4+);
+		// until then this view is pinned by shell + route tests only.
 		await page.goto('/en/timeline?type=note');
 		await expect(page.getByRole('heading', { name: 'Timeline' })).toBeVisible();
 	});

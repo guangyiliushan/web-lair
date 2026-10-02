@@ -16,7 +16,8 @@ const { dbMock, state } = vi.hoisted(() => ({
 		whereArgs: [] as unknown[],
 		orderArgs: [] as unknown[][],
 		limitArgs: [] as unknown[],
-		offsetArgs: [] as unknown[]
+		offsetArgs: [] as unknown[],
+		selectDistinctArgs: [] as unknown[][]
 	}
 }));
 
@@ -27,7 +28,7 @@ vi.mock('$lib/paraglide/runtime', () => ({
 	locales: ['en', 'zh-cn', 'ja']
 }));
 
-import { NOTE_PAGE_SIZE } from '$lib/server/services/notes';
+import { NOTE_PAGE_SIZE } from '$lib/utils/note-meta';
 import { load } from './+page.server';
 
 function makeChain(result: unknown[]) {
@@ -93,9 +94,13 @@ describe('notes list page', () => {
 		state.orderArgs = [];
 		state.limitArgs = [];
 		state.offsetArgs = [];
+		state.selectDistinctArgs = [];
 		Object.assign(dbMock, {
 			select: vi.fn(() => makeChain(state.selectResults.shift() ?? [])),
-			selectDistinct: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
+			selectDistinct: vi.fn((...args: unknown[]) => {
+				state.selectDistinctArgs.push(args);
+				return makeChain(state.selectResults.shift() ?? []);
+			})
 		});
 	});
 
@@ -161,6 +166,11 @@ describe('notes list page', () => {
 		// The re-rendered parameterized expression would bind $site twice and
 		// make PostgreSQL reject the whole query (real-PG review finding).
 		expect(yearsSql).not.toContain('coalesce');
+		// The alias itself is load-bearing: drizzle only emits ` as "year"`
+		// for SQL.Aliased, and without it ORDER BY references a column that
+		// does not exist in the select list (real-PG 42703, review round 2).
+		const projection = state.selectDistinctArgs[0]?.[0] as { year?: { fieldAlias?: string } };
+		expect(projection.year?.fieldAlias).toBe('year');
 	});
 
 	it('narrows by topic when it exists', async () => {

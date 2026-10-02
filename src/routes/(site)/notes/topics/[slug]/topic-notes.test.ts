@@ -54,7 +54,10 @@ function makeEvent(slug: string) {
 describe('notes topic page', () => {
 	beforeEach(() => {
 		state.selectResults = [];
-		Object.assign(dbMock, { select: vi.fn(() => makeChain(state.selectResults.shift() ?? [])) });
+		Object.assign(dbMock, {
+			select: vi.fn(() => makeChain(state.selectResults.shift() ?? [])),
+			selectDistinct: vi.fn(() => makeChain([]))
+		});
 	});
 
 	it('404s an unknown topic', async () => {
@@ -104,5 +107,9 @@ describe('notes topic page', () => {
 		// Topic lookup + count + rows only: facets are skipped and the slug is
 		// not resolved a second time inside listNotes (review finding).
 		expect((dbMock.select as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(3);
+		// Facets are skipped entirely: the years query (selectDistinct) must
+		// never fire on a topic page (review round 2 - the mutation used to
+		// crash with a missing mock instead of failing this assertion).
+		expect((dbMock.selectDistinct as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
 	});
 });

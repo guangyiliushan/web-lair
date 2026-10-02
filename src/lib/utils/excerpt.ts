@@ -47,7 +47,9 @@ export function firstImageFromMarkdown(markdown: string): string | null {
  * batches may reuse (og:image).
  */
 export function isSafeCoverUrl(url: string): boolean {
-	if (url.startsWith('//')) return false;
+	// WHATWG URL folds '\' to '/' for special schemes, so '/\host' parses as
+	// protocol-relative and would leak a third-party request (review round 2).
+	if (url.startsWith('//') || url.startsWith('/\\')) return false;
 	if (url.startsWith('/')) return true;
 	return /^https:\/\//i.test(url);
 }

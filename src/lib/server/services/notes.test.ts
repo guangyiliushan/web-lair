@@ -10,12 +10,12 @@ const { dbMock, state } = vi.hoisted(() => ({
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: vi.fn(async () => 'UTC') }));
 
+import { NOTE_PAGE_SIZE } from '$lib/utils/note-meta';
 import {
 	findVisibleNote,
 	getNoteBody,
 	getNoteGateRecord,
 	listNoteSummaries,
-	NOTE_PAGE_SIZE,
 	toNoteCard
 } from './notes';
 

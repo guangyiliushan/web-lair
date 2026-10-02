@@ -151,6 +151,7 @@ export async function loadTimelineMegaData(): Promise<MegaMenuDynamicData> {
 	]
 		// Deterministic across equal timestamps (review finding): notes first,
 		// then href - the concatenation order must not leak into the output.
+		// Mirror of the timeline page tie-break ((site)/timeline/+page.server.ts).
 		.sort(
 			(a, b) =>
 				b.publishedAt.getTime() - a.publishedAt.getTime() ||

@@ -5,9 +5,10 @@ export default defineConfig({
 	webServer: {
 		command: 'npm run build && npm run preview',
 		port: 4173,
-		// a cold production build alone takes ~50s on this machine; the
-		// default 60s readiness timeout kills the webServer mid-build
-		timeout: 300_000,
+		// A cold production build takes ~50s on an idle machine and 130-260s
+		// on a loaded one; on 2026-10-02 the 300s budget was blown three
+		// times in a row (build 256s + preview boot). Keep a generous margin.
+		timeout: 600_000,
 		// `preview` is a production build, so the loopback sign-in source has to
 		// be switched on explicitly (see security/tailscale-auth.ts).
 		// ORIGIN pins better-auth's baseURL: with it empty AND NODE_ENV=production,
