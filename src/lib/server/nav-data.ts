@@ -4,6 +4,7 @@ import { getLocale } from '$lib/paraglide/runtime';
 import { db } from '$lib/server/db';
 import { categories, posts } from '$lib/server/db/content';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
+import { countVisibleNotes, listNoteSummaries, listTopicOptions } from '$lib/server/services/notes';
 import { formatDate } from '$lib/utils/i18n';
 import type {
 	MegaMenuDynamicData,
@@ -13,18 +14,19 @@ import type {
 
 const MEGA_CATEGORY_LIMIT = 5;
 const MEGA_RECENT_LIMIT = 4;
+const MEGA_TOPIC_LIMIT = 5;
 
 /**
  * Load data for the Posts mega menu (P3-b): the locale's categories that
  * carry visible posts (curated order) plus the latest visible posts. Hrefs
- * stay neutral — the chrome renders them through `siteHref`.
+ * stay neutral - the chrome renders them through `siteHref`.
  */
 export async function loadPostsMegaData(): Promise<MegaMenuDynamicData> {
 	const lang = getLocale();
 	const now = new Date();
 
 	// Two queries (second review round): the unfiltered category aggregate
-	// doubles as the locale total — every visible post has exactly one
+	// doubles as the locale total - every visible post has exactly one
 	// category (`category_id NOT NULL`, FK-restricted), so the dedicated
 	// COUNT query was redundant.
 	const [categoryRows, recentRows] = await Promise.all([
@@ -69,100 +71,85 @@ export async function loadPostsMegaData(): Promise<MegaMenuDynamicData> {
 }
 
 /**
- * Load data for the Notes mega menu.
- * N1 (notes behavior batch) replaces the placeholder with real queries.
+ * Load data for the Notes mega menu (N1): the locale's topics that carry
+ * visible notes (curated order, icon names resolved client-side) plus the
+ * latest visible notes - gated rows included, flagged with `locked` (the
+ * list contract shows title + lock).
  */
 export async function loadNotesMegaData(): Promise<MegaMenuDynamicData> {
-	// TODO: Replace with actual database queries (N1)
+	const lang = getLocale();
+	const now = new Date();
 
-	const leftItems: NavChild[] = [
-		{
-			label: 'Year End Review',
-			href: '/notes/series/year-summary',
-			imageUrl: 'https://placehold.co/32x32/6366f1/white?text=Y'
-		},
-		{
-			label: 'Memories — Shanghai',
-			href: '/notes/series/shanghai',
-			imageUrl: 'https://placehold.co/32x32/f59e0b/white?text=S'
-		},
-		{
-			label: 'Late Night Emo',
-			href: '/notes/series/emo',
-			imageUrl: 'https://placehold.co/32x32/8b5cf6/white?text=E'
-		},
-		{
-			label: 'Phase Summary',
-			href: '/notes/series/stage-summary',
-			imageUrl: 'https://placehold.co/32x32/10b981/white?text=P'
-		},
-		{
-			label: 'Morning Flowers, Evening Picks',
-			href: '/notes/series/morning-glory',
-			imageUrl: 'https://placehold.co/32x32/ec4899/white?text=M'
-		},
-		{
-			label: 'Current Update',
-			href: '/notes/series/recent',
-			imageUrl: 'https://placehold.co/32x32/06b6d4/white?text=C'
-		},
-		{
-			label: 'Travel Notes',
-			href: '/notes/series/tour',
-			imageUrl: 'https://placehold.co/32x32/f97316/white?text=T'
-		}
-	];
+	const [topics, recent, total] = await Promise.all([
+		listTopicOptions(lang, now),
+		listNoteSummaries(lang, { limit: MEGA_RECENT_LIMIT, now }),
+		countVisibleNotes(lang, now)
+	]);
 
-	const rightItems: NavChild[] = [
-		{
-			label: 'First Time in Tokyo: A Trip 26 Years in the Making',
-			href: '/notes/1',
-			desc: '11 days ago'
-		},
-		{
-			label: 'When Life Is Consumed by AI, I Start Reflecting on Loneliness and Love',
-			href: '/notes/2',
-			desc: 'Tuesday, May 26, 2026'
-		},
-		{
-			label: 'Code & Dopamine: My Month of AI-Powered Creation',
-			href: '/notes/3',
-			desc: 'Wednesday, May 6, 2026'
-		},
-		{ label: 'A Child Who Never Grew Up', href: '/notes/4', desc: 'Monday, April 20, 2026' }
-	];
+	const leftItems: NavChild[] = topics.slice(0, MEGA_TOPIC_LIMIT).map((row) => ({
+		label: row.name,
+		href: `/notes/topics/${row.slug}`,
+		iconName: row.icon ?? undefined,
+		badge: row.total
+	}));
 
-	return { leftItems, rightItems };
+	const rightItems: NavChild[] = recent.map((row) => ({
+		label: row.title,
+		href: `/notes/${row.slug}`,
+		desc: formatDate(row.publishedAt, row.tz ? { timeZone: row.tz } : undefined),
+		locked: row.locked
+	}));
+
+	return { leftItems, rightItems, footerSecondaryText: m.notes_count({ count: total }) };
 }
 
 /**
- * Load data for the Timeline mega menu (P3-b): the latest visible posts as
- * activity entries — notes join the stream with N1 (`/timeline?type=note`
- * lands there too).
+ * Load data for the Timeline mega menu (P3-b + N1): the latest visible
+ * entries across posts and notes merged into one stream, newest first.
  */
 export async function loadTimelineMegaData(): Promise<MegaMenuDynamicData> {
 	const lang = getLocale();
 	const now = new Date();
 
-	const rows = await db
-		.select({ slug: posts.slug, title: posts.title, publishedAt: posts.publishedAt })
-		.from(posts)
-		.where(and(eq(posts.lang, lang), visiblePostCondition(now)))
-		.orderBy(desc(posts.publishedAt), desc(posts.id))
-		.limit(MEGA_RECENT_LIMIT);
+	const [postRows, noteRows] = await Promise.all([
+		db
+			.select({ slug: posts.slug, title: posts.title, publishedAt: posts.publishedAt })
+			.from(posts)
+			.where(and(eq(posts.lang, lang), visiblePostCondition(now)))
+			.orderBy(desc(posts.publishedAt), desc(posts.id))
+			.limit(MEGA_RECENT_LIMIT),
+		listNoteSummaries(lang, { limit: MEGA_RECENT_LIMIT, now })
+	]);
 
-	const timelineItems: TimelineActivityItem[] = rows.flatMap((row) =>
-		row.publishedAt
-			? [
-					{
-						title: row.title,
-						href: `/posts/${row.slug}`,
-						type: 'posts' as const,
-						date: formatDate(row.publishedAt)
-					}
-				]
-			: []
-	);
+	const merged = [
+		...postRows.flatMap((row) =>
+			row.publishedAt
+				? [
+						{
+							title: row.title,
+							href: `/posts/${row.slug}`,
+							type: 'posts' as const,
+							publishedAt: row.publishedAt
+						}
+					]
+				: []
+		),
+		...noteRows.map((row) => ({
+			title: row.title,
+			href: `/notes/${row.slug}`,
+			type: 'notes' as const,
+			publishedAt: row.publishedAt
+		}))
+	]
+		.sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
+		.slice(0, MEGA_RECENT_LIMIT);
+
+	const timelineItems: TimelineActivityItem[] = merged.map((item) => ({
+		title: item.title,
+		href: item.href,
+		type: item.type,
+		date: formatDate(item.publishedAt)
+	}));
 
 	return { leftItems: [], rightItems: [], timelineItems };
 }

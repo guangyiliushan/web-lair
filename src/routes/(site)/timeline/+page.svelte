@@ -2,6 +2,7 @@
 	import { SeoHead } from '$lib/components/seo';
 	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
+	import IconLock from '@tabler/icons-svelte-runes/icons/lock';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -46,13 +47,20 @@
 			{#each data.items as item (item.kind + item.slug)}
 				<li class="list-none">
 					<a
-						href={siteHref(`/posts/${item.slug}`)}
+						href={siteHref(item.kind === 'note' ? `/notes/${item.slug}` : `/posts/${item.slug}`)}
 						class="group -mx-3 grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-4 border-b border-foreground/5 px-3 py-3.5 transition-[background] duration-300 ease-out hover:bg-linear-to-r hover:from-transparent hover:via-primary/6 hover:to-transparent"
 					>
 						<span
-							class="min-w-0 truncate text-sm font-normal text-foreground/85 transition-colors duration-200 group-hover:text-primary group-focus-visible:text-primary"
+							class="flex min-w-0 items-center gap-1.5 text-sm font-normal text-foreground/85 transition-colors duration-200 group-hover:text-primary group-focus-visible:text-primary"
 						>
-							{item.title}
+							<span class="min-w-0 truncate">{item.title}</span>
+							{#if item.locked}
+								<IconLock
+									class="size-3.5 shrink-0 text-muted-foreground/60"
+									role="img"
+									aria-label={m.notes_locked()}
+								/>
+							{/if}
 						</span>
 						<span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground/40 tabular-nums">
 							{item.date}

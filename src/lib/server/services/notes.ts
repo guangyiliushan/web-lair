@@ -75,7 +75,7 @@ export interface NotesListQuery {
 	page?: number;
 	/** Belongs-to year filter (derived with the note's tz; site tz fallback). */
 	year?: number | null;
-	topicId?: string | null;
+	topicSlug?: string | null;
 	now?: Date;
 }
 
@@ -96,51 +96,83 @@ export async function listNotes(query: NotesListQuery): Promise<NotesListResult>
 	const siteTz = await getOption('site.timezone');
 
 	let condition = and(eq(notes.lang, query.lang), visibleNoteCondition(now)) as SQL<unknown>;
-	if (query.topicId) condition = and(condition, eq(notes.topicId, query.topicId)) as SQL<unknown>;
+	// An unknown topic filter matches nothing (an empty list, not a silently
+	// dropped filter); a known one narrows by topic id.
+	let emptyTopic = false;
+	if (query.topicSlug) {
+		const topic = await findTopicBySlug(query.topicSlug);
+		if (topic) condition = and(condition, eq(notes.topicId, topic.id)) as SQL<unknown>;
+		else emptyTopic = true;
+	}
 	if (typeof query.year === 'number')
 		condition = and(
 			condition,
 			sql`date_part('year', ${belongsToExpr(siteTz)}) = ${query.year}`
 		) as SQL<unknown>;
 
-	const [totals] = await db.select({ total: count() }).from(notes).where(condition);
-	const total = totals?.total ?? 0;
+	let total = 0;
+	if (!emptyTopic) {
+		const [totals] = await db.select({ total: count() }).from(notes).where(condition);
+		total = totals?.total ?? 0;
+	}
 	const totalPages = Math.max(1, Math.ceil(total / NOTE_PAGE_SIZE));
 	const requested =
 		query.page === undefined || Number.isNaN(query.page) ? 1 : Math.trunc(query.page);
 	const page = Math.min(Math.max(requested, 1), totalPages);
 
-	const rows = await db
-		.select({
-			slug: notes.slug,
-			title: notes.title,
-			publishedAt: notes.publishedAt,
-			tz: notes.tz,
-			content: notes.content,
-			passwordHash: notes.passwordHash,
-			pinAt: notes.pinAt
-		})
-		.from(notes)
-		.where(condition)
-		.orderBy(sql`${notes.pinAt} desc nulls last`, desc(notes.publishedAt), desc(notes.id))
-		.limit(NOTE_PAGE_SIZE)
-		.offset((page - 1) * NOTE_PAGE_SIZE);
+	let cards: NoteCard[] = [];
+	if (!emptyTopic) {
+		const rows = await db
+			.select({
+				slug: notes.slug,
+				title: notes.title,
+				publishedAt: notes.publishedAt,
+				tz: notes.tz,
+				content: notes.content,
+				passwordHash: notes.passwordHash,
+				pinAt: notes.pinAt
+			})
+			.from(notes)
+			.where(condition)
+			.orderBy(sql`${notes.pinAt} desc nulls last`, desc(notes.publishedAt), desc(notes.id))
+			.limit(NOTE_PAGE_SIZE)
+			.offset((page - 1) * NOTE_PAGE_SIZE);
 
-	const cards = rows.flatMap((row) => {
-		const card = toNoteCard(row);
-		return card ? [card] : [];
-	});
+		cards = rows.flatMap((row) => {
+			const card = toNoteCard(row);
+			return card ? [card] : [];
+		});
+	}
 
 	// Facets: belongs-to years and per-language topic counts (only topics
 	// that actually carry visible notes are offered as filters).
+	const years = await listNoteYears(query.lang, now, siteTz);
+	const topicOptions = await listTopicOptions(query.lang, now);
+
+	return {
+		cards,
+		total,
+		page,
+		totalPages,
+		years,
+		topics: topicOptions
+	};
+}
+
+/** Belongs-to years present among a language's visible notes (newest first). */
+export async function listNoteYears(lang: string, now: Date, siteTz: string): Promise<number[]> {
 	const yearExpr = sql<number>`date_part('year', ${belongsToExpr(siteTz)})::int`;
-	const yearRows = await db
+	const rows = await db
 		.selectDistinct({ year: yearExpr })
 		.from(notes)
-		.where(and(eq(notes.lang, query.lang), visibleNoteCondition(now)))
+		.where(and(eq(notes.lang, lang), visibleNoteCondition(now)))
 		.orderBy(desc(yearExpr));
+	return rows.map((row) => row.year);
+}
 
-	const topicRows = await db
+/** Topics that carry visible notes in one language (curated order). */
+export async function listTopicOptions(lang: string, now: Date): Promise<NoteTopicOption[]> {
+	const rows = await db
 		.select({
 			id: topics.id,
 			name: topics.name,
@@ -151,19 +183,20 @@ export async function listNotes(query: NotesListQuery): Promise<NotesListResult>
 		.from(topics)
 		.leftJoin(
 			notes,
-			and(eq(notes.topicId, topics.id), eq(notes.lang, query.lang), visibleNoteCondition(now))
+			and(eq(notes.topicId, topics.id), eq(notes.lang, lang), visibleNoteCondition(now))
 		)
 		.groupBy(topics.id)
 		.orderBy(topics.sortOrder, topics.name);
+	return rows.filter((row) => row.total > 0);
+}
 
-	return {
-		cards,
-		total,
-		page,
-		totalPages,
-		years: yearRows.map((row) => row.year),
-		topics: topicRows.filter((row) => row.total > 0)
-	};
+/** Count of visible notes in one language (mega-menu footer). */
+export async function countVisibleNotes(lang: string, now: Date = new Date()): Promise<number> {
+	const [row] = await db
+		.select({ total: count() })
+		.from(notes)
+		.where(and(eq(notes.lang, lang), visibleNoteCondition(now)));
+	return row?.total ?? 0;
 }
 
 export interface NoteTopic {

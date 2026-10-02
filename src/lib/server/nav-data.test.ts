@@ -25,7 +25,7 @@ vi.mock('$lib/paraglide/runtime', () => ({
 	experimentalStaticLocale: undefined
 }));
 
-import { loadPostsMegaData, loadTimelineMegaData } from './nav-data';
+import { loadNotesMegaData, loadPostsMegaData, loadTimelineMegaData } from './nav-data';
 
 function makeChain(result: unknown[]) {
 	const self: unknown = new Proxy(
@@ -82,16 +82,54 @@ describe('nav-data loaders', () => {
 		expect(data.footerSecondaryText).toBe('4 posts');
 	});
 
-	it('builds the timeline activity stream from visible posts', async () => {
+	it('builds the merged timeline stream from posts and notes', async () => {
 		state.selectResults = [
-			[{ slug: 'a', title: 'Post A', publishedAt: new Date(2026, 0, 15, 12) }]
+			[{ slug: 'a', title: 'Post A', publishedAt: new Date(2026, 0, 15, 12) }],
+			[
+				{
+					id: 'n1',
+					slug: 'trip',
+					title: 'Trip',
+					publishedAt: new Date(2026, 1, 1, 12),
+					tz: null,
+					locked: false
+				}
+			]
 		];
 
 		const data = await loadTimelineMegaData();
 
 		expect(data.timelineItems).toEqual([
+			{ title: 'Trip', href: '/notes/trip', type: 'notes', date: 'February 1, 2026' },
 			{ title: 'Post A', href: '/posts/a', type: 'posts', date: 'January 15, 2026' }
 		]);
+	});
+
+	it('maps the notes mega data from real queries', async () => {
+		state.selectResults = [
+			[{ id: 't1', name: 'Travel', slug: 'travel', icon: 'plane', total: 3 }],
+			[
+				{
+					id: 'n1',
+					slug: 'trip',
+					title: 'Trip',
+					publishedAt: new Date(2026, 0, 15, 12),
+					tz: null,
+					locked: true
+				}
+			],
+			[{ total: 7 }]
+		];
+
+		const data = await loadNotesMegaData();
+
+		expect(data.leftItems).toEqual([
+			{ label: 'Travel', href: '/notes/topics/travel', iconName: 'plane', badge: 3 }
+		]);
+		expect(data.rightItems).toEqual([
+			{ label: 'Trip', href: '/notes/trip', desc: 'January 15, 2026', locked: true }
+		]);
+		expect(data.footerSecondaryText).toBe('7 notes');
 	});
 
 	it('pins the locale + visibility predicates on every mega query (review finding)', async () => {
@@ -112,13 +150,17 @@ describe('nav-data loaders', () => {
 			expect(sql).toContain('"posts"."status"');
 		}
 
-		// Timeline loader: same guard on its single query.
-		state.selectResults = [[]];
+		// Timeline loader: posts + notes summaries, each guarded.
+		state.selectResults = [[], []];
 		state.whereArgs = [];
 		await loadTimelineMegaData();
-		expect(state.whereArgs).toHaveLength(1);
-		const timelineSql = dialect.sqlToQuery(state.whereArgs[0] as never).sql;
-		expect(timelineSql).toContain('"posts"."lang"');
-		expect(timelineSql).toContain('"posts"."status"');
+		expect(state.whereArgs).toHaveLength(2);
+		const [postWhere, noteWhere] = state.whereArgs.map(
+			(condition) => dialect.sqlToQuery(condition as never).sql
+		);
+		expect(postWhere).toContain('"posts"."lang"');
+		expect(postWhere).toContain('"posts"."status"');
+		expect(noteWhere).toContain('"notes"."lang"');
+		expect(noteWhere).toContain('"notes"."status"');
 	});
 });

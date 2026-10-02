@@ -6,6 +6,7 @@
 	import {
 		IconChevronRight,
 		IconBrandTwitter,
+		IconLock,
 		IconRss,
 		IconMail,
 		IconBrandGithub
@@ -19,6 +20,8 @@
 	import type { Snippet } from 'svelte';
 	import { portal } from '$lib/actions/portal';
 	import { siteHref } from '$lib/utils/href';
+	import { navIcon } from '$lib/config/nav-icons';
+	import { m } from '$lib/paraglide/messages';
 
 	interface Props {
 		menu: MegaMenu;
@@ -377,6 +380,7 @@
 								{/if}
 								<div class="flex flex-col gap-0.5" role="group">
 									{#each leftItems as child (child.href)}
+										{@const IconComp = child.icon ?? navIcon(child.iconName)}
 										<a
 											href={siteHref(child.href)}
 											role="menuitem"
@@ -388,10 +392,17 @@
 													alt=""
 													class="size-4 shrink-0 rounded object-cover"
 												/>
-											{:else if child.icon}
-												<child.icon class="size-4 shrink-0 text-muted-foreground" />
+											{:else if IconComp}
+												<IconComp class="size-4 shrink-0 text-muted-foreground" />
 											{/if}
 											<span class="truncate">{labelOf(child)}</span>
+											{#if child.locked}
+												<IconLock
+													class="size-3.5 shrink-0 text-muted-foreground/70"
+													role="img"
+													aria-label={m.notes_locked()}
+												/>
+											{/if}
 											{#if child.badge}
 												<Badge variant="secondary" class="ml-auto">{child.badge}</Badge>
 											{/if}
@@ -416,8 +427,17 @@
 										role="menuitem"
 										class="block min-w-0 rounded-lg border border-transparent bg-muted/30 px-3 py-2.5 transition-colors hover:border-border hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 									>
-										<div class="min-w-0 truncate text-sm leading-snug font-medium">
-											{labelOf(child)}
+										<div class="flex items-center gap-1.5">
+											<div class="min-w-0 truncate text-sm leading-snug font-medium">
+												{labelOf(child)}
+											</div>
+											{#if child.locked}
+												<IconLock
+													class="size-3.5 shrink-0 text-muted-foreground/70"
+													role="img"
+													aria-label={m.notes_locked()}
+												/>
+											{/if}
 										</div>
 										{#if child.desc || child.descKey}
 											<div class="mt-0.5 text-xs text-muted-foreground">

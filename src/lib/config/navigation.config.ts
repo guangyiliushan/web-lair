@@ -95,8 +95,12 @@ export interface NavChild {
 	descKey?: I18nKey;
 	desc?: string; // Literal fallback for descriptions/dates
 	icon?: Component;
+	/** Whitelist icon for dynamic server data (see $lib/config/nav-icons). */
+	iconName?: string;
 	imageUrl?: string; // Thumbnail image (e.g., series icons)
 	badge?: string | number;
+	/** Password-gated note marker on dynamic items. */
+	locked?: boolean;
 }
 
 export interface NavColumn {
@@ -286,12 +290,12 @@ export const navigationConfig: NavItem[] = [
 			footer: {
 				labelKey: 'nav_notes_view_all',
 				href: '/notes',
-				secondary: { labelKey: 'nav_notes_all_series', href: '/notes/series' }
+				secondary: { labelKey: 'nav_notes_all_series', href: '/notes' }
 			}
 		},
 		children: [
 			{ labelKey: 'nav_notes_view_all', href: '/notes' },
-			{ labelKey: 'nav_notes_all_series', href: '/notes/series' }
+			{ labelKey: 'nav_notes_all_series', href: '/notes' }
 		]
 	},
 	{
