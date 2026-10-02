@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { plainTextExcerpt } from './excerpt';
+import { firstImageFromMarkdown, plainTextExcerpt } from './excerpt';
 
 describe('plainTextExcerpt', () => {
 	it('trims plain text and collapses whitespace', () => {
@@ -71,5 +71,36 @@ describe('plainTextExcerpt', () => {
 
 	it('returns an empty string when only markers remain', () => {
 		expect(plainTextExcerpt('```\ncode\n```')).toBe('');
+	});
+});
+
+describe('firstImageFromMarkdown', () => {
+	it('returns the first markdown image URL', () => {
+		expect(
+			firstImageFromMarkdown('hello ![a](https://x.test/a.png) ![b](https://x.test/b.png)')
+		).toBe('https://x.test/a.png');
+	});
+
+	it('recognises raw <img> tags', () => {
+		expect(firstImageFromMarkdown('<img src="/i/abc">')).toBe('/i/abc');
+	});
+
+	it('picks whichever syntax appears first', () => {
+		expect(firstImageFromMarkdown('![a](https://x.test/a.png) <img src="/later">')).toBe(
+			'https://x.test/a.png'
+		);
+		expect(firstImageFromMarkdown('<img src="/early"> ![a](https://x.test/a.png)')).toBe('/early');
+	});
+
+	it('ignores images inside fenced code blocks', () => {
+		expect(
+			firstImageFromMarkdown('```md\n![a](https://x.test/a.png)\n```\n![b](https://x.test/b.png)')
+		).toBe('https://x.test/b.png');
+		expect(firstImageFromMarkdown('```\n![a](https://x.test/a.png)\n```')).toBeNull();
+	});
+
+	it('returns null when no image exists', () => {
+		expect(firstImageFromMarkdown('no images here')).toBeNull();
+		expect(firstImageFromMarkdown('')).toBeNull();
 	});
 });

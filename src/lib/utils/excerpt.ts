@@ -17,3 +17,19 @@ export function plainTextExcerpt(markdown: string, maxLength = 160): string {
 
 	return text.length > maxLength ? `${text.slice(0, maxLength).trimEnd()}…` : text;
 }
+
+/**
+ * First image URL in Markdown content - notes list cards derive their cover
+ * from the body (notes plan §3.1; diary entries have no cover column, by
+ * design). Fenced code blocks are stripped first so a code sample cannot
+ * steal the cover; Markdown images and raw `<img>` tags are both recognised
+ * and the earliest match wins. Returns null when there is no image.
+ */
+export function firstImageFromMarkdown(markdown: string): string | null {
+	const source = markdown.replace(/```[\s\S]*?```/g, ' ');
+	const markdownImage = /!\[[^\]]*\]\(\s*<?([^)\s>]+)>?/.exec(source);
+	const htmlImage = /<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i.exec(source);
+	if (!markdownImage) return htmlImage?.[1] ?? null;
+	if (!htmlImage) return markdownImage[1];
+	return markdownImage.index < htmlImage.index ? markdownImage[1] : htmlImage[1];
+}
