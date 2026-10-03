@@ -20,9 +20,9 @@ export const SEED_PAGES: SeedPage[] = [
 			ja: '運営者の紹介です。'
 		},
 		markdown: {
-			en: '# About Me\\n\\nThis page is ready to edit.',
-			'zh-cn': '# 关于我\\n\\n这个页面可以直接编辑。',
-			ja: '# 自己紹介\\n\\nこのページは編集できます。'
+			en: '# About Me\n\nThis page is ready to edit.',
+			'zh-cn': '# 关于我\n\n这个页面可以直接编辑。',
+			ja: '# 自己紹介\n\nこのページは編集できます。'
 		}
 	},
 	{
@@ -34,9 +34,9 @@ export const SEED_PAGES: SeedPage[] = [
 			ja: 'Web Lair の概要と構成です。'
 		},
 		markdown: {
-			en: '# About This Project\\n\\nWeb Lair is a self-hosted publishing project.',
-			'zh-cn': '# 关于本项目\\n\\nWeb Lair 是一个自托管发布项目。',
-			ja: '# このプロジェクトについて\\n\\nWeb Lair はセルフホストの公開プロジェクトです。'
+			en: '# About This Project\n\nWeb Lair is a self-hosted publishing project.',
+			'zh-cn': '# 关于本项目\n\nWeb Lair 是一个自托管发布项目。',
+			ja: '# このプロジェクトについて\n\nWeb Lair はセルフホストの公開プロジェクトです。'
 		}
 	}
 ];
