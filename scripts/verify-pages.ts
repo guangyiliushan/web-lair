@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { DEFAULT_PAGE_SLUGS } from './_shared/pages';
+import { PAGE_RESERVED_SLUGS } from '$lib/utils/page-meta';
 
 const DB_URL = process.env.DATABASE_URL;
 if (!DB_URL) {
@@ -36,21 +37,6 @@ const EXPECTED_CHECKS = [
 	'pages_content_format_check'
 ];
 const DEFAULT_SLUG_SET: ReadonlySet<string> = new Set(DEFAULT_PAGE_SLUGS);
-const RESERVED_SLUGS = new Set([
-	'about',
-	'about-site',
-	'admin',
-	'api',
-	'demo',
-	'files',
-	'i',
-	'maps',
-	'photos',
-	'robots.txt',
-	'rss.xml',
-	'sitemap.xml'
-]);
-
 function fail(message: string): never {
 	throw new Error(message);
 }
@@ -118,7 +104,7 @@ async function main(): Promise<void> {
 		for (const row of rows) {
 			const slug: string = row.slug;
 			if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) fail(`invalid page slug: ${slug}`);
-			if (RESERVED_SLUGS.has(slug) && !DEFAULT_SLUG_SET.has(slug)) {
+			if (PAGE_RESERVED_SLUGS.has(slug) && !DEFAULT_SLUG_SET.has(slug)) {
 				fail(`reserved slug: ${slug}`);
 			}
 			if (row.external_url !== null && !/^https?:\/\//.test(row.external_url)) {
