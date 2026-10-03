@@ -47,10 +47,12 @@ function cleanup(): void {
 	psql(`delete from notes where slug like 'e2e-n1%'`);
 	psql(`delete from slug_trackers where slug like 'e2e-n1%'`);
 	psql(`delete from topics where slug = '${TOPIC_SLUG}'`);
-	// The gate limiter lives in Valkey per IP; clear the budget best-effort.
-	valkeyDel(`limits:note-gate:::ffff:127.0.0.1`);
-	valkeyDel(`limits:note-gate:127.0.0.1`);
-	valkeyDel(`limits:note-gate:::1`);
+	// The gate limiter lives in Valkey per IP under the app key prefix
+	// (`wl:` + `limits:note-gate:<ip>` — a bare DEL was a silent no-op);
+	// clear the budget best-effort.
+	valkeyDel(`wl:limits:note-gate:::ffff:127.0.0.1`);
+	valkeyDel(`wl:limits:note-gate:127.0.0.1`);
+	valkeyDel(`wl:limits:note-gate:::1`);
 }
 
 test.beforeAll(() => {

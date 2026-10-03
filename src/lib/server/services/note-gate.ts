@@ -7,10 +7,11 @@ import { getOption } from '$lib/server/config/options-registry';
 /**
  * Password gate for notes (N1 detail page; notes plan v0.4 §2.5, ledger
  * §13.9). KDF = argon2id at the OWASP-cheatsheet minimum recommendation
- * (m=19456 KiB, t=2, p=1, 16 B salt, 32 B tag) — the API shape is the Node
- * 24 built-in: `argon2Sync(type, { message, nonce, tagLength, memory,
- * passes, parallelism })`. Storage is a self-describing PHC string so a
- * future parameter bump can rehash without a migration. Unlock tokens are
+ * (m=19456 KiB, t=2, p=1, 16 B salt, 32 B tag), run through the promisified
+ * Node 24 `crypto.argon2` (async, libuv threadpool - the unlock endpoint is
+ * public and must not block the event loop). Storage is a self-describing
+ * PHC string: m/t/p are all read back on verify, so a future parameter bump
+ * keeps existing rows verifiable without a migration. Unlock tokens are
  * HMAC-signed with a key derived from BETTER_AUTH_SECRET via HKDF (zero new
  * env vars) and bind the CURRENT password hash — changing or removing the
  * password invalidates every outstanding unlock automatically.

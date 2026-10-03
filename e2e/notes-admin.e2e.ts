@@ -198,14 +198,31 @@ test('topics CRUD: create, edit, reorder, attribution refusal, delete', async ({
 		.poll(() => psql(`select description from topics where slug = '${TOPIC2_SLUG}'`))
 		.toBe('e2e description');
 
-	// Reorder: one ▲ moves it one slot earlier; ▼ returns it.
+	// Reorder: one ▲ moves it one slot earlier; ▼ returns it. Clicks retry
+	// until the DB order actually flips (a swallowed click under full-suite
+	// load used to fail here); the DB is re-read before every click so a
+	// slow-but-successful move is never double-applied.
 	const slugOrder = () =>
 		psql(`select string_agg(slug, ',' order by sort_order, name) from topics`);
 	const indexBefore = slugOrder().split(',').indexOf(TOPIC2_SLUG);
-	await page.getByRole('button', { name: '上移' }).click();
-	await expect.poll(() => slugOrder().split(',').indexOf(TOPIC2_SLUG)).toBe(indexBefore - 1);
-	await page.getByRole('button', { name: '下移' }).click();
-	await expect.poll(() => slugOrder().split(',').indexOf(TOPIC2_SLUG)).toBe(indexBefore);
+	await expect(async () => {
+		const current = slugOrder().split(',').indexOf(TOPIC2_SLUG);
+		if (current !== indexBefore - 1) {
+			await page.getByRole('button', { name: '上移' }).click();
+		}
+		await expect
+			.poll(() => slugOrder().split(',').indexOf(TOPIC2_SLUG), { timeout: 2500 })
+			.toBe(indexBefore - 1);
+	}).toPass({ timeout: 30000 });
+	await expect(async () => {
+		const current = slugOrder().split(',').indexOf(TOPIC2_SLUG);
+		if (current !== indexBefore) {
+			await page.getByRole('button', { name: '下移' }).click();
+		}
+		await expect
+			.poll(() => slugOrder().split(',').indexOf(TOPIC2_SLUG), { timeout: 2500 })
+			.toBe(indexBefore);
+	}).toPass({ timeout: 30000 });
 
 	// Delete refusal: the fixture topic still owns the published note.
 	await page.getByText(TOPIC_NAME, { exact: true }).filter({ visible: true }).first().click();
