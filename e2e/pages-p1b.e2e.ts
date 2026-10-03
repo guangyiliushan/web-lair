@@ -103,12 +103,18 @@ test.describe('pages P1b', () => {
 
 		const panel = page.locator('[role="menu"]').first();
 		const items = panel.getByRole('menuitem');
-		await expect(items.nth(0)).toHaveText('About Me');
-		await expect(items.nth(1)).toHaveText('About This Project');
-		await expect(items.nth(2)).toHaveText(EXTRA_TITLE_EN);
-		await expect(items.nth(2)).toHaveAttribute('href', `/en/${EXTRA_SLUG}`);
-		// The four original quick links stay as a trailing group.
-		await expect(items.nth(3)).toHaveAttribute('href', '/en/rss.xml');
+		// The card reads the live registry: other suites' fixtures (or real extra
+		// pages) extend the middle, so assert the relative order instead of fixed
+		// indices — defaults first, extras after them, quick links trailing.
+		const hrefs = await items.evaluateAll((els) => els.map((el) => el.getAttribute('href')));
+		expect(hrefs.length).toBeGreaterThanOrEqual(6);
+		expect(hrefs.slice(0, 2)).toEqual(['/en/about', '/en/about-site']);
+		const extraIndex = hrefs.indexOf(`/en/${EXTRA_SLUG}`);
+		expect(extraIndex).toBeGreaterThanOrEqual(2);
+		await expect(items.nth(extraIndex)).toHaveText(EXTRA_TITLE_EN);
+		const quickStart = hrefs.length - 4;
+		expect(hrefs[quickStart]).toBe('/en/rss.xml');
+		expect(extraIndex).toBeLessThan(quickStart);
 		// Hidden rows never enter the card.
 		await expect(panel.getByText(HIDDEN_TITLE)).toHaveCount(0);
 	});
