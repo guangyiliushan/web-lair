@@ -12,6 +12,7 @@ import { noteDateLabel } from '$lib/utils/note-date';
 import type {
 	MegaMenuDynamicData,
 	NavChild,
+	PagesMegaData,
 	TimelineActivityItem
 } from '$lib/config/navigation.config';
 
@@ -173,12 +174,6 @@ export async function loadTimelineMegaData(): Promise<MegaMenuDynamicData> {
 	}));
 
 	return { leftItems: [], rightItems: [], timelineItems };
-}
-
-/** Chrome payload for the pages surface: menu items + footer defaults. */
-export interface PagesMegaData extends MegaMenuDynamicData {
-	/** `is_default` rows (footer About group); same single query as the items. */
-	footerDefaults: { label: string; href: string }[];
 }
 
 /**

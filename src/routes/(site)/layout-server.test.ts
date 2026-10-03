@@ -14,7 +14,8 @@ vi.mock('$env/dynamic/private', () => envState);
 vi.mock('$lib/server/nav-data', () => ({
 	loadPostsMegaData: vi.fn(async () => null),
 	loadNotesMegaData: vi.fn(async () => null),
-	loadTimelineMegaData: vi.fn(async () => null)
+	loadTimelineMegaData: vi.fn(async () => null),
+	loadPagesMegaData: vi.fn(async () => null)
 }));
 
 import { load } from './+layout.server';

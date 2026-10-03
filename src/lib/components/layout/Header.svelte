@@ -16,7 +16,8 @@
 		navigationConfig,
 		tLabel,
 		type MegaMenuDynamicData,
-		type NavChild
+		type NavChild,
+		type PagesMegaData
 	} from '$lib/config/navigation.config';
 
 	// ── Types ──
@@ -36,12 +37,14 @@
 		auth,
 		postsData,
 		notesData,
-		timelineData
+		timelineData,
+		pagesData
 	}: {
 		auth?: AuthData;
 		postsData?: MegaMenuDynamicData | null;
 		notesData?: MegaMenuDynamicData | null;
 		timelineData?: MegaMenuDynamicData | null;
+		pagesData?: PagesMegaData | null;
 	} = $props();
 
 	// ── Derived ──
@@ -121,7 +124,9 @@
 									? (notesData ?? null)
 									: item.key === 'nav_timeline'
 										? (timelineData ?? null)
-										: null}
+										: item.key === 'nav_home'
+											? (pagesData ?? null)
+											: null}
 						>
 							{#snippet trigger(state)}
 								{#if item.href === '#'}
@@ -266,6 +271,49 @@
 								</div>
 							{/each}
 						</div>
+
+						<!-- Pages group (P1b): defaults → extras, same chrome query -->
+						{#if pagesData && pagesData.leftItems.length > 0}
+							<div>
+								<div
+									class="flex items-center justify-between rounded-lg transition-colors hover:bg-muted/50"
+								>
+									<span class="flex-1 px-3 py-2.5 text-sm font-medium text-muted-foreground"
+										>{m.nav_pages()}</span
+									>
+									<button
+										onclick={() => toggleExpanded('nav_pages')}
+										class="flex items-center justify-center px-4 py-2.5 text-muted-foreground transition-colors hover:text-foreground"
+										aria-label={expandedKey === 'nav_pages' ? 'Collapse' : 'Expand'}
+									>
+										<span
+											class={cn(
+												'transition-transform duration-300',
+												expandedKey === 'nav_pages' ? 'rotate-180' : ''
+											)}
+										>
+											<IconChevronDown class="size-4" />
+										</span>
+									</button>
+								</div>
+								{#if expandedKey === 'nav_pages'}
+									<div
+										transition:slide={{ duration: 300, easing: cubicInOut }}
+										class="ml-3 flex flex-col border-l pt-0.5 pb-1 pl-3"
+									>
+										{#each pagesData.leftItems as child (child.href)}
+											<a
+												href={siteHref(child.href)}
+												onclick={closeMenu}
+												class="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+											>
+												<span>{childLabel(child)}</span>
+											</a>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						{/if}
 
 						<!-- Unrolled More Items -->
 						{#if navigationConfig.find((i) => i.key === 'nav_more')?.children}

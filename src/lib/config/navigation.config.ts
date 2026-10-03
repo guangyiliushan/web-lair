@@ -155,6 +155,23 @@ export interface TimelineActivityItem {
 	locked?: boolean;
 }
 
+/** Chrome payload for the pages surface (P1b): menu items + footer defaults. */
+export interface PagesMegaData extends MegaMenuDynamicData {
+	/** `is_default` rows (footer About group); same single query as the items. */
+	footerDefaults: { label: string; href: string }[];
+}
+
+/**
+ * Home menu order (F1, P1b): dynamic page entries (defaults → extras) first,
+ * the static quick links stay as a trailing group.
+ */
+export function mergeHomeMenuItems(
+	dynamic: NavChild[] | null | undefined,
+	fixed: NavChild[]
+): NavChild[] {
+	return [...(dynamic ?? []), ...fixed];
+}
+
 export interface MegaMenuCategory {
 	labelKey: I18nKey;
 	href: string;

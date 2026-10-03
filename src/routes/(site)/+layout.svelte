@@ -17,11 +17,12 @@
 		postsData={data.postsData}
 		notesData={data.notesData}
 		timelineData={data.timelineData}
+		pagesData={data.pagesData}
 	/>
 	<div class="flex flex-1 pt-24">
 		<main class="min-w-0 flex-1">
 			{@render children()}
 		</main>
 	</div>
-	<Footer />
+	<Footer pages={data.pagesData.footerDefaults} />
 </div>

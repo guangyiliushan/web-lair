@@ -28,11 +28,19 @@
 		icpNumber?: string;
 		/** Online visitor count (optional) */
 		onlineCount?: number;
+		/** Default-page links for the About group (pages line P1b; layout-provided) */
+		pages?: FooterLink[];
 		/** Additional CSS classes appended to the root footer element */
 		class?: string;
 	}
 
-	let { sections: sectionProp, icpNumber, onlineCount, class: className }: FooterProps = $props();
+	let {
+		sections: sectionProp,
+		icpNumber,
+		onlineCount,
+		pages,
+		class: className
+	}: FooterProps = $props();
 
 	/** Resolved sections — user-supplied or auto-generated localized defaults */
 	let sections = $derived(sectionProp ?? buildDefaultSections());
@@ -41,10 +49,7 @@
 		return [
 			{
 				title: m.footer_about(),
-				links: [
-					{ label: m.footer_about_me(), href: '/about/me' },
-					{ label: m.footer_about_project(), href: '/about/project', external: true }
-				]
+				links: pages ?? []
 			},
 			{
 				title: m.footer_more(),

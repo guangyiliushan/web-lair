@@ -12,6 +12,7 @@
 		IconBrandGithub
 	} from '@tabler/icons-svelte-runes';
 	import {
+		mergeHomeMenuItems,
 		tLabel,
 		type MegaMenu,
 		type MegaMenuDynamicData,
@@ -71,6 +72,12 @@
 	const leftItems = $derived(serverData?.leftItems ?? menu.columns[0]?.items ?? []);
 	const rightItems = $derived(serverData?.rightItems ?? menu.rightColumn?.items ?? []);
 	const footerSecondary = $derived(serverData?.footerSecondaryText ?? null);
+
+	// Home branch (F1, P1b): dynamic pages (defaults first) prepend the static
+	// quick links; the four original items stay as a trailing group.
+	const homeItems = $derived(
+		mergeHomeMenuItems(serverData?.leftItems, menu.columns[0]?.items ?? [])
+	);
 
 	// ── Skeleton helpers ──
 	const showSkeleton = $derived(loading && !serverData && menu.type === 'two-column');
@@ -314,7 +321,7 @@
 					<!-- Links Side -->
 					<div class="flex-1 border-l pl-6">
 						<div class="grid grid-cols-2 gap-x-4 gap-y-2">
-							{#each menu.columns[0].items as child (child.href)}
+							{#each homeItems as child (child.href)}
 								<a
 									href={siteHref(child.href)}
 									role="menuitem"
