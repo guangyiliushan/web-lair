@@ -7,6 +7,7 @@ import { buildSitemap, type SitemapUrl } from '$lib/server/feeds';
 import { conditionalResponse } from '$lib/server/feeds/cache';
 import { getPublicOrigin } from '$lib/server/origin';
 import { feedableNoteCondition } from '$lib/server/services/note-visibility';
+import { contentLocales, listSitemapPages } from '$lib/server/services/pages';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import type { RequestHandler } from './$types';
 
@@ -20,11 +21,12 @@ import type { RequestHandler } from './$types';
  * same-path-per-locale default. No changefreq/priority; lastmod only from a
  * real updated_at (topics carry no timestamp column). Tags/categories stay
  * out (thin pages) and /posts + /timeline wait on a follow-up decision
- * (registered); the pages and micro-content sources plug in here in their
- * own batches.
+ * (registered); the micro-content source plugs in here in its own batch (the
+ * pages source joined in P1b, 2026-10-03).
  *
  * Ordering is pinned (posts by lang/slug, then notes by lang/slug, then
- * topics by slug with locales in a fixed order) so the body - and therefore
+ * topics by slug with locales in a fixed order, then pages by slug with their
+ * content locales in fixed order) so the body - and therefore
  * the strong ETag - is byte-stable across requests (review finding).
  *
  * Caching (R1-Q2): strong ETag = representation hash, Last-Modified = the
@@ -38,7 +40,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 	const origin = getPublicOrigin() ?? url.origin;
 	const now = new Date();
 
-	const [postRows, noteRows, topicRows] = await Promise.all([
+	const [postRows, noteRows, topicRows, pageRows] = await Promise.all([
 		db
 			.select({
 				lang: posts.lang,
@@ -59,7 +61,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
 			.from(notes)
 			.where(feedableNoteCondition(now))
 			.orderBy(notes.lang, notes.slug),
-		db.select({ slug: topics.slug }).from(topics).orderBy(asc(topics.slug))
+		db.select({ slug: topics.slug }).from(topics).orderBy(asc(topics.slug)),
+		listSitemapPages()
 	]);
 
 	const localeOrder = locales as readonly string[];
@@ -135,6 +138,26 @@ export const GET: RequestHandler = async ({ request, url }) => {
 				alternates
 			});
 		}
+	}
+
+	// Pages source (P1b, 2026-10-03 ruling): one <loc> per content locale with
+	// a same-path alternate set (self included) - mirrors the route's hreflang
+	// exactly. Slug order + fixed locale order keep the body byte-stable.
+	for (const row of pageRows) {
+		const pagePath = `/${row.slug}`;
+		const pageLocales = contentLocales(row.content);
+		const alternates = pageLocales.map((lang) => ({
+			hreflang: lang,
+			href: `${origin}${localizeHref(pagePath, { locale: lang as (typeof locales)[number] })}`
+		}));
+		for (const lang of pageLocales) {
+			urls.push({
+				loc: `${origin}${localizeHref(pagePath, { locale: lang as (typeof locales)[number] })}`,
+				lastmod: row.updatedAt.toISOString(),
+				alternates
+			});
+		}
+		if (latest === null || row.updatedAt > latest) latest = row.updatedAt;
 	}
 
 	const body = buildSitemap({ urls });

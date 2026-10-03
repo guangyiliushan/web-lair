@@ -7,8 +7,9 @@ import { PgDialect } from 'drizzle-orm/pg-core';
  * Route-level tests for /sitemap.xml (P3-b): home + visible posts per
  * language, per-group alternates, lastmod only from updated_at, stable
  * (lang, slug) ordering, locale whitelisting and the strong-validator cache
- * contract (ETag derived from the body). The db module is mocked with a
- * queue of select results.
+ * contract (ETag derived from the body); P1b adds the pages source
+ * (per-content-locale locs, same-path alternates). The db module is mocked
+ * with a queue of select results.
  */
 const { dbMock, state, envState } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -81,7 +82,7 @@ const groupRows = [
 
 describe('sitemap route', () => {
 	beforeEach(() => {
-		state.selectResults = [[], [], []];
+		state.selectResults = [[], [], [], []];
 		state.orderArgs = [];
 		state.whereArgs = [];
 		envState.env.ORIGIN = 'https://example.com';
@@ -268,5 +269,51 @@ describe('sitemap route', () => {
 		expect(whereSql).toContain('"notes"."status" in');
 		expect(whereSql).toContain('"notes"."published_at" <=');
 		expect(whereSql).toContain('"notes"."password_hash" is null');
+	});
+
+	it('lists content-bearing pages with per-locale locs and same-path alternates (P1b seam)', async () => {
+		state.selectResults = [
+			[],
+			[],
+			[],
+			[
+				{
+					slug: 'about',
+					content: { en: 'x', 'zh-cn': 'y' },
+					updatedAt: new Date('2026-10-01T09:00:00Z')
+				},
+				{ slug: 'solo', content: { ja: 'z' }, updatedAt: new Date('2026-10-02T09:00:00Z') }
+			]
+		];
+
+		const body = await (await GET(event())).text();
+
+		// One loc per content locale; missing locales never appear.
+		expect(body).toContain('<loc>https://example.com/en/about</loc>');
+		expect(body).toContain('<loc>https://example.com/zh-cn/about</loc>');
+		expect(body).not.toContain('<loc>https://example.com/ja/about</loc>');
+		expect(body).toContain('hreflang="en" href="https://example.com/en/about"');
+		expect(body).toContain('hreflang="zh-cn" href="https://example.com/zh-cn/about"');
+		expect(body).toContain('<loc>https://example.com/ja/solo</loc>');
+		// Pages contribute their updated_at to Last-Modified.
+		expect(body).toContain('<lastmod>2026-10-02T09:00:00.000Z</lastmod>');
+	});
+
+	it('pins the pages source predicate and slug ordering (P1b seam)', async () => {
+		await GET(event());
+
+		// Third where (posts, notes, pages — topics carries none); fourth
+		// orderBy (posts, notes, topics, pages).
+		const whereSql = state.whereArgs[2]
+			.map((arg) => dbDialect.sqlToQuery(arg as never).sql)
+			.join(' | ');
+		expect(whereSql).toContain('"pages"."status"');
+		expect(whereSql).toContain('"pages"."content" is not null');
+		expect(whereSql).toContain('"pages"."external_url" is null');
+
+		const orderSql = state.orderArgs[3]
+			.map((arg) => dbDialect.sqlToQuery(sql`${arg}`).sql)
+			.join(' | ');
+		expect(orderSql).toContain('"pages"."slug"');
 	});
 });
