@@ -6,6 +6,7 @@ import { categories, posts } from '$lib/server/db/content';
 import { getOption } from '$lib/server/config/options-registry';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import { countVisibleNotes, listNoteSummaries, listTopicOptions } from '$lib/server/services/notes';
+import { listVisiblePages, pageHref, resolveLocalized } from '$lib/server/services/pages';
 import { formatDate } from '$lib/utils/i18n';
 import { noteDateLabel } from '$lib/utils/note-date';
 import type {
@@ -172,4 +173,38 @@ export async function loadTimelineMegaData(): Promise<MegaMenuDynamicData> {
 	}));
 
 	return { leftItems: [], rightItems: [], timelineItems };
+}
+
+/** Chrome payload for the pages surface: menu items + footer defaults. */
+export interface PagesMegaData extends MegaMenuDynamicData {
+	/** `is_default` rows (footer About group); same single query as the items. */
+	footerDefaults: { label: string; href: string }[];
+}
+
+/**
+ * Load data for the pages chrome (P1b): every visible row in chrome order
+ * (`is_default` first → `sort_order` → `created_at`). Item titles resolve
+ * through the display fallback chain, hrefs stay neutral for `siteHref`, and
+ * the footer defaults ride along from the same single query (no extra
+ * request). Row-level visibility (V1, 2026-10-03) - the route owns the
+ * per-language availability.
+ */
+export async function loadPagesMegaData(): Promise<PagesMegaData> {
+	const locale = getLocale();
+	const rows = await listVisiblePages();
+
+	const items: NavChild[] = rows.map((row) => ({
+		label: resolveLocalized(row.title, locale) ?? row.slug,
+		href: pageHref(row),
+		iconName: row.icon ?? undefined
+	}));
+
+	const footerDefaults = rows
+		.filter((row) => row.isDefault)
+		.map((row) => ({
+			label: resolveLocalized(row.title, locale) ?? row.slug,
+			href: pageHref(row)
+		}));
+
+	return { leftItems: items, rightItems: [], footerDefaults };
 }

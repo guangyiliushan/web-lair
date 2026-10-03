@@ -5,7 +5,9 @@ import { PgDialect } from 'drizzle-orm/pg-core';
  * Unit tests for the real mega-menu data (P3-b): the posts loader maps the
  * locale's categories (curated order, visible counts) and the latest visible
  * posts into neutral hrefs; the timeline loader builds the post activity
- * stream. The db module is mocked with a queue of select results.
+ * stream; the pages chrome loader (P1b) maps ordered rows with fallback
+ * labels and footer defaults. The db module is mocked with a queue of
+ * select results.
  */
 const { dbMock, state } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -13,7 +15,8 @@ const { dbMock, state } = vi.hoisted(() => ({
 		selectResults: [] as unknown[][],
 		whereArgs: [] as unknown[],
 		joinArgs: [] as unknown[][],
-		limitArgs: [] as unknown[]
+		limitArgs: [] as unknown[],
+		orderArgs: [] as unknown[]
 	}
 }));
 
@@ -29,7 +32,12 @@ vi.mock('$lib/server/config/options-registry', () => ({
 	getOption: vi.fn(async () => 'UTC')
 }));
 
-import { loadNotesMegaData, loadPostsMegaData, loadTimelineMegaData } from './nav-data';
+import {
+	loadNotesMegaData,
+	loadPagesMegaData,
+	loadPostsMegaData,
+	loadTimelineMegaData
+} from './nav-data';
 
 function makeChain(result: unknown[]) {
 	const self: unknown = new Proxy(
@@ -43,6 +51,7 @@ function makeChain(result: unknown[]) {
 					if (prop === 'where') state.whereArgs.push(args[0]);
 					if (prop === 'innerJoin') state.joinArgs.push(args);
 					if (prop === 'limit') state.limitArgs.push(args[0]);
+					if (prop === 'orderBy') state.orderArgs.push(args);
 					return self;
 				};
 			}
@@ -59,6 +68,7 @@ describe('nav-data loaders', () => {
 		state.whereArgs = [];
 		state.joinArgs = [];
 		state.limitArgs = [];
+		state.orderArgs = [];
 		Object.assign(dbMock, {
 			select: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
 		});
@@ -213,5 +223,58 @@ describe('nav-data loaders', () => {
 		expect(postWhere).toContain('"posts"."status"');
 		expect(noteWhere).toContain('"notes"."lang"');
 		expect(noteWhere).toContain('"notes"."status"');
+	});
+
+	it('maps the pages chrome data: defaults first, fallback labels, external hrefs', async () => {
+		state.selectResults = [
+			[
+				{
+					slug: 'about',
+					isDefault: true,
+					title: { en: 'About Me', 'zh-cn': '关于我' },
+					icon: null,
+					externalUrl: null
+				},
+				{
+					slug: 'about-site',
+					isDefault: true,
+					title: { 'zh-cn': '关于本项目' },
+					icon: 'home',
+					externalUrl: null
+				},
+				{
+					slug: 'sponsor',
+					isDefault: false,
+					title: { ja: 'スポンサー' },
+					icon: null,
+					externalUrl: 'https://buymeacoffee.com/x'
+				}
+			]
+		];
+
+		const data = await loadPagesMegaData();
+
+		expect(data.leftItems).toEqual([
+			{ label: 'About Me', href: '/about', iconName: undefined },
+			{ label: '关于本项目', href: '/about-site', iconName: 'home' },
+			{ label: 'スポンサー', href: 'https://buymeacoffee.com/x', iconName: undefined }
+		]);
+		expect(data.footerDefaults).toEqual([
+			{ label: 'About Me', href: '/about' },
+			{ label: '关于本项目', href: '/about-site' }
+		]);
+
+		// Visibility + chrome order stay in SQL (row-level V1): status filter,
+		// then is_default desc → sort_order asc → created_at asc.
+		expect(state.whereArgs).toHaveLength(1);
+		expect(dialect.sqlToQuery(state.whereArgs[0] as never).sql).toContain('"pages"."status"');
+		const order = (state.orderArgs[0] as unknown[]).map(
+			(fragment) => dialect.sqlToQuery(fragment as never).sql
+		);
+		expect(order).toHaveLength(3);
+		expect(order[0]).toContain('"pages"."is_default"');
+		expect(order[0].toLowerCase()).toContain('desc');
+		expect(order[1]).toContain('"pages"."sort_order"');
+		expect(order[2]).toContain('"pages"."created_at"');
 	});
 });
