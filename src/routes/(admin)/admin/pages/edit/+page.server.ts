@@ -65,11 +65,12 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = str(form, 'id');
 		if (!id || !isUuid(id)) return fail(400, { error: '缺少页面 ID' });
+		const pageId = id.toLowerCase();
 
 		const [row] = await db
 			.select({ id: pages.id, slug: pages.slug, isDefault: pages.isDefault })
 			.from(pages)
-			.where(eq(pages.id, id))
+			.where(eq(pages.id, pageId))
 			.limit(1);
 		if (!row) return fail(404, { error: '页面不存在' });
 
@@ -105,11 +106,11 @@ export const actions: Actions = {
 					externalUrl: externalUrl === '' ? null : externalUrl,
 					slug
 				})
-				.where(eq(pages.id, id))
+				.where(eq(pages.id, pageId))
 				.returning({ id: pages.id });
-		} catch (error) {
+		} catch (caught) {
 			// Only a unique violation is a user-visible conflict (topics pattern).
-			if (pgErrorCode(error) !== '23505') throw error;
+			if (pgErrorCode(caught) !== '23505') throw caught;
 			return fail(409, { error: 'Slug 已存在' });
 		}
 		if (updated.length === 0) return fail(404, { error: '页面不存在' });

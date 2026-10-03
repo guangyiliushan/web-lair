@@ -27,13 +27,15 @@ function cleanup(): void {
 test.beforeAll(() => {
 	cleanup();
 	psql(
-		`insert into pages (slug, title, description, icon, external_url, status, sort_order, is_default, content, content_format) values ('${SLUG_A}', '{"en":"${TITLE_A}","zh-cn":"${TITLE_A_ZH}"}'::jsonb, null, null, null, 'visible', 60, false, '{"en":"# E2E admin body A","zh-cn":"# E2E 管理页甲正文"}'::jsonb, 'markdown')`
+		`insert into pages (slug, title, description, icon, external_url, status, sort_order, is_default, content, content_format) values ('${SLUG_A}', '{"en":"${TITLE_A}","zh-cn":"${TITLE_A_ZH}"}'::jsonb, null, null, null, 'visible', 0, false, '{"en":"# E2E admin body A","zh-cn":"# E2E 管理页甲正文"}'::jsonb, 'markdown')`
 	);
 	psql(
 		`insert into pages (slug, title, description, icon, external_url, status, sort_order, is_default, content, content_format) values ('${SLUG_B}', '{"en":"${TITLE_B}"}'::jsonb, null, null, null, 'visible', 61, false, '{"en":"# E2E admin body B"}'::jsonb, 'markdown')`
 	);
 	idA = psql(`select id from pages where slug = '${SLUG_A}'`);
 	idB = psql(`select id from pages where slug = '${SLUG_B}'`);
+	// Cleanup + seed must leave exactly the two fixtures behind.
+	expect(psql(`select count(*) from pages where slug like 'e2e-admin-%'`)).toBe('2');
 });
 
 test.afterAll(() => {
@@ -64,6 +66,8 @@ test('the registry lists defaults first and tags the fixture rows', async ({ pag
 	await expect(row(page, TITLE_B)).toBeVisible();
 	await expect(row(page, 'About Me').getByText('默认')).toBeVisible();
 	await expect(row(page, TITLE_A).getByText('默认')).toHaveCount(0);
+	// The defaults pin outranks sort_order: A sorts at 0 yet stays below.
+	expect(await rowIndex(page, 'About Me')).toBeLessThan(await rowIndex(page, TITLE_A));
 	// "新增" stays with the P5 md editor — no header action here.
 	await expect(page.getByRole('button', { name: '新建' })).toHaveCount(0);
 });

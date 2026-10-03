@@ -5,9 +5,11 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 /**
  * Route-level tests for the P2 pages admin (T6 unit side): the chrome order +
  * locale-fallback title in load, the ▲/▼ swap as a full renumber inside one
- * transaction, the status whitelist, and the delete guards (uuid / default
- * protection / locked re-check). The db module is mocked with a recording
- * chain so a dropped WHERE, a wrong order or an unprotected default turns red.
+ * locked transaction, the cross-group/edge no-ops, the status whitelist, the
+ * delete guards (uuid / default protection / locked re-check) and the
+ * guard-order binding. The db module is mocked with a recording chain so a
+ * dropped WHERE, a dropped lock, a wrong order or an unprotected default
+ * turns red.
  */
 const { dbMock, state, service } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -15,7 +17,9 @@ const { dbMock, state, service } = vi.hoisted(() => ({
 		selectQueue: [] as unknown[][],
 		returningQueue: [] as unknown[][],
 		orderArgs: [] as unknown[][],
-		updates: [] as { values: Record<string, unknown>; target: string }[],
+		executes: [] as { sql: string; params: unknown[] }[],
+		statusUpdates: [] as { values: Record<string, unknown>; target: string }[],
+		forCalls: [] as unknown[],
 		deletes: [] as unknown[]
 	},
 	service: { requireAdminRole: vi.fn() }
@@ -48,7 +52,10 @@ function selectChain(): Record<string, unknown> {
 		from: ret,
 		where: ret,
 		limit: ret,
-		for: ret,
+		for: (...args: unknown[]) => {
+			state.forCalls.push(args[0]);
+			return c;
+		},
 		orderBy: (...args: unknown[]) => {
 			state.orderArgs.push(args);
 			return c;
@@ -63,15 +70,10 @@ function makeTx(): Record<string, unknown> {
 	const c = selectChain();
 	Object.assign(c, {
 		select: () => c,
-		update: () => ({
-			set: (values: Record<string, unknown>) => ({
-				where: (cond: unknown) => {
-					const params = dialect.sqlToQuery(cond as never).params;
-					state.updates.push({ values, target: String(params[0]) });
-					return Promise.resolve(undefined);
-				}
-			})
-		}),
+		execute: async (query: unknown) => {
+			const rendered = dialect.sqlToQuery(query as never);
+			state.executes.push({ sql: rendered.sql, params: rendered.params });
+		},
 		delete: () => ({
 			where: async (cond: unknown) => {
 				state.deletes.push(cond);
@@ -86,16 +88,20 @@ describe('admin pages list (P2)', () => {
 		state.selectQueue = [];
 		state.returningQueue = [];
 		state.orderArgs = [];
-		state.updates = [];
+		state.executes = [];
+		state.statusUpdates = [];
+		state.forCalls = [];
 		state.deletes = [];
 		service.requireAdminRole.mockClear();
 		Object.assign(dbMock, {
 			select: vi.fn(() => selectChain()),
 			update: vi.fn(() => ({
-				set: vi.fn(() => ({
-					where: vi.fn(() => ({
-						returning: vi.fn(async () => state.returningQueue.shift() ?? [])
-					}))
+				set: vi.fn((values: Record<string, unknown>) => ({
+					where: vi.fn((cond: unknown) => {
+						const params = dialect.sqlToQuery(cond as never).params;
+						state.statusUpdates.push({ values, target: String(params[0]) });
+						return { returning: vi.fn(async () => state.returningQueue.shift() ?? []) };
+					})
 				}))
 			})),
 			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(makeTx()))
@@ -123,52 +129,104 @@ describe('admin pages list (P2)', () => {
 
 		expect(service.requireAdminRole).toHaveBeenCalledTimes(1);
 		expect(data.pages[0].title).toBe('关于我');
-		const orderSql = state.orderArgs[0]
-			.map((arg) => dialect.sqlToQuery(sql`${arg}`).sql)
-			.join(' | ');
-		expect(orderSql).toContain('"pages"."is_default"');
-		expect(orderSql.toLowerCase()).toContain('desc');
-		expect(orderSql).toContain('"pages"."sort_order"');
-		expect(orderSql).toContain('"pages"."created_at"');
+		const fragments = state.orderArgs[0].map((arg) => dialect.sqlToQuery(sql`${arg}`).sql);
+		const orderSql = fragments.join(' | ');
+		// Relative order and per-key directions, not mere token presence.
+		expect(orderSql.indexOf('"pages"."is_default"')).toBeLessThan(
+			orderSql.indexOf('"pages"."sort_order"')
+		);
+		expect(orderSql.indexOf('"pages"."sort_order"')).toBeLessThan(
+			orderSql.indexOf('"pages"."created_at"')
+		);
+		expect(fragments[0].toLowerCase()).toContain('desc');
+		expect(fragments[1].toLowerCase()).toContain('asc');
+		expect(fragments[2].toLowerCase()).toContain('asc');
 	});
 
-	it('reorders with a full renumber inside one transaction (swap pinned)', async () => {
-		state.selectQueue = [[{ id: OTHER_A }, { id: PAGE_ID }, { id: OTHER_B }]];
+	it('reorders with a full renumber inside one locked transaction (swap pinned)', async () => {
+		state.selectQueue = [
+			[
+				{ id: OTHER_A, isDefault: false },
+				{ id: PAGE_ID, isDefault: false },
+				{ id: OTHER_B, isDefault: false }
+			]
+		];
 
 		const result = await actions.move!(formEvent({ id: PAGE_ID, direction: 'down' }) as never);
 
 		expect(result).toEqual({ success: true });
-		expect(state.updates.map((entry) => [entry.target, entry.values.sortOrder])).toEqual([
+		expect(service.requireAdminRole).toHaveBeenCalledTimes(1);
+		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
+		// The renumber runs on the locking read, in the chrome order.
+		expect(state.forCalls).toContain('update');
+		const moveOrder = state.orderArgs[0]
+			.map((arg) => dialect.sqlToQuery(sql`${arg}`).sql)
+			.join(' | ');
+		expect(moveOrder.indexOf('"pages"."is_default"')).toBeLessThan(
+			moveOrder.indexOf('"pages"."sort_order"')
+		);
+		// Raw-SQL renumber: [sort_order, id] pairs, position = array index.
+		expect(state.executes.map((entry) => [entry.params[1], entry.params[0]])).toEqual([
 			[OTHER_A, 0],
 			[OTHER_B, 1],
 			[PAGE_ID, 2]
 		]);
+		expect(state.executes[0].sql).toContain('update pages set sort_order');
 	});
 
 	it('guards the move input and reports missing rows', async () => {
 		expect(await actions.move!(formEvent({ id: 'nope', direction: 'up' }) as never)).toMatchObject({
 			status: 400
 		});
+		expect(service.requireAdminRole).toHaveBeenCalled();
+
 		expect(
 			await actions.move!(formEvent({ id: PAGE_ID, direction: 'sideways' }) as never)
 		).toMatchObject({ status: 400 });
 
-		state.selectQueue = [[{ id: OTHER_A }]];
+		state.selectQueue = [[{ id: OTHER_A, isDefault: false }]];
 		expect(await actions.move!(formEvent({ id: PAGE_ID, direction: 'up' }) as never)).toMatchObject(
 			{ status: 404 }
 		);
 	});
 
-	it('treats an edge move as a no-op success', async () => {
-		state.selectQueue = [[{ id: PAGE_ID }]];
+	it('treats edge moves as no-op successes without writing', async () => {
+		state.selectQueue = [[{ id: PAGE_ID, isDefault: false }]];
+
+		const top = await actions.move!(formEvent({ id: PAGE_ID, direction: 'up' }) as never);
+		expect(top).toEqual({ success: true });
+		expect(state.executes).toHaveLength(0);
+
+		state.selectQueue = [
+			[
+				{ id: OTHER_A, isDefault: false },
+				{ id: PAGE_ID, isDefault: false }
+			]
+		];
+		const bottom = await actions.move!(formEvent({ id: PAGE_ID, direction: 'down' }) as never);
+		expect(bottom).toEqual({ success: true });
+		expect(state.executes).toHaveLength(0);
+	});
+
+	it('treats a cross-group move as a no-op without writing', async () => {
+		state.selectQueue = [
+			[
+				{ id: OTHER_A, isDefault: true },
+				{ id: PAGE_ID, isDefault: false }
+			]
+		];
 
 		const result = await actions.move!(formEvent({ id: PAGE_ID, direction: 'up' }) as never);
 
 		expect(result).toEqual({ success: true });
-		expect(state.updates).toHaveLength(0);
+		expect(state.executes).toHaveLength(0);
 	});
 
-	it('validates the status whitelist and reports missing rows', async () => {
+	it('validates the status whitelist, the id shape and reports missing rows', async () => {
+		expect(
+			await actions.setStatus!(formEvent({ id: 'nope', status: 'hidden' }) as never)
+		).toMatchObject({ status: 400 });
+
 		expect(
 			await actions.setStatus!(formEvent({ id: PAGE_ID, status: 'gone' }) as never)
 		).toMatchObject({ status: 400 });
@@ -182,20 +240,39 @@ describe('admin pages list (P2)', () => {
 		expect(await actions.setStatus!(formEvent({ id: PAGE_ID, status: 'hidden' }) as never)).toEqual(
 			{ success: true }
 		);
+		// Both writes are pinned to the id and the requested status.
+		expect(state.statusUpdates.map((entry) => [entry.target, entry.values.status])).toEqual([
+			[PAGE_ID, 'hidden'],
+			[PAGE_ID, 'hidden']
+		]);
 	});
 
 	it('protects default rows and deletes only after a locked re-check', async () => {
+		// Deleting requires the guard and a well-formed id.
+		expect(await actions.delete!(formEvent({ id: 'nope' }) as never)).toMatchObject({
+			status: 400
+		});
+
+		// The whole guard runs INSIDE the transaction: the outer handle is
+		// never used (moving the check out of the tx would throw right here).
+		dbMock.select = vi.fn(() => {
+			throw new Error('outer select must not run for delete');
+		});
+
 		state.selectQueue = [[{ id: PAGE_ID, isDefault: true }]];
 		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toMatchObject({
 			status: 409
 		});
 		expect(state.deletes).toHaveLength(0);
+		expect(state.forCalls).toContain('update');
 
 		state.selectQueue = [[{ id: PAGE_ID, isDefault: false }]];
 		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toEqual({
 			success: true
 		});
 		expect(state.deletes).toHaveLength(1);
+		expect(dialect.sqlToQuery(state.deletes[0] as never).params).toEqual([PAGE_ID]);
+		expect(dbMock.transaction).toHaveBeenCalled();
 
 		state.selectQueue = [[]];
 		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toMatchObject({

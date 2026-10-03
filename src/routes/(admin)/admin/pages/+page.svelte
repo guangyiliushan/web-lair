@@ -26,6 +26,18 @@
 	// direct access stays); deleting them is refused by the server as well.
 	let hideTarget = $state<PageRow | null>(null);
 	let deleteTarget = $state<PageRow | null>(null);
+
+	// Writable derived (Svelte 5.25+): the refresh button clears the banner by
+	// assignment; the next submission resyncs it from `form`.
+	let errorText = $derived(form?.error ?? null);
+
+	// ▲/▼ dead zones (P2 review): defaults render first, so the first extra
+	// row cannot move up and the last default row cannot move down.
+	let submitting = $state(false);
+	const firstExtraIndex = $derived(data.pages.findIndex((row) => !row.isDefault));
+	const lastDefaultIndex = $derived(
+		data.pages.reduce((last, row, index) => (row.isDefault ? index : last), -1)
+	);
 </script>
 
 <svelte:head>
@@ -33,12 +45,12 @@
 </svelte:head>
 
 <div class="flex flex-col gap-6">
-	{#if form?.error}
+	{#if errorText}
 		<div
 			role="alert"
 			class="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
 		>
-			{form.error}
+			{errorText}
 		</div>
 	{/if}
 
@@ -48,7 +60,12 @@
 		</div>
 		<div class="absolute top-0 right-0 flex h-full items-center pr-2">
 			<Separator orientation="vertical" class="h-3.5" />
-			<RefreshButton onclick={() => invalidateAll()} />
+			<RefreshButton
+				onclick={() => {
+					errorText = null;
+					invalidateAll();
+				}}
+			/>
 		</div>
 	</div>
 
@@ -62,8 +79,18 @@
 	{:else}
 		<div class="overflow-x-auto">
 			<Table.Root class="table-fixed">
+				<Table.Header>
+					<Table.Row class="border-border">
+						<Table.Head>标题</Table.Head>
+						<Table.Head class="hidden w-44 sm:table-cell">Slug</Table.Head>
+						<Table.Head class="hidden w-20 md:table-cell">状态</Table.Head>
+						<Table.Head class="w-28">排序</Table.Head>
+						<Table.Head class="hidden w-36 lg:table-cell">更新时间</Table.Head>
+						<Table.Head class="w-28 text-right">操作</Table.Head>
+					</Table.Row>
+				</Table.Header>
 				<Table.Body>
-					{#each data.pages as page (page.id)}
+					{#each data.pages as page, index (page.id)}
 						<Table.Row class="group border-border">
 							<Table.Cell class="max-w-0 whitespace-normal">
 								<div class="flex min-w-0 items-center gap-2">
@@ -104,6 +131,7 @@
 											size="icon"
 											class="size-6"
 											aria-label="上移"
+											disabled={index === 0 || index === firstExtraIndex}
 										>
 											<IconArrowUp class="size-3.5" />
 										</Button>
@@ -115,6 +143,7 @@
 											size="icon"
 											class="size-6"
 											aria-label="下移"
+											disabled={index === data.pages.length - 1 || index === lastDefaultIndex}
 										>
 											<IconArrowDown class="size-3.5" />
 										</Button>
@@ -209,20 +238,26 @@
 				“{hideTarget?.title}” 将从首页卡片、移动端菜单与页脚一起消失（直达仍可访问，不 404）。
 			</AlertDialog.Description>
 		</AlertDialog.Header>
+		{#if form?.error}
+			<p class="text-sm text-destructive">{form.error}</p>
+		{/if}
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
 			<form
 				method="POST"
 				action="?/setStatus"
-				use:enhance={() =>
-					async ({ update }) => {
+				use:enhance={() => {
+					submitting = true;
+					return async ({ result, update }) => {
 						await update();
-						hideTarget = null;
-					}}
+						submitting = false;
+						if (result.type === 'success') hideTarget = null;
+					};
+				}}
 			>
 				<input type="hidden" name="id" value={hideTarget?.id ?? ''} />
 				<input type="hidden" name="status" value="hidden" />
-				<AlertDialog.Action type="submit">隐藏</AlertDialog.Action>
+				<AlertDialog.Action type="submit" disabled={submitting}>隐藏</AlertDialog.Action>
 			</form>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
@@ -241,19 +276,25 @@
 					: '入口将下线；如果代码路由存在，直达仍可访问。'}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
+		{#if form?.error}
+			<p class="text-sm text-destructive">{form.error}</p>
+		{/if}
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
 			<form
 				method="POST"
 				action="?/delete"
-				use:enhance={() =>
-					async ({ update }) => {
+				use:enhance={() => {
+					submitting = true;
+					return async ({ result, update }) => {
 						await update();
-						deleteTarget = null;
-					}}
+						submitting = false;
+						if (result.type === 'success') deleteTarget = null;
+					};
+				}}
 			>
 				<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
-				<AlertDialog.Action type="submit">删除</AlertDialog.Action>
+				<AlertDialog.Action type="submit" disabled={submitting}>删除</AlertDialog.Action>
 			</form>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

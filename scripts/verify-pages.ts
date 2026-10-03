@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { DEFAULT_PAGE_SLUGS } from './_shared/pages';
-import { PAGE_RESERVED_SLUGS } from '$lib/utils/page-meta';
+import { PAGE_RESERVED_SLUGS } from '../src/lib/utils/page-meta';
 
 const DB_URL = process.env.DATABASE_URL;
 if (!DB_URL) {

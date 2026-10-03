@@ -25,7 +25,7 @@ test.beforeAll(() => {
 	cleanup();
 	// Extra visible page: en + zh-cn content only (ja exercises the hint).
 	psql(
-		`insert into pages (slug, title, description, icon, external_url, status, sort_order, is_default, content, content_format) values ('${EXTRA_SLUG}', '{"en":"${EXTRA_TITLE_EN}","zh-cn":"${EXTRA_TITLE_ZH}"}'::jsonb, null, null, null, 'visible', 50, false, '{"en":"# E2E P1B extra body","zh-cn":"# E2E P1B 额外页正文"}'::jsonb, 'markdown')`
+		`insert into pages (slug, title, description, icon, external_url, status, sort_order, is_default, content, content_format) values ('${EXTRA_SLUG}', '{"en":"${EXTRA_TITLE_EN}","zh-cn":"${EXTRA_TITLE_ZH}"}'::jsonb, null, null, null, 'visible', 0, false, '{"en":"# E2E P1B extra body","zh-cn":"# E2E P1B 额外页正文"}'::jsonb, 'markdown')`
 	);
 	// Hidden page: out of every menu and the sitemap, still directly reachable.
 	psql(

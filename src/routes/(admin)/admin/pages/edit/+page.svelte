@@ -50,6 +50,9 @@
 	<form
 		method="POST"
 		action="?/save"
+		oninput={() => {
+			saved = false;
+		}}
 		use:enhance={() => {
 			saved = false;
 			return async ({ result, update }) => {

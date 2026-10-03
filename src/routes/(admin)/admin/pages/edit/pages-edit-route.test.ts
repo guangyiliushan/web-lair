@@ -75,7 +75,14 @@ describe('admin page editor (P2)', () => {
 		});
 	});
 
-	it('loads a row for editing and 404s unknown or malformed ids', async () => {
+	it('404s malformed ids before touching the database', async () => {
+		await expect(
+			load({ url: new URL('http://localhost/admin/pages/edit?id=nope') } as never)
+		).rejects.toMatchObject({ status: 404 });
+		expect(dbMock.select).not.toHaveBeenCalled();
+	});
+
+	it('loads a row for editing and 404s unknown ids', async () => {
 		state.selectQueue = [
 			[
 				{
@@ -96,14 +103,12 @@ describe('admin page editor (P2)', () => {
 		} as never)) as {
 			page: { slug: string; isDefault: boolean; hasContent: boolean; description: unknown };
 		};
+		expect(service.requireAdminRole).toHaveBeenCalledTimes(1);
 		expect(data.page.slug).toBe('about');
 		expect(data.page.isDefault).toBe(true);
 		expect(data.page.hasContent).toBe(true);
 		expect(data.page.description).toEqual({});
 
-		await expect(
-			load({ url: new URL('http://localhost/admin/pages/edit?id=nope') } as never)
-		).rejects.toMatchObject({ status: 404 });
 		state.selectQueue = [[]];
 		await expect(
 			load({ url: new URL(`http://localhost/admin/pages/edit?id=${PAGE_ID}`) } as never)
@@ -174,16 +179,18 @@ describe('admin page editor (P2)', () => {
 				id: PAGE_ID,
 				title_en: ' About Me ',
 				'title_zh-cn': '',
-				title_ja: '',
+				title_ja: ' アバウト ',
 				description_en: ' D ',
+				description_ja: '',
 				icon: '',
 				externalUrl: '',
 				slug: 'about'
 			}) as never
 		);
 		expect(ok).toEqual({ success: true });
+		expect(service.requireAdminRole).toHaveBeenCalled();
 		expect(state.setCalls[0]).toEqual({
-			title: { en: 'About Me' },
+			title: { en: 'About Me', ja: 'アバウト' },
 			description: { en: 'D' },
 			icon: null,
 			externalUrl: null,
@@ -203,5 +210,25 @@ describe('admin page editor (P2)', () => {
 		expect(
 			await actions.save!(formEvent({ id: PAGE_ID, title_en: 'X', slug: 'about' }) as never)
 		).toMatchObject({ status: 404 });
+	});
+
+	it('accepts any single content language and rethrows non-conflict errors', async () => {
+		// zh-cn alone is a valid title; en is not required.
+		state.selectQueue = [[{ ...baseRow, isDefault: true }]];
+		state.returningQueue = [[{ id: PAGE_ID }]];
+
+		const ok = await actions.save!(
+			formEvent({ id: PAGE_ID, 'title_zh-cn': '仅中文标题', slug: 'about' }) as never
+		);
+
+		expect(ok).toEqual({ success: true });
+		expect(state.setCalls[0]).toMatchObject({ title: { 'zh-cn': '仅中文标题' } });
+
+		// A non-unique-violation error bubbles instead of mapping to 409.
+		state.selectQueue = [[baseRow]];
+		state.nextThrow = new Error('boom');
+		await expect(
+			actions.save!(formEvent({ id: PAGE_ID, title_en: 'X', slug: 'about' }) as never)
+		).rejects.toThrow('boom');
 	});
 });
