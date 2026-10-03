@@ -245,6 +245,30 @@ describe('note draft flow', () => {
 		expect(state.updates).toHaveLength(0);
 	});
 
+	it('normalises the temperature boundary family (round-first, negative zero)', async () => {
+		const cases: [string, string | null][] = [
+			['7', '7.0'],
+			['-0.04', '0.0'],
+			['-0.001', '0.0'],
+			['-99.94', '-99.9'],
+			['99.94', '99.9'],
+			// 99.95 rounds up to 100.0 (JS and PG agree) - past the column.
+			['99.95', null],
+			['99.96', null],
+			['-99.96', null]
+		];
+		for (const [input, expected] of cases) {
+			state.selectQueue = [[BASE_DRAFT]];
+			state.updateResults = [[{ id: DRAFT_ID, version: 4, updatedAt: new Date() }]];
+			await saveNoteDraftWork({
+				draftId: DRAFT_ID,
+				payload: { ...payloadFromRow(BASE_DRAFT), temperatureC: input },
+				autosave: false
+			});
+			expect(state.updates.at(-1)?.values.temperatureC, input).toBe(expected);
+		}
+	});
+
 	it('drops malformed numeric input instead of letting it reach the column', async () => {
 		// '2.5.5' / '12.9' pass parseFloat/parseInt but 22P02 (numeric) or
 		// silently truncate (smallint) once stored - both must land as null.
@@ -627,6 +651,9 @@ describe('note draft flow', () => {
 		expect(state.updates[1].values.allowComment).toBe(false);
 		const commentWhere = render(state.updateWheres[1]);
 		expect(commentWhere.sql).toContain('"notes"."allow_comment"');
+		// Direction is pinned: flipping `ne` to `eq` must fail here
+		// (verify-round finding).
+		expect(commentWhere.sql).toContain('"notes"."allow_comment" <>');
 
 		// Unpin writes null directly.
 		state.updateResults = [[{ id: NOTE_ID }]];

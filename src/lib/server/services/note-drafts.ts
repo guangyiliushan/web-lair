@@ -82,9 +82,16 @@ function normalizeTemperature(raw: string | null): string | null {
 	if (trimmed === '') return null;
 	if (!DECIMAL_RE.test(trimmed)) return null;
 	const value = Number.parseFloat(trimmed);
-	if (!Number.isFinite(value) || value < -99.9 || value > 99.9) return null;
-	// Avoid the negative-zero spelling PG normalises away.
-	return (value === 0 ? 0 : value).toFixed(1);
+	if (!Number.isFinite(value)) return null;
+	// Round FIRST, then range-check the rounded value: 99.94 fits the column
+	// as 99.9 (dropping it silently was a verify-round finding) while 99.96
+	// rounds past the bound and must drop. The negative-zero family
+	// ((-0.05, 0) -> '-0.0') is normalised too: PG reads it back as '0.0'
+	// and the hash round-trip would break (verify-round finding).
+	const rounded = Number(value.toFixed(1));
+	if (!Number.isFinite(rounded) || rounded < -99.9 || rounded > 99.9) return null;
+	// `rounded === 0` is true for both +0 and -0, so '-0.0' becomes '0.0'.
+	return (rounded === 0 ? 0 : rounded).toFixed(1);
 }
 
 /** Both coordinates or neither; out-of-range values drop the pair. */

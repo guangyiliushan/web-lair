@@ -150,7 +150,9 @@
 						class="hidden w-24 justify-center text-xs font-normal text-muted-foreground hover:text-foreground sm:inline-flex"
 					>
 						<span class="truncate">
-							{data.filters.status ? STATUS_LABELS[data.filters.status] : '全部状态'}
+							{(FILTERABLE_STATUSES as readonly string[]).includes(data.filters.status)
+								? STATUS_LABELS[data.filters.status]
+								: '全部状态'}
 						</span>
 						<IconChevronDown class="size-3.5 shrink-0 text-muted-foreground" />
 					</Button>

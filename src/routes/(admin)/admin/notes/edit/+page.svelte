@@ -210,6 +210,14 @@
 	$effect(() => {
 		if (dataKey === loadedKey) return;
 		loadedKey = dataKey;
+		// The draft vanished server-side (published or discarded from this or
+		// another tab): drop the stale address so the dirty working copy can
+		// re-save as a FRESH draft instead of 409ing against a deleted row
+		// (verify-round finding).
+		if (!data.draft && draftId !== null) {
+			draftId = null;
+			draftVersion = null;
+		}
 		if (isDirty()) return; // keep the working copy; id state already tracks the save
 		applyAll();
 	});
@@ -321,13 +329,19 @@
 					scheduleSave(wait);
 				}
 			} else if (result.type === 'failure') {
-				const d = (result.data ?? {}) as { message?: string };
+				const d = (result.data ?? {}) as {
+					message?: string;
+					errors?: Record<string, string>;
+				};
 				if (result.status === 409) {
 					saveState = 'conflict';
 					conflictMessage = d.message ?? '内容已在其他窗口更新';
 				} else {
+					// Prefer the graded field errors (e.g. a topic deleted while
+					// the editor held its id) over the generic message.
+					const graded = Object.values(d.errors ?? {}).filter(Boolean);
 					saveState = 'error';
-					saveError = d.message ?? '保存失败';
+					saveError = graded.length > 0 ? graded.join('；') : (d.message ?? '保存失败');
 				}
 			} else {
 				saveState = 'error';

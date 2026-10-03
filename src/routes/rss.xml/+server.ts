@@ -83,7 +83,9 @@ export const GET: RequestHandler = async ({ url, request }) => {
 	// pipeline (the old shape rendered up to 40 items per request and then
 	// dropped half of them - round-7 review finding). Array.prototype.sort is
 	// stable, so equal timestamps keep a deterministic posts-then-notes order
-	// (byte-stable ETag, same output as the render-then-slice shape).
+	// (byte-stable ETag; byte-identical to the old shape on the success path.
+	// One deliberate difference: a single failed render no longer backfills
+	// from the rank-21+ candidates - it just drops that item).
 	const merged = [
 		...postRows.map((row) => ({ kind: 'post' as const, row })),
 		...noteRows.map((row) => ({ kind: 'note' as const, row }))
