@@ -71,14 +71,6 @@
 	const leftItems = $derived(serverData?.leftItems ?? menu.columns[0]?.items ?? []);
 	const rightItems = $derived(serverData?.rightItems ?? menu.rightColumn?.items ?? []);
 	const footerSecondary = $derived(serverData?.footerSecondaryText ?? null);
-	const footerSecondaryHref = $derived(serverData?.footerSecondaryHref ?? null);
-	// Pre-compute footer secondary label to avoid optional-chain issues in template
-	const footerSecondaryLabel = $derived.by(() => {
-		if (!footerSecondaryHref) return null;
-		if (footerSecondary) return footerSecondary;
-		const sec = menu.footer?.secondary;
-		return sec?.labelKey ? tLabel(sec.labelKey) : '';
-	});
 
 	// ── Skeleton helpers ──
 	const showSkeleton = $derived(loading && !serverData && menu.type === 'two-column');
@@ -582,24 +574,8 @@
 						{tLabel(menu.footer.labelKey)}
 						<IconChevronRight class="size-3" aria-hidden="true" />
 					</a>
-					{#if footerSecondaryHref}
-						<a
-							href={siteHref(footerSecondaryHref)}
-							role="menuitem"
-							class="text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-						>
-							{footerSecondaryLabel}
-						</a>
-					{:else if footerSecondary}
+					{#if footerSecondary}
 						<span class="text-xs text-muted-foreground">{footerSecondary}</span>
-					{:else if menu.footer.secondary}
-						<a
-							href={siteHref(menu.footer.secondary.href)}
-							role="menuitem"
-							class="text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-						>
-							{tLabel(menu.footer.secondary.labelKey)}
-						</a>
 					{/if}
 				</div>
 			{/if}

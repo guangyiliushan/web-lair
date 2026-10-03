@@ -267,37 +267,19 @@ export async function resolveCommentPostTarget(
 	return row?.id ?? null;
 }
 
-/**
- * Resolve a commentable note id from a language + slug pair. Password-gated
- * rows are never commentable (fail-closed): comment text must not attach to
- * a diary whose body sits behind a gate, even while an unlock cookie exists.
- */
-export async function resolveCommentNoteTarget(
-	lang: string,
-	slug: string,
-	now: Date = new Date()
-): Promise<string | null> {
-	const [row] = await db
-		.select({ id: notes.id })
-		.from(notes)
-		.where(
-			and(
-				eq(notes.lang, lang),
-				eq(notes.slug, slug),
-				visibleNoteCondition(now),
-				isNull(notes.passwordHash)
-			)
-		)
-		.limit(1);
-	return row?.id ?? null;
-}
-
 export interface SubmitCommentInput {
 	targetType: CommentTargetType;
 	/** Target row id, already resolved from the URL by the caller. */
 	targetId: string;
 	/** URL language; part of the authoritative target re-check. */
 	lang: string;
+	/**
+	 * The caller verified this request's unlock cookie for the target row
+	 * (note detail only). Gated rows stay fail-closed unless this explicit
+	 * signal is present - comment text must not attach to a diary whose body
+	 * sits behind a gate without the unlock (comment-line spec §7).
+	 */
+	unlockVerified?: boolean;
 	/** Root comment id when this submission is a reply. */
 	parentId?: string | null;
 	text: string;
@@ -350,8 +332,10 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 			.limit(1);
 		if (!target || !target.allowComment) return { kind: 'target-unavailable' };
 	} else {
-		// Password-gated notes are never commentable, fail-closed: comment
-		// text must not attach to a diary whose body sits behind a gate.
+		// Password-gated notes are commentable ONLY for a request that already
+		// presented this row's valid unlock cookie (the route verifies it and
+		// passes `unlockVerified`); everything else stays fail-closed.
+		const gateClause = input.unlockVerified ? [] : [isNull(notes.passwordHash)];
 		const [target] = await db
 			.select({ id: notes.id, allowComment: notes.allowComment })
 			.from(notes)
@@ -360,7 +344,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 					eq(notes.id, input.targetId),
 					eq(notes.lang, input.lang),
 					visibleNoteCondition(now),
-					isNull(notes.passwordHash)
+					...gateClause
 				)
 			)
 			.limit(1);

@@ -9,17 +9,15 @@ import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
 import { getOption } from '$lib/server/config/options-registry';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
-import {
-	loadThreads,
-	resolveCommentNoteTarget,
-	submitComment
-} from '$lib/server/services/comments';
+import { loadThreads, submitComment } from '$lib/server/services/comments';
 import {
 	findVisibleNote,
 	getNoteBody,
 	getNoteGateRecord,
+	getNoteMeta,
 	listVisibleGroupVersions,
-	listVisibleNoteLanguages
+	listVisibleNoteLanguages,
+	type NoteUnlockedMeta
 } from '$lib/server/services/notes';
 import { visibleNoteCondition } from '$lib/server/services/note-visibility';
 import {
@@ -32,6 +30,7 @@ import {
 } from '$lib/server/services/note-gate';
 import { findSlugTargetId } from '$lib/server/services/slug-resolver';
 import { noteDateLabel } from '$lib/utils/note-date';
+import type { Cookies } from '@sveltejs/kit';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
 
 /**
@@ -95,23 +94,36 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 
 	// Unlock state: the cookie token is verified against the CURRENT stored
 	// hash, so a password change revokes it. Verified unlocks re-read the
-	// body server-side - the SSR page then carries the decrypted diary.
+	// body AND the diary metadata server-side - the SSR page then carries the
+	// decrypted diary (body-only re-reads used to leave mood/weather/...
+	// missing forever; review finding).
 	let unlocked = false;
+	let unlockedBody: string | null = null;
+	let unlockedMeta: NoteUnlockedMeta | null = null;
 	if (note.locked) {
-		const token = cookies.get(noteUnlockCookieName(note.id));
-		if (token) {
-			const gate = await getNoteGateRecord(note.id);
-			if (gate?.passwordHash && verifyNoteUnlockToken(note.id, gate.passwordHash, token, now)) {
-				unlocked = true;
-			}
+		unlocked = await isUnlockVerified(cookies, note.id, now);
+		if (unlocked) {
+			[unlockedBody, unlockedMeta] = await Promise.all([
+				getNoteBody(note.id),
+				getNoteMeta(note.id)
+			]);
 		}
 	}
 
-	const body = note.locked
-		? unlocked
-			? ((await getNoteBody(note.id)) ?? '')
-			: ''
-		: (note.content ?? '');
+	const body = note.locked ? (unlocked ? (unlockedBody ?? '') : '') : (note.content ?? '');
+	// Locked-but-not-unlocked rows keep every field withheld (findVisibleNote
+	// already nulled them); unlocked rows read them from the verified pass.
+	const meta: NoteUnlockedMeta | null = note.locked
+		? unlockedMeta
+		: {
+				tz: note.tz,
+				mood: note.mood,
+				emotions: note.emotions,
+				weatherCode: note.weatherCode,
+				temperatureC: note.temperatureC,
+				coordinates: note.coordinates,
+				location: note.location
+			};
 	const html = body ? await renderMarkdownToHtml(body) : '';
 
 	// hreflang set: every visible language of the translation group, in
@@ -138,12 +150,13 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 		note: {
 			slug: note.slug,
 			title: note.title,
-			date: noteDateLabel(note.publishedAt, note.tz, siteTz),
-			mood: note.mood,
-			emotions: note.emotions,
-			weatherCode: note.weatherCode,
-			temperatureC: note.temperatureC,
-			location: note.location,
+			date: noteDateLabel(note.publishedAt, meta?.tz ?? null, siteTz),
+			mood: meta?.mood ?? null,
+			emotions: meta?.emotions ?? null,
+			weatherCode: meta?.weatherCode ?? null,
+			temperatureC: meta?.temperatureC ?? null,
+			location: meta?.location ?? null,
+			pinAt: note.pinAt,
 			topic: note.topic
 		},
 		html,
@@ -165,6 +178,21 @@ function clientIp(event: RequestEvent): string {
 }
 
 /**
+ * Verify this request's unlock cookie for one row against the CURRENT stored
+ * hash (a password change revokes outstanding unlocks). Shared by the page
+ * load and the comment actions so both layers agree on what "unlocked"
+ * means.
+ */
+async function isUnlockVerified(cookies: Cookies, noteId: string, now: Date): Promise<boolean> {
+	const token = cookies.get(noteUnlockCookieName(noteId));
+	if (!token) return false;
+	const gate = await getNoteGateRecord(noteId);
+	return Boolean(
+		gate?.passwordHash && verifyNoteUnlockToken(noteId, gate.passwordHash, token, now)
+	);
+}
+
+/**
  * Unlock action: the password is verified against the stored hash, then an
  * HMAC-signed cookie is set for this row only. The rate limit counts FAILED
  * attempts (a correct password never eats the budget) and shares the
@@ -181,7 +209,7 @@ async function handleUnlock(event: RequestEvent) {
 	const password = form.get('password')?.toString() ?? '';
 	const gate = await getNoteGateRecord(note.id);
 
-	if (!gate?.passwordHash || !verifyNotePassword(password, gate.passwordHash)) {
+	if (!gate?.passwordHash || !(await verifyNotePassword(password, gate.passwordHash))) {
 		const rate = await rateLimit(
 			getCache(),
 			`limits:note-gate:${clientIp(event)}`,
@@ -210,9 +238,13 @@ async function handleUnlock(event: RequestEvent) {
 		secure: event.url.protocol === 'https:',
 		maxAge: ttlSeconds
 	});
+	// The browser replaces the document query with the action suffix
+	// (`?/unlock`), so event.url.search is never the original query - redirect
+	// to the clean canonical URL (review finding: a dirty `?/unlock` used to
+	// land in the address bar).
 	redirect(
 		303,
-		localizeHref(`/notes/${note.slug}${event.url.search}`, {
+		localizeHref(`/notes/${note.slug}`, {
 			locale: lang as (typeof locales)[number]
 		})
 	);
@@ -235,14 +267,20 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 
 	const now = new Date();
 	const lang = getLocale();
-	const targetId = await resolveCommentNoteTarget(lang, event.params.slug, now);
-	if (!targetId) return fail(404, { message: m.comment_error_unavailable() });
+	// Resolve the target ourselves so the gate state is known before the
+	// service re-validates: an unlocked gated row is commentable (spec §7),
+	// everything else stays fail-closed.
+	const note = await findVisibleNote(lang, event.params.slug, now);
+	if (!note) return fail(404, { message: m.comment_error_unavailable() });
+	const unlockVerified = !note.locked || (await isUnlockVerified(event.cookies, note.id, now));
+	if (!unlockVerified) return fail(404, { message: m.comment_error_unavailable() });
 
 	const profile = event.locals.profile;
 	const result = await submitComment({
 		targetType: 'note',
-		targetId,
+		targetId: note.id,
 		lang,
+		unlockVerified,
 		parentId,
 		text,
 		user,

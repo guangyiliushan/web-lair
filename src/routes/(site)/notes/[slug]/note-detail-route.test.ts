@@ -19,7 +19,7 @@ const { dbMock, state, service } = vi.hoisted(() => {
 		listVisibleNoteLanguages: vi.fn(),
 		findSlugTargetId: vi.fn(),
 		loadThreads: vi.fn(),
-		resolveCommentNoteTarget: vi.fn(),
+		getNoteMeta: vi.fn(),
 		submitComment: vi.fn(),
 		verifyNotePassword: vi.fn(),
 		verifyNoteUnlockToken: vi.fn(),
@@ -40,6 +40,7 @@ vi.mock('$lib/server/services/notes', () => ({
 	findVisibleNote: service.findVisibleNote,
 	getNoteBody: service.getNoteBody,
 	getNoteGateRecord: service.getNoteGateRecord,
+	getNoteMeta: service.getNoteMeta,
 	listVisibleGroupVersions: service.listVisibleGroupVersions,
 	listVisibleNoteLanguages: service.listVisibleNoteLanguages
 }));
@@ -53,7 +54,6 @@ vi.mock('$lib/server/services/note-gate', () => ({
 }));
 vi.mock('$lib/server/services/comments', () => ({
 	loadThreads: service.loadThreads,
-	resolveCommentNoteTarget: service.resolveCommentNoteTarget,
 	submitComment: service.submitComment
 }));
 vi.mock('$lib/server/services/slug-resolver', () => ({
@@ -160,6 +160,15 @@ beforeEach(() => {
 		key === 'site.timezone' ? 'UTC' : { ttlDays: 30 }
 	);
 	service.getNoteBody.mockResolvedValue('Diary **body**');
+	service.getNoteMeta.mockResolvedValue({
+		tz: 'Asia/Taipei',
+		mood: 'calm',
+		emotions: ['happy'],
+		weatherCode: 61,
+		temperatureC: '21.5',
+		coordinates: { latitude: 25.03, longitude: 121.56 },
+		location: 'Taipei'
+	});
 	service.getNoteGateRecord.mockResolvedValue({ id: NOTE_ID, passwordHash: 'phc' });
 	service.listVisibleGroupVersions.mockResolvedValue([
 		{ lang: 'en', slug: 'hello' },
@@ -171,12 +180,11 @@ beforeEach(() => {
 	service.renderMarkdownToHtml.mockImplementation(async (md: string) => `rendered:${md}`);
 	service.noteDateLabel.mockReturnValue('October 1, 2026');
 	service.verifyNoteUnlockToken.mockReturnValue(false);
-	service.verifyNotePassword.mockReturnValue(false);
+	service.verifyNotePassword.mockResolvedValue(false);
 	service.signNoteUnlockToken.mockReturnValue('123.sig');
 	service.noteGateTtlSeconds.mockResolvedValue(30 * 86400);
 	service.rateLimit.mockResolvedValue({ allowed: true, count: 1 });
 	service.requireUser.mockReturnValue({ id: 'u-1', name: 'Reader', emailVerified: true });
-	service.resolveCommentNoteTarget.mockResolvedValue(NOTE_ID);
 	service.submitComment.mockResolvedValue({ kind: 'created', id: 'c-1', state: 'pending' });
 });
 
@@ -205,31 +213,57 @@ describe('note detail load', () => {
 		});
 	});
 
-	it('keeps a gated note closed without a valid cookie: no body, no discussion', async () => {
+	it('keeps a gated note closed without a valid cookie: no body, no metadata, no discussion', async () => {
 		service.findVisibleNote.mockResolvedValue(lockedNote);
 		const data = (await load(makeEvent())) as {
 			html: string;
 			gate: { locked: boolean; unlocked: boolean };
 			discussion: unknown;
-			note: { mood: string | null };
+			note: { mood: string | null; location: string | null };
 		};
 		expect(data.gate).toEqual({ locked: true, unlocked: false });
 		expect(data.html).toBe('');
 		expect(data.discussion).toBeNull();
 		expect(data.note.mood).toBeNull();
+		expect(data.note.location).toBeNull();
 		expect(service.getNoteBody).not.toHaveBeenCalled();
+		expect(service.getNoteMeta).not.toHaveBeenCalled();
 	});
 
-	it('unlocks a gated note when the cookie token verifies', async () => {
+	it('unlocks a gated note when the cookie token verifies (body AND metadata)', async () => {
 		service.findVisibleNote.mockResolvedValue(lockedNote);
 		service.verifyNoteUnlockToken.mockReturnValue(true);
 		const data = (await load(
 			makeEvent({ cookies: { get: vi.fn(() => '123.sig'), set: vi.fn() } })
-		)) as { html: string; gate: { locked: boolean; unlocked: boolean }; discussion: unknown };
+		)) as {
+			html: string;
+			gate: { locked: boolean; unlocked: boolean };
+			discussion: unknown;
+			note: {
+				mood: string | null;
+				emotions: string[] | null;
+				weatherCode: number | null;
+				location: string | null;
+			};
+		};
 		expect(data.gate).toEqual({ locked: true, unlocked: true });
 		expect(service.getNoteBody).toHaveBeenCalledWith(NOTE_ID);
+		expect(service.getNoteMeta).toHaveBeenCalledWith(NOTE_ID);
 		expect(data.html).toBe('rendered:Diary **body**');
 		expect(data.discussion).toEqual(threads);
+		// The diary metadata returns with the unlock (review finding: it used
+		// to stay null forever while only the body was re-read).
+		expect(data.note).toMatchObject({
+			mood: 'calm',
+			emotions: ['happy'],
+			weatherCode: 61,
+			location: 'Taipei'
+		});
+		expect(service.noteDateLabel).toHaveBeenCalledWith(
+			lockedNote.publishedAt,
+			'Asia/Taipei',
+			'UTC'
+		);
 	});
 
 	it('404s with no hint when the note does not exist anywhere', async () => {
@@ -270,17 +304,29 @@ describe('note detail load', () => {
 });
 
 describe('note unlock action', () => {
-	it('sets the row cookie and redirects on a correct password', async () => {
+	it('sets the row cookie and redirects on a correct password (clean URL)', async () => {
 		service.findVisibleNote.mockResolvedValue(lockedNote);
-		service.verifyNotePassword.mockReturnValue(true);
+		service.verifyNotePassword.mockResolvedValue(true);
 		const set = vi.fn();
 		await expect(
-			actions.unlock(makeEvent({ cookies: { get: vi.fn(), set } }) as never)
+			actions.unlock(
+				makeEvent({
+					// The browser replaces the document query with the action
+					// suffix; the redirect must NOT carry `?/unlock` forward.
+					url: new URL('http://localhost/en/notes/hello?/unlock'),
+					cookies: { get: vi.fn(), set }
+				}) as never
+			)
 		).rejects.toMatchObject({ status: 303, location: '/notes/hello' });
 		expect(set).toHaveBeenCalledWith(
 			'wl_note_11111111-1111-1111-1111-111111111111',
 			'123.sig',
-			expect.objectContaining({ httpOnly: true, sameSite: 'lax', maxAge: 30 * 86400 })
+			expect.objectContaining({
+				httpOnly: true,
+				sameSite: 'lax',
+				maxAge: 30 * 86400,
+				secure: false
+			})
 		);
 		// A correct password never charges the limiter.
 		expect(service.rateLimit).not.toHaveBeenCalled();
@@ -300,6 +346,16 @@ describe('note unlock action', () => {
 		expect(result).toMatchObject({ status: 429, data: { message: 'notes_unlock_limited' } });
 	});
 
+	it('fails 403 with a warning when the limiter store is unavailable (fail-open)', async () => {
+		service.findVisibleNote.mockResolvedValue(lockedNote);
+		service.rateLimit.mockResolvedValue({ allowed: true, count: 0 });
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const result = await actions.unlock(makeEvent() as never);
+		expect(result).toMatchObject({ status: 403, data: { message: 'notes_unlock_wrong' } });
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('failing open'));
+		warn.mockRestore();
+	});
+
 	it('fails 404 for a note that is not gated', async () => {
 		service.findVisibleNote.mockResolvedValue(openNote);
 		const result = await actions.unlock(makeEvent() as never);
@@ -316,19 +372,78 @@ describe('note unlock action', () => {
 });
 
 describe('note comment actions', () => {
-	it('submits a note comment through the shared service', async () => {
+	it('submits an open note comment through the shared service', async () => {
 		const result = await actions.comment(makeEvent() as never);
 		expect(result).toEqual({ submitted: 'pending' });
-		expect(service.resolveCommentNoteTarget).toHaveBeenCalledWith('en', 'hello', expect.any(Date));
 		expect(service.submitComment).toHaveBeenCalledWith(
-			expect.objectContaining({ targetType: 'note', targetId: NOTE_ID, parentId: null })
+			expect.objectContaining({
+				targetType: 'note',
+				targetId: NOTE_ID,
+				parentId: null,
+				unlockVerified: true
+			})
 		);
 	});
 
-	it('fails 404 when no commentable note matches the slug', async () => {
-		service.resolveCommentNoteTarget.mockResolvedValue(null);
+	it('fails 404 when no visible note matches the slug', async () => {
+		service.findVisibleNote.mockResolvedValue(null);
 		const result = await actions.comment(makeEvent() as never);
 		expect(result).toMatchObject({ status: 404, data: { message: 'comment_error_unavailable' } });
+		expect(service.submitComment).not.toHaveBeenCalled();
+	});
+
+	it('keeps a gated note fail-closed without the unlock cookie', async () => {
+		service.findVisibleNote.mockResolvedValue(lockedNote);
+		const result = await actions.comment(makeEvent() as never);
+		expect(result).toMatchObject({ status: 404, data: { message: 'comment_error_unavailable' } });
+		expect(service.submitComment).not.toHaveBeenCalled();
+	});
+
+	it('lets a verified unlock session comment on the gated note (spec §7)', async () => {
+		service.findVisibleNote.mockResolvedValue(lockedNote);
+		service.verifyNoteUnlockToken.mockReturnValue(true);
+		const result = await actions.comment(
+			makeEvent({ cookies: { get: vi.fn(() => '123.sig'), set: vi.fn() } }) as never
+		);
+		expect(result).toEqual({ submitted: 'pending' });
+		expect(service.submitComment).toHaveBeenCalledWith(
+			expect.objectContaining({ targetType: 'note', targetId: NOTE_ID, unlockVerified: true })
+		);
+	});
+
+	it('rejects a gated note whose unlock cookie fails verification', async () => {
+		service.findVisibleNote.mockResolvedValue(lockedNote);
+		service.verifyNoteUnlockToken.mockReturnValue(false);
+		const result = await actions.comment(
+			makeEvent({ cookies: { get: vi.fn(() => 'stale.sig'), set: vi.fn() } }) as never
+		);
+		expect(result).toMatchObject({ status: 404 });
+		expect(service.submitComment).not.toHaveBeenCalled();
+	});
+
+	it('passes the reply parentId through to the service and rejects a cross-note parent', async () => {
+		const fd = new FormData();
+		fd.set('text', 'a reply');
+		fd.set('parentId', 'aaaa1111-1111-1111-1111-111111111111');
+		const result = await actions.reply(
+			makeEvent({ request: { formData: vi.fn(async () => fd) } }) as never
+		);
+		expect(result).toEqual({ submitted: 'pending' });
+		expect(service.submitComment).toHaveBeenCalledWith(
+			expect.objectContaining({
+				targetType: 'note',
+				targetId: NOTE_ID,
+				parentId: 'aaaa1111-1111-1111-1111-111111111111'
+			})
+		);
+
+		// The service owns the authoritative parent check (parent-unavailable
+		// also covers a parent on another note - pinned server-side).
+		service.submitComment.mockResolvedValue({ kind: 'parent-unavailable' });
+		const rejected = await actions.reply(
+			makeEvent({ request: { formData: vi.fn(async () => fd) } }) as never
+		);
+		expect(rejected).toMatchObject({ status: 400, data: { message: 'comment_error_parent' } });
 	});
 
 	it('fails 403 for a signed-in reader without a verified email', async () => {

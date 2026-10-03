@@ -366,6 +366,9 @@
 				{dialogMode === 'create' ? '创建一个新的手记专栏' : '修改专栏信息'}
 			</Dialog.Description>
 		</Dialog.Header>
+		{#if form?.error}
+			<p role="alert" class="px-6 text-sm text-destructive">{form.error}</p>
+		{/if}
 		<form
 			method="POST"
 			action="?/{dialogMode === 'create' ? 'create' : 'update'}"

@@ -610,6 +610,31 @@ describe('submitComment note targets (N1)', () => {
 		expect(await submitComment(noteInput())).toEqual({ kind: 'target-unavailable' });
 	});
 
+	it('re-checks the note target against id + lang + visibility + the gate (SQL teeth)', async () => {
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'n-sql', state: 'pending' }]];
+		await submitComment(noteInput());
+		const query = render(state.wheres[0]?.[0]);
+		expect(query.sql).toContain('"notes"."id" = ');
+		expect(query.sql).toContain('"notes"."lang" = ');
+		expect(query.sql).toContain('"notes"."status" in ');
+		expect(query.sql).toContain('"notes"."published_at" <= ');
+		// Fail-closed default: no explicit unlock signal, the gate stays in.
+		expect(query.sql).toContain('"notes"."password_hash" is null');
+	});
+
+	it('drops the gate clause ONLY for requests carrying unlockVerified', async () => {
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'n-open', state: 'pending' }]];
+		const result = await submitComment(noteInput({ unlockVerified: true }));
+		expect(result).toEqual({ kind: 'created', id: 'n-open', state: 'pending' });
+		const query = render(state.wheres[0]?.[0]);
+		expect(query.sql).not.toContain('"notes"."password_hash" is null');
+		// The rest of the authoritative re-check is untouched.
+		expect(query.sql).toContain('"notes"."id" = ');
+		expect(query.sql).toContain('"notes"."lang" = ');
+	});
+
 	it('derives reply pointers against the note arc', async () => {
 		state.selectQueue = [
 			[{ id: TARGET, allowComment: true }],

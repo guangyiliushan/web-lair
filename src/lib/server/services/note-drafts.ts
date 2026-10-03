@@ -682,13 +682,16 @@ export async function setNotePassword(
 	if (!note) return { kind: 'not-found' };
 	if (password === '') {
 		if (note.passwordHash === null) return { kind: 'ok' };
-	} else if (note.passwordHash !== null && verifyNotePassword(password, note.passwordHash)) {
+	} else if (
+		note.passwordHash !== null &&
+		(await verifyNotePassword(password, note.passwordHash))
+	) {
 		// Same password: keep the existing hash. Re-salting would revoke every
 		// outstanding unlock cookie and burn an argon2 run for nothing
 		// (round-7 review finding).
 		return { kind: 'ok' };
 	}
-	const passwordHash = password === '' ? null : hashNotePassword(password);
+	const passwordHash = password === '' ? null : await hashNotePassword(password);
 	const rows = await db
 		.update(notes)
 		.set({ passwordHash, updatedAt: new Date() })

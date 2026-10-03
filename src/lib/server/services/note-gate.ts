@@ -1,5 +1,6 @@
 import { createHash, createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
-import { argon2Sync } from 'node:crypto';
+import { argon2 } from 'node:crypto';
+import { promisify } from 'node:util';
 import { env } from '$env/dynamic/private';
 import { getOption } from '$lib/server/config/options-registry';
 
@@ -33,10 +34,30 @@ export function noteUnlockCookieName(noteId: string): string {
 	return `${NOTE_UNLOCK_COOKIE_PREFIX}${noteId}`;
 }
 
+/**
+ * Async KDF on the libuv threadpool (`crypto.argon2` is callback-based).
+ * The unlock form is a PUBLIC endpoint: a synchronous argon2 (~39 ms at the
+ * OWASP minimum profile) would block the event loop for the whole process
+ * on every attempt (review finding), while the async form keeps concurrent
+ * verifications off the main thread.
+ */
+type Argon2Options = {
+	message: Buffer;
+	nonce: Buffer;
+	tagLength: number;
+	memory: number;
+	passes: number;
+	parallelism: number;
+};
+const argon2Async = promisify(argon2) as (
+	algorithm: string,
+	options: Argon2Options
+) => Promise<Buffer>;
+
 /** PHC string for a password (write side; the only place hashes are created). */
-export function hashNotePassword(password: string): string {
+export async function hashNotePassword(password: string): Promise<string> {
 	const salt = randomBytes(ARGON2_SALT_LENGTH);
-	const tag = argon2Sync(ARGON2_ID, {
+	const tag = await argon2Async(ARGON2_ID, {
 		message: Buffer.from(password, 'utf8'),
 		nonce: salt,
 		tagLength: ARGON2_TAG_LENGTH,
@@ -52,6 +73,7 @@ interface ParsedNotePhc {
 	tag: Buffer;
 	memory: number;
 	passes: number;
+	parallelism: number;
 }
 
 /**
@@ -72,29 +94,34 @@ function parseNotePhc(phc: string): ParsedNotePhc | null {
 	}
 	const memory = Number(params.get('m'));
 	const passes = Number(params.get('t'));
+	// `p` is read from the string and USED for verification (floor 1): a
+	// future constant bump must not make existing p=1 rows unverifiable
+	// (review finding).
+	const parallelism = Number(params.get('p'));
 	if (!Number.isFinite(memory) || memory < ARGON2_MEMORY_KIB) return null;
 	if (!Number.isFinite(passes) || passes < ARGON2_PASSES) return null;
+	if (!Number.isInteger(parallelism) || parallelism < 1) return null;
 	try {
 		const salt = Buffer.from(parts[4], 'base64');
 		const tag = Buffer.from(parts[5], 'base64');
 		if (salt.length < 8 || tag.length < 16) return null;
-		return { salt, tag, memory, passes };
+		return { salt, tag, memory, passes, parallelism };
 	} catch {
 		return null;
 	}
 }
 
 /** Constant-time password check against a stored PHC string. */
-export function verifyNotePassword(password: string, phc: string): boolean {
+export async function verifyNotePassword(password: string, phc: string): Promise<boolean> {
 	const parsed = parseNotePhc(phc);
 	if (!parsed) return false;
-	const computed = argon2Sync(ARGON2_ID, {
+	const computed = await argon2Async(ARGON2_ID, {
 		message: Buffer.from(password, 'utf8'),
 		nonce: parsed.salt,
 		tagLength: parsed.tag.length,
 		memory: parsed.memory,
 		passes: parsed.passes,
-		parallelism: ARGON2_PARALLELISM
+		parallelism: parsed.parallelism
 	});
 	return timingSafeEqual(computed, parsed.tag);
 }

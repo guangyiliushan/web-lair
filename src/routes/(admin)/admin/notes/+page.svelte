@@ -10,6 +10,8 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import { noteMoodLabel, NOTE_WEATHER } from '$lib/utils/note-meta';
+	import { afterNavigate, replaceState } from '$app/navigation';
+	import { page } from '$app/state';
 	import type { PageProps } from './$types';
 	import IconSearch from '@tabler/icons-svelte-runes/icons/search';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
@@ -23,6 +25,29 @@
 	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
 
 	let { data }: PageProps = $props();
+
+	// Transient banner for ?trashed=1 / ?discarded=1 (the edit page consumes
+	// its own variants; without this the redirects landed silently -
+	// review finding).
+	let flash = $state<string | null>(null);
+	let flashTimer: ReturnType<typeof setTimeout> | null = null;
+	afterNavigate(() => {
+		const params = page.url.searchParams;
+		const message =
+			params.get('trashed') === '1'
+				? '已移入回收站'
+				: params.get('discarded') === '1'
+					? '草稿已丢弃'
+					: null;
+		if (!message) return;
+		flash = message;
+		if (flashTimer) clearTimeout(flashTimer);
+		flashTimer = setTimeout(() => (flash = null), 3500);
+		const url = new URL(page.url);
+		url.searchParams.delete('trashed');
+		url.searchParams.delete('discarded');
+		replaceState(url.pathname + url.search, {});
+	});
 
 	const STATUS_LABELS: Record<string, string> = {
 		published: '已发布',
@@ -84,6 +109,14 @@
 </svelte:head>
 
 <div class="flex flex-col gap-6">
+	{#if flash}
+		<div
+			role="status"
+			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400"
+		>
+			{flash}
+		</div>
+	{/if}
 	<!-- 搜索和筛选工具栏 -->
 	<div class="relative flex h-10 shrink-0 items-center border-b">
 		<form
@@ -344,7 +377,8 @@
 														{/snippet}
 													</DropdownMenu.Item>
 													<DropdownMenu.Item
-														onclick={() => window.open(`/notes/${note.slug}`, '_blank')}
+														onclick={() =>
+															window.open(`/${note.lang}/notes/${note.slug}`, '_blank')}
 													>
 														<IconExternalLink data-icon="inline-start" />
 														在新窗口打开

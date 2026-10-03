@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const result = await listNotes({
 		lang,
 		page: Number.isNaN(pageParam) ? 1 : pageParam,
-		topicSlug: params.slug,
+		// topicId is already resolved; the slug lookup would be redundant.
 		topicId: topic.id,
 		facets: false,
 		siteTz,

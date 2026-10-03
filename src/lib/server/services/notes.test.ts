@@ -107,13 +107,35 @@ describe('detail and summary reads (review round 1 teeth)', () => {
 
 	it('findVisibleNote keeps locked bodies and hashes out of page data', async () => {
 		state.selectResults = [
-			[{ ...detailRow, content: 'secret ![x](/i/x.png)', passwordHash: '$argon2id$hash' }]
+			[
+				{
+					...detailRow,
+					content: 'secret ![x](/i/x.png)',
+					passwordHash: '$argon2id$hash',
+					// Discriminating input: every withheld field is populated on the
+					// input row, so dropping any `locked ? null : x` turns this red.
+					tz: 'Asia/Taipei',
+					mood: 'good',
+					weatherCode: 61,
+					temperatureC: '21.5',
+					coordinates: { latitude: 25.03, longitude: 121.56 },
+					location: 'Taipei',
+					meta: { emotions: ['happy'] }
+				}
+			]
 		];
 
 		const row = await findVisibleNote('en', 'first-night');
 
 		expect(row?.locked).toBe(true);
 		expect(row?.content).toBeNull();
+		expect(row?.tz).toBeNull();
+		expect(row?.mood).toBeNull();
+		expect(row?.emotions).toBeNull();
+		expect(row?.weatherCode).toBeNull();
+		expect(row?.temperatureC).toBeNull();
+		expect(row?.coordinates).toBeNull();
+		expect(row?.location).toBeNull();
 		expect(row !== null && 'passwordHash' in (row as unknown as Record<string, unknown>)).toBe(
 			false
 		);

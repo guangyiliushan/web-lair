@@ -18,12 +18,22 @@
  *   verify against `pg_timezone_names` when they land (batch 5); the sign
  *   guard above still closes the silent-shift class.
  */
+const ianaValidityCache = new Map<string, boolean>();
+
 export function isValidIanaTimeZone(value: string): boolean {
 	if (value.startsWith('+') || value.startsWith('-')) return false;
+	// Per-row callers (note date rendering) hit the same handful of zone
+	// strings on every render; memoise the probe (bounded set by design).
+	const cached = ianaValidityCache.get(value);
+	if (cached !== undefined) return cached;
+	let valid: boolean;
 	try {
 		new Intl.DateTimeFormat('en-US', { timeZone: value });
-		return true;
+		valid = true;
 	} catch {
-		return false;
+		valid = false;
 	}
+	if (ianaValidityCache.size >= 500) ianaValidityCache.clear();
+	ianaValidityCache.set(value, valid);
+	return valid;
 }

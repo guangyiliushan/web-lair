@@ -54,8 +54,9 @@ export const optionRegistry = {
 	},
 	'notes.gate': {
 		// Notes plan v0.4 §2.5 / ledger §13.9: TTL of the per-row unlock
-		// cookie (token crypto lives in services/note-gate.ts). Days only;
-		// the write side is the editor batch, no runtime writer yet.
+		// cookie (token crypto lives in services/note-gate.ts). Days only.
+		// The editor never writes this yet - TTL currently changes only
+		// through code or a deliberate `setOption` (no runtime writer).
 		schema: z.object({ ttlDays: z.number().int().min(1).max(365) }),
 		default: { ttlDays: 30 }
 	},

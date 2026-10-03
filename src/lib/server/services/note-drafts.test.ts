@@ -450,6 +450,10 @@ describe('note draft flow', () => {
 			status: 'published'
 		});
 		expect(state.deletes.some((entry) => entry.table === drafts)).toBe(true);
+		// First publish time survives a re-publish (coalesce keeps the original).
+		const renderedPublishedAt = render(noteUpdate?.values.publishedAt);
+		expect(renderedPublishedAt.sql).toContain('coalesce');
+		expect(renderedPublishedAt.sql).toContain('"notes"."published_at"');
 	});
 
 	it('keeps a same-slug or placeholder-slug publish free of tracker rows', async () => {

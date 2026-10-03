@@ -15,6 +15,7 @@
 	import * as Alert from '$lib/components/ui/alert';
 	import { MarkdownEditor } from '$lib/components/markdown';
 	import { formatDateTime } from '$lib/utils/i18n';
+	import { titleSlug } from '$lib/utils/slug';
 	import {
 		NOTE_EMOTIONS,
 		NOTE_EMOTION_LABELS,
@@ -393,24 +394,19 @@
 		}
 	}
 
-	/** Notes keep CJK slugs (titleSlug rule): lowercase + collapse separators. */
-	function normalizeNoteSlug(value: string): string {
-		return value
-			.toLowerCase()
-			.replace(/[^\p{L}\p{N}]+/gu, '-')
-			.replace(/^-+|-+$/g, '');
-	}
-
+	// The shared titleSlug rule (CJK kept, separators collapsed) lives in
+	// $lib/utils/slug - the local copy had drifted without its 120-char cap
+	// (review finding).
 	function onTitleInput(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		title = input.value;
-		if (!slugTouched) slug = normalizeNoteSlug(title);
+		if (!slugTouched) slug = titleSlug(title);
 	}
 
 	function onSlugInput(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		slugTouched = true;
-		slug = normalizeNoteSlug(input.value);
+		slug = titleSlug(input.value);
 	}
 
 	// Transient banners for ?published=1 / ?discarded=1 / ?private=1 / ?restored=1.

@@ -11,6 +11,7 @@
 		type NoteLang,
 		type NoteMood
 	} from '$lib/utils/note-meta';
+	import IconPin from '@tabler/icons-svelte-runes/icons/pin';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -54,7 +55,12 @@
 
 <article class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0">
 	<header class="border-b border-border/50 pb-6">
-		<h1 class="text-3xl font-normal">{data.note.title}</h1>
+		<div class="flex items-center gap-2">
+			<h1 class="text-3xl font-normal">{data.note.title}</h1>
+			{#if !gateClosed && data.note.pinAt}
+				<IconPin class="size-4 shrink-0 text-primary/70" role="img" aria-label={m.notes_pinned()} />
+			{/if}
+		</div>
 		{#if !gateClosed}
 			<div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
 				<span class="whitespace-nowrap">{data.note.date}</span>
@@ -99,8 +105,10 @@
 					id="note-password"
 					name="password"
 					type="password"
-					autocomplete="current-password"
+					autocomplete="off"
 					required
+					aria-invalid={gateMessage ? true : undefined}
+					aria-describedby={gateMessage ? 'note-unlock-error' : undefined}
 					class="rounded-md border border-border bg-card px-3 py-2 text-sm"
 				/>
 				<button
@@ -110,7 +118,9 @@
 					{m.notes_unlock_submit()}
 				</button>
 				{#if gateMessage}
-					<p class="text-xs text-destructive" role="alert">{gateMessage}</p>
+					<p id="note-unlock-error" class="text-xs text-destructive" role="alert">
+						{gateMessage}
+					</p>
 				{/if}
 			</form>
 		</section>
@@ -136,7 +146,7 @@
 			href={localizeHref('/notes')}
 			class="text-xs font-medium tracking-[2.5px] text-muted-foreground uppercase transition-colors hover:text-primary"
 		>
-			← Back to notes
+			← {m.notes_back_to_all()}
 		</a>
 	</footer>
 </article>

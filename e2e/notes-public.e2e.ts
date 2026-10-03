@@ -40,6 +40,7 @@ const TITLE_TRASH = 'E2E N1 trash note';
 const APPROVED_COMMENT = 'Approved note comment body.';
 const BODY_TEXT = 'Public diary body text.';
 const GATED_SECRET = 'Body that must stay hidden.';
+const GATED_LOCATION = 'Osaka-gated-secret';
 const GATE_PASSWORD = 'e2e-gate-pass';
 
 function cleanup(): void {
@@ -79,8 +80,8 @@ test.beforeAll(() => {
 			`insert into notes (id, slug, title, content, lang, status, published_at, translation_group, topic_id, allow_comment, translated_from_note_id, translation_origin) values`,
 			`('${OPEN_ZH_ID}', '${SLUG_OPEN}', '${TITLE_OPEN_ZH}', '中文正文。', 'zh-cn', 'published', now() - interval '1 day', '${GROUP_OPEN}', '${TOPIC_ID}', true, '${OPEN_EN_ID}', 'human')`,
 			`;`,
-			`insert into notes (id, slug, title, content, lang, status, published_at, translation_group, password_hash, allow_comment) values`,
-			`('${GATED_ID}', '${SLUG_GATED}', '${TITLE_GATED}', '${GATED_SECRET}', 'en', 'published', now() - interval '3 days', '${GROUP_GATED}', '${phc}', true)`,
+			`insert into notes (id, slug, title, content, lang, status, published_at, translation_group, password_hash, allow_comment, mood, weather_code, temperature_c, location) values`,
+			`('${GATED_ID}', '${SLUG_GATED}', '${TITLE_GATED}', '${GATED_SECRET}', 'en', 'published', now() - interval '3 days', '${GROUP_GATED}', '${phc}', true, 'bad', 61, 12.5, '${GATED_LOCATION}')`,
 			`;`,
 			`insert into notes (id, slug, title, content, lang, status, published_at, translation_group, allow_comment) values`,
 			`('${ONLY_EN_ID}', '${SLUG_ONLY_EN}', '${TITLE_ONLY_EN}', 'Only in english.', 'en', 'published', now() - interval '4 days', '${GROUP_ONLY_EN}', true)`,
@@ -179,7 +180,10 @@ test.describe('N1 password gate', () => {
 		expect(response?.status()).toBe(200);
 		await expect(page.getByRole('heading', { name: TITLE_GATED })).toBeVisible();
 		await expect(page.getByText(GATED_SECRET)).toHaveCount(0);
-		await expect(page.getByText('Taipei')).toHaveCount(0);
+		// The fixture really carries this location (and a mood), so the
+		// assertion cannot pass vacuously.
+		await expect(page.getByText(GATED_LOCATION)).toHaveCount(0);
+		await expect(page.getByText('Bad')).toHaveCount(0);
 		await expect(page.locator('form[action$="/unlock"]')).toBeVisible();
 		await expect(page.locator('meta[name="robots"][content="noindex"]')).toHaveCount(1);
 	});
@@ -204,9 +208,14 @@ test.describe('N1 password gate', () => {
 		await page.goto(`/en/notes/${SLUG_GATED}`);
 		await unlock(page, GATE_PASSWORD);
 		await expect(page.getByText(GATED_SECRET)).toBeVisible();
+		// The diary metadata returns with the unlock (review finding: only the
+		// body used to be re-read, so mood/weather/location stayed missing).
+		await expect(page.getByText(GATED_LOCATION)).toBeVisible();
+		await expect(page.getByText('Bad')).toBeVisible();
 		// The unlock cookie survives a reload (server-side verification).
 		await page.reload();
 		await expect(page.getByText(GATED_SECRET)).toBeVisible();
+		await expect(page.getByText(GATED_LOCATION)).toBeVisible();
 		// The comment section appears for the unlocked note.
 		await expect(page.getByRole('heading', { name: 'Comments (0)' })).toBeVisible();
 	});

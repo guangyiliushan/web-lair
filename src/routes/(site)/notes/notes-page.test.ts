@@ -105,7 +105,8 @@ describe('notes list page', () => {
 	});
 
 	it('lists visible notes with facets and never leaks locked content', async () => {
-		state.selectResults = [[{ total: 2 }], [openRow, gatedRow], [{ year: 2026 }], [topic]];
+		// Facets start first now (parallel), then count, then the cards.
+		state.selectResults = [[{ year: 2026 }], [topic], [{ total: 2 }], [openRow, gatedRow]];
 
 		const data = (await load(makeEvent())) as {
 			total: number;
@@ -139,13 +140,13 @@ describe('notes list page', () => {
 		expect(data.topics).toEqual([topic]);
 
 		// Predicate teeth: locale + visibility + bound params on the count query.
-		const { sql, params } = dialect.sqlToQuery(state.whereArgs[0] as never);
+		const { sql, params } = dialect.sqlToQuery(state.whereArgs[1] as never);
 		expect(sql).toContain('"notes"."status"');
 		expect(sql).toContain('"notes"."lang"');
 		expect(params).toEqual(expect.arrayContaining(['en', 'published', 'scheduled']));
 
 		// Ordering teeth: pin DESC NULLS LAST, published DESC, id DESC.
-		const order = state.orderArgs[0] as unknown[];
+		const order = state.orderArgs[2] as unknown[];
 		expect(order).toHaveLength(3);
 		expect(dialect.sqlToQuery(order[0] as never).sql).toContain('desc nulls last');
 		expect(dialect.sqlToQuery(order[1] as never).sql).toContain('"notes"."published_at" desc');
@@ -155,11 +156,11 @@ describe('notes list page', () => {
 	});
 
 	it('orders the years facet by its output alias (DISTINCT trap tooth)', async () => {
-		state.selectResults = [[{ total: 0 }], [], [{ year: 2026 }], []];
+		state.selectResults = [[{ year: 2026 }], [], [{ total: 0 }], []];
 
 		await load(makeEvent());
 
-		const yearsOrder = state.orderArgs[1] as unknown[];
+		const yearsOrder = state.orderArgs[0] as unknown[];
 		expect(yearsOrder).toHaveLength(1);
 		const yearsSql = dialect.sqlToQuery(yearsOrder[0] as never).sql;
 		expect(yearsSql).toBe('"year" desc');
@@ -174,11 +175,11 @@ describe('notes list page', () => {
 	});
 
 	it('narrows by topic when it exists', async () => {
-		state.selectResults = [[topic], [{ total: 1 }], [openRow], [], [topic]];
+		state.selectResults = [[topic], [], [topic], [{ total: 1 }], [openRow]];
 
 		await load(makeEvent('?topic=travel'));
 
-		const { sql } = dialect.sqlToQuery(state.whereArgs[1] as never);
+		const { sql } = dialect.sqlToQuery(state.whereArgs[2] as never);
 		expect(sql).toContain('"notes"."topic_id"');
 	});
 
@@ -197,18 +198,18 @@ describe('notes list page', () => {
 	});
 
 	it('applies the belongs-to year filter through the tz-aware expression', async () => {
-		state.selectResults = [[{ total: 0 }], [], [{ year: 2025 }], []];
+		state.selectResults = [[{ year: 2025 }], [], [{ total: 0 }], []];
 
 		await load(makeEvent('?year=2025'));
 
-		const { sql, params } = dialect.sqlToQuery(state.whereArgs[0] as never);
+		const { sql, params } = dialect.sqlToQuery(state.whereArgs[1] as never);
 		expect(sql).toContain("date_part('year'");
 		expect(sql).toContain('at time zone coalesce');
 		expect(params).toContain(2025);
 	});
 
 	it('picks the pinned card on page one and excludes it from the list', async () => {
-		state.selectResults = [[{ total: 2 }], [openRow, pinnedRow], [{ year: 2026 }], [topic]];
+		state.selectResults = [[{ year: 2026 }], [topic], [{ total: 2 }], [openRow, pinnedRow]];
 
 		const data = (await load(makeEvent())) as {
 			pinnedNote: { slug: string } | null;
@@ -220,17 +221,17 @@ describe('notes list page', () => {
 	});
 
 	it('clamps the requested page into the available range', async () => {
-		state.selectResults = [[{ total: 4 }], [openRow], [], []];
+		state.selectResults = [[], [], [{ total: 4 }], [openRow]];
 		const high = (await load(makeEvent('?page=99'))) as { page: number };
 		expect(high.page).toBe(1);
 
-		state.selectResults = [[{ total: 4 }], [openRow], [], []];
+		state.selectResults = [[], [], [{ total: 4 }], [openRow]];
 		const low = (await load(makeEvent('?page=0'))) as { page: number };
 		expect(low.page).toBe(1);
 	});
 
 	it('never picks a pinned card on later pages', async () => {
-		state.selectResults = [[{ total: 13 }], [openRow, pinnedRow], [], []];
+		state.selectResults = [[], [], [{ total: 13 }], [openRow, pinnedRow]];
 
 		const data = (await load(makeEvent('?page=2'))) as {
 			pinnedNote: unknown;

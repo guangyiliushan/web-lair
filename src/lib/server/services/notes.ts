@@ -143,6 +143,16 @@ export async function listNotes(query: NotesListQuery): Promise<NotesListResult>
 			sql`date_part('year', ${belongsToExpr(siteTz)}) = ${query.year}`
 		) as SQL<unknown>;
 
+	// Facets are independent of the count/cards chain: kick them off first and
+	// await at the end (review finding: four fully serial round trips).
+	const facetsEnabled = query.facets !== false;
+	const yearsPromise: Promise<Awaited<ReturnType<typeof listNoteYears>>> = facetsEnabled
+		? listNoteYears(query.lang, now, siteTz)
+		: Promise.resolve([]);
+	const topicOptionsPromise: Promise<Awaited<ReturnType<typeof listTopicOptions>>> = facetsEnabled
+		? listTopicOptions(query.lang, now)
+		: Promise.resolve([]);
+
 	let total = 0;
 	if (!emptyTopic) {
 		const [totals] = await db.select({ total: count() }).from(notes).where(condition);
@@ -179,9 +189,8 @@ export async function listNotes(query: NotesListQuery): Promise<NotesListResult>
 
 	// Facets: belongs-to years and per-language topic counts (only topics
 	// that actually carry visible notes are offered as filters). Topic pages
-	// set `facets: false` - they discard both.
-	const years = query.facets === false ? [] : await listNoteYears(query.lang, now, siteTz);
-	const topicOptions = query.facets === false ? [] : await listTopicOptions(query.lang, now);
+	// set `facets: false` - they discard both (resolved as empty promises).
+	const [years, topicOptions] = await Promise.all([yearsPromise, topicOptionsPromise]);
 
 	return {
 		cards,
@@ -375,6 +384,46 @@ export async function getNoteGateRecord(
 		.where(eq(notes.id, noteId))
 		.limit(1);
 	return row ?? null;
+}
+
+/** Diary metadata for gated rows after a verified unlock. Mirrors
+ * `getNoteBody`: locked rows keep these fields out of `findVisibleNote` (SSR
+ * data is readable in the HTML source), so the unlocked detail read composes
+ * body + metadata from the two focused reads. */
+export interface NoteUnlockedMeta {
+	tz: string | null;
+	mood: string | null;
+	emotions: string[] | null;
+	weatherCode: number | null;
+	temperatureC: string | null;
+	coordinates: { latitude: number; longitude: number } | null;
+	location: string | null;
+}
+
+export async function getNoteMeta(noteId: string): Promise<NoteUnlockedMeta | null> {
+	const [row] = await db
+		.select({
+			tz: notes.tz,
+			mood: notes.mood,
+			meta: notes.meta,
+			weatherCode: notes.weatherCode,
+			temperatureC: notes.temperatureC,
+			coordinates: notes.coordinates,
+			location: notes.location
+		})
+		.from(notes)
+		.where(eq(notes.id, noteId))
+		.limit(1);
+	if (!row) return null;
+	return {
+		tz: row.tz,
+		mood: row.mood,
+		emotions: row.meta?.emotions ?? null,
+		weatherCode: row.weatherCode,
+		temperatureC: row.temperatureC,
+		coordinates: row.coordinates,
+		location: row.location
+	};
 }
 
 /** Body read for gated rows after a verified unlock (locked bodies stay out

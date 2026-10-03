@@ -114,7 +114,6 @@ export interface NavColumn {
 export interface NavFooter {
 	labelKey: I18nKey;
 	href: string;
-	secondary?: NavFooter;
 }
 
 export type MegaMenuType = 'home' | 'two-column' | 'simple' | 'timeline';
@@ -143,7 +142,6 @@ export interface MegaMenuDynamicData {
 	leftItems: NavChild[];
 	rightItems: NavChild[];
 	footerSecondaryText?: string;
-	footerSecondaryHref?: string;
 	/** Timeline activity items (for type='timeline') */
 	timelineItems?: TimelineActivityItem[];
 }
