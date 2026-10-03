@@ -2,11 +2,12 @@ import { expect, test } from '@playwright/test';
 import { psql } from './support';
 
 /**
- * P3-b distribution-face acceptance (roadmap W2 #4): single-file sitemap with
- * published alternates, per-language RSS with `urn:uuid` guids and
- * content:encoded, the bare `/rss.xml` alias (302 to the default language),
- * dynamic robots.txt and the strong-validator cache contract. Fixtures under
- * `e2e-p3bf%`; cleaned in beforeAll/afterAll.
+ * P3-b distribution-face acceptance (roadmap W2 #4) + the N1 seam: posts and
+ * feedable notes share the per-language RSS, the sitemap carries notes and
+ * topic pages, and password-gated notes stay out of BOTH (notes plan §3.3
+ * exclusion face). Also covers the bare `/rss.xml` alias (302 to the default
+ * language), dynamic robots.txt and the strong-validator cache contract.
+ * Fixtures under `e2e-p3bf%`; cleaned in beforeAll/afterAll.
  */
 
 const CAT_ID = '00000000-0000-7000-8000-00000000c3f0';
@@ -17,7 +18,23 @@ const SLUG = 'e2e-p3bf-post';
 const SLUG_ZH = 'e2e-p3bf-post-zh';
 const TITLE = 'E2E P3BF feed post';
 
+// N1 seam fixtures: one feedable note, one password-gated note, one topic.
+const N_ID = '00000000-0000-7000-8000-00000000c3e5';
+const N_LOCKED_ID = '00000000-0000-7000-8000-00000000c3e6';
+const N_SLUG = 'e2e-p3bf-note';
+const N_LOCKED_SLUG = 'e2e-p3bf-locked-note';
+// Hidden-even-when-once-public rows: status must exclude them on its own
+// (published_at is set), per gate item 5 (private / trash invisibility).
+const N_PRIVATE_ID = '00000000-0000-7000-8000-00000000c3e8';
+const N_PRIVATE_SLUG = 'e2e-p3bf-private-note';
+const N_TRASH_ID = '00000000-0000-7000-8000-00000000c3e9';
+const N_TRASH_SLUG = 'e2e-p3bf-trash-note';
+const T_ID = '00000000-0000-7000-8000-00000000c3e7';
+const T_SLUG = 'e2e-p3bf-topic';
+
 function cleanup(): void {
+	psql(`delete from notes where slug like 'e2e-p3bf-%'`);
+	psql(`delete from topics where slug = '${T_SLUG}'`);
 	psql(`delete from posts where slug like 'e2e-p3bf-%'`);
 	psql(`delete from categories where slug = 'e2e-p3bf-cat'`);
 }
@@ -25,6 +42,24 @@ function cleanup(): void {
 test.beforeAll(() => {
 	cleanup();
 	psql(`insert into categories (id, name, slug) values ('${CAT_ID}', 'E2E P3BF', 'e2e-p3bf-cat')`);
+	psql(
+		[
+			`insert into notes (id, slug, title, content, lang, status, published_at, updated_at) values`,
+			`('${N_ID}', '${N_SLUG}', 'E2E P3BF note', 'Note body **bold**.', 'en', 'published', '2026-09-19T09:00:00Z', '2026-09-21T09:00:00Z')`,
+			`;`,
+			`insert into notes (id, slug, title, content, lang, status, published_at, updated_at, password_hash) values`,
+			`('${N_LOCKED_ID}', '${N_LOCKED_SLUG}', 'E2E P3BF locked note', 'Secret body.', 'en', 'published', '2026-09-19T10:00:00Z', '2026-09-21T10:00:00Z', 'e2e-locked-hash')`,
+			`;`,
+			`insert into notes (id, slug, title, content, lang, status, published_at, updated_at) values`,
+			`('${N_PRIVATE_ID}', '${N_PRIVATE_SLUG}', 'E2E P3BF private note', 'Private body.', 'en', 'private', '2026-09-17T09:00:00Z', '2026-09-22T09:00:00Z')`,
+			`;`,
+			`insert into notes (id, slug, title, content, lang, status, published_at, updated_at) values`,
+			`('${N_TRASH_ID}', '${N_TRASH_SLUG}', 'E2E P3BF trash note', 'Trashed body.', 'en', 'trash', '2026-09-16T09:00:00Z', '2026-09-22T09:00:00Z')`,
+			`;`,
+			`insert into topics (id, name, slug, description) values`,
+			`('${T_ID}', 'E2E P3BF topic', '${T_SLUG}', 'Fixture topic for the sitemap seam')`
+		].join(' ')
+	);
 	psql(
 		[
 			`insert into posts (id, slug, title, content, lang, status, published_at, updated_at, category_id, translation_group) values`,
@@ -55,6 +90,17 @@ test.describe('P3-b distribution face', () => {
 		expect(body).toContain(`hreflang="zh-cn" href="http://localhost:4173/zh-cn/posts/${SLUG_ZH}"`);
 		// Deterministic updated_at from the fixture.
 		expect(body).toContain('<lastmod>2026-09-20T09:00:00.000Z</lastmod>');
+		// N1 seam: the feedable note and the topic page are included...
+		expect(body).toContain(`<loc>http://localhost:4173/en/notes/${N_SLUG}</loc>`);
+		expect(body).toContain(`<loc>http://localhost:4173/en/notes/topics/${T_SLUG}</loc>`);
+		expect(body).toContain(
+			`hreflang="zh-cn" href="http://localhost:4173/zh-cn/notes/topics/${T_SLUG}"`
+		);
+		// ...and hidden rows stay out: password gate (§3.3 exclusion face)
+		// plus private/trash that had been public before (gate item 5).
+		expect(body).not.toContain(N_LOCKED_SLUG);
+		expect(body).not.toContain(N_PRIVATE_SLUG);
+		expect(body).not.toContain(N_TRASH_SLUG);
 		// Thin pages stay out.
 		expect(body).not.toContain('/posts/tags/');
 		expect(body).not.toContain('/posts/categories/');
@@ -93,6 +139,13 @@ test.describe('P3-b distribution face', () => {
 		expect(body).toContain('<content:encoded><![CDATA[');
 		expect(body).toContain('href="http://localhost:4173/en/rss.xml" rel="self"');
 		expect(body).toContain('<language>en</language>');
+		// N1 seam: notes share the feed (guid + link), gated notes never do.
+		expect(body).toContain(`<guid isPermaLink="false">urn:uuid:${N_ID}</guid>`);
+		expect(body).toContain(`<link>http://localhost:4173/en/notes/${N_SLUG}</link>`);
+		expect(body).not.toContain(N_LOCKED_ID);
+		expect(body).not.toContain(`/notes/${N_LOCKED_SLUG}`);
+		expect(body).not.toContain(N_PRIVATE_ID);
+		expect(body).not.toContain(N_TRASH_ID);
 	});
 
 	test('a mismatching If-None-Match answers 200 with the full body', async ({ request }) => {
@@ -130,10 +183,11 @@ test.describe('P3-b distribution face', () => {
 	});
 
 	test('a language without visible posts serves a valid empty feed', async ({ request }) => {
-		// Dynamic assertion: count what the database says is visible right now.
+		// Dynamic assertion: count what the database says is visible right now
+		// (N1 seam: the merged feed counts feedable notes alongside posts).
 		const visible = Number(
 			psql(
-				`select count(*) from posts where lang = 'ja' and status in ('published','scheduled') and published_at <= now()`
+				`select (select count(*) from posts where lang = 'ja' and status in ('published','scheduled') and published_at <= now()) + (select count(*) from notes where lang = 'ja' and status in ('published','scheduled') and published_at <= now() and password_hash is null)`
 			)
 		);
 

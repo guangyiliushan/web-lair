@@ -14,7 +14,8 @@ const { dbMock, state, envState } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		selectResults: [] as unknown[][],
-		orderArgs: [] as unknown[][]
+		orderArgs: [] as unknown[][],
+		whereArgs: [] as unknown[][]
 	},
 	envState: { env: {} as Record<string, string | undefined> }
 }));
@@ -41,6 +42,7 @@ function makeChain(result: unknown[]) {
 				}
 				return (...args: unknown[]) => {
 					if (prop === 'orderBy') state.orderArgs.push(args);
+					if (prop === 'where') state.whereArgs.push(args);
 					return self;
 				};
 			}
@@ -79,8 +81,9 @@ const groupRows = [
 
 describe('sitemap route', () => {
 	beforeEach(() => {
-		state.selectResults = [[]];
+		state.selectResults = [[], [], []];
 		state.orderArgs = [];
+		state.whereArgs = [];
 		envState.env.ORIGIN = 'https://example.com';
 		Object.assign(dbMock, {
 			select: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
@@ -192,5 +195,46 @@ describe('sitemap route', () => {
 		expect(body).toContain('<loc>https://example.com/</loc>');
 		expect(body).not.toContain('<lastmod>');
 		expect(response.headers.get('last-modified')).toBeNull();
+	});
+
+	it('lists feedable notes and topic pages with their alternates (N1 seam)', async () => {
+		const noteEn = {
+			lang: 'en',
+			slug: 'n-en',
+			updatedAt: new Date('2026-09-20T09:00:00Z'),
+			translationGroup: 'n1'
+		};
+		state.selectResults = [groupRows, [noteEn], [{ slug: 'travel' }]];
+
+		const body = await (await GET(event())).text();
+
+		// Notes join with their own paths and per-group alternates (self included).
+		expect(body).toContain('<loc>https://example.com/en/notes/n-en</loc>');
+		expect(body).toContain('hreflang="en" href="https://example.com/en/notes/n-en"');
+		// Topic pages: one <loc> per locale with a same-path alternate set
+		// (mirrors SeoHead's entity-page default).
+		expect(body).toContain('<loc>https://example.com/en/notes/topics/travel</loc>');
+		expect(body).toContain('<loc>https://example.com/ja/notes/topics/travel</loc>');
+		expect(body).toContain('hreflang="zh-cn" href="https://example.com/zh-cn/notes/topics/travel"');
+		// lastmod comes from real updated_at signals only; topics carry none.
+		const topicBlock = body
+			.split('<url>')
+			.find((block) => block.includes('notes/topics/travel') && block.includes('/en/'));
+		expect(topicBlock).toBeTruthy();
+		expect(topicBlock).not.toContain('<lastmod>');
+		// Notes contribute their updated_at to Last-Modified alongside posts.
+		expect(body).toContain('<lastmod>2026-09-20T09:00:00.000Z</lastmod>');
+	});
+
+	it('gates the notes source on the feedable predicate (visible AND not gated)', async () => {
+		await GET(event());
+
+		// Second select = notes (render-level assertion, review lesson).
+		const whereSql = state.whereArgs[1]
+			.map((arg) => dbDialect.sqlToQuery(arg as never).sql)
+			.join(' | ');
+		expect(whereSql).toContain('"notes"."status" in');
+		expect(whereSql).toContain('"notes"."published_at" <=');
+		expect(whereSql).toContain('"notes"."password_hash" is null');
 	});
 });

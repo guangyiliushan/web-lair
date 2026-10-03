@@ -16,7 +16,8 @@ const { dbMock, state, envState } = vi.hoisted(() => ({
 		selectResults: [] as unknown[][],
 		defaultLang: 'en',
 		orderArgs: [] as unknown[][],
-		limitArgs: [] as unknown[]
+		limitArgs: [] as unknown[],
+		whereArgs: [] as unknown[][]
 	},
 	envState: { env: {} as Record<string, string | undefined> }
 }));
@@ -66,6 +67,7 @@ function makeChain(result: unknown[]) {
 				return (...args: unknown[]) => {
 					if (prop === 'orderBy') state.orderArgs.push(args);
 					if (prop === 'limit') state.limitArgs.push(args[0]);
+					if (prop === 'where') state.whereArgs.push(args);
 					return self;
 				};
 			}
@@ -87,6 +89,7 @@ describe('rss route', () => {
 		state.defaultLang = 'en';
 		state.orderArgs = [];
 		state.limitArgs = [];
+		state.whereArgs = [];
 		envState.env.ORIGIN = 'https://example.com';
 		Object.assign(dbMock, {
 			select: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
@@ -160,16 +163,62 @@ describe('rss route', () => {
 		expect(body).not.toContain('urn:uuid:019bfc4e-0000-7000-8000-000000000009');
 	});
 
-	it('orders by published_at desc with an id tiebreak and clamps to the item limit', async () => {
-		state.selectResults = [[]];
+	it('orders both sources by published_at desc with an id tiebreak and clamps both to the item limit', async () => {
+		state.selectResults = [[], []];
 		await GET(event('/en/rss.xml'));
 
-		const orderSql = state.orderArgs[0]
+		const orderSql = (index: number) =>
+			state.orderArgs[index].map((arg) => dbDialect.sqlToQuery(arg as never).sql).join(' | ');
+		expect(orderSql(0)).toContain('"posts"."published_at" desc');
+		expect(orderSql(0)).toContain('"posts"."id" desc');
+		expect(orderSql(1)).toContain('"notes"."published_at" desc');
+		expect(orderSql(1)).toContain('"notes"."id" desc');
+		// Fetch 20 per source; the merged top-20 cannot need more.
+		expect(state.limitArgs).toEqual([20, 20]);
+	});
+
+	it('gates the notes source on the feedable predicate (visible AND not gated)', async () => {
+		state.selectResults = [[], []];
+		await GET(event('/en/rss.xml'));
+
+		// Second select = notes. Render-level assertion (review lesson): the
+		// SQL must carry the visibility predicate plus the password gate.
+		const whereSql = state.whereArgs[1]
 			.map((arg) => dbDialect.sqlToQuery(arg as never).sql)
 			.join(' | ');
-		expect(orderSql).toContain('"posts"."published_at" desc');
-		expect(orderSql).toContain('"posts"."id" desc');
-		expect(state.limitArgs).toEqual([20]);
+		expect(whereSql).toContain('"notes"."lang" = $');
+		expect(whereSql).toContain('"notes"."status" in');
+		expect(whereSql).toContain('"notes"."published_at" <=');
+		expect(whereSql).toContain('"notes"."password_hash" is null');
+	});
+
+	it('merges visible notes into the feed with urn:uuid guids and note links', async () => {
+		const noteRow = {
+			id: '019bfc4e-0000-7000-8000-0000000000aa',
+			slug: 'a-note',
+			title: 'A note <title>',
+			content: 'Diary **body**',
+			publishedAt: new Date('2026-10-01T09:00:00Z'),
+			updatedAt: new Date('2026-10-01T10:00:00Z')
+		};
+		state.selectResults = [[helloRow], [noteRow]];
+
+		const response = await GET(event('/en/rss.xml'));
+		const body = await response.text();
+		expect(body).toContain(
+			'<guid isPermaLink="false">urn:uuid:019bfc4e-0000-7000-8000-0000000000aa</guid>'
+		);
+		expect(body).toContain('<link>https://example.com/en/notes/a-note</link>');
+		expect(body).toContain('<content:encoded><![CDATA[<p>Diary **body**</p>]]></content:encoded>');
+		expect(body).toContain(
+			`<description>${escapeXml(plainTextExcerpt('Diary **body**'))}</description>`
+		);
+		// Newest first across sources: the note (Oct 1) precedes the post (Sep 30).
+		expect(body.indexOf('urn:uuid:019bfc4e-0000-7000-8000-0000000000aa')).toBeLessThan(
+			body.indexOf('urn:uuid:019bfc4e-0000-7000-8000-000000000001')
+		);
+		// lastBuildDate takes the newest updated_at across BOTH sources.
+		expect(body).toContain('<lastBuildDate>Thu, 01 Oct 2026 10:00:00 GMT</lastBuildDate>');
 	});
 
 	it('redirects the bare root alias to the default language with a temporary 302', async () => {

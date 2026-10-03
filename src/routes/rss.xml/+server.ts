@@ -5,11 +5,12 @@ import { localizeHref, locales } from '$lib/paraglide/runtime';
 import { m } from '$lib/paraglide/messages';
 import { getOption } from '$lib/server/config/options-registry';
 import { db } from '$lib/server/db';
-import { posts } from '$lib/server/db/content';
+import { notes, posts } from '$lib/server/db/content';
 import { buildRssFeed, type RssItem } from '$lib/server/feeds';
 import { conditionalResponse } from '$lib/server/feeds/cache';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { getPublicOrigin } from '$lib/server/origin';
+import { feedableNoteCondition } from '$lib/server/services/note-visibility';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import { plainTextExcerpt } from '$lib/utils/excerpt';
 import type { RequestHandler } from './$types';
@@ -22,12 +23,14 @@ const ITEM_LIMIT = 20;
  * with a temporary redirect (R1-Q3: `site.default_lang` is configurable, so
  * a permanent redirect would cache a stale target).
  *
- * Scope (ledger §22): posts — notes join with N1 — latest 20, future-dated
- * items excluded by the shared visibility predicate, `urn:uuid` guids so
- * slug changes never re-deliver an item. Caching (R1-Q2): strong ETag =
- * representation hash + Last-Modified from the newest updated_at;
+ * Scope (ledger §22, N1 seam): posts + notes share ONE feed - latest 20
+ * across both sources after merging, future-dated items excluded by the
+ * shared visibility predicates, and password-gated notes ALSO excluded
+ * (`feedableNoteCondition`, notes plan §3.3 exclusion face). `urn:uuid`
+ * guids so slug changes never re-deliver an item. Caching (R1-Q2): strong
+ * ETag = representation hash + Last-Modified from the newest updated_at;
  * conditional requests use the strong If-None-Match (weak list comparison,
- * RFC 9110 §13.1.2). If-Modified-Since is intentionally not evaluated —
+ * RFC 9110 §13.1.2). If-Modified-Since is intentionally not evaluated -
  * Last-Modified is informational (max(updated_at) is not consistent under
  * lazy visibility; second review round 2026-10-02).
  *
@@ -44,24 +47,41 @@ export const GET: RequestHandler = async ({ url, request }) => {
 	const origin = getPublicOrigin() ?? url.origin;
 	const now = new Date();
 
-	const rows = await db
-		.select({
-			id: posts.id,
-			slug: posts.slug,
-			title: posts.title,
-			summary: posts.summary,
-			content: posts.content,
-			publishedAt: posts.publishedAt,
-			updatedAt: posts.updatedAt
-		})
-		.from(posts)
-		.where(and(eq(posts.lang, locale), visiblePostCondition(now)))
-		.orderBy(desc(posts.publishedAt), desc(posts.id))
-		.limit(ITEM_LIMIT);
+	// Fetch up to ITEM_LIMIT per source: the global top-N cannot need more
+	// than N candidates from either one.
+	const [postRows, noteRows] = await Promise.all([
+		db
+			.select({
+				id: posts.id,
+				slug: posts.slug,
+				title: posts.title,
+				summary: posts.summary,
+				content: posts.content,
+				publishedAt: posts.publishedAt,
+				updatedAt: posts.updatedAt
+			})
+			.from(posts)
+			.where(and(eq(posts.lang, locale), visiblePostCondition(now)))
+			.orderBy(desc(posts.publishedAt), desc(posts.id))
+			.limit(ITEM_LIMIT),
+		db
+			.select({
+				id: notes.id,
+				slug: notes.slug,
+				title: notes.title,
+				content: notes.content,
+				publishedAt: notes.publishedAt,
+				updatedAt: notes.updatedAt
+			})
+			.from(notes)
+			.where(and(eq(notes.lang, locale), feedableNoteCondition(now)))
+			.orderBy(desc(notes.publishedAt), desc(notes.id))
+			.limit(ITEM_LIMIT)
+	]);
 
-	const items = (
+	const postItems = (
 		await Promise.all(
-			rows.map(async (row): Promise<RssItem | null> => {
+			postRows.map(async (row): Promise<RssItem | null> => {
 				// The visibility predicate already excludes unpublished rows;
 				// this guard only narrows the type.
 				if (!row.publishedAt) return null;
@@ -84,8 +104,35 @@ export const GET: RequestHandler = async ({ url, request }) => {
 		)
 	).filter((item): item is RssItem => item !== null);
 
+	const noteItems = (
+		await Promise.all(
+			noteRows.map(async (row): Promise<RssItem | null> => {
+				if (!row.publishedAt) return null;
+				try {
+					return {
+						title: row.title,
+						link: `${origin}${localizeHref(`/notes/${row.slug}`, { locale })}`,
+						guid: `urn:uuid:${row.id}`,
+						pubDate: row.publishedAt,
+						description: plainTextExcerpt(row.content ?? ''),
+						contentHtml: row.content ? await renderMarkdownToHtml(row.content) : undefined
+					};
+				} catch (error) {
+					console.warn('[rss] note item render failed', row.id, error);
+					return null;
+				}
+			})
+		)
+	).filter((item): item is RssItem => item !== null);
+
+	// Merge newest-first; Array.prototype.sort is stable, so equal timestamps
+	// keep a deterministic posts-then-notes order (byte-stable ETag).
+	const items = [...postItems, ...noteItems]
+		.sort((a, b) => b.pubDate.getTime() - a.pubDate.getTime())
+		.slice(0, ITEM_LIMIT);
+
 	let latest: Date | null = null;
-	for (const row of rows) {
+	for (const row of [...postRows, ...noteRows]) {
 		if (row.updatedAt && (latest === null || row.updatedAt > latest)) latest = row.updatedAt;
 	}
 
