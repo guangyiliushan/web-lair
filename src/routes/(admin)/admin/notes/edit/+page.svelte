@@ -965,7 +965,7 @@
 									name="password"
 									type="password"
 									aria-label="新密码"
-									placeholder="设置/更新密码（留空清除）"
+									placeholder="设置/更新密码（至少 6 位，留空清除）"
 									autocomplete="new-password"
 								/>
 								<Button type="submit" variant="outline" size="sm" class="shrink-0">

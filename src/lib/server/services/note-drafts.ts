@@ -673,6 +673,12 @@ export async function setNotePassword(
 	noteId: string,
 	password: string
 ): Promise<NoteRowActionResult> {
+	// Owner decision (2026-10-03): new passwords are at least 6 characters.
+	// '' still clears; existing shorter hashes keep verifying (this gate is
+	// write-side only - the unlock path never rejects a stored password).
+	if (password !== '' && password.length < 6) {
+		return { kind: 'invalid', message: '密码至少 6 位' };
+	}
 	if (password.length > 200) return { kind: 'invalid', message: '密码过长' };
 	const [note] = await db
 		.select({ id: notes.id, passwordHash: notes.passwordHash })

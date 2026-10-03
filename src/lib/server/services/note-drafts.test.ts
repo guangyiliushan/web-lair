@@ -588,9 +588,17 @@ describe('note draft flow', () => {
 		expect(await setNotePassword(NOTE_ID, '')).toEqual({ kind: 'ok' });
 		expect(state.updates).toHaveLength(3);
 
-		// Length guard runs before any db read.
+		// Length guards run before any db read.
 		expect(await setNotePassword(NOTE_ID, 'x'.repeat(201))).toMatchObject({ kind: 'invalid' });
+		expect(await setNotePassword(NOTE_ID, '12345')).toMatchObject({ kind: 'invalid' });
 		expect(state.updates).toHaveLength(3);
+
+		// The minimum is six characters; exactly six is accepted (owner
+		// decision 2026-10-03). '' still clears.
+		state.selectQueue = [[{ id: NOTE_ID, passwordHash: null }]];
+		state.updateResults = [[{ id: NOTE_ID }]];
+		expect(await setNotePassword(NOTE_ID, '123456')).toEqual({ kind: 'ok' });
+		expect(state.updates).toHaveLength(4);
 	});
 
 	it('writes emotions into meta with one jsonb_set (deduped, fail-closed)', async () => {
