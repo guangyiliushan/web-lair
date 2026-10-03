@@ -321,7 +321,7 @@
 					<!-- Links Side -->
 					<div class="flex-1 border-l pl-6">
 						<div class="grid grid-cols-2 gap-x-4 gap-y-2">
-							{#each homeItems as child (child.href)}
+							{#each homeItems as child (child.key ?? child.href)}
 								<a
 									href={siteHref(child.href)}
 									role="menuitem"

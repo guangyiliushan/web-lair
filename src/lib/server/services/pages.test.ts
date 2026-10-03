@@ -61,6 +61,8 @@ describe('pages read service', () => {
 	it('resolves display fields through current → en → any', () => {
 		expect(resolveLocalized({ 'zh-cn': '中' }, 'ja')).toBe('中');
 		expect(resolveLocalized({ en: 'EN', 'zh-cn': '中' }, 'zh-cn')).toBe('中');
+		// en outranks the 'any' tail when the current locale is missing.
+		expect(resolveLocalized({ ja: 'JA', en: 'EN' }, 'zh-cn')).toBe('EN');
 		expect(resolveLocalized({ en: '  ' }, 'en')).toBeNull();
 		expect(resolveLocalized({}, 'en')).toBeNull();
 		expect(resolveLocalized(null, 'en')).toBeNull();
@@ -78,6 +80,10 @@ describe('pages read service', () => {
 		expect(contentLocales({ 'zh-cn': 'c' })).toEqual(['zh-cn']);
 		expect(contentLocales({})).toEqual([]);
 		expect(contentLocales(null)).toEqual([]);
+		// Blank values and keys outside the locale list count as missing.
+		expect(contentLocales({ en: '   ', 'zh-cn': 'x' })).toEqual(['zh-cn']);
+		expect(contentLocales({ en: '  ' })).toEqual([]);
+		expect(contentLocales({ fr: 'y', en: 'x' } as Record<string, string>)).toEqual(['en']);
 	});
 
 	it('filters the sitemap source: visible ∧ content ∧ internal ∧ non-empty', async () => {

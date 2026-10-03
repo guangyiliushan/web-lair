@@ -255,13 +255,18 @@ describe('nav-data loaders', () => {
 		const data = await loadPagesMegaData();
 
 		expect(data.leftItems).toEqual([
-			{ label: 'About Me', href: '/about', iconName: undefined },
-			{ label: '关于本项目', href: '/about-site', iconName: 'home' },
-			{ label: 'スポンサー', href: 'https://buymeacoffee.com/x', iconName: undefined }
+			{ label: 'About Me', href: '/about', key: 'about', iconName: undefined },
+			{ label: '关于本项目', href: '/about-site', key: 'about-site', iconName: 'home' },
+			{
+				label: 'スポンサー',
+				href: 'https://buymeacoffee.com/x',
+				key: 'sponsor',
+				iconName: undefined
+			}
 		]);
 		expect(data.footerDefaults).toEqual([
-			{ label: 'About Me', href: '/about' },
-			{ label: '关于本项目', href: '/about-site' }
+			{ label: 'About Me', href: '/about', key: 'about' },
+			{ label: '关于本项目', href: '/about-site', key: 'about-site' }
 		]);
 
 		// Visibility + chrome order stay in SQL (row-level V1): status filter,

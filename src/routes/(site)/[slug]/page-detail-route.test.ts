@@ -127,7 +127,10 @@ describe('(site)/[slug] load — universal md page', () => {
 	it('404s without a hint when the content object carries no usable locale', async () => {
 		state.selectResults = [[{ ...pageRow, content: {} }]];
 
-		await expect(load(makeEvent())).rejects.toMatchObject({ status: 404, body: { message: 'Not found' } });
+		await expect(load(makeEvent())).rejects.toMatchObject({
+			status: 404,
+			body: { message: 'Not found' }
+		});
 	});
 
 	it('falls display fields back through the chain while the body stays strict', async () => {
@@ -139,5 +142,24 @@ describe('(site)/[slug] load — universal md page', () => {
 
 		expect(data.page.title).toBe('关于我');
 		expect(data.page.description).toBeNull();
+	});
+
+	it('404s locale-shaped slugs before touching the registry (P1b review belt)', async () => {
+		await expect(load(makeEvent('en'))).rejects.toMatchObject({ status: 404 });
+		await expect(load(makeEvent('zh-cn'))).rejects.toMatchObject({ status: 404 });
+		await expect(load(makeEvent('ja'))).rejects.toMatchObject({ status: 404 });
+		expect(dbMock.select).not.toHaveBeenCalled();
+	});
+
+	it('hints only locales that truly carry content (blank and unknown keys excluded)', async () => {
+		state.selectResults = [[{ ...pageRow, content: { en: '   ', 'zh-cn': '# 关于', fr: 'x' } }]];
+
+		await expect(load(makeEvent())).rejects.toMatchObject({
+			status: 404,
+			body: {
+				message: 'error_page_language_hint',
+				available: [{ lang: 'zh-cn', href: '/zh-cn/about' }]
+			}
+		});
 	});
 });

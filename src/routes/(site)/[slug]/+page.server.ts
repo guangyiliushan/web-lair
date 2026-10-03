@@ -21,6 +21,16 @@ import type { PageServerLoad } from './$types';
  */
 export const load: PageServerLoad = async ({ params }) => {
 	const lang = getLocale();
+
+	// Locale tags are never page slugs: the bare-language roots stay 404s by
+	// design (P3-a identity patterns), and a row claiming e.g. `en` would turn
+	// `/en` into a 200 with collapsed localised links. The admin editor and
+	// `db:verify-pages` reject such slugs through the shared reserved list;
+	// this is the read-side belt for rows that predate that entry.
+	if ((locales as readonly string[]).includes(params.slug)) {
+		error(404, 'Not found');
+	}
+
 	const row = await getPageBySlug(params.slug);
 
 	if (!row || row.externalUrl !== null || !row.content) {

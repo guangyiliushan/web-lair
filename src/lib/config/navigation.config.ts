@@ -92,6 +92,13 @@ export interface NavChild {
 	labelKey?: I18nKey;
 	label?: string; // Literal override for dynamic server data
 	href: string;
+	/**
+	 * Stable unique key for keyed-each menus. Hrefs are NOT unique across a
+	 * merged list (two rows may share an external_url, or a row may repeat a
+	 * static quick link) and Svelte throws `each_key_duplicate` in production
+	 * too. Pages rows pass their slug.
+	 */
+	key?: string;
 	descKey?: I18nKey;
 	desc?: string; // Literal fallback for descriptions/dates
 	/** Static config only: components cannot cross the load serialisation
@@ -158,7 +165,7 @@ export interface TimelineActivityItem {
 /** Chrome payload for the pages surface (P1b): menu items + footer defaults. */
 export interface PagesMegaData extends MegaMenuDynamicData {
 	/** `is_default` rows (footer About group); same single query as the items. */
-	footerDefaults: { label: string; href: string }[];
+	footerDefaults: { label: string; href: string; key?: string }[];
 }
 
 /**

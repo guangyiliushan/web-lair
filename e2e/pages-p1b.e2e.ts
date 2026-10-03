@@ -42,6 +42,7 @@ test.describe('pages P1b', () => {
 		const response = await page.goto('/en/about');
 		expect(response?.status()).toBe(200);
 		await expect(page.getByRole('heading', { name: 'About Me' }).first()).toBeVisible();
+		await expect(page).toHaveTitle(/About Me/);
 		await expect(page.getByText('This page is ready to edit.')).toBeVisible();
 
 		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
@@ -70,6 +71,13 @@ test.describe('pages P1b', () => {
 		);
 	});
 
+	test('a partially translated page advertises only its content languages', async ({ page }) => {
+		const response = await page.goto(`/en/${EXTRA_SLUG}`);
+		expect(response?.status()).toBe(200);
+		await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(2);
+		await expect(page.locator('link[hreflang="ja"]')).toHaveCount(0);
+	});
+
 	test('hidden pages stay directly reachable (no 404)', async ({ page }) => {
 		const response = await page.goto(`/en/${HIDDEN_SLUG}`);
 		expect(response?.status()).toBe(200);
@@ -89,6 +97,8 @@ test.describe('pages P1b', () => {
 			'href',
 			'/en/about-site'
 		);
+		// Extras never leak into the About group (defaults only).
+		await expect(footer.getByRole('link', { name: EXTRA_TITLE_EN })).toHaveCount(0);
 	});
 
 	test('the home hover card orders defaults → extras → the four quick links', async ({ page }) => {
@@ -130,6 +140,7 @@ test.describe('pages P1b', () => {
 		expect(body).toContain(`<loc>http://localhost:4173/en/${EXTRA_SLUG}</loc>`);
 		expect(body).toContain(`<loc>http://localhost:4173/zh-cn/${EXTRA_SLUG}</loc>`);
 		expect(body).not.toContain(`<loc>http://localhost:4173/ja/${EXTRA_SLUG}</loc>`);
+		expect(body).not.toContain(`hreflang="ja" href="http://localhost:4173/ja/${EXTRA_SLUG}"`);
 		// Hidden rows stay out of the sitemap.
 		expect(body).not.toContain(HIDDEN_SLUG);
 	});

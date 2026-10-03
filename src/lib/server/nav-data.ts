@@ -191,6 +191,7 @@ export async function loadPagesMegaData(): Promise<PagesMegaData> {
 	const items: NavChild[] = rows.map((row) => ({
 		label: resolveLocalized(row.title, locale) ?? row.slug,
 		href: pageHref(row),
+		key: row.slug,
 		iconName: row.icon ?? undefined
 	}));
 
@@ -198,7 +199,8 @@ export async function loadPagesMegaData(): Promise<PagesMegaData> {
 		.filter((row) => row.isDefault)
 		.map((row) => ({
 			label: resolveLocalized(row.title, locale) ?? row.slug,
-			href: pageHref(row)
+			href: pageHref(row),
+			key: row.slug
 		}));
 
 	return { leftItems: items, rightItems: [], footerDefaults };

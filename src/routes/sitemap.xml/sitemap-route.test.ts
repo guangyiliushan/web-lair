@@ -286,7 +286,8 @@ describe('sitemap route', () => {
 			]
 		];
 
-		const body = await (await GET(event())).text();
+		const response = await GET(event());
+		const body = await response.text();
 
 		// One loc per content locale; missing locales never appear.
 		expect(body).toContain('<loc>https://example.com/en/about</loc>');
@@ -295,8 +296,17 @@ describe('sitemap route', () => {
 		expect(body).toContain('hreflang="en" href="https://example.com/en/about"');
 		expect(body).toContain('hreflang="zh-cn" href="https://example.com/zh-cn/about"');
 		expect(body).toContain('<loc>https://example.com/ja/solo</loc>');
-		// Pages contribute their updated_at to Last-Modified.
+		// Alternates carry the CONTENT locales only - the full locale list
+		// would add a ja alternate for the en/zh page (P1b review teeth).
+		expect(body).not.toContain('hreflang="ja" href="https://example.com/ja/about"');
+		expect(body).toContain('hreflang="ja" href="https://example.com/ja/solo"');
+
+		// Pages contribute their updated_at to Last-Modified (the body lastmod
+		// alone would not catch a dropped header contribution).
 		expect(body).toContain('<lastmod>2026-10-02T09:00:00.000Z</lastmod>');
+		expect(response.headers.get('last-modified')).toBe(
+			new Date('2026-10-02T09:00:00Z').toUTCString()
+		);
 	});
 
 	it('pins the pages source predicate and slug ordering (P1b seam)', async () => {

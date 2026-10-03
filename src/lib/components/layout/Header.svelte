@@ -301,7 +301,7 @@
 										transition:slide={{ duration: 300, easing: cubicInOut }}
 										class="ml-3 flex flex-col border-l pt-0.5 pb-1 pl-3"
 									>
-										{#each pagesData.leftItems as child (child.href)}
+										{#each pagesData.leftItems as child (child.key ?? child.href)}
 											<a
 												href={siteHref(child.href)}
 												onclick={closeMenu}

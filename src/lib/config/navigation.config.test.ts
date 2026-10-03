@@ -42,4 +42,13 @@ describe('mergeHomeMenuItems (P1b home-card order)', () => {
 		expect(mergeHomeMenuItems(undefined, fixed)).toEqual(fixed);
 		expect(mergeHomeMenuItems([], fixed)).toEqual(fixed);
 	});
+
+	it('preserves the incoming chrome order (never re-sorts the items)', () => {
+		const dynamic = [
+			{ label: 'Zeta', href: '/zeta' },
+			{ label: 'Alpha', href: '/alpha' }
+		];
+
+		expect(mergeHomeMenuItems(dynamic, []).map((item) => item.href)).toEqual(['/zeta', '/alpha']);
+	});
 });

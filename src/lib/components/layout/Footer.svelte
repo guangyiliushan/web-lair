@@ -12,6 +12,8 @@
 		label: string;
 		href: string;
 		external?: boolean;
+		/** Stable unique key (pages rows pass their slug); hrefs are not unique. */
+		key?: string;
 	}
 
 	/** Footer section descriptor */
@@ -124,34 +126,36 @@
 
 			<!-- Navigation sections -->
 			{#each sections as section (section.title)}
-				<div class="flex flex-col gap-3">
-					<h3 class="text-sm font-semibold text-foreground">{section.title}</h3>
-					<ul class="flex flex-col gap-2" role="list">
-						{#each section.links as link (link.href)}
-							<li>
-								<a
-									href={siteHref(link.href)}
-									class={cn(
-										'group inline-flex items-center gap-1 text-sm text-muted-foreground',
-										'transition-colors hover:text-primary',
-										'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none',
-										'rounded-sm'
-									)}
-									target={link.external || isExternal(link.href) ? '_blank' : undefined}
-									rel={link.external || isExternal(link.href) ? 'noopener noreferrer' : undefined}
-								>
-									{link.label}
-									{#if link.external || isExternal(link.href)}
-										<IconExternalLink
-											class="size-3 opacity-0 transition-opacity group-hover:opacity-100"
-											aria-hidden="true"
-										/>
-									{/if}
-								</a>
-							</li>
-						{/each}
-					</ul>
-				</div>
+				{#if section.links.length > 0}
+					<div class="flex flex-col gap-3">
+						<h3 class="text-sm font-semibold text-foreground">{section.title}</h3>
+						<ul class="flex flex-col gap-2" role="list">
+							{#each section.links as link (link.key ?? link.href)}
+								<li>
+									<a
+										href={siteHref(link.href)}
+										class={cn(
+											'group inline-flex items-center gap-1 text-sm text-muted-foreground',
+											'transition-colors hover:text-primary',
+											'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none',
+											'rounded-sm'
+										)}
+										target={link.external || isExternal(link.href) ? '_blank' : undefined}
+										rel={link.external || isExternal(link.href) ? 'noopener noreferrer' : undefined}
+									>
+										{link.label}
+										{#if link.external || isExternal(link.href)}
+											<IconExternalLink
+												class="size-3 opacity-0 transition-opacity group-hover:opacity-100"
+												aria-hidden="true"
+											/>
+										{/if}
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
 			{/each}
 		</div>
 
