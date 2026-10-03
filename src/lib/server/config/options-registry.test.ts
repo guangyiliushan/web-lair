@@ -6,15 +6,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * is mocked; the options table object is real so the fake executor can verify
  * the target table.
  */
-const { dbMock, state } = vi.hoisted(() => ({
+const { dbMock, state, pgTz } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		selectRows: [] as unknown[][],
 		insertCalls: [] as { values: unknown; conflict: Record<string, unknown> }[]
-	}
+	},
+	pgTz: { isPgAcceptableTimeZone: vi.fn(async () => true) }
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
+// Batch-5 closure: the site.timezone write consults pg_timezone_names.
+vi.mock('$lib/server/pg-timezone', () => ({
+	isPgAcceptableTimeZone: pgTz.isPgAcceptableTimeZone
+}));
 
 import { options } from '$lib/server/db/config';
 import { getOption, optionKeys, setOption } from './options-registry';
@@ -38,6 +43,8 @@ describe('options registry (AI-1.1)', () => {
 	beforeEach(() => {
 		state.selectRows = [];
 		state.insertCalls = [];
+		pgTz.isPgAcceptableTimeZone.mockReset();
+		pgTz.isPgAcceptableTimeZone.mockResolvedValue(true);
 		Object.assign(dbMock, {
 			select: vi.fn(() => makeChain(state.selectRows.shift() ?? [])),
 			insert: vi.fn((table: unknown) => ({
@@ -181,10 +188,24 @@ describe('options registry (AI-1.1)', () => {
 			name: 'site.timezone',
 			value: 'Asia/Taipei'
 		});
+		// The write also consults the PostgreSQL zone set (batch-5 closure).
+		expect(pgTz.isPgAcceptableTimeZone).toHaveBeenCalledWith('Asia/Taipei', undefined);
 		await expect(setOption('site.timezone', 'Not/AZone' as never)).rejects.toThrow(
 			/无效的 IANA 时区名/
 		);
 		await expect(setOption('site.timezone', ' Asia/Taipei ' as never)).rejects.toThrow();
 		expect(state.insertCalls).toHaveLength(1);
+	});
+
+	it('rejects a zone Intl accepts but PostgreSQL rejects (batch-5 closure)', async () => {
+		// 'Japan' passes the ICU probe (real-PG probe: AT TIME ZONE rejects it).
+		pgTz.isPgAcceptableTimeZone.mockResolvedValueOnce(false);
+		await expect(setOption('site.timezone', 'Japan')).rejects.toThrow(/不被 PostgreSQL 接受/);
+		expect(state.insertCalls).toHaveLength(0);
+	});
+
+	it('does not consult pg_timezone_names for other keys', async () => {
+		await setOption('site.default_lang', 'ja');
+		expect(pgTz.isPgAcceptableTimeZone).not.toHaveBeenCalled();
 	});
 });

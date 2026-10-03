@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { options } from '$lib/server/db/config';
 import { AI_FUNCTIONS } from '$lib/utils/ai-meta';
 import { isValidIanaTimeZone } from '$lib/utils/timezone';
+import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '$lib/server/pg-timezone';
 
 /** Site languages (same set as the posts `lang` CHECK, ledger §9.16). */
 export const OPTION_LANGS = ['en', 'zh-cn', 'ja'] as const;
@@ -169,6 +170,22 @@ export async function setOption<K extends OptionKey>(
 ): Promise<void> {
 	const entry = entryFor(key);
 	const parsed = entry.schema.parse(value); // ZodError on invalid input
+	// Batch-5 tz closure (ledger §13.9): the Intl probe alone accepts names
+	// PostgreSQL rejects ('Japan', 'US/Pacific'...) - stored, they 500 every
+	// belongs-to query. Gate this write on pg_timezone_names too.
+	if (key === 'site.timezone') {
+		// The registry executor speaks select/insert; real db and tx handles
+		// both expose execute, which the membership check rides on.
+		const accepted = await isPgAcceptableTimeZone(
+			parsed as string,
+			executor as unknown as PgTimeZoneExecutor | undefined
+		);
+		if (!accepted) {
+			throw new Error(
+				`时区 "${String(parsed)}" 不被 PostgreSQL 接受（pg_timezone_names）；已拒绝写入`
+			);
+		}
+	}
 	const database = executor ?? (await defaultExecutor());
 	await database
 		.insert(options)

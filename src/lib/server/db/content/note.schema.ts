@@ -66,6 +66,8 @@ export const notes = pgTable(
 		content: text('content'),
 		contentFormat: text('content_format').notNull().default('markdown'),
 		meta: jsonb('meta').$type<NotesMeta | null>(),
+		// Write paths must pass `isPgAcceptableTimeZone` (server/pg-timezone):
+		// Intl alone accepts names PostgreSQL rejects (e.g. 'Japan').
 		tz: text('tz'),
 		publishedAt: timestamp('published_at', { withTimezone: true }),
 		pinAt: timestamp('pin_at', { withTimezone: true }),
