@@ -157,6 +157,7 @@
 	"error_generic_heading": "Something went wrong",
 	"error_go_login": "Go to login",
 	"error_note_language_hint": "This note is not available in this language",
+	"error_page_language_hint": "This page is not available in this language",
 	"error_post_language_hint": "This post is not available in this language",
 	"footer_about": "About",
 	"footer_about_me": "About Me",

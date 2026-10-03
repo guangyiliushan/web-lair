@@ -157,6 +157,7 @@
 	"error_generic_heading": "出错了",
 	"error_go_login": "前往登录",
 	"error_note_language_hint": "这篇手记没有该语言的版本",
+	"error_page_language_hint": "此页面暂无此语言版本",
 	"error_post_language_hint": "这篇文章暂无此语言版本",
 	"footer_about": "关于",
 	"footer_about_me": "关于我",
