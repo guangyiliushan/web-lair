@@ -220,14 +220,16 @@
 		}
 	}
 
-	const triggerState: TriggerState = {
+	// `props` must stay live: a frozen snapshot would pin `aria-expanded` to
+	// its initial false forever (P1b closeout finding).
+	const triggerState: TriggerState = $derived({
 		props: {
 			'aria-expanded': open,
 			'aria-haspopup': true,
 			id: triggerId
 		},
 		toggle: () => (open = !open)
-	};
+	});
 </script>
 
 <div

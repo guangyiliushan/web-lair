@@ -18,7 +18,7 @@ const TITLE_B = 'E2E Admin B';
 let idA = '';
 let idB = '';
 
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'serial', timeout: 120_000 });
 
 function cleanup(): void {
 	psql(`delete from pages where slug like 'e2e-admin-%'`);
@@ -149,18 +149,26 @@ test('the editor saves localized titles and carries the slug rules', async ({ pa
 	// Reserved slug is refused by the server-side whitelist.
 	await page.locator('input[name="slug"]').fill('admin');
 	await expect(async () => {
-		await page.getByRole('button', { name: '保存' }).click();
-		await expect(page.getByRole('alert')).toContainText('保留词', { timeout: 5000 });
-	}).toPass({ timeout: 30_000 });
+		// Always start from a fresh page: a submit that stalls under heavy
+		// load must not poison the retry (the old closure kept fighting a
+		// dead page until the budget was gone).
+		await page.goto(`/admin/pages/edit?id=${idA}`);
+		await page.locator('input[name="slug"]').fill('admin');
+		await page.getByRole('button', { name: '保存' }).click({ timeout: 5000 });
+		await expect(page.getByRole('alert')).toContainText('保留词', { timeout: 10_000 });
+	}).toPass({ timeout: 90_000 });
 	expect(psql(`select slug from pages where id = '${idA}'`)).toBe(SLUG_A);
 
 	// Fix the zh-cn title and move the slug; both persist.
 	await page.locator('input[name="title_zh-cn"]').fill('E2E 管理页甲改');
 	await page.locator('input[name="slug"]').fill(`${SLUG_A}2`);
 	await expect(async () => {
-		await page.getByRole('button', { name: '保存' }).click();
-		await expect(page.getByRole('status')).toContainText('已保存', { timeout: 5000 });
-	}).toPass({ timeout: 30_000 });
+		await page.goto(`/admin/pages/edit?id=${idA}`);
+		await page.locator('input[name="title_zh-cn"]').fill('E2E 管理页甲改');
+		await page.locator('input[name="slug"]').fill(`${SLUG_A}2`);
+		await page.getByRole('button', { name: '保存' }).click({ timeout: 5000 });
+		await expect(page.getByRole('status')).toContainText('已保存', { timeout: 10_000 });
+	}).toPass({ timeout: 90_000 });
 
 	expect(psql(`select title->>'zh-cn' from pages where id = '${idA}'`)).toBe('E2E 管理页甲改');
 	expect(psql(`select slug from pages where id = '${idA}'`)).toBe(`${SLUG_A}2`);

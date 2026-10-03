@@ -102,14 +102,24 @@ test.describe('pages P1b', () => {
 	});
 
 	test('the home hover card orders defaults → extras → the four quick links', async ({ page }) => {
+		test.setTimeout(90_000);
 		await page.goto('/');
 		const nav = page.getByRole('navigation', { name: 'Main navigation' });
 		const home = nav.getByRole('link', { name: 'Home' }).first();
 
+		// Full-suite runs (10 workers) can delay hydration past the first
+		// hover; the retry must LEAVE the trigger between attempts - a hover
+		// onto an already-hovered element fires no mouseenter and the
+		// pre-hydration swallow would otherwise never recover.
 		await expect(async () => {
+			await page.mouse.move(0, 0);
 			await home.hover();
-			await expect(page.locator('[role="menu"]').first()).toBeVisible({ timeout: 2000 });
-		}).toPass({ timeout: 20000 });
+			await expect(page.locator('[role="menu"]').first()).toBeVisible({ timeout: 3000 });
+		}).toPass({ timeout: 45_000 });
+
+		// The trigger advertises the open state (closeout finding: the props
+		// object used to be a frozen snapshot, pinning this to false).
+		await expect(home).toHaveAttribute('aria-expanded', 'true');
 
 		const panel = page.locator('[role="menu"]').first();
 		const items = panel.getByRole('menuitem');
@@ -149,6 +159,7 @@ test.describe('pages P1b', () => {
 		test.use({ viewport: { width: 390, height: 844 } });
 
 		test('the mobile menu folds the same rows into a pages group', async ({ page }) => {
+			test.setTimeout(90_000);
 			await page.goto('/');
 			const openButton = page.getByRole('button', { name: 'Open menu' });
 			const pagesLabel = page.getByText('Pages', { exact: true });
@@ -157,8 +168,8 @@ test.describe('pages P1b', () => {
 				if ((await openButton.getAttribute('aria-expanded')) !== 'true') {
 					await openButton.click();
 				}
-				await expect(pagesLabel).toBeVisible({ timeout: 2000 });
-			}).toPass({ timeout: 20000 });
+				await expect(pagesLabel).toBeVisible({ timeout: 3000 });
+			}).toPass({ timeout: 45_000 });
 
 			const mobileNav = page.getByRole('navigation', { name: 'Mobile navigation' });
 			const row = mobileNav.locator('div.flex.items-center.justify-between', { hasText: 'Pages' });
