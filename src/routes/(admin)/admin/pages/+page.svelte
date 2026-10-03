@@ -211,7 +211,15 @@
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
-			<form method="POST" action="?/setStatus" use:enhance>
+			<form
+				method="POST"
+				action="?/setStatus"
+				use:enhance={() =>
+					async ({ update }) => {
+						await update();
+						hideTarget = null;
+					}}
+			>
 				<input type="hidden" name="id" value={hideTarget?.id ?? ''} />
 				<input type="hidden" name="status" value="hidden" />
 				<AlertDialog.Action type="submit">隐藏</AlertDialog.Action>
@@ -235,7 +243,15 @@
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
-			<form method="POST" action="?/delete" use:enhance>
+			<form
+				method="POST"
+				action="?/delete"
+				use:enhance={() =>
+					async ({ update }) => {
+						await update();
+						deleteTarget = null;
+					}}
+			>
 				<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
 				<AlertDialog.Action type="submit">删除</AlertDialog.Action>
 			</form>
