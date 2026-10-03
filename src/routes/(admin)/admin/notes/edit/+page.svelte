@@ -177,7 +177,9 @@
 				? String(note.coordinates.longitude)
 				: '';
 		location = draft?.location ?? note?.location ?? '';
-		contentMarkdown = draft?.content ?? '';
+		// A published note without a draft opens on its published content;
+		// an empty editor here silently staged a blank first draft.
+		contentMarkdown = draft?.content ?? note?.content ?? '';
 		lang = note?.lang ?? data.defaultLang;
 		noteId = note?.id ?? null;
 		draftId = draft?.id ?? null;
@@ -196,15 +198,19 @@
 	// Initialize from the load data (intentional first apply).
 	applyAll();
 
-	// Row-level actions (pin/password/emotions...) refresh `data` without
-	// touching noteId/draftId/draftVersion, so unsaved field edits survive.
-	const dataKey = $derived(
-		`${data.note?.id ?? 'new'}@${data.draft?.id ?? ''}@${data.draft?.version ?? 0}`
-	);
+	// Background refreshes (row-level actions, the first-save URL anchor) must
+	// never replay the server copy over unsaved edits: draft.version stays OUT
+	// of the key - it advances on every autosave, which used to make any
+	// row-level click wipe the editor working copy (round-7 review finding).
+	// reloadFromServer() remounts the editor explicitly via editorEpoch.
+	const dataKey = $derived(`${data.note?.id ?? 'new'}@${data.draft?.id ?? ''}`);
 	let loadedKey = $state(untrack(() => dataKey));
+	/** Bumped to force an editor remount (MarkdownEditor reads initialMarkdown at mount only). */
+	let editorEpoch = $state(0);
 	$effect(() => {
 		if (dataKey === loadedKey) return;
 		loadedKey = dataKey;
+		if (isDirty()) return; // keep the working copy; id state already tracks the save
 		applyAll();
 	});
 
@@ -236,8 +242,17 @@
 
 	async function runSave(autosave: boolean): Promise<boolean> {
 		if (inFlight) {
-			pendingResave = true;
-			return false;
+			if (autosave) {
+				pendingResave = true;
+				return false;
+			}
+			// Manual saves (and the publish flush) must not be dropped by a race
+			// with the autosave flight: wait it out, then save the latest state
+			// below (round-7 review finding).
+			for (let waited = 0; waited < 100 && inFlight; waited += 1) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			}
+			if (inFlight) return false;
 		}
 		inFlight = true;
 		saveState = 'saving';
@@ -338,22 +353,21 @@
 	async function reloadFromServer() {
 		await invalidateAll();
 		applyAll();
+		// The editor holds its own DOM: bump the epoch so it remounts with the
+		// freshly applied server copy.
+		editorEpoch += 1;
 	}
 
 	async function onPublish() {
 		if (saveState === 'conflict' || publishing) return;
 		publishing = true;
 		try {
-			// An autosave may be mid-flight when 发布 is clicked; the flush
-			// needs a settled base, so wait the save out instead of silently
-			// aborting the publish (round-4 e2e finding).
-			for (let waited = 0; waited < 100 && saveState === 'saving'; waited += 1) {
-				await new Promise((resolve) => setTimeout(resolve, 100));
-			}
 			if (!draftId || isDirty()) {
-				// Only publish once the working copy is actually persisted: an
-				// error / throttled / in-flight save must abort the publish or we
-				// would ship the server's stale draft and silently drop edits.
+				// Flush the working copy first. runSave() itself waits out any
+				// in-flight autosave (a `saveState`-based wait missed the case
+				// where typing mid-flight flips the state to 'dirty' - round-7
+				// review finding); only real end-states (conflict / error /
+				// session loss) abort here.
 				const ok = await runSave(false);
 				if (!ok) return;
 			}
@@ -443,19 +457,20 @@
 		return '草稿';
 	});
 
-	const weatherOptions = $derived(
-		Object.entries(NOTE_WEATHER)
-			.map(([code, entry]) => ({
-				value: code,
-				label: `${code} ${entry.labels['zh-cn'] ?? entry.labels.en}`
-			}))
-			.sort((a, b) => Number(a.value) - Number(b.value))
-	);
+	// Static option list: no reactive dependency, computed once per module.
+	const weatherOptions = Object.entries(NOTE_WEATHER)
+		.map(([code, entry]) => ({
+			value: code,
+			label: `${code} ${entry.labels['zh-cn'] ?? entry.labels.en}`
+		}))
+		.sort((a, b) => Number(a.value) - Number(b.value));
 
 	let beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
 	$effect(() => {
 		beforeUnloadHandler = (e: BeforeUnloadEvent) => {
-			if (isDirty() && saveState !== 'conflict') {
+			// A conflict freezes SAVES but the typed text is still unsaved and
+			// would be lost silently; guard it like any other dirty state.
+			if (isDirty()) {
 				e.preventDefault();
 				e.returnValue = '';
 			}
@@ -639,6 +654,7 @@
 			<div class="group">
 				<input
 					name="title"
+					aria-label="标题"
 					class="w-full border-0 bg-transparent px-0 py-0 text-3xl font-semibold tracking-tight text-neutral-950 outline-none placeholder:font-medium placeholder:text-neutral-300 dark:text-neutral-50 dark:placeholder:text-neutral-700"
 					placeholder="输入标题..."
 					bind:value={title}
@@ -667,7 +683,7 @@
 		<!-- Editor area -->
 		<div class="flex min-h-0 flex-1 flex-col">
 			<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col px-3">
-				{#key loadedKey}
+				{#key `${loadedKey}@${editorEpoch}`}
 					<MarkdownEditor
 						initialMarkdown={contentMarkdown}
 						placeholder="输入正文..."
@@ -696,6 +712,7 @@
 			<div class="px-6 pb-2">
 				<Input
 					name="slug-input"
+					aria-label="Slug"
 					placeholder="my-note-slug"
 					class="font-mono"
 					value={slug}
@@ -736,10 +753,10 @@
 			<div class="flex flex-col gap-5 overflow-y-auto px-6 py-4">
 				<!-- Language -->
 				<div class="flex flex-col gap-1.5">
-					<label for="settings-lang" class="flex items-center gap-1.5 text-sm font-medium">
+					<div class="flex items-center gap-1.5 text-sm font-medium">
 						<IconLanguage class="size-4 text-muted-foreground" />
 						语言
-					</label>
+					</div>
 					{#if noteId}
 						<div class="flex items-center gap-2 text-sm">
 							<Badge variant="outline">{lang}</Badge>
@@ -747,7 +764,9 @@
 						</div>
 					{:else}
 						<Select.Root type="single" bind:value={lang as never}>
-							<Select.Trigger id="settings-lang" class="w-full">{lang}</Select.Trigger>
+							<Select.Trigger id="settings-lang" aria-label="语言" class="w-full"
+								>{lang}</Select.Trigger
+							>
 							<Select.Portal>
 								<Select.Content class="z-[60]">
 									{#each data.langs as l (l)}
@@ -935,6 +954,7 @@
 								<Input
 									name="password"
 									type="password"
+									aria-label="新密码"
 									placeholder="设置/更新密码（留空清除）"
 									autocomplete="new-password"
 								/>

@@ -32,7 +32,9 @@
 
 	function backToList() {
 		selectedId = null;
-		goto('.', { replaceState: true });
+		// Explicit path: `goto('.')` resolves to `/admin/notes/` (parent of the
+		// current URL) and lands on the wrong page (round-7 review finding).
+		goto('/admin/notes/topics', { replaceState: true });
 	}
 
 	let dialogOpen = $state(false);

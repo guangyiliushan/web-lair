@@ -32,6 +32,13 @@
 		trash: '回收站'
 	};
 
+	/**
+	 * Filterable statuses = the server whitelist. `scheduled` stays out until a
+	 * scheduling UI writes such rows; offering it used to answer an unfiltered
+	 * list while claiming a filter was active (round-7 review finding).
+	 */
+	const FILTERABLE_STATUSES = ['published', 'draft', 'private', 'trash'] as const;
+
 	const currentTopic = $derived(
 		data.topics.find((t) => t.id === data.filters.topic)?.name ?? '全部专栏'
 	);
@@ -90,15 +97,13 @@
 			{#if data.filters.topic}
 				<input type="hidden" name="topic" value={data.filters.topic} />
 			{/if}
-			{#if data.filters.topic}
-				<input type="hidden" name="topic" value={data.filters.topic} />
-			{/if}
 			<IconSearch
 				class="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
 			/>
 			<input
 				type="text"
 				name="keyword"
+				aria-label="搜索标题"
 				placeholder="搜索标题后回车"
 				class="h-7 w-full border-0 bg-transparent pr-0 pl-8 text-xs outline-none placeholder:text-muted-foreground focus:ring-0"
 				value={data.filters.keyword}
@@ -158,10 +163,10 @@
 							<a href={queryHref({ status: undefined })} {...props}>全部状态</a>
 						{/snippet}
 					</DropdownMenu.Item>
-					{#each Object.entries(STATUS_LABELS) as [value, label] (value)}
+					{#each FILTERABLE_STATUSES as value (value)}
 						<DropdownMenu.Item>
 							{#snippet child({ props })}
-								<a href={queryHref({ status: value })} {...props}>{label}</a>
+								<a href={queryHref({ status: value })} {...props}>{STATUS_LABELS[value]}</a>
 							{/snippet}
 						</DropdownMenu.Item>
 					{/each}

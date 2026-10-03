@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 /**
  * Route-level tests for topics CRUD (batch 5): validation guards, unique-
@@ -10,8 +12,10 @@ const { dbMock, state, pg } = vi.hoisted(() => {
 	const dbMock: Record<string, unknown> = {};
 	const state = {
 		selectQueue: [] as unknown[][],
+		updateResults: [] as unknown[][],
 		inserts: [] as { values: Record<string, unknown> }[],
 		updates: [] as { values: Record<string, unknown> }[],
+		updateWheres: [] as unknown[],
 		deletes: [] as unknown[],
 		transactions: 0,
 		failWith: null as null | { code?: string }
@@ -37,6 +41,8 @@ function selectChain(): Record<string, unknown> {
 		orderBy: ret,
 		limit: ret,
 		groupBy: ret,
+		// The delete flow locks the topic row (`for('update')`).
+		for: ret,
 		then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
 			Promise.resolve(state.selectQueue.shift() ?? []).then(res, rej)
 	});
@@ -54,10 +60,16 @@ function makeWriteExecutors() {
 		}),
 		update: () => ({
 			set: (values: Record<string, unknown>) => ({
-				where: () => {
+				where: (cond?: unknown) => {
 					if (state.failWith) throw Object.assign(new Error('db'), state.failWith);
 					state.updates.push({ values });
-					return Promise.resolve();
+					state.updateWheres.push(cond);
+					// `.returning()` (update action) consumes a queued result;
+					// awaiting the chain directly (move renumber) does not.
+					return {
+						returning: async () => state.updateResults.shift() ?? [],
+						then: (res: (v: unknown) => unknown) => Promise.resolve(undefined).then(res)
+					};
 				}
 			})
 		}),
@@ -74,8 +86,10 @@ function makeWriteExecutors() {
 beforeEach(() => {
 	vi.clearAllMocks();
 	state.selectQueue = [];
+	state.updateResults = [];
 	state.inserts = [];
 	state.updates = [];
+	state.updateWheres = [];
 	state.deletes = [];
 	state.transactions = 0;
 	state.failWith = null;
@@ -123,6 +137,13 @@ describe('topics · create', () => {
 		expect(state.inserts).toHaveLength(0);
 	});
 
+	it('rejects icons outside the shared whitelist (front end never renders them)', async () => {
+		expect(
+			(await run('create', { name: '旅行', slug: 'travel', icon: 'totally-fake' })).status
+		).toBe(400);
+		expect(state.inserts).toHaveLength(0);
+	});
+
 	it('normalizes values and defaults sortOrder to 0', async () => {
 		const result = await run('create', {
 			name: '  旅行  ',
@@ -157,9 +178,14 @@ describe('topics · create', () => {
 });
 
 describe('topics · update / delete', () => {
-	it('update validates the id and reflects set values', async () => {
+	it('update validates the id, reflects set values and reports a vanished row', async () => {
 		expect((await run('update', { id: 'nope', name: '旅行', slug: 'travel' })).status).toBe(400);
+		expect(
+			(await run('update', { id: TOPIC_ID, name: '旅行', slug: 'travel', icon: 'totally-fake' }))
+				.status
+		).toBe(400);
 
+		state.updateResults = [[{ id: TOPIC_ID }]];
 		const result = await run('update', {
 			id: TOPIC_ID,
 			name: '旅行',
@@ -176,19 +202,29 @@ describe('topics · update / delete', () => {
 			icon: 'plane',
 			sortOrder: 3
 		});
+
+		// 0 rows affected: not-found must not answer success.
+		state.updateResults = [[]];
+		expect((await run('update', { id: TOPIC_ID, name: '旅行', slug: 'travel' })).status).toBe(404);
 	});
 
 	it('delete refuses while notes still attribute to the topic', async () => {
-		state.selectQueue = [[{ total: 3 }]];
+		// The flow locks the topic row, then counts: [topic, count].
+		state.selectQueue = [[{ id: TOPIC_ID }], [{ total: 3 }]];
 		const refused = await run('delete', { id: TOPIC_ID });
 		expect(refused.status).toBe(409);
 		expect((refused.data as { error?: string }).error).toContain('3 篇手记');
 		expect(state.deletes).toHaveLength(0);
 
-		state.selectQueue = [[{ total: 0 }]];
+		state.selectQueue = [[{ id: TOPIC_ID }], [{ total: 0 }]];
 		const removed = await run('delete', { id: TOPIC_ID });
 		expect(removed.status).toBe(200);
 		expect(state.deletes).toHaveLength(1);
+		expect(state.transactions).toBe(2);
+
+		// A vanished topic answers 404, not success.
+		state.selectQueue = [[]];
+		expect((await run('delete', { id: TOPIC_ID })).status).toBe(404);
 	});
 });
 
@@ -217,6 +253,10 @@ describe('topics · move (▲/▼)', () => {
 		expect(state.transactions).toBe(1);
 		// b⇄a then c: every position is rewritten (deterministic renumber).
 		expect(state.updates.map((u) => u.values.sortOrder)).toEqual([0, 1, 2]);
+		// The swap itself is pinned: the first renumbered row must be b.
+		const dialect = new PgDialect();
+		const updatedIds = state.updateWheres.map((cond) => dialect.sqlToQuery(cond as SQL).params[0]);
+		expect(updatedIds).toEqual([ids[1], ids[0], ids[2]]);
 	});
 
 	function idsTail(tail: string): number {

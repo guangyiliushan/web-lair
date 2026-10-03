@@ -221,6 +221,31 @@ describe('rss route', () => {
 		expect(body).toContain('<lastBuildDate>Thu, 01 Oct 2026 10:00:00 GMT</lastBuildDate>');
 	});
 
+	it('merges before rendering: 21+21 candidates render exactly 20 items once each', async () => {
+		const { renderMarkdownToHtml } = await import('$lib/server/markdown');
+		vi.mocked(renderMarkdownToHtml).mockClear();
+		const makeRow = (prefix: string, minute: number, second = 0) => ({
+			...helloRow,
+			id: `019bfc4e-0000-7000-8000-00000000${prefix}${String(minute).padStart(4, '0')}`,
+			slug: `${prefix}-${minute}`,
+			content: `Body ${minute}`,
+			publishedAt: new Date(Date.UTC(2026, 8, 1, 0, minute, second)),
+			updatedAt: new Date(Date.UTC(2026, 8, 1, 1, minute))
+		});
+		const posts = Array.from({ length: 21 }, (_, i) => makeRow('p', i));
+		// Notes are offset by 30s so posts/notes interleave after the merge.
+		const notes = Array.from({ length: 21 }, (_, i) => makeRow('n', i, 30));
+		state.selectResults = [posts, notes];
+
+		const body = await (await GET(event('/en/rss.xml'))).text();
+		expect((body.match(/<item>/g) ?? []).length).toBe(20);
+		// Only the surviving top-20 runs the markdown pipeline.
+		expect(vi.mocked(renderMarkdownToHtml).mock.calls.length).toBe(20);
+		// The 21st-ranked candidates are sliced away entirely.
+		expect(body).not.toContain('/posts/p-10');
+		expect(body).not.toContain('/notes/n-10');
+	});
+
 	it('redirects the bare root alias to the default language with a temporary 302', async () => {
 		state.defaultLang = 'zh-cn';
 

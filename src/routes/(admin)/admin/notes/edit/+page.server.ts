@@ -71,6 +71,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			temperatureC: row.temperatureC,
 			coordinates: row.coordinates,
 			location: row.location,
+			content: row.content,
 			locked: row.passwordHash !== null,
 			allowComment: row.allowComment,
 			emotions: Array.isArray(row.meta?.emotions) ? (row.meta.emotions as string[]) : [],
@@ -79,7 +80,13 @@ export const load: PageServerLoad = async ({ url }) => {
 			updatedAt: row.updatedAt
 		};
 
-		const draftRow = await loadNoteDraftByNoteId(row.id);
+		const [draftRow, siblingRows] = await Promise.all([
+			loadNoteDraftByNoteId(row.id),
+			db
+				.select({ id: notes.id, lang: notes.lang, status: notes.status })
+				.from(notes)
+				.where(and(eq(notes.translationGroup, row.translationGroup), ne(notes.id, row.id)))
+		]);
 		if (draftRow) {
 			draft = {
 				id: draftRow.id,
@@ -96,11 +103,7 @@ export const load: PageServerLoad = async ({ url }) => {
 				updatedAt: draftRow.updatedAt
 			};
 		}
-
-		siblings = await db
-			.select({ id: notes.id, lang: notes.lang, status: notes.status })
-			.from(notes)
-			.where(and(eq(notes.translationGroup, row.translationGroup), ne(notes.id, row.id)));
+		siblings = siblingRows;
 	}
 
 	return {
@@ -194,6 +197,10 @@ export const actions: Actions = {
 				};
 			case 'not-found':
 				return fail(404, { message: '手记不存在' });
+			case 'invalid':
+				// Graded write-side constraint failure (e.g. a topic deleted while
+				// the editor held its id): a form error, not a 500.
+				return fail(400, { errors: result.errors, message: '保存校验未通过' });
 			case 'conflict':
 				return fail(409, {
 					conflict: true,

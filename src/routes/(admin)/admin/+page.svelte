@@ -63,15 +63,15 @@
 			title: '日记',
 			count: 188,
 			icon: IconPencil,
-			writeHref: '/admin/notes?type=diary',
-			manageHref: '/admin/notes?type=diary'
+			writeHref: '/admin/notes/edit',
+			manageHref: '/admin/notes'
 		},
 		{
 			title: '速记',
 			count: 88,
 			icon: IconNotebook,
-			writeHref: '/admin/notes?type=quick',
-			manageHref: '/admin/notes?type=quick'
+			writeHref: '/admin/notes/edit',
+			manageHref: '/admin/notes'
 		},
 		{
 			title: '说说',

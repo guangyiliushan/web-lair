@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { psql } from './support';
 
 /**
  * N1 admin chain (batch 5) - owner flow against the real notes editor, the
@@ -19,14 +19,6 @@ const TOPIC2_NAME = 'E2E Topic 2';
 const TOPIC2_SLUG = 'e2e-topic-2';
 const TITLE = 'e2e note alpha';
 const SLUG = 'e2e-note-alpha';
-
-function psql(sql: string): string {
-	return execFileSync(
-		'docker',
-		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', 'local', '-tAc', sql],
-		{ encoding: 'utf8' }
-	).trim();
-}
 
 function byText(page: Page, text: string | RegExp): Locator {
 	return page.getByText(text).filter({ visible: true });
@@ -260,6 +252,23 @@ test('row-level settings: pin, password and emotions', async ({ page }) => {
 		.toBe('1');
 });
 
+/** Type a title until the input truly holds it (pre-hydration keystrokes are lost). */
+async function setTitle(page: Page, value: string) {
+	const titleInput = page.locator('input[name="title"]');
+	await expect(async () => {
+		await titleInput.click();
+		await page.keyboard.press('Control+A');
+		await page.keyboard.type(value);
+		await expect(titleInput).toHaveValue(value, { timeout: 1500 });
+	}).toPass({ timeout: 30000 });
+}
+
+/** Manual save + wait for the saved indicator (manual saves bypass the throttle). */
+async function saveDraft(page: Page) {
+	await page.getByRole('button', { name: '保存草稿' }).click();
+	await expect(byText(page, /已保存/).first()).toBeVisible({ timeout: 30000 });
+}
+
 test('trash removes the note from the front; restore brings it back', async ({ page }) => {
 	const id = noteId();
 
@@ -281,4 +290,38 @@ test('trash removes the note from the front; restore brings it back', async ({ p
 
 	const live = await page.goto(`/en/notes/${SLUG}`);
 	expect(live?.status()).toBe(200);
+});
+
+test('a stale tab hits the 409 conflict banner and can reload the server state', async ({
+	context
+}) => {
+	const id = noteId();
+	const tabA = await context.newPage();
+	const tabB = await context.newPage();
+	await tabA.goto(`/admin/notes/edit?id=${id}`);
+	await tabB.goto(`/admin/notes/edit?id=${id}`);
+	await expect(tabA.locator('input[name="title"]')).toHaveValue(/.+/, { timeout: 10000 });
+	await expect(tabB.locator('input[name="title"]')).toHaveValue(/.+/, { timeout: 10000 });
+
+	// Tab A saves first (creates/advances the draft); tab B reloads to hold it.
+	await setTitle(tabA, 'e2e note alpha v1');
+	await saveDraft(tabA);
+	await tabB.goto(`/admin/notes/edit?id=${id}`);
+	await expect(tabB.locator('input[name="title"]')).toHaveValue('e2e note alpha v1');
+
+	// Tab A advances the draft; tab B's stale version must NOT overwrite it.
+	await setTitle(tabA, 'e2e note alpha v2');
+	await saveDraft(tabA);
+	await setTitle(tabB, 'e2e note alpha v3');
+	await tabB.getByRole('button', { name: '保存草稿' }).click();
+	await expect(byText(tabB, /内容已在其他窗口更新/).first()).toBeVisible({ timeout: 30000 });
+
+	// The banner's reload adopts the server copy (tab A's write survives).
+	await tabB.getByRole('button', { name: '载入服务端最新' }).click();
+	await expect(tabB.locator('input[name="title"]')).toHaveValue('e2e note alpha v2', {
+		timeout: 10000
+	});
+	expect(psql(`select title from drafts where ref_id = '${id}'`)).toBe('e2e note alpha v2');
+	await tabA.close();
+	await tabB.close();
 });

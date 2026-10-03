@@ -79,57 +79,52 @@ export const GET: RequestHandler = async ({ url, request }) => {
 			.limit(ITEM_LIMIT)
 	]);
 
-	const postItems = (
+	// Merge BEFORE rendering: only the surviving top-N runs the markdown
+	// pipeline (the old shape rendered up to 40 items per request and then
+	// dropped half of them - round-7 review finding). Array.prototype.sort is
+	// stable, so equal timestamps keep a deterministic posts-then-notes order
+	// (byte-stable ETag, same output as the render-then-slice shape).
+	const merged = [
+		...postRows.map((row) => ({ kind: 'post' as const, row })),
+		...noteRows.map((row) => ({ kind: 'note' as const, row }))
+	]
+		.sort((a, b) => (b.row.publishedAt?.getTime() ?? 0) - (a.row.publishedAt?.getTime() ?? 0))
+		.slice(0, ITEM_LIMIT);
+
+	const items = (
 		await Promise.all(
-			postRows.map(async (row): Promise<RssItem | null> => {
+			merged.map(async ({ kind, row }): Promise<RssItem | null> => {
 				// The visibility predicate already excludes unpublished rows;
 				// this guard only narrows the type.
 				if (!row.publishedAt) return null;
 				try {
-					return {
+					const base = {
 						title: row.title,
-						link: `${origin}${localizeHref(`/posts/${row.slug}`, { locale })}`,
 						guid: `urn:uuid:${row.id}`,
 						pubDate: row.publishedAt,
-						description: row.summary?.trim() || plainTextExcerpt(row.content ?? ''),
 						contentHtml: row.content ? await renderMarkdownToHtml(row.content) : undefined
+					};
+					if (kind === 'post') {
+						return {
+							...base,
+							link: `${origin}${localizeHref(`/posts/${row.slug}`, { locale })}`,
+							description: row.summary?.trim() || plainTextExcerpt(row.content ?? '')
+						};
+					}
+					return {
+						...base,
+						link: `${origin}${localizeHref(`/notes/${row.slug}`, { locale })}`,
+						description: plainTextExcerpt(row.content ?? '')
 					};
 				} catch (error) {
 					// One broken item must not take the whole feed down
 					// (second review round): log and skip it.
-					console.warn('[rss] item render failed', row.id, error);
+					console.warn(`[rss] ${kind} item render failed`, row.id, error);
 					return null;
 				}
 			})
 		)
 	).filter((item): item is RssItem => item !== null);
-
-	const noteItems = (
-		await Promise.all(
-			noteRows.map(async (row): Promise<RssItem | null> => {
-				if (!row.publishedAt) return null;
-				try {
-					return {
-						title: row.title,
-						link: `${origin}${localizeHref(`/notes/${row.slug}`, { locale })}`,
-						guid: `urn:uuid:${row.id}`,
-						pubDate: row.publishedAt,
-						description: plainTextExcerpt(row.content ?? ''),
-						contentHtml: row.content ? await renderMarkdownToHtml(row.content) : undefined
-					};
-				} catch (error) {
-					console.warn('[rss] note item render failed', row.id, error);
-					return null;
-				}
-			})
-		)
-	).filter((item): item is RssItem => item !== null);
-
-	// Merge newest-first; Array.prototype.sort is stable, so equal timestamps
-	// keep a deterministic posts-then-notes order (byte-stable ETag).
-	const items = [...postItems, ...noteItems]
-		.sort((a, b) => b.pubDate.getTime() - a.pubDate.getTime())
-		.slice(0, ITEM_LIMIT);
 
 	let latest: Date | null = null;
 	for (const row of [...postRows, ...noteRows]) {

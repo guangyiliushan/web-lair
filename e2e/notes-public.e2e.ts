@@ -18,6 +18,8 @@ const OPEN_EN_ID = '00000000-0000-7000-8000-0000000004a2';
 const OPEN_ZH_ID = '00000000-0000-7000-8000-0000000004a3';
 const GATED_ID = '00000000-0000-7000-8000-0000000004a4';
 const ONLY_EN_ID = '00000000-0000-7000-8000-0000000004a5';
+const PRIVATE_ID = '00000000-0000-7000-8000-0000000004a6';
+const TRASH_ID = '00000000-0000-7000-8000-0000000004a7';
 const GROUP_OPEN = '00000000-0000-7000-8000-0000000004b0';
 const GROUP_GATED = '00000000-0000-7000-8000-0000000004b1';
 const GROUP_ONLY_EN = '00000000-0000-7000-8000-0000000004b2';
@@ -25,12 +27,17 @@ const GROUP_ONLY_EN = '00000000-0000-7000-8000-0000000004b2';
 const SLUG_OPEN = 'e2e-n1-open';
 const SLUG_GATED = 'e2e-n1-gated';
 const SLUG_ONLY_EN = 'e2e-n1-only-en';
+const SLUG_PRIVATE = 'e2e-n1-private';
+const SLUG_TRASH = 'e2e-n1-trash';
 const SLUG_RETIRED = 'e2e-n1-old-slug';
 const TOPIC_SLUG = 'e2e-n1-topic';
 const TITLE_OPEN = 'E2E N1 open note';
 const TITLE_OPEN_ZH = 'E2E N1 中文手记';
 const TITLE_GATED = 'E2E N1 locked note';
 const TITLE_ONLY_EN = 'E2E N1 english only';
+const TITLE_PRIVATE = 'E2E N1 private note';
+const TITLE_TRASH = 'E2E N1 trash note';
+const APPROVED_COMMENT = 'Approved note comment body.';
 const BODY_TEXT = 'Public diary body text.';
 const GATED_SECRET = 'Body that must stay hidden.';
 const GATE_PASSWORD = 'e2e-gate-pass';
@@ -78,6 +85,15 @@ test.beforeAll(() => {
 			`insert into notes (id, slug, title, content, lang, status, published_at, translation_group, allow_comment) values`,
 			`('${ONLY_EN_ID}', '${SLUG_ONLY_EN}', '${TITLE_ONLY_EN}', 'Only in english.', 'en', 'published', now() - interval '4 days', '${GROUP_ONLY_EN}', true)`,
 			`;`,
+			`insert into notes (id, slug, title, content, lang, status, published_at, translation_group, allow_comment) values`,
+			`('${PRIVATE_ID}', '${SLUG_PRIVATE}', '${TITLE_PRIVATE}', 'Private body.', 'en', 'private', now() - interval '5 days', '00000000-0000-7000-8000-0000000004b3', true)`,
+			`;`,
+			`insert into notes (id, slug, title, content, lang, status, published_at, translation_group, allow_comment) values`,
+			`('${TRASH_ID}', '${SLUG_TRASH}', '${TITLE_TRASH}', 'Trashed body.', 'en', 'trash', now() - interval '6 days', '00000000-0000-7000-8000-0000000004b4', true)`,
+			`;`,
+			`insert into comments (id, note_id, author, text, state) values`,
+			`('00000000-0000-7000-8000-0000000004d1', '${ONLY_EN_ID}', 'E2E reader', '${APPROVED_COMMENT}', 'approved')`,
+			`;`,
 			`insert into slug_trackers (id, slug, type, lang, target_id) values`,
 			`('00000000-0000-7000-8000-0000000004c1', '${SLUG_RETIRED}', 'note', 'en', '${OPEN_EN_ID}')`
 		].join(' ')
@@ -123,6 +139,31 @@ test.describe('N1 public notes surface', () => {
 		expect(response?.status()).toBe(404);
 		// The page renders in the requested locale: the zh-cn hint copy.
 		await expect(page.getByText('这篇手记没有该语言的版本')).toBeVisible();
+	});
+
+	test('private and trash notes stay off every public face', async ({ page }) => {
+		// Both were published once (published_at set): only the status hides them.
+		await page.goto('/en/notes');
+		await expect(page.getByText(TITLE_PRIVATE)).toHaveCount(0);
+		await expect(page.getByText(TITLE_TRASH)).toHaveCount(0);
+
+		await page.goto(`/en/notes/topics/${TOPIC_SLUG}`);
+		await expect(page.getByText(TITLE_PRIVATE)).toHaveCount(0);
+		await expect(page.getByText(TITLE_TRASH)).toHaveCount(0);
+
+		const priv = await page.goto(`/en/notes/${SLUG_PRIVATE}`);
+		expect(priv?.status()).toBe(404);
+		const trash = await page.goto(`/en/notes/${SLUG_TRASH}`);
+		expect(trash?.status()).toBe(404);
+	});
+
+	test('an approved note comment renders on the note page', async ({ page }) => {
+		// The write side lands comments as `pending`; the review flow flips them
+		// to `approved` (covered for the queue in comment-p3a). This pins the
+		// note-target read leg: an approved comment shows on the public page.
+		await page.goto(`/en/notes/${SLUG_ONLY_EN}`);
+		await expect(page.getByRole('heading', { name: 'Comments (1)' })).toBeVisible();
+		await expect(page.getByText(APPROVED_COMMENT)).toBeVisible();
 	});
 
 	test('a retired slug resolves with one 301 to the live note', async ({ request }) => {

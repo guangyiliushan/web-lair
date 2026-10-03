@@ -1,11 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { drafts, notes } from '$lib/server/db/content';
 import { slugTrackers } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isReservedNoteSlug, NOTE_EMOTIONS, NOTE_MOODS } from '$lib/utils/note-meta';
-import { hashNotePassword } from './note-gate';
+import { hashNotePassword, verifyNotePassword } from './note-gate';
 import { DRAFT_THROTTLE_MS } from './post-drafts';
 
 /**
@@ -18,8 +18,6 @@ import { DRAFT_THROTTLE_MS } from './post-drafts';
  * base check relies on the one-draft-per-note unique + row locks + the
  * draft's own optimistic version (documented N1 decision).
  */
-export type DbExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 /** Marker for the auto-generated slug of never-published placeholder rows. */
 const PLACEHOLDER_SLUG_PREFIX = 'draft-';
 
@@ -28,7 +26,7 @@ export function isNotePlaceholderSlug(slug: string): boolean {
 }
 
 /** Unique-enough placeholder slug; the real slug is required at publish. */
-export function noteTempSlug(): string {
+function noteTempSlug(): string {
 	return `${PLACEHOLDER_SLUG_PREFIX}${randomBytes(5).toString('hex')}`;
 }
 
@@ -58,22 +56,35 @@ interface NormalizedNoteDraft {
 	content: string;
 }
 
+/** Plain decimal shape shared by the numeric form fields (no exponents,
+ * leading signs in odd places, thousands separators or hex). */
+const DECIMAL_RE = /^-?\d+(?:\.\d+)?$/;
+
 /** Coerce a weather code; anything outside the DB CHECK range becomes null. */
 function normalizeWeatherCode(raw: string | number | null): number | null {
 	if (raw === null || raw === '') return null;
-	const value = typeof raw === 'number' ? raw : Number.parseInt(raw, 10);
+	// parseInt would silently accept '12.9' / '12abc'; require the exact shape.
+	const value = typeof raw === 'number' ? raw : /^\d{1,2}$/.test(raw.trim()) ? Number(raw) : NaN;
 	if (!Number.isInteger(value) || value < 0 || value > 99) return null;
 	return value;
 }
 
-/** Numeric column; keep the form string but drop garbage (CHECK backs range). */
+/**
+ * Numeric(4,1) column. Strict shape first (parseFloat alone would pass
+ * '2.5.5' / '21,5' / '1e3' into the column and 22P02 into a 500), then
+ * canonicalise to the column scale so the stored text round-trips
+ * byte-identically ('7' -> '7.0') and the hash-unchanged guard keeps
+ * working (round-7 review finding).
+ */
 function normalizeTemperature(raw: string | null): string | null {
 	if (raw === null) return null;
 	const trimmed = raw.trim();
 	if (trimmed === '') return null;
+	if (!DECIMAL_RE.test(trimmed)) return null;
 	const value = Number.parseFloat(trimmed);
 	if (!Number.isFinite(value) || value < -99.9 || value > 99.9) return null;
-	return trimmed;
+	// Avoid the negative-zero spelling PG normalises away.
+	return (value === 0 ? 0 : value).toFixed(1);
 }
 
 /** Both coordinates or neither; out-of-range values drop the pair. */
@@ -84,6 +95,7 @@ function normalizeCoordinates(
 	const lat = latRaw.trim();
 	const lng = lngRaw.trim();
 	if (lat === '' || lng === '') return null;
+	if (!DECIMAL_RE.test(lat) || !DECIMAL_RE.test(lng)) return null;
 	const latitude = Number.parseFloat(lat);
 	const longitude = Number.parseFloat(lng);
 	if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return null;
@@ -154,7 +166,7 @@ function hashRow(row: NoteDraftRow): string {
 	});
 }
 
-export async function loadNoteDraftById(draftId: string): Promise<NoteDraftRow | null> {
+async function loadNoteDraftById(draftId: string): Promise<NoteDraftRow | null> {
 	const [row] = await db
 		.select()
 		.from(drafts)
@@ -182,6 +194,7 @@ export type SaveNoteDraftResult =
 			kind: 'conflict';
 			server: { draftId: string | null; version: number; updatedAt: Date | null };
 	  }
+	| { kind: 'invalid'; errors: Record<string, string> }
 	| { kind: 'not-found' };
 
 export interface SaveNoteDraftInput {
@@ -258,6 +271,12 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 					}
 				};
 			}
+			// The picked topic vanished between pick and write (FK 23503):
+			// a graded form error, not a 500 with an autosave retry loop
+			// (round-7 review finding).
+			if (pgErrorCode(caught) === '23503') {
+				return { kind: 'invalid', errors: { topicId: '专栏不存在，请重新选择' } };
+			}
 			throw caught;
 		}
 	}
@@ -306,6 +325,9 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 		} catch (caught) {
 			// Placeholder slug collision (extremely unlikely): retry with a new one.
 			if (pgErrorCode(caught) === '23505' && attempt < 2) continue;
+			if (pgErrorCode(caught) === '23503') {
+				return { kind: 'invalid', errors: { topicId: '专栏不存在，请重新选择' } };
+			}
 			throw caught;
 		}
 	}
@@ -347,11 +369,19 @@ async function updateExistingNoteDraft(
 	}
 
 	const expected = input.expectedVersion ?? draft.version;
-	const updated = await db
-		.update(drafts)
-		.set({ ...noteDraftUpdateSet(payload), version: draft.version + 1, updatedAt: new Date() })
-		.where(and(eq(drafts.id, draft.id), eq(drafts.version, expected)))
-		.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+	let updated: { id: string; version: number; updatedAt: Date | null }[];
+	try {
+		updated = await db
+			.update(drafts)
+			.set({ ...noteDraftUpdateSet(payload), version: draft.version + 1, updatedAt: new Date() })
+			.where(and(eq(drafts.id, draft.id), eq(drafts.version, expected)))
+			.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+	} catch (caught) {
+		if (pgErrorCode(caught) === '23503') {
+			return { kind: 'invalid', errors: { topicId: '专栏不存在，请重新选择' } };
+		}
+		throw caught;
+	}
 
 	if (updated.length === 0) {
 		// Lost the conditional update to a concurrent save.
@@ -400,7 +430,7 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 	const mood = (draft.mood ?? '').trim();
 	if (!title) errors.title = '标题不能为空';
 	if (!slug) errors.slug = 'Slug 不能为空';
-	else if (!NOTE_SLUG_RE.test(slug)) errors.slug = 'Slug 仅允许字母、数字、汉字与连字符';
+	else if (!NOTE_SLUG_RE.test(slug)) errors.slug = 'Slug 仅允许 Unicode 字母、数字与连字符';
 	else if (slug !== slug.toLowerCase()) errors.slug = 'Slug 需为小写';
 	else if (isReservedNoteSlug(slug)) errors.slug = '该 Slug 为保留词，请更换';
 	else if (isNotePlaceholderSlug(slug)) errors.slug = '该 Slug 前缀由系统占位保留，请更换';
@@ -571,13 +601,23 @@ export async function setNoteStatus(
 		.where(eq(notes.id, noteId))
 		.limit(1);
 	if (!note) return { kind: 'not-found' };
-	if (note.status === actionToStatus(action, note.publishedAt)) return { kind: 'ok' };
+	const target = actionToStatus(action, note.publishedAt);
+	if (note.status === target) return { kind: 'ok' };
 
-	await db
+	// CAS on the status we read: a concurrent publish/restore must not be
+	// overwritten blind (round-7 review finding).
+	const rows = await db
 		.update(notes)
-		.set({ status: actionToStatus(action, note.publishedAt), updatedAt: new Date() })
-		.where(eq(notes.id, noteId));
-	return { kind: 'ok' };
+		.set({ status: target, updatedAt: new Date() })
+		.where(and(eq(notes.id, noteId), eq(notes.status, note.status)))
+		.returning({ id: notes.id });
+	if (rows.length > 0) return { kind: 'ok' };
+	const [again] = await db
+		.select({ id: notes.id })
+		.from(notes)
+		.where(eq(notes.id, noteId))
+		.limit(1);
+	return again ? { kind: 'ok' } : { kind: 'not-found' };
 }
 
 function actionToStatus(action: 'private' | 'trash' | 'restore', publishedAt: Date | null): string {
@@ -589,7 +629,12 @@ function actionToStatus(action: 'private' | 'trash' | 'restore', publishedAt: Da
 export async function setNotePin(noteId: string, pinned: boolean): Promise<NoteRowActionResult> {
 	const rows = await db
 		.update(notes)
-		.set({ pinAt: pinned ? new Date() : null, updatedAt: new Date() })
+		.set({
+			// Re-pinning keeps the original instant: pin ordering must not
+			// drift on double-clicks (round-7 review finding).
+			pinAt: pinned ? sql`coalesce(${notes.pinAt}, now())` : null,
+			updatedAt: new Date()
+		})
 		.where(eq(notes.id, noteId))
 		.returning({ id: notes.id });
 	return rows.length > 0 ? { kind: 'ok' } : { kind: 'not-found' };
@@ -599,12 +644,20 @@ export async function setNoteAllowComment(
 	noteId: string,
 	allow: boolean
 ): Promise<NoteRowActionResult> {
+	// Conditional on the current value: a repeated toggle is a no-op instead
+	// of bumping updated_at (round-7 review finding).
 	const rows = await db
 		.update(notes)
 		.set({ allowComment: allow, updatedAt: new Date() })
-		.where(eq(notes.id, noteId))
+		.where(and(eq(notes.id, noteId), ne(notes.allowComment, allow)))
 		.returning({ id: notes.id });
-	return rows.length > 0 ? { kind: 'ok' } : { kind: 'not-found' };
+	if (rows.length > 0) return { kind: 'ok' };
+	const [again] = await db
+		.select({ id: notes.id })
+		.from(notes)
+		.where(eq(notes.id, noteId))
+		.limit(1);
+	return again ? { kind: 'ok' } : { kind: 'not-found' };
 }
 
 /** Empty string clears the gate; a new value revokes outstanding unlocks
@@ -614,6 +667,20 @@ export async function setNotePassword(
 	password: string
 ): Promise<NoteRowActionResult> {
 	if (password.length > 200) return { kind: 'invalid', message: '密码过长' };
+	const [note] = await db
+		.select({ id: notes.id, passwordHash: notes.passwordHash })
+		.from(notes)
+		.where(eq(notes.id, noteId))
+		.limit(1);
+	if (!note) return { kind: 'not-found' };
+	if (password === '') {
+		if (note.passwordHash === null) return { kind: 'ok' };
+	} else if (note.passwordHash !== null && verifyNotePassword(password, note.passwordHash)) {
+		// Same password: keep the existing hash. Re-salting would revoke every
+		// outstanding unlock cookie and burn an argon2 run for nothing
+		// (round-7 review finding).
+		return { kind: 'ok' };
+	}
 	const passwordHash = password === '' ? null : hashNotePassword(password);
 	const rows = await db
 		.update(notes)
@@ -633,15 +700,19 @@ export async function setNoteEmotions(
 	if (tokens.some((token) => !allowed.has(token))) {
 		return { kind: 'invalid', message: '情绪取值无效' };
 	}
-	const [note] = await db
-		.select({ id: notes.id, meta: notes.meta })
-		.from(notes)
+	// Dedupe (a repeated checkbox submit may repeat a token) and merge with a
+	// single jsonb_set statement: the old read-modify-write could drop a
+	// concurrent meta writer (round-7 review finding).
+	const unique = [...new Set(tokens)];
+	const rows = await db
+		.update(notes)
+		.set({
+			meta: sql`jsonb_set(coalesce(${notes.meta}, '{}'::jsonb), '{emotions}', ${JSON.stringify(unique)}::jsonb)`,
+			updatedAt: new Date()
+		})
 		.where(eq(notes.id, noteId))
-		.limit(1);
-	if (!note) return { kind: 'not-found' };
-	const nextMeta = { ...(note.meta ?? {}), emotions: tokens };
-	await db.update(notes).set({ meta: nextMeta, updatedAt: new Date() }).where(eq(notes.id, noteId));
-	return { kind: 'ok' };
+		.returning({ id: notes.id });
+	return rows.length > 0 ? { kind: 'ok' } : { kind: 'not-found' };
 }
 
 /* ── Read helpers for the lists ──────────────────────────────────────── */

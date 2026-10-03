@@ -226,6 +226,38 @@ describe('sitemap route', () => {
 		expect(body).toContain('<lastmod>2026-09-20T09:00:00.000Z</lastmod>');
 	});
 
+	it('pins the deterministic ordering of all three sources', async () => {
+		await GET(event());
+
+		const orderSql = (index: number) =>
+			state.orderArgs[index].map((arg) => dbDialect.sqlToQuery(sql`${arg}`).sql).join(' | ');
+		expect(orderSql(0)).toContain('"posts"."lang"');
+		expect(orderSql(0)).toContain('"posts"."slug"');
+		// Notes: same stability requirement as posts.
+		expect(orderSql(1)).toContain('"notes"."lang"');
+		expect(orderSql(1)).toContain('"notes"."slug"');
+		// Topics: slug order (locale loop is fixed code order).
+		expect(orderSql(2)).toContain('"topics"."slug"');
+	});
+
+	it('skips notes in unknown locales (no loc, no alternate)', async () => {
+		state.selectResults = [
+			[],
+			[
+				{
+					lang: 'fr',
+					slug: 'n-fr',
+					updatedAt: new Date('2026-09-20T09:00:00Z'),
+					translationGroup: 'nfr'
+				}
+			],
+			[]
+		];
+		const body = await (await GET(event())).text();
+		expect(body).not.toContain('/fr/');
+		expect(body).not.toContain('n-fr');
+	});
+
 	it('gates the notes source on the feedable predicate (visible AND not gated)', async () => {
 		await GET(event());
 

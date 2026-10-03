@@ -20,7 +20,7 @@ const { dbMock, state, service } = vi.hoisted(() => {
 		setNoteAllowComment: vi.fn(),
 		setNoteEmotions: vi.fn(),
 		setNotePassword: vi.fn(),
-		isNotePlaceholderSlug: vi.fn((slug: string) => slug.startsWith('note-')),
+		isNotePlaceholderSlug: vi.fn((slug: string) => slug.startsWith('draft-')),
 		requireAdminRole: vi.fn()
 	};
 	return { dbMock, state, service };
@@ -45,7 +45,7 @@ vi.mock('$lib/server/config/options-registry', () => ({
 	OPTION_LANGS: ['en', 'zh-cn', 'ja']
 }));
 
-import { actions } from './+page.server';
+import { actions, load } from './+page.server';
 
 const NOTE_ID = '11111111-1111-1111-1111-111111111111';
 const DRAFT_ID = '22222222-2222-2222-2222-222222222222';
@@ -240,16 +240,16 @@ describe('notes editor · publish / discard / status', () => {
 	it('only accepts the three status verbs and maps redirects', async () => {
 		expect((await run('status', { id: NOTE_ID, action: 'delete' })).status).toBe(400);
 
-		service.setNoteStatus.mockResolvedValueOnce({ kind: 'updated', status: 'trash' });
+		service.setNoteStatus.mockResolvedValueOnce({ kind: 'ok', status: 'trash' });
 		const trashed = await run('status', { id: NOTE_ID, action: 'trash' });
 		expect(trashed.location).toBe('/admin/notes?trashed=1');
 
-		service.setNoteStatus.mockResolvedValueOnce({ kind: 'updated', status: 'private' });
+		service.setNoteStatus.mockResolvedValueOnce({ kind: 'ok', status: 'private' });
 		expect((await run('status', { id: NOTE_ID, action: 'private' })).location).toBe(
 			`/admin/notes/edit?id=${NOTE_ID}&private=1`
 		);
 
-		service.setNoteStatus.mockResolvedValueOnce({ kind: 'updated', status: 'published' });
+		service.setNoteStatus.mockResolvedValueOnce({ kind: 'ok', status: 'published' });
 		expect((await run('status', { id: NOTE_ID, action: 'restore' })).location).toBe(
 			`/admin/notes/edit?id=${NOTE_ID}&restored=1`
 		);
@@ -261,8 +261,8 @@ describe('notes editor · publish / discard / status', () => {
 
 describe('notes editor · row-level settings', () => {
 	it('pin/comments parse the toggle value as strict "1"', async () => {
-		service.setNotePin.mockResolvedValue({ kind: 'updated' });
-		service.setNoteAllowComment.mockResolvedValue({ kind: 'updated' });
+		service.setNotePin.mockResolvedValue({ kind: 'ok' });
+		service.setNoteAllowComment.mockResolvedValue({ kind: 'ok' });
 		await run('pin', { id: NOTE_ID, value: '1' });
 		await run('comments', { id: NOTE_ID, value: '0' });
 		expect(service.setNotePin).toHaveBeenCalledWith(NOTE_ID, true);
@@ -270,7 +270,7 @@ describe('notes editor · row-level settings', () => {
 	});
 
 	it('emotions collect every repeated form field', async () => {
-		service.setNoteEmotions.mockResolvedValue({ kind: 'updated' });
+		service.setNoteEmotions.mockResolvedValue({ kind: 'ok' });
 		const result = await run('emotions', { id: NOTE_ID, emotions: ['happy', 'calm'] });
 		expect(result.status).toBe(200);
 		expect(service.setNoteEmotions).toHaveBeenCalledWith(NOTE_ID, ['happy', 'calm']);
@@ -283,7 +283,7 @@ describe('notes editor · row-level settings', () => {
 	});
 
 	it('password clear=1 wins over any typed value; empty clears', async () => {
-		service.setNotePassword.mockResolvedValue({ kind: 'updated' });
+		service.setNotePassword.mockResolvedValue({ kind: 'ok' });
 		await run('password', { id: NOTE_ID, password: 'typed', clear: '1' });
 		expect(service.setNotePassword).toHaveBeenCalledWith(NOTE_ID, '');
 		await run('password', { id: NOTE_ID, password: 'hunter2' });
@@ -291,8 +291,127 @@ describe('notes editor · row-level settings', () => {
 
 		service.setNotePassword.mockResolvedValueOnce({
 			kind: 'invalid',
-			message: '密码最长 200 字符'
+			message: '密码过长'
 		});
 		expect((await run('password', { id: NOTE_ID, password: 'x'.repeat(201) })).status).toBe(400);
+	});
+
+	it('maps a graded write-side constraint failure (invalid) to 400 with errors', async () => {
+		service.saveNoteDraftWork.mockResolvedValueOnce({
+			kind: 'invalid',
+			errors: { topicId: '专栏不存在，请重新选择' }
+		});
+		const result = await run('save', BASE_SAVE);
+		expect(result.status).toBe(400);
+		expect(result.data).toMatchObject({
+			errors: { topicId: '专栏不存在，请重新选择' }
+		});
+	});
+});
+
+describe('notes editor · load', () => {
+	function loadEvent(id?: string) {
+		return {
+			url: new URL(`http://localhost/admin/notes/edit${id ? `?id=${id}` : ''}`),
+			locals: { admin: { userId: 'user-1' }, user: { id: 'user-1' } }
+		} as never;
+	}
+
+	const NOTE_ROW = {
+		id: NOTE_ID,
+		nid: 7,
+		title: 'Existing note',
+		slug: 'existing-note',
+		lang: 'en',
+		status: 'published',
+		tz: null,
+		publishedAt: new Date('2026-09-01T00:00:00Z'),
+		pinAt: null,
+		topicId: TOPIC_ID,
+		mood: 'good',
+		weatherCode: 2,
+		temperatureC: '21.5',
+		coordinates: { latitude: 25.03, longitude: 121.56 },
+		location: 'Taipei',
+		content: 'Published body',
+		passwordHash: null,
+		allowComment: true,
+		meta: { emotions: ['calm'] },
+		createdAt: new Date('2026-09-01T00:00:00Z'),
+		updatedAt: new Date('2026-09-02T00:00:00Z'),
+		translationGroup: '00000000-0000-7000-8000-0000000000aa'
+	};
+
+	const DRAFT_ROW = {
+		id: DRAFT_ID,
+		version: 2,
+		title: 'Edited title',
+		slug: 'edited-slug',
+		topicId: null,
+		mood: null,
+		weatherCode: null,
+		temperatureC: null,
+		coordinates: null,
+		location: null,
+		content: 'Edited body',
+		updatedAt: new Date('2026-10-03T00:00:00Z')
+	};
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		state.selectQueue = [];
+		dbMock.select = () => chain();
+	});
+
+	it('projects the note without the password hash and keeps content for the editor', async () => {
+		state.selectQueue = [
+			[{ id: TOPIC_ID, name: '旅行', slug: 'travel' }], // topics
+			[NOTE_ROW], // note row
+			[{ id: '44444444-4444-4444-4444-444444444444', lang: 'zh-cn', status: 'published' }] // siblings
+		];
+		service.loadNoteDraftByNoteId.mockResolvedValueOnce(DRAFT_ROW);
+
+		const result = (await load(loadEvent(NOTE_ID))) as {
+			note: Record<string, unknown>;
+			draft: Record<string, unknown>;
+			siblings: unknown[];
+		};
+
+		// The hash never reaches the page; only the derived flag does.
+		expect(result.note).not.toHaveProperty('passwordHash');
+		expect(result.note).toMatchObject({
+			id: NOTE_ID,
+			locked: false,
+			placeholder: false,
+			content: 'Published body',
+			emotions: ['calm']
+		});
+		expect(result.draft).toMatchObject({ id: DRAFT_ID, version: 2, content: 'Edited body' });
+		expect(result.siblings).toHaveLength(1);
+	});
+
+	it('flags placeholder slugs and exposes note content when no draft exists', async () => {
+		state.selectQueue = [
+			[],
+			[{ ...NOTE_ROW, slug: 'draft-abc123', status: 'draft', publishedAt: null }],
+			[]
+		];
+		service.loadNoteDraftByNoteId.mockResolvedValueOnce(null);
+
+		const result = (await load(loadEvent(NOTE_ID))) as {
+			note: Record<string, unknown>;
+			draft: unknown;
+		};
+		expect(result.draft).toBeNull();
+		expect(result.note).toMatchObject({
+			placeholder: true,
+			content: 'Published body'
+		});
+	});
+
+	it('404s for a malformed or missing id', async () => {
+		await expect(load(loadEvent('not-a-uuid'))).rejects.toMatchObject({ status: 404 });
+		state.selectQueue = [[], []];
+		await expect(load(loadEvent(NOTE_ID))).rejects.toMatchObject({ status: 404 });
 	});
 });
