@@ -64,9 +64,13 @@ describe('findBacklink (§4.8)', () => {
 		);
 	});
 
-	it('treats <plaintext> as rawtext (no false positives after it)', () => {
+	it('keeps <plaintext> immune to a literal </plaintext> (WHATWG PLAINTEXT)', () => {
 		expect(
 			findBacklink('<plaintext><a href="https://us.example/">x</a>', PAGE, ACCEPTED).found
+		).toBe(false);
+		expect(
+			findBacklink('<plaintext>x</plaintext><a href="https://us.example/">y</a>', PAGE, ACCEPTED)
+				.found
 		).toBe(false);
 	});
 

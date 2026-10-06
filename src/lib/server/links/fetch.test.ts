@@ -96,7 +96,10 @@ describe('fetchUnit (§4.2/§4.8)', () => {
 		const stub = async () =>
 			new Response(null, { status: 302, headers: { location: 'http://x.example/next' } });
 		await expect(
-			fetchUnit('https://x.example/', OPTS, { fetch: stub as unknown as FetchUnitDeps['fetch'], resolveHost })
+			fetchUnit('https://x.example/', OPTS, {
+				fetch: stub as unknown as FetchUnitDeps['fetch'],
+				resolveHost
+			})
 		).rejects.toMatchObject({ code: 'non-https' });
 		expect(resolveHost).toHaveBeenCalledTimes(1);
 	});
@@ -106,7 +109,10 @@ describe('fetchUnit (§4.2/§4.8)', () => {
 		const stub = async () =>
 			new Response(null, { status: 302, headers: { location: 'https://y.example/next' } });
 		await expect(
-			fetchUnit('https://x.example/', OPTS, { fetch: stub as unknown as FetchUnitDeps['fetch'], resolveHost })
+			fetchUnit('https://x.example/', OPTS, {
+				fetch: stub as unknown as FetchUnitDeps['fetch'],
+				resolveHost
+			})
 		).rejects.toMatchObject({ code: 'ssrf' });
 		expect(resolveHost).toHaveBeenCalledTimes(2);
 	});
@@ -119,6 +125,21 @@ describe('fetchUnit (§4.2/§4.8)', () => {
 		const started = Date.now();
 		await expect(
 			fetchUnit('https://x.example/', { ...OPTS, timeoutMs: 150 }, depsWith(vi.fn(), slowResolve))
+		).rejects.toMatchObject({ name: 'TimeoutError' });
+		expect(Date.now() - started).toBeLessThan(900);
+	});
+
+	it('bounds the beforeHop gate by the unit deadline', async () => {
+		const slowGate = async () => {
+			await new Promise((resolve) => setTimeout(resolve, 1500));
+		};
+		const started = Date.now();
+		await expect(
+			fetchUnit(
+				'https://x.example/',
+				{ ...OPTS, timeoutMs: 150, beforeHop: slowGate },
+				depsWith(async () => new Response('ok', { status: 200 }))
+			)
 		).rejects.toMatchObject({ name: 'TimeoutError' });
 		expect(Date.now() - started).toBeLessThan(900);
 	});

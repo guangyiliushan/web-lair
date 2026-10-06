@@ -219,4 +219,18 @@ describe('robots hardening + Google precedence (review batch 2026-10-06)', () =>
 		);
 		expect(rules).toEqual([{ allow: false, pattern: '/x' }]);
 	});
+
+	it("a bare '$' pattern matches nothing (empty anchored body)", () => {
+		expect(evaluateRobots([{ allow: false, pattern: '$' }], '/anything').allowed).toBe(true);
+		expect(evaluateRobots([{ allow: false, pattern: '$' }], '/').allowed).toBe(true);
+	});
+
+	it('percent hex case is normalized on both sides (Google parity)', () => {
+		expect(evaluateRobots([{ allow: false, pattern: '/foo/ツ' }], '/foo/%e3%83%84').allowed).toBe(
+			false
+		);
+		expect(evaluateRobots([{ allow: false, pattern: '/foo/%62ar' }], '/foo/bar').allowed).toBe(
+			false
+		);
+	});
 });

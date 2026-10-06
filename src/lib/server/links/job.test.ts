@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import {
 	LINK_LOCK_KEY,
@@ -251,6 +252,9 @@ describe('SQL teeth + lock identity (review batch 2026-10-06)', () => {
 		expect(query.sql).toContain('make_interval');
 		expect(query.sql).toContain("in ('approved', 'outdated')");
 		expect(query.sql).toContain('::int');
+		expect(query.sql).toContain('is null');
+		expect(query.sql).toContain('<= now() -');
+		expect(query.sql).toContain('"check_enabled"');
 		expect(query.params).toEqual([72, 24]);
 	});
 
@@ -261,6 +265,7 @@ describe('SQL teeth + lock identity (review batch 2026-10-06)', () => {
 		expect(query.sql).toContain('jsonb_agg');
 		expect(query.sql).toContain('order by ord desc');
 		expect(query.sql).toContain('limit 10');
+		expect(query.sql).toContain('100000');
 		expect(String(query.params[0])).toContain('reachability');
 	});
 });
@@ -419,9 +424,17 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 			row({ id: 'a', host: 'a.example', url: 'https://a.example/', backlinkUrl: null })
 		];
 		const returning = vi.fn(async () => []);
+		const whereArgs: unknown[] = [];
 		const db = {
 			select: vi.fn(() => makeChain([rows])),
-			update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ returning })) })) }))
+			update: vi.fn(() => ({
+				set: vi.fn(() => ({
+					where: vi.fn((arg: unknown) => {
+						whereArgs.push(arg);
+						return { returning };
+					})
+				}))
+			}))
 		};
 		const logger = silentLogger();
 		const summary = await runLinkCheck({
@@ -437,5 +450,83 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 		expect(summary.writes).toBe(0);
 		expect(returning).toHaveBeenCalledTimes(1);
 		expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('skipped write'));
+		// The CAS predicate itself must carry the guard conjuncts
+		// (mutation teeth, review batch 2026-10-06).
+		expect(whereArgs).toHaveLength(1);
+		const cas = new PgDialect().sqlToQuery(whereArgs[0] as SQL);
+		expect(cas.sql).toContain('"status"');
+		expect(cas.sql).toContain('"check_enabled"');
+		expect(cas.sql).toContain('"url"');
+		expect(cas.sql).toContain('is not distinct from');
+	});
+
+	it('warns when ORIGIN is unset but extra accepted hosts are given', async () => {
+		const rows = [
+			row({ id: 'a', host: 'a.example', url: 'https://a.example/', backlinkUrl: null })
+		];
+		const { db } = stubDb([rows]);
+		const logger = silentLogger();
+		const summary = await runLinkCheck({
+			db: db as never,
+			config: RUN_CONFIG,
+			acceptedHosts: ['ok.example'],
+			origin: null,
+			logger,
+			dryRun: true,
+			sleepMs: async () => {},
+			fetchDeps: { fetch: okFetch() as never, resolveHost: okResolve }
+		});
+		expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('ORIGIN is unset'));
+		expect(summary.backlinkSkippedReason).toBeNull();
+	});
+
+	it('logs no-due only when the first pass is provably empty', async () => {
+		const { db } = stubDb([[]]);
+		const logger = silentLogger();
+		const summary = await runLinkCheck({
+			db: db as never,
+			config: RUN_CONFIG,
+			acceptedHosts: [],
+			origin: null,
+			logger,
+			dryRun: true,
+			sleepMs: async () => {},
+			fetchDeps: { fetch: okFetch() as never, resolveHost: okResolve }
+		});
+		expect(summary.due).toBe(0);
+		expect(logger.info).toHaveBeenCalledWith('[links] no due sites');
+	});
+
+	it('the per-lane gate leaves late rows for the next run (budget bounds a pass)', async () => {
+		const slowFetch = async (url: URL | string) => {
+			const href = typeof url === 'string' ? url : url.href;
+			if (new URL(href).pathname === '/robots.txt') return new Response('', { status: 404 });
+			await new Promise((resolve) => setTimeout(resolve, 500));
+			return new Response('<html></html>', {
+				status: 200,
+				headers: { 'content-type': 'text/html' }
+			});
+		};
+		const rows = [
+			row({ id: 'a', host: 'a.example', url: 'https://a.example/', backlinkUrl: null }),
+			row({ id: 'b', host: 'b.example', url: 'https://b.example/', backlinkUrl: null }),
+			row({ id: 'c', host: 'c.example', url: 'https://c.example/', backlinkUrl: null })
+		];
+		const { db } = stubDb([rows]);
+		const summary = await runLinkCheck({
+			db: db as never,
+			config: { ...RUN_CONFIG, concurrency: 1 },
+			acceptedHosts: ['ok.example'],
+			origin: 'https://ok.example',
+			logger: silentLogger(),
+			budgetMs: 400,
+			dryRun: true,
+			sleepMs: async () => {},
+			fetchDeps: { fetch: slowFetch as never, resolveHost: okResolve }
+		});
+		// Without the per-lane deadline gate a mutated build would drain all
+		// three rows (3 x 500 ms); the guard stops after the first.
+		expect(summary.checked).toBe(1);
+		expect(summary.budgetExhausted).toBe(true);
 	});
 });

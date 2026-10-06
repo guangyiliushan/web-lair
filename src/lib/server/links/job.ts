@@ -99,6 +99,11 @@ export interface LinkRunSummary {
 	inconclusive: number;
 	writes: number;
 	errors: number;
+	/**
+	 * True when the run stopped early with rows left (soft budget hit);
+	 * a fully processed run stays false even if the clock crossed the
+	 * deadline after the last row (review batch 2026-10-06).
+	 */
 	budgetExhausted: boolean;
 	backlinkSkippedReason: 'origin-missing' | null;
 	lines: LinkRunLine[];
@@ -342,16 +347,19 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 		let cursor = 0;
 		const lane = async () => {
 			for (;;) {
+				const index = cursor;
+				cursor += 1;
+				if (index >= rows.length) return;
 				// The budget bounds a SINGLE pass too, not just the pass
-				// boundary (review finding 2026-10-06): stop pulling rows
-				// once the deadline is up; in-flight rows finish.
+				// boundary: a row that would START after the deadline is
+				// left for the next run (in-flight rows finish). The flag
+				// means "rows were left" - checked after the bounds test,
+				// so a fully drained lane reports nothing (review batch
+				// 2026-10-06).
 				if (Date.now() >= deadline) {
 					summary.budgetExhausted = true;
 					return;
 				}
-				const index = cursor;
-				cursor += 1;
-				if (index >= rows.length) return;
 				const row = rows[index] as LinkRowSnapshot;
 				await runWithHost(row.host, () => processSite(row));
 			}
@@ -417,15 +425,18 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 				recentChecks: ringSqlFragment(outcome.entries)
 			})
 			.where(
-				// CAS (review finding 2026-10-06): never clobber a state the
-				// run's snapshot did not see (L3 human actions ban/restore
-				// without holding this lock); a mismatch skips + warns.
-				sql`${links.id} = ${row.id} and ${links.status} = ${row.status} and ${links.checkEnabled} = true`
+				// CAS (review batch 2026-10-06): never clobber state the
+				// snapshot did not see (L3 admin edits run lock-free); a
+				// mismatch skips + warns. url / backlink_url join the
+				// predicate: a mid-run retarget invalidates the verdict.
+				sql`${links.id} = ${row.id} and ${links.status} = ${row.status} and ${links.checkEnabled} = true
+					and ${links.url} = ${row.url}
+					and ${links.backlinkUrl} is not distinct from ${row.backlinkUrl}`
 			)
 			.returning({ id: links.id });
 		if (updated.length === 0) {
 			options.logger.warn(
-				`[links] ${row.host} skipped write: row changed concurrently (status or check_enabled)`
+				`[links] ${row.host} skipped write: row changed concurrently (status, url or check_enabled)`
 			);
 			return false;
 		}
@@ -439,17 +450,18 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 			break;
 		}
 		const processed = await perPass();
-		passes += 1;
-		if (processed === 0) break;
-		if (dryRun) {
-			// Nothing persisted: a second pass would re-read the same rows.
-			if (Date.now() >= deadline) summary.budgetExhausted = true;
+		if (processed === 0) {
+			// Only a FIRST, provably empty pass may claim there was
+			// nothing due; a budget-expired run must not (review batch
+			// 2026-10-06).
+			if (passes === 0 && summary.due === 0) {
+				options.logger.info('[links] no due sites');
+			}
 			break;
 		}
+		passes += 1;
+		if (dryRun) break; // nothing persisted: a second pass would re-read the same rows
 		if (processed < limitPerPass) break;
-	}
-	if (passes === 0 && summary.due === 0) {
-		options.logger.info('[links] no due sites');
 	}
 	return summary;
 }

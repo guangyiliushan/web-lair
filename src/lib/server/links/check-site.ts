@@ -160,6 +160,12 @@ export async function checkSite(
 			} else {
 				const failure = cls.failure!;
 				reach = failure.countsFailure ? 'fail' : 'skipped';
+				// Same Retry-After evidence as the backlink axis (review
+				// batch 2026-10-06): a 429 records the server's ask.
+				const retryNote =
+					homepageResult.status === 429 && homepageResult.retryAfter
+						? `; retry-after ${homepageResult.retryAfter}`
+						: '';
 				entries.push({
 					at,
 					kind: 'reachability',
@@ -167,7 +173,7 @@ export async function checkSite(
 					http: homepageResult.status,
 					err: failure.kind,
 					ms: Date.now() - started,
-					note: failure.detail
+					note: `${failure.detail}${retryNote}`
 				});
 			}
 		} catch (err) {

@@ -88,4 +88,10 @@ describe('links classify (§4.3)', () => {
 			retryable: true
 		});
 	});
+
+	it('waf statuses are never retryable', () => {
+		for (const status of [401, 403, 429, 451, 503]) {
+			expect(classifyHttpStatus(status).failure).toMatchObject({ kind: 'waf', retryable: false });
+		}
+	});
 });

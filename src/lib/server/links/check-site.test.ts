@@ -389,4 +389,39 @@ describe('checkSite (§4.1/§4.8)', () => {
 		expect(outcome.backlink).toBe('ok');
 		expect(outcome.entries[1].note).toContain('fallback: homepage');
 	});
+
+	it('429 is not retried even when retryOnce is true (waf)', async () => {
+		let partnerCalls = 0;
+		const stub = vi.fn(async (url: URL | string) => {
+			const href = typeof url === 'string' ? url : url.href;
+			if (href === HOME) return pageNoLink();
+			partnerCalls += 1;
+			return new Response('slow', { status: 429, headers: { 'retry-after': '120' } });
+		});
+		const sleep = vi.fn(async () => {});
+		const deps = depsWith(stub);
+		deps.sleepMs = sleep;
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: PARTNER },
+			config({ retryOnce: true }),
+			deps
+		);
+		expect(partnerCalls).toBe(1);
+		expect(sleep).not.toHaveBeenCalled();
+		expect(outcome.backlink).toBe('skipped');
+		expect(outcome.entries[1].note).toContain('retry-after 120');
+	});
+
+	it('records Retry-After on a 429 homepage too (reach axis)', async () => {
+		const stub = routes({
+			[HOME]: () => new Response('slow', { status: 429, headers: { 'retry-after': '60' } })
+		});
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: null },
+			config(),
+			depsWith(stub)
+		);
+		expect(outcome.reach).toBe('skipped');
+		expect(outcome.entries[0].note).toContain('retry-after 60');
+	});
 });

@@ -73,7 +73,7 @@ export function findBacklink(
 		}
 	};
 
-	const RAWTEXT_TAGS = new Set(['style', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext']);
+	const RAWTEXT_TAGS = new Set(['style', 'xmp', 'iframe', 'noembed', 'noframes']);
 	const RCDATA_TAGS = new Set(['title', 'textarea']);
 	const tokenizer = new Tokenizer(
 		{},
@@ -93,6 +93,14 @@ export function findBacklink(
 				// tag returns it to the data state - verified 2026-10-06).
 				if (token.tagName === 'script') {
 					tokenizer.state = TokenizerMode.SCRIPT_DATA;
+					return;
+				}
+				if (token.tagName === 'plaintext') {
+					// WHATWG PLAINTEXT never exits on an end tag; parse5 has
+					// a dedicated mode for it (review batch 2026-10-06 -
+					// RAWTEXT emulation reopened at the first literal
+					// `</plaintext>` and reported phantom links).
+					tokenizer.state = TokenizerMode.PLAINTEXT;
 					return;
 				}
 				if (RAWTEXT_TAGS.has(token.tagName)) {
