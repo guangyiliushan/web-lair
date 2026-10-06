@@ -73,7 +73,13 @@ try {
 		if (dryRun) console.log('[links] dry-run: no database writes were made (single pass)');
 	}
 } catch (err) {
-	console.error(`[links] run failed: ${err instanceof Error ? err.message : String(err)}`);
+	// drizzle wraps PG errors: surface the cause message too (e.g. 42804).
+	const cause =
+		err !== null && typeof err === 'object' && 'cause' in err
+			? (err as { cause?: unknown }).cause
+			: undefined;
+	const detail = cause instanceof Error ? ` (${cause.message})` : '';
+	console.error(`[links] run failed: ${err instanceof Error ? err.message : String(err)}${detail}`);
 	process.exitCode = 1;
 } finally {
 	await lockConnection`select pg_advisory_unlock(hashtext(${LINK_LOCK_KEY}))`;

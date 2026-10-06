@@ -314,8 +314,8 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 					and ${links.checkEnabled} = true
 					and (${links.lastCheckedAt} is null
 						or ${links.lastCheckedAt} <= now() - make_interval(hours => case
-							when ${links.status} = 'outdated' then ${cadence * 3}
-							else ${cadence}
+							when ${links.status} = 'outdated' then ${cadence * 3}::int
+							else ${cadence}::int
 						end))`
 			)
 			.orderBy(sql`${links.lastCheckedAt} asc nulls first`)
