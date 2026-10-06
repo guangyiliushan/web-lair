@@ -32,12 +32,15 @@ export function buildUserAgent(origin: string | null): string {
 }
 
 export class LinkFetchError extends Error {
-	constructor(
-		readonly code: 'ssrf' | 'non-https' | 'bad-url' | 'redirect',
-		message: string
-	) {
+	// Note: explicit assignment, NOT a constructor parameter property -
+	// Node's strip-only TypeScript mode rejects those (the builtin runs
+	// under plain `node`).
+	readonly code: 'ssrf' | 'non-https' | 'bad-url' | 'redirect';
+
+	constructor(code: 'ssrf' | 'non-https' | 'bad-url' | 'redirect', message: string) {
 		super(message);
 		this.name = 'LinkFetchError';
+		this.code = code;
 	}
 }
 

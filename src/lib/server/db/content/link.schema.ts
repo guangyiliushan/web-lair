@@ -11,7 +11,7 @@ import {
 	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
-import { user } from '../auth.schema';
+import { user } from '../auth.schema.ts';
 import type { LinkCheck } from '../../../utils/link-meta.ts';
 
 // Shared status / error-kind enums moved to `$lib/utils/link-meta.ts`

@@ -15,16 +15,24 @@
  */
 
 export class RobotsDisallowedError extends Error {
-	constructor(readonly rule: string) {
+	// Explicit assignments: parameter properties break Node's strip-only
+	// TypeScript mode (the builtin runs under plain `node`).
+	readonly rule: string;
+
+	constructor(rule: string) {
 		super(`robots.txt disallows: ${rule}`);
 		this.name = 'RobotsDisallowedError';
+		this.rule = rule;
 	}
 }
 
 export class RobotsUnreachableError extends Error {
-	constructor(readonly reason: string) {
+	readonly reason: string;
+
+	constructor(reason: string) {
 		super(`robots.txt unavailable: ${reason}`);
 		this.name = 'RobotsUnreachableError';
+		this.reason = reason;
 	}
 }
 
