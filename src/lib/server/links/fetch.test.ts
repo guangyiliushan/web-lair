@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
 	buildUserAgent,
@@ -142,6 +143,13 @@ describe('fetchUnit (§4.2/§4.8)', () => {
 			)
 		).rejects.toMatchObject({ name: 'TimeoutError' });
 		expect(Date.now() - started).toBeLessThan(900);
+	});
+
+	it('keeps the UA version in sync with package.json', () => {
+		const pkg = JSON.parse(
+			readFileSync(new URL('../../../../package.json', import.meta.url), 'utf8')
+		) as { version: string };
+		expect(buildUserAgent(null)).toBe(`web-lair-link-check/${pkg.version}`);
 	});
 
 	it('sends the configured user agent and builds both UA variants', async () => {

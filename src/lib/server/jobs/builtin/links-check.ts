@@ -28,6 +28,8 @@ export default {
 			}
 		});
 		ctx.summary({
+			due: summary.due,
+			disabled: summary.disabled,
 			checked: summary.checked,
 			ok: summary.ok,
 			failed: summary.failed,
@@ -35,6 +37,8 @@ export default {
 			inconclusive: summary.inconclusive,
 			writes: summary.writes,
 			errors: summary.errors,
+			casSkipped: summary.casSkipped,
+			transitions: summary.transitions,
 			budgetExhausted: summary.budgetExhausted,
 			backlinkSkipped: summary.backlinkSkippedReason
 		});

@@ -2,7 +2,7 @@ import type { LinkCheck, LinkErrorKind } from '../../utils/link-meta.ts';
 import { classifyFetchFailure, classifyHttpStatus } from './classify.ts';
 import { fetchUnit, LinkFetchError, type FetchUnitDeps, type FetchUnitResult } from './fetch.ts';
 import { decodeHtmlBody, findBacklink } from './parse-backlink.ts';
-import { isSameSite, normalizeHost, urlKey } from './normalize.ts';
+import { isSameSite, normalizeHost, redactCredentials, urlKey } from './normalize.ts';
 import { RobotsDisallowedError, RobotsUnreachableError, type RobotsOracle } from './robots.ts';
 
 /**
@@ -29,8 +29,7 @@ export interface SiteCheckRow {
 export interface SiteCheckConfig {
 	userAgent: string;
 	timeoutMs: number;
-	backlinkEnabled: boolean;
-	/** Normalized accepted hosts for backlink detection. */
+	/** Normalized accepted hosts; an empty list disables the backlink axis. */
 	acceptedBacklinkHosts: readonly string[];
 	/** Retry timeout/5xx once in-run (plan §4.4). Default true. */
 	retryOnce?: boolean;
@@ -68,6 +67,8 @@ export async function checkSite(
 	deps: SiteCheckDeps
 ): Promise<SiteCheckOutcome> {
 	const now = config.now ?? (() => new Date());
+	// Single source for the axis switch (review round 4).
+	const backlinkEnabled = config.acceptedBacklinkHosts.length > 0;
 	const entries: LinkCheck[] = [];
 	const notes: string[] = [];
 	const baseOptions = { userAgent: config.userAgent, timeoutMs: config.timeoutMs };
@@ -101,7 +102,9 @@ export async function checkSite(
 						: (classifyHttpStatus(result!.status).failure?.retryable ?? false);
 				if (retryable && (config.retryAllowed ? config.retryAllowed() : true)) {
 					await (deps.sleepMs ?? defaultSleep)(RETRY_GAP_MS);
-					continue;
+					// The budget may have died during the sleep: never fire
+					// a retry after the deadline (review round 4).
+					if (!config.retryAllowed || config.retryAllowed()) continue;
 				}
 			}
 			if (result) return result;
@@ -116,14 +119,15 @@ export async function checkSite(
 			return { axis: 'skipped', kind: 'robots', note: err.message };
 		}
 		if (err instanceof LinkFetchError) {
-			if (err.code === 'redirect') return { axis: 'fail', kind: 'redirect', note: err.message };
-			return { axis: 'skipped', kind: 'unsupported', note: err.message };
+			if (err.code === 'redirect')
+				return { axis: 'fail', kind: 'redirect', note: redactCredentials(err.message) };
+			return { axis: 'skipped', kind: 'unsupported', note: redactCredentials(err.message) };
 		}
 		const failure = classifyFetchFailure(err);
 		return {
 			axis: failure.countsFailure ? 'fail' : 'skipped',
 			kind: failure.kind,
-			note: failure.detail ?? 'fetch failure'
+			note: redactCredentials(failure.detail ?? 'fetch failure')
 		};
 	};
 
@@ -131,7 +135,7 @@ export async function checkSite(
 	let reach: ReachAxis;
 	let homepageResult: FetchUnitResult | null = null;
 	const sameTarget = row.backlinkUrl !== null && urlKey(row.backlinkUrl) === urlKey(row.url);
-	const wantHomeBody = config.backlinkEnabled && sameTarget;
+	const wantHomeBody = backlinkEnabled && sameTarget;
 	{
 		const started = Date.now();
 		const at = now().toISOString();
@@ -144,7 +148,7 @@ export async function checkSite(
 				try {
 					const finalHost = normalizeHost(new URL(homepageResult.finalUrl).hostname);
 					if (finalHost && !isSameSite(finalHost, row.host)) {
-						noteParts.push(`offsite → ${homepageResult.finalUrl}`);
+						noteParts.push(`offsite → ${redactCredentials(homepageResult.finalUrl)}`);
 					}
 				} catch {
 					// Unparsable final URL: no offsite note.
@@ -153,6 +157,7 @@ export async function checkSite(
 					at,
 					kind: 'reachability',
 					ok: true,
+					url: homepageResult.finalUrl,
 					http: homepageResult.status,
 					ms: Date.now() - started,
 					...(noteParts.length ? { note: noteParts.join('; ') } : {})
@@ -162,18 +167,15 @@ export async function checkSite(
 				reach = failure.countsFailure ? 'fail' : 'skipped';
 				// Same Retry-After evidence as the backlink axis (review
 				// batch 2026-10-06): a 429 records the server's ask.
-				const retryNote =
-					homepageResult.status === 429 && homepageResult.retryAfter
-						? `; retry-after ${homepageResult.retryAfter}`
-						: '';
 				entries.push({
 					at,
 					kind: 'reachability',
 					ok: false,
+					url: homepageResult.finalUrl,
 					http: homepageResult.status,
 					err: failure.kind,
 					ms: Date.now() - started,
-					note: `${failure.detail}${retryNote}`
+					note: `${failure.detail}${retryNoteSuffix(homepageResult.status, homepageResult.retryAfter)}`
 				});
 			}
 		} catch (err) {
@@ -183,6 +185,7 @@ export async function checkSite(
 				at,
 				kind: 'reachability',
 				ok: false,
+				url: row.url,
 				err: mapped.kind,
 				ms: Date.now() - started,
 				note: mapped.note
@@ -192,7 +195,7 @@ export async function checkSite(
 
 	// --- backlink axis -----------------------------------------------------
 	let backlink: BacklinkAxis = 'skipped';
-	if (!config.backlinkEnabled) {
+	if (!backlinkEnabled) {
 		notes.push('backlink axis disabled (origin-missing)');
 	} else if (!row.backlinkUrl) {
 		notes.push('no backlink_url');
@@ -219,6 +222,7 @@ export async function checkSite(
 							at,
 							kind: 'backlink',
 							ok: false,
+							url: result.finalUrl,
 							http: result.status,
 							err: 'link_missing',
 							ms,
@@ -235,6 +239,7 @@ export async function checkSite(
 							at,
 							kind: 'backlink',
 							ok: true,
+							url: result.finalUrl,
 							http: result.status,
 							ms,
 							...(finding.notes.length ? { note: finding.notes.join('; ') } : {})
@@ -248,6 +253,7 @@ export async function checkSite(
 							at,
 							kind: 'backlink',
 							ok: false,
+							url: result.finalUrl,
 							http: result.status,
 							err: 'link_missing',
 							ms,
@@ -257,7 +263,15 @@ export async function checkSite(
 				}
 				return {
 					axis: 'missing',
-					entry: { at, kind: 'backlink', ok: false, http: result.status, err: 'link_missing', ms }
+					entry: {
+						at,
+						kind: 'backlink',
+						ok: false,
+						url: result.finalUrl,
+						http: result.status,
+						err: 'link_missing',
+						ms
+					}
 				};
 			}
 			const failure = cls.failure!;
@@ -268,23 +282,22 @@ export async function checkSite(
 						at,
 						kind: 'backlink',
 						ok: false,
+						url: result.finalUrl,
 						http: result.status,
 						err: 'page_missing',
 						ms,
-						note: failure.detail
+						note: failure.detail ? redactCredentials(failure.detail) : undefined
 					}
 				};
 			}
-			const notCounted =
-				result.status === 429 && result.retryAfter
-					? `not counted; retry-after ${result.retryAfter}`
-					: 'not counted';
+			const notCounted = `not counted${retryNoteSuffix(result.status, result.retryAfter)}`;
 			return {
 				axis: 'skipped',
 				entry: {
 					at,
 					kind: 'backlink',
 					ok: false,
+					url: result.finalUrl,
 					http: result.status,
 					err: failure.kind,
 					ms,
@@ -305,7 +318,6 @@ export async function checkSite(
 				axis: BacklinkAxis;
 				entry: LinkCheck;
 			} | null> => {
-				if (sameTarget) return null;
 				try {
 					const homeResult =
 						homepageResult && homepageResult.body !== null
@@ -341,6 +353,7 @@ export async function checkSite(
 								at: now().toISOString(),
 								kind: 'backlink',
 								ok: false,
+								url: row.backlinkUrl ?? row.url,
 								err: 'page_missing',
 								ms: Date.now() - started,
 								note: mapped.note
@@ -353,6 +366,7 @@ export async function checkSite(
 							at: now().toISOString(),
 							kind: 'backlink',
 							ok: false,
+							url: row.backlinkUrl ?? row.url,
 							err: mapped.kind,
 							ms: Date.now() - started,
 							note: mapped.note
@@ -368,6 +382,11 @@ export async function checkSite(
 	}
 
 	return { entries, reach, backlink, notes };
+}
+
+/** `; retry-after <v>` when a 429 carried the header (shared by both axes). */
+function retryNoteSuffix(status: number, retryAfter: string | null): string {
+	return status === 429 && retryAfter ? `; retry-after ${retryAfter}` : '';
 }
 
 /** Timeout-class failures are retried in-run (plan §4.4); nothing else is. */

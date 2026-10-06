@@ -27,7 +27,6 @@ function config(overrides: Partial<SiteCheckConfig> = {}): SiteCheckConfig {
 	return {
 		userAgent: 'web-lair-link-check/0.0.1',
 		timeoutMs: 1000,
-		backlinkEnabled: true,
 		acceptedBacklinkHosts: ['us.example'],
 		retryOnce: false,
 		now: () => new Date('2026-10-06T00:00:00Z'),
@@ -185,7 +184,7 @@ describe('checkSite (§4.1/§4.8)', () => {
 		const stub = routes({ [HOME]: pageNoLink });
 		const outcome = await checkSite(
 			{ url: HOME, host: 'home.example', backlinkUrl: PARTNER },
-			config({ backlinkEnabled: false }),
+			config({ acceptedBacklinkHosts: [] }),
 			depsWith(stub)
 		);
 		expect(outcome.backlink).toBe('skipped');
@@ -443,5 +442,29 @@ describe('checkSite (§4.1/§4.8)', () => {
 			depsWith(otherStatus)
 		);
 		expect(outcome2.entries[0].note).toBe('http 500');
+	});
+
+	it('aborts a retry when the budget dies during the 30 s sleep', async () => {
+		let partnerCalls = 0;
+		const stub = vi.fn(async (url: URL | string) => {
+			const href = typeof url === 'string' ? url : url.href;
+			if (href === HOME) return pageNoLink();
+			partnerCalls += 1;
+			return new Response('overloaded', { status: 500 });
+		});
+		const sleep = vi.fn(async () => {});
+		const deps = depsWith(stub);
+		deps.sleepMs = sleep;
+		let gateCalls = 0;
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: PARTNER },
+			config({ retryOnce: true, retryAllowed: () => (gateCalls += 1) === 1 }),
+			deps
+		);
+		// Gate open before the sleep, closed after: exactly one fetch, one
+		// sleep, and the first failure stands (review round 4).
+		expect(partnerCalls).toBe(1);
+		expect(sleep).toHaveBeenCalledTimes(1);
+		expect(outcome.backlink).toBe('missing');
 	});
 });

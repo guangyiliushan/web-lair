@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSameSite, normalizeHost, normalizeUrl, stripWww, urlKey } from './normalize';
+import { isSameSite, normalizeHost, redactCredentials, stripWww, urlKey } from './normalize';
 
 describe('links normalize (§2.1)', () => {
 	it('strips one leading www and trailing dots, lowercases', () => {
@@ -17,17 +17,14 @@ describe('links normalize (§2.1)', () => {
 		expect(normalizeHost('not a host')).toBeNull();
 	});
 
-	it('normalizeUrl: https only, :443 dropped, fragment gone, trailing slash trimmed', () => {
-		expect(normalizeUrl('http://example.com/')).toBeNull();
-		expect(normalizeUrl('not a url')).toBeNull();
-		const result = normalizeUrl('https://WWW.Example.com:443/path/?q=1#frag');
-		expect(result).toEqual({
-			url: 'https://www.example.com/path?q=1',
-			host: 'example.com',
-			pathname: '/path'
-		});
-		expect(normalizeUrl('https://example.com/')?.url).toBe('https://example.com/');
-		expect(normalizeUrl('https://example.com')?.pathname).toBe('/');
+	it('redactCredentials strips URL userinfo from free text', () => {
+		expect(redactCredentials('boom https://user:pass@host/x')).toBe(
+			'boom https://[redacted]@host/x'
+		);
+		expect(redactCredentials('no credentials here')).toBe('no credentials here');
+		expect(redactCredentials('https://a:b@h/ and https://c@h/')).toBe(
+			'https://[redacted]@h/ and https://[redacted]@h/'
+		);
 	});
 
 	it('isSameSite treats equal hosts and subdomain relations as same site', () => {

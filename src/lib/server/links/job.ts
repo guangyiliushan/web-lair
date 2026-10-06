@@ -2,12 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LinkCheck, LinkStatus } from '../../utils/link-meta.ts';
 import { links } from '../db/content/link.schema.ts';
-import {
-	checkSite,
-	type BacklinkAxis,
-	type ReachAxis,
-	type SiteCheckOutcome
-} from './check-site.ts';
+import { checkSite, type SiteCheckOutcome } from './check-site.ts';
 import {
 	buildUserAgent,
 	fetchUnit,
@@ -16,8 +11,9 @@ import {
 	type FetchUnitDeps
 } from './fetch.ts';
 import { createRobotsOracle, type RobotsOracle } from './robots.ts';
-import { normalizeHost } from './normalize.ts';
+import { normalizeHost, redactCredentials } from './normalize.ts';
 import { jobLockKey } from '../jobs/registry.ts';
+import { sanitizeErrorText } from '../jobs/error-text.ts';
 
 /**
  * The links check job core (plan §4.5/§4.6; 2026-10-06 rulings): due
@@ -54,7 +50,9 @@ export interface LinkRunConfig {
 	enabled: boolean;
 	cadenceHours: number;
 	failStreak: number;
+	/** L3/L4 threshold (pending-queue); NOT consumed by L2 yet. */
 	backlinkStreak: number;
+	/** L4 prune grace; NOT consumed by L2 yet. */
 	graceDays: number;
 	timeoutMs: number;
 	concurrency: number;
@@ -81,13 +79,6 @@ export interface LinkRunOptions {
 	fetchDeps?: FetchUnitDeps;
 }
 
-export interface LinkRunLine {
-	host: string;
-	reach: ReachAxis;
-	backlink: BacklinkAxis;
-	detail: string;
-}
-
 export interface LinkRunSummary {
 	disabled: boolean;
 	dryRun: boolean;
@@ -99,15 +90,18 @@ export interface LinkRunSummary {
 	inconclusive: number;
 	writes: number;
 	errors: number;
+	/** Writes skipped because the row changed concurrently (CAS). */
+	casSkipped: number;
+	/** Automatic status transitions this run (approved <-> outdated). */
+	transitions: number;
 	/**
 	 * True when the run stopped with rows left (soft budget hit): set by
 	 * the per-lane gate only when a due row could not be STARTED, so a
 	 * fully processed run stays false even if the clock crossed the
-	 * deadline meanwhile (review batches 2026-10-06, rounds 2-3).
+	 * deadline meanwhile (review batches 2026-10-06, rounds 2-4).
 	 */
 	budgetExhausted: boolean;
 	backlinkSkippedReason: 'origin-missing' | null;
-	lines: LinkRunLine[];
 }
 
 /** Row snapshot the derivation needs (selected in the due query). */
@@ -124,6 +118,10 @@ export interface LinkRowSnapshot {
 	backlinkOk: boolean | null;
 	backlinkCheckedAt: Date | null;
 	lastErrorKind: string | null;
+	/** Snapshot of the write water-mark (CAS pin; review round 4). */
+	lastCheckedAt: Date | null;
+	/** Pinned on write: a machine check must not look like an edit. */
+	updatedAt: Date;
 }
 
 export interface RowUpdatePlan {
@@ -254,7 +252,7 @@ export function createRunRobotsOracle(
 				}
 				return {
 					outcome: 'network-error',
-					message: err instanceof Error ? err.message : 'robots fetch failed'
+					message: err instanceof Error ? redactCredentials(err.message) : 'robots fetch failed'
 				};
 			}
 		}
@@ -277,9 +275,10 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 		inconclusive: 0,
 		writes: 0,
 		errors: 0,
+		casSkipped: 0,
+		transitions: 0,
 		budgetExhausted: false,
-		backlinkSkippedReason: null,
-		lines: []
+		backlinkSkippedReason: null
 	};
 
 	if (!options.config.enabled) {
@@ -309,6 +308,9 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 	const oracle = createRunRobotsOracle(userAgent, options.config.timeoutMs, options.fetchDeps);
 	const deadline = Date.now() + budgetMs;
 
+	const dueIds = new Set<string>();
+	const failedIds = new Set<string>();
+
 	const perPass = async (): Promise<number> => {
 		const cadence = options.config.cadenceHours;
 		const rows = await options.db
@@ -324,14 +326,22 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 				lastOkAt: links.lastOkAt,
 				backlinkOk: links.backlinkOk,
 				backlinkCheckedAt: links.backlinkCheckedAt,
-				lastErrorKind: links.lastErrorKind
+				lastErrorKind: links.lastErrorKind,
+				lastCheckedAt: links.lastCheckedAt,
+				updatedAt: links.updatedAt
 			})
 			.from(links)
 			.where(dueWhereSql(cadence))
 			.orderBy(sql`${links.lastCheckedAt} asc nulls first`)
 			.limit(limitPerPass);
+		for (const row of rows) dueIds.add(row.id);
+		summary.due = dueIds.size;
 		if (rows.length === 0) return 0;
-		summary.due += rows.length;
+		// Rows whose write did not land this run (CAS mismatch or an
+		// internal error) are not re-fetched: the failure is deterministic
+		// or the snapshot is stale - the next run heals (review round 4;
+		// also what bounds the pass loop below).
+		const pending = failedIds.size > 0 ? rows.filter((row) => !failedIds.has(row.id)) : rows;
 
 		const hostQueues = new Map<string, Promise<unknown>>();
 		const runWithHost = (host: string, fn: () => Promise<void>): Promise<unknown> => {
@@ -346,27 +356,34 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 
 		const concurrency = Math.max(1, options.config.concurrency);
 		let cursor = 0;
+		// Rows actually STARTED (the deadline gate passed) - the pass
+		// reports this, not the batch size, so a batch that cannot start
+		// anything (deadline hit, or every remaining row already failed
+		// this run) terminates the run instead of spinning (review round 4
+		// - the 6892b25 regression fix).
+		let started = 0;
 		const lane = async () => {
 			for (;;) {
 				const index = cursor;
 				cursor += 1;
-				if (index >= rows.length) return;
+				if (index >= pending.length) return;
 				// The budget bounds a SINGLE pass too, not just the pass
 				// boundary: a row that would START after the deadline is
 				// left for the next run (in-flight rows finish). The flag
 				// means "rows were left" - checked after the bounds test,
-				// so a fully drained lane reports nothing (review batch
-				// 2026-10-06).
+				// so a fully drained lane reports nothing (review batches
+				// 2026-10-06, rounds 2-4).
 				if (Date.now() >= deadline) {
 					summary.budgetExhausted = true;
 					return;
 				}
-				const row = rows[index] as LinkRowSnapshot;
+				started += 1;
+				const row = pending[index] as LinkRowSnapshot;
 				await runWithHost(row.host, () => processSite(row));
 			}
 		};
 		await Promise.all(Array.from({ length: concurrency }, lane));
-		return rows.length;
+		return started;
 	};
 
 	const processSite = async (row: LinkRowSnapshot): Promise<void> => {
@@ -376,7 +393,6 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 				{
 					userAgent,
 					timeoutMs: options.config.timeoutMs,
-					backlinkEnabled,
 					acceptedBacklinkHosts: options.acceptedHosts,
 					retryAllowed: () => Date.now() < deadline,
 					now
@@ -386,16 +402,14 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 			if (!dryRun) {
 				const wrote = await applyUpdate(row, outcome);
 				if (wrote) summary.writes += 1;
+				else {
+					summary.casSkipped += 1;
+					failedIds.add(row.id);
+				}
 			}
 			const detail = outcome.entries.map((entry) => formatEntry(entry)).join(' ');
 			const note = outcome.notes.length > 0 ? ` (${outcome.notes.join('; ')})` : '';
 			options.logger.info(`[links] ${row.host} ${detail}${note}`);
-			summary.lines.push({
-				host: row.host,
-				reach: outcome.reach,
-				backlink: outcome.backlink,
-				detail
-			});
 			summary.checked += 1;
 			if (outcome.reach === 'ok') summary.ok += 1;
 			else if (outcome.reach === 'fail') summary.failed += 1;
@@ -403,8 +417,11 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 			if (outcome.backlink === 'inconclusive') summary.inconclusive += 1;
 		} catch (err) {
 			summary.errors += 1;
+			failedIds.add(row.id);
 			options.logger.error(
-				`[links] ${row.host} internal error: ${err instanceof Error ? err.message : String(err)}`
+				`[links] ${row.host} internal error: ${sanitizeErrorText(
+					err instanceof Error ? err.message : String(err)
+				)}`
 			);
 		}
 	};
@@ -423,38 +440,50 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 				backlinkOk: plan.backlinkOk,
 				backlinkCheckedAt: plan.backlinkCheckedAt,
 				lastErrorKind: plan.lastErrorKind,
-				recentChecks: ringSqlFragment(outcome.entries)
+				recentChecks: ringSqlFragment(outcome.entries),
+				// Pinned so a machine check never reads as a human edit
+				// (mirrors the drain's watermark discipline; review round 4).
+				updatedAt: row.updatedAt
 			})
 			.where(
-				// CAS (review batch 2026-10-06): never clobber state the
+				// CAS (review batches 2026-10-06): never clobber state the
 				// snapshot did not see (L3 admin edits run lock-free); a
 				// mismatch skips + warns. url / backlink_url join the
-				// predicate: a mid-run retarget invalidates the verdict.
+				// predicate (a mid-run retarget invalidates the verdict)
+				// and last_checked_at pins the snapshot itself against
+				// in-run duplicate writes (review round 4).
 				sql`${links.id} = ${row.id} and ${links.status} = ${row.status} and ${links.checkEnabled} = true
 					and ${links.url} = ${row.url}
-					and ${links.backlinkUrl} is not distinct from ${row.backlinkUrl}`
+					and ${links.backlinkUrl} is not distinct from ${row.backlinkUrl}
+					and ${links.lastCheckedAt} is not distinct from ${row.lastCheckedAt}`
 			)
 			.returning({ id: links.id });
 		if (updated.length === 0) {
 			options.logger.warn(
-				`[links] ${row.host} skipped write: row changed concurrently (status, url, backlink_url or check_enabled)`
+				`[links] ${row.host} skipped write: row changed concurrently (snapshot: status, url, backlink_url, check_enabled, last_checked_at)`
 			);
 			return false;
+		}
+		if (plan.status !== row.status) {
+			summary.transitions += 1;
+			options.logger.info(
+				`[links] ${row.host} status ${row.status} -> ${plan.status} (failStreak=${plan.failStreak})`
+			);
 		}
 		return true;
 	};
 
 	let passes = 0;
 	for (;;) {
-		// No deadline pre-check before the select: the query is cheap and
-		// the per-lane gate decides on real rows. A saturated batch whose
-		// last row finished before the deadline must not flag - the extra
-		// select returns empty and budgetExhausted stays false (review
-		// round 3, 2026-10-06).
-		const processed = await perPass();
-		if (processed === 0) {
+		// Passes continue until the batch comes back short/empty OR
+		// nothing could START (deadline hit with rows left, or every
+		// remaining row already failed to persist this run). A full batch
+		// alone must never spin - the lanes report what they started
+		// (review rounds 3-4, 2026-10-06; the 6892b25 regression fix).
+		const started = await perPass();
+		if (started === 0) {
 			// Only a FIRST, provably empty pass may claim there was
-			// nothing due (review batch 2026-10-06).
+			// nothing due; a budget-expired run must not.
 			if (passes === 0 && summary.due === 0) {
 				options.logger.info('[links] no due sites');
 			}
@@ -462,8 +491,9 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 		}
 		passes += 1;
 		if (dryRun) break; // nothing persisted: a second pass would re-read the same rows
-		if (processed < limitPerPass) break;
+		if (started < limitPerPass) break;
 	}
+	summary.due = dueIds.size;
 	return summary;
 }
 
@@ -490,7 +520,7 @@ export function dueWhereSql(cadenceHours: number) {
  */
 export function ringSqlFragment(entries: LinkCheck[]) {
 	return sql`(
-		select jsonb_agg(e order by ord) from (
+		select coalesce(jsonb_agg(e order by ord), '[]'::jsonb) from (
 			select e, ord from (
 				select e, ord from jsonb_array_elements(coalesce(${links.recentChecks}, '[]'::jsonb)) with ordinality as t(e, ord)
 				union all

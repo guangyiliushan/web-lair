@@ -2,10 +2,9 @@ import { error, isHttpError } from '@sveltejs/kit';
 import { promises as dns } from 'node:dns';
 import { canonicalHost, EMBED_PROVIDER_DOMAINS } from '$lib/components/markdown/embed/registry';
 // SSRF guard shared with the links checker (2026-10-06, links L2): the
-// blocklist and `isPrivateAddress` moved to `security/ssrf-guard.ts`; the
-// re-export below keeps the existing favicon tests importing from here.
+// blocklist and `isPrivateAddress` live in `security/ssrf-guard.ts` (the
+// single import point; review round 4 removed the test-only re-export).
 import { isPrivateAddress, resolvesPublic } from './security/ssrf-guard.ts';
-export { isPrivateAddress } from './security/ssrf-guard.ts';
 
 /**
  * Favicon proxy (spec 6) — the only server-side fetch the renderer performs.

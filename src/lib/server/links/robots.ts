@@ -144,6 +144,24 @@ export function matchRobotsRules(file: RobotsFile, productToken: string): Robots
  * unlike naive matched-URI-length logic); equal-length allow beats
  * disallow; no match = allowed.
  */
+const RULE_CANONICAL = new WeakMap<RobotsRule, { pattern: string; length: number }>();
+const TEXT_ENCODER = new TextEncoder();
+
+/**
+ * Per-rule canonicalization cache (review round 4): the oracle memoizes
+ * rules per origin, so each rule is canonicalized exactly once instead of
+ * on every URL decision.
+ */
+function canonicalFor(rule: RobotsRule): { pattern: string; length: number } {
+	let entry = RULE_CANONICAL.get(rule);
+	if (!entry) {
+		const pattern = canonicalPath(rule.pattern);
+		entry = { pattern, length: specificity(pattern) };
+		RULE_CANONICAL.set(rule, entry);
+	}
+	return entry;
+}
+
 export function evaluateRobots(
 	rules: RobotsRule[] | null,
 	uri: string
@@ -154,9 +172,9 @@ export function evaluateRobots(
 	let allowed = true;
 	let matched: RobotsRule | undefined;
 	for (const rule of rules) {
-		const pattern = canonicalPath(rule.pattern);
-		if (!wildcardMatch(pattern, target)) continue;
-		const length = specificity(pattern);
+		const canonical = canonicalFor(rule);
+		if (!wildcardMatch(canonical.pattern, target)) continue;
+		const length = canonical.length;
 		if (length > bestLength) {
 			bestLength = length;
 			allowed = rule.allow;
@@ -216,7 +234,7 @@ function specificity(pattern: string): number {
 function encodeNonAscii(pattern: string): string {
 	return pattern.replace(/[^\x21-\x7e]/g, (ch) => {
 		let encoded = '';
-		for (const byte of new TextEncoder().encode(ch)) {
+		for (const byte of TEXT_ENCODER.encode(ch)) {
 			encoded += `%${byte.toString(16).toUpperCase().padStart(2, '0')}`;
 		}
 		return encoded;
@@ -305,7 +323,9 @@ export function createRobotsOracle(options: RobotsOracleOptions): RobotsOracle {
 			return { kind: 'allow-all', reason: 'redirect overflow (treated as unavailable)' };
 		}
 		if (outcome.outcome === 'network-error') {
-			return { kind: 'allow-all' };
+			// The transport message is surfaced so the run log can explain
+			// why robots was skipped (review round 4; redacted at source).
+			return { kind: 'allow-all', reason: `transport failure: ${outcome.message}` };
 		}
 		const { status, body } = outcome;
 		if (status === 429 || status >= 500) return { kind: 'unreachable', reason: `http ${status}` };

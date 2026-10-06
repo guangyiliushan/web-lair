@@ -32,5 +32,8 @@ describe('links.check builtin loads under plain Node', () => {
 				{ cwd: repoRoot, timeout: 30_000 }
 			)
 		).resolves.toBeDefined();
-	});
+		// Spawns a real Node child: under full-suite load the 5 s default
+		// can cut it off (observed 5012 ms); the child itself stays bounded
+		// by the 30 s execFile timeout (review round 2026-10-06).
+	}, 20_000);
 });

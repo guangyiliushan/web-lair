@@ -22,11 +22,11 @@ import {
  *   site's own state (ENOTFOUND -> `dns`, counted - death detection depends
  *   on it).
  */
-export const MAX_REDIRECTS = 5;
+const MAX_REDIRECTS = 5;
 
 const VERSION = '0.0.1'; // keep in sync with package.json
 export const LINK_CHECK_PRODUCT_TOKEN = 'web-lair-link-check';
-export const LINK_CHECK_UA_BASE = `${LINK_CHECK_PRODUCT_TOKEN}/${VERSION}`;
+const LINK_CHECK_UA_BASE = `${LINK_CHECK_PRODUCT_TOKEN}/${VERSION}`;
 
 /** UA per plan §4.2 / RFC 9110 §10.1.5: product token first, contact comment when ORIGIN is set. */
 export function buildUserAgent(origin: string | null): string {

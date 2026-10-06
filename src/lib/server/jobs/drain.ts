@@ -4,6 +4,7 @@ import { jobSchedules } from '../db/system/job-schedule.schema.ts';
 import { webhooks } from '../db/system/webhook.schema.ts';
 import { webhookDeliveries } from '../db/system/webhook-delivery.schema.ts';
 import { pgErrorCode } from '../db/pg-error.ts';
+import { sanitizeErrorText } from './error-text.ts';
 import { dueWindow } from './due.ts';
 import { JOBS } from './registry.ts';
 import { webhookHeaders } from './signature.ts';
@@ -654,32 +655,9 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 // Error text hygiene
 // ---------------------------------------------------------------------------
 
-/**
- * Text recorded in `job_runs.error` and drain logs. Two hazards are stripped:
- *  - drizzle's DrizzleQueryError message embeds the full SQL AND its bound
- *    values ("params: ..." after the query line); bound values may carry
- *    content or secrets and may THEMSELVES contain newlines, so everything
- *    from the params marker to the end of the string is dropped (a line-wise
- *    filter would leave the tail of a multi-line value behind);
- *  - Node embeds raw URLs in parse errors ("Failed to parse URL from ..."),
- *    and webhook/heartbeat/database URLs carry tokens or credentials.
- */
-export function sanitizeErrorText(raw: unknown): string {
-	const text = typeof raw === 'string' ? raw : String(raw ?? '');
-	const paramsIndex = text.search(/\r?\n\s*params:/);
-	const withoutParams = paramsIndex === -1 ? text : text.slice(0, paramsIndex);
-	const redacted = withoutParams.replace(/(?:https?|postgres(?:ql)?):\/\/[^\s'"]+/g, (url) => {
-		try {
-			// NOTE: `origin` is "null" for non-special schemes (postgres://),
-			// so rebuild from protocol + host - host keeps the port.
-			const parsed = new URL(url);
-			return `${parsed.protocol}//${parsed.host}/...`;
-		} catch {
-			return '[url redacted]';
-		}
-	});
-	return redacted.slice(0, 500);
-}
+// sanitizeErrorText moved to ./error-text.ts (keeps the strip-only builtin
+// chain lean); re-exported for the existing drain consumers and tests.
+export { sanitizeErrorText } from './error-text.ts';
 
 function errorText(err: unknown): string {
 	const code = pgErrorCode(err);

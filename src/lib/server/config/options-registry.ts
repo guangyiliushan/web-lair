@@ -148,8 +148,12 @@ export const optionRegistry = {
 			failStreak: z.number('必须为数字').int('必须为整数').min(1, '至少为 1'),
 			backlinkStreak: z.number('必须为数字').int('必须为整数').min(1, '至少为 1'),
 			graceDays: z.number('必须为数字').int('必须为整数').min(1, '至少为 1 天'),
-			timeoutMs: z.number('必须为数字').int('必须为整数').min(1000, '至少 1000ms'),
-			concurrency: z.number('必须为数字').int('必须为整数').min(1, '至少为 1')
+			timeoutMs: z
+				.number('必须为数字')
+				.int('必须为整数')
+				.min(1000, '至少 1000ms')
+				.max(60000, '至多 60000ms'),
+			concurrency: z.number('必须为数字').int('必须为整数').min(1, '至少为 1').max(16, '至多 16')
 		}),
 		// Plan §2.6 defaults: daily cadence, 3-strike outage / 2-strike
 		// backlink loss before queueing, 30-day grace, 10s per fetch unit,

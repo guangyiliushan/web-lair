@@ -3,6 +3,7 @@ import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import {
 	LINK_LOCK_KEY,
+	ROBOTS_BODY_BYTES,
 	deriveAcceptedHosts,
 	deriveRowUpdate,
 	dueWhereSql,
@@ -32,6 +33,8 @@ function row(overrides: Partial<LinkRowSnapshot> = {}): LinkRowSnapshot {
 		backlinkOk: true,
 		backlinkCheckedAt: null,
 		lastErrorKind: null,
+		lastCheckedAt: null,
+		updatedAt: new Date('2026-10-01T00:00:00Z'),
 		...overrides
 	};
 }
@@ -264,7 +267,7 @@ describe('SQL teeth + lock identity (review batch 2026-10-06)', () => {
 		);
 		expect(query.sql).toContain('jsonb_agg');
 		expect(query.sql).toContain('order by ord desc');
-		expect(query.sql).toContain('limit 10');
+		expect(query.sql).toMatch(/limit 10\b/);
 		expect(query.sql).toContain('100000');
 		expect(String(query.params[0])).toContain('reachability');
 	});
@@ -298,15 +301,21 @@ function makeChain(result: unknown[]) {
 function stubDb(passes: LinkRowSnapshot[][]) {
 	const queue = [...passes];
 	const updateCalls: unknown[] = [];
+	const setArgs: Array<Record<string, unknown>> = [];
 	const returning = vi.fn(async () => {
 		updateCalls.push(1);
 		return [{ id: 'x' }];
 	});
 	const db = {
 		select: vi.fn(() => makeChain(queue.shift() ?? [])),
-		update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ returning })) })) }))
+		update: vi.fn(() => ({
+			set: vi.fn((payload: Record<string, unknown>) => {
+				setArgs.push(payload);
+				return { where: vi.fn(() => ({ returning })) };
+			})
+		}))
 	};
-	return { db, updateCalls };
+	return { db, updateCalls, setArgs };
 }
 
 const silentLogger = () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() });
@@ -349,7 +358,7 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 			row({ id: 'a', host: 'a.example', url: 'https://a.example/', backlinkUrl: null }),
 			row({ id: 'b', host: 'b.example', url: 'https://b.example/', backlinkUrl: null })
 		];
-		const { db, updateCalls } = stubDb([rows]);
+		const { db, updateCalls, setArgs } = stubDb([rows]);
 		const summary = await runLinkCheck({
 			db: db as never,
 			config: RUN_CONFIG,
@@ -362,6 +371,19 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 		expect(summary.checked).toBe(2);
 		expect(summary.writes).toBe(2);
 		expect(updateCalls).toHaveLength(2);
+		// The UPDATE payload (ring wiring, plan -> columns, pinned
+		// updated_at) must be pinned (review round 4): deleting
+		// recentChecks or a counter would otherwise survive the suite.
+		expect(setArgs).toHaveLength(2);
+		for (const payload of setArgs) {
+			expect(payload.status).toBe('approved');
+			expect(payload.failStreak).toBe(0);
+			expect(payload.lastCheckedAt).toBeInstanceOf(Date);
+			expect(payload.recentChecks).toBeDefined();
+			const ring = new PgDialect().sqlToQuery(payload.recentChecks as SQL);
+			expect(ring.sql).toContain('jsonb_agg');
+		}
+		expect(setArgs[0].updatedAt).toEqual(rows[0].updatedAt);
 	});
 
 	it('an exhausted budget stops pulling rows (per-lane deadline)', async () => {
@@ -458,6 +480,7 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 		expect(cas.sql).toContain('"check_enabled"');
 		expect(cas.sql).toContain('"url"');
 		expect(cas.sql).toContain('"backlink_url"');
+		expect(cas.sql).toContain('"last_checked_at"');
 		expect(cas.sql).toContain('is not distinct from');
 	});
 
@@ -502,7 +525,7 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 		const slowFetch = async (url: URL | string) => {
 			const href = typeof url === 'string' ? url : url.href;
 			if (new URL(href).pathname === '/robots.txt') return new Response('', { status: 404 });
-			await new Promise((resolve) => setTimeout(resolve, 500));
+			await new Promise((resolve) => setTimeout(resolve, 900));
 			return new Response('<html></html>', {
 				status: 200,
 				headers: { 'content-type': 'text/html' }
@@ -520,13 +543,13 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 			acceptedHosts: ['ok.example'],
 			origin: 'https://ok.example',
 			logger: silentLogger(),
-			budgetMs: 400,
+			budgetMs: 600,
 			dryRun: true,
 			sleepMs: async () => {},
 			fetchDeps: { fetch: slowFetch as never, resolveHost: okResolve }
 		});
 		// Without the per-lane deadline gate a mutated build would drain all
-		// three rows (3 x 500 ms); the guard stops after the first.
+		// three rows (3 x 900 ms); the guard stops after the first.
 		expect(summary.checked).toBe(1);
 		expect(summary.budgetExhausted).toBe(true);
 	});
@@ -538,7 +561,7 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 		const slowFetch = async (url: URL | string) => {
 			const href = typeof url === 'string' ? url : url.href;
 			if (new URL(href).pathname === '/robots.txt') return new Response('', { status: 404 });
-			await new Promise((resolve) => setTimeout(resolve, 500));
+			await new Promise((resolve) => setTimeout(resolve, 900));
 			return new Response('<html></html>', {
 				status: 200,
 				headers: { 'content-type': 'text/html' }
@@ -552,7 +575,7 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 			origin: 'https://ok.example',
 			logger: silentLogger(),
 			limitPerPass: 1,
-			budgetMs: 400,
+			budgetMs: 600,
 			sleepMs: async () => {},
 			fetchDeps: { fetch: slowFetch as never, resolveHost: okResolve }
 		});
@@ -582,5 +605,127 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 		});
 		expect(summary.checked).toBe(1);
 		expect(logger.info).not.toHaveBeenCalledWith('[links] no due sites');
+	});
+
+	it('a full batch that cannot start never spins (budget regression, review round 4)', async () => {
+		const rows = [
+			row({ id: 'a', host: 'a.example', url: 'https://a.example/', backlinkUrl: null }),
+			row({ id: 'b', host: 'b.example', url: 'https://b.example/', backlinkUrl: null })
+		];
+		const { db } = stubDb([rows]);
+		const summary = await runLinkCheck({
+			db: db as never,
+			config: RUN_CONFIG,
+			acceptedHosts: ['ok.example'],
+			origin: 'https://ok.example',
+			logger: silentLogger(),
+			limitPerPass: 2,
+			budgetMs: 0,
+			sleepMs: async () => {},
+			fetchDeps: { fetch: okFetch() as never, resolveHost: okResolve }
+		});
+		// Exactly ONE select: nothing could start, so the loop must end. A
+		// spinning loop would keep selecting (and hang this test) - this is
+		// the 6892b25 regression (review round 4).
+		expect(db.select).toHaveBeenCalledTimes(1);
+		expect(summary.budgetExhausted).toBe(true);
+		expect(summary.checked).toBe(0);
+		expect(summary.due).toBe(2);
+	});
+
+	it('rows whose writes fail are not refetched in-run (bounded passes)', async () => {
+		const rows = [
+			row({ id: 'a', host: 'a.example', url: 'https://a.example/', backlinkUrl: null }),
+			row({ id: 'b', host: 'b.example', url: 'https://b.example/', backlinkUrl: null })
+		];
+		const returning = vi.fn(async () => {
+			throw new Error('write boom');
+		});
+		const db = {
+			select: vi.fn(() => makeChain([rows, rows])),
+			update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ returning })) })) }))
+		};
+		const summary = await runLinkCheck({
+			db: db as never,
+			config: RUN_CONFIG,
+			acceptedHosts: ['ok.example'],
+			origin: 'https://ok.example',
+			logger: silentLogger(),
+			limitPerPass: 2,
+			sleepMs: async () => {},
+			fetchDeps: { fetch: okFetch() as never, resolveHost: okResolve }
+		});
+		expect(summary.errors).toBe(2);
+		expect(summary.writes).toBe(0);
+		// Second pass: both rows failed earlier this run -> filtered ->
+		// nothing startable -> the loop ends (two selects total).
+		expect(db.select).toHaveBeenCalledTimes(2);
+	});
+
+	it('counts and logs automatic status transitions', async () => {
+		const rows = [
+			row({
+				id: 'a',
+				host: 'a.example',
+				url: 'https://a.example/',
+				failStreak: 2,
+				backlinkUrl: null
+			})
+		];
+		const { db } = stubDb([rows, []]);
+		const logger = silentLogger();
+		const summary = await runLinkCheck({
+			db: db as never,
+			config: RUN_CONFIG,
+			acceptedHosts: ['ok.example'],
+			origin: 'https://ok.example',
+			logger,
+			limitPerPass: 1,
+			sleepMs: async () => {},
+			fetchDeps: {
+				fetch: okFetch() as never,
+				resolveHost: async () => {
+					throw Object.assign(new Error('getaddrinfo ENOTFOUND a.example'), {
+						code: 'ENOTFOUND'
+					});
+				}
+			}
+		});
+		expect(summary.transitions).toBe(1);
+		expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('approved -> outdated'));
+		expect(summary.checked).toBe(1);
+	});
+
+	it('routes robots.txt through the pinned unit (redirect overflow falls through)', async () => {
+		const rows = [
+			row({ id: 'a', host: 'a.example', url: 'https://a.example/', backlinkUrl: null })
+		];
+		const { db } = stubDb([rows]);
+		const calls: string[] = [];
+		const fetchImpl = async (url: URL | string) => {
+			const href = String(url);
+			calls.push(href);
+			if (href.endsWith('/robots.txt')) {
+				return new Response(null, { status: 301, headers: { location: '/robots.txt' } });
+			}
+			return new Response('<html></html>', {
+				status: 200,
+				headers: { 'content-type': 'text/html' }
+			});
+		};
+		const summary = await runLinkCheck({
+			db: db as never,
+			config: RUN_CONFIG,
+			acceptedHosts: ['ok.example'],
+			origin: 'https://ok.example',
+			logger: silentLogger(),
+			dryRun: true,
+			sleepMs: async () => {},
+			fetchDeps: { fetch: fetchImpl as never, resolveHost: okResolve }
+		});
+		expect(summary.checked).toBe(1);
+		// 5-hop limit: 6 robots attempts, then the page fetch.
+		expect(calls.filter((href) => href.endsWith('/robots.txt'))).toHaveLength(6);
+		expect(ROBOTS_BODY_BYTES).toBe(512 * 1024);
 	});
 });

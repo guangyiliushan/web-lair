@@ -15,7 +15,7 @@
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { sanitizeErrorText } from '../../src/lib/server/jobs/drain.ts';
+import { sanitizeErrorText } from '../../src/lib/server/jobs/error-text.ts';
 import { getOption } from '../../src/lib/server/config/options-registry.ts';
 import { parseLinksCliArgs } from '../../src/lib/server/links/cli-args.ts';
 import {
@@ -77,7 +77,7 @@ try {
 		console.log('[links] checks disabled (friends.checks.enabled=false)');
 	} else {
 		console.log(
-			`[links] ${dryRun ? 'dry-run ' : ''}done: due=${summary.due} checked=${summary.checked} ok=${summary.ok} failed=${summary.failed} skipped=${summary.skipped} inconclusive=${summary.inconclusive} writes=${summary.writes} errors=${summary.errors} budgetExhausted=${summary.budgetExhausted}${summary.backlinkSkippedReason ? ` backlinkSkipped=${summary.backlinkSkippedReason}` : ''}`
+			`[links] ${dryRun ? 'dry-run ' : ''}done: due=${summary.due} checked=${summary.checked} ok=${summary.ok} failed=${summary.failed} skipped=${summary.skipped} inconclusive=${summary.inconclusive} writes=${summary.writes} errors=${summary.errors} casSkipped=${summary.casSkipped} transitions=${summary.transitions} budgetExhausted=${summary.budgetExhausted}${summary.backlinkSkippedReason ? ` backlinkSkipped=${summary.backlinkSkippedReason}` : ''}`
 		);
 		if (dryRun) console.log('[links] dry-run: no database writes were made (single pass)');
 	}

@@ -28,32 +28,6 @@ export function normalizeHost(input: string): string | null {
 	}
 }
 
-export interface NormalizedUrl {
-	/** Canonical https URL: no fragment, `:443` dropped, trailing slash trimmed (root keeps `/`). */
-	url: string;
-	/** Matching host: lowercase, punycode, `www.` stripped. */
-	host: string;
-	pathname: string;
-}
-
-export function normalizeUrl(input: string): NormalizedUrl | null {
-	let url: URL;
-	try {
-		url = new URL(input.trim());
-	} catch {
-		return null;
-	}
-	if (url.protocol !== 'https:') return null;
-	if (url.port === '443') url.port = '';
-	url.hash = '';
-	if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
-		url.pathname = url.pathname.replace(/\/+$/, '');
-	}
-	const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
-	if (!hostname) return null;
-	return { url: url.href, host: stripWww(hostname), pathname: url.pathname };
-}
-
 /**
  * Same-site test for the offsite signal (plan §4.8, coarse on purpose —
  * PSL is a registered future item): equal hosts, or either one a dotted
@@ -64,6 +38,15 @@ export function isSameSite(a: string, b: string): boolean {
 	const y = normalizeHost(b);
 	if (!x || !y) return false;
 	return x === y || x.endsWith(`.${y}`) || y.endsWith(`.${x}`);
+}
+
+/**
+ * Strip URL userinfo (`://user:pass@`) from free text before it reaches a
+ * log line or the evidence ring (undici embeds the full URL in some
+ * TypeError messages; review round 4).
+ */
+export function redactCredentials(text: string): string {
+	return text.replace(/:\/\/[^\s/@]+@/g, '://[redacted]@');
 }
 
 /** Fetch-comparison key: href with the fragment removed (null = invalid). */

@@ -1,4 +1,5 @@
 import type { LinkErrorKind } from '../../utils/link-meta.ts';
+import { redactCredentials } from './normalize.ts';
 
 /**
  * Error / status classification for the link checker (plan §4.3, calibrated
@@ -95,7 +96,12 @@ export function classifyFetchFailure(error: unknown): FailureClass {
 	if (codes.some((code) => CONNECT_CODES.has(code))) {
 		return { kind: 'connect', countsFailure: true, retryable: false };
 	}
-	return { kind: 'connect', countsFailure: true, retryable: false, detail: messages[0] };
+	return {
+		kind: 'connect',
+		countsFailure: true,
+		retryable: false,
+		detail: redactCredentials(messages[0])
+	};
 }
 
 /** Map a final HTTP status to the plan §4.3 vocabulary. */

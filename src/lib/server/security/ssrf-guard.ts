@@ -42,11 +42,15 @@ for (const [network, prefix] of [
 	['::', 96], // v4-compatible (deprecated) - covers ::/128 and ::<v4>
 	['::1', 128],
 	['64:ff9b::', 96], // NAT64 (pure v6 form)
+	['64:ff9b:1::', 48], // local-use NAT64 prefix (RFC 8215)
 	['2002::', 16], // 6to4 (pure v6 form)
 	['ff00::', 8], // multicast
 	['2001::', 32], // Teredo
+	['2001:2::', 48], // benchmarking (RFC 5180)
 	['fc00::', 7],
 	['fe80::', 10],
+	['fec0::', 10], // site-local (deprecated, RFC 3879)
+	['100::', 64], // discard-only (RFC 6666)
 	['2001:db8::', 32],
 	['3fff::', 20] // documentation (RFC 9637)
 ] as const) {

@@ -25,10 +25,15 @@ export function parseLinksCliArgs(argv: readonly string[]): LinksCliArgsResult {
 			const raw = argv[index + 1];
 			// Strict decimal spelling: `Number()` would accept '0x10',
 			// '1e3' or padded whitespace (review round 3, 2026-10-06).
-			if (typeof raw !== 'string' || !/^\d+$/.test(raw) || Number(raw) < 1) {
+			if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
 				return { ok: false, error: '--limit expects a positive integer' };
 			}
-			limitPerPass = Number(raw);
+			const value = Number(raw);
+			if (value < 1) return { ok: false, error: '--limit expects a positive integer' };
+			// Upper bound: one select must not pull an unbounded set into
+			// memory (review round 4).
+			if (value > 500) return { ok: false, error: '--limit must be at most 500' };
+			limitPerPass = value;
 			index += 1;
 			continue;
 		}

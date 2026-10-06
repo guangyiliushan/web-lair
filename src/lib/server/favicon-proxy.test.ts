@@ -5,7 +5,8 @@ vi.mock('node:dns', () => ({ promises: { lookup: (...args: unknown[]) => lookup(
 
 const fetchMock = vi.fn();
 
-import { handleFaviconRequest, isPrivateAddress } from '$lib/server/favicon-proxy';
+import { handleFaviconRequest } from '$lib/server/favicon-proxy';
+import { isPrivateAddress } from '$lib/server/security/ssrf-guard';
 
 beforeEach(() => {
 	lookup.mockReset();
@@ -40,7 +41,11 @@ describe('favicon proxy (spec 6)', () => {
 			'fe80::1',
 			'ff02::1',
 			'2001::1',
+			'2001:2::1',
 			'3fff::1',
+			'64:ff9b:1::7f00:1',
+			'fec0::1',
+			'100::1',
 			'::ffff:127.0.0.1',
 			'::ffff:7f00:1'
 		]) {

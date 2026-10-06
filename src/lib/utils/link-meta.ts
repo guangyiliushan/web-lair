@@ -38,6 +38,8 @@ export interface LinkCheck {
 	at: string;
 	kind: 'precheck' | 'reachability' | 'backlink';
 	ok: boolean;
+	/** The page actually checked (post-redirect); review round 4. */
+	url?: string;
 	http?: number;
 	err?: LinkErrorKind;
 	ms?: number;

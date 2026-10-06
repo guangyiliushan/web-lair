@@ -94,4 +94,13 @@ describe('links classify (§4.3)', () => {
 			expect(classifyHttpStatus(status).failure).toMatchObject({ kind: 'waf', retryable: false });
 		}
 	});
+
+	it('redacts URL credentials in dynamic connect details', () => {
+		const err = new TypeError(
+			'Request cannot be constructed from a URL that includes credentials: https://user:pass@host/x'
+		);
+		const failure = classifyFetchFailure(err);
+		expect(failure.detail).toContain('://[redacted]@');
+		expect(failure.detail).not.toContain('user:pass');
+	});
 });
