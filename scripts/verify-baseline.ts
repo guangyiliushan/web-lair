@@ -880,6 +880,65 @@ begin
 		if c <> 'links_ring_check' then raise exception 'FAIL links ring: wrong constraint %', c; end if;
 	end;
 
+	-- L1 acceptance teeth (links plan §2.2; 2026-10-06): the remaining seven
+	-- negatives - banned without reason, lost_since both directions, plain
+	-- http, approved without backlink, an 11-element ring, duplicate url.
+	begin
+		insert into links (name, url, host, backlink_url, status) values ('c1v-l1', 'https://l1.example/', 'l1.example', 'https://l1.example/', 'banned');
+		raise exception 'FAIL links_banned_reason_check accepted banned without a reason';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'links_banned_reason_check' then raise exception 'FAIL links banned: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into links (name, url, host, backlink_url, status, lost_since) values ('c1v-l2', 'https://l2.example/', 'l2.example', 'https://l2.example/', 'approved', now());
+		raise exception 'FAIL links_lost_since_check accepted approved with lost_since';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'links_lost_since_check' then raise exception 'FAIL links lost approved: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into links (name, url, host, backlink_url, status) values ('c1v-l3', 'https://l3.example/', 'l3.example', 'https://l3.example/', 'outdated');
+		raise exception 'FAIL links_lost_since_check accepted outdated without lost_since';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'links_lost_since_check' then raise exception 'FAIL links lost outdated: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into links (name, url, host, backlink_url) values ('c1v-l4', 'http://l4.example/', 'l4.example', 'https://l4.example/');
+		raise exception 'FAIL links_https_check accepted a plain-http url';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'links_https_check' then raise exception 'FAIL links https: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into links (name, url, host, status) values ('c1v-l5', 'https://l5.example/', 'l5.example', 'approved');
+		raise exception 'FAIL links_backlink_required_check accepted approved without backlink_url';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'links_backlink_required_check' then raise exception 'FAIL links backlink: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into links (name, url, host, backlink_url, recent_checks) values ('c1v-l6', 'https://l6.example/', 'l6.example', 'https://l6.example/', '[1,2,3,4,5,6,7,8,9,10,11]'::jsonb);
+		raise exception 'FAIL links_ring_check accepted an 11-element ring';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'links_ring_check' then raise exception 'FAIL links ring 11: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into links (name, url, host, backlink_url) values ('c1v-l7', 'https://ok.example/', 'ok.example', 'https://ok.example/');
+		raise exception 'FAIL links_url_uniq accepted a duplicate url';
+	exception when unique_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'links_url_uniq' then raise exception 'FAIL links url uniq: wrong constraint %', c; end if;
+	end;
+
 	-- notes v0.3 reshape teeth (plan §7.5)
 	begin
 		insert into notes (content_format, lang, title, slug, status)
