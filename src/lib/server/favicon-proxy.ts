@@ -1,7 +1,11 @@
 import { error, isHttpError } from '@sveltejs/kit';
 import { promises as dns } from 'node:dns';
-import { BlockList } from 'node:net';
 import { canonicalHost, EMBED_PROVIDER_DOMAINS } from '$lib/components/markdown/embed/registry';
+// SSRF guard shared with the links checker (2026-10-06, links L2): the
+// blocklist and `isPrivateAddress` moved to `security/ssrf-guard.ts`; the
+// re-export below keeps the existing favicon tests importing from here.
+import { isPrivateAddress, resolvesPublic } from './security/ssrf-guard.ts';
+export { isPrivateAddress } from './security/ssrf-guard.ts';
 
 /**
  * Favicon proxy (spec 6) — the only server-side fetch the renderer performs.
@@ -18,7 +22,9 @@ import { canonicalHost, EMBED_PROVIDER_DOMAINS } from '$lib/components/markdown/
  *   /favicon.ico (bilibili, themoviedb, …). Residual DNS-rebinding
  *   risk (resolve-then-connect TOCTOU) is a registered hardening item —
  *   the fetch is HTTPS with certificate validation, which is what keeps it
- *   unexploitable for allowlisted hosts.
+ *   unexploitable for allowlisted hosts. (The links checker closes the
+ *   TOCTOU gap via `security/ssrf-guard.ts` `pinnedLookup`; adopting it here
+ *   is the registered follow-up.)
  * - limits: 5 s timeout, a streaming 512 KiB body cap (the reader is the
  *   memory bound — arrayBuffer would buffer an unbounded body), a raster
  *   image content-type allowlist (SVG is excluded: it would render
@@ -37,72 +43,7 @@ const ALLOWED_CONTENT_TYPES = new Set([
 	'image/avif'
 ]);
 
-const BLOCKED_RANGES = new BlockList();
-for (const [network, prefix] of [
-	['0.0.0.0', 8],
-	['10.0.0.0', 8],
-	['100.64.0.0', 10],
-	['127.0.0.0', 8],
-	['169.254.0.0', 16],
-	['172.16.0.0', 12],
-	['192.0.0.0', 24],
-	['192.0.2.0', 24],
-	['192.168.0.0', 16],
-	['198.18.0.0', 15],
-	['198.51.100.0', 24],
-	['203.0.113.0', 24],
-	['224.0.0.0', 4],
-	['240.0.0.0', 4],
-	['255.255.255.255', 32]
-] as const) {
-	BLOCKED_RANGES.addSubnet(network, prefix, 'ipv4');
-}
-for (const [network, prefix] of [
-	['::', 128],
-	['::1', 128],
-	['64:ff9b::', 96], // NAT64 (pure v6 form)
-	['2002::', 16], // 6to4 (pure v6 form)
-	['fc00::', 7],
-	['fe80::', 10],
-	['2001:db8::', 32]
-] as const) {
-	BLOCKED_RANGES.addSubnet(network, prefix, 'ipv6');
-}
-
-const IPV4 = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-
-/**
- * True when the address is not a globally routable unicast address.
- *
- * v4-mapped forms (`::ffff:127.0.0.1` and the hex spelling `::ffff:7f00:1`)
- * are unpacked by hand and the embedded v4 is classified instead: Node's
- * BlockList normalises every v4 string to its mapped form, so a blanket
- * `::ffff:0:0/96` rule would match ALL addresses. Unparsable mapped forms
- * fail closed.
- */
-export function isPrivateAddress(address: string): boolean {
-	const clean = address.includes('%') ? address.slice(0, address.indexOf('%')) : address;
-	const lower = clean.toLowerCase();
-	if (lower.startsWith('::ffff:')) {
-		const rest = lower.slice('::ffff:'.length);
-		if (IPV4.test(rest)) return isPrivateAddress(rest);
-		const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(rest);
-		if (hex) {
-			const hi = parseInt(hex[1], 16);
-			const lo = parseInt(hex[2], 16);
-			return isPrivateAddress(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
-		}
-		return true;
-	}
-	return BLOCKED_RANGES.check(clean, lower.includes(':') ? 'ipv6' : 'ipv4');
-}
-
 const MAX_REDIRECTS = 3;
-
-async function resolvesPublic(host: string): Promise<boolean> {
-	const addresses = await dns.lookup(host, { all: true }).catch(() => []);
-	return addresses.length > 0 && !addresses.some((entry) => isPrivateAddress(entry.address));
-}
 
 /**
  * Fetches the favicon, following redirects manually: `redirect: 'follow'`
