@@ -16,6 +16,9 @@ import {
  *   DNS-rebinding closure; TLS servername stays the hostname).
  * - One total deadline per unit (`timeoutMs` covers the whole redirect chain
  *   and the body read); streaming body cap (`maxBytes`).
+ * - Resolver failures propagate unchanged: the caller classifies them as the
+ *   site's own state (ENOTFOUND -> `dns`, counted - death detection depends
+ *   on it).
  */
 export const MAX_REDIRECTS = 5;
 

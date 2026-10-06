@@ -42,6 +42,19 @@ describe('fetchUnit (§4.2/§4.8)', () => {
 		).rejects.toMatchObject({ code: 'ssrf' });
 	});
 
+	it('propagates resolver failures (classified as site state upstream)', async () => {
+		const enotfound = Object.assign(new Error('getaddrinfo ENOTFOUND dead.invalid'), {
+			code: 'ENOTFOUND'
+		});
+		await expect(
+			fetchUnit(
+				'https://dead.invalid/',
+				OPTS,
+				depsWith(vi.fn(), async () => Promise.reject(enotfound))
+			)
+		).rejects.toBe(enotfound);
+	});
+
 	it('follows redirects manually and returns the final body', async () => {
 		const calls: string[] = [];
 		const stub = async (url: URL | string) => {

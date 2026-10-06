@@ -137,7 +137,7 @@ describe('robots oracle (§4.7)', () => {
 		expect(fetchRobots).toHaveBeenCalledTimes(2);
 	});
 
-	it('4xx (except 429) = no restrictions; 429/5xx/network = unreachable; redirect overflow = no restrictions', async () => {
+	it('4xx (except 429) = no restrictions; 429/5xx = unreachable; network/redirect = no restrictions', async () => {
 		const notFound = oracleWith({ outcome: 'text', status: 404, body: new Uint8Array() });
 		expect((await notFound.oracle.decisionFor(new URL('https://a.example/x'))).kind).toBe('allow');
 
@@ -151,19 +151,19 @@ describe('robots oracle (§4.7)', () => {
 			'unreachable'
 		);
 
+		// Transport failures fall through to the page fetch (2026-10-06
+		// refinement): a network-dead site must count as a hard failure.
 		const network = oracleWith({ outcome: 'network-error', message: 'connect ECONNREFUSED' });
-		expect((await network.oracle.decisionFor(new URL('https://a.example/x'))).kind).toBe(
-			'unreachable'
-		);
+		expect((await network.oracle.decisionFor(new URL('https://a.example/x'))).kind).toBe('allow');
 
 		const overflow = oracleWith({ outcome: 'redirect-loop' });
 		expect((await overflow.oracle.decisionFor(new URL('https://a.example/x'))).kind).toBe('allow');
 	});
 
-	it('thrown fetch errors become unreachable, not crashes', async () => {
+	it('thrown fetch errors fall through to allow, not crashes', async () => {
 		const { oracle } = oracleWith(async () => {
 			throw new Error('boom');
 		});
-		expect((await oracle.decisionFor(new URL('https://a.example/x'))).kind).toBe('unreachable');
+		expect((await oracle.decisionFor(new URL('https://a.example/x'))).kind).toBe('allow');
 	});
 });

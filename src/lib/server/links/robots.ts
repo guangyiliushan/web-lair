@@ -5,10 +5,13 @@
  * access results, §2.4 caching, §2.5 size) and Google's interpretation page.
  *
  * Status semantics honored by the oracle: 2xx parse; 4xx (except 429) treat
- * as "no restrictions"; 429/5xx/network failure -> site skipped this round
- * (kind `robots`, not counted as a failure - RFC "MUST assume complete
- * disallow" taken on its conservative side); redirect overflow (fetch unit
- * throws) -> "unavailable" -> no restrictions (RFC §2.3.1.2/§2.3.1.3).
+ * as "no restrictions"; 429/5xx -> site skipped this round (kind `robots`,
+ * not counted - RFC 9309 §2.3.1.4's "MUST assume complete disallow" covers
+ * server status codes); transport-level failures (DNS/connect/TLS/timeout)
+ * or redirect overflow -> "unavailable" -> no restrictions
+ * (RFC §2.3.1.2/§2.3.1.3), because for a verifier a network-dead site must
+ * surface as the hard failure it is (§4.3) - the page fetch classifies it
+ * with no extra requests (2026-10-06 execution refinement).
  */
 
 export class RobotsDisallowedError extends Error {
@@ -200,15 +203,17 @@ export function createRobotsOracle(options: RobotsOracleOptions): RobotsOracle {
 		let outcome: RobotsFetchOutcome;
 		try {
 			outcome = await options.fetchRobots(`${origin}/robots.txt`);
-		} catch (err) {
-			return {
-				kind: 'unreachable',
-				reason: err instanceof Error ? err.message : 'fetch failed'
-			};
+		} catch {
+			// A thrown fetcher is our own bug: never let it silently freeze the
+			// site forever - fall through to the page fetch instead.
+			return { kind: 'allow-all' };
 		}
-		if (outcome.outcome === 'redirect-loop') return { kind: 'allow-all' };
-		if (outcome.outcome === 'network-error') {
-			return { kind: 'unreachable', reason: outcome.message };
+		// Transport failures are NOT a skip (2026-10-06 refinement): the
+		// RFC's MUST covers server status codes; a network-dead site is the
+		// hard failure the checker exists to detect, so fall through to the
+		// normal page fetch (which classifies it; no extra requests).
+		if (outcome.outcome === 'redirect-loop' || outcome.outcome === 'network-error') {
+			return { kind: 'allow-all' };
 		}
 		const { status, body } = outcome;
 		if (status === 429 || status >= 500) return { kind: 'unreachable', reason: `http ${status}` };

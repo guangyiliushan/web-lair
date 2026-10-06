@@ -192,6 +192,27 @@ describe('checkSite (§4.1/§4.8)', () => {
 		expect(stub).toHaveBeenCalledTimes(1);
 	});
 
+	it('dns-dead hosts count as hard failures (no robots masking)', async () => {
+		const stub = routes({});
+		const deps = depsWith(stub);
+		deps.fetchDeps = {
+			fetch: stub as never,
+			resolveHost: async () => {
+				throw Object.assign(new Error('getaddrinfo ENOTFOUND dead.invalid'), {
+					code: 'ENOTFOUND'
+				});
+			}
+		};
+		const outcome = await checkSite(
+			{ url: 'https://dead.invalid/', host: 'dead.invalid', backlinkUrl: null },
+			config(),
+			deps
+		);
+		expect(outcome.reach).toBe('fail');
+		expect(outcome.entries[0]).toMatchObject({ err: 'dns', ok: false });
+		expect(stub).not.toHaveBeenCalled();
+	});
+
 	it('records an offsite note when the final URL crossed sites', async () => {
 		const stub = routes({
 			[HOME]: () =>

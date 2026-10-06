@@ -84,17 +84,20 @@ export interface ResolvedAddress {
 
 /**
  * Resolve `host` and return the answers only when every one of them is
- * globally routable (fail closed). Returns null on DNS failure, an empty
- * answer set, or any private answer - callers must then refuse the request.
+ * globally routable (fail closed). Returns null when the answers fail
+ * validation (private or empty) - callers must then refuse the request.
+ * A DNS *lookup failure* (ENOTFOUND / EAI_AGAIN) is NOT swallowed: it
+ * propagates so the checker classifies it as the site's own failure
+ * (2026-10-06 refinement - death detection depends on it).
  */
 export async function resolvePublicAddresses(host: string): Promise<ResolvedAddress[] | null> {
-	const addresses = await dns.lookup(host, { all: true }).catch(() => []);
+	const addresses = await dns.lookup(host, { all: true });
 	if (addresses.length === 0) return null;
 	if (addresses.some((entry) => isPrivateAddress(entry.address))) return null;
 	return addresses.map((entry) => ({ address: entry.address, family: entry.family }));
 }
 
-/** Boolean form used by `favicon-proxy.ts` callers. */
+/** Boolean form used by `favicon-proxy.ts` callers (DNS failures throw). */
 export async function resolvesPublic(host: string): Promise<boolean> {
 	return (await resolvePublicAddresses(host)) !== null;
 }
