@@ -4,5 +4,5 @@
 		"types": ["node"],
 		"noEmit": true
 	},
-	"include": ["./**/*.ts", "../src/lib/server/jobs/builtin/**/*.ts"]
+	"include": ["./**/*.ts", "../src/lib/server/jobs/builtin/**/*.ts", "../.svelte-kit/ambient.d.ts"]
 }

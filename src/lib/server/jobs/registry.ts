@@ -56,5 +56,13 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 		manual: true,
 		scheduleHint: '*/15 * * * *',
 		timeoutMs: 30_000
+	},
+	'links.check': {
+		name: 'links.check',
+		description:
+			'Run the friend-link checker: due selection, reachability + backlink checks, evidence-ring and streak updates (links line plan §4).',
+		manual: true,
+		scheduleHint: '0 5 * * *',
+		timeoutMs: 900_000
 	}
 });
