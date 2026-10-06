@@ -661,8 +661,11 @@ async function dbChecks(): Promise<void> {
 			await sql`insert into projects (name, project_url, provider) values ('c1v-s', 'https://s.example', 'site')`;
 			await sql`insert into links (name, url, host, backlink_url) values ('c1v-ok-link', 'https://ok.example/', 'ok.example', 'https://ok.example/link')`;
 			// Positive control (review round 4): a full 10-element ring is
-			// legal - proves links_ring_check is not over-strict.
-			await sql`insert into links (name, url, host, recent_checks) values ('c1v-ring-full', 'https://ring.example/', 'ring.example', ${JSON.stringify(Array.from({ length: 10 }, () => ({ at: '2026-01-01T00:00:00.000Z', kind: 'reachability', ok: true })))}::jsonb)`;
+			// legal - proves links_ring_check is not over-strict. NOTE:
+			// postgres.js infers the parameter type from the ::jsonb cast and
+			// would JSON-encode a plain string parameter into a jsonb STRING
+			// (scalar, failing the check) - sql.json() sends proper json.
+			await sql`insert into links (name, url, host, backlink_url, recent_checks) values ('c1v-ring-full', 'https://ring.example/', 'ring.example', 'https://ring.example/link', ${sql.json(Array.from({ length: 10 }, () => ({ at: '2026-01-01T00:00:00.000Z', kind: 'reachability', ok: true })))}::jsonb)`;
 			await sql`select set_config('c1.src', ${src.id}, true)`;
 			await sql`select set_config('c1.post', ${post.id}, true)`;
 			await sql`select set_config('c1.tag', ${tag.id}, true)`;
