@@ -4,5 +4,6 @@
 		"types": ["node"],
 		"noEmit": true
 	},
+	"//": "The ambient include pulls $env/$app module declarations required when the builtin job chain (options-registry -> links/job) is type-checked under plain Node; see jobs-line plan §5.1 + links plan §4.6.",
 	"include": ["./**/*.ts", "../src/lib/server/jobs/builtin/**/*.ts", "../.svelte-kit/ambient.d.ts"]
 }

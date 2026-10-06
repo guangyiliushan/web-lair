@@ -71,7 +71,11 @@ async function fetchFavicon(host: string, signal: AbortSignal): Promise<Response
 		if (next.protocol !== 'https:') throw error(403, 'redirected off https');
 		const nextHost = canonicalHost(next.hostname);
 		if (!EMBED_PROVIDER_DOMAINS.has(nextHost)) throw error(403, 'redirected outside the allowlist');
-		if (!(await resolvesPublic(nextHost))) throw error(403, 'blocked redirect address');
+		// The shared guard throws on DNS failure (links refinement): keep the
+		// historical favicon semantics - a hop that cannot be validated is a
+		// blocked redirect (403), not a 502 fetch failure (review finding).
+		const publicHop = await resolvesPublic(nextHost).catch(() => false);
+		if (!publicHop) throw error(403, 'blocked redirect address');
 		target = next;
 	}
 	throw error(502, 'too many redirects');

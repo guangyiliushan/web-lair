@@ -79,4 +79,13 @@ describe('links classify (§4.3)', () => {
 		});
 		expect(classifyHttpStatus(302).failure?.kind).toBe('http_error');
 	});
+
+	it('classifies AbortError as a retryable timeout', () => {
+		const aborted = Object.assign(new Error('aborted'), { name: 'AbortError' });
+		expect(classifyFetchFailure(aborted)).toMatchObject({
+			kind: 'timeout',
+			countsFailure: true,
+			retryable: true
+		});
+	});
 });

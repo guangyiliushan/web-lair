@@ -34,16 +34,23 @@ describe('favicon proxy (spec 6)', () => {
 			'100.64.0.1',
 			'0.0.0.0',
 			'::1',
+			'::0.0.0.1',
 			'fc00::1',
 			'fd12::1',
 			'fe80::1',
-			'::ffff:127.0.0.1'
+			'ff02::1',
+			'2001::1',
+			'3fff::1',
+			'::ffff:127.0.0.1',
+			'::ffff:7f00:1'
 		]) {
 			expect(isPrivateAddress(address), address).toBe(true);
 		}
 		for (const address of ['140.82.112.3', '8.8.8.8', '1.1.1.1', '2606:4700::1111']) {
 			expect(isPrivateAddress(address), address).toBe(false);
 		}
+		// Unparsable input fails closed (never reads as public).
+		expect(isPrivateAddress('not-an-ip')).toBe(true);
 	});
 
 	it('rejects missing, invalid and non-web targets', async () => {

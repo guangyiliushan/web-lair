@@ -15,7 +15,9 @@ import {
  *   unit via `pinnedLookup` - never a second, unchecked lookup (the OWASP
  *   DNS-rebinding closure; TLS servername stays the hostname).
  * - One total deadline per unit (`timeoutMs` covers the whole redirect chain
- *   and the body read); streaming body cap (`maxBytes`).
+ *   AND the DNS resolution and `beforeHop` gate of every hop - non-abortable
+ *   steps are raced against the same signal, review finding 2026-10-06);
+ *   streaming body cap (`maxBytes`).
  * - Resolver failures propagate unchanged: the caller classifies them as the
  *   site's own state (ENOTFOUND -> `dns`, counted - death detection depends
  *   on it).
@@ -67,6 +69,8 @@ export interface FetchUnitResult {
 	finalUrl: string;
 	status: number;
 	contentType: string | null;
+	/** `Retry-After` of the final response when present (429 evidence, §4.3). */
+	retryAfter: string | null;
 	body: Uint8Array | null;
 	truncated: boolean;
 	redirects: number;
@@ -95,11 +99,11 @@ export async function fetchUnit(
 		if (target.protocol !== 'https:') {
 			throw new LinkFetchError('non-https', `non-https target rejected: ${target.href}`);
 		}
-		const addresses = await resolveHost(target.hostname);
+		const addresses = await withDeadline(resolveHost(target.hostname), signal);
 		if (!addresses || addresses.length === 0) {
 			throw new LinkFetchError('ssrf', `host has no public address: ${target.hostname}`);
 		}
-		if (options.beforeHop) await options.beforeHop(target);
+		if (options.beforeHop) await withDeadline(Promise.resolve(options.beforeHop(target)), signal);
 
 		const agent = new Agent({ connect: { lookup: pinnedLookup(addresses) } });
 		let response: Awaited<ReturnType<typeof undiciFetch>>;
@@ -127,6 +131,7 @@ export async function fetchUnit(
 					finalUrl: target.href,
 					status: response.status,
 					contentType: response.headers.get('content-type'),
+					retryAfter: response.headers.get('retry-after'),
 					body: null,
 					truncated: false,
 					redirects,
@@ -182,6 +187,7 @@ export async function fetchUnit(
 			finalUrl: target.href,
 			status: response.status,
 			contentType: response.headers.get('content-type'),
+			retryAfter: response.headers.get('retry-after'),
 			body,
 			truncated,
 			redirects,
@@ -198,4 +204,35 @@ function concat(chunks: Uint8Array[], total: number): Uint8Array {
 		offset += chunk.byteLength;
 	}
 	return out;
+}
+
+/**
+ * Bound a non-abortable step (DNS resolution, the robots gate) by the unit's
+ * deadline: the wall clock of `timeoutMs` must cover the WHOLE unit (§4.2),
+ * not just the fetch calls (review finding, 2026-10-06). The rejection
+ * carries the signal's reason (a TimeoutError DOMException), so the caller's
+ * classification stays `timeout`.
+ */
+function withDeadline<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+	if (signal.aborted) return Promise.reject(signalReason(signal));
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = () => reject(signalReason(signal));
+		signal.addEventListener('abort', onAbort, { once: true });
+		promise.then(
+			(value) => {
+				signal.removeEventListener('abort', onAbort);
+				resolve(value);
+			},
+			(error: unknown) => {
+				signal.removeEventListener('abort', onAbort);
+				reject(error);
+			}
+		);
+	});
+}
+
+function signalReason(signal: AbortSignal): unknown {
+	return (
+		signal.reason ?? new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+	);
 }

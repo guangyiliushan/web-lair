@@ -63,6 +63,16 @@ describe('findBacklink (§4.8)', () => {
 			false
 		);
 	});
+
+	it('treats <plaintext> as rawtext (no false positives after it)', () => {
+		expect(
+			findBacklink('<plaintext><a href="https://us.example/">x</a>', PAGE, ACCEPTED).found
+		).toBe(false);
+	});
+
+	it('ignores non-http(s) schemes', () => {
+		expect(findBacklink('<a href="ftp://us.example/x">y</a>', PAGE, ACCEPTED).found).toBe(false);
+	});
 });
 
 describe('decodeHtmlBody (§4.8 sniff order)', () => {

@@ -156,8 +156,11 @@ describe('robots oracle (§4.7)', () => {
 		const network = oracleWith({ outcome: 'network-error', message: 'connect ECONNREFUSED' });
 		expect((await network.oracle.decisionFor(new URL('https://a.example/x'))).kind).toBe('allow');
 
+		// Redirect overflow takes the unavailable path, with a distinguishable reason.
 		const overflow = oracleWith({ outcome: 'redirect-loop' });
-		expect((await overflow.oracle.decisionFor(new URL('https://a.example/x'))).kind).toBe('allow');
+		const overflowDecision = await overflow.oracle.decisionFor(new URL('https://a.example/x'));
+		expect(overflowDecision.kind).toBe('allow');
+		expect(overflowDecision.reason).toContain('redirect overflow');
 	});
 
 	it('thrown fetch errors fall through to allow, not crashes', async () => {
@@ -165,5 +168,55 @@ describe('robots oracle (§4.7)', () => {
 			throw new Error('boom');
 		});
 		expect((await oracle.decisionFor(new URL('https://a.example/x'))).kind).toBe('allow');
+	});
+});
+
+describe('robots hardening + Google precedence (review batch 2026-10-06)', () => {
+	it('Google ties: /page vs /*.ph on /page.php5 -> allow; /*.htm (longer) wins on /page.htm', () => {
+		expect(
+			evaluateRobots(
+				[
+					{ allow: true, pattern: '/page' },
+					{ allow: false, pattern: '/*.ph' }
+				],
+				'/page.php5'
+			).allowed
+		).toBe(true);
+		expect(
+			evaluateRobots(
+				[
+					{ allow: true, pattern: '/page' },
+					{ allow: false, pattern: '/*.htm' }
+				],
+				'/page.htm'
+			).allowed
+		).toBe(false);
+	});
+
+	it('pathological wildcard patterns complete fast (linear matcher, no ReDoS)', () => {
+		const started = Date.now();
+		const result = evaluateRobots(
+			[{ allow: false, pattern: '/*a*a*a*a*a*a*b' }],
+			`/${'a'.repeat(400)}`
+		);
+		expect(result.allowed).toBe(true);
+		expect(Date.now() - started).toBeLessThan(200);
+	});
+
+	it('percent-encoding: raw UTF-8 patterns match %-encoded URIs; unreserved %-bytes decode', () => {
+		expect(evaluateRobots([{ allow: false, pattern: '/foo/ツ' }], '/foo/%E3%83%84').allowed).toBe(
+			false
+		);
+		expect(evaluateRobots([{ allow: false, pattern: '/foo/baz' }], '/foo/%62%61%7A').allowed).toBe(
+			false
+		);
+	});
+
+	it('user-agent values with a version tail still match (googlebot/1.2 = googlebot)', () => {
+		const rules = matchRobotsRules(
+			parseRobots('user-agent: web-lair-link-check/0.0.1\ndisallow: /x'),
+			TOKEN
+		);
+		expect(rules).toEqual([{ allow: false, pattern: '/x' }]);
 	});
 });

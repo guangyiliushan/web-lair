@@ -34,6 +34,12 @@ export interface SiteCheckConfig {
 	acceptedBacklinkHosts: readonly string[];
 	/** Retry timeout/5xx once in-run (plan §4.4). Default true. */
 	retryOnce?: boolean;
+	/**
+	 * Budget gate for the in-run retry: consulted before the 30 s sleep; a
+	 * false return skips the retry (review finding 2026-10-06 - the run
+	 * budget must bound a single pass too, not just the pass boundary).
+	 */
+	retryAllowed?: () => boolean;
 	now?: () => Date;
 }
 
@@ -93,7 +99,7 @@ export async function checkSite(
 					thrown !== null
 						? isRetryableFailure(thrown)
 						: (classifyHttpStatus(result!.status).failure?.retryable ?? false);
-				if (retryable) {
+				if (retryable && (config.retryAllowed ? config.retryAllowed() : true)) {
 					await (deps.sleepMs ?? defaultSleep)(RETRY_GAP_MS);
 					continue;
 				}
@@ -122,7 +128,7 @@ export async function checkSite(
 	};
 
 	// --- reachability axis -------------------------------------------------
-	let reach: ReachAxis = 'skipped';
+	let reach: ReachAxis;
 	let homepageResult: FetchUnitResult | null = null;
 	const sameTarget = row.backlinkUrl !== null && urlKey(row.backlinkUrl) === urlKey(row.url);
 	const wantHomeBody = config.backlinkEnabled && sameTarget;
@@ -263,6 +269,10 @@ export async function checkSite(
 					}
 				};
 			}
+			const notCounted =
+				result.status === 429 && result.retryAfter
+					? `not counted; retry-after ${result.retryAfter}`
+					: 'not counted';
 			return {
 				axis: 'skipped',
 				entry: {
@@ -272,13 +282,13 @@ export async function checkSite(
 					http: result.status,
 					err: failure.kind,
 					ms,
-					note: 'not counted'
+					note: notCounted
 				}
 			};
 		};
 
 		const started = Date.now();
-		let outcome: { axis: BacklinkAxis; entry: LinkCheck } | null = null;
+		let outcome: { axis: BacklinkAxis; entry: LinkCheck } | null;
 		if (sameTarget) {
 			// One fetch serves both axes (plan §4.1); a failed homepage fetch
 			// already told us everything a re-fetch would.

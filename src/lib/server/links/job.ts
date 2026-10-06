@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LinkCheck, LinkStatus } from '../../utils/link-meta.ts';
 import { links } from '../db/content/link.schema.ts';
@@ -17,6 +17,7 @@ import {
 } from './fetch.ts';
 import { createRobotsOracle, type RobotsOracle } from './robots.ts';
 import { normalizeHost } from './normalize.ts';
+import { jobLockKey } from '../jobs/registry.ts';
 
 /**
  * The links check job core (plan §4.5/§4.6; 2026-10-06 rulings): due
@@ -31,8 +32,12 @@ import { normalizeHost } from './normalize.ts';
  * same key the drain job lock derives); this module assumes it is held.
  */
 
-/** Session advisory-lock key shared by drain, CLI and any manual trigger. */
-export const LINK_LOCK_KEY = 'web_lair.job.links.check';
+/**
+ * Session advisory-lock key shared by drain, CLI and any manual trigger -
+ * derived from the registry namespace (`web_lair.job.links.check`): one
+ * source, mirrors the drain's per-job lock (review finding 2026-10-06).
+ */
+export const LINK_LOCK_KEY = jobLockKey('links.check');
 
 /** Plan §4.7 floor: parse at least 500 KiB of robots.txt (cap: 512 KiB). */
 export const ROBOTS_BODY_BYTES = 512 * 1024;
@@ -285,6 +290,13 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 		options.logger.error(
 			'[links] backlink axis disabled: ORIGIN is unset and acceptedBacklinkHosts is empty (see plan §4.5)'
 		);
+	} else if (!options.origin) {
+		// Running on extras alone is allowed, but it must be observable
+		// (review finding 2026-10-06 - plan §4.5 requires the missing ORIGIN
+		// to be called out, not silent).
+		options.logger.error(
+			'[links] ORIGIN is unset: backlink acceptance relies on acceptedBacklinkHosts only (plan §4.5)'
+		);
 	}
 
 	const userAgent = buildUserAgent(options.origin);
@@ -309,15 +321,7 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 				lastErrorKind: links.lastErrorKind
 			})
 			.from(links)
-			.where(
-				sql`${links.status} in ('approved', 'outdated')
-					and ${links.checkEnabled} = true
-					and (${links.lastCheckedAt} is null
-						or ${links.lastCheckedAt} <= now() - make_interval(hours => case
-							when ${links.status} = 'outdated' then ${cadence * 3}::int
-							else ${cadence}::int
-						end))`
-			)
+			.where(dueWhereSql(cadence))
 			.orderBy(sql`${links.lastCheckedAt} asc nulls first`)
 			.limit(limitPerPass);
 		if (rows.length === 0) return 0;
@@ -338,6 +342,13 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 		let cursor = 0;
 		const lane = async () => {
 			for (;;) {
+				// The budget bounds a SINGLE pass too, not just the pass
+				// boundary (review finding 2026-10-06): stop pulling rows
+				// once the deadline is up; in-flight rows finish.
+				if (Date.now() >= deadline) {
+					summary.budgetExhausted = true;
+					return;
+				}
 				const index = cursor;
 				cursor += 1;
 				if (index >= rows.length) return;
@@ -358,13 +369,14 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 					timeoutMs: options.config.timeoutMs,
 					backlinkEnabled,
 					acceptedBacklinkHosts: options.acceptedHosts,
+					retryAllowed: () => Date.now() < deadline,
 					now
 				},
 				{ oracle, fetchDeps: options.fetchDeps, sleepMs: options.sleepMs }
 			);
 			if (!dryRun) {
-				await applyUpdate(row, outcome);
-				summary.writes += 1;
+				const wrote = await applyUpdate(row, outcome);
+				if (wrote) summary.writes += 1;
 			}
 			const detail = outcome.entries.map((entry) => formatEntry(entry)).join(' ');
 			const note = outcome.notes.length > 0 ? ` (${outcome.notes.join('; ')})` : '';
@@ -388,20 +400,9 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 		}
 	};
 
-	const applyUpdate = async (row: LinkRowSnapshot, outcome: SiteCheckOutcome): Promise<void> => {
+	const applyUpdate = async (row: LinkRowSnapshot, outcome: SiteCheckOutcome): Promise<boolean> => {
 		const plan = deriveRowUpdate(row, outcome, options.config, now());
-		const ring = sql`(
-			select jsonb_agg(e order by ord) from (
-				select e, ord from (
-					select e, ord from jsonb_array_elements(coalesce(${links.recentChecks}, '[]'::jsonb)) with ordinality as t(e, ord)
-					union all
-					select v, 100000 + i from jsonb_array_elements(${JSON.stringify(outcome.entries)}::jsonb) with ordinality as u(v, i)
-				) merged
-				order by ord desc
-				limit 10
-			) newest
-		)`;
-		await options.db
+		const updated = await options.db
 			.update(links)
 			.set({
 				lastCheckedAt: plan.lastCheckedAt,
@@ -413,9 +414,22 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 				backlinkOk: plan.backlinkOk,
 				backlinkCheckedAt: plan.backlinkCheckedAt,
 				lastErrorKind: plan.lastErrorKind,
-				recentChecks: ring
+				recentChecks: ringSqlFragment(outcome.entries)
 			})
-			.where(eq(links.id, row.id));
+			.where(
+				// CAS (review finding 2026-10-06): never clobber a state the
+				// run's snapshot did not see (L3 human actions ban/restore
+				// without holding this lock); a mismatch skips + warns.
+				sql`${links.id} = ${row.id} and ${links.status} = ${row.status} and ${links.checkEnabled} = true`
+			)
+			.returning({ id: links.id });
+		if (updated.length === 0) {
+			options.logger.warn(
+				`[links] ${row.host} skipped write: row changed concurrently (status or check_enabled)`
+			);
+			return false;
+		}
+		return true;
 	};
 
 	let passes = 0;
@@ -425,15 +439,54 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 			break;
 		}
 		const processed = await perPass();
-		if (processed === 0) break;
 		passes += 1;
+		if (processed === 0) break;
+		if (dryRun) {
+			// Nothing persisted: a second pass would re-read the same rows.
+			if (Date.now() >= deadline) summary.budgetExhausted = true;
+			break;
+		}
 		if (processed < limitPerPass) break;
-		if (dryRun) break; // nothing persisted: a second pass would re-read the same rows
 	}
 	if (passes === 0 && summary.due === 0) {
 		options.logger.info('[links] no due sites');
 	}
 	return summary;
+}
+
+/**
+ * Due predicate (plan §4.5): approved rows at 1x cadence, `outdated` at 3x,
+ * `last_checked_at` nulls always due; exposed for SQL-level teeth (the
+ * `::int` casts are load-bearing - PG cannot infer the parameter types
+ * through the CASE inside `make_interval`, review fix 1eabcbd).
+ */
+export function dueWhereSql(cadenceHours: number) {
+	return sql`${links.status} in ('approved', 'outdated')
+					and ${links.checkEnabled} = true
+					and (${links.lastCheckedAt} is null
+						or ${links.lastCheckedAt} <= now() - make_interval(hours => case
+							when ${links.status} = 'outdated' then ${cadenceHours * 3}::int
+							else ${cadenceHours}::int
+						end))`;
+}
+
+/**
+ * Ring append + trim (plan §2.4): merge the run's entries after the existing
+ * array (ordinal 100000+ keeps them newest), keep the newest 10, re-emit
+ * oldest-first. Exposed for SQL-level teeth.
+ */
+export function ringSqlFragment(entries: LinkCheck[]) {
+	return sql`(
+		select jsonb_agg(e order by ord) from (
+			select e, ord from (
+				select e, ord from jsonb_array_elements(coalesce(${links.recentChecks}, '[]'::jsonb)) with ordinality as t(e, ord)
+				union all
+				select v, 100000 + i from jsonb_array_elements(${JSON.stringify(entries)}::jsonb) with ordinality as u(v, i)
+			) merged
+			order by ord desc
+			limit 10
+		) newest
+	)`;
 }
 
 function formatEntry(entry: LinkCheck): string {

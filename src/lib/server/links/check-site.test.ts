@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { checkSite, SCAN_BODY_BYTES, type SiteCheckConfig, type SiteCheckDeps } from './check-site';
+import { LinkFetchError } from './fetch';
 import type { RobotsOracle } from './robots';
 
 const HOME = 'https://home.example/';
@@ -226,5 +227,166 @@ describe('checkSite (§4.1/§4.8)', () => {
 		);
 		expect(outcome.reach).toBe('ok');
 		expect(outcome.entries[0].note).toContain('offsite');
+	});
+
+	it('retries a thrown timeout once (retryOnce: true)', async () => {
+		let partnerCalls = 0;
+		const timeoutError = Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+		const stub = vi.fn(async (url: URL | string) => {
+			const href = typeof url === 'string' ? url : url.href;
+			if (href === HOME) return pageNoLink();
+			partnerCalls += 1;
+			if (partnerCalls === 1) throw timeoutError;
+			return pageWithLink();
+		});
+		const sleep = vi.fn(async () => {});
+		const deps = depsWith(stub);
+		deps.sleepMs = sleep;
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: PARTNER },
+			config({ retryOnce: true }),
+			deps
+		);
+		expect(outcome.backlink).toBe('ok');
+		expect(partnerCalls).toBe(2);
+		expect(sleep).toHaveBeenCalledWith(30_000);
+	});
+
+	it('does not retry when retryOnce is false', async () => {
+		let partnerCalls = 0;
+		const timeoutError = Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+		const stub = vi.fn(async (url: URL | string) => {
+			const href = typeof url === 'string' ? url : url.href;
+			if (href === HOME) return pageNoLink();
+			partnerCalls += 1;
+			throw timeoutError;
+		});
+		const sleep = vi.fn(async () => {});
+		const deps = depsWith(stub);
+		deps.sleepMs = sleep;
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: PARTNER },
+			config(),
+			deps
+		);
+		expect(partnerCalls).toBe(1);
+		expect(sleep).not.toHaveBeenCalled();
+		expect(outcome.backlink).toBe('missing');
+	});
+
+	it('skips the in-run retry when the budget gate denies it', async () => {
+		let partnerCalls = 0;
+		const stub = vi.fn(async (url: URL | string) => {
+			const href = typeof url === 'string' ? url : url.href;
+			if (href === HOME) return pageNoLink();
+			partnerCalls += 1;
+			return new Response('overloaded', { status: 500 });
+		});
+		const sleep = vi.fn(async () => {});
+		const deps = depsWith(stub);
+		deps.sleepMs = sleep;
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: PARTNER },
+			config({ retryOnce: true, retryAllowed: () => false }),
+			deps
+		);
+		expect(partnerCalls).toBe(1);
+		expect(sleep).not.toHaveBeenCalled();
+		expect(outcome.backlink).toBe('missing');
+	});
+
+	it('records Retry-After on a 429 page (waf, not counted)', async () => {
+		const stub = routes({
+			[HOME]: pageNoLink,
+			[PARTNER]: () => new Response('slow', { status: 429, headers: { 'retry-after': '120' } })
+		});
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: PARTNER },
+			config(),
+			depsWith(stub)
+		);
+		expect(outcome.backlink).toBe('skipped');
+		expect(outcome.entries[1]).toMatchObject({ err: 'waf' });
+		expect(outcome.entries[1].note).toContain('retry-after 120');
+	});
+
+	it('non-html declared pages are inconclusive', async () => {
+		const stub = routes({
+			[HOME]: pageNoLink,
+			[PARTNER]: () =>
+				new Response('%PDF-1.7', { status: 200, headers: { 'content-type': 'application/pdf' } })
+		});
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: PARTNER },
+			config(),
+			depsWith(stub)
+		);
+		expect(outcome.backlink).toBe('inconclusive');
+		expect(outcome.entries[1].note).toBe('non-html: application/pdf');
+	});
+
+	it('robots unreachable skips without counting', async () => {
+		const oracle: RobotsOracle = {
+			decisionFor: vi.fn(async () => ({ kind: 'unreachable' as const, reason: 'http 503' }))
+		};
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: null },
+			config(),
+			depsWith(routes({}), oracle)
+		);
+		expect(outcome.reach).toBe('skipped');
+		expect(outcome.entries[0]).toMatchObject({ err: 'robots' });
+		expect(outcome.entries[0].note).toContain('unavailable');
+	});
+
+	it('same-target with a failed homepage leaves the backlink axis skipped', async () => {
+		const stub = routes({});
+		const deps = depsWith(stub);
+		deps.fetchDeps = {
+			fetch: stub as never,
+			resolveHost: async () => {
+				throw Object.assign(new Error('getaddrinfo ENOTFOUND home.example'), {
+					code: 'ENOTFOUND'
+				});
+			}
+		};
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: HOME },
+			config(),
+			deps
+		);
+		expect(outcome.reach).toBe('fail');
+		expect(outcome.backlink).toBe('skipped');
+		expect(outcome.notes.join('; ')).toContain('homepage fetch failed');
+		expect(stub).not.toHaveBeenCalled();
+	});
+
+	it('ssrf-refused targets are skipped, not counted', async () => {
+		const stub = routes({});
+		const deps = depsWith(stub);
+		deps.fetchDeps = { fetch: stub as never, resolveHost: async () => null };
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: null },
+			config(),
+			deps
+		);
+		expect(outcome.reach).toBe('skipped');
+		expect(outcome.entries[0]).toMatchObject({ err: 'unsupported' });
+		expect(stub).not.toHaveBeenCalled();
+	});
+
+	it('a redirect-overflow declared page falls back to the homepage', async () => {
+		const stub = vi.fn(async (url: URL | string) => {
+			const href = typeof url === 'string' ? url : url.href;
+			if (href === HOME) return pageWithLink();
+			throw new LinkFetchError('redirect', 'more than 5 redirects');
+		});
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: PARTNER },
+			config(),
+			depsWith(stub)
+		);
+		expect(outcome.backlink).toBe('ok');
+		expect(outcome.entries[1].note).toContain('fallback: homepage');
 	});
 });

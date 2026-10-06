@@ -15,6 +15,7 @@
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import { sanitizeErrorText } from '../../src/lib/server/jobs/drain.ts';
 import { getOption } from '../../src/lib/server/config/options-registry.ts';
 import {
 	deriveAcceptedHosts,
@@ -29,20 +30,46 @@ if (!DATABASE_URL) {
 	process.exit(2);
 }
 
-const dryRun = process.argv.includes('--dry-run');
-const limitAt = process.argv.indexOf('--limit');
-const limitPerPass = limitAt >= 0 ? Number(process.argv[limitAt + 1]) : undefined;
-if (limitAt >= 0 && (!Number.isInteger(limitPerPass) || (limitPerPass as number) < 1)) {
-	console.error('[links] --limit expects a positive integer');
-	process.exit(2);
+let dryRun = false;
+let limitPerPass: number | undefined;
+{
+	const args = process.argv.slice(2);
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
+		if (arg === '--dry-run') {
+			dryRun = true;
+			continue;
+		}
+		if (arg === '--limit') {
+			const value = Number(args[index + 1]);
+			if (!Number.isInteger(value) || value < 1) {
+				console.error('[links] --limit expects a positive integer');
+				process.exit(2);
+			}
+			limitPerPass = value;
+			index += 1;
+			continue;
+		}
+		// Unknown flags are rejected: a typo must not silently run in WRITE
+		// mode (the --dry-run gate is load-bearing, review finding 2026-10-06).
+		console.error(`[links] unknown argument: ${arg}`);
+		console.error('[links] usage: pnpm jobs:check-links [--dry-run] [--limit N]');
+		process.exit(2);
+	}
 }
 
 const client = postgres(DATABASE_URL, { max: 2, onnotice: () => {} });
 const db = drizzle(client);
-const lockConnection = await client.reserve();
+const lockConnection = await client.reserve().catch((err: unknown) => {
+	console.error(
+		`[links] failed to acquire the lock connection: ${sanitizeErrorText(err instanceof Error ? err.message : err)}`
+	);
+	process.exit(1);
+});
 const [lock] = await lockConnection`select pg_try_advisory_lock(hashtext(${LINK_LOCK_KEY})) as ok`;
 if (lock?.ok !== true) {
 	console.error('[links] a check run is already in progress (lock busy); try again later.');
+	await lockConnection.release();
 	await client.end({ timeout: 5 });
 	process.exit(3);
 }
@@ -73,15 +100,19 @@ try {
 		if (dryRun) console.log('[links] dry-run: no database writes were made (single pass)');
 	}
 } catch (err) {
-	// drizzle wraps PG errors: surface the cause message too (e.g. 42804).
+	// drizzle wraps PG errors: surface the cause message too (e.g. 42804),
+	// sanitized like the drain (no SQL text / bound params in logs).
 	const cause =
 		err !== null && typeof err === 'object' && 'cause' in err
 			? (err as { cause?: unknown }).cause
 			: undefined;
 	const detail = cause instanceof Error ? ` (${cause.message})` : '';
-	console.error(`[links] run failed: ${err instanceof Error ? err.message : String(err)}${detail}`);
+	console.error(
+		`[links] run failed: ${sanitizeErrorText(`${err instanceof Error ? err.message : String(err)}${detail}`)}`
+	);
 	process.exitCode = 1;
 } finally {
 	await lockConnection`select pg_advisory_unlock(hashtext(${LINK_LOCK_KEY}))`;
+	await lockConnection.release();
 	await client.end({ timeout: 5 });
 }

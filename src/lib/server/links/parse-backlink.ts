@@ -73,10 +73,9 @@ export function findBacklink(
 		}
 	};
 
-	const RAWTEXT_TAGS = new Set(['style', 'xmp', 'iframe', 'noembed', 'noframes']);
+	const RAWTEXT_TAGS = new Set(['style', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext']);
 	const RCDATA_TAGS = new Set(['title', 'textarea']);
-	let tokenizer!: Tokenizer;
-	tokenizer = new Tokenizer(
+	const tokenizer = new Tokenizer(
 		{},
 		{
 			onStartTag(token) {
@@ -113,6 +112,10 @@ export function findBacklink(
 				} catch {
 					return;
 				}
+				// Only http(s) links count as evidence of a link placement
+				// (review finding 2026-10-06; the plan only defines http(s)
+				// hits).
+				if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return;
 				const host = normalizeHost(resolved.hostname);
 				if (!host || !accepted.has(host)) return;
 				finding.found = true;

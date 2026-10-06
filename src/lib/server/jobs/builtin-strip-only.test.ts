@@ -1,8 +1,12 @@
 import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
 const run = promisify(execFile);
+
+/** Explicit repo root (vitest cwd is config-dependent; never assume it). */
+const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 
 /**
  * The `links.check` builtin must load under plain Node type stripping (the
@@ -25,7 +29,7 @@ describe('links.check builtin loads under plain Node', () => {
 					'-e',
 					"await import('./src/lib/server/jobs/builtin/links-check.ts')"
 				],
-				{ cwd: process.cwd(), timeout: 30_000 }
+				{ cwd: repoRoot, timeout: 30_000 }
 			)
 		).resolves.toBeDefined();
 	});

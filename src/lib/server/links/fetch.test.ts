@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchUnit, LinkFetchError, type FetchUnitDeps, type FetchUnitOptions } from './fetch';
+import {
+	buildUserAgent,
+	fetchUnit,
+	LinkFetchError,
+	type FetchUnitDeps,
+	type FetchUnitOptions
+} from './fetch';
 
 const OPTS: FetchUnitOptions = {
 	userAgent: 'web-lair-link-check/0.0.1',
@@ -73,16 +79,71 @@ describe('fetchUnit (§4.2/§4.8)', () => {
 		expect(calls).toEqual(['https://x.example/start', 'https://x.example/final']);
 	});
 
-	it('throws after more than 5 redirects', async () => {
+	it('throws LinkFetchError(redirect) after more than 5 redirects', async () => {
 		let calls = 0;
 		const stub = async () => {
 			calls += 1;
 			return new Response(null, { status: 301, headers: { location: '/next' } });
 		};
-		await expect(fetchUnit('https://loop.example/', OPTS, depsWith(stub))).rejects.toMatchObject({
-			code: 'redirect'
-		});
+		const rejected = fetchUnit('https://loop.example/', OPTS, depsWith(stub));
+		await expect(rejected).rejects.toBeInstanceOf(LinkFetchError);
+		await expect(rejected).rejects.toMatchObject({ code: 'redirect' });
 		expect(calls).toBe(6);
+	});
+
+	it('rejects a hop that redirects off https, before requesting it', async () => {
+		const resolveHost = vi.fn(async () => RESOLVED);
+		const stub = async () =>
+			new Response(null, { status: 302, headers: { location: 'http://x.example/next' } });
+		await expect(
+			fetchUnit('https://x.example/', OPTS, { fetch: stub as unknown as FetchUnitDeps['fetch'], resolveHost })
+		).rejects.toMatchObject({ code: 'non-https' });
+		expect(resolveHost).toHaveBeenCalledTimes(1);
+	});
+
+	it('re-resolves and re-validates every hop (second hop ssrf-blocked)', async () => {
+		const resolveHost = vi.fn(async (host: string) => (host === 'x.example' ? RESOLVED : null));
+		const stub = async () =>
+			new Response(null, { status: 302, headers: { location: 'https://y.example/next' } });
+		await expect(
+			fetchUnit('https://x.example/', OPTS, { fetch: stub as unknown as FetchUnitDeps['fetch'], resolveHost })
+		).rejects.toMatchObject({ code: 'ssrf' });
+		expect(resolveHost).toHaveBeenCalledTimes(2);
+	});
+
+	it('bounds DNS resolution by the unit deadline', async () => {
+		const slowResolve = async () => {
+			await new Promise((resolve) => setTimeout(resolve, 1500));
+			return RESOLVED;
+		};
+		const started = Date.now();
+		await expect(
+			fetchUnit('https://x.example/', { ...OPTS, timeoutMs: 150 }, depsWith(vi.fn(), slowResolve))
+		).rejects.toMatchObject({ name: 'TimeoutError' });
+		expect(Date.now() - started).toBeLessThan(900);
+	});
+
+	it('sends the configured user agent and builds both UA variants', async () => {
+		const seen: string[] = [];
+		const stub = async (_url: unknown, init: { headers: Record<string, string> }) => {
+			seen.push(init.headers['user-agent']);
+			return new Response('ok', { status: 200 });
+		};
+		await fetchUnit(
+			'https://x.example/',
+			{ ...OPTS, userAgent: buildUserAgent('https://lair.example') },
+			{ fetch: stub as unknown as FetchUnitDeps['fetch'], resolveHost: async () => RESOLVED }
+		);
+		expect(seen[0]).toBe('web-lair-link-check/0.0.1 (+https://lair.example/friends)');
+		expect(buildUserAgent(null)).toBe('web-lair-link-check/0.0.1');
+	});
+
+	it('surfaces Retry-After of the final response', async () => {
+		const stub = async () =>
+			new Response('slow down', { status: 429, headers: { 'retry-after': '120' } });
+		const result = await fetchUnit('https://x.example/', OPTS, depsWith(stub));
+		expect(result.status).toBe(429);
+		expect(result.retryAfter).toBe('120');
 	});
 
 	it('treats a 3xx without location as the final response', async () => {
@@ -129,9 +190,5 @@ describe('fetchUnit (§4.2/§4.8)', () => {
 			)
 		).rejects.toBe(guard);
 		expect(seen).toEqual(['https://x.example/', 'https://y.example/next']);
-	});
-
-	it('exposes LinkFetchError for the fetch-layer vocabulary', () => {
-		expect(new LinkFetchError('ssrf', 'x').code).toBe('ssrf');
 	});
 });

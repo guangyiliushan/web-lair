@@ -231,6 +231,8 @@ describe('options registry (AI-1.1)', () => {
 		});
 		const policy = await getOption('friends.policy');
 		expect(policy.blockedHostSuffixes).toHaveLength(19);
+		expect(policy.blockedHostSuffixes[0]).toBe('github.io');
+		expect(policy.blockedHostSuffixes[18]).toBe('firebaseapp.com');
 		expect(policy.blockedTlds).toEqual(['.tk', '.ml', '.cf', '.ga', '.gq']);
 		expect(policy.acceptedBacklinkHosts).toEqual([]);
 		expect(policy.publicBannedList).toBe(true);
@@ -262,6 +264,39 @@ describe('options registry (AI-1.1)', () => {
 				graceDays: 30,
 				timeoutMs: 500,
 				concurrency: 2
+			})
+		).rejects.toThrow();
+		await expect(
+			setOption('friends.checks', {
+				enabled: true,
+				cadenceHours: 24,
+				failStreak: 0,
+				backlinkStreak: 2,
+				graceDays: 30,
+				timeoutMs: 10000,
+				concurrency: 2
+			})
+		).rejects.toThrow();
+		await expect(
+			setOption('friends.checks', {
+				enabled: true,
+				cadenceHours: 24,
+				failStreak: 3,
+				backlinkStreak: 2,
+				graceDays: 0,
+				timeoutMs: 10000,
+				concurrency: 2
+			})
+		).rejects.toThrow();
+		await expect(
+			setOption('friends.checks', {
+				enabled: true,
+				cadenceHours: 24,
+				failStreak: 3,
+				backlinkStreak: 2,
+				graceDays: 30,
+				timeoutMs: 10000,
+				concurrency: 0
 			})
 		).rejects.toThrow();
 		expect(state.insertCalls).toHaveLength(0);

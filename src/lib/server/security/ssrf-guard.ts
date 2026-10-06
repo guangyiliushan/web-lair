@@ -1,5 +1,5 @@
 import { promises as dns } from 'node:dns';
-import { BlockList } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 
 /**
  * Shared SSRF guard for server-side fetches (links line, 2026-10-06; moved
@@ -31,6 +31,7 @@ for (const [network, prefix] of [
 	['198.18.0.0', 15],
 	['198.51.100.0', 24],
 	['203.0.113.0', 24],
+	['192.88.99.0', 24], // 6to4 relay anycast (deprecated, RFC 7526)
 	['224.0.0.0', 4],
 	['240.0.0.0', 4],
 	['255.255.255.255', 32]
@@ -38,13 +39,16 @@ for (const [network, prefix] of [
 	BLOCKED_RANGES.addSubnet(network, prefix, 'ipv4');
 }
 for (const [network, prefix] of [
-	['::', 128],
+	['::', 96], // v4-compatible (deprecated) - covers ::/128 and ::<v4>
 	['::1', 128],
 	['64:ff9b::', 96], // NAT64 (pure v6 form)
 	['2002::', 16], // 6to4 (pure v6 form)
+	['ff00::', 8], // multicast
+	['2001::', 32], // Teredo
 	['fc00::', 7],
 	['fe80::', 10],
-	['2001:db8::', 32]
+	['2001:db8::', 32],
+	['3fff::', 20] // documentation (RFC 9637)
 ] as const) {
 	BLOCKED_RANGES.addSubnet(network, prefix, 'ipv6');
 }
@@ -62,6 +66,10 @@ const IPV4 = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
  */
 export function isPrivateAddress(address: string): boolean {
 	const clean = address.includes('%') ? address.slice(0, address.indexOf('%')) : address;
+	// Unparsable input fails closed: only resolver answers are checked in
+	// production, and a garbage value must never read as "public" (review
+	// finding 2026-10-06).
+	if (isIP(clean) === 0) return true;
 	const lower = clean.toLowerCase();
 	if (lower.startsWith('::ffff:')) {
 		const rest = lower.slice('::ffff:'.length);
