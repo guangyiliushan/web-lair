@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { LINK_STATUSES } from './link.schema';
+import { LINK_STATUSES } from '$lib/utils/link-meta';
 import { NOTE_MOODS, NOTES_STATUSES } from './note.schema';
 import { PROJECT_PROVIDERS, PROJECT_STATUSES } from './project.schema';
 import { DRAFT_REF_TYPES } from './draft.schema';

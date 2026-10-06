@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
-import { options } from '$lib/server/db/config';
-import { AI_FUNCTIONS } from '$lib/utils/ai-meta';
-import { isValidIanaTimeZone } from '$lib/utils/timezone';
-import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '$lib/server/pg-timezone';
+import { options } from '../db/config/index.ts';
+import { AI_FUNCTIONS } from '../../utils/ai-meta.ts';
+import { isValidIanaTimeZone } from '../../utils/timezone.ts';
+import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '../pg-timezone.ts';
 
 /** Site languages (same set as the posts `lang` CHECK, ledger §9.16). */
 export const OPTION_LANGS = ['en', 'zh-cn', 'ja'] as const;
@@ -33,6 +33,12 @@ async function defaultExecutor(): Promise<RegistryExecutor> {
  * rejected, and every key ships a schema plus its default value. Defaults
  * mirror the ai-line plan §3.3 ledger; the AI-2.1 review batch moved the
  * numeric bounds here so route handlers cannot drift from the contract.
+ *
+ * All static imports use relative `.ts` specifiers (links line, 2026-10-06):
+ * the same module must load under plain Node for the jobs side
+ * (`jobs/builtin/links-check.ts`), which has no `$lib` alias resolution -
+ * pass an executor there; the lazy `$lib/server/db` fallback stays
+ * SvelteKit-only.
  */
 export const optionRegistry = {
 	'site.languages': {
@@ -124,6 +130,80 @@ export const optionRegistry = {
 		// Floor is 1 day (round-3 ruling): a destructive knob must not reach
 		// zero; an explicit instant-clean switch can be added if ever needed.
 		default: { pendingDays: 7, detachedDays: 30 }
+	},
+	'friends.apply': {
+		schema: z.object({
+			enabled: z.boolean(),
+			allowSubPath: z.boolean(),
+			internalizeAvatars: z.boolean()
+		}),
+		// Links plan §2.6: applications open; home-page URLs only (no sub
+		// paths); avatars stay hot-linked (localisation is a registered item).
+		default: { enabled: true, allowSubPath: false, internalizeAvatars: false }
+	},
+	'friends.checks': {
+		schema: z.object({
+			enabled: z.boolean(),
+			cadenceHours: z.number('必须为数字').int('必须为整数').min(1, '至少为 1 小时'),
+			failStreak: z.number('必须为数字').int('必须为整数').min(1, '至少为 1'),
+			backlinkStreak: z.number('必须为数字').int('必须为整数').min(1, '至少为 1'),
+			graceDays: z.number('必须为数字').int('必须为整数').min(1, '至少为 1 天'),
+			timeoutMs: z.number('必须为数字').int('必须为整数').min(1000, '至少 1000ms'),
+			concurrency: z.number('必须为数字').int('必须为整数').min(1, '至少为 1')
+		}),
+		// Plan §2.6 defaults: daily cadence, 3-strike outage / 2-strike
+		// backlink loss before queueing, 30-day grace, 10s per fetch unit,
+		// global concurrency 2 (politeness; per-host serialisation on top).
+		default: {
+			enabled: true,
+			cadenceHours: 24,
+			failStreak: 3,
+			backlinkStreak: 2,
+			graceDays: 30,
+			timeoutMs: 10000,
+			concurrency: 2
+		}
+	},
+	'friends.policy': {
+		schema: z.object({
+			blockedHostSuffixes: z.array(z.string()),
+			blockedTlds: z.array(z.string()),
+			acceptedBacklinkHosts: z.array(z.string()),
+			publicBannedList: z.boolean()
+		}),
+		// Plan §2.6: public-host / free-domain suffixes, free TLDs, extra
+		// accepted backlink hosts (domain moves), public ban wall on.
+		default: {
+			blockedHostSuffixes: [
+				'github.io',
+				'vercel.app',
+				'netlify.app',
+				'pages.dev',
+				'workers.dev',
+				'gitlab.io',
+				'eu.org',
+				'js.cool',
+				'blogspot.com',
+				'wordpress.com',
+				'neocities.org',
+				'herokuapp.com',
+				'onrender.com',
+				'glitch.me',
+				'deno.dev',
+				'surge.sh',
+				'notion.site',
+				'web.app',
+				'firebaseapp.com'
+			],
+			blockedTlds: ['.tk', '.ml', '.cf', '.ga', '.gq'],
+			acceptedBacklinkHosts: [],
+			publicBannedList: true
+		}
+	},
+	'site.info': {
+		schema: z.object({ name: z.string(), description: z.string(), avatar: z.string() }),
+		// Public "our link info" block on /friends (plan §2.6).
+		default: { name: 'Web Lair', description: '', avatar: '' }
 	}
 } as const satisfies Record<string, RegistryEntry>;
 

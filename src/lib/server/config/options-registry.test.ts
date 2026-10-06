@@ -58,16 +58,20 @@ describe('options registry (AI-1.1)', () => {
 		});
 	});
 
-	it('ships exactly the planned keys (storage line adds media.purge)', () => {
+	it('ships exactly the planned keys (storage line adds media.purge; links adds friends.* / site.info)', () => {
 		expect([...optionKeys].sort()).toEqual(
 			[
 				'ai.assignments',
 				'ai.budget',
 				'ai.styleGuide',
 				'comments.moderation',
+				'friends.apply',
+				'friends.checks',
+				'friends.policy',
 				'media.purge',
 				'notes.gate',
 				'site.default_lang',
+				'site.info',
 				'site.languages',
 				'site.timezone'
 			].sort()
@@ -207,5 +211,84 @@ describe('options registry (AI-1.1)', () => {
 	it('does not consult pg_timezone_names for other keys', async () => {
 		await setOption('site.default_lang', 'ja');
 		expect(pgTz.isPgAcceptableTimeZone).not.toHaveBeenCalled();
+	});
+
+	it('ships the links friends / site.info keys with plan §2.6 defaults', async () => {
+		state.selectRows = [[], [], [], []];
+		await expect(getOption('friends.apply')).resolves.toEqual({
+			enabled: true,
+			allowSubPath: false,
+			internalizeAvatars: false
+		});
+		await expect(getOption('friends.checks')).resolves.toEqual({
+			enabled: true,
+			cadenceHours: 24,
+			failStreak: 3,
+			backlinkStreak: 2,
+			graceDays: 30,
+			timeoutMs: 10000,
+			concurrency: 2
+		});
+		const policy = await getOption('friends.policy');
+		expect(policy.blockedHostSuffixes).toHaveLength(19);
+		expect(policy.blockedTlds).toEqual(['.tk', '.ml', '.cf', '.ga', '.gq']);
+		expect(policy.acceptedBacklinkHosts).toEqual([]);
+		expect(policy.publicBannedList).toBe(true);
+		await expect(getOption('site.info')).resolves.toEqual({
+			name: 'Web Lair',
+			description: '',
+			avatar: ''
+		});
+	});
+
+	it('rejects zero or too-small friends.checks knobs before touching the database', async () => {
+		await expect(
+			setOption('friends.checks', {
+				enabled: true,
+				cadenceHours: 0,
+				failStreak: 3,
+				backlinkStreak: 2,
+				graceDays: 30,
+				timeoutMs: 10000,
+				concurrency: 2
+			})
+		).rejects.toThrow();
+		await expect(
+			setOption('friends.checks', {
+				enabled: true,
+				cadenceHours: 24,
+				failStreak: 3,
+				backlinkStreak: 2,
+				graceDays: 30,
+				timeoutMs: 500,
+				concurrency: 2
+			})
+		).rejects.toThrow();
+		expect(state.insertCalls).toHaveLength(0);
+	});
+
+	it('accepts a valid friends.checks write (positive control)', async () => {
+		await setOption('friends.checks', {
+			enabled: false,
+			cadenceHours: 48,
+			failStreak: 4,
+			backlinkStreak: 3,
+			graceDays: 14,
+			timeoutMs: 15000,
+			concurrency: 1
+		});
+		expect(state.insertCalls).toHaveLength(1);
+		expect(state.insertCalls[0].values).toEqual({
+			name: 'friends.checks',
+			value: {
+				enabled: false,
+				cadenceHours: 48,
+				failStreak: 4,
+				backlinkStreak: 3,
+				graceDays: 14,
+				timeoutMs: 15000,
+				concurrency: 1
+			}
+		});
 	});
 });

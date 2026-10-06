@@ -12,36 +12,12 @@ import {
 	uuid
 } from 'drizzle-orm/pg-core';
 import { user } from '../auth.schema';
+import type { LinkCheck } from '../../../utils/link-meta.ts';
 
-export const LINK_STATUSES = ['pending', 'approved', 'outdated', 'rejected', 'banned'] as const;
-export type LinkStatus = (typeof LINK_STATUSES)[number];
-
-export const LINK_ERROR_KINDS = [
-	'dns',
-	'connect',
-	'tls',
-	'timeout',
-	'http_gone',
-	'http_error',
-	'waf',
-	'robots',
-	'offsite',
-	'unsupported',
-	'page_missing',
-	'link_missing',
-	'ok'
-] as const;
-export type LinkErrorKind = (typeof LINK_ERROR_KINDS)[number];
-
-export interface LinkCheck {
-	at: string;
-	kind: 'precheck' | 'reachability' | 'backlink';
-	ok: boolean;
-	http?: number;
-	err?: LinkErrorKind;
-	ms?: number;
-	note?: string;
-}
+// Shared status / error-kind enums moved to `$lib/utils/link-meta.ts`
+// (2026-10-06, links L1 remainder): the checker side (plain-Node jobs)
+// imports that module relatively, and the enum-drift test pins
+// LINK_STATUSES against the baseline CHECK literals.
 
 /**
  * Friend-link registry (links line §2): single table with health state,
