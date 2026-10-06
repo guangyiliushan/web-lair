@@ -457,6 +457,7 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 		expect(cas.sql).toContain('"status"');
 		expect(cas.sql).toContain('"check_enabled"');
 		expect(cas.sql).toContain('"url"');
+		expect(cas.sql).toContain('"backlink_url"');
 		expect(cas.sql).toContain('is not distinct from');
 	});
 
@@ -528,5 +529,58 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 		// three rows (3 x 500 ms); the guard stops after the first.
 		expect(summary.checked).toBe(1);
 		expect(summary.budgetExhausted).toBe(true);
+	});
+
+	it('a saturated batch fully drained before the deadline stays unflagged', async () => {
+		const rows = [
+			row({ id: 'a', host: 'a.example', url: 'https://a.example/', backlinkUrl: null })
+		];
+		const slowFetch = async (url: URL | string) => {
+			const href = typeof url === 'string' ? url : url.href;
+			if (new URL(href).pathname === '/robots.txt') return new Response('', { status: 404 });
+			await new Promise((resolve) => setTimeout(resolve, 500));
+			return new Response('<html></html>', {
+				status: 200,
+				headers: { 'content-type': 'text/html' }
+			});
+		};
+		const { db } = stubDb([rows, []]);
+		const summary = await runLinkCheck({
+			db: db as never,
+			config: RUN_CONFIG,
+			acceptedHosts: ['ok.example'],
+			origin: 'https://ok.example',
+			logger: silentLogger(),
+			limitPerPass: 1,
+			budgetMs: 400,
+			sleepMs: async () => {},
+			fetchDeps: { fetch: slowFetch as never, resolveHost: okResolve }
+		});
+		// Saturated batch, all rows processed: the follow-up select is
+		// empty, so the run must not claim a budget stop (the pre-select
+		// deadline gate was removed for exactly this, review round 3).
+		expect(summary.checked).toBe(1);
+		expect(summary.writes).toBe(1);
+		expect(summary.budgetExhausted).toBe(false);
+	});
+
+	it('does not log no-due after a real pass (non-first empty pass)', async () => {
+		const rows = [
+			row({ id: 'a', host: 'a.example', url: 'https://a.example/', backlinkUrl: null })
+		];
+		const { db } = stubDb([rows, []]);
+		const logger = silentLogger();
+		const summary = await runLinkCheck({
+			db: db as never,
+			config: RUN_CONFIG,
+			acceptedHosts: ['ok.example'],
+			origin: 'https://ok.example',
+			logger,
+			limitPerPass: 1,
+			sleepMs: async () => {},
+			fetchDeps: { fetch: okFetch() as never, resolveHost: okResolve }
+		});
+		expect(summary.checked).toBe(1);
+		expect(logger.info).not.toHaveBeenCalledWith('[links] no due sites');
 	});
 });

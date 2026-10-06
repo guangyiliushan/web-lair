@@ -38,6 +38,18 @@ describe('parseLinksCliArgs (dry-run safety gate, review batch 2026-10-06)', () 
 			ok: false,
 			error: '--limit expects a positive integer'
 		});
+		expect(parseLinksCliArgs(['--limit', '0x10'])).toEqual({
+			ok: false,
+			error: '--limit expects a positive integer'
+		});
+		expect(parseLinksCliArgs(['--limit', '1e3'])).toEqual({
+			ok: false,
+			error: '--limit expects a positive integer'
+		});
+		expect(parseLinksCliArgs(['--limit', ' 7 '])).toEqual({
+			ok: false,
+			error: '--limit expects a positive integer'
+		});
 		expect(parseLinksCliArgs(['--dry-run', '--bogus']).ok).toBe(false);
 	});
 });

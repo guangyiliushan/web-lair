@@ -17,10 +17,11 @@
  *
  * Path evaluation uses a LINEAR wildcard matcher (segment scanning, no
  * regex): a hostile robots.txt pattern like `*a*a*a*a*a*b` must not trigger
- * catastrophic backtracking in the drain's single thread (CWE-1333). Raw
- * UTF-8 patterns are canonicalized to the percent-encoded form, and URIs
- * have percent-encoded unreserved characters decoded, per RFC §2.2.2 and
- * Google's canonicalization note.
+ * catastrophic backtracking in the drain's single thread (CWE-1333). Both
+ * the rule and the URI are canonicalized symmetrically (canonicalPath():
+ * raw UTF-8 -> %XX, existing escape hex upper-cased, percent-encoded
+ * unreserved characters decoded), per RFC §2.2.2 and Google's
+ * canonicalization note.
  */
 
 export class RobotsDisallowedError extends Error {

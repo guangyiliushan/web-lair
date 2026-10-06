@@ -22,11 +22,13 @@ export function parseLinksCliArgs(argv: readonly string[]): LinksCliArgsResult {
 			continue;
 		}
 		if (arg === '--limit') {
-			const value = Number(argv[index + 1]);
-			if (!Number.isInteger(value) || value < 1) {
+			const raw = argv[index + 1];
+			// Strict decimal spelling: `Number()` would accept '0x10',
+			// '1e3' or padded whitespace (review round 3, 2026-10-06).
+			if (typeof raw !== 'string' || !/^\d+$/.test(raw) || Number(raw) < 1) {
 				return { ok: false, error: '--limit expects a positive integer' };
 			}
-			limitPerPass = value;
+			limitPerPass = Number(raw);
 			index += 1;
 			continue;
 		}

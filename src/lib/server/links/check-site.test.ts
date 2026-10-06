@@ -424,4 +424,24 @@ describe('checkSite (§4.1/§4.8)', () => {
 		expect(outcome.reach).toBe('skipped');
 		expect(outcome.entries[0].note).toContain('retry-after 60');
 	});
+
+	it('does not fabricate retry-after evidence without the header or the status', async () => {
+		const noHeader = routes({ [HOME]: () => new Response('slow', { status: 429 }) });
+		const outcome = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: null },
+			config(),
+			depsWith(noHeader)
+		);
+		expect(outcome.entries[0].note).toBe('http 429');
+
+		const otherStatus = routes({
+			[HOME]: () => new Response('boom', { status: 500, headers: { 'retry-after': '5' } })
+		});
+		const outcome2 = await checkSite(
+			{ url: HOME, host: 'home.example', backlinkUrl: null },
+			config(),
+			depsWith(otherStatus)
+		);
+		expect(outcome2.entries[0].note).toBe('http 500');
+	});
 });

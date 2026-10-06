@@ -100,9 +100,10 @@ export interface LinkRunSummary {
 	writes: number;
 	errors: number;
 	/**
-	 * True when the run stopped early with rows left (soft budget hit);
-	 * a fully processed run stays false even if the clock crossed the
-	 * deadline after the last row (review batch 2026-10-06).
+	 * True when the run stopped with rows left (soft budget hit): set by
+	 * the per-lane gate only when a due row could not be STARTED, so a
+	 * fully processed run stays false even if the clock crossed the
+	 * deadline meanwhile (review batches 2026-10-06, rounds 2-3).
 	 */
 	budgetExhausted: boolean;
 	backlinkSkippedReason: 'origin-missing' | null;
@@ -436,7 +437,7 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 			.returning({ id: links.id });
 		if (updated.length === 0) {
 			options.logger.warn(
-				`[links] ${row.host} skipped write: row changed concurrently (status, url or check_enabled)`
+				`[links] ${row.host} skipped write: row changed concurrently (status, url, backlink_url or check_enabled)`
 			);
 			return false;
 		}
@@ -445,15 +446,15 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 
 	let passes = 0;
 	for (;;) {
-		if (Date.now() >= deadline) {
-			summary.budgetExhausted = true;
-			break;
-		}
+		// No deadline pre-check before the select: the query is cheap and
+		// the per-lane gate decides on real rows. A saturated batch whose
+		// last row finished before the deadline must not flag - the extra
+		// select returns empty and budgetExhausted stays false (review
+		// round 3, 2026-10-06).
 		const processed = await perPass();
 		if (processed === 0) {
 			// Only a FIRST, provably empty pass may claim there was
-			// nothing due; a budget-expired run must not (review batch
-			// 2026-10-06).
+			// nothing due (review batch 2026-10-06).
 			if (passes === 0 && summary.due === 0) {
 				options.logger.info('[links] no due sites');
 			}
