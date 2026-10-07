@@ -37,3 +37,19 @@ describe('links.check builtin loads under plain Node', () => {
 		// by the 30 s execFile timeout (review round 2026-10-06).
 	}, 20_000);
 });
+
+describe('projects.sync builtin loads under plain Node', () => {
+	it('imports the module graph without a strip-only error', async () => {
+		await expect(
+			run(
+				process.execPath,
+				[
+					'--input-type=module',
+					'-e',
+					"await import('./src/lib/server/jobs/builtin/projects-sync.ts')"
+				],
+				{ cwd: repoRoot, timeout: 30_000 }
+			)
+		).resolves.toBeDefined();
+	}, 20_000);
+});

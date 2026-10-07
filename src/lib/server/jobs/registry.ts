@@ -64,5 +64,13 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 		manual: true,
 		scheduleHint: '0 5 * * *',
 		timeoutMs: 900_000
+	},
+	'projects.sync': {
+		name: 'projects.sync',
+		description:
+			'Run the four-platform project sync: fetch public repo lists for the configured accounts and upsert snapshot rows (projects line plan §3).',
+		manual: true,
+		scheduleHint: null,
+		timeoutMs: 900_000
 	}
 });

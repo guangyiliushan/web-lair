@@ -37,6 +37,7 @@
 		"jobs:drain": "node --env-file=.env jobs/drain.ts",
 		"jobs:enqueue": "node --env-file=.env scripts/jobs-enqueue.ts",
 		"jobs:check-links": "tsx --env-file=.env scripts/jobs/check-links.ts",
+		"jobs:sync-projects": "tsx --env-file=.env scripts/jobs/sync-projects.ts",
 		"db:ensure-pages": "tsx --env-file=.env scripts/ensure-pages.ts",
 		"db:verify-pages": "tsx --env-file=.env scripts/verify-pages.ts",
 		"storage:smoke": "tsx --env-file=.env scripts/storage-smoke.ts",
