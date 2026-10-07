@@ -20,7 +20,7 @@ vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: vi.fn(async () => {}) }));
 
 import { requireAdminRole } from '$lib/server/authz';
-import { actions } from './+page.server';
+import { actions, load } from './+page.server';
 
 const guardMock = vi.mocked(requireAdminRole);
 const ROW_ID = '22222222-2222-7222-8222-222222222222';
@@ -74,7 +74,10 @@ describe('admin thoughts actions', () => {
 						return state.deletedRows;
 					}
 				})
-			}))
+			})),
+			select: vi.fn(() => {
+				throw new Error('db must not be reached without the guard');
+			})
 		});
 	});
 
@@ -124,11 +127,22 @@ describe('admin thoughts actions', () => {
 		expect(state.deletes).toHaveLength(1);
 	});
 
-	it('stops the action when the guard rejects (no db writes)', async () => {
-		guardMock.mockRejectedValueOnce(new Error('denied'));
-		const { result, thrown } = await callAction('create', { content: 'x' });
-		expect(result).toBeUndefined();
-		expect(thrown).toBeInstanceOf(Error);
+	it('stops every action when the guard rejects (no db writes)', async () => {
+		for (const name of ['create', 'update', 'delete'] as const) {
+			guardMock.mockRejectedValueOnce(new Error('denied'));
+			const { result, thrown } = await callAction(name, { content: 'x' });
+			expect(result).toBeUndefined();
+			expect(thrown).toBeInstanceOf(Error);
+		}
 		expect(state.inserts).toHaveLength(0);
+		expect(state.updates).toHaveLength(0);
+		expect(state.deletes).toHaveLength(0);
+	});
+
+	it('guards the load before any db work', async () => {
+		guardMock.mockRejectedValueOnce(new Error('denied'));
+		await expect(load(undefined as never)).rejects.toThrow('denied');
+		const selectMock = dbMock.select as ReturnType<typeof vi.fn>;
+		expect(selectMock).not.toHaveBeenCalled();
 	});
 });

@@ -39,6 +39,7 @@
 	});
 
 	function openCreate() {
+		dismissError();
 		editing = null;
 		fieldContent = '';
 		fieldAuthor = '';
@@ -47,6 +48,7 @@
 	}
 
 	function openEdit(row: QuoteRow) {
+		dismissError();
 		editing = row;
 		fieldContent = row.content;
 		fieldAuthor = row.author ?? '';
@@ -72,9 +74,25 @@
 	// ── Delete confirm ──
 	let deleteTarget = $state<QuoteRow | null>(null);
 
+	function openDelete(row: QuoteRow) {
+		dismissError();
+		deleteTarget = row;
+	}
+
+	// Round-4 review: a page-form error belongs to the action that produced
+	// it; any older failure is dismissed when a dialog opens (a fresh result
+	// is a new `form` object and re-enables the message).
+	let errorDismissedFor: unknown = null;
+
 	const errorMessage = $derived(
-		form && 'error' in form && typeof form.error === 'string' ? form.error : null
+		form && form !== errorDismissedFor && 'error' in form && typeof form.error === 'string'
+			? form.error
+			: null
 	);
+
+	function dismissError() {
+		errorDismissedFor = form;
+	}
 </script>
 
 <svelte:head>
@@ -101,15 +119,6 @@
 			</Button>
 		</div>
 	</header>
-
-	{#if errorMessage}
-		<div
-			role="alert"
-			class="border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
-		>
-			{errorMessage}
-		</div>
-	{/if}
 
 	<!-- 添加 / 编辑摘录对话框 -->
 	<Dialog.Root bind:open={dialogOpen}>
@@ -191,7 +200,7 @@
 		title="删除摘录"
 		description="将删除这条摘录，此操作不可撤销。"
 		id={deleteTarget?.id ?? ''}
-		error={deleteTarget ? errorMessage : null}
+		error={errorMessage}
 		onclose={() => (deleteTarget = null)}
 	/>
 
@@ -235,7 +244,7 @@
 									</div>
 								</div>
 								<div
-									class="flex shrink-0 items-start gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+									class="flex shrink-0 items-start gap-1 opacity-100 transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100 sm:pointer-fine:opacity-0"
 								>
 									<Button
 										variant="outline"
@@ -252,7 +261,7 @@
 										size="sm"
 										class="h-8 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
 										aria-label="删除摘录"
-										onclick={() => (deleteTarget = row)}
+										onclick={() => openDelete(row)}
 									>
 										<IconTrash class="size-3.5" />
 										<span class="hidden sm:inline">删除</span>

@@ -8,6 +8,7 @@ import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
 
 export const load: PageServerLoad = async () => {
+	await requireAdminRole();
 	const allCategories = await db
 		.select({
 			id: categories.id,

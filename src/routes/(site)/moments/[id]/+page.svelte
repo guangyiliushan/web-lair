@@ -42,19 +42,15 @@
 				{kindLabels[data.row.type as MomentKind]?.() ?? data.row.type}
 			</span>
 			<span>{data.row.dateLabel}</span>
-			<span
-				class="inline-flex items-center gap-2"
-				role="group"
-				aria-label={`${m.moments_vote_up()} / ${m.moments_vote_down()}`}
-			>
+			<span class="inline-flex items-center gap-2">
 				<span class="inline-flex items-center gap-1">
-					<IconThumbUp class="size-4" />
-					{data.row.up}
+					<IconThumbUp class="size-4" aria-hidden="true" />
+					<span class="sr-only">{m.moments_vote_up()} </span>{data.row.up}
 				</span>
 				<span class="h-3 w-px bg-border"></span>
 				<span class="inline-flex items-center gap-1">
-					<IconThumbDown class="size-4" />
-					{data.row.down}
+					<IconThumbDown class="size-4" aria-hidden="true" />
+					<span class="sr-only">{m.moments_vote_down()} </span>{data.row.down}
 				</span>
 			</span>
 		</div>

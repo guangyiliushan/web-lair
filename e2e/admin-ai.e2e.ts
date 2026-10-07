@@ -122,49 +122,69 @@ test('saves the moderation switches and thresholds', async ({ page }) => {
 	await page.goto('/admin/settings/ai');
 
 	const toggle = page.getByRole('switch', { name: '启用 AI 分诊' });
+	// Hydration gate (round-4 flake): force two real flips - a pre-hydration
+	// click never changes aria-checked, so observing both flips proves the JS
+	// is live before we fill and save (also guarantees the hidden notes-style
+	// inputs exist, so a stray native POST cannot drop them).
 	await expect(async () => {
-		if ((await toggle.getAttribute('aria-checked')) !== 'true') {
+		if ((await toggle.getAttribute('aria-checked')) === 'true') {
+			await toggle.click();
+		}
+		await expect(toggle).toHaveAttribute('aria-checked', 'false');
+	}).toPass({ timeout: 20000 });
+	await expect(async () => {
+		if ((await toggle.getAttribute('aria-checked')) === 'false') {
 			await toggle.click();
 		}
 		await expect(toggle).toHaveAttribute('aria-checked', 'true');
 	}).toPass({ timeout: 20000 });
 
-	await vis(page.locator('#mod-link-threshold')).fill('3');
+	// Converge on the persisted value: a pre-hydration fill only writes the
+	// DOM, so re-fill + re-save until the option row matches (round-4 flake).
 	await expect(async () => {
-		if (!(await byText(page, '审核设置已保存').isVisible())) {
-			await page.getByRole('button', { name: '保存审核设置' }).click();
-		}
+		await vis(page.locator('#mod-link-threshold')).fill('3');
+		await page.getByRole('button', { name: '保存审核设置' }).click();
 		await expect(byText(page, '审核设置已保存')).toBeVisible();
-	}).toPass({ timeout: 20000 });
-
-	expect(
-		psql(
-			`select (value->>'enabled') || '|' || (value->>'linkThreshold') from options where name = 'comments.moderation'`
-		)
-	).toBe('true|3');
+		expect(
+			psql(
+				`select (value->>'enabled') || '|' || (value->>'linkThreshold') from options where name = 'comments.moderation'`
+			)
+		).toBe('true|3');
+	}).toPass({ timeout: 30_000 });
 });
 
 test('saves the translation enqueue threshold', async ({ page }) => {
 	await page.goto('/admin/settings/ai');
 
 	const minChars = vis(page.locator('#translation-min-chars'));
+	// Same hydration gate as the moderation card: flip the notes switch off
+	// and back on; only a live component flips, which also guarantees the
+	// bound hidden input is present for the save submission.
+	const notesAuto = page.getByRole('switch', { name: '手记参与自动翻译' });
+	await expect(async () => {
+		if ((await notesAuto.getAttribute('aria-checked')) === 'true') {
+			await notesAuto.click();
+		}
+		await expect(notesAuto).toHaveAttribute('aria-checked', 'false');
+	}).toPass({ timeout: 20000 });
+	await expect(async () => {
+		if ((await notesAuto.getAttribute('aria-checked')) === 'false') {
+			await notesAuto.click();
+		}
+		await expect(notesAuto).toHaveAttribute('aria-checked', 'true');
+	}).toPass({ timeout: 20000 });
+	// Converge on the persisted value: keep re-filling and re-saving until
+	// the option row matches (pre-hydration fills are DOM-only).
 	await expect(async () => {
 		await minChars.fill('450');
-		await expect(minChars).toHaveValue('450');
-	}).toPass({ timeout: 20000 });
-
-	await expect(async () => {
-		if (!(await byText(page, '翻译设置已保存').isVisible())) {
-			await page.getByRole('button', { name: '保存翻译设置' }).click();
-		}
+		await page.getByRole('button', { name: '保存翻译设置' }).click();
 		await expect(byText(page, '翻译设置已保存')).toBeVisible();
-	}).toPass({ timeout: 20000 });
-
-	expect(
-		psql(
-			`select (value->>'minChars') || '|' || (value->>'notesAuto') from options where name = 'ai.translation'`
-		)
-	).toBe('450|true');
+		expect(
+			psql(
+				`select (value->>'minChars') || '|' || (value->>'notesAuto') from options where name = 'ai.translation'`
+			)
+		).toBe('450|true');
+	}).toPass({ timeout: 30_000 });
 });
 
 test('the AI console shows its empty states', async ({ page }) => {

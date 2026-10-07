@@ -47,6 +47,7 @@
 	});
 
 	function openCreate() {
+		dismissError();
 		editing = null;
 		fieldContent = '';
 		fieldType = 'life';
@@ -54,6 +55,7 @@
 	}
 
 	function openEdit(row: MomentRow) {
+		dismissError();
 		editing = row;
 		fieldContent = row.content;
 		fieldType = row.type as MomentKind;
@@ -78,9 +80,25 @@
 	// ── Delete confirm ──
 	let deleteTarget = $state<MomentRow | null>(null);
 
+	function openDelete(row: MomentRow) {
+		dismissError();
+		deleteTarget = row;
+	}
+
+	// Round-4 review: a page-form error belongs to the action that produced
+	// it; any older failure is dismissed when a dialog opens (a fresh result
+	// is a new `form` object and re-enables the message).
+	let errorDismissedFor: unknown = null;
+
 	const errorMessage = $derived(
-		form && 'error' in form && typeof form.error === 'string' ? form.error : null
+		form && form !== errorDismissedFor && 'error' in form && typeof form.error === 'string'
+			? form.error
+			: null
 	);
+
+	function dismissError() {
+		errorDismissedFor = form;
+	}
 </script>
 
 <svelte:head>
@@ -107,15 +125,6 @@
 			</Button>
 		</div>
 	</header>
-
-	{#if errorMessage}
-		<div
-			role="alert"
-			class="border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
-		>
-			{errorMessage}
-		</div>
-	{/if}
 
 	<!-- 写一条 / 编辑微记对话框 -->
 	<Dialog.Root bind:open={dialogOpen}>
@@ -200,7 +209,7 @@
 		title="删除微记"
 		description="将删除这条微记，此操作不可撤销。"
 		id={deleteTarget?.id ?? ''}
-		error={deleteTarget ? errorMessage : null}
+		error={errorMessage}
 		onclose={() => (deleteTarget = null)}
 	/>
 
@@ -233,24 +242,20 @@
 										{KIND_LABELS[row.type as MomentKind] ?? row.type}
 									</span>
 									<span>{row.dateLabel}</span>
-									<span
-										class="inline-flex items-center gap-2"
-										role="group"
-										aria-label="赞同 / 反对"
-									>
+									<span class="inline-flex items-center gap-2">
 										<span class="inline-flex items-center gap-1">
-											<IconThumbUp class="size-3.5" />
-											{row.up}
+											<IconThumbUp class="size-3.5" aria-hidden="true" />
+											<span class="sr-only">赞同 </span>{row.up}
 										</span>
 										<span class="h-3 w-px bg-border"></span>
 										<span class="inline-flex items-center gap-1">
-											<IconThumbDown class="size-3.5" />
-											{row.down}
+											<IconThumbDown class="size-3.5" aria-hidden="true" />
+											<span class="sr-only">反对 </span>{row.down}
 										</span>
 									</span>
 								</div>
 								<div
-									class="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+									class="flex items-center gap-1 opacity-100 transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100 sm:pointer-fine:opacity-0"
 								>
 									<Button
 										variant="outline"
@@ -267,7 +272,7 @@
 										size="sm"
 										class="h-8 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
 										aria-label="删除微记"
-										onclick={() => (deleteTarget = row)}
+										onclick={() => openDelete(row)}
 									>
 										<IconTrash class="size-3.5" />
 										<span class="hidden sm:inline">删除</span>

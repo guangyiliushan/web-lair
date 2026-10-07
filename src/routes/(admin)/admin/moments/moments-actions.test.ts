@@ -14,7 +14,8 @@ const { dbMock, state } = vi.hoisted(() => ({
 		deletes: [] as { table: unknown }[],
 		updatedRows: [{ id: 'row' }] as unknown[],
 		deletedRows: [{ id: 'row' }] as unknown[],
-		updateError: null as unknown
+		updateError: null as unknown,
+		insertError: null as unknown
 	}
 }));
 
@@ -22,7 +23,7 @@ vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: vi.fn(async () => {}) }));
 
 import { requireAdminRole } from '$lib/server/authz';
-import { actions } from './+page.server';
+import { actions, load } from './+page.server';
 
 const guardMock = vi.mocked(requireAdminRole);
 const ROW_ID = '33333333-3333-7333-8333-333333333333';
@@ -52,10 +53,12 @@ describe('admin moments actions', () => {
 		state.updatedRows = [{ id: 'row' }];
 		state.deletedRows = [{ id: 'row' }];
 		state.updateError = null;
+		state.insertError = null;
 
 		Object.assign(dbMock, {
 			insert: vi.fn((table: unknown) => ({
 				values: async (values: Record<string, unknown>) => {
+					if (state.insertError) throw state.insertError;
 					state.inserts.push({ table, values });
 					return [{ id: 'new-row' }];
 				}
@@ -78,7 +81,10 @@ describe('admin moments actions', () => {
 						return state.deletedRows;
 					}
 				})
-			}))
+			})),
+			select: vi.fn(() => {
+				throw new Error('db must not be reached without the guard');
+			})
 		});
 	});
 
@@ -109,6 +115,12 @@ describe('admin moments actions', () => {
 			content: 'x',
 			type: 'life'
 		});
+		expect(result).toMatchObject({ status: 400, data: { error: '微记类型无效' } });
+	});
+
+	it('maps the DB CHECK backstop (cause-shaped 23514) to a 400 on create too', async () => {
+		state.insertError = Object.assign(new Error('check'), { cause: { code: '23514' } });
+		const { result } = await callAction('create', { content: 'x', type: 'life' });
 		expect(result).toMatchObject({ status: 400, data: { error: '微记类型无效' } });
 	});
 
@@ -146,11 +158,22 @@ describe('admin moments actions', () => {
 		expect(state.deletes).toHaveLength(1);
 	});
 
-	it('stops the action when the guard rejects (no db writes)', async () => {
-		guardMock.mockRejectedValueOnce(new Error('denied'));
-		const { result, thrown } = await callAction('create', { content: 'x', type: 'life' });
-		expect(result).toBeUndefined();
-		expect(thrown).toBeInstanceOf(Error);
+	it('stops every action when the guard rejects (no db writes)', async () => {
+		for (const name of ['create', 'update', 'delete'] as const) {
+			guardMock.mockRejectedValueOnce(new Error('denied'));
+			const { result, thrown } = await callAction(name, { content: 'x', type: 'life' });
+			expect(result).toBeUndefined();
+			expect(thrown).toBeInstanceOf(Error);
+		}
 		expect(state.inserts).toHaveLength(0);
+		expect(state.updates).toHaveLength(0);
+		expect(state.deletes).toHaveLength(0);
+	});
+
+	it('guards the load before any db work', async () => {
+		guardMock.mockRejectedValueOnce(new Error('denied'));
+		await expect(load(undefined as never)).rejects.toThrow('denied');
+		const selectMock = dbMock.select as ReturnType<typeof vi.fn>;
+		expect(selectMock).not.toHaveBeenCalled();
 	});
 });

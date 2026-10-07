@@ -35,7 +35,7 @@
 			<AlertDialog.Description>{description}</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if error}
-			<p role="alert" class="px-6 text-sm text-destructive">{error}</p>
+			<p role="alert" class="px-4 text-sm text-destructive">{error}</p>
 		{/if}
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
@@ -44,9 +44,13 @@
 				action="?/delete"
 				use:enhance={() => {
 					submitting = true;
+					// Round-4 review: remember which row this submission belongs to -
+					// a success result must not close a dialog the user has meanwhile
+					// reopened for another row (cancel-in-flight race).
+					const submittedId = id;
 					return async ({ result, update }) => {
 						submitting = false;
-						if (result.type === 'success') onclose();
+						if (result.type === 'success' && id === submittedId) onclose();
 						await update();
 					};
 				}}

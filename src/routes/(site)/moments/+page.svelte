@@ -31,7 +31,7 @@
 		<p class="mt-2 text-sm text-muted-foreground">{m.moments_subtitle()}</p>
 		<div class="mt-6 mb-6 h-px w-8 bg-primary/70"></div>
 
-		<div class="flex flex-wrap gap-1.5" role="group" aria-label={m.moments_kind_heading()}>
+		<nav class="flex flex-wrap gap-1.5" aria-label={m.moments_kind_heading()}>
 			<a
 				href={siteHref('/moments')}
 				class={!data.kind ? chipActive : chipIdle}
@@ -48,7 +48,7 @@
 					{kindLabels[kind]()}
 				</a>
 			{/each}
-		</div>
+		</nav>
 	</div>
 
 	{#await data.rows}
@@ -81,19 +81,15 @@
 											{kindLabels[row.type as MomentKind]?.() ?? row.type}
 										</span>
 										<span>{row.dateLabel}</span>
-										<span
-											class="inline-flex items-center gap-2"
-											role="group"
-											aria-label={`${m.moments_vote_up()} / ${m.moments_vote_down()}`}
-										>
+										<span class="inline-flex items-center gap-2">
 											<span class="inline-flex items-center gap-1">
-												<IconThumbUp class="size-3.5" />
-												{row.up}
+												<IconThumbUp class="size-3.5" aria-hidden="true" />
+												<span class="sr-only">{m.moments_vote_up()} </span>{row.up}
 											</span>
 											<span class="h-3 w-px bg-border"></span>
 											<span class="inline-flex items-center gap-1">
-												<IconThumbDown class="size-3.5" />
-												{row.down}
+												<IconThumbDown class="size-3.5" aria-hidden="true" />
+												<span class="sr-only">{m.moments_vote_down()} </span>{row.down}
 											</span>
 										</span>
 									</div>
