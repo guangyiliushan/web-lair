@@ -51,44 +51,44 @@
 		}
 	];
 
-	// 快速操作
-	const quickActions = [
+	// 快速操作（计数真化：C3；微记三卡的「撰写」深链 ?add=1 自动打开添加对话框）
+	const quickActions = $derived([
 		{
 			title: '博文',
-			count: 167,
+			count: data.counts.posts,
 			icon: IconArticle,
 			writeHref: '/admin/posts/edit',
 			manageHref: '/admin/posts'
 		},
 		{
 			title: '手记',
-			count: 188,
+			count: data.counts.notes,
 			icon: IconNotebook,
 			writeHref: '/admin/notes/edit',
 			manageHref: '/admin/notes'
 		},
 		{
 			title: '摘录',
-			count: 38,
+			count: data.counts.quotes,
 			icon: IconQuote,
-			writeHref: '/admin/quotes',
+			writeHref: '/admin/quotes?add=1',
 			manageHref: '/admin/quotes'
 		},
 		{
 			title: '思考',
-			count: 88,
+			count: data.counts.thoughts,
 			icon: IconBulb,
-			writeHref: '/admin/thoughts',
+			writeHref: '/admin/thoughts?add=1',
 			manageHref: '/admin/thoughts'
 		},
 		{
 			title: '微记',
-			count: 0,
+			count: data.counts.moments,
 			icon: IconWriting,
-			writeHref: '/admin/moments',
+			writeHref: '/admin/moments?add=1',
 			manageHref: '/admin/moments'
 		}
-	];
+	]);
 
 	// 数据统计
 	const dataStats = [
@@ -159,7 +159,7 @@
 		<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
 			快速操作
 		</h2>
-		<div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+		<div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
 			{#each quickActions as action (action.title)}
 				<Card.Root>
 					<Card.Content class="p-3 sm:p-6">
