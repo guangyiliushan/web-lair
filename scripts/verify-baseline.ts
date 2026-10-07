@@ -835,6 +835,38 @@ begin
 		if c <> 'projects_external_id_check' then raise exception 'FAIL projects extid check: wrong constraint %', c; end if;
 	end;
 
+	-- Projects S-batch teeth (2026-10-07): the provider / status whitelists,
+	-- the site row carrying an external_id (the false->true arm of the
+	-- biconditional), plus a cross-provider positive control proving
+	-- projects_extid_uniq is not over-broad.
+	begin
+		insert into projects (name, project_url, provider) values ('c1v-bp', 'https://bp.example', 'gitlabx');
+		raise exception 'FAIL projects_provider_check accepted gitlabx';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'projects_provider_check' then raise exception 'FAIL projects provider: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into projects (name, project_url, provider, status) values ('c1v-bs', 'https://bs.example', 'site', 'archived');
+		raise exception 'FAIL projects_status_check accepted archived';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'projects_status_check' then raise exception 'FAIL projects status: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into projects (name, project_url, provider, external_id) values ('c1v-bsx', 'https://bsx.example', 'site', 'c1v/site-x');
+		raise exception 'FAIL projects_external_id_check accepted a site row with external_id';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'projects_external_id_check' then raise exception 'FAIL projects extid site: wrong constraint %', c; end if;
+	end;
+
+	-- Positive control: the same external_id under a different provider must
+	-- pass - projects_extid_uniq is keyed on (provider, external_id).
+	insert into projects (name, project_url, provider, external_id) values ('c1v-p3', 'https://p3.example', 'gitlab', 'c1v/g');
+
 	-- Subscriptions state machine (P1 repair): pending must not carry verified_at;
 	-- unsubscribed must carry unsubscribed_at; verified history is retained.
 	begin

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { options } from '../db/config/index.ts';
 import { AI_FUNCTIONS } from '../../utils/ai-meta.ts';
+import { PROJECT_SYNC_PROVIDERS } from '../../utils/project-meta.ts';
 import { isValidIanaTimeZone } from '../../utils/timezone.ts';
 import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '../pg-timezone.ts';
 
@@ -221,6 +222,28 @@ export const optionRegistry = {
 		schema: z.object({ name: z.string(), description: z.string(), avatar: z.string() }),
 		// Public "our link info" block on /friends (plan §2.6).
 		default: { name: 'Web Lair', description: '', avatar: '' }
+	},
+	'projects.sync_targets': {
+		// Projects line §2.5: the accounts the sync job pulls public
+		// repositories from; empty by default (the admin surface prompts for
+		// configuration). `.trim()` normalizes entry whitespace and duplicate
+		// (provider, account) pairs are rejected - a duplicate burns the same
+		// anonymous quota twice for zero benefit (validation lives in the
+		// registry per AI-1.1, not in route handlers).
+		schema: z
+			.array(
+				z.object({
+					provider: z.enum(PROJECT_SYNC_PROVIDERS),
+					account: z.string().trim().min(1, '账号不能为空')
+				})
+			)
+			.refine(
+				(targets) =>
+					new Set(targets.map(({ provider, account }) => JSON.stringify([provider, account])))
+						.size === targets.length,
+				'同一平台账号不能重复'
+			),
+		default: []
 	}
 } as const satisfies Record<string, RegistryEntry>;
 

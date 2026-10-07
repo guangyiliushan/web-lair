@@ -58,7 +58,7 @@ describe('options registry (AI-1.1)', () => {
 		});
 	});
 
-	it('ships exactly the planned keys (storage: media.purge; links: friends.* / site.info; micro: ai.translation)', () => {
+	it('ships exactly the planned keys (storage: media.purge; links: friends.* / site.info; micro: ai.translation; projects: projects.sync_targets)', () => {
 		expect([...optionKeys].sort()).toEqual(
 			[
 				'ai.assignments',
@@ -71,6 +71,7 @@ describe('options registry (AI-1.1)', () => {
 				'friends.policy',
 				'media.purge',
 				'notes.gate',
+				'projects.sync_targets',
 				'site.default_lang',
 				'site.info',
 				'site.languages',
@@ -353,6 +354,42 @@ describe('options registry (AI-1.1)', () => {
 				timeoutMs: 15000,
 				concurrency: 1
 			}
+		});
+	});
+
+	it('ships the projects sync_targets key with an empty default', async () => {
+		state.selectRows = [[]];
+		await expect(getOption('projects.sync_targets')).resolves.toEqual([]);
+	});
+
+	it('rejects off-platform, blank or duplicate sync targets before touching the database', async () => {
+		await expect(
+			setOption('projects.sync_targets', [{ provider: 'site', account: 'x' }] as never)
+		).rejects.toThrow();
+		await expect(
+			setOption('projects.sync_targets', [{ provider: 'github', account: '   ' }])
+		).rejects.toThrow(/账号不能为空/);
+		await expect(
+			setOption('projects.sync_targets', [
+				{ provider: 'github', account: 'guang' },
+				{ provider: 'github', account: 'guang' }
+			])
+		).rejects.toThrow(/同一平台账号不能重复/);
+		expect(state.insertCalls).toHaveLength(0);
+	});
+
+	it('accepts sync targets, trimming accounts and keeping cross-provider entries', async () => {
+		await setOption('projects.sync_targets', [
+			{ provider: 'github', account: ' guang ' },
+			{ provider: 'gitlab', account: 'guang' }
+		]);
+		expect(state.insertCalls).toHaveLength(1);
+		expect(state.insertCalls[0].values).toEqual({
+			name: 'projects.sync_targets',
+			value: [
+				{ provider: 'github', account: 'guang' },
+				{ provider: 'gitlab', account: 'guang' }
+			]
 		});
 	});
 });

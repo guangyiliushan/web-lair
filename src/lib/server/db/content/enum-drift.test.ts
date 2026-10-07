@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LINK_STATUSES } from '$lib/utils/link-meta';
+import {
+	PROJECT_PROVIDERS as META_PROJECT_PROVIDERS,
+	PROJECT_STATUSES as META_PROJECT_STATUSES
+} from '$lib/utils/project-meta';
 import { NOTE_MOODS, NOTES_STATUSES } from './note.schema';
 import { PROJECT_PROVIDERS, PROJECT_STATUSES } from './project.schema';
 import { DRAFT_REF_TYPES } from './draft.schema';
@@ -28,6 +32,16 @@ describe('enum drift guard', () => {
 
 	it('projects_status_check literals match PROJECT_STATUSES', () => {
 		expect(new Set(checkLiterals('projects_status_check'))).toEqual(new Set(PROJECT_STATUSES));
+	});
+
+	it('projects_provider_check literals match the UI-facing provider list', () => {
+		expect(new Set(checkLiterals('projects_provider_check'))).toEqual(
+			new Set(META_PROJECT_PROVIDERS)
+		);
+	});
+
+	it('projects_status_check literals match the UI-facing status list', () => {
+		expect(new Set(checkLiterals('projects_status_check'))).toEqual(new Set(META_PROJECT_STATUSES));
 	});
 
 	it('notes_status_check literals match NOTES_STATUSES', () => {
