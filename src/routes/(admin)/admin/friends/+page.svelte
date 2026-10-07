@@ -219,7 +219,7 @@
 
 <!-- 新增友链对话框 -->
 <Dialog.Root bind:open={addDialogOpen}>
-	<Dialog.Content class="sm:max-w-lg">
+	<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>
 		<form
 			class="flex flex-col"
 			onsubmit={(e) => {

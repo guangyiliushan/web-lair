@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
+	import type { ActionResult } from '@sveltejs/kit';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Empty } from '$lib/components/ui/empty';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { DeleteConfirm } from '$lib/components/admin';
+	import { MOMENT_KINDS, type MomentKind } from '$lib/utils/moment-meta';
 	import IconWriting from '@tabler/icons-svelte-runes/icons/writing';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
@@ -19,7 +21,6 @@
 	let { data, form }: PageProps = $props();
 
 	type MomentRow = Awaited<PageProps['data']['rows']>[number];
-	type MomentKind = 'life' | 'tech' | 'media' | 'other';
 
 	const KIND_LABELS: Record<MomentKind, string> = {
 		life: '生活',
@@ -27,13 +28,14 @@
 		media: '书影',
 		other: '其他'
 	};
-	const KINDS = Object.keys(KIND_LABELS) as MomentKind[];
 
 	// ── Add / edit dialog ──
 	let dialogOpen = $state(false);
 	let editing = $state<MomentRow | null>(null);
 	let fieldContent = $state('');
 	let fieldType = $state<MomentKind>('life');
+	// Double-submit guard (C3 review): kit does not merge submissions.
+	let submitting = $state(false);
 
 	// Dashboard 撰写 deep link: /admin/moments?add=1 opens the dialog once.
 	let addConsumed = false;
@@ -54,8 +56,23 @@
 	function openEdit(row: MomentRow) {
 		editing = row;
 		fieldContent = row.content;
-		fieldType = (row.type as MomentKind) ?? 'life';
+		fieldType = row.type as MomentKind;
 		dialogOpen = true;
+	}
+
+	/** Close the dialog once an action succeeds; failures keep it open with the error shown. */
+	function closeOnSuccess() {
+		return async ({
+			result,
+			update
+		}: {
+			result: ActionResult;
+			update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+		}) => {
+			submitting = false;
+			if (result.type !== 'failure') dialogOpen = false;
+			await update();
+		};
 	}
 
 	// ── Delete confirm ──
@@ -102,16 +119,15 @@
 
 	<!-- 写一条 / 编辑微记对话框 -->
 	<Dialog.Root bind:open={dialogOpen}>
-		<Dialog.Content class="sm:max-w-lg">
+		<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>
 			<form
 				method="post"
 				action={editing ? '?/update' : '?/create'}
 				class="flex flex-col"
-				use:enhance={() =>
-					async ({ result, update }) => {
-						if (result.type === 'success') dialogOpen = false;
-						await update();
-					}}
+				use:enhance={() => {
+					submitting = true;
+					return closeOnSuccess();
+				}}
 			>
 				{#if editing}
 					<input type="hidden" name="id" value={editing.id} />
@@ -126,6 +142,9 @@
 						{/snippet}
 					</Dialog.Close>
 				</div>
+				{#if errorMessage}
+					<p role="alert" class="px-5 pt-3 text-sm text-destructive">{errorMessage}</p>
+				{/if}
 				<div class="grid gap-4 px-5 py-4">
 					<label class="grid gap-1.5">
 						<span class="text-sm font-medium">
@@ -142,7 +161,7 @@
 					<div class="grid gap-1.5">
 						<span class="text-sm font-medium">类型</span>
 						<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="微记类型">
-							{#each KINDS as kind (kind)}
+							{#each MOMENT_KINDS as kind (kind)}
 								<label
 									class="rounded-full border px-3 py-1 text-xs transition-colors focus-within:ring-2 focus-within:ring-ring/50 {fieldType ===
 									kind
@@ -168,7 +187,7 @@
 							<Button variant="outline" size="sm" {...props}>取消</Button>
 						{/snippet}
 					</Dialog.Close>
-					<Button type="submit" size="sm" disabled={!fieldContent.trim()}>
+					<Button type="submit" size="sm" disabled={submitting || !fieldContent.trim()}>
 						{editing ? '保存' : '发布'}
 					</Button>
 				</div>
@@ -176,35 +195,14 @@
 		</Dialog.Content>
 	</Dialog.Root>
 
-	<!-- 删除确认 -->
-	<AlertDialog.Root
+	<DeleteConfirm
 		open={deleteTarget !== null}
-		onOpenChange={(open) => {
-			if (!open) deleteTarget = null;
-		}}
-	>
-		<AlertDialog.Content>
-			<AlertDialog.Header>
-				<AlertDialog.Title>删除微记</AlertDialog.Title>
-				<AlertDialog.Description>将删除这条微记，此操作不可撤销。</AlertDialog.Description>
-			</AlertDialog.Header>
-			<AlertDialog.Footer>
-				<AlertDialog.Cancel>取消</AlertDialog.Cancel>
-				<form
-					method="post"
-					action="?/delete"
-					use:enhance={() =>
-						async ({ result, update }) => {
-							if (result.type === 'success') deleteTarget = null;
-							await update();
-						}}
-				>
-					<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
-					<Button type="submit" variant="destructive">删除</Button>
-				</form>
-			</AlertDialog.Footer>
-		</AlertDialog.Content>
-	</AlertDialog.Root>
+		title="删除微记"
+		description="将删除这条微记，此操作不可撤销。"
+		id={deleteTarget?.id ?? ''}
+		error={deleteTarget ? errorMessage : null}
+		onclose={() => (deleteTarget = null)}
+	/>
 
 	<!-- 微记列表（流式加载：先骨架后内容，ui-ux C1） -->
 	<div class="min-h-0 flex-1 overflow-auto">
@@ -223,9 +221,9 @@
 					</div>
 				</Empty>
 			{:else}
-				<div class="mx-auto max-w-4xl divide-y" role="feed" aria-label="微记列表">
+				<div class="mx-auto max-w-4xl divide-y" role="list" aria-label="微记列表">
 					{#each rows as row (row.id)}
-						<article class="group px-4 py-5 transition-colors hover:bg-muted/50">
+						<article role="listitem" class="group px-4 py-5 transition-colors hover:bg-muted/50">
 							<p class="text-base leading-7 wrap-break-word whitespace-pre-wrap">{row.content}</p>
 							<footer class="mt-4 flex flex-wrap items-center justify-between gap-3">
 								<div
@@ -234,8 +232,12 @@
 									<span class="rounded border px-1.5 py-0.5 text-xs text-muted-foreground">
 										{KIND_LABELS[row.type as MomentKind] ?? row.type}
 									</span>
-									<time>{row.dateLabel}</time>
-									<span class="inline-flex items-center gap-2">
+									<span>{row.dateLabel}</span>
+									<span
+										class="inline-flex items-center gap-2"
+										role="group"
+										aria-label="赞同 / 反对"
+									>
 										<span class="inline-flex items-center gap-1">
 											<IconThumbUp class="size-3.5" />
 											{row.up}

@@ -3,7 +3,7 @@ import { db } from '$lib/server/db';
 import { moments } from '$lib/server/db/content';
 import { getOption } from '$lib/server/config/options-registry';
 import { formatDate } from '$lib/utils/i18n';
-import { isMomentKind } from '$lib/utils/moment-meta';
+import { parseMomentKind } from '$lib/utils/moment-meta';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -15,7 +15,7 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ url }) => {
 	const siteTz = await getOption('site.timezone');
 	const rawKind = url.searchParams.get('kind') ?? '';
-	const kind = isMomentKind(rawKind) ? rawKind : null;
+	const kind = parseMomentKind(rawKind);
 	const rows = db
 		.select({
 			id: moments.id,

@@ -33,15 +33,18 @@
 		{m.moments_back()}
 	</a>
 
+	<h1 class="sr-only">{m.moments_title()}</h1>
+
 	<div class="mt-10">
 		<p class="text-xl leading-relaxed wrap-break-word whitespace-pre-wrap">{data.row.content}</p>
 		<div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
 			<span class="rounded border px-1.5 py-0.5 text-xs">
 				{kindLabels[data.row.type as MomentKind]?.() ?? data.row.type}
 			</span>
-			<time>{data.row.dateLabel}</time>
+			<span>{data.row.dateLabel}</span>
 			<span
 				class="inline-flex items-center gap-2"
+				role="group"
 				aria-label={`${m.moments_vote_up()} / ${m.moments_vote_down()}`}
 			>
 				<span class="inline-flex items-center gap-1">

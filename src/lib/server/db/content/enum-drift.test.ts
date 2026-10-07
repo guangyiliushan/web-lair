@@ -5,6 +5,7 @@ import { NOTE_MOODS, NOTES_STATUSES } from './note.schema';
 import { PROJECT_PROVIDERS, PROJECT_STATUSES } from './project.schema';
 import { DRAFT_REF_TYPES } from './draft.schema';
 import { SLUG_TRACKER_TYPES } from '../system/slug-tracker.schema';
+import { MOMENT_KINDS } from '$lib/utils/moment-meta';
 
 // Guards the reviewed "enum dual-source" risk: the TS constants consumed by
 // services and the literals baked into the single baseline must not drift.
@@ -43,5 +44,9 @@ describe('enum drift guard', () => {
 
 	it('slug_trackers_type_check literals match SLUG_TRACKER_TYPES', () => {
 		expect(new Set(checkLiterals('slug_trackers_type_check'))).toEqual(new Set(SLUG_TRACKER_TYPES));
+	});
+
+	it('moments_type_check literals match MOMENT_KINDS', () => {
+		expect(new Set(checkLiterals('moments_type_check'))).toEqual(new Set(MOMENT_KINDS));
 	});
 });

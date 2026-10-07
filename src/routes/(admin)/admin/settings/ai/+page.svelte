@@ -578,7 +578,7 @@
 
 <!-- ── Provider dialog ──────────────────────────────────────────────── -->
 <Dialog.Root bind:open={dialogOpen}>
-	<Dialog.Content class="sm:max-w-lg">
+	<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>
 		<form
 			method="post"
 			action="?/saveProvider"

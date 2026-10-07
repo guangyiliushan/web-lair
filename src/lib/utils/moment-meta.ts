@@ -10,3 +10,8 @@ export type MomentKind = (typeof MOMENT_KINDS)[number];
 export function isMomentKind(value: string): value is MomentKind {
 	return (MOMENT_KINDS as readonly string[]).includes(value);
 }
+
+/** Parse a raw value into a kind, or null - shared by the admin actions and the public list filter. */
+export function parseMomentKind(raw: string): MomentKind | null {
+	return isMomentKind(raw) ? raw : null;
+}

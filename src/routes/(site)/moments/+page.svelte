@@ -27,11 +27,11 @@
 
 <div class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0">
 	<div class="min-w-0">
-		<h1 class="text-[28px] leading-tight font-medium">{m.moments_title()}</h1>
+		<h1 id="moments-heading" class="text-[28px] leading-tight font-medium">{m.moments_title()}</h1>
 		<p class="mt-2 text-sm text-muted-foreground">{m.moments_subtitle()}</p>
-		<div class="mt-6 mb-4 h-px w-8 bg-primary/70"></div>
+		<div class="mt-6 mb-6 h-px w-8 bg-primary/70"></div>
 
-		<div class="flex flex-wrap gap-1.5" role="group" aria-label={m.moments_kind_all()}>
+		<div class="flex flex-wrap gap-1.5" role="group" aria-label={m.moments_kind_heading()}>
 			<a
 				href={siteHref('/moments')}
 				class={!data.kind ? chipActive : chipIdle}
@@ -61,9 +61,10 @@
 		{#if rows.length === 0}
 			<p class="py-6 text-sm text-muted-foreground">{m.moments_empty()}</p>
 		{:else}
-			<div class="flex flex-col gap-4 py-6">
+			<div class="flex flex-col gap-4 py-6" role="list" aria-labelledby="moments-heading">
 				{#each rows as row (row.id)}
 					<article
+						role="listitem"
 						class="rounded-lg border border-border/60 p-4 transition-colors hover:border-border hover:bg-muted/30"
 					>
 						<a href={siteHref(`/moments/${row.id}`)} class="block">
@@ -79,8 +80,12 @@
 										<span class="rounded border px-1.5 py-0.5">
 											{kindLabels[row.type as MomentKind]?.() ?? row.type}
 										</span>
-										<time>{row.dateLabel}</time>
-										<span class="inline-flex items-center gap-2">
+										<span>{row.dateLabel}</span>
+										<span
+											class="inline-flex items-center gap-2"
+											role="group"
+											aria-label={`${m.moments_vote_up()} / ${m.moments_vote_down()}`}
+										>
 											<span class="inline-flex items-center gap-1">
 												<IconThumbUp class="size-3.5" />
 												{row.up}

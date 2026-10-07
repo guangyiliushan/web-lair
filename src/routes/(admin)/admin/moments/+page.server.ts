@@ -6,21 +6,18 @@ import { requireAdminRole } from '$lib/server/authz';
 import { getOption } from '$lib/server/config/options-registry';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isUuid } from '$lib/utils/uuid';
-import { isMomentKind, type MomentKind } from '$lib/utils/moment-meta';
+import { parseMomentKind } from '$lib/utils/moment-meta';
 import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad, Actions } from './$types';
 
-function parseKind(raw: string): MomentKind | null {
-	return isMomentKind(raw) ? raw : null;
-}
-
 /**
  * Admin 微记 CRUD (C3): content + kind (`life|tech|media|other`, app-validated
- * with the DB CHECK as backstop) + read-only up/down counters. Same P2
- * contract as the sibling micro pages; the list streams for the ui-ux C1
+ * with the DB CHECK as backstop) + read-only up/down counters. The load and
+ * every action follow the P2 contract; the list streams for the ui-ux C1
  * Skeleton.
  */
 export const load: PageServerLoad = async () => {
+	await requireAdminRole();
 	const [siteTz, countRows] = await Promise.all([
 		getOption('site.timezone'),
 		db.select({ count: sql<number>`count(*)`.mapWith(Number) }).from(moments)
@@ -56,9 +53,16 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const content = (form.get('content') ?? '').toString().trim();
 		if (!content) return fail(400, { error: '微记内容不能为空' });
-		const kind = parseKind((form.get('type') ?? '').toString());
+		const kind = parseMomentKind((form.get('type') ?? '').toString());
 		if (!kind) return fail(400, { error: '微记类型无效' });
-		await db.insert(moments).values({ content, type: kind });
+		try {
+			await db.insert(moments).values({ content, type: kind });
+		} catch (caught) {
+			// The `moments_type_check` CHECK is the backstop; the app-side
+			// whitelist above should make this unreachable.
+			if (pgErrorCode(caught) === '23514') return fail(400, { error: '微记类型无效' });
+			throw caught;
+		}
 		return { success: true };
 	},
 
@@ -69,7 +73,7 @@ export const actions: Actions = {
 		if (!id || !isUuid(id)) return fail(400, { error: '缺少微记 ID' });
 		const content = (form.get('content') ?? '').toString().trim();
 		if (!content) return fail(400, { error: '微记内容不能为空' });
-		const kind = parseKind((form.get('type') ?? '').toString());
+		const kind = parseMomentKind((form.get('type') ?? '').toString());
 		if (!kind) return fail(400, { error: '微记类型无效' });
 		try {
 			const updated = await db

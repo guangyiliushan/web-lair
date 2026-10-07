@@ -15,8 +15,7 @@ const { dbMock, state } = vi.hoisted(() => ({
 		updates: [] as { table: unknown; values: Record<string, unknown> }[],
 		deletes: [] as { table: unknown }[],
 		updatedRows: [{ id: 'row' }] as unknown[],
-		deletedRows: [{ id: 'row' }] as unknown[],
-		updateError: null as unknown
+		deletedRows: [{ id: 'row' }] as unknown[]
 	}
 }));
 
@@ -53,7 +52,6 @@ describe('admin quotes actions', () => {
 		state.deletes = [];
 		state.updatedRows = [{ id: 'row' }];
 		state.deletedRows = [{ id: 'row' }];
-		state.updateError = null;
 
 		Object.assign(dbMock, {
 			insert: vi.fn((table: unknown) => ({
@@ -66,7 +64,6 @@ describe('admin quotes actions', () => {
 				set: (values: Record<string, unknown>) => ({
 					where: () => ({
 						returning: async () => {
-							if (state.updateError) throw state.updateError;
 							state.updates.push({ table, values });
 							return state.updatedRows;
 						}
@@ -136,5 +133,13 @@ describe('admin quotes actions', () => {
 		const del = await callAction('delete', { id: ROW_ID });
 		expect(del.result).toMatchObject({ success: true });
 		expect(state.deletes).toHaveLength(1);
+	});
+
+	it('stops the action when the guard rejects (no db writes)', async () => {
+		guardMock.mockRejectedValueOnce(new Error('denied'));
+		const { result, thrown } = await callAction('create', { content: 'x' });
+		expect(result).toBeUndefined();
+		expect(thrown).toBeInstanceOf(Error);
+		expect(state.inserts).toHaveLength(0);
 	});
 });

@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
+	import type { ActionResult } from '@sveltejs/kit';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Empty } from '$lib/components/ui/empty';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { DeleteConfirm } from '$lib/components/admin';
 	import IconBulb from '@tabler/icons-svelte-runes/icons/bulb';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
@@ -22,6 +23,8 @@
 	let dialogOpen = $state(false);
 	let editing = $state<ThoughtRow | null>(null);
 	let fieldContent = $state('');
+	// Double-submit guard (C3 review): kit does not merge submissions.
+	let submitting = $state(false);
 
 	// Dashboard 撰写 deep link: /admin/thoughts?add=1 opens the dialog once.
 	let addConsumed = false;
@@ -42,6 +45,21 @@
 		editing = row;
 		fieldContent = row.content;
 		dialogOpen = true;
+	}
+
+	/** Close the dialog once an action succeeds; failures keep it open with the error shown. */
+	function closeOnSuccess() {
+		return async ({
+			result,
+			update
+		}: {
+			result: ActionResult;
+			update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+		}) => {
+			submitting = false;
+			if (result.type !== 'failure') dialogOpen = false;
+			await update();
+		};
 	}
 
 	// ── Delete confirm ──
@@ -88,16 +106,15 @@
 
 	<!-- 写一条 / 编辑思考对话框 -->
 	<Dialog.Root bind:open={dialogOpen}>
-		<Dialog.Content class="sm:max-w-lg">
+		<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>
 			<form
 				method="post"
 				action={editing ? '?/update' : '?/create'}
 				class="flex flex-col"
-				use:enhance={() =>
-					async ({ result, update }) => {
-						if (result.type === 'success') dialogOpen = false;
-						await update();
-					}}
+				use:enhance={() => {
+					submitting = true;
+					return closeOnSuccess();
+				}}
 			>
 				{#if editing}
 					<input type="hidden" name="id" value={editing.id} />
@@ -112,6 +129,9 @@
 						{/snippet}
 					</Dialog.Close>
 				</div>
+				{#if errorMessage}
+					<p role="alert" class="px-5 pt-3 text-sm text-destructive">{errorMessage}</p>
+				{/if}
 				<div class="px-5 py-4">
 					<label class="grid gap-1.5">
 						<span class="text-sm font-medium">
@@ -132,7 +152,7 @@
 							<Button variant="outline" size="sm" {...props}>取消</Button>
 						{/snippet}
 					</Dialog.Close>
-					<Button type="submit" size="sm" disabled={!fieldContent.trim()}>
+					<Button type="submit" size="sm" disabled={submitting || !fieldContent.trim()}>
 						{editing ? '保存' : '发布'}
 					</Button>
 				</div>
@@ -140,35 +160,14 @@
 		</Dialog.Content>
 	</Dialog.Root>
 
-	<!-- 删除确认 -->
-	<AlertDialog.Root
+	<DeleteConfirm
 		open={deleteTarget !== null}
-		onOpenChange={(open) => {
-			if (!open) deleteTarget = null;
-		}}
-	>
-		<AlertDialog.Content>
-			<AlertDialog.Header>
-				<AlertDialog.Title>删除思考</AlertDialog.Title>
-				<AlertDialog.Description>将删除这条思考，此操作不可撤销。</AlertDialog.Description>
-			</AlertDialog.Header>
-			<AlertDialog.Footer>
-				<AlertDialog.Cancel>取消</AlertDialog.Cancel>
-				<form
-					method="post"
-					action="?/delete"
-					use:enhance={() =>
-						async ({ result, update }) => {
-							if (result.type === 'success') deleteTarget = null;
-							await update();
-						}}
-				>
-					<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
-					<Button type="submit" variant="destructive">删除</Button>
-				</form>
-			</AlertDialog.Footer>
-		</AlertDialog.Content>
-	</AlertDialog.Root>
+		title="删除思考"
+		description="将删除这条思考，此操作不可撤销。"
+		id={deleteTarget?.id ?? ''}
+		error={deleteTarget ? errorMessage : null}
+		onclose={() => (deleteTarget = null)}
+	/>
 
 	<!-- 思考列表（流式加载：先骨架后内容，ui-ux C1） -->
 	<div class="min-h-0 flex-1 overflow-auto">
@@ -187,15 +186,15 @@
 					</div>
 				</Empty>
 			{:else}
-				<div class="mx-auto max-w-4xl divide-y" role="feed" aria-label="思考列表">
+				<div class="mx-auto max-w-4xl divide-y" role="list" aria-label="思考列表">
 					{#each rows as row (row.id)}
-						<article class="group px-4 py-5 transition-colors hover:bg-muted/50">
+						<article role="listitem" class="group px-4 py-5 transition-colors hover:bg-muted/50">
 							<p class="text-base leading-7 wrap-break-word whitespace-pre-wrap">{row.content}</p>
 							<footer class="mt-4 flex flex-wrap items-center justify-between gap-3">
 								<div
 									class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground"
 								>
-									<time>{row.dateLabel}</time>
+									<span>{row.dateLabel}</span>
 								</div>
 								<div
 									class="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"

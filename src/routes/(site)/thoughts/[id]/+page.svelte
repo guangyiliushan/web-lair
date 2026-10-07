@@ -23,8 +23,10 @@
 		{m.thoughts_back()}
 	</a>
 
+	<h1 class="sr-only">{m.thoughts_title()}</h1>
+
 	<div class="mt-10">
 		<p class="text-xl leading-relaxed wrap-break-word whitespace-pre-wrap">{data.row.content}</p>
-		<time class="mt-6 block text-sm text-muted-foreground">{data.row.dateLabel}</time>
+		<span class="mt-6 block text-sm text-muted-foreground">{data.row.dateLabel}</span>
 	</div>
 </article>

@@ -117,6 +117,14 @@ describe('admin moments actions', () => {
 		expect(malformed.result).toMatchObject({ status: 400, data: { error: '缺少微记 ID' } });
 		expect(state.deletes).toHaveLength(0);
 
+		const malformedUpdate = await callAction('update', { id: 'nope', content: 'x', type: 'life' });
+		expect(malformedUpdate.result).toMatchObject({ status: 400, data: { error: '缺少微记 ID' } });
+		expect(state.updates).toHaveLength(0);
+
+		const badKindUpdate = await callAction('update', { id: ROW_ID, content: 'x', type: 'math' });
+		expect(badKindUpdate.result).toMatchObject({ status: 400, data: { error: '微记类型无效' } });
+		expect(state.updates).toHaveLength(0);
+
 		state.updatedRows = [];
 		const miss = await callAction('update', { id: ROW_ID, content: 'x', type: 'life' });
 		expect(miss.result).toMatchObject({ status: 404, data: { error: '微记不存在' } });
@@ -127,8 +135,22 @@ describe('admin moments actions', () => {
 		expect(hit.result).toMatchObject({ success: true });
 		expect(state.updates[0].values).toEqual({ content: '更新', type: 'media' });
 
+		state.deletedRows = [];
+		const missDelete = await callAction('delete', { id: ROW_ID });
+		expect(missDelete.result).toMatchObject({ status: 404, data: { error: '微记不存在' } });
+		state.deletes = [];
+
+		state.deletedRows = [{ id: ROW_ID }];
 		const del = await callAction('delete', { id: ROW_ID });
 		expect(del.result).toMatchObject({ success: true });
 		expect(state.deletes).toHaveLength(1);
+	});
+
+	it('stops the action when the guard rejects (no db writes)', async () => {
+		guardMock.mockRejectedValueOnce(new Error('denied'));
+		const { result, thrown } = await callAction('create', { content: 'x', type: 'life' });
+		expect(result).toBeUndefined();
+		expect(thrown).toBeInstanceOf(Error);
+		expect(state.inserts).toHaveLength(0);
 	});
 });

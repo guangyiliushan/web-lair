@@ -24,6 +24,8 @@
 		{m.quotes_back()}
 	</a>
 
+	<h1 class="sr-only">{m.quotes_title()}</h1>
+
 	<blockquote class="mt-10 border-l-2 border-primary/60 pl-6">
 		<IconQuote class="size-5 text-muted-foreground/50" />
 		<p class="mt-3 text-xl leading-relaxed">{data.row.content}</p>
@@ -34,7 +36,7 @@
 			{#if data.row.source}
 				<span class="italic">《{data.row.source}》</span>
 			{/if}
-			<time>{data.row.dateLabel}</time>
+			<span>{data.row.dateLabel}</span>
 		</footer>
 	</blockquote>
 </article>

@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
+	import type { ActionResult } from '@sveltejs/kit';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Empty } from '$lib/components/ui/empty';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { DeleteConfirm } from '$lib/components/admin';
 	import IconQuote from '@tabler/icons-svelte-runes/icons/quote';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
@@ -25,6 +26,8 @@
 	let fieldContent = $state('');
 	let fieldAuthor = $state('');
 	let fieldSource = $state('');
+	// Double-submit guard (C3 review): kit does not merge submissions.
+	let submitting = $state(false);
 
 	// Dashboard 撰写 deep link: /admin/quotes?add=1 opens the dialog once.
 	let addConsumed = false;
@@ -49,6 +52,21 @@
 		fieldAuthor = row.author ?? '';
 		fieldSource = row.source ?? '';
 		dialogOpen = true;
+	}
+
+	/** Close the dialog once an action succeeds; failures keep it open with the error shown. */
+	function closeOnSuccess() {
+		return async ({
+			result,
+			update
+		}: {
+			result: ActionResult;
+			update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+		}) => {
+			submitting = false;
+			if (result.type !== 'failure') dialogOpen = false;
+			await update();
+		};
 	}
 
 	// ── Delete confirm ──
@@ -95,32 +113,32 @@
 
 	<!-- 添加 / 编辑摘录对话框 -->
 	<Dialog.Root bind:open={dialogOpen}>
-		<Dialog.Content class="sm:max-w-lg">
+		<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>
 			<form
 				method="post"
 				action={editing ? '?/update' : '?/create'}
 				class="flex flex-col"
-				use:enhance={() =>
-					async ({ result, update }) => {
-						if (result.type === 'success') dialogOpen = false;
-						await update();
-					}}
+				use:enhance={() => {
+					submitting = true;
+					return closeOnSuccess();
+				}}
 			>
 				{#if editing}
 					<input type="hidden" name="id" value={editing.id} />
 				{/if}
-				<Dialog.Header>
-					<div class="flex items-center justify-between gap-3">
-						<Dialog.Title>{editing ? '编辑摘录' : '添加摘录'}</Dialog.Title>
-						<Dialog.Close>
-							{#snippet child({ props })}
-								<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
-									<IconX class="size-4" />
-								</Button>
-							{/snippet}
-						</Dialog.Close>
-					</div>
-				</Dialog.Header>
+				<div class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
+					<Dialog.Title>{editing ? '编辑摘录' : '添加摘录'}</Dialog.Title>
+					<Dialog.Close>
+						{#snippet child({ props })}
+							<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
+								<IconX class="size-4" />
+							</Button>
+						{/snippet}
+					</Dialog.Close>
+				</div>
+				{#if errorMessage}
+					<p role="alert" class="px-5 pt-3 text-sm text-destructive">{errorMessage}</p>
+				{/if}
 				<div class="grid gap-4 px-5 py-4">
 					<div class="grid gap-1.5">
 						<label for="quote-content" class="text-sm font-medium">
@@ -154,49 +172,28 @@
 						/>
 					</div>
 				</div>
-				<Dialog.Footer class="border-t px-4 py-2">
+				<div class="flex shrink-0 items-center justify-end gap-2 border-t px-4 py-2">
 					<Dialog.Close>
 						{#snippet child({ props })}
 							<Button variant="outline" size="sm" {...props}>取消</Button>
 						{/snippet}
 					</Dialog.Close>
-					<Button type="submit" size="sm" disabled={!fieldContent.trim()}>
+					<Button type="submit" size="sm" disabled={submitting || !fieldContent.trim()}>
 						{editing ? '保存' : '添加'}
 					</Button>
-				</Dialog.Footer>
+				</div>
 			</form>
 		</Dialog.Content>
 	</Dialog.Root>
 
-	<!-- 删除确认 -->
-	<AlertDialog.Root
+	<DeleteConfirm
 		open={deleteTarget !== null}
-		onOpenChange={(open) => {
-			if (!open) deleteTarget = null;
-		}}
-	>
-		<AlertDialog.Content>
-			<AlertDialog.Header>
-				<AlertDialog.Title>删除摘录</AlertDialog.Title>
-				<AlertDialog.Description>将删除这条摘录，此操作不可撤销。</AlertDialog.Description>
-			</AlertDialog.Header>
-			<AlertDialog.Footer>
-				<AlertDialog.Cancel>取消</AlertDialog.Cancel>
-				<form
-					method="post"
-					action="?/delete"
-					use:enhance={() =>
-						async ({ result, update }) => {
-							if (result.type === 'success') deleteTarget = null;
-							await update();
-						}}
-				>
-					<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
-					<Button type="submit" variant="destructive">删除</Button>
-				</form>
-			</AlertDialog.Footer>
-		</AlertDialog.Content>
-	</AlertDialog.Root>
+		title="删除摘录"
+		description="将删除这条摘录，此操作不可撤销。"
+		id={deleteTarget?.id ?? ''}
+		error={deleteTarget ? errorMessage : null}
+		onclose={() => (deleteTarget = null)}
+	/>
 
 	<!-- 摘录列表（流式加载：先骨架后内容，ui-ux C1） -->
 	<div class="min-h-0 flex-1 overflow-auto">
@@ -215,9 +212,10 @@
 					</div>
 				</Empty>
 			{:else}
-				<div class="mx-auto max-w-5xl">
+				<div class="mx-auto max-w-5xl" role="list" aria-label="摘录列表">
 					{#each rows as row (row.id)}
 						<article
+							role="listitem"
 							class="group border-b px-4 py-4 transition-colors last:border-b-0 hover:bg-muted/50"
 						>
 							<div class="flex gap-3">
@@ -233,16 +231,17 @@
 										{#if row.source}
 											<span class="italic">《{row.source}》</span>
 										{/if}
-										<time class="text-muted-foreground/70">{row.dateLabel}</time>
+										<span class="text-muted-foreground/70">{row.dateLabel}</span>
 									</div>
 								</div>
 								<div
-									class="flex shrink-0 items-start gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+									class="flex shrink-0 items-start gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
 								>
 									<Button
 										variant="outline"
 										size="sm"
 										class="h-8 gap-1 px-2 text-xs"
+										aria-label="编辑摘录"
 										onclick={() => openEdit(row)}
 									>
 										<IconPencil class="size-3.5" />
@@ -252,6 +251,7 @@
 										variant="outline"
 										size="sm"
 										class="h-8 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+										aria-label="删除摘录"
 										onclick={() => (deleteTarget = row)}
 									>
 										<IconTrash class="size-3.5" />

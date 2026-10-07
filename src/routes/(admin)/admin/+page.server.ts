@@ -1,14 +1,16 @@
 import { ne, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { moments, notes, posts, quotes, thoughts } from '$lib/server/db/content';
+import { requireAdminRole } from '$lib/server/authz';
 import type { PageServerLoad } from './$types';
 
 /**
- * Admin dashboard (C3): the five quick-action counters read real rows
- * (posts exclude trash). The stat cards below stay mock until their own
+ * Admin dashboard (C3): the load is admin-guarded and the five quick-action
+ * counters read real rows (posts exclude trash). The stat cards below stay mock until their own
  * batches wire their sources.
  */
 export const load: PageServerLoad = async () => {
+	await requireAdminRole();
 	const [[postRow], [noteRow], [quoteRow], [thoughtRow], [momentRow]] = await Promise.all([
 		db
 			.select({ count: sql<number>`count(*)`.mapWith(Number) })

@@ -13,9 +13,11 @@
 
 <div class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0">
 	<div class="min-w-0">
-		<h1 class="text-[28px] leading-tight font-medium">{m.thoughts_title()}</h1>
+		<h1 id="thoughts-heading" class="text-[28px] leading-tight font-medium">
+			{m.thoughts_title()}
+		</h1>
 		<p class="mt-2 text-sm text-muted-foreground">{m.nav_more_thoughts_desc()}</p>
-		<div class="mt-6 mb-2 h-px w-8 bg-primary/70"></div>
+		<div class="mt-6 mb-6 h-px w-8 bg-primary/70"></div>
 	</div>
 
 	{#await data.rows}
@@ -28,9 +30,9 @@
 		{#if rows.length === 0}
 			<p class="py-6 text-sm text-muted-foreground">{m.thoughts_empty()}</p>
 		{:else}
-			<div class="divide-y divide-border/60">
+			<div class="divide-y divide-border/60" role="list" aria-labelledby="thoughts-heading">
 				{#each rows as row (row.id)}
-					<article class="group py-6">
+					<article role="listitem" class="group py-6">
 						<a href={siteHref(`/thoughts/${row.id}`)} class="block">
 							<div class="flex items-start gap-3">
 								<IconBulb class="mt-1 size-4 shrink-0 text-muted-foreground/60" />
@@ -38,7 +40,7 @@
 									<p class="text-base leading-7 wrap-break-word whitespace-pre-wrap">
 										{row.content}
 									</p>
-									<time class="mt-2 block text-xs text-muted-foreground">{row.dateLabel}</time>
+									<span class="mt-2 block text-xs text-muted-foreground">{row.dateLabel}</span>
 								</div>
 							</div>
 						</a>

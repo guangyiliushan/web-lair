@@ -100,6 +100,10 @@ describe('admin thoughts actions', () => {
 		expect(malformed.result).toMatchObject({ status: 400, data: { error: '缺少思考 ID' } });
 		expect(state.updates).toHaveLength(0);
 
+		const malformedDelete = await callAction('delete', { id: 'nope' });
+		expect(malformedDelete.result).toMatchObject({ status: 400, data: { error: '缺少思考 ID' } });
+		expect(state.deletes).toHaveLength(0);
+
 		state.updatedRows = [];
 		const miss = await callAction('update', { id: ROW_ID, content: 'x' });
 		expect(miss.result).toMatchObject({ status: 404, data: { error: '思考不存在' } });
@@ -118,5 +122,13 @@ describe('admin thoughts actions', () => {
 		const del = await callAction('delete', { id: ROW_ID });
 		expect(del.result).toMatchObject({ success: true });
 		expect(state.deletes).toHaveLength(1);
+	});
+
+	it('stops the action when the guard rejects (no db writes)', async () => {
+		guardMock.mockRejectedValueOnce(new Error('denied'));
+		const { result, thrown } = await callAction('create', { content: 'x' });
+		expect(result).toBeUndefined();
+		expect(thrown).toBeInstanceOf(Error);
+		expect(state.inserts).toHaveLength(0);
 	});
 });

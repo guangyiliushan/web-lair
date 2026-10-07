@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
 
@@ -27,7 +27,7 @@ function cleanup(): void {
 	psql(`delete from moments where content like 'e2e-c3-%'`);
 }
 
-test.describe.configure({ mode: 'serial', timeout: 120_000 });
+test.describe.configure({ mode: 'serial', timeout: 180_000 });
 test.use(zhCnLocale);
 
 test.beforeAll(() => {
@@ -41,28 +41,15 @@ test.afterAll(() => {
 	cleanup();
 });
 
-/** Click a control, retrying until the expected state flip survives hydration. */
-async function clickUntil(page: Page, click: () => Promise<void>, settle: () => Promise<void>) {
-	await expect(async () => {
-		try {
-			await click();
-		} catch {
-			// ignore stale-element races while the page is still settling
-		}
-		await settle();
-	}).toPass({ timeout: 20_000 });
-}
-
 test.describe('micro C3 admin', () => {
 	test('quotes: create → edit → delete round trip through the real table', async ({ page }) => {
 		await page.goto('/admin/quotes');
 		const dialog = page.getByRole('dialog');
 
-		await clickUntil(
-			page,
-			() => page.getByRole('button', { name: '添加摘录' }).click({ timeout: 5000 }),
-			() => expect(dialog).toBeVisible({ timeout: 5000 })
-		);
+		await expect(async () => {
+			await page.getByRole('button', { name: '添加摘录' }).click({ timeout: 5000 });
+			await expect(dialog).toBeVisible({ timeout: 5000 });
+		}).toPass({ timeout: 20_000 });
 		await dialog.getByLabel('内容').fill(CRUD_QUOTE);
 		await dialog.getByLabel('作者').fill('e2e 作者');
 		await dialog.getByRole('button', { name: '添加' }).click({ timeout: 5000 });
@@ -71,10 +58,14 @@ test.describe('micro C3 admin', () => {
 		expect(psql(`select count(*) from quotes where content = '${CRUD_QUOTE}'`)).toBe('1');
 
 		const row = page.locator('article', { hasText: CRUD_QUOTE });
-		await row.hover();
-		await row.getByRole('button', { name: '编辑' }).click({ timeout: 5000 });
-		await expect(dialog).toBeVisible({ timeout: 20_000 });
+		await expect(async () => {
+			await page.mouse.move(0, 0);
+			await row.hover();
+			await row.getByRole('button', { name: '编辑摘录' }).click({ timeout: 3000 });
+			await expect(dialog).toBeVisible({ timeout: 3000 });
+		}).toPass({ timeout: 20_000 });
 		await expect(dialog.getByLabel('内容')).toHaveValue(CRUD_QUOTE);
+		await expect(dialog.getByLabel('作者')).toHaveValue('e2e 作者');
 		await dialog.getByLabel('内容').fill(CRUD_QUOTE_EDITED);
 		await dialog.getByRole('button', { name: '保存' }).click({ timeout: 5000 });
 		await expect(dialog).toBeHidden({ timeout: 20_000 });
@@ -82,10 +73,13 @@ test.describe('micro C3 admin', () => {
 		expect(psql(`select count(*) from quotes where content = '${CRUD_QUOTE_EDITED}'`)).toBe('1');
 
 		const editedRow = page.locator('article', { hasText: CRUD_QUOTE_EDITED });
-		await editedRow.hover();
-		await editedRow.getByRole('button', { name: '删除' }).click({ timeout: 5000 });
 		const confirm = page.getByRole('alertdialog');
-		await expect(confirm).toBeVisible({ timeout: 20_000 });
+		await expect(async () => {
+			await page.mouse.move(0, 0);
+			await editedRow.hover();
+			await editedRow.getByRole('button', { name: '删除摘录' }).click({ timeout: 3000 });
+			await expect(confirm).toBeVisible({ timeout: 3000 });
+		}).toPass({ timeout: 20_000 });
 		await confirm.getByRole('button', { name: '删除' }).click({ timeout: 5000 });
 		await expect(confirm).toBeHidden({ timeout: 20_000 });
 		await expect(page.getByText(CRUD_QUOTE_EDITED)).toHaveCount(0, { timeout: 20_000 });
@@ -169,6 +163,11 @@ test.describe('micro C3 public', () => {
 		await page.goto(`/zh-cn/thoughts/${id}`);
 		await expect(page.getByText(FIX_THOUGHT)).toBeVisible({ timeout: 20_000 });
 		await expect(page.getByRole('link', { name: '返回思考' })).toBeVisible();
+
+		const malformed = await page.goto('/zh-cn/thoughts/not-a-uuid');
+		expect(malformed?.status()).toBe(404);
+		const missing = await page.goto('/zh-cn/thoughts/00000000-0000-7000-8000-000000000000');
+		expect(missing?.status()).toBe(404);
 	});
 
 	test('moments: the kind filter narrows the stream and the detail renders votes', async ({
@@ -193,5 +192,10 @@ test.describe('micro C3 public', () => {
 		await page.goto(`/zh-cn/moments/${id}`);
 		await expect(page.getByText(FIX_MOMENT)).toBeVisible({ timeout: 20_000 });
 		await expect(page.getByRole('link', { name: '返回微记' })).toBeVisible();
+
+		const malformed = await page.goto('/zh-cn/moments/not-a-uuid');
+		expect(malformed?.status()).toBe(404);
+		const missing = await page.goto('/zh-cn/moments/00000000-0000-7000-8000-000000000000');
+		expect(missing?.status()).toBe(404);
 	});
 });

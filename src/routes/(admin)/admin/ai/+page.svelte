@@ -353,7 +353,7 @@
 
 <!-- ── Memory dialog ────────────────────────────────────────────────── -->
 <Dialog.Root bind:open={memoryDialogOpen}>
-	<Dialog.Content class="sm:max-w-lg">
+	<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>
 		<form
 			method="post"
 			action="?/saveMemory"
