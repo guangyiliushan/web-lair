@@ -104,7 +104,7 @@ describe('options registry (AI-1.1)', () => {
 		await expect(getOption('site.default_lang')).resolves.toBe('zh-cn');
 	});
 
-	it('ships the micro line ai.translation key with §17.5 defaults', async () => {
+	it('ships the micro line ai.translation key with ledger §17.5 defaults', async () => {
 		state.selectRows = [[]];
 		await expect(getOption('ai.translation')).resolves.toEqual({
 			minChars: 300,
@@ -117,7 +117,19 @@ describe('options registry (AI-1.1)', () => {
 		await expect(
 			setOption('ai.translation', { minChars: 12.5, notesAuto: true })
 		).rejects.toThrow();
+		// notesAuto is required (omitting it must not fall through as undefined).
+		await expect(setOption('ai.translation', { minChars: 300 } as never)).rejects.toThrow();
 		expect(state.insertCalls).toHaveLength(0);
+	});
+
+	it('accepts and persists a valid ai.translation write (positive control)', async () => {
+		state.selectRows = [];
+		await setOption('ai.translation', { minChars: 450, notesAuto: false });
+		expect(state.insertCalls).toHaveLength(1);
+		expect(state.insertCalls[0].values).toEqual({
+			name: 'ai.translation',
+			value: { minChars: 450, notesAuto: false }
+		});
 	});
 
 	it('falls back to the default (with a warning) on a corrupt stored value', async () => {

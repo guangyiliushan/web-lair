@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
+import { psql } from './support';
 
 /**
  * Comment review queue (B2) - owner flow against the real page and the real
@@ -17,14 +17,6 @@ const CATEGORY = '00000000-0000-7000-8000-000000000010';
 const POST = '00000000-0000-7000-8000-000000000011';
 const ACTIVE = '00000000-0000-7000-8000-000000000001';
 const EXTRA = '00000000-0000-7000-8000-000000000002';
-
-function psql(sql: string): string {
-	return execFileSync(
-		'docker',
-		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', 'local', '-tAc', sql],
-		{ encoding: 'utf8' }
-	).trim();
-}
 
 test.describe.configure({ mode: 'serial' });
 

@@ -93,7 +93,7 @@ export const optionRegistry = {
 			minChars: z.number('必须为数字').int('必须为整数').min(1, '至少为 1'),
 			notesAuto: z.boolean()
 		}),
-		// Micro-content line §17.5 (C2): automatic enqueue threshold for
+		// Micro-content line (ledger §17.5 / plan §1.6, C2): auto-enqueue
 		// posts + notes - content below `minChars` produces no translation
 		// candidate, manual translation is never gated. `notesAuto` opts
 		// the notes surface into automatic enqueue (site default stays

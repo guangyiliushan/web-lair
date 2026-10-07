@@ -190,7 +190,7 @@ describe('paraglide message contract', () => {
 			for (const key of usedKeys) {
 				if (!compiled.includes(`export const ${key} `)) {
 					stale.push(
-						`${key} missing from ${file} — run: npx paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide`
+						`${key} missing from ${file} — run any vite process (dev / build / vitest) to regenerate; the bare paraglide-js CLI is banned since P3-a (it drops urlPatterns/routeStrategies)`
 					);
 				}
 			}

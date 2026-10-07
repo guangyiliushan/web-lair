@@ -303,7 +303,7 @@
 	<section class="flex flex-col gap-6">
 		<header>
 			<h2 class="text-base font-medium">开关与阈值</h2>
-			<p class="mt-1 text-xs text-muted-foreground">审核漏斗、预算护栏、翻译门槛与写作风格指南。</p>
+			<p class="mt-1 text-xs text-muted-foreground">审核漏斗、预算护栏、写作风格指南与翻译门槛。</p>
 		</header>
 
 		<Alert.Root>
@@ -540,7 +540,7 @@
 			<h3 class="text-sm font-semibold">自动翻译（入队门槛）</h3>
 			<div class="grid gap-3 sm:grid-cols-3">
 				<Field.Field>
-					<Field.Label for="translation-min-chars">最小字数（自动入队门槛）</Field.Label>
+					<Field.Label for="translation-min-chars">最小字数</Field.Label>
 					<Input
 						id="translation-min-chars"
 						name="minChars"

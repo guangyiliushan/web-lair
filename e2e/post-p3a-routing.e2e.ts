@@ -1,6 +1,6 @@
-import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
+import { psql } from './support';
 
 /**
  * P3-a routing nails (roadmap W1 #1, ledger §9.20.2) against the built site:
@@ -41,14 +41,6 @@ const TITLE_ONLY_EN = 'E2E P3A only english';
 const TITLE_SCHEDULED = 'E2E P3A scheduled future';
 const TITLE_ZH_DRAFT = 'E2E P3A 中文草稿';
 const BODY_TEXT = 'Hello world from P3-a.';
-
-function psql(sql: string): string {
-	return execFileSync(
-		'docker',
-		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', 'local', '-tAc', sql],
-		{ encoding: 'utf8' }
-	).trim();
-}
 
 function cleanup(): void {
 	psql(`delete from posts where slug like 'e2e-p3a%'`);

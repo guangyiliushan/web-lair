@@ -26,6 +26,13 @@ test.describe('micro C2 routes', () => {
 			expect(response?.status(), path).toBe(404);
 		}
 	});
+
+	test('bare paths redirect to the localized route (307)', async ({ page }) => {
+		for (const path of ['/quotes', '/thoughts', '/moments']) {
+			await page.goto(path);
+			expect(new URL(page.url()).pathname, path).toBe(`/zh-cn${path}`);
+		}
+	});
 });
 
 test.describe('micro C2 navigation', () => {
@@ -76,5 +83,14 @@ test.describe('micro C2 navigation', () => {
 			'href',
 			'/admin/moments'
 		);
+	});
+
+	test('dashboard quick actions carry the five micro cards', async ({ page }) => {
+		await page.goto('/admin');
+		const quick = page.locator('section', { hasText: '快速操作' }).first();
+		for (const title of ['博文', '手记', '摘录', '思考', '微记']) {
+			await expect(quick.getByText(title, { exact: true })).toBeVisible();
+		}
+		await expect(quick.locator('a[href="/admin/moments"]').first()).toBeVisible();
 	});
 });

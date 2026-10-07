@@ -19,6 +19,15 @@ import { psql } from './support';
 const PROVIDER = 'E2E Provider';
 const MEMORY_TEXT = 'E2E memory card: keep the tone dry.';
 
+/** Options wiped around the spec so each run starts from registry defaults. */
+const AI_OPTION_KEYS = [
+	'ai.assignments',
+	'comments.moderation',
+	'ai.budget',
+	'ai.styleGuide',
+	'ai.translation'
+] as const;
+
 function byText(page: Page, text: string | RegExp): Locator {
 	return page.getByText(text).filter({ visible: true });
 }
@@ -27,25 +36,23 @@ function vis(locator: Locator): Locator {
 	return locator.filter({ visible: true });
 }
 
-test.describe.configure({ mode: 'serial' });
+// Serial suite: two sequential toPass(20s) loops in one test can exceed
+// the 30s default (10-04 lesson) - keep an explicit 120s budget.
+test.describe.configure({ mode: 'serial', timeout: 120_000 });
 
 test.beforeAll(() => {
 	psql(`delete from ai_providers where name = '${PROVIDER}'`);
-	psql(
-		`delete from options where name in ('ai.assignments', 'comments.moderation', 'ai.budget', 'ai.styleGuide', 'ai.translation')`
-	);
+	psql(`delete from options where name in (${AI_OPTION_KEYS.map((key) => `'${key}'`).join(', ')})`);
 	psql(`delete from ai_agent_memories where content like 'E2E memory card%'`);
 });
 
 test.afterAll(() => {
 	psql(`delete from ai_providers where name = '${PROVIDER}'`);
-	psql(
-		`delete from options where name in ('ai.assignments', 'comments.moderation', 'ai.budget', 'ai.styleGuide', 'ai.translation')`
-	);
+	psql(`delete from options where name in (${AI_OPTION_KEYS.map((key) => `'${key}'`).join(', ')})`);
 	psql(`delete from ai_agent_memories where content like 'E2E memory card%'`);
 });
 
-test('the settings page renders the three AI sections and the translation card', async ({
+test('the settings page renders the three AI sections and the moderation / translation cards', async ({
 	page
 }) => {
 	await page.goto('/admin/settings/ai');

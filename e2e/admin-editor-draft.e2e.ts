@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { psql } from './support';
 
 /**
  * P2 writing chain (ledger §9.2/§9.10) - owner flow against the real editor,
@@ -19,14 +19,6 @@ const CATEGORY = '00000000-0000-7000-8000-000000000020';
 const CATEGORY_NAME = 'E2E Editor';
 const TITLE = 'e2e writing chain';
 const SLUG = 'e2e-writing-chain';
-
-function psql(sql: string): string {
-	return execFileSync(
-		'docker',
-		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', 'local', '-tAc', sql],
-		{ encoding: 'utf8' }
-	).trim();
-}
 
 function byText(page: Page, text: string | RegExp): Locator {
 	return page.getByText(text).filter({ visible: true });
