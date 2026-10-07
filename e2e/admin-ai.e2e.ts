@@ -40,7 +40,7 @@ test.describe.configure({ mode: 'serial' });
 test.beforeAll(() => {
 	psql(`delete from ai_providers where name = '${PROVIDER}'`);
 	psql(
-		`delete from options where name in ('ai.assignments', 'comments.moderation', 'ai.budget', 'ai.styleGuide')`
+		`delete from options where name in ('ai.assignments', 'comments.moderation', 'ai.budget', 'ai.styleGuide', 'ai.translation')`
 	);
 	psql(`delete from ai_agent_memories where content like 'E2E memory card%'`);
 });
@@ -48,7 +48,7 @@ test.beforeAll(() => {
 test.afterAll(() => {
 	psql(`delete from ai_providers where name = '${PROVIDER}'`);
 	psql(
-		`delete from options where name in ('ai.assignments', 'comments.moderation', 'ai.budget', 'ai.styleGuide')`
+		`delete from options where name in ('ai.assignments', 'comments.moderation', 'ai.budget', 'ai.styleGuide', 'ai.translation')`
 	);
 	psql(`delete from ai_agent_memories where content like 'E2E memory card%'`);
 });
@@ -61,6 +61,7 @@ test('the settings page renders the three AI sections', async ({ page }) => {
 	await expect(byText(page, '功能位分配')).toBeVisible();
 	await expect(byText(page, '开关与阈值')).toBeVisible();
 	await expect(byText(page, '评论分诊（审核）')).toBeVisible();
+	await expect(byText(page, '自动翻译（入队门槛）')).toBeVisible();
 });
 
 test('creates a provider, probes it, and lists it', async ({ page }) => {
@@ -140,6 +141,29 @@ test('saves the moderation switches and thresholds', async ({ page }) => {
 			`select (value->>'enabled') || '|' || (value->>'linkThreshold') from options where name = 'comments.moderation'`
 		)
 	).toBe('true|3');
+});
+
+test('saves the translation enqueue threshold', async ({ page }) => {
+	await page.goto('/admin/settings/ai');
+
+	const minChars = vis(page.locator('#translation-min-chars'));
+	await expect(async () => {
+		await minChars.fill('450');
+		await expect(minChars).toHaveValue('450');
+	}).toPass({ timeout: 20000 });
+
+	await expect(async () => {
+		if (!(await byText(page, '翻译设置已保存').isVisible())) {
+			await page.getByRole('button', { name: '保存翻译设置' }).click();
+		}
+		await expect(byText(page, '翻译设置已保存')).toBeVisible();
+	}).toPass({ timeout: 20000 });
+
+	expect(
+		psql(
+			`select (value->>'minChars') || '|' || (value->>'notesAuto') from options where name = 'ai.translation'`
+		)
+	).toBe('450|true');
 });
 
 test('the AI console shows its empty states', async ({ page }) => {

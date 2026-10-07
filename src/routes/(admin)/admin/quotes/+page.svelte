@@ -209,7 +209,7 @@
 									variant="outline"
 									size="sm"
 									class="h-8 gap-1 px-2 text-xs"
-									href="/admin/says/{say.id}/edit"
+									href="/admin/quotes/{say.id}/edit"
 								>
 									<IconPencil class="size-3.5" />
 									<span class="hidden sm:inline">编辑</span>

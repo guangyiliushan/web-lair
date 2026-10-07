@@ -90,7 +90,8 @@
 	let budget = $state(untrack(() => ({ ...data.budget })));
 	let alertRatiosText = $state('');
 	let styleGuideText = $state('');
-	// True while one of the four block forms holds unsaved edits. The resync
+	let translation = $state(untrack(() => ({ ...data.translation })));
+	// True while one of the five block forms holds unsaved edits. The resync
 	// effect below must not clobber that state when an unrelated enhance (e.g.
 	// another row's "test connection") refreshes the load data (AI-2.1 review).
 	let dirty = $state(false);
@@ -105,6 +106,7 @@
 		const freshModeration = data.moderation;
 		const freshBudget = data.budget;
 		const freshStyleGuide = data.styleGuide;
+		const freshTranslation = data.translation;
 		if (dirty) return;
 		const nextProviders: Record<string, string> = {};
 		const nextModels: Record<string, string> = {};
@@ -121,6 +123,7 @@
 		budget = { ...freshBudget };
 		alertRatiosText = freshBudget.alertRatios.join(', ');
 		styleGuideText = freshStyleGuide.text;
+		translation = { ...freshTranslation };
 	});
 
 	const kindPlaceholder: Record<string, string> = {
@@ -300,7 +303,7 @@
 	<section class="flex flex-col gap-6">
 		<header>
 			<h2 class="text-base font-medium">开关与阈值</h2>
-			<p class="mt-1 text-xs text-muted-foreground">审核漏斗、预算护栏与写作风格指南。</p>
+			<p class="mt-1 text-xs text-muted-foreground">审核漏斗、预算护栏、翻译门槛与写作风格指南。</p>
 		</header>
 
 		<Alert.Root>
@@ -517,6 +520,56 @@
 				<Button type="submit" size="sm">
 					<IconDeviceFloppy data-icon="inline-start" />
 					保存风格指南
+				</Button>
+			</div>
+		</form>
+
+		<!-- 翻译门槛 -->
+		<form
+			method="post"
+			action="?/saveTranslation"
+			class="flex flex-col gap-4 rounded-lg border p-4"
+			oninput={() => (dirty = true)}
+			onchange={() => (dirty = true)}
+			use:enhance={() =>
+				async ({ result, update }) => {
+					if (result.type === 'success') dirty = false;
+					await update();
+				}}
+		>
+			<h3 class="text-sm font-semibold">自动翻译（入队门槛）</h3>
+			<div class="grid gap-3 sm:grid-cols-3">
+				<Field.Field>
+					<Field.Label for="translation-min-chars">最小字数（自动入队门槛）</Field.Label>
+					<Input
+						id="translation-min-chars"
+						name="minChars"
+						type="number"
+						min="1"
+						step="1"
+						bind:value={translation.minChars}
+					/>
+					<Field.Description>低于门槛不产翻译候选；手动翻译不受限。</Field.Description>
+				</Field.Field>
+			</div>
+			<div class="flex items-center justify-between gap-4">
+				<div>
+					<div class="text-sm font-medium">手记参与自动翻译</div>
+					<div class="text-xs text-muted-foreground">
+						关闭后仅博文按门槛自动入队；手动翻译始终可用。
+					</div>
+				</div>
+				<Switch
+					name="notesAuto"
+					bind:checked={translation.notesAuto}
+					onCheckedChange={() => (dirty = true)}
+					aria-label="手记参与自动翻译"
+				/>
+			</div>
+			<div class="flex items-center justify-end">
+				<Button type="submit" size="sm">
+					<IconDeviceFloppy data-icon="inline-start" />
+					保存翻译设置
 				</Button>
 			</div>
 		</form>

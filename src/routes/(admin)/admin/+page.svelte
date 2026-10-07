@@ -7,7 +7,8 @@
 	import IconArticle from '@tabler/icons-svelte-runes/icons/article';
 	import IconNotebook from '@tabler/icons-svelte-runes/icons/notebook';
 	import IconQuote from '@tabler/icons-svelte-runes/icons/quote';
-	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
+	import IconBulb from '@tabler/icons-svelte-runes/icons/bulb';
+	import IconWriting from '@tabler/icons-svelte-runes/icons/writing';
 	import IconChartBar from '@tabler/icons-svelte-runes/icons/chart-bar';
 	import IconUsers from '@tabler/icons-svelte-runes/icons/users';
 	import IconMessage from '@tabler/icons-svelte-runes/icons/message';
@@ -60,25 +61,32 @@
 			manageHref: '/admin/posts'
 		},
 		{
-			title: '日记',
+			title: '手记',
 			count: 188,
-			icon: IconPencil,
-			writeHref: '/admin/notes/edit',
-			manageHref: '/admin/notes'
-		},
-		{
-			title: '速记',
-			count: 88,
 			icon: IconNotebook,
 			writeHref: '/admin/notes/edit',
 			manageHref: '/admin/notes'
 		},
 		{
-			title: '说说',
+			title: '摘录',
 			count: 38,
 			icon: IconQuote,
-			writeHref: '/admin/says',
-			manageHref: '/admin/says'
+			writeHref: '/admin/quotes',
+			manageHref: '/admin/quotes'
+		},
+		{
+			title: '思考',
+			count: 88,
+			icon: IconBulb,
+			writeHref: '/admin/thoughts',
+			manageHref: '/admin/thoughts'
+		},
+		{
+			title: '微记',
+			count: 0,
+			icon: IconWriting,
+			writeHref: '/admin/moments',
+			manageHref: '/admin/moments'
 		}
 	];
 

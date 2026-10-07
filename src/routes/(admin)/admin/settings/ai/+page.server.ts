@@ -39,12 +39,13 @@ type ProviderFailPayload = {
  */
 export const load: PageServerLoad = async () => {
 	await requireAdminRole();
-	const [providers, assignments, moderation, budget, styleGuide] = await Promise.all([
+	const [providers, assignments, moderation, budget, styleGuide, translation] = await Promise.all([
 		db.select().from(aiProviders).orderBy(aiProviders.name),
 		getOption('ai.assignments'),
 		getOption('comments.moderation'),
 		getOption('ai.budget'),
-		getOption('ai.styleGuide')
+		getOption('ai.styleGuide'),
+		getOption('ai.translation')
 	]);
 	return {
 		headerTitle: 'AI 设定',
@@ -53,6 +54,7 @@ export const load: PageServerLoad = async () => {
 		moderation,
 		budget,
 		styleGuide,
+		translation,
 		// Presence of the env var, not the secret - the UI only shows the name.
 		envSet: Object.fromEntries(
 			providers.map((p) => [p.id, p.apiKeyEnv ? Boolean(env[p.apiKeyEnv]) : null])
@@ -288,5 +290,22 @@ export const actions: Actions = {
 			throw caught;
 		}
 		return { message: '风格指南已保存' };
+	},
+
+	saveTranslation: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const minCharsRaw = (form.get('minChars') ?? '').toString().trim();
+		if (minCharsRaw === '') return fail(400, { message: '最小字数不能为空' });
+		try {
+			await setOption('ai.translation', {
+				minChars: Number(minCharsRaw),
+				notesAuto: form.get('notesAuto') !== null
+			});
+		} catch (caught) {
+			if (caught instanceof z.ZodError) return fail(400, { message: firstIssueMessage(caught) });
+			throw caught;
+		}
+		return { message: '翻译设置已保存' };
 	}
 } satisfies Actions;

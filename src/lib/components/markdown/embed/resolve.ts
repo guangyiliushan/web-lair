@@ -44,8 +44,8 @@ const IMAGE_EXTENSIONS = new Set([
 	'ico'
 ]);
 
-/** Site-internal card paths (spec 3.4: lair posts / notes / thinking). */
-const SITE_EMBED_PATH_REGEX = /^\/(posts|notes|thinking)\//;
+/** Site-internal card paths (spec 3.4: lair posts / notes / thoughts). */
+const SITE_EMBED_PATH_REGEX = /^\/(posts|notes|thoughts)\//;
 
 export function imageExtension(url: string): string | null {
 	const clean = url.split(/[?#]/, 1)[0];

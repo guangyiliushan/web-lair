@@ -13,7 +13,8 @@ import {
 	IconWorld,
 	IconPencil,
 	IconBook,
-	IconHeart
+	IconHeart,
+	IconWriting
 } from '@tabler/icons-svelte-runes';
 import { m } from '$lib/paraglide/messages';
 
@@ -24,7 +25,7 @@ const t = {
 	nav_posts: m.nav_posts,
 	nav_notes: m.nav_notes,
 	nav_timeline: m.nav_timeline,
-	nav_thinking: m.nav_thinking,
+	nav_moments: m.nav_moments,
 	nav_more: m.nav_more,
 	nav_categories: m.nav_categories,
 	nav_about: m.nav_about,
@@ -37,14 +38,6 @@ const t = {
 	nav_home_twitter_desc: m.nav_home_twitter_desc,
 	nav_home_email: m.nav_home_email,
 	nav_home_email_desc: m.nav_home_email_desc,
-	nav_thinking_all: m.nav_thinking_all,
-	nav_thinking_categories: m.nav_thinking_categories,
-	nav_thinking_tech: m.nav_thinking_tech,
-	nav_thinking_life: m.nav_thinking_life,
-	nav_thinking_design: m.nav_thinking_design,
-	nav_thinking_reading: m.nav_thinking_reading,
-	nav_thinking_view_all: m.nav_thinking_view_all,
-	nav_thinking_write: m.nav_thinking_write,
 	nav_categories_all: m.nav_categories_all,
 	nav_categories_tech: m.nav_categories_tech,
 	nav_categories_tech_desc: m.nav_categories_tech_desc,
@@ -63,6 +56,8 @@ const t = {
 	nav_more_projects_desc: m.nav_more_projects_desc,
 	nav_more_quotes: m.nav_more_quotes,
 	nav_more_quotes_desc: m.nav_more_quotes_desc,
+	nav_more_thoughts: m.nav_more_thoughts,
+	nav_more_thoughts_desc: m.nav_more_thoughts_desc,
 	nav_more_warp: m.nav_more_warp,
 	nav_more_warp_desc: m.nav_more_warp_desc,
 	nav_posts_categories: m.nav_posts_categories,
@@ -346,10 +341,10 @@ export const navigationConfig: NavItem[] = [
 		children: [{ labelKey: 'nav_timeline_view_all', href: '/timeline' }]
 	},
 	{
-		key: 'nav_thinking',
-		labelKey: 'nav_thinking',
-		href: '/thinking',
-		icon: IconBulb
+		key: 'nav_moments',
+		labelKey: 'nav_moments',
+		href: '/moments',
+		icon: IconWriting
 	},
 	{
 		key: 'nav_more',
@@ -376,9 +371,15 @@ export const navigationConfig: NavItem[] = [
 						},
 						{
 							labelKey: 'nav_more_quotes',
-							href: '/says',
+							href: '/quotes',
 							descKey: 'nav_more_quotes_desc',
 							icon: IconQuote
+						},
+						{
+							labelKey: 'nav_more_thoughts',
+							href: '/thoughts',
+							descKey: 'nav_more_thoughts_desc',
+							icon: IconBulb
 						},
 						{
 							labelKey: 'nav_more_warp',
@@ -393,7 +394,8 @@ export const navigationConfig: NavItem[] = [
 		children: [
 			{ labelKey: 'nav_more_friends', href: '/friends' },
 			{ labelKey: 'nav_more_projects', href: '/projects' },
-			{ labelKey: 'nav_more_quotes', href: '/says' },
+			{ labelKey: 'nav_more_quotes', href: '/quotes' },
+			{ labelKey: 'nav_more_thoughts', href: '/thoughts' },
 			{ labelKey: 'nav_more_warp', href: 'https://travel.moe/go.html' }
 		]
 	}

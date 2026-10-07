@@ -144,11 +144,12 @@ describe('AI settings actions', () => {
 			'saveAssignments',
 			'saveModeration',
 			'saveBudget',
-			'saveStyleGuide'
+			'saveStyleGuide',
+			'saveTranslation'
 		]) {
 			await callAction(name, {});
 		}
-		expect(guardMock).toHaveBeenCalledTimes(7);
+		expect(guardMock).toHaveBeenCalledTimes(8);
 	});
 
 	it('rejects an invalid provider form before touching the database', async () => {
@@ -417,5 +418,31 @@ describe('AI settings actions', () => {
 		expect(result).toMatchObject({ message: '风格指南已保存' });
 		const optionsWrite = state.inserts.find((i) => i.table === options);
 		expect(optionsWrite?.values).toEqual({ name: 'ai.styleGuide', value: { text: 'dry tone' } });
+	});
+
+	it('validates and saves the translation threshold through the registry', async () => {
+		const empty = await callAction('saveTranslation', {});
+		expect(empty.result).toMatchObject({
+			status: 400,
+			data: { message: '最小字数不能为空' }
+		});
+
+		const bad = await callAction('saveTranslation', { minChars: 'abc', notesAuto: 'on' });
+		expect(bad.result).toMatchObject({ status: 400 });
+		expect(state.inserts).toHaveLength(0);
+
+		const ok = await callAction('saveTranslation', { minChars: '450', notesAuto: 'on' });
+		expect(ok.result).toMatchObject({ message: '翻译设置已保存' });
+		expect(state.inserts[state.inserts.length - 1].values).toEqual({
+			name: 'ai.translation',
+			value: { minChars: 450, notesAuto: true }
+		});
+
+		const off = await callAction('saveTranslation', { minChars: '300' });
+		expect(off.result).toMatchObject({ message: '翻译设置已保存' });
+		expect(state.inserts[state.inserts.length - 1].values).toEqual({
+			name: 'ai.translation',
+			value: { minChars: 300, notesAuto: false }
+		});
 	});
 });

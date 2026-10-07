@@ -88,6 +88,19 @@ export const optionRegistry = {
 		schema: z.object({ text: z.string().max(20000, '风格指南过长（≤20000 字）') }),
 		default: { text: '' }
 	},
+	'ai.translation': {
+		schema: z.object({
+			minChars: z.number('必须为数字').int('必须为整数').min(1, '至少为 1'),
+			notesAuto: z.boolean()
+		}),
+		// Micro-content line §17.5 (C2): automatic enqueue threshold for
+		// posts + notes - content below `minChars` produces no translation
+		// candidate, manual translation is never gated. `notesAuto` opts
+		// the notes surface into automatic enqueue (site default stays
+		// review-first); per-note override lives in `notes.meta.translate`
+		// mode. Cost guardrail = the existing ai.budget pause switch.
+		default: { minChars: 300, notesAuto: true }
+	},
 	'comments.moderation': {
 		schema: z.object({
 			enabled: z.boolean(),

@@ -10,6 +10,7 @@
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconFileText from '@tabler/icons-svelte-runes/icons/file-text';
 	import IconEye from '@tabler/icons-svelte-runes/icons/eye';
+	import IconBulb from '@tabler/icons-svelte-runes/icons/bulb';
 	import IconQuote from '@tabler/icons-svelte-runes/icons/quote';
 	import IconWriting from '@tabler/icons-svelte-runes/icons/writing';
 	import IconFolders from '@tabler/icons-svelte-runes/icons/folders';
@@ -38,8 +39,9 @@
 		{ title: m.admin_nav_drafts(), href: '/admin/drafts', icon: IconPencil },
 		{ title: m.admin_nav_pages(), href: '/admin/pages', icon: IconFileText },
 		{ title: m.admin_nav_readers(), href: '/admin/readers', icon: IconEye },
-		{ title: m.admin_nav_says(), href: '/admin/says', icon: IconQuote },
-		{ title: m.admin_nav_memos(), href: '/admin/memos', icon: IconWriting },
+		{ title: m.admin_nav_quotes(), href: '/admin/quotes', icon: IconQuote },
+		{ title: m.admin_nav_thoughts(), href: '/admin/thoughts', icon: IconBulb },
+		{ title: m.admin_nav_moments(), href: '/admin/moments', icon: IconWriting },
 		{ title: m.admin_nav_projects(), href: '/admin/projects', icon: IconFolders },
 		{ title: m.admin_nav_friends(), href: '/admin/friends', icon: IconUsers },
 		{ title: m.admin_nav_ai(), href: '/admin/ai', icon: IconSparkles },

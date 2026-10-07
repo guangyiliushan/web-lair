@@ -58,12 +58,13 @@ describe('options registry (AI-1.1)', () => {
 		});
 	});
 
-	it('ships exactly the planned keys (storage line adds media.purge; links adds friends.* / site.info)', () => {
+	it('ships exactly the planned keys (storage: media.purge; links: friends.* / site.info; micro: ai.translation)', () => {
 		expect([...optionKeys].sort()).toEqual(
 			[
 				'ai.assignments',
 				'ai.budget',
 				'ai.styleGuide',
+				'ai.translation',
 				'comments.moderation',
 				'friends.apply',
 				'friends.checks',
@@ -101,6 +102,22 @@ describe('options registry (AI-1.1)', () => {
 	it('returns a valid stored value as-is', async () => {
 		state.selectRows = [[{ value: 'zh-cn' }]];
 		await expect(getOption('site.default_lang')).resolves.toBe('zh-cn');
+	});
+
+	it('ships the micro line ai.translation key with §17.5 defaults', async () => {
+		state.selectRows = [[]];
+		await expect(getOption('ai.translation')).resolves.toEqual({
+			minChars: 300,
+			notesAuto: true
+		});
+	});
+
+	it('rejects non-positive or fractional ai.translation thresholds', async () => {
+		await expect(setOption('ai.translation', { minChars: 0, notesAuto: true })).rejects.toThrow();
+		await expect(
+			setOption('ai.translation', { minChars: 12.5, notesAuto: true })
+		).rejects.toThrow();
+		expect(state.insertCalls).toHaveLength(0);
 	});
 
 	it('falls back to the default (with a warning) on a corrupt stored value', async () => {

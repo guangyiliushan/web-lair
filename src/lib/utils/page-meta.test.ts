@@ -46,11 +46,12 @@ describe('page reserved slugs', () => {
 const SOFT_WARNED_SEGMENTS: ReadonlySet<string> = new Set([
 	'account',
 	'friends',
+	'moments',
 	'notes',
 	'posts',
 	'projects',
-	'says',
-	'thinking',
+	'quotes',
+	'thoughts',
 	'timeline'
 ]);
 

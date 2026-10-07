@@ -35,7 +35,7 @@ const POSITIVES: Record<string, string> = {
 	'https://leetcode.cn/problems/two-sum/': 'leetcode',
 	'/posts/hello-world': 'lair',
 	'/notes/some-note': 'lair',
-	'/thinking/42': 'lair'
+	'/thoughts/42': 'lair'
 };
 
 const NEGATIVES = [
