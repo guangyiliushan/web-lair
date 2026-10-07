@@ -178,7 +178,10 @@ test.describe('micro C3 public', () => {
 		await expect(page.getByText(FIX_MOMENT)).toBeVisible({ timeout: 20_000 });
 
 		await page.goto('/zh-cn/moments?kind=media');
-		await expect(page.getByRole('link', { name: '书影' })).toHaveAttribute('aria-current', 'true');
+		await expect(page.getByRole('link', { name: '书影', exact: true })).toHaveAttribute(
+			'aria-current',
+			'true'
+		);
 		const expectedMedia = Number(psql(`select count(*) from moments where type = 'media'`));
 		await expect(page.locator('article')).toHaveCount(expectedMedia, { timeout: 20_000 });
 		await expect(page.getByText(FIX_MOMENT)).toBeVisible({ timeout: 20_000 });
