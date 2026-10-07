@@ -136,7 +136,8 @@ const RETIRED_TABLE_NAMES = [
 const RETIRED_INDEX_NAMES = [
 	'notes_nid_desc_idx',
 	'notes_published_public_created_idx',
-	'notes_topic_id_idx'
+	'notes_topic_id_idx',
+	'projects_name_uniq'
 ];
 
 const JUNCTION_PKS: Record<string, string> = {
@@ -446,6 +447,14 @@ async function fileChecks(): Promise<void> {
 		expect(notesCols.includes(added), `notes.${added} missing`);
 	expect(/"title" text NOT NULL/.test(notesBlock![2]), 'notes.title must be NOT NULL');
 	expect(/"slug" text NOT NULL/.test(notesBlock![2]), 'notes.slug must be NOT NULL');
+
+	// projects reshape pins (projects plan §2.1 / §7 T1): retired columns and
+	// the column count - closes the negative faces flagged in the S-batch
+	// review (images/text gone; 21 columns total).
+	const projectsCols = tableColumns.get('projects') ?? [];
+	expect(projectsCols.length === 21, `projects column count = ${projectsCols.length}`);
+	for (const gone of ['images', 'text'])
+		expect(!projectsCols.includes(gone), `projects.${gone} should be retired`);
 
 	for (const def of indexDefs) {
 		if (OFFICIAL_GENERATED_TABLES.has(def.table)) continue;

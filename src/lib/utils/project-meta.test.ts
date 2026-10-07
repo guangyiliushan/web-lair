@@ -42,16 +42,17 @@ describe('project meta', () => {
 			gitee: null,
 			bitbucket: null,
 			site: 'projects_badge_site',
-			other: 'projects_provider_other'
+			other: 'projects_badge_other'
 		});
 	});
 
-	it('type guards accept the whitelists and reject everything else', () => {
-		expect(isProjectProvider('gitee')).toBe(true);
+	it('type guards accept every whitelist member and reject everything else', () => {
+		for (const provider of PROJECT_PROVIDERS) expect(isProjectProvider(provider)).toBe(true);
+		for (const provider of PROJECT_SYNC_PROVIDERS)
+			expect(isProjectSyncProvider(provider)).toBe(true);
+		for (const status of PROJECT_STATUSES) expect(isProjectStatus(status)).toBe(true);
 		expect(isProjectProvider('GitHub')).toBe(false);
-		expect(isProjectSyncProvider('gitlab')).toBe(true);
 		expect(isProjectSyncProvider('site')).toBe(false);
-		expect(isProjectStatus('published')).toBe(true);
 		expect(isProjectStatus('draft')).toBe(false);
 	});
 });

@@ -50,7 +50,7 @@ export const PROJECT_PROVIDER_LABEL_KEYS: Record<ProjectProvider, string | null>
 	gitee: null,
 	bitbucket: null,
 	site: 'projects_badge_site',
-	other: 'projects_provider_other'
+	other: 'projects_badge_other'
 };
 
 export function isProjectProvider(value: string): value is ProjectProvider {

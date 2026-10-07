@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { LINK_STATUSES } from '$lib/utils/link-meta';
 import {
 	PROJECT_PROVIDERS as META_PROJECT_PROVIDERS,
-	PROJECT_STATUSES as META_PROJECT_STATUSES
+	PROJECT_STATUSES as META_PROJECT_STATUSES,
+	PROJECT_SYNC_PROVIDERS
 } from '$lib/utils/project-meta';
 import { NOTE_MOODS, NOTES_STATUSES } from './note.schema';
 import { PROJECT_PROVIDERS, PROJECT_STATUSES } from './project.schema';
@@ -42,6 +43,12 @@ describe('enum drift guard', () => {
 
 	it('projects_status_check literals match the UI-facing status list', () => {
 		expect(new Set(checkLiterals('projects_status_check'))).toEqual(new Set(META_PROJECT_STATUSES));
+	});
+
+	it('projects_external_id_check literals match PROJECT_SYNC_PROVIDERS', () => {
+		expect(new Set(checkLiterals('projects_external_id_check'))).toEqual(
+			new Set(PROJECT_SYNC_PROVIDERS)
+		);
 	});
 
 	it('notes_status_check literals match NOTES_STATUSES', () => {
