@@ -428,7 +428,10 @@ describe('AI settings actions', () => {
 		});
 
 		const bad = await callAction('saveTranslation', { minChars: 'abc', notesAuto: 'on' });
-		expect(bad.result).toMatchObject({ status: 400 });
+		expect(bad.result).toMatchObject({
+			status: 400,
+			data: { message: expect.stringContaining('minChars') }
+		});
 		expect(state.inserts).toHaveLength(0);
 
 		const ok = await callAction('saveTranslation', { minChars: '450', notesAuto: 'on' });

@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { psql } from './support';
 
 /**
  * AI admin surface (AI-2) - owner flow against the real pages and database:
@@ -27,14 +27,6 @@ function vis(locator: Locator): Locator {
 	return locator.filter({ visible: true });
 }
 
-function psql(sql: string): string {
-	return execFileSync(
-		'docker',
-		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', 'local', '-tAc', sql],
-		{ encoding: 'utf8' }
-	).trim();
-}
-
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(() => {
@@ -53,7 +45,9 @@ test.afterAll(() => {
 	psql(`delete from ai_agent_memories where content like 'E2E memory card%'`);
 });
 
-test('the settings page renders the three AI sections', async ({ page }) => {
+test('the settings page renders the three AI sections and the translation card', async ({
+	page
+}) => {
 	await page.goto('/admin/settings/ai');
 	await expect(page.getByRole('button', { name: '添加服务商' })).toBeVisible({
 		timeout: 10000

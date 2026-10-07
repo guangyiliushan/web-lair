@@ -85,7 +85,8 @@ describe('micro-content navigation config (C2)', () => {
 			'/thoughts',
 			'https://travel.moe/go.html'
 		];
-		const megaItems = more?.megaMenu?.columns[0].items.map((child) => child.href) ?? [];
+		const megaItems =
+			more?.megaMenu?.columns.flatMap((column) => column.items).map((child) => child.href) ?? [];
 		expect(megaItems).toEqual(expected);
 		expect(more?.children?.map((child) => child.href) ?? []).toEqual(expected);
 	});
