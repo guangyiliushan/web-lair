@@ -132,7 +132,7 @@ const RETIRED_TABLE_NAMES = [
 	'owner_profiles'
 ];
 
-/** Composite-PK constraint names for junction tables. */
+/** Retired index names that must not reappear in the baseline. */
 const RETIRED_INDEX_NAMES = [
 	'notes_nid_desc_idx',
 	'notes_published_public_created_idx',
@@ -140,6 +140,7 @@ const RETIRED_INDEX_NAMES = [
 	'projects_name_uniq'
 ];
 
+/** Composite-PK constraint names for junction tables. */
 const JUNCTION_PKS: Record<string, string> = {
 	photo_tags: 'photo_tags_photo_id_tag_id_pk',
 	post_related_posts: 'post_related_posts_post_id_related_post_id_pk',
