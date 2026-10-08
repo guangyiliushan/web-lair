@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { untrack } from 'svelte';
 	import type { ActionResult } from '@sveltejs/kit';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
@@ -206,7 +207,6 @@
 	}
 
 	interface ImportPrefillPayload {
-		kind: 'repo' | 'og';
 		provider: string;
 		name: string;
 		description: string | null;
@@ -233,7 +233,12 @@
 	function applyPrefill(prefill: ImportPrefillPayload) {
 		createExternalId = prefill.externalId;
 		createFullName = prefill.fullName;
-		createProviderRaw = prefill.provider;
+		if (prefill.externalId) {
+			createProviderRaw = prefill.provider;
+		} else {
+			// OG imports land as site/other (§4.4); honor the resolved default.
+			createProvider = prefill.provider === 'other' ? 'other' : 'site';
+		}
 		fieldName = prefill.name;
 		fieldDescription = prefill.description ?? '';
 		fieldProjectUrl = prefill.projectUrl;
@@ -297,7 +302,32 @@
 
 	function runNumber(key: string): number {
 		const value = runResult?.[key];
-		return typeof value === 'number' ? value : Number(value ?? 0);
+		return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+	}
+
+	interface RunFailure {
+		provider: string;
+		account: string;
+		repo: string | null;
+		kind: string;
+	}
+
+	const runFailures = $derived(
+		Array.isArray(runResult?.failures) ? (runResult.failures as RunFailure[]) : []
+	);
+
+	/** Selection must not survive a tab switch: the bulk bar would act on rows
+	 * that are no longer visible (review). */
+	let lastFilter: string = untrack(() => data.filter);
+	$effect(() => {
+		if (data.filter !== lastFilter) {
+			lastFilter = data.filter;
+			selectedIds = [];
+		}
+	});
+
+	function isSyncProvider(provider: string): boolean {
+		return (PROJECT_SYNC_PROVIDERS as readonly string[]).includes(provider);
 	}
 </script>
 
@@ -369,6 +399,20 @@
 				</span>
 			{/if}
 			<span>{data.lastRun.createdLabel}</span>
+			{#if runFailures.length > 0}
+				<details class="w-full">
+					<summary class="cursor-pointer">{m.admin_projects_failures()}</summary>
+					<ul class="mt-1 grid gap-0.5 pl-4">
+						{#each runFailures as failure, index (index)}
+							<li>
+								{failure.provider}/{failure.account}{failure.repo ? ` · ${failure.repo}` : ''} — {ERROR_FNS[
+									failure.kind
+								]?.() ?? failure.kind}
+							</li>
+						{/each}
+					</ul>
+				</details>
+			{/if}
 		{:else}
 			<span>{m.admin_projects_last_run_none()}</span>
 		{/if}
@@ -619,7 +663,18 @@
 						<label for="project-url" class="text-sm font-medium">
 							{m.admin_projects_field_project_url()}<span class="text-destructive"> *</span>
 						</label>
-						<Input id="project-url" name="projectUrl" bind:value={fieldProjectUrl} required />
+						<Input
+							id="project-url"
+							name="projectUrl"
+							bind:value={fieldProjectUrl}
+							readonly={isSyncProvider(editing.provider)}
+							required
+						/>
+						{#if isSyncProvider(editing.provider)}
+							<p class="text-xs text-muted-foreground">
+								仓库行的主链接由同步维护（以平台 API 为准）。
+							</p>
+						{/if}
 					</div>
 					<div class="grid gap-4 sm:grid-cols-2">
 						<div class="grid gap-1.5">
@@ -929,20 +984,24 @@
 				{m.admin_projects_delete_warning()}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
-		<form method="post" action="?/delete" class="flex justify-end gap-2">
-			{#each selectedIds as id (id)}
-				<input type="hidden" name="ids" value={id} />
-			{/each}
+		<div class="flex justify-end gap-2">
+			<!-- Cancel stays OUTSIDE the destructive form: a bits-ui cancel
+			     button submits when placed inside one (review P1). -->
 			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
-			<Button
-				type="submit"
-				variant="outline"
-				class="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-				onclick={() => (bulkDeleteOpen = false)}
-			>
-				删除
-			</Button>
-		</form>
+			<form method="post" action="?/delete">
+				{#each selectedIds as id (id)}
+					<input type="hidden" name="ids" value={id} />
+				{/each}
+				<Button
+					type="submit"
+					variant="outline"
+					class="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+					onclick={() => (bulkDeleteOpen = false)}
+				>
+					{m.admin_projects_bulk_delete()}
+				</Button>
+			</form>
+		</div>
 	</AlertDialog.Content>
 </AlertDialog.Root>
 

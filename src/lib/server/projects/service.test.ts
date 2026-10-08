@@ -36,11 +36,9 @@ describe('projects service invariants', () => {
 	});
 
 	it('rejects non-http(s) URL fields on the write side', () => {
-		expect(requireHttpUrl('  https://example.com/x  ', 'project_url')).toBe(
-			'https://example.com/x'
-		);
-		expect(requireHttpUrl('', 'project_url')).toBeNull();
-		expect(requireHttpUrl(null, 'project_url')).toBeNull();
+		expect(requireHttpUrl('  https://example.com/x  ')).toBe('https://example.com/x');
+		expect(requireHttpUrl('')).toBeNull();
+		expect(requireHttpUrl(null)).toBeNull();
 		for (const bad of [
 			'javascript:alert(1)',
 			'data:text/html,x',
@@ -48,7 +46,7 @@ describe('projects service invariants', () => {
 			'//example.com',
 			'/relative'
 		]) {
-			expect(() => requireHttpUrl(bad, 'project_url'), bad).toThrow(ProjectsServiceError);
+			expect(() => requireHttpUrl(bad), bad).toThrow(ProjectsServiceError);
 		}
 	});
 });

@@ -1,4 +1,5 @@
 import { fail } from '@sveltejs/kit';
+import { ZodError } from 'zod';
 import { requireAdminRole } from '$lib/server/authz';
 import { getOption } from '$lib/server/config/options-registry';
 import { formatDate, formatDateTime } from '$lib/utils/i18n';
@@ -83,12 +84,15 @@ const SERVICE_ERROR_TEXT: Record<string, string> = {
 	'url-required': '主链接为必填项',
 	'bad-url': '链接必须是 http(s) 地址',
 	'external-id-required': '仓库导入缺少平台 ID（请使用「从链接导入」）',
+	'identity-mismatch': '仓库链接与所选平台不匹配',
 	duplicate: '已存在相同链接或仓库',
+	busy: '操作繁忙，请重试',
 	missing: '项目不存在'
 };
 
 function serviceFail(err: unknown) {
 	if (err instanceof ProjectsServiceError) {
+		if (err.code === 'busy') return fail(409, { error: SERVICE_ERROR_TEXT.busy });
 		return fail(err.code === 'not_found' ? 404 : 400, {
 			error: SERVICE_ERROR_TEXT[err.message] ?? '操作失败'
 		});
@@ -128,6 +132,12 @@ function idsFrom(form: FormData): string[] {
 export const actions: Actions = {
 	sync: async () => {
 		await requireAdminRole();
+		// Scenario #1 (§0.1): no targets configured -> steer the admin to the
+		// target editor instead of queueing a guaranteed-empty run.
+		const targets = await getSyncTargets();
+		if (targets.length === 0) {
+			return fail(400, { error: '请先在「同步目标」中添加至少一个账号' });
+		}
 		const { deduplicated } = await enqueueSync();
 		return { success: true, flash: deduplicated ? 'sync-dedup' : 'sync-queued' };
 	},
@@ -232,10 +242,15 @@ export const actions: Actions = {
 		try {
 			await setSyncTargets(targets as Awaited<ReturnType<typeof getSyncTargets>>);
 			return { success: true, flash: 'targets-saved' };
-		} catch {
-			return fail(400, {
-				error: '同步目标校验失败：账号不能为空，同一平台账号不可重复'
-			});
+		} catch (err) {
+			// Only registry validation failures are user-fixable; anything else
+			// (db down, ...) must surface honestly (review).
+			if (err instanceof ZodError) {
+				return fail(400, {
+					error: '同步目标校验失败：账号不能为空，同一平台账号不可重复'
+				});
+			}
+			throw err;
 		}
 	}
 };

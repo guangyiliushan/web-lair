@@ -375,6 +375,14 @@ describe('options registry (AI-1.1)', () => {
 				{ provider: 'github', account: 'guang' }
 			])
 		).rejects.toThrow(/同一平台账号不能重复/);
+		// Case variants share one platform bucket (review: the refresh
+		// breaker lowercases accounts, so the editor must too).
+		await expect(
+			setOption('projects.sync_targets', [
+				{ provider: 'github', account: 'guang' },
+				{ provider: 'github', account: 'Guang' }
+			])
+		).rejects.toThrow(/同一平台账号不能重复/);
 		// trim interacts with dedupe: whitespace variants of the same pair
 		// are duplicates too (the refine sees the trimmed values).
 		await expect(

@@ -239,8 +239,11 @@ export const optionRegistry = {
 			)
 			.refine(
 				(targets) =>
-					new Set(targets.map(({ provider, account }) => JSON.stringify([provider, account])))
-						.size === targets.length,
+					new Set(
+						targets.map(({ provider, account }) =>
+							JSON.stringify([provider, account.toLowerCase()])
+						)
+					).size === targets.length,
 				'同一平台账号不能重复'
 			),
 		default: []
