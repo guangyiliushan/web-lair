@@ -12,13 +12,15 @@
 	 * + secondary exits shown only when filled. The whole card is a single
 	 * stretched link to the project URL (`noopener noreferrer`); the corner
 	 * buttons sit above the overlay so they stay independently clickable.
+	 * A null `projectUrl` (unsafe scheme filtered by the loader) renders the
+	 * name as plain text without a link.
 	 */
 	interface Props {
 		project: {
 			name: string;
 			description: string | null;
 			provider: string;
-			projectUrl: string;
+			projectUrl: string | null;
 			previewUrl: string | null;
 			docUrl: string | null;
 			avatar: string | null;
@@ -29,6 +31,14 @@
 		};
 	}
 	let { project }: Props = $props();
+
+	/** The favicon proxy / avatar can answer 403 or 404; fall back to the glyph. */
+	let imgFailed = $state(false);
+	/** The <img> failed before hydration (SSR): no error event reaches us. */
+	let imgEl = $state<HTMLImageElement | undefined>();
+	$effect(() => {
+		if (imgEl && imgEl.complete && imgEl.naturalWidth === 0) imgFailed = true;
+	});
 
 	/** Platform brands are proper nouns rendered literally (meta mapping). */
 	const PROVIDER_BRANDS: Record<string, string> = {
@@ -56,7 +66,7 @@
 	/** avatar when the platform provides one; site-like rows fall back to the proxy favicon. */
 	const iconSrc = $derived.by(() => {
 		if (project.avatar) return project.avatar;
-		if (isSiteLike) {
+		if (isSiteLike && project.projectUrl) {
 			try {
 				return `/api/favicon?url=${encodeURIComponent(new URL(project.projectUrl).origin)}`;
 			} catch {
@@ -68,29 +78,44 @@
 </script>
 
 <article
+	role="listitem"
 	class="relative flex flex-col gap-3 rounded-lg border border-border/60 p-4 transition-colors hover:border-border hover:bg-muted/30"
 >
 	<div class="flex items-start gap-3">
 		<div
 			class="mt-0.5 flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/60 bg-muted/40"
 		>
-			{#if iconSrc}
-				<img src={iconSrc} alt="" class="size-full object-cover" loading="lazy" />
+			{#if iconSrc && !imgFailed}
+				<img
+					bind:this={imgEl}
+					src={iconSrc}
+					alt=""
+					class="size-full object-cover"
+					loading="lazy"
+					onerror={() => (imgFailed = true)}
+				/>
 			{:else}
-				<IconCode class="size-4 text-muted-foreground/60" aria-hidden="true" />
+				<IconCode
+					class="project-card-fallback size-4 text-muted-foreground/60"
+					aria-hidden="true"
+				/>
 			{/if}
 		</div>
 		<div class="min-w-0 flex-1">
 			<div class="flex flex-wrap items-center gap-2">
-				<a
-					href={project.projectUrl}
-					target="_blank"
-					rel="noopener noreferrer"
-					class="truncate text-base font-medium after:absolute after:inset-0 after:content-['']"
-					aria-label={`${visitLabel}: ${project.name}`}
-				>
-					{project.name}
-				</a>
+				{#if project.projectUrl}
+					<a
+						href={project.projectUrl}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="truncate text-base font-medium after:absolute after:inset-0 after:content-['']"
+						aria-label={`${visitLabel}: ${project.name}`}
+					>
+						{project.name}
+					</a>
+				{:else}
+					<span class="truncate text-base font-medium">{project.name}</span>
+				{/if}
 				{#if project.archived}
 					<span class="rounded border px-1.5 py-0.5 text-xs text-muted-foreground">
 						{m.projects_badge_archived()}
@@ -98,7 +123,9 @@
 				{/if}
 			</div>
 			{#if project.description}
-				<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{project.description}</p>
+				<p class="mt-1 line-clamp-2 text-sm wrap-break-word text-muted-foreground">
+					{project.description}
+				</p>
 			{/if}
 			<div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
 				<span class="rounded border px-1.5 py-0.5">{badgeLabel}</span>
@@ -107,7 +134,8 @@
 				{/if}
 				{#if project.stars !== null}
 					<span class="inline-flex items-center gap-1">
-						<IconStar class="size-3.5" aria-hidden="true" />{project.stars}
+						<IconStar class="size-3.5" aria-hidden="true" />
+						<span class="sr-only">{m.projects_stars()} </span><span>{project.stars}</span>
 					</span>
 				{/if}
 				{#if project.pushedLabel}

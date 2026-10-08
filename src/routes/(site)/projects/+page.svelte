@@ -22,7 +22,7 @@
 	{#await data.rows}
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
 			{#each [0, 1, 2, 3, 4, 5] as i (i)}
-				<Skeleton class="h-32 w-full" />
+				<Skeleton class="h-40 w-full" />
 			{/each}
 		</div>
 	{:then rows}
