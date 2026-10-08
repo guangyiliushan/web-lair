@@ -423,6 +423,42 @@ describe('projects fetchJson hardening (review 2026-10-08)', () => {
 		expect(sleep).toHaveBeenCalledWith(2000);
 	});
 
+	it('waits the shorter of retry-after and reset on a 403', async () => {
+		const reset = String(Math.floor((Date.now() + 5000) / 1000));
+		let calls = 0;
+		const flaky = vi.fn(async () => {
+			calls += 1;
+			return calls === 1
+				? jsonResponse(403, {}, { 'retry-after': '2', 'x-ratelimit-reset': reset })
+				: jsonResponse(200, { ok: true });
+		});
+		const sleep = vi.fn(async () => {});
+		const result = await fetchJson(
+			'https://api.github.com/x',
+			{},
+			{ fetch: flaky as unknown as typeof fetch, sleep }
+		);
+		expect(result.json).toEqual({ ok: true });
+		expect(sleep).toHaveBeenCalledWith(2000);
+	});
+
+	it('does not wait on a past 403 reset', async () => {
+		const past = String(Math.floor((Date.now() - 60_000) / 1000));
+		const doFetch = vi.fn(async () =>
+			jsonResponse(403, {}, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': past })
+		);
+		const sleep = vi.fn(async () => {});
+		await rejection(
+			fetchJson(
+				'https://api.github.com/x',
+				{},
+				{ fetch: doFetch as unknown as typeof fetch, sleep }
+			)
+		).toMatchObject({ kind: 'rate_limited' });
+		expect(sleep).not.toHaveBeenCalled();
+		expect(doFetch).toHaveBeenCalledTimes(1);
+	});
+
 	it('classifies a mid-body read failure as network, not parse', async () => {
 		const broken = vi.fn(async () => ({
 			status: 200,

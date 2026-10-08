@@ -492,7 +492,8 @@ describe('projects runSync hardening (review 2026-10-08)', () => {
 		state.selectQueue = [
 			[
 				{ id: 'row-1', provider: 'github', projectUrl: 'https://github.com/guang/reborn' },
-				{ id: 'row-2', provider: 'github', projectUrl: 'https://github.com/guang/other' }
+				{ id: 'row-2', provider: 'github', projectUrl: 'https://github.com/Guang/other' },
+				{ id: 'row-3', provider: 'github', projectUrl: 'https://github.com/guang/third' }
 			]
 		];
 		const fetchJson: FetchJson = async (url) => {
@@ -504,13 +505,16 @@ describe('projects runSync hardening (review 2026-10-08)', () => {
 		const summary = await runSync({
 			db,
 			targets: [],
-			refreshIds: ['row-1', 'row-2'],
+			refreshIds: ['row-1', 'row-2', 'row-3'],
 			logger: makeLogger(),
 			now: NOW,
 			fetchJson
 		});
 		expect(summary.failed).toBe(1);
-		expect(summary.skipped).toBe(1);
+		// Row 2 differs only by account casing - providers treat account
+		// names case-insensitively, so it shares the breaker (review
+		// 2026-10-08).
+		expect(summary.skipped).toBe(2);
 		expect(state.updates).toHaveLength(1);
 	});
 
