@@ -1,5 +1,41 @@
-import { describe, expect, it } from 'vitest';
-import { canTransition, normalizeSiteUrl, requireHttpUrl, ProjectsServiceError } from './service';
+import { describe, expect, it, vi } from 'vitest';
+import {
+	canTransition,
+	normalizeSiteUrl,
+	requireHttpUrl,
+	updateProjectFields,
+	ProjectsServiceError
+} from './service';
+
+// Fake db for the URL-ownership pins below (vi.mock is hoisted).
+const dbMock = vi.hoisted(() => {
+	const state = {
+		selectRows: [] as unknown[][],
+		setValues: [] as Record<string, unknown>[],
+		updateReturn: [] as unknown[]
+	};
+	return {
+		state,
+		db: {
+			select: () => ({
+				from: () => ({
+					where: () => ({
+						limit: () => Promise.resolve(state.selectRows.shift() ?? [])
+					})
+				})
+			}),
+			update: () => ({
+				set: (values: Record<string, unknown>) => {
+					state.setValues.push(values);
+					return {
+						where: () => ({ returning: () => Promise.resolve(state.updateReturn) })
+					};
+				}
+			})
+		}
+	};
+});
+vi.mock('$lib/server/db', () => ({ db: dbMock.db }));
 
 /**
  * A-batch service pins (plan §4): the pure rules behind the admin surface.
@@ -48,5 +84,38 @@ describe('projects service invariants', () => {
 		]) {
 			expect(() => requireHttpUrl(bad), bad).toThrow(ProjectsServiceError);
 		}
+	});
+});
+
+describe('projects service URL ownership (nine-dimension round)', () => {
+	it('omits projectUrl for four-platform rows (sync owns the column)', async () => {
+		dbMock.state.setValues.length = 0;
+		dbMock.state.updateReturn = [{ id: 'row-1' }];
+		dbMock.state.selectRows = [[{ provider: 'gitlab' }]];
+		await updateProjectFields('11111111-1111-1111-1111-111111111111', {
+			name: 'demo',
+			description: null,
+			projectUrl: 'https://gitlab.com/owner/repo',
+			previewUrl: null,
+			docUrl: null,
+			avatar: null
+		});
+		expect(dbMock.state.setValues).toHaveLength(1);
+		expect('projectUrl' in dbMock.state.setValues[0]).toBe(false);
+	});
+
+	it('normalizes and writes projectUrl for site/other rows', async () => {
+		dbMock.state.setValues.length = 0;
+		dbMock.state.updateReturn = [{ id: 'row-1' }];
+		dbMock.state.selectRows = [[{ provider: 'site' }]];
+		await updateProjectFields('11111111-1111-1111-1111-111111111111', {
+			name: 'demo',
+			description: null,
+			projectUrl: 'https://Example.com/',
+			previewUrl: null,
+			docUrl: null,
+			avatar: null
+		});
+		expect(dbMock.state.setValues[0].projectUrl).toBe('https://example.com');
 	});
 });

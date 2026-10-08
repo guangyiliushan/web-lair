@@ -108,8 +108,3 @@ export function normalizeRepoUrl(raw: string): RepoIdentity | null {
 	const account = accountSegments.join('/');
 	return { provider: rule.provider, account, repo: repoSegment };
 }
-
-/** `owner/repo` (or `namespace/sub/repo`) form used for display + API paths. */
-export function fullNameOf(identity: RepoIdentity): string {
-	return `${identity.account}/${identity.repo}`;
-}

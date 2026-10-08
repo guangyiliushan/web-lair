@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fullNameOf, normalizeRepoUrl } from './normalize';
+import { normalizeRepoUrl } from './normalize';
 
 /**
  * T7 (plan §7): the four platforms' URL shapes - `.git` suffix, trailing
@@ -67,11 +67,5 @@ describe('projects normalizeRepoUrl', () => {
 		expect(normalizeRepoUrl('https://github.com/marketplace/actions')).toBeNull();
 		// A `.git`-only segment is not a repository.
 		expect(normalizeRepoUrl('https://github.com/owner/.git')).toBeNull();
-	});
-
-	it('builds the display full name', () => {
-		expect(fullNameOf({ provider: 'gitlab', account: 'group/sub', repo: 'project' })).toBe(
-			'group/sub/project'
-		);
 	});
 });

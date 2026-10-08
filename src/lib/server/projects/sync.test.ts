@@ -303,7 +303,7 @@ describe('projects runSync (write rules, plan §3.5)', () => {
 
 	it('falls back to a snapshot update when the insert loses the unique race', async () => {
 		const { state, db } = makeFakeDb();
-		state.selectQueue = [[], [{ id: 'raced-row' }]];
+		state.selectQueue = [[], [{ id: 'raced-row', status: 'pending' }]];
 		state.insertError = Object.assign(new Error('duplicate key value violates unique constraint'), {
 			cause: { code: '23505' }
 		});
@@ -318,6 +318,24 @@ describe('projects runSync (write rules, plan §3.5)', () => {
 		expect(summary).toMatchObject({ added: 0, updated: 1 });
 		expect(state.updates).toHaveLength(1);
 		expect(Object.keys(state.updates[0]).sort()).toEqual([...SNAPSHOT_KEYS].sort());
+	});
+
+	it('leaves a rejected race winner untouched (no snapshot update)', async () => {
+		const { state, db } = makeFakeDb();
+		state.selectQueue = [[], [{ id: 'raced-row', status: 'rejected' }]];
+		state.insertError = Object.assign(new Error('duplicate key value violates unique constraint'), {
+			cause: { code: '23505' }
+		});
+		const fetchJson: FetchJson = async () => response([githubRepo()]);
+		const summary = await runSync({
+			db,
+			targets: [TARGET],
+			logger: makeLogger(),
+			now: NOW,
+			fetchJson
+		});
+		expect(summary).toMatchObject({ added: 0, updated: 0, skipped: 1 });
+		expect(state.updates).toHaveLength(0);
 	});
 
 	it('refresh mode re-GETs selected rows and stamps not_found without touching status', async () => {

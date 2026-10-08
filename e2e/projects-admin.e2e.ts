@@ -389,6 +389,10 @@ test.describe('projects admin', () => {
 		await page.getByRole('button', { name: '通过' }).click({ timeout: 5000 });
 		await expect(page.getByText('已更新 0 项，跳过 1 项。')).toBeVisible({ timeout: 20_000 });
 		expect(statusOf(ROW_A)).toBe('published');
+		// The enhanced bulk form keeps the filtered view (a native POST used to
+		// replace ?status= with the action URL) and clears the selection.
+		await expect(page).toHaveURL(/status=published/);
+		await expect(page.getByText('已选', { exact: false })).toHaveCount(0);
 
 		// Cancel inside the bulk-delete confirm must NOT delete (review P1:
 		// a cancel button inside the destructive form used to submit).

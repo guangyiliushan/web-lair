@@ -322,3 +322,13 @@ describe('import-url hardening (review 2026-10-08)', () => {
 		expect(result.og.description).toBe('TAILX');
 	});
 });
+
+describe('extractOpenGraph depth hardening (nine-dimension round)', () => {
+	it('extracts OG from deeply nested markup without a stack overflow', () => {
+		// 6k deep: the recursive visit blew up at ~5k (audit probe); parse
+		// cost stays ~0.2s so the case holds up under full-suite load.
+		const depth = 6_000;
+		const html = `<html><body>${'<div>'.repeat(depth)}<meta property="og:title" content="deep" />${'</div>'.repeat(depth)}</body></html>`;
+		expect(extractOpenGraph(html).title).toBe('deep');
+	}, 20_000);
+});

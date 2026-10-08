@@ -275,6 +275,19 @@
 		};
 	}
 
+	/** Bulk actions stay on the filtered view (enhance keeps ?status=) and
+	 * drop the selection once the rows have been updated. */
+	function bulkSubmitter() {
+		return async ({
+			update
+		}: {
+			update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+		}) => {
+			await update();
+			selectedIds = [];
+		};
+	}
+
 	async function importSubmitter() {
 		submitting = true;
 		return async ({
@@ -455,6 +468,7 @@
 		<form
 			method="post"
 			action="?/setStatus"
+			use:enhance={bulkSubmitter}
 			class="flex shrink-0 flex-wrap items-center gap-2 border-b bg-muted/50 px-4 py-2"
 		>
 			{#each selectedIds as id (id)}
@@ -990,10 +1004,10 @@
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<div class="flex justify-end gap-2">
-			<!-- Cancel stays OUTSIDE the destructive form: a bits-ui cancel
-			     button submits when placed inside one (review P1). -->
+			<!-- Cancel stays OUTSIDE the destructive form (original P1 find)
+			     and the wrapper now defaults type="button" too. -->
 			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
-			<form method="post" action="?/delete">
+			<form method="post" action="?/delete" use:enhance={bulkSubmitter}>
 				{#each selectedIds as id (id)}
 					<input type="hidden" name="ids" value={id} />
 				{/each}

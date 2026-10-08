@@ -289,7 +289,11 @@ export function extractOpenGraph(html: string): OgPrefill {
 	const document = parseHtml(html) as unknown as HtmlNode;
 	const metas = new Map<string, string>();
 	let title: string | null = null;
-	const visit = (node: HtmlNode): void => {
+	// Iterative traversal: a recursive visit blew the call stack on deeply
+	// nested markup, turning a merely deep page into an import 500.
+	const stack: HtmlNode[] = [document];
+	while (stack.length > 0) {
+		const node = stack.pop() as HtmlNode;
 		if (node.tagName === 'meta' && Array.isArray(node.attrs)) {
 			const attr = (name: string): string | undefined =>
 				node.attrs?.find((entry) => entry.name === name)?.value;
@@ -306,9 +310,9 @@ export function extractOpenGraph(html: string): OgPrefill {
 				.trim();
 			if (text.length > 0) title = text;
 		}
-		for (const child of node.childNodes ?? []) visit(child);
-	};
-	visit(document);
+		const children = node.childNodes ?? [];
+		for (let index = children.length - 1; index >= 0; index -= 1) stack.push(children[index]);
+	}
 	const pick = (...keys: string[]): string | null => {
 		for (const key of keys) {
 			const value = metas.get(key);

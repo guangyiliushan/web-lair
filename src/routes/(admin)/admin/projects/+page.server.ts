@@ -2,7 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { ZodError } from 'zod';
 import { requireAdminRole } from '$lib/server/authz';
 import { getOption } from '$lib/server/config/options-registry';
-import { formatDate, formatDateTime } from '$lib/utils/i18n';
+import { formatDateTime } from '$lib/utils/i18n';
 import { isUuid } from '$lib/utils/uuid';
 import { isProjectProvider, isProjectStatus, type ProjectStatus } from '$lib/utils/project-meta';
 import {
@@ -45,7 +45,6 @@ export const load: PageServerLoad = async ({ url }) => {
 	const rows = listProjects(filter).then((items) =>
 		items.map((item) => ({
 			...item,
-			pushedLabel: item.pushedAt ? formatDate(item.pushedAt, { timeZone: siteTz }) : null,
 			syncedLabel: item.lastSyncedAt
 				? formatDateTime(item.lastSyncedAt, { timeZone: siteTz })
 				: null
@@ -61,10 +60,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		lastRun: lastRun
 			? {
 					...lastRun,
-					createdLabel: formatDateTime(lastRun.createdAt, { timeZone: siteTz }),
-					finishedLabel: lastRun.finishedAt
-						? formatDateTime(lastRun.finishedAt, { timeZone: siteTz })
-						: null
+					createdLabel: formatDateTime(lastRun.createdAt, { timeZone: siteTz })
 				}
 			: null,
 		focusRow,

@@ -167,7 +167,7 @@ export async function updateProjectFields(id: string, fields: ProjectEditFields)
 	const docUrl = requireHttpUrl(fields.docUrl);
 	const avatar = requireHttpUrl(fields.avatar);
 	const [current] = await db
-		.select({ provider: projects.provider, projectUrl: projects.projectUrl })
+		.select({ provider: projects.provider })
 		.from(projects)
 		.where(eq(projects.id, id))
 		.limit(1);
@@ -179,12 +179,13 @@ export async function updateProjectFields(id: string, fields: ProjectEditFields)
 				name,
 				description: fields.description,
 				// Repo-row URLs stay sync-owned: the edit dialog renders them
-				// read-only, and a constructed POST must not rewrite them either
-				// (closing review - create rechecks the platform identity, the
-				// update path keeps the stored value).
-				projectUrl: isProjectSyncProvider(current.provider)
-					? current.projectUrl
-					: normalizeUrlForWrite(current.provider, projectUrl),
+				// read-only and the write path omits the column entirely, so a
+				// constructed POST cannot rewrite it and a stale read cannot
+				// clobber a concurrent sync rename (closing + nine-dimension
+				// reviews).
+				...(isProjectSyncProvider(current.provider)
+					? {}
+					: { projectUrl: normalizeUrlForWrite(current.provider, projectUrl) }),
 				previewUrl,
 				docUrl,
 				avatar

@@ -16,11 +16,7 @@ export default {
 		const summary = await runSync({
 			db: ctx.db,
 			targets,
-			logger: {
-				info: (line) => ctx.logger.info(line),
-				warn: (line) => ctx.logger.warn(line),
-				error: (line) => ctx.logger.error(line)
-			}
+			logger: ctx.logger
 		});
 		ctx.summary({
 			targets: summary.targets,

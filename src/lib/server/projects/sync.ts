@@ -237,13 +237,17 @@ export async function runSync(options: RunSyncOptions): Promise<SyncSummary> {
 				// snapshot update so the row is still refreshed.
 				if (pgErrorCode(err) !== '23505') throw err;
 				const [row] = await db
-					.select({ id: projects.id })
+					.select({ id: projects.id, status: projects.status })
 					.from(projects)
 					.where(
 						and(eq(projects.provider, target.provider), eq(projects.externalId, repo.externalId))
 					)
 					.limit(1);
-				if (row) {
+				if (row && row.status === 'rejected') {
+					// The race winner was rejected before we got here: rejected
+					// rows never take snapshot updates (same rule as the scan).
+					summary.skipped += 1;
+				} else if (row) {
 					await db.update(projects).set(snapshotValues(repo, now())).where(eq(projects.id, row.id));
 					summary.updated += 1;
 				} else {
