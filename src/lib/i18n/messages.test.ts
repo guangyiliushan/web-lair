@@ -176,6 +176,9 @@ describe('paraglide message contract', () => {
 		expect(missing).toEqual([]);
 	});
 
+	// The key scan walks every source file and every compiled locale module;
+	// on a loaded 10-worker day it can exceed the 5s default (the A batch
+	// grew the message set). Explicit budget; registered in the W4 receipts.
 	it('exports every used key from the compiled output, so m.key() cannot be undefined at runtime', () => {
 		const usages = collectUsages();
 		const usedKeys = [...new Set(usages.map((usage) => usage.key))];
@@ -196,7 +199,7 @@ describe('paraglide message contract', () => {
 			}
 		}
 		expect(stale).toEqual([]);
-	});
+	}, 15_000);
 
 	it('defines an identical key set in every locale file', () => {
 		const baseKeys = Object.keys(readLocaleMessages(BASE_LOCALE)).sort();
