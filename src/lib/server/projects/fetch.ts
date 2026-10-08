@@ -56,8 +56,9 @@ export interface FetchJsonResponse {
 export type FetchJson = (url: string, init?: FetchJsonInit) => Promise<FetchJsonResponse>;
 
 /**
- * Rate-limit exhaustion probe per platform (plan §3.4 "Remaining=0 -> 等到
- * Reset；本轮该账号余下请求放弃并记 rate_limited"). Bitbucket exposes no
+ * Rate-limit exhaustion probe per platform (plan §3.4: at Remaining=0 wait
+ * for the reset window; otherwise give up the rest of this run's requests
+ * for the account and record rate_limited). Bitbucket exposes no
  * remaining header on the probed endpoints - 429 is its only signal.
  */
 export function isRateLimitExhausted(
@@ -105,13 +106,62 @@ function rawRetryAfterMs(headers: Headers): number | null {
 	return null;
 }
 
-/** Upstream rate-limit signal on a 403: any of the platform headers at 0. */
+/** Upstream rate-limit signal on a 403: any of the platform headers at 0,
+ * or a bare Retry-After (GitHub secondary limits carry it without zeroing
+ * the primary remaining header per the REST best-practices doc). */
 function isRateLimitedResponse(headers: Headers): boolean {
 	const remaining =
 		headers.get('x-ratelimit-remaining') ??
 		headers.get('ratelimit-remaining') ??
 		headers.get('x-rate-limit-remaining');
-	return remaining === '0';
+	return remaining === '0' || headers.get('retry-after') !== null;
+}
+
+const MAX_API_REDIRECTS = 3;
+
+/**
+ * Fixed-host API GET with manual redirects: follow up to
+ * MAX_API_REDIRECTS hops (GitHub answers 301 for renamed repositories -
+ * the API response stays the source of truth), but never leave the
+ * original hostname - undici strips `authorization` cross-origin yet
+ * leaves custom headers (GitLab's `private-token`) intact, so a
+ * cross-origin hop would leak credentials. Fail closed instead.
+ */
+async function doFetchWithRedirects(
+	doFetch: typeof fetch,
+	url: string,
+	init: FetchJsonInit,
+	timeoutMs: number
+): Promise<Response> {
+	let target = url;
+	let redirects = 0;
+	for (;;) {
+		const response = await doFetch(target, {
+			method: 'GET',
+			headers: { 'user-agent': syncUserAgent(), accept: 'application/json', ...init.headers },
+			signal: AbortSignal.timeout(timeoutMs),
+			redirect: 'manual'
+		});
+		if (response.status < 300 || response.status >= 400) return response;
+		const location = response.headers.get('location');
+		await response.body?.cancel().catch(() => {});
+		if (!location)
+			throw new ProjectsFetchError('parse', 'redirect without location', response.status);
+		redirects += 1;
+		if (redirects > MAX_API_REDIRECTS) {
+			throw new ProjectsFetchError('parse', 'too many redirects', response.status);
+		}
+		let next: URL;
+		try {
+			next = new URL(location, target);
+		} catch {
+			throw new ProjectsFetchError('parse', 'invalid redirect location', response.status);
+		}
+		if (next.hostname !== new URL(target).hostname) {
+			throw new ProjectsFetchError('parse', `cross-origin redirect rejected: ${next.hostname}`);
+		}
+		target = next.href;
+	}
 }
 
 /**
@@ -133,15 +183,17 @@ export async function fetchJson(
 		attempt += 1;
 		let response: Response;
 		try {
-			response = await doFetch(url, {
-				method: 'GET',
-				headers: { 'user-agent': syncUserAgent(), accept: 'application/json', ...init.headers },
-				signal: AbortSignal.timeout(timeoutMs),
-				redirect: 'follow'
-			});
+			response = await doFetchWithRedirects(doFetch, url, init, timeoutMs);
 		} catch (err) {
-			// AbortSignal.timeout / DNS / TLS / connect all land here as
-			// network-class failures (the plan's `network` bucket).
+			// Classified redirect failures pass straight through.
+			if (err instanceof ProjectsFetchError) throw err;
+			// Timeouts retry once within the run (plan §3.4: one in-run
+			// retry for timeouts / 5xx); other network-class failures
+			// (DNS / TLS / connect) do not.
+			if (attempt === 1 && err instanceof Error && err.name === 'TimeoutError') {
+				await sleep(RETRY_DELAY_MS);
+				continue;
+			}
 			throw new ProjectsFetchError('network', sanitizeMessage(err));
 		}
 
@@ -150,7 +202,7 @@ export async function fetchJson(
 			await response.body?.cancel().catch(() => {});
 			// Plan §3.4: honour Retry-After, but only within the run budget -
 			// a longer window means this account is done for this run
-			// ("放弃本轮余下请求并记 rate_limited").
+			// (give up the rest of its requests and record rate_limited).
 			if (waitMs !== null && waitMs <= MAX_RETRY_AFTER_MS && attempt === 1) {
 				await sleep(waitMs);
 				continue;
@@ -167,10 +219,14 @@ export async function fetchJson(
 		}
 		if (response.status === 403) {
 			await response.body?.cancel().catch(() => {});
-			const kind: SyncFailureKind = isRateLimitedResponse(response.headers)
-				? 'rate_limited'
-				: 'auth';
-			throw new ProjectsFetchError(kind, 'HTTP 403', 403);
+			if (isRateLimitedResponse(response.headers)) {
+				// Surface "when can we retry" (plan §3.3) from the reset
+				// header when the platform provides one.
+				const { resetAtMs } = isRateLimitExhausted('github', response.headers);
+				const suffix = resetAtMs !== null ? `; reset at ${new Date(resetAtMs).toISOString()}` : '';
+				throw new ProjectsFetchError('rate_limited', `HTTP 403 (rate limited${suffix})`, 403);
+			}
+			throw new ProjectsFetchError('auth', 'HTTP 403', 403);
 		}
 		if (response.status === 404 || response.status === 410) {
 			await response.body?.cancel().catch(() => {});

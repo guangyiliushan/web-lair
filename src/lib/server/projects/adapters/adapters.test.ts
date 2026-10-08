@@ -94,6 +94,8 @@ describe('github adapter', () => {
 		};
 		const { repos } = await github.fetchUserRepos('a', { fetchJson });
 		expect(repos.map((repo) => repo.externalId)).toEqual(['1', '2']);
+		// The second request must be the page-2 URL (review 2026-10-08).
+		expect(urls[1]).toContain('page=2');
 	});
 
 	it('fetches a single repository for refresh', async () => {
@@ -256,5 +258,38 @@ describe('bitbucket adapter', () => {
 		await bitbucket.fetchUserRepos('ws', { fetchJson });
 		expect(seen).toHaveLength(1);
 		expect(seen[0].authorization).toBeUndefined();
+	});
+});
+
+describe('adapter hardening (review 2026-10-08)', () => {
+	it('flags truncated lists at the page cap and stops at 10 pages', async () => {
+		let pages = 0;
+		const fetchJson: FetchJson = async () => {
+			pages += 1;
+			return response(
+				[
+					{
+						id: 1000 + pages,
+						full_name: `a/r${pages}`,
+						html_url: `https://github.com/a/r${pages}`,
+						private: false,
+						owner: {}
+					}
+				],
+				{ link: '<https://api.github.com/users/a/repos?page=99>; rel="next"' }
+			);
+		};
+		const result = await github.fetchUserRepos('a', { fetchJson });
+		expect(pages).toBe(10);
+		expect(result.truncated).toBe(true);
+		expect(result.rateLimited).toBe(false);
+	});
+
+	it('rejects a bitbucket repo payload without full_name as a shape change', async () => {
+		const fetchJson: FetchJson = async () =>
+			response({ values: [{ uuid: '{x}', is_private: false }], next: null });
+		await expect(bitbucket.fetchUserRepos('ws', { fetchJson })).rejects.toMatchObject({
+			kind: 'parse'
+		});
 	});
 });

@@ -121,3 +121,163 @@ describe('extractOpenGraph', () => {
 		});
 	});
 });
+
+describe('import-url hardening (review 2026-10-08)', () => {
+	function chunkedResponse(chunks: Uint8Array[]): Response {
+		const stream = new ReadableStream<Uint8Array>({
+			start(controller) {
+				for (const chunk of chunks) controller.enqueue(chunk);
+				controller.close();
+			}
+		});
+		return new Response(stream, { status: 200, headers: { 'content-type': 'text/html' } });
+	}
+
+	it('reads multi-chunk pages past the 512KiB cap without crashing', async () => {
+		const head = new TextEncoder().encode(
+			'<html><head><meta property="og:title" content="Big"></head><body>'
+		);
+		const filler = new Uint8Array(400 * 1024);
+		const fetch = (async () =>
+			chunkedResponse([head, filler, filler])) as unknown as typeof undiciFetch;
+		const result = await resolveImportMetadata('https://lair.example/big', {
+			fetch,
+			resolveHost: async () => PUBLIC_HOST
+		});
+		expect(result).toMatchObject({ ok: true, kind: 'og' });
+		if (result.ok && result.kind === 'og') expect(result.og.title).toBe('Big');
+	});
+
+	it('accepts a page exactly at the cap', async () => {
+		const base = '<title>Exact</title>';
+		const padded = base + 'a'.repeat(512 * 1024 - base.length);
+		const fetch = (async () =>
+			new Response(new TextEncoder().encode(padded), {
+				status: 200,
+				headers: { 'content-type': 'text/html' }
+			})) as unknown as typeof undiciFetch;
+		const result = await resolveImportMetadata('https://lair.example/exact', {
+			fetch,
+			resolveHost: async () => PUBLIC_HOST
+		});
+		expect(result).toMatchObject({ ok: true, kind: 'og' });
+		if (result.ok && result.kind === 'og') expect(result.og.title).toBe('Exact');
+	});
+
+	it('classifies mid-body stream failures as network (no raw DOMException)', async () => {
+		const fetch = (async () =>
+			new Response(
+				new ReadableStream({
+					start(controller) {
+						controller.enqueue(new TextEncoder().encode('<html>'));
+						controller.error(new Error('socket reset'));
+					}
+				}),
+				{ status: 200, headers: { 'content-type': 'text/html' } }
+			)) as unknown as typeof undiciFetch;
+		const result = await resolveImportMetadata('https://lair.example/stall', {
+			fetch,
+			resolveHost: async () => PUBLIC_HOST
+		});
+		expect(result).toEqual({ ok: false, reason: 'network' });
+	});
+
+	it('classifies DNS resolution failures as network', async () => {
+		const result = await resolveImportMetadata('https://nx.example/page', {
+			resolveHost: async () => {
+				throw new Error('getaddrinfo ENOTFOUND nx.example');
+			}
+		});
+		expect(result).toEqual({ ok: false, reason: 'network' });
+	});
+
+	it('follows redirects with per-hop revalidation and caps the chain', async () => {
+		let calls = 0;
+		const fetch = (async () => {
+			calls += 1;
+			if (calls <= 2) {
+				return new Response(null, { status: 302, headers: { location: `/hop${calls}` } });
+			}
+			return htmlResponse('<meta property="og:title" content="Hopped">');
+		}) as unknown as typeof undiciFetch;
+		let resolves = 0;
+		const result = await resolveImportMetadata('https://lair.example/start', {
+			fetch,
+			resolveHost: async () => {
+				resolves += 1;
+				return PUBLIC_HOST;
+			}
+		});
+		expect(result).toMatchObject({ ok: true, kind: 'og' });
+		if (result.ok && result.kind === 'og') {
+			expect(result.og.title).toBe('Hopped');
+			expect(result.url).toBe('https://lair.example/hop2');
+		}
+		expect(resolves).toBe(3);
+
+		const loop = (async () =>
+			new Response(null, {
+				status: 302,
+				headers: { location: '/x' }
+			})) as unknown as typeof undiciFetch;
+		const capped = await resolveImportMetadata('https://lair.example/loop', {
+			fetch: loop,
+			resolveHost: async () => PUBLIC_HOST
+		});
+		expect(capped).toEqual({ ok: false, reason: 'network' });
+	});
+
+	it('rejects non-HTML content types as parse', async () => {
+		const fetch = (async () =>
+			new Response('{}', {
+				status: 200,
+				headers: { 'content-type': 'application/json' }
+			})) as unknown as typeof undiciFetch;
+		const result = await resolveImportMetadata('https://lair.example/api', {
+			fetch,
+			resolveHost: async () => PUBLIC_HOST
+		});
+		expect(result).toEqual({ ok: false, reason: 'parse' });
+	});
+
+	it('decodes the declared charset', async () => {
+		const text = '<meta property="og:title" content="caf\u00e9">';
+		const bytes = Uint8Array.from([...text].map((ch) => ch.charCodeAt(0) & 0xff));
+		const fetch = (async () =>
+			new Response(bytes, {
+				status: 200,
+				headers: { 'content-type': 'text/html; charset=iso-8859-1' }
+			})) as unknown as typeof undiciFetch;
+		const result = await resolveImportMetadata('https://lair.example/latin', {
+			fetch,
+			resolveHost: async () => PUBLIC_HOST
+		});
+		if (!result.ok || result.kind !== 'og') throw new Error('expected og result');
+		expect(result.og.title).toBe('caf\u00e9');
+	});
+
+	it('clips prefill text, strips controls and resolves relative icons', async () => {
+		const long = 'y'.repeat(600);
+		const html = `<meta property="og:title" content="${long}"><meta name="description" content="line\u0001break"><meta property="og:image" content="/img/pic.png">`;
+		const fetch = (async () => htmlResponse(html)) as unknown as typeof undiciFetch;
+		const result = await resolveImportMetadata('https://lair.example/page', {
+			fetch,
+			resolveHost: async () => PUBLIC_HOST
+		});
+		if (!result.ok || result.kind !== 'og') throw new Error('expected og result');
+		expect(result.og.title).toHaveLength(300);
+		expect(result.og.description).toBe('line break');
+		expect(result.og.icon).toBe('https://lair.example/img/pic.png');
+
+		const dataFetch = (async () =>
+			htmlResponse(
+				'<meta property="og:image" content="data:image/png;base64,AAAA">'
+			)) as unknown as typeof undiciFetch;
+		const dataResult = await resolveImportMetadata('https://lair.example/page', {
+			fetch: dataFetch,
+			resolveHost: async () => PUBLIC_HOST
+		});
+		if (!dataResult.ok || dataResult.kind !== 'og') throw new Error('expected og result');
+		expect(dataResult.og.icon).toBeNull();
+	});
+});

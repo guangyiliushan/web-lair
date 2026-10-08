@@ -57,7 +57,8 @@ const ADAPTERS: Record<
  * Resolve import metadata for an admin-entered URL: an adapter prefill for
  * the four platforms, an OG prefill for everything else. Failures are
  * classified with the same five kinds as the sync (plan §3.3) plus
- * `blocked` for SSRF refusals; callers surface "已存在（状态 X）" themselves
+ * blocked for SSRF refusals; callers surface the "already exists (status X)"
+ * check themselves
  * (that check needs the db - the A batch service owns it).
  */
 export async function resolveImportMetadata(
@@ -87,11 +88,25 @@ export async function resolveImportMetadata(
 
 	try {
 		const page = await fetchPageHtml(parsed.href, deps);
-		return { ok: true, kind: 'og', url: page.finalUrl, og: extractOpenGraph(page.html) };
+		const og = extractOpenGraph(page.html);
+		og.icon = resolveIcon(og.icon, page.finalUrl);
+		return { ok: true, kind: 'og', url: page.finalUrl, og };
 	} catch (err) {
 		if (err instanceof ProjectsFetchError) return { ok: false, reason: err.kind };
 		if (err instanceof OgFetchError) return { ok: false, reason: err.reason };
 		throw err;
+	}
+}
+
+/** Icons must be absolute http(s) URLs; relatives resolve against the page. */
+function resolveIcon(raw: string | null, base: string): string | null {
+	if (raw === null) return null;
+	try {
+		const resolved = new URL(raw, base);
+		if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return null;
+		return resolved.href.length > 2048 ? resolved.href.slice(0, 2048) : resolved.href;
+	} catch {
+		return null;
 	}
 }
 
@@ -122,7 +137,14 @@ async function fetchPageHtml(
 
 	for (let redirects = 0; ;) {
 		if (target.protocol !== 'https:') throw new OgFetchError('invalid-url', 'https only');
-		const addresses = await resolveHost(target.hostname);
+		let addresses: ResolvedAddress[] | null;
+		try {
+			addresses = await resolveHost(target.hostname);
+		} catch (err) {
+			// DNS failures are the target site's own state - classified as
+			// network, never leaked as raw resolver errors (review 2026-10-08).
+			throw new ProjectsFetchError('network', err instanceof Error ? err.message : String(err));
+		}
 		if (!addresses || addresses.length === 0) {
 			throw new OgFetchError('blocked', `host has no public address: ${target.hostname}`);
 		}
@@ -179,21 +201,34 @@ async function fetchPageHtml(
 		const reader = response.body?.getReader();
 		const chunks: Uint8Array[] = [];
 		let total = 0;
-		if (reader) {
-			for (;;) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				if (total + value.byteLength > OG_MAX_BYTES) {
-					const keep = OG_MAX_BYTES - total;
-					if (keep > 0) chunks.push(value.subarray(0, keep));
-					await reader.cancel().catch(() => {});
-					break;
+		try {
+			if (reader) {
+				for (;;) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					if (total + value.byteLength > OG_MAX_BYTES) {
+						const keep = OG_MAX_BYTES - total;
+						if (keep > 0) {
+							chunks.push(value.subarray(0, keep));
+							total += keep;
+						}
+						await reader.cancel().catch(() => {});
+						break;
+					}
+					chunks.push(value);
+					total += value.byteLength;
 				}
-				chunks.push(value);
-				total += value.byteLength;
 			}
+		} catch (err) {
+			// Mid-body failures (socket reset, deadline abort) must stay
+			// inside the classification contract instead of leaking raw
+			// DOMExceptions to the caller (review 2026-10-08).
+			await reader?.cancel().catch(() => {});
+			throw new ProjectsFetchError('network', err instanceof Error ? err.message : String(err));
+		} finally {
+			// Every exit path - success, classify, throw - closes the agent.
+			await agent.close().catch(() => {});
 		}
-		await agent.close().catch(() => {});
 		const bytes = new Uint8Array(total);
 		let offset = 0;
 		for (const chunk of chunks) {
@@ -231,6 +266,22 @@ interface HtmlNode {
 	value?: string;
 }
 
+/**
+ * Single-line display text for import prefill: strip C0 controls and bidi
+ * formatting (house rule: \p{Cc} + explicit bidi ranges, never literal
+ * control escapes), collapse whitespace, trim, and cap the length - OG
+ * values are attacker-sized by default (review 2026-10-08).
+ */
+function cleanText(value: string | null, maxLen: number): string | null {
+	if (value === null) return null;
+	const cleaned = value
+		.replaceAll(/[\p{Cc}\u202a-\u202e\u2066-\u2069]+/gu, ' ')
+		.replaceAll(/\s+/g, ' ')
+		.trim();
+	if (cleaned.length === 0) return null;
+	return cleaned.length > maxLen ? cleaned.slice(0, maxLen) : cleaned;
+}
+
 /** OG extraction: `og:*` first, then `twitter:*`, then plain `<title>`. */
 export function extractOpenGraph(html: string): OgPrefill {
 	const document = parseHtml(html) as unknown as HtmlNode;
@@ -264,8 +315,8 @@ export function extractOpenGraph(html: string): OgPrefill {
 		return null;
 	};
 	return {
-		title: pick('og:title') ?? title,
-		description: pick('og:description', 'description'),
+		title: cleanText(pick('og:title') ?? title, 300),
+		description: cleanText(pick('og:description', 'description'), 1000),
 		icon: pick('og:image', 'twitter:image')
 	};
 }

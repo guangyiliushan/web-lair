@@ -45,11 +45,14 @@ export function parseProjectsCliArgs(argv: readonly string[]): ProjectsCliArgsRe
 			flag = arg;
 		}
 		const takeValue = (): string | { error: string } => {
-			if (inlineValue !== undefined) return inlineValue;
-			const next = argv[index + 1];
-			if (typeof next !== 'string') return { error: `${flag} expects a value` };
-			index += 1;
-			return next;
+			const value = inlineValue !== undefined ? inlineValue : argv[index + 1];
+			if (typeof value !== 'string' || value.startsWith('--')) {
+				// A following flag must never be swallowed as a value
+				// (e.g. `--account --dry-run` would silently drop dry-run).
+				return { error: `${flag} expects a value` };
+			}
+			if (inlineValue === undefined) index += 1;
+			return value;
 		};
 
 		if (flag === '--provider') {
@@ -79,6 +82,11 @@ export function parseProjectsCliArgs(argv: readonly string[]): ProjectsCliArgsRe
 				.map((id) => id.trim())
 				.filter((id) => id.length > 0);
 			if (ids.length === 0) return { ok: false, error: '--refresh-ids expects at least one id' };
+			// Bounded so one invocation cannot overflow the SQL parameter
+			// list or run an unbounded serial refresh (review 2026-10-08).
+			if (ids.length > 500) {
+				return { ok: false, error: '--refresh-ids accepts at most 500 ids' };
+			}
 			const bad = ids.find((id) => !isUuid(id));
 			if (bad !== undefined)
 				return { ok: false, error: `--refresh-ids entry is not a uuid: ${bad}` };

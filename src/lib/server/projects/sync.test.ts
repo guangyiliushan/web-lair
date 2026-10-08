@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { ProjectsFetchError, type FetchJson, type FetchJsonResponse } from './fetch';
 import { runSync } from './sync';
 import type { SyncTarget } from './types';
+
+/** Renders a captured drizzle condition so tests can assert its shape. */
+const dialect = new PgDialect();
+const renderCondition = (condition: unknown): string => dialect.sqlToQuery(condition as never).sql;
 
 /**
  * T9 (plan §7): the four write rules against a fake db + stubbed transport -
@@ -16,6 +21,9 @@ interface FakeState {
 	inserts: Record<string, unknown>[];
 	updates: Record<string, unknown>[];
 	insertError: unknown;
+	/** Captured where-conditions (predicate teeth, review 2026-10-08). */
+	selectWhere: unknown[];
+	updateWhere: unknown[];
 }
 
 function makeChain(rows: unknown[]) {
@@ -27,12 +35,24 @@ function makeChain(rows: unknown[]) {
 }
 
 function makeFakeDb() {
-	const state: FakeState = { selectQueue: [], inserts: [], updates: [], insertError: null };
+	const state: FakeState = {
+		selectQueue: [],
+		inserts: [],
+		updates: [],
+		insertError: null,
+		selectWhere: [],
+		updateWhere: []
+	};
 	const db = {
 		select: () => {
 			const rows = state.selectQueue.shift() ?? [];
 			return {
-				from: () => ({ where: () => makeChain(rows) })
+				from: () => ({
+					where: (condition: unknown) => {
+						state.selectWhere.push(condition);
+						return makeChain(rows);
+					}
+				})
 			};
 		},
 		insert: () => ({
@@ -49,7 +69,12 @@ function makeFakeDb() {
 		update: () => ({
 			set: (values: Record<string, unknown>) => {
 				state.updates.push(values);
-				return { where: () => Promise.resolve() };
+				return {
+					where: (condition: unknown) => {
+						state.updateWhere.push(condition);
+						return Promise.resolve();
+					}
+				};
 			}
 		})
 	};
@@ -336,5 +361,129 @@ describe('projects runSync (write rules, plan §3.5)', () => {
 		});
 		expect(summary.updated).toBe(1);
 		expect(state.updates[0]).toMatchObject({ stars: 42, lastErrorKind: null });
+	});
+});
+
+describe('projects runSync hardening (review 2026-10-08)', () => {
+	it('scopes selects by provider/externalId and updates by row id (predicate teeth)', async () => {
+		const { state, db } = makeFakeDb();
+		state.selectQueue = [[{ id: 'row-1', externalId: '1', status: 'published' }]];
+		const fetchJson: FetchJson = async () => response([githubRepo()]);
+		await runSync({ db, targets: [TARGET], logger: makeLogger(), now: NOW, fetchJson });
+		expect(state.selectWhere).toHaveLength(1);
+		const selectSql = renderCondition(state.selectWhere[0]);
+		expect(selectSql).toContain('"projects"."provider"');
+		expect(selectSql).toContain('"projects"."external_id"');
+		expect(state.updateWhere).toHaveLength(1);
+		expect(renderCondition(state.updateWhere[0])).toContain('"projects"."id"');
+	});
+
+	it('leaves rejected rows untouched in refresh mode', async () => {
+		const { state, db } = makeFakeDb();
+		state.selectQueue = [
+			[
+				{
+					id: 'row-1',
+					provider: 'github',
+					projectUrl: 'https://github.com/guang/reborn',
+					status: 'rejected'
+				}
+			]
+		];
+		const fetchJson: FetchJson = async () => {
+			throw new Error('must not fetch');
+		};
+		const summary = await runSync({
+			db,
+			targets: [],
+			refreshIds: ['row-1'],
+			logger: makeLogger(),
+			now: NOW,
+			fetchJson
+		});
+		expect(summary.skipped).toBe(1);
+		expect(state.updates).toHaveLength(0);
+	});
+
+	it('skips refresh rows whose URL provider no longer matches the row', async () => {
+		const { state, db } = makeFakeDb();
+		state.selectQueue = [
+			[
+				{
+					id: 'row-1',
+					provider: 'github',
+					projectUrl: 'https://gitlab.com/group/project',
+					status: 'pending'
+				}
+			]
+		];
+		const fetchJson: FetchJson = async () => {
+			throw new Error('must not fetch');
+		};
+		const summary = await runSync({
+			db,
+			targets: [],
+			refreshIds: ['row-1'],
+			logger: makeLogger(),
+			now: NOW,
+			fetchJson
+		});
+		expect(summary.skipped).toBe(1);
+		expect(state.updates).toHaveLength(0);
+	});
+
+	it('dry-run refresh writes nothing, even on failures', async () => {
+		const { state, db } = makeFakeDb();
+		state.selectQueue = [
+			[
+				{
+					id: 'row-1',
+					provider: 'github',
+					projectUrl: 'https://github.com/guang/reborn',
+					status: 'pending'
+				}
+			]
+		];
+		const fetchJson: FetchJson = async () => {
+			throw new ProjectsFetchError('not_found', 'HTTP 404', 404);
+		};
+		const summary = await runSync({
+			db,
+			targets: [],
+			refreshIds: ['row-1'],
+			logger: makeLogger(),
+			now: NOW,
+			fetchJson,
+			dryRun: true
+		});
+		expect(summary.failed).toBe(1);
+		expect(state.updates).toHaveLength(0);
+	});
+
+	it('rethrows the original 23505 when the raced row cannot be found', async () => {
+		const { state, db } = makeFakeDb();
+		state.selectQueue = [[], []];
+		state.insertError = Object.assign(new Error('duplicate key value violates unique constraint'), {
+			cause: { code: '23505' }
+		});
+		const fetchJson: FetchJson = async () => response([githubRepo()]);
+		await expect(
+			runSync({ db, targets: [TARGET], logger: makeLogger(), now: NOW, fetchJson })
+		).rejects.toThrow(/duplicate key/);
+		expect(state.updates).toHaveLength(0);
+	});
+
+	it('warns when a list stops at the pagination cap', async () => {
+		const { state, db } = makeFakeDb();
+		state.selectQueue = [[]];
+		const fetchJson: FetchJson = async () =>
+			response([githubRepo()], {
+				link: '<https://api.github.com/users/guang/repos?page=2>; rel="next"'
+			});
+		const logger = makeLogger();
+		await runSync({ db, targets: [TARGET], logger, now: NOW, fetchJson });
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('truncated at the pagination cap')
+		);
 	});
 });

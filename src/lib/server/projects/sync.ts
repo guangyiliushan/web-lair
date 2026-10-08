@@ -60,7 +60,7 @@ interface Adapter {
 	fetchUserRepos(
 		account: string,
 		deps: { fetchJson?: FetchJson }
-	): Promise<{ repos: RawRepoMeta[]; rateLimited: boolean }>;
+	): Promise<{ repos: RawRepoMeta[]; rateLimited: boolean; truncated: boolean }>;
 	fetchRepo(identity: RepoIdentity, deps: { fetchJson?: FetchJson }): Promise<RawRepoMeta>;
 }
 
@@ -144,7 +144,7 @@ export async function runSync(options: RunSyncOptions): Promise<SyncSummary> {
 	for (const target of options.targets) {
 		summary.targets += 1;
 		const adapter = ADAPTERS[target.provider];
-		let listed: { repos: RawRepoMeta[]; rateLimited: boolean };
+		let listed: { repos: RawRepoMeta[]; rateLimited: boolean; truncated: boolean };
 		try {
 			listed = await adapter.fetchUserRepos(target.account, { fetchJson: options.fetchJson });
 		} catch (err) {
@@ -164,6 +164,13 @@ export async function runSync(options: RunSyncOptions): Promise<SyncSummary> {
 				repo: null,
 				kind: 'rate_limited'
 			});
+		}
+		if (listed.truncated) {
+			// Page-cap stop with more pages pending: loud, not silent
+			// (review 2026-10-08).
+			logger.warn(
+				`[projects] ${target.provider}/${target.account}: repo list truncated at the pagination cap`
+			);
 		}
 		const candidates: RawRepoMeta[] = [];
 		for (const repo of listed.repos) {
@@ -266,7 +273,8 @@ async function refreshByIds(
 		.select({
 			id: projects.id,
 			provider: projects.provider,
-			projectUrl: projects.projectUrl
+			projectUrl: projects.projectUrl,
+			status: projects.status
 		})
 		.from(projects)
 		.where(inArray(projects.id, ids));
@@ -277,13 +285,21 @@ async function refreshByIds(
 			summary.skipped += 1;
 			continue;
 		}
-		const identity = normalizeRepoUrl(row.projectUrl);
-		const adapter = identity ? ADAPTERS[identity.provider as ProjectSyncProvider] : undefined;
-		if (!identity || !adapter) {
-			// site / other rows are not syncable - skip silently (caller filters).
+		if (row.status === 'rejected') {
+			// Permanent memory: rejected rows are never touched by sync,
+			// refresh included (review 2026-10-08, §3.5).
 			summary.skipped += 1;
 			continue;
 		}
+		const identity = normalizeRepoUrl(row.projectUrl);
+		if (!identity || identity.provider !== row.provider) {
+			// site / other rows are not syncable, and a URL whose provider
+			// no longer matches the row would refresh the wrong repository
+			// (review 2026-10-08) - skip both.
+			summary.skipped += 1;
+			continue;
+		}
+		const adapter = ADAPTERS[identity.provider as ProjectSyncProvider];
 		try {
 			const repo = await adapter.fetchRepo(identity, { fetchJson: options.fetchJson });
 			if (!dryRun) {

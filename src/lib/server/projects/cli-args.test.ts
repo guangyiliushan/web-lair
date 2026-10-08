@@ -64,4 +64,20 @@ describe('parseProjectsCliArgs', () => {
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain('expects a value');
 	});
+
+	it('never swallows a following flag as a value (review 2026-10-08)', () => {
+		const result = parseProjectsCliArgs(['--account', '--dry-run']);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.error).toContain('expects a value');
+	});
+
+	it('caps the refresh id list', () => {
+		const ids = Array.from(
+			{ length: 501 },
+			(_, index) => `0191ca43-1a2b-7c3d-8e4f-${String(index).padStart(12, '0')}`
+		);
+		const result = parseProjectsCliArgs(['--refresh-ids', ids.join(',')]);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.error).toContain('at most 500');
+	});
 });

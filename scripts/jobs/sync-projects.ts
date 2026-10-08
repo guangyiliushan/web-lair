@@ -55,6 +55,13 @@ if (lock?.ok !== true) {
 
 try {
 	let targets: SyncTarget[] = [];
+	if (refreshIds && refreshIds.length > 0 && (provider || account)) {
+		// Do not silently drop the filters: refresh mode ignores them by
+		// design (it addresses rows, not targets).
+		console.warn(
+			'[projects] --refresh-ids ignores --provider/--account (rows are addressed by id).'
+		);
+	}
 	if (!refreshIds || refreshIds.length === 0) {
 		targets = await getOption('projects.sync_targets', db);
 		if (provider) targets = targets.filter((target) => target.provider === provider);

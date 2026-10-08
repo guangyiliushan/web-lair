@@ -17,6 +17,8 @@ export interface UserReposResult {
 	repos: RawRepoMeta[];
 	/** True when pagination stopped early because the quota ran out. */
 	rateLimited: boolean;
+	/** True when the page cap stopped paging while more pages existed. */
+	truncated: boolean;
 }
 
 function githubHeaders(): Record<string, string> {
@@ -78,10 +80,10 @@ export async function fetchUserRepos(
 		}
 		url = nextLink(response.headers.get('link'));
 		if (url && isRateLimitExhausted('github', response.headers).exhausted) {
-			return { repos, rateLimited: true };
+			return { repos, rateLimited: true, truncated: false };
 		}
 	}
-	return { repos, rateLimited: false };
+	return { repos, rateLimited: false, truncated: url !== null };
 }
 
 export async function fetchRepo(

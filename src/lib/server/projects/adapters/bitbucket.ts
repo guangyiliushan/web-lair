@@ -25,6 +25,15 @@ function bitbucketHeaders(): Record<string, string> {
 export function mapBitbucketRepo(value: unknown, workspace: string): RawRepoMeta | null {
 	const raw = asRecord(value, 'bitbucket repo');
 	if (raw.is_private === true) return null;
+	// full_name is the only display identity Bitbucket gives us; a payload
+	// without it is a shape change, not a row to import with a fake name.
+	const fullName = str(raw.full_name);
+	if (!fullName) {
+		throw new ProjectsFetchError(
+			'parse',
+			`bitbucket repository without full_name (workspace ${workspace})`
+		);
+	}
 	const links =
 		raw.links !== null && typeof raw.links === 'object'
 			? (raw.links as Record<string, unknown>)
@@ -41,7 +50,7 @@ export function mapBitbucketRepo(value: unknown, workspace: string): RawRepoMeta
 	return {
 		// Bitbucket uuids arrive brace-wrapped ({...}); strip before storing.
 		externalId: uuid.replace(/^\{/, '').replace(/\}$/, ''),
-		fullName: str(raw.full_name) ?? `${workspace}/`,
+		fullName,
 		projectUrl: str(html.href) ?? '',
 		homepage: str(raw.website),
 		avatar: str(avatarLink.href),
@@ -74,10 +83,10 @@ export async function fetchUserRepos(
 		}
 		url = str(body.next);
 		if (url && isRateLimitExhausted('bitbucket', response.headers).exhausted) {
-			return { repos, rateLimited: true };
+			return { repos, rateLimited: true, truncated: false };
 		}
 	}
-	return { repos, rateLimited: false };
+	return { repos, rateLimited: false, truncated: url !== null };
 }
 
 export async function fetchRepo(

@@ -58,12 +58,13 @@ export async function fetchUserRepos(
 			const mapped = mapGiteeRepo(item);
 			if (mapped) repos.push(mapped);
 		}
-		if (items.length < PER_PAGE) return { repos, rateLimited: false };
+		if (items.length < PER_PAGE) return { repos, rateLimited: false, truncated: false };
 		if (isRateLimitExhausted('gitee', response.headers).exhausted) {
-			return { repos, rateLimited: true };
+			return { repos, rateLimited: true, truncated: false };
 		}
 	}
-	return { repos, rateLimited: false };
+	// The loop only runs out while the last page was full - more may exist.
+	return { repos, rateLimited: false, truncated: true };
 }
 
 export async function fetchRepo(

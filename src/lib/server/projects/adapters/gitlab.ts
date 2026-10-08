@@ -69,10 +69,10 @@ export async function fetchUserRepos(
 		}
 		page = response.headers.get('x-next-page') || null;
 		if (page && isRateLimitExhausted('gitlab', response.headers).exhausted) {
-			return { repos, rateLimited: true };
+			return { repos, rateLimited: true, truncated: false };
 		}
 	} while (page && pages < MAX_PAGES);
-	return { repos, rateLimited: false };
+	return { repos, rateLimited: false, truncated: page !== null };
 }
 
 export async function fetchRepo(

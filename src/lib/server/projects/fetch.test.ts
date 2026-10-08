@@ -151,3 +151,115 @@ describe('projects fetchJson helpers', () => {
 		expect(error.kind).toBe('parse');
 	});
 });
+
+describe('projects fetchJson hardening (review 2026-10-08)', () => {
+	it('maps 410 to not_found as well as 404', async () => {
+		const gone = { fetch: vi.fn(async () => jsonResponse(410, {})) as unknown as typeof fetch };
+		await rejection(fetchJson('https://api.github.com/x', {}, gone)).toMatchObject({
+			kind: 'not_found'
+		});
+	});
+
+	it('retries a timeout once, then succeeds; persistent timeouts end as network', async () => {
+		let calls = 0;
+		const flaky = vi.fn(async () => {
+			calls += 1;
+			if (calls === 1) {
+				throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+			}
+			return jsonResponse(200, { ok: true });
+		});
+		const sleep = vi.fn(async () => {});
+		const result = await fetchJson(
+			'https://api.github.com/x',
+			{},
+			{ fetch: flaky as unknown as typeof fetch, sleep }
+		);
+		expect(result.json).toEqual({ ok: true });
+		expect(flaky).toHaveBeenCalledTimes(2);
+
+		const always = vi.fn(async () => {
+			throw new DOMException('aborted', 'TimeoutError');
+		});
+		await rejection(
+			fetchJson('https://api.github.com/x', {}, { fetch: always as unknown as typeof fetch, sleep })
+		).toMatchObject({ kind: 'network' });
+		expect(always).toHaveBeenCalledTimes(2);
+	});
+
+	it('does not retry DNS-style failures', async () => {
+		const dns = vi.fn(async () => {
+			throw new TypeError('fetch failed');
+		});
+		const sleep = vi.fn(async () => {});
+		await rejection(
+			fetchJson('https://api.github.com/x', {}, { fetch: dns as unknown as typeof fetch, sleep })
+		).toMatchObject({ kind: 'network' });
+		expect(dns).toHaveBeenCalledTimes(1);
+		expect(sleep).not.toHaveBeenCalled();
+	});
+
+	it('follows same-host redirects but rejects cross-origin hops', async () => {
+		const urls: string[] = [];
+		const same = vi.fn(async (url: RequestInfo | URL) => {
+			urls.push(String(url));
+			return urls.length === 1
+				? new Response(null, {
+						status: 301,
+						headers: { location: 'https://api.github.com/repos/a/b-new' }
+					})
+				: jsonResponse(200, { ok: true });
+		});
+		const result = await fetchJson(
+			'https://api.github.com/repos/a/b-old',
+			{},
+			{ fetch: same as unknown as typeof fetch }
+		);
+		expect(result.status).toBe(200);
+		expect(urls).toEqual([
+			'https://api.github.com/repos/a/b-old',
+			'https://api.github.com/repos/a/b-new'
+		]);
+
+		const cross = vi.fn(
+			async () =>
+				new Response(null, { status: 302, headers: { location: 'https://evil.example/' } })
+		);
+		await rejection(
+			fetchJson('https://api.github.com/x', {}, { fetch: cross as unknown as typeof fetch })
+		).toMatchObject({ kind: 'parse' });
+		expect(cross).toHaveBeenCalledTimes(1);
+	});
+
+	it('treats a bare Retry-After 403 as rate-limited and surfaces the reset time', async () => {
+		const limited = {
+			fetch: vi.fn(async () =>
+				jsonResponse(403, {}, { 'retry-after': '60', 'x-ratelimit-reset': '1700000000' })
+			) as unknown as typeof fetch
+		};
+		const error = (await fetchJson('https://api.github.com/x', {}, limited).catch(
+			(caught: unknown) => caught
+		)) as ProjectsFetchError;
+		expect(error).toMatchObject({ kind: 'rate_limited' });
+		expect(error.message).toContain('reset at 2023-11-14');
+	});
+
+	it('parses the HTTP-date form of Retry-After', async () => {
+		let calls = 0;
+		const flaky = vi.fn(async () => {
+			calls += 1;
+			return calls === 1
+				? jsonResponse(429, {}, { 'retry-after': new Date(Date.now() + 1500).toUTCString() })
+				: jsonResponse(200, { ok: true });
+		});
+		const sleep = vi.fn(async () => {});
+		const result = await fetchJson(
+			'https://api.github.com/x',
+			{},
+			{ fetch: flaky as unknown as typeof fetch, sleep }
+		);
+		expect(result.json).toEqual({ ok: true });
+		expect(flaky).toHaveBeenCalledTimes(2);
+		expect(sleep).toHaveBeenCalledTimes(1);
+	});
+});
