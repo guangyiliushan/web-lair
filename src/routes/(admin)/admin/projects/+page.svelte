@@ -313,7 +313,12 @@
 	}
 
 	const runFailures = $derived(
-		Array.isArray(runResult?.failures) ? (runResult.failures as RunFailure[]) : []
+		Array.isArray(runResult?.failures)
+			? (runResult.failures as unknown[]).filter(
+					(failure): failure is RunFailure =>
+						typeof failure === 'object' && failure !== null && 'kind' in failure
+				)
+			: []
 	);
 
 	/** Selection must not survive a tab switch: the bulk bar would act on rows

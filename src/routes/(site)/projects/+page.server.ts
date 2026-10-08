@@ -32,7 +32,7 @@ export const load: PageServerLoad = async () => {
 		})
 		.from(projects)
 		.where(eq(projects.status, 'published'))
-		.orderBy(asc(projects.sortOrder), desc(projects.createdAt))
+		.orderBy(asc(projects.sortOrder), desc(projects.createdAt), desc(projects.id))
 		.then((items) =>
 			items.map((item) => ({
 				...item,

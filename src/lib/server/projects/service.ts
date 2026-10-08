@@ -123,7 +123,7 @@ export function listProjects(filter: ProjectStatus | 'all'): Promise<AdminProjec
 		.select(ADMIN_PROJECT_COLUMNS)
 		.from(projects)
 		.where(filter === 'all' ? undefined : eq(projects.status, filter))
-		.orderBy(asc(projects.sortOrder), desc(projects.createdAt));
+		.orderBy(asc(projects.sortOrder), desc(projects.createdAt), desc(projects.id));
 }
 
 /** Bulk status transition (§4.2): one atomic conditional UPDATE - rows whose
@@ -167,7 +167,7 @@ export async function updateProjectFields(id: string, fields: ProjectEditFields)
 	const docUrl = requireHttpUrl(fields.docUrl);
 	const avatar = requireHttpUrl(fields.avatar);
 	const [current] = await db
-		.select({ provider: projects.provider })
+		.select({ provider: projects.provider, projectUrl: projects.projectUrl })
 		.from(projects)
 		.where(eq(projects.id, id))
 		.limit(1);
@@ -178,7 +178,13 @@ export async function updateProjectFields(id: string, fields: ProjectEditFields)
 			.set({
 				name,
 				description: fields.description,
-				projectUrl: normalizeUrlForWrite(current.provider, projectUrl),
+				// Repo-row URLs stay sync-owned: the edit dialog renders them
+				// read-only, and a constructed POST must not rewrite them either
+				// (closing review - create rechecks the platform identity, the
+				// update path keeps the stored value).
+				projectUrl: isProjectSyncProvider(current.provider)
+					? current.projectUrl
+					: normalizeUrlForWrite(current.provider, projectUrl),
 				previewUrl,
 				docUrl,
 				avatar
@@ -269,7 +275,7 @@ export async function moveProject(id: string, move: 'up' | 'down' | 'top'): Prom
 			const rows = await tx
 				.select({ id: projects.id })
 				.from(projects)
-				.orderBy(asc(projects.sortOrder), desc(projects.createdAt))
+				.orderBy(asc(projects.sortOrder), desc(projects.createdAt), desc(projects.id))
 				.for('update');
 			const index = rows.findIndex((row) => row.id === id);
 			if (index === -1) throw new ProjectsServiceError('not_found', 'missing');
@@ -396,7 +402,11 @@ async function findExistingSite(url: string): Promise<{ id: string; status: stri
 	return row ?? null;
 }
 
-/** Site/other main links normalize by host case + trailing slash (§2.8-4). */
+/**
+ * Site/other main links normalize by host case + trailing slash (§2.8-4);
+ * the fragment (hash) and any userinfo are dropped, queries are preserved
+ * as-is (closing review: documented behavior).
+ */
 export function normalizeSiteUrl(raw: string): string {
 	const parsed = new URL(raw);
 	const host = parsed.host.toLowerCase();

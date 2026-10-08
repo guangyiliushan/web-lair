@@ -82,6 +82,10 @@ test.beforeAll(() => {
 test.afterAll(() => {
 	cleanup();
 	restoreTargets();
+	// Self-check (closing review): the restore must land exactly on the
+	// snapshot value.
+	const restored = psql(`select value::text from options where name = '${TARGETS_OPTION}'`);
+	expect(restored === '' ? null : restored).toBe(savedTargets);
 });
 
 test.describe('projects admin', () => {
