@@ -302,7 +302,10 @@ async function refreshByIds(
 			summary.skipped += 1;
 			continue;
 		}
-		const accountKey = `${identity.provider}/${identity.account}`;
+		// Case-insensitive account bucket: providers treat account names
+		// case-insensitively, so case variants share one breaker (review
+		// 2026-10-08).
+		const accountKey = `${identity.provider}/${identity.account.toLowerCase()}`;
 		if (rateLimitedAccounts.has(accountKey)) {
 			// Plan §3.4: after a rate limit, the rest of this run's requests
 			// for the account are abandoned (review 2026-10-08).

@@ -340,6 +340,18 @@ describe('projects fetchJson hardening (review 2026-10-08)', () => {
 			fetchJson('https://api.github.com/x', {}, { fetch: otherPort as unknown as typeof fetch })
 		).toMatchObject({ kind: 'parse' });
 		expect(otherPort).toHaveBeenCalledTimes(1);
+
+		const credentials = vi.fn(
+			async () =>
+				new Response(null, {
+					status: 301,
+					headers: { location: 'https://user:pass@api.github.com/x' }
+				})
+		);
+		await rejection(
+			fetchJson('https://api.github.com/x', {}, { fetch: credentials as unknown as typeof fetch })
+		).toMatchObject({ kind: 'parse' });
+		expect(credentials).toHaveBeenCalledTimes(1);
 	});
 
 	it('waits out a near 403 reset once, then rate-limits', async () => {
@@ -374,5 +386,55 @@ describe('projects fetchJson hardening (review 2026-10-08)', () => {
 		).toMatchObject({ kind: 'rate_limited' });
 		expect(farFetch).toHaveBeenCalledTimes(1);
 		expect(sleep2).not.toHaveBeenCalled();
+	});
+
+	it('waits for a near 403 reset only once per call', async () => {
+		const soon = String(Math.floor((Date.now() + 2000) / 1000));
+		const doFetch = vi.fn(async () =>
+			jsonResponse(403, {}, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': soon })
+		);
+		const sleep = vi.fn(async () => {});
+		await rejection(
+			fetchJson(
+				'https://api.github.com/x',
+				{},
+				{ fetch: doFetch as unknown as typeof fetch, sleep }
+			)
+		).toMatchObject({ kind: 'rate_limited' });
+		expect(doFetch).toHaveBeenCalledTimes(2);
+		expect(sleep).toHaveBeenCalledTimes(1);
+	});
+
+	it('honours a short Retry-After on a secondary-limit 403', async () => {
+		let calls = 0;
+		const flaky = vi.fn(async () => {
+			calls += 1;
+			return calls === 1
+				? jsonResponse(403, {}, { 'retry-after': '2' })
+				: jsonResponse(200, { ok: true });
+		});
+		const sleep = vi.fn(async () => {});
+		const result = await fetchJson(
+			'https://api.github.com/x',
+			{},
+			{ fetch: flaky as unknown as typeof fetch, sleep }
+		);
+		expect(result.json).toEqual({ ok: true });
+		expect(sleep).toHaveBeenCalledWith(2000);
+	});
+
+	it('classifies a mid-body read failure as network, not parse', async () => {
+		const broken = vi.fn(async () => ({
+			status: 200,
+			headers: new Headers(),
+			body: null,
+			json: async () => {
+				throw new TypeError('terminated');
+			}
+		}));
+		await rejection(
+			fetchJson('https://api.github.com/x', {}, { fetch: broken as unknown as typeof fetch })
+		).toMatchObject({ kind: 'network' });
+		expect(broken).toHaveBeenCalledTimes(1);
 	});
 });

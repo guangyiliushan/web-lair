@@ -154,6 +154,12 @@ async function doFetchWithRedirects(
 		} catch {
 			throw new ProjectsFetchError('parse', 'invalid redirect location', response.status);
 		}
+		// Embedded credentials in a redirect target are never followed
+		// (review 2026-10-08): undici would refuse the request anyway, but
+		// classify it as a malformed redirect instead of a network error.
+		if (next.username !== '' || next.password !== '') {
+			throw new ProjectsFetchError('parse', 'redirect with embedded credentials rejected');
+		}
 		// Origin-level (scheme + host + port): a same-host scheme downgrade
 		// or port change would still resend credentials (review 2026-10-08).
 		if (next.origin !== new URL(target).origin || next.protocol !== 'https:') {
@@ -223,11 +229,18 @@ export async function fetchJson(
 			await response.body?.cancel().catch(() => {});
 			if (isRateLimitedResponse(response.headers)) {
 				const resetAtMs = rateLimitResetAtMs(response.headers);
-				// Same run-budget rule as 429: wait out a near reset once,
-				// otherwise give up this run's requests for the account
-				// (plan §3.4).
-				const waitMs = resetAtMs !== null ? resetAtMs - Date.now() : null;
-				if (waitMs !== null && waitMs >= 0 && waitMs <= MAX_RETRY_AFTER_MS && attempt === 1) {
+				const retryAfterWaitMs = rawRetryAfterMs(response.headers);
+				const resetWaitMs = resetAtMs !== null ? resetAtMs - Date.now() : null;
+				// Same run-budget rule as 429: wait out the nearest promised
+				// window once, otherwise give up this run's requests for the
+				// account (plan §3.4; review 2026-10-08).
+				let waitMs: number | null = null;
+				for (const candidate of [retryAfterWaitMs, resetWaitMs]) {
+					if (candidate !== null && candidate >= 0) {
+						waitMs = waitMs === null ? candidate : Math.min(waitMs, candidate);
+					}
+				}
+				if (waitMs !== null && waitMs <= MAX_RETRY_AFTER_MS && attempt === 1) {
 					await sleep(waitMs);
 					continue;
 				}
@@ -275,7 +288,13 @@ export async function fetchJson(
 				}
 				throw new ProjectsFetchError('network', 'response body timed out');
 			}
-			throw new ProjectsFetchError('parse', 'response body is not JSON', response.status);
+			// A body cut mid-read (socket reset / premature close) is a
+			// network failure; SyntaxError means the platform answered with
+			// non-JSON - a shape signal (review 2026-10-08).
+			if (err instanceof SyntaxError) {
+				throw new ProjectsFetchError('parse', 'response body is not JSON', response.status);
+			}
+			throw new ProjectsFetchError('network', 'response body could not be read');
 		}
 		return { status: response.status, headers: response.headers, json };
 	}

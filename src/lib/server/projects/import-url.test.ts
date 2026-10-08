@@ -265,7 +265,7 @@ describe('import-url hardening (review 2026-10-08)', () => {
 
 	it('clips prefill text, strips controls and resolves relative icons', async () => {
 		const long = 'y'.repeat(600);
-		const html = `<meta property="og:title" content="${long}"><meta name="description" content="line\u0001break\u200e"><meta property="og:image" content="/img/pic.png">`;
+		const html = `<meta property="og:title" content="${long}"><meta name="description" content="line\u0001break\u200e\u200f"><meta property="og:image" content="/img/pic.png">`;
 		const fetch = (async () => htmlResponse(html)) as unknown as typeof undiciFetch;
 		const result = await resolveImportMetadata('https://lair.example/page', {
 			fetch,
@@ -288,5 +288,37 @@ describe('import-url hardening (review 2026-10-08)', () => {
 		});
 		if (!dataResult.ok || dataResult.kind !== 'og') throw new Error('expected og result');
 		expect(dataResult.og.icon).toBeNull();
+	});
+
+	it('caps titles by code points (no split surrogate pairs)', async () => {
+		const html = `<meta property="og:title" content="${'a' + '😀'.repeat(400)}">`;
+		const fetch = (async () => htmlResponse(html)) as unknown as typeof undiciFetch;
+		const result = await resolveImportMetadata('https://lair.example/astral', {
+			fetch,
+			resolveHost: async () => PUBLIC_HOST
+		});
+		if (!result.ok || result.kind !== 'og') throw new Error('expected og result');
+		const title = result.og.title ?? '';
+		expect([...title]).toHaveLength(300);
+		expect(title.endsWith('\u{1F600}')).toBe(true);
+	});
+
+	it('keeps the tail of the kept range when a chunk crosses the cap', async () => {
+		const head = '<html><head><meta property="og:title" content="Cut">';
+		const marker = '<meta property="og:description" content="TAILX">';
+		const cap = 512 * 1024;
+		const chunks = [
+			new TextEncoder().encode(head),
+			new TextEncoder().encode('b'.repeat(cap - head.length - marker.length) + marker + 'cccc'),
+			new TextEncoder().encode('<meta property="og:url" content="/late">')
+		];
+		const fetch = (async () => chunkedResponse(chunks)) as unknown as typeof undiciFetch;
+		const result = await resolveImportMetadata('https://lair.example/cut', {
+			fetch,
+			resolveHost: async () => PUBLIC_HOST
+		});
+		if (!result.ok || result.kind !== 'og') throw new Error('expected og result');
+		expect(result.og.title).toBe('Cut');
+		expect(result.og.description).toBe('TAILX');
 	});
 });
