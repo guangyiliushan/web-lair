@@ -268,7 +268,10 @@ async function refreshByIds(
 	addFailure: (failure: SyncFailure) => void
 ): Promise<void> {
 	const { db, dryRun, now } = options;
-	const ids = options.refreshIds ?? [];
+	// Duplicate ids collapse: one fetch per row (review 2026-10-08).
+	const ids = [...new Set(options.refreshIds ?? [])];
+	/** Accounts that hit a rate limit this run - remaining rows skip (plan §3.4). */
+	const rateLimitedAccounts = new Set<string>();
 	const rows = await db
 		.select({
 			id: projects.id,
@@ -299,6 +302,13 @@ async function refreshByIds(
 			summary.skipped += 1;
 			continue;
 		}
+		const accountKey = `${identity.provider}/${identity.account}`;
+		if (rateLimitedAccounts.has(accountKey)) {
+			// Plan §3.4: after a rate limit, the rest of this run's requests
+			// for the account are abandoned (review 2026-10-08).
+			summary.skipped += 1;
+			continue;
+		}
 		const adapter = ADAPTERS[identity.provider as ProjectSyncProvider];
 		try {
 			const repo = await adapter.fetchRepo(identity, { fetchJson: options.fetchJson });
@@ -314,6 +324,9 @@ async function refreshByIds(
 				repo: identity.repo,
 				kind
 			});
+			if (kind === 'rate_limited') {
+				rateLimitedAccounts.add(accountKey);
+			}
 			if (!dryRun) {
 				await db
 					.update(projects)

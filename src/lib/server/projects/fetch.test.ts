@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchJson, isRateLimitExhausted, ProjectsFetchError, syncUserAgent } from './fetch';
+import {
+	fetchJson,
+	isRateLimitExhausted,
+	ProjectsFetchError,
+	rateLimitResetAtMs,
+	syncUserAgent
+} from './fetch';
 
 /**
  * T10 (plan §7): the five-class failure surface of the fetch unit - 404 ->
@@ -118,23 +124,28 @@ describe('projects fetchJson classification', () => {
 
 describe('projects fetchJson helpers', () => {
 	it('reads exhaustion signals per platform', () => {
-		expect(
-			isRateLimitExhausted('github', new Headers({ 'x-ratelimit-remaining': '0' }))
-		).toMatchObject({
-			exhausted: true
-		});
-		expect(
-			isRateLimitExhausted('gitlab', new Headers({ 'ratelimit-remaining': '0' }))
-		).toMatchObject({
-			exhausted: true
-		});
-		expect(
-			isRateLimitExhausted('gitee', new Headers({ 'x-ratelimit-remaining': '1' }))
-		).toMatchObject({
-			exhausted: false
-		});
+		expect(isRateLimitExhausted('github', new Headers({ 'x-ratelimit-remaining': '0' }))).toBe(
+			true
+		);
+		expect(isRateLimitExhausted('gitlab', new Headers({ 'ratelimit-remaining': '0' }))).toBe(true);
+		expect(isRateLimitExhausted('gitee', new Headers({ 'x-ratelimit-remaining': '1' }))).toBe(
+			false
+		);
 		// Bitbucket exposes no remaining header on the probed endpoints.
-		expect(isRateLimitExhausted('bitbucket', new Headers())).toMatchObject({ exhausted: false });
+		expect(isRateLimitExhausted('bitbucket', new Headers())).toBe(false);
+	});
+
+	it('reads reset headers with a hard validity cap', () => {
+		expect(rateLimitResetAtMs(new Headers({ 'x-ratelimit-reset': '1700000000' }))).toBe(
+			1700000000000
+		);
+		expect(rateLimitResetAtMs(new Headers({ 'ratelimit-reset': '1700000000' }))).toBe(
+			1700000000000
+		);
+		// Malformed values never reach Date: digit cap + finite range.
+		expect(rateLimitResetAtMs(new Headers({ 'x-ratelimit-reset': '17000000001234' }))).toBeNull();
+		expect(rateLimitResetAtMs(new Headers({ 'x-ratelimit-reset': 'soon' }))).toBeNull();
+		expect(rateLimitResetAtMs(new Headers())).toBeNull();
 	});
 
 	it('builds the product UA with an optional contact comment', () => {
@@ -261,5 +272,107 @@ describe('projects fetchJson hardening (review 2026-10-08)', () => {
 		expect(result.json).toEqual({ ok: true });
 		expect(flaky).toHaveBeenCalledTimes(2);
 		expect(sleep).toHaveBeenCalledTimes(1);
+	});
+
+	it('retries a body-phase timeout once and classifies persistent ones as network', async () => {
+		const stalled = () => ({
+			status: 200,
+			headers: new Headers(),
+			body: null,
+			json: async () => {
+				throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+			}
+		});
+		let calls = 0;
+		const flaky = vi.fn(async () => {
+			calls += 1;
+			return calls === 1 ? stalled() : jsonResponse(200, { ok: true });
+		});
+		const sleep = vi.fn(async () => {});
+		const result = await fetchJson(
+			'https://api.github.com/x',
+			{},
+			{ fetch: flaky as unknown as typeof fetch, sleep }
+		);
+		expect(result.json).toEqual({ ok: true });
+		expect(flaky).toHaveBeenCalledTimes(2);
+
+		const always = vi.fn(async () => stalled());
+		const sleep2 = vi.fn(async () => {});
+		await rejection(
+			fetchJson(
+				'https://api.github.com/x',
+				{},
+				{ fetch: always as unknown as typeof fetch, sleep: sleep2 }
+			)
+		).toMatchObject({ kind: 'network' });
+		expect(always).toHaveBeenCalledTimes(2);
+	});
+
+	it('caps the redirect chain and rejects scheme downgrades / port changes', async () => {
+		let calls = 0;
+		const loopback = vi.fn(async () => {
+			calls += 1;
+			return new Response(null, {
+				status: 302,
+				headers: { location: `https://api.github.com/hop${calls}` }
+			});
+		});
+		await rejection(
+			fetchJson('https://api.github.com/start', {}, { fetch: loopback as unknown as typeof fetch })
+		).toMatchObject({ kind: 'parse' });
+		expect(loopback).toHaveBeenCalledTimes(4);
+
+		const downgrade = vi.fn(
+			async () =>
+				new Response(null, { status: 301, headers: { location: 'http://api.github.com/x' } })
+		);
+		await rejection(
+			fetchJson('https://api.github.com/x', {}, { fetch: downgrade as unknown as typeof fetch })
+		).toMatchObject({ kind: 'parse' });
+		expect(downgrade).toHaveBeenCalledTimes(1);
+
+		const otherPort = vi.fn(
+			async () =>
+				new Response(null, { status: 301, headers: { location: 'https://api.github.com:8443/x' } })
+		);
+		await rejection(
+			fetchJson('https://api.github.com/x', {}, { fetch: otherPort as unknown as typeof fetch })
+		).toMatchObject({ kind: 'parse' });
+		expect(otherPort).toHaveBeenCalledTimes(1);
+	});
+
+	it('waits out a near 403 reset once, then rate-limits', async () => {
+		const soon = String(Math.floor((Date.now() + 2000) / 1000));
+		let calls = 0;
+		const flaky = vi.fn(async () => {
+			calls += 1;
+			return calls === 1
+				? jsonResponse(403, {}, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': soon })
+				: jsonResponse(200, { ok: true });
+		});
+		const sleep = vi.fn(async () => {});
+		const result = await fetchJson(
+			'https://api.github.com/x',
+			{},
+			{ fetch: flaky as unknown as typeof fetch, sleep }
+		);
+		expect(result.json).toEqual({ ok: true });
+		expect(sleep).toHaveBeenCalledTimes(1);
+
+		const far = String(Math.floor((Date.now() + 3_600_000) / 1000));
+		const farFetch = vi.fn(async () =>
+			jsonResponse(403, {}, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': far })
+		);
+		const sleep2 = vi.fn(async () => {});
+		await rejection(
+			fetchJson(
+				'https://api.github.com/x',
+				{},
+				{ fetch: farFetch as unknown as typeof fetch, sleep: sleep2 }
+			)
+		).toMatchObject({ kind: 'rate_limited' });
+		expect(farFetch).toHaveBeenCalledTimes(1);
+		expect(sleep2).not.toHaveBeenCalled();
 	});
 });

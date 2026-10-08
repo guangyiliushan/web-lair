@@ -56,33 +56,27 @@ export interface FetchJsonResponse {
 export type FetchJson = (url: string, init?: FetchJsonInit) => Promise<FetchJsonResponse>;
 
 /**
- * Rate-limit exhaustion probe per platform (plan §3.4: at Remaining=0 wait
- * for the reset window; otherwise give up the rest of this run's requests
- * for the account and record rate_limited). Bitbucket exposes no
- * remaining header on the probed endpoints - 429 is its only signal.
+ * Rate-limit exhaustion probe per platform (plan §3.4). Bitbucket exposes
+ * no remaining header on the probed endpoints - 429 is its only signal.
  */
-export function isRateLimitExhausted(
-	provider: string,
-	headers: Headers
-): { exhausted: boolean; resetAtMs: number | null } {
-	const read = (name: string): string | null => headers.get(name);
-	if (provider === 'github') {
-		const remaining = read('x-ratelimit-remaining');
-		const reset = read('x-ratelimit-reset');
-		return {
-			exhausted: remaining === '0',
-			resetAtMs: reset !== null && /^\d+$/.test(reset) ? Number(reset) * 1000 : null
-		};
-	}
-	if (provider === 'gitlab') {
-		const remaining = read('ratelimit-remaining');
-		return { exhausted: remaining === '0', resetAtMs: null };
-	}
-	if (provider === 'gitee') {
-		const remaining = read('x-ratelimit-remaining');
-		return { exhausted: remaining === '0', resetAtMs: null };
-	}
-	return { exhausted: false, resetAtMs: null };
+export function isRateLimitExhausted(provider: string, headers: Headers): boolean {
+	if (provider === 'github') return headers.get('x-ratelimit-remaining') === '0';
+	if (provider === 'gitlab') return headers.get('ratelimit-remaining') === '0';
+	if (provider === 'gitee') return headers.get('x-ratelimit-remaining') === '0';
+	return false;
+}
+
+/**
+ * Reset moment from the epoch-seconds headers (GitHub `x-ratelimit-reset`,
+ * GitLab `ratelimit-reset`). Digit-capped and range-checked so a malformed
+ * header can never reach `new Date(...).toISOString()` as an invalid value
+ * (review 2026-10-08).
+ */
+export function rateLimitResetAtMs(headers: Headers): number | null {
+	const raw = headers.get('x-ratelimit-reset') ?? headers.get('ratelimit-reset');
+	if (raw === null || !/^\d{1,11}$/.test(raw)) return null;
+	const ms = Number(raw) * 1000;
+	return Number.isFinite(ms) && ms <= 8.64e15 ? ms : null;
 }
 
 export interface ApiFetchDeps {
@@ -123,15 +117,18 @@ const MAX_API_REDIRECTS = 3;
  * Fixed-host API GET with manual redirects: follow up to
  * MAX_API_REDIRECTS hops (GitHub answers 301 for renamed repositories -
  * the API response stays the source of truth), but never leave the
- * original hostname - undici strips `authorization` cross-origin yet
- * leaves custom headers (GitLab's `private-token`) intact, so a
- * cross-origin hop would leak credentials. Fail closed instead.
+ * original origin (scheme + host + port) - undici strips `authorization`
+ * cross-origin yet leaves custom headers (GitLab's `private-token`)
+ * intact, and a same-host downgrade/port change still resends them.
+ * Fail closed instead. `signal` is the per-attempt deadline: every hop of
+ * this attempt shares it, so a redirect chain cannot outlive the nominal
+ * timeout (review 2026-10-08).
  */
 async function doFetchWithRedirects(
 	doFetch: typeof fetch,
 	url: string,
 	init: FetchJsonInit,
-	timeoutMs: number
+	signal: AbortSignal
 ): Promise<Response> {
 	let target = url;
 	let redirects = 0;
@@ -139,7 +136,7 @@ async function doFetchWithRedirects(
 		const response = await doFetch(target, {
 			method: 'GET',
 			headers: { 'user-agent': syncUserAgent(), accept: 'application/json', ...init.headers },
-			signal: AbortSignal.timeout(timeoutMs),
+			signal,
 			redirect: 'manual'
 		});
 		if (response.status < 300 || response.status >= 400) return response;
@@ -157,8 +154,10 @@ async function doFetchWithRedirects(
 		} catch {
 			throw new ProjectsFetchError('parse', 'invalid redirect location', response.status);
 		}
-		if (next.hostname !== new URL(target).hostname) {
-			throw new ProjectsFetchError('parse', `cross-origin redirect rejected: ${next.hostname}`);
+		// Origin-level (scheme + host + port): a same-host scheme downgrade
+		// or port change would still resend credentials (review 2026-10-08).
+		if (next.origin !== new URL(target).origin || next.protocol !== 'https:') {
+			throw new ProjectsFetchError('parse', `cross-origin redirect rejected: ${next.origin}`);
 		}
 		target = next.href;
 	}
@@ -183,7 +182,10 @@ export async function fetchJson(
 		attempt += 1;
 		let response: Response;
 		try {
-			response = await doFetchWithRedirects(doFetch, url, init, timeoutMs);
+			// One deadline per attempt, covering every redirect hop of that
+			// attempt (review 2026-10-08: per-hop signals let a chain exceed
+			// the nominal timeout).
+			response = await doFetchWithRedirects(doFetch, url, init, AbortSignal.timeout(timeoutMs));
 		} catch (err) {
 			// Classified redirect failures pass straight through.
 			if (err instanceof ProjectsFetchError) throw err;
@@ -220,9 +222,15 @@ export async function fetchJson(
 		if (response.status === 403) {
 			await response.body?.cancel().catch(() => {});
 			if (isRateLimitedResponse(response.headers)) {
-				// Surface "when can we retry" (plan §3.3) from the reset
-				// header when the platform provides one.
-				const { resetAtMs } = isRateLimitExhausted('github', response.headers);
+				const resetAtMs = rateLimitResetAtMs(response.headers);
+				// Same run-budget rule as 429: wait out a near reset once,
+				// otherwise give up this run's requests for the account
+				// (plan §3.4).
+				const waitMs = resetAtMs !== null ? resetAtMs - Date.now() : null;
+				if (waitMs !== null && waitMs >= 0 && waitMs <= MAX_RETRY_AFTER_MS && attempt === 1) {
+					await sleep(waitMs);
+					continue;
+				}
 				const suffix = resetAtMs !== null ? `; reset at ${new Date(resetAtMs).toISOString()}` : '';
 				throw new ProjectsFetchError('rate_limited', `HTTP 403 (rate limited${suffix})`, 403);
 			}
@@ -257,7 +265,16 @@ export async function fetchJson(
 		let json: unknown;
 		try {
 			json = await response.json();
-		} catch {
+		} catch (err) {
+			// A body-phase timeout is still a timeout (retry once, then
+			// network) - never a platform shape signal (review 2026-10-08).
+			if (err instanceof Error && err.name === 'TimeoutError') {
+				if (attempt === 1) {
+					await sleep(RETRY_DELAY_MS);
+					continue;
+				}
+				throw new ProjectsFetchError('network', 'response body timed out');
+			}
 			throw new ProjectsFetchError('parse', 'response body is not JSON', response.status);
 		}
 		return { status: response.status, headers: response.headers, json };

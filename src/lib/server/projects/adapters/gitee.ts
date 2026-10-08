@@ -59,7 +59,7 @@ export async function fetchUserRepos(
 			if (mapped) repos.push(mapped);
 		}
 		if (items.length < PER_PAGE) return { repos, rateLimited: false, truncated: false };
-		if (isRateLimitExhausted('gitee', response.headers).exhausted) {
+		if (isRateLimitExhausted('gitee', response.headers)) {
 			return { repos, rateLimited: true, truncated: false };
 		}
 	}

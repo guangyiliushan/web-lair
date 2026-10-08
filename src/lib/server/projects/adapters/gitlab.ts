@@ -68,7 +68,7 @@ export async function fetchUserRepos(
 			if (mapped) repos.push(mapped);
 		}
 		page = response.headers.get('x-next-page') || null;
-		if (page && isRateLimitExhausted('gitlab', response.headers).exhausted) {
+		if (page && isRateLimitExhausted('gitlab', response.headers)) {
 			return { repos, rateLimited: true, truncated: false };
 		}
 	} while (page && pages < MAX_PAGES);

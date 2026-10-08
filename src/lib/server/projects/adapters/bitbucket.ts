@@ -82,7 +82,7 @@ export async function fetchUserRepos(
 			if (mapped) repos.push(mapped);
 		}
 		url = str(body.next);
-		if (url && isRateLimitExhausted('bitbucket', response.headers).exhausted) {
+		if (url && isRateLimitExhausted('bitbucket', response.headers)) {
 			return { repos, rateLimited: true, truncated: false };
 		}
 	}

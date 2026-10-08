@@ -79,7 +79,7 @@ export async function fetchUserRepos(
 			if (mapped) repos.push(mapped);
 		}
 		url = nextLink(response.headers.get('link'));
-		if (url && isRateLimitExhausted('github', response.headers).exhausted) {
+		if (url && isRateLimitExhausted('github', response.headers)) {
 			return { repos, rateLimited: true, truncated: false };
 		}
 	}

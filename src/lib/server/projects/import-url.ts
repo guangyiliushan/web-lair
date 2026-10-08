@@ -275,11 +275,13 @@ interface HtmlNode {
 function cleanText(value: string | null, maxLen: number): string | null {
 	if (value === null) return null;
 	const cleaned = value
-		.replaceAll(/[\p{Cc}\u202a-\u202e\u2066-\u2069]+/gu, ' ')
+		.replaceAll(/[\p{Cc}\u200e\u200f\u202a-\u202e\u2066-\u2069]+/gu, ' ')
 		.replaceAll(/\s+/g, ' ')
 		.trim();
 	if (cleaned.length === 0) return null;
-	return cleaned.length > maxLen ? cleaned.slice(0, maxLen) : cleaned;
+	// Code-point-safe cap: a code-unit slice could split a surrogate pair.
+	const points = [...cleaned];
+	return points.length > maxLen ? points.slice(0, maxLen).join('') : cleaned;
 }
 
 /** OG extraction: `og:*` first, then `twitter:*`, then plain `<title>`. */

@@ -148,9 +148,10 @@ describe('import-url hardening (review 2026-10-08)', () => {
 		if (result.ok && result.kind === 'og') expect(result.og.title).toBe('Big');
 	});
 
-	it('accepts a page exactly at the cap', async () => {
+	it('accepts a page exactly at the cap, keeping the tail', async () => {
+		const tail = '<meta property="og:description" content="TAIL">';
 		const base = '<title>Exact</title>';
-		const padded = base + 'a'.repeat(512 * 1024 - base.length);
+		const padded = base + 'a'.repeat(512 * 1024 - base.length - tail.length) + tail;
 		const fetch = (async () =>
 			new Response(new TextEncoder().encode(padded), {
 				status: 200,
@@ -161,7 +162,13 @@ describe('import-url hardening (review 2026-10-08)', () => {
 			resolveHost: async () => PUBLIC_HOST
 		});
 		expect(result).toMatchObject({ ok: true, kind: 'og' });
-		if (result.ok && result.kind === 'og') expect(result.og.title).toBe('Exact');
+		if (result.ok && result.kind === 'og') {
+			expect(result.og.title).toBe('Exact');
+			// The marker sits at the very end of the exactly-cap page: the
+			// cap must keep the final bytes, not just the head (review
+			// 2026-10-08).
+			expect(result.og.description).toBe('TAIL');
+		}
 	});
 
 	it('classifies mid-body stream failures as network (no raw DOMException)', async () => {
@@ -258,7 +265,7 @@ describe('import-url hardening (review 2026-10-08)', () => {
 
 	it('clips prefill text, strips controls and resolves relative icons', async () => {
 		const long = 'y'.repeat(600);
-		const html = `<meta property="og:title" content="${long}"><meta name="description" content="line\u0001break"><meta property="og:image" content="/img/pic.png">`;
+		const html = `<meta property="og:title" content="${long}"><meta name="description" content="line\u0001break\u200e"><meta property="og:image" content="/img/pic.png">`;
 		const fetch = (async () => htmlResponse(html)) as unknown as typeof undiciFetch;
 		const result = await resolveImportMetadata('https://lair.example/page', {
 			fetch,
@@ -266,6 +273,8 @@ describe('import-url hardening (review 2026-10-08)', () => {
 		});
 		if (!result.ok || result.kind !== 'og') throw new Error('expected og result');
 		expect(result.og.title).toHaveLength(300);
+		// C0 control and LRM both reduce to spaces, then collapse (review
+		// 2026-10-08).
 		expect(result.og.description).toBe('line break');
 		expect(result.og.icon).toBe('https://lair.example/img/pic.png');
 

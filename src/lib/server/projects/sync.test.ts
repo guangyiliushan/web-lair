@@ -486,4 +486,49 @@ describe('projects runSync hardening (review 2026-10-08)', () => {
 			expect.stringContaining('truncated at the pagination cap')
 		);
 	});
+
+	it('circuit-breaks remaining refresh rows for an account after a rate limit', async () => {
+		const { state, db } = makeFakeDb();
+		state.selectQueue = [
+			[
+				{ id: 'row-1', provider: 'github', projectUrl: 'https://github.com/guang/reborn' },
+				{ id: 'row-2', provider: 'github', projectUrl: 'https://github.com/guang/other' }
+			]
+		];
+		const fetchJson: FetchJson = async (url) => {
+			if (url.includes('reborn')) {
+				throw new ProjectsFetchError('rate_limited', 'HTTP 403 (rate limited)', 403);
+			}
+			throw new Error('must not fetch after the rate limit');
+		};
+		const summary = await runSync({
+			db,
+			targets: [],
+			refreshIds: ['row-1', 'row-2'],
+			logger: makeLogger(),
+			now: NOW,
+			fetchJson
+		});
+		expect(summary.failed).toBe(1);
+		expect(summary.skipped).toBe(1);
+		expect(state.updates).toHaveLength(1);
+	});
+
+	it('deduplicates repeated refresh ids (one fetch per row)', async () => {
+		const { state, db } = makeFakeDb();
+		state.selectQueue = [
+			[{ id: 'row-1', provider: 'github', projectUrl: 'https://github.com/guang/reborn' }]
+		];
+		const doFetch = vi.fn(async () => response(githubRepo()));
+		const summary = await runSync({
+			db,
+			targets: [],
+			refreshIds: ['row-1', 'row-1'],
+			logger: makeLogger(),
+			now: NOW,
+			fetchJson: doFetch as unknown as FetchJson
+		});
+		expect(doFetch).toHaveBeenCalledTimes(1);
+		expect(summary.updated).toBe(1);
+	});
 });
