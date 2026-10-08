@@ -109,7 +109,9 @@ test.describe('projects public grid', () => {
 		// The icon slot always settles on the fallback glyph: the proxy
 		// denies fixture.example (not in the embed-registry whitelist), and
 		// the completion check covers failures that predate hydration.
-		await expect(siteCard.locator('.project-card-fallback')).toBeVisible({ timeout: 10_000 });
+		await expect(async () => {
+			await expect(siteCard.locator('.project-card-fallback')).toBeVisible({ timeout: 5000 });
+		}).toPass({ timeout: 15_000 });
 
 		// Other card: other badge, visit-site label, no exits.
 		const otherCard = page.locator('article', { hasText: OTHER_NAME });

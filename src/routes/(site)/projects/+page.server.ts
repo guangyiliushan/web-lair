@@ -3,29 +3,15 @@ import { db } from '$lib/server/db';
 import { projects } from '$lib/server/db/content';
 import { getOption } from '$lib/server/config/options-registry';
 import { formatDate } from '$lib/utils/i18n';
+import { safeHttpUrl } from '$lib/utils/url-safety';
 import type { PageServerLoad } from './$types';
-
-/**
- * http(s)-only filter for URLs that reach an href (P review P2): a
- * javascript:/data: value stored in the DB must never become a clickable
- * link. Write-side validation lands with batch A; the render side does not
- * rely on it.
- */
-function safeHttpUrl(value: string | null): string | null {
-	if (value === null) return null;
-	try {
-		const parsed = new URL(value);
-		return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? value : null;
-	} catch {
-		return null;
-	}
-}
 
 /**
  * Public projects grid (P batch, plan §5): published rows only, ordered by
  * `sort_order ASC, created_at DESC`. The pushed-at label is formatted here
  * in the site timezone so the card stays presentational. Streams for the
- * ui-ux Skeleton pattern.
+ * ui-ux Skeleton pattern. URLs pass through the shared http(s) filter
+ * (`$lib/utils/url-safety`) before reaching the card.
  */
 export const load: PageServerLoad = async () => {
 	const siteTz = await getOption('site.timezone');

@@ -135,7 +135,7 @@
 				{#if project.stars !== null}
 					<span class="inline-flex items-center gap-1">
 						<IconStar class="size-3.5" aria-hidden="true" />
-						<span class="sr-only">{m.projects_stars()} </span><span>{project.stars}</span>
+						<span class="sr-only">{m.projects_stars()}&#32;</span><span>{project.stars}</span>
 					</span>
 				{/if}
 				{#if project.pushedLabel}
