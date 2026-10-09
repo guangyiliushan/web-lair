@@ -85,5 +85,7 @@ export { jobRuns } from '../db/system/job-run.schema.ts';
 export { webhookDeliveries } from '../db/system/webhook-delivery.schema.ts';
 export { deriveAcceptedHosts, publicOrigin, runLinkCheck } from '../links/job.ts';
 export { runSync } from '../projects/sync.ts';
+export { runJobsTypecheck } from './typecheck.ts';
+export type { TypecheckSummary } from './typecheck.ts';
 export type { JobContext, JobLogger, JobsDb, JobsQueryable, LoadedJob } from './types.ts';
 export type { JobResult, JobTrigger } from '../db/system/job-run.schema.ts';

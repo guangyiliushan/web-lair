@@ -72,5 +72,13 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 		manual: true,
 		scheduleHint: null,
 		timeoutMs: 900_000
+	},
+	'jobs.typecheck': {
+		name: 'jobs.typecheck',
+		description:
+			'Type-check the user job scripts (tsc --noEmit against the generated tsconfig in $DATA_DIR/jobs); the bounded result lands in the run ledger.',
+		manual: true,
+		scheduleHint: null,
+		timeoutMs: 180_000
 	}
 });

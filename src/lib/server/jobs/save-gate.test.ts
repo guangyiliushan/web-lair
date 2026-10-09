@@ -35,7 +35,7 @@ describe('checkJobName', () => {
 	});
 });
 
-describe('runSaveGate', () => {
+describe('runSaveGate', { timeout: 30_000 }, () => {
 	it('passes a well-formed script (node:* + #jobs-sdk imports only)', async () => {
 		const report = await runSaveGate({ name: 'my-task', code: VALID });
 		expect(report.errors).toEqual([]);

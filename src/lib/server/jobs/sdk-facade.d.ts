@@ -99,3 +99,9 @@ export declare function publicOrigin(): string;
 
 /** Four-platform projects sync (projects line). */
 export declare function runSync(input: any): Promise<any>;
+
+/** Type-check the user job scripts (jobs.typecheck) - bounded summary. */
+export declare function runJobsTypecheck(options?: {
+	dataDir?: string;
+	maxIssues?: number;
+}): Promise<any>;
