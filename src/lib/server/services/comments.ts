@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import { db } from '$lib/server/db';
-import { comments, notes, posts } from '$lib/server/db/content';
+import { comments, notes, pages, posts } from '$lib/server/db/content';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isAdminRole } from '$lib/server/auth/owner';
 import { getCache } from '$lib/server/cache';
@@ -15,13 +15,14 @@ import {
 	type ThreadsPage
 } from '$lib/components/comments/types';
 import { visibleNoteCondition } from './note-visibility';
+import { getPageBySlug, resolvePageContent } from './pages';
 import { visiblePostCondition } from './post-visibility';
 
 /**
- * Public comment threads (comment P3a, ledger §27 / spec §10): article-level
- * comments on posts - anchored (segment) comments are P3b. The read side is
- * target-shaped so the notes/pages mounts can reuse it; the write side only
- * admits posts until those mounts land (fail-closed, see `submitComment`).
+ * Public comment threads (comment P3a, ledger §27 / spec §10; pages P4 adds
+ * the reader self-service - edit / soft-delete - and admits the pages arc):
+ * article-level comments on posts / notes / pages - anchored (segment)
+ * comments are P3b. The read side is target-shaped across the three arcs.
  *
  * Visibility (flipped §19.6): approved rows are public, a signed-in reader
  * additionally sees their own pending rows ("审核中"), rejected rows never
@@ -64,7 +65,11 @@ const commentColumns = {
 	pin: comments.pin,
 	createdAt: comments.createdAt,
 	parentCommentId: comments.parentCommentId,
-	rootCommentId: comments.rootCommentId
+	rootCommentId: comments.rootCommentId,
+	editedAt: comments.editedAt,
+	// Authoring identity stays server-side: the assembly converts it into the
+	// boolean `isMine` so the client never receives reader ids (P4).
+	readerId: comments.readerId
 };
 
 export interface CommentRow {
@@ -79,6 +84,8 @@ export interface CommentRow {
 	createdAt: Date;
 	parentCommentId: string | null;
 	rootCommentId: string | null;
+	editedAt: Date | null;
+	readerId: string | null;
 }
 
 /**
@@ -144,7 +151,8 @@ export async function loadThreads(input: LoadThreadsInput): Promise<ThreadsPage>
 	}
 
 	return assembleThreads(rootRows, replyRows, {
-		truncated: rootsTruncated || repliesTruncated
+		truncated: rootsTruncated || repliesTruncated,
+		viewerId: input.viewerId
 	});
 }
 
@@ -155,8 +163,10 @@ export async function loadThreads(input: LoadThreadsInput): Promise<ThreadsPage>
 export function assembleThreads(
 	rootRows: CommentRow[],
 	replyRows: CommentRow[],
-	options: { truncated?: boolean } = {}
+	options: { truncated?: boolean; viewerId?: string | null } = {}
 ): ThreadsPage {
+	const viewerId = options.viewerId ?? null;
+	const isMine = (row: CommentRow) => viewerId !== null && row.readerId === viewerId;
 	const repliesByRoot = new Map<string, CommentRow[]>();
 	for (const row of replyRows) {
 		// A deleted reply leaves no trace; replies without a root pointer are
@@ -188,6 +198,8 @@ export function assembleThreads(
 			avatar: reply.avatar,
 			isOwner: reply.isOwnerReply,
 			isPending: reply.state === 'pending',
+			isMine: isMine(reply),
+			editedAt: reply.editedAt,
 			createdAt: reply.createdAt,
 			replyToAuthor:
 				reply.parentCommentId && reply.parentCommentId !== reply.rootCommentId
@@ -202,6 +214,10 @@ export function assembleThreads(
 			avatar: row.isDeleted ? null : row.avatar,
 			isOwner: row.isDeleted ? false : row.isOwnerReply,
 			isPending: row.isDeleted ? false : row.state === 'pending',
+			// A floor placeholder withholds the edit stamp and the authorship
+			// flag too: nothing about the removed text leaks through (P4).
+			isMine: row.isDeleted ? false : isMine(row),
+			editedAt: row.isDeleted ? null : row.editedAt,
 			createdAt: row.createdAt,
 			pin: row.pin,
 			isDeleted: row.isDeleted,
@@ -267,6 +283,19 @@ export async function resolveCommentPostTarget(
 	return row?.id ?? null;
 }
 
+/**
+ * Resolve a commentable page id from a slug - the pages counterpart of
+ * `resolveCommentPostTarget` (single home of the write-path predicate).
+ * Mirrors the universal route's contract: non-external md rows whose
+ * current-locale body exists (strict language serving, P1b ruling).
+ */
+export async function resolveCommentPageTarget(slug: string, lang: string): Promise<string | null> {
+	const row = await getPageBySlug(slug);
+	if (!row || row.externalUrl !== null || row.content === null) return null;
+	if (resolvePageContent(row.content, lang) === null) return null;
+	return row.id;
+}
+
 export interface SubmitCommentInput {
 	targetType: CommentTargetType;
 	/** Target row id, already resolved from the URL by the caller. */
@@ -316,11 +345,8 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	if (length < COMMENT_MIN_LENGTH) return { kind: 'empty' };
 	if (length > COMMENT_MAX_LENGTH) return { kind: 'too-long', max: COMMENT_MAX_LENGTH };
 
-	// Notes validate here since N1; pages arrive with pages P1b and stay
-	// fail-closed until then (spec §10 - the mount batches extend this).
-	if (input.targetType !== 'post' && input.targetType !== 'note')
-		return { kind: 'unsupported-target' };
-
+	// All three arcs are served since the P4 pages mount (notes since N1);
+	// each branch below keeps its own authoritative re-check.
 	if (!isUuid(input.targetId)) return { kind: 'target-unavailable' };
 	if (input.targetType === 'post') {
 		const [target] = await db
@@ -331,7 +357,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 			)
 			.limit(1);
 		if (!target || !target.allowComment) return { kind: 'target-unavailable' };
-	} else {
+	} else if (input.targetType === 'note') {
 		// Password-gated notes are commentable ONLY for a request that already
 		// presented this row's valid unlock cookie (the route verifies it and
 		// passes `unlockVerified`); everything else stays fail-closed.
@@ -349,6 +375,25 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 			)
 			.limit(1);
 		if (!target || !target.allowComment) return { kind: 'target-unavailable' };
+	} else {
+		// Pages (P4 mount): every md row the universal route can serve is
+		// commentable - pages carry no per-row switch (plan §0 #46). External
+		// rows and empty content stay unreachable, exactly like the route's
+		// 404s; the current language must carry a body (strict language
+		// serving, P1b ruling 2026-10-03).
+		const [target] = await db
+			.select({
+				id: pages.id,
+				content: pages.content,
+				externalUrl: pages.externalUrl
+			})
+			.from(pages)
+			.where(eq(pages.id, input.targetId))
+			.limit(1);
+		if (!target || target.externalUrl !== null || target.content === null)
+			return { kind: 'target-unavailable' };
+		if (resolvePageContent(target.content, input.lang) === null)
+			return { kind: 'target-unavailable' };
 	}
 
 	let rootCommentId: string | null = null;
@@ -360,6 +405,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 				id: comments.id,
 				postId: comments.postId,
 				noteId: comments.noteId,
+				pageId: comments.pageId,
 				state: comments.state,
 				isDeleted: comments.isDeleted,
 				rootCommentId: comments.rootCommentId
@@ -370,7 +416,11 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		// A reply needs an approved, undeleted parent on the same target - the
 		// same rows the public list shows (spec §6/§8).
 		const parentTargetId =
-			input.targetType === 'post' ? (parent?.postId ?? null) : (parent?.noteId ?? null);
+			input.targetType === 'post'
+				? (parent?.postId ?? null)
+				: input.targetType === 'note'
+					? (parent?.noteId ?? null)
+					: (parent?.pageId ?? null);
 		if (
 			!parent ||
 			parentTargetId !== input.targetId ||
@@ -407,42 +457,31 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	}
 
 	// Policy: ip/agent/location/country_code are never collected (spec §1);
-	// the display snapshot is sanitised and frozen at write time.
+	// the display snapshot is sanitised and frozen at write time. The arc
+	// column is picked per target type; the values are otherwise identical.
+	const arc =
+		input.targetType === 'post'
+			? { postId: input.targetId }
+			: input.targetType === 'note'
+				? { noteId: input.targetId }
+				: { pageId: input.targetId };
 	try {
-		const [created] =
-			input.targetType === 'post'
-				? await db
-						.insert(comments)
-						.values({
-							postId: input.targetId,
-							readerId: input.user.id,
-							author: normalizeCommentAuthor(input.author),
-							avatar: normalizeCommentAvatar(input.avatar),
-							text,
-							state: autoApprove ? 'approved' : 'pending',
-							isOwnerReply: autoApprove,
-							parentCommentId,
-							rootCommentId,
-							reviewedBy: autoApprove ? input.user.id : null,
-							reviewedAt: autoApprove ? now : null
-						})
-						.returning({ id: comments.id, state: comments.state })
-				: await db
-						.insert(comments)
-						.values({
-							noteId: input.targetId,
-							readerId: input.user.id,
-							author: normalizeCommentAuthor(input.author),
-							avatar: normalizeCommentAvatar(input.avatar),
-							text,
-							state: autoApprove ? 'approved' : 'pending',
-							isOwnerReply: autoApprove,
-							parentCommentId,
-							rootCommentId,
-							reviewedBy: autoApprove ? input.user.id : null,
-							reviewedAt: autoApprove ? now : null
-						})
-						.returning({ id: comments.id, state: comments.state });
+		const [created] = await db
+			.insert(comments)
+			.values({
+				...arc,
+				readerId: input.user.id,
+				author: normalizeCommentAuthor(input.author),
+				avatar: normalizeCommentAvatar(input.avatar),
+				text,
+				state: autoApprove ? 'approved' : 'pending',
+				isOwnerReply: autoApprove,
+				parentCommentId,
+				rootCommentId,
+				reviewedBy: autoApprove ? input.user.id : null,
+				reviewedAt: autoApprove ? now : null
+			})
+			.returning({ id: comments.id, state: comments.state });
 		return { kind: 'created', id: created.id, state: created.state as 'pending' | 'approved' };
 	} catch (caught) {
 		// The target or parent row was hard-deleted between validation and
@@ -451,4 +490,162 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		if (pgErrorCode(caught) === '23503') return { kind: 'target-unavailable' };
 		throw caught;
 	}
+}
+
+/* ── Reader self-service: edit / soft-delete (P4, ledger §19.10) ────────── */
+
+export interface EditCommentInput {
+	commentId: string;
+	text: string;
+	/** Signed-in author; the service is the authoritative ownership gate. */
+	user: { id: string; role?: unknown };
+	/** Test seam: cache store override (defaults to the process-wide store). */
+	cache?: CacheStore;
+	/** Test seam: clock. */
+	now?: Date;
+}
+
+export type EditCommentResult =
+	| { kind: 'updated'; state: 'pending' | 'approved' }
+	| { kind: 'throttled'; windowSeconds: number }
+	| { kind: 'empty' }
+	| { kind: 'too-long'; max: number }
+	| { kind: 'unavailable' };
+
+/**
+ * Author-only edit (spec §6): the new text always re-enters review - an
+ * approved comment drops back to `pending`, so a post-approval rewrite can
+ * never ride the old approval ("审核后注入" guard) - and gets the public
+ * `edited_at` stamp. Owner/admin edits auto-approve like their submissions
+ * and skip the window. A missing row, a foreign author, a deleted row and a
+ * rejected row are one indistinguishable `unavailable` (fail-closed).
+ */
+export async function editComment(input: EditCommentInput): Promise<EditCommentResult> {
+	const now = input.now ?? new Date();
+	if (!isUuid(input.commentId)) return { kind: 'unavailable' };
+
+	const text = normalizeCommentText(input.text);
+	const length = [...text].length;
+	if (length < COMMENT_MIN_LENGTH) return { kind: 'empty' };
+	if (length > COMMENT_MAX_LENGTH) return { kind: 'too-long', max: COMMENT_MAX_LENGTH };
+
+	const [row] = await db
+		.select({
+			id: comments.id,
+			text: comments.text,
+			state: comments.state,
+			isDeleted: comments.isDeleted,
+			readerId: comments.readerId
+		})
+		.from(comments)
+		.where(eq(comments.id, input.commentId))
+		.limit(1);
+
+	if (
+		!row ||
+		row.readerId !== input.user.id ||
+		row.isDeleted ||
+		(row.state !== 'pending' && row.state !== 'approved')
+	) {
+		return { kind: 'unavailable' };
+	}
+
+	// Unchanged payload: no write, no edit stamp, no window charge.
+	if (text === row.text) return { kind: 'updated', state: row.state as 'pending' | 'approved' };
+
+	const autoApprove = isAdminRole(input.user.role);
+	if (!autoApprove) {
+		const rate = await rateLimit(
+			input.cache ?? getCache(),
+			`limits:comment:${input.user.id}`,
+			COMMENT_RATE_LIMIT.limit,
+			COMMENT_RATE_LIMIT.windowSeconds
+		);
+		if (!rate.allowed) {
+			return { kind: 'throttled', windowSeconds: COMMENT_RATE_LIMIT.windowSeconds };
+		}
+		if (rate.count === 0) {
+			// rateLimit() fail-open signature (the store threw): deliberate,
+			// but never silent (security review; mirrors submitComment).
+			console.warn('[comments] rate limiter store unavailable; failing open');
+		}
+	}
+
+	// Clearing reviewed_by/at keeps the queue honest: the previous decision
+	// no longer covers the new text (the review batch re-stamps an approval).
+	const state = autoApprove ? 'approved' : 'pending';
+	const updated = await db
+		.update(comments)
+		.set({
+			text,
+			editedAt: now,
+			state,
+			reviewedBy: autoApprove ? input.user.id : null,
+			reviewedAt: autoApprove ? now : null
+		})
+		.where(
+			and(
+				eq(comments.id, row.id),
+				eq(comments.readerId, input.user.id),
+				eq(comments.isDeleted, false)
+			)
+		)
+		.returning({ id: comments.id });
+	if (updated.length === 0) return { kind: 'unavailable' }; // raced a delete
+
+	return { kind: 'updated', state };
+}
+
+export interface DeleteCommentInput {
+	commentId: string;
+	user: { id: string };
+	/** Test seam: clock. */
+	now?: Date;
+}
+
+export type DeleteCommentResult = { kind: 'deleted' } | { kind: 'unavailable' };
+
+/**
+ * Author-only soft delete (spec §6): the moderation axis stays untouched so
+ * an approved root with replies keeps its floor placeholder; `pin` drops -
+ * a removed comment must not stay highlighted (ledger §19.10). Not
+ * throttled: retraction is not a spam vector.
+ */
+export async function deleteComment(input: DeleteCommentInput): Promise<DeleteCommentResult> {
+	const now = input.now ?? new Date();
+	if (!isUuid(input.commentId)) return { kind: 'unavailable' };
+
+	const [row] = await db
+		.select({
+			id: comments.id,
+			state: comments.state,
+			isDeleted: comments.isDeleted,
+			readerId: comments.readerId
+		})
+		.from(comments)
+		.where(eq(comments.id, input.commentId))
+		.limit(1);
+	if (
+		!row ||
+		row.readerId !== input.user.id ||
+		row.isDeleted ||
+		(row.state !== 'pending' && row.state !== 'approved')
+	) {
+		return { kind: 'unavailable' };
+	}
+
+	const updated = await db
+		.update(comments)
+		.set({ isDeleted: true, deletedAt: now, pin: false })
+		.where(
+			and(
+				eq(comments.id, row.id),
+				eq(comments.readerId, input.user.id),
+				eq(comments.isDeleted, false)
+			)
+		)
+		.returning({ id: comments.id });
+	if (updated.length === 0) return { kind: 'unavailable' };
+
+	return { kind: 'deleted' };
 }

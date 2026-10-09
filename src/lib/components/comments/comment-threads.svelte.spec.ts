@@ -18,6 +18,8 @@ function root(overrides: Partial<ThreadRoot> = {}): ThreadRoot {
 		isOwner: false,
 		isPending: false,
 		createdAt: new Date('2026-09-29T12:00:00Z'),
+		editedAt: null,
+		isMine: false,
 		pin: false,
 		isDeleted: false,
 		replies: [],
@@ -34,6 +36,8 @@ function reply(overrides: Partial<ThreadReply> = {}): ThreadReply {
 		isOwner: false,
 		isPending: false,
 		createdAt: new Date('2026-09-29T13:00:00Z'),
+		editedAt: null,
+		isMine: false,
 		replyToAuthor: null,
 		...overrides
 	};
@@ -224,5 +228,92 @@ describe('CommentsSection', () => {
 			threads: threadsPage([root()], { truncated: true })
 		});
 		await expect.element(page.getByText('评论过多，仅显示前一部分。')).toBeInTheDocument();
+	});
+
+	it('shows edit and delete entries only on the viewers own comments', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([
+				root({ id: 'root-1', isMine: true, replies: [reply({ id: 'reply-1', isMine: true })] }),
+				root({ id: 'root-2' })
+			])
+		});
+		expect(document.querySelector('[data-edit-target="root-1"]')).not.toBeNull();
+		expect(document.querySelector('[data-delete-target="root-1"]')).not.toBeNull();
+		expect(document.querySelector('[data-edit-target="reply-1"]')).not.toBeNull();
+		expect(document.querySelector('[data-edit-target="root-2"]')).toBeNull();
+		expect(document.querySelector('[data-delete-target="root-2"]')).toBeNull();
+	});
+
+	it('renders the edited marker with the edit time in its tooltip', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([root({ editedAt: new Date('2026-10-09T12:00:00Z') })])
+		});
+		const marker = [...document.querySelectorAll('[data-comment-id="root-1"] span')].find(
+			(el) => el.textContent?.trim() === '已编辑'
+		);
+		expect(marker).toBeTruthy();
+		expect(marker?.getAttribute('title')).toBeTruthy();
+	});
+
+	it('opens the edit composer pre-filled with the row id and the ?/edit action', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([root({ isMine: true })])
+		});
+		const editButton = document.querySelector('[data-edit-target="root-1"]');
+		if (!editButton) throw new Error('edit button not found');
+		await page.elementLocator(editButton).click();
+		await expect.poll(() => document.querySelectorAll('textarea').length).toBe(2);
+		const form = document.querySelector('form[action="?/edit"]');
+		expect(form).not.toBeNull();
+		expect(form?.querySelector('input[name="id"]')?.getAttribute('value')).toBe('root-1');
+		const textarea = form?.querySelector('textarea') as HTMLTextAreaElement | null;
+		expect(textarea?.value).toBe('你好');
+		expect(form?.textContent).toContain('修改后需重新审核。');
+		expect(form?.textContent).toContain('保存');
+	});
+
+	it('asks for confirmation before posting a delete', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([root({ isMine: true })])
+		});
+		const deleteButton = document.querySelector('[data-delete-target="root-1"]');
+		if (!deleteButton) throw new Error('delete button not found');
+		await page.elementLocator(deleteButton).click();
+		await expect
+			.poll(() => document.querySelector('[data-slot="comment-delete-confirm"]') !== null)
+			.toBe(true);
+		const confirm = document.querySelector('[data-slot="comment-delete-confirm"]');
+		expect(confirm?.getAttribute('action')).toBe('?/delete');
+		expect(confirm?.querySelector('input[name="id"]')?.getAttribute('value')).toBe('root-1');
+		expect(confirm?.textContent).toContain('确定删除这条评论吗？');
+		const cancel = confirm?.querySelector('button[type="button"]');
+		if (!cancel) throw new Error('cancel button not found');
+		await page.elementLocator(cancel).click();
+		await expect
+			.poll(() => document.querySelector('[data-slot="comment-delete-confirm"]'))
+			.toBeNull();
+		expect(document.querySelector('[data-edit-target="root-1"]')).not.toBeNull();
+	});
+
+	it('keeps reply and edit mutually exclusive per comment', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([root({ isMine: true })])
+		});
+		const clickBySelector = async (selector: string) => {
+			const element = document.querySelector(selector);
+			if (!element) throw new Error(`${selector} not found`);
+			await page.elementLocator(element).click();
+		};
+		await clickBySelector('[data-reply-target="root-1"]');
+		await expect.poll(() => document.querySelectorAll('textarea').length).toBe(2);
+		await clickBySelector('[data-edit-target="root-1"]');
+		await expect.poll(() => document.querySelector('form[action="?/edit"]') !== null).toBe(true);
+		expect(document.querySelector('form[action="?/reply"]')).toBeNull();
+		expect(document.querySelectorAll('textarea').length).toBe(2);
 	});
 });

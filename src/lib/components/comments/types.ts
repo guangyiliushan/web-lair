@@ -20,6 +20,10 @@ export interface CommentView {
 	isOwner: boolean;
 	isPending: boolean;
 	createdAt: Date;
+	/** Non-null once the author edited the text - drives the "已编辑" marker. */
+	editedAt: Date | null;
+	/** The signed-in viewer authored this comment (edit/delete entries). */
+	isMine: boolean;
 }
 
 export interface ThreadReply extends CommentView {

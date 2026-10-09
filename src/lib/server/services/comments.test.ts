@@ -20,6 +20,9 @@ const { dbMock, state } = vi.hoisted(() => ({
 		selectQueue: [] as unknown[][],
 		insertResults: [] as unknown[][],
 		inserts: [] as { table: unknown; values: Record<string, unknown> }[],
+		updateResults: [] as unknown[][],
+		updates: [] as { table: unknown; values: Record<string, unknown> }[],
+		updateWheres: [] as unknown[][],
 		limits: [] as unknown[],
 		wheres: [] as unknown[][],
 		orderBys: [] as unknown[][],
@@ -37,7 +40,10 @@ vi.mock('$lib/server/cache', () => ({
 
 import {
 	assembleThreads,
+	deleteComment,
+	editComment,
 	loadThreads,
+	resolveCommentPageTarget,
 	submitComment,
 	visibleCommentCondition,
 	COMMENT_RATE_LIMIT,
@@ -98,18 +104,35 @@ const insertMock = vi.fn((table: unknown) => ({
 		};
 	}
 }));
-Object.assign(dbMock, { select: selectMock, insert: insertMock });
+const updateMock = vi.fn((table: unknown) => ({
+	set: (values: Record<string, unknown>) => {
+		state.updates.push({ table, values });
+		return {
+			where: (...args: unknown[]) => {
+				state.updateWheres.push(args);
+				return {
+					returning: async () => state.updateResults.shift() ?? []
+				};
+			}
+		};
+	}
+}));
+Object.assign(dbMock, { select: selectMock, insert: insertMock, update: updateMock });
 
 beforeEach(() => {
 	state.selectQueue = [];
 	state.insertResults = [];
 	state.inserts = [];
+	state.updateResults = [];
+	state.updates = [];
+	state.updateWheres = [];
 	state.limits = [];
 	state.wheres = [];
 	state.orderBys = [];
 	state.failWith = undefined;
 	selectMock.mockClear();
 	insertMock.mockClear();
+	updateMock.mockClear();
 });
 
 function row(overrides: Partial<CommentRow> = {}): CommentRow {
@@ -125,6 +148,8 @@ function row(overrides: Partial<CommentRow> = {}): CommentRow {
 		createdAt: new Date('2026-09-30T10:00:00Z'),
 		parentCommentId: null,
 		rootCommentId: null,
+		editedAt: null,
+		readerId: null,
 		...overrides
 	};
 }
@@ -254,6 +279,44 @@ describe('assembleThreads', () => {
 	it('passes the truncation flag through', () => {
 		expect(assembleThreads([], [], { truncated: true }).truncated).toBe(true);
 		expect(assembleThreads([], []).truncated).toBe(false);
+	});
+
+	it('passes the edit stamp and the per-viewer authorship flag through', () => {
+		const edited = new Date('2026-09-30T11:00:00Z');
+		const own = row({ id: 'r1', readerId: VIEWER, editedAt: edited });
+		const other = row({ id: 'r2', readerId: 'someone-else' });
+		const page = assembleThreads([own, other], [], { viewerId: VIEWER });
+		expect(page.roots[0].isMine).toBe(true);
+		expect(page.roots[0].editedAt).toBe(edited);
+		expect(page.roots[1].isMine).toBe(false);
+		// No viewer (guest read): nobody owns anything.
+		expect(assembleThreads([own], []).roots[0].isMine).toBe(false);
+		// Replies carry the same pair.
+		const replyOwn = row({
+			id: 'p1',
+			parentCommentId: 'r1',
+			rootCommentId: 'r1',
+			readerId: VIEWER,
+			editedAt: edited
+		});
+		const withReply = assembleThreads([own], [replyOwn], { viewerId: VIEWER });
+		expect(withReply.roots[0].replies[0].isMine).toBe(true);
+		expect(withReply.roots[0].replies[0].editedAt).toBe(edited);
+	});
+
+	it('withholds the edit stamp and ownership on deleted placeholders', () => {
+		const root = row({
+			id: 'r1',
+			isDeleted: true,
+			state: 'approved',
+			readerId: VIEWER,
+			editedAt: new Date('2026-09-30T11:00:00Z')
+		});
+		const reply = row({ id: 'p1', parentCommentId: 'r1', rootCommentId: 'r1' });
+		const page = assembleThreads([root], [reply], { viewerId: VIEWER });
+		expect(page.roots).toHaveLength(1);
+		expect(page.roots[0].isMine).toBe(false);
+		expect(page.roots[0].editedAt).toBeNull();
 	});
 });
 
@@ -561,14 +624,6 @@ describe('submitComment', () => {
 		state.failWith = { cause: { code: '42P01' } };
 		await expect(submitComment(input())).rejects.toMatchObject({ cause: { code: '42P01' } });
 	});
-
-	it('fails closed on targets this batch does not serve yet (pages)', async () => {
-		const incr = vi.fn(async () => 1);
-		const result = await submitComment(input({ targetType: 'page', cache: fakeStore(incr) }));
-		expect(result).toEqual({ kind: 'unsupported-target' });
-		expect(incr).not.toHaveBeenCalled();
-		expect(selectMock).not.toHaveBeenCalled();
-	});
 });
 
 describe('submitComment note targets (N1)', () => {
@@ -666,5 +721,292 @@ describe('submitComment note targets (N1)', () => {
 			kind: 'parent-unavailable'
 		});
 		expect(state.inserts).toHaveLength(0);
+	});
+});
+
+describe('submitComment page targets (P4 mount)', () => {
+	function pageInput(overrides: Record<string, unknown> = {}) {
+		return {
+			targetType: 'page' as const,
+			targetId: TARGET,
+			lang: 'en',
+			text: 'page comment',
+			user: READER,
+			author: 'Alice',
+			avatar: null,
+			cache: fakeStore(async () => 1),
+			now: new Date('2026-09-30T12:00:00Z'),
+			...overrides
+		};
+	}
+
+	it('stores a root comment against the page arc', async () => {
+		state.selectQueue = [[{ id: TARGET, content: { en: 'body' }, externalUrl: null }]];
+		state.insertResults = [[{ id: 'pg-1', state: 'pending' }]];
+		const result = await submitComment(pageInput());
+		expect(result).toEqual({ kind: 'created', id: 'pg-1', state: 'pending' });
+		const values = state.inserts[0].values;
+		expect(values).toMatchObject({ pageId: TARGET, readerId: VIEWER });
+		// Exclusive arc: the other two columns must stay untouched.
+		expect(values).not.toHaveProperty('postId');
+		expect(values).not.toHaveProperty('noteId');
+	});
+
+	it('refuses rows the universal route cannot serve (empty content or external)', async () => {
+		const cases: Array<Array<unknown>> = [
+			[[]],
+			[[{ id: TARGET, content: null, externalUrl: null }]],
+			[[{ id: TARGET, content: { en: 'body' }, externalUrl: 'https://coffee.example' }]]
+		];
+		for (const rows of cases) {
+			state.selectQueue = [rows];
+			expect(await submitComment(pageInput())).toEqual({ kind: 'target-unavailable' });
+		}
+		expect(state.inserts).toHaveLength(0);
+	});
+
+	it('refuses a page whose current language has no body (strict serving)', async () => {
+		state.selectQueue = [[{ id: TARGET, content: { en: 'body' }, externalUrl: null }]];
+		expect(await submitComment(pageInput({ lang: 'ja' }))).toEqual({
+			kind: 'target-unavailable'
+		});
+	});
+
+	it('re-checks the page target by id (SQL teeth)', async () => {
+		state.selectQueue = [[{ id: TARGET, content: { en: 'body' }, externalUrl: null }]];
+		state.insertResults = [[{ id: 'pg-sql', state: 'pending' }]];
+		await submitComment(pageInput());
+		const query = render(state.wheres[0]?.[0]);
+		expect(query.sql).toContain('"pages"."id" = ');
+	});
+
+	it('derives reply pointers against the page arc', async () => {
+		state.selectQueue = [
+			[{ id: TARGET, content: { en: 'body' }, externalUrl: null }],
+			[
+				{
+					id: PARENT,
+					postId: null,
+					noteId: null,
+					pageId: TARGET,
+					state: 'approved',
+					isDeleted: false
+				}
+			]
+		];
+		state.insertResults = [[{ id: 'pg-2', state: 'pending' }]];
+		await submitComment(pageInput({ parentId: PARENT }));
+		expect(state.inserts[0].values).toMatchObject({
+			pageId: TARGET,
+			parentCommentId: PARENT,
+			rootCommentId: PARENT
+		});
+	});
+});
+
+describe('resolveCommentPageTarget', () => {
+	it('returns the id for a served md row and null for everything else', async () => {
+		state.selectQueue = [[{ id: TARGET, content: { en: 'body' }, externalUrl: null }]];
+		expect(await resolveCommentPageTarget('about', 'en')).toBe(TARGET);
+
+		state.selectQueue = [
+			[],
+			[{ id: TARGET, content: null }],
+			[{ id: TARGET, content: { en: 'x' }, externalUrl: 'https://x' }]
+		];
+		expect(await resolveCommentPageTarget('nope', 'en')).toBeNull();
+		expect(await resolveCommentPageTarget('empty', 'en')).toBeNull();
+		expect(await resolveCommentPageTarget('ext', 'en')).toBeNull();
+	});
+
+	it('requires the current language to carry a body', async () => {
+		state.selectQueue = [[{ id: TARGET, content: { en: 'body' }, externalUrl: null }]];
+		expect(await resolveCommentPageTarget('about', 'ja')).toBeNull();
+	});
+});
+
+describe('editComment', () => {
+	const ROW_ID = '55555555-5555-5555-5555-555555555555';
+	const ROW = {
+		id: ROW_ID,
+		text: 'old text',
+		state: 'approved',
+		isDeleted: false,
+		readerId: VIEWER
+	};
+	const NOW = new Date('2026-10-09T12:00:00Z');
+
+	function input(overrides: Record<string, unknown> = {}) {
+		return {
+			commentId: ROW_ID,
+			text: 'new text',
+			user: { id: VIEWER, role: 'member' },
+			cache: fakeStore(async () => 1),
+			now: NOW,
+			...overrides
+		};
+	}
+
+	it('stores the readers edit as pending with the edit stamp and a fresh review state', async () => {
+		state.selectQueue = [[{ ...ROW }]];
+		state.updateResults = [[{ id: ROW_ID }]];
+		const result = await editComment(input());
+		expect(result).toEqual({ kind: 'updated', state: 'pending' });
+		expect(state.updates).toHaveLength(1);
+		expect(state.updates[0].table).toBe(comments);
+		expect(state.updates[0].values).toMatchObject({
+			text: 'new text',
+			state: 'pending',
+			editedAt: NOW,
+			reviewedBy: null,
+			reviewedAt: null
+		});
+		// The CAS where clause keeps author + liveness + id honest.
+		const query = render(state.updateWheres[0]?.[0]);
+		expect(query.sql).toContain('"comments"."id" = ');
+		expect(query.sql).toContain('"comments"."reader_id" = ');
+		expect(query.sql).toContain('"comments"."is_deleted" = ');
+		expect(query.params).toContain(VIEWER);
+	});
+
+	it('charges the shared window only after validation', async () => {
+		const incr = vi.fn(async () => 3);
+		state.selectQueue = [[{ ...ROW }]];
+		expect(await editComment(input({ cache: fakeStore(incr) }))).toEqual({
+			kind: 'throttled',
+			windowSeconds: 60
+		});
+		expect(incr).toHaveBeenCalledTimes(1);
+		expect(state.updates).toHaveLength(0);
+	});
+
+	it('validates text before any db work', async () => {
+		expect(await editComment(input({ text: '   ' }))).toEqual({ kind: 'empty' });
+		expect(await editComment(input({ text: 'a'.repeat(COMMENT_MAX_LENGTH + 1) }))).toEqual({
+			kind: 'too-long',
+			max: COMMENT_MAX_LENGTH
+		});
+		expect(selectMock).not.toHaveBeenCalled();
+	});
+
+	it('is indistinguishable for foreign, missing, deleted and rejected rows', async () => {
+		const cases: Array<Array<unknown>> = [
+			[[]],
+			[[{ ...ROW, readerId: 'someone-else' }]],
+			[[{ ...ROW, isDeleted: true }]],
+			[[{ ...ROW, state: 'rejected' }]]
+		];
+		for (const rows of cases) {
+			state.selectQueue = [rows];
+			expect(await editComment(input())).toEqual({ kind: 'unavailable' });
+		}
+		expect(state.updates).toHaveLength(0);
+	});
+
+	it('treats an unchanged payload as a no-op (no write, no charge, no stamp)', async () => {
+		const incr = vi.fn(async () => 1);
+		state.selectQueue = [[{ ...ROW, text: 'new text' }]];
+		expect(await editComment(input({ cache: fakeStore(incr) }))).toEqual({
+			kind: 'updated',
+			state: 'approved'
+		});
+		expect(incr).not.toHaveBeenCalled();
+		expect(state.updates).toHaveLength(0);
+	});
+
+	it('auto-approves owner/admin edits and skips their window', async () => {
+		const incr = vi.fn(async () => 1);
+		state.selectQueue = [[{ ...ROW, readerId: 'o1' }]];
+		state.updateResults = [[{ id: ROW_ID }]];
+		const result = await editComment(
+			input({ user: { id: 'o1', role: 'owner' }, cache: fakeStore(incr) })
+		);
+		expect(incr).not.toHaveBeenCalled();
+		expect(result).toEqual({ kind: 'updated', state: 'approved' });
+		expect(state.updates[0].values).toMatchObject({
+			state: 'approved',
+			reviewedBy: 'o1',
+			reviewedAt: NOW
+		});
+	});
+
+	it('stays fail-open when the cache store is down and says so', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		state.selectQueue = [[{ ...ROW }]];
+		state.updateResults = [[{ id: ROW_ID }]];
+		const result = await editComment(
+			input({
+				cache: fakeStore(async () => {
+					throw new Error('valkey down');
+				})
+			})
+		);
+		expect(result).toEqual({ kind: 'updated', state: 'pending' });
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('failing open'));
+		warn.mockRestore();
+	});
+
+	it('rejects malformed ids and raced deletes', async () => {
+		expect(await editComment(input({ commentId: 'nope' }))).toEqual({ kind: 'unavailable' });
+		expect(selectMock).not.toHaveBeenCalled();
+		state.selectQueue = [[{ ...ROW }]];
+		state.updateResults = [[]];
+		expect(await editComment(input())).toEqual({ kind: 'unavailable' });
+	});
+});
+
+describe('deleteComment', () => {
+	const ROW_ID = '55555555-5555-5555-5555-555555555555';
+	const ROW = { id: ROW_ID, state: 'approved', isDeleted: false, readerId: VIEWER };
+	const NOW = new Date('2026-10-09T13:00:00Z');
+
+	it('soft-deletes own rows, clears pin and never charges the window', async () => {
+		state.selectQueue = [[{ ...ROW, pin: true }]];
+		state.updateResults = [[{ id: ROW_ID }]];
+		const result = await deleteComment({ commentId: ROW_ID, user: { id: VIEWER }, now: NOW });
+		expect(result).toEqual({ kind: 'deleted' });
+		expect(state.updates[0].values).toMatchObject({
+			isDeleted: true,
+			deletedAt: NOW,
+			pin: false
+		});
+		const query = render(state.updateWheres[0]?.[0]);
+		expect(query.sql).toContain('"comments"."reader_id" = ');
+		expect(query.sql).toContain('"comments"."is_deleted" = ');
+	});
+
+	it('leaves the moderation axis untouched so the floor rule can hold', async () => {
+		state.selectQueue = [[{ ...ROW }]];
+		state.updateResults = [[{ id: ROW_ID }]];
+		await deleteComment({ commentId: ROW_ID, user: { id: VIEWER }, now: NOW });
+		expect(state.updates[0].values).not.toHaveProperty('state');
+	});
+
+	it('fails closed for foreign, missing, deleted and rejected rows', async () => {
+		const cases: Array<Array<unknown>> = [
+			[[]],
+			[[{ ...ROW, readerId: 'someone-else' }]],
+			[[{ ...ROW, isDeleted: true }]],
+			[[{ ...ROW, state: 'rejected' }]]
+		];
+		for (const rows of cases) {
+			state.selectQueue = [rows];
+			expect(await deleteComment({ commentId: ROW_ID, user: { id: VIEWER } })).toEqual({
+				kind: 'unavailable'
+			});
+		}
+		expect(state.updates).toHaveLength(0);
+	});
+
+	it('rejects malformed ids and raced deletes', async () => {
+		expect(await deleteComment({ commentId: 'nope', user: { id: VIEWER } })).toEqual({
+			kind: 'unavailable'
+		});
+		expect(selectMock).not.toHaveBeenCalled();
+		state.selectQueue = [[{ ...ROW }]];
+		state.updateResults = [[]];
+		expect(await deleteComment({ commentId: ROW_ID, user: { id: VIEWER } })).toEqual({
+			kind: 'unavailable'
+		});
 	});
 });

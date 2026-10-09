@@ -18,18 +18,47 @@
 
 	let { root, canComment }: Props = $props();
 
-	// One inline reply composer at a time, keyed by the comment being replied to.
+	// One inline surface at a time, keyed by the comment it belongs to:
+	// reply composer, edit composer, delete confirmation (P4 self-service).
 	let openReplyId = $state<string | null>(null);
+	let editingId = $state<string | null>(null);
+	let confirmingDeleteId = $state<string | null>(null);
 
 	function toggleReply(id: string) {
 		openReplyId = openReplyId === id ? null : id;
+		editingId = null;
+		confirmingDeleteId = null;
 	}
 
-	/** Close the inline composer and hand focus back to its trigger (WCAG). */
+	function startEdit(id: string) {
+		editingId = id;
+		openReplyId = null;
+		confirmingDeleteId = null;
+	}
+
+	function startDelete(id: string) {
+		confirmingDeleteId = id;
+		editingId = null;
+		openReplyId = null;
+	}
+
+	/** Close an inline surface and hand focus back to its trigger (WCAG). */
 	async function closeReply(id: string) {
 		openReplyId = null;
 		await tick();
 		document.querySelector<HTMLElement>(`[data-reply-target="${id}"]`)?.focus();
+	}
+
+	async function cancelEdit(id: string) {
+		editingId = null;
+		await tick();
+		document.querySelector<HTMLElement>(`[data-edit-target="${id}"]`)?.focus();
+	}
+
+	async function cancelDelete(id: string) {
+		confirmingDeleteId = null;
+		await tick();
+		document.querySelector<HTMLElement>(`[data-delete-target="${id}"]`)?.focus();
 	}
 
 	function initialOf(name: string | null): string {
@@ -56,6 +85,14 @@
 	<Badge variant="secondary">{m.comment_pending_badge()}</Badge>
 {/snippet}
 
+{#snippet editedMark(editedAt: Date | null)}
+	{#if editedAt}
+		<span class="text-xs text-muted-foreground" title={formatDateTime(editedAt)}>
+			{m.comment_edited()}
+		</span>
+	{/if}
+{/snippet}
+
 {#snippet commentTime(value: Date)}
 	<time
 		class="text-xs text-muted-foreground"
@@ -75,6 +112,85 @@
 					rel="nofollow ugc noopener noreferrer">{segment.text}</a
 				>{:else}{segment.text}{/if}{/each}</span
 	>
+{/snippet}
+
+{#snippet itemActions(
+	id: string,
+	text: string,
+	author: string | null,
+	isPending: boolean,
+	isMine: boolean
+)}
+	{#if canComment}
+		<div class="mt-1.5 flex flex-wrap items-center gap-x-1 gap-y-1">
+			{#if !isPending}
+				<Button
+					variant="ghost"
+					size="sm"
+					data-reply-target={id}
+					aria-expanded={openReplyId === id}
+					aria-label={m.comment_replying_to({ name: author ?? '?' })}
+					onclick={() => toggleReply(id)}
+				>
+					{m.comment_reply()}
+				</Button>
+			{/if}
+			{#if isMine}
+				<Button
+					variant="ghost"
+					size="sm"
+					data-edit-target={id}
+					aria-expanded={editingId === id}
+					onclick={() => startEdit(id)}
+				>
+					{m.comment_edit()}
+				</Button>
+				<Button variant="ghost" size="sm" data-delete-target={id} onclick={() => startDelete(id)}>
+					{m.comment_delete()}
+				</Button>
+			{/if}
+		</div>
+		{#if editingId === id}
+			<div class="mt-2">
+				<CommentComposer
+					action="?/edit"
+					commentId={id}
+					initialText={text}
+					submitLabel={m.comment_edit_save()}
+					hint={m.comment_edit_hint()}
+					compact
+					autofocus
+					onCancel={() => cancelEdit(id)}
+				/>
+			</div>
+		{/if}
+		{#if openReplyId === id}
+			<CommentComposer
+				action="?/reply"
+				parentId={id}
+				compact
+				autofocus
+				onCancel={() => closeReply(id)}
+			/>
+		{/if}
+	{/if}
+	{#if confirmingDeleteId === id}
+		<form
+			method="POST"
+			action="?/delete"
+			class="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2"
+			data-slot="comment-delete-confirm"
+		>
+			<input type="hidden" name="id" value={id} />
+			<p class="text-sm">{m.comment_delete_confirm()}</p>
+			<div class="mt-2 flex items-center justify-end gap-2">
+				<Button type="button" variant="ghost" size="sm" onclick={() => cancelDelete(id)}>
+					{m.comment_cancel()}
+				</Button>
+				<Button type="submit" variant="destructive" size="sm">{m.comment_delete()}</Button>
+			</div>
+		</form>
+	{/if}
 {/snippet}
 
 <li
@@ -99,33 +215,12 @@
 					{/if}
 					{@render commentTime(root.createdAt)}
 					{#if root.isPending}{@render pendingBadge()}{/if}
+					{@render editedMark(root.editedAt)}
 				</div>
 				<div class="mt-1.5 text-sm leading-relaxed break-words">
 					{@render commentBody(root.text)}
 				</div>
-				{#if canComment && !root.isPending}
-					<div class="mt-1.5">
-						<Button
-							variant="ghost"
-							size="sm"
-							data-reply-target={root.id}
-							aria-expanded={openReplyId === root.id}
-							aria-label={m.comment_replying_to({ name: root.author ?? '?' })}
-							onclick={() => toggleReply(root.id)}
-						>
-							{m.comment_reply()}
-						</Button>
-					</div>
-				{/if}
-				{#if openReplyId === root.id}
-					<CommentComposer
-						action="?/reply"
-						parentId={root.id}
-						compact
-						autofocus
-						onCancel={() => closeReply(root.id)}
-					/>
-				{/if}
+				{@render itemActions(root.id, root.text, root.author, root.isPending, root.isMine)}
 			</div>
 		</article>
 	{/if}
@@ -147,33 +242,18 @@
 								{/if}
 								{@render commentTime(reply.createdAt)}
 								{#if reply.isPending}{@render pendingBadge()}{/if}
+								{@render editedMark(reply.editedAt)}
 							</div>
 							<div class="mt-1.5 text-sm leading-relaxed break-words">
 								{@render commentBody(reply.text)}
 							</div>
-							{#if canComment && !reply.isPending}
-								<div class="mt-1.5">
-									<Button
-										variant="ghost"
-										size="sm"
-										data-reply-target={reply.id}
-										aria-expanded={openReplyId === reply.id}
-										aria-label={m.comment_replying_to({ name: reply.author ?? '?' })}
-										onclick={() => toggleReply(reply.id)}
-									>
-										{m.comment_reply()}
-									</Button>
-								</div>
-							{/if}
-							{#if openReplyId === reply.id}
-								<CommentComposer
-									action="?/reply"
-									parentId={reply.id}
-									compact
-									autofocus
-									onCancel={() => closeReply(reply.id)}
-								/>
-							{/if}
+							{@render itemActions(
+								reply.id,
+								reply.text,
+								reply.author,
+								reply.isPending,
+								reply.isMine
+							)}
 						</div>
 					</article>
 				</li>
