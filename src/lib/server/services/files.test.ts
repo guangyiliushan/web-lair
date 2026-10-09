@@ -5,14 +5,22 @@ import { files as filesTable, photos as photosTable } from '$lib/server/db/conte
 import { fileReferences } from '$lib/server/db/system';
 import type { StoredObjectBody, StoredObjectHead } from '$lib/server/storage/port';
 
-const dbMock = vi.hoisted(() => ({
-	select: vi.fn(),
-	insert: vi.fn(),
-	update: vi.fn(),
-	delete: vi.fn(),
-	$count: vi.fn()
-}));
-/** Dedupe hits touch updated_at via db.update(files).set(...).where(...). */
+const dbMock = vi.hoisted(() => {
+	const mock = {
+		select: vi.fn(),
+		insert: vi.fn(),
+		update: vi.fn(),
+		delete: vi.fn(),
+		$count: vi.fn(),
+		transaction: vi.fn()
+	};
+	// deleteFile guards inside a transaction; hand the callback a tx surface
+	// that shares the same mocks so call assertions stay aligned.
+	mock.transaction.mockImplementation((callback: (tx: unknown) => Promise<unknown>) =>
+		callback({ select: mock.select, delete: mock.delete, $count: mock.$count })
+	);
+	return mock;
+});
 const updateChain = { set: vi.fn(() => ({ where: vi.fn(async () => {}) })) };
 const storageMock = vi.hoisted(() => ({
 	put: vi.fn<
@@ -59,20 +67,26 @@ const EXISTING_ROW = {
 	status: 'pending'
 };
 
-interface SelectChain {
+interface SelectChain extends PromiseLike<unknown[]> {
 	from: () => SelectChain;
 	where: () => SelectChain;
 	orderBy: () => SelectChain;
-	limit: () => Promise<unknown[]>;
+	limit: () => SelectChain;
+	for: () => SelectChain;
 }
 
 function selectChain(rows: unknown[]): SelectChain {
-	const chain: SelectChain = {
+	const chain = {
 		from: vi.fn(() => chain),
 		where: vi.fn(() => chain),
 		orderBy: vi.fn(() => chain),
-		limit: vi.fn(async () => rows)
-	};
+		limit: vi.fn(() => chain),
+		for: vi.fn(() => chain),
+		// Thenable: `await ....limit(1)` still resolves to rows while
+		// `.limit(1).for('update')` keeps chaining (deleteFile's row lock).
+		then: (onfulfilled: (value: unknown[]) => unknown, onrejected?: (reason: unknown) => unknown) =>
+			Promise.resolve(rows).then(onfulfilled, onrejected)
+	} as unknown as SelectChain;
 	return chain;
 }
 
@@ -399,6 +413,7 @@ describe('deleteFile', () => {
 	it('returns not-found for unknown ids', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		expect(await deleteFile('missing', { storage: storageMock })).toEqual({ kind: 'not-found' });
+		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
 	});
 
 	it('blocks deletion while content or the gallery still references the file', async () => {
@@ -414,6 +429,10 @@ describe('deleteFile', () => {
 		// Guard queries must hit the right tables (refs vs photos).
 		expect(dbMock.$count.mock.calls[0][0]).toBe(fileReferences);
 		expect(dbMock.$count.mock.calls[1][0]).toBe(photosTable);
+		// §11 fix: the guard runs under the row lock, inside one transaction.
+		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
+		const lockChain = dbMock.select.mock.results[0].value as { for: ReturnType<typeof vi.fn> };
+		expect(lockChain.for).toHaveBeenCalledWith('update');
 
 		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'file-1', objectKey: BASE_KEY }]));
 		dbMock.$count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
@@ -424,7 +443,7 @@ describe('deleteFile', () => {
 		});
 	});
 
-	it('deletes objects first and the registry row last when unreferenced', async () => {
+	it('locks the registry row (FOR UPDATE) before re-checking, then deletes objects first (T15 race fix)', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'file-1', objectKey: BASE_KEY }]));
 		dbMock.$count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
 		dbMock.delete.mockReturnValueOnce(deleteChain());
@@ -440,6 +459,23 @@ describe('deleteFile', () => {
 			`${BASE_KEY}@full`
 		]);
 		expect(dbMock.delete).toHaveBeenCalledTimes(1);
+		const chain = dbMock.select.mock.results[0].value as {
+			from: ReturnType<typeof vi.fn>;
+			for: ReturnType<typeof vi.fn>;
+		};
+		expect(chain.from.mock.calls[0][0]).toBe(filesTable);
+		expect(chain.for).toHaveBeenCalledWith('update');
+		// Ordering teeth: transaction → lock → re-check → objects → row.
+		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
+		expect(dbMock.transaction.mock.invocationCallOrder[0]).toBeLessThan(
+			chain.for.mock.invocationCallOrder[0]
+		);
+		expect(chain.for.mock.invocationCallOrder[0]).toBeLessThan(
+			dbMock.$count.mock.invocationCallOrder[0]
+		);
+		expect(dbMock.$count.mock.invocationCallOrder[1]).toBeLessThan(
+			storageMock.delete.mock.invocationCallOrder[0]
+		);
 		// Objects-first ordering is retryable: pin it (round-2 mutation m18).
 		const lastObjectDelete = storageMock.delete.mock.invocationCallOrder.at(-1) ?? -1;
 		expect(lastObjectDelete).toBeGreaterThan(0);

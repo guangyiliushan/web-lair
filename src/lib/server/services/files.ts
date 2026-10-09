@@ -32,7 +32,7 @@ import {
 /** Structural handle over the app db, mirroring the jobs-line pattern. */
 export type FilesDb = Pick<
 	typeof import('$lib/server/db').db,
-	'select' | 'insert' | 'update' | 'delete' | '$count'
+	'select' | 'insert' | 'update' | 'delete' | '$count' | 'transaction'
 >;
 
 export interface FilesDeps {
@@ -387,36 +387,43 @@ export type DeleteFileResult =
 	| { kind: 'referenced'; refCount: number; isInGallery: boolean };
 
 /**
- * Reference-guarded delete (§6.3): a file referenced by content or linked to
- * a photo is never removed silently. Objects go first and the registry row
- * last, so a partial failure stays retryable and the audit can see it.
+ * Reference-guarded delete (§6.3, T15): a file referenced by content or linked
+ * to a photo is never removed silently. The re-check and the delete run in a
+ * single transaction that locks the registry row first (`FOR UPDATE`): an FK
+ * check on a concurrent `file_references`/`photos` INSERT takes an implicit
+ * `FOR KEY SHARE` lock on the same row, so the two serialize — either the
+ * re-check sees the committed reference (delete blocked), or the racing
+ * INSERT waits for this transaction and then fails (23503, row already gone),
+ * which the ST-3 writer contract reads as "file removed". Read Committed
+ * gives every statement a fresh snapshot, so a reference committed while we
+ * waited for the lock is visible to the re-check.
  *
- * Known window (registered §11): the reference count and the row delete are
- * not one transaction, so a `file_references` INSERT racing this check would
- * be cascaded away by the delete. Nothing writes refs until ST-3 — that
- * wiring must wrap the re-check and the row delete in a `FOR UPDATE`
- * transaction before references go live.
+ * Objects go first and the registry row last, so a partial failure rolls the
+ * transaction back and stays retryable.
  */
 export async function deleteFile(id: string, deps: FilesDeps = {}): Promise<DeleteFileResult> {
 	const { storage, database } = await resolveDeps(deps);
-	const [row] = await database
-		.select({ id: files.id, objectKey: files.objectKey })
-		.from(files)
-		.where(eq(files.id, id))
-		.limit(1);
-	if (!row) return { kind: 'not-found' };
+	return database.transaction(async (tx): Promise<DeleteFileResult> => {
+		const [row] = await tx
+			.select({ id: files.id, objectKey: files.objectKey })
+			.from(files)
+			.where(eq(files.id, id))
+			.limit(1)
+			.for('update');
+		if (!row) return { kind: 'not-found' };
 
-	const [refCount, photoCount] = await Promise.all([
-		database.$count(fileReferences, eq(fileReferences.fileId, id)),
-		database.$count(photos, eq(photos.fileId, id))
-	]);
-	if (refCount > 0 || photoCount > 0) {
-		return { kind: 'referenced', refCount, isInGallery: photoCount > 0 };
-	}
+		const [refCount, photoCount] = await Promise.all([
+			tx.$count(fileReferences, eq(fileReferences.fileId, id)),
+			tx.$count(photos, eq(photos.fileId, id))
+		]);
+		if (refCount > 0 || photoCount > 0) {
+			return { kind: 'referenced', refCount, isInGallery: photoCount > 0 };
+		}
 
-	await deleteObjectAndVariants(row.objectKey, storage);
-	await database.delete(files).where(eq(files.id, id));
-	return { kind: 'ok', objectKey: row.objectKey };
+		await deleteObjectAndVariants(row.objectKey, storage);
+		await tx.delete(files).where(eq(files.id, id));
+		return { kind: 'ok', objectKey: row.objectKey };
+	});
 }
 
 export interface PurgeCandidate {
