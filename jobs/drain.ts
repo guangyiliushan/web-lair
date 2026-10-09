@@ -10,6 +10,10 @@
 //   DATABASE_URL        required - the drain builds its own postgres.js client
 //                       (the app's `$lib/server/db` reads `$env/dynamic/private`
 //                       and cannot load under plain Node).
+//   DATA_DIR            optional - jobs data dir (J-2; default <repo>/data).
+//                       User job scripts and the generated SDK scaffold live
+//                       in `$DATA_DIR/jobs`; the scaffold is refreshed on
+//                       every tick (hash-guarded, a no-op when unchanged).
 //   JOBS_HEARTBEAT_URL  optional - one GET after each tick (Uptime Kuma push
 //                       style; the §25 monitoring line wires the actual probe).
 //
@@ -22,8 +26,10 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { runDrain, sanitizeErrorText } from '../src/lib/server/jobs/drain.ts';
-import { createBuiltinLoader } from '../src/lib/server/jobs/loader.ts';
+import { resolveDataDir } from '../src/lib/server/jobs/data-dir.ts';
+import { ensureJobsScaffold } from '../src/lib/server/jobs/scaffold.ts';
 import { jobLockKey } from '../src/lib/server/jobs/registry.ts';
+import { createJobLoader, resolveJobDefinition } from '../src/lib/server/jobs/user-layer.ts';
 import type { DrainSummary } from '../src/lib/server/jobs/drain.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -47,11 +53,17 @@ async function tick(): Promise<DrainSummary> {
 			await lockConnection`select pg_advisory_unlock(hashtext(${key}))`;
 		};
 	};
+	// Keep $DATA_DIR/jobs fresh before loading anything from it (J-2): the
+	// scaffold is idempotent and self-healing, so a missing or stale data dir
+	// is repaired here instead of failing the tick.
+	const dataDir = resolveDataDir();
 	try {
+		await ensureJobsScaffold(dataDir);
 		return await runDrain({
 			db,
 			acquireLock,
-			loadJob: createBuiltinLoader(),
+			loadJob: createJobLoader({ dataDir }),
+			resolveJob: (name) => resolveJobDefinition(name, dataDir),
 			heartbeatUrl: process.env.JOBS_HEARTBEAT_URL ?? null,
 			log: (line) => console.log(line)
 		});

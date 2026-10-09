@@ -3,6 +3,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { pgErrorCode } from '../db/pg-error.ts';
 import { jobRuns } from '../db/system/job-run.schema.ts';
 import { JOBS } from './registry.ts';
+import type { JobDefinition } from './registry.ts';
 import type { JobTrigger } from '../db/system/job-run.schema.ts';
 
 export interface EnqueueResult {
@@ -21,6 +22,11 @@ export interface EnqueueResult {
  * execution); the 23505 re-select also covers the race where the previous
  * blocker just became `running`. The watermark is never touched here.
  *
+ * Merged-name note (J-2, grill R1-2): callers that see the user layer resolve
+ * the definition first (`resolveJobDefinition`) and pass it in; without a
+ * definition the registry is consulted, which keeps the pre-J-2 contract for
+ * builtin-only callers.
+ *
  * Generic over the schema on purpose: the J-3 admin calls this with the web
  * app's `drizzle(client, { schema })` handle, which is NOT assignable to the
  * schema-less type the drain uses (the `fullSchema` property makes the
@@ -30,11 +36,12 @@ export interface EnqueueResult {
 export async function enqueueJob<TSchema extends Record<string, unknown>>(
 	db: PostgresJsDatabase<TSchema>,
 	job: string,
-	trigger: Extract<JobTrigger, 'manual' | 'cli'> = 'manual'
+	trigger: Extract<JobTrigger, 'manual' | 'cli'> = 'manual',
+	definition?: JobDefinition
 ): Promise<EnqueueResult> {
-	const definition = Object.hasOwn(JOBS, job) ? JOBS[job] : undefined;
-	if (!definition) throw new Error(`unknown job "${job}"`);
-	if (!definition.manual) throw new Error(`job "${job}" does not allow manual runs`);
+	const resolved = definition ?? (Object.hasOwn(JOBS, job) ? JOBS[job] : undefined);
+	if (!resolved) throw new Error(`unknown job "${job}"`);
+	if (!resolved.manual) throw new Error(`job "${job}" does not allow manual runs`);
 
 	let lastError: unknown;
 	for (let attempt = 0; attempt < 2; attempt++) {

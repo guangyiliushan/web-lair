@@ -8,6 +8,7 @@ import { sanitizeErrorText } from './error-text.ts';
 import { bindJobDb } from './sdk-binding.ts';
 import { dueWindow } from './due.ts';
 import { JOBS } from './registry.ts';
+import type { JobDefinition } from './registry.ts';
 import { webhookHeaders } from './signature.ts';
 import type { JobResult, JobTrigger } from '../db/system/job-run.schema.ts';
 import type { JobContext, JobLogger, JobsDb, LoadedJob } from './types.ts';
@@ -57,6 +58,11 @@ export interface DrainDeps {
 	/** Try to take the job's session advisory lock; null means it is held elsewhere. */
 	acquireLock(job: string): Promise<(() => Promise<void>) | null>;
 	loadJob(name: string): Promise<LoadedJob>;
+	/**
+	 * Merged job metadata (registry ∪ user layer, J-2). Defaults to the
+	 * registry-only lookup so non-drain callers keep the pre-J-2 contract.
+	 */
+	resolveJob?(name: string): Promise<JobDefinition | null>;
 	now?: () => Date;
 	log?: (line: string) => void;
 	fetch?: typeof fetch;
@@ -96,6 +102,8 @@ export async function runDrain(deps: DrainDeps): Promise<DrainSummary> {
 		db: deps.db,
 		acquireLock: deps.acquireLock,
 		loadJob: deps.loadJob,
+		resolveJob:
+			deps.resolveJob ?? (async (name) => (Object.hasOwn(JOBS, name) ? JOBS[name] : null)),
 		now: deps.now ?? (() => new Date()),
 		log: deps.log ?? (() => {}),
 		fetch: deps.fetch ?? fetch,
@@ -213,7 +221,8 @@ async function runOneSchedule(
 	schedule: typeof jobSchedules.$inferSelect,
 	stats: DrainSummary
 ): Promise<void> {
-	if (!Object.hasOwn(JOBS, schedule.job)) {
+	const definition = await deps.resolveJob(schedule.job);
+	if (!definition) {
 		stats.schedules.unknownJob += 1;
 		deps.log(
 			`[drain] schedule ${schedule.id}: unknown job "${schedule.job}" - skipped, watermark untouched`
@@ -421,7 +430,14 @@ async function reclaimStaleRuns(deps: ResolvedDeps, job: string): Promise<number
 }
 
 async function executeRun(deps: ResolvedDeps, target: RunTarget): Promise<void> {
-	const definition = JOBS[target.job];
+	const definition = await deps.resolveJob(target.job);
+	if (!definition) {
+		// The name can vanish between enqueue and claim (e.g. a user job was
+		// deleted); record the failure instead of crashing on undefined.
+		await finalizeRun(deps, target.id, 'failed', null, {}, `unknown job "${target.job}"`);
+		deps.log(`[drain] ${target.job} run ${target.id}: failed - unknown job`);
+		return;
+	}
 	const summaryData: JobResult = {};
 	const logger = createLogger(deps.log, target.job);
 	try {
