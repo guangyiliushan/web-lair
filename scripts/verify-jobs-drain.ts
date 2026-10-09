@@ -21,12 +21,13 @@
 // file, bootstrap of a NULL watermark, a microsecond-precision watermark
 // written by SQL (monotonic CAS), the executeRun failure branch (poisoned
 // table), concurrent delivery and queue claims, the entry exit-code contract
-// (2 / 1), heartbeat ping. T6/T7 (save gate / SDK probe) belong to J-2, T8
-// (Kuma wiring) to §25.
+// (2 / 1), heartbeat ping; since J-2: T6 (SDK dual resolution), T7 (save
+// gate negatives) and T10 (user jobs end-to-end: hot update, fork override,
+// run-scoped SDK binding). T8 (Kuma wiring) to §25.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { createServer as createNetServer } from 'node:net';
@@ -43,8 +44,21 @@ import { webhooks } from '../src/lib/server/db/system/webhook.schema';
 import { enqueueJob } from '../src/lib/server/jobs/queue';
 import { builtinModuleFile, jobLockKey } from '../src/lib/server/jobs/registry';
 import { signWebhookPayload } from '../src/lib/server/jobs/signature';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ensureJobsScaffold } from '../src/lib/server/jobs/scaffold';
+import { runSaveGate } from '../src/lib/server/jobs/save-gate';
+import { runJobsTypecheck } from '../src/lib/server/jobs/typecheck';
+import { resolveJobDefinition } from '../src/lib/server/jobs/user-layer';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+
+/**
+ * Throwaway DATA_DIR for every drain spawn (J-2): the entry scaffolds and
+ * loads user jobs from `$DATA_DIR/jobs`, so the harness pins it here instead
+ * of the repo's `data/`, and removes it in the teardown.
+ */
+const fixtureDataDir = await mkdtemp(join(tmpdir(), 'wl-jobs-verify-data-'));
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -140,7 +154,7 @@ function spawnDrain(extraEnv: Record<string, string> = {}): {
 	delete env.JOBS_HEARTBEAT_URL;
 	const child = spawn(process.execPath, ['jobs/drain.ts'], {
 		cwd: repoRoot,
-		env: { ...env, DATABASE_URL: scratchUrl, ...extraEnv }
+		env: { ...env, DATABASE_URL: scratchUrl, DATA_DIR: fixtureDataDir, ...extraEnv }
 	});
 	spawnedChildren.add(child);
 	let stdout = '';
@@ -1116,6 +1130,192 @@ async function heartbeatPing(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// J-2 scenarios: SDK resolution, save gate, user jobs end-to-end (T6/T7/T10)
+// ---------------------------------------------------------------------------
+
+function sha256Of(bytes: Buffer): string {
+	return createHash('sha256').update(bytes).digest('hex');
+}
+
+/** Spawn a plain Node probe (same pattern as startLockHolder). */
+async function runNodeScript(script: string): Promise<DrainResult> {
+	const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+		cwd: repoRoot,
+		env: { ...process.env, DATA_DIR: fixtureDataDir }
+	});
+	spawnedChildren.add(child);
+	let stdout = '';
+	let stderr = '';
+	child.stdout?.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+	child.stderr?.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+	return new Promise<DrainResult>((resolve) => {
+		child.on('close', (code) => {
+			spawnedChildren.delete(child);
+			resolve({ code, stdout, stderr });
+		});
+	});
+}
+
+async function writeUserJob(dataDir: string, file: string, content: string): Promise<void> {
+	const dir = join(dataDir, 'jobs');
+	await mkdir(dir, { recursive: true });
+	await writeFile(join(dir, file), content, 'utf8');
+}
+
+async function t6SdkDualResolution(): Promise<void> {
+	section('T6: #jobs-sdk resolves under plain Node AND tsc (temp DATA_DIR)');
+	const dataDir = join(fixtureDataDir, 't6');
+	await ensureJobsScaffold(dataDir);
+	await writeUserJob(
+		dataDir,
+		'probe-sdk.ts',
+		"import { getDb, sql, type JobContext } from '#jobs-sdk';\nexport default { run(ctx: JobContext) { return [typeof getDb, typeof sql, typeof ctx.job] as const; } };\n"
+	);
+
+	const nodeProbe = await runNodeScript(`
+		const { pathToFileURL } = await import('node:url');
+		const mod = await import(pathToFileURL(${JSON.stringify(join(dataDir, 'jobs', 'probe-sdk.ts'))}).href);
+		if (typeof mod.default?.run !== 'function') throw new Error('probe did not load');
+		console.log('NODE-RESOLVED');
+	`);
+	check(
+		'T6 node: the scaffold runtime resolves #jobs-sdk for a user file',
+		nodeProbe.code === 0 && nodeProbe.stdout.includes('NODE-RESOLVED'),
+		nodeProbe.stderr.slice(0, 300)
+	);
+
+	const typecheck = await runJobsTypecheck({ dataDir });
+	check(
+		'T6 tsc: the generated tsconfig resolves the facade with zero diagnostics',
+		typecheck.ok && typecheck.fileCount === 1,
+		JSON.stringify(typecheck.issues.slice(0, 3)) + (typecheck.runnerError ?? '')
+	);
+}
+
+async function t7SaveGateNegatives(): Promise<void> {
+	section('T7: the save gate rejects enum / unlisted imports with positions');
+	const enumReport = await runSaveGate({
+		name: 'bad-enum',
+		code: 'const a = 1;\n\nenum E { A }\n'
+	});
+	const enumError = enumReport.errors.find((error) => error.code === 1294);
+	check(
+		'T7 enum rejected with TS 1294 + a line position',
+		!enumReport.ok && enumError?.line === 3 && typeof enumError?.column === 'number',
+		JSON.stringify(enumReport.errors.slice(0, 2))
+	);
+	const importReport = await runSaveGate({
+		name: 'bad-imports',
+		code: "import fs from 'node:fs';\nimport zod from 'zod';\nimport helper from './helper';\nexport default {};\n"
+	});
+	const lintLines = importReport.errors
+		.filter((error) => error.source === 'eslint')
+		.map((error) => error.line);
+	check(
+		'T7 unlisted imports rejected with positions (zod / relative)',
+		JSON.stringify(lintLines) === '[2,3]',
+		JSON.stringify(importReport.errors)
+	);
+	const okReport = await runSaveGate({ name: 'ok-task', code: 'export default { run() {} };\n' });
+	check('T7 positive control passes', okReport.ok);
+}
+
+async function t10UserJobEndToEnd(): Promise<void> {
+	section('T10: user jobs run, hot-update next tick, override builtins, use the bound SDK');
+	await resetLedger();
+	const dataDir = join(fixtureDataDir, 't10');
+	const heatLog = join(dataDir, 'heat.log');
+	const jobSource = (version: string) => `import { appendFile } from 'node:fs/promises';
+export default {
+	async run(ctx) {
+		await appendFile(${JSON.stringify(heatLog)}, '${version}\\n');
+		ctx.summary({ version: '${version}' });
+	}
+};
+`;
+	await writeUserJob(dataDir, 'heat-task.ts', jobSource('v1'));
+
+	const definition = await resolveJobDefinition('heat-task', dataDir);
+	check(
+		'T10 user-only job resolves with the R1-2 defaults',
+		definition !== null && definition.manual && definition.timeoutMs === 300_000
+	);
+
+	await enqueueJob(db, 'heat-task', 'cli', definition!);
+	const first = await runDrainOnce({ DATA_DIR: dataDir });
+	check('T10 first drain exits 0', first.code === 0, first.stdout + first.stderr);
+	const v1Hash = sha256Of(await readFile(join(dataDir, 'jobs', 'heat-task.ts')));
+	const runsAfterFirst = await runsFor('heat-task');
+	check(
+		'T10 v1 ran once, succeeded, source_hash = the file hash',
+		runsAfterFirst.length === 1 &&
+			runsAfterFirst[0].status === 'succeeded' &&
+			runsAfterFirst[0].sourceHash === v1Hash,
+		JSON.stringify(runsAfterFirst[0]?.status)
+	);
+	check(
+		'T10 v1 marker written by the job itself',
+		(await readFile(heatLog, 'utf8')).includes('v1')
+	);
+
+	// Hot update (plan §2 "each tick is a fresh process"): the next tick must
+	// execute the NEW bytes - source_hash is the proof.
+	await writeUserJob(dataDir, 'heat-task.ts', jobSource('v2'));
+	await enqueueJob(db, 'heat-task', 'cli', definition!);
+	const second = await runDrainOnce({ DATA_DIR: dataDir });
+	check('T10 second drain exits 0', second.code === 0);
+	const v2Hash = sha256Of(await readFile(join(dataDir, 'jobs', 'heat-task.ts')));
+	const runsAfterSecond = await runsFor('heat-task');
+	check(
+		'T10 v2 executed with a NEW source_hash (no stale code)',
+		runsAfterSecond.length === 2 && runsAfterSecond[1].sourceHash === v2Hash && v2Hash !== v1Hash,
+		`count=${runsAfterSecond.length}`
+	);
+	check('T10 v2 marker appended', (await readFile(heatLog, 'utf8')).includes('v2'));
+
+	// Run-scoped SDK binding (R2-3): a bare getOption() has no executor and
+	// must resolve through the client the drain bound for this run.
+	await writeUserJob(
+		dataDir,
+		'sdk-bind.ts',
+		"import { getOption } from '#jobs-sdk';\nexport default {\n\tasync run(ctx) {\n\t\tconst checks = await getOption('friends.checks');\n\t\tctx.summary({ boundChecksType: typeof checks });\n\t}\n};\n"
+	);
+	const bindDefinition = await resolveJobDefinition('sdk-bind', dataDir);
+	await enqueueJob(db, 'sdk-bind', 'cli', bindDefinition!);
+	const third = await runDrainOnce({ DATA_DIR: dataDir });
+	const bindRun = (await runsFor('sdk-bind'))[0];
+	check(
+		'T10 bare getOption resolves via the run-scoped binding',
+		third.code === 0 && bindRun?.status === 'succeeded',
+		bindRun?.error ?? ''
+	);
+
+	// User > builtin at runtime: a forked builtin name executes the user file.
+	await writeUserJob(
+		dataDir,
+		'system-resources.ts',
+		`import { appendFile } from 'node:fs/promises';
+export default {
+	async run() {
+		await appendFile(${JSON.stringify(heatLog)}, 'fork\\n');
+	}
+};
+`
+	);
+	const forkDefinition = await resolveJobDefinition('system.resources', dataDir);
+	await enqueueJob(db, 'system.resources', 'cli', forkDefinition!);
+	const fourth = await runDrainOnce({ DATA_DIR: dataDir });
+	const forkRun = (await runsFor('system.resources'))[0];
+	check(
+		'T10 user fork overrides the builtin at runtime',
+		fourth.code === 0 &&
+			forkRun?.status === 'succeeded' &&
+			(await readFile(heatLog, 'utf8')).includes('fork'),
+		forkRun?.error ?? ''
+	);
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -1175,6 +1375,9 @@ async function main(): Promise<void> {
 	await exitCodesContract();
 	await queueContentionSingleExecution();
 	await heartbeatPing();
+	await t6SdkDualResolution();
+	await t7SaveGateNegatives();
+	await t10UserJobEndToEnd();
 
 	console.log(
 		`\n${failures === 0 ? 'ALL' : `${failures} of`} ${checks} checks ${failures === 0 ? 'passed' : 'FAILED'}`
@@ -1230,6 +1433,11 @@ try {
 		await admin.end({ timeout: 5 });
 	} catch {
 		/* already gone */
+	}
+	try {
+		await rm(fixtureDataDir, { recursive: true, force: true });
+	} catch {
+		/* best-effort */
 	}
 }
 if (scenarioError) process.exitCode = 1;
