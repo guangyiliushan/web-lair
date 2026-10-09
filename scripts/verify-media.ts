@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
 import * as schema from '../src/lib/server/db/schema';
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
@@ -15,6 +15,7 @@ import {
 	runMediaAudit,
 	uploadFile
 } from '../src/lib/server/services/files';
+import { createPhotoFromFile, removePhoto, updatePhoto } from '../src/lib/server/services/photos';
 
 /**
  * One-time media verification (storage line §4.6 / T5 / T6) against the dev
@@ -72,6 +73,10 @@ let uploadedKey: string | null = null;
 let refId: string | null = null;
 let raceRefId: string | null = null;
 let raceSql: ReturnType<typeof postgres> | null = null;
+let photoProbe: { id: string; slug: string } | null = null;
+let photoProbeFileId: string | null = null;
+let photoProbeKey: string | null = null;
+let photoProbeTagSlug: string | null = null;
 
 /** Scoped probe-row counter: immune to concurrent activity on the live db. */
 async function probeRowCount(keys: string[]): Promise<number> {
@@ -94,9 +99,34 @@ async function cleanup(): Promise<void> {
 	if (raceRefId) {
 		await db.delete(schema.fileReferences).where(eq(schema.fileReferences.refId, raceRefId));
 	}
+	if (photoProbe) {
+		await db
+			.delete(schema.slugTrackers)
+			.where(eq(schema.slugTrackers.targetId, photoProbe.id))
+			.catch(() => undefined);
+		await db
+			.delete(schema.photos)
+			.where(eq(schema.photos.id, photoProbe.id))
+			.catch(() => undefined);
+	}
+	if (photoProbeTagSlug) {
+		await db
+			.delete(schema.tags)
+			.where(eq(schema.tags.slug, photoProbeTagSlug))
+			.catch(() => undefined);
+	}
 	await db
 		.delete(schema.files)
-		.where(inArray(schema.files.objectKey, [orphanKey, missingKey, galleryKey, guardKey, raceKey]));
+		.where(
+			inArray(schema.files.objectKey, [
+				orphanKey,
+				missingKey,
+				galleryKey,
+				guardKey,
+				raceKey,
+				...(photoProbeKey ? [photoProbeKey] : [])
+			])
+		);
 	await db.delete(schema.drafts).where(inArray(schema.drafts.title, [draftTitle, guardTitle]));
 	await storage.delete(orphanKey);
 	await storage.delete(galleryKey);
@@ -110,6 +140,9 @@ async function cleanup(): Promise<void> {
 	}
 	if (raceSql) {
 		await raceSql.end({ timeout: 5 }).catch(() => undefined);
+	}
+	if (photoProbeFileId) {
+		await deleteFile(photoProbeFileId, deps).catch(() => undefined);
 	}
 }
 
@@ -241,6 +274,69 @@ async function main(): Promise<void> {
 		lateInsertFailed = (e?.code ?? e?.cause?.code) === '23503';
 	}
 	check('T15 a late reference INSERT fails 23503 (row gone)', lateInsertFailed);
+
+	// -- photos gallery (ST-2/T15): create -> rename+tracker -> guarded -> remove
+	const photoPng = await sharp({
+		create: { width: 8, height: 6, channels: 3, background: { r: 10, g: 20, b: 30 } }
+	})
+		.png()
+		.toBuffer();
+	const galleryUpload = await uploadFile(
+		{ fileName: `verify-照片-${stamp}.png`, bytes: photoPng, uploadedBy: null },
+		deps
+	);
+	photoProbeFileId = galleryUpload.id;
+	photoProbeKey = galleryUpload.objectKey;
+	photoProbeTagSlug = `verify-${stamp}`;
+	const created = await createPhotoFromFile(galleryUpload.id, { tags: [photoProbeTagSlug] }, deps);
+	check('photo created from a registry file', created.kind === 'ok', `kind=${created.kind}`);
+	if (created.kind === 'ok') photoProbe = { id: created.id, slug: created.slug };
+	check(
+		'photo slug preserves CJK and lowercases the rest',
+		created.kind === 'ok' && created.slug === `verify-照片-${stamp}`,
+		`slug=${created.kind === 'ok' ? created.slug : 'n/a'}`
+	);
+	const blockedByGallery = await deleteFile(galleryUpload.id, deps);
+	check(
+		'gallery-linked file delete is blocked',
+		blockedByGallery.kind === 'referenced' && blockedByGallery.isInGallery === true,
+		`kind=${blockedByGallery.kind}`
+	);
+	const renamedSlug = `verify-photo-${stamp}-renamed`;
+	const renamed = photoProbe
+		? await updatePhoto(photoProbe.id, { slug: renamedSlug }, deps)
+		: ({ kind: 'skipped' } as const);
+	check('photo slug rename succeeds', renamed.kind === 'ok', `kind=${renamed.kind}`);
+	// slug-resolver statically imports the $-env db module (unavailable under
+	// plain tsx); probe the tracker directly with the same ordering contract.
+	const resolvedName = photoProbe
+		? ((
+				await db
+					.select({ targetId: schema.slugTrackers.targetId })
+					.from(schema.slugTrackers)
+					.where(
+						and(
+							eq(schema.slugTrackers.type, 'photo'),
+							eq(schema.slugTrackers.lang, 'en'),
+							eq(schema.slugTrackers.slug, photoProbe.slug)
+						)
+					)
+					.orderBy(desc(schema.slugTrackers.createdAt), desc(schema.slugTrackers.id))
+					.limit(1)
+			)[0]?.targetId ?? null)
+		: null;
+	check(
+		'old photo slug resolves via slug_trackers',
+		photoProbe !== null && resolvedName === photoProbe.id,
+		`target=${resolvedName}`
+	);
+	const removed = photoProbe
+		? await removePhoto(photoProbe.id, {}, deps)
+		: ({ kind: 'skipped' } as const);
+	check('photo removal keeps the file', removed.kind === 'ok', `kind=${removed.kind}`);
+	const afterRemoval = await deleteFile(galleryUpload.id, deps);
+	check('file deletes after the photo is removed', afterRemoval.kind === 'ok');
+	check('gallery upload objects removed', (await storage.head(galleryUpload.objectKey)) === null);
 
 	// -- constructed audit cases ---------------------------------------------
 	await storage.put(orphanKey, Buffer.from('orphan-probe'), {
@@ -392,13 +488,15 @@ try {
 		galleryKey,
 		guardKey,
 		raceKey,
-		...(uploadedKey ? [uploadedKey] : [])
+		...(uploadedKey ? [uploadedKey] : []),
+		...(photoProbeKey ? [photoProbeKey] : [])
 	];
 	const remaining = await probeRowCount(probes).catch(() => -1);
 	check('probe rows are gone after cleanup', remaining === 0, `remaining=${remaining}`);
-	const leftoverObjects = (
-		await Promise.all([orphanKey, galleryKey, guardKey].map((key) => storage.head(key)))
-	).filter((head) => head !== null).length;
+	const leftoverKeys = [orphanKey, galleryKey, guardKey, ...(photoProbeKey ? [photoProbeKey] : [])];
+	const leftoverObjects = (await Promise.all(leftoverKeys.map((key) => storage.head(key)))).filter(
+		(head) => head !== null
+	).length;
 	check('probe objects are gone after cleanup', leftoverObjects === 0, `left=${leftoverObjects}`);
 	console.log(`\nchecks=${checks} failures=${failures}`);
 	await sql.end();
