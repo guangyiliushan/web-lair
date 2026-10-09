@@ -50,6 +50,9 @@ importers:
       '@lexical/utils':
         specifier: ^0.51.0
         version: 0.51.0(typescript@6.0.3)
+      '@masonry-grid/svelte':
+        specifier: ^1.1.1
+        version: 1.1.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))
       cron-parser:
         specifier: ^5.10.1
         version: 5.10.1
@@ -134,6 +137,9 @@ importers:
       shiki:
         specifier: ^4.4.3
         version: 4.4.3
+      svelte-gestures:
+        specifier: ^5.2.2
+        version: 5.2.2
       thumbhash:
         specifier: ^0.1.1
         version: 0.1.1
@@ -1534,6 +1540,16 @@ packages:
 
   '@lix-js/sdk@0.17.0':
     resolution: {integrity: sha512-xplbKYEokKbm0/soUy9eXlROF55Si1J9HK97iwJrNl/av1VixZ2mvpDTa0QsX96UyxFnzkXru6hngjtIJTl73g==}
+
+  '@masonry-grid/svelte@1.1.1':
+    resolution: {integrity: sha512-AJnXk2gnzwDvprY+kCbtFz6z/sdikPxLlDiBi4W+iZjiHqj3odqwr2x/OWCs1GfmjSu78ED5Stdh9Tn73qWx+g==}
+    engines: {node: '>=16'}
+    peerDependencies:
+      svelte: ^5.0.0
+
+  '@masonry-grid/vanilla@1.1.0':
+    resolution: {integrity: sha512-bHpdnA3xBzBey0PpHvrBYs9IZ8vn5VevP75+Vdg5Dqlsez/hufJZ7oRh5rrDK1aAaggoN+FM5fXPdaXOuEvf4Q==}
+    engines: {node: '>=16'}
 
   '@mdx-js/react@3.1.1':
     resolution: {integrity: sha512-f++rKLQgUVYDAtECQ6fn/is15GkEH9+nZPM3MS0RcxVqoTfawHvDlSCH7JbMhAM6uJ32v3eXLvLmLvjGu7PTQw==}
@@ -4925,6 +4941,9 @@ packages:
       svelte:
         optional: true
 
+  svelte-gestures@5.2.2:
+    resolution: {integrity: sha512-Y+chXPaSx8OsPoFppUwPk8PJzgrZ7xoDJKXeiEc7JBqyKKzXer9hlf8F9O34eFuAWB4/WQEvccACvyBplESL7A==}
+
   svelte-toolbelt@0.10.6:
     resolution: {integrity: sha512-YWuX+RE+CnWYx09yseAe4ZVMM7e7GRFZM6OYWpBKOb++s+SQ8RBIMMe+Bs/CznBMc0QPLjr+vDBxTAkozXsFXQ==}
     engines: {node: '>=18', pnpm: '>=8.7.0'}
@@ -6304,6 +6323,13 @@ snapshots:
       '@lix-js/sdk-linux-arm64': 0.17.0
       '@lix-js/sdk-linux-x64': 0.17.0
       '@lix-js/sdk-win32-x64': 0.17.0
+
+  '@masonry-grid/svelte@1.1.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))':
+    dependencies:
+      '@masonry-grid/vanilla': 1.1.0
+      svelte: 5.57.1(@typescript-eslint/types@8.70.1)
+
+  '@masonry-grid/vanilla@1.1.0': {}
 
   '@mdx-js/react@3.1.1(@types/react@19.2.15)(react@19.2.6)':
     dependencies:
@@ -9941,6 +9967,8 @@ snapshots:
       semver: 7.8.1
     optionalDependencies:
       svelte: 5.57.1(@typescript-eslint/types@8.70.1)
+
+  svelte-gestures@5.2.2: {}
 
   svelte-toolbelt@0.10.6(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@24.12.4)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.1(@typescript-eslint/types@8.70.1))(typescript@6.0.3)(vite@8.3.0(@types/node@24.12.4)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.1(@typescript-eslint/types@8.70.1)):
     dependencies:
