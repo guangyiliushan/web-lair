@@ -10,6 +10,7 @@ import {
 	uploadFiles,
 	UploadRejected
 } from '$lib/server/services/files';
+import { createPhotoFromFile } from '$lib/server/services/photos';
 import { MAX_BATCH_COUNT, MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
@@ -122,6 +123,20 @@ export const actions: Actions = {
 			return fail(409, { message: `仍被引用（${parts.join('、')}），不能删除` });
 		}
 		throw redirect(303, '/admin/files?deleted=1');
+	},
+
+	addToGallery: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const id = (form.get('id') ?? '').toString();
+		if (!isUuid(id)) return fail(400, { message: '文件标识无效' });
+		const result = await createPhotoFromFile(id);
+		if (result.kind === 'not-found') return fail(404, { message: '文件不存在' });
+		if (result.kind === 'not-image') return fail(400, { message: '仅图片可加入图床' });
+		if (result.kind === 'source-missing') return fail(409, { message: '对象缺失，无法加入图床' });
+		return {
+			galleryAdded: { kind: result.kind, slug: result.kind === 'ok' ? result.slug : null }
+		};
 	},
 
 	audit: async () => {

@@ -9,6 +9,8 @@
 	import IconMessage from '@tabler/icons-svelte-runes/icons/message';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconFileText from '@tabler/icons-svelte-runes/icons/file-text';
+import IconFile from '@tabler/icons-svelte-runes/icons/file';
+import IconPhoto from '@tabler/icons-svelte-runes/icons/photo';
 	import IconEye from '@tabler/icons-svelte-runes/icons/eye';
 	import IconBulb from '@tabler/icons-svelte-runes/icons/bulb';
 	import IconQuote from '@tabler/icons-svelte-runes/icons/quote';
@@ -38,6 +40,8 @@
 		{ title: m.admin_nav_comments(), href: '/admin/comments', icon: IconMessage },
 		{ title: m.admin_nav_drafts(), href: '/admin/drafts', icon: IconPencil },
 		{ title: m.admin_nav_pages(), href: '/admin/pages', icon: IconFileText },
+		{ title: m.admin_nav_files(), href: '/admin/files', icon: IconFile },
+		{ title: m.admin_nav_photos(), href: '/admin/photos', icon: IconPhoto },
 		{ title: m.admin_nav_readers(), href: '/admin/readers', icon: IconEye },
 		{ title: m.admin_nav_quotes(), href: '/admin/quotes', icon: IconQuote },
 		{ title: m.admin_nav_thoughts(), href: '/admin/thoughts', icon: IconBulb },

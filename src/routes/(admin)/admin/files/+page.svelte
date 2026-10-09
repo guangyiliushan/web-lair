@@ -40,6 +40,7 @@
 		(form ?? {}) as {
 			message?: string;
 			uploadResults?: UploadResult[];
+			galleryAdded?: { kind: string; slug: string | null };
 			audit?: AuditReport;
 			purge?: PurgeList;
 		}
@@ -108,6 +109,15 @@
 			class="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
 		>
 			{actionData.message}
+		</div>
+	{/if}
+	{#if actionData.galleryAdded}
+		<div
+			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
+		>
+			{actionData.galleryAdded.kind === 'ok'
+				? `已加入图床：/${actionData.galleryAdded.slug}`
+				: '该文件已在图床中。'}
 		</div>
 	{/if}
 	{#if actionData.uploadResults}
@@ -306,7 +316,15 @@
 										{#if copiedId === row.id}
 											<span class="text-xs text-emerald-600 dark:text-emerald-400">已复制</span>
 										{/if}
-										<Button
+																					{#if row.mimeType.startsWith('image/') && !row.isInGallery}
+											<form method="POST" action="?/addToGallery">
+											<input type="hidden" name="id" value={row.id} />
+											<Button variant="ghost" size="icon" class="size-8" aria-label="加入图床">
+											<IconPhoto class="size-4" />
+											</Button>
+											</form>
+											{/if}
+<Button
 											variant="ghost"
 											size="icon"
 											class="size-8"
