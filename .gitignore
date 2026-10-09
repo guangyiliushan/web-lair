@@ -43,3 +43,6 @@ project.inlang/cache/
 
 # Local tool directories
 .zcode/
+
+# Jobs data dir (dev default; J-2)
+/data/
