@@ -6,6 +6,12 @@
 		"node": ">=22.19.0"
 	},
 	"type": "module",
+	"imports": {
+		"#jobs-sdk": {
+			"types": "./src/lib/server/jobs/jobs-sdk.ts",
+			"default": "./src/lib/server/jobs/jobs-sdk.ts"
+		}
+	},
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",

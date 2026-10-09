@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
+import { JOBS, builtinModuleFile } from './registry';
 
 const run = promisify(execFile);
 
@@ -9,47 +10,32 @@ const run = promisify(execFile);
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 
 /**
- * The `links.check` builtin must load under plain Node type stripping (the
- * drain executes it via `node jobs/drain.ts`). This guard catches strip-only
- * landmines that Vite/vitest transforms would hide: extensionless relative
- * imports and constructor parameter properties both shipped past the unit
- * suite on 2026-10-06 and were only caught by the drain-chain smoke.
+ * Every registered builtin must load under plain Node type stripping (the
+ * drain executes them via `node jobs/drain.ts`). This guard catches
+ * strip-only landmines that Vite/vitest transforms would hide: extensionless
+ * relative imports and constructor parameter properties both shipped past
+ * the unit suite on 2026-10-06, and since J-2 the builtins import `#jobs-sdk`
+ * - resolved by Node's package `imports` map, a layer vitest does not
+ * exercise the same way. The loop is registry-driven, so a new builtin is
+ * covered the moment it is registered.
  *
  * Lives OUTSIDE `builtin/` on purpose: the roster test pins that directory
  * to exactly the registered job modules.
  */
-describe('links.check builtin loads under plain Node', () => {
-	it('imports the module graph without a strip-only error', async () => {
-		// execFile rejects on a non-zero exit, so resolving IS the assertion.
-		await expect(
-			run(
-				process.execPath,
-				[
-					'--input-type=module',
-					'-e',
-					"await import('./src/lib/server/jobs/builtin/links-check.ts')"
-				],
-				{ cwd: repoRoot, timeout: 30_000 }
-			)
-		).resolves.toBeDefined();
-		// Spawns a real Node child: under full-suite load the 5 s default
-		// can cut it off (observed 5012 ms); the child itself stays bounded
-		// by the 30 s execFile timeout (review round 2026-10-06).
-	}, 20_000);
-});
-
-describe('projects.sync builtin loads under plain Node', () => {
-	it('imports the module graph without a strip-only error', async () => {
-		await expect(
-			run(
-				process.execPath,
-				[
-					'--input-type=module',
-					'-e',
-					"await import('./src/lib/server/jobs/builtin/projects-sync.ts')"
-				],
-				{ cwd: repoRoot, timeout: 30_000 }
-			)
-		).resolves.toBeDefined();
-	}, 20_000);
+describe('every builtin loads under plain Node', () => {
+	for (const name of Object.keys(JOBS)) {
+		it(`${name} imports its module graph without a strip-only error`, async () => {
+			const file = `./src/lib/server/jobs/builtin/${builtinModuleFile(name)}`;
+			// execFile rejects on a non-zero exit, so resolving IS the assertion.
+			await expect(
+				run(process.execPath, ['--input-type=module', '-e', `await import('${file}')`], {
+					cwd: repoRoot,
+					timeout: 30_000
+				})
+			).resolves.toBeDefined();
+			// Spawns a real Node child: under full-suite load the 5 s default
+			// can cut it off (observed 5012 ms); the child itself stays bounded
+			// by the 30 s execFile timeout (review round 2026-10-06).
+		}, 20_000);
+	}
 });

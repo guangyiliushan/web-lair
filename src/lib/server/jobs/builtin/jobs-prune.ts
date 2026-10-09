@@ -1,13 +1,19 @@
-import { and, inArray, lt, sql } from 'drizzle-orm';
-import { activities } from '../../db/system/activity.schema.ts';
-import { jobRuns } from '../../db/system/job-run.schema.ts';
-import { webhookDeliveries } from '../../db/system/webhook-delivery.schema.ts';
-import type { JobContext } from '../types.ts';
+import {
+	activities,
+	and,
+	inArray,
+	jobRuns,
+	lt,
+	sql,
+	webhookDeliveries,
+	type JobContext
+} from '#jobs-sdk';
 
 /**
  * jobs.prune (J-1 builtin): trim the ledger tables per the decided retention
  * windows (ledger §24: job_runs 24 months; §26: activities 24 months,
- * webhook_deliveries 30 days).
+ * webhook_deliveries 30 days). Imports only `#jobs-sdk` (J-2, plan §5.5) so
+ * the file stays fork-runnable from the user layer.
  *
  * Only terminal rows are ever deleted (`succeeded`/`failed`/`skipped` for
  * runs, `succeeded`/`failed` for deliveries): a lingering `queued` row is a

@@ -46,5 +46,27 @@ export default defineConfig(
 			// resolve() is only needed when config.kit.paths.base is set.
 			'svelte/no-navigation-without-resolve': 'off'
 		}
+	},
+	{
+		// Jobs builtins must stay fork-runnable (jobs-line plan §5.5): only
+		// `node:*` modules and the SDK facade are importable. User job files
+		// get the same rule through the save gate.
+		files: ['src/lib/server/jobs/builtin/**/*.ts'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					patterns: [
+						{
+							// minimatch never crosses "/" with `*`: a single
+							// `node:*` negator misses `node:fs/promises`, so the
+							// one-slash form gets its own negation (probed matrix).
+							group: ['**', '!node:*', '!node:*/*', '!*#jobs-sdk*'],
+							message: 'builtin jobs may only import node:* modules and #jobs-sdk'
+						}
+					]
+				}
+			]
+		}
 	}
 );

@@ -1,6 +1,6 @@
 import { statfs } from 'node:fs/promises';
 import os from 'node:os';
-import type { JobContext } from '../types.ts';
+import type { JobContext } from '#jobs-sdk';
 
 /**
  * system.resources (J-1 builtin): record host readings into the run result
@@ -10,7 +10,7 @@ import type { JobContext } from '../types.ts';
  * Notes: `loadavg` is always zero on Windows (platform limitation; the
  * production host is Linux). The disk read covers the current working
  * directory - the deploy root - and will follow the storage layer's data
- * directory once it exists.
+ * directory once it exists. Imports only `node:*` + `#jobs-sdk` (J-2).
  */
 export default {
 	async run(ctx: JobContext): Promise<void> {

@@ -5,6 +5,7 @@ import { webhooks } from '../db/system/webhook.schema.ts';
 import { webhookDeliveries } from '../db/system/webhook-delivery.schema.ts';
 import { pgErrorCode } from '../db/pg-error.ts';
 import { sanitizeErrorText } from './error-text.ts';
+import { bindJobDb } from './sdk-binding.ts';
 import { dueWindow } from './due.ts';
 import { JOBS } from './registry.ts';
 import { webhookHeaders } from './signature.ts';
@@ -436,7 +437,14 @@ async function executeRun(deps: ResolvedDeps, target: RunTarget): Promise<void> 
 			logger,
 			summary: (data) => Object.assign(summaryData, data)
 		};
-		await withTimeout(Promise.resolve(loaded.run(ctx)), definition.timeoutMs, target.job);
+		// Bind the client for the duration of the run so bare SDK calls
+		// (`getOption`, `db`) resolve without threading ctx.db (J-2, R2-3).
+		bindJobDb(deps.db);
+		try {
+			await withTimeout(Promise.resolve(loaded.run(ctx)), definition.timeoutMs, target.job);
+		} finally {
+			bindJobDb(null);
+		}
 		await finalizeRun(deps, target.id, 'succeeded', target.catchup, summaryData, null);
 		deps.log(`[drain] ${target.job} run ${target.id}: succeeded`);
 	} catch (err) {

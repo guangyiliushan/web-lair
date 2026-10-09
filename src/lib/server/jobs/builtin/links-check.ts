@@ -1,6 +1,10 @@
-import { getOption } from '../../config/options-registry.ts';
-import { deriveAcceptedHosts, publicOrigin, runLinkCheck } from '../../links/job.ts';
-import type { JobContext } from '../types.ts';
+import {
+	deriveAcceptedHosts,
+	getOption,
+	publicOrigin,
+	runLinkCheck,
+	type JobContext
+} from '#jobs-sdk';
 
 /**
  * links.check (links line L2, plan §4.5/§4.6; registered 2026-10-06): one
@@ -8,8 +12,9 @@ import type { JobContext } from '../types.ts';
  * batches, reachability + backlink checks, evidence-ring and streak updates.
  * Runs under plain Node via the drain; single-flight comes from the drain's
  * own per-job lock (`web_lair.job.links.check`), the CLI shares the key.
- * Options are read through the registry with `ctx.db` injected (the registry
- * is Node-loadable - see the 2026-10-06 ruling).
+ * Imports only `#jobs-sdk` (J-2, plan §5.5) so the file stays fork-runnable
+ * from the user layer; options are read through the registry with `ctx.db`
+ * injected (the registry is Node-loadable - see the 2026-10-06 ruling).
  */
 export default {
 	async run(ctx: JobContext): Promise<void> {
