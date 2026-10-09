@@ -695,6 +695,7 @@ declare
 	ph uuid := current_setting('c1.photo')::uuid;
 	g uuid;
 	s2 uuid;
+	fl2 uuid;
 	src_nid int;
 begin
 	begin
@@ -917,6 +918,26 @@ begin
 	exception when check_violation then
 		get stacked diagnostics c = constraint_name;
 		if c <> 'photos_coords_check' then raise exception 'FAIL photos coords: wrong constraint %', c; end if;
+	end;
+
+	-- ST-2/A2 teeth (single-baseline regen, 2026-10-09): file_references is
+	-- NO ACTION - deleting a referenced file must fail loudly (never silently
+	-- cascade the reference away), and must succeed once the ref is gone.
+	insert into files (object_key, content_hash, file_name, mime_type, byte_size)
+		values ('c1v/2', 'c1vhash2', 'f2.txt', 'text/plain', 1) returning id into fl2;
+	begin
+		insert into file_references (file_id, ref_type, ref_id) values (fl2, 'post', p);
+		delete from files where id = fl2;
+		raise exception 'FAIL deleting a referenced file was allowed (file_references FK must be NO ACTION)';
+	exception when foreign_key_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'file_references_file_id_files_id_fk' then raise exception 'FAIL file_references FK: wrong constraint %', c; end if;
+	end;
+	begin
+		delete from file_references where file_id = fl2;
+		delete from files where id = fl2;
+	exception when others then
+		raise exception 'FAIL unreferenced file delete failed: %', sqlerrm;
 	end;
 
 	-- Links evidence ring: non-array jsonb must be rejected by the CHECK.

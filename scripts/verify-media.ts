@@ -36,6 +36,8 @@ const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
 const storage = new RustFsStorage(storageConfigFromEnv(process.env));
 const deps = { db, storage };
+/** Narrowed copy: TS does not carry the module-level guard into closures. */
+const DB_URL: string = DATABASE_URL;
 
 let failures = 0;
 let checks = 0;
@@ -62,10 +64,14 @@ const gallerySlug = `verify-media-gallery-${stamp}`;
 const guardHash = sha256(`verify-media-guard-${stamp}`);
 const guardKey = objectKeyFor(guardHash, 'jpg');
 const guardTitle = `verify-media-guard-${stamp}`;
+const raceHash = sha256(`verify-media-race-${stamp}`);
+const raceKey = objectKeyFor(raceHash, 'jpg');
 
 let uploadedId: string | null = null;
 let uploadedKey: string | null = null;
 let refId: string | null = null;
+let raceRefId: string | null = null;
+let raceSql: ReturnType<typeof postgres> | null = null;
 
 /** Scoped probe-row counter: immune to concurrent activity on the live db. */
 async function probeRowCount(keys: string[]): Promise<number> {
@@ -80,9 +86,17 @@ async function cleanup(): Promise<void> {
 	// Best-effort: remove every probe row/object even when checks failed.
 	// photos references files with NO ACTION — drop the gallery link first.
 	await db.delete(schema.photos).where(eq(schema.photos.slug, gallerySlug));
+	// Refs first: the FK is NO ACTION since A2 - a leftover reference would
+	// otherwise block the row cleanup below.
+	if (refId) {
+		await db.delete(schema.fileReferences).where(eq(schema.fileReferences.refId, refId));
+	}
+	if (raceRefId) {
+		await db.delete(schema.fileReferences).where(eq(schema.fileReferences.refId, raceRefId));
+	}
 	await db
 		.delete(schema.files)
-		.where(inArray(schema.files.objectKey, [orphanKey, missingKey, galleryKey, guardKey]));
+		.where(inArray(schema.files.objectKey, [orphanKey, missingKey, galleryKey, guardKey, raceKey]));
 	await db.delete(schema.drafts).where(inArray(schema.drafts.title, [draftTitle, guardTitle]));
 	await storage.delete(orphanKey);
 	await storage.delete(galleryKey);
@@ -93,6 +107,9 @@ async function cleanup(): Promise<void> {
 	if (uploadedId) {
 		// deleteFile honours the reference guard; probes must be unreferenced by now.
 		await deleteFile(uploadedId, deps);
+	}
+	if (raceSql) {
+		await raceSql.end({ timeout: 5 }).catch(() => undefined);
 	}
 }
 
@@ -157,6 +174,73 @@ async function main(): Promise<void> {
 	uploadedId = null;
 	check('unreferenced file deletes cleanly', deleted.kind === 'ok');
 	check('objects removed with the row', (await storage.head(uploaded.objectKey)) === null);
+
+	// -- T15 race (ST-2): deleteFile serializes with a live reference INSERT --
+	const [raceRow] = await db
+		.insert(schema.files)
+		.values({
+			objectKey: raceKey,
+			contentHash: raceHash,
+			fileName: `verify-race-${stamp}.jpg`,
+			mimeType: 'image/jpeg',
+			byteSize: 1,
+			status: 'pending'
+		})
+		.returning({ id: schema.files.id });
+	raceRefId = randomUUID();
+	raceSql = postgres(DB_URL, { max: 1 });
+	let releaseBlocker!: () => void;
+	const blockerHold = new Promise<void>((resolve) => (releaseBlocker = resolve));
+	let blockerError: unknown = null;
+	const blockerTx = raceSql
+		.begin(async (tx) => {
+			await tx`insert into file_references (file_id, ref_type, ref_id) values (${raceRow.id}, 'post', ${raceRefId})`;
+			await blockerHold;
+		})
+		.catch((error: unknown) => {
+			blockerError = error;
+		});
+	await new Promise((resolve) => setTimeout(resolve, 150)); // let the INSERT land (uncommitted)
+	const deleteAttempt = deleteFile(raceRow.id, deps);
+	const raceOutcome = await Promise.race([
+		deleteAttempt.then(
+			() => 'settled' as const,
+			() => 'settled' as const
+		),
+		new Promise<'blocked'>((resolve) => setTimeout(() => resolve('blocked'), 400))
+	]);
+	check(
+		'T15 deleteFile waits on an in-flight reference insert (FOR UPDATE vs FK KEY SHARE)',
+		raceOutcome === 'blocked',
+		`outcome=${raceOutcome}`
+	);
+	releaseBlocker();
+	await blockerTx;
+	check('T15 blocker transaction committed cleanly', blockerError === null);
+	const blockedByRace = await deleteAttempt;
+	check(
+		'T15 re-check sees the committed reference -> blocked',
+		blockedByRace.kind === 'referenced' && blockedByRace.refCount === 1,
+		`kind=${blockedByRace.kind}`
+	);
+	// Delete-wins direction: with the reference gone the delete succeeds, and a
+	// late reference INSERT then fails 23503 (the row is already gone).
+	await db.delete(schema.fileReferences).where(eq(schema.fileReferences.refId, raceRefId));
+	const raceDeleted = await deleteFile(raceRow.id, deps);
+	check(
+		'T15 unreferenced delete succeeds after the reference is removed',
+		raceDeleted.kind === 'ok'
+	);
+	let lateInsertFailed = false;
+	try {
+		await db
+			.insert(schema.fileReferences)
+			.values({ fileId: raceRow.id, refType: 'post', refId: randomUUID() });
+	} catch (error) {
+		const e = error as { code?: string; cause?: { code?: string } };
+		lateInsertFailed = (e?.code ?? e?.cause?.code) === '23503';
+	}
+	check('T15 a late reference INSERT fails 23503 (row gone)', lateInsertFailed);
 
 	// -- constructed audit cases ---------------------------------------------
 	await storage.put(orphanKey, Buffer.from('orphan-probe'), {
@@ -307,6 +391,7 @@ try {
 		missingKey,
 		galleryKey,
 		guardKey,
+		raceKey,
 		...(uploadedKey ? [uploadedKey] : [])
 	];
 	const remaining = await probeRowCount(probes).catch(() => -1);

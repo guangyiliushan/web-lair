@@ -10,7 +10,7 @@ export const fileReferences = pgTable(
 	{
 		fileId: uuid('file_id')
 			.notNull()
-			.references(() => files.id, { onDelete: 'cascade' }),
+			.references(() => files.id, { onDelete: 'no action' }),
 		refType: text('ref_type').notNull(),
 		refId: uuid('ref_id').notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
