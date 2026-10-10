@@ -1,7 +1,10 @@
 import { stripTypeScriptTypes } from 'node:module';
 import { repoRoot } from './data-dir.ts';
+import { JOB_IMPORT_PATTERNS, isAllowedImportSpecifier } from './import-policy.ts';
 import { isSafeJobName } from './loader.ts';
-import type { CompilerOptions, Node as TypeScriptNode } from 'typescript';
+import { JOBS, builtinModuleFile } from './registry.ts';
+import { jobNameForUserFile } from './user-layer.ts';
+import type { CompilerOptions, Node as TypeScriptNode, SourceFile } from 'typescript';
 import type { ESLint } from 'eslint';
 
 /**
@@ -9,8 +12,12 @@ import type { ESLint } from 'eslint';
  * before it may be written to the user layer. All checks are pure "parsing" -
  * user code is never executed here; the drain is the only executor (plan §5.1).
  *
- * The checks and why (all probed 2026-10-07):
- *   1. name       - module-file safety (Windows device names, traversal) + length.
+ * The checks and why (all probed 2026-10-07; hardened by the J-2 review):
+ *   1. name       - module-file safety (Windows device names, traversal),
+ *                   bounded length, and the canonical-name invariant: a name
+ *                   must map to its own file (`my.job` would land in
+ *                   `my-job.ts`; `jobs-prune` would silently shadow the
+ *                   `jobs.prune` builtin without a fork sidecar).
  *   2. typescript - parser + `erasableSyntaxOnly` diagnostics (TS 5.8+, the
  *                   option the TypeScript and Node docs pair for strip-only
  *                   mode). It is the only checker that reports line/column
@@ -19,12 +26,14 @@ import type { ESLint } from 'eslint';
  *   3. strip      - `module.stripTypeScriptTypes` is the runtime authority
  *                   (node's own amaro-based stripper). When it rejects and
  *                   the TS pass explained nothing, its message is the report.
- *   4. runtime    - constructs that pass type stripping yet are invalid when
- *                   node executes the stripped output (decorators). Rejected
- *                   here so a save cannot produce an unrunnable file.
- *   5. eslint     - `no-restricted-imports`: only `node:*` and `#jobs-sdk`
- *                   (fork-runnable, plan §5.5), with an isolated config - the
- *                   repository config is never consulted.
+ *   4. runtime    - constructs that pass stripping yet fail when node executes
+ *                   the stripped ESM output: decorators, CJS globals
+ *                   (`require` / `__dirname` / ...), and dynamic imports with
+ *                   disallowed or non-literal specifiers.
+ *   5. eslint     - static import allowlist (`no-restricted-imports`: only
+ *                   `node:*` and `#jobs-sdk`; shared literal with the repo
+ *                   eslint config via `import-policy.ts`), with an isolated
+ *                   config - the repository config is never consulted.
  */
 
 export interface GateError {
@@ -44,7 +53,14 @@ export interface GateReport {
 
 const MAX_JOB_NAME_LENGTH = 64;
 
-/** Name rules (plan §5.4): module-file safe, traversal safe, bounded length. */
+/**
+ * Name rules (plan §5.4): module-file safe, traversal safe, bounded length,
+ * and canonical (J-2 review F1): a registered name always passes; a user-only
+ * name must be dot-free and must not alias a builtin's module file. Without
+ * this, saving `jobs-prune` would overwrite the `jobs.prune` builtin's user
+ * file as a plain "user" job - no fork sidecar, no upgrade baseline - and
+ * `my.job` would silently live in `my-job.ts` under a different identity.
+ */
 export function checkJobName(name: string): GateError[] {
 	const errors: GateError[] = [];
 	if (name.length > MAX_JOB_NAME_LENGTH) {
@@ -62,23 +78,17 @@ export function checkJobName(name: string): GateError[] {
 			column: null,
 			message: 'job name must match [a-z0-9][a-z0-9.-]* and must not be a Windows device name'
 		});
+	} else if (!Object.hasOwn(JOBS, name) && jobNameForUserFile(builtinModuleFile(name)) !== name) {
+		errors.push({
+			source: 'name',
+			line: null,
+			column: null,
+			message:
+				'job name must be a registered builtin name, or a dot-free user name whose file mapping is its own ("my-task", not "my.job" or a builtin module alias)'
+		});
 	}
 	return errors;
 }
-
-/**
- * Import policy for job files. The two node negations are deliberate:
- * minimatch never crosses "/" with a single `*`, so one-slash builtins such
- * as node:fs/promises need a second one-slash pattern on top of the bare
- * `node:*` negation (probed matrix). The builtin-side twin of this rule
- * lives in eslint.config.js.
- */
-export const JOB_IMPORT_PATTERNS = [
-	{
-		group: ['**', '!node:*', '!node:*/*', '!*#jobs-sdk*'],
-		message: 'only node:* modules and #jobs-sdk may be imported'
-	}
-];
 
 // ---------------------------------------------------------------------------
 // TypeScript diagnostics (positions for everything strip-only rejects)
@@ -143,6 +153,13 @@ async function checkTypeScript(code: string): Promise<GateError[]> {
 // Type stripping (runtime authority; no positions - probed)
 // ---------------------------------------------------------------------------
 
+/**
+ * Reported only when TypeScript explained nothing (see `runSaveGate`). The TS
+ * 1xxx pass covered every rejection the stripper produced in probes (the TS
+ * rule set is stricter), so this fallback arm is defensive and currently has
+ * no input that exercises it - it is kept because node's stripper, not TS,
+ * decides what actually runs.
+ */
 function checkStrip(code: string): GateError[] {
 	try {
 		stripTypeScriptTypes(code, { mode: 'strip' });
@@ -162,8 +179,63 @@ function checkStrip(code: string): GateError[] {
 }
 
 // ---------------------------------------------------------------------------
-// Runtime residue: decorators pass stripping, fail on execution
+// Runtime residue: passes stripping, fails on execution
 // ---------------------------------------------------------------------------
+
+/**
+ * CJS globals that `@types/node` declares globally but that do not exist in
+ * the ESM job runtime (`$DATA_DIR/jobs/package.json` is `"type": "module"`):
+ * referencing them is a guaranteed ReferenceError at run time, yet the TS
+ * 1xxx pass does not flag them (they are legitimately declared globals for
+ * the real type environment). One common source of false positives is
+ * deliberate shadowing (`const require = createRequire(...)` or a function
+ * parameter named like a global), so any file that binds the name itself is
+ * exempted.
+ */
+const RESIDUE_GLOBALS = new Set(['require', '__dirname', '__filename', 'module', 'exports']);
+
+function collectBoundNames(ts: TsModule, sourceFile: SourceFile): Set<string> {
+	const bound = new Set<string>();
+	const addBinding = (name: import('typescript').BindingName): void => {
+		if (ts.isIdentifier(name)) bound.add(name.text);
+		else if (ts.isObjectBindingPattern(name) || ts.isArrayBindingPattern(name)) {
+			for (const element of name.elements) {
+				if (ts.isBindingElement(element)) addBinding(element.name);
+			}
+		}
+	};
+	const visit = (node: TypeScriptNode): void => {
+		if (ts.isVariableDeclaration(node)) addBinding(node.name);
+		else if (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) {
+			if (node.name) bound.add(node.name.text);
+		} else if (ts.isParameter(node)) addBinding(node.name);
+		else if (ts.isImportSpecifier(node) || ts.isImportClause(node)) {
+			if (node.name) bound.add(node.name.text);
+		} else if (ts.isCatchClause(node) && node.variableDeclaration) {
+			addBinding(node.variableDeclaration.name);
+		}
+		ts.forEachChild(node, visit);
+	};
+	visit(sourceFile);
+	return bound;
+}
+
+/** Skip identifiers that are names, not references (property keys etc.). */
+function isResidueReference(ts: TsModule, node: import('typescript').Identifier): boolean {
+	const parent = node.parent;
+	if (!parent) return false;
+	if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
+	if (ts.isPropertyAssignment(parent) && parent.name === node) return false;
+	if (ts.isQualifiedName(parent) && parent.right === node) return false;
+	if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isImportClause(parent)) {
+		return false;
+	}
+	if (ts.isVariableDeclaration(parent) && parent.name === node) return false;
+	if ((ts.isFunctionDeclaration(parent) || ts.isClassDeclaration(parent)) && parent.name === node) {
+		return false;
+	}
+	return true;
+}
 
 async function checkRuntimeResidue(code: string): Promise<GateError[]> {
 	const ts = await loadTypescript();
@@ -175,17 +247,60 @@ async function checkRuntimeResidue(code: string): Promise<GateError[]> {
 		ts.ScriptKind.TS
 	);
 	const errors: GateError[] = [];
+	const bound = collectBoundNames(ts, sourceFile);
+	const report = (node: TypeScriptNode, message: string): void => {
+		const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+		errors.push({
+			source: 'runtime',
+			line: position.line + 1,
+			column: position.character + 1,
+			message
+		});
+	};
 	const visit = (node: TypeScriptNode): void => {
 		if (ts.canHaveDecorators(node)) {
 			for (const decorator of ts.getDecorators(node) ?? []) {
-				const position = sourceFile.getLineAndCharacterOfPosition(decorator.getStart(sourceFile));
-				errors.push({
-					source: 'runtime',
-					line: position.line + 1,
-					column: position.character + 1,
-					message:
-						'decorators pass type stripping but are not valid JavaScript at run time (strip-only mode)'
-				});
+				report(
+					decorator,
+					'decorators pass type stripping but are not valid JavaScript at run time (strip-only mode)'
+				);
+			}
+		}
+		if (
+			ts.isCallExpression(node) &&
+			ts.isIdentifier(node.expression) &&
+			node.expression.text === 'require' &&
+			!bound.has('require')
+		) {
+			report(
+				node.expression,
+				'require(...) is not available in ESM job scripts; import a node:* module instead'
+			);
+		} else if (
+			ts.isIdentifier(node) &&
+			RESIDUE_GLOBALS.has(node.text) &&
+			!bound.has(node.text) &&
+			isResidueReference(ts, node)
+		) {
+			report(
+				node,
+				`${node.text} is not defined in ESM job scripts (the user layer runs as a module); use node:* imports instead`
+			);
+		}
+		if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+			const source = node.arguments[0];
+			if (source && ts.isStringLiteralLike(source)) {
+				if (!isAllowedImportSpecifier(source.text)) {
+					report(
+						source,
+						`dynamically imported modules must be node:* or #jobs-sdk (got "${source.text}")`
+					);
+				}
+			} else {
+				report(
+					node,
+					'dynamic import specifiers must be string literals (node:* or #jobs-sdk); computed specifiers cannot be verified'
+				);
 			}
 		}
 		ts.forEachChild(node, visit);

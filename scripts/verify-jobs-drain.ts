@@ -23,7 +23,8 @@
 // table), concurrent delivery and queue claims, the entry exit-code contract
 // (2 / 1), heartbeat ping; since J-2: T6 (SDK dual resolution), T7 (save
 // gate negatives) and T10 (user jobs end-to-end: hot update, fork override,
-// run-scoped SDK binding). T8 (Kuma wiring) to §25.
+// run-scoped SDK binding), T11 (delete lifecycle on a real database) and
+// the scaffold-degradation guard. T8 (Kuma wiring) to §25.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -42,6 +43,7 @@ import { jobSchedules } from '../src/lib/server/db/system/job-schedule.schema';
 import { webhookDeliveries } from '../src/lib/server/db/system/webhook-delivery.schema';
 import { webhooks } from '../src/lib/server/db/system/webhook.schema';
 import { enqueueJob } from '../src/lib/server/jobs/queue';
+import { deleteUserJob } from '../src/lib/server/jobs/job-scripts';
 import { builtinModuleFile, jobLockKey } from '../src/lib/server/jobs/registry';
 import { signWebhookPayload } from '../src/lib/server/jobs/signature';
 import { tmpdir } from 'node:os';
@@ -1070,6 +1072,7 @@ async function exitCodesContract(): Promise<void> {
 	const noEnv = { ...process.env };
 	delete noEnv.DATABASE_URL;
 	delete noEnv.JOBS_HEARTBEAT_URL;
+	noEnv.DATA_DIR = join(fixtureDataDir, 'nocfg');
 	const missing = spawn(process.execPath, ['jobs/drain.ts'], { cwd: repoRoot, env: noEnv });
 	spawnedChildren.add(missing);
 	const missingResult = await new Promise<DrainResult>((resolve) => {
@@ -1216,7 +1219,10 @@ async function t7SaveGateNegatives(): Promise<void> {
 		JSON.stringify(lintLines) === '[2,3]',
 		JSON.stringify(importReport.errors)
 	);
-	const okReport = await runSaveGate({ name: 'ok-task', code: 'export default { run() {} };\n' });
+	const okReport = await runSaveGate({
+		name: 'ok-task',
+		code: "import { readFile } from 'node:fs/promises';\nimport { type JobContext } from '#jobs-sdk';\nexport default { run(ctx: JobContext) { ctx.logger.info(String(readFile)); } };\n"
+	});
 	check('T7 positive control passes', okReport.ok);
 }
 
@@ -1313,6 +1319,104 @@ export default {
 			(await readFile(heatLog, 'utf8')).includes('fork'),
 		forkRun?.error ?? ''
 	);
+	const forkHash = sha256Of(await readFile(join(dataDir, 'jobs', 'system-resources.ts')));
+	check(
+		'T10 fork run records the USER file hash (user>builtin at the hash level)',
+		forkRun?.sourceHash === forkHash,
+		`run=${String(forkRun?.sourceHash).slice(0, 8)} file=${forkHash.slice(0, 8)}`
+	);
+}
+
+async function t11DeleteLifecycle(): Promise<void> {
+	section('T11: deleteUserJob cleans schedules/queued/running in one tx, keeps history (real DB)');
+	await resetLedger();
+	const dataDir = join(fixtureDataDir, 't11');
+	await ensureJobsScaffold(dataDir);
+	await writeUserJob(dataDir, 'doomed.ts', 'export default { run() {} };\n');
+	await writeUserJob(dataDir, 'keeper.ts', 'export default { run() {} };\n');
+	await createSchedule('doomed', '* * * * *', new Date());
+	await createSchedule('doomed', '0 4 * * *', new Date());
+	await createSchedule('keeper', '* * * * *', new Date());
+	await db.insert(jobRuns).values({ job: 'doomed', trigger: 'cli', status: 'queued' });
+	await db.insert(jobRuns).values({
+		job: 'doomed',
+		trigger: 'cli',
+		status: 'running',
+		startedAt: new Date(),
+		sourceHash: 'fixture'
+	});
+	await db.insert(jobRuns).values({
+		job: 'doomed',
+		trigger: 'cli',
+		status: 'succeeded',
+		startedAt: new Date(),
+		finishedAt: new Date()
+	});
+	await db.insert(jobRuns).values({ job: 'keeper', trigger: 'cli', status: 'queued' });
+
+	const result = await deleteUserJob({ dataDir, name: 'doomed', actorId: null, db: db as never });
+	check(
+		'T11 delete reports 2 schedules / 1 queued / 1 running finalized',
+		result.kind === 'deleted' &&
+			result.schedulesRemoved === 2 &&
+			result.queuedRemoved === 1 &&
+			result.runningFinalized === 1,
+		JSON.stringify(result)
+	);
+	const doomedRuns = await runsFor('doomed');
+	check(
+		'T11 running row finalized as failed (job deleted)',
+		doomedRuns.some((run) => run.status === 'failed' && run.error === 'unknown job (job deleted)')
+	);
+	check(
+		'T11 terminal history kept (jobs.prune owns retention)',
+		doomedRuns.some((run) => run.status === 'succeeded')
+	);
+	check(
+		'T11 doomed schedules gone',
+		(await db.select().from(jobSchedules).where(eq(jobSchedules.job, 'doomed'))).length === 0
+	);
+	const keeperSchedules = await db
+		.select()
+		.from(jobSchedules)
+		.where(eq(jobSchedules.job, 'keeper'));
+	const keeperRuns = await runsFor('keeper');
+	check(
+		'T11 keeper rows untouched (where-clause scope)',
+		keeperSchedules.length === 1 && keeperRuns.length === 1 && keeperRuns[0].status === 'queued'
+	);
+	const audit = await db.select().from(activities).where(eq(activities.event, 'job.delete'));
+	check(
+		'T11 audit row committed with the transaction',
+		audit.some((row) => (row.payload as { name?: string } | null)?.name === 'doomed')
+	);
+	const fileGone = await readFile(join(dataDir, 'jobs', 'doomed.ts'), 'utf8').then(
+		() => false,
+		() => true
+	);
+	check('T11 user file removed after the commit', fileGone);
+}
+
+async function scaffoldFailureDegrades(): Promise<void> {
+	section('scaffold failure: the tick survives and builtin work still runs (J-2 review F5)');
+	await resetLedger();
+	// DATA_DIR points at a FILE, so `mkdir` inside ensureJobsScaffold fails.
+	const blocked = join(fixtureDataDir, 'blocked-scaffold');
+	await writeFile(blocked, 'not a directory', 'utf8');
+	await enqueueJob(db, 'system.resources', 'cli');
+	const result = await runDrainOnce({ DATA_DIR: blocked });
+	check(
+		'drain exits 0 despite the scaffold failure',
+		result.code === 0,
+		result.stdout + result.stderr
+	);
+	check('scaffold failure is logged', /scaffold ensure failed/.test(result.stderr + result.stdout));
+	const runs = await runsFor('system.resources');
+	check(
+		'builtin job still executed',
+		runs.length === 1 && runs[0].status === 'succeeded',
+		JSON.stringify(runs[0]?.status)
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -1378,6 +1482,8 @@ async function main(): Promise<void> {
 	await t6SdkDualResolution();
 	await t7SaveGateNegatives();
 	await t10UserJobEndToEnd();
+	await t11DeleteLifecycle();
+	await scaffoldFailureDegrades();
 
 	console.log(
 		`\n${failures === 0 ? 'ALL' : `${failures} of`} ${checks} checks ${failures === 0 ? 'passed' : 'FAILED'}`

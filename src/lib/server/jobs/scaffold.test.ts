@@ -124,5 +124,26 @@ describe('ensureJobsScaffold', () => {
 			join(repoRoot, 'node_modules', '@types').replaceAll('\\', '/')
 		);
 		expect(config.exclude).toContain('_sdk.runtime.ts');
+		// Pinned after the J-2 review: the strictness keys are part of what
+		// makes jobs.typecheck meaningful - a silently dropped `strict` must
+		// fail here, not sail through.
+		expect(config.compilerOptions.strict).toBe(true);
+		expect(config.compilerOptions.skipLibCheck).toBe(true);
+		expect(config.compilerOptions.lib).toEqual(['esnext']);
+		expect(config.include).toEqual(['./**/*.ts']);
+	});
+
+	it('uses the file URL form when the differing path part carries unusual characters', () => {
+		// Same-drive paths with spaces in a SHARED ancestor still get a plain
+		// relative specifier (the relative part is clean); the URL form is for
+		// unusual characters in the part a relative specifier must carry.
+		const clean = sdkRuntimeSpecifier('D:/a b/jobs', 'D:/a b/src/lib/server/jobs/jobs-sdk.ts');
+		expect(clean.startsWith('../')).toBe(true);
+		const spec = sdkRuntimeSpecifier(
+			'D:/wl-data/jobs',
+			'D:/my repo/src/lib/server/jobs/jobs-sdk.ts'
+		);
+		expect(spec.startsWith('file:///')).toBe(true);
+		expect(fileURLToPath(spec).endsWith('jobs-sdk.ts')).toBe(true);
 	});
 });

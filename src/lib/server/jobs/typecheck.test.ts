@@ -85,3 +85,27 @@ describe('runJobsTypecheck', () => {
 		expect(issue?.line).toBe(1);
 	}, 60_000);
 });
+
+describe('jobs.typecheck builtin wrapper (J-2 review: run-package coverage)', () => {
+	it('maps the service summary into the job result', async () => {
+		const dataDir = await tempDataDir();
+		const previous = process.env.DATA_DIR;
+		process.env.DATA_DIR = dataDir;
+		try {
+			const builtin = (await import('./builtin/jobs-typecheck')).default;
+			const summaries: Record<string, unknown>[] = [];
+			await builtin.run({
+				job: 'jobs.typecheck',
+				trigger: 'cli',
+				db: {} as never,
+				logger: { info: () => {}, warn: () => {}, error: () => {} },
+				summary: (data: Record<string, unknown>) =>
+					Object.assign(summaries[0] ?? (summaries[0] = {}), data)
+			} as never);
+			expect(summaries[0]).toMatchObject({ ok: true, files: 0, errors: 0, timedOut: false });
+		} finally {
+			if (previous === undefined) delete process.env.DATA_DIR;
+			else process.env.DATA_DIR = previous;
+		}
+	}, 60_000);
+});

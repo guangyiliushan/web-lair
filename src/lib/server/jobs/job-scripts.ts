@@ -27,6 +27,13 @@ import type { GateError } from './save-gate.ts';
  * builtin-update dismissal. File writes are atomic (tmp + rename); every
  * mutation writes its audit row on the same call path.
  *
+ * All user-file mutations run through one in-process queue (J-2 review fix):
+ * the web process is the only writer of `$DATA_DIR/jobs`, so the queue makes
+ * each check-then-act sequence (save's read-gate-write, delete's tx+rm)
+ * atomic per process - the save×save silent-overwrite race and the
+ * save×delete / save×revert "resurrection" windows close at the root. The
+ * optimistic lock remains the cross-request contract.
+ *
  * Web-side module (not part of the drain chain): takes the web app's db
  * handle as an argument, like every other server service.
  */
@@ -62,6 +69,26 @@ export interface ScriptBundle {
 	builtin: ScriptSourceInfo | null;
 }
 
+/** ENOENT/ENOTDIR = genuinely missing; anything else is a real IO failure. */
+function isNotFoundError(error: unknown): boolean {
+	const code = (error as { code?: unknown }).code;
+	return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
+/**
+ * Serialize user-file mutations. `action` runs regardless of the previous
+ * operation's outcome; callers receive their own promise.
+ */
+let jobsFsQueue: Promise<unknown> = Promise.resolve();
+function withJobsFsLock<T>(action: () => Promise<T>): Promise<T> {
+	const run = jobsFsQueue.then(action, action);
+	jobsFsQueue = run.then(
+		() => undefined,
+		() => undefined
+	);
+	return run;
+}
+
 function sha256(bytes: Buffer): string {
 	return createHash('sha256').update(bytes).digest('hex');
 }
@@ -75,8 +102,13 @@ async function fileInfo(path: string): Promise<ScriptSourceInfo | null> {
 			size: stats.size,
 			modifiedAt: stats.mtime.toISOString()
 		};
-	} catch {
-		return null;
+	} catch (error) {
+		// Only a genuinely missing file reads as null; a transient read
+		// failure must not masquerade as "absent" (J-2 review F7) - that
+		// turned permission/blip errors into bogus `created:true` saves and
+		// silent fallbacks to builtin code.
+		if (isNotFoundError(error)) return null;
+		throw error;
 	}
 }
 
@@ -158,11 +190,22 @@ export type SaveScriptResult =
 
 /**
  * Save a script. `baseHash` is the hash of the exact bytes the editor loaded
- * (null = "new file"); it is checked before and after the gate so a save
- * racing another save can never overwrite it silently (grill R2-4; the
+ * (null = "new file"); it is checked before and after the gate so a stale
+ * editor can never overwrite a newer version silently (grill R2-4; the
  * reload/overwrite choice belongs to the UI).
  */
-export async function saveScript(input: {
+export function saveScript(input: {
+	dataDir: string;
+	name: string;
+	code: string;
+	baseHash: string | null;
+	actorId: string | null;
+	db: ScriptDb;
+}): Promise<SaveScriptResult> {
+	return withJobsFsLock(() => saveScriptLocked(input));
+}
+
+async function saveScriptLocked(input: {
 	dataDir: string;
 	name: string;
 	code: string;
@@ -184,8 +227,10 @@ export async function saveScript(input: {
 	const report = await runSaveGate({ name, code });
 	if (!report.ok) return { kind: 'invalid', errors: report.errors };
 
-	// Re-check after the (slower) gate: a concurrent save must win over this
-	// one, never be overwritten by it.
+	// Second check after the (slower) gate. The module-level queue already
+	// serializes in-process writers, so this arm only matters for a
+	// hypothetical second writer process; kept as defense-in-depth (review
+	// note: currently no deterministic test input).
 	const after = await fileInfo(target);
 	if ((after?.hash ?? null) !== baseHash)
 		return { kind: 'conflict', currentHash: after?.hash ?? null };
@@ -216,7 +261,16 @@ export async function saveScript(input: {
 export type RevertScriptResult = { kind: 'reverted' } | { kind: 'not-forked' };
 
 /** Restore a forked builtin: drop the user file + sidecar; schedules stay. */
-export async function revertToBuiltin(input: {
+export function revertToBuiltin(input: {
+	dataDir: string;
+	name: string;
+	actorId: string | null;
+	db: ScriptDb;
+}): Promise<RevertScriptResult> {
+	return withJobsFsLock(() => revertToBuiltinLocked(input));
+}
+
+async function revertToBuiltinLocked(input: {
 	dataDir: string;
 	name: string;
 	actorId: string | null;
@@ -234,7 +288,8 @@ export async function revertToBuiltin(input: {
 }
 
 export type DeleteScriptResult =
-	{ kind: 'deleted'; schedulesRemoved: number; queuedRemoved: number } | { kind: 'not-user-job' };
+	| { kind: 'deleted'; schedulesRemoved: number; queuedRemoved: number; runningFinalized: number }
+	| { kind: 'not-user-job' };
 
 /**
  * Hard-delete a user-only job (R1-2 lifecycle): once the file is gone the
@@ -242,7 +297,16 @@ export type DeleteScriptResult =
  * in one transaction with the audit row; run history stays (jobs.prune owns
  * retention). Forked builtins are refused - that action is `revertToBuiltin`.
  */
-export async function deleteUserJob(input: {
+export function deleteUserJob(input: {
+	dataDir: string;
+	name: string;
+	actorId: string | null;
+	db: ScriptDb;
+}): Promise<DeleteScriptResult> {
+	return withJobsFsLock(() => deleteUserJobLocked(input));
+}
+
+async function deleteUserJobLocked(input: {
 	dataDir: string;
 	name: string;
 	actorId: string | null;
@@ -253,9 +317,13 @@ export async function deleteUserJob(input: {
 	const dir = jobsDir(dataDir);
 	const target = join(dir, userJobFileName(name));
 	if ((await fileInfo(target)) === null) return { kind: 'not-user-job' };
-	await rm(target, { force: true });
-	await rm(sidecarPath(dir, name), { force: true });
-	return db.transaction(async (tx) => {
+	// DB side first, files after (J-2 review R06): with the file removed
+	// first, a failed transaction left a state that could never be retried -
+	// the guard above refuses a missing file and the schedules/queued rows
+	// were stranded. This order converges on retry: an rm failure after a
+	// committed transaction is fixable by running delete again, and the
+	// transaction itself is idempotent (0-row deletes on the second pass).
+	const counts = await db.transaction(async (tx) => {
 		const schedules = await tx
 			.delete(jobSchedules)
 			.where(eq(jobSchedules.job, name))
@@ -264,24 +332,50 @@ export async function deleteUserJob(input: {
 			.delete(jobRuns)
 			.where(and(eq(jobRuns.job, name), eq(jobRuns.status, 'queued')))
 			.returning({ id: jobRuns.id });
+		// A crashed run of a deleted name can never be reclaimed through the
+		// usual lock path (no definition -> no execution -> no reclaim), so
+		// unfinished rows are finalized here (J-2 review R07). A LIVE run is
+		// unaffected long-term: it finalizes by id when it ends, overwriting
+		// this marker with its real outcome.
+		const abandoned = await tx
+			.update(jobRuns)
+			.set({ status: 'failed', error: 'unknown job (job deleted)' })
+			.where(and(eq(jobRuns.job, name), eq(jobRuns.status, 'running')))
+			.returning({ id: jobRuns.id });
 		await recordActivity(tx, {
 			event: 'job.delete',
 			actorId,
-			payload: { name, schedules: schedules.length, queued: queued.length }
+			payload: {
+				name,
+				schedules: schedules.length,
+				queued: queued.length,
+				running: abandoned.length
+			}
 		});
 		return {
 			kind: 'deleted' as const,
 			schedulesRemoved: schedules.length,
-			queuedRemoved: queued.length
+			queuedRemoved: queued.length,
+			runningFinalized: abandoned.length
 		};
 	});
+	await rm(target, { force: true });
+	await rm(sidecarPath(dir, name), { force: true });
+	return counts;
 }
 
 export type IgnoreUpdateResult =
 	{ kind: 'dismissed'; dismissed: string[] } | { kind: 'not-forked' } | { kind: 'no-update' };
 
 /** "Ignore this version": push the current builtin hash into the sidecar. */
-export async function ignoreBuiltinUpdate(input: {
+export function ignoreBuiltinUpdate(input: {
+	dataDir: string;
+	name: string;
+}): Promise<IgnoreUpdateResult> {
+	return withJobsFsLock(() => ignoreBuiltinUpdateLocked(input));
+}
+
+async function ignoreBuiltinUpdateLocked(input: {
 	dataDir: string;
 	name: string;
 }): Promise<IgnoreUpdateResult> {

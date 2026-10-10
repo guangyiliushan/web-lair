@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { jobsDir, repoRoot } from './data-dir.ts';
@@ -93,7 +93,17 @@ async function writeIfChanged(path: string, content: string, changed: string[]):
 		// Missing file: the write below creates it.
 	}
 	if (current === content) return;
-	await writeFile(path, content, 'utf8');
+	// tmp + rename (J-2 review R09): a concurrent reader - another drain
+	// tick, a web save, or the typecheck's tsc reading tsconfig.json - must
+	// never observe a torn artifact while this process refreshes it.
+	const tmp = `${path}.${process.pid}.tmp`;
+	try {
+		await writeFile(tmp, content, 'utf8');
+		await rename(tmp, path);
+	} catch (error) {
+		await rm(tmp, { force: true }).catch(() => {});
+		throw error;
+	}
 	changed.push(path);
 }
 

@@ -191,3 +191,42 @@ describe('createJobLoader (plain Node child)', () => {
 		expect(stdout).toContain('user-layer child ok');
 	}, 20_000);
 });
+
+describe('review fix batch: boundaries and load consistency', () => {
+	it('pins the timeout_ms boundaries inclusively at both ends', async () => {
+		const dataDir = await tempDataDir();
+		await jobFile(dataDir, 'my-task.ts', 'export default { run() {} };\n');
+		await jobFile(dataDir, '.meta/my-task.json', JSON.stringify({ timeout_ms: 5_000 }));
+		expect((await resolveJobDefinition('my-task', dataDir))?.timeoutMs).toBe(5_000);
+		await jobFile(dataDir, '.meta/my-task.json', JSON.stringify({ timeout_ms: 4_999 }));
+		expect((await resolveJobDefinition('my-task', dataDir))?.timeoutMs).toBe(
+			DEFAULT_USER_JOB_TIMEOUT_MS
+		);
+		await jobFile(dataDir, '.meta/my-task.json', JSON.stringify({ timeout_ms: 3_600_001 }));
+		expect((await resolveJobDefinition('my-task', dataDir))?.timeoutMs).toBe(
+			DEFAULT_USER_JOB_TIMEOUT_MS
+		);
+	});
+
+	it('memoizes a loaded job per process so the recorded hash always matches the executed code', async () => {
+		const dataDir = await tempDataDir();
+		await ensureJobsScaffold(dataDir);
+		await jobFile(dataDir, 'memo-task.ts', "export default { run() { return 'v1'; } };\n");
+		const script = `
+			const { createJobLoader } = await import('./src/lib/server/jobs/user-layer.ts');
+			const fs = await import('node:fs/promises');
+			const loader = createJobLoader({ dataDir: ${JSON.stringify(dataDir)} });
+			const first = await loader('memo-task');
+			await fs.writeFile(${JSON.stringify(join(dataDir, 'jobs', 'memo-task.ts'))}, "export default { run() { return 'v2'; } };\\n");
+			const second = await loader('memo-task');
+			if (second.sourceHash !== first.sourceHash) throw new Error('hash drifted from the executed code');
+			if ((await second.run({})) !== 'v1') throw new Error('second load must reuse the first module');
+			console.log('memo ok');
+		`;
+		const { stdout } = await run(process.execPath, ['--input-type=module', '-e', script], {
+			cwd: repoRoot,
+			timeout: 30_000
+		});
+		expect(stdout).toContain('memo ok');
+	}, 20_000);
+});

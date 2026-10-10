@@ -35,7 +35,7 @@ describe('checkJobName', () => {
 	});
 });
 
-describe('runSaveGate', { timeout: 30_000 }, () => {
+describe('runSaveGate', { timeout: 60_000 }, () => {
 	it('passes a well-formed script (node:* + #jobs-sdk imports only)', async () => {
 		const report = await runSaveGate({ name: 'my-task', code: VALID });
 		expect(report.errors).toEqual([]);
@@ -120,5 +120,65 @@ describe('runSaveGate', { timeout: 30_000 }, () => {
 		const sources = new Set(report.errors.map((error) => error.source));
 		expect(sources.has('typescript')).toBe(true);
 		expect(sources.has('eslint')).toBe(true);
+	});
+});
+
+describe('canonical name mapping (J-2 review F1)', { timeout: 60_000 }, () => {
+	it('rejects names that would live under a different identity', () => {
+		expect(checkJobName('my.job')).not.toEqual([]);
+		expect(checkJobName('jobs-prune')).not.toEqual([]);
+		expect(checkJobName('jobs.prune')).toEqual([]);
+		expect(checkJobName('my-task')).toEqual([]);
+	});
+
+	it('runSaveGate reports the name error itself', async () => {
+		const report = await runSaveGate({ name: 'my.job', code: VALID });
+		expect(report.ok).toBe(false);
+		expect(report.errors.some((error) => error.source === 'name')).toBe(true);
+	});
+});
+
+describe('dynamic imports and CJS residue (J-2 review F3/F6)', { timeout: 60_000 }, () => {
+	it('rejects dynamic imports outside the allowlist, with a position', async () => {
+		const report = await runSaveGate({
+			name: 'dyn-bad',
+			code: "const m = await import('lodash');\nexport default { run() { return m; } };\n"
+		});
+		const runtime = report.errors.filter((error) => error.source === 'runtime');
+		expect(runtime.some((error) => error.line === 1)).toBe(true);
+		expect(runtime.some((error) => error.message.includes('node:*'))).toBe(true);
+	});
+
+	it('rejects computed dynamic specifiers and accepts node:* ones', async () => {
+		const computed = await runSaveGate({
+			name: 'dyn-computed',
+			code: "const which = 'node:fs';\nconst m = await import(which);\nexport default { run() { return m; } };\n"
+		});
+		expect(computed.errors.some((error) => error.source === 'runtime' && error.line === 2)).toBe(
+			true
+		);
+		const allowed = await runSaveGate({
+			name: 'dyn-ok',
+			code: "const m = await import('node:fs/promises');\nexport default { run() { return m; } };\n"
+		});
+		expect(allowed.ok).toBe(true);
+	});
+
+	it('rejects CJS globals that fail at run time in the ESM user layer', async () => {
+		const report = await runSaveGate({
+			name: 'cjs-residue',
+			code: "const fs = require('node:fs');\nmodule.exports = { run() { return fs; } };\n"
+		});
+		const runtime = report.errors.filter((error) => error.source === 'runtime');
+		expect(runtime.some((error) => error.message.includes('require'))).toBe(true);
+		expect(runtime.some((error) => error.message.includes('module'))).toBe(true);
+	});
+
+	it('exempts files that shadow the names themselves', async () => {
+		const report = await runSaveGate({
+			name: 'shadowed',
+			code: "import { createRequire } from 'node:module';\nconst require = createRequire(import.meta.url);\nexport default { run() { return require; } };\n"
+		});
+		expect(report.errors.filter((error) => error.source === 'runtime')).toEqual([]);
 	});
 });

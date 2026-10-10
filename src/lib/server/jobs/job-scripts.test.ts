@@ -46,8 +46,19 @@ function exists(path: string): Promise<boolean> {
 	);
 }
 
-/** Fake web db: captures audit inserts and the delete transaction's rows. */
-function makeDb(options: { scheduleRows?: unknown[]; queuedRows?: unknown[] } = {}) {
+/**
+ * Fake web db: captures audit inserts; the delete transaction exposes the
+ * delete chains (schedules first, queued second) plus the running-finalize
+ * update chain, and can be made to fail to exercise the retry contract.
+ */
+function makeDb(
+	options: {
+		scheduleRows?: unknown[];
+		queuedRows?: unknown[];
+		runningRows?: unknown[];
+		transactionThrows?: boolean;
+	} = {}
+) {
 	const auditRows: Record<string, unknown>[] = [];
 	const db = {
 		insert: vi.fn(() => ({
@@ -56,6 +67,7 @@ function makeDb(options: { scheduleRows?: unknown[]; queuedRows?: unknown[] } = 
 			})
 		})),
 		transaction: vi.fn(async (fn: (tx: unknown) => unknown) => {
+			if (options.transactionThrows) throw new Error('tx boom');
 			let deleteCall = 0;
 			const tx = {
 				delete: vi.fn(() => ({
@@ -64,6 +76,13 @@ function makeDb(options: { scheduleRows?: unknown[]; queuedRows?: unknown[] } = 
 							deleteCall += 1;
 							return deleteCall === 1 ? (options.scheduleRows ?? []) : (options.queuedRows ?? []);
 						})
+					}))
+				})),
+				update: vi.fn(() => ({
+					set: vi.fn(() => ({
+						where: vi.fn(() => ({
+							returning: vi.fn(async () => options.runningRows ?? [])
+						}))
 					}))
 				})),
 				insert: vi.fn(() => ({
@@ -178,6 +197,21 @@ describe('saveScript', { timeout: 30_000 }, () => {
 		}
 	});
 
+	it('rejects alias names that would shadow a builtin module file (review F1)', async () => {
+		const dataDir = await tempDataDir();
+		const { db } = makeDb();
+		const result = await saveScript({
+			dataDir,
+			name: 'jobs-prune',
+			code: VALID_CODE,
+			baseHash: null,
+			actorId: null,
+			db
+		});
+		expect(result.kind).toBe('invalid');
+		expect(await exists(join(dataDir, 'jobs', 'jobs-prune.ts'))).toBe(false);
+	});
+
 	it('enforces the optimistic lock in both directions', async () => {
 		const dataDir = await tempDataDir();
 		const { db } = makeDb();
@@ -217,6 +251,34 @@ describe('saveScript', { timeout: 30_000 }, () => {
 		expect(await readFile(join(dataDir, 'jobs', 'my-task.ts'), 'utf8')).toBe(updated);
 	});
 
+	it('serializes concurrent saves: exactly one wins, the other conflicts (review R01)', async () => {
+		const dataDir = await tempDataDir();
+		const { db } = makeDb();
+		const [a, b] = await Promise.all([
+			saveScript({
+				dataDir,
+				name: 'race-task',
+				code: VALID_CODE,
+				baseHash: null,
+				actorId: null,
+				db
+			}),
+			saveScript({
+				dataDir,
+				name: 'race-task',
+				code: 'export default { run() { /* b */ } };\n',
+				baseHash: null,
+				actorId: null,
+				db
+			})
+		]);
+		const kinds = [a.kind, b.kind].sort();
+		expect(kinds).toEqual(['conflict', 'saved']);
+		const winner = a.kind === 'saved' ? a : b;
+		if (winner.kind !== 'saved') throw new Error('no winner in the race');
+		expect(await sha256File(join(dataDir, 'jobs', 'race-task.ts'))).toBe(winner.hash);
+	});
+
 	it('creates the fork sidecar on first save of a builtin-backed name', async () => {
 		const dataDir = await tempDataDir();
 		const { db, auditRows } = makeDb();
@@ -240,7 +302,7 @@ describe('saveScript', { timeout: 30_000 }, () => {
 		expect(auditRows[0]).toMatchObject({ event: 'job.fork' });
 	});
 
-	it('later saves keep the fork baseline untouched', async () => {
+	it('later saves keep the fork baseline and forked_at untouched', async () => {
 		const dataDir = await tempDataDir();
 		const { db, auditRows } = makeDb();
 		await jobFile(dataDir, 'system-resources.ts', VALID_CODE);
@@ -263,6 +325,7 @@ describe('saveScript', { timeout: 30_000 }, () => {
 			await readFile(join(dataDir, 'jobs', '.meta', 'system-resources.json'), 'utf8')
 		);
 		expect(sidecar.builtin_hash).toBe('oldhash');
+		expect(sidecar.forked_at).toBe('2026-01-01');
 		expect(auditRows[0]).toMatchObject({ event: 'job.save' });
 	});
 });
@@ -297,22 +360,48 @@ describe('revertToBuiltin', () => {
 });
 
 describe('deleteUserJob', () => {
-	it('removes the file and cleans schedules + queued runs in one transaction', async () => {
+	it('cleans schedules + queued + running in one transaction and keeps history', async () => {
 		const dataDir = await tempDataDir();
 		const { db, auditRows, raw } = makeDb({
 			scheduleRows: [{ id: 's1' }, { id: 's2' }],
-			queuedRows: [{ id: 'q1' }]
+			queuedRows: [{ id: 'q1' }],
+			runningRows: [{ id: 'r1' }, { id: 'r2' }]
 		});
 		await jobFile(dataDir, 'my-task.ts', VALID_CODE);
 		const result = await deleteUserJob({ dataDir, name: 'my-task', actorId: 'admin-1', db });
-		expect(result).toEqual({ kind: 'deleted', schedulesRemoved: 2, queuedRemoved: 1 });
+		expect(result).toEqual({
+			kind: 'deleted',
+			schedulesRemoved: 2,
+			queuedRemoved: 1,
+			runningFinalized: 2
+		});
 		expect(await exists(join(dataDir, 'jobs', 'my-task.ts'))).toBe(false);
 		expect(raw.transaction).toHaveBeenCalledTimes(1);
 		expect(auditRows[0]).toMatchObject({
 			event: 'job.delete',
 			actorId: 'admin-1',
-			payload: { name: 'my-task', schedules: 2, queued: 1 }
+			payload: { name: 'my-task', schedules: 2, queued: 1, running: 2 }
 		});
+	});
+
+	it('keeps the file until the transaction commits: a failed tx is retryable (review R06)', async () => {
+		const dataDir = await tempDataDir();
+		await jobFile(dataDir, 'my-task.ts', VALID_CODE);
+		const failing = makeDb({ transactionThrows: true });
+		await expect(
+			deleteUserJob({ dataDir, name: 'my-task', actorId: null, db: failing.db })
+		).rejects.toThrow('tx boom');
+		expect(await exists(join(dataDir, 'jobs', 'my-task.ts'))).toBe(true);
+
+		const working = makeDb({ scheduleRows: [{ id: 's1' }] });
+		const retried = await deleteUserJob({
+			dataDir,
+			name: 'my-task',
+			actorId: null,
+			db: working.db
+		});
+		expect(retried).toMatchObject({ kind: 'deleted', schedulesRemoved: 1 });
+		expect(await exists(join(dataDir, 'jobs', 'my-task.ts'))).toBe(false);
 	});
 
 	it('refuses forked builtins and keeps their file', async () => {

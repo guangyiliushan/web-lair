@@ -9,6 +9,10 @@ import { defineConfig } from 'eslint/config';
 import globals from 'globals';
 import ts from 'typescript-eslint';
 import svelteConfig from './svelte.config.js';
+import {
+	JOB_DYNAMIC_IMPORT_SELECTORS,
+	JOB_IMPORT_PATTERNS
+} from './src/lib/server/jobs/import-policy.ts';
 
 const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
 
@@ -49,24 +53,15 @@ export default defineConfig(
 	},
 	{
 		// Jobs builtins must stay fork-runnable (jobs-line plan §5.5): only
-		// `node:*` modules and the SDK facade are importable. User job files
-		// get the same rule through the save gate.
+		// `node:*` modules and the SDK facade are importable, statically and
+		// dynamically. Both rule shapes are single-sourced with the save gate
+		// in src/lib/server/jobs/import-policy.ts (J-2 review F3: the dynamic
+		// selectors close the `await import(...)` hole `no-restricted-imports`
+		// alone does not see).
 		files: ['src/lib/server/jobs/builtin/**/*.ts'],
 		rules: {
-			'no-restricted-imports': [
-				'error',
-				{
-					patterns: [
-						{
-							// minimatch never crosses "/" with `*`: a single
-							// `node:*` negator misses `node:fs/promises`, so the
-							// one-slash form gets its own negation (probed matrix).
-							group: ['**', '!node:*', '!node:*/*', '!*#jobs-sdk*'],
-							message: 'builtin jobs may only import node:* modules and #jobs-sdk'
-						}
-					]
-				}
-			]
+			'no-restricted-imports': ['error', { patterns: JOB_IMPORT_PATTERNS }],
+			'no-restricted-syntax': ['error', ...JOB_DYNAMIC_IMPORT_SELECTORS]
 		}
 	}
 );

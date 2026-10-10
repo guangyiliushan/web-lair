@@ -30,6 +30,12 @@
 		onChange?: (value: string) => void;
 		/** Mod-s inside the editor; the component never renders its own button. */
 		onSave?: () => void;
+		/**
+		 * Mount-time flag: the CodeMirror read-only/editable facets are set
+		 * once at editor creation, so toggling at runtime needs a remount
+		 * (e.g. wrap the host in `{#key readonly}`). Documented J-2 review
+		 * note; the saved editor contract is decided by the save gate anyway.
+		 */
 		readonly?: boolean;
 		ariaLabel?: string;
 		class?: string;

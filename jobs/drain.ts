@@ -58,7 +58,16 @@ async function tick(): Promise<DrainSummary> {
 	// is repaired here instead of failing the tick.
 	const dataDir = resolveDataDir();
 	try {
-		await ensureJobsScaffold(dataDir);
+		// Scaffold failures degrade instead of killing the tick (J-2 review
+		// F5): builtin schedules and webhook deliveries do not need the user
+		// layer, and any user job that cannot load is recorded per run.
+		try {
+			await ensureJobsScaffold(dataDir);
+		} catch (error) {
+			console.error(
+				`[drain] scaffold ensure failed (user jobs may not load this tick): ${sanitizeErrorText(error instanceof Error ? error.message : error)}`
+			);
+		}
 		return await runDrain({
 			db,
 			acquireLock,

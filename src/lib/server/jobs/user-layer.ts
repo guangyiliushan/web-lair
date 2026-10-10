@@ -36,6 +36,12 @@ export interface UserJobMeta {
 /** A user-layer job file: lowercase stem + hyphen, `.ts` only (plan §5.1). */
 const USER_JOB_FILE_RE = /^[a-z0-9][a-z0-9-]*\.ts$/;
 
+/** ENOENT/ENOTDIR = genuinely missing; anything else is a real IO failure. */
+function isNotFoundError(error: unknown): boolean {
+	const code = (error as { code?: unknown }).code;
+	return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
 /** Module file name for a job name in the user layer (same mapping as builtin). */
 export function userJobFileName(name: string): string {
 	return builtinModuleFile(name);
@@ -67,7 +73,8 @@ export async function readUserJobMeta(dir: string, name: string): Promise<UserJo
 	let raw: string;
 	try {
 		raw = await readFile(sidecarPath(dir, name), 'utf8');
-	} catch {
+	} catch (error) {
+		if (!isNotFoundError(error)) throw error;
 		return null;
 	}
 	try {
@@ -101,7 +108,8 @@ export async function listUserJobFiles(dataDir: string): Promise<{ file: string;
 	let entries;
 	try {
 		entries = await readdir(dir, { withFileTypes: true });
-	} catch {
+	} catch (error) {
+		if (!isNotFoundError(error)) throw error;
 		return []; // no data dir yet - the scaffold creates it on the next ensure
 	}
 	const jobs: { file: string; name: string }[] = [];
@@ -119,8 +127,9 @@ export async function userJobFileExists(dataDir: string, name: string): Promise<
 	try {
 		const stats = await stat(join(jobsDir(dataDir), userJobFileName(name)));
 		return stats.isFile();
-	} catch {
-		return false;
+	} catch (error) {
+		if (isNotFoundError(error)) return false;
+		throw error;
 	}
 }
 
@@ -172,12 +181,21 @@ export async function resolveJobDefinition(
  * the name wins; otherwise the registry-backed builtin loader runs. The
  * executing source hash always comes from the file that actually ran
  * (plan §3.1 `source_hash`).
+ *
+ * Per-process memoization (J-2 review R10): plan §2 accepts that a tick
+ * reuses the first loaded version. Caching the whole LoadedJob - not just
+ * relying on the module cache - is what keeps `source_hash` truthful when a
+ * same-tick second execution happens after the file changed: without it the
+ * import cache would keep running v1 while the re-read bytes hash v2.
  */
 export function createJobLoader(options: {
 	dataDir: string;
 }): (name: string) => Promise<LoadedJob> {
 	const loadBuiltin = createBuiltinLoader();
+	const cache = new Map<string, LoadedJob>();
 	return async (name) => {
+		const cached = cache.get(name);
+		if (cached) return cached;
 		if (!isSafeJobName(name)) {
 			throw new Error(`job name "${name}" is not a valid module name`);
 		}
@@ -185,17 +203,25 @@ export function createJobLoader(options: {
 		let bytes: Buffer;
 		try {
 			bytes = await readFile(filePath);
-		} catch {
-			return loadBuiltin(name);
+		} catch (error) {
+			// Only a genuinely missing file falls back to the builtin (J-2
+			// review F7): a transient read failure must not silently run
+			// different code than the user layer holds.
+			if (!isNotFoundError(error)) throw error;
+			const fallback = await loadBuiltin(name);
+			cache.set(name, fallback);
+			return fallback;
 		}
 		const module = await import(pathToFileURL(filePath).href);
 		const run = (module as { default?: { run?: unknown } }).default?.run;
 		if (typeof run !== 'function') {
 			throw new Error(`user job module for "${name}" must default-export { run(ctx) }`);
 		}
-		return {
+		const loaded: LoadedJob = {
 			run: run as JobRunFn,
 			sourceHash: createHash('sha256').update(bytes).digest('hex')
 		};
+		cache.set(name, loaded);
+		return loaded;
 	};
 }

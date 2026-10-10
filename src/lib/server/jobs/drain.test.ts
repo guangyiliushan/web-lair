@@ -231,3 +231,46 @@ describe('sanitizeErrorText', () => {
 		expect(sanitizeErrorText(undefined)).toBe('');
 	});
 });
+
+describe('run-scoped binding through the drain (J-2 review: unbind arm)', () => {
+	it('binds the client around a run and clears it afterwards', async () => {
+		const { requireBoundDb } = await import('./sdk-binding');
+		const scheduleRow = {
+			id: '00000000-0000-7000-8000-000000000002',
+			job: 'system.resources',
+			cronExpr: '30 1 * * *',
+			tz: 'UTC',
+			isEnabled: true,
+			lastDueAt: new Date('2025-12-30T01:30:00.000Z')
+		};
+		const db = makeScriptedDb([
+			[scheduleRow], // enabled schedules
+			[], // reclaim
+			[{ id: scheduleRow.id }], // CAS watermark
+			[{ id: 'run-bind' }], // insert run row
+			[], // source hash update
+			[] // finalize
+		]);
+		let captured: unknown = 'run-never-invoked';
+		await runDrain({
+			db,
+			acquireLock: async () => async () => {},
+			loadJob: async () => ({
+				run: () => {
+					try {
+						captured = requireBoundDb();
+					} catch (error) {
+						captured = error instanceof Error ? error.message : String(error);
+					}
+				},
+				sourceHash: 'hash'
+			}),
+			now: fixedNow
+		});
+		expect(captured).toBe(db);
+		expect(() => requireBoundDb()).toThrowError(/no database is bound/);
+		// The same loadJob contract also works with the real loader shape:
+		// resolving a user name the registry does not know still runs it when
+		// a registry name is used (covered by the harness T10 end-to-end).
+	});
+});

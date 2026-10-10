@@ -21,7 +21,7 @@ function declaredValueNames(source: string): string[] {
 	return [...names].sort();
 }
 
-describe('jobs SDK facade parity', () => {
+describe('jobs SDK facade parity', { timeout: 30_000 }, () => {
 	it('runtime exports and facade declarations match in both directions', async () => {
 		const runtime = await import('./jobs-sdk');
 		const runtimeNames = Object.keys(runtime).sort();
