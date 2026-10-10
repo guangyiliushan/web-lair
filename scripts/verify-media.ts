@@ -5,6 +5,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
 import * as schema from '../src/lib/server/db/schema';
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
+import { StorageError } from '../src/lib/server/storage/port';
 import { RustFsStorage } from '../src/lib/server/storage/rustfs';
 import { objectKeyFor, variantKeyFor } from '../src/lib/media/keys';
 import {
@@ -470,6 +471,47 @@ async function main(): Promise<void> {
 		(await storage.head(orphanKey)) === null &&
 			(await storage.head(variantKeyFor(orphanKey, 'thumb'))) === null
 	);
+
+	// -- §8 map service probe (T12): Range semantics through the adapter ----
+	// Pins the behaviours the /maps route forwards: 200 full, 206 + exact
+	// Content-Range on a ranged read, 416 (as StorageError) past the end.
+	const mapProbeKey = `maps/verify-range-${stamp}.bin`;
+	const mapBytes = new Uint8Array(256).map((_value, index) => index);
+	await storage.put(mapProbeKey, mapBytes, { contentType: 'application/vnd.pmtiles' });
+	const mapFull = await storage.get(mapProbeKey);
+	check(
+		'map range: full read answers 200 with the exact size',
+		mapFull?.status === 200 && mapFull?.byteSize === 256,
+		`status=${mapFull?.status} size=${mapFull?.byteSize}`
+	);
+	const mapRanged = await storage.get(mapProbeKey, { range: { start: 0, end: 9 } });
+	const mapRangedBytes = mapRanged
+		? new Uint8Array(await new Response(mapRanged.body).arrayBuffer())
+		: null;
+	check(
+		'map range: ranged read answers 206 with the exact Content-Range',
+		mapRanged?.status === 206 &&
+			mapRanged?.contentRange === 'bytes 0-9/256' &&
+			mapRangedBytes?.length === 10 &&
+			mapRangedBytes[0] === 0 &&
+			mapRangedBytes[9] === 9,
+		`status=${mapRanged?.status} cr=${mapRanged?.contentRange} n=${mapRangedBytes?.length}`
+	);
+	const mapOpen = await storage.get(mapProbeKey, { range: { start: 250 } });
+	check(
+		'map range: open-ended range answers 206 to the end',
+		mapOpen?.status === 206 && mapOpen?.contentRange === 'bytes 250-255/256',
+		`status=${mapOpen?.status} cr=${mapOpen?.contentRange}`
+	);
+	let mapOverflow = false;
+	try {
+		await storage.get(mapProbeKey, { range: { start: 300, end: 400 } });
+	} catch (cause) {
+		mapOverflow = cause instanceof StorageError && cause.status === 416;
+	}
+	check('map range: unsatisfiable range surfaces as StorageError 416', mapOverflow);
+	await storage.delete(mapProbeKey);
+	check('map range: probe object cleaned up', (await storage.head(mapProbeKey)) === null);
 }
 
 try {

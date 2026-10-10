@@ -22,6 +22,18 @@ export interface StoredObjectBody {
 	byteSize: number | null;
 	contentType: string | null;
 	etag: string | null;
+	/** Content-Range reported by a ranged read (HTTP 206). */
+	contentRange?: string | null;
+	/** Storage response status (200 full · 206 partial). */
+	status?: number;
+}
+
+export interface GetOptions {
+	/**
+	 * Single byte range, S3 dialect — either `{ start, end? }` (`end`
+	 * INCLUSIVE; omit for an open end) or `{ suffix }` for the last N bytes.
+	 */
+	range?: { start: number; end?: number } | { suffix: number };
 }
 
 /** Non-2xx storage response the caller cannot treat as "absent". */
@@ -42,7 +54,7 @@ export interface ObjectStoragePort {
 	ensureBucket(): Promise<void>;
 	put(key: string, data: Uint8Array, options?: PutOptions): Promise<{ etag: string | null }>;
 	/** Resolves null when the object does not exist (404). */
-	get(key: string): Promise<StoredObjectBody | null>;
+	get(key: string, options?: GetOptions): Promise<StoredObjectBody | null>;
 	/** Resolves null when the object does not exist (404). */
 	head(key: string): Promise<StoredObjectHead | null>;
 	/** Idempotent: deleting a missing object resolves. */

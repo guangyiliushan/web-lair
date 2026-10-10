@@ -157,3 +157,116 @@ describe('RustFsStorage', () => {
 		expect(calls[0].init.method).toBe('PUT');
 	});
 });
+
+describe('staged read timeouts', () => {
+	it('stage 1 aborts a stalled response and surfaces a StorageError', async () => {
+		const impl = vi.fn(
+			(_input: URL | RequestInfo, init?: RequestInit) =>
+				new Promise<Response>((_resolve, reject) => {
+					init?.signal?.addEventListener('abort', () =>
+						reject(new DOMException('aborted', 'AbortError'))
+					);
+				})
+		) as unknown as typeof fetch;
+		const storage = new RustFsStorage(CONFIG, {
+			fetchImpl: impl,
+			clock: FIXED_CLOCK,
+			headersTimeoutMs: 25
+		});
+
+		await expect(storage.head('x')).rejects.toMatchObject({ name: 'StorageError', status: 0 });
+	});
+
+	it('a slow but active stream is not killed by the headers budget', async () => {
+		const encoder = new TextEncoder();
+		const { impl } = recordingFetch(() => {
+			const stream = new ReadableStream<Uint8Array>({
+				async start(controller) {
+					for (let index = 0; index < 5; index += 1) {
+						await new Promise((resolve) => setTimeout(resolve, 20));
+						controller.enqueue(encoder.encode(`c${index}`));
+					}
+					controller.close();
+				}
+			});
+			return new Response(stream, {
+				status: 200,
+				headers: { 'content-type': 'application/octet-stream' }
+			});
+		});
+		const storage = new RustFsStorage(CONFIG, {
+			fetchImpl: impl,
+			clock: FIXED_CLOCK,
+			headersTimeoutMs: 10,
+			bodyIdleTimeoutMs: 5_000
+		});
+
+		const object = await storage.get('maps/world.pmtiles');
+
+		await expect(new Response(object!.body).text()).resolves.toBe('c0c1c2c3c4');
+	});
+
+	it('stage 2 fails an idle body with a StorageError', async () => {
+		const { impl } = recordingFetch(() => {
+			const stream = new ReadableStream<Uint8Array>({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode('head'));
+					// never closes — the next read hangs until the idle guard fires
+				}
+			});
+			return new Response(stream, { status: 200 });
+		});
+		const storage = new RustFsStorage(CONFIG, {
+			fetchImpl: impl,
+			clock: FIXED_CLOCK,
+			bodyIdleTimeoutMs: 40
+		});
+
+		const object = await storage.get('maps/x.pmtiles');
+
+		await expect(new Response(object!.body).text()).rejects.toMatchObject({
+			name: 'StorageError'
+		});
+	});
+
+	it('forwards a suffix range as the S3 last-N header', async () => {
+		const { impl, calls } = recordingFetch(
+			() =>
+				new Response('tail', {
+					status: 206,
+					headers: { 'content-range': 'bytes 252-255/256' }
+				})
+		);
+		const storage = storageWith(impl);
+
+		await storage.get('maps/world.pmtiles', { range: { suffix: 4 } });
+
+		const headers = new Headers(calls[0]!.init.headers);
+		expect(headers.get('range')).toBe('bytes=-4');
+	});
+
+	it('forwards a byte range unsigned and reports the 206 fields', async () => {
+		const { impl, calls } = recordingFetch(
+			() =>
+				new Response('0123', {
+					status: 206,
+					headers: {
+						'content-length': '4',
+						'content-range': 'bytes 0-3/10',
+						'content-type': 'application/octet-stream'
+					}
+				})
+		);
+		const storage = storageWith(impl);
+
+		const object = await storage.get('maps/world.pmtiles', { range: { start: 0, end: 3 } });
+
+		expect(object?.status).toBe(206);
+		expect(object?.contentRange).toBe('bytes 0-3/10');
+		expect(calls[0]!.init.method).toBe('GET');
+		const headers = new Headers(calls[0]!.init.headers);
+		expect(headers.get('range')).toBe('bytes=0-3');
+		expect(headers.get('authorization') ?? '').not.toContain('range');
+		await expect(new Response(object!.body).text()).resolves.toBe('0123');
+	});
+});

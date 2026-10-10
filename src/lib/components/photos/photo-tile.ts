@@ -55,6 +55,14 @@ export function photoTileSrc(tile: PhotoTile, variant: 'thumb' | 'preview' | 'fu
 	return `/i/${variantKeyFor(tile.objectKey, variant)}`;
 }
 
+/** Slim shape for the public map markers (ST-2d). */
+export interface MapPhoto {
+	slug: string;
+	title: PhotoTileText;
+	latitude: number;
+	longitude: number;
+}
+
 const THUMBHASH_CACHE = new Map<string, string | null>();
 
 /** Base64 thumbhash → data URL (cached); garbage hashes resolve to null. */
@@ -62,7 +70,7 @@ export function thumbhashDataUrl(hash: string | null): string | null {
 	if (!hash) return null;
 	const cached = THUMBHASH_CACHE.get(hash);
 	if (cached !== undefined) return cached;
-	let result: string | null = null;
+	let result: string | null;
 	try {
 		const binary = atob(hash);
 		const bytes = new Uint8Array(binary.length);

@@ -1,7 +1,12 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-	use: { baseURL: 'http://localhost:4173' },
+	use: {
+		baseURL: 'http://localhost:4173',
+		// MapLibre needs a WebGL context: headless chromium falls back to
+		// SwiftShader, which recent versions gate behind this flag.
+		launchOptions: { args: ['--enable-unsafe-swiftshader'] }
+	},
 	webServer: {
 		command: 'npm run build && npm run preview',
 		port: 4173,

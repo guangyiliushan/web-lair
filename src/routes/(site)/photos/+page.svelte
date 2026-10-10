@@ -32,9 +32,17 @@
 
 <div class="mx-auto mt-14 max-w-6xl px-4 lg:mt-20 lg:px-0">
 	<div class="min-w-0">
-		<h1 id="photos-heading" class="text-[28px] leading-tight font-medium">
-			{m.photos_title()}
-		</h1>
+		<div class="flex items-baseline justify-between gap-4">
+			<h1 id="photos-heading" class="text-[28px] leading-tight font-medium">
+				{m.photos_title()}
+			</h1>
+			<a
+				class="shrink-0 text-sm text-muted-foreground hover:text-foreground"
+				href={siteHref('/photos/map')}
+			>
+				{m.photos_map_link()}
+			</a>
+		</div>
 		<p class="mt-2 text-sm text-muted-foreground">{m.photos_desc()}</p>
 		<div class="mt-6 mb-6 h-px w-8 bg-primary/70"></div>
 	</div>

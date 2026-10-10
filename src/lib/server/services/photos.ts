@@ -609,6 +609,8 @@ export interface PublicPhotoFilters {
 	cameraModel?: string;
 	lensModel?: string;
 	tagId?: string;
+	/** Map view (ST-2d): only rows carrying both coordinates. */
+	hasLocation?: boolean;
 }
 
 export interface PublicPhotoCursor {
@@ -672,6 +674,11 @@ export async function listPublicPhotos(
 	}
 	if (filters.cameraModel) conditions.push(eq(photos.cameraModel, filters.cameraModel));
 	if (filters.lensModel) conditions.push(eq(photos.lensModel, filters.lensModel));
+	if (filters.hasLocation) {
+		// `and()` of two defined predicates cannot be undefined; this array is
+		// typed SQL<> because it was seeded with the visibility equality.
+		conditions.push(and(isNotNull(photos.latitude), isNotNull(photos.longitude))!);
+	}
 	if (filters.tagId) {
 		conditions.push(
 			sql`exists (select 1 from ${photoTags} where ${photoTags.photoId} = ${photos.id} and ${photoTags.tagId} = ${filters.tagId})`
