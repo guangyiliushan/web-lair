@@ -173,32 +173,51 @@ export async function createPhotoFromFile(
 	const slug = await uniquePhotoSlug(database, base);
 	const title = emptyToNull(options.title);
 
-	const row = await database.transaction(async (tx) => {
-		const [created] = await tx
-			.insert(photos)
-			.values({
-				fileId,
-				slug,
-				title,
-				takenAt: meta.takenAt,
-				cameraMake: meta.cameraMake,
-				cameraModel: meta.cameraModel,
-				lensModel: meta.lensModel,
-				fNumber: numeric(meta.fNumber),
-				focalLengthMm: numeric(meta.focalLengthMm),
-				exposureTimeS: numeric(meta.exposureTimeS),
-				iso: meta.iso,
-				latitude: numeric(meta.latitude),
-				longitude: numeric(meta.longitude),
-				altitudeM: numeric(meta.altitudeM),
-				exif: meta.exif
-			})
-			.returning({ id: photos.id, slug: photos.slug });
-		if (options.tags && options.tags.length > 0) {
-			await attachTags(tx, created!.id, options.tags);
+	let row: { id: string; slug: string };
+	try {
+		row = await database.transaction(async (tx) => {
+			const [created] = await tx
+				.insert(photos)
+				.values({
+					fileId,
+					slug,
+					title,
+					takenAt: meta.takenAt,
+					cameraMake: meta.cameraMake,
+					cameraModel: meta.cameraModel,
+					lensModel: meta.lensModel,
+					fNumber: numeric(meta.fNumber),
+					focalLengthMm: numeric(meta.focalLengthMm),
+					exposureTimeS: numeric(meta.exposureTimeS),
+					iso: meta.iso,
+					latitude: numeric(meta.latitude),
+					longitude: numeric(meta.longitude),
+					altitudeM: numeric(meta.altitudeM),
+					exif: meta.exif
+				})
+				.returning({ id: photos.id, slug: photos.slug });
+			if (options.tags && options.tags.length > 0) {
+				await attachTags(tx, created!.id, options.tags);
+			}
+			return created!;
+		});
+	} catch (caught) {
+		// Idempotency under concurrency (T13 live import): the same file can be
+		// handed to this service from two directory entries at once (identical
+		// bytes) or from a parallel caller. `photos.file_id` is unique, so one
+		// side loses the insert; the loser re-reads the winner's row instead of
+		// surfacing a raw driver error. A 23505 on the slug (no row for the
+		// file) is NOT ours to absorb — rethrow for the caller to classify.
+		if (pgErrorCode(caught) === '23505') {
+			const [winner] = await database
+				.select({ id: photos.id })
+				.from(photos)
+				.where(eq(photos.fileId, fileId))
+				.limit(1);
+			if (winner) return { kind: 'already-in-gallery', photoId: winner.id };
 		}
-		return created!;
-	});
+		throw caught;
+	}
 	return { kind: 'ok', id: row.id, slug: row.slug };
 }
 

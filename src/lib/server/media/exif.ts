@@ -110,13 +110,22 @@ export function composeTakenAt(
 	return zonedNaiveToUtc(naive, timeZone);
 }
 
-/** Deep-copy into JSON-safe values; binary views (maker note bytes, ICC) drop out. */
+/**
+ * Deep-copy into JSON-safe values; binary views (maker note bytes, ICC) drop
+ * out and NUL (U+0000) is stripped from strings — PostgreSQL jsonb cannot
+ * carry U+0000 at all (`unsupported Unicode escape sequence`), and real
+ * Fujifilm files ship NUL-padded fields (e.g. Copyright), caught by the T13
+ * live import.
+ */
 export function toJsonSafe(value: unknown, depth = 0): unknown {
 	if (value === null || value === undefined) return null;
 	if (depth > 6) return undefined;
 	if (value instanceof Date) return value.toISOString();
 	if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-	if (typeof value === 'string' || typeof value === 'boolean') return value;
+	if (typeof value === 'string') {
+		return value.includes('\u0000') ? value.replaceAll('\u0000', '') : value;
+	}
+	if (typeof value === 'boolean') return value;
 	if (ArrayBuffer.isView(value)) return undefined;
 	if (Array.isArray(value)) {
 		return value
@@ -178,7 +187,10 @@ function asNumber(value: unknown): number | null {
 }
 
 function asString(value: unknown): string | null {
-	return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+	if (typeof value !== 'string') return null;
+	// Same PG boundary as `toJsonSafe`: text columns cannot carry U+0000.
+	const cleaned = value.replaceAll('\u0000', '').trim();
+	return cleaned !== '' ? cleaned : null;
 }
 
 const EMPTY: PhotoExif = {

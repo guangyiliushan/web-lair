@@ -42,6 +42,7 @@
 		"db:verify-pages": "tsx --env-file=.env scripts/verify-pages.ts",
 		"storage:smoke": "tsx --env-file=.env scripts/storage-smoke.ts",
 		"media:audit": "tsx --env-file=.env scripts/media-audit.ts",
+		"media:import": "tsx --env-file=.env scripts/media-import.ts",
 		"media:purge": "tsx --env-file=.env scripts/purge-media.ts",
 		"db:verify-media": "tsx --env-file=.env scripts/verify-media.ts"
 	},

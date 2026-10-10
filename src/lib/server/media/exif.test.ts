@@ -91,3 +91,16 @@ describe('extractPhotoMetadata', () => {
 		expect(result.exif === null || typeof result.exif === 'object').toBe(true);
 	});
 });
+
+describe('toJsonSafe — PostgreSQL jsonb boundaries', () => {
+	it('strips NUL (U+0000): jsonb cannot carry it (T13 live import)', () => {
+		expect(toJsonSafe({ copyright: '\u0000', mixed: 'a\u0000b' })).toEqual({
+			copyright: '',
+			mixed: 'ab'
+		});
+	});
+
+	it('keeps ordinary control characters intact', () => {
+		expect(toJsonSafe({ tab: 'a\tb' })).toEqual({ tab: 'a\tb' });
+	});
+});

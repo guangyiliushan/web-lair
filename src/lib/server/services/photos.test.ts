@@ -231,6 +231,24 @@ describe('createPhotoFromFile', () => {
 		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
 	});
 
+	it('absorbs a concurrent duplicate insert as already-in-gallery', async () => {
+		// T13 race: two directory entries with identical bytes reach the
+		// service at once; the loser's insert hits the unique file_id and
+		// must map to the winner's row instead of throwing.
+		dbMock.select.mockReturnValueOnce(selectChain([FILE_ROW]));
+		dbMock.select.mockReturnValueOnce(selectChain([])); // no existing photo yet
+		dbMock.select.mockReturnValueOnce(selectChain([])); // slug check
+		dbMock.insert.mockReturnValueOnce(
+			insertChain(Object.assign(new Error('duplicate key'), { code: '23505' }))
+		);
+		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'p-winner' }])); // winner re-read
+
+		await expect(createPhotoFromFile('f1', {}, { storage: storageMock })).resolves.toEqual({
+			kind: 'already-in-gallery',
+			photoId: 'p-winner'
+		});
+	});
+
 	it('suffixes a colliding slug', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([FILE_ROW]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
