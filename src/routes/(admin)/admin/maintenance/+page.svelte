@@ -399,7 +399,7 @@
 		{/if}
 		{#if data.auditTruncated}
 			<p class="mt-2 text-xs text-muted-foreground">
-				仅显示最近 {data.auditPageSize} 条审计记录——更早记录请用筛选缩小范围。
+				仅显示最近 {data.auditPageSize} 条审计记录——审计筛选为后续增强，更早记录请直接查询数据库。
 			</p>
 		{/if}
 	</section>

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
@@ -95,8 +95,11 @@ test.describe('J-3 maintenance (admin)', () => {
 		// init (~10s, longer under load): one click with a generous navigation
 		// budget, then poll for the landing (never abandon the POST mid-navigation).
 		await page.getByRole('button', { name: '保存', exact: true }).click({ timeout: 60_000 });
+		// The POST is now fetch-based (use:enhance), so the click resolves
+		// immediately and THIS poll carries the whole cold gate init (~10s
+		// warm, minutes under load) - keep the budget generous.
 		await expect
-			.poll(() => new URL(page.url()).pathname, { timeout: 30_000 })
+			.poll(() => new URL(page.url()).pathname, { timeout: 90_000 })
 			.toBe(`/admin/maintenance/${JOB}`);
 		// File on disk (LF, template), then the list shows the user badge.
 		expect(existsSync(jobFilePath())).toBe(true);
@@ -171,7 +174,7 @@ test.describe('J-3 maintenance (admin)', () => {
 		await page.goto(`/admin/maintenance/${JOB}`);
 		await page.getByRole('button', { name: '保存并试运行' }).click({ timeout: 30_000 });
 		await expect
-			.poll(() => new URL(page.url()).pathname, { timeout: 30_000 })
+			.poll(() => new URL(page.url()).pathname, { timeout: 60_000 })
 			.toBe('/admin/maintenance');
 		expect(
 			psql(`select status from job_runs where job = '${JOB}' order by created_at desc limit 1`)
@@ -239,5 +242,37 @@ test.describe('J-3 maintenance (admin)', () => {
 			.filter({ hasText: '排队' });
 		await expect(queuedRow).toBeVisible({ timeout: 20_000 });
 		await expect(queuedRow.getByRole('button', { name: '重投' })).toHaveCount(0);
+	});
+	test('a stale baseHash freezes the editor; 载入服务端最新 adopts the server state', async ({
+		page
+	}) => {
+		// Fixture: the file exists as server-v1; the editor loads its hash. An
+		// external write moves the file to server-v2 - the editor's save must
+		// 409, freeze (no silent overwrite), and recover only through the
+		// explicit reload (J-3 review F1 activation: with use:enhance the
+		// buffer survives the rejected save instead of a page reload adopting
+		// the disk file).
+		writeFileSync(jobFilePath(), 'export default { run() {} }; // server-v1\n', 'utf8');
+		await page.goto(`/admin/maintenance/${JOB}`);
+		// .cm-content only exists after hydration + the editor's dynamic
+		// import, so its visibility is also the hydration gate for the click.
+		await expect(page.locator('.cm-content')).toContainText('server-v1', { timeout: 20_000 });
+		writeFileSync(jobFilePath(), 'export default { run() {} }; // server-v2\n', 'utf8');
+
+		await page.getByRole('button', { name: '保存', exact: true }).click({ timeout: 10_000 });
+		await expect(page.locator('[data-slot="maintenance-flash"]')).toContainText('保存已暂停', {
+			timeout: 10_000
+		});
+		// The freeze disables both save buttons (J-3 review F3).
+		await expect(page.getByRole('button', { name: '保存', exact: true })).toBeDisabled();
+		// The rejected save wrote nothing - the external v2 survives.
+		expect(readFileSync(jobFilePath(), 'utf8')).toContain('server-v2');
+
+		await page.getByRole('button', { name: /载入服务端最新/ }).click();
+		await expect(page.locator('[data-slot="maintenance-flash"]')).toHaveCount(0, {
+			timeout: 10_000
+		});
+		await expect(page.locator('.cm-content')).toContainText('server-v2', { timeout: 10_000 });
+		await expect(page.getByRole('button', { name: '保存', exact: true })).toBeEnabled();
 	});
 });

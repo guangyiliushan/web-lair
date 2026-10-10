@@ -24,8 +24,8 @@
 // (2 / 1), heartbeat ping; since J-2: T6 (SDK dual resolution), T7 (save
 // gate negatives) and T10 (user jobs end-to-end: hot update, fork override,
 // run-scoped SDK binding), T11 (delete lifecycle on a real database), T12
-// (admin edit mid-tick -> config-snapshot CAS) and the scaffold-degradation
-// guard. T8 (Kuma wiring) to §25.
+// (admin edit mid-tick -> config-snapshot CAS; toggle race on a real DB) and
+// the scaffold-degradation guard. T8 (Kuma wiring) to §25.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -45,6 +45,7 @@ import { webhookDeliveries } from '../src/lib/server/db/system/webhook-delivery.
 import { webhooks } from '../src/lib/server/db/system/webhook.schema';
 import { enqueueJob } from '../src/lib/server/jobs/queue';
 import { deleteUserJob } from '../src/lib/server/jobs/job-scripts';
+import { toggleSchedule } from '../src/lib/server/jobs/job-schedules';
 import { builtinModuleFile, jobLockKey } from '../src/lib/server/jobs/registry';
 import { signWebhookPayload } from '../src/lib/server/jobs/signature';
 import { tmpdir } from 'node:os';
@@ -1396,6 +1397,32 @@ export default {
 	);
 }
 
+async function t12bToggleCasRealDb(): Promise<void> {
+	section('T12b: toggle CAS loses a racing flip on a real database (J-3 review M13)');
+	await resetLedger();
+	const id = await createSchedule('jobs.prune', '* * * * *', new Date());
+	await db.update(jobSchedules).set({ isEnabled: false }).where(eq(jobSchedules.id, id));
+	// The racing writer flips the row inside the service's read->write
+	// window: the conditional write (`is_enabled = <read value>`) must then
+	// lose, and the service answers `stale` instead of overwriting the racer.
+	const flippingDb = {
+		select: db.select.bind(db),
+		transaction: async (cb: (tx: unknown) => Promise<unknown>) => {
+			await db.update(jobSchedules).set({ isEnabled: true }).where(eq(jobSchedules.id, id));
+			return db.transaction(cb as never);
+		}
+	};
+	const result = await toggleSchedule({
+		db: flippingDb as never,
+		id,
+		enabled: true,
+		actorId: null
+	});
+	check('T12b racing flip answers stale', result.kind === 'stale', JSON.stringify(result));
+	check('T12b the racer state is not overwritten', (await scheduleById(id))?.isEnabled === true);
+	check('T12b no audit row for the lost toggle', (await db.select().from(activities)).length === 0);
+}
+
 async function t11DeleteLifecycle(): Promise<void> {
 	section('T11: deleteUserJob cleans schedules/queued/running in one tx, keeps history (real DB)');
 	await resetLedger();
@@ -1585,6 +1612,7 @@ async function main(): Promise<void> {
 	await t10UserJobEndToEnd();
 	await t11DeleteLifecycle();
 	await t12MidTickConfigChange();
+	await t12bToggleCasRealDb();
 	await scaffoldFailureDegrades();
 
 	console.log(

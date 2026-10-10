@@ -2,7 +2,9 @@
 	import type { PageProps } from './$types';
 	import { page } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
+	import { applyAction, enhance } from '$app/forms';
 	import { untrack } from 'svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { DeleteConfirm } from '$lib/components/admin';
@@ -17,6 +19,21 @@
 	 */
 
 	let { data }: PageProps = $props();
+
+	// enhance keeps the editor buffer alive across rejected saves (J-3 review
+	// F1): a plain native POST reloads the page and adopts the file on disk,
+	// silently discarding the user's edits. applyAction alone renders the
+	// result in place (conflict freeze / gate errors / saved flash) and still
+	// navigates on redirects; nothing is auto-adopted into the buffer. Only a
+	// FIRST save invalidates (the fork flips `info` - the notices must follow).
+	const enhanceKeepBuffer: SubmitFunction =
+		() =>
+		async ({ result }) => {
+			await applyAction(result);
+			if (result.type === 'success' && (result.data?.created || result.data?.forked)) {
+				await invalidateAll();
+			}
+		};
 
 	const editorPromise = import('$lib/components/admin/jobs/job-editor.svelte').then(
 		(module) => module.default
@@ -133,7 +150,6 @@
 			const parts = ['已保存'];
 			if (form.created && form.forked) parts.push('（首次保存：已创建用户副本并记录 fork 基线）');
 			else if (form.created) parts.push('（新建）');
-			if (form.queued) parts.push('，已排队试运行（≤1 分钟执行）');
 			return { kind: 'ok' as const, text: parts.join('') };
 		}
 		if (form.reverted)
@@ -273,7 +289,13 @@
 		</div>
 	{/if}
 
-	<form method="POST" action="?/save" bind:this={saveForm} data-slot="save-form">
+	<form
+		method="POST"
+		action="?/save"
+		use:enhance={enhanceKeepBuffer}
+		bind:this={saveForm}
+		data-slot="save-form"
+	>
 		<input type="hidden" name="code" value={code} />
 		<input type="hidden" name="baseHash" value={baseHash ?? ''} />
 		<div class="h-[30rem] min-h-0 overflow-hidden rounded-lg border" data-slot="editor-host">

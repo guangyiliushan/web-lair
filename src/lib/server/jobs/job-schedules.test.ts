@@ -196,7 +196,7 @@ describe('createSchedule', () => {
 		expect(auditRows[0]).toMatchObject({
 			event: 'schedule.create',
 			actorId: 'admin-1',
-			payload: { job: 'known', cron_expr: '0 4 * * *', tz: 'Etc/UTC' }
+			payload: { id: 'sched-new', job: 'known', cron_expr: '0 4 * * *', tz: 'Etc/UTC' }
 		});
 	});
 
@@ -398,7 +398,7 @@ describe('updateSchedule / toggleSchedule / deleteSchedule', () => {
 		expect(auditRows[0]).toMatchObject({
 			event: 'schedule.delete',
 			actorId: 'admin-1',
-			payload: { job: 'known' }
+			payload: { id: 'sched-1', job: 'known' }
 		});
 
 		state.deleteRows = [];

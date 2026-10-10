@@ -1,7 +1,10 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { page } from '$app/state';
+	import { invalidateAll } from '$app/navigation';
+	import { applyAction, enhance } from '$app/forms';
 	import { untrack } from 'svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
@@ -14,6 +17,21 @@
 	 */
 
 	let { data }: PageProps = $props();
+
+	// enhance keeps the editor buffer alive across rejected saves (J-3 review
+	// F1): a plain native POST reloads the page and adopts the file on disk,
+	// silently discarding the user's edits. applyAction alone renders the
+	// result in place (conflict freeze / gate errors / saved flash) and still
+	// navigates on redirects; nothing is auto-adopted into the buffer. Only a
+	// FIRST save invalidates (the fork flips `info` - the notices must follow).
+	const enhanceKeepBuffer: SubmitFunction =
+		() =>
+		async ({ result }) => {
+			await applyAction(result);
+			if (result.type === 'success' && (result.data?.created || result.data?.forked)) {
+				await invalidateAll();
+			}
+		};
 
 	const editorPromise = import('$lib/components/admin/jobs/job-editor.svelte').then(
 		(module) => module.default
@@ -113,7 +131,13 @@
 		</div>
 	{/if}
 
-	<form method="POST" action="?/save" bind:this={saveForm} data-slot="new-form">
+	<form
+		method="POST"
+		action="?/save"
+		use:enhance={enhanceKeepBuffer}
+		bind:this={saveForm}
+		data-slot="new-form"
+	>
 		<div class="mb-3 grid max-w-md gap-1">
 			<label for="new-job-name" class="text-xs text-muted-foreground">
 				任务名（小写字母/数字/连字符；不得与内置模块别名冲突，例如 my-task）
@@ -122,6 +146,7 @@
 				id="new-job-name"
 				name="name"
 				bind:value={name}
+				oninput={() => (baseHash = '')}
 				placeholder="my-task"
 				class="font-mono"
 				autocomplete="off"
