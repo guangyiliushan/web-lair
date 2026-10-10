@@ -1395,6 +1395,38 @@ async function t11DeleteLifecycle(): Promise<void> {
 		() => true
 	);
 	check('T11 user file removed after the commit', fileGone);
+
+	// Alias names must be refused by delete too (J-2 review round 2, D1):
+	// `system-resources` is the module file of the system.resources fork, and
+	// `my.task` maps onto another job's `my-task.ts` - both would otherwise
+	// remove the WRONG file.
+	await writeUserJob(dataDir, 'system-resources.ts', 'export default { run() {} };\n');
+	await writeUserJob(dataDir, 'my-task.ts', 'export default { run() {} };\n');
+	const aliasFork = await deleteUserJob({
+		dataDir,
+		name: 'system-resources',
+		actorId: null,
+		db: db as never
+	});
+	const aliasDotted = await deleteUserJob({
+		dataDir,
+		name: 'my.task',
+		actorId: null,
+		db: db as never
+	});
+	const survives = (file: string): Promise<boolean> =>
+		readFile(join(dataDir, 'jobs', file), 'utf8').then(
+			() => true,
+			() => false
+		);
+	check(
+		'T11 delete refuses module-file and dotted aliases (files survive)',
+		aliasFork.kind === 'not-user-job' &&
+			aliasDotted.kind === 'not-user-job' &&
+			(await survives('system-resources.ts')) &&
+			(await survives('my-task.ts')),
+		`${JSON.stringify(aliasFork)} ${JSON.stringify(aliasDotted)}`
+	);
 }
 
 async function scaffoldFailureDegrades(): Promise<void> {

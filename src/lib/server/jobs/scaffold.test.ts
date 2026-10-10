@@ -1,10 +1,11 @@
+import { stripTypeScriptTypes } from 'node:module';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { repoRoot } from './data-dir';
-import { ensureJobsScaffold, sdkRuntimeSpecifier } from './scaffold';
+import { ensureJobsScaffold, runtimeContent, sdkRuntimeSpecifier } from './scaffold';
 
 const SDK_PATH = join(repoRoot, 'src', 'lib', 'server', 'jobs', 'jobs-sdk.ts');
 
@@ -33,11 +34,25 @@ describe('sdkRuntimeSpecifier', () => {
 	it.skipIf(process.platform !== 'win32')(
 		'falls back to a file URL when path.relative cannot express the path',
 		() => {
-			const spec = sdkRuntimeSpecifier('C:/elsewhere/jobs', SDK_PATH);
+			// Pick the OTHER drive dynamically: a hard-coded C: made this test
+			// red on any checkout living on C: (review round 2, P2-5).
+			const other = /^c:/i.test(repoRoot) ? 'D:' : 'C:';
+			const spec = sdkRuntimeSpecifier(`${other}/elsewhere/jobs`, SDK_PATH);
 			expect(spec.startsWith('file:///')).toBe(true);
 			expect(fileURLToPath(spec).endsWith('jobs-sdk.ts')).toBe(true);
 		}
 	);
+
+	it('escapes the re-export specifier so quoted paths stay parseable (review D5)', () => {
+		const target = "D:/my 'repo/src/lib/server/jobs/jobs-sdk.ts";
+		const spec = sdkRuntimeSpecifier('D:/wl-data/jobs', target);
+		expect(spec.startsWith('file:///')).toBe(true);
+		expect(spec).toContain("'"); // pathToFileURL does not encode the quote
+		const generated = runtimeContent(spec);
+		expect(generated).toContain(`export * from ${JSON.stringify(spec)};`);
+		expect(generated).not.toContain(`'${spec}'`);
+		expect(() => stripTypeScriptTypes(generated, { mode: 'strip' })).not.toThrow();
+	});
 });
 
 describe('ensureJobsScaffold', () => {
@@ -89,7 +104,7 @@ describe('ensureJobsScaffold', () => {
 		await ensureJobsScaffold(dataDir);
 		const dir = join(dataDir, 'jobs');
 		const runtime = await readFile(join(dir, '_sdk.runtime.ts'), 'utf8');
-		const spec = /export \* from '([^']+)';/.exec(runtime)?.[1];
+		const spec = /export \* from "([^"]+)";/.exec(runtime)?.[1];
 		expect(spec).toBeTruthy();
 		const resolved = spec!.startsWith('file:') ? fileURLToPath(spec!) : resolve(dir, spec!);
 		expect(resolved).toBe(SDK_PATH);

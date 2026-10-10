@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ensureJobsScaffold } from './scaffold';
 import {
+	createJobLoader,
 	DEFAULT_USER_JOB_TIMEOUT_MS,
 	jobNameForUserFile,
 	listJobs,
@@ -229,4 +230,35 @@ describe('review fix batch: boundaries and load consistency', () => {
 		});
 		expect(stdout).toContain('memo ok');
 	}, 20_000);
+});
+
+describe('review round 2: canonical names and IO error classes', () => {
+	it('refuses alias names at the resolver and the loader (D2)', async () => {
+		const dataDir = await tempDataDir();
+		await jobFile(dataDir, 'my-task.ts', 'export default { run() {} };\n');
+		await jobFile(dataDir, 'system-resources.ts', 'export default { run() {} };\n');
+		expect(await resolveJobDefinition('my.task', dataDir)).toBeNull();
+		expect(await resolveJobDefinition('system-resources', dataDir)).toBeNull();
+		expect((await resolveJobDefinition('my-task', dataDir))?.name).toBe('my-task');
+		expect((await resolveJobDefinition('system.resources', dataDir))?.name).toBe(
+			'system.resources'
+		);
+
+		const loader = createJobLoader({ dataDir });
+		await expect(loader('my.task')).rejects.toThrow(/canonical/);
+		await expect(loader('system-resources')).rejects.toThrow(/canonical/);
+	});
+
+	it('surfaces non-missing IO failures instead of folding them into "absent" (P1-1)', async () => {
+		const dataDir = await tempDataDir();
+		// A directory on the job path: the loader must reject with the IO
+		// error, not fall back to the builtin loader (a mask-all
+		// isNotFoundError would answer `unknown job` instead - the round-2
+		// mutation survivor).
+		await mkdir(join(dataDir, 'jobs', 'dir-task.ts'), { recursive: true });
+		await expect(createJobLoader({ dataDir })('dir-task')).rejects.toThrow(/EISDIR/i);
+		// Same for the sidecar read.
+		await mkdir(join(dataDir, 'jobs', '.meta', 'meta-task.json'), { recursive: true });
+		await expect(readUserJobMeta(join(dataDir, 'jobs'), 'meta-task')).rejects.toThrow(/EISDIR/i);
+	});
 });

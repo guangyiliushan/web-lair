@@ -19,7 +19,9 @@ export default {
 			runnerError: summary.runnerError
 		});
 		ctx.logger.info(
-			`typecheck ${summary.ok ? 'passed' : 'failed'}: ${summary.fileCount} file(s), ${summary.errorCount} error(s)`
+			`typecheck ${summary.ok ? 'passed' : 'failed'}: ${summary.fileCount} file(s), ${summary.errorCount} error(s)` +
+				(summary.timedOut ? ' (timed out)' : '') +
+				(summary.runnerError ? ` (runner: ${summary.runnerError})` : '')
 		);
 	}
 };

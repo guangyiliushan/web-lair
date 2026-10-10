@@ -89,6 +89,11 @@ describe('runJobsTypecheck', () => {
 describe('jobs.typecheck builtin wrapper (J-2 review: run-package coverage)', () => {
 	it('maps the service summary into the job result', async () => {
 		const dataDir = await tempDataDir();
+		await jobFile(
+			dataDir,
+			'good.ts',
+			"import { type JobContext } from '#jobs-sdk';\nexport default { run(ctx: JobContext): void { ctx.logger.info('ok'); } };\n"
+		);
 		const previous = process.env.DATA_DIR;
 		process.env.DATA_DIR = dataDir;
 		try {
@@ -102,7 +107,15 @@ describe('jobs.typecheck builtin wrapper (J-2 review: run-package coverage)', ()
 				summary: (data: Record<string, unknown>) =>
 					Object.assign(summaries[0] ?? (summaries[0] = {}), data)
 			} as never);
-			expect(summaries[0]).toMatchObject({ ok: true, files: 0, errors: 0, timedOut: false });
+			// One good file: `files` and `errors` must map distinctly (the
+			// all-zero fixture let a files<->errors swap survive round 2, P1-2).
+			expect(summaries[0]).toMatchObject({
+				ok: true,
+				files: 1,
+				errors: 0,
+				timedOut: false,
+				runnerError: null
+			});
 		} finally {
 			if (previous === undefined) delete process.env.DATA_DIR;
 			else process.env.DATA_DIR = previous;

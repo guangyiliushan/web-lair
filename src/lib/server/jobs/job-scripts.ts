@@ -11,6 +11,8 @@ import { builtinModuleFile, JOBS } from './registry.ts';
 import { checkJobName, runSaveGate } from './save-gate.ts';
 import { ensureJobsScaffold } from './scaffold.ts';
 import {
+	isCanonicalJobName,
+	isNotFoundError,
 	listJobs,
 	readUserJobMeta,
 	resolveJobDefinition,
@@ -28,8 +30,10 @@ import type { GateError } from './save-gate.ts';
  * mutation writes its audit row on the same call path.
  *
  * All user-file mutations run through one in-process queue (J-2 review fix):
- * the web process is the only writer of `$DATA_DIR/jobs`, so the queue makes
- * each check-then-act sequence (save's read-gate-write, delete's tx+rm)
+ * the web process is the only writer of user job FILES in `$DATA_DIR/jobs`
+ * (the drain also refreshes the generated scaffold there, but never user
+ * scripts), so the queue makes each check-then-act sequence (save's
+ * read-gate-write, delete's tx+rm)
  * atomic per process - the save×save silent-overwrite race and the
  * save×delete / save×revert "resurrection" windows close at the root. The
  * optimistic lock remains the cross-request contract.
@@ -57,6 +61,13 @@ export interface ScriptInfo {
 	manual: boolean;
 	scheduleHint: string | null;
 	timeoutMs: number;
+	/**
+	 * Hash of the code that actually runs: the user file when present, else
+	 * the builtin source. NOT the value for `saveScript.baseHash` (J-2 review
+	 * round 2, dimension 7) - the optimistic-lock token is the hash of the
+	 * USER file only (`bundle.user?.hash ?? null`, null when no user file
+	 * exists yet).
+	 */
 	sourceHash: string;
 	builtinHash: string | null;
 	hasUpdate: boolean;
@@ -67,12 +78,6 @@ export interface ScriptBundle {
 	info: ScriptInfo;
 	user: ScriptSourceInfo | null;
 	builtin: ScriptSourceInfo | null;
-}
-
-/** ENOENT/ENOTDIR = genuinely missing; anything else is a real IO failure. */
-function isNotFoundError(error: unknown): boolean {
-	const code = (error as { code?: unknown }).code;
-	return code === 'ENOENT' || code === 'ENOTDIR';
 }
 
 /**
@@ -192,7 +197,10 @@ export type SaveScriptResult =
  * Save a script. `baseHash` is the hash of the exact bytes the editor loaded
  * (null = "new file"); it is checked before and after the gate so a stale
  * editor can never overwrite a newer version silently (grill R2-4; the
- * reload/overwrite choice belongs to the UI).
+ * reload/overwrite choice belongs to the UI). Feed it `bundle.user?.hash ??
+ * null` from `getScript` - never `info.sourceHash`, which falls back to the
+ * builtin hash for an unforked builtin and would turn every first save into
+ * a conflict (J-2 review round 2, dimension 7).
  */
 export function saveScript(input: {
 	dataDir: string;
@@ -280,9 +288,21 @@ async function revertToBuiltinLocked(input: {
 	if (!Object.hasOwn(JOBS, name)) return { kind: 'not-forked' };
 	const dir = jobsDir(dataDir);
 	const target = join(dir, userJobFileName(name));
-	if ((await fileInfo(target)) === null) return { kind: 'not-forked' };
+	if ((await fileInfo(target)) === null) {
+		// A crashed earlier revert can leave the file gone with its sidecar
+		// orphaned; finish that cleanup so the retry converges instead of
+		// stranding the sidecar forever (J-2 review round 2, F-1). A sidecar
+		// only ever exists for a fork, so `reverted` is truthful here.
+		const orphan = await readUserJobMeta(dir, name);
+		if (orphan === null) return { kind: 'not-forked' };
+		await rm(sidecarPath(dir, name), { force: true }).catch(() => {});
+		await recordActivity(db, { event: 'job.revert', actorId, payload: { name } });
+		return { kind: 'reverted' };
+	}
 	await rm(target, { force: true });
-	await rm(sidecarPath(dir, name), { force: true });
+	// The sidecar is metadata: an EPERM here must not fail the revert itself -
+	// the next attempt cleans the orphan through the branch above (DB-01/F-1).
+	await rm(sidecarPath(dir, name), { force: true }).catch(() => {});
 	await recordActivity(db, { event: 'job.revert', actorId, payload: { name } });
 	return { kind: 'reverted' };
 }
@@ -313,10 +333,22 @@ async function deleteUserJobLocked(input: {
 	db: ScriptDb;
 }): Promise<DeleteScriptResult> {
 	const { dataDir, name, actorId, db } = input;
-	if (Object.hasOwn(JOBS, name)) return { kind: 'not-user-job' };
+	// Canonical-name invariant (J-2 review round 2, D1): a registry name is a
+	// fork (`revertToBuiltin` owns it), and an alias such as `my.job` maps to
+	// `my-job.ts` - deleting through it once removed a DIFFERENT job's file.
+	if (Object.hasOwn(JOBS, name) || !isCanonicalJobName(name)) {
+		return { kind: 'not-user-job' };
+	}
 	const dir = jobsDir(dataDir);
 	const target = join(dir, userJobFileName(name));
-	if ((await fileInfo(target)) === null) return { kind: 'not-user-job' };
+	const sidecar = sidecarPath(dir, name);
+	if ((await fileInfo(target)) === null) {
+		// A crash between the two rm calls of an earlier attempt leaves a
+		// sidecar with no file - clean it so the retry converges instead of
+		// reporting not-user-job forever (J-2 review round 2, D7/DB-01).
+		await rm(sidecar, { force: true }).catch(() => {});
+		return { kind: 'not-user-job' };
+	}
 	// DB side first, files after (J-2 review R06): with the file removed
 	// first, a failed transaction left a state that could never be retried -
 	// the guard above refuses a missing file and the schedules/queued rows
@@ -360,7 +392,12 @@ async function deleteUserJobLocked(input: {
 		};
 	});
 	await rm(target, { force: true });
-	await rm(sidecarPath(dir, name), { force: true });
+	// The transaction has committed: a sidecar orphan (Windows EPERM/EBUSY)
+	// must not surface as a failed delete - the next attempt or a revert
+	// cleans it (J-2 review round 2, DB-01).
+	await rm(sidecar, { force: true }).catch((error: unknown) => {
+		console.error(`[jobs] deleteUserJob: sidecar cleanup failed (${name}): ${String(error)}`);
+	});
 	return counts;
 }
 

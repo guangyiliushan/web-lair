@@ -129,6 +129,9 @@ describe('canonical name mapping (J-2 review F1)', { timeout: 60_000 }, () => {
 		expect(checkJobName('jobs-prune')).not.toEqual([]);
 		expect(checkJobName('jobs.prune')).toEqual([]);
 		expect(checkJobName('my-task')).toEqual([]);
+		// The length boundary is inclusive (review round 2, P2-4): 65 fails,
+		// 64 passes - an off-by-one here would silently move the limit.
+		expect(checkJobName('a'.repeat(64))).toEqual([]);
 	});
 
 	it('runSaveGate reports the name error itself', async () => {
@@ -180,5 +183,52 @@ describe('dynamic imports and CJS residue (J-2 review F3/F6)', { timeout: 60_000
 			code: "import { createRequire } from 'node:module';\nconst require = createRequire(import.meta.url);\nexport default { run() { return require; } };\n"
 		});
 		expect(report.errors.filter((error) => error.source === 'runtime')).toEqual([]);
+	});
+
+	it('rejects substring lookalikes of the SDK specifier (review round 2, D3)', async () => {
+		const report = await runSaveGate({
+			name: 'evil-substr',
+			code: "import z from 'evil#jobs-sdk';\nimport y from '#jobs-sdk/x';\nexport default { run() {} };\n"
+		});
+		const lint = report.errors.filter((error) => error.source === 'eslint');
+		expect(lint.map((error) => error.line)).toEqual([1, 2]);
+	});
+
+	it('flags exactly the CJS residue sites, not names or type positions (review round 2, D4)', async () => {
+		const clean = await runSaveGate({
+			name: 'residue-names',
+			code: [
+				'const src = { module: 1, exports: 2 };',
+				'const { module: m, exports: e } = src;',
+				'type Cfg = { require?: boolean };',
+				'type T = typeof require;',
+				'class Box { module = 1; }',
+				'require: for (let i = 0; i < 1; i++) { break require; }',
+				"export default { run() { return [m, e, new Box(), 'Cfg' as unknown as Cfg, undefined as unknown as T]; } };",
+				''
+			].join('\n')
+		});
+		expect(clean.errors.filter((error) => error.source === 'runtime')).toEqual([]);
+
+		const calls = await runSaveGate({
+			name: 'residue-calls',
+			code: "const fs = require('node:fs');\nmodule.exports = { run() { return fs; } };\n"
+		});
+		const runtime = calls.errors.filter((error) => error.source === 'runtime');
+		// Exactly two: the require(...) call once (no callee double-report) and
+		// the `module` reference; `exports` is a property name.
+		expect(runtime).toHaveLength(2);
+		expect(runtime.some((error) => error.message.includes('require'))).toBe(true);
+		expect(runtime.some((error) => error.message.includes('module'))).toBe(true);
+
+		const globalRequire = await runSaveGate({
+			name: 'residue-global',
+			code: "const fs = globalThis.require('node:fs');\nexport default { run() { return fs; } };\n"
+		});
+		expect(
+			globalRequire.errors.some(
+				(error) => error.source === 'runtime' && error.message.includes('require')
+			)
+		).toBe(true);
 	});
 });

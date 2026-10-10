@@ -31,12 +31,15 @@
 		/** Mod-s inside the editor; the component never renders its own button. */
 		onSave?: () => void;
 		/**
-		 * Mount-time flag: the CodeMirror read-only/editable facets are set
-		 * once at editor creation, so toggling at runtime needs a remount
-		 * (e.g. wrap the host in `{#key readonly}`). Documented J-2 review
-		 * note; the saved editor contract is decided by the save gate anyway.
+		 * Mount-time flags (J-2 review round 2, dimension 7): the read-only
+		 * facets AND the content attributes (aria-label/aria-readonly) are set
+		 * once at editor creation. Changing either at runtime requires a
+		 * remount - key the host on the task AND the mode, e.g.
+		 * `{#key name + ':' + readonly}` - or a stale readonly keeps accepting
+		 * edits for the old target.
 		 */
 		readonly?: boolean;
+		/** Default text for the textbox role; also mount-time (see above). */
 		ariaLabel?: string;
 		class?: string;
 	}
@@ -77,9 +80,13 @@
 					}),
 					keymap.of([
 						{
+							// readOnly facets do not gate commands: without this arm a
+							// read-only view would still fire onSave (J-2 review round
+							// 2, dimension 7).
 							key: 'Mod-s',
-							preventDefault: true,
+							preventDefault: !readonly,
 							run: () => {
+								if (readonly) return false;
 								onSave?.();
 								return true;
 							}

@@ -2,8 +2,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { repoRoot } from './data-dir.ts';
 import { JOB_IMPORT_PATTERNS, isAllowedImportSpecifier } from './import-policy.ts';
 import { isSafeJobName } from './loader.ts';
-import { JOBS, builtinModuleFile } from './registry.ts';
-import { jobNameForUserFile } from './user-layer.ts';
+import { isCanonicalJobName } from './user-layer.ts';
 import type { CompilerOptions, Node as TypeScriptNode, SourceFile } from 'typescript';
 import type { ESLint } from 'eslint';
 
@@ -78,7 +77,7 @@ export function checkJobName(name: string): GateError[] {
 			column: null,
 			message: 'job name must match [a-z0-9][a-z0-9.-]* and must not be a Windows device name'
 		});
-	} else if (!Object.hasOwn(JOBS, name) && jobNameForUserFile(builtinModuleFile(name)) !== name) {
+	} else if (!isCanonicalJobName(name)) {
 		errors.push({
 			source: 'name',
 			line: null,
@@ -220,12 +219,33 @@ function collectBoundNames(ts: TsModule, sourceFile: SourceFile): Set<string> {
 	return bound;
 }
 
-/** Skip identifiers that are names, not references (property keys etc.). */
+/**
+ * Skip identifiers that are names, not references (property keys etc.).
+ * Expanded by the J-2 review round 2 (D4): destructuring renames, interface /
+ * class member names, labels and `typeof X` type queries are names or type
+ * positions - flagging them rejected legitimate scripts.
+ */
 function isResidueReference(ts: TsModule, node: import('typescript').Identifier): boolean {
 	const parent = node.parent;
 	if (!parent) return false;
-	if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
+	// The call-expression arm owns `require(...)`; reporting its callee here
+	// again double-reported the same site (J-2 review round 2, D4).
+	if (ts.isCallExpression(parent) && parent.expression === node) return false;
+	if (ts.isPropertyAccessExpression(parent) && parent.name === node) {
+		// `globalThis.require` is the CJS global itself, not a property name
+		// (the review's known miss); other `x.require` shapes stay skipped.
+		return ts.isIdentifier(parent.expression) && parent.expression.text === 'globalThis';
+	}
 	if (ts.isPropertyAssignment(parent) && parent.name === node) return false;
+	if (ts.isPropertySignature(parent) && parent.name === node) return false;
+	if (ts.isPropertyDeclaration(parent) && parent.name === node) return false;
+	if (ts.isMethodSignature(parent) && parent.name === node) return false;
+	if (ts.isMethodDeclaration(parent) && parent.name === node) return false;
+	if (ts.isBindingElement(parent) && parent.propertyName === node) return false;
+	if (ts.isLabeledStatement(parent) && parent.label === node) return false;
+	if ((ts.isBreakStatement(parent) || ts.isContinueStatement(parent)) && parent.label === node)
+		return false;
+	if (ts.isTypeQueryNode(parent)) return false;
 	if (ts.isQualifiedName(parent) && parent.right === node) return false;
 	if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isImportClause(parent)) {
 		return false;

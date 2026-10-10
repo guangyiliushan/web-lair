@@ -30,7 +30,7 @@ export interface TypecheckSummary {
 	ok: boolean;
 	fileCount: number;
 	errorCount: number;
-	/** Bounded diagnostics list for the ledger; the log carries the full set. */
+	/** Bounded diagnostics list for the ledger (tsc stdout is parsed, not logged). */
 	issues: TypecheckIssue[];
 	timedOut: boolean;
 	/** Set when the runner itself failed (tsc missing, spawn error). */

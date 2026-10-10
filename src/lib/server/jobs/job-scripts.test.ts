@@ -253,6 +253,9 @@ describe('saveScript', { timeout: 30_000 }, () => {
 
 	it('serializes concurrent saves: exactly one wins, the other conflicts (review R01)', async () => {
 		const dataDir = await tempDataDir();
+		// Pre-create the scaffold so a mutant fingerprint cannot land on the
+		// scaffold's pid-named tmp rename before the save race (round 2).
+		await ensureJobsScaffold(dataDir);
 		const { db } = makeDb();
 		const [a, b] = await Promise.all([
 			saveScript({
@@ -328,6 +331,38 @@ describe('saveScript', { timeout: 30_000 }, () => {
 		expect(sidecar.forked_at).toBe('2026-01-01');
 		expect(auditRows[0]).toMatchObject({ event: 'job.save' });
 	});
+
+	it('surfaces non-missing IO failures instead of reading them as "absent" (review round 2, P1-1)', async () => {
+		const dataDir = await tempDataDir();
+		const { db } = makeDb();
+		// A directory squatting on the target path: fileInfo must throw, not
+		// report null (a mask-all isNotFoundError let the save proceed).
+		await mkdir(join(dataDir, 'jobs', 'dir-task.ts'), { recursive: true });
+		await expect(
+			saveScript({
+				dataDir,
+				name: 'dir-task',
+				code: VALID_CODE,
+				baseHash: null,
+				actorId: null,
+				db
+			})
+		).rejects.toThrow(/EISDIR/i);
+
+		// Same for the sidecar read on the first-fork path.
+		const forkDir = await tempDataDir();
+		await mkdir(join(forkDir, 'jobs', '.meta', 'system-resources.json'), { recursive: true });
+		await expect(
+			saveScript({
+				dataDir: forkDir,
+				name: 'system.resources',
+				code: VALID_CODE,
+				baseHash: null,
+				actorId: null,
+				db
+			})
+		).rejects.toThrow(/EISDIR/i);
+	});
 });
 
 describe('revertToBuiltin', () => {
@@ -356,6 +391,21 @@ describe('revertToBuiltin', () => {
 		expect(await revertToBuiltin({ dataDir, name: 'my-task', actorId: null, db })).toEqual({
 			kind: 'not-forked'
 		});
+	});
+
+	it('finishes a crashed revert when only the sidecar survives (review F-1)', async () => {
+		const dataDir = await tempDataDir();
+		const { db, auditRows } = makeDb();
+		await jobFile(
+			dataDir,
+			'.meta/system-resources.json',
+			JSON.stringify({ builtin_hash: 'oldhash', forked_at: '2026-01-01' })
+		);
+		expect(
+			await revertToBuiltin({ dataDir, name: 'system.resources', actorId: 'admin-1', db })
+		).toEqual({ kind: 'reverted' });
+		expect(await exists(join(dataDir, 'jobs', '.meta', 'system-resources.json'))).toBe(false);
+		expect(auditRows[0]).toMatchObject({ event: 'job.revert' });
 	});
 });
 
@@ -412,6 +462,39 @@ describe('deleteUserJob', () => {
 			kind: 'not-user-job'
 		});
 		expect(await exists(join(dataDir, 'jobs', 'system-resources.ts'))).toBe(true);
+	});
+
+	it('refuses aliases so no other job or fork file can be hit (review round 2, D1)', async () => {
+		const dataDir = await tempDataDir();
+		const { db } = makeDb();
+		await jobFile(dataDir, 'my-task.ts', VALID_CODE);
+		await jobFile(dataDir, 'jobs-prune.ts', VALID_CODE); // stands in for a jobs.prune fork
+		expect(await deleteUserJob({ dataDir, name: 'my.task', actorId: null, db })).toEqual({
+			kind: 'not-user-job'
+		});
+		expect(await deleteUserJob({ dataDir, name: 'jobs-prune', actorId: null, db })).toEqual({
+			kind: 'not-user-job'
+		});
+		expect(await exists(join(dataDir, 'jobs', 'my-task.ts'))).toBe(true);
+		expect(await exists(join(dataDir, 'jobs', 'jobs-prune.ts'))).toBe(true);
+	});
+
+	it('removes the sidecar with the file and converges from an orphan sidecar (D7/DB-01)', async () => {
+		const dataDir = await tempDataDir();
+		const { db } = makeDb({ scheduleRows: [{ id: 's1' }] });
+		await jobFile(dataDir, 'my-task.ts', VALID_CODE);
+		await jobFile(dataDir, '.meta/my-task.json', JSON.stringify({ timeout_ms: 45_000 }));
+		const first = await deleteUserJob({ dataDir, name: 'my-task', actorId: null, db });
+		expect(first).toMatchObject({ kind: 'deleted', schedulesRemoved: 1 });
+		expect(await exists(join(dataDir, 'jobs', 'my-task.ts'))).toBe(false);
+		expect(await exists(join(dataDir, 'jobs', '.meta', 'my-task.json'))).toBe(false);
+
+		// Orphan sidecar, no file: a retry cleans it and stays a no-op.
+		await jobFile(dataDir, '.meta/ghost.json', '{}');
+		expect(await deleteUserJob({ dataDir, name: 'ghost', actorId: null, db })).toEqual({
+			kind: 'not-user-job'
+		});
+		expect(await exists(join(dataDir, 'jobs', '.meta', 'ghost.json'))).toBe(false);
 	});
 });
 

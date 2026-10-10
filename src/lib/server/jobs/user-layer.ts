@@ -37,7 +37,7 @@ export interface UserJobMeta {
 const USER_JOB_FILE_RE = /^[a-z0-9][a-z0-9-]*\.ts$/;
 
 /** ENOENT/ENOTDIR = genuinely missing; anything else is a real IO failure. */
-function isNotFoundError(error: unknown): boolean {
+export function isNotFoundError(error: unknown): boolean {
 	const code = (error as { code?: unknown }).code;
 	return code === 'ENOENT' || code === 'ENOTDIR';
 }
@@ -66,6 +66,20 @@ export function jobNameForUserFile(fileName: string): string | null {
 	}
 	const name = fileName.slice(0, -'.ts'.length);
 	return isSafeJobName(name) ? name : null;
+}
+
+/**
+ * Canonical-name invariant (J-2 review F1/D1/D2): a name is usable only when
+ * its file mapping points back to itself - a registered name, or a dot-free
+ * user name. Aliases (`my.job` maps to `my-job.ts`; `jobs-prune` is the
+ * module file of the `jobs.prune` fork) are refused at every entry point
+ * (save gate, resolver, loader, delete) so one file can never carry two
+ * identities - without this, deleting `my.job` removed another job's file.
+ */
+export function isCanonicalJobName(name: string): boolean {
+	if (Object.hasOwn(JOBS, name)) return true;
+	if (!isSafeJobName(name)) return false;
+	return jobNameForUserFile(builtinModuleFile(name)) === name;
 }
 
 /** Read + validate a sidecar; a missing or malformed file reads as null. */
@@ -160,6 +174,10 @@ export async function resolveJobDefinition(
 	name: string,
 	dataDir: string
 ): Promise<JobDefinition | null> {
+	// Aliases have no identity of their own (J-2 review round 2, D2):
+	// resolving one would run another job's file under a phantom name and
+	// split the single-flight lock (locks key on the name).
+	if (!isCanonicalJobName(name)) return null;
 	const registry = Object.hasOwn(JOBS, name) ? JOBS[name] : undefined;
 	const meta = await readUserJobMeta(jobsDir(dataDir), name);
 	if (registry) {
@@ -196,8 +214,10 @@ export function createJobLoader(options: {
 	return async (name) => {
 		const cached = cache.get(name);
 		if (cached) return cached;
-		if (!isSafeJobName(name)) {
-			throw new Error(`job name "${name}" is not a valid module name`);
+		if (!isCanonicalJobName(name)) {
+			throw new Error(
+				`job name "${name}" is not canonical (an alias would load another job's file)`
+			);
 		}
 		const filePath = join(jobsDir(options.dataDir), userJobFileName(name));
 		let bytes: Buffer;
