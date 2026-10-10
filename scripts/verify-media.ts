@@ -146,9 +146,6 @@ async function cleanup(): Promise<void> {
 	await storage.delete(orphanKey);
 	await storage.delete(galleryKey);
 	await storage.delete(guardKey);
-	if (refId) {
-		await db.delete(schema.fileReferences).where(eq(schema.fileReferences.refId, refId));
-	}
 	if (uploadedId) {
 		// deleteFile honours the reference guard; probes must be unreferenced by now.
 		await deleteFile(uploadedId, {}, deps);

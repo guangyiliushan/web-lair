@@ -14,7 +14,8 @@ const { service } = vi.hoisted(() => ({
 	}
 }));
 
-vi.mock('$lib/server/services/photos', () => ({
+vi.mock('$lib/server/services/photos', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/server/services/photos')>()),
 	listPublicPhotos: service.listPublicPhotos,
 	listPhotoFacets: service.listPhotoFacets
 }));

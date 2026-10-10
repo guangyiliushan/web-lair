@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 const { service } = vi.hoisted(() => ({ service: { listPublicPhotos: vi.fn() } }));
 
-vi.mock('$lib/server/services/photos', () => ({
+vi.mock('$lib/server/services/photos', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/server/services/photos')>()),
 	listPublicPhotos: service.listPublicPhotos
 }));
 

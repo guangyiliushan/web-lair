@@ -8,6 +8,7 @@
 	import { Empty } from '$lib/components/ui/empty';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import { variantKeyFor } from '$lib/media/keys';
+	import { formatBytes } from '$lib/utils/format';
 	import type { PageProps } from './$types';
 	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
@@ -79,12 +80,6 @@
 	};
 	const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.tif,.tiff,.pdf,.zip,.txt,.md';
 
-	function formatBytes(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-	}
-
 	/**
 	 * Public content URL: webp `@full` for transcoded photos, the ORIGINAL
 	 * key for GIFs (plan §4.3 直通 — the original is the public tier) and for
@@ -132,13 +127,13 @@
 			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
 		>
 			{actionData.galleryAdded.kind === 'ok'
-				? `已加入图床：/${actionData.galleryAdded.slug}`
+				? `已加入图床：/photos/${actionData.galleryAdded.slug}`
 				: '该文件已在图床中。'}
 		</div>
 	{/if}
 	{#if actionData.uploadResults}
 		<div class="rounded-md border bg-background px-3 py-2 text-sm">
-			{#each actionData.uploadResults as result (result.fileName)}
+			{#each actionData.uploadResults as result, index (result.fileName + ':' + index)}
 				<p class:opacity-60={!result.ok}>
 					{result.ok ? '✓' : '✗'}
 					{result.fileName}
@@ -335,7 +330,13 @@
 										{#if row.mimeType.startsWith('image/') && !row.isInGallery}
 											<form method="POST" action="?/addToGallery">
 												<input type="hidden" name="id" value={row.id} />
-												<Button variant="ghost" size="icon" class="size-8" aria-label="加入图床">
+												<Button
+													type="submit"
+													variant="ghost"
+													size="icon"
+													class="size-8"
+													aria-label="加入图床"
+												>
 													<IconPhoto class="size-4" />
 												</Button>
 											</form>

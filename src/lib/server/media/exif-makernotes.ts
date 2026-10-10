@@ -12,13 +12,13 @@ import { ExifTool } from 'exiftool-vendored';
  * verified against the live sample). Groups that are not maker notes
  * (system, standard EXIF/MPF containers, ICC/Photoshop/JFIF, container
  * metadata) are excluded; unknown brand groups are kept (data asset, audit
- * registered). Values stay ExifTool''s PrintConv (human-readable) form;
+ * registered). Values stay ExifTool's PrintConv (human-readable) form;
  * numeric `-n` sidecars are registered for future filter axes.
  *
  * Security posture (§3.3): the ExifTool process only ever receives a temp
  * file with an OURS-OWNED safe name — user-controlled names never reach
  * argv (argument-injection face closed by construction; the official
- * ''-''-prefix and newline guidance is satisfied structurally). readArgs
+ * '-'-prefix and newline guidance is satisfied structurally). readArgs
  * are constants, never user strings. Values are NUL-stripped before they
  * can reach a jsonb write (round-2 review; PostgreSQL cannot carry U+0000).
  */
@@ -204,7 +204,7 @@ export function groupBrandDump(tags: Record<string, unknown>): Record<string, un
 }
 
 /**
- * Extract the brand maker-note dump for an upload''s bytes. Returns null on
+ * Extract the brand maker-note dump for an upload's bytes. Returns null on
  * any failure — parse problems never block an ingest. Callers merge the
  * result into `exif` via {@link mergeMakerNotes}.
  */

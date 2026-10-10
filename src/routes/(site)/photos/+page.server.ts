@@ -1,6 +1,8 @@
 import {
+	fuzzCoordinate,
 	listPhotoFacets,
 	listPublicPhotos,
+	PHOTO_PAGE_DEFAULT,
 	type PublicPhotoCursor,
 	type PublicPhotoFilters,
 	type PublicPhotoItem
@@ -16,7 +18,7 @@ import type { PageServerLoad } from './$types';
  * length, they are never trusted as query values. A malformed entry ends the
  * chain at that point; the chain is capped regardless.
  */
-const PAGE_SIZE = 24;
+const PAGE_SIZE = PHOTO_PAGE_DEFAULT;
 const MAX_CHAIN = 12;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -84,8 +86,8 @@ export const load: PageServerLoad = ({ url }) => {
 			.filter((entry) => !seen.has(entry.id) && (seen.add(entry.id), true))
 			.map((entry) => ({
 				...entry,
-				latitude: entry.latitude === null ? null : Number(entry.latitude).toFixed(2),
-				longitude: entry.longitude === null ? null : Number(entry.longitude).toFixed(2)
+				latitude: fuzzCoordinate(entry.latitude),
+				longitude: fuzzCoordinate(entry.longitude)
 			}));
 
 		let moreHref: string | null = null;

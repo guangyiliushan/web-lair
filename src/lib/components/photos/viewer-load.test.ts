@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	FULL_AUTO_LIMIT_BYTES,
-	formatBytes,
-	isMeteredConnection,
-	shouldLoadFullOnDemand
-} from './viewer-load';
+import { FULL_AUTO_LIMIT_BYTES, isMeteredConnection, shouldLoadFullOnDemand } from './viewer-load';
 
 /** T16 policy branches (plan §4.5): threshold / saveData / 2G-class / unknown. */
 describe('viewer-load policy', () => {
@@ -38,17 +33,5 @@ describe('viewer-load policy', () => {
 		expect(isMeteredConnection({})).toBe(false);
 		expect(isMeteredConnection(undefined)).toBe(false);
 		expect(isMeteredConnection(null)).toBe(false);
-	});
-
-	it('formats byte sizes for the floater and the load button', () => {
-		expect(formatBytes(0)).toBe('0 B');
-		expect(formatBytes(1023)).toBe('1023 B');
-		expect(formatBytes(1024)).toBe('1.0 KB');
-		expect(formatBytes(1536)).toBe('1.5 KB');
-		expect(formatBytes(8 * 1024 * 1024)).toBe('8.0 MB');
-		expect(formatBytes(9_000_000)).toBe('8.6 MB');
-		expect(formatBytes(2.5 * 1024 * 1024 * 1024)).toBe('2.5 GB');
-		expect(formatBytes(Number.NaN)).toBe('—');
-		expect(formatBytes(-1)).toBe('—');
 	});
 });

@@ -1,8 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
-import { describe, expect, it } from 'vitest';
-import { isHeic } from './heic';
+import { describe, expect, it, vi } from 'vitest';
+import { decodeHeic, isHeic } from './heic';
 import { processImage, readImageSize } from './variants';
+
+vi.mock('./heic', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('./heic')>();
+	return { ...actual, isHeic: vi.fn(actual.isHeic), decodeHeic: vi.fn(actual.decodeHeic) };
+});
 
 const HEIC_FIXTURE = new URL('./fixtures/example.heic', import.meta.url);
 
@@ -104,6 +109,19 @@ describe('processImage (ledger §21 pipeline)', () => {
 		expect(out.variants.preview).toBeNull();
 		expect(out.thumbhash.length).toBeGreaterThan(10);
 		expect(out.palette.dominant).toHaveLength(3);
+	});
+
+	it('rejects HEIC decodes above the 100MP budget (round-1 guard, round-3 teeth)', async () => {
+		vi.mocked(isHeic).mockReturnValueOnce(true);
+		vi.mocked(decodeHeic).mockResolvedValueOnce({
+			width: 12_000,
+			height: 10_000,
+			data: new Uint8Array(4)
+		} as never);
+
+		await expect(processImage(Uint8Array.from([1, 2, 3, 4]))).rejects.toThrow(
+			/decode pixel budget/
+		);
 	});
 
 	it('keeps the libheif floor at ≥1.22 (CVE line, ledger §21)', async () => {

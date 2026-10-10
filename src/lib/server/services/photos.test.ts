@@ -55,6 +55,7 @@ vi.mock('./files', () => ({ deleteFile: deleteFileMock }));
 
 import {
 	createPhotoFromFile,
+	getVisiblePhotoBySlug,
 	listAdminPhotos,
 	listPhotoNeighbors,
 	photoSlugBase,
@@ -438,6 +439,19 @@ describe('removePhoto', () => {
 		expect(deleteFileMock.mock.calls[0][0]).toBe('f1');
 	});
 
+	it('blocks the file delete when the guard reports a content mention (round-3)', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'p1', fileId: 'f1' }]));
+		dbMock.delete.mockReturnValueOnce(deleteChain([])); // slug trackers
+		dbMock.delete.mockReturnValueOnce(deleteChain([{ id: 'p1' }])); // photo row
+		deleteFileMock.mockResolvedValueOnce({ kind: 'mentioned' });
+
+		expect(await removePhoto('p1', { removeFile: true })).toEqual({
+			kind: 'ok',
+			fileDeleted: false,
+			fileBlocked: true
+		});
+	});
+
 	it('reports a storage-failed file delete instead of throwing (round-2)', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'p1', fileId: 'f1' }]));
 		dbMock.delete.mockReturnValueOnce(deleteChain([])); // slug trackers
@@ -450,6 +464,86 @@ describe('removePhoto', () => {
 			fileBlocked: false,
 			fileDeleteFailed: true
 		});
+	});
+});
+
+describe('getVisiblePhotoBySlug (public detail hygiene)', () => {
+	it('rounds coordinates to 2dp and rounds altitude (round-3 teeth)', async () => {
+		dbMock.select.mockReturnValueOnce(
+			selectChain([
+				{
+					id: 'p1',
+					slug: 'sunset',
+					title: null,
+					description: null,
+					takenAt: null,
+					createdAt: new Date('2026-01-01T00:00:00Z'),
+					cameraMake: null,
+					cameraModel: null,
+					lensModel: null,
+					fNumber: null,
+					focalLengthMm: null,
+					exposureTimeS: null,
+					iso: null,
+					latitude: '25.033123',
+					longitude: '121.5654321',
+					altitudeM: '12.6',
+					objectKey: 'aa/x.jpg',
+					fileName: 'x.jpg',
+					mimeType: 'image/jpeg',
+					byteSize: 1000,
+					width: 100,
+					height: 100,
+					thumbhash: null,
+					palette: null
+				}
+			])
+		);
+
+		const row = await getVisiblePhotoBySlug('sunset');
+
+		expect(row?.latitude).toBe('25.03');
+		expect(row?.longitude).toBe('121.57');
+		expect(row?.altitudeM).toBe('13');
+	});
+
+	it('keeps absent coordinates null (no 0.00 fallback)', async () => {
+		dbMock.select.mockReturnValueOnce(
+			selectChain([
+				{
+					id: 'p1',
+					slug: 'sunset',
+					title: null,
+					description: null,
+					takenAt: null,
+					createdAt: new Date('2026-01-01T00:00:00Z'),
+					cameraMake: null,
+					cameraModel: null,
+					lensModel: null,
+					fNumber: null,
+					focalLengthMm: null,
+					exposureTimeS: null,
+					iso: null,
+					latitude: null,
+					longitude: null,
+					altitudeM: null,
+					objectKey: 'aa/x.jpg',
+					fileName: 'x.jpg',
+					mimeType: 'image/jpeg',
+					byteSize: 1000,
+					width: 100,
+					height: 100,
+					thumbhash: null,
+					palette: null
+				}
+			])
+		);
+
+		const row = await getVisiblePhotoBySlug('sunset');
+
+		expect(row?.latitude).toBeNull();
+		expect(row?.longitude).toBeNull();
+		expect(row?.altitudeM).toBeNull();
 	});
 });
 

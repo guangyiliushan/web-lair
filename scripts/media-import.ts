@@ -249,6 +249,32 @@ for (const dir of options.dirs) {
 		}
 	}
 
+	/**
+	 * One counting rule for both upload branches (round-3 review: the switch
+	 * had been duplicated once and its copy had already drifted).
+	 */
+	const enterGallery = async (
+		path: string,
+		fileId: string,
+		status: 'new' | 'deduplicated'
+	): Promise<Outcome> => {
+		const photo = await createPhotoFromFile(fileId, { tags: tag ? [tag] : [] }, { db, storage });
+		switch (photo.kind) {
+			case 'ok':
+				photosCreated += 1;
+				return { path, status, photo: 'created', detail: `/photos/${photo.slug}` };
+			case 'already-in-gallery':
+				photosAlready += 1;
+				return { path, status, photo: 'already', detail: null };
+			case 'not-image':
+				photosSkipped += 1;
+				return { path, status, photo: 'not-image', detail: null };
+			default:
+				photosSkipped += 1;
+				return { path, status, photo: 'unavailable', detail: photo.kind };
+		}
+	};
+
 	const outcomes = await mapPool(paths, options.concurrency, async (path): Promise<Outcome> => {
 		const fileName = basename(path);
 		try {
@@ -260,60 +286,17 @@ for (const dir of options.dirs) {
 			const uploaded = await uploadFile({ fileName, bytes }, { db, storage });
 			if (uploaded.deduplicated) {
 				deduplicated += 1;
-				if (options.assetsOnly) {
-					return { path, status: 'deduplicated', photo: 'off', detail: null };
-				}
-				// The file is known, the gallery row may not be: a rerun still
-				// finishes half-done imports (photo kinds are counted by the
-				// photo outcome, never by the file outcome).
-				const photo = await createPhotoFromFile(
-					uploaded.id,
-					{ tags: tag ? [tag] : [] },
-					{ db, storage }
-				);
-				switch (photo.kind) {
-					case 'ok':
-						photosCreated += 1;
-						return {
-							path,
-							status: 'deduplicated',
-							photo: 'created',
-							detail: `/photos/${photo.slug}`
-						};
-					case 'already-in-gallery':
-						photosAlready += 1;
-						return { path, status: 'deduplicated', photo: 'already', detail: null };
-					case 'not-image':
-						photosSkipped += 1;
-						return { path, status: 'deduplicated', photo: 'not-image', detail: null };
-					default:
-						photosSkipped += 1;
-						return { path, status: 'deduplicated', photo: 'unavailable', detail: photo.kind };
-				}
+			} else {
+				created += 1;
 			}
-			created += 1;
+			const status = uploaded.deduplicated ? 'deduplicated' : 'new';
 			if (options.assetsOnly) {
-				return { path, status: 'new', photo: 'off', detail: null };
+				return { path, status, photo: 'off', detail: null };
 			}
-			const photo = await createPhotoFromFile(
-				uploaded.id,
-				{ tags: tag ? [tag] : [] },
-				{ db, storage }
-			);
-			switch (photo.kind) {
-				case 'ok':
-					photosCreated += 1;
-					return { path, status: 'new', photo: 'created', detail: `/photos/${photo.slug}` };
-				case 'already-in-gallery':
-					photosAlready += 1;
-					return { path, status: 'new', photo: 'already', detail: null };
-				case 'not-image':
-					photosSkipped += 1;
-					return { path, status: 'new', photo: 'not-image', detail: null };
-				default:
-					photosSkipped += 1;
-					return { path, status: 'new', photo: 'unavailable', detail: photo.kind };
-			}
+			// The file is known, the gallery row may not be: a rerun still
+			// finishes half-done imports (photo kinds are counted by the
+			// photo outcome, never by the file outcome).
+			return enterGallery(path, uploaded.id, status);
 		} catch (cause) {
 			if (cause instanceof UploadRejected) {
 				return { path, status: 'skipped', photo: 'off', detail: cause.code };

@@ -1,4 +1,4 @@
-import { listPublicPhotos } from '$lib/server/services/photos';
+import { fuzzCoordinate, listPublicPhotos, PHOTO_PAGE_MAX } from '$lib/server/services/photos';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -9,7 +9,7 @@ import type { PageServerLoad } from './$types';
  * (registered decision).
  */
 export const load: PageServerLoad = async () => {
-	const rows = await listPublicPhotos({ hasLocation: true }, null, 200);
+	const rows = await listPublicPhotos({ hasLocation: true }, null, PHOTO_PAGE_MAX);
 	// Plan §5.1: public coordinates render at two decimals (~1km blur); the
 	// admin face keeps full precision (review round 1: exact values used to
 	// reach the public client here).
@@ -17,8 +17,8 @@ export const load: PageServerLoad = async () => {
 		.map((row) => ({
 			slug: row.slug,
 			title: row.title,
-			latitude: Number(Number(row.latitude).toFixed(2)),
-			longitude: Number(Number(row.longitude).toFixed(2))
+			latitude: Number(fuzzCoordinate(row.latitude) ?? Number.NaN),
+			longitude: Number(fuzzCoordinate(row.longitude) ?? Number.NaN)
 		}))
 		.filter((row) => Number.isFinite(row.latitude) && Number.isFinite(row.longitude));
 	return { photos };

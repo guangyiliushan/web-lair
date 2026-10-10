@@ -41,8 +41,8 @@ async function resolveDeps(
 }
 
 export const PHOTO_LIST_LIMIT = 200;
-const PHOTO_PAGE_DEFAULT = 24;
-const PHOTO_PAGE_MAX = 200;
+export const PHOTO_PAGE_DEFAULT = 24;
+export const PHOTO_PAGE_MAX = 200;
 
 const REF_COUNT_SQL = sql<number>`(select count(*)::int from ${fileReferences} where ${fileReferences.fileId} = ${photos.fileId})`;
 const SORT_EXPR = sql`coalesce(${photos.takenAt}, ${photos.createdAt})`;
@@ -414,9 +414,15 @@ export async function removePhoto(
 			fileDeleted = result.kind === 'ok';
 			// `mentioned` = the transition guard (content still references it).
 			fileBlocked = result.kind === 'referenced' || result.kind === 'mentioned';
-		} catch {
+		} catch (error) {
 			// The photo is already gone; a storage outage must not look like a
 			// full failure (round-2 review: the old 500 hid the partial state).
+			// The cause is logged so the swallowed failure stays observable
+			// (round-3 review).
+			console.warn('[photos] file delete failed after the row removal', {
+				fileId: current.fileId,
+				error: error instanceof Error ? error.name : typeof error
+			});
 			fileDeleteFailed = true;
 		}
 	}
@@ -619,6 +625,24 @@ const DETAIL_FIELDS = {
 	palette: files.palette
 } as const;
 
+/**
+ * Public coordinate hygiene (plan §5.1). ONE rounding rule for every public
+ * consumer — the detail service, the feed route and the map route used to
+ * re-implement it (round-3 review); new consumers must call these.
+ */
+export function fuzzCoordinate(value: string | number | null): string | null {
+	if (value === null) return null;
+	const numeric = Number(value);
+	return Number.isFinite(numeric) ? numeric.toFixed(2) : null;
+}
+
+/** Whole-metre altitude for public payloads (same rule as coordinates). */
+export function roundPublicAltitude(value: string | number | null): string | null {
+	if (value === null) return null;
+	const numeric = Number(value);
+	return Number.isFinite(numeric) ? String(Math.round(numeric)) : null;
+}
+
 async function loadVisibleDetail(
 	where: ReturnType<typeof eq>,
 	deps: PhotosDeps
@@ -638,9 +662,9 @@ async function loadVisibleDetail(
 	// `exif` is not part of the public face at all.
 	return {
 		...row,
-		latitude: row.latitude === null ? null : Number(row.latitude).toFixed(2),
-		longitude: row.longitude === null ? null : Number(row.longitude).toFixed(2),
-		altitudeM: row.altitudeM === null ? null : String(Math.round(Number(row.altitudeM)))
+		latitude: fuzzCoordinate(row.latitude),
+		longitude: fuzzCoordinate(row.longitude),
+		altitudeM: roundPublicAltitude(row.altitudeM)
 	};
 }
 

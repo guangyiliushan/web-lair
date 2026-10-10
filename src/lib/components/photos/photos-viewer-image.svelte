@@ -3,9 +3,9 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { photoTileSrc, thumbhashDataUrl } from './photo-tile';
+	import { formatBytes } from '$lib/utils/format';
 	import {
 		FLOATER_DELAY_MS,
-		formatBytes,
 		shouldLoadFullOnDemand,
 		type ConnectionLike,
 		type ViewerImageSource
@@ -44,9 +44,14 @@
 	// GIFs have no variant tiers: photoTileSrc returns the ORIGINAL for every
 	// tier, so rendering the interim image would download the whole file even
 	// under an on-demand decision (round-2 confirm, P2). On-demand GIFs hold
-	// the layout box instead and load on the explicit click.
+	// the layout box instead and load on the explicit click. SSR cannot see
+	// `navigator.connection`, so GIFs render NO <img> until mount — otherwise
+	// a metered client would preload the original before hydration and the
+	// two sides would disagree on the element type (round-3 review, P2).
+	/** Flips after hydration; GIF interim images wait for it (SSR-true). */
+	let mounted = $state(false);
 	const isGif = $derived(photo.mimeType === 'image/gif');
-	const interimSrc = $derived(isGif && onDemand ? null : thumbSrc);
+	const interimSrc = $derived(isGif && (!mounted || onDemand) ? null : thumbSrc);
 
 	type Phase = 'waiting' | 'loading' | 'done' | 'error';
 	// SSR renders the loading phase for BOTH branches (the connection signal
@@ -142,6 +147,7 @@
 	}
 
 	onMount(() => {
+		mounted = true;
 		if (onDemand) {
 			phase = 'waiting';
 			return;

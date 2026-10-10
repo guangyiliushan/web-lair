@@ -450,8 +450,12 @@ export interface DeleteFileOptions {
  * gives every statement a fresh snapshot, so a reference committed while we
  * waited for the lock is visible to the re-check.
  *
- * Objects go first and the registry row last, so a partial failure rolls the
- * transaction back and stays retryable.
+ * Objects go first and the registry row last. The DB half is transactional
+ * (a failure after the row delete rolls back), but object deletes are NOT:
+ * a crash between the object sweep and the row delete leaves a row whose
+ * objects are gone — audit check ③ surfaces that state and a re-run stays
+ * retryable. The row lock is held across those storage DELETEs by design
+ * (round-3 review: the old comment overclaimed).
  */
 export async function deleteFile(
 	id: string,
@@ -465,6 +469,11 @@ export async function deleteFile(
 	// the only in-use signal. The admin delete path used to skip this guard
 	// entirely (only purgeMedia had it), so a file referenced by a post body
 	// could be deleted silently. Scans are shared with the audit.
+	//
+	// Residual window (round-3 review, registered): the scan runs BEFORE the
+	// transaction, so a mention committed between the scan and the row lock
+	// is not seen — best-effort until the ST-3 reference backfill closes it
+	// (plan §11).
 	if (!options.skipMentionScan) {
 		const { mentions, truncated } = await scanMentions(database);
 		const [row] = await database

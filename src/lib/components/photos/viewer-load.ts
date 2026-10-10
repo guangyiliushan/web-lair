@@ -47,12 +47,3 @@ export function shouldLoadFullOnDemand(
 		? byteSize > FULL_AUTO_LIMIT_BYTES
 		: false;
 }
-
-/** "2.3 MB" / "980 KB" — floater + load-button labels. */
-export function formatBytes(bytes: number): string {
-	if (!Number.isFinite(bytes) || bytes < 0) return '—';
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-	return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}

@@ -52,6 +52,16 @@
 
 	function onKeydown(event: KeyboardEvent) {
 		if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+		// Never hijack arrows from text entry or IME composition (round-3
+		// review: a future control on this route would navigate mid-typing).
+		const target = event.target;
+		if (
+			event.isComposing ||
+			(target instanceof HTMLElement &&
+				(target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)))
+		) {
+			return;
+		}
 		if (event.key === 'ArrowLeft' && newerHref) void goto(newerHref);
 		else if (event.key === 'ArrowRight' && olderHref) void goto(olderHref);
 	}
@@ -63,7 +73,7 @@
 </script>
 
 <svelte:window onkeydown={onKeydown} />
-<SeoHead path={`/photos/${data.photo.slug}`} />
+<SeoHead path={`/photos/${data.photo.slug}`} ogTitle={title} ogDescription={description} />
 
 <svelte:head>
 	<title>{title}</title>

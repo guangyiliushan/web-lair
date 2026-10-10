@@ -20,9 +20,13 @@
 		path: string;
 		/** Published alternates, self included. Defaults to `path` per locale. */
 		alternates?: Alternate[];
+		/** Optional Open Graph title (round-3 review: the text half of #62). */
+		ogTitle?: string;
+		/** Optional Open Graph description. */
+		ogDescription?: string | null;
 	}
 
-	let { path, alternates }: Props = $props();
+	let { path, alternates, ogTitle, ogDescription }: Props = $props();
 
 	/**
 	 * Absolute-URL origin: the (site) layout provides ORIGIN when configured
@@ -47,6 +51,12 @@
 
 <svelte:head>
 	<link rel="canonical" href={canonical} />
+	{#if ogTitle}
+		<meta property="og:title" content={ogTitle} />
+		<meta property="og:type" content="article" />
+		<meta property="og:url" content={canonical} />
+		{#if ogDescription}<meta property="og:description" content={ogDescription} />{/if}
+	{/if}
 	{#each altLinks as alt (alt.lang)}
 		<link rel="alternate" hreflang={alt.lang} href={alt.href} />
 	{/each}

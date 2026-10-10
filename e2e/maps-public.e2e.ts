@@ -53,7 +53,7 @@ test.describe('photos public map', () => {
 
 		// Precondition: the world archive is a manual publish step (registered
 		// release artifact) - a missing file must SKIP, not fail the suite.
-		const archiveProbe = await page.request.get('http://localhost:4173/maps/world-z0-6.pmtiles', {
+		const archiveProbe = await page.request.get('/maps/world-z0-6.pmtiles', {
 			headers: { Range: 'bytes=0-1' }
 		});
 		test.skip(

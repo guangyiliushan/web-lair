@@ -24,6 +24,9 @@
 	 */
 	let { photos }: { photos: MapPhoto[] } = $props();
 
+	/** One source for the archive name (probe + style); renames change here. */
+	const WORLD_ARCHIVE = 'world-z0-6.pmtiles';
+
 	const pmProtocol = new PmProtocol();
 	const locale = $derived(getLocale());
 	/** Label language follows the site locale (review round 1: hardcoded zh). */
@@ -46,7 +49,7 @@
 		probe = 'pending';
 		(async () => {
 			try {
-				const response = await fetch(`${window.location.origin}/maps/world-z0-6.pmtiles`, {
+				const response = await fetch(`${window.location.origin}/maps/${WORLD_ARCHIVE}`, {
 					headers: { Range: 'bytes=0-1' }
 				});
 				if (!cancelled) probe = response.ok ? 'ok' : 'failed';
@@ -95,7 +98,7 @@
 		sources: {
 			protomaps: {
 				type: 'vector' as const,
-				url: `pmtiles://${browser ? window.location.origin : ''}/maps/world-z0-6.pmtiles`,
+				url: `pmtiles://${browser ? window.location.origin : ''}/maps/${WORLD_ARCHIVE}`,
 				attribution:
 					'<a href="https://protomaps.com" target="_blank" rel="noopener">Protomaps</a> · © <a href="https://openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
 			}

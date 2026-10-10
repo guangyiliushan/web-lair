@@ -49,8 +49,16 @@ export function photoAlt(tile: PhotoTile, locale: string): string {
 	return photoText(tile.title, locale) ?? photoText(tile.description, locale) ?? tile.fileName;
 }
 
-/** Public URL for a tile: GIFs are their own public tier, others use variants. */
-export function photoTileSrc(tile: PhotoTile, variant: 'thumb' | 'preview' | 'full'): string {
+/**
+ * Public URL for a tile: GIFs are their own public tier, others use variants.
+ * Only `mimeType`/`objectKey` are read, so admin rows (and any structural
+ * subset) can call it directly — the single source for the tier rule
+ * (round-3 review: two copies had drifted into the admin pages).
+ */
+export function photoTileSrc(
+	tile: Pick<PhotoTile, 'mimeType' | 'objectKey'>,
+	variant: 'thumb' | 'preview' | 'full'
+): string {
 	if (tile.mimeType === 'image/gif') return `/i/${tile.objectKey}`;
 	return `/i/${variantKeyFor(tile.objectKey, variant)}`;
 }

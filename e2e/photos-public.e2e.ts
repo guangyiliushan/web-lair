@@ -107,6 +107,10 @@ test.afterAll(() => {
 	cleanup();
 });
 
+test.afterEach(() => {
+	cleanup();
+});
+
 test.describe('photos public gallery', () => {
 	test('renders the visible feed in keyset order and hides invisible rows', async ({ page }) => {
 		await page.goto('/zh-cn/photos');

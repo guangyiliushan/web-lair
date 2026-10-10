@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import { Empty } from '$lib/components/ui/empty';
+	import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '$lib/components/ui/empty';
 	import { formatDateTime } from '$lib/utils/i18n';
-	import { variantKeyFor } from '$lib/media/keys';
+	import { formatBytes } from '$lib/utils/format';
+	import { photoTileSrc } from '$lib/components/photos/photo-tile';
 	import type { PageProps } from './$types';
 	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
@@ -76,37 +76,20 @@
 		return title['zh-cn'] ?? title.en ?? title.ja ?? row.slug;
 	}
 
+	// Shared tier rule (round-3 review: the local copies had drifted from
+	// photoTileSrc, the single source for GIF-is-its-own-tier).
 	function thumbUrl(row: PhotoRow): string {
-		return row.mimeType === 'image/gif'
-			? `/i/${row.objectKey}`
-			: `/i/${variantKeyFor(row.objectKey, 'thumb')}`;
+		return photoTileSrc(row, 'thumb');
 	}
 
 	function fullUrl(row: PhotoRow): string {
-		return row.mimeType === 'image/gif'
-			? `/i/${row.objectKey}`
-			: `/i/${variantKeyFor(row.objectKey, 'full')}`;
+		return photoTileSrc(row, 'full');
 	}
-
-	function formatBytes(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-	}
-
-	const flashDeleted = $derived(page.url.searchParams.get('deleted') === '1');
 </script>
 
 <svelte:head><title>图床 - Lair Admin</title></svelte:head>
 
 <div class="flex flex-col gap-6">
-	{#if flashDeleted}
-		<div
-			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
-		>
-			已移出图床。
-		</div>
-	{/if}
 	{#if actionData.saved}
 		<div
 			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
@@ -144,7 +127,7 @@
 	{/if}
 	{#if actionData.uploadResults}
 		<div class="rounded-md border bg-background px-3 py-2 text-sm">
-			{#each actionData.uploadResults as result (result.fileName)}
+			{#each actionData.uploadResults as result, index (result.fileName + ':' + index)}
 				<p class:opacity-60={!result.ok}>
 					{result.ok ? '✓' : '✗'}
 					{result.fileName}
@@ -170,6 +153,7 @@
 			class="flex flex-wrap items-center gap-3"
 		>
 			<input
+				aria-label="选择要上传的图片"
 				type="file"
 				name="files"
 				multiple
@@ -249,12 +233,10 @@
 
 		{#if data.photos.length === 0}
 			<Empty class="py-12">
-				<div class="flex flex-col items-center gap-1">
-					<h3 class="text-lg font-semibold tracking-tight">暂无照片</h3>
-					<p class="text-sm text-muted-foreground">
-						上传图片或从内容资产「加入图床」，照片会出现在这里。
-					</p>
-				</div>
+				<EmptyHeader>
+					<EmptyTitle>暂无照片</EmptyTitle>
+					<EmptyDescription>上传图片或从内容资产「加入图床」，照片会出现在这里。</EmptyDescription>
+				</EmptyHeader>
 			</Empty>
 		{:else}
 			<form method="POST" action="?/bulk" class="flex flex-col gap-3">
@@ -262,13 +244,18 @@
 					class="flex flex-wrap items-center gap-3 rounded-xl border bg-background px-3 py-2 text-sm"
 				>
 					<span class="text-muted-foreground">已选 {selectedIds.length} 张</span>
-					<select name="op" class="h-8 rounded-md border bg-background px-2 text-sm">
+					<select
+						name="op"
+						aria-label="批量操作"
+						class="h-8 rounded-md border bg-background px-2 text-sm"
+					>
 						<option value="show">设为可见</option>
 						<option value="hide">设为隐藏</option>
 						<option value="tag">加标签</option>
 					</select>
 					<input
 						name="tags"
+						aria-label="标签（逗号分隔，仅「加标签」用）"
 						placeholder="标签（逗号分隔，仅「加标签」用）"
 						class="h-8 rounded-md border bg-background px-2 text-sm"
 					/>
@@ -298,6 +285,7 @@
 									name="ids"
 									value={row.id}
 									bind:group={selectedIds}
+									aria-label={`选择 ${rowTitle(row)}`}
 									class="size-4 rounded border"
 								/>
 							</label>

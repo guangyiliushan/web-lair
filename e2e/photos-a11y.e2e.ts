@@ -91,7 +91,7 @@ test.describe('photos a11y baseline', () => {
 		// Mirrors maps-public.e2e.ts: the world archive is a manual publish
 		// step — absent means the map renders its fallback (no markers), so
 		// this assertion must SKIP, not burn a timeout (round-2 confirm P2).
-		const archiveProbe = await page.request.get('http://localhost:4173/maps/world-z0-6.pmtiles', {
+		const archiveProbe = await page.request.get('/maps/world-z0-6.pmtiles', {
 			headers: { Range: 'bytes=0-1' }
 		});
 		test.skip(
