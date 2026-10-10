@@ -106,6 +106,12 @@ describe('photos viewer image stage', () => {
 		expect(host.querySelector('.photos-viewer-progress')!.textContent).toContain('Loading');
 		await until(() => img().src.startsWith('blob:'));
 		expect(img().dataset.phase).toBe('done');
+		// The completion copy is visible during the fade (round-2 confirm).
+		await until(
+			() =>
+				host.querySelector('.photos-viewer-progress')?.textContent?.includes('Full image loaded') ??
+				false
+		);
 		await until(() => host.querySelector('.photos-viewer-progress') === null);
 		const live = host.querySelector('[aria-live="polite"]')!;
 		expect(live.textContent).toBe('Full image loaded');
@@ -175,6 +181,30 @@ describe('photos viewer image stage', () => {
 			await until(() => host.querySelector('.photos-viewer-load') !== null);
 			await new Promise((resolve) => setTimeout(resolve, 400));
 			expect(spy).not.toHaveBeenCalled();
+		} finally {
+			if (original) Object.defineProperty(navigator, 'connection', original);
+			else delete (navigator as unknown as Record<string, unknown>).connection;
+		}
+	});
+
+	it('a metered GIF waits for the click (no tier exists to load early)', async () => {
+		const original = Object.getOwnPropertyDescriptor(navigator, 'connection');
+		Object.defineProperty(navigator, 'connection', {
+			configurable: true,
+			value: { saveData: true }
+		});
+		try {
+			const spy = vi.spyOn(globalThis, 'fetch');
+			spy.mockImplementation(() => Promise.resolve(streamResponse(1, 4096, 0, 4096)));
+			const { host } = mountStage(photo({ mimeType: 'image/gif', byteSize: 12_000_000 }));
+			await until(() => host.querySelector('.photos-viewer-load') !== null);
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			expect(spy).not.toHaveBeenCalled();
+			// No interim img: every GIF tier resolves to the original file.
+			expect(host.querySelector('img')).toBeNull();
+			host.querySelector<HTMLButtonElement>('.photos-viewer-load')!.click();
+			await until(() => host.querySelector('img')?.src.startsWith('blob:') ?? false);
+			expect(spy).toHaveBeenCalledTimes(1);
 		} finally {
 			if (original) Object.defineProperty(navigator, 'connection', original);
 			else delete (navigator as unknown as Record<string, unknown>).connection;

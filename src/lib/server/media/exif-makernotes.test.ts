@@ -62,6 +62,13 @@ describe('groupBrandDump', () => {
 		expect(dump).toEqual({ fuji: { Copyright: 'ACME', Software: 1 } });
 	});
 
+	it('strips U+0000 from nested keys too (jsonb parity with exif.ts)', () => {
+		const dump = groupBrandDump({
+			'FujiFilm:FaceRecInfo': { 'Face\u00001': 'x' }
+		});
+		expect(dump).toEqual({ fuji: { FaceRecInfo: { Face1: 'x' } } });
+	});
+
 	it('counts non-system unqualified keys into a visible _dropped marker', () => {
 		const dump = groupBrandDump({
 			SourceFile: 'x.jpg',

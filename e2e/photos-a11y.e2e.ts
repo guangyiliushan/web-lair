@@ -75,7 +75,7 @@ test.describe('photos a11y baseline', () => {
 		});
 	}
 
-	test('2.5.8: viewer controls and map markers meet 24×24', async ({ page }) => {
+	test('2.5.8: viewer controls meet 24×24', async ({ page }) => {
 		await page.goto(`/zh-cn/photos/${FIX}-alpha`);
 		await expect(page.locator('.photos-viewer-image')).toBeVisible({ timeout: 20_000 });
 		const controls = [page.locator('div.sticky a').first(), page.locator('div.sticky a').last()];
@@ -85,7 +85,19 @@ test.describe('photos a11y baseline', () => {
 			expect(box!.width).toBeGreaterThanOrEqual(24);
 			expect(box!.height).toBeGreaterThanOrEqual(24);
 		}
+	});
 
+	test('2.5.8: map markers meet 24×24 (world-archive precondition)', async ({ page }) => {
+		// Mirrors maps-public.e2e.ts: the world archive is a manual publish
+		// step — absent means the map renders its fallback (no markers), so
+		// this assertion must SKIP, not burn a timeout (round-2 confirm P2).
+		const archiveProbe = await page.request.get('http://localhost:4173/maps/world-z0-6.pmtiles', {
+			headers: { Range: 'bytes=0-1' }
+		});
+		test.skip(
+			archiveProbe.status() !== 206 && archiveProbe.status() !== 200,
+			'world archive not published to RustFS'
+		);
 		await page.goto('/zh-cn/photos/map');
 		const marker = page.locator('a.photos-map-marker').first();
 		await expect(marker).toBeVisible({ timeout: 30_000 });

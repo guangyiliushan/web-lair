@@ -22,7 +22,8 @@ const NAME_RE = /^[a-z0-9][a-z0-9._-]*\.pmtiles$/;
  *   integer: a beyond-2^53 digit string would lose precision and be
  *   re-serialised as `1e+23` into the forwarded Range header;
  * - `'unsatisfiable'` — `bytes=-0` / `end < start`: no byte can satisfy it,
- *   answer 416 locally (RFC 9110 §14.2) instead of a nonsense 200.
+ *   answer 416 locally (RFC 9110 §14.2 covers unsatisfiable ranges; rejecting
+ *   the invalid end<start form mirrors S3) instead of a nonsense 200.
  */
 type ByteRange = { start: number; end?: number } | { suffix: number };
 const RANGE_RE = /^bytes=(\d*)-(\d*)$/i;

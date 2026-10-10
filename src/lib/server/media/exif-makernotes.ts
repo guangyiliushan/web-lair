@@ -128,8 +128,12 @@ function sanitizeValue(value: unknown): unknown {
 		}
 		const out: Record<string, unknown> = {};
 		for (const [key, entry] of Object.entries(record)) {
+			// jsonb rejects U+0000 in KEYS exactly as in values (parity with
+			// the exif.ts round-1 fix; round-2 confirm P3).
+			const cleanKey = stripNul(key);
+			if (cleanKey === '') continue;
 			const safe = sanitizeValue(entry);
-			if (safe !== undefined) out[key] = safe;
+			if (safe !== undefined) out[cleanKey] = safe;
 		}
 		return out;
 	}

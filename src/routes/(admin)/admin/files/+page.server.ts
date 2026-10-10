@@ -117,7 +117,13 @@ export const actions: Actions = {
 		const result = await deleteFile(id);
 		if (result.kind === 'not-found') return fail(404, { message: '文件不存在' });
 		if (result.kind === 'mentioned') {
-			return fail(409, { message: '正文仍提及该文件（引用回填落地前的过渡守卫），不能删除' });
+			// A truncated scan is fail-closed, not a content hit (round-2
+			// confirm P3): surface the real reason instead of a false claim.
+			return fail(409, {
+				message: result.scanTruncated
+					? '正文提及扫描已达行数上限（保守拦截；分页扩展见方案 §11 登记）'
+					: '正文仍提及该文件（引用回填落地前的过渡守卫），不能删除'
+			});
 		}
 		if (result.kind === 'referenced') {
 			const parts: string[] = [];

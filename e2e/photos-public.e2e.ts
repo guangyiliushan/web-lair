@@ -78,10 +78,19 @@ async function expectPageCount(grid: import('@playwright/test').Locator, pageSiz
 	await expect
 		.poll(
 			async () => {
-				const count = await grid.locator('a').count();
-				return count === Math.min(pageSize, visibleCount());
+				try {
+					const count = await grid.locator('a').count();
+					return count === Math.min(pageSize, visibleCount());
+				} catch {
+					// Playwright fails a poll outright on a throwing callback
+					// (no retry) — a transient docker/exec hiccup must keep
+					// sampling instead (round-2 confirm P3).
+					return false;
+				}
 			},
-			{ timeout: 15_000 }
+			// Sparse intervals: each attempt costs a docker exec, and a slow
+			// build phase can push the first consistent read past 15s.
+			{ timeout: 30_000, intervals: [500, 1000, 2000] }
 		)
 		.toBe(true);
 }

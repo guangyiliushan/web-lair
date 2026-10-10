@@ -41,6 +41,13 @@
 		: null;
 	const onDemand = $derived(shouldLoadFullOnDemand(photo.byteSize, connection));
 
+	// GIFs have no variant tiers: photoTileSrc returns the ORIGINAL for every
+	// tier, so rendering the interim image would download the whole file even
+	// under an on-demand decision (round-2 confirm, P2). On-demand GIFs hold
+	// the layout box instead and load on the explicit click.
+	const isGif = $derived(photo.mimeType === 'image/gif');
+	const interimSrc = $derived(isGif && onDemand ? null : thumbSrc);
+
 	type Phase = 'waiting' | 'loading' | 'done' | 'error';
 	// SSR renders the loading phase for BOTH branches (the connection signal
 	// only exists client-side); onMount flips to `waiting` when on-demand,
@@ -153,18 +160,31 @@
 	const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 </script>
 
-<img
-	class="photos-viewer-image max-h-[76vh] w-auto max-w-full rounded-lg object-contain"
-	src={objectUrl ?? thumbSrc}
-	{alt}
-	width={photo.width ?? undefined}
-	height={photo.height ?? undefined}
-	style={!objectUrl && placeholder
-		? `background-image:url(${placeholder});background-size:cover;background-position:center;`
-		: undefined}
-	decoding="async"
-	data-phase={phase}
-/>
+{#if objectUrl || interimSrc}
+	<img
+		class="photos-viewer-image max-h-[76vh] w-auto max-w-full rounded-lg object-contain"
+		src={objectUrl ?? interimSrc}
+		{alt}
+		width={photo.width ?? undefined}
+		height={photo.height ?? undefined}
+		style={!objectUrl && placeholder
+			? `background-image:url(${placeholder});background-size:cover;background-position:center;`
+			: undefined}
+		decoding="async"
+		data-phase={phase}
+	/>
+{:else}
+	<!-- On-demand GIF: no tier exists to show before the click; hold the
+	     layout box so the floater and controls do not jump. -->
+	<div
+		class="photos-viewer-image max-h-[76vh] w-full max-w-full rounded-lg bg-muted/40"
+		style={photo.width && photo.height
+			? `aspect-ratio:${photo.width}/${photo.height};`
+			: 'min-height:40vh;'}
+		aria-hidden="true"
+		data-phase={phase}
+	></div>
+{/if}
 
 {#if phase === 'waiting'}
 	<div class="fixed right-4 bottom-4 z-30">
@@ -232,6 +252,10 @@
 				</svg>
 				<span class="whitespace-nowrap">{m.photos_viewer_loading()}</span>
 			{/if}
+		{:else if phase === 'done'}
+			<!-- The completed state stays visible while the card fades out
+			     (round-2 confirm P3: the fade used to animate an empty pill). -->
+			<span class="whitespace-nowrap">{m.photos_viewer_loaded()}</span>
 		{:else if phase === 'error'}
 			<span class="whitespace-nowrap">{m.photos_viewer_load_failed()}</span>
 			<button
