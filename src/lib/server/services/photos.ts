@@ -41,6 +41,17 @@ const PHOTO_PAGE_MAX = 60;
 
 const REF_COUNT_SQL = sql<number>`(select count(*)::int from ${fileReferences} where ${fileReferences.fileId} = ${photos.fileId})`;
 const SORT_EXPR = sql`coalesce(${photos.takenAt}, ${photos.createdAt})`;
+/**
+ * Keyset ORDER/comparison key at MILLISECOND precision (review round 1):
+ * `taken_at`/`created_at` cross into JS as ms-truncated Dates, so row-derived
+ * cursors are ms-exact. Comparing a ms cursor against the raw microsecond
+ * value used to drop every row whose sort value sat in `(floor_ms, value]`
+ * (page 2+ silently lost same-millisecond rows — a bulk transaction shares
+ * one `created_at` — and a row could become its own `newer` neighbour).
+ * Truncating the DB side to the cursor's own precision makes each comparison
+ * exact and deterministic; ties fall to the id, as before.
+ */
+const SORT_KEY = sql`date_trunc('milliseconds', ${SORT_EXPR})`;
 
 /** Slug base from a file name: extension off, CJK kept (titleSlug rules). */
 export function photoSlugBase(fileName: string): string {
@@ -130,6 +141,27 @@ export type CreatePhotoResult =
 	| { kind: 'already-in-gallery'; photoId: string }
 	| { kind: 'source-missing' };
 
+/**
+ * A loser (or a re-run) must still land its INTENT on the winner's row:
+ * missing tags are merged, an absent title is filled — never overwritten
+ * (review round 1: the CLI's directory→tag guarantee used to silently die
+ * whenever the photo already existed).
+ */
+async function backfillWinner(
+	database: PhotosDb,
+	winnerId: string,
+	winnerTitle: LocalizedText | null,
+	options: CreatePhotoOptions
+): Promise<void> {
+	if (options.tags && options.tags.length > 0) {
+		await attachTags(database, winnerId, options.tags);
+	}
+	const title = emptyToNull(options.title);
+	if (title && winnerTitle === null) {
+		await database.update(photos).set({ title }).where(eq(photos.id, winnerId));
+	}
+}
+
 export interface CreatePhotoOptions {
 	title?: LocalizedText | null;
 	/** Tag names, created on demand. */
@@ -157,11 +189,14 @@ export async function createPhotoFromFile(
 	if (!file.mimeType.startsWith('image/')) return { kind: 'not-image' };
 
 	const [existing] = await database
-		.select({ id: photos.id })
+		.select({ id: photos.id, title: photos.title })
 		.from(photos)
 		.where(eq(photos.fileId, fileId))
 		.limit(1);
-	if (existing) return { kind: 'already-in-gallery', photoId: existing.id };
+	if (existing) {
+		await backfillWinner(database, existing.id, existing.title, options);
+		return { kind: 'already-in-gallery', photoId: existing.id };
+	}
 
 	const object = await storage.get(file.objectKey);
 	if (!object) return { kind: 'source-missing' };
@@ -173,51 +208,68 @@ export async function createPhotoFromFile(
 	const slug = await uniquePhotoSlug(database, base);
 	const title = emptyToNull(options.title);
 
-	let row: { id: string; slug: string };
-	try {
-		row = await database.transaction(async (tx) => {
-			const [created] = await tx
-				.insert(photos)
-				.values({
-					fileId,
-					slug,
-					title,
-					takenAt: meta.takenAt,
-					cameraMake: meta.cameraMake,
-					cameraModel: meta.cameraModel,
-					lensModel: meta.lensModel,
-					fNumber: numeric(meta.fNumber),
-					focalLengthMm: numeric(meta.focalLengthMm),
-					exposureTimeS: numeric(meta.exposureTimeS),
-					iso: meta.iso,
-					latitude: numeric(meta.latitude),
-					longitude: numeric(meta.longitude),
-					altitudeM: numeric(meta.altitudeM),
-					exif: meta.exif
-				})
-				.returning({ id: photos.id, slug: photos.slug });
-			if (options.tags && options.tags.length > 0) {
-				await attachTags(tx, created!.id, options.tags);
+	let row: { id: string; slug: string } | undefined;
+	let lastError: unknown;
+	for (let attempt = 0; attempt < 2 && row === undefined; attempt += 1) {
+		// Attempt 1 uses the computed unique slug; a slug-only collision
+		// (concurrent same-base files — the check-then-insert has no lock)
+		// retries ONCE with an entropy suffix instead of surfacing a raw
+		// 23505 to callers that never classified it (review round 1).
+		const attemptSlug = attempt === 0 ? slug : `${base}-${Date.now().toString(36)}`;
+		try {
+			row = await database.transaction(async (tx) => {
+				const [created] = await tx
+					.insert(photos)
+					.values({
+						fileId,
+						slug: attemptSlug,
+						title,
+						takenAt: meta.takenAt,
+						cameraMake: meta.cameraMake,
+						cameraModel: meta.cameraModel,
+						lensModel: meta.lensModel,
+						fNumber: numeric(meta.fNumber),
+						focalLengthMm: numeric(meta.focalLengthMm),
+						exposureTimeS: numeric(meta.exposureTimeS),
+						iso: meta.iso,
+						latitude: numeric(meta.latitude),
+						longitude: numeric(meta.longitude),
+						altitudeM: numeric(meta.altitudeM),
+						exif: meta.exif
+					})
+					.returning({ id: photos.id, slug: photos.slug });
+				if (options.tags && options.tags.length > 0) {
+					await attachTags(tx, created!.id, options.tags);
+				}
+				return created!;
+			});
+		} catch (caught) {
+			lastError = caught;
+			const code = pgErrorCode(caught);
+			// The file row can vanish between the lookup above and the insert
+			// (concurrent deleteFile); the FK answers 23503 — the same caller
+			// outcome as a missing file (ST-3 writer contract, symmetric).
+			if (code === '23503') return { kind: 'not-found' };
+			if (code === '23505') {
+				// Idempotency under concurrency (T13 live import): the same
+				// file handed to this service twice at once — `photos.file_id`
+				// is unique, one side loses and re-reads the winner's row
+				// (with the loser's tags/title intent backfilled).
+				const [winner] = await database
+					.select({ id: photos.id, title: photos.title })
+					.from(photos)
+					.where(eq(photos.fileId, fileId))
+					.limit(1);
+				if (winner) {
+					await backfillWinner(database, winner.id, winner.title, options);
+					return { kind: 'already-in-gallery', photoId: winner.id };
+				}
+				if (attempt === 0) continue; // slug collision → one retry
 			}
-			return created!;
-		});
-	} catch (caught) {
-		// Idempotency under concurrency (T13 live import): the same file can be
-		// handed to this service from two directory entries at once (identical
-		// bytes) or from a parallel caller. `photos.file_id` is unique, so one
-		// side loses the insert; the loser re-reads the winner's row instead of
-		// surfacing a raw driver error. A 23505 on the slug (no row for the
-		// file) is NOT ours to absorb — rethrow for the caller to classify.
-		if (pgErrorCode(caught) === '23505') {
-			const [winner] = await database
-				.select({ id: photos.id })
-				.from(photos)
-				.where(eq(photos.fileId, fileId))
-				.limit(1);
-			if (winner) return { kind: 'already-in-gallery', photoId: winner.id };
+			throw caught;
 		}
-		throw caught;
 	}
+	if (!row) throw lastError ?? new Error('photo insert failed');
 	return { kind: 'ok', id: row.id, slug: row.slug };
 }
 
@@ -248,12 +300,6 @@ export async function updatePhoto(
 	deps: PhotosDeps = {}
 ): Promise<UpdatePhotoResult> {
 	const { database } = await resolveDeps(deps);
-	const [current] = await database
-		.select({ id: photos.id, slug: photos.slug })
-		.from(photos)
-		.where(eq(photos.id, photoId))
-		.limit(1);
-	if (!current) return { kind: 'not-found' };
 
 	let nextSlug: string | undefined;
 	if (patch.slug !== undefined) {
@@ -264,6 +310,20 @@ export async function updatePhoto(
 
 	try {
 		await database.transaction(async (tx) => {
+			// Lock the row for the whole edit (review round 1): concurrent
+			// renames used to read the OLD slug from parallel snapshots and
+			// write trackers from both, losing a hop (/old → 404 instead of
+			// a single 301). The lock serializes slug accounting; a missing
+			// row surfaces here for patches of ANY shape (including
+			// tags-only, where the update used to be skipped entirely).
+			const [locked] = await tx
+				.select({ id: photos.id, slug: photos.slug })
+				.from(photos)
+				.where(eq(photos.id, photoId))
+				.limit(1)
+				.for('update');
+			if (!locked) throw new PhotoGoneError();
+
 			const set: Record<string, unknown> = {};
 			if (patch.title !== undefined) set.title = emptyToNull(patch.title);
 			if (patch.description !== undefined) set.description = emptyToNull(patch.description);
@@ -279,9 +339,9 @@ export async function updatePhoto(
 					.returning({ id: photos.id });
 				if (updated.length === 0) throw new PhotoGoneError();
 			}
-			if (nextSlug !== undefined && nextSlug !== current.slug) {
+			if (nextSlug !== undefined && nextSlug !== locked.slug) {
 				await tx.insert(slugTrackers).values({
-					slug: current.slug,
+					slug: locked.slug,
 					type: 'photo',
 					lang: 'en',
 					targetId: photoId
@@ -321,18 +381,23 @@ export async function removePhoto(
 		.limit(1);
 	if (!current) return { kind: 'not-found' };
 
-	const deleted = await database
-		.delete(photos)
-		.where(eq(photos.id, photoId))
-		.returning({ id: photos.id });
+	const deleted = await database.transaction(async (tx) => {
+		// Trackers die with the photo (review round 1): a removed photo's old
+		// slugs must 404, not keep pointing at a dead id forever.
+		await tx
+			.delete(slugTrackers)
+			.where(and(eq(slugTrackers.type, 'photo'), eq(slugTrackers.targetId, photoId)));
+		return tx.delete(photos).where(eq(photos.id, photoId)).returning({ id: photos.id });
+	});
 	if (deleted.length === 0) return { kind: 'not-found' };
 
 	let fileDeleted = false;
 	let fileBlocked = false;
 	if (options.removeFile) {
-		const result = await deleteFile(current.fileId, { storage, db: database });
+		const result = await deleteFile(current.fileId, {}, { storage, db: database });
 		fileDeleted = result.kind === 'ok';
-		fileBlocked = result.kind === 'referenced';
+		// `mentioned` = the transition guard (content still references it).
+		fileBlocked = result.kind === 'referenced' || result.kind === 'mentioned';
 	}
 	return { kind: 'ok', fileDeleted, fileBlocked };
 }
@@ -433,7 +498,7 @@ export async function listAdminPhotos(
 		.from(photos)
 		.innerJoin(files, eq(photos.fileId, files.id))
 		.where(conditions.length > 0 ? and(...conditions) : undefined)
-		.orderBy(desc(SORT_EXPR), desc(photos.id))
+		.orderBy(desc(SORT_KEY), desc(photos.id))
 		.limit(PHOTO_LIST_LIMIT);
 
 	const ids = rows.map((row) => row.id);
@@ -584,10 +649,10 @@ export async function listPhotoNeighbors(
 			.where(
 				and(
 					eq(photos.isVisible, true),
-					sql`(${SORT_EXPR}, ${photos.id}) > (${sortAt}::timestamptz, ${current.id}::uuid)`
+					sql`(${SORT_KEY}, ${photos.id}) > (${sortAt}::timestamptz, ${current.id}::uuid)`
 				)
 			)
-			.orderBy(sql`${SORT_EXPR} asc, ${photos.id} asc`)
+			.orderBy(sql`${SORT_KEY} asc, ${photos.id} asc`)
 			.limit(1),
 		database
 			.select(fields)
@@ -595,10 +660,10 @@ export async function listPhotoNeighbors(
 			.where(
 				and(
 					eq(photos.isVisible, true),
-					sql`(${SORT_EXPR}, ${photos.id}) < (${sortAt}::timestamptz, ${current.id}::uuid)`
+					sql`(${SORT_KEY}, ${photos.id}) < (${sortAt}::timestamptz, ${current.id}::uuid)`
 				)
 			)
-			.orderBy(sql`${SORT_EXPR} desc, ${photos.id} desc`)
+			.orderBy(sql`${SORT_KEY} desc, ${photos.id} desc`)
 			.limit(1)
 	]);
 	return { newer: newerRows[0] ?? null, older: olderRows[0] ?? null };
@@ -686,7 +751,7 @@ export async function listPublicPhotos(
 	}
 	if (cursor) {
 		conditions.push(
-			sql`(${SORT_EXPR}, ${photos.id}) < (${cursor.sortAt}::timestamptz, ${cursor.id}::uuid)`
+			sql`(${SORT_KEY}, ${photos.id}) < (${cursor.sortAt}::timestamptz, ${cursor.id}::uuid)`
 		);
 	}
 	const clamped = Math.min(Math.max(1, Math.trunc(limit)), PHOTO_PAGE_MAX);
@@ -695,7 +760,7 @@ export async function listPublicPhotos(
 		.from(photos)
 		.innerJoin(files, eq(photos.fileId, files.id))
 		.where(and(...conditions))
-		.orderBy(sql`${SORT_EXPR} desc, ${photos.id} desc`)
+		.orderBy(sql`${SORT_KEY} desc, ${photos.id} desc`)
 		.limit(clamped);
 	return rows as PublicPhotoItem[];
 }

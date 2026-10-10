@@ -136,8 +136,11 @@ export function toJsonSafe(value: unknown, depth = 0): unknown {
 		const result: Record<string, unknown> = {};
 		for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
 			if (DROP_KEYS.has(key)) continue;
+			// jsonb rejects U+0000 in KEYS exactly like in values (review
+			// round 1: only the value side was stripped before).
+			const cleanKey = key.includes('\u0000') ? key.replaceAll('\u0000', '') : key;
 			const safe = toJsonSafe(entry, depth + 1);
-			if (safe !== undefined) result[key] = safe;
+			if (safe !== undefined) result[cleanKey] = safe;
 		}
 		return result;
 	}
@@ -245,7 +248,12 @@ export async function extractPhotoMetadata(
 	}
 
 	const safe = (toJsonSafe(parsed) as Record<string, unknown> | undefined) ?? {};
-	if (fujiRecipe !== undefined) safe.fujiRecipe = fujiRecipe;
+	if (fujiRecipe !== undefined) {
+		// The recipe used to be injected AFTER sanitization (review round 1):
+		// same NUL / JSON-safety discipline as everything else from the file.
+		const safeRecipe = toJsonSafe(fujiRecipe);
+		if (safeRecipe !== undefined && safeRecipe !== null) safe.fujiRecipe = safeRecipe;
+	}
 
 	return {
 		takenAt: composeTakenAt(

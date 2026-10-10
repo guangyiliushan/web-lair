@@ -82,7 +82,7 @@
 		].filter((axis) => axis.values.length > 0)}
 
 		{#if axes.length > 0}
-			<div class="mb-6 space-y-1.5" aria-label={m.photos_title()}>
+			<div class="mb-6 space-y-1.5" role="group" aria-label={m.photos_title()}>
 				{#each axes as axis (axis.key)}
 					<div class="flex flex-wrap items-center gap-1.5">
 						<span class="w-12 shrink-0 text-xs text-muted-foreground">{axis.label}</span>
@@ -110,9 +110,9 @@
 		{#if feed.items.length === 0}
 			<p class="py-10 text-sm text-muted-foreground">{m.photos_empty()}</p>
 		{:else}
-			<div role="list" aria-labelledby="photos-heading">
-				<PhotosMasonry items={feed.items} ariaLabel={m.photos_title()} />
-			</div>
+			<!-- No role=list: the masonry is not a flat list (a list without
+			     listitem children is worse than none — review round 1). -->
+			<PhotosMasonry items={feed.items} ariaLabel={m.photos_title()} />
 			{#if feed.moreHref}
 				<div class="mt-8 mb-4 flex justify-center">
 					<a

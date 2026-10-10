@@ -148,9 +148,17 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 	if (existing) {
 		// A dedupe hit is a USE: refresh the last-event anchor so the TTL
 		// purge (pending anchors on updated_at since the round-3 ruling)
-		// never deletes content that was handed out moments ago.
-		await database.update(files).set({ updatedAt: new Date() }).where(eq(files.id, existing.id));
-		return { ...existing, deduplicated: true };
+		// never deletes content that was handed out moments ago. The touch
+		// must be CONFIRMED (review round 1): if a purge deleted the row
+		// between the lookup and the touch, the update hits 0 rows and we
+		// fall through to a fresh insert — reporting a deleted row as a
+		// dedupe hit would hand callers a file whose bytes are gone.
+		const touched = await database
+			.update(files)
+			.set({ updatedAt: new Date() })
+			.where(eq(files.id, existing.id))
+			.returning({ id: files.id });
+		if (touched.length > 0) return { ...existing, deduplicated: true };
 	}
 
 	const objectKey = objectKeyFor(contentHash, sniffed.ext);
@@ -384,7 +392,26 @@ export async function listFiles(
 export type DeleteFileResult =
 	| { kind: 'ok'; objectKey: string }
 	| { kind: 'not-found' }
-	| { kind: 'referenced'; refCount: number; isInGallery: boolean };
+	| { kind: 'referenced'; refCount: number; isInGallery: boolean }
+	/** Still mentioned by stored content (`/i/<key>`) — the transition guard. */
+	| { kind: 'mentioned' }
+	/** Purge only: the row was USED (anchor refreshed) after the snapshot. */
+	| { kind: 'reused' };
+
+export interface DeleteFileOptions {
+	/**
+	 * Purge-only anchor re-verify (review round 1): candidates are selected
+	 * from a snapshot, then a mention scan runs before the delete loop — a
+	 * dedupe USE landing in that window refreshes `updated_at` and must
+	 * abort this deletion. Pass the TTL cutoff the candidate was judged by.
+	 */
+	requireUnusedSince?: Date;
+	/**
+	 * Purge-only: purgeMedia already ran the mention scan for its whole
+	 * candidate set; re-scanning per candidate would multiply the cost.
+	 */
+	skipMentionScan?: boolean;
+}
 
 /**
  * Reference-guarded delete (§6.3, T15): a file referenced by content or linked
@@ -401,16 +428,42 @@ export type DeleteFileResult =
  * Objects go first and the registry row last, so a partial failure rolls the
  * transaction back and stays retryable.
  */
-export async function deleteFile(id: string, deps: FilesDeps = {}): Promise<DeleteFileResult> {
+export async function deleteFile(
+	id: string,
+	options: DeleteFileOptions = {},
+	deps: FilesDeps = {}
+): Promise<DeleteFileResult> {
 	const { storage, database } = await resolveDeps(deps);
+
+	// Transition guard (§6.3 "没有静默删除", review round 1): until the ST-3
+	// reference backfill lands, an `/i/<key>` mention in stored content is
+	// the only in-use signal. The admin delete path used to skip this guard
+	// entirely (only purgeMedia had it), so a file referenced by a post body
+	// could be deleted silently. Scans are shared with the audit.
+	if (!options.skipMentionScan) {
+		const { mentions } = await scanMentions(database);
+		const [row] = await database
+			.select({ objectKey: files.objectKey })
+			.from(files)
+			.where(eq(files.id, id))
+			.limit(1);
+		if (row && mentions.some((mention) => mention.key === row.objectKey)) {
+			return { kind: 'mentioned' };
+		}
+	}
+
 	return database.transaction(async (tx): Promise<DeleteFileResult> => {
 		const [row] = await tx
-			.select({ id: files.id, objectKey: files.objectKey })
+			.select({ id: files.id, objectKey: files.objectKey, updatedAt: files.updatedAt })
 			.from(files)
 			.where(eq(files.id, id))
 			.limit(1)
 			.for('update');
 		if (!row) return { kind: 'not-found' };
+
+		if (options.requireUnusedSince && row.updatedAt > options.requireUnusedSince) {
+			return { kind: 'reused' };
+		}
 
 		const [refCount, photoCount] = await Promise.all([
 			tx.$count(fileReferences, eq(fileReferences.fileId, id)),
@@ -520,6 +573,8 @@ export async function purgeMedia(
 	const candidates = await listPurgeCandidates({ storage, db: database });
 	const { mentions, truncated } = await scanMentions(database);
 	const mentioned = new Set(mentions.map((mention) => mention.key));
+	const { pendingDays, detachedDays } = await getOption('media.purge', database);
+	const now = Date.now();
 
 	const skipped = candidates
 		.filter((candidate) => mentioned.has(candidate.objectKey))
@@ -530,9 +585,19 @@ export async function purgeMedia(
 	if (!options.dryRun) {
 		for (const candidate of candidates) {
 			if (mentioned.has(candidate.objectKey)) continue;
+			// Anchor re-verify (review round 1): a dedupe USE landing after
+			// the snapshot refreshes updated_at; the recorded TTL cutoff
+			// turns that into `reused` → skipped, never deleted.
+			const ttlDays = candidate.status === 'detached' ? detachedDays : pendingDays;
+			const cutoff = new Date(now - ttlDays * DAY_MS);
 			try {
-				const result = await deleteFile(candidate.id, { storage, db: database });
+				const result = await deleteFile(
+					candidate.id,
+					{ requireUnusedSince: cutoff, skipMentionScan: true },
+					{ storage, db: database }
+				);
 				if (result.kind === 'ok') deleted.push(candidate.objectKey);
+				else if (result.kind === 'reused') skipped.push(candidate.objectKey);
 			} catch (error) {
 				failed.push({
 					objectKey: candidate.objectKey,

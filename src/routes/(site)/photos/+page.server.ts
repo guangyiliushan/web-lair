@@ -19,11 +19,13 @@ import type { PageServerLoad } from './$types';
 const PAGE_SIZE = 24;
 const MAX_CHAIN = 12;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function parseCursor(raw: string): PublicPhotoCursor | null {
 	const separator = raw.lastIndexOf('~');
 	if (separator <= 0) return null;
 	const id = raw.slice(separator + 1);
-	if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
+	if (!UUID_RE.test(id)) return null;
 	const parsed = new Date(raw.slice(0, separator));
 	if (Number.isNaN(parsed.getTime())) return null;
 	return { sortAt: parsed.toISOString(), id };
@@ -39,7 +41,10 @@ export const load: PageServerLoad = ({ url }) => {
 	const year = /^\d{4}$/.test(yearRaw) ? Number(yearRaw) : null;
 	const camera = search.get('camera')?.trim() || null;
 	const lens = search.get('lens')?.trim() || null;
-	const tag = search.get('tag')?.trim() || null;
+	const tagRaw = search.get('tag')?.trim() ?? '';
+	// tagId lands in a uuid column: a free-form value used to reach PG as
+	// 22P02 and 500 the whole load (review round 1) — validate like cursors.
+	const tag = UUID_RE.test(tagRaw) ? tagRaw : null;
 
 	const filters: PublicPhotoFilters = {};
 	if (year !== null) filters.year = year;
@@ -49,9 +54,12 @@ export const load: PageServerLoad = ({ url }) => {
 
 	let pages = 1;
 	for (const raw of search.getAll('c')) {
+		// Check BEFORE consuming an entry (review round 1): the old
+		// increment-then-check shape let a 13th valid cursor fetch a 14th
+		// page, one extra DB round-trip per request over the stated cap.
+		if (pages >= MAX_CHAIN + 1) break;
 		if (parseCursor(raw) === null) break;
 		pages += 1;
-		if (pages > MAX_CHAIN + 1) break;
 	}
 
 	const feed = (async () => {
@@ -68,8 +76,17 @@ export const load: PageServerLoad = ({ url }) => {
 		}
 
 		// A cursor/filter drift could double-serve one boundary row; ids win.
+		// Public coordinates are fuzzed to two decimals at the read boundary
+		// (plan §5.1: ~1km render-time blur; the admin face keeps full
+		// precision — review round 1 caught the exact values leaking here).
 		const seen = new Set<string>();
-		const unique = items.filter((entry) => !seen.has(entry.id) && (seen.add(entry.id), true));
+		const unique = items
+			.filter((entry) => !seen.has(entry.id) && (seen.add(entry.id), true))
+			.map((entry) => ({
+				...entry,
+				latitude: entry.latitude === null ? null : Number(entry.latitude).toFixed(2),
+				longitude: entry.longitude === null ? null : Number(entry.longitude).toFixed(2)
+			}));
 
 		let moreHref: string | null = null;
 		if (boundaries.length === pages) {

@@ -379,6 +379,8 @@
 	"photos_filter_year": "年",
 	"photos_load_more": "もっと見る",
 	"photos_map_title": "地図",
+	"photos_map_fallback": "地図を表示できません。写真リストを表示します。",
+	"photos_map_retry": "再試行",
 	"photos_map_desc": "位置情報付きの写真を一枚の地図に。",
 	"photos_map_link": "地図表示",
 	"photos_map_empty": "位置情報付きの写真はまだありません。",

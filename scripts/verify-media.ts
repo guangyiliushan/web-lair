@@ -16,7 +16,13 @@ import {
 	runMediaAudit,
 	uploadFile
 } from '../src/lib/server/services/files';
-import { createPhotoFromFile, removePhoto, updatePhoto } from '../src/lib/server/services/photos';
+import {
+	createPhotoFromFile,
+	listPhotoNeighbors,
+	listPublicPhotos,
+	removePhoto,
+	updatePhoto
+} from '../src/lib/server/services/photos';
 
 /**
  * One-time media verification (storage line §4.6 / T5 / T6) against the dev
@@ -77,6 +83,9 @@ let raceSql: ReturnType<typeof postgres> | null = null;
 let photoProbe: { id: string; slug: string } | null = null;
 let photoProbeFileId: string | null = null;
 let photoProbeKey: string | null = null;
+/** keyset-precision probes (review round 1): files + photo ids for cleanup. */
+const msFiles: Array<{ id: string; key: string }> = [];
+const msPhotoIds: string[] = [];
 let photoProbeTagSlug: string | null = null;
 
 /** Scoped probe-row counter: immune to concurrent activity on the live db. */
@@ -137,14 +146,38 @@ async function cleanup(): Promise<void> {
 	}
 	if (uploadedId) {
 		// deleteFile honours the reference guard; probes must be unreferenced by now.
-		await deleteFile(uploadedId, deps);
+		await deleteFile(uploadedId, {}, deps);
 	}
 	if (raceSql) {
 		await raceSql.end({ timeout: 5 }).catch(() => undefined);
 	}
 	if (photoProbeFileId) {
-		await deleteFile(photoProbeFileId, deps).catch(() => undefined);
+		await deleteFile(photoProbeFileId, {}, deps).catch(() => undefined);
 	}
+	for (const photoId of msPhotoIds) {
+		await db
+			.delete(schema.photos)
+			.where(eq(schema.photos.id, photoId))
+			.catch(() => undefined);
+	}
+	for (const entry of msFiles) {
+		await deleteFile(entry.id, { skipMentionScan: true }, deps).catch(() => undefined);
+	}
+}
+
+/** Poll a live-database predicate; the T15 probe no longer sleeps blindly. */
+async function pollUntil(
+	predicate: () => Promise<boolean>,
+	timeoutMs: number,
+	label: string
+): Promise<boolean> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (await predicate()) return true;
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	console.log(`  (poll timeout: ${label})`);
+	return false;
 }
 
 async function main(): Promise<void> {
@@ -191,7 +224,7 @@ async function main(): Promise<void> {
 	// -- reference guard ------------------------------------------------------
 	refId = randomUUID();
 	await db.insert(schema.fileReferences).values({ fileId: uploaded.id, refType: 'post', refId });
-	const blocked = await deleteFile(uploaded.id, deps);
+	const blocked = await deleteFile(uploaded.id, { skipMentionScan: true }, deps);
 	check(
 		'referenced file delete is blocked',
 		blocked.kind === 'referenced' && blocked.refCount === 1,
@@ -204,10 +237,23 @@ async function main(): Promise<void> {
 	);
 	await db.delete(schema.fileReferences).where(eq(schema.fileReferences.refId, refId));
 	refId = null;
-	const deleted = await deleteFile(uploaded.id, deps);
+	const deleted = await deleteFile(uploaded.id, { skipMentionScan: true }, deps);
 	uploadedId = null;
 	check('unreferenced file deletes cleanly', deleted.kind === 'ok');
 	check('objects removed with the row', (await storage.head(uploaded.objectKey)) === null);
+
+	// -- T4 discriminator (review round 1): assert the FK ACTION itself, ------
+	// not just a 23503 that CASCADE would raise the same way for this
+	// direction; verify-baseline Phase B holds the negative-direction teeth.
+	const [fkRow] = await sql`
+		select confdeltype from pg_constraint
+		where conrelid = 'file_references'::regclass and contype = 'f'
+	`;
+	check(
+		"T4: file_references FK is NO ACTION (confdeltype = 'a')",
+		fkRow?.confdeltype === 'a',
+		`confdeltype=${fkRow?.confdeltype}`
+	);
 
 	// -- T15 race (ST-2): deleteFile serializes with a live reference INSERT --
 	const [raceRow] = await db
@@ -229,13 +275,26 @@ async function main(): Promise<void> {
 	const blockerTx = raceSql
 		.begin(async (tx) => {
 			await tx`insert into file_references (file_id, ref_type, ref_id) values (${raceRow.id}, 'post', ${raceRefId})`;
+			// Session marker so the probe can WAIT for the insert to actually
+			// land (review round 1: a fixed 150ms sleep could fire too early
+			// under load and pass a race it never exercised).
+			await tx.unsafe("set application_name = 'wm-verify-blocker'");
 			await blockerHold;
 		})
 		.catch((error: unknown) => {
 			blockerError = error;
 		});
-	await new Promise((resolve) => setTimeout(resolve, 150)); // let the INSERT land (uncommitted)
-	const deleteAttempt = deleteFile(raceRow.id, deps);
+	const blockerReady = await pollUntil(
+		async () => {
+			const [row] =
+				await sql`select count(*)::int as n from pg_stat_activity where application_name = 'wm-verify-blocker'`;
+			return (row?.n ?? 0) > 0;
+		},
+		10_000,
+		'T15 blocker holds its insert'
+	);
+	check('T15 blocker holds its insert (session marker visible)', blockerReady);
+	const deleteAttempt = deleteFile(raceRow.id, {}, deps);
 	const raceOutcome = await Promise.race([
 		deleteAttempt.then(
 			() => 'settled' as const,
@@ -260,7 +319,7 @@ async function main(): Promise<void> {
 	// Delete-wins direction: with the reference gone the delete succeeds, and a
 	// late reference INSERT then fails 23503 (the row is already gone).
 	await db.delete(schema.fileReferences).where(eq(schema.fileReferences.refId, raceRefId));
-	const raceDeleted = await deleteFile(raceRow.id, deps);
+	const raceDeleted = await deleteFile(raceRow.id, {}, deps);
 	check(
 		'T15 unreferenced delete succeeds after the reference is removed',
 		raceDeleted.kind === 'ok'
@@ -297,7 +356,7 @@ async function main(): Promise<void> {
 		created.kind === 'ok' && created.slug === `verify-照片-${stamp}`,
 		`slug=${created.kind === 'ok' ? created.slug : 'n/a'}`
 	);
-	const blockedByGallery = await deleteFile(galleryUpload.id, deps);
+	const blockedByGallery = await deleteFile(galleryUpload.id, {}, deps);
 	check(
 		'gallery-linked file delete is blocked',
 		blockedByGallery.kind === 'referenced' && blockedByGallery.isInGallery === true,
@@ -335,8 +394,61 @@ async function main(): Promise<void> {
 		? await removePhoto(photoProbe.id, {}, deps)
 		: ({ kind: 'skipped' } as const);
 	check('photo removal keeps the file', removed.kind === 'ok', `kind=${removed.kind}`);
-	const afterRemoval = await deleteFile(galleryUpload.id, deps);
+	const afterRemoval = await deleteFile(galleryUpload.id, {}, deps);
 	check('file deletes after the photo is removed', afterRemoval.kind === 'ok');
+
+	// -- keyset precision (review round 1): rows sharing one millisecond ------
+	// (µs-differing values) must survive BOTH pagination and neighbour lookup;
+	// the old ms round-trip of the sort key could silently skip them.
+	const msCreate = async (suffix: string, takenAt: string, blue: number) => {
+		// Distinct bytes per probe: reusing one buffer would dedupe to a
+		// single files row and the second photo would read already-in-gallery.
+		const bytes = await sharp({
+			create: { width: 6, height: 4, channels: 3, background: { r: 51, g: 85, b: blue } }
+		})
+			.png()
+			.toBuffer();
+		const upload = await uploadFile(
+			{ fileName: `verify-ms-${stamp}-${suffix}.png`, bytes, uploadedBy: null },
+			deps
+		);
+		const photo = await createPhotoFromFile(upload.id, {}, deps);
+		if (photo.kind !== 'ok') throw new Error(`ms probe photo failed: ${photo.kind}`);
+		await sql`update photos set taken_at = ${takenAt}::timestamptz where id = ${photo.id}`;
+		msFiles.push({ id: upload.id, key: upload.objectKey });
+		msPhotoIds.push(photo.id);
+		return photo.id;
+	};
+	const msIdA = await msCreate('a', '2099-01-01 00:00:00.123456+00', 119);
+	const msIdB = await msCreate('b', '2099-01-01 00:00:00.123400+00', 120);
+	const msFeed = await listPublicPhotos({}, null, 5, deps);
+	check(
+		'keyset ms: both same-millisecond rows are on page 1',
+		msFeed.some((row) => row.id === msIdA) && msFeed.some((row) => row.id === msIdB)
+	);
+	const msTop = msFeed.find((row) => row.id === msIdA || row.id === msIdB);
+	if (msTop) {
+		const msNext = await listPublicPhotos(
+			{},
+			{ sortAt: (msTop.takenAt ?? msTop.createdAt).toISOString(), id: msTop.id },
+			5,
+			deps
+		);
+		check(
+			'keyset ms: the cursor never skips the same-ms sibling',
+			msNext.some((row) => row.id !== msTop.id && (row.id === msIdA || row.id === msIdB))
+		);
+		const msNeighbors = await listPhotoNeighbors(
+			{ sortAt: msTop.takenAt ?? msTop.createdAt, id: msTop.id },
+			deps
+		);
+		check(
+			'keyset ms: a row is never its own neighbour',
+			msNeighbors.newer?.slug !== msTop.slug && msNeighbors.older?.slug !== msTop.slug
+		);
+	} else {
+		check('keyset ms: probe rows present', false, 'ms probe rows missing from the feed');
+	}
 	check('gallery upload objects removed', (await storage.head(galleryUpload.objectKey)) === null);
 
 	// -- constructed audit cases ---------------------------------------------
@@ -531,11 +643,18 @@ try {
 		guardKey,
 		raceKey,
 		...(uploadedKey ? [uploadedKey] : []),
-		...(photoProbeKey ? [photoProbeKey] : [])
+		...(photoProbeKey ? [photoProbeKey] : []),
+		...msFiles.map((entry) => entry.id)
 	];
 	const remaining = await probeRowCount(probes).catch(() => -1);
 	check('probe rows are gone after cleanup', remaining === 0, `remaining=${remaining}`);
-	const leftoverKeys = [orphanKey, galleryKey, guardKey, ...(photoProbeKey ? [photoProbeKey] : [])];
+	const leftoverKeys = [
+		orphanKey,
+		galleryKey,
+		guardKey,
+		...(photoProbeKey ? [photoProbeKey] : []),
+		...msFiles.map((entry) => entry.key)
+	];
 	const leftoverObjects = (await Promise.all(leftoverKeys.map((key) => storage.head(key)))).filter(
 		(head) => head !== null
 	).length;

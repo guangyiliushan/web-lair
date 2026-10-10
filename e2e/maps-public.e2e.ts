@@ -6,8 +6,10 @@ import { psql } from './support';
  * Storage ST-2d (T12) map acceptance: the public map renders tiles through
  * OUR /maps route (Range-capable, pmtiles protocol) and its markers link to
  * the photo pages. Fixtures use the `e2e-map` marker and are cleaned around
- * every test; the tile assertion listens to real network responses so a
- * broken Range path cannot slip through a mocked render.
+ * every test; marker assertions are scoped to the fixture slug so unrelated
+ * live photos cannot break them. The world-archive precondition (a manual
+ * publish step) turns into an explicit skip; the tile assertion listens to
+ * real network responses so a broken Range path cannot slip through.
  */
 const FIX = 'e2e-map';
 const FILE_A = '00000000-0000-7000-9000-0000000000b1';
@@ -49,6 +51,16 @@ test.describe('photos public map', () => {
 			}
 		});
 
+		// Precondition: the world archive is a manual publish step (registered
+		// release artifact) - a missing file must SKIP, not fail the suite.
+		const archiveProbe = await page.request.get('http://localhost:4173/maps/world-z0-6.pmtiles', {
+			headers: { Range: 'bytes=0-1' }
+		});
+		test.skip(
+			archiveProbe.status() !== 206 && archiveProbe.status() !== 200,
+			'world archive not published to RustFS'
+		);
+
 		await page.goto('/zh-cn/photos/map');
 		await expect(page.getByRole('heading', { name: '地图' })).toBeVisible({ timeout: 20_000 });
 
@@ -65,10 +77,10 @@ test.describe('photos public map', () => {
 		const pmtilesHits = served.filter((entry) => entry.url.includes('world-z0-6.pmtiles'));
 		expect(pmtilesHits.some((entry) => entry.status === 206)).toBe(true);
 
-		// The located fixture produces a marker that links to its page.
-		const marker = page.locator('a.photos-map-marker');
+		// The located fixture produces a marker that links to its page
+		// (scoped to the fixture: other located photos may exist).
+		const marker = page.locator(`a.photos-map-marker[href*="${FIX}-alpha"]`);
 		await expect(marker).toHaveCount(1);
-		await expect(marker).toHaveAttribute('href', new RegExp(`${FIX}-alpha$`));
 		await marker.click();
 		await expect(page).toHaveURL(new RegExp(`${FIX}-alpha$`));
 		await expect(page.locator('div.sticky')).toContainText('E2E 地图照片', { timeout: 20_000 });
@@ -78,7 +90,12 @@ test.describe('photos public map', () => {
 		psql(`update photos set latitude = null, longitude = null where slug = '${FIX}-alpha'`);
 		await page.goto('/zh-cn/photos/map');
 		await expect(page.getByRole('heading', { name: '地图' })).toBeVisible({ timeout: 20_000 });
-		await expect(page.getByText('还没有带位置信息的照片。')).toBeVisible();
-		await expect(page.locator('a.photos-map-marker')).toHaveCount(0);
+		// The fixture marker disappears; the global empty copy only shows
+		// when NO located photo remains in the live database.
+		await expect(page.locator(`a.photos-map-marker[href*="${FIX}-alpha"]`)).toHaveCount(0);
+		const located = psql('select count(*) from photos where is_visible and latitude is not null');
+		if (located === '0') {
+			await expect(page.getByText('还没有带位置信息的照片。')).toBeVisible();
+		}
 	});
 });

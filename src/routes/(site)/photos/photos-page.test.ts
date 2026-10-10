@@ -120,18 +120,58 @@ describe('(site)/photos load — public gallery feed', () => {
 		expect(service.listPublicPhotos).toHaveBeenCalledTimes(1);
 	});
 
-	it('validates and echoes filters; bad years are dropped', async () => {
+	it('validates and echoes filters; bad years and malformed tags are dropped', async () => {
 		service.listPublicPhotos.mockResolvedValueOnce([]);
 
-		const data = (await load(makeEvent('?year=abcd&camera=X-T5&lens=XF+35&tag=tt'))) as {
+		const data = (await load(makeEvent('?year=abcd&camera=X-T5&lens=XF+35&tag=not-a-uuid'))) as {
 			filters: Record<string, unknown>;
 		};
 
 		expect(service.listPublicPhotos).toHaveBeenCalledWith(
-			{ cameraModel: 'X-T5', lensModel: 'XF 35', tagId: 'tt' },
+			{ cameraModel: 'X-T5', lensModel: 'XF 35' },
 			null,
 			24
 		);
-		expect(data.filters).toEqual({ year: null, camera: 'X-T5', lens: 'XF 35', tag: 'tt' });
+		expect(data.filters).toEqual({ year: null, camera: 'X-T5', lens: 'XF 35', tag: null });
+	});
+	it('caps the cursor chain at 13 pages even with 13 valid cursors', async () => {
+		const page = Array.from({ length: 24 }, (_, index) =>
+			item(index === 23 ? UUID_A : uuid(index), '2026-01-05T00:00:00.000Z')
+		);
+		service.listPublicPhotos.mockResolvedValue(page);
+		const cursors = Array.from({ length: 13 }, () => `c=2026-01-06T00:00:00.000Z~${UUID_B}`).join(
+			'&'
+		);
+		const data = (await load(makeEvent(`?${cursors}`))) as { feed: Promise<unknown> };
+		await data.feed;
+		expect(service.listPublicPhotos).toHaveBeenCalledTimes(13);
+	});
+
+	it('drops a non-uuid tag but accepts a uuid one', async () => {
+		service.listPublicPhotos.mockResolvedValueOnce([]);
+		const bad = (await load(makeEvent('?tag=not-a-uuid'))) as { filters: { tag: string | null } };
+		expect(service.listPublicPhotos).toHaveBeenCalledWith({}, null, 24);
+		expect(bad.filters.tag).toBeNull();
+
+		service.listPublicPhotos.mockResolvedValueOnce([]);
+		const good = (await load(makeEvent(`?tag=${UUID_A}`))) as { filters: { tag: string | null } };
+		expect(service.listPublicPhotos).toHaveBeenCalledWith({ tagId: UUID_A }, null, 24);
+		expect(good.filters.tag).toBe(UUID_A);
+	});
+
+	it('fuzzes item coordinates to two decimals', async () => {
+		service.listPublicPhotos.mockResolvedValueOnce([
+			{
+				...item(UUID_A, '2026-01-03T00:00:00.000Z'),
+				latitude: '25.033123',
+				longitude: '121.565432'
+			}
+		]);
+		const data = (await load(makeEvent())) as {
+			feed: Promise<{ items: { latitude: string | null; longitude: string | null }[] }>;
+		};
+		const feed = await data.feed;
+		expect(feed.items[0]!.latitude).toBe('25.03');
+		expect(feed.items[0]!.longitude).toBe('121.57');
 	});
 });

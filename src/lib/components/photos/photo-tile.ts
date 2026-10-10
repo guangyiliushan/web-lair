@@ -64,6 +64,9 @@ export interface MapPhoto {
 }
 
 const THUMBHASH_CACHE = new Map<string, string | null>();
+/** Bound the session cache (review round 1): browsing N photos used to
+ * accumulate N data-URL strings for the whole session. */
+const THUMBHASH_CACHE_MAX = 512;
 
 /** Base64 thumbhash → data URL (cached); garbage hashes resolve to null. */
 export function thumbhashDataUrl(hash: string | null): string | null {
@@ -81,6 +84,7 @@ export function thumbhashDataUrl(hash: string | null): string | null {
 	} catch {
 		result = null;
 	}
+	if (THUMBHASH_CACHE.size >= THUMBHASH_CACHE_MAX) THUMBHASH_CACHE.clear();
 	THUMBHASH_CACHE.set(hash, result);
 	return result;
 }

@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { SeoHead } from '$lib/components/seo';
 	import PhotosMap from '$lib/components/photos/photos-map.svelte';
+	import { photoText } from '$lib/components/photos/photo-tile';
 	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 	import { siteHref } from '$lib/utils/href';
 	import type { PageData } from './$types';
 
@@ -30,8 +32,30 @@
 	{#if data.photos.length === 0}
 		<p class="py-10 text-sm text-muted-foreground">{m.photos_map_empty()}</p>
 	{:else}
-		<div aria-labelledby="photos-map-heading">
-			<PhotosMap photos={data.photos} />
+		<div role="region" aria-labelledby="photos-map-heading">
+			<!-- A WebGL-less browser throws while the map mounts (review round
+			     1): the boundary swaps in a plain link list instead of taking
+			     the whole route down. -->
+			<svelte:boundary>
+				<PhotosMap photos={data.photos} />
+				{#snippet failed()}
+					<div class="rounded-lg border p-6">
+						<p class="text-sm text-muted-foreground">{m.photos_map_fallback()}</p>
+						<ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+							{#each data.photos as photo (photo.slug)}
+								<li>
+									<a
+										class="underline hover:text-foreground"
+										href={siteHref(`/photos/${photo.slug}`)}
+									>
+										{photoText(photo.title, getLocale()) ?? photo.slug}
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/snippet}
+			</svelte:boundary>
 		</div>
 	{/if}
 </div>

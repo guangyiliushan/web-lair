@@ -379,6 +379,8 @@
 	"photos_filter_year": "年份",
 	"photos_load_more": "加载更多",
 	"photos_map_title": "地图",
+	"photos_map_fallback": "地图暂不可用 —— 已切换为照片列表。",
+	"photos_map_retry": "重试",
 	"photos_map_desc": "带位置信息的照片都在这张地图上。",
 	"photos_map_link": "地图视图",
 	"photos_map_empty": "还没有带位置信息的照片。",

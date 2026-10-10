@@ -76,6 +76,7 @@ function selectChain(rows: unknown[]): Chain {
 		orderBy: vi.fn(() => chain),
 		groupBy: vi.fn(() => chain),
 		limit: vi.fn(() => chain),
+		for: vi.fn(() => chain),
 		then: (resolve: (value: unknown[]) => unknown, reject?: (e: unknown) => unknown) =>
 			Promise.resolve(rows).then(resolve, reject)
 	} as unknown as Chain;
@@ -249,6 +250,54 @@ describe('createPhotoFromFile', () => {
 		});
 	});
 
+	it('backfills missing tags onto an existing photo (CLI directory-tag guarantee)', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([FILE_ROW]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'p9', title: null }])); // existing photo
+		dbMock.select.mockReturnValueOnce(selectChain([{ id: 't1' }])); // tag lookup hit
+		dbMock.insert.mockReturnValueOnce(insertChain(undefined)); // junction row
+
+		await expect(
+			createPhotoFromFile('f1', { tags: ['旅行'] }, { storage: storageMock })
+		).resolves.toEqual({ kind: 'already-in-gallery', photoId: 'p9' });
+		expect(dbMock.insert.mock.calls[0][0]).toBe(photoTagsTable);
+		expect(dbMock.insert.mock.results[0].value.values.mock.calls[0][0]).toEqual([
+			{ photoId: 'p9', tagId: 't1' }
+		]);
+	});
+
+	it('retries once with an entropy slug on a slug-only collision', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([FILE_ROW]));
+		dbMock.select.mockReturnValueOnce(selectChain([])); // no existing photo
+		dbMock.select.mockReturnValueOnce(selectChain([])); // slug check
+		dbMock.insert.mockReturnValueOnce(
+			insertChain(Object.assign(new Error('duplicate key'), { code: '23505' }))
+		);
+		dbMock.select.mockReturnValueOnce(selectChain([])); // no winner for the file
+		dbMock.insert.mockReturnValueOnce(insertChain([{ id: 'p3', slug: 'sunset-北京-ab12' }]));
+
+		const result = await createPhotoFromFile('f1', {}, { storage: storageMock });
+
+		expect(result).toMatchObject({ kind: 'ok', id: 'p3' });
+		expect(dbMock.insert).toHaveBeenCalledTimes(2);
+		const retry = dbMock.insert.mock.results[1].value.values.mock.calls[0][0] as {
+			slug: string;
+		};
+		expect(retry.slug.startsWith('sunset-北京-')).toBe(true);
+	});
+
+	it('maps a vanished file (23503) to not-found', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([FILE_ROW]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([])); // slug check
+		dbMock.insert.mockReturnValueOnce(
+			insertChain(Object.assign(new Error('fk violation'), { code: '23503' }))
+		);
+
+		await expect(createPhotoFromFile('f1', {}, { storage: storageMock })).resolves.toEqual({
+			kind: 'not-found'
+		});
+	});
+
 	it('suffixes a colliding slug', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([FILE_ROW]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
@@ -302,7 +351,7 @@ describe('updatePhoto', () => {
 	});
 
 	it('rejects an empty normalized slug', async () => {
-		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'p1', slug: 'x' }]));
+		// Slug validation happens before the transaction — no select consumed.
 		expect(await updatePhoto('p1', { slug: '!!!' })).toEqual({ kind: 'slug-invalid' });
 	});
 
@@ -335,19 +384,22 @@ describe('removePhoto', () => {
 
 	it('removes the photo row and keeps the file by default', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'p1', fileId: 'f1' }]));
-		dbMock.delete.mockReturnValueOnce(deleteChain([{ id: 'p1' }]));
+		dbMock.delete.mockReturnValueOnce(deleteChain([])); // slug trackers
+		dbMock.delete.mockReturnValueOnce(deleteChain([{ id: 'p1' }])); // photo row
 
 		expect(await removePhoto('p1')).toEqual({
 			kind: 'ok',
 			fileDeleted: false,
 			fileBlocked: false
 		});
+		expect(dbMock.delete.mock.calls[0][0]).toBe(slugTrackers);
 		expect(deleteFileMock).not.toHaveBeenCalled();
 	});
 
 	it('re-runs the file guard when removeFile is asked for', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'p1', fileId: 'f1' }]));
-		dbMock.delete.mockReturnValueOnce(deleteChain([{ id: 'p1' }]));
+		dbMock.delete.mockReturnValueOnce(deleteChain([])); // slug trackers
+		dbMock.delete.mockReturnValueOnce(deleteChain([{ id: 'p1' }])); // photo row
 		deleteFileMock.mockResolvedValueOnce({ kind: 'referenced', refCount: 2, isInGallery: false });
 
 		expect(await removePhoto('p1', { removeFile: true })).toEqual({

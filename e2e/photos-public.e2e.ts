@@ -8,11 +8,12 @@ import { psql } from './support';
  * by camera, the viewer ships the EXIF floater with neighbour navigation
  * (link + ArrowLeft/ArrowRight), a retired slug 301s exactly once through
  * slug_trackers, hidden slugs 404, and "load more" extends the stateless
- * cursor chain. Fixtures share the `e2e-photo` marker and are cleaned
- * around every test; counts are checked against the live DB so the suite
- * stays truthful next to other data. Swipe gestures are not driven here
- * (pointer emulation is flaky under load) - the gesture wiring is pinned by
- * the component contract, keyboard equivalents are covered below.
+ * cursor chain. Fixtures share the `e2e-photo` marker, use YEAR-2030
+ * timestamps (so "newest" assumptions stay true next to arbitrary live
+ * data), and are cleaned around every test. Count assertions compare
+ * against live totals with page-size formulas, never a hardcoded grid size.
+ * Swipe gestures are NOT driven or covered anywhere (pointer emulation is
+ * flaky under load); the keyboard equivalents below are the covered surface.
  */
 
 const FIX = 'e2e-photo';
@@ -37,9 +38,9 @@ function seedCore(): void {
 	);
 	psql(
 		`insert into photos (file_id, slug, title, description, taken_at, camera_make, camera_model, lens_model, f_number, focal_length_mm, exposure_time_s, iso, is_visible) values
-		 ('${FILE_A}', '${FIX}-alpha', '{"en":"E2E Alpha","zh-cn":"E2E 甲"}', null, '2026-01-03T08:00:00+08', 'FUJIFILM', '${CAMERA}', 'E2E Lens', 2.8, 35, 0.008, 400, true),
-		 ('${FILE_B}', '${FIX}-beta', null, '{"zh-cn":"乙的照片"}', '2026-01-02T08:00:00+08', null, null, null, null, null, null, null, true),
-		 ('${FILE_G}', '${FIX}-gamma', '{"en":"${FIX}-gamma-marker"}', null, '2026-01-01T08:00:00+08', null, null, null, null, null, null, null, false)`
+		 ('${FILE_A}', '${FIX}-alpha', '{"en":"E2E Alpha","zh-cn":"E2E 甲"}', null, '2030-01-03T08:00:00+08', 'FUJIFILM', '${CAMERA}', 'E2E Lens', 2.8, 35, 0.008, 400, true),
+		 ('${FILE_B}', '${FIX}-beta', null, '{"zh-cn":"乙的照片"}', '2030-01-02T08:00:00+08', null, null, null, null, null, null, null, true),
+		 ('${FILE_G}', '${FIX}-gamma', '{"en":"${FIX}-gamma-marker"}', null, '2030-01-01T08:00:00+08', null, null, null, null, null, null, null, false)`
 	);
 }
 
@@ -87,8 +88,9 @@ test.describe('photos public gallery', () => {
 		const grid = page.locator('.photos-masonry');
 		await expect(grid).toBeVisible();
 
-		// Every visible row renders; the count matches the live database.
-		await expect(grid.locator('a')).toHaveCount(visibleCount(), { timeout: 10_000 });
+		// Page one holds min(24, total): assert the formula, not a raw count.
+		const total = visibleCount();
+		await expect(grid.locator('a')).toHaveCount(Math.min(24, total), { timeout: 10_000 });
 
 		// Hidden rows never surface (title marker is unique to the row).
 		await expect(page.getByText(`${FIX}-gamma-marker`)).toHaveCount(0);
@@ -99,14 +101,16 @@ test.describe('photos public gallery', () => {
 		await expect(beta).toBeVisible();
 
 		// Keyset order: alpha (2026-01-03) precedes beta (2026-01-02).
-		const order = await grid.locator('a').evaluateAll(
-			(anchors, [a, b]) =>
-				[
-					anchors.findIndex((el) => (el as HTMLAnchorElement).href.includes(a as string)),
-					anchors.findIndex((el) => (el as HTMLAnchorElement).href.includes(b as string))
-				] as [number, number],
-			[`${FIX}-alpha`, `${FIX}-beta`]
-		);
+		const order = await grid
+			.locator('a')
+			.evaluateAll(
+				(anchors, [a, b]) =>
+					[
+						anchors.findIndex((el) => (el as HTMLAnchorElement).href.includes(a as string)),
+						anchors.findIndex((el) => (el as HTMLAnchorElement).href.includes(b as string))
+					] as [number, number],
+				[`${FIX}-alpha`, `${FIX}-beta`]
+			);
 		expect(order[0]).toBeGreaterThanOrEqual(0);
 		expect(order[1]).toBeGreaterThan(order[0]);
 
@@ -169,7 +173,7 @@ test.describe('photos public gallery', () => {
 		expect(hidden?.status()).toBe(404);
 	});
 
-	test('load more extends the cursor chain to the full feed', async ({ page }) => {
+	test('load more extends the cursor chain to the full feed (dynamic bounds)', async ({ page }) => {
 		seedBulk(25);
 		const total = visibleCount();
 		expect(total).toBeGreaterThan(24);
@@ -183,7 +187,12 @@ test.describe('photos public gallery', () => {
 		await expect(more).toBeVisible();
 		await more.click();
 
-		await expect(grid.locator('a')).toHaveCount(total, { timeout: 15_000 });
-		await expect(page.getByRole('link', { name: '加载更多' })).toHaveCount(0);
+		// Two pages = min(48, total); the link survives only past 48.
+		await expect(grid.locator('a')).toHaveCount(Math.min(48, total), { timeout: 15_000 });
+		if (total <= 48) {
+			await expect(page.getByRole('link', { name: '加载更多' })).toHaveCount(0);
+		} else {
+			await expect(page.getByRole('link', { name: '加载更多' })).toBeVisible();
+		}
 	});
 });

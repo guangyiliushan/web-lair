@@ -21,7 +21,13 @@ const dbMock = vi.hoisted(() => {
 	);
 	return mock;
 });
-const updateChain = { set: vi.fn(() => ({ where: vi.fn(async () => {}) })) };
+const updateChain = {
+	// The dedupe touch now CONFIRMS the row (review round 1): `.returning`
+	// resolves the touched id, or an empty list when a purge won the race.
+	set: vi.fn(() => ({
+		where: vi.fn(() => ({ returning: vi.fn(async () => [{ id: 'file-1' }]) }))
+	}))
+};
 const storageMock = vi.hoisted(() => ({
 	put: vi.fn<
 		(key: string, data: Uint8Array, options?: { contentType?: string }) => Promise<{ etag: string }>
@@ -412,7 +418,9 @@ describe('uploadFiles', () => {
 describe('deleteFile', () => {
 	it('returns not-found for unknown ids', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([]));
-		expect(await deleteFile('missing', { storage: storageMock })).toEqual({ kind: 'not-found' });
+		expect(
+			await deleteFile('missing', { skipMentionScan: true }, { storage: storageMock })
+		).toEqual({ kind: 'not-found' });
 		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
 	});
 
@@ -420,11 +428,13 @@ describe('deleteFile', () => {
 		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'file-1', objectKey: BASE_KEY }]));
 		dbMock.$count.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
 
-		expect(await deleteFile('file-1', { storage: storageMock })).toEqual({
-			kind: 'referenced',
-			refCount: 1,
-			isInGallery: false
-		});
+		expect(await deleteFile('file-1', { skipMentionScan: true }, { storage: storageMock })).toEqual(
+			{
+				kind: 'referenced',
+				refCount: 1,
+				isInGallery: false
+			}
+		);
 		expect(storageMock.delete).not.toHaveBeenCalled();
 		// Guard queries must hit the right tables (refs vs photos).
 		expect(dbMock.$count.mock.calls[0][0]).toBe(fileReferences);
@@ -436,11 +446,13 @@ describe('deleteFile', () => {
 
 		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'file-1', objectKey: BASE_KEY }]));
 		dbMock.$count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
-		expect(await deleteFile('file-1', { storage: storageMock })).toEqual({
-			kind: 'referenced',
-			refCount: 0,
-			isInGallery: true
-		});
+		expect(await deleteFile('file-1', { skipMentionScan: true }, { storage: storageMock })).toEqual(
+			{
+				kind: 'referenced',
+				refCount: 0,
+				isInGallery: true
+			}
+		);
 	});
 
 	it('locks the registry row (FOR UPDATE) before re-checking, then deletes objects first (T15 race fix)', async () => {
@@ -448,10 +460,12 @@ describe('deleteFile', () => {
 		dbMock.$count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
 		dbMock.delete.mockReturnValueOnce(deleteChain());
 
-		expect(await deleteFile('file-1', { storage: storageMock })).toEqual({
-			kind: 'ok',
-			objectKey: BASE_KEY
-		});
+		expect(await deleteFile('file-1', { skipMentionScan: true }, { storage: storageMock })).toEqual(
+			{
+				kind: 'ok',
+				objectKey: BASE_KEY
+			}
+		);
 		expect(storageMock.delete.mock.calls.map((call) => call[0])).toEqual([
 			BASE_KEY,
 			`${BASE_KEY}@thumb`,
@@ -480,6 +494,40 @@ describe('deleteFile', () => {
 		const lastObjectDelete = storageMock.delete.mock.invocationCallOrder.at(-1) ?? -1;
 		expect(lastObjectDelete).toBeGreaterThan(0);
 		expect(lastObjectDelete).toBeLessThan(dbMock.delete.mock.invocationCallOrder[0]);
+	});
+
+	it('blocks deletion while stored content still mentions the key (transition guard)', async () => {
+		// The shared mention scan runs first (posts / drafts / notes; hit in
+		// a post body), then the guard re-reads the row before deciding.
+		dbMock.select.mockReturnValueOnce(
+			selectChain([{ id: 'p-1', content: `inline /i/${BASE_KEY} here` }])
+		);
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ objectKey: BASE_KEY }]));
+
+		expect(await deleteFile('file-1', {}, { storage: storageMock })).toEqual({
+			kind: 'mentioned'
+		});
+		expect(dbMock.transaction).not.toHaveBeenCalled();
+		expect(storageMock.delete).not.toHaveBeenCalled();
+	});
+
+	it('skips (reused) when the anchor was refreshed after the purge snapshot', async () => {
+		const future = new Date(Date.now() + 60_000);
+		dbMock.select.mockReturnValueOnce(
+			selectChain([{ id: 'file-1', objectKey: BASE_KEY, updatedAt: future }])
+		);
+
+		expect(
+			await deleteFile(
+				'file-1',
+				{ requireUnusedSince: new Date(Date.now() - 60_000), skipMentionScan: true },
+				{ storage: storageMock }
+			)
+		).toEqual({ kind: 'reused' });
+		expect(storageMock.delete).not.toHaveBeenCalled();
+		expect(dbMock.$count).not.toHaveBeenCalled();
 	});
 });
 

@@ -103,4 +103,8 @@ describe('toJsonSafe — PostgreSQL jsonb boundaries', () => {
 	it('keeps ordinary control characters intact', () => {
 		expect(toJsonSafe({ tab: 'a\tb' })).toEqual({ tab: 'a\tb' });
 	});
+
+	it('strips NUL from object KEYS as well (jsonb rejects it there too)', () => {
+		expect(toJsonSafe({ 'bad\u0000key': 'v' })).toEqual({ badkey: 'v' });
+	});
 });

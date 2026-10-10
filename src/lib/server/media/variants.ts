@@ -2,6 +2,14 @@ import sharp, { type SharpOptions } from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
 import { decodeHeic, isHeic } from './heic';
 
+/**
+ * Decode bound (review round 1): sharp's default limit (~268MP ≈ 1GB RGBA)
+ * let a 25MB upload expand unboundedly inside the pipeline; 100MP covers
+ * every real camera (a 100MP Fuji GFX frame is 11648×8736) with headroom
+ * while keeping the worst-case decode allocation bounded.
+ */
+const MAX_DECODE_PIXELS = 100_000_000;
+
 /** Long-edge boxes for the derived variants (ledger §21 / plan §4.3). */
 const THUMB_BOX = 480;
 const PREVIEW_BOX = 2560;
@@ -59,12 +67,18 @@ export async function readImageSize(
 export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
 	const heic = isHeic(input);
 	const decoded = heic ? await decodeHeic(input) : null;
+	// The WASM decoder allocates the full RGBA frame before sharp sees it —
+	// bound it here too (raw pixels never hit `limitInputPixels`).
+	if (decoded && decoded.width * decoded.height > MAX_DECODE_PIXELS) {
+		throw new Error('media: image exceeds the decode pixel budget');
+	}
 	const rawOptions: SharpOptions | undefined = decoded
 		? { raw: { width: decoded.width, height: decoded.height, channels: 4 } }
 		: undefined;
 	const source = decoded ? Buffer.from(decoded.data) : Buffer.from(input);
 
-	const meta = await sharp(source, rawOptions).metadata();
+	const limits = { limitInputPixels: MAX_DECODE_PIXELS };
+	const meta = await sharp(source, { ...(rawOptions ?? {}), ...limits }).metadata();
 	// heic-decode hands back raw pixels: any container orientation tag has
 	// already been resolved, so there is nothing left to swap for.
 	const orientation = decoded ? 1 : (meta.orientation ?? 1);
@@ -75,7 +89,7 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
 		throw new Error('media: unable to read image dimensions');
 	}
 
-	const base = sharp(source, rawOptions).rotate();
+	const base = sharp(source, { ...(rawOptions ?? {}), ...limits }).rotate();
 	const thumb = await base
 		.clone()
 		.resize({ width: THUMB_BOX, height: THUMB_BOX, fit: 'inside', withoutEnlargement: true })

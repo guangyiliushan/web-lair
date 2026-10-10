@@ -57,7 +57,13 @@ function parseArgs(argv: string[]): Options {
 		if (arg === '--assets-only') {
 			assetsOnly = true;
 		} else if (arg === '--concurrency') {
-			concurrency = Number(argv[index + 1]);
+			const value = argv[index + 1];
+			// A flag missing its value used to swallow the NEXT flag as the
+			// number (NaN → silent default) — reject loudly instead.
+			if (value === undefined || value.startsWith('--')) {
+				throw new Error('--concurrency requires a value (1-4)');
+			}
+			concurrency = Number(value);
 			index += 1;
 		} else if (arg.startsWith('--')) {
 			throw new Error(`Unknown flag: ${arg}`);

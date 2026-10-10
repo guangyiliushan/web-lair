@@ -116,6 +116,9 @@ export const actions: Actions = {
 
 		const result = await deleteFile(id);
 		if (result.kind === 'not-found') return fail(404, { message: '文件不存在' });
+		if (result.kind === 'mentioned') {
+			return fail(409, { message: '正文仍提及该文件（引用回填落地前的过渡守卫），不能删除' });
+		}
 		if (result.kind === 'referenced') {
 			const parts: string[] = [];
 			if (result.refCount > 0) parts.push(`内容引用 ${result.refCount} 处`);

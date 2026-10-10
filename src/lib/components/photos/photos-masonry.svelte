@@ -20,7 +20,13 @@
 	const locale = $derived(getLocale());
 </script>
 
-<div class="photos-masonry" aria-label={ariaLabel || undefined}>
+<!-- role=group only when named: ARIA 1.2 forbids naming a role=generic div
+	 (review round 1) — an unnamed wrapper keeps no role at all. -->
+<div
+	class="photos-masonry"
+	role={ariaLabel ? 'group' : undefined}
+	aria-label={ariaLabel || undefined}
+>
 	<RegularMasonryGrid frameWidth={240} gap={12} {disabled}>
 		{#each items as tile (tile.id)}
 			{@const placeholder = thumbhashDataUrl(tile.thumbhash)}
@@ -55,6 +61,8 @@
 	}
 	.photos-masonry :global(a:focus-visible) {
 		outline: 2px solid var(--accent, currentColor);
-		outline-offset: 2px;
+		/* Inset: the tile anchor fills a Frame with `overflow-hidden`; an
+		   outside offset would be clipped and the ring invisible (review). */
+		outline-offset: -2px;
 	}
 </style>

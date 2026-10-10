@@ -8,12 +8,15 @@ import type { PageServerLoad } from './$types';
  */
 export const load: PageServerLoad = async () => {
 	const rows = await listPublicPhotos({ hasLocation: true }, null, 200);
+	// Plan §5.1: public coordinates render at two decimals (~1km blur); the
+	// admin face keeps full precision (review round 1: exact values used to
+	// reach the public client here).
 	const photos = rows
 		.map((row) => ({
 			slug: row.slug,
 			title: row.title,
-			latitude: Number(row.latitude),
-			longitude: Number(row.longitude)
+			latitude: Number(Number(row.latitude).toFixed(2)),
+			longitude: Number(Number(row.longitude).toFixed(2))
 		}))
 		.filter((row) => Number.isFinite(row.latitude) && Number.isFinite(row.longitude));
 	return { photos };
