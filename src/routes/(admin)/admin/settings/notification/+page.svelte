@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { page } from '$app/state';
+	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Select from '$lib/components/ui/select';
@@ -8,6 +10,26 @@
 
 	let { data }: PageProps = $props();
 	let s = $derived(data.settings);
+
+	// Webhooks 区块（J-3）：重投动作结果随 page.form 回显。
+	const form = $derived(
+		page.form as { status?: number; message?: string; retried?: boolean } | null | undefined
+	);
+	const retryFlash = $derived.by(() => {
+		if (!form) return null;
+		if (form.retried)
+			return { kind: 'ok' as const, text: '已重投：新排队行已写入，≤1 tick 内投递' };
+		if (typeof form.status === 'number' && form.status >= 400) {
+			return { kind: 'error' as const, text: String(form.message ?? '操作失败') };
+		}
+		return null;
+	});
+
+	function deliveryVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+		if (status === 'failed') return 'destructive';
+		if (status === 'succeeded') return 'default';
+		return 'outline';
+	}
 </script>
 
 <svelte:head>
@@ -257,6 +279,80 @@
 								class:translate-x-4={s.notification.barkRateLimitNotify}
 							></span>
 						</button>
+					</div>
+				</div>
+			</section>
+
+			<!-- Webhooks（J-3：只读端点列表 + 投递记录 + 重投） -->
+			<section>
+				<h3 class="mb-4 text-sm font-semibold">Webhooks</h3>
+				<div class="space-y-4 rounded-lg border p-4">
+					{#if retryFlash}
+						<p
+							role="status"
+							class="text-sm {retryFlash.kind === 'error' ? 'text-destructive' : 'text-foreground'}"
+						>
+							{retryFlash.text}
+						</p>
+					{/if}
+
+					<div class="space-y-2">
+						<p class="text-xs font-medium text-muted-foreground">端点</p>
+						{#if data.webhookEndpoints.length === 0}
+							<p class="text-xs text-muted-foreground">尚未配置端点（端点 CRUD 属后续小批）。</p>
+						{:else}
+							<ul class="space-y-1">
+								{#each data.webhookEndpoints as endpoint (endpoint.id)}
+									<li class="flex flex-wrap items-center gap-2 text-xs">
+										<span class="font-medium">{endpoint.name}</span>
+										<code class="text-muted-foreground">{endpoint.payloadUrl}</code>
+										<Badge variant={endpoint.isEnabled ? 'default' : 'outline'}>
+											{endpoint.isEnabled ? '启用' : '停用'}
+										</Badge>
+										<span class="text-muted-foreground">{endpoint.events.join(' · ')}</span>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</div>
+
+					<div class="space-y-2">
+						<p class="text-xs font-medium text-muted-foreground">最近投递（50 条）</p>
+						{#if data.webhookDeliveries.length === 0}
+							<p class="text-xs text-muted-foreground">暂无投递记录。</p>
+						{:else}
+							<div class="overflow-hidden rounded-md border">
+								{#each data.webhookDeliveries as delivery (delivery.id)}
+									<div
+										class="flex flex-wrap items-center gap-2 border-b px-2 py-1.5 text-xs last:border-b-0"
+										data-slot="delivery-row"
+									>
+										<span class="w-40 shrink-0 text-muted-foreground">{delivery.createdLabel}</span>
+										<span class="font-mono">{delivery.event}</span>
+										<span class="min-w-0 flex-1 truncate text-muted-foreground">
+											{delivery.webhookName}
+											{#if delivery.error}· {delivery.error}{/if}
+										</span>
+										<Badge variant={deliveryVariant(delivery.status)} class="w-fit">
+											{delivery.status === 'failed'
+												? '失败'
+												: delivery.status === 'succeeded'
+													? '成功'
+													: '排队'}
+										</Badge>
+										{#if delivery.status === 'failed'}
+											<span class="text-muted-foreground">
+												{delivery.responseCode ? `HTTP ${delivery.responseCode}` : '无响应'}
+											</span>
+											<form method="POST" action="?/retry">
+												<input type="hidden" name="id" value={delivery.id} />
+												<Button type="submit" variant="outline" size="sm">重投</Button>
+											</form>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				</div>
 			</section>
