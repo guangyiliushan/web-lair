@@ -136,8 +136,6 @@
 
 	// Dialog error text: an action failure the user must see inside the
 	// overlay (a page banner hides behind it - DeleteConfirm contract).
-	// Dialog error text: an action failure the user must see inside the
-	// overlay (a page banner hides behind it - DeleteConfirm contract).
 	// `form.status` is never set by kit, so the payload keys are the signal
 	// (J-3 review R4-1); the old generic fallback went stale across actions
 	// (review P3-R2-4) - no message, no dialog text.
