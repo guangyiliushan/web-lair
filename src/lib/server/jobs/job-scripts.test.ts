@@ -370,6 +370,11 @@ describe('revertToBuiltin', () => {
 		const dataDir = await tempDataDir();
 		const { db, auditRows } = makeDb();
 		await jobFile(dataDir, 'system-resources.ts', VALID_CODE);
+		await jobFile(
+			dataDir,
+			'.meta/system-resources.json',
+			JSON.stringify({ builtin_hash: 'oldhash', forked_at: '2026-01-01' })
+		);
 		const result = await revertToBuiltin({
 			dataDir,
 			name: 'system.resources',
@@ -378,6 +383,7 @@ describe('revertToBuiltin', () => {
 		});
 		expect(result).toEqual({ kind: 'reverted' });
 		expect(await exists(join(dataDir, 'jobs', 'system-resources.ts'))).toBe(false);
+		expect(await exists(join(dataDir, 'jobs', '.meta', 'system-resources.json'))).toBe(false);
 		expect(auditRows[0]).toMatchObject({
 			event: 'job.revert',
 			payload: { name: 'system.resources' }
@@ -405,6 +411,31 @@ describe('revertToBuiltin', () => {
 			await revertToBuiltin({ dataDir, name: 'system.resources', actorId: 'admin-1', db })
 		).toEqual({ kind: 'reverted' });
 		expect(await exists(join(dataDir, 'jobs', '.meta', 'system-resources.json'))).toBe(false);
+		expect(auditRows[0]).toMatchObject({ event: 'job.revert' });
+	});
+
+	it('cleans a malformed orphan sidecar on retry (round 3, P3-7)', async () => {
+		const dataDir = await tempDataDir();
+		const { db } = makeDb();
+		await jobFile(dataDir, '.meta/system-resources.json', 'not json');
+		expect(await revertToBuiltin({ dataDir, name: 'system.resources', actorId: null, db })).toEqual(
+			{
+				kind: 'reverted'
+			}
+		);
+		expect(await exists(join(dataDir, 'jobs', '.meta', 'system-resources.json'))).toBe(false);
+	});
+
+	it('tolerates a sidecar rm failure on the revert path (round 3, M10b)', async () => {
+		const dataDir = await tempDataDir();
+		const { db, auditRows } = makeDb();
+		await jobFile(dataDir, 'system-resources.ts', VALID_CODE);
+		// A directory on the sidecar path: rm(force) still throws (force only
+		// swallows ENOENT), pinning the catch that keeps the revert converging.
+		await mkdir(join(dataDir, 'jobs', '.meta', 'system-resources.json'), { recursive: true });
+		const result = await revertToBuiltin({ dataDir, name: 'system.resources', actorId: null, db });
+		expect(result).toEqual({ kind: 'reverted' });
+		expect(await exists(join(dataDir, 'jobs', 'system-resources.ts'))).toBe(false);
 		expect(auditRows[0]).toMatchObject({ event: 'job.revert' });
 	});
 });
@@ -481,7 +512,7 @@ describe('deleteUserJob', () => {
 
 	it('removes the sidecar with the file and converges from an orphan sidecar (D7/DB-01)', async () => {
 		const dataDir = await tempDataDir();
-		const { db } = makeDb({ scheduleRows: [{ id: 's1' }] });
+		const { db, auditRows } = makeDb({ scheduleRows: [{ id: 's1' }] });
 		await jobFile(dataDir, 'my-task.ts', VALID_CODE);
 		await jobFile(dataDir, '.meta/my-task.json', JSON.stringify({ timeout_ms: 45_000 }));
 		const first = await deleteUserJob({ dataDir, name: 'my-task', actorId: null, db });
@@ -495,6 +526,19 @@ describe('deleteUserJob', () => {
 			kind: 'not-user-job'
 		});
 		expect(await exists(join(dataDir, 'jobs', '.meta', 'ghost.json'))).toBe(false);
+		expect(auditRows).toHaveLength(1); // the ghost cleanup writes no audit row
+	});
+
+	it('tolerates a sidecar rm failure after the commit (round 3, M10)', async () => {
+		const dataDir = await tempDataDir();
+		const { db } = makeDb();
+		await jobFile(dataDir, 'my-task.ts', VALID_CODE);
+		// Directory on the sidecar path -> rm(force) throws; the committed
+		// delete must still report `deleted` (pins the catch).
+		await mkdir(join(dataDir, 'jobs', '.meta', 'my-task.json'), { recursive: true });
+		const result = await deleteUserJob({ dataDir, name: 'my-task', actorId: null, db });
+		expect(result).toMatchObject({ kind: 'deleted' });
+		expect(await exists(join(dataDir, 'jobs', 'my-task.ts'))).toBe(false);
 	});
 });
 

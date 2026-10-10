@@ -81,10 +81,11 @@
 					keymap.of([
 						{
 							// readOnly facets do not gate commands: without this arm a
-							// read-only view would still fire onSave (J-2 review round
-							// 2, dimension 7).
+							// read-only view would still fire onSave. preventDefault
+							// stays true so the browser's own save dialog never opens
+							// while the editor has focus (J-2 review round 2/3).
 							key: 'Mod-s',
-							preventDefault: !readonly,
+							preventDefault: true,
 							run: () => {
 								if (readonly) return false;
 								onSave?.();

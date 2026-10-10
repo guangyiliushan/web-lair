@@ -66,5 +66,13 @@ describe('job editor (CodeMirror thin wrapper)', () => {
 		await userEvent.click(content);
 		await userEvent.keyboard('ZZZ');
 		expect(document.querySelector('.cm-editor')?.textContent ?? '').not.toContain('ZZZ');
+		// Mod-s must not reach onSave in read-only mode (round 3, P3-4).
+		await userEvent.keyboard('{Control>}s{/Control}');
+		await expect
+			.poll(
+				() => Number(document.querySelector('[data-testid="save-count"]')?.textContent ?? '0'),
+				{ timeout: 15_000 }
+			)
+			.toBe(0);
 	});
 });

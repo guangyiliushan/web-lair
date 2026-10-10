@@ -229,8 +229,12 @@ function isResidueReference(ts: TsModule, node: import('typescript').Identifier)
 	const parent = node.parent;
 	if (!parent) return false;
 	// The call-expression arm owns `require(...)`; reporting its callee here
-	// again double-reported the same site (J-2 review round 2, D4).
-	if (ts.isCallExpression(parent) && parent.expression === node) return false;
+	// again double-reported the same site (J-2 review round 2, D4). Only
+	// `require` is skipped - `exports('x')` in callee position is a real
+	// runtime reference and stays flagged (round 3, P3-1).
+	if (ts.isCallExpression(parent) && parent.expression === node && node.text === 'require') {
+		return false;
+	}
 	if (ts.isPropertyAccessExpression(parent) && parent.name === node) {
 		// `globalThis.require` is the CJS global itself, not a property name
 		// (the review's known miss); other `x.require` shapes stay skipped.
@@ -241,6 +245,8 @@ function isResidueReference(ts: TsModule, node: import('typescript').Identifier)
 	if (ts.isPropertyDeclaration(parent) && parent.name === node) return false;
 	if (ts.isMethodSignature(parent) && parent.name === node) return false;
 	if (ts.isMethodDeclaration(parent) && parent.name === node) return false;
+	if (ts.isGetAccessorDeclaration(parent) && parent.name === node) return false;
+	if (ts.isSetAccessorDeclaration(parent) && parent.name === node) return false;
 	if (ts.isBindingElement(parent) && parent.propertyName === node) return false;
 	if (ts.isLabeledStatement(parent) && parent.label === node) return false;
 	if ((ts.isBreakStatement(parent) || ts.isContinueStatement(parent)) && parent.label === node)

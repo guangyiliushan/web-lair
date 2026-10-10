@@ -198,13 +198,14 @@ describe('dynamic imports and CJS residue (J-2 review F3/F6)', { timeout: 60_000
 		const clean = await runSaveGate({
 			name: 'residue-names',
 			code: [
-				'const src = { module: 1, exports: 2 };',
+				'const src = { module: 1, exports: 2, require: 3 };',
 				'const { module: m, exports: e } = src;',
 				'type Cfg = { require?: boolean };',
 				'type T = typeof require;',
 				'class Box { module = 1; }',
+				'class GetterBox { get require() { return 1; } set exports(v: number) {} }',
 				'require: for (let i = 0; i < 1; i++) { break require; }',
-				"export default { run() { return [m, e, new Box(), 'Cfg' as unknown as Cfg, undefined as unknown as T]; } };",
+				"export default { run() { return [m, e, new Box(), new GetterBox(), src.require, 'Cfg' as unknown as Cfg, undefined as unknown as T]; } };",
 				''
 			].join('\n')
 		});
@@ -228,6 +229,18 @@ describe('dynamic imports and CJS residue (J-2 review F3/F6)', { timeout: 60_000
 		expect(
 			globalRequire.errors.some(
 				(error) => error.source === 'runtime' && error.message.includes('require')
+			)
+		).toBe(true);
+
+		// Callee position stays flagged for the other residue names (round 3,
+		// P3-1): only `require` is owned by the call arm.
+		const callShapes = await runSaveGate({
+			name: 'residue-calls2',
+			code: "exports('x');\nexport default { run() {} };\n"
+		});
+		expect(
+			callShapes.errors.some(
+				(error) => error.source === 'runtime' && error.message.includes('exports')
 			)
 		).toBe(true);
 	});

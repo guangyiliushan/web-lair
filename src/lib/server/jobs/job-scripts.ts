@@ -291,18 +291,28 @@ async function revertToBuiltinLocked(input: {
 	if ((await fileInfo(target)) === null) {
 		// A crashed earlier revert can leave the file gone with its sidecar
 		// orphaned; finish that cleanup so the retry converges instead of
-		// stranding the sidecar forever (J-2 review round 2, F-1). A sidecar
-		// only ever exists for a fork, so `reverted` is truthful here.
-		const orphan = await readUserJobMeta(dir, name);
-		if (orphan === null) return { kind: 'not-forked' };
-		await rm(sidecarPath(dir, name), { force: true }).catch(() => {});
+		// stranding the sidecar forever (J-2 review round 2, F-1). Probe by
+		// stat, not by parse: a malformed sidecar is still an orphan that
+		// must be cleaned (round 3, P3-7). A sidecar only ever exists for a
+		// fork, so `reverted` is truthful here.
+		const sidecar = sidecarPath(dir, name);
+		const orphaned = await stat(sidecar).then(
+			() => true,
+			() => false
+		);
+		if (!orphaned) return { kind: 'not-forked' };
+		await rm(sidecar, { force: true }).catch((error: unknown) => {
+			console.error(`[jobs] revertToBuiltin: sidecar cleanup failed (${name}): ${String(error)}`);
+		});
 		await recordActivity(db, { event: 'job.revert', actorId, payload: { name } });
 		return { kind: 'reverted' };
 	}
 	await rm(target, { force: true });
 	// The sidecar is metadata: an EPERM here must not fail the revert itself -
 	// the next attempt cleans the orphan through the branch above (DB-01/F-1).
-	await rm(sidecarPath(dir, name), { force: true }).catch(() => {});
+	await rm(sidecarPath(dir, name), { force: true }).catch((error: unknown) => {
+		console.error(`[jobs] revertToBuiltin: sidecar cleanup failed (${name}): ${String(error)}`);
+	});
 	await recordActivity(db, { event: 'job.revert', actorId, payload: { name } });
 	return { kind: 'reverted' };
 }
@@ -345,8 +355,13 @@ async function deleteUserJobLocked(input: {
 	if ((await fileInfo(target)) === null) {
 		// A crash between the two rm calls of an earlier attempt leaves a
 		// sidecar with no file - clean it so the retry converges instead of
-		// reporting not-user-job forever (J-2 review round 2, D7/DB-01).
-		await rm(sidecar, { force: true }).catch(() => {});
+		// reporting not-user-job forever (J-2 review round 2, D7/DB-01;
+		// logging added round 3, P3-6/N3).
+		await rm(sidecar, { force: true }).catch((error: unknown) => {
+			console.error(
+				`[jobs] deleteUserJob: orphan sidecar cleanup failed (${name}): ${String(error)}`
+			);
+		});
 		return { kind: 'not-user-job' };
 	}
 	// DB side first, files after (J-2 review R06): with the file removed

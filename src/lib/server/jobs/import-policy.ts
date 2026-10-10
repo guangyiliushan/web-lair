@@ -9,8 +9,9 @@
  *
  * Why `!#jobs-sdk` is exact (J-2 review round 2, D3): a glob without
  * wildcards matches that string alone, so lookalikes (`evil#jobs-sdk`,
- * `#jobs-sdk/x`, `#jobs-sdk-x`) stay restricted - the earlier `!*#jobs-sdk*`
- * negation subsumed all of them while the runtime gate kept rejecting them.
+ * `#jobs-sdk-x`, `x#jobs-sdk`) stay restricted - the earlier `!*#jobs-sdk*`
+ * negation admitted those forms (probed) while the runtime gate kept
+ * rejecting them. (`#jobs-sdk/x` was already restricted then and now.)
  *
  * Why the dynamic selectors: `no-restricted-imports` only sees STATIC import
  * statements; `await import('lodash')` slips through it (J-2 review F3). The

@@ -40,6 +40,13 @@ describe('sdkRuntimeSpecifier', () => {
 			const spec = sdkRuntimeSpecifier(`${other}/elsewhere/jobs`, SDK_PATH);
 			expect(spec.startsWith('file:///')).toBe(true);
 			expect(fileURLToPath(spec).endsWith('jobs-sdk.ts')).toBe(true);
+			// Repo-independent fixed pairs (round 3, M14a): both branches pinned
+			// to concrete drives so discrimination does not depend on where the
+			// repository happens to live.
+			const crossDrive = sdkRuntimeSpecifier('D:/x/jobs', 'C:/y/src/lib/server/jobs/jobs-sdk.ts');
+			expect(crossDrive.startsWith('file:///')).toBe(true);
+			const sameDrive = sdkRuntimeSpecifier('C:/x/jobs', 'C:/x/src/lib/server/jobs/jobs-sdk.ts');
+			expect(sameDrive).toBe('../src/lib/server/jobs/jobs-sdk.ts');
 		}
 	);
 
