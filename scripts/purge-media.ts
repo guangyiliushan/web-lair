@@ -34,13 +34,25 @@ for (const candidate of outcome.candidates) {
 }
 if (outcome.scanTruncated) {
 	console.log(
-		'WARNING: the content mention scan hit its row cap — the in-use guard may be partial.'
+		'WARNING: the content mention scan hit its row cap — the in-use guard is partial; execution fails closed (no deletions).'
 	);
 }
 if (outcome.skipped.length > 0) {
-	console.log(`skipped (still mentioned by stored content): ${outcome.skipped.length}`);
-	for (const key of outcome.skipped) {
-		console.log(`    ~ ${key}`);
+	const reasons: Array<[string, string]> = [
+		['mentioned', 'still mentioned by stored content'],
+		['reused', 'used (dedupe anchor refreshed) since the snapshot'],
+		['referenced', 'gained references since the snapshot'],
+		['gone', 'vanished before the delete (concurrent purge)'],
+		['scan-truncated', 'fail-closed: mention scan hit its row cap']
+	];
+	console.log(`skipped: ${outcome.skipped.length}`);
+	for (const [reason, label] of reasons) {
+		const keys = outcome.skipped
+			.filter((entry) => entry.reason === reason)
+			.map((entry) => entry.objectKey);
+		if (keys.length === 0) continue;
+		console.log(`    ~ [${reason}] ${label}: ${keys.length}`);
+		for (const key of keys) console.log(`        ${key}`);
 	}
 }
 if (execute) {

@@ -121,12 +121,22 @@ export class RustFsStorage implements ObjectStoragePort {
 		this.#bodyIdleTimeoutMs = options.bodyIdleTimeoutMs ?? DEFAULT_BODY_IDLE_TIMEOUT_MS;
 	}
 
-	/** URL path for an object: bucket + key, encoded segment-wise. */
+	/**
+	 * URL path for an object: bucket + key, encoded segment-wise. Exact `.` /
+	 * `..` segments are rejected outright (round-2 review): unvetted callers
+	 * must not rely on the encoder to neutralise path dot-segments — this
+	 * check makes "no traversal reaches the wire" an adapter property.
+	 */
 	#objectPath(key: string): string {
 		const encoded = key
 			.split('/')
 			.filter((segment) => segment.length > 0)
-			.map((segment) => uriEncode(segment, true))
+			.map((segment) => {
+				if (segment === '.' || segment === '..') {
+					throw new StorageError(`storage key contains a dot segment: ${key}`, 0, null);
+				}
+				return uriEncode(segment, true);
+			})
 			.join('/');
 		return `/${this.#config.bucket}/${encoded}`;
 	}

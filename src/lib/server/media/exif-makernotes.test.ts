@@ -54,6 +54,64 @@ describe('groupBrandDump', () => {
 		expect(dump).toEqual({ apple: { RunTimeEpoch: '2026-01-01T00:00:00.000Z' } });
 	});
 
+	it('strips U+0000 from values and keys (jsonb cannot carry it)', () => {
+		const dump = groupBrandDump({
+			'FujiFilm:Copyright': 'ACME\u0000',
+			'FujiFilm:Soft\u0000ware': 1
+		});
+		expect(dump).toEqual({ fuji: { Copyright: 'ACME', Software: 1 } });
+	});
+
+	it('counts non-system unqualified keys into a visible _dropped marker', () => {
+		const dump = groupBrandDump({
+			SourceFile: 'x.jpg',
+			errors: ['x'],
+			warnings: [],
+			SomeLooseKey: 1,
+			'FujiFilm:FilmMode': 'X'
+		});
+		expect(dump).toEqual({
+			fuji: { FilmMode: 'X' },
+			_dropped: { unqualifiedKeys: 1 }
+		});
+	});
+
+	it('excludes every non-brand group in the table (table-driven)', () => {
+		const excluded = [
+			'SourceFile',
+			'errors',
+			'warnings',
+			'ExifTool',
+			'System',
+			'File',
+			'IFD0',
+			'IFD1',
+			'ExifIFD',
+			'GPS',
+			'InteropIFD',
+			'Composite',
+			'MWG',
+			'ICC_Profile',
+			'ICC-header',
+			'Photoshop',
+			'JFIF',
+			'PrintIM',
+			'FlashPix',
+			'FotoStation',
+			'QuickTime',
+			'Keys',
+			'Meta',
+			'UserData',
+			'ItemList',
+			'XML'
+		];
+		const tags: Record<string, unknown> = {};
+		for (const group of excluded) tags[`${group}:SampleTag`] = 'x';
+		tags['XMP:Rating'] = 5;
+		tags['XMP-dc:Subject'] = 'x';
+		expect(groupBrandDump(tags)).toEqual({});
+	});
+
 	it('caps oversized dumps with a visible truncation marker', () => {
 		const big: Record<string, unknown> = {};
 		for (let index = 0; index < 40; index += 1) {

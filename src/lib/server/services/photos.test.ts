@@ -437,6 +437,20 @@ describe('removePhoto', () => {
 		expect(deleteFileMock).toHaveBeenCalledTimes(1);
 		expect(deleteFileMock.mock.calls[0][0]).toBe('f1');
 	});
+
+	it('reports a storage-failed file delete instead of throwing (round-2)', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([{ id: 'p1', fileId: 'f1' }]));
+		dbMock.delete.mockReturnValueOnce(deleteChain([])); // slug trackers
+		dbMock.delete.mockReturnValueOnce(deleteChain([{ id: 'p1' }])); // photo row
+		deleteFileMock.mockRejectedValueOnce(new Error('storage down'));
+
+		expect(await removePhoto('p1', { removeFile: true })).toEqual({
+			kind: 'ok',
+			fileDeleted: false,
+			fileBlocked: false,
+			fileDeleteFailed: true
+		});
+	});
 });
 
 describe('listAdminPhotos', () => {

@@ -3,8 +3,10 @@ import type { PageServerLoad } from './$types';
 
 /**
  * Public map (§8): every visible photo carrying coordinates, slimmed to what
- * the markers need. Bounded by the public list cap; a regional extract that
- * matches the spread is published on demand (registered decision).
+ * the markers need. Bounded by the public read cap (PHOTO_PAGE_MAX = 200 —
+ * the old 60 clamp silently truncated the map's request; round-2 review);
+ * a regional extract that matches the spread is published on demand
+ * (registered decision).
  */
 export const load: PageServerLoad = async () => {
 	const rows = await listPublicPhotos({ hasLocation: true }, null, 200);

@@ -53,6 +53,7 @@ const DB_URL: string = DATABASE_URL;
 
 let failures = 0;
 let checks = 0;
+let skipped = 0;
 
 function check(name: string, condition: boolean, detail = ''): void {
 	checks += 1;
@@ -408,6 +409,12 @@ async function main(): Promise<void> {
 	const evidenceDir =
 		process.env.WL_EVIDENCE_DIR ??
 		pathJoin(process.cwd(), '..', 'notes', 'backups', 'storage-st2-evidence-20261009');
+	if (process.env.WL_EVIDENCE_DIR && !existsSync(evidenceDir)) {
+		// An EXPLICIT evidence dir that is missing is an operator error,
+		// not an optional skip (round-2 review) — fail loudly.
+		console.error(`FAIL: WL_EVIDENCE_DIR is set but missing: ${evidenceDir}`);
+		process.exit(1);
+	}
 	const mnProbes: Array<{
 		file: string;
 		brand: string;
@@ -445,6 +452,7 @@ async function main(): Promise<void> {
 	for (const probe of mnProbes) {
 		const samplePath = pathJoin(evidenceDir, probe.file);
 		if (!existsSync(samplePath)) {
+			skipped += 1;
 			console.log(`  - makerNotes[${probe.brand}]: sample ${probe.file} missing — SKIPPED`);
 			continue;
 		}
@@ -652,7 +660,7 @@ async function main(): Promise<void> {
 	const executed = await purgeMedia({ dryRun: false }, deps);
 	check(
 		'purge execution skips keys still mentioned by content',
-		executed.skipped.includes(guardKey)
+		executed.skipped.some((entry) => entry.objectKey === guardKey)
 	);
 	check('mentioned file row survives execution', (await probeRowCount([guardKey])) === 1);
 	check(
@@ -740,7 +748,7 @@ try {
 		(head) => head !== null
 	).length;
 	check('probe objects are gone after cleanup', leftoverObjects === 0, `left=${leftoverObjects}`);
-	console.log(`\nchecks=${checks} failures=${failures}`);
+	console.log(`\nchecks=${checks} skipped=${skipped} failures=${failures}`);
 	await sql.end();
 	process.exit(failures === 0 ? 0 : 1);
 }

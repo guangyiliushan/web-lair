@@ -19,7 +19,8 @@ import { ExifTool } from 'exiftool-vendored';
  * file with an OURS-OWNED safe name — user-controlled names never reach
  * argv (argument-injection face closed by construction; the official
  * ''-''-prefix and newline guidance is satisfied structurally). readArgs
- * are constants, never user strings.
+ * are constants, never user strings. Values are NUL-stripped before they
+ * can reach a jsonb write (round-2 review; PostgreSQL cannot carry U+0000).
  */
 
 export const MAKER_NOTES_SIZE_LIMIT = 256 * 1024;
@@ -73,8 +74,11 @@ function getExifTool(): ExifTool {
 	let instance = holder[GLOBAL_KEY];
 	if (!instance) {
 		// One long-lived instance (docs: instances are expensive; the first
-		// spawn can take seconds on Windows — keep it alive for the process).
-		instance = new ExifTool({ taskTimeoutMillis: 30_000 });
+		// spawn can take seconds on Windows). The underlying child recycles
+		// on the library maxProcAgeMillis (default 5 min) — a wedged worker
+		// cannot live forever; taskTimeoutMillis bounds a single read (a
+		// timeout surfaces as TaskTimeoutError, caught, extraction → null).
+		instance = new ExifTool({ maxProcs: 2, taskTimeoutMillis: 30_000 });
 		holder[GLOBAL_KEY] = instance;
 	}
 	return instance;
@@ -96,12 +100,22 @@ export function tempExtForMime(mimeType: string): string {
 	return EXT_BY_MIME[mimeType] ?? 'bin';
 }
 
+/**
+ * Postgres jsonb cannot carry U+0000 in ANY string (`unsupported Unicode
+ * escape sequence`); real files ship NUL-padded fields (the T13 live
+ * import caught a Fujifilm Copyright). Round-2 review: the maker-note path
+ * had its own sanitizer and missed this strip — that is the fix.
+ */
+function stripNul(value: string): string {
+	return value.includes('\u0000') ? value.replaceAll('\u0000', '') : value;
+}
+
 function sanitizeValue(value: unknown): unknown {
 	if (value === null || value === undefined) return null;
 	if (value instanceof Date) return value.toISOString();
-	if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-		return value;
-	}
+	if (typeof value === 'string') return stripNul(value);
+	if (typeof value === 'number' || typeof value === 'boolean') return value;
+
 	if (Array.isArray(value)) {
 		return value.map(sanitizeValue).filter((entry) => entry !== undefined);
 	}
@@ -155,21 +169,34 @@ function capAndTrim(brands: Record<string, Record<string, unknown>>): Record<str
 /** Pure: group a `-G1` tag map into the storage shape (unit-tested). */
 export function groupBrandDump(tags: Record<string, unknown>): Record<string, unknown> {
 	const brands: Record<string, Record<string, unknown>> = {};
+	let unqualified = 0;
 	for (const [qualifiedKey, rawValue] of Object.entries(tags)) {
 		const colon = qualifiedKey.indexOf(':');
-		if (colon <= 0) continue;
+		if (colon <= 0) {
+			// Wrapper/system keys (SourceFile / errors / warnings) arrive
+			// without a group prefix — exempt everything the exclusion table
+			// already names; any OTHER unqualified key would otherwise
+			// vanish silently (round-2 review) — count it visibly.
+			if (qualifiedKey !== '' && !EXCLUDED_GROUPS.has(qualifiedKey)) {
+				unqualified += 1;
+			}
+			continue;
+		}
 		const group = qualifiedKey.slice(0, colon);
 		if (EXCLUDED_GROUPS.has(group)) continue;
 		if (STANDARD_PREFIXES.some((prefix) => group === prefix || group.startsWith(`${prefix}-`))) {
 			continue;
 		}
-		const tag = qualifiedKey.slice(colon + 1);
+		const tag = stripNul(qualifiedKey.slice(colon + 1));
+		if (tag === '') continue;
 		const brandKey = BRAND_ALIASES[group.toLowerCase()] ?? group.toLowerCase();
 		const safe = sanitizeValue(rawValue);
 		if (safe === undefined) continue;
 		(brands[brandKey] ??= {})[tag] = safe;
 	}
-	return capAndTrim(brands);
+	const grouped = capAndTrim(brands);
+	if (unqualified > 0) grouped._dropped = { unqualifiedKeys: unqualified };
+	return grouped;
 }
 
 /**
@@ -187,6 +214,10 @@ export async function extractMakerNotes(
 		const file = join(dir, `probe-${randomUUID()}.${options.ext}`);
 		await writeFile(file, bytes);
 		const tags = (await getExifTool().read(file, {
+			// `-G1` = family-1 groups (brand namespace); `--b` suppresses
+			// binary tags. `-fast` is deliberately NOT set: it stops at the
+			// first IFD and would skip trailing blocks (FlashPix / late
+			// maker notes) the live probes caught.
 			readArgs: ['-G1', '--b']
 		})) as unknown as Record<string, unknown>;
 		const grouped = groupBrandDump(tags);
@@ -198,7 +229,15 @@ export async function extractMakerNotes(
 		});
 		return null;
 	} finally {
-		if (dir) await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+		if (dir) {
+			await rm(dir, { recursive: true, force: true }).catch((cleanupError: unknown) => {
+				// Never silent: a leaked temp dir is visible in the logs.
+				console.warn('exif-makernotes: temp dir cleanup failed', {
+					dir,
+					error: cleanupError instanceof Error ? cleanupError.name : 'unknown'
+				});
+			});
+		}
 	}
 }
 

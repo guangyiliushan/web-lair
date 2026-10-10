@@ -131,17 +131,32 @@ export const actions: Actions = {
 					enriched.push({ ...result, added: false, galleryError: null });
 					continue;
 				}
-				const created = await createPhotoFromFile(result.file.id);
-				enriched.push({
-					...result,
-					added: created.kind === 'ok' || created.kind === 'already-in-gallery',
-					galleryError:
-						created.kind === 'not-image'
-							? '非图片文件（已入内容资产）'
-							: created.kind === 'source-missing'
-								? '对象缺失，未入图床'
-								: null
-				});
+				try {
+					const created = await createPhotoFromFile(result.file.id);
+					enriched.push({
+						...result,
+						added: created.kind === 'ok' || created.kind === 'already-in-gallery',
+						galleryError:
+							created.kind === 'not-image'
+								? '非图片文件（已入内容资产）'
+								: created.kind === 'source-missing'
+									? '对象缺失，未入图床'
+									: null
+					});
+				} catch (error) {
+					// Per-file isolation (round-2 review): one gallery hiccup
+					// must not 500 the whole batch — the upload above is
+					// already registered, report the file and move on.
+					console.warn('[admin/photos] gallery entry failed', {
+						fileName: result.file.fileName,
+						error: error instanceof Error ? error.name : typeof error
+					});
+					enriched.push({
+						...result,
+						added: false,
+						galleryError: '图床入库失败（文件已入内容资产）'
+					});
+				}
 			}
 			return { uploadResults: enriched };
 		} catch (error) {
@@ -227,7 +242,12 @@ export const actions: Actions = {
 		const result = await removePhoto(id, { removeFile });
 		if (result.kind === 'not-found') return fail(404, { message: '照片不存在' });
 		return {
-			deleted: { removeFile, fileDeleted: result.fileDeleted, fileBlocked: result.fileBlocked }
+			deleted: {
+				removeFile,
+				fileDeleted: result.fileDeleted,
+				fileBlocked: result.fileBlocked,
+				fileDeleteFailed: result.fileDeleteFailed === true
+			}
 		};
 	}
 } satisfies Actions;

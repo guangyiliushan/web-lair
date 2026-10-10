@@ -230,6 +230,27 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 			await Promise.allSettled(
 				putKeys.filter((key) => !winnerKeys.has(key)).map((key) => storage.delete(key))
 			);
+			// A lost race is still a USE (round-2 review): refresh the
+			// winner's TTL anchor like the happy dedupe path. Best-effort —
+			// the bytes are already live and the anchor is only purge input;
+			// failures are logged, never silent.
+			const touched = await database
+				.update(files)
+				.set({ updatedAt: new Date() })
+				.where(eq(files.id, recheck.row.id))
+				.returning({ id: files.id })
+				.catch((touchError: unknown) => {
+					console.warn('[files] dedupe winner touch failed', {
+						fileId: recheck.row.id,
+						error: touchError instanceof Error ? touchError.name : typeof touchError
+					});
+					return [] as { id: string }[];
+				});
+			if (touched.length === 0) {
+				console.warn('[files] dedupe winner vanished before the anchor touch', {
+					fileId: recheck.row.id
+				});
+			}
 			return { ...recheck.row, deduplicated: true };
 		}
 		await Promise.allSettled(putKeys.map((key) => storage.delete(key)));
@@ -393,8 +414,12 @@ export type DeleteFileResult =
 	| { kind: 'ok'; objectKey: string }
 	| { kind: 'not-found' }
 	| { kind: 'referenced'; refCount: number; isInGallery: boolean }
-	/** Still mentioned by stored content (`/i/<key>`) — the transition guard. */
-	| { kind: 'mentioned' }
+	/**
+	 * Still mentioned by stored content (`/i/<key>`) — the transition guard.
+	 * `scanTruncated` marks a fail-closed refusal (round-2 review): the scan
+	 * hit its row cap, so a clean sweep no longer proves the key is unused.
+	 */
+	| { kind: 'mentioned'; scanTruncated?: boolean }
 	/** Purge only: the row was USED (anchor refreshed) after the snapshot. */
 	| { kind: 'reused' };
 
@@ -441,28 +466,41 @@ export async function deleteFile(
 	// entirely (only purgeMedia had it), so a file referenced by a post body
 	// could be deleted silently. Scans are shared with the audit.
 	if (!options.skipMentionScan) {
-		const { mentions } = await scanMentions(database);
+		const { mentions, truncated } = await scanMentions(database);
 		const [row] = await database
 			.select({ objectKey: files.objectKey })
 			.from(files)
 			.where(eq(files.id, id))
 			.limit(1);
-		if (row && mentions.some((mention) => mention.key === row.objectKey)) {
-			return { kind: 'mentioned' };
+		const hit = Boolean(row && mentions.some((mention) => mention.key === row.objectKey));
+		// Fail closed on a truncated scan (round-2 review, §6.3): once content
+		// outgrows the scan cap a clean sweep no longer proves the key unused.
+		if (hit || truncated) {
+			return truncated ? { kind: 'mentioned', scanTruncated: true } : { kind: 'mentioned' };
 		}
 	}
 
 	return database.transaction(async (tx): Promise<DeleteFileResult> => {
 		const [row] = await tx
-			.select({ id: files.id, objectKey: files.objectKey, updatedAt: files.updatedAt })
+			.select({
+				id: files.id,
+				objectKey: files.objectKey,
+				status: files.status,
+				detachedAt: files.detachedAt,
+				updatedAt: files.updatedAt
+			})
 			.from(files)
 			.where(eq(files.id, id))
 			.limit(1)
 			.for('update');
 		if (!row) return { kind: 'not-found' };
 
-		if (options.requireUnusedSince && row.updatedAt > options.requireUnusedSince) {
-			return { kind: 'reused' };
+		if (options.requireUnusedSince) {
+			// Same anchor the candidate was judged by (round-2 review): a
+			// detached row's TTL runs on detached_at; comparing updated_at
+			// alone could clear a row the purge had already ruled too fresh.
+			const anchor = row.status === 'detached' ? (row.detachedAt ?? row.updatedAt) : row.updatedAt;
+			if (anchor > options.requireUnusedSince) return { kind: 'reused' };
 		}
 
 		const [refCount, photoCount] = await Promise.all([
@@ -546,11 +584,25 @@ export interface PurgeFailure {
 	reason: string;
 }
 
+/** Why a candidate was kept — never a silent drop (round-2 review). */
+export type PurgeSkipReason = 'mentioned' | 'reused' | 'referenced' | 'gone' | 'scan-truncated';
+
+export interface PurgeSkip {
+	objectKey: string;
+	reason: PurgeSkipReason;
+}
+
 export interface PurgeOutcome {
 	dryRun: boolean;
 	candidates: PurgeCandidate[];
-	/** Candidates skipped because stored content still mentions their key. */
-	skipped: string[];
+	/**
+	 * Candidates kept, each tagged with its reason: `mentioned` (content
+	 * still references the key), `reused` (a dedupe use refreshed the anchor
+	 * after the snapshot), `referenced` (references appeared between listing
+	 * and delete), `gone` (row vanished — concurrent purge), `scan-truncated`
+	 * (the mention scan hit its cap: fail-closed, §6.3).
+	 */
+	skipped: PurgeSkip[];
 	/** Deletions that failed (objects kept, row kept — retryable). */
 	failed: PurgeFailure[];
 	deleted: string[];
@@ -576,13 +628,24 @@ export async function purgeMedia(
 	const { pendingDays, detachedDays } = await getOption('media.purge', database);
 	const now = Date.now();
 
-	const skipped = candidates
+	const skipped: PurgeSkip[] = candidates
 		.filter((candidate) => mentioned.has(candidate.objectKey))
-		.map((candidate) => candidate.objectKey);
+		.map((candidate) => ({ objectKey: candidate.objectKey, reason: 'mentioned' as const }));
+
+	// Fail-closed (round-2 review, §6.3): a truncated scan cannot clear ANY
+	// candidate — the un-scanned tail may still mention it.
+	if (truncated) {
+		for (const candidate of candidates) {
+			if (!mentioned.has(candidate.objectKey)) {
+				skipped.push({ objectKey: candidate.objectKey, reason: 'scan-truncated' });
+			}
+		}
+	}
+
 	const deleted: string[] = [];
 	const failed: PurgeFailure[] = [];
 
-	if (!options.dryRun) {
+	if (!options.dryRun && !truncated) {
 		for (const candidate of candidates) {
 			if (mentioned.has(candidate.objectKey)) continue;
 			// Anchor re-verify (review round 1): a dedupe USE landing after
@@ -597,7 +660,13 @@ export async function purgeMedia(
 					{ storage, db: database }
 				);
 				if (result.kind === 'ok') deleted.push(candidate.objectKey);
-				else if (result.kind === 'reused') skipped.push(candidate.objectKey);
+				else if (result.kind === 'reused')
+					skipped.push({ objectKey: candidate.objectKey, reason: 'reused' });
+				else if (result.kind === 'referenced')
+					skipped.push({ objectKey: candidate.objectKey, reason: 'referenced' });
+				else if (result.kind === 'not-found')
+					skipped.push({ objectKey: candidate.objectKey, reason: 'gone' });
+				else skipped.push({ objectKey: candidate.objectKey, reason: 'mentioned' });
 			} catch (error) {
 				failed.push({
 					objectKey: candidate.objectKey,

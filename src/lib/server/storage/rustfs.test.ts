@@ -80,6 +80,15 @@ describe('RustFsStorage', () => {
 		expect(new TextDecoder().decode(call.init.body as Uint8Array)).toBe('hello');
 	});
 
+	it('rejects dot segments before any request hits the wire (round-2)', async () => {
+		const { impl, calls } = recordingFetch(() => new Response(null, { status: 200 }));
+		const storage = storageWith(impl);
+
+		await expect(storage.put('a/../b', new Uint8Array(1))).rejects.toThrow(/dot segment/);
+		await expect(storage.get('a/./b')).rejects.toThrow(/dot segment/);
+		expect(calls).toHaveLength(0);
+	});
+
 	it('GET maps 404 to null and streams the body otherwise', async () => {
 		const missing = storageWith(recordingFetch(() => new Response(null, { status: 404 })).impl);
 		expect(await missing.get('a/missing.bin')).toBeNull();

@@ -42,7 +42,7 @@ async function resolveDeps(
 
 export const PHOTO_LIST_LIMIT = 200;
 const PHOTO_PAGE_DEFAULT = 24;
-const PHOTO_PAGE_MAX = 60;
+const PHOTO_PAGE_MAX = 200;
 
 const REF_COUNT_SQL = sql<number>`(select count(*)::int from ${fileReferences} where ${fileReferences.fileId} = ${photos.fileId})`;
 const SORT_EXPR = sql`coalesce(${photos.takenAt}, ${photos.createdAt})`;
@@ -372,7 +372,8 @@ export async function updatePhoto(
 }
 
 export type RemovePhotoResult =
-	{ kind: 'ok'; fileDeleted: boolean; fileBlocked: boolean } | { kind: 'not-found' };
+	| { kind: 'ok'; fileDeleted: boolean; fileBlocked: boolean; fileDeleteFailed?: boolean }
+	| { kind: 'not-found' };
 
 /**
  * Gallery removal (§6.3): the photo row always goes; the blob only when the
@@ -385,32 +386,46 @@ export async function removePhoto(
 	deps: PhotosDeps = {}
 ): Promise<RemovePhotoResult> {
 	const { storage, database } = await resolveDeps(deps);
-	const [current] = await database
-		.select({ id: photos.id, fileId: photos.fileId })
-		.from(photos)
-		.where(eq(photos.id, photoId))
-		.limit(1);
-	if (!current) return { kind: 'not-found' };
-
-	const deleted = await database.transaction(async (tx) => {
-		// Trackers die with the photo (review round 1): a removed photo's old
-		// slugs must 404, not keep pointing at a dead id forever.
+	// The row lock comes FIRST (round-2 review): a concurrent rename locks
+	// the same photo row, so the rename/delete interleaving can no longer
+	// slip a fresh tracker in after this transaction's tracker sweep.
+	const current = await database.transaction(async (tx) => {
+		const [row] = await tx
+			.select({ id: photos.id, fileId: photos.fileId })
+			.from(photos)
+			.where(eq(photos.id, photoId))
+			.limit(1)
+			.for('update');
+		if (!row) return null;
 		await tx
 			.delete(slugTrackers)
 			.where(and(eq(slugTrackers.type, 'photo'), eq(slugTrackers.targetId, photoId)));
-		return tx.delete(photos).where(eq(photos.id, photoId)).returning({ id: photos.id });
+		await tx.delete(photos).where(eq(photos.id, photoId));
+		return row;
 	});
-	if (deleted.length === 0) return { kind: 'not-found' };
+	if (!current) return { kind: 'not-found' };
 
 	let fileDeleted = false;
 	let fileBlocked = false;
+	let fileDeleteFailed = false;
 	if (options.removeFile) {
-		const result = await deleteFile(current.fileId, {}, { storage, db: database });
-		fileDeleted = result.kind === 'ok';
-		// `mentioned` = the transition guard (content still references it).
-		fileBlocked = result.kind === 'referenced' || result.kind === 'mentioned';
+		try {
+			const result = await deleteFile(current.fileId, {}, { storage, db: database });
+			fileDeleted = result.kind === 'ok';
+			// `mentioned` = the transition guard (content still references it).
+			fileBlocked = result.kind === 'referenced' || result.kind === 'mentioned';
+		} catch {
+			// The photo is already gone; a storage outage must not look like a
+			// full failure (round-2 review: the old 500 hid the partial state).
+			fileDeleteFailed = true;
+		}
 	}
-	return { kind: 'ok', fileDeleted, fileBlocked };
+	return {
+		kind: 'ok',
+		fileDeleted,
+		fileBlocked,
+		...(fileDeleteFailed ? { fileDeleteFailed } : {})
+	};
 }
 
 /** Append tag names to an existing photo (batch op). */
@@ -567,7 +582,6 @@ export interface PublicPhotoDetail {
 	latitude: string | null;
 	longitude: string | null;
 	altitudeM: string | null;
-	exif: Record<string, unknown> | null;
 	objectKey: string;
 	fileName: string;
 	mimeType: string;
@@ -595,7 +609,6 @@ const DETAIL_FIELDS = {
 	latitude: photos.latitude,
 	longitude: photos.longitude,
 	altitudeM: photos.altitudeM,
-	exif: photos.exif,
 	objectKey: files.objectKey,
 	fileName: files.fileName,
 	mimeType: files.mimeType,
@@ -617,7 +630,18 @@ async function loadVisibleDetail(
 		.innerJoin(files, eq(photos.fileId, files.id))
 		.where(and(eq(photos.isVisible, true), where))
 		.limit(1);
-	return row ?? null;
+	if (!row) return null;
+	// Public payload hygiene (round-2 review, plan §5.1): full-precision
+	// coordinates and the whole `exif` blob (which carries GPS keys) used to
+	// ride the SSR/hydration payload of the detail page. Coordinates fuzz to
+	// 2dp (~1km, same rule as list/map); altitude rounds to whole metres;
+	// `exif` is not part of the public face at all.
+	return {
+		...row,
+		latitude: row.latitude === null ? null : Number(row.latitude).toFixed(2),
+		longitude: row.longitude === null ? null : Number(row.longitude).toFixed(2),
+		altitudeM: row.altitudeM === null ? null : String(Math.round(Number(row.altitudeM)))
+	};
 }
 
 export function getVisiblePhotoBySlug(

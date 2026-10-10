@@ -224,7 +224,11 @@ export async function extractPhotoMetadata(
 ): Promise<PhotoExif> {
 	let parsed: ParsedExif | null = null;
 	try {
-		const result = (await exifr.parse(bytes, { makerNote: true })) as ParsedExif | undefined;
+		// `makerNote: true` was removed in round-2 review: exifr parsed the
+		// maker-note block only for `toJsonSafe` to drop it (DROP_KEYS),
+		// while the real maker-note source is exiftool (./exif-makernotes).
+		// Standard fields are unaffected.
+		const result = (await exifr.parse(bytes)) as ParsedExif | undefined;
 		if (result && typeof result === 'object') parsed = result;
 	} catch {
 		return { ...EMPTY };

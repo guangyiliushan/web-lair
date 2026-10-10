@@ -321,6 +321,9 @@ describe('uploadFile', () => {
 		// The winner's objects are content-addressed and SHARED — same-extension
 		// attempts touch the same keys, so nothing may be deleted.
 		expect(storageMock.delete).not.toHaveBeenCalled();
+		// A lost race is still a USE: the winner's TTL anchor is refreshed.
+		expect(dbMock.update).toHaveBeenCalledTimes(1);
+		expect(dbMock.update.mock.calls[0][0]).toBe(filesTable);
 	});
 
 	it('deletes only extra keys when the winner landed under another extension', async () => {
@@ -673,7 +676,7 @@ describe('purgeMedia', () => {
 
 		const outcome = await purgeMedia({ dryRun: false }, { storage: storageMock });
 
-		expect(outcome.skipped).toEqual([mentionedKey]);
+		expect(outcome.skipped).toEqual([{ objectKey: mentionedKey, reason: 'mentioned' }]);
 		expect(outcome.deleted).toEqual([]);
 		expect(storageMock.delete).not.toHaveBeenCalled();
 		expect(dbMock.delete).not.toHaveBeenCalled();
@@ -690,5 +693,137 @@ describe('isRegisteredKey', () => {
 
 		const chain = dbMock.select.mock.results[0].value as { from: ReturnType<typeof vi.fn> };
 		expect(chain.from.mock.calls[0][0]).toBe(filesTable);
+	});
+});
+
+describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fallthrough', () => {
+	const stalePending = {
+		id: 'a',
+		objectKey: 'aa/a.jpg',
+		fileName: 'a.jpg',
+		status: 'pending',
+		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+		detachedAt: null,
+		updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+	};
+
+	it('deleteFile fails closed when the mention scan hits its row cap', async () => {
+		const bulk = Array.from({ length: 2000 }, (_, index) => ({
+			id: `p-${index}`,
+			content: 'no keys here'
+		}));
+		dbMock.select.mockReturnValueOnce(selectChain(bulk)); // posts at the cap
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ objectKey: BASE_KEY }]));
+
+		expect(await deleteFile('file-1', {}, { storage: storageMock })).toEqual({
+			kind: 'mentioned',
+			scanTruncated: true
+		});
+		expect(dbMock.transaction).not.toHaveBeenCalled();
+		expect(storageMock.delete).not.toHaveBeenCalled();
+	});
+
+	it('deleteFile anchors the reuse check on detached_at for detached rows', async () => {
+		const future = new Date(Date.now() + 60_000);
+		dbMock.select.mockReturnValueOnce(
+			selectChain([
+				{
+					id: 'file-1',
+					objectKey: BASE_KEY,
+					status: 'detached',
+					detachedAt: future,
+					updatedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+				}
+			])
+		);
+
+		expect(
+			await deleteFile(
+				'file-1',
+				{ requireUnusedSince: new Date(Date.now() - 60_000), skipMentionScan: true },
+				{ storage: storageMock }
+			)
+		).toEqual({ kind: 'reused' });
+		expect(storageMock.delete).not.toHaveBeenCalled();
+		expect(dbMock.$count).not.toHaveBeenCalled();
+	});
+
+	it('uploadFile falls through to a fresh insert when the dedupe touch hits 0 rows', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([EXISTING_ROW]));
+		// The delete-window race: the row was purged between lookup and touch.
+		dbMock.update.mockReturnValueOnce({
+			set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn(async () => []) })) }))
+		});
+		processImageMock.mockResolvedValueOnce(PROCESSED);
+		dbMock.insert.mockReturnValueOnce(
+			insertChain([{ ...EXISTING_ROW, width: 64, height: 32, status: 'pending' }])
+		);
+
+		const result = await uploadFile(
+			{ fileName: 'photo.jpg', bytes: JPEG },
+			{ storage: storageMock }
+		);
+
+		expect(result.deduplicated).toBe(false);
+		expect(dbMock.insert).toHaveBeenCalledTimes(1);
+		expect(storageMock.put).toHaveBeenCalled();
+	});
+
+	it('purgeMedia fails closed when the mention scan is truncated — nothing is deleted', async () => {
+		const bulk = Array.from({ length: 2000 }, (_, index) => ({
+			id: `p-${index}`,
+			content: 'no keys here'
+		}));
+		dbMock.select.mockReturnValueOnce(selectChain([stalePending]));
+		dbMock.select.mockReturnValueOnce(selectChain(bulk));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+
+		const outcome = await purgeMedia({ dryRun: false }, { storage: storageMock });
+
+		expect(outcome.scanTruncated).toBe(true);
+		expect(outcome.deleted).toEqual([]);
+		expect(outcome.skipped).toEqual([{ objectKey: 'aa/a.jpg', reason: 'scan-truncated' }]);
+		expect(storageMock.delete).not.toHaveBeenCalled();
+		expect(dbMock.delete).not.toHaveBeenCalled();
+	});
+
+	it('purgeMedia tags a reused candidate when its anchor moved after the snapshot', async () => {
+		const future = new Date(Date.now() + 60_000);
+		dbMock.select.mockReturnValueOnce(selectChain([stalePending]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(
+			selectChain([
+				{
+					id: 'a',
+					objectKey: 'aa/a.jpg',
+					status: 'pending',
+					detachedAt: null,
+					updatedAt: future
+				}
+			])
+		);
+
+		const outcome = await purgeMedia({ dryRun: false }, { storage: storageMock });
+
+		expect(outcome.skipped).toEqual([{ objectKey: 'aa/a.jpg', reason: 'reused' }]);
+		expect(outcome.deleted).toEqual([]);
+	});
+
+	it('purgeMedia records a candidate that vanished before the delete as gone', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([stalePending]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([])); // row lock: gone
+
+		const outcome = await purgeMedia({ dryRun: false }, { storage: storageMock });
+
+		expect(outcome.skipped).toEqual([{ objectKey: 'aa/a.jpg', reason: 'gone' }]);
+		expect(outcome.deleted).toEqual([]);
 	});
 });
