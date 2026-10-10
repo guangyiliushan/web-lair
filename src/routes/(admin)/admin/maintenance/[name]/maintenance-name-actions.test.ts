@@ -179,15 +179,16 @@ describe('admin maintenance [name] actions', () => {
 		});
 	});
 
-	it('saveRun: queues with the re-resolved definition and audits job.run', async () => {
-		const ok = await callAction('saveRun', { code: 'x', baseHash: '' });
-		expect(ok.result).toMatchObject({ saved: true, queued: true, deduplicated: false });
+	it('saveRun: queues with the re-resolved definition, audits, then lands on the ledger', async () => {
+		const { thrown } = await callAction('saveRun', { code: 'x', baseHash: '' });
 		expect(state.enqueueCalls[0][1]).toBe('my-task');
 		expect(state.enqueueCalls[0][3]).toEqual({ name: 'my-task', manual: true });
 		expect(state.auditCalls[0]).toMatchObject({
 			event: 'job.run',
 			payload: { name: 'my-task', via: 'save-and-run' }
 		});
+		// 跳台账 (plan §4.4) - redirect, not a stay-on-page result.
+		expect(thrown).toMatchObject({ status: 303, location: '/admin/maintenance' });
 	});
 
 	it('saveRun: a conflict never queues', async () => {

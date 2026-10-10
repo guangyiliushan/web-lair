@@ -21,6 +21,8 @@
 	let name = $state('');
 	let code = $state(data.template);
 	let saveForm: HTMLFormElement | undefined = $state();
+	// Cold first saves run the gate's module init (~10s); pending state.
+	let saving = $state(false);
 
 	interface ActionResult {
 		status?: number;
@@ -38,7 +40,12 @@
 
 	const form = $derived(page.form as ActionResult | null | undefined);
 
+	$effect(() => {
+		if (form) saving = false;
+	});
+
 	function submitSave(): void {
+		saving = true;
 		saveForm?.requestSubmit();
 	}
 </script>
@@ -126,8 +133,37 @@
 				保存即生效（≤1 tick 执行）；保存并试运行会立即排队一次。
 			</p>
 			<div class="flex items-center gap-2">
-				<Button type="submit" variant="outline" size="sm">保存</Button>
-				<Button type="submit" size="sm" formaction="?/saveRun">保存并试运行</Button>
+				<Button
+					type="submit"
+					variant="outline"
+					size="sm"
+					onclick={(event) => {
+						// Never flip `disabled` here: a disabled submitter aborts
+						// the native form submission itself; gate repeats via
+						// preventDefault instead.
+						if (saving) {
+							event.preventDefault();
+							return;
+						}
+						saving = true;
+					}}
+				>
+					{saving ? '保存中…' : '保存'}
+				</Button>
+				<Button
+					type="submit"
+					size="sm"
+					formaction="?/saveRun"
+					onclick={(event) => {
+						if (saving) {
+							event.preventDefault();
+							return;
+						}
+						saving = true;
+					}}
+				>
+					{saving ? '保存中…' : '保存并试运行'}
+				</Button>
 			</div>
 		</div>
 	</form>

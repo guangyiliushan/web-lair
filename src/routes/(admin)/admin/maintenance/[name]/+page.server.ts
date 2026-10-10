@@ -104,14 +104,8 @@ export const actions: Actions = {
 				via: 'save-and-run'
 			}
 		});
-		return {
-			saved: true,
-			hash: result.hash,
-			created: result.created,
-			forked: result.forked,
-			queued: true,
-			deduplicated: queued.deduplicated
-		};
+		// 跳台账 (plan §4.4): the fresh queued row in the ledger is the feedback.
+		redirect(303, '/admin/maintenance');
 	},
 
 	revert: async ({ params, locals }) => {

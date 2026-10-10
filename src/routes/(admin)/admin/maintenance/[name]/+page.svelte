@@ -25,6 +25,10 @@
 	let baseHash = $state<string | null>(data.saveBaseHash);
 	let saveForm: HTMLFormElement | undefined = $state();
 	let deleteOpen = $state(false);
+	// Cold gate loads (first save in a fresh server process) run tsc+eslint
+	// module init, so the first POST can take ~10s - show a pending state
+	// (J-2 review suggestion) instead of a seemingly dead button.
+	let saving = $state(false);
 
 	interface ActionResult {
 		status?: number;
@@ -54,6 +58,12 @@
 	// A successful save makes the server hash our new base.
 	$effect(() => {
 		if (form?.saved && typeof form.hash === 'string') baseHash = form.hash;
+	});
+
+	// Any action result (save / conflict / revert / ignore) ends the pending
+	// window; a redirect unmounts the page entirely.
+	$effect(() => {
+		if (form) saving = false;
 	});
 
 	const flash = $derived.by(() => {
@@ -88,6 +98,7 @@
 	}
 
 	function submitSave(): void {
+		saving = true;
 		saveForm?.requestSubmit();
 	}
 </script>
@@ -207,8 +218,37 @@
 				Mod-S 保存 · 约定：可擦除语法（无 enum/namespace）/ import 带 .ts 后缀 / type 关键字
 			</p>
 			<div class="flex items-center gap-2">
-				<Button type="submit" variant="outline" size="sm">保存</Button>
-				<Button type="submit" size="sm" formaction="?/saveRun">保存并试运行</Button>
+				<Button
+					type="submit"
+					variant="outline"
+					size="sm"
+					onclick={(event) => {
+						// A disabled flip would abort the native submit itself
+						// (the submitter cannot be disabled); gate repeats by
+						// canceling the click instead.
+						if (saving) {
+							event.preventDefault();
+							return;
+						}
+						saving = true;
+					}}
+				>
+					{saving ? '保存中…' : '保存'}
+				</Button>
+				<Button
+					type="submit"
+					size="sm"
+					formaction="?/saveRun"
+					onclick={(event) => {
+						if (saving) {
+							event.preventDefault();
+							return;
+						}
+						saving = true;
+					}}
+				>
+					{saving ? '保存中…' : '保存并试运行'}
+				</Button>
 			</div>
 		</div>
 	</form>
