@@ -48,6 +48,7 @@
 		"db:verify-media": "tsx --env-file=.env scripts/verify-media.ts"
 	},
 	"devDependencies": {
+		"@axe-core/playwright": "^4.13.0",
 		"@chromatic-com/storybook": "^5.3.1",
 		"@eslint/compat": "^2.1.1",
 		"@eslint/js": "^10.0.1",

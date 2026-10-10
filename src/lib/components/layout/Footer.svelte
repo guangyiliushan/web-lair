@@ -128,7 +128,9 @@
 			{#each sections as section (section.title)}
 				{#if section.links.length > 0}
 					<div class="flex flex-col gap-3">
-						<h3 class="text-sm font-semibold text-foreground">{section.title}</h3>
+						<!-- h2, not h3: axe heading-order — pages whose only heading is the
+						page h1 used to jump h1 → h3 at the footer. -->
+						<h2 class="text-sm font-semibold text-foreground">{section.title}</h2>
 						<ul class="flex flex-col gap-2" role="list">
 							{#each section.links as link (link.key ?? link.href)}
 								<li>

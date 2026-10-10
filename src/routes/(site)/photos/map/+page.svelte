@@ -12,6 +12,10 @@
 
 <SeoHead path="/photos/map" />
 
+<svelte:head>
+	<title>{m.photos_map_title()}</title>
+</svelte:head>
+
 <div class="mx-auto mt-14 max-w-6xl px-4 lg:mt-20 lg:px-0">
 	<div class="min-w-0">
 		<div class="flex items-baseline justify-between gap-4">

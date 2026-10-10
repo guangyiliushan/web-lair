@@ -68,6 +68,24 @@ function visibleCount(): number {
 	return Number(psql(`select count(*) from photos where is_visible`));
 }
 
+/**
+ * Count-formula assertion that tolerates concurrent visible writes from
+ * other specs (they share the live database): each poll reads the rendered
+ * anchor count and a FRESH total — once no mutation falls between the two
+ * reads, the page formula must hold. Retries absorb the rest.
+ */
+async function expectPageCount(grid: import('@playwright/test').Locator, pageSize: number) {
+	await expect
+		.poll(
+			async () => {
+				const count = await grid.locator('a').count();
+				return count === Math.min(pageSize, visibleCount());
+			},
+			{ timeout: 15_000 }
+		)
+		.toBe(true);
+}
+
 test.describe.configure({ mode: 'serial', timeout: 300_000 });
 test.use(zhCnLocale);
 
@@ -88,9 +106,9 @@ test.describe('photos public gallery', () => {
 		const grid = page.locator('.photos-masonry');
 		await expect(grid).toBeVisible();
 
-		// Page one holds min(24, total): assert the formula, not a raw count.
-		const total = visibleCount();
-		await expect(grid.locator('a')).toHaveCount(Math.min(24, total), { timeout: 10_000 });
+		// Page one holds min(24, total): assert the formula (collision-proof
+		// against concurrent fixtures from other spec files), not a snapshot.
+		await expectPageCount(grid, 24);
 
 		// Hidden rows never surface (title marker is unique to the row).
 		await expect(page.getByText(`${FIX}-gamma-marker`)).toHaveCount(0);
@@ -188,7 +206,7 @@ test.describe('photos public gallery', () => {
 		await more.click();
 
 		// Two pages = min(48, total); the link survives only past 48.
-		await expect(grid.locator('a')).toHaveCount(Math.min(48, total), { timeout: 15_000 });
+		await expectPageCount(grid, 48);
 		if (total <= 48) {
 			await expect(page.getByRole('link', { name: '加载更多' })).toHaveCount(0);
 		} else {
