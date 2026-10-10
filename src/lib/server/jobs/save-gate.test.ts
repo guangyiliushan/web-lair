@@ -129,6 +129,8 @@ describe('canonical name mapping (J-2 review F1)', { timeout: 60_000 }, () => {
 		expect(checkJobName('jobs-prune')).not.toEqual([]);
 		expect(checkJobName('jobs.prune')).toEqual([]);
 		expect(checkJobName('my-task')).toEqual([]);
+		// `new` is reserved by the admin create route (J-3).
+		expect(checkJobName('new')).not.toEqual([]);
 		// The length boundary is inclusive (review round 2, P2-4): 65 fails,
 		// 64 passes - an off-by-one here would silently move the limit.
 		expect(checkJobName('a'.repeat(64))).toEqual([]);

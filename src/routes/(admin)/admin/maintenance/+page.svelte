@@ -94,9 +94,12 @@
 	<section>
 		<div class="mb-4 flex items-center justify-between">
 			<h3 class="text-sm font-semibold">脚本</h3>
-			<span class="text-xs text-muted-foreground">
-				注册表 ∪ 用户层（$DATA_DIR/jobs）· 共 {data.scripts.length} 个
-			</span>
+			<div class="flex items-center gap-2">
+				<span class="text-xs text-muted-foreground">
+					注册表 ∪ 用户层（$DATA_DIR/jobs）· 共 {data.scripts.length} 个
+				</span>
+				<Button variant="outline" size="sm" href="/admin/maintenance/new">新建脚本</Button>
+			</div>
 		</div>
 		<div class="grid gap-4 lg:grid-cols-2">
 			{#each data.scripts as script (script.name)}

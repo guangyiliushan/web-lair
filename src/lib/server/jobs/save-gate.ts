@@ -62,6 +62,16 @@ const MAX_JOB_NAME_LENGTH = 64;
  */
 export function checkJobName(name: string): GateError[] {
 	const errors: GateError[] = [];
+	// `new` is reserved by the admin route (/admin/maintenance/new): a job
+	// with that name would shadow the create page and its edit link.
+	if (name === 'new') {
+		errors.push({
+			source: 'name',
+			line: null,
+			column: null,
+			message: 'job name "new" is reserved by the admin create route'
+		});
+	}
 	if (name.length > MAX_JOB_NAME_LENGTH) {
 		errors.push({
 			source: 'name',

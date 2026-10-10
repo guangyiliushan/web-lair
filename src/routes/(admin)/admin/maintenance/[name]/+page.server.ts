@@ -12,6 +12,7 @@ import {
 } from '$lib/server/jobs/job-scripts';
 import { enqueueJob } from '$lib/server/jobs/queue';
 import { resolveJobDefinition } from '$lib/server/jobs/user-layer';
+import { parseBaseHash, parseCode } from '../maintenance-form-utils';
 import type { PageServerLoad, Actions } from './$types';
 
 /**
@@ -42,21 +43,6 @@ export const load: PageServerLoad = async ({ params }) => {
 		builtinCode: builtin?.code ?? null
 	};
 };
-
-function parseBaseHash(raw: FormDataEntryValue | null): string | null {
-	const value = (raw ?? '').toString().trim();
-	return value === '' ? null : value;
-}
-
-/**
- * Multipart form submission normalizes line endings to CRLF (HTML spec;
- * undici proves it in tests), while the editor works in LF and user files
- * should stay LF like the rest of the repo - normalize back at the ingress.
- */
-function parseCode(form: FormData): string {
-	const raw = (form.get('code') ?? '').toString();
-	return raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-}
 
 export const actions: Actions = {
 	save: async ({ request, params, locals }) => {
