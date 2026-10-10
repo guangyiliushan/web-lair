@@ -128,7 +128,7 @@
 		"@masonry-grid/svelte": "^1.1.1",
 		"@protomaps/basemaps": "^5.7.2",
 		"cron-parser": "^5.10.1",
-		"fuji-recipes": "^1.0.2",
+		"exiftool-vendored": "39.0.1",
 		"hast-util-sanitize": "^5.0.2",
 		"heic-decode": "^2.1.0",
 		"iovalkey": "^0.4.0",

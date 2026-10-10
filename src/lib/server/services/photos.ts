@@ -4,6 +4,11 @@ import { files, photoTags, photos, tags, type LocalizedText } from '$lib/server/
 import { getOption } from '$lib/server/config/options-registry';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { extractPhotoMetadata } from '$lib/server/media/exif';
+import {
+	extractMakerNotes,
+	mergeMakerNotes,
+	tempExtForMime
+} from '$lib/server/media/exif-makernotes';
 import { tagSlug, titleSlug } from '$lib/utils/slug';
 import { deleteFile } from './files';
 import type { ObjectStoragePort } from '$lib/server/storage/port';
@@ -203,6 +208,12 @@ export async function createPhotoFromFile(
 	const bytes = await readStream(object.body);
 	const timeZone = await getOption('site.timezone', database);
 	const meta = await extractPhotoMetadata(bytes, { timeZone });
+	// Brand maker notes (multi-brand batch): one ExifTool pass per ingest;
+	// failures degrade to null and never block the photo (observability is
+	// a structured warn inside the module).
+	const makerNotes = await extractMakerNotes(bytes, {
+		ext: tempExtForMime(file.mimeType)
+	});
 
 	const base = photoSlugBase(file.fileName) || `photo-${fileId.slice(0, 8)}`;
 	const slug = await uniquePhotoSlug(database, base);
@@ -235,7 +246,7 @@ export async function createPhotoFromFile(
 						latitude: numeric(meta.latitude),
 						longitude: numeric(meta.longitude),
 						altitudeM: numeric(meta.altitudeM),
-						exif: meta.exif
+						exif: mergeMakerNotes(meta.exif, makerNotes)
 					})
 					.returning({ id: photos.id, slug: photos.slug });
 				if (options.tags && options.tags.length > 0) {

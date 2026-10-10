@@ -1,12 +1,13 @@
-import { Buffer } from 'node:buffer';
 import exifr from '@laosb/exifr';
-import getFujiRecipe from 'fuji-recipes';
 
 /**
  * Photo EXIF extraction (storage line §3.3 / §4.3): `@laosb/exifr` for the
- * general parse plus `fuji-recipes` for the Fujifilm MakerNote recipe block.
- * Pure and storage-agnostic — the caller hands in the original bytes and the
- * site timezone (`site.timezone` option), keeping this module unit-testable.
+ * general parse, the structured columns and the stored `exif` blob. Brand
+ * maker notes moved to `./exif-makernotes` (multi-brand batch, 2026-10-10):
+ * one ExifTool decoder produces `exif.makerNotes.<brand>` for every brand —
+ * fuji-recipes is retired (its 15 recipe fields are a strict subset of the
+ * FujiFilm group dump). Pure and storage-agnostic — the caller hands in the
+ * original bytes and the site timezone, keeping this module unit-testable.
  */
 
 export interface PhotoExif {
@@ -21,7 +22,8 @@ export interface PhotoExif {
 	latitude: number | null;
 	longitude: number | null;
 	altitudeM: number | null;
-	/** JSON-safe full parse (Fuji recipe folded in; binary blobs dropped). */
+	/** JSON-safe standard parse (binary blobs dropped); maker notes are
+	 * merged in as `makerNotes.<brand>` by the photos service. */
 	exif: Record<string, unknown> | null;
 }
 
@@ -229,31 +231,7 @@ export async function extractPhotoMetadata(
 	}
 	if (!parsed) return { ...EMPTY };
 
-	let fujiRecipe: unknown = undefined;
-	const makerNote = parsed.makerNote;
-	if (makerNote !== undefined && makerNote !== null) {
-		try {
-			const input = ArrayBuffer.isView(makerNote)
-				? Buffer.from(makerNote.buffer, makerNote.byteOffset, makerNote.byteLength)
-				: Array.isArray(makerNote)
-					? (makerNote as number[])
-					: null;
-			if (input) {
-				const recipe = getFujiRecipe(input);
-				if (recipe) fujiRecipe = recipe;
-			}
-		} catch {
-			// Maker note is best-effort; the general parse stands on its own.
-		}
-	}
-
 	const safe = (toJsonSafe(parsed) as Record<string, unknown> | undefined) ?? {};
-	if (fujiRecipe !== undefined) {
-		// The recipe used to be injected AFTER sanitization (review round 1):
-		// same NUL / JSON-safety discipline as everything else from the file.
-		const safeRecipe = toJsonSafe(fujiRecipe);
-		if (safeRecipe !== undefined && safeRecipe !== null) safe.fujiRecipe = safeRecipe;
-	}
 
 	return {
 		takenAt: composeTakenAt(

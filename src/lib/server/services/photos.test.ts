@@ -37,12 +37,19 @@ const storageMock = vi.hoisted(() => ({
 	ensureBucket: vi.fn()
 }));
 const exifMock = vi.hoisted(() => vi.fn());
+const makerNotesMock = vi.hoisted(() =>
+	vi.fn(async (): Promise<Record<string, unknown> | null> => null)
+);
 const getOptionMock = vi.hoisted(() => vi.fn());
 const deleteFileMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$lib/server/storage', () => ({ getStorage: () => storageMock }));
 vi.mock('$lib/server/media/exif', () => ({ extractPhotoMetadata: exifMock }));
+vi.mock('$lib/server/media/exif-makernotes', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/server/media/exif-makernotes')>()),
+	extractMakerNotes: makerNotesMock
+}));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: getOptionMock }));
 vi.mock('./files', () => ({ deleteFile: deleteFileMock }));
 
@@ -159,13 +166,14 @@ const META = {
 	latitude: 25.033,
 	longitude: 121.5654,
 	altitudeM: 12.5,
-	exif: { ISO: 400, fujiRecipe: { FilmMode: 'Classic Chrome' } }
+	exif: { ISO: 400, makerNotes: { fuji: { FilmMode: 'Classic Chrome' } } }
 };
 
 beforeEach(() => {
 	vi.clearAllMocks();
 	getOptionMock.mockResolvedValue('UTC');
 	exifMock.mockResolvedValue({ ...META });
+	makerNotesMock.mockResolvedValue(null);
 	storageMock.get.mockResolvedValue(bodyFor([1, 2, 3]));
 	deleteFileMock.mockResolvedValue({ kind: 'ok', objectKey: 'aa/x.jpg' });
 });
@@ -230,6 +238,25 @@ describe('createPhotoFromFile', () => {
 		});
 		expect(values.takenAt).toEqual(META.takenAt);
 		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
+	});
+
+	it('merges the maker-notes dump into the stored exif payload', async () => {
+		makerNotesMock.mockResolvedValueOnce({ fuji: { FilmMode: 'Classic Chrome' } });
+		dbMock.select.mockReturnValueOnce(selectChain([FILE_ROW]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([])); // slug check
+		dbMock.insert.mockReturnValueOnce(insertChain([{ id: 'p1', slug: 'x' }]));
+
+		await createPhotoFromFile('f1', {}, { storage: storageMock });
+
+		const values = dbMock.insert.mock.results[0].value.values.mock.calls[0][0] as Record<
+			string,
+			unknown
+		>;
+		expect(values.exif).toMatchObject({
+			ISO: 400,
+			makerNotes: { fuji: { FilmMode: 'Classic Chrome' } }
+		});
 	});
 
 	it('absorbs a concurrent duplicate insert as already-in-gallery', async () => {
