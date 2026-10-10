@@ -49,6 +49,7 @@ vi.mock('./files', () => ({ deleteFile: deleteFileMock }));
 import {
 	createPhotoFromFile,
 	listAdminPhotos,
+	listPhotoNeighbors,
 	photoSlugBase,
 	removePhoto,
 	updatePhoto
@@ -379,5 +380,35 @@ describe('listAdminPhotos', () => {
 		};
 		expect(chain.from.mock.calls[0][0]).toBe(photosTable);
 		expect(chain.innerJoin.mock.calls[0][0]).toBe(filesTable);
+	});
+});
+
+describe('listPhotoNeighbors', () => {
+	it('returns the adjacent visible rows around the cursor', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([{ slug: 'newer', title: { en: 'N' } }]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ slug: 'older', title: null }]));
+
+		const result = await listPhotoNeighbors({
+			sortAt: new Date('2026-01-01T00:00:00Z'),
+			id: '11111111-1111-1111-1111-111111111111'
+		});
+
+		expect(result).toEqual({
+			newer: { slug: 'newer', title: { en: 'N' } },
+			older: { slug: 'older', title: null }
+		});
+		expect(dbMock.select).toHaveBeenCalledTimes(2);
+	});
+
+	it('returns null neighbours at the feed boundaries', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+
+		await expect(
+			listPhotoNeighbors({
+				sortAt: new Date('2026-01-01T00:00:00Z'),
+				id: '11111111-1111-1111-1111-111111111111'
+			})
+		).resolves.toEqual({ newer: null, older: null });
 	});
 });

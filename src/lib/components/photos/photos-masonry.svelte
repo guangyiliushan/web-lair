@@ -2,7 +2,7 @@
 	import { Frame, RegularMasonryGrid } from '@masonry-grid/svelte';
 	import { getLocale } from '$lib/paraglide/runtime';
 	import { siteHref } from '$lib/utils/href';
-	import { photoAlt, photoTitle, photoTileSrc, thumbhashDataUrl } from './photo-tile';
+	import { photoAlt, photoTileSrc, thumbhashDataUrl } from './photo-tile';
 	import type { PhotoTile } from './photo-tile';
 
 	/**

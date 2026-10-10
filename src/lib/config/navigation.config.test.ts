@@ -81,6 +81,7 @@ describe('micro-content navigation config (C2)', () => {
 		const expected = [
 			'/friends',
 			'/projects',
+			'/photos',
 			'/quotes',
 			'/thoughts',
 			'https://travel.moe/go.html'

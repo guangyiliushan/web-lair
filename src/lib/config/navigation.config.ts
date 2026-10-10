@@ -13,6 +13,7 @@ import {
 	IconWorld,
 	IconPencil,
 	IconBook,
+	IconCamera,
 	IconHeart,
 	IconWriting
 } from '@tabler/icons-svelte-runes';
@@ -39,6 +40,8 @@ const t = {
 	nav_home_email_desc: m.nav_home_email_desc,
 	nav_more_friends: m.nav_more_friends,
 	nav_more_friends_desc: m.nav_more_friends_desc,
+	nav_more_photos: m.nav_more_photos,
+	nav_more_photos_desc: m.nav_more_photos_desc,
 	nav_more_projects: m.nav_more_projects,
 	nav_more_projects_desc: m.nav_more_projects_desc,
 	nav_more_quotes: m.nav_more_quotes,
@@ -356,6 +359,12 @@ export const navigationConfig: NavItem[] = [
 							icon: IconFlask
 						},
 						{
+							labelKey: 'nav_more_photos',
+							href: '/photos',
+							descKey: 'nav_more_photos_desc',
+							icon: IconCamera
+						},
+						{
 							labelKey: 'nav_more_quotes',
 							href: '/quotes',
 							descKey: 'nav_more_quotes_desc',
@@ -380,6 +389,7 @@ export const navigationConfig: NavItem[] = [
 		children: [
 			{ labelKey: 'nav_more_friends', href: '/friends' },
 			{ labelKey: 'nav_more_projects', href: '/projects' },
+			{ labelKey: 'nav_more_photos', href: '/photos' },
 			{ labelKey: 'nav_more_quotes', href: '/quotes' },
 			{ labelKey: 'nav_more_thoughts', href: '/thoughts' },
 			{ labelKey: 'nav_more_warp', href: 'https://travel.moe/go.html' }

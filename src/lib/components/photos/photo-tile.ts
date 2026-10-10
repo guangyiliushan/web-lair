@@ -14,7 +14,7 @@ export interface PhotoTile {
 	slug: string;
 	title: PhotoTileText;
 	description: PhotoTileText;
-	takenAt: string | null;
+	takenAt: Date | string | null;
 	cameraMake: string | null;
 	cameraModel: string | null;
 	lensModel: string | null;
@@ -26,30 +26,27 @@ export interface PhotoTile {
 	thumbhash: string | null;
 }
 
-/** Display title: current locale → en → any → slug. */
-export function photoTitle(tile: PhotoTile, locale: string): string {
-	const title = tile.title;
-	if (title) {
-		const direct = title[locale];
-		if (typeof direct === 'string' && direct.trim() !== '') return direct;
-		for (const value of Object.values(title)) {
-			if (typeof value === 'string' && value.trim() !== '') return value;
-		}
+/** First non-blank string: current locale → en → any other language. */
+export function photoText(value: PhotoTileText, locale: string): string | null {
+	if (!value) return null;
+	const direct = value[locale];
+	if (typeof direct === 'string' && direct.trim() !== '') return direct;
+	const english = value.en;
+	if (typeof english === 'string' && english.trim() !== '') return english;
+	for (const candidate of Object.values(value)) {
+		if (typeof candidate === 'string' && candidate.trim() !== '') return candidate;
 	}
-	return tile.slug;
+	return null;
+}
+
+/** Display title: localized → en → any → slug. */
+export function photoTitle(tile: PhotoTile, locale: string): string {
+	return photoText(tile.title, locale) ?? tile.slug;
 }
 
 /** Alt text chain (§5.3): title → description → file name. */
 export function photoAlt(tile: PhotoTile, locale: string): string {
-	const title = photoTitle(tile, locale);
-	if (title !== tile.slug) return title;
-	const description = tile.description;
-	if (description) {
-		for (const value of Object.values(description)) {
-			if (typeof value === 'string' && value.trim() !== '') return value;
-		}
-	}
-	return tile.fileName;
+	return photoText(tile.title, locale) ?? photoText(tile.description, locale) ?? tile.fileName;
 }
 
 /** Public URL for a tile: GIFs are their own public tier, others use variants. */

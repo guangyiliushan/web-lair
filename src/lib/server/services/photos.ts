@@ -539,6 +539,52 @@ export function getVisiblePhotoById(
 	return loadVisibleDetail(eq(photos.id, id), deps);
 }
 
+export interface PhotoNeighbor {
+	slug: string;
+	title: LocalizedText | null;
+}
+
+/**
+ * Adjacent visible photos for the viewer. The feed orders by
+ * `(sort_at, id) DESC`, so `newer` is the row before the current one (tuple
+ * GREATER, first page of the tail) and `older` the row after it. Both sides
+ * are single-row keyset reads on the same tuple the list paginates on —
+ * hidden rows are filtered identically on both faces.
+ */
+export async function listPhotoNeighbors(
+	current: { sortAt: Date; id: string },
+	deps: PhotosDeps = {}
+): Promise<{ newer: PhotoNeighbor | null; older: PhotoNeighbor | null }> {
+	const { database } = await resolveDeps(deps);
+	const sortAt = current.sortAt.toISOString();
+	const fields = { slug: photos.slug, title: photos.title };
+	const [newerRows, olderRows] = await Promise.all([
+		database
+			.select(fields)
+			.from(photos)
+			.where(
+				and(
+					eq(photos.isVisible, true),
+					sql`(${SORT_EXPR}, ${photos.id}) > (${sortAt}::timestamptz, ${current.id}::uuid)`
+				)
+			)
+			.orderBy(sql`${SORT_EXPR} asc, ${photos.id} asc`)
+			.limit(1),
+		database
+			.select(fields)
+			.from(photos)
+			.where(
+				and(
+					eq(photos.isVisible, true),
+					sql`(${SORT_EXPR}, ${photos.id}) < (${sortAt}::timestamptz, ${current.id}::uuid)`
+				)
+			)
+			.orderBy(sql`${SORT_EXPR} desc, ${photos.id} desc`)
+			.limit(1)
+	]);
+	return { newer: newerRows[0] ?? null, older: olderRows[0] ?? null };
+}
+
 export interface PublicPhotoFilters {
 	year?: number;
 	cameraModel?: string;
