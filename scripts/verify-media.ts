@@ -1,4 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { join as pathJoin } from 'node:path';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { and, desc, eq, inArray } from 'drizzle-orm';
@@ -23,6 +26,7 @@ import {
 	removePhoto,
 	updatePhoto
 } from '../src/lib/server/services/photos';
+import { extractMakerNotes } from '../src/lib/server/media/exif-makernotes';
 
 /**
  * One-time media verification (storage line §4.6 / T5 / T6) against the dev
@@ -396,6 +400,83 @@ async function main(): Promise<void> {
 	check('photo removal keeps the file', removed.kind === 'ok', `kind=${removed.kind}`);
 	const afterRemoval = await deleteFile(galleryUpload.id, {}, deps);
 	check('file deletes after the photo is removed', afterRemoval.kind === 'ok');
+
+	// -- maker-notes three-brand probes (multi-brand batch, 2026-10-10) -------
+	// Official exiftool test images + the live X-T5 sample live in the
+	// repo-external evidence dir (licence-clean); a missing sample SKIPS its
+	// probe explicitly instead of failing the run.
+	const evidenceDir =
+		process.env.WL_EVIDENCE_DIR ??
+		pathJoin(process.cwd(), '..', 'notes', 'backups', 'storage-st2-evidence-20261009');
+	const mnProbes: Array<{
+		file: string;
+		brand: string;
+		requiredKeys: string[];
+		absent?: string[];
+	}> = [
+		{
+			file: 'fuji-sample.jpg',
+			brand: 'fuji',
+			// The retired fuji-recipes 15-field recipe set is a strict
+			// subset of the FujiFilm group dump (super-set verified
+			// before the switch; recipe parity pinned below).
+			requiredKeys: [
+				'FilmMode',
+				'GrainEffectRoughness',
+				'GrainEffectSize',
+				'ColorChromeEffect',
+				'ColorChromeFXBlue',
+				'WhiteBalance',
+				'WBRed',
+				'WBBlue',
+				'DynamicRange',
+				'HighlightTone',
+				'ShadowTone',
+				'Saturation',
+				'Sharpness',
+				'NoiseReduction',
+				'Clarity'
+			],
+			absent: ['flashpix', 'fotostation']
+		},
+		{ file: 'Apple.jpg', brand: 'apple', requiredKeys: ['MakerNoteVersion', 'RunTimeValue'] },
+		{ file: 'Canon.jpg', brand: 'canon', requiredKeys: ['BulbDuration', 'Quality'] }
+	];
+	for (const probe of mnProbes) {
+		const samplePath = pathJoin(evidenceDir, probe.file);
+		if (!existsSync(samplePath)) {
+			console.log(`  - makerNotes[${probe.brand}]: sample ${probe.file} missing — SKIPPED`);
+			continue;
+		}
+		const sampleBytes = new Uint8Array(await readFile(samplePath));
+		const dump = await extractMakerNotes(sampleBytes, { ext: 'jpg' });
+		const brandDump = dump?.[probe.brand] as Record<string, unknown> | undefined;
+		check(
+			`makerNotes.${probe.brand} extracted (${probe.file})`,
+			Boolean(brandDump) && Object.keys(brandDump ?? {}).length > 0,
+			`dump=${dump ? Object.keys(dump).join(',') : 'null'}`
+		);
+		const missing = probe.requiredKeys.filter((key) => !(key in (brandDump ?? {})));
+		check(
+			`makerNotes.${probe.brand} carries the required keys`,
+			missing.length === 0,
+			`missing=${missing.join(',')}`
+		);
+		for (const key of probe.absent ?? []) {
+			check(
+				`makerNotes.${probe.brand}: non-brand group '${key}' excluded`,
+				dump?.[key] === undefined
+			);
+		}
+	}
+	if (existsSync(pathJoin(evidenceDir, 'fuji-sample.jpg'))) {
+		const sampleBytes = new Uint8Array(await readFile(pathJoin(evidenceDir, 'fuji-sample.jpg')));
+		const dump = await extractMakerNotes(sampleBytes, { ext: 'jpg' });
+		check(
+			"makerNotes.fuji.FilmMode is 'Classic Chrome' (recipe parity)",
+			(dump?.fuji as Record<string, unknown> | undefined)?.FilmMode === 'Classic Chrome'
+		);
+	}
 
 	// -- keyset precision (review round 1): rows sharing one millisecond ------
 	// (µs-differing values) must survive BOTH pagination and neighbour lookup;

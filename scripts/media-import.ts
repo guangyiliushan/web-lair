@@ -42,6 +42,13 @@ const SCAN_EXTENSIONS = new Set([
 	'md'
 ]);
 
+/**
+ * Video containers are NOT yet whitelisted (server-side video is a future
+ * item); Live Photo MOVs live here. They are scanned separately so they get
+ * REPORTED as skipped instead of vanishing silently (multi-brand batch).
+ */
+const VIDEO_EXTENSIONS = new Set(['mov', 'mp4', 'm4v']);
+
 interface Options {
 	dirs: string[];
 	assetsOnly: boolean;
@@ -78,17 +85,18 @@ function parseArgs(argv: string[]): Options {
 	return { dirs, assetsOnly, concurrency: clamped };
 }
 
-async function walk(root: string, out: string[]): Promise<void> {
+async function walk(root: string, out: string[], videos: string[]): Promise<void> {
 	const entries = await readdir(root, { withFileTypes: true });
 	entries.sort((a, b) => a.name.localeCompare(b.name));
 	for (const entry of entries) {
 		if (entry.name.startsWith('.')) continue;
 		const path = join(root, entry.name);
 		if (entry.isDirectory()) {
-			await walk(path, out);
+			await walk(path, out, videos);
 		} else if (entry.isFile()) {
 			const ext = entry.name.split('.').pop()?.toLowerCase() ?? '';
 			if (SCAN_EXTENSIONS.has(ext)) out.push(path);
+			else if (VIDEO_EXTENSIONS.has(ext)) videos.push(path);
 		}
 	}
 }
@@ -142,6 +150,7 @@ const db = drizzle(sql, { schema });
 const storage = new RustFsStorage(storageConfigFromEnv(process.env));
 
 let scanned = 0;
+let videoSkipped = 0;
 let created = 0;
 let deduplicated = 0;
 let photosCreated = 0;
@@ -160,9 +169,19 @@ for (const dir of options.dirs) {
 	}
 	const tag = tagSlug(basename(root));
 	const paths: string[] = [];
-	await walk(root, paths);
+	const videoPaths: string[] = [];
+	await walk(root, paths, videoPaths);
 	scanned += paths.length;
 	console.log(`\nimporting ${paths.length} files from ${root}${tag ? `  (tag: ${tag})` : ''}`);
+	if (videoPaths.length > 0) {
+		videoSkipped += videoPaths.length;
+		console.log(
+			`  video files SKIPPED (whitelist pending — Live Photo MOV / video): ${videoPaths.length}`
+		);
+		for (const video of videoPaths.slice(0, 5)) {
+			console.log(`      ~ ${basename(video)}`);
+		}
+	}
 
 	const outcomes = await mapPool(paths, options.concurrency, async (path): Promise<Outcome> => {
 		const fileName = basename(path);
@@ -259,6 +278,9 @@ console.log(
 	}`
 );
 console.log(`  skipped:      ${skipped} (unsupported / too large)`);
+if (videoSkipped > 0) {
+	console.log(`  video:        ${videoSkipped} file(s) reported skipped (whitelist pending)`);
+}
 console.log(`  failed:       ${failed}`);
 
 await sql.end();
