@@ -426,6 +426,21 @@ describe('revertToBuiltin', () => {
 		expect(await exists(join(dataDir, 'jobs', '.meta', 'system-resources.json'))).toBe(false);
 	});
 
+	it('keeps the guard branch a no-op when the orphan sidecar cannot be removed (round 4)', async () => {
+		const dataDir = await tempDataDir();
+		const { db, auditRows } = makeDb();
+		// No user file (the crashed-revert shape) and the sidecar path is a
+		// directory: the probe finds the orphan, the rm fails, and the call
+		// must stay a logged no-op - no audit, no `reverted` claim.
+		await mkdir(join(dataDir, 'jobs', '.meta', 'system-resources.json'), { recursive: true });
+		expect(await revertToBuiltin({ dataDir, name: 'system.resources', actorId: null, db })).toEqual(
+			{
+				kind: 'not-forked'
+			}
+		);
+		expect(auditRows).toEqual([]);
+	});
+
 	it('tolerates a sidecar rm failure on the revert path (round 3, M10b)', async () => {
 		const dataDir = await tempDataDir();
 		const { db, auditRows } = makeDb();
@@ -527,6 +542,18 @@ describe('deleteUserJob', () => {
 		});
 		expect(await exists(join(dataDir, 'jobs', '.meta', 'ghost.json'))).toBe(false);
 		expect(auditRows).toHaveLength(1); // the ghost cleanup writes no audit row
+	});
+
+	it('stays not-user-job when the orphan sidecar cannot be removed (round 4)', async () => {
+		const dataDir = await tempDataDir();
+		const { db, auditRows } = makeDb();
+		// No file + directory-shaped sidecar: the guard's rm fails, the call
+		// must remain a clean not-user-job (logged, no audit).
+		await mkdir(join(dataDir, 'jobs', '.meta', 'ghost.json'), { recursive: true });
+		expect(await deleteUserJob({ dataDir, name: 'ghost', actorId: null, db })).toEqual({
+			kind: 'not-user-job'
+		});
+		expect(auditRows).toEqual([]);
 	});
 
 	it('tolerates a sidecar rm failure after the commit (round 3, M10)', async () => {

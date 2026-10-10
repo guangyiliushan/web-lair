@@ -293,17 +293,33 @@ async function revertToBuiltinLocked(input: {
 		// orphaned; finish that cleanup so the retry converges instead of
 		// stranding the sidecar forever (J-2 review round 2, F-1). Probe by
 		// stat, not by parse: a malformed sidecar is still an orphan that
-		// must be cleaned (round 3, P3-7). A sidecar only ever exists for a
-		// fork, so `reverted` is truthful here.
+		// must be cleaned (round 3, P3-7). Only a genuinely missing sidecar
+		// reads as no-orphan - other stat failures are surfaced in the log
+		// (round 4, P4-1, same policy as `fileInfo`).
 		const sidecar = sidecarPath(dir, name);
 		const orphaned = await stat(sidecar).then(
 			() => true,
-			() => false
+			(error: unknown) => {
+				if (!isNotFoundError(error)) {
+					console.error(`[jobs] revertToBuiltin: sidecar probe failed (${name}): ${String(error)}`);
+				}
+				return false;
+			}
 		);
 		if (!orphaned) return { kind: 'not-forked' };
-		await rm(sidecar, { force: true }).catch((error: unknown) => {
-			console.error(`[jobs] revertToBuiltin: sidecar cleanup failed (${name}): ${String(error)}`);
-		});
+		// Audit + `reverted` only when the cleanup actually landed (round 4,
+		// P4-2): a still-failing rm (directory, persistent EPERM) left the
+		// state untouched, so the call did NOT finish the earlier attempt.
+		const cleaned = await rm(sidecar, { force: true }).then(
+			() => true,
+			(error: unknown) => {
+				console.error(
+					`[jobs] revertToBuiltin: orphan sidecar cleanup failed (${name}): ${String(error)}`
+				);
+				return false;
+			}
+		);
+		if (!cleaned) return { kind: 'not-forked' };
 		await recordActivity(db, { event: 'job.revert', actorId, payload: { name } });
 		return { kind: 'reverted' };
 	}

@@ -66,8 +66,20 @@ describe('job editor (CodeMirror thin wrapper)', () => {
 		await userEvent.click(content);
 		await userEvent.keyboard('ZZZ');
 		expect(document.querySelector('.cm-editor')?.textContent ?? '').not.toContain('ZZZ');
-		// Mod-s must not reach onSave in read-only mode (round 3, P3-4).
-		await userEvent.keyboard('{Control>}s{/Control}');
+		// Mod-s must not reach onSave in read-only mode, and the keymap must
+		// still swallow the browser save shortcut. The content is not
+		// focusable in read-only mode, so dispatch straight onto the surface
+		// (round 3, P3-4; discriminating recipe from round 4, P4-3):
+		// defaultPrevented pins the `preventDefault: true` side, save-count
+		// pins the `if (readonly) return false` side.
+		const saveEvent = new KeyboardEvent('keydown', {
+			key: 's',
+			ctrlKey: true,
+			bubbles: true,
+			cancelable: true
+		});
+		content.dispatchEvent(saveEvent);
+		expect(saveEvent.defaultPrevented).toBe(true);
 		await expect
 			.poll(
 				() => Number(document.querySelector('[data-testid="save-count"]')?.textContent ?? '0'),
