@@ -4,11 +4,10 @@
 	import {
 		photoAlt,
 		photoText,
-		photoTileSrc,
 		photoTitle,
-		thumbhashDataUrl,
 		type PhotoTile
 	} from '$lib/components/photos/photo-tile';
+	import PhotosViewerImage from '$lib/components/photos/photos-viewer-image.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime';
 	import { siteHref } from '$lib/utils/href';
@@ -23,7 +22,6 @@
 	const alt = $derived(photoAlt(tile, getLocale()));
 	const description = $derived(photoText(data.photo.description, getLocale()));
 	const dateLabel = $derived(data.photo.takenAt ? formatDate(data.photo.takenAt) : null);
-	const placeholder = $derived(thumbhashDataUrl(tile.thumbhash));
 
 	/** EXIF summary line — parts, not labels (photos are language agnostic). */
 	const meta = $derived.by(() => {
@@ -67,6 +65,10 @@
 <svelte:window onkeydown={onKeydown} />
 <SeoHead path={`/photos/${data.photo.slug}`} />
 
+<svelte:head>
+	<title>{title}</title>
+</svelte:head>
+
 <article class="mx-auto mt-8 max-w-6xl px-4 md:mt-12 lg:px-0">
 	<!-- Accessible page heading (round-2 review: the viewer had no h1; the
 	     visible title lives in the sticky metadata bar below). -->
@@ -75,17 +77,13 @@
 		class="flex min-h-[40vh] items-center justify-center"
 		{...useSwipe(onSwipe, () => ({ timeframe: 350, minSwipeDistance: 60, touchAction: 'pan-y' }))}
 	>
-		<img
-			class="max-h-[76vh] w-auto max-w-full rounded-lg object-contain"
-			src={photoTileSrc(tile, 'full')}
-			{alt}
-			width={tile.width ?? undefined}
-			height={tile.height ?? undefined}
-			style={placeholder
-				? `background-image:url(${placeholder});background-size:cover;background-position:center;`
-				: undefined}
-			decoding="async"
-		/>
+		<!-- Progressive stage (T10/T16, plan §4.5): thumb first, streamed full
+		     with a 300ms-delayed progress floater; >8MB or metered → on-demand.
+		     Keyed by photo id: the [slug] route is reused between neighbours
+		     (previous/next), so the stage must reset per photo. -->
+		{#key data.photo.id}
+			<PhotosViewerImage photo={data.photo} {alt} />
+		{/key}
 	</figure>
 
 	{#if description}
