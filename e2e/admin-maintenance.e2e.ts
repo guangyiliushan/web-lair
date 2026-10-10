@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
@@ -34,13 +34,28 @@ function jobSidecarPath(): string {
 	return join(JOBS_DIR, '.meta', `${JOB}.json`);
 }
 
+// The builtin-fork fixture (test 9): a user copy of jobs.prune created and
+// removed around the case.
+function pruneFilePath(): string {
+	return join(JOBS_DIR, 'jobs-prune.ts');
+}
+
+function pruneSidecarPath(): string {
+	return join(JOBS_DIR, '.meta', 'jobs-prune.json');
+}
+
 function cleanupFs(): void {
 	rmSync(jobFilePath(), { force: true });
 	rmSync(jobSidecarPath(), { force: true });
+	rmSync(pruneFilePath(), { force: true });
+	rmSync(pruneSidecarPath(), { force: true });
 }
 
 function cleanupDb(): void {
 	psql(`delete from job_schedules where job like 'e2e-jobs-%'`);
+	psql(
+		`delete from activities where payload->>'name' = 'jobs.prune' and created_at > now() - interval '2 hours'`
+	);
 	psql(`delete from job_runs where job like 'e2e-jobs-%'`);
 	psql(
 		`delete from activities where payload->>'name' like 'e2e-jobs-%' or payload->>'job' like 'e2e-jobs-%'`
@@ -252,6 +267,7 @@ test.describe('J-3 maintenance (admin)', () => {
 		// explicit reload (J-3 review F1 activation: with use:enhance the
 		// buffer survives the rejected save instead of a page reload adopting
 		// the disk file).
+		mkdirSync(JOBS_DIR, { recursive: true });
 		writeFileSync(jobFilePath(), 'export default { run() {} }; // server-v1\n', 'utf8');
 		await page.goto(`/admin/maintenance/${JOB}`);
 		// .cm-content only exists after hydration + the editor's dynamic
@@ -265,6 +281,9 @@ test.describe('J-3 maintenance (admin)', () => {
 		});
 		// The freeze disables both save buttons (J-3 review F3).
 		await expect(page.getByRole('button', { name: '保存', exact: true })).toBeDisabled();
+		// The buffer must NOT adopt the disk file - that retention is the F1
+		// delta versus the old native POST (which reloaded and showed v2).
+		await expect(page.locator('.cm-content')).toContainText('server-v1');
 		// The rejected save wrote nothing - the external v2 survives.
 		expect(readFileSync(jobFilePath(), 'utf8')).toContain('server-v2');
 
@@ -273,6 +292,31 @@ test.describe('J-3 maintenance (admin)', () => {
 			timeout: 10_000
 		});
 		await expect(page.locator('.cm-content')).toContainText('server-v2', { timeout: 10_000 });
+		await expect(page.getByRole('button', { name: '保存', exact: true })).toBeEnabled();
+	});
+	test('forking a builtin keeps the saved flash through the invalidation (J-3 复核 v2 #1)', async ({
+		page
+	}) => {
+		// No user copy of jobs.prune: the editor shows the builtin, and the
+		// first save forks it (created+forked) - the one path that triggers the
+		// created/forked invalidation, whose ordering must preserve the flash.
+		rmSync(pruneFilePath(), { force: true });
+		rmSync(pruneSidecarPath(), { force: true });
+		await page.goto('/admin/maintenance/jobs.prune');
+		// CodeMirror virtualizes: only the top viewport renders, so gate on
+		// a line that is certainly visible (the #jobs-sdk import head).
+		await expect(page.locator('.cm-content')).toContainText('jobs-sdk', {
+			timeout: 20_000
+		});
+
+		await page.getByRole('button', { name: '保存', exact: true }).click({ timeout: 10_000 });
+		await expect(page.locator('[data-slot="maintenance-flash"]')).toContainText('已保存', {
+			timeout: 60_000
+		});
+		// A stale form would be cleared by the invalidation; after the settle
+		// delay the flash must still be there (kit#13825 ordering).
+		await page.waitForTimeout(1500);
+		await expect(page.locator('[data-slot="maintenance-flash"]')).toContainText('已保存');
 		await expect(page.getByRole('button', { name: '保存', exact: true })).toBeEnabled();
 	});
 });

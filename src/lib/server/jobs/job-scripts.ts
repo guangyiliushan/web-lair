@@ -1,12 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { and, eq } from 'drizzle-orm';
 import { jobRuns } from '../db/system/job-run.schema.ts';
 import { jobSchedules } from '../db/system/job-schedule.schema.ts';
 import { recordActivity } from '../audit.ts';
-import { jobsDir } from './data-dir.ts';
+import { jobsDir, repoRoot } from './data-dir.ts';
 import { builtinModuleFile, JOBS } from './registry.ts';
 import { checkJobName, runSaveGate } from './save-gate.ts';
 import { ensureJobsScaffold } from './scaffold.ts';
@@ -117,8 +116,17 @@ async function fileInfo(path: string): Promise<ScriptSourceInfo | null> {
 	}
 }
 
+/**
+ * Absolute path of a builtin's source file, anchored to the REPOSITORY root
+ * (discovered via `data-dir.ts`), NOT to `import.meta.url`: inside the
+ * production build this module ships as a chunk under `.svelte-kit/output`,
+ * where `./builtin/*.ts` does not exist - the editor would show an empty
+ * buffer, the fork baseline would record `builtin_hash: undefined`, and the
+ * update/revert comparisons would silently degrade (J-3 复核 batch-4 finding,
+ * surfaced by the first production-build builtin-editor test).
+ */
 function builtinSourcePath(name: string): string {
-	return fileURLToPath(new URL(`./builtin/${builtinModuleFile(name)}`, import.meta.url));
+	return join(repoRoot, 'src', 'lib', 'server', 'jobs', 'builtin', builtinModuleFile(name));
 }
 
 async function atomicWrite(path: string, content: string): Promise<void> {

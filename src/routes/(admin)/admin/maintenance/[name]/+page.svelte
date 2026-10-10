@@ -22,16 +22,30 @@
 
 	// enhance keeps the editor buffer alive across rejected saves (J-3 review
 	// F1): a plain native POST reloads the page and adopts the file on disk,
-	// silently discarding the user's edits. applyAction alone renders the
-	// result in place (conflict freeze / gate errors / saved flash) and still
-	// navigates on redirects; nothing is auto-adopted into the buffer. Only a
-	// FIRST save invalidates (the fork flips `info` - the notices must follow).
+	// silently discarding the user's edits. applyAction renders the result in
+	// place (conflict freeze / gate errors / saved flash) and still navigates
+	// on redirects; nothing is auto-adopted into the buffer. When the load
+	// data flips (created, or `forked` - which reports "builtin-backed" and
+	// therefore re-flips on EVERY save of such a script), refresh it FIRST
+	// and re-apply the action afterwards: invalidateAll clears `page.form`
+	// (sveltejs/kit#13825), so applying before it would wipe the 已保存 flash
+	// (J-3 复核 v2 #1). `pristine` is the SUBMITTED snapshot, not the live
+	// buffer: edits typed while the POST is in flight are not saved and must
+	// keep the unsaved-changes guard armed (J-3 复核 v2 #2).
 	const enhanceKeepBuffer: SubmitFunction =
-		() =>
+		({ formData }) =>
 		async ({ result }) => {
-			await applyAction(result);
+			const submittedCode = String(formData.get('code') ?? '');
 			if (result.type === 'success' && (result.data?.created || result.data?.forked)) {
 				await invalidateAll();
+			}
+			await applyAction(result);
+			const landed =
+				result.type === 'success' || result.type === 'failure'
+					? (result.data as { hash?: string } | undefined)
+					: undefined;
+			if (typeof landed?.hash === 'string') {
+				pristine = submittedCode;
 			}
 		};
 
@@ -88,12 +102,13 @@
 	// The server hash becomes our new base whenever a save landed - including
 	// a save-and-run whose enqueue half failed (`hash` rides the fail payload;
 	// retrying against a stale token would fake a 409, J-3 review P3-R2-2).
-	// `reverted` rewrites both the buffer and the token: after 恢复内置 the
-	// user file is gone, so the old hash can never match again (review F1).
+	// `pristine` advances in the submit callback from the SUBMITTED snapshot
+	// (复核 v2 #2); `reverted` rewrites both the buffer and the token: after
+	// 恢复内置 the user file is gone, so the old hash can never match again
+	// (review F1).
 	$effect(() => {
 		if (typeof form?.hash === 'string') {
 			baseHash = form.hash;
-			pristine = untrack(() => code);
 		}
 		if (form?.reverted) {
 			code = untrack(() => data.saveCode);

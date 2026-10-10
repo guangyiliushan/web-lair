@@ -20,16 +20,27 @@
 
 	// enhance keeps the editor buffer alive across rejected saves (J-3 review
 	// F1): a plain native POST reloads the page and adopts the file on disk,
-	// silently discarding the user's edits. applyAction alone renders the
-	// result in place (conflict freeze / gate errors / saved flash) and still
-	// navigates on redirects; nothing is auto-adopted into the buffer. Only a
-	// FIRST save invalidates (the fork flips `info` - the notices must follow).
+	// silently discarding the user's edits. applyAction renders the result in
+	// place and still navigates on redirects - and this page's successful
+	// saves ALWAYS redirect, so the invalidation branch below is inert here
+	// (kept for parity with the [name] page). The optimistic-lock token
+	// advances only when the response belongs to the name currently in the
+	// input: a rename while the POST is in flight must not adopt the old
+	// target's hash (J-3 复核 v2 #4).
 	const enhanceKeepBuffer: SubmitFunction =
-		() =>
+		({ formData }) =>
 		async ({ result }) => {
-			await applyAction(result);
+			const submittedName = String(formData.get('name') ?? '');
 			if (result.type === 'success' && (result.data?.created || result.data?.forked)) {
 				await invalidateAll();
+			}
+			await applyAction(result);
+			const landed =
+				result.type === 'success' || result.type === 'failure'
+					? (result.data as { hash?: string } | undefined)
+					: undefined;
+			if (typeof landed?.hash === 'string' && submittedName === untrack(() => name)) {
+				baseHash = landed.hash;
 			}
 		};
 
@@ -65,7 +76,6 @@
 
 	$effect(() => {
 		if (form) saving = false;
-		if (typeof form?.hash === 'string') baseHash = form.hash;
 	});
 
 	function submitSave(): void {
