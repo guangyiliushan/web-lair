@@ -105,6 +105,26 @@ describe('admin maintenance new actions', () => {
 		expect(state.saveCalls.at(-1)).toMatchObject({ code: 'a\nb\n' });
 	});
 
+	it('saveRun: missing name / unresolvable / non-manual / enqueue failure all refuse without queueing', async () => {
+		const missing = await callAction('saveRun', {});
+		expect(missing.result).toMatchObject({ status: 400 });
+
+		state.resolveResult = null;
+		const unresolvable = await callAction('saveRun', { name: 'my-task', code: 'x' });
+		expect(unresolvable.result).toMatchObject({ status: 404 });
+		expect((unresolvable.result as { data: { hash?: string } }).data.hash).toBe('h1');
+
+		state.resolveResult = { name: 'my-task', manual: false };
+		const nonManual = await callAction('saveRun', { name: 'my-task', code: 'x' });
+		expect(nonManual.result).toMatchObject({ status: 400 });
+
+		state.resolveResult = { name: 'my-task', manual: true };
+		mocks.enqueueJob.mockRejectedValueOnce(new Error('dedupe storm'));
+		const failed = await callAction('saveRun', { name: 'my-task', code: 'x' });
+		expect(failed.result).toMatchObject({ status: 400 });
+		expect(state.enqueueCalls).toHaveLength(0);
+	});
+
 	it('load requires the admin role first (J-3 review I1)', async () => {
 		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
 		await expect(load({} as never)).rejects.toThrow('redirect: no session');

@@ -221,19 +221,31 @@ describe('admin maintenance actions', () => {
 		expect((await callAction('scheduleCreate', {})).result).toMatchObject({ status: 400 });
 	});
 
-	it('scheduleToggle: uuid guard first, then not-found / toggled', async () => {
+	it('scheduleToggle: uuid/state guards first, then not-found / stale / toggled', async () => {
 		const bad = await callAction('scheduleToggle', { id: 'not-a-uuid' });
 		expect(bad.result).toMatchObject({ status: 400 });
+		const noState = await callAction('scheduleToggle', { id: SCHED_ID });
+		expect(noState.result).toMatchObject({ status: 400 });
 		expect(state.toggleCalls).toHaveLength(0);
 
 		state.toggleResult = { kind: 'not-found' };
-		expect((await callAction('scheduleToggle', { id: SCHED_ID })).result).toMatchObject({
+		expect(
+			(await callAction('scheduleToggle', { id: SCHED_ID, enabled: 'true' })).result
+		).toMatchObject({
 			status: 404
 		});
 
+		state.toggleResult = { kind: 'stale' };
+		expect(
+			(await callAction('scheduleToggle', { id: SCHED_ID, enabled: 'false' })).result
+		).toMatchObject({
+			status: 409
+		});
+
 		state.toggleResult = { kind: 'toggled', id: SCHED_ID, enabled: true };
-		const ok = await callAction('scheduleToggle', { id: SCHED_ID });
+		const ok = await callAction('scheduleToggle', { id: SCHED_ID, enabled: 'true' });
 		expect(ok.result).toMatchObject({ scheduleChanged: true, enabled: true });
+		expect(state.toggleCalls.at(-1)).toMatchObject({ id: SCHED_ID, enabled: true });
 	});
 
 	it('scheduleUpdate: uuid guard first, watermark result passthrough', async () => {
@@ -291,6 +303,14 @@ describe('admin maintenance actions', () => {
 		mocks.enqueueJob.mockRejectedValueOnce(new Error('job does not allow manual runs'));
 		const { result } = await callAction('typecheck');
 		expect(result).toMatchObject({ status: 400 });
+	});
+
+	it('run: an enqueue failure answers 400 with no audit row (J-3 review R4-2)', async () => {
+		state.resolveResult = { name: 'my-task', manual: true };
+		mocks.enqueueJob.mockRejectedValueOnce(new Error('dedupe storm'));
+		const { result } = await callAction('run', { name: 'my-task' });
+		expect(result).toMatchObject({ status: 400 });
+		expect(state.auditCalls).toHaveLength(0);
 	});
 
 	it('the guard runs before the request body is parsed (J-3 review B9)', async () => {

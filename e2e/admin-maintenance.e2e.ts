@@ -92,9 +92,9 @@ test.describe('J-3 maintenance (admin)', () => {
 		await page.goto('/admin/maintenance/new');
 		await page.getByLabel(/任务名/).fill(JOB);
 		// The first save in a fresh server process runs the gate's cold module
-		// init (~10s): one click with a generous navigation budget, then poll
-		// for the landing (never abandon the POST mid-navigation).
-		await page.getByRole('button', { name: '保存', exact: true }).click({ timeout: 30_000 });
+		// init (~10s, longer under load): one click with a generous navigation
+		// budget, then poll for the landing (never abandon the POST mid-navigation).
+		await page.getByRole('button', { name: '保存', exact: true }).click({ timeout: 60_000 });
 		await expect
 			.poll(() => new URL(page.url()).pathname, { timeout: 30_000 })
 			.toBe(`/admin/maintenance/${JOB}`);
@@ -131,6 +131,19 @@ test.describe('J-3 maintenance (admin)', () => {
 			await expect(card.locator('[data-slot="schedule-row"]')).toContainText(CRON, {
 				timeout: 5000
 			});
+		}).toPass({ timeout: 30_000 });
+		expect(psql(`select count(*) from job_schedules where job = '${JOB}'`)).toBe('1');
+
+		// A duplicate create answers 409 and the flash SHOWS it (J-3 review
+		// R4-1: failures must be visible, not just returned).
+		await expect(async () => {
+			await card.locator('summary', { hasText: '添加调度…' }).click({ timeout: 5000 });
+			await card.getByPlaceholder('0 4 * * *').fill(CRON);
+			await card.getByRole('button', { name: '添加' }).click({ timeout: 5000 });
+			await expect(page.locator('[data-slot="maintenance-flash"]')).toContainText(
+				'该任务已有一条相同 cron 的调度',
+				{ timeout: 5000 }
+			);
 		}).toPass({ timeout: 30_000 });
 		expect(psql(`select count(*) from job_schedules where job = '${JOB}'`)).toBe('1');
 

@@ -17,6 +17,7 @@ import {
 	updateSchedule
 } from '$lib/server/jobs/job-schedules';
 import { enqueueJob } from '$lib/server/jobs/queue';
+import { sanitizeErrorText } from '$lib/server/jobs/error-text';
 import { resolveJobDefinition } from '$lib/server/jobs/user-layer';
 import { RUN_STATUSES } from './maintenance-form-utils';
 import type { PageServerLoad, Actions } from './$types';
@@ -26,7 +27,7 @@ import type { PageServerLoad, Actions } from './$types';
  * three regions - scripts (registry ∪ user layer), the run ledger, and the
  * job/schedule audit trail - plus the latest jobs.typecheck summary. Actions
  * cover manual runs ("立即执行" / "运行类型检查") and the schedule CRUD; the
- * editor/ever-fork/save actions live on the [name] route (§5.6 lazy import).
+ * editor/fork/revert/save actions live on the [name] route (§5.6 lazy import).
  */
 
 const RUN_PAGE_SIZE = 100;
@@ -74,7 +75,7 @@ export const load: PageServerLoad = async ({ url }) => {
 				)
 			)
 			.orderBy(desc(jobRuns.createdAt))
-			.limit(RUN_PAGE_SIZE),
+			.limit(RUN_PAGE_SIZE + 1),
 		db
 			.select({
 				id: jobRuns.id,
@@ -97,20 +98,30 @@ export const load: PageServerLoad = async ({ url }) => {
 			.from(activities)
 			.where(or(like(activities.event, 'job.%'), like(activities.event, 'schedule.%')))
 			.orderBy(desc(activities.createdAt))
-			.limit(AUDIT_PAGE_SIZE)
+			.limit(AUDIT_PAGE_SIZE + 1)
 	]);
+
+	// N+1 probe surfaces truncation without a count query (J-3 review P2-2).
+	const runsTruncated = runs.length > RUN_PAGE_SIZE;
+	const auditTruncated = activityRows.length > AUDIT_PAGE_SIZE;
+	const visibleRuns = runsTruncated ? runs.slice(0, RUN_PAGE_SIZE) : runs;
+	const visibleActivities = auditTruncated ? activityRows.slice(0, AUDIT_PAGE_SIZE) : activityRows;
 
 	const typecheckRow = typecheckRows[0];
 	return {
 		headerTitle: '维护',
 		siteTz,
+		runsTruncated,
+		auditTruncated,
+		runPageSize: RUN_PAGE_SIZE,
+		auditPageSize: AUDIT_PAGE_SIZE,
 		filters: { job: jobFilter, status: statusIsValid ? statusFilter : '' },
 		scripts,
 		schedules: schedules.map((row) => ({
 			...row,
 			lastDueLabel: row.lastDueAt ? formatDateTime(row.lastDueAt, { timeZone: siteTz }) : null
 		})),
-		runs: runs.map((row) => ({
+		runs: visibleRuns.map((row) => ({
 			...row,
 			createdLabel: formatDateTime(row.createdAt, { timeZone: siteTz })
 		})),
@@ -123,7 +134,7 @@ export const load: PageServerLoad = async ({ url }) => {
 					error: typecheckRow.error
 				}
 			: null,
-		activities: activityRows.map((row) => ({
+		activities: visibleActivities.map((row) => ({
 			...row,
 			createdLabel: formatDateTime(row.createdAt, { timeZone: siteTz })
 		}))
@@ -139,13 +150,17 @@ export const actions: Actions = {
 		if (!name) return fail(400, { error: '缺少任务名' });
 		const dataDir = resolveDataDir();
 		const definition = await resolveJobDefinition(name, dataDir);
-		if (!definition) return fail(404, { error: `未知的 job：${name}` });
+		if (!definition) return fail(404, { error: `未知的任务：${name}` });
 		if (!definition.manual) return fail(400, { error: '该任务不允许手动执行' });
 		let queued;
 		try {
 			queued = await enqueueJob(db, name, 'manual', definition);
 		} catch (error) {
-			return fail(400, { error: error instanceof Error ? error.message : '入队失败' });
+			// manual=false and 23505 storms throw - answer 400 with a
+			// sanitized message and keep the platform log entry (J-3 review
+			// R4-2: an unlogged echo left failures invisible everywhere).
+			console.error('[jobs] manual enqueue failed', error);
+			return fail(400, { error: sanitizeErrorText(error) });
 		}
 		// Audit after the enqueue (same call path, not same transaction - the
 		// F-4 window the J-2 review registered; a retry dedupes via 23505).
@@ -165,8 +180,10 @@ export const actions: Actions = {
 			queued = await enqueueJob(db, 'jobs.typecheck', 'manual');
 		} catch (error) {
 			// manual=false throws and a 23505 storm throws lastError - both
-			// must answer 400, not a 500 form page (J-3 review J3-3).
-			return fail(400, { error: error instanceof Error ? error.message : '入队失败' });
+			// must answer 400, not a 500 form page (J-3 review J3-3);
+			// sanitized + logged (J-3 review R4-2).
+			console.error('[jobs] manual enqueue failed', error);
+			return fail(400, { error: sanitizeErrorText(error) });
 		}
 		await recordActivity(db, {
 			event: 'job.run',
@@ -220,8 +237,17 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
 		if (!id || !isUuid(id)) return fail(400, { error: '缺少有效的调度 ID' });
-		const result = await toggleSchedule({ db, id, actorId: locals.user?.id ?? null });
+		const enabledRaw = (form.get('enabled') ?? '').toString();
+		if (enabledRaw !== 'true' && enabledRaw !== 'false')
+			return fail(400, { error: '缺少有效的调度状态' });
+		const result = await toggleSchedule({
+			db,
+			id,
+			enabled: enabledRaw === 'true',
+			actorId: locals.user?.id ?? null
+		});
 		if (result.kind === 'not-found') return fail(404, { error: '调度不存在' });
+		if (result.kind === 'stale') return fail(409, { error: '调度状态已变化，请刷新页面后重试' });
 		return { scheduleChanged: true, scheduleAction: 'toggle' as const, enabled: result.enabled };
 	},
 

@@ -253,19 +253,30 @@ async function runOneSchedule(
 	const ran = await runWithJobLock(deps, schedule.job, async () => {
 		// Watermark advance + ledger row commit in ONE transaction - a crash
 		// can never leave the watermark moved with no run recorded for it.
-		// The CAS predicate is MONOTONIC (`watermark < new due`), not equality:
-		// equality breaks against watermarks written outside drizzle (SQL
-		// now() carries microseconds; drizzle/postgres.js round-trip at
-		// milliseconds) and would silently stop the schedule from ever firing.
-		// Monotonicity still guarantees exactly-one: two drains computing the
-		// same due - the second sees `latestDue < latestDue` false (plan §4.1
-		// / T1). `updatedAt` is pinned: a watermark move is not a config edit.
+		// The CAS predicate is MONOTONIC (`watermark < new due`) PLUS a CONFIG
+		// SNAPSHOT (cron/tz/enabled exactly as read at segment start; J-3
+		// review F1). Monotonic-only was the hole: `schedule` can be minutes
+		// old here (rows run inline), so an admin edit mid-tick would still
+		// match - clobbering the admin's watermark reset and firing once under
+		// the old expression. Equality alone is not an option either:
+		// watermarks written outside drizzle carry microseconds and would
+		// silently stop the schedule from ever firing - monotonicity stays as
+		// the concurrency half (plan §4.1 / T1). Two drains racing the same
+		// due: the second sees `latestDue < latestDue` false; an admin edit:
+		// the snapshot columns mismatch. `updatedAt` is pinned: a watermark
+		// move is not a config edit.
 		const runId = await deps.db.transaction(async (tx) => {
 			const advanced = await tx
 				.update(jobSchedules)
 				.set({ lastDueAt: snapshot.latestDue, updatedAt: schedule.updatedAt })
 				.where(
-					and(eq(jobSchedules.id, schedule.id), lt(jobSchedules.lastDueAt, snapshot.latestDue))
+					and(
+						eq(jobSchedules.id, schedule.id),
+						lt(jobSchedules.lastDueAt, snapshot.latestDue),
+						eq(jobSchedules.cronExpr, schedule.cronExpr),
+						eq(jobSchedules.tz, schedule.tz),
+						eq(jobSchedules.isEnabled, true)
+					)
 				)
 				.returning({ id: jobSchedules.id });
 			if (advanced.length === 0) return null;
@@ -277,7 +288,9 @@ async function runOneSchedule(
 		});
 		if (runId === null) {
 			stats.schedules.casLost += 1;
-			deps.log(`[drain] ${schedule.job}: watermark already advanced by a concurrent drain`);
+			deps.log(
+				`[drain] ${schedule.job}: watermark advance lost (concurrent drain or config changed mid-tick)`
+			);
 			return;
 		}
 		stats.schedules.fired += 1;

@@ -11,6 +11,7 @@ import {
 	saveScript
 } from '$lib/server/jobs/job-scripts';
 import { enqueueJob } from '$lib/server/jobs/queue';
+import { sanitizeErrorText } from '$lib/server/jobs/error-text';
 import { resolveJobDefinition } from '$lib/server/jobs/user-layer';
 import { parseBaseHash, parseCode } from '../maintenance-form-utils';
 import type { PageServerLoad, Actions } from './$types';
@@ -91,14 +92,22 @@ export const actions: Actions = {
 		// Re-resolve AFTER the save: a first save of a builtin name just
 		// created the fork, and non-registry names need the user-layer
 		// definition for enqueueJob (J-2 review D2 note).
+		// The manifest already landed: every failure below carries the fresh
+		// hash so the editor can advance its optimistic-lock token instead of
+		// re-saving against a stale one (J-3 review P3-R2-2).
 		const definition = await resolveJobDefinition(params.name, dataDir);
-		if (!definition) return fail(404, { message: `保存成功，但脚本无法解析：${params.name}` });
-		if (!definition.manual) return fail(400, { message: '该任务不允许手动执行' });
+		if (!definition) {
+			return fail(404, { message: `保存成功，但脚本无法解析：${params.name}`, hash: result.hash });
+		}
+		if (!definition.manual) {
+			return fail(400, { message: '该任务不允许手动执行', hash: result.hash });
+		}
 		let queued;
 		try {
 			queued = await enqueueJob(db, params.name, 'manual', definition);
 		} catch (error) {
-			return fail(400, { message: error instanceof Error ? error.message : '入队失败' });
+			console.error('[jobs] manual enqueue failed', error);
+			return fail(400, { message: sanitizeErrorText(error), hash: result.hash });
 		}
 		await recordActivity(db, {
 			event: 'job.run',

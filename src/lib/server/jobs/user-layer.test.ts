@@ -9,6 +9,7 @@ import { ensureJobsScaffold } from './scaffold';
 import {
 	createJobLoader,
 	DEFAULT_USER_JOB_TIMEOUT_MS,
+	isCanonicalJobName,
 	jobNameForUserFile,
 	listJobs,
 	listUserJobFiles,
@@ -55,6 +56,15 @@ describe('jobNameForUserFile', () => {
 		expect(jobNameForUserFile('bad name.ts')).toBeNull();
 		expect(jobNameForUserFile('con.ts')).toBeNull();
 		expect(jobNameForUserFile('../evil.ts')).toBeNull();
+	});
+
+	it('reserves new.ts so the /new route name never resolves as a job (J-3 review J3-1)', () => {
+		// The write path rejects the name at the gate; this pins the READ
+		// path - a hand-placed new.ts must stay invisible to list/resolve/
+		// delete/drain.
+		expect(jobNameForUserFile('new.ts')).toBeNull();
+		expect(isCanonicalJobName('new')).toBe(false);
+		expect(isCanonicalJobName('my-task')).toBe(true);
 	});
 });
 

@@ -2,6 +2,7 @@
 	import type { PageProps } from './$types';
 	import { page } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
+	import { untrack } from 'svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { DeleteConfirm } from '$lib/components/admin';
@@ -21,8 +22,11 @@
 		(module) => module.default
 	);
 
-	let code = $state(data.saveCode);
-	let baseHash = $state<string | null>(data.saveBaseHash);
+	let code = $state(untrack(() => data.saveCode));
+	let baseHash = $state<string | null>(untrack(() => data.saveBaseHash));
+	// Unsaved-changes baseline (J-3 review P3-18, drafts/edit precedent).
+	let pristine = $state(untrack(() => data.saveCode));
+	const dirty = $derived(code !== pristine);
 	let saveForm: HTMLFormElement | undefined = $state();
 	let deleteOpen = $state(false);
 	let revertOpen = $state(false);
@@ -33,7 +37,11 @@
 	// Conflict freeze (J-3 review P2-6, drafts precedent): after a 409 the
 	// editor keeps the buffer but saving is paused until the server state is
 	// loaded explicitly - otherwise the next save just produces another 409.
+	// LOCAL state is the single source for the banner; `page.form` may or may
+	// not survive invalidateAll (sveltejs/kit#13825 - J-3 reviews F1/R2-1),
+	// so the hash is snapshotted alongside.
 	let conflicted = $state(false);
+	let conflictHash = $state<string | null>(null);
 
 	interface ActionResult {
 		status?: number;
@@ -60,38 +68,66 @@
 
 	const form = $derived(page.form as ActionResult | null | undefined);
 
-	// A successful save makes the server hash our new base.
+	// The server hash becomes our new base whenever a save landed - including
+	// a save-and-run whose enqueue half failed (`hash` rides the fail payload;
+	// retrying against a stale token would fake a 409, J-3 review P3-R2-2).
+	// `reverted` rewrites both the buffer and the token: after 恢复内置 the
+	// user file is gone, so the old hash can never match again (review F1).
 	$effect(() => {
-		if (form?.saved && typeof form.hash === 'string') baseHash = form.hash;
+		if (typeof form?.hash === 'string') {
+			baseHash = form.hash;
+			pristine = untrack(() => code);
+		}
+		if (form?.reverted) {
+			code = untrack(() => data.saveCode);
+			baseHash = untrack(() => data.saveBaseHash);
+			pristine = untrack(() => data.saveCode);
+			conflicted = false;
+			conflictHash = null;
+		}
 	});
 
 	// Any action result ends the pending window; a redirect unmounts the page
-	// entirely. A conflict flips the freeze on, a successful save clears it.
+	// entirely. The conflict freeze stays LOCAL (single source); a successful
+	// save (or revert) clears it.
 	$effect(() => {
 		if (form) saving = false;
-		if (form?.conflict) conflicted = true;
-		if (form?.saved) conflicted = false;
+		if (form?.conflict) {
+			conflicted = true;
+			conflictHash = form.currentHash ?? null;
+		}
+		if (form?.saved) {
+			conflicted = false;
+			conflictHash = null;
+		}
 	});
 
 	// Dialog error text: an action failure the user must see inside the
 	// overlay (a page banner hides behind it - DeleteConfirm contract).
+	// Dialog error text: an action failure the user must see inside the
+	// overlay (a page banner hides behind it - DeleteConfirm contract).
+	// `form.status` is never set by kit, so the payload keys are the signal
+	// (J-3 review R4-1); the old generic fallback went stale across actions
+	// (review P3-R2-4) - no message, no dialog text.
 	const dialogError = $derived(
-		form && !form.conflict && typeof form.status === 'number' && form.status >= 400
-			? String(form.message ?? form.error ?? '操作失败')
+		form && !form.conflict && (typeof form.message === 'string' || typeof form.error === 'string')
+			? String(form.message ?? form.error)
 			: null
 	);
 
 	const flash = $derived.by(() => {
-		if (!form) return null;
-		if (form.conflict) {
+		if (conflicted) {
 			return {
 				kind: 'conflict' as const,
-				text: String(form.message ?? '脚本已在其他窗口更新'),
-				currentHash: form.currentHash ?? null
+				text: '脚本已在其他窗口更新（乐观锁失配）',
+				currentHash: conflictHash
 			};
 		}
-		if (typeof form.status === 'number' && form.status >= 400) {
-			return { kind: 'error' as const, text: String(form.message ?? form.error ?? '操作失败') };
+		if (!form) return null;
+		if (form.conflict) return null; // stale conflict payload after a reload
+		if (form.errors && form.errors.length > 0) return null; // gate block speaks
+		if (typeof form.error === 'string' || typeof form.message === 'string') {
+			return { kind: 'error' as const, text: String(form.message ?? form.error) };
 		}
 		if (form.saved) {
 			const parts = ['已保存'];
@@ -110,9 +146,24 @@
 		await invalidateAll();
 		code = data.saveCode;
 		baseHash = data.saveBaseHash;
+		pristine = data.saveCode;
 		saving = false;
 		conflicted = false;
+		conflictHash = null;
 	}
+
+	// Unsaved-changes guard (J-3 review P3-18, drafts/edit precedent).
+	// `saving` exempts the editor's own submit navigation - that navigation
+	// IS the save; anything else with an unpristine buffer asks first.
+	$effect(() => {
+		if (!dirty) return;
+		const guard = (event: BeforeUnloadEvent): void => {
+			if (saving) return;
+			event.preventDefault();
+		};
+		window.addEventListener('beforeunload', guard);
+		return () => window.removeEventListener('beforeunload', guard);
+	});
 
 	function submitSave(): void {
 		// Re-entry guard for the Mod-S path too (J-3 review J3-7): a second
@@ -196,7 +247,7 @@
 			<p class="mb-2 text-sm font-medium text-destructive">保存被拒绝：</p>
 			<ul class="space-y-1">
 				{#each form.errors as gateError, index (index)}
-					<li class="font-mono text-xs">
+					<li class="font-mono text-xs break-all">
 						{#if gateError.line !== null}
 							<span class="text-muted-foreground"
 								>{gateError.line}{gateError.column !== null ? `:${gateError.column}` : ''}</span
@@ -246,11 +297,12 @@
 					type="submit"
 					variant="outline"
 					size="sm"
+					disabled={conflicted}
 					onclick={(event) => {
-						// A disabled flip would abort the native submit itself
-						// (the submitter cannot be disabled); gate repeats by
-						// canceling the click instead - and a conflicted editor
-						// stays frozen until the server state is reloaded.
+						// While `saving` repeats are canceled here (a disabled
+						// flip would abort the native submit itself); the
+						// conflicted freeze uses disabled - no in-flight
+						// submit exists to interrupt (J-3 review F3).
 						if (saving || conflicted) {
 							event.preventDefault();
 							return;
@@ -264,6 +316,7 @@
 					type="submit"
 					size="sm"
 					formaction="?/saveRun"
+					disabled={conflicted}
 					onclick={(event) => {
 						if (saving || conflicted) {
 							event.preventDefault();

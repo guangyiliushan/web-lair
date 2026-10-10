@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { CronExpressionParser } from 'cron-parser';
 import { jobSchedules } from '../db/system/job-schedule.schema.ts';
 import { pgErrorCode } from '../db/pg-error.ts';
@@ -104,7 +104,7 @@ export async function createSchedule(input: {
 }): Promise<CreateScheduleResult> {
 	const job = input.job.trim();
 	const definition = await resolveJobDefinition(job, input.dataDir);
-	if (!definition) return { kind: 'unknown-job', message: `未知的 job："${job}"` };
+	if (!definition) return { kind: 'unknown-job', message: `未知的任务："${job}"` };
 	// The membership check rides on `execute`, which the ScheduleDb surface
 	// does not name - same cast the options registry uses (ledger §13.9).
 	const validation = await validateScheduleInput(input, input.db as unknown as PgTimeZoneExecutor);
@@ -124,7 +124,7 @@ export async function createSchedule(input: {
 			await recordActivity(tx, {
 				event: 'schedule.create',
 				actorId: input.actorId,
-				payload: { job, cron_expr: validation.cronExpr, tz: validation.tz }
+				payload: { id: row.id, job, cron_expr: validation.cronExpr, tz: validation.tz }
 			});
 			return { kind: 'created' as const, id: row.id };
 		});
@@ -176,6 +176,7 @@ export async function updateSchedule(input: {
 				event: 'schedule.update',
 				actorId: input.actorId,
 				payload: {
+					id: input.id,
 					job: existing.job,
 					cron_expr: validation.cronExpr,
 					tz: validation.tz,
@@ -193,12 +194,19 @@ export async function updateSchedule(input: {
 }
 
 export type ToggleScheduleResult =
-	{ kind: 'toggled'; id: string; enabled: boolean } | { kind: 'not-found' };
+	{ kind: 'toggled'; id: string; enabled: boolean } | { kind: 'stale' } | { kind: 'not-found' };
 
-/** Flip `is_enabled`; enabling resets the watermark (plan §3.2). */
+/**
+ * Set `is_enabled` to an EXPLICIT target state (never a blind flip): the UI
+ * submits the desired end state, so a double-click / replayed POST is an
+ * idempotent no-op instead of flipping the row back (J-3 review F2).
+ * Enabling resets the watermark (plan §3.2); a concurrent writer that moved
+ * the state in between answers `stale` (conditional write, no lost update).
+ */
 export async function toggleSchedule(input: {
 	db: ScheduleDb;
 	id: string;
+	enabled: boolean;
 	actorId: string | null;
 }): Promise<ToggleScheduleResult> {
 	const [existing] = await input.db
@@ -207,22 +215,36 @@ export async function toggleSchedule(input: {
 		.where(eq(jobSchedules.id, input.id))
 		.limit(1);
 	if (!existing) return { kind: 'not-found' };
-	const enabled = !existing.isEnabled;
+	const enabled = input.enabled;
+	if (existing.isEnabled === enabled) {
+		// Idempotent replay: already in the requested state - no write, no
+		// duplicate audit row.
+		return { kind: 'toggled', id: input.id, enabled };
+	}
 	const outcome = await input.db.transaction(async (tx) => {
 		const updated = await tx
 			.update(jobSchedules)
 			.set(enabled ? { isEnabled: true, lastDueAt: new Date() } : { isEnabled: false })
-			.where(eq(jobSchedules.id, input.id))
+			.where(and(eq(jobSchedules.id, input.id), eq(jobSchedules.isEnabled, existing.isEnabled)))
 			.returning({ id: jobSchedules.id });
-		if (updated.length === 0) return 'missing' as const;
+		if (updated.length === 0) {
+			// Distinguish vanished row from a racing flip for the caller.
+			const [stillThere] = await tx
+				.select({ id: jobSchedules.id })
+				.from(jobSchedules)
+				.where(eq(jobSchedules.id, input.id))
+				.limit(1);
+			return stillThere ? ('stale' as const) : ('missing' as const);
+		}
 		await recordActivity(tx, {
 			event: 'schedule.toggle',
 			actorId: input.actorId,
-			payload: { job: existing.job, enabled }
+			payload: { id: input.id, job: existing.job, enabled }
 		});
 		return 'toggled' as const;
 	});
 	if (outcome === 'missing') return { kind: 'not-found' };
+	if (outcome === 'stale') return { kind: 'stale' };
 	return { kind: 'toggled', id: input.id, enabled };
 }
 
@@ -243,7 +265,7 @@ export async function deleteSchedule(input: {
 		await recordActivity(tx, {
 			event: 'schedule.delete',
 			actorId: input.actorId,
-			payload: { job: deleted[0].job }
+			payload: { id: deleted[0].id, job: deleted[0].job }
 		});
 		return deleted[0];
 	});

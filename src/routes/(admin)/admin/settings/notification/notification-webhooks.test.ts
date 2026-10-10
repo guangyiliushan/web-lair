@@ -167,7 +167,7 @@ describe('notification webhooks retry', () => {
 		state.selectQueue.push([{ isEnabled: true }]);
 		const ok = await callRetry({ id: DELIVERY_ID });
 		expect(ok.result).toMatchObject({ retried: true, id: 'new-delivery' });
-		expect(state.insertValues[0]).toMatchObject({
+		expect(state.insertValues[0]).toEqual({
 			webhookId: 'w1',
 			event: 'comment.created',
 			payload: { a: 1 },

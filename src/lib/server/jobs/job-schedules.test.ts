@@ -59,6 +59,14 @@ function makeDb(state: FakeState) {
 		}
 	});
 	const makeTx = () => ({
+		// The toggle/existence probes read back through the tx (J-3 review F2).
+		select: () => ({
+			from: () => ({
+				where: () => ({
+					limit: async () => state.selectQueue.shift() ?? []
+				})
+			})
+		}),
 		insert: () => ({
 			values: (values: unknown) => {
 				state.insertValues.push(values);
@@ -263,7 +271,7 @@ describe('updateSchedule / toggleSchedule / deleteSchedule', () => {
 		expect((state.updateSets[0] as { lastDueAt?: unknown }).lastDueAt).toBeInstanceOf(Date);
 		expect(auditRows[0]).toMatchObject({
 			event: 'schedule.update',
-			payload: { watermark_reset: true }
+			payload: { id: 'sched-1', watermark_reset: true }
 		});
 
 		state.selectQueue.push([{ job: 'known', cronExpr: '0 5 * * *', tz: 'Etc/UTC' }]);
@@ -326,7 +334,8 @@ describe('updateSchedule / toggleSchedule / deleteSchedule', () => {
 		).toEqual({ kind: 'not-found' });
 
 		state.selectQueue.push([{ job: 'known', isEnabled: true }]);
-		expect(await toggleSchedule({ db, id: 'sched-1', actorId: null })).toEqual({
+		state.selectQueue.push([]); // the existence probe inside the tx
+		expect(await toggleSchedule({ db, id: 'sched-1', enabled: false, actorId: null })).toEqual({
 			kind: 'not-found'
 		});
 		expect(auditRows).toHaveLength(0);
@@ -334,7 +343,7 @@ describe('updateSchedule / toggleSchedule / deleteSchedule', () => {
 
 	it('toggle: enabling resets the watermark, disabling does not', async () => {
 		state.selectQueue.push([{ job: 'known', isEnabled: false }]);
-		expect(await toggleSchedule({ db, id: 'sched-1', actorId: 'admin-1' })).toEqual({
+		expect(await toggleSchedule({ db, id: 'sched-1', enabled: true, actorId: 'admin-1' })).toEqual({
 			kind: 'toggled',
 			id: 'sched-1',
 			enabled: true
@@ -343,16 +352,42 @@ describe('updateSchedule / toggleSchedule / deleteSchedule', () => {
 		expect((state.updateSets[0] as { lastDueAt?: unknown }).lastDueAt).toBeInstanceOf(Date);
 
 		state.selectQueue.push([{ job: 'known', isEnabled: true }]);
-		expect(await toggleSchedule({ db, id: 'sched-1', actorId: null })).toMatchObject({
+		expect(
+			await toggleSchedule({ db, id: 'sched-1', enabled: false, actorId: null })
+		).toMatchObject({
 			enabled: false
 		});
 		expect(state.updateSets[1]).toEqual({ isEnabled: false });
-		expect(auditRows[1]).toMatchObject({ event: 'schedule.toggle', payload: { enabled: false } });
+		expect(auditRows[1]).toMatchObject({
+			event: 'schedule.toggle',
+			payload: { id: 'sched-1', enabled: false }
+		});
+	});
+
+	it('toggle: an explicit target that already holds is an idempotent no-op (J-3 review F2)', async () => {
+		state.selectQueue.push([{ job: 'known', isEnabled: true }]);
+		expect(await toggleSchedule({ db, id: 'sched-1', enabled: true, actorId: null })).toEqual({
+			kind: 'toggled',
+			id: 'sched-1',
+			enabled: true
+		});
+		expect(state.updateCount).toBe(0);
+		expect(auditRows).toHaveLength(0);
+	});
+
+	it('toggle: a racing flip answers stale, not a silent overwrite (J-3 review F2)', async () => {
+		state.selectQueue.push([{ job: 'known', isEnabled: false }]);
+		state.updateRows = [];
+		state.selectQueue.push([{ id: 'sched-1' }]); // the row still exists
+		expect(await toggleSchedule({ db, id: 'sched-1', enabled: true, actorId: null })).toEqual({
+			kind: 'stale'
+		});
+		expect(auditRows).toHaveLength(0);
 	});
 
 	it('toggle reports not-found for unknown rows', async () => {
 		state.selectQueue.push([]);
-		expect(await toggleSchedule({ db, id: 'sched-x', actorId: null })).toEqual({
+		expect(await toggleSchedule({ db, id: 'sched-x', enabled: true, actorId: null })).toEqual({
 			kind: 'not-found'
 		});
 	});

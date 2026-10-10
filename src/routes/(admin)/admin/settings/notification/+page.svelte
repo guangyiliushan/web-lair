@@ -19,8 +19,10 @@
 		if (!form) return null;
 		if (form.retried)
 			return { kind: 'ok' as const, text: '已重投：新排队行已写入，≤1 tick 内投递' };
-		if (typeof form.status === 'number' && form.status >= 400) {
-			return { kind: 'error' as const, text: String(form.message ?? '操作失败') };
+		if (form.message && !form.retried) {
+			// `form.status` is never set by kit (J-3 review R4-1): the
+			// payload keys carry the signal.
+			return { kind: 'error' as const, text: String(form.message) };
 		}
 		return null;
 	});

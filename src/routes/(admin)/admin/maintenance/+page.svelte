@@ -7,7 +7,15 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { RefreshButton } from '$lib/components/admin/refresh-button';
-	import { RUN_STATUSES } from './maintenance-form-utils';
+	import {
+		buildFilterQuery,
+		maintenanceFlash,
+		RUN_LABELS,
+		RUN_STATUSES,
+		typecheckLabel,
+		typecheckVariant
+	} from './maintenance-form-utils';
+	import * as Empty from '$lib/components/ui/empty';
 
 	/**
 	 * /admin/maintenance (J-3, plan §5.7): scripts (registry ∪ user layer)
@@ -31,44 +39,11 @@
 	}
 
 	const form = $derived(page.form as ActionForm | null | undefined);
-	const flash = $derived.by(() => {
-		if (!form) return null;
-		if (typeof form.status === 'number' && form.status >= 400) {
-			return { kind: 'error' as const, text: String(form.error ?? '操作失败') };
-		}
-		if (form.queued) {
-			return {
-				kind: 'ok' as const,
-				text: `已排队：${String(form.name)}${form.deduplicated ? '（已有同任务在队列，未重复入队）' : ''}——≤1 分钟内执行`
-			};
-		}
-		if (form.scheduleChanged) {
-			const action = form.scheduleAction;
-			const text =
-				action === 'create'
-					? '已添加调度'
-					: action === 'delete'
-						? '调度已删除'
-						: action === 'toggle'
-							? form.enabled
-								? '调度已启用（水位已重置为当前时间）'
-								: '调度已停用'
-							: form.watermarkReset
-								? '调度已更新（水位已重置为当前时间）'
-								: '调度已更新';
-			return { kind: 'ok' as const, text };
-		}
-		return null;
-	});
+	const flash = $derived(maintenanceFlash(form));
 
 	/** Query suffix so schedule/run actions keep the active ledger filters
 	 * (a bare `?/action` POST would otherwise reset them, review P3-20). */
-	const filterQuery = $derived.by(() => {
-		const parts: string[] = [];
-		if (data.filters.job) parts.push(`job=${encodeURIComponent(data.filters.job)}`);
-		if (data.filters.status) parts.push(`status=${encodeURIComponent(data.filters.status)}`);
-		return parts.length > 0 ? `&${parts.join('&')}` : '';
-	});
+	const filterQuery = $derived(buildFilterQuery(data.filters));
 
 	const schedulesByJob = $derived.by(() => {
 		const map = new SvelteMap<string, PageProps['data']['schedules']>();
@@ -79,14 +54,6 @@
 		}
 		return map;
 	});
-
-	const RUN_LABELS: Record<string, string> = {
-		queued: '排队中',
-		running: '运行中',
-		succeeded: '成功',
-		failed: '失败',
-		skipped: '跳过'
-	};
 
 	function runVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
 		if (status === 'failed') return 'destructive';
@@ -100,26 +67,6 @@
 		const ms = new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime();
 		if (!Number.isFinite(ms) || ms < 0) return '—';
 		return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
-	}
-
-	/** Typecheck summary badge: a failed RUN is not the same as a failed
-	 * CHECK, and "queued" must not render as a red failure (review P2-1). */
-	function typecheckVariant(check: {
-		status: string;
-		summary: { ok?: boolean } | null;
-	}): 'default' | 'secondary' | 'destructive' | 'outline' {
-		if (check.status === 'queued') return 'outline';
-		if (check.status === 'running') return 'secondary';
-		if (check.status === 'failed') return 'destructive';
-		if (check.summary?.ok) return 'default';
-		return 'destructive';
-	}
-
-	function typecheckLabel(check: { status: string; summary: { ok?: boolean } | null }): string {
-		if (check.status === 'failed') return '失败';
-		if (check.summary?.ok) return '通过';
-		if (check.status === 'succeeded') return '未通过';
-		return RUN_LABELS[check.status] ?? check.status;
 	}
 </script>
 
@@ -143,7 +90,7 @@
 	<!-- ① 脚本（含调度 inline） -->
 	<section>
 		<div class="mb-4 flex items-center justify-between">
-			<h3 class="text-sm font-semibold">脚本</h3>
+			<h2 class="text-sm font-semibold">脚本</h2>
 			<div class="flex items-center gap-2">
 				<span class="text-xs text-muted-foreground">
 					注册表 ∪ 用户层（$DATA_DIR/jobs）· 共 {data.scripts.length} 个
@@ -191,7 +138,9 @@
 
 					<div class="mt-3 border-t pt-3">
 						{#if rows.length === 0}
-							<p class="text-xs text-muted-foreground">无调度</p>
+							<Empty.Root class="gap-1 border-0 p-3">
+								<Empty.Description class="text-xs">无调度</Empty.Description>
+							</Empty.Root>
 						{:else}
 							<ul class="space-y-2">
 								{#each rows as sched (sched.id)}
@@ -206,6 +155,11 @@
 											<span class="ml-auto flex items-center gap-1">
 												<form method="POST" action={'?/scheduleToggle' + filterQuery}>
 													<input type="hidden" name="id" value={sched.id} />
+													<input
+														type="hidden"
+														name="enabled"
+														value={sched.isEnabled ? 'false' : 'true'}
+													/>
 													<Button type="submit" variant="ghost" size="sm">
 														{sched.isEnabled ? '停用' : '启用'}
 													</Button>
@@ -284,7 +238,7 @@
 	<!-- ② 运行台账 -->
 	<section>
 		<div class="mb-4 flex items-center justify-between">
-			<h3 class="text-sm font-semibold">运行台账</h3>
+			<h2 class="text-sm font-semibold">运行台账</h2>
 			<div class="flex items-center gap-2">
 				<form method="POST" action={'?/typecheck' + filterQuery}>
 					<Button type="submit" variant="outline" size="sm">运行类型检查</Button>
@@ -315,7 +269,7 @@
 				{/if}
 				{#if (data.typecheck.summary?.issues ?? []).length > 0}
 					{#each (data.typecheck.summary?.issues ?? []).slice(0, 10) as issue, index (index)}
-						<p class="mt-1 font-mono text-[11px] text-muted-foreground">
+						<p class="mt-1 font-mono text-[11px] break-all text-muted-foreground">
 							{issue.file}{issue.line !== null
 								? `:${issue.line}${issue.column !== null ? `:${issue.column}` : ''}`
 								: ''} — {issue.message}
@@ -354,7 +308,9 @@
 				>
 					<option value="" selected={data.filters.status === ''}>全部</option>
 					{#each RUN_STATUSES as status (status)}
-						<option value={status} selected={data.filters.status === status}>{status}</option>
+						<option value={status} selected={data.filters.status === status}
+							>{RUN_LABELS[status] ?? status}</option
+						>
 					{/each}
 				</select>
 			</label>
@@ -363,7 +319,9 @@
 		</form>
 
 		{#if data.runs.length === 0}
-			<p class="text-xs text-muted-foreground">无运行记录。</p>
+			<Empty.Root class="gap-1 border-0 p-3">
+				<Empty.Description class="text-xs">无运行记录。</Empty.Description>
+			</Empty.Root>
 		{:else}
 			<div class="overflow-x-auto rounded-lg border">
 				<div class="min-w-[44rem]">
@@ -407,13 +365,20 @@
 				</div>
 			</div>
 		{/if}
+		{#if data.runsTruncated}
+			<p class="mt-2 text-xs text-muted-foreground">
+				仅显示最近 {data.runPageSize} 条运行记录——更早记录请用筛选缩小范围。
+			</p>
+		{/if}
 	</section>
 
 	<!-- ③ 审计 -->
 	<section>
-		<h3 class="mb-4 text-sm font-semibold">审计（job / schedule 事件）</h3>
+		<h2 class="mb-4 text-sm font-semibold">审计（job / schedule 事件）</h2>
 		{#if data.activities.length === 0}
-			<p class="text-xs text-muted-foreground">暂无记录。</p>
+			<Empty.Root class="gap-1 border-0 p-3">
+				<Empty.Description class="text-xs">暂无记录。</Empty.Description>
+			</Empty.Root>
 		{:else}
 			<div class="overflow-x-auto rounded-lg border">
 				<div class="min-w-[34rem]">
@@ -431,6 +396,11 @@
 					{/each}
 				</div>
 			</div>
+		{/if}
+		{#if data.auditTruncated}
+			<p class="mt-2 text-xs text-muted-foreground">
+				仅显示最近 {data.auditPageSize} 条审计记录——更早记录请用筛选缩小范围。
+			</p>
 		{/if}
 	</section>
 </div>

@@ -5,6 +5,7 @@ import { recordActivity } from '$lib/server/audit';
 import { resolveDataDir } from '$lib/server/jobs/data-dir';
 import { saveScript } from '$lib/server/jobs/job-scripts';
 import { enqueueJob } from '$lib/server/jobs/queue';
+import { sanitizeErrorText } from '$lib/server/jobs/error-text';
 import { resolveJobDefinition } from '$lib/server/jobs/user-layer';
 import { parseBaseHash, parseCode } from '../maintenance-form-utils';
 import type { PageServerLoad, Actions } from './$types';
@@ -85,14 +86,21 @@ export const actions: Actions = {
 				message: '同名脚本刚被创建（乐观锁失配）——请返回列表打开它'
 			});
 		}
+		// The save already landed: failures carry the fresh hash so the
+		// editor can advance its optimistic-lock token (J-3 review P3-R2-2).
 		const definition = await resolveJobDefinition(name, dataDir);
-		if (!definition) return fail(404, { message: `保存成功，但脚本无法解析：${name}` });
-		if (!definition.manual) return fail(400, { message: '该任务不允许手动执行' });
+		if (!definition) {
+			return fail(404, { message: `保存成功，但脚本无法解析：${name}`, hash: result.hash });
+		}
+		if (!definition.manual) {
+			return fail(400, { message: '该任务不允许手动执行', hash: result.hash });
+		}
 		let queued;
 		try {
 			queued = await enqueueJob(db, name, 'manual', definition);
 		} catch (error) {
-			return fail(400, { message: error instanceof Error ? error.message : '入队失败' });
+			console.error('[jobs] manual enqueue failed', error);
+			return fail(400, { message: sanitizeErrorText(error), hash: result.hash });
 		}
 		await recordActivity(db, {
 			event: 'job.run',

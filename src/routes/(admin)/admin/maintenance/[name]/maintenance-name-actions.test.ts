@@ -203,6 +203,18 @@ describe('admin maintenance [name] actions', () => {
 		expect(state.auditCalls).toHaveLength(0);
 	});
 
+	it('saveRun: gate-invalid passes errors through; unresolvable answers 404 with the fresh hash (J-3 review R2 additions)', async () => {
+		state.saveResult = { kind: 'invalid', errors: [{ source: 'typescript', line: 1 }] };
+		const invalid = await callAction('saveRun', { code: 'enum E {}', baseHash: '' });
+		expect(invalid.result).toMatchObject({ status: 400 });
+
+		state.saveResult = { kind: 'saved', hash: 'newhash', created: false, forked: false };
+		state.resolveResult = null;
+		const unresolvable = await callAction('saveRun', { code: 'x', baseHash: '' });
+		expect(unresolvable.result).toMatchObject({ status: 404 });
+		expect((unresolvable.result as { data: { hash?: string } }).data.hash).toBe('newhash');
+	});
+
 	it('load requires the admin role first (J-3 review I1)', async () => {
 		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
 		await expect(load({ params: { name: 'my-task' } } as never)).rejects.toThrow(

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { page } from '$app/state';
+	import { untrack } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
@@ -19,7 +20,10 @@
 	);
 
 	let name = $state('');
-	let code = $state(data.template);
+	let code = $state(untrack(() => data.template));
+	// The optimistic-lock token advances once a save landed, so a failed
+	// save-and-run can still be retried without a fake 409 (J-3 review P3-R2-2).
+	let baseHash = $state('');
 	let saveForm: HTMLFormElement | undefined = $state();
 	// Cold first saves run the gate's module init (~10s); pending state.
 	let saving = $state(false);
@@ -27,6 +31,7 @@
 	interface ActionResult {
 		status?: number;
 		message?: string;
+		hash?: string;
 		conflict?: boolean;
 		currentHash?: string | null;
 		errors?: {
@@ -42,6 +47,7 @@
 
 	$effect(() => {
 		if (form) saving = false;
+		if (typeof form?.hash === 'string') baseHash = form.hash;
 	});
 
 	function submitSave(): void {
@@ -66,12 +72,12 @@
 		</div>
 	</div>
 
-	{#if form && typeof form.status === 'number' && form.status >= 400 && !form.conflict}
+	{#if form && !form.conflict && !(form.errors && form.errors.length > 0) && typeof form.message === 'string'}
 		<div
 			class="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive"
 			role="status"
 		>
-			{String(form.message ?? '操作失败')}
+			{String(form.message)}
 		</div>
 	{/if}
 	{#if form?.conflict}
@@ -88,11 +94,12 @@
 		<div
 			class="rounded-lg border border-destructive/40 bg-destructive/5 p-3"
 			data-slot="gate-errors"
+			role="alert"
 		>
 			<p class="mb-2 text-sm font-medium text-destructive">创建被拒绝：</p>
 			<ul class="space-y-1">
 				{#each form.errors as gateError, index (index)}
-					<li class="font-mono text-xs">
+					<li class="font-mono text-xs break-all">
 						{#if gateError.line !== null}
 							<span class="text-muted-foreground"
 								>{gateError.line}{gateError.column !== null ? `:${gateError.column}` : ''}</span
@@ -121,7 +128,7 @@
 			/>
 		</div>
 		<input type="hidden" name="code" value={code} />
-		<input type="hidden" name="baseHash" value="" />
+		<input type="hidden" name="baseHash" value={baseHash} />
 		<div class="h-[26rem] min-h-0 overflow-hidden rounded-lg border" data-slot="editor-host">
 			{#await editorPromise then JobEditor}
 				<JobEditor

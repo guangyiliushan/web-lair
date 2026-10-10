@@ -23,8 +23,9 @@
 // table), concurrent delivery and queue claims, the entry exit-code contract
 // (2 / 1), heartbeat ping; since J-2: T6 (SDK dual resolution), T7 (save
 // gate negatives) and T10 (user jobs end-to-end: hot update, fork override,
-// run-scoped SDK binding), T11 (delete lifecycle on a real database) and
-// the scaffold-degradation guard. T8 (Kuma wiring) to §25.
+// run-scoped SDK binding), T11 (delete lifecycle on a real database), T12
+// (admin edit mid-tick -> config-snapshot CAS) and the scaffold-degradation
+// guard. T8 (Kuma wiring) to §25.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -1327,6 +1328,74 @@ export default {
 	);
 }
 
+async function t12MidTickConfigChange(): Promise<void> {
+	section('T12: admin edit mid-tick -> the CAS loses on the config snapshot (J-3 review F1)');
+	await resetLedger();
+	const dataDir = join(fixtureDataDir, 't12');
+	await ensureJobsScaffold(dataDir);
+	// Row 1 (created first -> processed first, createdAt asc) is a SLOW user
+	// job: it signals via a marker file, then sleeps 70s. The marker starts
+	// the race clock; the >60s sleep guarantees the minutely grid puts the
+	// stale snapshot's latestDue ABOVE the admin's reset watermark, so under
+	// the old monotonic-only predicate the tick WOULD match and fire - the
+	// scenario is a true kill for the config-snapshot predicate.
+	const startedLog = join(dataDir, 'slow-started.log');
+	await writeUserJob(
+		dataDir,
+		'slow-task.ts',
+		`import { appendFile } from 'node:fs/promises';
+export default {
+	async run() {
+		await appendFile(${JSON.stringify(startedLog)}, 'started');
+		await new Promise((resolve) => setTimeout(resolve, 70_000));
+	}
+};
+`
+	);
+	const dueA = latestDailyDueUtc(1, 30, new Date());
+	await createSchedule('slow-task', '30 1 * * *', new Date(dueA.getTime() - DAY));
+	await delay(25); // distinct created_at so the slow row sorts first
+	const targetId = await createSchedule(
+		'system.resources',
+		'* * * * *',
+		new Date(Date.now() - 90_000)
+	);
+
+	const drain = spawnDrain({ DATA_DIR: dataDir });
+	let started = false;
+	for (let i = 0; i < 300 && !started; i++) {
+		try {
+			started = (await readFile(startedLog, 'utf8')).includes('started');
+		} catch {
+			started = false;
+		}
+		if (!started) await delay(50);
+	}
+	check('T12 slow row signalled mid-tick', started);
+	// Mid-tick edit on row 2 (still unprocessed): new expression + watermark
+	// reset, exactly what scheduleUpdate writes.
+	const resetAt = new Date();
+	await db
+		.update(jobSchedules)
+		.set({ cronExpr: '0 4 * * *', lastDueAt: resetAt })
+		.where(eq(jobSchedules.id, targetId));
+	const result = await drain.done;
+	check('T12 drain exits 0', result.code === 0, result.stdout + result.stderr);
+	check('T12 slow row ran under the first expression', (await runsFor('slow-task')).length === 1);
+	check(
+		'T12 log names the mid-tick config loss',
+		/config changed mid-tick/.test(result.stdout),
+		result.stdout
+	);
+	const target = await scheduleById(targetId);
+	check(
+		'T12 admin watermark reset survives (no clobber, no run under the old expression)',
+		target?.lastDueAt?.getTime() === resetAt.getTime() &&
+			(await runsFor('system.resources')).length === 0,
+		`water=${target?.lastDueAt?.toISOString()} runs=${(await runsFor('system.resources')).length}`
+	);
+}
+
 async function t11DeleteLifecycle(): Promise<void> {
 	section('T11: deleteUserJob cleans schedules/queued/running in one tx, keeps history (real DB)');
 	await resetLedger();
@@ -1515,6 +1584,7 @@ async function main(): Promise<void> {
 	await t7SaveGateNegatives();
 	await t10UserJobEndToEnd();
 	await t11DeleteLifecycle();
+	await t12MidTickConfigChange();
 	await scaffoldFailureDegrades();
 
 	console.log(
