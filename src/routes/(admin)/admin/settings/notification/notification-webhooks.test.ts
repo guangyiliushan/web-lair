@@ -11,7 +11,8 @@ const { mocks, state } = vi.hoisted(() => {
 	const state = {
 		selectQueue: [] as unknown[][],
 		insertValues: [] as unknown[],
-		insertRows: [{ id: 'new-delivery' }] as unknown[]
+		insertRows: [{ id: 'new-delivery' }] as unknown[],
+		insertError: null as Error | null
 	};
 	const mocks = {
 		requireAdminRole: vi.fn(async () => {})
@@ -33,7 +34,12 @@ vi.mock('$lib/server/db', () => {
 		insert: () => ({
 			values: (values: unknown) => {
 				state.insertValues.push(values);
-				return { returning: async () => state.insertRows };
+				return {
+					returning: async () => {
+						if (state.insertError) throw state.insertError;
+						return state.insertRows;
+					}
+				};
 			}
 		})
 	};
@@ -43,7 +49,7 @@ vi.mock('$lib/server/db/system', () => ({ webhooks: {}, webhookDeliveries: {} })
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: mocks.requireAdminRole }));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: vi.fn(async () => 'Etc/UTC') }));
 
-import { actions } from './+page.server';
+import { actions, load } from './+page.server';
 
 const guardMock = vi.mocked(mocks.requireAdminRole);
 const DELIVERY_ID = '33333333-3333-7333-8333-333333333333';
@@ -73,6 +79,7 @@ describe('notification webhooks retry', () => {
 		state.selectQueue = [];
 		state.insertValues = [];
 		state.insertRows = [{ id: 'new-delivery' }];
+		state.insertError = null;
 	});
 
 	it('runs requireAdminRole first', async () => {
@@ -130,6 +137,21 @@ describe('notification webhooks retry', () => {
 		state.selectQueue.push([{ isEnabled: false }]);
 		expect((await callRetry({ id: DELIVERY_ID })).result).toMatchObject({ status: 400 });
 		expect(state.insertValues).toHaveLength(0);
+	});
+
+	it('maps a 23503 (endpoint deleted mid-flight) to 400 (J-3 review P3-1)', async () => {
+		state.selectQueue.push([
+			{ id: DELIVERY_ID, webhookId: 'w1', event: 'comment.created', payload: {}, status: 'failed' }
+		]);
+		state.selectQueue.push([{ isEnabled: true }]);
+		state.insertError = Object.assign(new Error('fk'), { cause: { code: '23503' } });
+		const { result } = await callRetry({ id: DELIVERY_ID });
+		expect(result).toMatchObject({ status: 400 });
+	});
+
+	it('load requires the admin role first (J-3 review I1)', async () => {
+		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
+		await expect(load({} as never)).rejects.toThrow('redirect: no session');
 	});
 
 	it('copies the failed row into a fresh queued delivery', async () => {

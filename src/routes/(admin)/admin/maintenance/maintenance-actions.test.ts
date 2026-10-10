@@ -80,7 +80,7 @@ vi.mock('$lib/server/jobs/user-layer', () => ({
 	resolveJobDefinition: mocks.resolveJobDefinition
 }));
 
-import { actions } from './+page.server';
+import { actions, load } from './+page.server';
 
 const guardMock = vi.mocked(mocks.requireAdminRole);
 const SCHED_ID = '22222222-2222-7222-8222-222222222222';
@@ -249,6 +249,20 @@ describe('admin maintenance actions', () => {
 		expect(ok.result).toMatchObject({ scheduleChanged: true, watermarkReset: true });
 		expect(state.updateCalls[0]).toMatchObject({ id: SCHED_ID, cronExpr: '0 5 * * *', tz: 'UTC' });
 
+		state.updateResult = { kind: 'invalid', message: 'bad cron' };
+		expect(
+			(await callAction('scheduleUpdate', { id: SCHED_ID, cron_expr: 'bad' })).result
+		).toMatchObject({
+			status: 400
+		});
+
+		state.updateResult = { kind: 'duplicate' };
+		expect(
+			(await callAction('scheduleUpdate', { id: SCHED_ID, cron_expr: '0 5 * * *' })).result
+		).toMatchObject({
+			status: 409
+		});
+
 		state.updateResult = { kind: 'not-found' };
 		expect(
 			(await callAction('scheduleUpdate', { id: SCHED_ID, cron_expr: '0 5 * * *' })).result
@@ -271,5 +285,33 @@ describe('admin maintenance actions', () => {
 		expect((await callAction('scheduleDelete', { id: SCHED_ID })).result).toMatchObject({
 			scheduleChanged: true
 		});
+	});
+
+	it('typecheck: an enqueue failure answers 400, not a 500 (J-3 review J3-3)', async () => {
+		mocks.enqueueJob.mockRejectedValueOnce(new Error('job does not allow manual runs'));
+		const { result } = await callAction('typecheck');
+		expect(result).toMatchObject({ status: 400 });
+	});
+
+	it('the guard runs before the request body is parsed (J-3 review B9)', async () => {
+		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
+		const bodyTrap = {
+			request: {
+				formData: () => {
+					throw new Error('body must not be read');
+				}
+			},
+			params: {},
+			locals: { user: { id: 'admin-1' } }
+		};
+		const fn = (actions as unknown as Record<string, (event: never) => Promise<unknown>>).run;
+		await expect(fn(bodyTrap as never)).rejects.toThrow('redirect: no session');
+	});
+
+	it('load requires the admin role first (J-3 review I1)', async () => {
+		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
+		await expect(load({ url: new URL('http://x/admin/maintenance') } as never)).rejects.toThrow(
+			'redirect: no session'
+		);
 	});
 });

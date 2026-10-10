@@ -45,6 +45,7 @@
 	});
 
 	function submitSave(): void {
+		if (saving) return;
 		saving = true;
 		saveForm?.requestSubmit();
 	}
@@ -74,7 +75,10 @@
 		</div>
 	{/if}
 	{#if form?.conflict}
-		<div class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm">
+		<div
+			class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm"
+			role="alert"
+		>
 			{String(form.message ?? '同名脚本已存在')}
 			<Button variant="outline" size="sm" class="ml-2" href="/admin/maintenance">返回列表</Button>
 		</div>
@@ -90,7 +94,9 @@
 				{#each form.errors as gateError, index (index)}
 					<li class="font-mono text-xs">
 						{#if gateError.line !== null}
-							<span class="text-muted-foreground">{gateError.line}:{gateError.column ?? ''}</span>
+							<span class="text-muted-foreground"
+								>{gateError.line}{gateError.column !== null ? `:${gateError.column}` : ''}</span
+							>
 						{/if}
 						<span class="text-muted-foreground">[{gateError.source}]</span>
 						{gateError.message}

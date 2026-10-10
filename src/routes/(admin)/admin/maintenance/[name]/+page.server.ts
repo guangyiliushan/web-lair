@@ -93,7 +93,13 @@ export const actions: Actions = {
 		// definition for enqueueJob (J-2 review D2 note).
 		const definition = await resolveJobDefinition(params.name, dataDir);
 		if (!definition) return fail(404, { message: `保存成功，但脚本无法解析：${params.name}` });
-		const queued = await enqueueJob(db, params.name, 'manual', definition);
+		if (!definition.manual) return fail(400, { message: '该任务不允许手动执行' });
+		let queued;
+		try {
+			queued = await enqueueJob(db, params.name, 'manual', definition);
+		} catch (error) {
+			return fail(400, { message: error instanceof Error ? error.message : '入队失败' });
+		}
 		await recordActivity(db, {
 			event: 'job.run',
 			actorId: locals.user?.id ?? null,

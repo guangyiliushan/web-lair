@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { asc, desc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
+import { pgErrorCode } from '$lib/server/db/pg-error';
 import { webhookDeliveries, webhooks } from '$lib/server/db/system';
 import { requireAdminRole } from '$lib/server/authz';
 import { getOption } from '$lib/server/config/options-registry';
@@ -88,15 +89,24 @@ export const actions: Actions = {
 			.limit(1);
 		if (!endpoint) return fail(404, { message: '端点已不存在' });
 		if (!endpoint.isEnabled) return fail(400, { message: '端点已停用，启用后再重投' });
-		const [row] = await db
-			.insert(webhookDeliveries)
-			.values({
-				webhookId: delivery.webhookId,
-				event: delivery.event,
-				payload: delivery.payload,
-				status: 'queued'
-			})
-			.returning({ id: webhookDeliveries.id });
-		return { retried: true, id: row.id };
+		try {
+			const [row] = await db
+				.insert(webhookDeliveries)
+				.values({
+					webhookId: delivery.webhookId,
+					event: delivery.event,
+					payload: delivery.payload,
+					status: 'queued'
+				})
+				.returning({ id: webhookDeliveries.id });
+			return { retried: true, id: row.id };
+		} catch (error) {
+			// TOCTOU tail (J-3 review P3-1): the endpoint can be deleted
+			// between the check above and this insert; the FK answers 23503.
+			if (pgErrorCode(error) === '23503') {
+				return fail(400, { message: '端点已不存在（并发删除）' });
+			}
+			throw error;
+		}
 	}
 };

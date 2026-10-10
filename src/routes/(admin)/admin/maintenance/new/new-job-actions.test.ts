@@ -47,7 +47,7 @@ vi.mock('$lib/server/jobs/user-layer', () => ({
 	resolveJobDefinition: mocks.resolveJobDefinition
 }));
 
-import { actions } from './+page.server';
+import { actions, load } from './+page.server';
 
 const guardMock = vi.mocked(mocks.requireAdminRole);
 
@@ -98,6 +98,16 @@ describe('admin maintenance new actions', () => {
 		const { thrown } = await callAction('save', { name: 'my-task', code: 'x', baseHash: '' });
 		expect(state.saveCalls[0]).toMatchObject({ name: 'my-task', code: 'x', baseHash: null });
 		expect(thrown).toMatchObject({ status: 303, location: '/admin/maintenance/my-task' });
+
+		// CRLF parity with the [name] route (J-3 review E1: the mutant only
+		// died on [name]'s test - this file pins the ingress fold too).
+		await callAction('save', { name: 'my-task', code: 'a\r\nb\r', baseHash: '' });
+		expect(state.saveCalls.at(-1)).toMatchObject({ code: 'a\nb\n' });
+	});
+
+	it('load requires the admin role first (J-3 review I1)', async () => {
+		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
+		await expect(load({} as never)).rejects.toThrow('redirect: no session');
 	});
 
 	it('save: gate errors pass through as 400 and conflicts as 409', async () => {

@@ -8,15 +8,28 @@
 		open: boolean;
 		title: string;
 		description: string;
-		/** Row id submitted as `?/delete`. */
+		/** Row id submitted to the action below. */
 		id: string;
+		/** Form action to submit to (default `?/delete`). */
+		action?: string;
+		/** Confirm button label (default 删除). */
+		confirmLabel?: string;
 		/** Action failure text rendered inside the dialog (a page banner hides behind the overlay). */
 		error?: string | null;
 		/** Called when the dialog closes (cancel/Escape/success). */
 		onclose: () => void;
 	}
 
-	let { open, title, description, id, error, onclose }: Props = $props();
+	let {
+		open,
+		title,
+		description,
+		id,
+		action = '?/delete',
+		confirmLabel = '删除',
+		error,
+		onclose
+	}: Props = $props();
 
 	// Double-submit guard (C3 review): kit does not merge submissions, so a
 	// replayed delete would answer 404 and surface a misleading error.
@@ -41,7 +54,7 @@
 			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
 			<form
 				method="post"
-				action="?/delete"
+				{action}
 				use:enhance={() => {
 					submitting = true;
 					// Round-4 review: remember which row this submission belongs to -
@@ -56,7 +69,7 @@
 				}}
 			>
 				<input type="hidden" name="id" value={id} />
-				<Button type="submit" variant="destructive" disabled={submitting}>删除</Button>
+				<Button type="submit" variant="destructive" disabled={submitting}>{confirmLabel}</Button>
 			</form>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

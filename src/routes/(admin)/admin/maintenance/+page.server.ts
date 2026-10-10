@@ -18,6 +18,7 @@ import {
 } from '$lib/server/jobs/job-schedules';
 import { enqueueJob } from '$lib/server/jobs/queue';
 import { resolveJobDefinition } from '$lib/server/jobs/user-layer';
+import { RUN_STATUSES } from './maintenance-form-utils';
 import type { PageServerLoad, Actions } from './$types';
 
 /**
@@ -28,7 +29,6 @@ import type { PageServerLoad, Actions } from './$types';
  * editor/ever-fork/save actions live on the [name] route (§5.6 lazy import).
  */
 
-const RUN_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'skipped'] as const;
 const RUN_PAGE_SIZE = 100;
 const AUDIT_PAGE_SIZE = 40;
 
@@ -160,7 +160,14 @@ export const actions: Actions = {
 	/** 运行类型检查（enqueue `jobs.typecheck`）。 */
 	typecheck: async ({ locals }) => {
 		await requireAdminRole();
-		const queued = await enqueueJob(db, 'jobs.typecheck', 'manual');
+		let queued;
+		try {
+			queued = await enqueueJob(db, 'jobs.typecheck', 'manual');
+		} catch (error) {
+			// manual=false throws and a 23505 storm throws lastError - both
+			// must answer 400, not a 500 form page (J-3 review J3-3).
+			return fail(400, { error: error instanceof Error ? error.message : '入队失败' });
+		}
 		await recordActivity(db, {
 			event: 'job.run',
 			actorId: locals.user?.id ?? null,
@@ -187,7 +194,7 @@ export const actions: Actions = {
 		if (result.kind === 'invalid') return fail(400, { error: result.message });
 		if (result.kind === 'unknown-job') return fail(404, { error: result.message });
 		if (result.kind === 'duplicate') return fail(409, { error: '该任务已有一条相同 cron 的调度' });
-		return { scheduleChanged: true };
+		return { scheduleChanged: true, scheduleAction: 'create' as const };
 	},
 
 	scheduleUpdate: async ({ request, locals }) => {
@@ -199,8 +206,13 @@ export const actions: Actions = {
 		const tz = (form.get('tz') ?? '').toString().trim() || (await getOption('site.timezone'));
 		const result = await updateSchedule({ db, id, cronExpr, tz, actorId: locals.user?.id ?? null });
 		if (result.kind === 'invalid') return fail(400, { error: result.message });
+		if (result.kind === 'duplicate') return fail(409, { error: '该任务已有一条相同 cron 的调度' });
 		if (result.kind === 'not-found') return fail(404, { error: '调度不存在' });
-		return { scheduleChanged: true, watermarkReset: result.watermarkReset };
+		return {
+			scheduleChanged: true,
+			scheduleAction: 'update' as const,
+			watermarkReset: result.watermarkReset
+		};
 	},
 
 	scheduleToggle: async ({ request, locals }) => {
@@ -210,7 +222,7 @@ export const actions: Actions = {
 		if (!id || !isUuid(id)) return fail(400, { error: '缺少有效的调度 ID' });
 		const result = await toggleSchedule({ db, id, actorId: locals.user?.id ?? null });
 		if (result.kind === 'not-found') return fail(404, { error: '调度不存在' });
-		return { scheduleChanged: true, enabled: result.enabled };
+		return { scheduleChanged: true, scheduleAction: 'toggle' as const, enabled: result.enabled };
 	},
 
 	scheduleDelete: async ({ request, locals }) => {
@@ -220,6 +232,6 @@ export const actions: Actions = {
 		if (!id || !isUuid(id)) return fail(400, { error: '缺少有效的调度 ID' });
 		const result = await deleteSchedule({ db, id, actorId: locals.user?.id ?? null });
 		if (result.kind === 'not-found') return fail(404, { error: '调度不存在' });
-		return { scheduleChanged: true };
+		return { scheduleChanged: true, scheduleAction: 'delete' as const };
 	}
 };

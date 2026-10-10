@@ -1,5 +1,5 @@
-import { existsSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
@@ -19,7 +19,12 @@ import { psql } from './support';
 const JOB = 'e2e-jobs-task';
 const CRON = '*/30 * * * *';
 const HOOK = 'e2e-jobs-hook';
-const JOBS_DIR = join(process.cwd(), 'data', 'jobs');
+// Same resolver contract as the app (J-3 review J3-9): an explicit DATA_DIR
+// wins (absolute or cwd-relative), otherwise the dev default <repo>/data.
+const DATA_DIR = process.env.DATA_DIR?.trim()
+	? resolve(process.cwd(), process.env.DATA_DIR.trim())
+	: join(process.cwd(), 'data');
+const JOBS_DIR = join(DATA_DIR, 'jobs');
 
 function jobFilePath(): string {
 	return join(JOBS_DIR, `${JOB}.ts`);
@@ -111,8 +116,9 @@ test.describe('J-3 maintenance (admin)', () => {
 			await expect(page.locator('[data-slot="gate-errors"]')).toBeVisible({ timeout: 5000 });
 		}).toPass({ timeout: 30_000 });
 		await expect(page.locator('[data-slot="gate-errors"]')).toContainText('1:6');
-		// The rejected save wrote nothing: the file still holds the template.
-		expect(existsSync(jobFilePath())).toBe(true);
+		// The rejected save wrote nothing: the file still holds the template
+		// (content, not just existence - J-3 review J3-9).
+		expect(readFileSync(jobFilePath(), 'utf8')).toContain('hello from a new job');
 	});
 
 	test('schedule CRUD: add → disable → delete through the card', async ({ page }) => {

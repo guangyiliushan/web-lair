@@ -61,6 +61,11 @@ export function sidecarPath(dir: string, name: string): string {
  */
 export function jobNameForUserFile(fileName: string): string | null {
 	if (!USER_JOB_FILE_RE.test(fileName)) return null;
+	// `new` is reserved by the admin create route (J-3 review J3-1): a
+	// hand-placed new.ts must be ignored everywhere rather than surface a
+	// card whose edit link opens the create page (and whose delete path does
+	// not exist). `checkJobName` blocks creating the name through the UI.
+	if (fileName === 'new.ts') return null;
 	for (const candidate of Object.keys(JOBS)) {
 		if (builtinModuleFile(candidate) === fileName) return candidate;
 	}

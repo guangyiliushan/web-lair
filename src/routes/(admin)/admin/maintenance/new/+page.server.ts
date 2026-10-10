@@ -87,7 +87,13 @@ export const actions: Actions = {
 		}
 		const definition = await resolveJobDefinition(name, dataDir);
 		if (!definition) return fail(404, { message: `保存成功，但脚本无法解析：${name}` });
-		const queued = await enqueueJob(db, name, 'manual', definition);
+		if (!definition.manual) return fail(400, { message: '该任务不允许手动执行' });
+		let queued;
+		try {
+			queued = await enqueueJob(db, name, 'manual', definition);
+		} catch (error) {
+			return fail(400, { message: error instanceof Error ? error.message : '入队失败' });
+		}
 		await recordActivity(db, {
 			event: 'job.run',
 			actorId: locals.user?.id ?? null,

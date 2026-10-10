@@ -35,7 +35,7 @@ export interface ScheduleListRow {
 	updatedAt: Date;
 }
 
-/** All schedules, grouped by job then creation time (the page renders inline). */
+/** All schedules, ordered by job then creation time (the page groups inline). */
 export async function listSchedules(db: ScheduleDb): Promise<ScheduleListRow[]> {
 	return db
 		.select({
@@ -137,6 +137,7 @@ export async function createSchedule(input: {
 export type UpdateScheduleResult =
 	| { kind: 'updated'; id: string; watermarkReset: boolean }
 	| { kind: 'invalid'; message: string }
+	| { kind: 'duplicate' }
 	| { kind: 'not-found' };
 
 /** Edit a schedule's cron/tz. A due-grid change resets the watermark. */
@@ -157,15 +158,20 @@ export async function updateSchedule(input: {
 	if (!existing) return { kind: 'not-found' };
 	const watermarkReset = existing.cronExpr !== validation.cronExpr || existing.tz !== validation.tz;
 	try {
-		await input.db.transaction(async (tx) => {
-			await tx
+		const outcome = await input.db.transaction(async (tx) => {
+			// `.returning` as the existence probe (J-3 review J3-2): a row
+			// deleted between the read above and this write must answer
+			// not-found, not a phantom success plus a stray audit row.
+			const updated = await tx
 				.update(jobSchedules)
 				.set(
 					watermarkReset
 						? { cronExpr: validation.cronExpr, tz: validation.tz, lastDueAt: new Date() }
 						: { cronExpr: validation.cronExpr, tz: validation.tz }
 				)
-				.where(eq(jobSchedules.id, input.id));
+				.where(eq(jobSchedules.id, input.id))
+				.returning({ id: jobSchedules.id });
+			if (updated.length === 0) return 'missing' as const;
 			await recordActivity(tx, {
 				event: 'schedule.update',
 				actorId: input.actorId,
@@ -176,11 +182,11 @@ export async function updateSchedule(input: {
 					watermark_reset: watermarkReset
 				}
 			});
+			return 'updated' as const;
 		});
+		if (outcome === 'missing') return { kind: 'not-found' };
 	} catch (error) {
-		if (pgErrorCode(error) === '23505') {
-			return { kind: 'invalid', message: '该 job 下已存在相同 cron 表达式的调度' };
-		}
+		if (pgErrorCode(error) === '23505') return { kind: 'duplicate' };
 		throw error;
 	}
 	return { kind: 'updated', id: input.id, watermarkReset };
@@ -202,17 +208,21 @@ export async function toggleSchedule(input: {
 		.limit(1);
 	if (!existing) return { kind: 'not-found' };
 	const enabled = !existing.isEnabled;
-	await input.db.transaction(async (tx) => {
-		await tx
+	const outcome = await input.db.transaction(async (tx) => {
+		const updated = await tx
 			.update(jobSchedules)
 			.set(enabled ? { isEnabled: true, lastDueAt: new Date() } : { isEnabled: false })
-			.where(eq(jobSchedules.id, input.id));
+			.where(eq(jobSchedules.id, input.id))
+			.returning({ id: jobSchedules.id });
+		if (updated.length === 0) return 'missing' as const;
 		await recordActivity(tx, {
 			event: 'schedule.toggle',
 			actorId: input.actorId,
 			payload: { job: existing.job, enabled }
 		});
+		return 'toggled' as const;
 	});
+	if (outcome === 'missing') return { kind: 'not-found' };
 	return { kind: 'toggled', id: input.id, enabled };
 }
 

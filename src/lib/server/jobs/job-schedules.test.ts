@@ -38,6 +38,8 @@ interface FakeState {
 	insertRows: unknown[];
 	insertError: Error | null;
 	deleteRows: unknown[];
+	updateRows: unknown[];
+	updateError: Error | null;
 	updateSets: unknown[];
 	insertValues: unknown[];
 	updateCount: number;
@@ -70,10 +72,14 @@ function makeDb(state: FakeState) {
 		}),
 		update: () => ({
 			set: (values: unknown) => ({
-				where: async () => {
-					state.updateCount += 1;
-					state.updateSets.push(values);
-				}
+				where: () => ({
+					returning: async () => {
+						state.updateCount += 1;
+						state.updateSets.push(values);
+						if (state.updateError) throw state.updateError;
+						return state.updateRows;
+					}
+				})
 			})
 		}),
 		delete: () => ({
@@ -97,6 +103,8 @@ function freshState(): FakeState {
 		insertRows: [{ id: 'sched-new' }],
 		insertError: null,
 		deleteRows: [{ id: 'sched-1', job: 'known' }],
+		updateRows: [{ id: 'sched-1' }],
+		updateError: null,
 		updateSets: [],
 		insertValues: [],
 		updateCount: 0
@@ -139,9 +147,23 @@ describe('validateScheduleInput', () => {
 		if (!japan.ok) expect(japan.message).toContain('PostgreSQL');
 	});
 
-	it('rejects empty fields', async () => {
-		expect((await validateScheduleInput({ cronExpr: '', tz: 'UTC' }, db)).ok).toBe(false);
-		expect((await validateScheduleInput({ cronExpr: '0 4 * * *', tz: '' }, db)).ok).toBe(false);
+	it('rejects empty fields with field-specific messages (J-3 review S10)', async () => {
+		expect(await validateScheduleInput({ cronExpr: '  ', tz: 'Etc/UTC' }, db)).toEqual({
+			ok: false,
+			message: 'cron 表达式不能为空'
+		});
+		expect(await validateScheduleInput({ cronExpr: '0 4 * * *', tz: '  ' }, db)).toEqual({
+			ok: false,
+			message: '时区不能为空'
+		});
+	});
+
+	it('rejects values that pass the 5-field gate but not cron-parser (J-3 review S13)', async () => {
+		for (const expr of ['61 4 * * *', '0 25 * * *']) {
+			const result = await validateScheduleInput({ cronExpr: expr, tz: 'Etc/UTC' }, db);
+			expect(result.ok).toBe(false);
+			if (!result.ok) expect(result.message).toContain('无法解析');
+		}
 	});
 });
 
@@ -197,6 +219,20 @@ describe('createSchedule', () => {
 		expect(auditRows).toHaveLength(0);
 	});
 
+	it('resolves the job before validating the cron (J-3 review S14)', async () => {
+		const result = await createSchedule({
+			db,
+			dataDir: '/data',
+			job: 'ghost',
+			cronExpr: '0 4 * *',
+			tz: 'Etc/UTC',
+			actorId: null
+		});
+		// Order pinned: the job probe runs first, so a ghost + bad cron is
+		// unknown-job - swapping the order would answer invalid.
+		expect(result.kind).toBe('unknown-job');
+	});
+
 	it('maps 23505 to a duplicate result (no audit row)', async () => {
 		state.insertError = dupError();
 		const result = await createSchedule({
@@ -247,6 +283,53 @@ describe('updateSchedule / toggleSchedule / deleteSchedule', () => {
 		expect(
 			await updateSchedule({ db, id: 'sched-x', cronExpr: '0 5 * * *', tz: 'UTC', actorId: null })
 		).toEqual({ kind: 'not-found' });
+	});
+
+	it('resets the watermark when only the timezone changes (J-3 review S4)', async () => {
+		state.selectQueue.push([{ job: 'known', cronExpr: '0 4 * * *', tz: 'Etc/UTC' }]);
+		const result = await updateSchedule({
+			db,
+			id: 'sched-1',
+			cronExpr: '0 4 * * *',
+			tz: 'Asia/Tokyo',
+			actorId: null
+		});
+		expect(result).toMatchObject({ kind: 'updated', watermarkReset: true });
+		expect((state.updateSets[0] as { lastDueAt?: unknown }).lastDueAt).toBeInstanceOf(Date);
+	});
+
+	it('maps a 23505 update to duplicate with no audit row (J-3 review S6)', async () => {
+		state.selectQueue.push([{ job: 'known', cronExpr: '0 4 * * *', tz: 'Etc/UTC' }]);
+		state.updateError = dupError();
+		const result = await updateSchedule({
+			db,
+			id: 'sched-1',
+			cronExpr: '0 5 * * *',
+			tz: 'Etc/UTC',
+			actorId: null
+		});
+		expect(result).toEqual({ kind: 'duplicate' });
+		expect(auditRows).toHaveLength(0);
+	});
+
+	it('answers not-found when the row vanishes between read and write (J-3 review J3-2)', async () => {
+		state.selectQueue.push([{ job: 'known', cronExpr: '0 4 * * *', tz: 'Etc/UTC' }]);
+		state.updateRows = [];
+		expect(
+			await updateSchedule({
+				db,
+				id: 'sched-1',
+				cronExpr: '0 5 * * *',
+				tz: 'Etc/UTC',
+				actorId: null
+			})
+		).toEqual({ kind: 'not-found' });
+
+		state.selectQueue.push([{ job: 'known', isEnabled: true }]);
+		expect(await toggleSchedule({ db, id: 'sched-1', actorId: null })).toEqual({
+			kind: 'not-found'
+		});
+		expect(auditRows).toHaveLength(0);
 	});
 
 	it('toggle: enabling resets the watermark, disabling does not', async () => {

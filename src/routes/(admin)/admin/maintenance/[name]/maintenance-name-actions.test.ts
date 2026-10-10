@@ -79,7 +79,7 @@ vi.mock('$lib/server/jobs/user-layer', () => ({
 	resolveJobDefinition: mocks.resolveJobDefinition
 }));
 
-import { actions } from './+page.server';
+import { actions, load } from './+page.server';
 
 const guardMock = vi.mocked(mocks.requireAdminRole);
 const ACTION_NAMES = ['save', 'saveRun', 'revert', 'delete', 'ignoreUpdate'];
@@ -189,6 +189,25 @@ describe('admin maintenance [name] actions', () => {
 		});
 		// 跳台账 (plan §4.4) - redirect, not a stay-on-page result.
 		expect(thrown).toMatchObject({ status: 303, location: '/admin/maintenance' });
+	});
+
+	it('saveRun: refuses non-manual definitions and enqueue failures with 400 (J-3 review J3-3)', async () => {
+		state.resolveResult = { name: 'my-task', manual: false };
+		const nonManual = await callAction('saveRun', { code: 'x', baseHash: '' });
+		expect(nonManual.result).toMatchObject({ status: 400 });
+
+		state.resolveResult = { name: 'my-task', manual: true };
+		mocks.enqueueJob.mockRejectedValueOnce(new Error('dedupe storm'));
+		const failed = await callAction('saveRun', { code: 'x', baseHash: '' });
+		expect(failed.result).toMatchObject({ status: 400 });
+		expect(state.auditCalls).toHaveLength(0);
+	});
+
+	it('load requires the admin role first (J-3 review I1)', async () => {
+		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
+		await expect(load({ params: { name: 'my-task' } } as never)).rejects.toThrow(
+			'redirect: no session'
+		);
 	});
 
 	it('saveRun: a conflict never queues', async () => {

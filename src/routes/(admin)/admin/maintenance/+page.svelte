@@ -7,6 +7,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { RefreshButton } from '$lib/components/admin/refresh-button';
+	import { RUN_STATUSES } from './maintenance-form-utils';
 
 	/**
 	 * /admin/maintenance (J-3, plan §5.7): scripts (registry ∪ user layer)
@@ -24,6 +25,7 @@
 		name?: string;
 		deduplicated?: boolean;
 		scheduleChanged?: boolean;
+		scheduleAction?: string;
 		enabled?: boolean;
 		watermarkReset?: boolean;
 	}
@@ -41,9 +43,31 @@
 			};
 		}
 		if (form.scheduleChanged) {
-			return { kind: 'ok' as const, text: '调度已更新' };
+			const action = form.scheduleAction;
+			const text =
+				action === 'create'
+					? '已添加调度'
+					: action === 'delete'
+						? '调度已删除'
+						: action === 'toggle'
+							? form.enabled
+								? '调度已启用（水位已重置为当前时间）'
+								: '调度已停用'
+							: form.watermarkReset
+								? '调度已更新（水位已重置为当前时间）'
+								: '调度已更新';
+			return { kind: 'ok' as const, text };
 		}
 		return null;
+	});
+
+	/** Query suffix so schedule/run actions keep the active ledger filters
+	 * (a bare `?/action` POST would otherwise reset them, review P3-20). */
+	const filterQuery = $derived.by(() => {
+		const parts: string[] = [];
+		if (data.filters.job) parts.push(`job=${encodeURIComponent(data.filters.job)}`);
+		if (data.filters.status) parts.push(`status=${encodeURIComponent(data.filters.status)}`);
+		return parts.length > 0 ? `&${parts.join('&')}` : '';
 	});
 
 	const schedulesByJob = $derived.by(() => {
@@ -56,7 +80,13 @@
 		return map;
 	});
 
-	const RUN_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'skipped'] as const;
+	const RUN_LABELS: Record<string, string> = {
+		queued: '排队中',
+		running: '运行中',
+		succeeded: '成功',
+		failed: '失败',
+		skipped: '跳过'
+	};
 
 	function runVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
 		if (status === 'failed') return 'destructive';
@@ -70,6 +100,26 @@
 		const ms = new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime();
 		if (!Number.isFinite(ms) || ms < 0) return '—';
 		return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+	}
+
+	/** Typecheck summary badge: a failed RUN is not the same as a failed
+	 * CHECK, and "queued" must not render as a red failure (review P2-1). */
+	function typecheckVariant(check: {
+		status: string;
+		summary: { ok?: boolean } | null;
+	}): 'default' | 'secondary' | 'destructive' | 'outline' {
+		if (check.status === 'queued') return 'outline';
+		if (check.status === 'running') return 'secondary';
+		if (check.status === 'failed') return 'destructive';
+		if (check.summary?.ok) return 'default';
+		return 'destructive';
+	}
+
+	function typecheckLabel(check: { status: string; summary: { ok?: boolean } | null }): string {
+		if (check.status === 'failed') return '失败';
+		if (check.summary?.ok) return '通过';
+		if (check.status === 'succeeded') return '未通过';
+		return RUN_LABELS[check.status] ?? check.status;
 	}
 </script>
 
@@ -117,7 +167,7 @@
 							<p class="mt-1 line-clamp-2 text-xs text-muted-foreground">{script.description}</p>
 						</div>
 						<div class="flex shrink-0 items-center gap-1">
-							<form method="POST" action="?/run">
+							<form method="POST" action={'?/run' + filterQuery}>
 								<input type="hidden" name="name" value={script.name} />
 								<Button
 									type="submit"
@@ -154,13 +204,13 @@
 											</Badge>
 											<span class="text-muted-foreground">水位：{sched.lastDueLabel ?? '—'}</span>
 											<span class="ml-auto flex items-center gap-1">
-												<form method="POST" action="?/scheduleToggle">
+												<form method="POST" action={'?/scheduleToggle' + filterQuery}>
 													<input type="hidden" name="id" value={sched.id} />
 													<Button type="submit" variant="ghost" size="sm">
 														{sched.isEnabled ? '停用' : '启用'}
 													</Button>
 												</form>
-												<form method="POST" action="?/scheduleDelete">
+												<form method="POST" action={'?/scheduleDelete' + filterQuery}>
 													<input type="hidden" name="id" value={sched.id} />
 													<Button type="submit" variant="ghost" size="sm" class="text-destructive">
 														删除
@@ -174,7 +224,7 @@
 											</summary>
 											<form
 												method="POST"
-												action="?/scheduleUpdate"
+												action={'?/scheduleUpdate' + filterQuery}
 												class="mt-2 flex flex-wrap items-end gap-2"
 											>
 												<input type="hidden" name="id" value={sched.id} />
@@ -203,7 +253,7 @@
 							</summary>
 							<form
 								method="POST"
-								action="?/scheduleCreate"
+								action={'?/scheduleCreate' + filterQuery}
 								class="mt-2 flex flex-wrap items-end gap-2"
 							>
 								<input type="hidden" name="job" value={script.name} />
@@ -236,7 +286,7 @@
 		<div class="mb-4 flex items-center justify-between">
 			<h3 class="text-sm font-semibold">运行台账</h3>
 			<div class="flex items-center gap-2">
-				<form method="POST" action="?/typecheck">
+				<form method="POST" action={'?/typecheck' + filterQuery}>
 					<Button type="submit" variant="outline" size="sm">运行类型检查</Button>
 				</form>
 				<RefreshButton size="sm" onclick={() => invalidateAll()} />
@@ -247,8 +297,8 @@
 			<div class="mb-3 rounded-lg border p-3 text-xs" data-slot="typecheck-summary">
 				<div class="flex flex-wrap items-center gap-2">
 					<span class="font-medium">最近类型检查</span>
-					<Badge variant={data.typecheck.summary?.ok ? 'default' : 'destructive'}>
-						{data.typecheck.summary?.ok ? '通过' : data.typecheck.status}
+					<Badge variant={typecheckVariant(data.typecheck)}>
+						{typecheckLabel(data.typecheck)}
 					</Badge>
 					<span class="text-muted-foreground">
 						{data.typecheck.createdLabel} · {data.typecheck.summary?.files ?? '—'} 文件 / {data
@@ -266,7 +316,9 @@
 				{#if (data.typecheck.summary?.issues ?? []).length > 0}
 					{#each (data.typecheck.summary?.issues ?? []).slice(0, 10) as issue, index (index)}
 						<p class="mt-1 font-mono text-[11px] text-muted-foreground">
-							{issue.file}{issue.line ? `:${issue.line}:${issue.column ?? ''}` : ''} — {issue.message}
+							{issue.file}{issue.line !== null
+								? `:${issue.line}${issue.column !== null ? `:${issue.column}` : ''}`
+								: ''} — {issue.message}
 						</p>
 					{/each}
 					{#if (data.typecheck.summary?.issues ?? []).length > 10}
@@ -313,36 +365,46 @@
 		{#if data.runs.length === 0}
 			<p class="text-xs text-muted-foreground">无运行记录。</p>
 		{:else}
-			<div class="overflow-hidden rounded-lg border">
-				{#each data.runs as run (run.id)}
-					<details class="border-b last:border-b-0" data-slot="run-row">
-						<summary
-							class="grid cursor-pointer grid-cols-[10rem_1fr_5rem_6rem_4.5rem] items-center gap-2 px-3 py-2 text-xs hover:bg-muted/50"
-						>
-							<span class="truncate text-muted-foreground">{run.createdLabel}</span>
-							<span class="truncate font-mono">{run.job}</span>
-							<span class="text-muted-foreground">{run.trigger}</span>
-							<Badge variant={runVariant(run.status)} class="w-fit">{run.status}</Badge>
-							<span class="text-right text-muted-foreground">{runDuration(run)}</span>
-						</summary>
-						<div class="space-y-1 border-t bg-muted/30 px-3 py-2 text-[11px]">
-							<p>
-								id：<code class="break-all">{run.id}</code>
-							</p>
-							<p>
-								source_hash：<code class="break-all">{run.sourceHash ?? '—'}</code>
-							</p>
-							{#if run.result}
+			<div class="overflow-x-auto rounded-lg border">
+				<div class="min-w-[44rem]">
+					{#each data.runs as run (run.id)}
+						<details class="group border-b last:border-b-0" data-slot="run-row">
+							<summary
+								class="grid cursor-pointer grid-cols-[10rem_1fr_5rem_6rem_4.5rem_1.25rem] items-center gap-2 px-3 py-2 text-xs hover:bg-muted/50"
+								title="展开详情"
+							>
+								<span class="truncate text-muted-foreground">{run.createdLabel}</span>
+								<span class="truncate font-mono">{run.job}</span>
+								<span class="text-muted-foreground">{run.trigger}</span>
+								<Badge variant={runVariant(run.status)} class="w-fit">
+									{RUN_LABELS[run.status] ?? run.status}
+								</Badge>
+								<span class="text-right text-muted-foreground">{runDuration(run)}</span>
+								<span
+									aria-hidden="true"
+									class="text-center text-muted-foreground transition-transform group-open:rotate-90"
+									>▸</span
+								>
+							</summary>
+							<div class="space-y-1 border-t bg-muted/30 px-3 py-2 text-[11px]">
 								<p>
-									result：<code class="break-all">{JSON.stringify(run.result)}</code>
+									id：<code class="break-all">{run.id}</code>
 								</p>
-							{/if}
-							{#if run.error}
-								<p class="text-destructive">error：{run.error}</p>
-							{/if}
-						</div>
-					</details>
-				{/each}
+								<p>
+									source_hash：<code class="break-all">{run.sourceHash ?? '—'}</code>
+								</p>
+								{#if run.result}
+									<p>
+										result：<code class="break-all">{JSON.stringify(run.result)}</code>
+									</p>
+								{/if}
+								{#if run.error}
+									<p class="text-destructive">error：{run.error}</p>
+								{/if}
+							</div>
+						</details>
+					{/each}
+				</div>
 			</div>
 		{/if}
 	</section>
@@ -353,19 +415,21 @@
 		{#if data.activities.length === 0}
 			<p class="text-xs text-muted-foreground">暂无记录。</p>
 		{:else}
-			<div class="overflow-hidden rounded-lg border">
-				{#each data.activities as activity (activity.id)}
-					<div
-						class="grid grid-cols-[10rem_12rem_1fr] items-center gap-2 border-b px-3 py-2 text-xs last:border-b-0"
-						data-slot="audit-row"
-					>
-						<span class="truncate text-muted-foreground">{activity.createdLabel}</span>
-						<Badge variant="outline" class="w-fit">{activity.event}</Badge>
-						<span class="truncate font-mono text-muted-foreground">
-							{activity.payload ? JSON.stringify(activity.payload) : '—'}
-						</span>
-					</div>
-				{/each}
+			<div class="overflow-x-auto rounded-lg border">
+				<div class="min-w-[34rem]">
+					{#each data.activities as activity (activity.id)}
+						<div
+							class="grid grid-cols-[10rem_12rem_1fr] items-center gap-2 border-b px-3 py-2 text-xs last:border-b-0"
+							data-slot="audit-row"
+						>
+							<span class="truncate text-muted-foreground">{activity.createdLabel}</span>
+							<Badge variant="outline" class="w-fit">{activity.event}</Badge>
+							<span class="truncate font-mono text-muted-foreground">
+								{activity.payload ? JSON.stringify(activity.payload) : '—'}
+							</span>
+						</div>
+					{/each}
+				</div>
 			</div>
 		{/if}
 	</section>

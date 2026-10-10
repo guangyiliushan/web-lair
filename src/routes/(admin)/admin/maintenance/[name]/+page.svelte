@@ -25,10 +25,15 @@
 	let baseHash = $state<string | null>(data.saveBaseHash);
 	let saveForm: HTMLFormElement | undefined = $state();
 	let deleteOpen = $state(false);
+	let revertOpen = $state(false);
 	// Cold gate loads (first save in a fresh server process) run tsc+eslint
 	// module init, so the first POST can take ~10s - show a pending state
 	// (J-2 review suggestion) instead of a seemingly dead button.
 	let saving = $state(false);
+	// Conflict freeze (J-3 review P2-6, drafts precedent): after a 409 the
+	// editor keeps the buffer but saving is paused until the server state is
+	// loaded explicitly - otherwise the next save just produces another 409.
+	let conflicted = $state(false);
 
 	interface ActionResult {
 		status?: number;
@@ -60,11 +65,21 @@
 		if (form?.saved && typeof form.hash === 'string') baseHash = form.hash;
 	});
 
-	// Any action result (save / conflict / revert / ignore) ends the pending
-	// window; a redirect unmounts the page entirely.
+	// Any action result ends the pending window; a redirect unmounts the page
+	// entirely. A conflict flips the freeze on, a successful save clears it.
 	$effect(() => {
 		if (form) saving = false;
+		if (form?.conflict) conflicted = true;
+		if (form?.saved) conflicted = false;
 	});
+
+	// Dialog error text: an action failure the user must see inside the
+	// overlay (a page banner hides behind it - DeleteConfirm contract).
+	const dialogError = $derived(
+		form && !form.conflict && typeof form.status === 'number' && form.status >= 400
+			? String(form.message ?? form.error ?? '操作失败')
+			: null
+	);
 
 	const flash = $derived.by(() => {
 		if (!form) return null;
@@ -95,9 +110,15 @@
 		await invalidateAll();
 		code = data.saveCode;
 		baseHash = data.saveBaseHash;
+		saving = false;
+		conflicted = false;
 	}
 
 	function submitSave(): void {
+		// Re-entry guard for the Mod-S path too (J-3 review J3-7): a second
+		// requestSubmit carries the stale baseHash and would surface a fake
+		// conflict for a save that already landed.
+		if (saving || conflicted) return;
 		saving = true;
 		saveForm?.requestSubmit();
 	}
@@ -127,9 +148,7 @@
 				</form>
 			{/if}
 			{#if data.info.forked}
-				<form method="POST" action="?/revert">
-					<Button type="submit" variant="outline" size="sm">恢复内置</Button>
-				</form>
+				<Button variant="outline" size="sm" onclick={() => (revertOpen = true)}>恢复内置</Button>
 			{/if}
 			{#if data.info.source === 'user' && !data.info.hasBuiltin}
 				<Button variant="destructive" size="sm" onclick={() => (deleteOpen = true)}>删除</Button>
@@ -159,9 +178,11 @@
 				<span class="text-xs text-muted-foreground">
 					{flash.currentHash
 						? `服务端 hash：${flash.currentHash.slice(0, 12)}…`
-						: '服务端已无该文件（可能被删除）'}
+						: '服务端已无该文件（可能被删除）'} · 保存已暂停
 				</span>
-				<Button variant="outline" size="sm" onclick={reloadFromServer}>载入服务端最新</Button>
+				<Button variant="outline" size="sm" onclick={reloadFromServer}>
+					载入服务端最新（放弃当前编辑）
+				</Button>
 			{/if}
 		</div>
 	{/if}
@@ -170,13 +191,16 @@
 		<div
 			class="rounded-lg border border-destructive/40 bg-destructive/5 p-3"
 			data-slot="gate-errors"
+			role="alert"
 		>
 			<p class="mb-2 text-sm font-medium text-destructive">保存被拒绝：</p>
 			<ul class="space-y-1">
 				{#each form.errors as gateError, index (index)}
 					<li class="font-mono text-xs">
 						{#if gateError.line !== null}
-							<span class="text-muted-foreground">{gateError.line}:{gateError.column ?? ''}</span>
+							<span class="text-muted-foreground"
+								>{gateError.line}{gateError.column !== null ? `:${gateError.column}` : ''}</span
+							>
 						{/if}
 						<span class="text-muted-foreground">[{gateError.source}]</span>
 						{gateError.message}
@@ -225,8 +249,9 @@
 					onclick={(event) => {
 						// A disabled flip would abort the native submit itself
 						// (the submitter cannot be disabled); gate repeats by
-						// canceling the click instead.
-						if (saving) {
+						// canceling the click instead - and a conflicted editor
+						// stays frozen until the server state is reloaded.
+						if (saving || conflicted) {
 							event.preventDefault();
 							return;
 						}
@@ -240,7 +265,7 @@
 					size="sm"
 					formaction="?/saveRun"
 					onclick={(event) => {
-						if (saving) {
+						if (saving || conflicted) {
 							event.preventDefault();
 							return;
 						}
@@ -279,5 +304,16 @@
 	title="删除脚本"
 	description={`确定删除「${data.name}」？其调度与排队中的运行会被一并清理（历史运行记录保留）。`}
 	id={data.name}
+	error={dialogError}
 	onclose={() => (deleteOpen = false)}
+/>
+<DeleteConfirm
+	open={revertOpen}
+	title="恢复内置"
+	description={`确定将「${data.name}」恢复为内置版本？用户副本将被移除（调度保留）。`}
+	id={data.name}
+	action="?/revert"
+	confirmLabel="恢复"
+	error={dialogError}
+	onclose={() => (revertOpen = false)}
 />
