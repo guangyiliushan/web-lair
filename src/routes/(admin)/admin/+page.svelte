@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
@@ -29,21 +31,21 @@
 	// 实时数据
 	const realtimeStats = [
 		{
-			label: '当前在线访客',
+			label: m.admin_dashboard_realtime_online(),
 			value: 15,
 			icon: IconActivity,
 			color: 'text-emerald-500',
 			bgColor: 'bg-emerald-500/10'
 		},
 		{
-			label: '今日访客',
+			label: m.admin_dashboard_realtime_today(),
 			value: 638,
 			icon: IconUsers,
 			color: 'text-blue-500',
 			bgColor: 'bg-blue-500/10'
 		},
 		{
-			label: '今日最高在线',
+			label: m.admin_dashboard_realtime_peak(),
 			value: 24,
 			icon: IconTrendingUp,
 			color: 'text-violet-500',
@@ -54,35 +56,35 @@
 	// 快速操作（计数真化：C3；微记三卡的「撰写」深链 ?add=1 自动打开添加对话框）
 	const quickActions = $derived([
 		{
-			title: '博文',
+			title: m.admin_nav_posts(),
 			count: data.counts.posts,
 			icon: IconArticle,
 			writeHref: '/admin/posts/edit',
 			manageHref: '/admin/posts'
 		},
 		{
-			title: '手记',
+			title: m.admin_nav_notes(),
 			count: data.counts.notes,
 			icon: IconNotebook,
 			writeHref: '/admin/notes/edit',
 			manageHref: '/admin/notes'
 		},
 		{
-			title: '摘录',
+			title: m.admin_nav_quotes(),
 			count: data.counts.quotes,
 			icon: IconQuote,
 			writeHref: '/admin/quotes?add=1',
 			manageHref: '/admin/quotes'
 		},
 		{
-			title: '思考',
+			title: m.admin_nav_thoughts(),
 			count: data.counts.thoughts,
 			icon: IconBulb,
 			writeHref: '/admin/thoughts?add=1',
 			manageHref: '/admin/thoughts'
 		},
 		{
-			title: '微记',
+			title: m.admin_nav_moments(),
 			count: data.counts.moments,
 			icon: IconWriting,
 			writeHref: '/admin/moments?add=1',
@@ -92,22 +94,22 @@
 
 	// 数据统计
 	const dataStats = [
-		{ label: '页面', value: 10, icon: IconFiles },
-		{ label: '分类', value: 7, icon: IconChartBar },
-		{ label: '全部评论', value: '2,418', icon: IconMessage },
-		{ label: '未读评论', value: 1, icon: IconMessage, badge: true },
-		{ label: '友链', value: 55, icon: IconUsers },
-		{ label: '友链申请', value: 8, icon: IconUsers },
-		{ label: 'API 调用', value: '15,696,939', icon: IconActivity },
-		{ label: '今日 IP 访问', value: 345, icon: IconEye },
-		{ label: '全站字符数', value: '1,193,363', icon: IconArticle },
-		{ label: '总阅读量', value: '587,828', icon: IconEye },
-		{ label: '文章点赞', value: '2,522', icon: IconTrendingUp },
-		{ label: '站点点赞', value: '3,775', icon: IconTrendingUp }
+		{ label: m.admin_dashboard_stat_pages(), value: 10, icon: IconFiles },
+		{ label: m.admin_dashboard_stat_categories(), value: 7, icon: IconChartBar },
+		{ label: m.admin_dashboard_stat_comments(), value: '2,418', icon: IconMessage },
+		{ label: m.admin_dashboard_stat_comments_unread(), value: 1, icon: IconMessage, badge: true },
+		{ label: m.admin_dashboard_stat_friends(), value: 55, icon: IconUsers },
+		{ label: m.admin_dashboard_stat_friend_requests(), value: 8, icon: IconUsers },
+		{ label: m.admin_dashboard_stat_api_calls(), value: '15,696,939', icon: IconActivity },
+		{ label: m.admin_dashboard_stat_ip_today(), value: 345, icon: IconEye },
+		{ label: m.admin_dashboard_stat_chars(), value: '1,193,363', icon: IconArticle },
+		{ label: m.admin_dashboard_stat_reads(), value: '587,828', icon: IconEye },
+		{ label: m.admin_dashboard_stat_post_likes(), value: '2,522', icon: IconTrendingUp },
+		{ label: m.admin_dashboard_stat_site_likes(), value: '3,775', icon: IconTrendingUp }
 	];
 
 	const lastUpdated = $state(
-		new Date().toLocaleTimeString('zh-CN', {
+		new Date().toLocaleTimeString(getLocale(), {
 			hour: '2-digit',
 			minute: '2-digit',
 			second: '2-digit'
@@ -119,21 +121,23 @@
 	<!-- 欢迎标题 -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-2xl font-bold tracking-tight">欢迎回来</h1>
+			<h1 class="text-2xl font-bold tracking-tight">{m.admin_dashboard_welcome()}</h1>
 			<p class="text-sm text-muted-foreground">
-				{data.auth?.profile?.displayName ?? data.auth?.user?.name ?? 'Admin'}，这是你的个人仪表盘
+				{m.admin_dashboard_welcome_hint({
+					name: data.auth?.profile?.displayName ?? data.auth?.user?.name ?? 'Admin'
+				})}
 			</p>
 		</div>
 		<Button variant="outline" size="sm" onclick={() => location.reload()}>
 			<IconRefresh data-icon="inline-start" />
-			刷新
+			{m.admin_common_refresh()}
 		</Button>
 	</div>
 
 	<!-- 实时数据 -->
 	<section class="flex flex-col gap-2 sm:gap-3">
 		<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
-			实时数据
+			{m.admin_dashboard_section_realtime()}
 		</h2>
 		<div class="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
 			{#each realtimeStats as stat (stat.label)}
@@ -157,7 +161,7 @@
 	<!-- 快速操作 -->
 	<section class="flex flex-col gap-2 sm:gap-3">
 		<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
-			快速操作
+			{m.admin_dashboard_section_quick()}
 		</h2>
 		<div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
 			{#each quickActions as action (action.title)}
@@ -183,7 +187,7 @@
 								href={action.writeHref}
 								class="flex-1 sm:flex-none"
 							>
-								撰写
+								{m.admin_dashboard_quick_write()}
 							</Button>
 							<Button
 								size="sm"
@@ -191,7 +195,7 @@
 								href={action.manageHref}
 								class="flex-1 sm:flex-none"
 							>
-								管理
+								{m.admin_dashboard_quick_manage()}
 							</Button>
 						</div>
 					</Card.Content>
@@ -204,9 +208,11 @@
 	<section class="flex flex-col gap-2 sm:gap-3">
 		<div class="flex items-center justify-between">
 			<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
-				数据统计
+				{m.admin_dashboard_section_stats()}
 			</h2>
-			<span class="text-[10px] text-muted-foreground sm:text-xs">更新于 {lastUpdated}</span>
+			<span class="text-[10px] text-muted-foreground sm:text-xs"
+				>{m.admin_dashboard_updated_at({ time: lastUpdated })}</span
+			>
 		</div>
 		<Card.Root data-size="sm">
 			<Card.Content class="p-4 sm:p-6">
@@ -241,20 +247,20 @@
 	<!-- ## 数据洞察 -->
 	<section class="flex flex-col gap-2 sm:gap-3">
 		<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
-			数据洞察
+			{m.admin_dashboard_section_insights()}
 		</h2>
 
 		<!-- 发布趋势 + 分类分布 -->
 		<div class="mt-6 grid gap-4 xl:grid-cols-2">
 			<ChartPanel
-				title="发布趋势"
-				description="内容发布时间线统计"
+				title={m.admin_dashboard_chart_publish_title()}
+				description={m.admin_dashboard_chart_publish_desc()}
 				icon={IconTrendingUp}
 				empty={true}
 			/>
 			<ChartPanel
-				title="分类分布"
-				description="各内容分类占比统计"
+				title={m.admin_dashboard_chart_categories_title()}
+				description={m.admin_dashboard_chart_categories_desc()}
 				icon={IconPieChart}
 				empty={true}
 			/>
@@ -263,8 +269,8 @@
 		<!-- 评论活动 + 流量来源 -->
 		<div class="grid gap-4 xl:grid-cols-2">
 			<ChartPanel
-				title="评论活动"
-				description="日期维度评论量统计"
+				title={m.admin_dashboard_chart_comments_title()}
+				description={m.admin_dashboard_chart_comments_desc()}
 				icon={IconChartBar}
 				empty={true}
 			/>
@@ -274,22 +280,22 @@
 				<Card.Header>
 					<div class="flex items-center gap-2">
 						<IconTraffic class="size-4 text-muted-foreground" />
-						<Card.Title class="text-sm font-medium">流量来源</Card.Title>
+						<Card.Title class="text-sm font-medium">{m.admin_dashboard_traffic_title()}</Card.Title>
 					</div>
-					<Card.Description>浏览器与操作系统访问分布</Card.Description>
+					<Card.Description>{m.admin_dashboard_traffic_desc()}</Card.Description>
 				</Card.Header>
 				<Card.Content>
 					<div class="grid gap-px bg-border sm:grid-cols-2">
 						<div class="bg-surface-card p-4">
 							<h3 class="mb-3 text-xs font-medium text-muted-foreground uppercase">Browser</h3>
 							<div class="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
-								暂无数据
+								{m.admin_common_empty()}
 							</div>
 						</div>
 						<div class="bg-surface-card p-4">
 							<h3 class="mb-3 text-xs font-medium text-muted-foreground uppercase">OS</h3>
 							<div class="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
-								暂无数据
+								{m.admin_common_empty()}
 							</div>
 						</div>
 					</div>
@@ -299,8 +305,18 @@
 
 		<!-- 热门文章 + 标签云 -->
 		<div class="grid gap-4 xl:grid-cols-2">
-			<ChartPanel title="热门文章" description="阅读量 TOP 排行榜" icon={IconFlame} empty={true} />
-			<ChartPanel title="标签云" description="标签热度权重云图" icon={IconTag} empty={true} />
+			<ChartPanel
+				title={m.admin_dashboard_chart_hot_title()}
+				description={m.admin_dashboard_chart_hot_desc()}
+				icon={IconFlame}
+				empty={true}
+			/>
+			<ChartPanel
+				title={m.admin_dashboard_chart_tags_title()}
+				description={m.admin_dashboard_chart_tags_desc()}
+				icon={IconTag}
+				empty={true}
+			/>
 		</div>
 	</section>
 
@@ -309,24 +325,24 @@
 	<!-- ## 系统操作 -->
 	<section class="flex flex-col gap-2 sm:gap-3">
 		<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
-			系统操作
+			{m.admin_dashboard_section_system()}
 		</h2>
 
 		<Card.Root class="mt-6">
 			<Card.Header>
 				<div class="flex items-center gap-2">
 					<IconBrush class="size-4 text-muted-foreground" />
-					<Card.Title class="text-sm font-medium">缓存管理</Card.Title>
+					<Card.Title class="text-sm font-medium">{m.admin_dashboard_cache_title()}</Card.Title>
 				</div>
-				<Card.Description>API 数据缓存与 HTTP 数据缓存（存储介质：Redis）</Card.Description>
+				<Card.Description>{m.admin_dashboard_cache_desc()}</Card.Description>
 			</Card.Header>
 			<Card.Content>
 				<div class="grid gap-px bg-border sm:grid-cols-2">
-					<MaintenanceCard icon={IconBrush} label="API 缓存" value="HTTP">
-						<Button variant="outline" size="sm">清除</Button>
+					<MaintenanceCard icon={IconBrush} label={m.admin_dashboard_cache_api()} value="HTTP">
+						<Button variant="outline" size="sm">{m.admin_common_clear()}</Button>
 					</MaintenanceCard>
-					<MaintenanceCard icon={IconBrush} label="数据缓存" value="Redis">
-						<Button variant="outline" size="sm">清除</Button>
+					<MaintenanceCard icon={IconBrush} label={m.admin_dashboard_cache_data()} value="Redis">
+						<Button variant="outline" size="sm">{m.admin_common_clear()}</Button>
 					</MaintenanceCard>
 				</div>
 			</Card.Content>
@@ -336,24 +352,24 @@
 			<Card.Header>
 				<div class="flex items-center gap-2">
 					<IconSearch class="size-4 text-muted-foreground" />
-					<Card.Title class="text-sm font-medium">搜索索引管理</Card.Title>
+					<Card.Title class="text-sm font-medium">{m.admin_dashboard_search_title()}</Card.Title>
 				</div>
-				<Card.Description>按需重建全文索引；强制模式会清空后全量重建。</Card.Description>
+				<Card.Description>{m.admin_dashboard_search_desc()}</Card.Description>
 			</Card.Header>
 			<Card.Content>
 				<div class="grid gap-px bg-border sm:grid-cols-2 xl:grid-cols-3">
 					<MaintenanceCard
 						icon={IconSearch}
-						label="搜索索引"
+						label={m.admin_dashboard_search_label()}
 						value="BM25"
-						description="按需重建全文索引；强制模式会清空后全量重建。"
+						description={m.admin_dashboard_search_desc()}
 					>
-						<Button variant="outline" size="sm">增量重建</Button>
+						<Button variant="outline" size="sm">{m.admin_dashboard_search_incremental()}</Button>
 						<Button
 							variant="outline"
 							size="sm"
 							class="border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-950 dark:text-amber-300 dark:hover:bg-amber-950/30"
-							>强制全量重建</Button
+							>{m.admin_dashboard_search_force()}</Button
 						>
 					</MaintenanceCard>
 				</div>

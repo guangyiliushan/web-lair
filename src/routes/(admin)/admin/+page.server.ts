@@ -2,6 +2,7 @@ import { ne, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { moments, notes, posts, quotes, thoughts } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
+import { m } from '$lib/paraglide/messages';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -22,7 +23,7 @@ export const load: PageServerLoad = async () => {
 		db.select({ count: sql<number>`count(*)`.mapWith(Number) }).from(moments)
 	]);
 	return {
-		headerTitle: '仪表盘',
+		headerTitle: m.admin_nav_dashboard(),
 		counts: {
 			posts: postRow?.count ?? 0,
 			notes: noteRow?.count ?? 0,
