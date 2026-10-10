@@ -9,8 +9,8 @@
 	import IconMessage from '@tabler/icons-svelte-runes/icons/message';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconFileText from '@tabler/icons-svelte-runes/icons/file-text';
-import IconFile from '@tabler/icons-svelte-runes/icons/file';
-import IconPhoto from '@tabler/icons-svelte-runes/icons/photo';
+	import IconFile from '@tabler/icons-svelte-runes/icons/file';
+	import IconPhoto from '@tabler/icons-svelte-runes/icons/photo';
 	import IconEye from '@tabler/icons-svelte-runes/icons/eye';
 	import IconBulb from '@tabler/icons-svelte-runes/icons/bulb';
 	import IconQuote from '@tabler/icons-svelte-runes/icons/quote';

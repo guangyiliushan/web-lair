@@ -14,6 +14,13 @@
 	 * RustFS, served by `/maps/world-z0-6.pmtiles` (Range-capable route);
 	 * one marker per located photo, each a real anchor so keyboard, new-tab
 	 * and middle-click all behave like links.
+	 *
+	 * Failure handling (round-2 review): MapLibre's vector source is lazy, so
+	 * a 404 archive used to mean a silently blank canvas. Now (a) a 2-byte
+	 * Range probe hits the archive BEFORE mounting, (b) WebGL/context errors
+	 * and a 12s never-loaded timer still flip the fallback, and (c) the
+	 * fallback shows the message + the photo list + a Retry button that
+	 * re-runs the probe and remounts.
 	 */
 	let { photos }: { photos: MapPhoto[] } = $props();
 
@@ -21,19 +28,43 @@
 	const locale = $derived(getLocale());
 	/** Label language follows the site locale (review round 1: hardcoded zh). */
 	const mapLang = $derived(locale === 'zh-cn' ? 'zh' : locale === 'ja' ? 'ja' : 'en');
-	/**
-	 * Failure fallback without false positives (review round 1 follow-up):
-	 * MapLibre's `error` event also fires for recoverable resource hiccups,
-	 * so the copy only flips for (a) a thrown mount (the route boundary),
-	 * (b) a WebGL/context-level error, or (c) a load that never completes
-	 * within 12s — never for a benign warning.
-	 */
+
 	let mapFailed = $state(false);
 	let mapReady = $state(false);
+	/** Archive probe: mount waits for `ok`; `failed` flips the fallback. */
+	let probe = $state<'pending' | 'ok' | 'failed'>('pending');
+	let attempt = $state(0);
 	let loadTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Probe the PMTiles archive before mounting: a 2-byte ranged GET proves
+	// the route + storage answer, so a missing archive cannot render as a
+	// silent blank canvas.
 	$effect(() => {
-		if (mapReady || mapFailed || loadTimer !== null) return;
+		if (!browser) return;
+		void attempt; // the Retry button re-arms the probe
+		let cancelled = false;
+		probe = 'pending';
+		(async () => {
+			try {
+				const response = await fetch(`${window.location.origin}/maps/world-z0-6.pmtiles`, {
+					headers: { Range: 'bytes=0-1' }
+				});
+				if (!cancelled) probe = response.ok ? 'ok' : 'failed';
+			} catch {
+				if (!cancelled) probe = 'failed';
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		if (probe === 'failed') mapFailed = true;
+	});
+
+	$effect(() => {
+		if (mapReady || mapFailed || probe !== 'ok' || loadTimer !== null) return;
 		loadTimer = setTimeout(() => {
 			if (!mapReady) mapFailed = true;
 		}, 12_000);
@@ -44,6 +75,13 @@
 			}
 		};
 	});
+
+	function retry() {
+		mapFailed = false;
+		mapReady = false;
+		probe = 'pending';
+		attempt += 1;
+	}
 
 	function onMapError(event: unknown) {
 		const error = (event as { error?: { name?: string; message?: string } } | undefined)?.error;
@@ -65,8 +103,12 @@
 		layers: layers('protomaps', namedFlavor('light'), { lang: mapLang })
 	});
 
+	// `bounds` needs ≥2 points; a single photo gets an explicit center+zoom
+	// (round-2 review: a degenerate bounds box relied on maxZoom clamping).
+	// Antimeridian-crossing bounds remain registered as a known limit.
+	const single = $derived(photos.length === 1 ? photos[0]! : null);
 	const bounds = $derived.by(() => {
-		if (photos.length === 0) return undefined;
+		if (photos.length < 2) return undefined;
 		const lngs = photos.map((photo) => photo.longitude);
 		const lats = photos.map((photo) => photo.latitude);
 		return [
@@ -79,12 +121,33 @@
 <Protocol scheme="pmtiles" loadFn={pmProtocol.tile} />
 
 {#if mapFailed}
-	<div class="rounded-lg border p-6 text-sm text-muted-foreground">{m.photos_map_fallback()}</div>
-{:else}
+	<div class="rounded-lg border p-6 text-sm text-muted-foreground">
+		<p>{m.photos_map_fallback()}</p>
+		<ul class="mt-4 space-y-1.5">
+			{#each photos as photo (photo.slug)}
+				<li class="truncate">
+					<a
+						class="underline underline-offset-2 hover:text-foreground"
+						href={siteHref(`/photos/${photo.slug}`)}
+					>
+						{photoText(photo.title, locale) ?? photo.slug}
+					</a>
+				</li>
+			{/each}
+		</ul>
+		<button
+			type="button"
+			class="mt-4 rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-muted"
+			onclick={retry}
+		>
+			{m.photos_map_retry()}
+		</button>
+	</div>
+{:else if probe === 'ok'}
 	<MapLibre
 		{style}
-		center={[0, 20]}
-		zoom={1}
+		center={single ? [single.longitude, single.latitude] : [0, 20]}
+		zoom={single ? 10 : 1}
 		{bounds}
 		fitBoundsOptions={{ padding: 64, maxZoom: 12 }}
 		class="h-[70vh] min-h-[320px] w-full overflow-hidden rounded-lg border"
@@ -108,6 +171,9 @@
 			</Marker>
 		{/each}
 	</MapLibre>
+{:else}
+	<!-- Same footprint while the probe runs: no layout jump on success. -->
+	<div class="h-[70vh] min-h-[320px] w-full rounded-lg border" aria-hidden="true"></div>
 {/if}
 
 <style>

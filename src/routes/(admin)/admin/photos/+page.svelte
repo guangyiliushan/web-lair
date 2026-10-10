@@ -32,7 +32,12 @@
 			message?: string;
 			uploadResults?: UploadResult[];
 			bulkResult?: { op: string; done: number; failed: number };
-			deleted?: { removeFile: boolean; fileDeleted: boolean; fileBlocked: boolean };
+			deleted?: {
+				removeFile: boolean;
+				fileDeleted: boolean;
+				fileBlocked: boolean;
+				fileDeleteFailed: boolean;
+			};
 			saved?: boolean;
 		}
 	);
@@ -52,6 +57,12 @@
 	const editing = $derived(
 		editingId ? (data.photos.find((row) => row.id === editingId) ?? null) : null
 	);
+
+	// Close the delete dialog once the action lands (round-2 review: it used
+	// to stay open above the success flash).
+	$effect(() => {
+		if (actionData.deleted) deleteTarget = null;
+	});
 
 	const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.tif,.tiff';
 	const LOCALE_LABELS: Array<{ key: 'en' | 'zh-cn' | 'ja'; label: string }> = [
@@ -112,7 +123,9 @@
 					? '并删除文件'
 					: actionData.deleted.fileBlocked
 						? '（文件仍被引用，未删除）'
-						: '（文件未删除）'
+						: actionData.deleted.fileDeleteFailed
+							? '（照片已移除；文件删除失败，可稍后重试）'
+							: '（文件未删除）'
 				: ''}。
 		</div>
 	{/if}

@@ -66,11 +66,16 @@ function parseArgs(argv: string[]): Options {
 		} else if (arg === '--concurrency') {
 			const value = argv[index + 1];
 			// A flag missing its value used to swallow the NEXT flag as the
-			// number (NaN → silent default) — reject loudly instead.
+			// number (NaN → silent default) — reject loudly instead
+			// (round-2 review: non-integers must not fall back silently).
 			if (value === undefined || value.startsWith('--')) {
 				throw new Error('--concurrency requires a value (1-4)');
 			}
-			concurrency = Number(value);
+			const parsed = Number(value);
+			if (!Number.isInteger(parsed) || parsed < 1 || parsed > 4) {
+				throw new Error(`--concurrency must be an integer between 1 and 4 (got "${value}")`);
+			}
+			concurrency = parsed;
 			index += 1;
 		} else if (arg.startsWith('--')) {
 			throw new Error(`Unknown flag: ${arg}`);
@@ -81,22 +86,48 @@ function parseArgs(argv: string[]): Options {
 	if (dirs.length === 0) {
 		throw new Error('Usage: pnpm media:import <dir…> [--assets-only] [--concurrency 1-4]');
 	}
-	const clamped = Math.min(4, Math.max(1, Math.trunc(concurrency) || 3));
-	return { dirs, assetsOnly, concurrency: clamped };
+	return { dirs, assetsOnly, concurrency };
 }
 
-async function walk(root: string, out: string[], videos: string[]): Promise<void> {
-	const entries = await readdir(root, { withFileTypes: true });
+interface WalkResult {
+	paths: string[];
+	videos: string[];
+	/** Directories that could not be read (reported; counted as failures). */
+	unreadable: string[];
+	/** Symlinks skipped (round-2 review: never dropped silently). */
+	symlinks: number;
+	/** Files outside both whitelists, by extension. */
+	ignored: Map<string, number>;
+}
+
+/** Recursive scan that never aborts the run: unreadable dirs are recorded. */
+async function walk(root: string, acc: WalkResult): Promise<void> {
+	let entries;
+	try {
+		entries = await readdir(root, { withFileTypes: true });
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code ?? 'unknown';
+		acc.unreadable.push(`${root} (${code})`);
+		return;
+	}
 	entries.sort((a, b) => a.name.localeCompare(b.name));
 	for (const entry of entries) {
 		if (entry.name.startsWith('.')) continue;
 		const path = join(root, entry.name);
 		if (entry.isDirectory()) {
-			await walk(path, out, videos);
+			await walk(path, acc);
 		} else if (entry.isFile()) {
 			const ext = entry.name.split('.').pop()?.toLowerCase() ?? '';
-			if (SCAN_EXTENSIONS.has(ext)) out.push(path);
-			else if (VIDEO_EXTENSIONS.has(ext)) videos.push(path);
+			if (SCAN_EXTENSIONS.has(ext)) acc.paths.push(path);
+			else if (VIDEO_EXTENSIONS.has(ext)) acc.videos.push(path);
+			else {
+				const key = ext === '' ? '(no extension)' : ext;
+				acc.ignored.set(key, (acc.ignored.get(key) ?? 0) + 1);
+			}
+		} else if (entry.isSymbolicLink()) {
+			acc.symlinks += 1;
+		} else {
+			acc.ignored.set('(non-regular)', (acc.ignored.get('(non-regular)') ?? 0) + 1);
 		}
 	}
 }
@@ -158,21 +189,56 @@ let photosAlready = 0;
 let photosSkipped = 0;
 let skipped = 0;
 let failed = 0;
+const unreadableDirs: string[] = [];
+let ignoredFiles = 0;
+let symlinkSkipped = 0;
 
 for (const dir of options.dirs) {
 	const root = resolve(dir);
-	const rootInfo = await stat(root).catch(() => null);
-	if (!rootInfo?.isDirectory()) {
+	// Distinguish "missing / not a directory" from "cannot read it"
+	// (round-2 review: EACCES used to masquerade as not-a-directory).
+	const rootInfo = await stat(root).catch((error: NodeJS.ErrnoException) => error);
+	if (rootInfo instanceof Error) {
+		console.error(`! cannot read ${root}: ${rootInfo.code ?? rootInfo.name}`);
+		failed += 1;
+		continue;
+	}
+	if (!rootInfo.isDirectory()) {
 		console.error(`! not a directory: ${root}`);
 		failed += 1;
 		continue;
 	}
 	const tag = tagSlug(basename(root));
-	const paths: string[] = [];
-	const videoPaths: string[] = [];
-	await walk(root, paths, videoPaths);
+	const walkResult: WalkResult = {
+		paths: [],
+		videos: [],
+		unreadable: [],
+		symlinks: 0,
+		ignored: new Map()
+	};
+	await walk(root, walkResult);
+	const paths = walkResult.paths;
+	const videoPaths = walkResult.videos;
 	scanned += paths.length;
+	ignoredFiles += [...walkResult.ignored.values()].reduce((sum, count) => sum + count, 0);
+	symlinkSkipped += walkResult.symlinks;
+	unreadableDirs.push(...walkResult.unreadable);
+	failed += walkResult.unreadable.length;
 	console.log(`\nimporting ${paths.length} files from ${root}${tag ? `  (tag: ${tag})` : ''}`);
+	if (walkResult.ignored.size > 0) {
+		const top = [...walkResult.ignored.entries()]
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, 8)
+			.map(([ext, count]) => `${ext}×${count}`)
+			.join(', ');
+		console.log(`  outside the whitelist (not imported): ${top}`);
+	}
+	if (walkResult.symlinks > 0) {
+		console.log(`  symlinks skipped: ${walkResult.symlinks} (regular files only)`);
+	}
+	for (const broken of walkResult.unreadable) {
+		console.error(`  ! unreadable directory: ${broken}`);
+	}
 	if (videoPaths.length > 0) {
 		videoSkipped += videoPaths.length;
 		console.log(
@@ -280,6 +346,15 @@ console.log(
 console.log(`  skipped:      ${skipped} (unsupported / too large)`);
 if (videoSkipped > 0) {
 	console.log(`  video:        ${videoSkipped} file(s) reported skipped (whitelist pending)`);
+}
+if (ignoredFiles > 0) {
+	console.log(`  ignored:      ${ignoredFiles} outside the whitelist`);
+}
+if (symlinkSkipped > 0) {
+	console.log(`  symlinks:     ${symlinkSkipped} skipped`);
+}
+if (unreadableDirs.length > 0) {
+	console.log(`  unreadable:   ${unreadableDirs.length} director(ies) — see the ! lines`);
 }
 console.log(`  failed:       ${failed}`);
 

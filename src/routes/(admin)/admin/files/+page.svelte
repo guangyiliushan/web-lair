@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
@@ -49,7 +50,22 @@
 	let deleteTarget = $state<{ id: string; name: string } | null>(null);
 	let copiedId = $state<string | null>(null);
 
-	const deletedFlash = $derived(page.url.searchParams.get('deleted') === '1');
+	/**
+	 * One-shot flash (round-2 review): `?deleted=1` is consumed from the URL
+	 * via replaceState, so a refresh / back-nav cannot replay a stale banner;
+	 * the delete dialog also closes on success. Same-route redirects keep
+	 * this component mounted, so the param is WATCHED rather than read once.
+	 */
+	let flashDeleted = $state(false);
+	$effect(() => {
+		if (page.url.searchParams.get('deleted') === '1') {
+			flashDeleted = true;
+			deleteTarget = null;
+			const url = new URL(page.url);
+			url.searchParams.delete('deleted');
+			replaceState(url, {});
+		}
+	});
 
 	const STATUS_LABELS: Record<string, string> = {
 		pending: '待引用',
@@ -97,7 +113,7 @@
 </svelte:head>
 
 <div class="flex flex-col gap-6">
-	{#if deletedFlash}
+	{#if flashDeleted}
 		<div
 			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
 		>
@@ -316,15 +332,15 @@
 										{#if copiedId === row.id}
 											<span class="text-xs text-emerald-600 dark:text-emerald-400">已复制</span>
 										{/if}
-																					{#if row.mimeType.startsWith('image/') && !row.isInGallery}
+										{#if row.mimeType.startsWith('image/') && !row.isInGallery}
 											<form method="POST" action="?/addToGallery">
-											<input type="hidden" name="id" value={row.id} />
-											<Button variant="ghost" size="icon" class="size-8" aria-label="加入图床">
-											<IconPhoto class="size-4" />
-											</Button>
+												<input type="hidden" name="id" value={row.id} />
+												<Button variant="ghost" size="icon" class="size-8" aria-label="加入图床">
+													<IconPhoto class="size-4" />
+												</Button>
 											</form>
-											{/if}
-<Button
+										{/if}
+										<Button
 											variant="ghost"
 											size="icon"
 											class="size-8"

@@ -68,6 +68,9 @@
 <SeoHead path={`/photos/${data.photo.slug}`} />
 
 <article class="mx-auto mt-8 max-w-6xl px-4 md:mt-12 lg:px-0">
+	<!-- Accessible page heading (round-2 review: the viewer had no h1; the
+	     visible title lives in the sticky metadata bar below). -->
+	<h1 class="sr-only">{title}</h1>
 	<figure
 		class="flex min-h-[40vh] items-center justify-center"
 		{...useSwipe(onSwipe, () => ({ timeframe: 350, minSwipeDistance: 60, touchAction: 'pan-y' }))}

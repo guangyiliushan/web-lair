@@ -108,7 +108,20 @@
 		{/if}
 
 		{#if feed.items.length === 0}
-			<p class="py-10 text-sm text-muted-foreground">{m.photos_empty()}</p>
+			{@const filtered =
+				data.filters.year !== null ||
+				(data.filters.camera ?? '') !== '' ||
+				(data.filters.lens ?? '') !== '' ||
+				(data.filters.tag ?? '') !== ''}
+			<p class="py-10 text-sm text-muted-foreground">
+				{filtered ? m.photos_empty_filtered() : m.photos_empty()}
+				{#if filtered}
+					<a
+						class="ml-2 underline underline-offset-2 hover:text-foreground"
+						href={siteHref('/photos')}>{m.photos_filter_clear()}</a
+					>
+				{/if}
+			</p>
 		{:else}
 			<!-- No role=list: the masonry is not a flat list (a list without
 			     listitem children is worse than none — review round 1). -->
