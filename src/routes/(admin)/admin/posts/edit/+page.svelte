@@ -5,6 +5,7 @@
 	import { page } from '$app/state';
 	import type { ActionResult } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import * as Select from '$lib/components/ui/select';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -218,7 +219,7 @@
 				// A guard bounced us (session expired): stop the retry loop and
 				// offer a re-login instead of blaming the network forever.
 				saveState = 'error';
-				saveError = '登录已失效，请重新登录后继续（修改尚未保存）';
+				saveError = m.admin_posts_edit_err_session_expired();
 				reauthUrl = result.location ?? null;
 			} else if (result.type === 'success') {
 				const d = result.data as {
@@ -255,21 +256,21 @@
 				const d = (result.data ?? {}) as { message?: string; needsCategory?: boolean };
 				if (result.status === 409) {
 					saveState = 'conflict';
-					conflictMessage = d.message ?? '内容已在其他窗口更新';
+					conflictMessage = d.message ?? m.admin_posts_edit_conflict_short();
 				} else if (result.status === 400 && d.needsCategory) {
 					saveState = 'needs-category';
 				} else {
 					saveState = 'error';
-					saveError = d.message ?? '保存失败';
+					saveError = d.message ?? m.admin_posts_edit_err_save_failed();
 				}
 			} else {
 				saveState = 'error';
-				saveError = '网络异常，稍后将重试';
+				saveError = m.admin_posts_edit_err_network();
 				scheduleSave(THROTTLE_RETRY_MS);
 			}
 		} catch {
 			saveState = 'error';
-			saveError = '网络异常，稍后将重试';
+			saveError = m.admin_posts_edit_err_network();
 			scheduleSave(THROTTLE_RETRY_MS);
 		} finally {
 			inFlight = false;
@@ -326,9 +327,10 @@
 	afterNavigate(() => {
 		const params = page.url.searchParams;
 		let message: string | null = null;
-		if (params.get('published') === '1') message = '已发布';
-		else if (params.get('discarded') === '1') message = '草稿已丢弃';
-		else if (params.get('translation') === '1') message = '翻译草稿已创建';
+		if (params.get('published') === '1') message = m.admin_posts_status_published();
+		else if (params.get('discarded') === '1') message = m.admin_posts_edit_flash_discarded();
+		else if (params.get('translation') === '1')
+			message = m.admin_posts_edit_flash_translation_created();
 		if (!message) return;
 		flash = message;
 		if (flashTimer) clearTimeout(flashTimer);
@@ -349,36 +351,41 @@
 	const saveLabel = $derived.by(() => {
 		switch (saveState) {
 			case 'saving':
-				return '保存中…';
+				return m.admin_posts_edit_saving();
 			case 'saved':
 				return lastSavedAt
-					? `已保存 ${formatDateTime(lastSavedAt, { timeStyle: 'medium' })}`
-					: '已保存';
+					? m.admin_posts_edit_saved_at({
+							time: formatDateTime(lastSavedAt, { timeStyle: 'medium' })
+						})
+					: m.admin_posts_edit_saved();
 			case 'dirty':
-				return '未保存的修改';
+				return m.admin_posts_edit_unsaved();
 			case 'throttled':
-				return '自动保存节流中，稍后重试…';
+				return m.admin_posts_edit_autosave_throttled();
 			case 'needs-category':
-				return '选定分类后开始自动保存';
+				return m.admin_posts_edit_pick_category_hint();
 			case 'conflict':
-				return '冲突：服务端已有更新';
+				return m.admin_posts_edit_conflict_detected();
 			case 'error':
-				return saveError ?? '保存失败';
+				return saveError ?? m.admin_posts_edit_err_save_failed();
 			default:
 				return null;
 		}
 	});
 
 	const statusText = $derived.by(() => {
-		if (!data.post) return '新文章';
+		if (!data.post) return m.admin_posts_edit_new();
 		if (data.source) {
 			const pending = data.post.status === 'draft' && data.post.version === 0;
-			return `译文${pending ? '（待翻译）' : ''} · 源《${data.source.title}》`;
+			return m.admin_posts_edit_translation_of({
+				pending: pending ? m.admin_posts_edit_translation_pending() : '',
+				source: data.source.title
+			});
 		}
-		if (data.post.status === 'published') return '已发布';
-		if (data.post.status === 'scheduled') return '定时发布';
-		if (data.post.status === 'trash') return '回收站';
-		return '草稿';
+		if (data.post.status === 'published') return m.admin_posts_status_published();
+		if (data.post.status === 'scheduled') return m.admin_posts_status_scheduled();
+		if (data.post.status === 'trash') return m.admin_posts_status_trash();
+		return m.admin_posts_status_draft();
 	});
 
 	const occupiedLangs = $derived(
@@ -456,7 +463,7 @@
 					<span class="truncate">
 						{statusText}
 						{#if data.post}
-							· 修改于
+							{m.admin_posts_edit_modified()}
 							{formatDateTime(new Date(data.post.updatedAt ?? data.post.createdAt), {
 								dateStyle: 'short',
 								timeStyle: 'short'
@@ -465,7 +472,9 @@
 					</span>
 					{#if data.post && !data.post.placeholder && data.post.status !== 'draft'}
 						{#if data.draft}
-							<Badge variant="secondary" class="shrink-0">有未发布改动</Badge>
+							<Badge variant="secondary" class="shrink-0"
+								>{m.admin_posts_unpublished_changes()}</Badge
+							>
 						{/if}
 					{/if}
 					{#if flash}
@@ -491,8 +500,8 @@
 						type="button"
 						onclick={() => (settingsOpen = true)}
 						class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-						aria-label="文章设置"
-						title="文章设置"
+						aria-label={m.admin_posts_edit_settings()}
+						title={m.admin_posts_edit_settings()}
 					>
 						<IconSettings class="size-3.5" />
 					</button>
@@ -505,7 +514,7 @@
 						disabled={saveState === 'saving' || saveState === 'conflict'}
 					>
 						<IconDeviceFloppy class="size-3" />
-						保存草稿
+						{m.admin_posts_edit_save_draft()}
 					</Button>
 					<Button
 						type="button"
@@ -515,7 +524,7 @@
 						disabled={publishing || saveState === 'conflict'}
 					>
 						<IconCloudUpload class="size-3" />
-						发布
+						{m.admin_posts_edit_publish()}
 					</Button>
 				</div>
 			</div>
@@ -527,7 +536,7 @@
 						<div class="flex flex-wrap items-center justify-between gap-2">
 							<span
 								>{conflictMessage ??
-									'内容已在其他窗口更新'}——编辑已暂停，请先载入服务端最新内容。</span
+									m.admin_posts_edit_conflict_short()}{m.admin_posts_edit_conflict_frozen_suffix()}</span
 							>
 							<Button
 								type="button"
@@ -535,7 +544,7 @@
 								size="sm"
 								onclick={() => void reloadFromServer()}
 							>
-								载入服务端最新
+								{m.admin_posts_edit_load_latest()}
 							</Button>
 						</div>
 					</Alert.Description>
@@ -547,14 +556,14 @@
 				<Alert.Root variant="destructive" class="mb-3">
 					<Alert.Description>
 						<div class="flex flex-wrap items-center justify-between gap-2">
-							<span>{saveError ?? '登录状态已失效'}</span>
+							<span>{saveError ?? m.admin_posts_edit_err_session_invalid()}</span>
 							<Button
 								type="button"
 								variant="outline"
 								size="sm"
 								onclick={() => window.location.assign(reauthUrl ?? '/')}
 							>
-								重新登录
+								{m.admin_posts_edit_relogin()}
 							</Button>
 						</div>
 					</Alert.Description>
@@ -567,8 +576,8 @@
 					role="alert"
 					class="mb-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
 				>
-					<span class="shrink-0 font-medium">无法完成:</span>
-					<span class="min-w-0">{activeErrors.join('；')}</span>
+					<span class="shrink-0 font-medium">{m.admin_posts_edit_validation_failed()}</span>
+					<span class="min-w-0">{activeErrors.join(m.admin_posts_edit_error_join())}</span>
 				</div>
 			{/if}
 
@@ -577,7 +586,7 @@
 				<input
 					name="title"
 					class="w-full border-0 bg-transparent px-0 py-0 text-3xl font-semibold tracking-tight text-neutral-950 outline-none placeholder:font-medium placeholder:text-neutral-300 dark:text-neutral-50 dark:placeholder:text-neutral-700"
-					placeholder="输入标题..."
+					placeholder={m.admin_posts_edit_title_placeholder()}
 					bind:value={title}
 					oninput={onTitleInput}
 				/>
@@ -587,13 +596,13 @@
 						type="button"
 						class="-ml-1 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-xs text-muted-foreground transition-opacity duration-150 outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-accent/15"
 						onclick={() => (slugDialogOpen = true)}
-						aria-label="添加 slug"
+						aria-label={m.admin_posts_edit_add_slug()}
 					>
-						<span class="truncate">{slug ? `/${slug}` : '+ 添加 slug'}</span>
+						<span class="truncate">{slug ? `/${slug}` : m.admin_posts_edit_add_slug_label()}</span>
 						<IconPencil class="size-3 shrink-0" />
 					</button>
 					{#if title && !slug}
-						<span class="text-xs text-destructive">发布前需要填写英文 slug</span>
+						<span class="text-xs text-destructive">{m.admin_posts_edit_slug_required_hint()}</span>
 					{/if}
 				</div>
 			</div>
@@ -607,7 +616,7 @@
 				{#key loadedKey}
 					<MarkdownEditor
 						initialMarkdown={contentMarkdown}
-						placeholder="输入正文..."
+						placeholder={m.admin_posts_edit_body_placeholder()}
 						stickyToolbar={true}
 						borderless={true}
 						class="min-h-0 flex-1"
@@ -627,8 +636,8 @@
 		<Dialog.Overlay />
 		<Dialog.Content class="sm:max-w-md">
 			<Dialog.Header>
-				<Dialog.Title>设置 Slug</Dialog.Title>
-				<Dialog.Description>URL 友好的标识符，用于文章链接。</Dialog.Description>
+				<Dialog.Title>{m.admin_posts_edit_slug_dialog_title()}</Dialog.Title>
+				<Dialog.Description>{m.admin_posts_edit_slug_dialog_desc()}</Dialog.Description>
 			</Dialog.Header>
 			<div class="px-6 pb-2">
 				<Input
@@ -638,18 +647,20 @@
 					value={slug}
 					oninput={onSlugInput}
 				/>
-				<p class="mt-1.5 text-xs text-muted-foreground">仅限小写英文、数字和连字符</p>
+				<p class="mt-1.5 text-xs text-muted-foreground">{m.admin_posts_edit_slug_rule()}</p>
 				{#if slug}
-					<p class="mt-1.5 font-mono text-xs text-muted-foreground">预览: /posts/{slug}</p>
+					<p class="mt-1.5 font-mono text-xs text-muted-foreground">
+						{m.admin_posts_edit_slug_preview()}{slug}
+					</p>
 				{/if}
 			</div>
 			<Dialog.Footer>
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="outline" {...props}>取消</Button>
+						<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button onclick={() => (slugDialogOpen = false)}>确定</Button>
+				<Button onclick={() => (slugDialogOpen = false)}>{m.admin_common_confirm()}</Button>
 			</Dialog.Footer>
 		</Dialog.Content>
 	</Dialog.Portal>
@@ -661,13 +672,13 @@
 		<Sheet.Overlay />
 		<Sheet.Content side="right" class="w-full sm:max-w-sm">
 			<Sheet.Header>
-				<Sheet.Title>文章设置</Sheet.Title>
-				<Sheet.Description>配置文章的元数据信息。</Sheet.Description>
+				<Sheet.Title>{m.admin_posts_edit_settings()}</Sheet.Title>
+				<Sheet.Description>{m.admin_posts_edit_settings_desc()}</Sheet.Description>
 				<Sheet.Close
 					class="absolute top-4 right-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
 				>
 					<IconX class="size-4" />
-					<span class="sr-only">关闭</span>
+					<span class="sr-only">{m.admin_common_close()}</span>
 				</Sheet.Close>
 			</Sheet.Header>
 			<div class="flex flex-col gap-5 overflow-y-auto px-6 py-4">
@@ -675,12 +686,12 @@
 				<div class="flex flex-col gap-1.5">
 					<label for="settings-lang" class="flex items-center gap-1.5 text-sm font-medium">
 						<IconLanguage class="size-4 text-muted-foreground" />
-						语言
+						{m.admin_posts_edit_lang_label()}
 					</label>
 					{#if postId}
 						<div class="flex items-center gap-2 text-sm">
 							<Badge variant="outline">{lang}</Badge>
-							<span class="text-xs text-muted-foreground">创建后不可更改</span>
+							<span class="text-xs text-muted-foreground">{m.admin_posts_edit_lang_locked()}</span>
 						</div>
 					{:else}
 						<Select.Root type="single" bind:value={lang as never}>
@@ -700,18 +711,19 @@
 				<div class="flex flex-col gap-1.5">
 					<label for="settings-category" class="flex items-center gap-1.5 text-sm font-medium">
 						<IconCategory class="size-4 text-muted-foreground" />
-						分类
+						{m.nav_posts_categories()}
 					</label>
 					<Select.Root type="single" bind:value={categoryId as never}>
 						<Select.Trigger id="settings-category" class="w-full">
 							{categoryId
-								? (data.categories.find((c) => c.id === categoryId)?.name ?? '选择分类')
-								: '选择分类'}
+								? (data.categories.find((c) => c.id === categoryId)?.name ??
+									m.admin_categories_select())
+								: m.admin_categories_select()}
 						</Select.Trigger>
 						<Select.Portal>
 							<Select.Content class="z-[60]">
 								<Select.Group>
-									<Select.Label>分类</Select.Label>
+									<Select.Label>{m.nav_posts_categories()}</Select.Label>
 									{#each data.categories as cat (cat.id)}
 										<Select.Item value={cat.id}>{cat.name}</Select.Item>
 									{/each}
@@ -720,7 +732,9 @@
 						</Select.Portal>
 					</Select.Root>
 					{#if !postId && !categoryId}
-						<p class="text-xs text-muted-foreground">选定分类后即可自动保存。</p>
+						<p class="text-xs text-muted-foreground">
+							{m.admin_posts_edit_category_autosave_hint()}
+						</p>
 					{/if}
 					{#if publishErrors.categoryId}
 						<p class="text-sm text-destructive">{publishErrors.categoryId}</p>
@@ -731,21 +745,21 @@
 				<div class="flex flex-col gap-1.5">
 					<label for="settings-tags" class="flex items-center gap-1.5 text-sm font-medium">
 						<IconTag class="size-4 text-muted-foreground" />
-						标签
+						{m.admin_tags_nav()}
 					</label>
 					<Input id="settings-tags" placeholder="svelte, typescript, tutorial" bind:value={tags} />
-					<p class="text-xs text-muted-foreground">逗号分隔；发布时同步到标签库。</p>
+					<p class="text-xs text-muted-foreground">{m.admin_posts_edit_tags_hint()}</p>
 				</div>
 
 				<!-- Summary -->
 				<div class="flex flex-col gap-1.5">
 					<label for="settings-summary" class="flex items-center gap-1.5 text-sm font-medium">
 						<IconFileDescription class="size-4 text-muted-foreground" />
-						摘要
+						{m.admin_posts_edit_summary_label()}
 					</label>
 					<Textarea
 						id="settings-summary"
-						placeholder="文章简短描述...（可留空；AI 摘要采纳随 P2/P3 钩子）"
+						placeholder={m.admin_posts_edit_summary_placeholder()}
 						bind:value={summary}
 						rows={4}
 					/>
@@ -755,18 +769,20 @@
 				<div class="flex flex-col gap-2">
 					<div class="flex items-center gap-1.5 text-sm font-medium">
 						<IconLanguage class="size-4 text-muted-foreground" />
-						多语言版本
+						{m.admin_posts_edit_translations()}
 					</div>
 					{#if data.siblings.length > 0}
 						<div class="flex flex-wrap gap-1.5">
 							{#each data.siblings as s (s.id)}
 								<Badge variant={s.status === 'published' ? 'default' : 'outline'}>
-									{s.lang}·{s.status === 'published' ? '已发布' : '草稿'}
+									{s.lang}·{s.status === 'published'
+										? m.admin_posts_status_published()
+										: m.admin_posts_status_draft()}
 								</Badge>
 							{/each}
 						</div>
 					{:else}
-						<p class="text-xs text-muted-foreground">暂无其他语言版本。</p>
+						<p class="text-xs text-muted-foreground">{m.admin_posts_edit_no_translations()}</p>
 					{/if}
 					{#if postId}
 						<Button
@@ -779,7 +795,7 @@
 							}}
 						>
 							<IconLanguage class="size-4" />
-							创建翻译
+							{m.admin_posts_edit_create_translation()}
 						</Button>
 					{/if}
 				</div>
@@ -795,28 +811,26 @@
 									{...props}
 								>
 									<IconTrash class="size-4" />
-									丢弃草稿
+									{m.admin_posts_edit_discard_draft()}
 								</Button>
 							{/snippet}
 						</AlertDialog.Trigger>
 						<AlertDialog.Content>
 							<AlertDialog.Header>
-								<AlertDialog.Title>丢弃未发布的改动？</AlertDialog.Title>
+								<AlertDialog.Title>{m.admin_posts_edit_discard_title()}</AlertDialog.Title>
 								<AlertDialog.Description>
-									{draftId
-										? '将删除当前草稿。若是从未发布过的新文章，连占位记录一并删除。此操作不可撤销。'
-										: ''}
+									{draftId ? m.admin_posts_edit_discard_desc() : ''}
 								</AlertDialog.Description>
 							</AlertDialog.Header>
 							<AlertDialog.Footer>
-								<AlertDialog.Cancel>取消</AlertDialog.Cancel>
+								<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 								<AlertDialog.Action
 									onclick={() => {
 										const f = document.getElementById('discard-form');
 										if (f instanceof HTMLFormElement) f.requestSubmit();
 									}}
 								>
-									丢弃
+									{m.admin_posts_edit_discard_confirm()}
 								</AlertDialog.Action>
 							</AlertDialog.Footer>
 						</AlertDialog.Content>
@@ -833,21 +847,21 @@
 		<Dialog.Overlay />
 		<Dialog.Content class="sm:max-w-md">
 			<Dialog.Header>
-				<Dialog.Title>创建翻译</Dialog.Title>
+				<Dialog.Title>{m.admin_posts_edit_create_translation()}</Dialog.Title>
 				<Dialog.Description>
-					复制当前文章的标题/正文/摘要为新草稿（同组、slug 留空），再逐段翻译并发布。
+					{m.admin_posts_edit_translation_desc()}
 				</Dialog.Description>
 			</Dialog.Header>
 			<div class="flex flex-col gap-3 px-6 pb-2">
 				<Select.Root type="single" bind:value={translationLang as never}>
 					<Select.Trigger class="w-full">
-						{translationLang || '选择目标语言'}
+						{translationLang || m.admin_posts_edit_target_lang()}
 					</Select.Trigger>
 					<Select.Portal>
 						<Select.Content class="z-[60]">
 							{#each data.langs as l (l)}
 								<Select.Item value={l} disabled={occupiedLangs.has(l)}>
-									{l}{occupiedLangs.has(l) ? '（已存在）' : ''}
+									{l}{occupiedLangs.has(l) ? m.admin_posts_edit_lang_exists() : ''}
 								</Select.Item>
 							{/each}
 						</Select.Content>
@@ -857,7 +871,7 @@
 			<Dialog.Footer>
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="outline" {...props}>取消</Button>
+						<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
 					{/snippet}
 				</Dialog.Close>
 				<Button
@@ -868,7 +882,7 @@
 					}}
 				>
 					<IconSend class="size-4" />
-					创建
+					{m.admin_common_create()}
 				</Button>
 			</Dialog.Footer>
 		</Dialog.Content>

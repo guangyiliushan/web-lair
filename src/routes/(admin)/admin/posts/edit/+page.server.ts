@@ -14,6 +14,7 @@ import {
 } from '$lib/server/services/post-drafts';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * P2 editor (ledger §9.2/§9.10): the post row is the published version and is
@@ -50,7 +51,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	// ?id= loads an existing post; without it this page creates a new article.
 	const id = url.searchParams.get('id');
-	if (id && !isUuid(id)) error(404, '文章不存在');
+	if (id && !isUuid(id)) error(404, m.admin_posts_edit_err_not_found());
 
 	let post = null;
 	let draft = null;
@@ -59,7 +60,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	if (id) {
 		const [row] = await db.select().from(posts).where(eq(posts.id, id)).limit(1);
-		if (!row) error(404, '文章不存在');
+		if (!row) error(404, m.admin_posts_edit_err_not_found());
 		const tagNames = await loadTagNames(row.id);
 		post = {
 			id: row.id,
@@ -109,9 +110,14 @@ export const load: PageServerLoad = async ({ url }) => {
 	}
 
 	return {
-		headerTitle: '博文',
+		headerTitle: m.admin_nav_posts(),
 		headerActions: [
-			{ label: '返回', iconName: 'arrow-left', variant: 'outline', href: '/admin/posts' }
+			{
+				label: m.admin_common_back(),
+				iconName: 'arrow-left',
+				variant: 'outline',
+				href: '/admin/posts'
+			}
 		],
 		categories: allCategories,
 		langs,
@@ -138,13 +144,15 @@ export const actions: Actions = {
 		const versionRaw = str(form, 'draftVersion').trim();
 		const langRaw = str(form, 'lang').trim();
 		const autosave = form.get('autosave') === '1';
-		if (rawId && !isUuid(rawId)) return fail(400, { message: '文章标识无效' });
-		if (draftId && !isUuid(draftId)) return fail(400, { message: '草稿标识无效' });
+		if (rawId && !isUuid(rawId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_post_id() });
+		if (draftId && !isUuid(draftId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
 		// Malformed category ids must never reach the uuid column (22P02 → 500;
 		// the P1.1 guard this rewrite had dropped - review finding).
 		const categoryIdRaw = str(form, 'categoryId').trim();
 		if (categoryIdRaw && !isUuid(categoryIdRaw)) {
-			return fail(400, { message: '分类标识无效' });
+			return fail(400, { message: m.admin_posts_edit_err_bad_category_id() });
 		}
 
 		const result = await saveDraftWork({
@@ -194,14 +202,14 @@ export const actions: Actions = {
 					retryAfterMs: result.retryAfterMs
 				};
 			case 'needs-category':
-				return fail(400, { message: '请先选择分类，选定后即可自动保存', needsCategory: true });
+				return fail(400, { message: m.admin_posts_edit_pick_category_hint(), needsCategory: true });
 			case 'not-found':
-				return fail(404, { message: '文章不存在' });
+				return fail(404, { message: m.admin_posts_edit_err_not_found() });
 			case 'conflict':
 				return fail(409, {
 					conflict: true,
 					server: result.server,
-					message: '内容已在其他窗口更新，请以服务端为准刷新后再编辑'
+					message: m.admin_posts_edit_err_conflict_long()
 				});
 		}
 	},
@@ -211,26 +219,30 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const draftId = str(form, 'draftId').trim();
-		if (!draftId || !isUuid(draftId)) return fail(400, { message: '草稿标识无效' });
+		if (!draftId || !isUuid(draftId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
 
 		const result = await publishDraft(draftId, locals.admin?.userId ?? locals.user?.id ?? null);
 		switch (result.kind) {
 			case 'published':
 				throw redirect(303, `/admin/posts/edit?id=${result.postId}&published=1`);
 			case 'invalid':
-				return fail(400, { errors: result.errors, message: '发布校验未通过' });
+				return fail(400, {
+					errors: result.errors,
+					message: m.admin_posts_edit_err_publish_validation()
+				});
 			case 'conflict':
 				return fail(409, {
 					conflict: true,
-					message: '文章基底已更新（可能在其他窗口发布过），请刷新后重试',
+					message: m.admin_posts_edit_err_base_updated(),
 					server: result.server
 				});
 			case 'slug-taken':
-				return fail(400, { errors: { slug: '该 Slug 已被其他文章使用' } });
+				return fail(400, { errors: { slug: m.admin_posts_edit_err_slug_taken() } });
 			case 'busy':
-				return fail(409, { message: '并发操作冲突，请稍后重试' });
+				return fail(409, { message: m.admin_posts_edit_err_busy() });
 			case 'not-found':
-				return fail(404, { message: '草稿不存在' });
+				return fail(404, { message: m.admin_posts_edit_err_draft_not_found() });
 		}
 	},
 
@@ -242,11 +254,13 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const draftId = str(form, 'draftId').trim();
-		if (!draftId || !isUuid(draftId)) return fail(400, { message: '草稿标识无效' });
+		if (!draftId || !isUuid(draftId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
 
 		const result = await discardDraft(draftId);
-		if (result.kind === 'not-found') return fail(404, { message: '草稿不存在' });
-		if (result.kind === 'busy') return fail(409, { message: '并发操作冲突，请稍后重试' });
+		if (result.kind === 'not-found')
+			return fail(404, { message: m.admin_posts_edit_err_draft_not_found() });
+		if (result.kind === 'busy') return fail(409, { message: m.admin_posts_edit_err_busy() });
 		if (result.removedPlaceholder) throw redirect(303, '/admin/posts?discarded=1');
 		if (result.postId) throw redirect(303, `/admin/posts/edit?id=${result.postId}&discarded=1`);
 		throw redirect(303, '/admin/posts?discarded=1');
@@ -258,9 +272,10 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const sourceId = str(form, 'id').trim();
 		const lang = str(form, 'lang').trim();
-		if (!sourceId || !isUuid(sourceId)) return fail(400, { message: '文章标识无效' });
+		if (!sourceId || !isUuid(sourceId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_post_id() });
 		if (!(OPTION_LANGS as readonly string[]).includes(lang)) {
-			return fail(400, { message: '请选择目标语言' });
+			return fail(400, { message: m.admin_posts_edit_target_lang() });
 		}
 
 		const result = await createTranslationDraft(
@@ -272,13 +287,13 @@ export const actions: Actions = {
 			case 'created':
 				throw redirect(303, `/admin/posts/edit?id=${result.postId}&translation=1`);
 			case 'same-lang':
-				return fail(400, { message: '不能为同语言创建翻译' });
+				return fail(400, { message: m.admin_posts_edit_err_same_lang() });
 			case 'lang-exists':
-				return fail(400, { message: '该语言版本已存在' });
+				return fail(400, { message: m.admin_posts_edit_err_lang_exists() });
 			case 'not-source':
-				return fail(400, { message: '请从源语言版本创建翻译' });
+				return fail(400, { message: m.admin_posts_edit_err_from_source() });
 			case 'not-found':
-				return fail(404, { message: '文章不存在' });
+				return fail(404, { message: m.admin_posts_edit_err_not_found() });
 		}
 	}
 } satisfies Actions;
