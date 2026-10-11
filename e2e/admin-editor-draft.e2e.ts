@@ -1,5 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { psql } from './support';
+import { zhCnLocale } from './locale-fixture';
+
+test.use(zhCnLocale);
 
 /**
  * P2 writing chain (ledger §9.2/§9.10) - owner flow against the real editor,

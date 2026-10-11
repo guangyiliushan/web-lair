@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { psql } from './support';
+import { zhCnLocale } from './locale-fixture';
+
+test.use(zhCnLocale);
 
 /**
  * Comment review queue (B2) - owner flow against the real page and the real

@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { psql } from './support';
+import { zhCnLocale } from './locale-fixture';
+
+test.use(zhCnLocale);
 
 /**
  * pages-line P2 acceptance (roadmap W3 #6, T6): the admin registry list and

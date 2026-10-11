@@ -1,5 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { psql } from './support';
+import { zhCnLocale } from './locale-fixture';
+
+test.use(zhCnLocale);
 
 /**
  * N1 admin chain (batch 5) - owner flow against the real notes editor, the

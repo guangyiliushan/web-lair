@@ -1,5 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { psql } from './support';
+import { zhCnLocale } from './locale-fixture';
+
+test.use(zhCnLocale);
 
 /**
  * AI admin surface (AI-2) - owner flow against the real pages and database:
