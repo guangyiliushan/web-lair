@@ -14,6 +14,7 @@
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 
 	let { data, form }: PageProps = $props();
 
@@ -89,7 +90,7 @@
 </script>
 
 <svelte:head>
-	<title>思考管理 - Lair Admin</title>
+	<title>{m.admin_thoughts_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -101,14 +102,16 @@
 				<IconBulb class="size-4" />
 			</span>
 			<div class="flex min-w-0 items-baseline gap-2">
-				<h1 class="truncate text-base font-semibold">思考</h1>
-				<span class="shrink-0 text-xs text-muted-foreground tabular-nums">{data.total} 条</span>
+				<h1 class="truncate text-base font-semibold">{m.admin_nav_thoughts()}</h1>
+				<span class="shrink-0 text-xs text-muted-foreground tabular-nums"
+					>{m.admin_thoughts_count({ count: data.total })}</span
+				>
 			</div>
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
 			<Button size="sm" variant="outline" onclick={openCreate}>
 				<IconPlus class="size-3.5" />
-				写一条思考
+				{m.admin_thoughts_new()}
 			</Button>
 		</div>
 	</header>
@@ -129,10 +132,16 @@
 					<input type="hidden" name="id" value={editing.id} />
 				{/if}
 				<div class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
-					<Dialog.Title>{editing ? '编辑思考' : '写一条思考'}</Dialog.Title>
+					<Dialog.Title>{editing ? m.admin_thoughts_edit() : m.admin_thoughts_new()}</Dialog.Title>
 					<Dialog.Close>
 						{#snippet child({ props })}
-							<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
+							<Button
+								variant="ghost"
+								size="icon"
+								class="size-7"
+								{...props}
+								aria-label={m.admin_common_close()}
+							>
 								<IconX class="size-4" />
 							</Button>
 						{/snippet}
@@ -144,12 +153,12 @@
 				<div class="px-5 py-4">
 					<label class="grid gap-1.5">
 						<span class="text-sm font-medium">
-							内容 <span class="text-destructive">*</span>
+							{m.admin_thoughts_content()} <span class="text-destructive">*</span>
 						</span>
 						<Textarea
 							name="content"
 							class="min-h-36"
-							placeholder="写点什么，或粘贴一个链接..."
+							placeholder={m.admin_thoughts_content_ph()}
 							required
 							bind:value={fieldContent}
 						/>
@@ -158,11 +167,11 @@
 				<div class="flex shrink-0 items-center justify-end gap-2 border-t px-4 py-2">
 					<Dialog.Close>
 						{#snippet child({ props })}
-							<Button variant="outline" size="sm" {...props}>取消</Button>
+							<Button variant="outline" size="sm" {...props}>{m.admin_common_cancel()}</Button>
 						{/snippet}
 					</Dialog.Close>
 					<Button type="submit" size="sm" disabled={submitting || !fieldContent.trim()}>
-						{editing ? '保存' : '发布'}
+						{editing ? m.admin_common_save() : m.admin_posts_edit_publish()}
 					</Button>
 				</div>
 			</form>
@@ -171,8 +180,8 @@
 
 	<DeleteConfirm
 		open={deleteTarget !== null}
-		title="删除思考"
-		description="将删除这条思考，此操作不可撤销。"
+		title={m.admin_thoughts_delete_title()}
+		description={m.admin_thoughts_delete_desc()}
 		id={deleteTarget?.id ?? ''}
 		error={errorMessage}
 		onclose={() => (deleteTarget = null)}
@@ -190,12 +199,16 @@
 			{#if rows.length === 0}
 				<Empty class="py-12">
 					<div class="flex flex-col items-center gap-1">
-						<h3 class="text-lg font-semibold tracking-tight">暂无思考</h3>
-						<p class="text-sm text-muted-foreground">点击上方按钮写下第一条思考</p>
+						<h3 class="text-lg font-semibold tracking-tight">{m.admin_thoughts_empty()}</h3>
+						<p class="text-sm text-muted-foreground">{m.admin_thoughts_empty_desc()}</p>
 					</div>
 				</Empty>
 			{:else}
-				<div class="mx-auto max-w-4xl divide-y" role="list" aria-label="思考列表">
+				<div
+					class="mx-auto max-w-4xl divide-y"
+					role="list"
+					aria-label={m.admin_thoughts_list_aria()}
+				>
 					{#each rows as row (row.id)}
 						<article role="listitem" class="group px-4 py-5 transition-colors hover:bg-muted/50">
 							<p class="text-base leading-7 wrap-break-word whitespace-pre-wrap">{row.content}</p>
@@ -212,21 +225,21 @@
 										variant="outline"
 										size="sm"
 										class="h-8 gap-1 px-2 text-xs"
-										aria-label="编辑思考"
+										aria-label={m.admin_thoughts_edit()}
 										onclick={() => openEdit(row)}
 									>
 										<IconPencil class="size-3.5" />
-										<span class="hidden sm:inline">编辑</span>
+										<span class="hidden sm:inline">{m.admin_common_edit()}</span>
 									</Button>
 									<Button
 										variant="outline"
 										size="sm"
 										class="h-8 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-										aria-label="删除思考"
+										aria-label={m.admin_thoughts_delete_title()}
 										onclick={() => openDelete(row)}
 									>
 										<IconTrash class="size-3.5" />
-										<span class="hidden sm:inline">删除</span>
+										<span class="hidden sm:inline">{m.admin_common_delete()}</span>
 									</Button>
 								</div>
 							</footer>

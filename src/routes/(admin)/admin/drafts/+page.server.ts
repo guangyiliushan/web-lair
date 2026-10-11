@@ -6,6 +6,7 @@ import { requireAdminRole } from '$lib/server/authz';
 import { discardDraft } from '$lib/server/services/post-drafts';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Draft management (ledger §9.14.3): every pending working copy, oldest
@@ -40,7 +41,7 @@ export const load: PageServerLoad = async () => {
 		return {
 			draftId: row.draftId,
 			postId: row.postId,
-			title: row.draftTitle || row.postTitle || '(无标题)',
+			title: row.draftTitle || row.postTitle || m.admin_drafts_untitled(),
 			kind,
 			lang: row.postLang ?? '-',
 			postStatus: row.postStatus,
@@ -49,7 +50,7 @@ export const load: PageServerLoad = async () => {
 		};
 	});
 
-	return { headerTitle: '草稿箱', drafts: items };
+	return { headerTitle: m.admin_nav_drafts(), drafts: items };
 };
 
 export const actions: Actions = {
@@ -57,11 +58,13 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const draftId = (form.get('draftId') ?? '').toString();
-		if (!draftId || !isUuid(draftId)) return fail(400, { message: '草稿标识无效' });
+		if (!draftId || !isUuid(draftId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
 
 		const result = await discardDraft(draftId);
-		if (result.kind === 'not-found') return fail(404, { message: '草稿不存在' });
-		if (result.kind === 'busy') return fail(409, { message: '并发操作冲突，请稍后重试' });
+		if (result.kind === 'not-found')
+			return fail(404, { message: m.admin_posts_edit_err_draft_not_found() });
+		if (result.kind === 'busy') return fail(409, { message: m.admin_posts_edit_err_busy() });
 		throw redirect(303, '/admin/drafts?discarded=1');
 	}
 } satisfies Actions;

@@ -7,6 +7,7 @@ import { getOption } from '$lib/server/config/options-registry';
 import { isUuid } from '$lib/utils/uuid';
 import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Admin 思考 CRUD (C3): content-only rows from `thoughts`. The load and
@@ -36,7 +37,7 @@ export const load: PageServerLoad = async () => {
 			}))
 		);
 	return {
-		headerTitle: '思考',
+		headerTitle: m.admin_nav_thoughts(),
 		total,
 		rows
 	};
@@ -47,7 +48,7 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const content = (form.get('content') ?? '').toString().trim();
-		if (!content) return fail(400, { error: '思考内容不能为空' });
+		if (!content) return fail(400, { error: m.admin_thoughts_err_content() });
 		await db.insert(thoughts).values({ content });
 		return { success: true };
 	},
@@ -56,15 +57,15 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少思考 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_thoughts_err_missing_id() });
 		const content = (form.get('content') ?? '').toString().trim();
-		if (!content) return fail(400, { error: '思考内容不能为空' });
+		if (!content) return fail(400, { error: m.admin_thoughts_err_content() });
 		const updated = await db
 			.update(thoughts)
 			.set({ content })
 			.where(eq(thoughts.id, id))
 			.returning({ id: thoughts.id });
-		if (updated.length === 0) return fail(404, { error: '思考不存在' });
+		if (updated.length === 0) return fail(404, { error: m.admin_thoughts_err_not_found() });
 		return { success: true };
 	},
 
@@ -72,12 +73,12 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少思考 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_thoughts_err_missing_id() });
 		const deleted = await db
 			.delete(thoughts)
 			.where(eq(thoughts.id, id))
 			.returning({ id: thoughts.id });
-		if (deleted.length === 0) return fail(404, { error: '思考不存在' });
+		if (deleted.length === 0) return fail(404, { error: m.admin_thoughts_err_not_found() });
 		return { success: true };
 	}
 };

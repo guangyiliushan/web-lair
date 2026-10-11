@@ -8,6 +8,7 @@
 	import { Empty } from '$lib/components/ui/empty';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconArticle from '@tabler/icons-svelte-runes/icons/article';
@@ -18,9 +19,9 @@
 	let discarding = $state(false);
 
 	const KIND_LABELS: Record<string, string> = {
-		new: '新文',
-		translation: '译文',
-		edit: '改动'
+		new: m.admin_drafts_kind_new(),
+		translation: m.admin_drafts_kind_translation(),
+		edit: m.admin_drafts_kind_edit()
 	};
 	const KIND_VARIANTS: Record<string, 'default' | 'secondary' | 'outline'> = {
 		new: 'secondary',
@@ -43,7 +44,7 @@
 </script>
 
 <svelte:head>
-	<title>草稿箱 - Lair Admin</title>
+	<title>{m.admin_nav_drafts()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex flex-col gap-6">
@@ -51,22 +52,22 @@
 		<div
 			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
 		>
-			草稿已丢弃。
+			{m.admin_drafts_discarded_flash()}
 		</div>
 	{/if}
 
 	{#if data.drafts.length === 0}
 		<Empty class="py-12">
 			<div class="flex flex-col items-center gap-1">
-				<h3 class="text-lg font-semibold tracking-tight">暂无草稿</h3>
+				<h3 class="text-lg font-semibold tracking-tight">{m.admin_drafts_empty()}</h3>
 				<p class="text-sm text-muted-foreground">
-					编辑文章时的未发布改动会出现在这里；草稿不自动清理，直到发布或显式丢弃。
+					{m.admin_drafts_empty_desc()}
 				</p>
 			</div>
 			<div class="mt-4">
 				<Button href="/admin/posts">
 					<IconArticle data-icon="inline-start" />
-					去看文章列表
+					{m.admin_drafts_go_posts()}
 				</Button>
 			</div>
 		</Empty>
@@ -75,12 +76,13 @@
 			<Table.Root>
 				<Table.Header>
 					<Table.Row>
-						<Table.Head>标题</Table.Head>
-						<Table.Head class="w-20">类型</Table.Head>
-						<Table.Head class="w-16">语言</Table.Head>
-						<Table.Head class="w-24">文章状态</Table.Head>
-						<Table.Head class="hidden w-40 sm:table-cell">最近修改</Table.Head>
-						<Table.Head class="w-24 text-right">操作</Table.Head>
+						<Table.Head>{m.admin_drafts_col_title()}</Table.Head>
+						<Table.Head class="w-20">{m.admin_common_type()}</Table.Head>
+						<Table.Head class="w-16">{m.admin_posts_edit_lang_label()}</Table.Head>
+						<Table.Head class="w-24">{m.admin_drafts_col_post_status()}</Table.Head>
+						<Table.Head class="hidden w-40 sm:table-cell">{m.admin_drafts_col_updated()}</Table.Head
+						>
+						<Table.Head class="w-24 text-right">{m.admin_common_actions()}</Table.Head>
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
@@ -129,7 +131,7 @@
 										size="icon"
 										class="size-8 text-destructive"
 										onclick={() => (discardTarget = { draftId: draft.draftId, title: draft.title })}
-										aria-label="丢弃草稿"
+										aria-label={m.admin_posts_edit_discard_draft()}
 									>
 										<IconTrash class="size-4" />
 									</Button>
@@ -152,18 +154,17 @@
 >
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>丢弃草稿？</AlertDialog.Title>
+			<AlertDialog.Title>{m.admin_drafts_discard_title()}</AlertDialog.Title>
 			<AlertDialog.Description>
-				将删除「{discardTarget?.title ??
-					''}」的未发布改动。若是从未发布过的新文章，连占位记录一并删除。此操作不可撤销。
+				{m.admin_drafts_discard_desc({ title: discardTarget?.title ?? '' })}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 			<form method="POST" action="?/discard" use:enhance={discardHandler}>
 				<input type="hidden" name="draftId" value={discardTarget?.draftId ?? ''} />
 				<Button type="submit" variant="destructive" disabled={discarding}>
-					{discarding ? '丢弃中…' : '丢弃'}
+					{discarding ? m.admin_drafts_discarding() : m.admin_posts_edit_discard_confirm()}
 				</Button>
 			</form>
 		</AlertDialog.Footer>
