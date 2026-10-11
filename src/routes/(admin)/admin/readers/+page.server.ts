@@ -1,7 +1,8 @@
 import type { PageServerLoad } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 export const load: PageServerLoad = async () => {
 	return {
-		headerTitle: '读者'
+		headerTitle: m.admin_readers()
 	};
 };

@@ -10,6 +10,7 @@
 	import IconUserStar from '@tabler/icons-svelte-runes/icons/user-star';
 	import IconUserMinus from '@tabler/icons-svelte-runes/icons/user-minus';
 	import IconUsers from '@tabler/icons-svelte-runes/icons/users';
+	import { m } from '$lib/paraglide/messages';
 
 	interface Reader {
 		id: string;
@@ -33,14 +34,18 @@
 			avatar: 'https://cravatar.cn/avatar/b642b4217b34b1e8d3bd915fc65c4452?d=retro',
 			role: 'owner',
 			verified: true,
-			joinedAt: '11 天前',
-			lastLogin: '5 小时前',
-			updatedAt: '从未登录'
+			joinedAt: m.admin_readers_demo_joined(),
+			lastLogin: m.admin_readers_demo_last_login(),
+			updatedAt: m.admin_readers_never()
 		}
 	];
 
 	const roleFilters = ['all', 'owner', 'reader'] as const;
-	const roleLabels: Record<string, string> = { all: '全部', owner: '站长', reader: '读者' };
+	const roleLabels: Record<string, string> = {
+		all: m.admin_readers_role_all(),
+		owner: m.admin_readers_role_owner(),
+		reader: m.admin_readers_role_reader()
+	};
 
 	let searchQuery = $state('');
 	let selectedRole = $state('all');
@@ -67,13 +72,13 @@
 </script>
 
 <svelte:head>
-	<title>读者管理 - Lair Admin</title>
+	<title>{m.admin_readers_title()} - Lair Admin</title>
 </svelte:head>
 
 <MasterDetail.Root class="h-[calc(100vh-10rem)]">
 	<!-- ===== 左侧：读者列表 ===== -->
 	<MasterDetail.Pane side="master" class="w-80 shrink-0">
-		<MasterDetail.Header icon={IconUsers} title="读者" count={readers.length} />
+		<MasterDetail.Header icon={IconUsers} title={m.admin_readers()} count={readers.length} />
 
 		<!-- 角色筛选标签（带计数） -->
 		<div class="flex flex-wrap gap-2 border-b px-4 py-3">
@@ -104,12 +109,12 @@
 				/>
 				<input
 					type="text"
-					placeholder="搜索读者"
+					placeholder={m.admin_readers_search()}
 					class="bg-surface-card h-8 w-full rounded-sm border border-border pr-3 pl-9 text-sm transition-colors outline-none placeholder:text-muted-foreground focus:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/15"
 					bind:value={searchQuery}
 				/>
 			</div>
-			<Button variant="outline" size="icon" class="size-8" aria-label="刷新">
+			<Button variant="outline" size="icon" class="size-8" aria-label={m.admin_common_refresh()}>
 				<IconRefresh class="size-4" />
 			</Button>
 		</div>
@@ -117,7 +122,7 @@
 		<MasterDetail.List>
 			{#if filteredReaders.length === 0}
 				<div class="flex flex-col items-center gap-1 py-12">
-					<p class="text-sm text-muted-foreground">暂无读者</p>
+					<p class="text-sm text-muted-foreground">{m.admin_readers_empty()}</p>
 				</div>
 			{:else}
 				{#each filteredReaders as reader (reader.id)}
@@ -136,7 +141,7 @@
 								{#if reader.role === 'owner'}
 									<span
 										class="flex size-4 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-500"
-										title="站长"
+										title={m.admin_readers_role_owner()}
 									>
 										<IconCrown class="size-2.5" />
 									</span>
@@ -160,7 +165,7 @@
 	<MasterDetail.Pane side="detail">
 		{#if selectedReader}
 			{@const reader = selectedReader}
-			<MasterDetail.Header title="读者详情" />
+			<MasterDetail.Header title={m.admin_readers_detail()} />
 
 			<div class="flex min-h-0 flex-1 flex-col">
 				<!-- 用户信息概览 -->
@@ -176,7 +181,7 @@
 							{#if reader.role === 'owner'}
 								<span
 									class="flex size-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-500"
-									title="站长"
+									title={m.admin_readers_role_owner()}
 								>
 									<IconCrown class="size-3" />
 								</span>
@@ -190,7 +195,7 @@
 							{#if reader.verified}
 								<span class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
 									<IconShieldCheck class="size-3" />
-									已验证
+									{m.admin_readers_verified()}
 								</span>
 							{/if}
 						</div>
@@ -202,7 +207,7 @@
 						<!-- 身份信息 -->
 						<section class="flex flex-col gap-3">
 							<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-								身份
+								{m.admin_readers_section_identity()}
 							</h3>
 							<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 								<div class="rounded-md border p-3">
@@ -211,7 +216,7 @@
 										<code class="min-w-0 truncate text-sm">{reader.id}</code>
 										<button
 											class="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-											title="复制 ID"
+											title={m.admin_readers_copy_id()}
 											type="button"
 										>
 											<IconCopy class="size-4" />
@@ -219,25 +224,31 @@
 									</div>
 								</div>
 								<div class="rounded-md border p-3">
-									<div class="text-xs text-muted-foreground">用户名</div>
+									<div class="text-xs text-muted-foreground">{m.admin_readers_username()}</div>
 									<div class="mt-1 truncate text-sm">{reader.username}</div>
 								</div>
 								<div class="rounded-md border p-3 sm:col-span-2">
-									<div class="text-xs text-muted-foreground">显示名称</div>
+									<div class="text-xs text-muted-foreground">{m.admin_readers_display_name()}</div>
 									<div class="mt-1 truncate text-sm">{reader.name}</div>
 								</div>
 							</div>
 							<div class="divide-y rounded-md border px-3">
 								<div class="flex items-baseline justify-between gap-4 py-2">
-									<span class="shrink-0 text-xs text-muted-foreground">邮箱</span>
+									<span class="shrink-0 text-xs text-muted-foreground"
+										>{m.admin_readers_email()}</span
+									>
 									<span class="min-w-0 truncate text-right text-sm">{reader.email}</span>
 								</div>
 								<div class="flex items-baseline justify-between gap-4 py-2">
-									<span class="shrink-0 text-xs text-muted-foreground">账号</span>
+									<span class="shrink-0 text-xs text-muted-foreground"
+										>{m.admin_readers_account()}</span
+									>
 									<span class="min-w-0 truncate text-right text-sm">@{reader.username}</span>
 								</div>
 								<div class="flex items-baseline justify-between gap-4 py-2">
-									<span class="shrink-0 text-xs text-muted-foreground">角色</span>
+									<span class="shrink-0 text-xs text-muted-foreground"
+										>{m.admin_readers_role()}</span
+									>
 									<span class="min-w-0 truncate text-right text-sm">{roleLabels[reader.role]}</span>
 								</div>
 							</div>
@@ -246,19 +257,25 @@
 						<!-- 活动信息 -->
 						<section class="flex flex-col gap-3">
 							<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-								活动
+								{m.admin_readers_section_activity()}
 							</h3>
 							<div class="divide-y rounded-md border px-3">
 								<div class="flex items-baseline justify-between gap-4 py-2">
-									<span class="shrink-0 text-xs text-muted-foreground">加入时间</span>
+									<span class="shrink-0 text-xs text-muted-foreground"
+										>{m.admin_readers_joined()}</span
+									>
 									<time class="min-w-0 truncate text-right text-sm">{reader.joinedAt}</time>
 								</div>
 								<div class="flex items-baseline justify-between gap-4 py-2">
-									<span class="shrink-0 text-xs text-muted-foreground">最近登录</span>
+									<span class="shrink-0 text-xs text-muted-foreground"
+										>{m.admin_readers_last_login()}</span
+									>
 									<time class="min-w-0 truncate text-right text-sm">{reader.lastLogin}</time>
 								</div>
 								<div class="flex items-baseline justify-between gap-4 py-2">
-									<span class="shrink-0 text-xs text-muted-foreground">更新时间</span>
+									<span class="shrink-0 text-xs text-muted-foreground"
+										>{m.admin_readers_updated()}</span
+									>
 									<span class="text-right text-sm">{reader.updatedAt}</span>
 								</div>
 							</div>
@@ -270,11 +287,11 @@
 				<div class="flex flex-wrap items-center gap-2 border-t px-4 py-3">
 					<Button variant="outline" size="sm" disabled={reader.role === 'owner'}>
 						<IconUserStar class="size-4" />
-						转让站长
+						{m.admin_readers_transfer()}
 					</Button>
 					<Button variant="outline" size="sm" disabled={reader.role !== 'owner'}>
 						<IconUserMinus class="size-4" />
-						撤销站长
+						{m.admin_readers_revoke()}
 					</Button>
 					<div class="flex-1"></div>
 					<Button
@@ -282,10 +299,10 @@
 						size="sm"
 						class="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
 						disabled={reader.role === 'owner'}
-						title={reader.role === 'owner' ? '无法封禁站长' : ''}
+						title={reader.role === 'owner' ? m.admin_readers_cannot_ban() : ''}
 					>
 						<IconBan class="size-4" />
-						封禁
+						{m.admin_readers_ban()}
 					</Button>
 				</div>
 			</div>
@@ -293,8 +310,8 @@
 			<div class="flex flex-1 items-center justify-center">
 				<div class="flex flex-col items-center gap-2 text-center">
 					<IconUsers class="size-10 text-muted-foreground/40" />
-					<h3 class="text-lg font-semibold tracking-tight">选择一位读者</h3>
-					<p class="text-sm text-muted-foreground">从左侧列表中选择读者以查看详情</p>
+					<h3 class="text-lg font-semibold tracking-tight">{m.admin_readers_select()}</h3>
+					<p class="text-sm text-muted-foreground">{m.admin_readers_select_desc()}</p>
 				</div>
 			</div>
 		{/if}

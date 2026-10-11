@@ -1,11 +1,17 @@
 import type { PageServerLoad } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 export const load: PageServerLoad = async () => {
 	return {
-		headerTitle: '朋友们',
+		headerTitle: m.admin_nav_friends(),
 		headerActions: [
-			{ label: '添加友链', iconName: 'user-plus', variant: 'default', href: '/admin/friends/new' },
-			{ label: '访问站点', iconName: 'external-link', href: '/' }
+			{
+				label: m.admin_friends_add(),
+				iconName: 'user-plus',
+				variant: 'default',
+				href: '/admin/friends/new'
+			},
+			{ label: m.admin_friends_visit(), iconName: 'external-link', href: '/' }
 		]
 	};
 };

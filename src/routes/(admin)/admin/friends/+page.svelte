@@ -12,6 +12,7 @@
 	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
+	import { m } from '$lib/paraglide/messages';
 
 	interface Friend {
 		id: string;
@@ -29,7 +30,7 @@
 			name: '123',
 			description: '-',
 			url: 'example.com',
-			type: '朋友',
+			type: m.admin_friends_type_friend(),
 			email: '-',
 			createdAt: '2026/07/17'
 		}
@@ -37,11 +38,11 @@
 
 	const states = ['friends', 'pending', 'outdated', 'rejected', 'banned'] as const;
 	const stateLabels: Record<string, string> = {
-		friends: '朋友们',
-		pending: '待审核',
-		outdated: '过时的',
-		rejected: '已拒绝',
-		banned: '封禁的'
+		friends: m.admin_friends_state_friends(),
+		pending: m.admin_friends_state_pending(),
+		outdated: m.admin_friends_state_outdated(),
+		rejected: m.admin_friends_state_rejected(),
+		banned: m.admin_friends_state_banned()
 	};
 
 	let activeState = $state('friends');
@@ -51,14 +52,14 @@
 	let formAvatar = $state('');
 	let formUrl = $state('');
 	let formDescription = $state('');
-	let formType = $state('朋友');
+	let formType = $state(m.admin_friends_type_friend());
 
 	function resetForm() {
 		formName = '';
 		formAvatar = '';
 		formUrl = '';
 		formDescription = '';
-		formType = '朋友';
+		formType = m.admin_friends_type_friend();
 	}
 
 	function openAddDialog() {
@@ -70,11 +71,19 @@
 		return name.slice(0, 1);
 	}
 
-	const columns = ['名称', '描述', '网址', '类型', '邮箱', '创建时间', '操作'] as const;
+	const columns = [
+		m.admin_friends_col_name(),
+		m.admin_friends_col_description(),
+		m.admin_friends_col_url(),
+		m.admin_common_type(),
+		m.admin_friends_col_email(),
+		m.admin_friends_col_created(),
+		m.admin_common_actions()
+	];
 </script>
 
 <svelte:head>
-	<title>友链管理 - Lair Admin</title>
+	<title>{m.admin_friends_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -83,22 +92,24 @@
 		<div class="flex min-w-0 items-center gap-2">
 			<h2 class="inline-flex items-center gap-2 text-lg font-semibold">
 				<IconUsers class="size-4" />
-				友链
+				{m.admin_nav_friends()}
 			</h2>
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
-			<span class="hidden text-xs text-muted-foreground sm:inline">{friends.length} 条</span>
+			<span class="hidden text-xs text-muted-foreground sm:inline"
+				>{m.admin_friends_count({ count: friends.length })}</span
+			>
 			<Button size="sm" variant="outline" onclick={openAddDialog}>
 				<IconPlus class="size-4" />
-				<span class="hidden sm:inline">新增友链</span>
+				<span class="hidden sm:inline">{m.admin_friends_add()}</span>
 			</Button>
-			<Button size="sm" variant="outline" aria-label="检查友链可用性">
+			<Button size="sm" variant="outline" aria-label={m.admin_friends_check_aria()}>
 				<IconSearch class="size-4" />
-				<span class="hidden lg:inline">检查可用性</span>
+				<span class="hidden lg:inline">{m.admin_friends_check()}</span>
 			</Button>
-			<Button size="sm" variant="outline" aria-label="迁移头像">
+			<Button size="sm" variant="outline" aria-label={m.admin_friends_migrate_avatars()}>
 				<IconRefresh class="size-4" />
-				<span class="hidden lg:inline">迁移头像</span>
+				<span class="hidden lg:inline">{m.admin_friends_migrate_avatars()}</span>
 			</Button>
 		</div>
 	</header>
@@ -134,7 +145,9 @@
 			<Table.Header class="sticky top-0 z-10 bg-muted/50">
 				<Table.Row class="text-xs text-muted-foreground uppercase hover:bg-transparent">
 					{#each columns as col (col)}
-						<Table.Head class={col === '操作' ? 'text-right' : ''}>{col}</Table.Head>
+						<Table.Head class={col === m.admin_common_actions() ? 'text-right' : ''}
+							>{col}</Table.Head
+						>
 					{/each}
 				</Table.Row>
 			</Table.Header>
@@ -142,7 +155,7 @@
 				{#if friends.length === 0}
 					<Table.Row>
 						<Table.Cell colspan={columns.length} class="py-12 text-center">
-							<p class="text-sm text-muted-foreground">暂无友链</p>
+							<p class="text-sm text-muted-foreground">{m.admin_friends_empty()}</p>
 						</Table.Cell>
 					</Table.Row>
 				{:else}
@@ -197,7 +210,7 @@
 								<div class="flex justify-end gap-1">
 									<Button variant="outline" size="sm" class="h-8 gap-1 px-2 text-xs">
 										<IconPencil class="size-3.5" />
-										编辑
+										{m.admin_common_edit()}
 									</Button>
 									<Button
 										variant="outline"
@@ -205,7 +218,7 @@
 										class="h-8 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
 									>
 										<IconTrash class="size-3.5" />
-										移除
+										{m.admin_friends_remove()}
 									</Button>
 								</div>
 							</Table.Cell>
@@ -228,10 +241,16 @@
 			}}
 		>
 			<div class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
-				<Dialog.Title>新增友链</Dialog.Title>
+				<Dialog.Title>{m.admin_friends_add()}</Dialog.Title>
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
+						<Button
+							variant="ghost"
+							size="icon"
+							class="size-7"
+							{...props}
+							aria-label={m.admin_common_close()}
+						>
 							<IconX class="size-4" />
 						</Button>
 					{/snippet}
@@ -240,26 +259,30 @@
 			<div class="grid gap-4 px-5 py-4">
 				<div class="grid gap-1.5">
 					<label for="friend-name" class="text-sm font-medium">
-						名字<span class="text-destructive"> *</span>
+						{m.admin_friends_field_name()}<span class="text-destructive"> *</span>
 					</label>
 					<Input id="friend-name" required bind:value={formName} />
 				</div>
 				<div class="grid gap-1.5">
-					<label for="friend-avatar" class="text-sm font-medium">头像</label>
+					<label for="friend-avatar" class="text-sm font-medium"
+						>{m.admin_friends_field_avatar()}</label
+					>
 					<Input id="friend-avatar" bind:value={formAvatar} />
 				</div>
 				<div class="grid gap-1.5">
 					<label for="friend-url" class="text-sm font-medium">
-						网址<span class="text-destructive"> *</span>
+						{m.admin_friends_col_url()}<span class="text-destructive"> *</span>
 					</label>
 					<Input id="friend-url" required bind:value={formUrl} />
 				</div>
 				<div class="grid gap-1.5">
-					<label for="friend-desc" class="text-sm font-medium">描述</label>
+					<label for="friend-desc" class="text-sm font-medium"
+						>{m.admin_friends_col_description()}</label
+					>
 					<Input id="friend-desc" bind:value={formDescription} />
 				</div>
 				<div class="grid gap-1.5">
-					<label for="friend-type" class="text-sm font-medium">类型</label>
+					<label for="friend-type" class="text-sm font-medium">{m.admin_common_type()}</label>
 					<button
 						id="friend-type"
 						type="button"
@@ -273,10 +296,12 @@
 			<div class="flex shrink-0 items-center justify-end gap-2 border-t px-4 py-2">
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="outline" size="sm" {...props}>取消</Button>
+						<Button variant="outline" size="sm" {...props}>{m.admin_common_cancel()}</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button type="submit" size="sm" disabled={!formName.trim() || !formUrl.trim()}>确定</Button>
+				<Button type="submit" size="sm" disabled={!formName.trim() || !formUrl.trim()}
+					>{m.admin_common_confirm()}</Button
+				>
 			</div>
 		</form>
 	</Dialog.Content>
