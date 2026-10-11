@@ -7,6 +7,12 @@ import {
 	typecheckLabel,
 	typecheckVariant
 } from './maintenance-form-utils';
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
+
+// The flash copy and run labels come from the message catalog; pin the locale
+// so assertions stay in sync with the zh-cn catalog (same convention as the
+// e2e fixtures that assert Chinese copy).
+overwriteGetLocale(() => 'zh-cn');
 
 /**
  * Pure-function pins for the maintenance list page (J-3 reviews): the flash
@@ -99,8 +105,8 @@ describe('typecheck badge mapping (review P2-1)', () => {
 	});
 
 	it('exposes Chinese run labels for the ledger and the filter select', () => {
-		expect(RUN_LABELS.queued).toBe('排队中');
-		expect(RUN_LABELS.skipped).toBe('跳过');
+		expect(RUN_LABELS.queued?.()).toBe('排队中');
+		expect(RUN_LABELS.skipped?.()).toBe('跳过');
 		expect(RUN_STATUSES).toContain('failed');
 	});
 });

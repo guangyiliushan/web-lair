@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { page } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
 	import { applyAction, enhance } from '$app/forms';
@@ -86,7 +87,7 @@
 </script>
 
 <svelte:head>
-	<title>维护 · 新建脚本 - Lair Admin</title>
+	<title>{m.admin_nav_maintenance()} · {m.admin_maintenance_new_script()} - Lair Admin</title>
 </svelte:head>
 
 <div class="space-y-4">
@@ -94,9 +95,9 @@
 		<div class="flex min-w-0 items-center gap-2">
 			<Button variant="ghost" size="sm" href="/admin/maintenance">
 				<IconArrowLeft data-icon="inline-start" />
-				返回
+				{m.admin_common_back()}
 			</Button>
-			<span class="text-sm font-semibold">新建脚本</span>
+			<span class="text-sm font-semibold">{m.admin_maintenance_new_script()}</span>
 		</div>
 	</div>
 
@@ -113,8 +114,10 @@
 			class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm"
 			role="alert"
 		>
-			{String(form.message ?? '同名脚本已存在')}
-			<Button variant="outline" size="sm" class="ml-2" href="/admin/maintenance">返回列表</Button>
+			{String(form.message ?? m.admin_maintenance_name_exists())}
+			<Button variant="outline" size="sm" class="ml-2" href="/admin/maintenance"
+				>{m.admin_common_back_to_list()}</Button
+			>
 		</div>
 	{/if}
 
@@ -124,7 +127,9 @@
 			data-slot="gate-errors"
 			role="alert"
 		>
-			<p class="mb-2 text-sm font-medium text-destructive">创建被拒绝：</p>
+			<p class="mb-2 text-sm font-medium text-destructive">
+				{m.admin_maintenance_create_rejected()}
+			</p>
 			<ul class="space-y-1">
 				{#each form.errors as gateError, index (index)}
 					<li class="font-mono text-xs break-all">
@@ -150,7 +155,7 @@
 	>
 		<div class="mb-3 grid max-w-md gap-1">
 			<label for="new-job-name" class="text-xs text-muted-foreground">
-				任务名（小写字母/数字/连字符；不得与内置模块别名冲突，例如 my-task）
+				{m.admin_maintenance_name_label()}
 			</label>
 			<Input
 				id="new-job-name"
@@ -170,15 +175,15 @@
 					value={code}
 					onChange={(value) => (code = value)}
 					onSave={submitSave}
-					ariaLabel="新建脚本编辑器"
+					ariaLabel={m.admin_maintenance_editor_aria_new()}
 				/>
 			{:catch}
-				<p class="p-4 text-xs text-destructive">编辑器加载失败（CodeMirror 模块导入失败）。</p>
+				<p class="p-4 text-xs text-destructive">{m.admin_maintenance_editor_failed()}</p>
 			{/await}
 		</div>
 		<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
 			<p class="text-xs text-muted-foreground">
-				保存即生效（≤1 tick 执行）；保存并试运行会立即排队一次。
+				{m.admin_maintenance_new_save_hint()}
 			</p>
 			<div class="flex items-center gap-2">
 				<Button
@@ -196,7 +201,7 @@
 						saving = true;
 					}}
 				>
-					{saving ? '保存中…' : '保存'}
+					{saving ? m.admin_posts_edit_saving() : m.admin_common_save()}
 				</Button>
 				<Button
 					type="submit"
@@ -210,7 +215,7 @@
 						saving = true;
 					}}
 				>
-					{saving ? '保存中…' : '保存并试运行'}
+					{saving ? m.admin_posts_edit_saving() : m.admin_maintenance_save_try()}
 				</Button>
 			</div>
 		</div>

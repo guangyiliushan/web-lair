@@ -5,6 +5,8 @@
  * the ingress. `baseHash` rides as '' for "no user file yet" (null).
  */
 
+import { m } from '$lib/paraglide/messages';
+
 export function parseBaseHash(raw: FormDataEntryValue | null): string | null {
 	const value = (raw ?? '').toString().trim();
 	return value === '' ? null : value;
@@ -20,12 +22,12 @@ export function parseCode(form: FormData): string {
 export const RUN_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'skipped'] as const;
 
 /** Chinese labels for run/typecheck statuses (admin copy is hardcoded). */
-export const RUN_LABELS: Record<string, string> = {
-	queued: '排队中',
-	running: '运行中',
-	succeeded: '成功',
-	failed: '失败',
-	skipped: '跳过'
+export const RUN_LABELS: Record<string, () => string> = {
+	queued: () => m.admin_maintenance_status_queued(),
+	running: () => m.admin_maintenance_status_running(),
+	succeeded: () => m.admin_maintenance_status_succeeded(),
+	failed: () => m.admin_maintenance_status_failed(),
+	skipped: () => m.admin_maintenance_status_skipped()
 };
 
 /** Typecheck badge variant: a failed RUN is not a failed CHECK, and a
@@ -45,10 +47,10 @@ export function typecheckLabel(check: {
 	status: string;
 	summary: { ok?: boolean } | null;
 }): string {
-	if (check.status === 'failed') return '失败';
-	if (check.summary?.ok) return '通过';
-	if (check.status === 'succeeded') return '未通过';
-	return RUN_LABELS[check.status] ?? check.status;
+	if (check.status === 'failed') return m.admin_maintenance_status_failed();
+	if (check.summary?.ok) return m.admin_maintenance_check_passed();
+	if (check.status === 'succeeded') return m.admin_maintenance_check_not_passed();
+	return RUN_LABELS[check.status]?.() ?? check.status;
 }
 
 /** Payload keys of the maintenance actions' fail() results. */
@@ -74,23 +76,23 @@ export function maintenanceFlash(
 	if (form.queued) {
 		return {
 			kind: 'ok',
-			text: `已排队：${String(form.name)}${form.deduplicated ? '（已有同任务在队列，未重复入队）' : ''}——≤1 分钟内执行`
+			text: `${m.admin_maintenance_queued({ name: String(form.name) })}${form.deduplicated ? m.admin_maintenance_queued_dedup() : ''}${m.admin_maintenance_queued_suffix()}`
 		};
 	}
 	if (form.scheduleChanged) {
 		const action = form.scheduleAction;
 		const text =
 			action === 'create'
-				? '已添加调度'
+				? m.admin_maintenance_flash_added()
 				: action === 'delete'
-					? '调度已删除'
+					? m.admin_maintenance_flash_deleted()
 					: action === 'toggle'
 						? form.enabled
-							? '调度已启用（水位已重置为当前时间）'
-							: '调度已停用'
+							? m.admin_maintenance_flash_enabled()
+							: m.admin_maintenance_flash_disabled()
 						: form.watermarkReset
-							? '调度已更新（水位已重置为当前时间）'
-							: '调度已更新';
+							? m.admin_maintenance_flash_updated_reset()
+							: m.admin_maintenance_flash_updated();
 		return { kind: 'ok', text };
 	}
 	return null;

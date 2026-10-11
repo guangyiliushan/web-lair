@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { page } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
 	import { applyAction, enhance } from '$app/forms';
@@ -149,7 +150,7 @@
 		if (conflicted) {
 			return {
 				kind: 'conflict' as const,
-				text: '脚本已在其他窗口更新（乐观锁失配）',
+				text: m.admin_maintenance_conflict(),
 				currentHash: conflictHash
 			};
 		}
@@ -160,14 +161,13 @@
 			return { kind: 'error' as const, text: String(form.message ?? form.error) };
 		}
 		if (form.saved) {
-			const parts = ['已保存'];
-			if (form.created && form.forked) parts.push('（首次保存：已创建用户副本并记录 fork 基线）');
-			else if (form.created) parts.push('（新建）');
+			const parts = [m.admin_posts_edit_saved()];
+			if (form.created && form.forked) parts.push(m.admin_maintenance_first_save());
+			else if (form.created) parts.push(m.admin_maintenance_created());
 			return { kind: 'ok' as const, text: parts.join('') };
 		}
-		if (form.reverted)
-			return { kind: 'ok' as const, text: '已恢复内置版本（用户副本已移除，调度保留）' };
-		if (form.ignored) return { kind: 'ok' as const, text: '已忽略此内置更新' };
+		if (form.reverted) return { kind: 'ok' as const, text: m.admin_maintenance_reverted() };
+		if (form.ignored) return { kind: 'ok' as const, text: m.admin_maintenance_ignored() };
 		return null;
 	});
 
@@ -205,7 +205,7 @@
 </script>
 
 <svelte:head>
-	<title>{`维护 · ${data.name} - Lair Admin`}</title>
+	<title>{`${m.admin_nav_maintenance()} · ${data.name} - Lair Admin`}</title>
 </svelte:head>
 
 <div class="space-y-4">
@@ -213,33 +213,46 @@
 		<div class="flex min-w-0 items-center gap-2">
 			<Button variant="ghost" size="sm" href="/admin/maintenance">
 				<IconArrowLeft data-icon="inline-start" />
-				返回
+				{m.admin_common_back()}
 			</Button>
 			<span class="truncate font-mono text-sm font-semibold">{data.name}</span>
-			<Badge variant="outline">{data.info.source === 'user' ? '用户' : '内置'}</Badge>
-			{#if data.info.forked}<Badge variant="secondary">已 fork</Badge>{/if}
-			{#if data.info.hasUpdate}<Badge>有更新</Badge>{/if}
-			{#if data.info.dismissed}<Badge variant="outline">已忽略此版本</Badge>{/if}
+			<Badge variant="outline"
+				>{data.info.source === 'user'
+					? m.admin_maintenance_source_user()
+					: m.admin_maintenance_source_builtin()}</Badge
+			>
+			{#if data.info.forked}<Badge variant="secondary">{m.admin_maintenance_forked()}</Badge>{/if}
+			{#if data.info.hasUpdate}<Badge>{m.admin_maintenance_has_update()}</Badge>{/if}
+			{#if data.info.dismissed}<Badge variant="outline">{m.admin_maintenance_dismissed()}</Badge
+				>{/if}
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			{#if data.info.hasUpdate}
 				<form method="POST" action="?/ignoreUpdate">
-					<Button type="submit" variant="outline" size="sm">忽略此版本</Button>
+					<Button type="submit" variant="outline" size="sm"
+						>{m.admin_maintenance_ignore_version()}</Button
+					>
 				</form>
 			{/if}
 			{#if data.info.forked}
-				<Button variant="outline" size="sm" onclick={() => (revertOpen = true)}>恢复内置</Button>
+				<Button variant="outline" size="sm" onclick={() => (revertOpen = true)}
+					>{m.admin_maintenance_revert()}</Button
+				>
 			{/if}
 			{#if data.info.source === 'user' && !data.info.hasBuiltin}
-				<Button variant="destructive" size="sm" onclick={() => (deleteOpen = true)}>删除</Button>
+				<Button variant="destructive" size="sm" onclick={() => (deleteOpen = true)}
+					>{m.admin_common_delete()}</Button
+				>
 			{/if}
 		</div>
 	</div>
 
 	<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
 		<span class="min-w-0">{data.info.description}</span>
-		<span>超时 {Math.round(data.info.timeoutMs / 1000)}s</span>
-		{#if data.info.scheduleHint}<span>建议 cron：{data.info.scheduleHint}</span>{/if}
+		<span>{m.admin_maintenance_timeout({ seconds: Math.round(data.info.timeoutMs / 1000) })}</span>
+		{#if data.info.scheduleHint}<span
+				>{m.admin_maintenance_suggested_cron({ hint: data.info.scheduleHint })}</span
+			>{/if}
 	</div>
 
 	{#if flash}
@@ -257,11 +270,11 @@
 			{#if flash.kind === 'conflict'}
 				<span class="text-xs text-muted-foreground">
 					{flash.currentHash
-						? `服务端 hash：${flash.currentHash.slice(0, 12)}…`
-						: '服务端已无该文件（可能被删除）'} · 保存已暂停
+						? m.admin_maintenance_server_hash({ hash: flash.currentHash.slice(0, 12) })
+						: m.admin_maintenance_no_server_file()}{m.admin_maintenance_saving_paused()}
 				</span>
 				<Button variant="outline" size="sm" onclick={reloadFromServer}>
-					载入服务端最新（放弃当前编辑）
+					{m.admin_maintenance_load_latest()}
 				</Button>
 			{/if}
 		</div>
@@ -273,7 +286,7 @@
 			data-slot="gate-errors"
 			role="alert"
 		>
-			<p class="mb-2 text-sm font-medium text-destructive">保存被拒绝：</p>
+			<p class="mb-2 text-sm font-medium text-destructive">{m.admin_maintenance_save_rejected()}</p>
 			<ul class="space-y-1">
 				{#each form.errors as gateError, index (index)}
 					<li class="font-mono text-xs break-all">
@@ -292,13 +305,12 @@
 
 	{#if data.userCode === null && data.info.hasBuiltin}
 		<div class="rounded-lg border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-			尚未 fork：当前显示内置版本，首次保存将创建用户副本（sidecar 记录 fork
-			基线，升级时提示而不覆盖）。
+			{m.admin_maintenance_not_forked_hint()}
 		</div>
 	{/if}
 	{#if data.info.hasUpdate}
 		<div class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs">
-			内置版本已有更新（fork 后仓库升级）。下方「内置对照」可查看差异；「忽略此版本」后不再提示。
+			{m.admin_maintenance_update_hint()}
 		</div>
 	{/if}
 
@@ -317,15 +329,15 @@
 					value={code}
 					onChange={(value) => (code = value)}
 					onSave={submitSave}
-					ariaLabel={`脚本编辑器：${data.name}`}
+					ariaLabel={m.admin_maintenance_editor_aria({ name: data.name })}
 				/>
 			{:catch}
-				<p class="p-4 text-xs text-destructive">编辑器加载失败（CodeMirror 模块导入失败）。</p>
+				<p class="p-4 text-xs text-destructive">{m.admin_maintenance_editor_failed()}</p>
 			{/await}
 		</div>
 		<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
 			<p class="text-xs text-muted-foreground">
-				Mod-S 保存 · 约定：可擦除语法（无 enum/namespace）/ import 带 .ts 后缀 / type 关键字
+				{m.admin_maintenance_editor_help()}
 			</p>
 			<div class="flex items-center gap-2">
 				<Button
@@ -345,7 +357,7 @@
 						saving = true;
 					}}
 				>
-					{saving ? '保存中…' : '保存'}
+					{saving ? m.admin_posts_edit_saving() : m.admin_common_save()}
 				</Button>
 				<Button
 					type="submit"
@@ -360,7 +372,7 @@
 						saving = true;
 					}}
 				>
-					{saving ? '保存中…' : '保存并试运行'}
+					{saving ? m.admin_posts_edit_saving() : m.admin_maintenance_save_try()}
 				</Button>
 			</div>
 		</div>
@@ -369,16 +381,20 @@
 	{#if data.info.hasBuiltin && data.userCode !== null}
 		<details class="rounded-lg border" data-slot="builtin-diff">
 			<summary class="cursor-pointer px-4 py-2 text-sm font-medium select-none"
-				>内置对照（只读）</summary
+				>{m.admin_maintenance_builtin_diff()}</summary
 			>
 			<div class="grid gap-2 border-t p-3 md:grid-cols-2">
 				<div class="min-w-0">
-					<p class="mb-1 text-xs font-medium text-muted-foreground">用户版本（当前运行）</p>
+					<p class="mb-1 text-xs font-medium text-muted-foreground">
+						{m.admin_maintenance_user_version()}
+					</p>
 					<pre
 						class="max-h-80 overflow-auto rounded bg-muted/40 p-2 text-[11px] leading-relaxed">{data.userCode}</pre>
 				</div>
 				<div class="min-w-0">
-					<p class="mb-1 text-xs font-medium text-muted-foreground">内置版本（仓库）</p>
+					<p class="mb-1 text-xs font-medium text-muted-foreground">
+						{m.admin_maintenance_builtin_version()}
+					</p>
 					<pre
 						class="max-h-80 overflow-auto rounded bg-muted/40 p-2 text-[11px] leading-relaxed">{data.builtinCode}</pre>
 				</div>
@@ -389,19 +405,19 @@
 
 <DeleteConfirm
 	open={deleteOpen}
-	title="删除脚本"
-	description={`确定删除「${data.name}」？其调度与排队中的运行会被一并清理（历史运行记录保留）。`}
+	title={m.admin_maintenance_delete_title()}
+	description={m.admin_maintenance_delete_desc({ name: data.name })}
 	id={data.name}
 	error={dialogError}
 	onclose={() => (deleteOpen = false)}
 />
 <DeleteConfirm
 	open={revertOpen}
-	title="恢复内置"
-	description={`确定将「${data.name}」恢复为内置版本？用户副本将被移除（调度保留）。`}
+	title={m.admin_maintenance_revert()}
+	description={m.admin_maintenance_revert_desc({ name: data.name })}
 	id={data.name}
 	action="?/revert"
-	confirmLabel="恢复"
+	confirmLabel={m.admin_maintenance_revert_confirm()}
 	error={dialogError}
 	onclose={() => (revertOpen = false)}
 />

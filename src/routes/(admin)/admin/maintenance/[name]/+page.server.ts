@@ -15,6 +15,7 @@ import { sanitizeErrorText } from '$lib/server/jobs/error-text';
 import { resolveJobDefinition } from '$lib/server/jobs/user-layer';
 import { parseBaseHash, parseCode } from '../maintenance-form-utils';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * /admin/maintenance/[name] (J-3, plan §5.6): the script editor page -
@@ -31,10 +32,10 @@ export const load: PageServerLoad = async ({ params }) => {
 	await requireAdminRole();
 	const name = params.name;
 	const bundle = await getScript(resolveDataDir(), name);
-	if (!bundle) throw error(404, `脚本不存在：${name}`);
+	if (!bundle) throw error(404, m.admin_maintenance_err_not_found({ name: name }));
 	const { info, user, builtin } = bundle;
 	return {
-		headerTitle: `维护 · ${name}`,
+		headerTitle: `${m.admin_nav_maintenance()} · ${name}`,
 		name,
 		info,
 		/** Editor seed + the optimistic-lock token for the next save. */
@@ -62,7 +63,7 @@ export const actions: Actions = {
 			return fail(409, {
 				conflict: true,
 				currentHash: result.currentHash,
-				message: '脚本已在其他窗口更新（乐观锁失配）'
+				message: m.admin_maintenance_conflict()
 			});
 		}
 		return { saved: true, hash: result.hash, created: result.created, forked: result.forked };
@@ -86,7 +87,7 @@ export const actions: Actions = {
 			return fail(409, {
 				conflict: true,
 				currentHash: result.currentHash,
-				message: '脚本已在其他窗口更新（乐观锁失配）'
+				message: m.admin_maintenance_conflict()
 			});
 		}
 		// Re-resolve AFTER the save: a first save of a builtin name just
@@ -97,10 +98,13 @@ export const actions: Actions = {
 		// re-saving against a stale one (J-3 review P3-R2-2).
 		const definition = await resolveJobDefinition(params.name, dataDir);
 		if (!definition) {
-			return fail(404, { message: `保存成功，但脚本无法解析：${params.name}`, hash: result.hash });
+			return fail(404, {
+				message: m.admin_maintenance_err_parse({ name: params.name }),
+				hash: result.hash
+			});
 		}
 		if (!definition.manual) {
-			return fail(400, { message: '该任务不允许手动执行', hash: result.hash });
+			return fail(400, { message: m.admin_maintenance_manual_blocked(), hash: result.hash });
 		}
 		let queued;
 		try {
@@ -132,7 +136,7 @@ export const actions: Actions = {
 			db
 		});
 		if (result.kind === 'not-forked') {
-			return fail(400, { message: '当前不是 fork 状态（或用户文件已不存在）' });
+			return fail(400, { message: m.admin_maintenance_err_not_forked() });
 		}
 		return { reverted: true };
 	},
@@ -146,7 +150,7 @@ export const actions: Actions = {
 			db
 		});
 		if (result.kind === 'not-user-job') {
-			return fail(400, { message: '不是可删除的用户任务（forked 内置请用「恢复内置」）' });
+			return fail(400, { message: m.admin_maintenance_err_not_deletable() });
 		}
 		redirect(303, '/admin/maintenance');
 	},
@@ -154,8 +158,10 @@ export const actions: Actions = {
 	ignoreUpdate: async ({ params }) => {
 		await requireAdminRole();
 		const result = await ignoreBuiltinUpdate({ dataDir: resolveDataDir(), name: params.name });
-		if (result.kind === 'not-forked') return fail(400, { message: '没有可忽略的用户副本' });
-		if (result.kind === 'no-update') return fail(400, { message: '没有可忽略的更新' });
+		if (result.kind === 'not-forked')
+			return fail(400, { message: m.admin_maintenance_err_no_copy() });
+		if (result.kind === 'no-update')
+			return fail(400, { message: m.admin_maintenance_err_no_update() });
 		return { ignored: true, dismissed: result.dismissed };
 	}
 };

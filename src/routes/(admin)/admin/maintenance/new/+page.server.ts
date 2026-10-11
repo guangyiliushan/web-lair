@@ -9,6 +9,7 @@ import { sanitizeErrorText } from '$lib/server/jobs/error-text';
 import { resolveJobDefinition } from '$lib/server/jobs/user-layer';
 import { parseBaseHash, parseCode } from '../maintenance-form-utils';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * /admin/maintenance/new (J-3): create a user-only job - the missing half of
@@ -30,7 +31,10 @@ export default {
 
 export const load: PageServerLoad = async () => {
 	await requireAdminRole();
-	return { headerTitle: '维护 · 新建脚本', template: TEMPLATE };
+	return {
+		headerTitle: `${m.admin_nav_maintenance()} · ${m.admin_maintenance_new_script()}`,
+		template: TEMPLATE
+	};
 };
 
 function requiredNameError(
@@ -44,7 +48,8 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const name = (form.get('name') ?? '').toString().trim();
-		if (!name) return fail(400, { errors: requiredNameError('缺少任务名') });
+		if (!name)
+			return fail(400, { errors: requiredNameError(m.admin_maintenance_err_missing_name()) });
 		const result = await saveScript({
 			dataDir: resolveDataDir(),
 			name,
@@ -58,7 +63,7 @@ export const actions: Actions = {
 			return fail(409, {
 				conflict: true,
 				currentHash: result.currentHash,
-				message: '同名脚本刚被创建（乐观锁失配）——请返回列表打开它'
+				message: m.admin_maintenance_err_just_created()
 			});
 		}
 		redirect(303, `/admin/maintenance/${encodeURIComponent(name)}`);
@@ -69,7 +74,8 @@ export const actions: Actions = {
 		const dataDir = resolveDataDir();
 		const form = await request.formData();
 		const name = (form.get('name') ?? '').toString().trim();
-		if (!name) return fail(400, { errors: requiredNameError('缺少任务名') });
+		if (!name)
+			return fail(400, { errors: requiredNameError(m.admin_maintenance_err_missing_name()) });
 		const result = await saveScript({
 			dataDir,
 			name,
@@ -83,17 +89,20 @@ export const actions: Actions = {
 			return fail(409, {
 				conflict: true,
 				currentHash: result.currentHash,
-				message: '同名脚本刚被创建（乐观锁失配）——请返回列表打开它'
+				message: m.admin_maintenance_err_just_created()
 			});
 		}
 		// The save already landed: failures carry the fresh hash so the
 		// editor can advance its optimistic-lock token (J-3 review P3-R2-2).
 		const definition = await resolveJobDefinition(name, dataDir);
 		if (!definition) {
-			return fail(404, { message: `保存成功，但脚本无法解析：${name}`, hash: result.hash });
+			return fail(404, {
+				message: m.admin_maintenance_err_parse({ name: name }),
+				hash: result.hash
+			});
 		}
 		if (!definition.manual) {
-			return fail(400, { message: '该任务不允许手动执行', hash: result.hash });
+			return fail(400, { message: m.admin_maintenance_manual_blocked(), hash: result.hash });
 		}
 		let queued;
 		try {

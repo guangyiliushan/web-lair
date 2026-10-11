@@ -21,6 +21,7 @@ import { sanitizeErrorText } from '$lib/server/jobs/error-text';
 import { resolveJobDefinition } from '$lib/server/jobs/user-layer';
 import { RUN_STATUSES } from './maintenance-form-utils';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * /admin/maintenance (J-3, plan §5.7): the jobs platform surface. Loads the
@@ -109,7 +110,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	const typecheckRow = typecheckRows[0];
 	return {
-		headerTitle: '维护',
+		headerTitle: m.admin_nav_maintenance(),
 		siteTz,
 		runsTruncated,
 		auditTruncated,
@@ -147,11 +148,11 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const name = (form.get('name') ?? '').toString().trim();
-		if (!name) return fail(400, { error: '缺少任务名' });
+		if (!name) return fail(400, { error: m.admin_maintenance_err_missing_name() });
 		const dataDir = resolveDataDir();
 		const definition = await resolveJobDefinition(name, dataDir);
-		if (!definition) return fail(404, { error: `未知的任务：${name}` });
-		if (!definition.manual) return fail(400, { error: '该任务不允许手动执行' });
+		if (!definition) return fail(404, { error: m.admin_maintenance_err_unknown({ name: name }) });
+		if (!definition.manual) return fail(400, { error: m.admin_maintenance_manual_blocked() });
 		let queued;
 		try {
 			queued = await enqueueJob(db, name, 'manual', definition);
@@ -197,7 +198,7 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const job = (form.get('job') ?? '').toString().trim();
-		if (!job) return fail(400, { error: '缺少任务名' });
+		if (!job) return fail(400, { error: m.admin_maintenance_err_missing_name() });
 		const cronExpr = (form.get('cron_expr') ?? '').toString();
 		const tz = (form.get('tz') ?? '').toString().trim() || (await getOption('site.timezone'));
 		const result = await createSchedule({
@@ -210,7 +211,8 @@ export const actions: Actions = {
 		});
 		if (result.kind === 'invalid') return fail(400, { error: result.message });
 		if (result.kind === 'unknown-job') return fail(404, { error: result.message });
-		if (result.kind === 'duplicate') return fail(409, { error: '该任务已有一条相同 cron 的调度' });
+		if (result.kind === 'duplicate')
+			return fail(409, { error: m.admin_maintenance_err_dup_schedule() });
 		return { scheduleChanged: true, scheduleAction: 'create' as const };
 	},
 
@@ -218,13 +220,15 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少有效的调度 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_maintenance_err_bad_schedule_id() });
 		const cronExpr = (form.get('cron_expr') ?? '').toString();
 		const tz = (form.get('tz') ?? '').toString().trim() || (await getOption('site.timezone'));
 		const result = await updateSchedule({ db, id, cronExpr, tz, actorId: locals.user?.id ?? null });
 		if (result.kind === 'invalid') return fail(400, { error: result.message });
-		if (result.kind === 'duplicate') return fail(409, { error: '该任务已有一条相同 cron 的调度' });
-		if (result.kind === 'not-found') return fail(404, { error: '调度不存在' });
+		if (result.kind === 'duplicate')
+			return fail(409, { error: m.admin_maintenance_err_dup_schedule() });
+		if (result.kind === 'not-found')
+			return fail(404, { error: m.admin_maintenance_err_schedule_not_found() });
 		return {
 			scheduleChanged: true,
 			scheduleAction: 'update' as const,
@@ -236,18 +240,19 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少有效的调度 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_maintenance_err_bad_schedule_id() });
 		const enabledRaw = (form.get('enabled') ?? '').toString();
 		if (enabledRaw !== 'true' && enabledRaw !== 'false')
-			return fail(400, { error: '缺少有效的调度状态' });
+			return fail(400, { error: m.admin_maintenance_err_bad_state() });
 		const result = await toggleSchedule({
 			db,
 			id,
 			enabled: enabledRaw === 'true',
 			actorId: locals.user?.id ?? null
 		});
-		if (result.kind === 'not-found') return fail(404, { error: '调度不存在' });
-		if (result.kind === 'stale') return fail(409, { error: '调度状态已变化，请刷新页面后重试' });
+		if (result.kind === 'not-found')
+			return fail(404, { error: m.admin_maintenance_err_schedule_not_found() });
+		if (result.kind === 'stale') return fail(409, { error: m.admin_maintenance_err_stale() });
 		return { scheduleChanged: true, scheduleAction: 'toggle' as const, enabled: result.enabled };
 	},
 
@@ -255,9 +260,10 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少有效的调度 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_maintenance_err_bad_schedule_id() });
 		const result = await deleteSchedule({ db, id, actorId: locals.user?.id ?? null });
-		if (result.kind === 'not-found') return fail(404, { error: '调度不存在' });
+		if (result.kind === 'not-found')
+			return fail(404, { error: m.admin_maintenance_err_schedule_not_found() });
 		return { scheduleChanged: true, scheduleAction: 'delete' as const };
 	}
 };
