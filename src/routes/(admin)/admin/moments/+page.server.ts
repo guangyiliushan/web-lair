@@ -9,6 +9,7 @@ import { isUuid } from '$lib/utils/uuid';
 import { parseMomentKind } from '$lib/utils/moment-meta';
 import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Admin 微记 CRUD (C3): content + kind (`life|tech|media|other`, app-validated
@@ -41,7 +42,7 @@ export const load: PageServerLoad = async () => {
 			}))
 		);
 	return {
-		headerTitle: '微记',
+		headerTitle: m.admin_nav_moments(),
 		total,
 		rows
 	};
@@ -52,15 +53,15 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const content = (form.get('content') ?? '').toString().trim();
-		if (!content) return fail(400, { error: '微记内容不能为空' });
+		if (!content) return fail(400, { error: m.admin_moments_err_content() });
 		const kind = parseMomentKind((form.get('type') ?? '').toString());
-		if (!kind) return fail(400, { error: '微记类型无效' });
+		if (!kind) return fail(400, { error: m.admin_moments_err_kind() });
 		try {
 			await db.insert(moments).values({ content, type: kind });
 		} catch (caught) {
 			// The `moments_type_check` CHECK is the backstop; the app-side
 			// whitelist above should make this unreachable.
-			if (pgErrorCode(caught) === '23514') return fail(400, { error: '微记类型无效' });
+			if (pgErrorCode(caught) === '23514') return fail(400, { error: m.admin_moments_err_kind() });
 			throw caught;
 		}
 		return { success: true };
@@ -70,22 +71,22 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少微记 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_moments_err_missing_id() });
 		const content = (form.get('content') ?? '').toString().trim();
-		if (!content) return fail(400, { error: '微记内容不能为空' });
+		if (!content) return fail(400, { error: m.admin_moments_err_content() });
 		const kind = parseMomentKind((form.get('type') ?? '').toString());
-		if (!kind) return fail(400, { error: '微记类型无效' });
+		if (!kind) return fail(400, { error: m.admin_moments_err_kind() });
 		try {
 			const updated = await db
 				.update(moments)
 				.set({ content, type: kind })
 				.where(eq(moments.id, id))
 				.returning({ id: moments.id });
-			if (updated.length === 0) return fail(404, { error: '微记不存在' });
+			if (updated.length === 0) return fail(404, { error: m.admin_moments_err_not_found() });
 		} catch (caught) {
 			// The `moments_type_check` CHECK is the backstop; the app-side
 			// whitelist above should make this unreachable.
-			if (pgErrorCode(caught) === '23514') return fail(400, { error: '微记类型无效' });
+			if (pgErrorCode(caught) === '23514') return fail(400, { error: m.admin_moments_err_kind() });
 			throw caught;
 		}
 		return { success: true };
@@ -95,12 +96,12 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少微记 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_moments_err_missing_id() });
 		const deleted = await db
 			.delete(moments)
 			.where(eq(moments.id, id))
 			.returning({ id: moments.id });
-		if (deleted.length === 0) return fail(404, { error: '微记不存在' });
+		if (deleted.length === 0) return fail(404, { error: m.admin_moments_err_not_found() });
 		return { success: true };
 	}
 };

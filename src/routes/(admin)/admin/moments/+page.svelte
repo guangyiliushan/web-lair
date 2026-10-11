@@ -17,16 +17,17 @@
 	import IconThumbDown from '@tabler/icons-svelte-runes/icons/thumb-down';
 	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 
 	let { data, form }: PageProps = $props();
 
 	type MomentRow = Awaited<PageProps['data']['rows']>[number];
 
 	const KIND_LABELS: Record<MomentKind, string> = {
-		life: '生活',
-		tech: '技术',
-		media: '书影',
-		other: '其他'
+		life: m.admin_moments_kind_life(),
+		tech: m.admin_moments_kind_tech(),
+		media: m.admin_moments_kind_media(),
+		other: m.admin_moments_kind_other()
 	};
 
 	// ── Add / edit dialog ──
@@ -102,7 +103,7 @@
 </script>
 
 <svelte:head>
-	<title>微记管理 - Lair Admin</title>
+	<title>{m.admin_moments_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -114,14 +115,16 @@
 				<IconWriting class="size-4" />
 			</span>
 			<div class="flex min-w-0 items-baseline gap-2">
-				<h1 class="truncate text-base font-semibold">微记</h1>
-				<span class="shrink-0 text-xs text-muted-foreground tabular-nums">{data.total} 条</span>
+				<h1 class="truncate text-base font-semibold">{m.admin_nav_moments()}</h1>
+				<span class="shrink-0 text-xs text-muted-foreground tabular-nums"
+					>{m.admin_moments_count({ count: data.total })}</span
+				>
 			</div>
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
 			<Button size="sm" variant="outline" onclick={openCreate}>
 				<IconPlus class="size-3.5" />
-				写一条微记
+				{m.admin_moments_new()}
 			</Button>
 		</div>
 	</header>
@@ -142,10 +145,16 @@
 					<input type="hidden" name="id" value={editing.id} />
 				{/if}
 				<div class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
-					<Dialog.Title>{editing ? '编辑微记' : '写一条微记'}</Dialog.Title>
+					<Dialog.Title>{editing ? m.admin_moments_edit() : m.admin_moments_new()}</Dialog.Title>
 					<Dialog.Close>
 						{#snippet child({ props })}
-							<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
+							<Button
+								variant="ghost"
+								size="icon"
+								class="size-7"
+								{...props}
+								aria-label={m.admin_common_close()}
+							>
 								<IconX class="size-4" />
 							</Button>
 						{/snippet}
@@ -157,19 +166,19 @@
 				<div class="grid gap-4 px-5 py-4">
 					<label class="grid gap-1.5">
 						<span class="text-sm font-medium">
-							内容 <span class="text-destructive">*</span>
+							{m.admin_moments_content()} <span class="text-destructive">*</span>
 						</span>
 						<Textarea
 							name="content"
 							class="min-h-28"
-							placeholder="此刻的碎片..."
+							placeholder={m.admin_moments_content_ph()}
 							required
 							bind:value={fieldContent}
 						/>
 					</label>
 					<div class="grid gap-1.5">
-						<span class="text-sm font-medium">类型</span>
-						<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="微记类型">
+						<span class="text-sm font-medium">{m.admin_common_type()}</span>
+						<div class="flex flex-wrap gap-2" role="radiogroup" aria-label={m.admin_moments_kind()}>
 							{#each MOMENT_KINDS as kind (kind)}
 								<label
 									class="rounded-full border px-3 py-1 text-xs transition-colors focus-within:ring-2 focus-within:ring-ring/50 {fieldType ===
@@ -193,11 +202,11 @@
 				<div class="flex shrink-0 items-center justify-end gap-2 border-t px-4 py-2">
 					<Dialog.Close>
 						{#snippet child({ props })}
-							<Button variant="outline" size="sm" {...props}>取消</Button>
+							<Button variant="outline" size="sm" {...props}>{m.admin_common_cancel()}</Button>
 						{/snippet}
 					</Dialog.Close>
 					<Button type="submit" size="sm" disabled={submitting || !fieldContent.trim()}>
-						{editing ? '保存' : '发布'}
+						{editing ? m.admin_common_save() : m.admin_posts_edit_publish()}
 					</Button>
 				</div>
 			</form>
@@ -206,8 +215,8 @@
 
 	<DeleteConfirm
 		open={deleteTarget !== null}
-		title="删除微记"
-		description="将删除这条微记，此操作不可撤销。"
+		title={m.admin_moments_delete_title()}
+		description={m.admin_moments_delete_desc()}
 		id={deleteTarget?.id ?? ''}
 		error={errorMessage}
 		onclose={() => (deleteTarget = null)}
@@ -225,12 +234,16 @@
 			{#if rows.length === 0}
 				<Empty class="py-12">
 					<div class="flex flex-col items-center gap-1">
-						<h3 class="text-lg font-semibold tracking-tight">暂无微记</h3>
-						<p class="text-sm text-muted-foreground">点击上方按钮写下第一条微记</p>
+						<h3 class="text-lg font-semibold tracking-tight">{m.admin_moments_empty()}</h3>
+						<p class="text-sm text-muted-foreground">{m.admin_moments_empty_desc()}</p>
 					</div>
 				</Empty>
 			{:else}
-				<div class="mx-auto max-w-4xl divide-y" role="list" aria-label="微记列表">
+				<div
+					class="mx-auto max-w-4xl divide-y"
+					role="list"
+					aria-label={m.admin_moments_list_aria()}
+				>
 					{#each rows as row (row.id)}
 						<article role="listitem" class="group px-4 py-5 transition-colors hover:bg-muted/50">
 							<p class="text-base leading-7 wrap-break-word whitespace-pre-wrap">{row.content}</p>
@@ -245,12 +258,12 @@
 									<span class="inline-flex items-center gap-2">
 										<span class="inline-flex items-center gap-1">
 											<IconThumbUp class="size-3.5" aria-hidden="true" />
-											<span class="sr-only">赞同 </span>{row.up}
+											<span class="sr-only">{m.admin_moments_upvote()}</span>{row.up}
 										</span>
 										<span class="h-3 w-px bg-border"></span>
 										<span class="inline-flex items-center gap-1">
 											<IconThumbDown class="size-3.5" aria-hidden="true" />
-											<span class="sr-only">反对 </span>{row.down}
+											<span class="sr-only">{m.admin_moments_downvote()}</span>{row.down}
 										</span>
 									</span>
 								</div>
@@ -261,21 +274,21 @@
 										variant="outline"
 										size="sm"
 										class="h-8 gap-1 px-2 text-xs"
-										aria-label="编辑微记"
+										aria-label={m.admin_moments_edit()}
 										onclick={() => openEdit(row)}
 									>
 										<IconPencil class="size-3.5" />
-										<span class="hidden sm:inline">编辑</span>
+										<span class="hidden sm:inline">{m.admin_common_edit()}</span>
 									</Button>
 									<Button
 										variant="outline"
 										size="sm"
 										class="h-8 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-										aria-label="删除微记"
+										aria-label={m.admin_moments_delete_title()}
 										onclick={() => openDelete(row)}
 									>
 										<IconTrash class="size-3.5" />
-										<span class="hidden sm:inline">删除</span>
+										<span class="hidden sm:inline">{m.admin_common_delete()}</span>
 									</Button>
 								</div>
 							</footer>

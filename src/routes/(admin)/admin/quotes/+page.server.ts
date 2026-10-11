@@ -7,6 +7,7 @@ import { getOption } from '$lib/server/config/options-registry';
 import { isUuid } from '$lib/utils/uuid';
 import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Admin 摘录 CRUD (C3): real rows from `quotes` (content required; author /
@@ -39,7 +40,7 @@ export const load: PageServerLoad = async () => {
 			}))
 		);
 	return {
-		headerTitle: '摘录',
+		headerTitle: m.admin_nav_quotes(),
 		total,
 		rows
 	};
@@ -50,7 +51,7 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const content = (form.get('content') ?? '').toString().trim();
-		if (!content) return fail(400, { error: '摘录内容不能为空' });
+		if (!content) return fail(400, { error: m.admin_quotes_err_content() });
 		const author = (form.get('author') ?? '').toString().trim() || null;
 		const source = (form.get('source') ?? '').toString().trim() || null;
 		await db.insert(quotes).values({ content, author, source });
@@ -61,9 +62,9 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少摘录 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_quotes_err_missing_id() });
 		const content = (form.get('content') ?? '').toString().trim();
-		if (!content) return fail(400, { error: '摘录内容不能为空' });
+		if (!content) return fail(400, { error: m.admin_quotes_err_content() });
 		const author = (form.get('author') ?? '').toString().trim() || null;
 		const source = (form.get('source') ?? '').toString().trim() || null;
 		const updated = await db
@@ -71,7 +72,7 @@ export const actions: Actions = {
 			.set({ content, author, source })
 			.where(eq(quotes.id, id))
 			.returning({ id: quotes.id });
-		if (updated.length === 0) return fail(404, { error: '摘录不存在' });
+		if (updated.length === 0) return fail(404, { error: m.admin_quotes_err_not_found() });
 		return { success: true };
 	},
 
@@ -79,9 +80,9 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少摘录 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_quotes_err_missing_id() });
 		const deleted = await db.delete(quotes).where(eq(quotes.id, id)).returning({ id: quotes.id });
-		if (deleted.length === 0) return fail(404, { error: '摘录不存在' });
+		if (deleted.length === 0) return fail(404, { error: m.admin_quotes_err_not_found() });
 		return { success: true };
 	}
 };

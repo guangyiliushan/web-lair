@@ -24,6 +24,12 @@ vi.mock('$lib/server/authz', () => ({ requireAdminRole: vi.fn(async () => {}) })
 
 import { requireAdminRole } from '$lib/server/authz';
 import { actions, load } from './+page.server';
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
+
+// Action copy comes from the message catalog; pin the locale so assertions
+// stay in sync with the zh-cn catalog (same convention as the e2e fixtures
+// that assert Chinese copy).
+overwriteGetLocale(() => 'zh-cn');
 
 const guardMock = vi.mocked(requireAdminRole);
 const ROW_ID = '33333333-3333-7333-8333-333333333333';

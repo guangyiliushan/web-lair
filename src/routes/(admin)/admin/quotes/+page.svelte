@@ -15,6 +15,7 @@
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 
 	let { data, form }: PageProps = $props();
 
@@ -96,7 +97,7 @@
 </script>
 
 <svelte:head>
-	<title>摘录管理 - Lair Admin</title>
+	<title>{m.admin_quotes_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -108,14 +109,16 @@
 				<IconQuote class="size-4" />
 			</span>
 			<div class="flex min-w-0 items-baseline gap-2">
-				<h1 class="truncate text-base font-semibold">摘录</h1>
-				<span class="shrink-0 text-xs text-muted-foreground tabular-nums">{data.total} 条</span>
+				<h1 class="truncate text-base font-semibold">{m.admin_nav_quotes()}</h1>
+				<span class="shrink-0 text-xs text-muted-foreground tabular-nums"
+					>{m.admin_quotes_count({ count: data.total })}</span
+				>
 			</div>
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
 			<Button size="sm" variant="outline" onclick={openCreate}>
 				<IconPlus class="size-3.5" />
-				添加摘录
+				{m.admin_quotes_add()}
 			</Button>
 		</div>
 	</header>
@@ -136,10 +139,16 @@
 					<input type="hidden" name="id" value={editing.id} />
 				{/if}
 				<div class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
-					<Dialog.Title>{editing ? '编辑摘录' : '添加摘录'}</Dialog.Title>
+					<Dialog.Title>{editing ? m.admin_quotes_edit() : m.admin_quotes_add()}</Dialog.Title>
 					<Dialog.Close>
 						{#snippet child({ props })}
-							<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
+							<Button
+								variant="ghost"
+								size="icon"
+								class="size-7"
+								{...props}
+								aria-label={m.admin_common_close()}
+							>
 								<IconX class="size-4" />
 							</Button>
 						{/snippet}
@@ -151,32 +160,32 @@
 				<div class="grid gap-4 px-5 py-4">
 					<div class="grid gap-1.5">
 						<label for="quote-content" class="text-sm font-medium">
-							内容<span class="text-destructive"> *</span>
+							{m.admin_quotes_content()}<span class="text-destructive"> *</span>
 						</label>
 						<Textarea
 							id="quote-content"
 							name="content"
 							class="min-h-28"
-							placeholder="记录一句有意思的话..."
+							placeholder={m.admin_quotes_content_ph()}
 							bind:value={fieldContent}
 							required
 						/>
 					</div>
 					<div class="grid gap-1.5">
-						<label for="quote-author" class="text-sm font-medium">作者</label>
+						<label for="quote-author" class="text-sm font-medium">{m.admin_quotes_author()}</label>
 						<Input
 							id="quote-author"
 							name="author"
-							placeholder="谁说的？"
+							placeholder={m.admin_quotes_author_ph()}
 							bind:value={fieldAuthor}
 						/>
 					</div>
 					<div class="grid gap-1.5">
-						<label for="quote-source" class="text-sm font-medium">来源</label>
+						<label for="quote-source" class="text-sm font-medium">{m.admin_quotes_source()}</label>
 						<Input
 							id="quote-source"
 							name="source"
-							placeholder="出自哪里？"
+							placeholder={m.admin_quotes_source_ph()}
 							bind:value={fieldSource}
 						/>
 					</div>
@@ -184,11 +193,11 @@
 				<div class="flex shrink-0 items-center justify-end gap-2 border-t px-4 py-2">
 					<Dialog.Close>
 						{#snippet child({ props })}
-							<Button variant="outline" size="sm" {...props}>取消</Button>
+							<Button variant="outline" size="sm" {...props}>{m.admin_common_cancel()}</Button>
 						{/snippet}
 					</Dialog.Close>
 					<Button type="submit" size="sm" disabled={submitting || !fieldContent.trim()}>
-						{editing ? '保存' : '添加'}
+						{editing ? m.admin_common_save() : m.admin_common_add()}
 					</Button>
 				</div>
 			</form>
@@ -197,8 +206,8 @@
 
 	<DeleteConfirm
 		open={deleteTarget !== null}
-		title="删除摘录"
-		description="将删除这条摘录，此操作不可撤销。"
+		title={m.admin_quotes_delete_title()}
+		description={m.admin_quotes_delete_desc()}
 		id={deleteTarget?.id ?? ''}
 		error={errorMessage}
 		onclose={() => (deleteTarget = null)}
@@ -216,12 +225,12 @@
 			{#if rows.length === 0}
 				<Empty class="py-12">
 					<div class="flex flex-col items-center gap-1">
-						<h3 class="text-lg font-semibold tracking-tight">暂无摘录</h3>
-						<p class="text-sm text-muted-foreground">点击上方按钮添加第一条摘录</p>
+						<h3 class="text-lg font-semibold tracking-tight">{m.admin_quotes_empty()}</h3>
+						<p class="text-sm text-muted-foreground">{m.admin_quotes_empty_desc()}</p>
 					</div>
 				</Empty>
 			{:else}
-				<div class="mx-auto max-w-5xl" role="list" aria-label="摘录列表">
+				<div class="mx-auto max-w-5xl" role="list" aria-label={m.admin_quotes_list_aria()}>
 					{#each rows as row (row.id)}
 						<article
 							role="listitem"
@@ -238,7 +247,9 @@
 											<span>{row.author}</span>
 										{/if}
 										{#if row.source}
-											<span class="italic">《{row.source}》</span>
+											<span class="italic"
+												>{m.admin_quotes_source_wrap({ source: row.source })}</span
+											>
 										{/if}
 										<span class="text-muted-foreground/70">{row.dateLabel}</span>
 									</div>
@@ -250,21 +261,21 @@
 										variant="outline"
 										size="sm"
 										class="h-8 gap-1 px-2 text-xs"
-										aria-label="编辑摘录"
+										aria-label={m.admin_quotes_edit()}
 										onclick={() => openEdit(row)}
 									>
 										<IconPencil class="size-3.5" />
-										<span class="hidden sm:inline">编辑</span>
+										<span class="hidden sm:inline">{m.admin_common_edit()}</span>
 									</Button>
 									<Button
 										variant="outline"
 										size="sm"
 										class="h-8 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-										aria-label="删除摘录"
+										aria-label={m.admin_quotes_delete_title()}
 										onclick={() => openDelete(row)}
 									>
 										<IconTrash class="size-3.5" />
-										<span class="hidden sm:inline">删除</span>
+										<span class="hidden sm:inline">{m.admin_common_delete()}</span>
 									</Button>
 								</div>
 							</div>
