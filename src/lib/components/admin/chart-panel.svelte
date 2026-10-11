@@ -2,6 +2,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { cn } from '$lib/utils';
 	import type { Component } from 'svelte';
+	import { m } from '$lib/paraglide/messages';
 
 	interface Props {
 		title: string;
@@ -37,7 +38,7 @@
 	<Card.Content>
 		{#if empty}
 			<div class="flex min-h-32 items-center justify-center text-sm text-muted-foreground">
-				暂无数据
+				{m.admin_common_empty()}
 			</div>
 		{:else if children}
 			{@render children()}

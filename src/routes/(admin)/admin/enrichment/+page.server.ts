@@ -1,7 +1,8 @@
 import type { PageServerLoad } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 export const load: PageServerLoad = async () => {
 	return {
-		headerTitle: '内容增强'
+		headerTitle: m.admin_enrichment_title()
 	};
 };

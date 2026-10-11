@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Button } from '$lib/components/ui/button';
+	import { m } from '$lib/paraglide/messages';
 
 	interface Props {
 		/** Open state; the parent owns the target row (null = closed). */
@@ -26,7 +27,7 @@
 		description,
 		id,
 		action = '?/delete',
-		confirmLabel = '删除',
+		confirmLabel = m.admin_common_delete(),
 		error,
 		onclose
 	}: Props = $props();
@@ -51,7 +52,7 @@
 			<p role="alert" class="px-4 text-sm text-destructive">{error}</p>
 		{/if}
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 			<form
 				method="post"
 				{action}

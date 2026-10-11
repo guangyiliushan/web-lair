@@ -2,6 +2,7 @@
 	import { cn } from '$lib/utils';
 	import IconShield from '@tabler/icons-svelte-runes/icons/shield';
 	import IconWorld from '@tabler/icons-svelte-runes/icons/world';
+	import { m } from '$lib/paraglide/messages';
 
 	interface Props {
 		lastLoginTime: string;
@@ -20,14 +21,14 @@
 >
 	<div class="inline-flex min-w-0 items-center gap-2">
 		<IconShield class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-		<span class="shrink-0">上次登录时间:</span>
+		<span class="shrink-0">{m.admin_login_stat_time()}</span>
 		<time class="min-w-0 truncate text-foreground" datetime={lastLoginTime}>
 			{lastLoginTime}
 		</time>
 	</div>
 	<div class="inline-flex min-w-0 items-center gap-2 sm:justify-end">
 		<IconWorld class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-		<span class="shrink-0">上次登录 IP:</span>
+		<span class="shrink-0">{m.admin_login_stat_ip()}</span>
 		<span class="text-foreground">
 			{lastLoginIp ?? 'N/A'}
 		</span>

@@ -3,9 +3,10 @@
 	import { Button } from '$lib/components/ui/button';
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
 	import IconHome from '@tabler/icons-svelte-runes/icons/home';
+	import { m } from '$lib/paraglide/messages';
 
 	let status = $derived(page.status);
-	let message = $derived(page.error?.message ?? '访问被拒绝');
+	let message = $derived(page.error?.message ?? m.admin_error_forbidden());
 
 	const isNotFound = $derived(status === 404);
 	const isForbidden = $derived(status === 403);
@@ -13,21 +14,21 @@
 
 	const heading = $derived(
 		isNotFound
-			? '页面未找到'
+			? m.admin_error_not_found()
 			: isForbidden
-				? '访问被拒绝'
+				? m.admin_error_forbidden()
 				: isServerError
-					? '服务器错误'
-					: '发生了一些错误'
+					? m.admin_error_server()
+					: m.admin_error_generic()
 	);
 
 	const description = $derived(
 		isNotFound
-			? '请求的页面不存在或已被移除。'
+			? m.admin_error_desc_not_found()
 			: isForbidden
-				? '您没有权限访问此区域，需要管理员权限。'
+				? m.admin_error_desc_forbidden()
 				: isServerError
-					? '处理您的请求时发生了内部错误。'
+					? m.admin_error_desc_server()
 					: message
 	);
 </script>
@@ -48,11 +49,11 @@
 		<div class="flex flex-col items-center justify-center gap-3 sm:flex-row">
 			<Button href="/admin" size="lg">
 				<IconArrowLeft data-icon="inline-start" />
-				返回控制台
+				{m.admin_error_back_dashboard()}
 			</Button>
 			<Button href="/" variant="outline" size="lg">
 				<IconHome data-icon="inline-start" />
-				返回站点
+				{m.admin_error_back_site()}
 			</Button>
 		</div>
 	</div>

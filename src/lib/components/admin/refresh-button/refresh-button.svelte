@@ -22,6 +22,7 @@
 	import { cn } from '$lib/utils';
 	import IconRefresh from '@tabler/icons-svelte-runes/icons/refresh';
 	import type { HTMLButtonAttributes } from 'svelte/elements';
+	import { m } from '$lib/paraglide/messages';
 
 	type Props = HTMLButtonAttributes & {
 		size?: RefreshButtonSize;
@@ -35,7 +36,7 @@
 		class: className,
 		size = 'default',
 		loading = false,
-		label = '刷新',
+		label = m.admin_common_refresh(),
 		disabled,
 		type = 'button',
 		...restProps

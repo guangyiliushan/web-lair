@@ -2,6 +2,7 @@
 	import { cn, type WithElementRef } from '$lib/utils.js';
 	import type { HTMLAttributes } from 'svelte/elements';
 	import type { Component } from 'svelte';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		ref = $bindable(null),
@@ -32,7 +33,9 @@
 	</div>
 	<div class="flex shrink-0 items-center gap-2">
 		{#if count !== undefined}
-			<span class="text-xs text-muted-foreground tabular-nums">{count} 个</span>
+			<span class="text-xs text-muted-foreground tabular-nums"
+				>{m.admin_master_detail_count({ count: count })}</span
+			>
 		{/if}
 		{@render children?.()}
 	</div>
