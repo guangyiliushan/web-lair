@@ -56,7 +56,7 @@
 	const devices = [
 		{
 			id: 1,
-			name: '当前设备',
+			name: m.admin_settings_account_this_device(),
 			ip: '192.168.1.100',
 			ua: 'Chrome 131.0 / Windows 11',
 			time: '2026-07-22 10:30',
@@ -202,9 +202,9 @@
 		<div class="mb-4 flex items-center justify-between">
 			<div class="flex items-center gap-2">
 				<IconDeviceLaptop class="size-5 text-muted-foreground" />
-				<h3 class="text-base font-semibold">登录设备</h3>
+				<h3 class="text-base font-semibold">{m.admin_settings_account_devices()}</h3>
 			</div>
-			<Button variant="outline" size="sm">踢掉其他设备</Button>
+			<Button variant="outline" size="sm">{m.admin_settings_account_kick_others()}</Button>
 		</div>
 		<div class="space-y-3">
 			{#each devices as device (device.id)}
@@ -220,7 +220,9 @@
 								variant={device.current ? 'default' : 'secondary'}
 								class={device.current ? 'bg-emerald-500 text-emerald-50 hover:bg-emerald-500' : ''}
 							>
-								{device.current ? '当前' : '其他'}
+								{device.current
+									? m.admin_settings_account_badge_current()
+									: m.admin_settings_account_badge_other()}
 							</Badge>
 						</div>
 						<div class="mt-1 space-y-0.5 text-xs text-muted-foreground">
@@ -230,7 +232,7 @@
 						</div>
 					</div>
 					<Button variant="ghost" size="sm" class="shrink-0 text-destructive">
-						{device.current ? '退出' : '踢掉'}
+						{device.current ? m.admin_settings_account_signout() : m.admin_settings_account_kick()}
 					</Button>
 				</div>
 			{/each}
@@ -243,14 +245,14 @@
 	<section>
 		<div class="mb-4 flex items-center gap-2">
 			<IconLock class="size-5 text-muted-foreground" />
-			<h3 class="text-base font-semibold">修改密码</h3>
+			<h3 class="text-base font-semibold">{m.admin_settings_account_password()}</h3>
 		</div>
 		<p class="mb-3 text-sm text-muted-foreground">
-			定期更换密码可以更好地保护账户安全。建议使用包含大小写字母、数字和特殊字符的强密码。
+			{m.admin_settings_account_password_hint()}
 		</p>
 		<Button variant="outline" size="sm">
 			<IconLock data-icon="inline-start" />
-			修改密码
+			{m.admin_settings_account_password()}
 		</Button>
 	</section>
 
@@ -263,9 +265,9 @@
 			<h3 class="text-base font-semibold">API Token</h3>
 		</div>
 		<p class="mb-3 text-sm text-muted-foreground">
-			管理 API 令牌，用于第三方应用或脚本访问平台接口。请妥善保管您的令牌。
+			{m.admin_settings_account_tokens_hint()}
 		</p>
-		<Button variant="outline" size="sm">管理令牌</Button>
+		<Button variant="outline" size="sm">{m.admin_settings_account_tokens_manage()}</Button>
 	</section>
 
 	<Separator.Root />
@@ -277,9 +279,9 @@
 			<h3 class="text-base font-semibold">Passkey</h3>
 		</div>
 		<p class="mb-3 text-sm text-muted-foreground">
-			使用生物识别或设备 PIN 码进行无密码登录。Passkey 比传统密码更安全、更便捷。
+			{m.admin_settings_account_passkey_hint()}
 		</p>
-		<Button variant="outline" size="sm">管理 Passkey</Button>
+		<Button variant="outline" size="sm">{m.admin_settings_account_passkey_manage()}</Button>
 	</section>
 
 	<Separator.Root />
@@ -288,7 +290,7 @@
 	<section>
 		<div class="mb-4 flex items-center gap-2">
 			<IconGlobe class="size-5 text-muted-foreground" />
-			<h3 class="text-base font-semibold">OAuth 登录</h3>
+			<h3 class="text-base font-semibold">{m.admin_settings_account_oauth()}</h3>
 		</div>
 
 		<!-- GitHub OAuth -->
@@ -340,10 +342,10 @@
 							variant="ghost"
 							size="icon-xs"
 							onclick={() => copyToClipboard(s.account.github.callbackUrl, 'gh')}
-							aria-label="复制回调地址"
+							aria-label={m.admin_settings_account_copy_callback()}
 						>
 							{#if copiedGh}
-								<span class="text-xs text-emerald-500">已复制</span>
+								<span class="text-xs text-emerald-500">{m.admin_settings_account_copied()}</span>
 							{:else}
 								<IconCopy />
 							{/if}
@@ -351,10 +353,10 @@
 					</div>
 				</div>
 				<div class="flex items-center gap-2 pt-1">
-					<Button variant="outline" size="sm">验证连接</Button>
+					<Button variant="outline" size="sm">{m.admin_settings_account_verify()}</Button>
 					<Button variant="default" size="sm">
 						<IconDeviceFloppy data-icon="inline-start" />
-						保存配置
+						{m.admin_settings_account_save_config()}
 					</Button>
 				</div>
 			</div>
@@ -409,10 +411,10 @@
 							variant="ghost"
 							size="icon-xs"
 							onclick={() => copyToClipboard(s.account.google.callbackUrl, 'google')}
-							aria-label="复制回调地址"
+							aria-label={m.admin_settings_account_copy_callback()}
 						>
 							{#if copiedGoogle}
-								<span class="text-xs text-emerald-500">已复制</span>
+								<span class="text-xs text-emerald-500">{m.admin_settings_account_copied()}</span>
 							{:else}
 								<IconCopy />
 							{/if}
@@ -420,10 +422,10 @@
 					</div>
 				</div>
 				<div class="flex items-center gap-2 pt-1">
-					<Button variant="outline" size="sm">验证连接</Button>
+					<Button variant="outline" size="sm">{m.admin_settings_account_verify()}</Button>
 					<Button variant="default" size="sm">
 						<IconDeviceFloppy data-icon="inline-start" />
-						保存配置
+						{m.admin_settings_account_save_config()}
 					</Button>
 				</div>
 			</div>

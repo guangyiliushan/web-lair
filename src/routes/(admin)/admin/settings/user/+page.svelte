@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Input } from '$lib/components/ui/input';
@@ -15,21 +16,23 @@
 </script>
 
 <svelte:head>
-	<title>用户设定 - Lair Admin</title>
+	<title>{m.admin_settings_user()} - Lair Admin</title>
 </svelte:head>
 
 <section class="space-y-4">
 	<header class="flex flex-wrap items-start justify-between gap-3">
 		<div class="min-w-0">
-			<h2 class="inline-flex items-center gap-2 text-base font-medium">用户</h2>
-			<p class="mt-1 text-xs text-muted-foreground">Owner 基础资料、头像链接和社交账号。</p>
+			<h2 class="inline-flex items-center gap-2 text-base font-medium">
+				{m.admin_settings_user()}
+			</h2>
+			<p class="mt-1 text-xs text-muted-foreground">{m.admin_settings_user_intro()}</p>
 		</div>
 	</header>
 	<form class="space-y-6" onsubmit={(e) => e.preventDefault()}>
 		<div class="flex flex-wrap items-center gap-4">
 			<button
 				class="group relative flex size-20 items-center justify-center overflow-hidden rounded-full bg-muted text-lg font-semibold text-muted-foreground ring-4 ring-muted transition-all hover:ring-accent/50"
-				title="上传头像"
+				title={m.admin_settings_user_upload_avatar()}
 				type="button"
 			>
 				<img alt="" class="size-full object-cover" src={s.user.avatar} />
@@ -49,51 +52,51 @@
 					</span>
 					<span class="inline-flex min-w-0 items-center gap-1.5">
 						<IconShield class="size-3.5 shrink-0 text-muted-foreground/60" />
-						<span>上次登录：{s.user.lastLogin}</span>
+						<span>{m.admin_settings_user_last_login({ time: s.user.lastLogin })}</span>
 					</span>
 				</div>
 			</div>
 		</div>
 		<Field.Group class="grid gap-4 md:grid-cols-2">
 			<Field.Field>
-				<Field.Label for="user-nickname">昵称</Field.Label>
+				<Field.Label for="user-nickname">{m.admin_settings_user_nickname()}</Field.Label>
 				<Input id="user-nickname" type="text" value={s.user.nickname} />
 			</Field.Field>
 			<Field.Field>
-				<Field.Label for="user-username">用户名</Field.Label>
+				<Field.Label for="user-username">{m.admin_settings_user_username()}</Field.Label>
 				<Input id="user-username" type="text" value={s.user.username} />
 			</Field.Field>
 			<Field.Field>
-				<Field.Label for="user-email">邮箱</Field.Label>
+				<Field.Label for="user-email">{m.admin_settings_user_email()}</Field.Label>
 				<Input id="user-email" type="email" value={s.user.email} />
 			</Field.Field>
 			<Field.Field>
-				<Field.Label for="user-site">站点</Field.Label>
+				<Field.Label for="user-site">{m.admin_settings_site()}</Field.Label>
 				<Input id="user-site" type="text" value={s.user.site} />
 			</Field.Field>
 			<Field.Field>
-				<Field.Label for="user-avatar">头像</Field.Label>
+				<Field.Label for="user-avatar">{m.admin_settings_user_avatar()}</Field.Label>
 				<Input id="user-avatar" type="text" value={s.user.avatar} />
 			</Field.Field>
 		</Field.Group>
 		<label class="grid gap-1.5 text-sm">
-			<span class="font-medium">介绍</span>
+			<span class="font-medium">{m.admin_settings_user_bio()}</span>
 			<Textarea class="min-h-24" value={s.user.bio} />
 		</label>
 		<div class="space-y-3">
 			<div class="flex items-center justify-between">
-				<h3 class="text-sm font-medium">社交账号</h3>
+				<h3 class="text-sm font-medium">{m.admin_settings_user_social()}</h3>
 				<Button type="button" variant="outline" size="sm">
 					<IconPlus data-icon="inline-start" />
-					添加
+					{m.admin_common_add()}
 				</Button>
 			</div>
-			<p class="text-sm text-muted-foreground">暂无社交账号。</p>
+			<p class="text-sm text-muted-foreground">{m.admin_settings_user_social_empty()}</p>
 		</div>
 		<div class="flex justify-end">
 			<Button type="submit" size="sm">
 				<IconDeviceFloppy data-icon="inline-start" />
-				保存
+				{m.admin_common_save()}
 			</Button>
 		</div>
 	</form>

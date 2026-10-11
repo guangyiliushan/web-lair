@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Input } from '$lib/components/ui/input';
 
 	let { data }: PageProps = $props();
@@ -7,7 +8,7 @@
 </script>
 
 <svelte:head>
-	<title>第三方集成 - Lair Admin</title>
+	<title>{m.admin_settings_integrations()} - Lair Admin</title>
 </svelte:head>
 
 <div class="space-y-10">
@@ -28,7 +29,7 @@
 									type="button"
 									role="switch"
 									aria-checked={integration.enabled}
-									aria-label="切换"
+									aria-label={m.admin_settings_integrations_toggle({ name: label })}
 									class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 									class:bg-accent={integration.enabled}
 									class:bg-surface-inset={!integration.enabled}

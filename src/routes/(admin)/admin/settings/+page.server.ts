@@ -1,8 +1,9 @@
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 export const load: PageServerLoad = async () => {
 	return {
-		headerTitle: '设定',
+		headerTitle: m.admin_settings_title(),
 		settings: {
 			user: {
 				nickname: 'test',

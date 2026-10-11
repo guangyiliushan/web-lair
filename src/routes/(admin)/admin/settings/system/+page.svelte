@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Input } from '$lib/components/ui/input';
 
 	let { data }: PageProps = $props();
@@ -7,7 +8,7 @@
 </script>
 
 <svelte:head>
-	<title>System 设定 - Lair Admin</title>
+	<title>{m.admin_settings_system()} - Lair Admin</title>
 </svelte:head>
 
 <div class="space-y-10">
@@ -28,7 +29,7 @@
 						type="button"
 						role="switch"
 						aria-checked={s.system.adminProxy}
-						aria-label="切换"
+						aria-label={m.admin_settings_system_toggle_proxy()}
 						class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 						class:bg-accent={s.system.adminProxy}
 						class:bg-surface-inset={!s.system.adminProxy}
@@ -68,7 +69,7 @@
 						type="button"
 						role="switch"
 						aria-checked={s.system.emailSubscription}
-						aria-label="切换"
+						aria-label={m.admin_settings_system_toggle_email()}
 						class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 						class:bg-accent={s.system.emailSubscription}
 						class:bg-surface-inset={!s.system.emailSubscription}

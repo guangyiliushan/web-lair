@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
@@ -11,7 +12,7 @@
 </script>
 
 <svelte:head>
-	<title>Site 设定 - Lair Admin</title>
+	<title>{m.admin_settings_site()} - Lair Admin</title>
 </svelte:head>
 
 <div class="space-y-10">
@@ -58,12 +59,13 @@
 									<button
 										type="button"
 										class="inline-flex size-3 items-center"
-										aria-label="移除 {kw}"><IconX class="size-3" /></button
+										aria-label={m.admin_settings_remove_keyword({ keyword: kw })}
+										><IconX class="size-3" /></button
 									>
 								</Badge>
 							{/each}
 						</div>
-						<Input type="text" placeholder="输入后按 Enter" />
+						<Input type="text" placeholder={m.admin_settings_keywords_placeholder()} />
 					</div>
 				</div>
 			</div>
@@ -72,7 +74,7 @@
 	<div class="flex justify-end">
 		<Button type="button" size="sm">
 			<IconDeviceFloppy data-icon="inline-start" />
-			保存
+			{m.admin_common_save()}
 		</Button>
 	</div>
 </div>
