@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { PageData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -64,7 +65,7 @@
 </script>
 
 <svelte:head>
-	<title>分类管理 - Lair Admin</title>
+	<title>{m.admin_categories_title()} - Lair Admin</title>
 </svelte:head>
 
 <!-- Mobile: flat layout -->
@@ -77,15 +78,15 @@
 					size="icon"
 					class="size-8"
 					onclick={backToList}
-					aria-label="返回列表"
+					aria-label={m.admin_common_back_to_list()}
 				>
 					<IconArrowLeft data-icon="inline-start" />
 				</Button>
-				<span class="text-sm font-medium">分类详情</span>
+				<span class="text-sm font-medium">{m.admin_categories_detail()}</span>
 			</div>
 			<div class="flex shrink-0 items-center gap-2">
 				<Button variant="outline" size="sm" onclick={openEdit}>
-					<IconPencil data-icon="inline-start" />编辑
+					<IconPencil data-icon="inline-start" />{m.admin_common_edit()}
 				</Button>
 				<form method="POST" action="?/delete" use:enhance>
 					<input type="hidden" name="id" value={selectedCategory.id} />
@@ -94,7 +95,7 @@
 						size="sm"
 						class="border-destructive/20 text-destructive hover:bg-destructive/10"
 					>
-						<IconTrash data-icon="inline-start" />删除
+						<IconTrash data-icon="inline-start" />{m.admin_common_delete()}
 					</Button>
 				</form>
 			</div>
@@ -112,18 +113,20 @@
 						<IconHash class="size-3" />{selectedCategory.slug}
 					</p>
 					<p class="mt-2 text-xs text-muted-foreground">
-						{data.postCounts[selectedCategory.id] ?? 0} 篇文章
+						{m.admin_categories_post_count({ count: data.postCounts[selectedCategory.id] ?? 0 })}
 					</p>
 				</div>
 			</section>
 			<section>
 				<div class="mb-3 flex items-center justify-between">
-					<h3 class="text-sm font-medium">该分类下的文章</h3>
-					<span class="text-xs text-muted-foreground">0 篇</span>
+					<h3 class="text-sm font-medium">{m.admin_categories_posts_heading()}</h3>
+					<span class="text-xs text-muted-foreground"
+						>{m.admin_categories_post_count({ count: 0 })}</span
+					>
 				</div>
 				<div class="overflow-hidden rounded-lg border">
 					<Empty class="py-8">
-						<p class="text-sm text-muted-foreground">暂无文章</p>
+						<p class="text-sm text-muted-foreground">{m.admin_categories_no_posts()}</p>
 					</Empty>
 				</div>
 			</section>
@@ -132,20 +135,24 @@
 		<div class="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-4">
 			<div class="flex min-w-0 items-center gap-2">
 				<IconFolder class="size-4 shrink-0 text-muted-foreground" />
-				<h2 class="truncate text-sm font-semibold">分类与标签</h2>
-				<span class="text-xs text-muted-foreground tabular-nums">{data.categories.length} 个</span>
+				<h2 class="truncate text-sm font-semibold">{m.admin_categories_tags_heading()}</h2>
+				<span class="text-xs text-muted-foreground tabular-nums"
+					>{m.admin_categories_tags_count({ count: data.categories.length })}</span
+				>
 			</div>
 			<Button variant="outline" size="sm" onclick={openCreate}>
-				<IconPlus data-icon="inline-start" />新建
+				<IconPlus data-icon="inline-start" />{m.admin_common_new()}
 			</Button>
 		</div>
 		<div class="border-b px-4 py-2">
-			<h3 class="text-xs font-medium text-muted-foreground uppercase">分类</h3>
+			<h3 class="text-xs font-medium text-muted-foreground uppercase">
+				{m.nav_posts_categories()}
+			</h3>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			{#if data.categories.length === 0}
 				<Empty class="py-8">
-					<p class="text-sm text-muted-foreground">暂无分类</p>
+					<p class="text-sm text-muted-foreground">{m.admin_categories_empty()}</p>
 				</Empty>
 			{:else}
 				{#each data.categories as cat (cat.id)}
@@ -181,19 +188,25 @@
 	<MasterDetail.Root class="h-[calc(100vh-10rem)]">
 		<!-- 侧边栏：分类列表 -->
 		<MasterDetail.Pane side="master" class="w-80 shrink-0">
-			<MasterDetail.Header icon={IconFolder} title="分类与标签" count={data.categories.length}>
+			<MasterDetail.Header
+				icon={IconFolder}
+				title={m.admin_categories_tags_heading()}
+				count={data.categories.length}
+			>
 				<Button variant="outline" size="sm" onclick={openCreate}>
 					<IconPlus data-icon="inline-start" />
-					新建
+					{m.admin_common_new()}
 				</Button>
 			</MasterDetail.Header>
 			<MasterDetail.List>
 				<div class="border-b px-4 py-2">
-					<h3 class="text-xs font-medium text-muted-foreground uppercase">分类</h3>
+					<h3 class="text-xs font-medium text-muted-foreground uppercase">
+						{m.nav_posts_categories()}
+					</h3>
 				</div>
 				{#if data.categories.length === 0}
 					<Empty class="py-8">
-						<p class="text-sm text-muted-foreground">暂无分类</p>
+						<p class="text-sm text-muted-foreground">{m.admin_categories_empty()}</p>
 					</Empty>
 				{:else}
 					{#each data.categories as cat (cat.id)}
@@ -223,10 +236,10 @@
 		<!-- 主面板：分类详情 -->
 		<MasterDetail.Pane side="detail">
 			{#if selectedCategory}
-				<MasterDetail.Header title="分类详情">
+				<MasterDetail.Header title={m.admin_categories_detail()}>
 					<Button variant="outline" size="sm" onclick={openEdit}>
 						<IconPencil data-icon="inline-start" />
-						编辑
+						{m.admin_common_edit()}
 					</Button>
 					<form method="POST" action="?/delete" use:enhance>
 						<input type="hidden" name="id" value={selectedCategory.id} />
@@ -236,7 +249,7 @@
 							class="border-destructive/20 text-destructive hover:bg-destructive/10"
 						>
 							<IconTrash data-icon="inline-start" />
-							删除
+							{m.admin_common_delete()}
 						</Button>
 					</form>
 				</MasterDetail.Header>
@@ -256,19 +269,23 @@
 								{selectedCategory.slug}
 							</p>
 							<p class="mt-2 text-xs text-muted-foreground">
-								{data.postCounts[selectedCategory.id] ?? 0} 篇文章
+								{m.admin_categories_post_count({
+									count: data.postCounts[selectedCategory.id] ?? 0
+								})}
 							</p>
 						</div>
 					</section>
 
 					<section>
 						<div class="mb-3 flex items-center justify-between">
-							<h3 class="text-sm font-medium">该分类下的文章</h3>
-							<span class="text-xs text-muted-foreground">0 篇</span>
+							<h3 class="text-sm font-medium">{m.admin_categories_posts_heading()}</h3>
+							<span class="text-xs text-muted-foreground"
+								>{m.admin_categories_post_count({ count: 0 })}</span
+							>
 						</div>
 						<div class="overflow-hidden rounded-lg border">
 							<Empty class="py-8">
-								<p class="text-sm text-muted-foreground">暂无文章</p>
+								<p class="text-sm text-muted-foreground">{m.admin_categories_no_posts()}</p>
 							</Empty>
 						</div>
 					</section>
@@ -278,8 +295,8 @@
 					<Empty>
 						<div class="flex flex-col items-center gap-1">
 							<IconFolder class="size-8 text-muted-foreground/40" />
-							<h3 class="text-lg font-semibold tracking-tight">选择分类</h3>
-							<p class="text-sm text-muted-foreground">从左侧选择一个分类查看详情</p>
+							<h3 class="text-lg font-semibold tracking-tight">{m.admin_categories_select()}</h3>
+							<p class="text-sm text-muted-foreground">{m.admin_categories_select_hint()}</p>
 						</div>
 					</Empty>
 				</div>
@@ -292,9 +309,15 @@
 <Dialog.Root bind:open={dialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>{dialogMode === 'create' ? '新建分类' : '编辑分类'}</Dialog.Title>
+			<Dialog.Title
+				>{dialogMode === 'create'
+					? m.admin_categories_dialog_create()
+					: m.admin_categories_dialog_edit()}</Dialog.Title
+			>
 			<Dialog.Description>
-				{dialogMode === 'create' ? '创建一个新的文章分类' : '修改分类信息'}
+				{dialogMode === 'create'
+					? m.admin_categories_dialog_create_desc()
+					: m.admin_categories_dialog_edit_desc()}
 			</Dialog.Description>
 		</Dialog.Header>
 		<form method="POST" action="?/{dialogMode === 'create' ? 'create' : 'update'}" use:enhance>
@@ -303,11 +326,11 @@
 			{/if}
 			<div class="flex flex-col gap-4 px-6 pb-4">
 				<div class="flex flex-col gap-1.5">
-					<label for="cat-name" class="text-sm font-medium">名称</label>
+					<label for="cat-name" class="text-sm font-medium">{m.admin_categories_name()}</label>
 					<Input
 						id="cat-name"
 						name="name"
-						placeholder="分类名称"
+						placeholder={m.admin_categories_name_placeholder()}
 						bind:value={editName}
 						oninput={onNameInput}
 						required
@@ -325,8 +348,12 @@
 				</div>
 			</div>
 			<Dialog.Footer>
-				<Button type="button" variant="outline" onclick={() => (dialogOpen = false)}>取消</Button>
-				<Button type="submit">{dialogMode === 'create' ? '创建' : '保存'}</Button>
+				<Button type="button" variant="outline" onclick={() => (dialogOpen = false)}
+					>{m.admin_common_cancel()}</Button
+				>
+				<Button type="submit"
+					>{dialogMode === 'create' ? m.admin_common_create() : m.admin_common_save()}</Button
+				>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>

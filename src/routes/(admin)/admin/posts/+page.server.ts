@@ -5,6 +5,7 @@ import { requireAdminRole } from '$lib/server/authz';
 import { draftsForPosts } from '$lib/server/services/post-drafts';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 const PAGE_SIZE = 20;
 const STATUSES = ['published', 'draft', 'scheduled', 'trash'] as const;
@@ -65,12 +66,17 @@ export const load: PageServerLoad = async ({ url }) => {
 	const withDrafts = await draftsForPosts(rows.map((r) => r.id));
 
 	return {
-		headerTitle: '博文',
+		headerTitle: m.admin_nav_posts(),
 		headerActions: [
-			{ label: '分类', iconName: 'category', href: '/admin/posts/categories' },
-			{ label: '标签', iconName: 'tag', href: '/admin/posts/tags' },
-			{ label: '草稿箱', iconName: 'draft', href: '/admin/drafts' },
-			{ label: '新建', iconName: 'plus', variant: 'default', href: '/admin/posts/edit' }
+			{ label: m.nav_posts_categories(), iconName: 'category', href: '/admin/posts/categories' },
+			{ label: m.admin_tags_nav(), iconName: 'tag', href: '/admin/posts/tags' },
+			{ label: m.admin_nav_drafts(), iconName: 'draft', href: '/admin/drafts' },
+			{
+				label: m.admin_common_new(),
+				iconName: 'plus',
+				variant: 'default',
+				href: '/admin/posts/edit'
+			}
 		],
 		posts: rows.map((row) => ({ ...row, hasDraft: withDrafts.has(row.id) })),
 		totalCount: totals[0]?.count ?? 0,

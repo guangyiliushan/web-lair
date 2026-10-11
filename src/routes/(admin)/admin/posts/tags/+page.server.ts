@@ -2,6 +2,7 @@ import { db } from '$lib/server/db';
 import { tags } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
 import type { PageServerLoad } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 export const load: PageServerLoad = async () => {
 	await requireAdminRole();
@@ -13,5 +14,5 @@ export const load: PageServerLoad = async () => {
 		.from(tags)
 		.orderBy(tags.name);
 
-	return { headerTitle: '标签', tags: rows };
+	return { headerTitle: m.admin_tags_nav(), tags: rows };
 };

@@ -10,6 +10,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import IconSearch from '@tabler/icons-svelte-runes/icons/search';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
@@ -22,14 +23,15 @@
 	let { data }: PageProps = $props();
 
 	const STATUS_LABELS: Record<string, string> = {
-		published: '已发布',
-		draft: '草稿',
-		scheduled: '定时',
-		trash: '回收站'
+		published: m.admin_posts_status_published(),
+		draft: m.admin_posts_status_draft(),
+		scheduled: m.admin_posts_status_scheduled(),
+		trash: m.admin_posts_status_trash()
 	};
 
 	const currentCategory = $derived(
-		data.categories.find((c) => c.id === data.filters.category)?.name ?? '全部分类'
+		data.categories.find((c) => c.id === data.filters.category)?.name ??
+			m.admin_posts_filter_all_categories()
 	);
 
 	function queryHref(patch: Record<string, string | undefined>): string {
@@ -64,7 +66,7 @@
 </script>
 
 <svelte:head>
-	<title>博文管理 - Lair Admin</title>
+	<title>{m.admin_posts_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex flex-col gap-6">
@@ -87,7 +89,7 @@
 			<input
 				type="text"
 				name="keyword"
-				placeholder="搜索标题后回车"
+				placeholder={m.admin_posts_search_placeholder()}
 				class="h-7 w-full border-0 bg-transparent pr-0 pl-8 text-xs outline-none placeholder:text-muted-foreground focus:ring-0"
 				value={data.filters.keyword}
 			/>
@@ -110,7 +112,9 @@
 				<DropdownMenu.Group>
 					<DropdownMenu.Item>
 						{#snippet child({ props })}
-							<a href={queryHref({ category: undefined })} {...props}>全部分类</a>
+							<a href={queryHref({ category: undefined })} {...props}
+								>{m.admin_posts_filter_all_categories()}</a
+							>
 						{/snippet}
 					</DropdownMenu.Item>
 					{#each data.categories as cat (cat.id)}
@@ -133,7 +137,9 @@
 						class="hidden w-24 justify-center text-xs font-normal text-muted-foreground hover:text-foreground sm:inline-flex"
 					>
 						<span class="truncate">
-							{data.filters.status ? STATUS_LABELS[data.filters.status] : '全部状态'}
+							{data.filters.status
+								? STATUS_LABELS[data.filters.status]
+								: m.admin_posts_filter_all_status()}
 						</span>
 						<IconChevronDown class="size-3.5 shrink-0 text-muted-foreground" />
 					</Button>
@@ -143,7 +149,9 @@
 				<DropdownMenu.Group>
 					<DropdownMenu.Item>
 						{#snippet child({ props })}
-							<a href={queryHref({ status: undefined })} {...props}>全部状态</a>
+							<a href={queryHref({ status: undefined })} {...props}
+								>{m.admin_posts_filter_all_status()}</a
+							>
 						{/snippet}
 					</DropdownMenu.Item>
 					{#each Object.entries(STATUS_LABELS) as [value, label] (value)}
@@ -169,17 +177,17 @@
 	{#if data.posts.length === 0}
 		<Empty class="py-12">
 			<div class="flex flex-col items-center gap-1">
-				<h3 class="text-lg font-semibold tracking-tight">暂无博文</h3>
+				<h3 class="text-lg font-semibold tracking-tight">{m.admin_posts_empty_title()}</h3>
 				<p class="text-sm text-muted-foreground">
 					{data.filters.keyword || data.filters.status || data.filters.category
-						? '没有符合条件的文章，试试清除筛选。'
-						: '还没有创建任何博文，点击上方按钮开始创作吧'}
+						? m.admin_posts_empty_filtered()
+						: m.admin_posts_empty_hint()}
 				</p>
 			</div>
 			<div class="mt-4">
 				<Button href="/admin/posts/edit">
 					<IconPlus data-icon="inline-start" />
-					新建博文
+					{m.admin_posts_new()}
 				</Button>
 			</div>
 		</Empty>
@@ -196,11 +204,13 @@
 											href="/admin/posts/edit?id={post.id}"
 											class="line-clamp-2 block max-w-lg font-medium hover:text-primary lg:line-clamp-none lg:truncate"
 										>
-											{post.title || '(无标题)'}
+											{post.title || m.admin_posts_untitled()}
 										</a>
 										<Badge variant="outline" class="shrink-0 text-xs">{post.lang}</Badge>
 										{#if post.hasDraft}
-											<Badge variant="secondary" class="shrink-0 text-xs">有未发布改动</Badge>
+											<Badge variant="secondary" class="shrink-0 text-xs"
+												>{m.admin_posts_unpublished_changes()}</Badge
+											>
 										{/if}
 									</div>
 									<!-- 紧凑模式元信息行：lg 以下显示 -->
@@ -281,20 +291,20 @@
 														{#snippet child({ props })}
 															<a href="/admin/posts/edit?id={post.id}" {...props}>
 																<IconPencil data-icon="inline-start" />
-																编辑
+																{m.admin_common_edit()}
 															</a>
 														{/snippet}
 													</DropdownMenu.Item>
 													<DropdownMenu.Item onclick={() => window.open(`/${post.slug}`, '_blank')}>
 														<IconExternalLink data-icon="inline-start" />
-														在新窗口打开
+														{m.admin_posts_open_new_tab()}
 													</DropdownMenu.Item>
 												</DropdownMenu.Group>
 												<DropdownMenu.Separator />
 												<DropdownMenu.Group>
-													<DropdownMenu.Item disabled title="随读侧路由（P3）">
+													<DropdownMenu.Item disabled title={m.admin_posts_copy_link_hint()}>
 														<IconExternalLink data-icon="inline-start" />
-														复制链接
+														{m.admin_posts_copy_link()}
 													</DropdownMenu.Item>
 												</DropdownMenu.Group>
 											</DropdownMenu.Content>
@@ -311,16 +321,22 @@
 		<!-- 分页 -->
 		<div class="flex items-center justify-between text-xs text-muted-foreground">
 			<span>
-				共 {data.totalCount} 篇{data.totalCount > 0 ? ` · 显示 ${showFrom}–${showTo}` : ''}
+				{m.admin_posts_total({ count: data.totalCount })}{data.totalCount > 0
+					? m.admin_posts_showing_range({ from: showFrom, to: showTo })
+					: ''}
 			</span>
 			{#if totalPages > 1}
 				<div class="flex items-center gap-2">
 					{#if data.page > 1}
-						<Button variant="outline" size="sm" href={pageHref(data.page - 1)}>上一页</Button>
+						<Button variant="outline" size="sm" href={pageHref(data.page - 1)}
+							>{m.admin_common_prev()}</Button
+						>
 					{/if}
 					<span>{data.page} / {totalPages}</span>
 					{#if data.page < totalPages}
-						<Button variant="outline" size="sm" href={pageHref(data.page + 1)}>下一页</Button>
+						<Button variant="outline" size="sm" href={pageHref(data.page + 1)}
+							>{m.admin_common_next()}</Button
+						>
 					{/if}
 				</div>
 			{/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Empty } from '$lib/components/ui/empty';
@@ -30,17 +31,23 @@
 </script>
 
 <svelte:head>
-	<title>标签管理 - Lair Admin</title>
+	<title>{m.admin_tags_title()} - Lair Admin</title>
 </svelte:head>
 
 <!-- Mobile: flat layout -->
 <div class="flex min-h-0 flex-1 flex-col sm:hidden">
 	{#if selectedTag}
 		<div class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-			<Button variant="ghost" size="icon" class="size-8" onclick={backToList} aria-label="返回列表">
+			<Button
+				variant="ghost"
+				size="icon"
+				class="size-8"
+				onclick={backToList}
+				aria-label={m.admin_common_back_to_list()}
+			>
 				<IconArrowLeft data-icon="inline-start" />
 			</Button>
-			<span class="text-sm font-medium">标签详情</span>
+			<span class="text-sm font-medium">{m.admin_tags_detail()}</span>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto p-5">
 			<section class="mb-6 flex items-start gap-4 rounded-lg border p-4">
@@ -58,7 +65,7 @@
 						class="mt-3 flex items-start gap-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground"
 					>
 						<IconInfo class="mt-px size-3.5 shrink-0" />
-						<span>标签随文章编辑管理，在此处仅可查看。编辑文章时可添加或移除标签。</span>
+						<span>{m.admin_tags_hint()}</span>
 					</div>
 				</div>
 			</section>
@@ -66,17 +73,19 @@
 	{:else}
 		<div class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
 			<IconTag class="size-4 shrink-0 text-muted-foreground" />
-			<h2 class="truncate text-sm font-semibold">分类与标签</h2>
-			<span class="ml-auto text-xs text-muted-foreground tabular-nums">{data.tags.length} 个</span>
+			<h2 class="truncate text-sm font-semibold">{m.admin_categories_tags_heading()}</h2>
+			<span class="ml-auto text-xs text-muted-foreground tabular-nums"
+				>{m.admin_categories_tags_count({ count: data.tags.length })}</span
+			>
 		</div>
 		<div class="border-b px-4 py-2">
-			<h3 class="text-xs font-medium text-muted-foreground uppercase">标签</h3>
+			<h3 class="text-xs font-medium text-muted-foreground uppercase">{m.admin_tags_nav()}</h3>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			{#if data.tags.length === 0}
 				<Empty class="py-8">
-					<p class="text-sm text-muted-foreground">暂无标签</p>
-					<p class="text-xs text-muted-foreground">标签随文章创建自动生成</p>
+					<p class="text-sm text-muted-foreground">{m.admin_tags_empty()}</p>
+					<p class="text-xs text-muted-foreground">{m.admin_tags_auto_hint()}</p>
 				</Empty>
 			{:else}
 				{#each data.tags as tag (tag.id)}
@@ -97,7 +106,7 @@
 								<IconHash class="size-3 shrink-0" />{tag.slug}
 							</p>
 						</div>
-						<Badge variant="outline" class="text-xs">标签</Badge>
+						<Badge variant="outline" class="text-xs">{m.admin_tags_nav()}</Badge>
 					</button>
 				{/each}
 			{/if}
@@ -110,15 +119,19 @@
 	<MasterDetail.Root class="h-[calc(100vh-10rem)]">
 		<!-- 侧边栏：标签列表 -->
 		<MasterDetail.Pane side="master" class="w-80 shrink-0">
-			<MasterDetail.Header icon={IconTag} title="分类与标签" count={data.tags.length} />
+			<MasterDetail.Header
+				icon={IconTag}
+				title={m.admin_categories_tags_heading()}
+				count={data.tags.length}
+			/>
 			<MasterDetail.List>
 				<div class="border-b px-4 py-2">
-					<h3 class="text-xs font-medium text-muted-foreground uppercase">标签</h3>
+					<h3 class="text-xs font-medium text-muted-foreground uppercase">{m.admin_tags_nav()}</h3>
 				</div>
 				{#if data.tags.length === 0}
 					<Empty class="py-8">
-						<p class="text-sm text-muted-foreground">暂无标签</p>
-						<p class="text-xs text-muted-foreground">标签随文章创建自动生成</p>
+						<p class="text-sm text-muted-foreground">{m.admin_tags_empty()}</p>
+						<p class="text-xs text-muted-foreground">{m.admin_tags_auto_hint()}</p>
 					</Empty>
 				{:else}
 					{#each data.tags as tag (tag.id)}
@@ -133,7 +146,7 @@
 									{tag.slug}
 								</p>
 							</div>
-							<Badge variant="outline" class="text-xs">标签</Badge>
+							<Badge variant="outline" class="text-xs">{m.admin_tags_nav()}</Badge>
 						</MasterDetail.Item>
 					{/each}
 				{/if}
@@ -143,7 +156,7 @@
 		<!-- 主面板：标签详情（只读） -->
 		<MasterDetail.Pane side="detail">
 			{#if selectedTag}
-				<MasterDetail.Header title="标签详情" />
+				<MasterDetail.Header title={m.admin_tags_detail()} />
 				<div class="flex-1 overflow-y-auto p-5">
 					<section class="mb-6 flex items-start gap-4 rounded-lg border p-4">
 						<div
@@ -163,7 +176,7 @@
 								class="mt-3 flex items-start gap-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground"
 							>
 								<IconInfo class="mt-px size-3.5 shrink-0" />
-								<span>标签随文章编辑管理，在此处仅可查看。编辑文章时可添加或移除标签。</span>
+								<span>{m.admin_tags_hint()}</span>
 							</div>
 						</div>
 					</section>
@@ -173,8 +186,8 @@
 					<Empty>
 						<div class="flex flex-col items-center gap-1">
 							<IconTag class="size-8 text-muted-foreground/40" />
-							<h3 class="text-lg font-semibold tracking-tight">选择标签</h3>
-							<p class="text-sm text-muted-foreground">从左侧选择一个标签查看详情</p>
+							<h3 class="text-lg font-semibold tracking-tight">{m.admin_tags_select()}</h3>
+							<p class="text-sm text-muted-foreground">{m.admin_tags_select_hint()}</p>
 						</div>
 					</Empty>
 				</div>
