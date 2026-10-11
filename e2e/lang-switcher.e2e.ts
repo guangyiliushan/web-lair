@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
+import { openAdminSidebarMenu, pickLocaleMenuItem } from './support';
 
 // The preference lives in paraglide's cookie (PARAGLIDE_LOCALE): the server
 // renders every page from it and setLocale() writes it and reloads, so a
@@ -118,18 +119,9 @@ test.describe('Language switcher', () => {
 	// its own sidebar), so the sidebar user menu carries the same radio group.
 	test('the admin sidebar menu switches locale and settles in one reload', async ({ page }) => {
 		await page.goto('/admin');
-		// Not [data-slot="sidebar-menu-button"]: when the button doubles as a
-		// DropdownMenu.Trigger its trigger props are spread after the data-slot
-		// and overwrite it. The sidebar header holds exactly this one button.
-		const trigger = page.locator('[data-slot="sidebar-header"]').getByRole('button').first();
-		const english = page.locator('[role="menuitemradio"]').filter({ hasText: 'English' });
-		await expect(async () => {
-			await trigger.click();
-			await expect(english).toBeVisible({ timeout: 2000 });
-		}).toPass({ timeout: 20000 });
-
 		const loads = documentLoads(page);
-		await english.click();
+		await openAdminSidebarMenu(page);
+		await pickLocaleMenuItem(page, 'English');
 		await expect
 			.poll(() => page.evaluate(() => document.documentElement.lang), { timeout: 10000 })
 			.toBe('en');

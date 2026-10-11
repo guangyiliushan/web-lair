@@ -3,6 +3,7 @@
 	import { untrack } from 'svelte';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -188,7 +189,7 @@
 							<div class="flex flex-wrap items-center gap-2">
 								<span class="truncate text-sm font-medium">{provider.name}</span>
 								<Badge variant="secondary"
-									>{AI_PROVIDER_KIND_LABELS[provider.kind as AiProviderKind]}</Badge
+									>{AI_PROVIDER_KIND_LABELS[provider.kind as AiProviderKind][getLocale()]}</Badge
 								>
 								{#if provider.enabled}
 									<Badge>{m.admin_common_enable()}</Badge>
@@ -265,7 +266,7 @@
 		>
 			{#each AI_FUNCTIONS as fn (fn)}
 				<div class="grid items-center gap-3 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)]">
-					<div class="text-sm font-medium">{AI_FUNCTION_LABELS[fn]}</div>
+					<div class="text-sm font-medium">{AI_FUNCTION_LABELS[fn][getLocale()]}</div>
 					<Select.Root
 						type="single"
 						name={`assign_${fn}`}
@@ -642,13 +643,16 @@
 						<Field.Label for="provider-kind">{m.admin_settings_ai_field_kind()}</Field.Label>
 						<Select.Root type="single" name="kind" bind:value={fieldKind}>
 							<Select.Trigger id="provider-kind" class="w-full">
-								{AI_PROVIDER_KIND_LABELS[fieldKind as keyof typeof AI_PROVIDER_KIND_LABELS] ??
-									fieldKind}
+								{AI_PROVIDER_KIND_LABELS[fieldKind as keyof typeof AI_PROVIDER_KIND_LABELS]?.[
+									getLocale()
+								] ?? fieldKind}
 							</Select.Trigger>
 							<Select.Portal>
 								<Select.Content>
 									{#each AI_PROVIDER_KINDS as kind (kind)}
-										<Select.Item value={kind}>{AI_PROVIDER_KIND_LABELS[kind]}</Select.Item>
+										<Select.Item value={kind}
+											>{AI_PROVIDER_KIND_LABELS[kind][getLocale()]}</Select.Item
+										>
 									{/each}
 								</Select.Content>
 							</Select.Portal>

@@ -6,10 +6,12 @@
 export const AI_PROVIDER_KINDS = ['openai-compatible', 'deepl', 'custom'] as const;
 export type AiProviderKind = (typeof AI_PROVIDER_KINDS)[number];
 
-export const AI_PROVIDER_KIND_LABELS: Record<AiProviderKind, string> = {
-	'openai-compatible': 'OpenAI 兼容',
-	deepl: 'DeepL',
-	custom: '自定义'
+type AiLabelLang = 'en' | 'zh-cn' | 'ja';
+
+export const AI_PROVIDER_KIND_LABELS: Record<AiProviderKind, Record<AiLabelLang, string>> = {
+	'openai-compatible': { en: 'OpenAI compatible', 'zh-cn': 'OpenAI 兼容', ja: 'OpenAI 互換' },
+	deepl: { en: 'DeepL', 'zh-cn': 'DeepL', ja: 'DeepL' },
+	custom: { en: 'Custom', 'zh-cn': '自定义', ja: 'カスタム' }
 };
 
 export const AI_FUNCTIONS = [
@@ -22,11 +24,11 @@ export const AI_FUNCTIONS = [
 ] as const;
 export type AiFunction = (typeof AI_FUNCTIONS)[number];
 
-export const AI_FUNCTION_LABELS: Record<AiFunction, string> = {
-	summary: '摘要',
-	translation: '翻译',
-	translation_review: '翻译审校',
-	comment_review: '评论分诊',
-	chat: '管理对话',
-	assistant: '写作助手'
+export const AI_FUNCTION_LABELS: Record<AiFunction, Record<AiLabelLang, string>> = {
+	summary: { en: 'Summary', 'zh-cn': '摘要', ja: '要約' },
+	translation: { en: 'Translation', 'zh-cn': '翻译', ja: '翻訳' },
+	translation_review: { en: 'Translation review', 'zh-cn': '翻译审校', ja: '翻訳レビュー' },
+	comment_review: { en: 'Comment triage', 'zh-cn': '评论分诊', ja: 'コメントトリアージ' },
+	chat: { en: 'Chat', 'zh-cn': '管理对话', ja: 'チャット' },
+	assistant: { en: 'Writing assistant', 'zh-cn': '写作助手', ja: 'ライティングアシスタント' }
 };

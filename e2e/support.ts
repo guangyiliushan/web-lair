@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import type { Page, Response } from '@playwright/test';
+import { expect, type Page, type Response } from '@playwright/test';
 
 /**
  * Shared acceptance-test plumbing (comment P3a review follow-up): the docker
@@ -84,4 +84,26 @@ export async function apiPost(
 		return apiPost(page, path, data, attempt + 1);
 	}
 	return response;
+}
+
+/**
+ * Open the admin sidebar user menu. The SSR trigger is clickable before
+ * SvelteKit hydrates, so a first click can be swallowed under load; retry the
+ * click-pair (same pattern the lang-switcher spec used inline).
+ *
+ * Not [data-slot="sidebar-menu-button"]: when the button doubles as a
+ * DropdownMenu.Trigger its trigger props overwrite the data-slot, so target
+ * the header's single button instead.
+ */
+export async function openAdminSidebarMenu(page: Page) {
+	const trigger = page.locator('[data-slot="sidebar-header"]').getByRole('button').first();
+	await expect(async () => {
+		await trigger.click();
+		await expect(page.locator('[role="menuitemradio"]').first()).toBeVisible({ timeout: 2000 });
+	}).toPass({ timeout: 20000 });
+}
+
+/** Pick one language radio item inside the (already open) admin user menu. */
+export async function pickLocaleMenuItem(page: Page, label: string) {
+	await page.locator('[role="menuitemradio"]').filter({ hasText: label }).click();
 }

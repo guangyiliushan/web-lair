@@ -10,6 +10,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import { noteMoodLabel, NOTE_WEATHER } from '$lib/utils/note-meta';
+	import { getLocale } from '$lib/paraglide/runtime';
 	import { afterNavigate, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { PageProps } from './$types';
@@ -71,7 +72,7 @@
 
 	function weatherLabel(code: number | null): string | null {
 		if (code === null || code === undefined) return null;
-		return NOTE_WEATHER[code]?.labels['zh-cn'] ?? String(code);
+		return NOTE_WEATHER[code]?.labels[getLocale()] ?? String(code);
 	}
 
 	function queryHref(patch: Record<string, string | undefined>): string {
@@ -287,7 +288,7 @@
 											><IconThumbUp class="size-3" />{note.likeCount}</span
 										>
 										{#if note.mood}
-											<span>{noteMoodLabel(note.mood as never, 'zh-cn')}</span>
+											<span>{noteMoodLabel(note.mood as never, getLocale())}</span>
 										{/if}
 										{#if weatherLabel(note.weatherCode)}
 											<span>{weatherLabel(note.weatherCode)}</span>
@@ -317,7 +318,7 @@
 							</Table.Cell>
 							<Table.Cell class="hidden w-40 xl:table-cell">
 								<div class="flex flex-col gap-0.5 text-xs text-muted-foreground">
-									<span>{note.mood ? noteMoodLabel(note.mood as never, 'zh-cn') : '—'}</span>
+									<span>{note.mood ? noteMoodLabel(note.mood as never, getLocale()) : '—'}</span>
 									<span>
 										{weatherLabel(note.weatherCode) ?? '—'}{note.temperatureC
 											? ` · ${note.temperatureC}°C`

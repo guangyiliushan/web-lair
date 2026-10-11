@@ -21,7 +21,7 @@ export function parseCode(form: FormData): string {
  * review P3-21: the two copies had already drifted risk). */
 export const RUN_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'skipped'] as const;
 
-/** Chinese labels for run/typecheck statuses (admin copy is hardcoded). */
+/** Shared run/typecheck status labels (lazy: resolved per call, never frozen). */
 export const RUN_LABELS: Record<string, () => string> = {
 	queued: () => m.admin_maintenance_status_queued(),
 	running: () => m.admin_maintenance_status_running(),

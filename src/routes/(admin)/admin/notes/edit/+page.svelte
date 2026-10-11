@@ -6,6 +6,7 @@
 	import type { ActionResult } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 	import * as Select from '$lib/components/ui/select';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
@@ -477,7 +478,7 @@
 	const weatherOptions = Object.entries(NOTE_WEATHER)
 		.map(([code, entry]) => ({
 			value: code,
-			label: `${code} ${entry.labels['zh-cn'] ?? entry.labels.en}`
+			label: `${code} ${entry.labels[getLocale()] ?? entry.labels.en}`
 		}))
 		.sort((a, b) => Number(a.value) - Number(b.value));
 
@@ -844,14 +845,14 @@
 					>
 						<Select.Trigger id="settings-mood" class="w-full">
 							{mood
-								? (NOTE_MOOD_LABELS[mood as (typeof NOTE_MOODS)[number]]?.['zh-cn'] ?? mood)
+								? (NOTE_MOOD_LABELS[mood as (typeof NOTE_MOODS)[number]]?.[getLocale()] ?? mood)
 								: m.admin_notes_edit_none()}
 						</Select.Trigger>
 						<Select.Portal>
 							<Select.Content class="z-[60]">
 								<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
 								{#each NOTE_MOODS as level (level)}
-									<Select.Item value={level}>{NOTE_MOOD_LABELS[level]['zh-cn']}</Select.Item>
+									<Select.Item value={level}>{NOTE_MOOD_LABELS[level][getLocale()]}</Select.Item>
 								{/each}
 							</Select.Content>
 						</Select.Portal>
@@ -877,7 +878,7 @@
 											checked={data.note?.emotions.includes(token) ?? false}
 											class="size-3.5 rounded border-border bg-transparent"
 										/>
-										{NOTE_EMOTION_LABELS[token]['zh-cn']}
+										{NOTE_EMOTION_LABELS[token][getLocale()]}
 									</label>
 								{/each}
 							</div>
