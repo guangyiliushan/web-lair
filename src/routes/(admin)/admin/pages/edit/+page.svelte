@@ -4,16 +4,13 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import type { PageData } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { locales } from '$lib/paraglide/runtime';
 	import { localeLabels } from '$lib/stores/locale.svelte';
 
 	let { data, form }: { data: PageData; form: { success?: boolean; error?: string } | null } =
 		$props();
 
-	const LOCALES = [
-		{ code: 'en', label: localeLabels.en },
-		{ code: 'zh-cn', label: localeLabels['zh-cn'] },
-		{ code: 'ja', label: localeLabels.ja }
-	] as const;
+	const LOCALES = locales.map((code) => ({ code, label: localeLabels[code] }));
 
 	let saved = $state(false);
 </script>

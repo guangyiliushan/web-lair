@@ -72,13 +72,13 @@
 	}
 
 	const columns = [
-		m.admin_friends_col_name(),
-		m.admin_friends_col_description(),
-		m.admin_friends_col_url(),
-		m.admin_common_type(),
-		m.admin_friends_col_email(),
-		m.admin_friends_col_created(),
-		m.admin_common_actions()
+		{ id: 'name', label: m.admin_friends_col_name() },
+		{ id: 'description', label: m.admin_friends_col_description() },
+		{ id: 'url', label: m.admin_friends_col_url() },
+		{ id: 'type', label: m.admin_common_type() },
+		{ id: 'email', label: m.admin_friends_col_email() },
+		{ id: 'created', label: m.admin_friends_col_created() },
+		{ id: 'actions', label: m.admin_common_actions() }
 	];
 </script>
 
@@ -97,7 +97,7 @@
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
 			<span class="hidden text-xs text-muted-foreground sm:inline"
-				>{m.admin_friends_count({ count: friends.length })}</span
+				>{m.admin_common_count_entries({ count: friends.length })}</span
 			>
 			<Button size="sm" variant="outline" onclick={openAddDialog}>
 				<IconPlus class="size-4" />
@@ -144,10 +144,8 @@
 		<Table.Root>
 			<Table.Header class="sticky top-0 z-10 bg-muted/50">
 				<Table.Row class="text-xs text-muted-foreground uppercase hover:bg-transparent">
-					{#each columns as col (col)}
-						<Table.Head class={col === m.admin_common_actions() ? 'text-right' : ''}
-							>{col}</Table.Head
-						>
+					{#each columns as col (col.id)}
+						<Table.Head class={col.id === 'actions' ? 'text-right' : ''}>{col.label}</Table.Head>
 					{/each}
 				</Table.Row>
 			</Table.Header>

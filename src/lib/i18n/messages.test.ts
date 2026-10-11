@@ -19,7 +19,10 @@ const SKIP_DIRS = new Set(['node_modules', '.svelte-kit']);
 
 // A local `m` binding shadows the paraglide import and regex scanning cannot
 // tell the two apart, so such files are excluded from key checks (svelte-check
-// still type-checks their m.* calls against the compiled output).
+// still type-checks their m.* calls against the compiled output). Spread
+// inputs (`m.x({ ...rest })`) are not statically checked either: the
+// provided-key scan reads object literals only and flags spreads as missing
+// placeholders, so avoid spreading into m.*() calls in source.
 const SHADOWED_M_PATTERN = /\b(?:const|let|var|function)\s+m\b|\bimport[\s\S]*?\bas\s+m\b/;
 
 const settings = JSON.parse(

@@ -364,7 +364,7 @@
 			<div class="flex min-w-0 items-baseline gap-2">
 				<h1 class="truncate text-base font-semibold">{data.headerTitle}</h1>
 				<span class="shrink-0 text-xs text-muted-foreground tabular-nums">
-					{m.admin_projects_count({ count: data.counts.all })}
+					{m.admin_common_count_entries({ count: data.counts.all })}
 				</span>
 			</div>
 		</div>

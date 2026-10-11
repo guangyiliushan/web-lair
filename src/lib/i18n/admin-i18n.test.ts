@@ -10,14 +10,16 @@ import { join, relative } from 'node:path';
  *
  * The allowlist below stays EMPTY by design - test fixtures are exempted by
  * path (they assert catalog copy or carry fixture content), so any remaining
- * hit is a real violation. Adding an entry requires a one-line rationale in
- * the A2 fix batch (see the plan's section A2 acceptance notes).
+ * hit is a real violation. The mechanism is intentionally locked: enabling an
+ * entry means editing the `ALLOWLIST.length === 0` assertion, and that diff
+ * must carry a one-line rationale (see the plan's section A2 acceptance notes).
  *
  * Known blind spots (registered, currently zero instances): CJK escape
- * sequences (`\uXXXX` / HTML entities), extension-B ideographs (U+20000+),
- * a literal `//` inside a string swallowing its line tail, and single-locale
- * label maps (plain ASCII strings that render Chinese - the guard cannot see
- * those; treat label maps as locale-resolved by construction).
+ * sequences (`\uXXXX` / HTML entities), a literal `//` inside a string
+ * swallowing its line tail, and single-locale label maps (plain ASCII strings
+ * that render Chinese - the guard cannot see those; treat label maps as
+ * locale-resolved by construction). BMP extensions A, compatibility
+ * ideographs, kana and the extension-B+ planes are covered by the detector.
  */
 
 const ROOTS = [
@@ -38,7 +40,8 @@ const ROOT_FLOORS: Record<(typeof ROOTS)[number], number> = {
 const EXEMPT_SUFFIXES = ['.test.ts', '.spec.ts'] as const;
 const EXEMPT_SEGMENTS = ['/testing/'] as const;
 
-const CJK = /[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/;
+const CJK =
+	/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u30ff\u3000-\u303f\uff00-\uffef\u{20000}-\u{2fa1f}]/u;
 
 // Comment strippers: HTML comments, Svelte comments, block comments, and line
 // comments (URL schemes `://` protected by the lookbehind).
@@ -73,7 +76,11 @@ function walk(dir: string): string[] {
 		const path = join(dir, entry.name);
 		if (entry.isDirectory()) {
 			out.push(...walk(path));
-		} else if (entry.name.endsWith('.svelte') || entry.name.endsWith('.ts')) {
+		} else if (
+			entry.name.endsWith('.svelte') ||
+			entry.name.endsWith('.ts') ||
+			entry.name.endsWith('.js')
+		) {
 			out.push(path);
 		}
 	}
@@ -115,6 +122,8 @@ describe('admin i18n static guard (A2)', () => {
 		it('flags hardcoded CJK in code, including full-width punctuation', () => {
 			expect(findViolationLines("const x = '中文';")).toEqual([1]);
 			expect(findViolationLines('<p>删掉，请。</p>')).toEqual([1]);
+			expect(findViolationLines("const k = 'こんにちは';")).toEqual([1]);
+			expect(findViolationLines("const c = '㐖豈';")).toEqual([1]);
 		});
 
 		it('never flags the four comment forms, and URL lines stay code', () => {

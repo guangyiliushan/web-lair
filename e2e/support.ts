@@ -78,6 +78,8 @@ export async function apiPost(
 		rateGates.set(apiPath, state);
 	}
 	const response = await page.request.post(path, { data, headers: { origin: ORIGIN } });
+	// Each retry waits (x-retry-after + 1)s (11s when the header is absent), so
+	// callers on the default 30s test timeout should raise it (see admin-2fa).
 	if (response.status() === 429 && attempt < 2) {
 		const retryAfter = Number(response.headers()['x-retry-after'] ?? 11);
 		await new Promise((resolve) => setTimeout(resolve, (retryAfter + 1) * 1000));

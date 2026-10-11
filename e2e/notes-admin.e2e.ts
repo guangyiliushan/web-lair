@@ -336,7 +336,6 @@ test('trash removes the note from the front; restore brings it back', async ({ p
 
 	const live = await page.goto(`/en/notes/${SLUG}`);
 	expect(live?.status()).toBe(200);
-	await repinLocale(page); // keep the serial follow-ups on the pinned locale
 });
 
 test('a stale tab hits the 409 conflict banner and can reload the server state', async ({

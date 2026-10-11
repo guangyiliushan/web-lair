@@ -7,6 +7,10 @@ import { openAdminSidebarMenu, pickLocaleMenuItem } from './support';
 // switches to zh-cn and back; ja is spot-checked. No DB fixtures - the
 // dashboard chrome is enough to observe the message set.
 
+// The retry budgets below (openAdminSidebarMenu 20s + polls) can exceed the
+// 30s default test timeout under load; siblings raise it too.
+test.describe.configure({ timeout: 120_000 });
+
 test('admin chrome defaults to the en message set', async ({ page }) => {
 	await page.goto('/admin');
 	await expect

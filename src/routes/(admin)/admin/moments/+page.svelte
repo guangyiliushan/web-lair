@@ -117,7 +117,7 @@
 			<div class="flex min-w-0 items-baseline gap-2">
 				<h1 class="truncate text-base font-semibold">{m.admin_nav_moments()}</h1>
 				<span class="shrink-0 text-xs text-muted-foreground tabular-nums"
-					>{m.admin_moments_count({ count: data.total })}</span
+					>{m.admin_common_count_entries({ count: data.total })}</span
 				>
 			</div>
 		</div>

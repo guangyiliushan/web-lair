@@ -21,8 +21,7 @@
 	/**
 	 * /admin/maintenance (J-3, plan §5.7): scripts (registry ∪ user layer)
 	 * with inline schedule management, the run ledger with filters, and the
-	 * job/schedule audit trail. Admin copy is hardcoded Chinese like the rest
-	 * of the admin surface (the A2 i18n pass is a separate delivery).
+	 * job/schedule audit trail. Copy resolves from the message catalog.
 	 */
 
 	let { data }: PageProps = $props();
@@ -302,7 +301,9 @@
 					{/each}
 					{#if (data.typecheck.summary?.issues ?? []).length > 10}
 						<p class="mt-1 text-muted-foreground">
-							{m.admin_maintenance_tc_issues({ count: data.typecheck.summary?.issues?.length ?? 0 })}
+							{m.admin_maintenance_tc_issues({
+								count: data.typecheck.summary?.issues?.length ?? 0
+							})}
 						</p>
 					{/if}
 				{/if}

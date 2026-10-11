@@ -348,7 +348,7 @@ test('the queue resolves the note target (the item absorbed from N1)', async ({ 
 	await ownerPage.goto('/admin/comments');
 	const row = ownerPage.locator('label').filter({ hasText: T_NOTE });
 	await expect(row).toBeVisible({ timeout: 15000 });
-	await expect(row.getByText('笔记', { exact: true })).toBeVisible();
+	await expect(row.getByText('手记', { exact: true })).toBeVisible();
 	await expect(row.getByRole('link', { name: /E2E 评论笔记/ })).toHaveAttribute(
 		'href',
 		'/zh-cn/notes/e2e-cmt-note'

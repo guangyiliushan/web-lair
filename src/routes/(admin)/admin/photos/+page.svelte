@@ -8,6 +8,7 @@
 	import { photoTileSrc } from '$lib/components/photos/photo-tile';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { locales } from '$lib/paraglide/runtime';
 	import { localeLabels } from '$lib/stores/locale.svelte';
 	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
@@ -67,11 +68,7 @@
 	});
 
 	const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.tif,.tiff';
-	const LOCALE_LABELS: Array<{ key: 'en' | 'zh-cn' | 'ja'; label: string }> = [
-		{ key: 'en', label: localeLabels.en },
-		{ key: 'zh-cn', label: localeLabels['zh-cn'] },
-		{ key: 'ja', label: localeLabels.ja }
-	];
+	const LOCALE_LABELS = locales.map((key) => ({ key, label: localeLabels[key] }));
 
 	function rowTitle(row: PhotoRow): string {
 		const title = row.title ?? {};
@@ -222,8 +219,7 @@
 					name="since"
 					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
 				>
-					<option value="" selected={data.filters.since === ''}
-						>{m.admin_media_filter_all()}</option
+					<option value="" selected={data.filters.since === ''}>{m.admin_media_filter_all()}</option
 					>
 					<option value="7d" selected={data.filters.since === '7d'}
 						>{m.admin_media_last_7d()}</option
