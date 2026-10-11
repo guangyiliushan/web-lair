@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { page } from '$app/state';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
@@ -18,7 +19,7 @@
 	const retryFlash = $derived.by(() => {
 		if (!form) return null;
 		if (form.retried)
-			return { kind: 'ok' as const, text: '已重投：新排队行已写入，≤1 tick 内投递' };
+			return { kind: 'ok' as const, text: m.admin_settings_notification_requeued() };
 		if (form.message && !form.retried) {
 			// `form.status` is never set by kit (J-3 review R4-1): the
 			// payload keys carry the signal.
@@ -42,16 +43,16 @@
 	<header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
 		<div class="flex min-w-0 items-center gap-2">
 			<IconMail class="size-4 shrink-0 text-muted-foreground" />
-			<h2 class="truncate text-sm font-semibold">通知设置</h2>
+			<h2 class="truncate text-sm font-semibold">{m.admin_settings_notification()}</h2>
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
 			<Button size="sm" variant="outline">
 				<IconMail data-icon="inline-start" />
-				发送测试邮件
+				{m.admin_settings_notification_send_test()}
 			</Button>
 			<Button size="sm">
 				<IconDeviceFloppy data-icon="inline-start" />
-				保存
+				{m.admin_common_save()}
 			</Button>
 		</div>
 	</header>
@@ -60,16 +61,18 @@
 		<div class="space-y-8 p-6">
 			<!-- Email 通知 -->
 			<section>
-				<h3 class="mb-4 text-sm font-semibold">邮件通知</h3>
+				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_email()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
 					<!-- emailEnabled -->
 					<div class="flex items-center justify-between gap-4">
-						<label for="notif-emailEnabled" class="text-sm">启用邮件通知</label>
+						<label for="notif-emailEnabled" class="text-sm"
+							>{m.admin_settings_notification_email_enabled()}</label
+						>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.notification.emailEnabled)}
-							aria-label="启用邮件通知"
+							aria-label={m.admin_settings_notification_email_enabled()}
 							id="notif-emailEnabled"
 							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.emailEnabled}
@@ -84,7 +87,9 @@
 
 					<!-- emailProvider -->
 					<div class="space-y-1.5">
-						<label for="notif-emailProvider" class="text-sm">邮件服务商</label>
+						<label for="notif-emailProvider" class="text-sm"
+							>{m.admin_settings_notification_provider()}</label
+						>
 						<Select.Root type="single" bind:value={s.notification.emailProvider as never}>
 							<Select.Trigger id="notif-emailProvider" class="w-full justify-between">
 								<span class="truncate">
@@ -104,7 +109,9 @@
 
 					<!-- senderEmail -->
 					<div class="space-y-1.5">
-						<label for="notif-senderEmail" class="text-sm">发件人邮箱</label>
+						<label for="notif-senderEmail" class="text-sm"
+							>{m.admin_settings_notification_sender()}</label
+						>
 						<Input
 							id="notif-senderEmail"
 							bind:value={s.notification.senderEmail}
@@ -114,28 +121,34 @@
 
 					<!-- smtpUser -->
 					<div class="space-y-1.5">
-						<label for="notif-smtpUser" class="text-sm">SMTP 用户名</label>
+						<label for="notif-smtpUser" class="text-sm"
+							>{m.admin_settings_notification_smtp_user()}</label
+						>
 						<Input
 							id="notif-smtpUser"
 							bind:value={s.notification.smtpUser}
-							placeholder="smtp 用户名"
+							placeholder={m.admin_settings_notification_smtp_user_ph()}
 						/>
 					</div>
 
 					<!-- smtpPass -->
 					<div class="space-y-1.5">
-						<label for="notif-smtpPass" class="text-sm">SMTP 密码</label>
+						<label for="notif-smtpPass" class="text-sm"
+							>{m.admin_settings_notification_smtp_pass()}</label
+						>
 						<Input
 							id="notif-smtpPass"
 							type="password"
 							bind:value={s.notification.smtpPass}
-							placeholder="smtp 密码"
+							placeholder={m.admin_settings_notification_smtp_pass_ph()}
 						/>
 					</div>
 
 					<!-- smtpHost -->
 					<div class="space-y-1.5">
-						<label for="notif-smtpHost" class="text-sm">SMTP 服务器</label>
+						<label for="notif-smtpHost" class="text-sm"
+							>{m.admin_settings_notification_smtp_host()}</label
+						>
 						<Input
 							id="notif-smtpHost"
 							bind:value={s.notification.smtpHost}
@@ -145,7 +158,9 @@
 
 					<!-- smtpPort -->
 					<div class="space-y-1.5">
-						<label for="notif-smtpPort" class="text-sm">SMTP 端口</label>
+						<label for="notif-smtpPort" class="text-sm"
+							>{m.admin_settings_notification_smtp_port()}</label
+						>
 						<Input
 							id="notif-smtpPort"
 							type="number"
@@ -176,7 +191,9 @@
 
 					<!-- rateLimit -->
 					<div class="space-y-1.5">
-						<label for="notif-rateLimit" class="text-sm">频率限制（条/小时）</label>
+						<label for="notif-rateLimit" class="text-sm"
+							>{m.admin_settings_notification_rate_limit()}</label
+						>
 						<Input
 							id="notif-rateLimit"
 							type="number"
@@ -187,7 +204,9 @@
 
 					<!-- retryCount -->
 					<div class="space-y-1.5">
-						<label for="notif-retryCount" class="text-sm">重试次数</label>
+						<label for="notif-retryCount" class="text-sm"
+							>{m.admin_settings_notification_retries()}</label
+						>
 						<Input
 							id="notif-retryCount"
 							type="number"
@@ -200,16 +219,18 @@
 
 			<!-- Bark 通知 -->
 			<section>
-				<h3 class="mb-4 text-sm font-semibold">Bark 通知</h3>
+				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_bark()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
 					<!-- barkEnabled -->
 					<div class="flex items-center justify-between gap-4">
-						<label for="notif-barkEnabled" class="text-sm">启用 Bark 推送</label>
+						<label for="notif-barkEnabled" class="text-sm"
+							>{m.admin_settings_notification_bark_enabled()}</label
+						>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.notification.barkEnabled)}
-							aria-label="启用 Bark 推送"
+							aria-label={m.admin_settings_notification_bark_enabled()}
 							id="notif-barkEnabled"
 							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.barkEnabled}
@@ -229,13 +250,15 @@
 							id="notif-barkKey"
 							type="password"
 							bind:value={s.notification.barkKey}
-							placeholder="Bark 设备 Key"
+							placeholder={m.admin_settings_notification_bark_key_ph()}
 						/>
 					</div>
 
 					<!-- barkServer -->
 					<div class="space-y-1.5">
-						<label for="notif-barkServer" class="text-sm">Bark 服务器</label>
+						<label for="notif-barkServer" class="text-sm"
+							>{m.admin_settings_notification_bark_server()}</label
+						>
 						<Input
 							id="notif-barkServer"
 							bind:value={s.notification.barkServer}
@@ -245,12 +268,14 @@
 
 					<!-- barkCommentNotify -->
 					<div class="flex items-center justify-between gap-4">
-						<label for="notif-barkCommentNotify" class="text-sm">评论通知</label>
+						<label for="notif-barkCommentNotify" class="text-sm"
+							>{m.admin_settings_notification_comment_notify()}</label
+						>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.notification.barkCommentNotify)}
-							aria-label="评论通知"
+							aria-label={m.admin_settings_notification_comment_notify()}
 							id="notif-barkCommentNotify"
 							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.barkCommentNotify}
@@ -265,12 +290,14 @@
 
 					<!-- barkRateLimitNotify -->
 					<div class="flex items-center justify-between gap-4">
-						<label for="notif-barkRateLimitNotify" class="text-sm">触发频率限制时通知</label>
+						<label for="notif-barkRateLimitNotify" class="text-sm"
+							>{m.admin_settings_notification_ratelimit_notify()}</label
+						>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.notification.barkRateLimitNotify)}
-							aria-label="触发频率限制时通知"
+							aria-label={m.admin_settings_notification_ratelimit_notify()}
 							id="notif-barkRateLimitNotify"
 							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.barkRateLimitNotify}
@@ -299,9 +326,13 @@
 					{/if}
 
 					<div class="space-y-2">
-						<p class="text-xs font-medium text-muted-foreground">端点</p>
+						<p class="text-xs font-medium text-muted-foreground">
+							{m.admin_settings_notification_endpoints()}
+						</p>
 						{#if data.webhookEndpoints.length === 0}
-							<p class="text-xs text-muted-foreground">尚未配置端点（端点 CRUD 属后续小批）。</p>
+							<p class="text-xs text-muted-foreground">
+								{m.admin_settings_notification_no_endpoints()}
+							</p>
 						{:else}
 							<ul class="space-y-1">
 								{#each data.webhookEndpoints as endpoint (endpoint.id)}
@@ -309,7 +340,9 @@
 										<span class="font-medium">{endpoint.name}</span>
 										<code class="text-muted-foreground">{endpoint.payloadUrl}</code>
 										<Badge variant={endpoint.isEnabled ? 'default' : 'outline'}>
-											{endpoint.isEnabled ? '启用' : '停用'}
+											{endpoint.isEnabled
+												? m.admin_common_enable()
+												: m.admin_common_disable()}
 										</Badge>
 										<span class="text-muted-foreground">{endpoint.events.join(' · ')}</span>
 									</li>
@@ -319,9 +352,13 @@
 					</div>
 
 					<div class="space-y-2">
-						<p class="text-xs font-medium text-muted-foreground">最近投递（50 条）</p>
+						<p class="text-xs font-medium text-muted-foreground">
+							{m.admin_settings_notification_recent_deliveries()}
+						</p>
 						{#if data.webhookDeliveries.length === 0}
-							<p class="text-xs text-muted-foreground">暂无投递记录。</p>
+							<p class="text-xs text-muted-foreground">
+								{m.admin_settings_notification_no_deliveries()}
+							</p>
 						{:else}
 							<div class="overflow-hidden rounded-md border">
 								{#each data.webhookDeliveries as delivery (delivery.id)}
@@ -337,18 +374,22 @@
 										</span>
 										<Badge variant={deliveryVariant(delivery.status)} class="w-fit">
 											{delivery.status === 'failed'
-												? '失败'
+												? m.admin_settings_notification_failed()
 												: delivery.status === 'succeeded'
-													? '成功'
-													: '排队'}
+													? m.admin_settings_notification_succeeded()
+													: m.admin_settings_notification_queued()}
 										</Badge>
 										{#if delivery.status === 'failed'}
 											<span class="text-muted-foreground">
-												{delivery.responseCode ? `HTTP ${delivery.responseCode}` : '无响应'}
+												{delivery.responseCode
+													? `HTTP ${delivery.responseCode}`
+													: m.admin_settings_notification_no_response()}
 											</span>
 											<form method="POST" action="?/retry">
 												<input type="hidden" name="id" value={delivery.id} />
-												<Button type="submit" variant="outline" size="sm">重投</Button>
+												<Button type="submit" variant="outline" size="sm"
+													>{m.admin_settings_notification_requeue()}</Button
+												>
 											</form>
 										{/if}
 									</div>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Select from '$lib/components/ui/select';
@@ -11,28 +12,36 @@
 	let s = $derived(data.settings);
 
 	const commentToggles: { key: string; label: string }[] = [
-		{ key: 'antiSpam', label: '反垃圾' },
-		{ key: 'aiReview', label: 'AI 审核' },
-		{ key: 'disableComments', label: '关闭评论' },
-		{ key: 'allowAnonymousComments', label: '允许匿名评论' },
-		{ key: 'rejectNonChinese', label: '仅允许中文评论' },
-		{ key: 'onlyApproved', label: '仅允许已批准评论显示' },
-		{ key: 'showCommentLocation', label: '显示评论归属地' }
+		{ key: 'antiSpam', label: m.admin_settings_content_anti_spam() },
+		{ key: 'aiReview', label: m.admin_settings_content_ai_review() },
+		{ key: 'disableComments', label: m.admin_settings_content_disable_comments() },
+		{ key: 'allowAnonymousComments', label: m.admin_settings_content_allow_anonymous() },
+		{ key: 'rejectNonChinese', label: m.admin_settings_content_chinese_only() },
+		{ key: 'onlyApproved', label: m.admin_settings_content_approved_only() },
+		{ key: 'showCommentLocation', label: m.admin_settings_content_show_location() }
 	];
 
 	const friendLinkToggles: { key: string; label: string; description: string }[] = [
 		{
 			key: 'allowFriendApps',
-			label: '允许友链申请',
-			description: '开启后外部用户可提交友链申请。'
+			label: m.admin_settings_content_allow_friend_apply(),
+			description: m.admin_settings_content_allow_friend_apply_desc()
 		},
-		{ key: 'allowSubPathFriends', label: '允许子路径友链', description: '允许友链指向子路径。' },
-		{ key: 'internalizeAvatars', label: '本地化头像', description: '将友链头像缓存到本地存储。' }
+		{
+			key: 'allowSubPathFriends',
+			label: m.admin_settings_content_friend_subpaths(),
+			description: m.admin_settings_content_friend_subpaths_desc()
+		},
+		{
+			key: 'internalizeAvatars',
+			label: m.admin_settings_content_localize_avatars(),
+			description: m.admin_settings_content_localize_avatars_desc()
+		}
 	];
 </script>
 
 <svelte:head>
-	<title>Content 设定 - Lair Admin</title>
+	<title>{m.admin_settings_content()} - Lair Admin</title>
 </svelte:head>
 
 <div class="space-y-10">
@@ -40,8 +49,10 @@
 	<section class="space-y-4">
 		<header class="flex flex-wrap items-start justify-between gap-3">
 			<div class="min-w-0">
-				<h2 class="inline-flex items-center gap-2 text-base font-medium">评论</h2>
-				<p class="mt-1 text-xs text-muted-foreground">评论审核、反垃圾与内容过滤。</p>
+				<h2 class="inline-flex items-center gap-2 text-base font-medium">
+					{m.admin_settings_content_comments_section()}
+				</h2>
+				<p class="mt-1 text-xs text-muted-foreground">{m.admin_settings_content_comments_desc()}</p>
 			</div>
 		</header>
 		<div class="space-y-5">
@@ -66,24 +77,26 @@
 			{/each}
 			{#if s.content.aiReview}
 				<div class="flex items-center justify-between gap-4">
-					<span class="text-sm">AI 审核模式</span>
+					<span class="text-sm">{m.admin_settings_content_ai_mode()}</span>
 					<Select.Root type="single" value={s.content.aiReviewMode}>
 						<Select.Trigger class="w-32">
-							{s.content.aiReviewMode === 'binary' ? '二分类' : '评分'}
+							{s.content.aiReviewMode === 'binary'
+								? m.admin_settings_content_ai_binary()
+								: m.admin_settings_content_ai_score()}
 						</Select.Trigger>
 						<Select.Content>
-							<Select.Item value="binary">二分类</Select.Item>
-							<Select.Item value="score">评分</Select.Item>
+							<Select.Item value="binary">{m.admin_settings_content_ai_binary()}</Select.Item>
+							<Select.Item value="score">{m.admin_settings_content_ai_score()}</Select.Item>
 						</Select.Content>
 					</Select.Root>
 				</div>
 				<div class="flex items-center justify-between gap-4">
-					<span class="text-sm">AI 审核阈值</span>
+					<span class="text-sm">{m.admin_settings_content_ai_threshold()}</span>
 					<Input class="w-24" type="number" value={s.content.aiReviewThreshold} />
 				</div>
 			{/if}
 			<div class="flex items-center justify-between gap-4">
-				<span class="text-sm">屏蔽词</span>
+				<span class="text-sm">{m.admin_settings_content_blocked_words()}</span>
 				<div class="max-w-[60%] min-w-0 flex-1">
 					<div class="flex flex-wrap gap-2">
 						{#each s.content.blockedKeywords as kw (kw)}
@@ -92,16 +105,17 @@
 								<button
 									type="button"
 									class="relative inline-flex size-3 items-center after:absolute after:-inset-2"
-									aria-label="移除 {kw}"><IconX class="size-3" /></button
+									aria-label={m.admin_settings_remove_keyword({ keyword: kw })}
+									><IconX class="size-3" /></button
 								>
 							</Badge>
 						{/each}
 					</div>
-					<Input class="mt-2" type="text" placeholder="输入后按 Enter" />
+					<Input class="mt-2" type="text" placeholder={m.admin_settings_keywords_placeholder()} />
 				</div>
 			</div>
 			<div class="flex items-center justify-between gap-4">
-				<span class="text-sm">屏蔽 IP</span>
+				<span class="text-sm">{m.admin_settings_content_blocked_ips()}</span>
 				<div class="max-w-[60%] min-w-0 flex-1">
 					<div class="flex flex-wrap gap-2">
 						{#each s.content.blockedIps as ip (ip)}
@@ -110,12 +124,13 @@
 								<button
 									type="button"
 									class="relative inline-flex size-3 items-center after:absolute after:-inset-2"
-									aria-label="移除 {ip}"><IconX class="size-3" /></button
+									aria-label={m.admin_settings_content_remove_ip({ ip: ip })}
+									><IconX class="size-3" /></button
 								>
 							</Badge>
 						{/each}
 					</div>
-					<Input class="mt-2" type="text" placeholder="输入后按 Enter" />
+					<Input class="mt-2" type="text" placeholder={m.admin_settings_keywords_placeholder()} />
 				</div>
 			</div>
 		</div>
@@ -125,8 +140,10 @@
 	<section class="space-y-4">
 		<header class="flex flex-wrap items-start justify-between gap-3">
 			<div class="min-w-0">
-				<h2 class="inline-flex items-center gap-2 text-base font-medium">友链</h2>
-				<p class="mt-1 text-xs text-muted-foreground">友链申请、子路径与头像本地化。</p>
+				<h2 class="inline-flex items-center gap-2 text-base font-medium">
+					{m.admin_settings_content_friends_section()}
+				</h2>
+				<p class="mt-1 text-xs text-muted-foreground">{m.admin_settings_content_friends_desc()}</p>
 			</div>
 		</header>
 		<div class="space-y-5">
@@ -158,7 +175,7 @@
 	<div class="flex justify-end">
 		<Button type="button" size="sm">
 			<IconDeviceFloppy data-icon="inline-start" />
-			保存
+			{m.admin_common_save()}
 		</Button>
 	</div>
 </div>

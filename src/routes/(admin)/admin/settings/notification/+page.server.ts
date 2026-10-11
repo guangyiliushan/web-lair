@@ -8,6 +8,7 @@ import { getOption } from '$lib/server/config/options-registry';
 import { isUuid } from '$lib/utils/uuid';
 import { formatDateTime } from '$lib/utils/i18n';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * 通知设置 · Webhooks 区块 (J-3, grill R1-5): read-only endpoint list +
@@ -55,7 +56,7 @@ export const load: PageServerLoad = async () => {
 			const endpoint = byId.get(row.webhookId);
 			return {
 				...row,
-				webhookName: endpoint?.name ?? '（端点已删除）',
+				webhookName: endpoint?.name ?? m.admin_settings_notification_endpoint_deleted(),
 				createdLabel: formatDateTime(row.createdAt, { timeZone: siteTz })
 			};
 		})
@@ -67,7 +68,8 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { message: '缺少有效的投递 ID' });
+		if (!id || !isUuid(id))
+			return fail(400, { message: m.admin_settings_notification_err_bad_id() });
 		const [delivery] = await db
 			.select({
 				id: webhookDeliveries.id,
@@ -79,16 +81,18 @@ export const actions: Actions = {
 			.from(webhookDeliveries)
 			.where(eq(webhookDeliveries.id, id))
 			.limit(1);
-		if (!delivery) return fail(404, { message: '投递记录不存在' });
+		if (!delivery) return fail(404, { message: m.admin_settings_notification_err_not_found() });
 		// Assertion 87: 失败可重投 - a queued/succeeded row has nothing to retry.
-		if (delivery.status !== 'failed') return fail(400, { message: '仅失败的投递可重投' });
+		if (delivery.status !== 'failed')
+			return fail(400, { message: m.admin_settings_notification_err_not_failed() });
 		const [endpoint] = await db
 			.select({ isEnabled: webhooks.isEnabled })
 			.from(webhooks)
 			.where(eq(webhooks.id, delivery.webhookId))
 			.limit(1);
-		if (!endpoint) return fail(404, { message: '端点已不存在' });
-		if (!endpoint.isEnabled) return fail(400, { message: '端点已停用，启用后再重投' });
+		if (!endpoint) return fail(404, { message: m.admin_settings_notification_err_endpoint_gone() });
+		if (!endpoint.isEnabled)
+			return fail(400, { message: m.admin_settings_notification_err_disabled() });
 		try {
 			const [row] = await db
 				.insert(webhookDeliveries)
@@ -104,7 +108,7 @@ export const actions: Actions = {
 			// TOCTOU tail (J-3 review P3-1): the endpoint can be deleted
 			// between the check above and this insert; the FK answers 23503.
 			if (pgErrorCode(error) === '23503') {
-				return fail(400, { message: '端点已不存在（并发删除）' });
+				return fail(400, { message: m.admin_settings_notification_err_gone_race() });
 			}
 			throw error;
 		}

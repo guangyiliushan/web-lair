@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
@@ -11,19 +12,19 @@
 </script>
 
 <svelte:head>
-	<title>Storage - Lair Admin</title>
+	<title>{m.admin_settings_storage()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
 	<header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
 		<div class="flex min-w-0 items-center gap-2">
 			<IconDeviceFloppy class="size-4 shrink-0 text-muted-foreground" />
-			<h2 class="truncate text-sm font-semibold">存储设置</h2>
+			<h2 class="truncate text-sm font-semibold">{m.admin_settings_storage()}</h2>
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
 			<Button size="sm">
 				<IconDeviceFloppy data-icon="inline-start" />
-				保存
+				{m.admin_common_save()}
 			</Button>
 		</div>
 	</header>
@@ -32,17 +33,19 @@
 		<div class="space-y-8 p-6">
 			<!-- 备份 -->
 			<section>
-				<h3 class="mb-4 text-sm font-semibold">备份</h3>
+				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_storage_backup()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
 					<!-- autoBackup -->
 					<div class="flex items-center justify-between gap-4">
-						<label class="text-sm" for="storage-autoBackup">自动备份到 S3</label>
+						<label class="text-sm" for="storage-autoBackup"
+							>{m.admin_settings_storage_auto_backup()}</label
+						>
 						<button
 							type="button"
 							role="switch"
 							id="storage-autoBackup"
 							aria-checked={Boolean(s.storage.autoBackup)}
-							aria-label="自动备份到 S3"
+							aria-label={m.admin_settings_storage_auto_backup()}
 							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.storage.autoBackup}
 							class:bg-surface-inset={!s.storage.autoBackup}
@@ -105,17 +108,19 @@
 
 			<!-- 图片存储 -->
 			<section>
-				<h3 class="mb-4 text-sm font-semibold">图片存储</h3>
+				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_storage_images()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
 					<!-- s3ImageEnabled -->
 					<div class="flex items-center justify-between gap-4">
-						<label class="text-sm" for="storage-s3ImageEnabled">启用 S3 图片存储</label>
+						<label class="text-sm" for="storage-s3ImageEnabled"
+							>{m.admin_settings_storage_s3_enabled()}</label
+						>
 						<button
 							type="button"
 							role="switch"
 							id="storage-s3ImageEnabled"
 							aria-checked={Boolean(s.storage.s3ImageEnabled)}
-							aria-label="启用 S3 图片存储"
+							aria-label={m.admin_settings_storage_s3_enabled()}
 							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.storage.s3ImageEnabled}
 							class:bg-surface-inset={!s.storage.s3ImageEnabled}
@@ -129,7 +134,9 @@
 
 					<!-- s3ImageEndpoint -->
 					<div class="space-y-1.5">
-						<label for="storage-s3ImageEndpoint" class="text-sm">图片 S3 Endpoint</label>
+						<label for="storage-s3ImageEndpoint" class="text-sm"
+							>{m.admin_settings_storage_s3_endpoint()}</label
+						>
 						<Input
 							id="storage-s3ImageEndpoint"
 							bind:value={s.storage.s3ImageEndpoint}
@@ -139,7 +146,9 @@
 
 					<!-- s3ImageAccessKey -->
 					<div class="space-y-1.5">
-						<label for="storage-s3ImageAccessKey" class="text-sm">图片 S3 Access Key</label>
+						<label for="storage-s3ImageAccessKey" class="text-sm"
+							>{m.admin_settings_storage_s3_access()}</label
+						>
 						<Input
 							id="storage-s3ImageAccessKey"
 							bind:value={s.storage.s3ImageAccessKey}
@@ -149,7 +158,9 @@
 
 					<!-- s3ImageSecretKey -->
 					<div class="space-y-1.5">
-						<label for="storage-s3ImageSecretKey" class="text-sm">图片 S3 Secret Key</label>
+						<label for="storage-s3ImageSecretKey" class="text-sm"
+							>{m.admin_settings_storage_s3_secret()}</label
+						>
 						<Input
 							id="storage-s3ImageSecretKey"
 							type="password"
@@ -160,7 +171,9 @@
 
 					<!-- s3ImageBucket -->
 					<div class="space-y-1.5">
-						<label for="storage-s3ImageBucket" class="text-sm">图片 S3 Bucket</label>
+						<label for="storage-s3ImageBucket" class="text-sm"
+							>{m.admin_settings_storage_s3_bucket()}</label
+						>
 						<Input
 							id="storage-s3ImageBucket"
 							bind:value={s.storage.s3ImageBucket}
@@ -170,7 +183,9 @@
 
 					<!-- s3ImageRegion -->
 					<div class="space-y-1.5">
-						<label for="storage-s3ImageRegion" class="text-sm">图片 S3 Region</label>
+						<label for="storage-s3ImageRegion" class="text-sm"
+							>{m.admin_settings_storage_s3_region()}</label
+						>
 						<Input
 							id="storage-s3ImageRegion"
 							bind:value={s.storage.s3ImageRegion}
@@ -180,7 +195,7 @@
 
 					<!-- s3ImageCdn -->
 					<div class="space-y-1.5">
-						<label for="storage-s3ImageCdn" class="text-sm">图片 CDN 域名</label>
+						<label for="storage-s3ImageCdn" class="text-sm">{m.admin_settings_storage_cdn()}</label>
 						<Input
 							id="storage-s3ImageCdn"
 							bind:value={s.storage.s3ImageCdn}
@@ -190,7 +205,9 @@
 
 					<!-- s3ImagePrefix -->
 					<div class="space-y-1.5">
-						<label for="storage-s3ImagePrefix" class="text-sm">图片路径前缀</label>
+						<label for="storage-s3ImagePrefix" class="text-sm"
+							>{m.admin_settings_storage_image_prefix()}</label
+						>
 						<Input
 							id="storage-s3ImagePrefix"
 							bind:value={s.storage.s3ImagePrefix}
@@ -200,7 +217,9 @@
 
 					<!-- s3CommentPrefix -->
 					<div class="space-y-1.5">
-						<label for="storage-s3CommentPrefix" class="text-sm">评论图片路径前缀</label>
+						<label for="storage-s3CommentPrefix" class="text-sm"
+							>{m.admin_settings_storage_comment_prefix()}</label
+						>
 						<Input
 							id="storage-s3CommentPrefix"
 							bind:value={s.storage.s3CommentPrefix}
@@ -212,17 +231,19 @@
 
 			<!-- 评论图片上传 -->
 			<section>
-				<h3 class="mb-4 text-sm font-semibold">评论图片上传</h3>
+				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_storage_comment_upload()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
 					<!-- commentUploadEnabled -->
 					<div class="flex items-center justify-between gap-4">
-						<label class="text-sm" for="storage-commentUploadEnabled">允许评论上传图片</label>
+						<label class="text-sm" for="storage-commentUploadEnabled"
+							>{m.admin_settings_storage_comment_upload_enabled()}</label
+						>
 						<button
 							type="button"
 							role="switch"
 							id="storage-commentUploadEnabled"
 							aria-checked={Boolean(s.storage.commentUploadEnabled)}
-							aria-label="允许评论上传图片"
+							aria-label={m.admin_settings_storage_comment_upload_enabled()}
 							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.storage.commentUploadEnabled}
 							class:bg-surface-inset={!s.storage.commentUploadEnabled}
@@ -237,7 +258,9 @@
 					<div class="grid gap-4 sm:grid-cols-2">
 						<!-- pendingTtl -->
 						<div class="space-y-1.5">
-							<label for="storage-pendingTtl" class="text-sm">待审核 TTL（分钟）</label>
+							<label for="storage-pendingTtl" class="text-sm"
+								>{m.admin_settings_storage_pending_ttl()}</label
+							>
 							<Input
 								id="storage-pendingTtl"
 								type="number"
@@ -248,7 +271,9 @@
 
 						<!-- detachedTtl -->
 						<div class="space-y-1.5">
-							<label for="storage-detachedTtl" class="text-sm">游离图片 TTL（天）</label>
+							<label for="storage-detachedTtl" class="text-sm"
+								>{m.admin_settings_storage_detached_ttl()}</label
+							>
 							<Input
 								id="storage-detachedTtl"
 								type="number"
@@ -259,7 +284,9 @@
 
 						<!-- cleanupInterval -->
 						<div class="space-y-1.5">
-							<label for="storage-cleanupInterval" class="text-sm">清理间隔（分钟）</label>
+							<label for="storage-cleanupInterval" class="text-sm"
+								>{m.admin_settings_storage_cleanup_interval()}</label
+							>
 							<Input
 								id="storage-cleanupInterval"
 								type="number"
@@ -270,7 +297,9 @@
 
 						<!-- maxImageSize -->
 						<div class="space-y-1.5">
-							<label for="storage-maxImageSize" class="text-sm">单张图片最大（MB）</label>
+							<label for="storage-maxImageSize" class="text-sm"
+								>{m.admin_settings_storage_max_image()}</label
+							>
 							<Input
 								id="storage-maxImageSize"
 								type="number"
@@ -281,7 +310,9 @@
 
 						<!-- maxImagesPerComment -->
 						<div class="space-y-1.5">
-							<label for="storage-maxImagesPerComment" class="text-sm">每评论最多图片数</label>
+							<label for="storage-maxImagesPerComment" class="text-sm"
+								>{m.admin_settings_storage_max_per_comment()}</label
+							>
 							<Input
 								id="storage-maxImagesPerComment"
 								type="number"
@@ -292,7 +323,9 @@
 
 						<!-- maxUploadsPerHour -->
 						<div class="space-y-1.5">
-							<label for="storage-maxUploadsPerHour" class="text-sm">每小时最多上传数</label>
+							<label for="storage-maxUploadsPerHour" class="text-sm"
+								>{m.admin_settings_storage_max_per_hour()}</label
+							>
 							<Input
 								id="storage-maxUploadsPerHour"
 								type="number"
@@ -303,7 +336,9 @@
 
 						<!-- maxStoragePerReader -->
 						<div class="space-y-1.5">
-							<label for="storage-maxStoragePerReader" class="text-sm">每人最多存储（MB）</label>
+							<label for="storage-maxStoragePerReader" class="text-sm"
+								>{m.admin_settings_storage_max_per_reader()}</label
+							>
 							<Input
 								id="storage-maxStoragePerReader"
 								type="number"
@@ -314,7 +349,9 @@
 
 						<!-- minAccountAge -->
 						<div class="space-y-1.5">
-							<label for="storage-minAccountAge" class="text-sm">最小账号年龄（天）</label>
+							<label for="storage-minAccountAge" class="text-sm"
+								>{m.admin_settings_storage_min_age()}</label
+							>
 							<Input
 								id="storage-minAccountAge"
 								type="number"
@@ -325,7 +362,9 @@
 
 						<!-- minCommentsPosted -->
 						<div class="space-y-1.5">
-							<label for="storage-minCommentsPosted" class="text-sm">最少评论数</label>
+							<label for="storage-minCommentsPosted" class="text-sm"
+								>{m.admin_settings_storage_min_comments()}</label
+							>
 							<Input
 								id="storage-minCommentsPosted"
 								type="number"
@@ -337,13 +376,15 @@
 
 					<!-- deleteSpamImages -->
 					<div class="flex items-center justify-between gap-4">
-						<label class="text-sm" for="storage-deleteSpamImages">删除垃圾图片</label>
+						<label class="text-sm" for="storage-deleteSpamImages"
+							>{m.admin_settings_storage_delete_spam()}</label
+						>
 						<button
 							type="button"
 							role="switch"
 							id="storage-deleteSpamImages"
 							aria-checked={Boolean(s.storage.deleteSpamImages)}
-							aria-label="删除垃圾图片"
+							aria-label={m.admin_settings_storage_delete_spam()}
 							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.storage.deleteSpamImages}
 							class:bg-surface-inset={!s.storage.deleteSpamImages}
@@ -357,7 +398,7 @@
 
 					<!-- mimeWhitelist -->
 					<div class="space-y-2">
-						<span class="text-sm">MIME 白名单</span>
+						<span class="text-sm">{m.admin_settings_storage_mime()}</span>
 						<div class="flex flex-wrap gap-1.5">
 							{#each s.storage.mimeWhitelist as mime (mime)}
 								<Badge variant="secondary">
@@ -365,7 +406,7 @@
 									<button
 										type="button"
 										class="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20"
-										aria-label="移除 {mime}"
+										aria-label={m.admin_settings_storage_remove_mime({ mime: mime })}
 									>
 										<IconX class="size-3" />
 									</button>
