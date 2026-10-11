@@ -10,6 +10,7 @@
 	import { variantKeyFor } from '$lib/media/keys';
 	import { formatBytes } from '$lib/utils/format';
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconCopy from '@tabler/icons-svelte-runes/icons/copy';
@@ -69,9 +70,9 @@
 	});
 
 	const STATUS_LABELS: Record<string, string> = {
-		pending: '待引用',
-		attached: '已引用',
-		detached: '已解挂'
+		pending: m.admin_files_status_pending(),
+		attached: m.admin_files_status_attached(),
+		detached: m.admin_files_status_detached()
 	};
 	const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'outline'> = {
 		pending: 'outline',
@@ -104,7 +105,7 @@
 </script>
 
 <svelte:head>
-	<title>文件 - Lair Admin</title>
+	<title>{m.admin_nav_files()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex flex-col gap-6">
@@ -112,7 +113,7 @@
 		<div
 			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
 		>
-			文件已删除。
+			{m.admin_files_flash_deleted()}
 		</div>
 	{/if}
 	{#if actionData.message}
@@ -127,8 +128,8 @@
 			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
 		>
 			{actionData.galleryAdded.kind === 'ok'
-				? `已加入图床：/photos/${actionData.galleryAdded.slug}`
-				: '该文件已在图床中。'}
+				? m.admin_files_gallery_added({ slug: actionData.galleryAdded.slug ?? '' })
+				: m.admin_files_gallery_exists()}
 		</div>
 	{/if}
 	{#if actionData.uploadResults}
@@ -137,7 +138,7 @@
 				<p class:opacity-60={!result.ok}>
 					{result.ok ? '✓' : '✗'}
 					{result.fileName}
-					{#if result.ok && result.file?.deduplicated}（重复内容，复用了已有文件）{/if}
+					{#if result.ok && result.file?.deduplicated}{m.admin_files_dedup()}{/if}
 					{#if !result.ok}— {result.message ?? result.code}{/if}
 				</p>
 			{/each}
@@ -146,7 +147,10 @@
 
 	<section class="rounded-xl border bg-background p-4">
 		<h2 class="mb-3 text-sm font-medium">
-			上传（≤ {data.limits.maxBatch} 个/批，单文件 ≤ {data.limits.maxBytes / 1024 / 1024}MB）
+			{m.admin_files_upload_hint({
+				batch: data.limits.maxBatch,
+				size: data.limits.maxBytes / 1024 / 1024
+			})}
 		</h2>
 		<form
 			method="POST"
@@ -163,7 +167,7 @@
 			/>
 			<Button type="submit" size="sm">
 				<IconUpload data-icon="inline-start" />
-				上传
+				{m.admin_media_upload()}
 			</Button>
 		</form>
 	</section>
@@ -171,47 +175,66 @@
 	<section class="flex flex-col gap-4">
 		<form method="GET" class="flex flex-wrap items-end gap-3">
 			<label class="grid gap-1 text-xs text-muted-foreground">
-				类型
+				{m.admin_common_type()}
 				<select
 					name="kind"
 					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
 				>
-					<option value="" selected={data.filters.kind === ''}>全部</option>
-					<option value="image" selected={data.filters.kind === 'image'}>图片</option>
-					<option value="file" selected={data.filters.kind === 'file'}>文件</option>
+					<option value="" selected={data.filters.kind === ''}>{m.admin_media_filter_all()}</option>
+					<option value="image" selected={data.filters.kind === 'image'}
+						>{m.admin_files_kind_image()}</option
+					>
+					<option value="file" selected={data.filters.kind === 'file'}
+						>{m.admin_files_kind_file()}</option
+					>
 				</select>
 			</label>
 			<label class="grid gap-1 text-xs text-muted-foreground">
-				状态
+				{m.admin_common_status()}
 				<select
 					name="status"
 					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
 				>
-					<option value="" selected={data.filters.status === ''}>全部</option>
-					<option value="pending" selected={data.filters.status === 'pending'}>待引用</option>
-					<option value="attached" selected={data.filters.status === 'attached'}>已引用</option>
-					<option value="detached" selected={data.filters.status === 'detached'}>已解挂</option>
+					<option value="" selected={data.filters.status === ''}
+						>{m.admin_media_filter_all()}</option
+					>
+					<option value="pending" selected={data.filters.status === 'pending'}
+						>{m.admin_files_status_pending()}</option
+					>
+					<option value="attached" selected={data.filters.status === 'attached'}
+						>{m.admin_files_status_attached()}</option
+					>
+					<option value="detached" selected={data.filters.status === 'detached'}
+						>{m.admin_files_status_detached()}</option
+					>
 				</select>
 			</label>
 			<label class="grid gap-1 text-xs text-muted-foreground">
-				关键词
+				{m.admin_files_keyword()}
 				<input
 					name="keyword"
 					value={data.filters.keyword}
-					placeholder="文件名"
+					placeholder={m.admin_files_filename_ph()}
 					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
 				/>
 			</label>
 			<label class="grid gap-1 text-xs text-muted-foreground">
-				时间
+				{m.admin_media_time()}
 				<select
 					name="since"
 					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
 				>
-					<option value="" selected={data.filters.since === ''}>全部</option>
-					<option value="7d" selected={data.filters.since === '7d'}>近 7 天</option>
-					<option value="30d" selected={data.filters.since === '30d'}>近 30 天</option>
-					<option value="90d" selected={data.filters.since === '90d'}>近 90 天</option>
+					<option value="" selected={data.filters.since === ''}>{m.admin_media_filter_all()}</option
+					>
+					<option value="7d" selected={data.filters.since === '7d'}
+						>{m.admin_media_last_7d()}</option
+					>
+					<option value="30d" selected={data.filters.since === '30d'}
+						>{m.admin_media_last_30d()}</option
+					>
+					<option value="90d" selected={data.filters.since === '90d'}
+						>{m.admin_media_last_90d()}</option
+					>
 				</select>
 			</label>
 			<label class="flex items-center gap-2 pb-2 text-xs text-muted-foreground">
@@ -222,23 +245,23 @@
 					checked={data.filters.orphan}
 					class="size-4 rounded border"
 				/>
-				仅游离（超 TTL 孤儿）
+				{m.admin_files_orphan_only()}
 			</label>
-			<Button type="submit" variant="secondary" size="sm">筛选</Button>
+			<Button type="submit" variant="secondary" size="sm">{m.admin_media_filter()}</Button>
 		</form>
 
 		{#if data.listTruncated}
 			<p class="text-xs text-muted-foreground">
-				仅显示前 {data.files.length} 条（达到上限，请用筛选缩小范围）。
+				{m.admin_files_cap_notice({ count: data.files.length })}
 			</p>
 		{/if}
 
 		{#if data.files.length === 0}
 			<Empty class="py-12">
 				<div class="flex flex-col items-center gap-1">
-					<h3 class="text-lg font-semibold tracking-tight">暂无文件</h3>
+					<h3 class="text-lg font-semibold tracking-tight">{m.admin_files_empty()}</h3>
 					<p class="text-sm text-muted-foreground">
-						上传的图片与文档会出现在这里（内容寻址登记表）。
+						{m.admin_files_empty_desc()}
 					</p>
 				</div>
 			</Empty>
@@ -247,14 +270,18 @@
 				<Table.Root>
 					<Table.Header>
 						<Table.Row>
-							<Table.Head class="w-14">预览</Table.Head>
-							<Table.Head>文件</Table.Head>
-							<Table.Head class="hidden w-28 md:table-cell">尺寸</Table.Head>
-							<Table.Head class="w-24">大小</Table.Head>
-							<Table.Head class="w-24">状态</Table.Head>
-							<Table.Head class="hidden w-24 sm:table-cell">引用</Table.Head>
-							<Table.Head class="hidden w-40 lg:table-cell">上传时间</Table.Head>
-							<Table.Head class="w-44 text-right">操作</Table.Head>
+							<Table.Head class="w-14">{m.admin_files_col_preview()}</Table.Head>
+							<Table.Head>{m.admin_files_kind_file()}</Table.Head>
+							<Table.Head class="hidden w-28 md:table-cell"
+								>{m.admin_files_col_dimensions()}</Table.Head
+							>
+							<Table.Head class="w-24">{m.admin_files_col_size()}</Table.Head>
+							<Table.Head class="w-24">{m.admin_common_status()}</Table.Head>
+							<Table.Head class="hidden w-24 sm:table-cell">{m.admin_files_col_refs()}</Table.Head>
+							<Table.Head class="hidden w-40 lg:table-cell"
+								>{m.admin_files_col_uploaded()}</Table.Head
+							>
+							<Table.Head class="w-44 text-right">{m.admin_common_actions()}</Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
@@ -311,7 +338,7 @@
 											class="size-8"
 											href={publicUrl(row)}
 											target="_blank"
-											aria-label="预览"
+											aria-label={m.admin_files_col_preview()}
 										>
 											<IconExternalLink class="size-4" />
 										</Button>
@@ -320,12 +347,14 @@
 											size="icon"
 											class="size-8"
 											onclick={() => copyUrl(row)}
-											aria-label="复制 URL"
+											aria-label={m.admin_files_copy_url()}
 										>
 											<IconCopy class="size-4" />
 										</Button>
 										{#if copiedId === row.id}
-											<span class="text-xs text-emerald-600 dark:text-emerald-400">已复制</span>
+											<span class="text-xs text-emerald-600 dark:text-emerald-400"
+												>{m.admin_settings_account_copied()}</span
+											>
 										{/if}
 										{#if row.mimeType.startsWith('image/') && !row.isInGallery}
 											<form method="POST" action="?/addToGallery">
@@ -335,7 +364,7 @@
 													variant="ghost"
 													size="icon"
 													class="size-8"
-													aria-label="加入图床"
+													aria-label={m.admin_files_add_to_gallery()}
 												>
 													<IconPhoto class="size-4" />
 												</Button>
@@ -347,7 +376,7 @@
 											class="size-8"
 											href="/i/{row.objectKey}"
 											download={row.fileName}
-											aria-label="下载原件"
+											aria-label={m.admin_files_download()}
 										>
 											<IconDownload class="size-4" />
 										</Button>
@@ -356,7 +385,7 @@
 											size="icon"
 											class="size-8 text-destructive"
 											onclick={() => (deleteTarget = { id: row.id, name: row.fileName })}
-											aria-label="删除"
+											aria-label={m.admin_common_delete()}
 										>
 											<IconTrash class="size-4" />
 										</Button>
@@ -371,55 +400,71 @@
 	</section>
 
 	<section class="rounded-xl border bg-background p-4">
-		<h2 class="mb-1 text-sm font-medium">三检托底（只读）</h2>
+		<h2 class="mb-1 text-sm font-medium">{m.admin_files_audit_title()}</h2>
 		<p class="mb-3 text-xs text-muted-foreground">
-			孤儿 = 无引用 · 非图床 · 超 TTL；破链 = 内容引用 /i/&lt;key&gt; 但登记表无行；对象缺失 =
-			有行无物。实际清理走 CLI（<code>pnpm media:purge</code>，默认 dry-run）。
+			{m.admin_files_audit_desc_before()}<code>pnpm media:purge</code
+			>{m.admin_files_audit_desc_after()}
 		</p>
 		<div class="flex flex-wrap gap-3">
 			<form method="POST" action="?/audit">
 				<Button type="submit" variant="secondary" size="sm">
 					<IconRefresh data-icon="inline-start" />
-					运行巡检
+					{m.admin_files_audit_run()}
 				</Button>
 			</form>
 			<form method="POST" action="?/purgePreview">
-				<Button type="submit" variant="outline" size="sm">清理预演（dry-run）</Button>
+				<Button type="submit" variant="outline" size="sm">{m.admin_files_purge_preview()}</Button>
 			</form>
 		</div>
 
 		{#if actionData.audit}
 			<div class="mt-4 space-y-2 text-sm">
-				<p class="text-xs text-muted-foreground">生成于 {actionData.audit.generatedAt}</p>
+				<p class="text-xs text-muted-foreground">
+					{m.admin_files_audit_generated({ time: actionData.audit.generatedAt })}
+				</p>
 				<p>
-					① 孤儿：{actionData.audit.orphans.length} · ② 破链：{actionData.audit.brokenLinks.length} ·
-					③ 对象缺失：{actionData.audit.missingObjects.length}
+					{m.admin_files_audit_counts({
+						orphans: actionData.audit.orphans.length,
+						broken: actionData.audit.brokenLinks.length,
+						missing: actionData.audit.missingObjects.length
+					})}
 				</p>
 				{#if actionData.audit.truncated}
 					<p class="text-xs text-amber-600 dark:text-amber-400">
-						注意：扫描达到行数上限，结果可能不完整。
+						{m.admin_files_audit_truncated()}
 					</p>
 				{/if}
 				{#each actionData.audit.orphans as orphan (orphan.objectKey)}
 					<p class="text-xs text-muted-foreground">
-						① {orphan.objectKey}（{orphan.fileName}，{orphan.ageDays} 天）
+						{m.admin_files_orphan_row({
+							key: orphan.objectKey,
+							name: orphan.fileName,
+							days: orphan.ageDays
+						})}
 					</p>
 				{/each}
 				{#each actionData.audit.brokenLinks as link (link.key + link.refId)}
 					<p class="text-xs text-muted-foreground">② {link.key} ← {link.refType}:{link.refId}</p>
 				{/each}
 				{#each actionData.audit.missingObjects as row (row.objectKey)}
-					<p class="text-xs text-muted-foreground">③ {row.objectKey}（{row.fileName}）</p>
+					<p class="text-xs text-muted-foreground">
+						{m.admin_files_missing_row({ key: row.objectKey, name: row.fileName })}
+					</p>
 				{/each}
 			</div>
 		{/if}
 
 		{#if actionData.purge}
 			<div class="mt-4 space-y-2 text-sm">
-				<p>清理预演：{actionData.purge.length} 个候选（只读，未删除）</p>
+				<p>{m.admin_files_purge_summary({ count: actionData.purge.length })}</p>
 				{#each actionData.purge as candidate (candidate.objectKey)}
 					<p class="text-xs text-muted-foreground">
-						{candidate.objectKey}（{candidate.fileName}，{candidate.status}，{candidate.ageDays} 天）
+						{m.admin_files_purge_row({
+							key: candidate.objectKey,
+							name: candidate.fileName,
+							status: candidate.status,
+							days: candidate.ageDays
+						})}
 					</p>
 				{/each}
 			</div>
@@ -433,16 +478,16 @@
 >
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>删除文件？</AlertDialog.Title>
+			<AlertDialog.Title>{m.admin_files_delete_title()}</AlertDialog.Title>
 			<AlertDialog.Description>
-				“{deleteTarget?.name}” 将连同全部派生对象一起删除；被内容或图床引用时会被阻止。
+				{m.admin_files_delete_desc({ name: deleteTarget?.name ?? '' })}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 			<form method="POST" action="?/delete">
 				<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
-				<AlertDialog.Action type="submit">删除</AlertDialog.Action>
+				<AlertDialog.Action type="submit">{m.admin_common_delete()}</AlertDialog.Action>
 			</form>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

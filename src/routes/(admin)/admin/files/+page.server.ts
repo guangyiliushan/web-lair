@@ -15,6 +15,7 @@ import { MAX_BATCH_COUNT, MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Content assets admin (storage line §6.1): registry list with filters, batch
@@ -47,7 +48,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	const files = await listFiles({ kind, status, keyword, since, orphan });
 
 	return {
-		headerTitle: '文件',
+		headerTitle: m.admin_nav_files(),
 		files,
 		// The list is capped at FILE_LIST_LIMIT rows — surface it (round-2).
 		listTruncated: files.length >= FILE_LIST_LIMIT,
@@ -73,22 +74,22 @@ export const actions: Actions = {
 			UPLOAD_RATE_LIMIT.limit,
 			UPLOAD_RATE_LIMIT.windowSeconds
 		);
-		if (!rate.allowed) return fail(429, { message: '上传过于频繁，请稍后再试' });
+		if (!rate.allowed) return fail(429, { message: m.admin_media_err_rate() });
 		const form = await request.formData();
 		const uploads = form
 			.getAll('files')
 			.filter((entry): entry is File => entry instanceof File && entry.size > 0);
-		if (uploads.length === 0) return fail(400, { message: '请选择要上传的文件' });
+		if (uploads.length === 0) return fail(400, { message: m.admin_files_err_no_files() });
 		// Reject oversized batches before copying bodies; the service keeps its
 		// own cap as the authoritative contract (batch-too-large, plan §4.2).
 		if (uploads.length > MAX_BATCH_COUNT) {
-			return fail(400, { message: `一次最多上传 ${MAX_BATCH_COUNT} 个文件` });
+			return fail(400, { message: m.admin_media_err_too_many({ count: MAX_BATCH_COUNT }) });
 		}
 		// Early reject oversized files before copying bodies; the service keeps
 		// the authoritative check (plan §4.2).
 		const oversized = uploads.find((file) => file.size > MAX_UPLOAD_BYTES);
 		if (oversized) {
-			return fail(400, { message: `${oversized.name} 超过单文件上限` });
+			return fail(400, { message: m.admin_media_err_too_big({ name: oversized.name }) });
 		}
 
 		try {
@@ -112,24 +113,26 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!isUuid(id)) return fail(400, { message: '文件标识无效' });
+		if (!isUuid(id)) return fail(400, { message: m.admin_files_err_bad_id() });
 
 		const result = await deleteFile(id);
-		if (result.kind === 'not-found') return fail(404, { message: '文件不存在' });
+		if (result.kind === 'not-found') return fail(404, { message: m.admin_files_err_not_found() });
 		if (result.kind === 'mentioned') {
 			// A truncated scan is fail-closed, not a content hit (round-2
 			// confirm P3): surface the real reason instead of a false claim.
 			return fail(409, {
 				message: result.scanTruncated
-					? '正文提及扫描已达行数上限（保守拦截；分页扩展见方案 §11 登记）'
-					: '正文仍提及该文件（引用回填落地前的过渡守卫），不能删除'
+					? m.admin_files_err_scan_cap()
+					: m.admin_files_err_still_mentioned()
 			});
 		}
 		if (result.kind === 'referenced') {
 			const parts: string[] = [];
-			if (result.refCount > 0) parts.push(`内容引用 ${result.refCount} 处`);
-			if (result.isInGallery) parts.push('图床引用');
-			return fail(409, { message: `仍被引用（${parts.join('、')}），不能删除` });
+			if (result.refCount > 0) parts.push(m.admin_files_ref_count({ count: result.refCount }));
+			if (result.isInGallery) parts.push(m.admin_files_gallery_ref());
+			return fail(409, {
+				message: m.admin_files_err_in_use({ parts: parts.join(m.admin_files_join()) })
+			});
 		}
 		throw redirect(303, '/admin/files?deleted=1');
 	},
@@ -138,11 +141,12 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!isUuid(id)) return fail(400, { message: '文件标识无效' });
+		if (!isUuid(id)) return fail(400, { message: m.admin_files_err_bad_id() });
 		const result = await createPhotoFromFile(id);
-		if (result.kind === 'not-found') return fail(404, { message: '文件不存在' });
-		if (result.kind === 'not-image') return fail(400, { message: '仅图片可加入图床' });
-		if (result.kind === 'source-missing') return fail(409, { message: '对象缺失，无法加入图床' });
+		if (result.kind === 'not-found') return fail(404, { message: m.admin_files_err_not_found() });
+		if (result.kind === 'not-image') return fail(400, { message: m.admin_files_err_not_image() });
+		if (result.kind === 'source-missing')
+			return fail(409, { message: m.admin_files_err_source_missing() });
 		return {
 			galleryAdded: { kind: result.kind, slug: result.kind === 'ok' ? result.slug : null }
 		};
