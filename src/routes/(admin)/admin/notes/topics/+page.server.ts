@@ -7,6 +7,7 @@ import { pgErrorCode } from '$lib/server/db/pg-error';
 import { NAV_ICON_NAMES } from '$lib/config/nav-icons';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Topics CRUD (notes plan §3.2): numeric sort_order plus ▲/▼ moves (no drag
@@ -42,7 +43,7 @@ export const load: PageServerLoad = async () => {
 		if (row.topicId) noteCounts[row.topicId] = row.count;
 	}
 
-	return { headerTitle: '专栏', topics: rows, noteCounts };
+	return { headerTitle: m.admin_notes_topics(), topics: rows, noteCounts };
 };
 
 function str(form: FormData, key: string): string {
@@ -59,10 +60,10 @@ export const actions: Actions = {
 		const icon = str(form, 'icon').trim();
 		const sortRaw = str(form, 'sortOrder').trim();
 
-		if (!name) return fail(400, { error: '专栏名称不能为空' });
-		if (!slug) return fail(400, { error: 'Slug 不能为空' });
+		if (!name) return fail(400, { error: m.admin_notes_topics_err_name_required() });
+		if (!slug) return fail(400, { error: m.admin_notes_topics_err_slug_required() });
 		if (icon !== '' && !(NAV_ICON_NAMES as readonly string[]).includes(icon)) {
-			return fail(400, { error: '图标不在白名单内（前台不会渲染）' });
+			return fail(400, { error: m.admin_notes_topics_err_icon_whitelist() });
 		}
 		const sortOrder = /^-?\d+$/.test(sortRaw) ? Number(sortRaw) : 0;
 
@@ -78,7 +79,7 @@ export const actions: Actions = {
 			// Only a unique violation is a user-visible conflict; anything else
 			// (connection lost, permissions) must surface as a server error.
 			if (pgErrorCode(error) !== '23505') throw error;
-			return fail(409, { error: '专栏名称或 Slug 已存在' });
+			return fail(409, { error: m.admin_notes_topics_err_duplicate() });
 		}
 		return { success: true };
 	},
@@ -93,11 +94,11 @@ export const actions: Actions = {
 		const icon = str(form, 'icon').trim();
 		const sortRaw = str(form, 'sortOrder').trim();
 
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少专栏 ID' });
-		if (!name) return fail(400, { error: '专栏名称不能为空' });
-		if (!slug) return fail(400, { error: 'Slug 不能为空' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_notes_topics_err_missing_id() });
+		if (!name) return fail(400, { error: m.admin_notes_topics_err_name_required() });
+		if (!slug) return fail(400, { error: m.admin_notes_topics_err_slug_required() });
 		if (icon !== '' && !(NAV_ICON_NAMES as readonly string[]).includes(icon)) {
-			return fail(400, { error: '图标不在白名单内（前台不会渲染）' });
+			return fail(400, { error: m.admin_notes_topics_err_icon_whitelist() });
 		}
 		const sortOrder = /^-?\d+$/.test(sortRaw) ? Number(sortRaw) : 0;
 
@@ -110,10 +111,10 @@ export const actions: Actions = {
 				.returning({ id: topics.id });
 		} catch (error) {
 			if (pgErrorCode(error) !== '23505') throw error;
-			return fail(409, { error: '专栏名称或 Slug 已存在' });
+			return fail(409, { error: m.admin_notes_topics_err_duplicate() });
 		}
 		// A vanished row must not answer success (round-7 review finding).
-		if (updated.length === 0) return fail(404, { error: '专栏不存在' });
+		if (updated.length === 0) return fail(404, { error: m.admin_notes_topics_err_not_found() });
 		return { success: true };
 	},
 
@@ -123,8 +124,9 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = str(form, 'id');
 		const direction = str(form, 'direction');
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少专栏 ID' });
-		if (direction !== 'up' && direction !== 'down') return fail(400, { error: '方向无效' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_notes_topics_err_missing_id() });
+		if (direction !== 'up' && direction !== 'down')
+			return fail(400, { error: m.admin_notes_topics_err_bad_direction() });
 
 		const result = await db.transaction(async (tx) => {
 			const ordered = await tx
@@ -147,7 +149,8 @@ export const actions: Actions = {
 			return { kind: 'moved' as const };
 		});
 
-		if (result.kind === 'not-found') return fail(404, { error: '专栏不存在' });
+		if (result.kind === 'not-found')
+			return fail(404, { error: m.admin_notes_topics_err_not_found() });
 		return { success: true };
 	},
 
@@ -155,7 +158,7 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = str(form, 'id');
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少专栏 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_notes_topics_err_missing_id() });
 
 		// The notes FK is SET NULL, so the "still owns notes" refusal must be
 		// explicit here (categories mirror the same intent with a RESTRICT FK).
@@ -180,10 +183,11 @@ export const actions: Actions = {
 			return { kind: 'deleted' as const };
 		});
 
-		if (result.kind === 'not-found') return fail(404, { error: '专栏不存在' });
+		if (result.kind === 'not-found')
+			return fail(404, { error: m.admin_notes_topics_err_not_found() });
 		if (result.kind === 'blocked') {
 			return fail(409, {
-				error: `该专栏下仍有 ${result.total} 篇手记，无法删除（可先将手记改到其他专栏）`
+				error: m.admin_notes_topics_err_in_use({ count: result.total })
 			});
 		}
 		return { success: true };

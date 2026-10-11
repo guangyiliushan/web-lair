@@ -13,6 +13,7 @@
 	import { afterNavigate, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import IconSearch from '@tabler/icons-svelte-runes/icons/search';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
@@ -35,9 +36,9 @@
 		const params = page.url.searchParams;
 		const message =
 			params.get('trashed') === '1'
-				? '已移入回收站'
+				? m.admin_notes_flash_trashed()
 				: params.get('discarded') === '1'
-					? '草稿已丢弃'
+					? m.admin_posts_edit_flash_discarded()
 					: null;
 		if (!message) return;
 		flash = message;
@@ -50,11 +51,11 @@
 	});
 
 	const STATUS_LABELS: Record<string, string> = {
-		published: '已发布',
-		draft: '草稿',
-		private: '私密',
-		scheduled: '定时',
-		trash: '回收站'
+		published: m.admin_posts_status_published(),
+		draft: m.admin_posts_status_draft(),
+		private: m.admin_notes_status_private(),
+		scheduled: m.admin_posts_status_scheduled(),
+		trash: m.admin_posts_status_trash()
 	};
 
 	/**
@@ -65,7 +66,7 @@
 	const FILTERABLE_STATUSES = ['published', 'draft', 'private', 'trash'] as const;
 
 	const currentTopic = $derived(
-		data.topics.find((t) => t.id === data.filters.topic)?.name ?? '全部专栏'
+		data.topics.find((t) => t.id === data.filters.topic)?.name ?? m.admin_notes_all_topics()
 	);
 
 	function weatherLabel(code: number | null): string | null {
@@ -105,7 +106,7 @@
 </script>
 
 <svelte:head>
-	<title>手记管理 - Lair Admin</title>
+	<title>{m.admin_notes_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex flex-col gap-6">
@@ -136,8 +137,8 @@
 			<input
 				type="text"
 				name="keyword"
-				aria-label="搜索标题"
-				placeholder="搜索标题后回车"
+				aria-label={m.admin_notes_search_label()}
+				placeholder={m.admin_posts_search_placeholder()}
 				class="h-7 w-full border-0 bg-transparent pr-0 pl-8 text-xs outline-none placeholder:text-muted-foreground focus:ring-0"
 				value={data.filters.keyword}
 			/>
@@ -160,7 +161,7 @@
 				<DropdownMenu.Group>
 					<DropdownMenu.Item>
 						{#snippet child({ props })}
-							<a href={queryHref({ topic: undefined })} {...props}>全部专栏</a>
+							<a href={queryHref({ topic: undefined })} {...props}>{m.admin_notes_all_topics()}</a>
 						{/snippet}
 					</DropdownMenu.Item>
 					{#each data.topics as topic (topic.id)}
@@ -185,7 +186,7 @@
 						<span class="truncate">
 							{(FILTERABLE_STATUSES as readonly string[]).includes(data.filters.status)
 								? STATUS_LABELS[data.filters.status]
-								: '全部状态'}
+								: m.admin_posts_filter_all_status()}
 						</span>
 						<IconChevronDown class="size-3.5 shrink-0 text-muted-foreground" />
 					</Button>
@@ -195,7 +196,9 @@
 				<DropdownMenu.Group>
 					<DropdownMenu.Item>
 						{#snippet child({ props })}
-							<a href={queryHref({ status: undefined })} {...props}>全部状态</a>
+							<a href={queryHref({ status: undefined })} {...props}
+								>{m.admin_posts_filter_all_status()}</a
+							>
 						{/snippet}
 					</DropdownMenu.Item>
 					{#each FILTERABLE_STATUSES as value (value)}
@@ -221,17 +224,17 @@
 	{#if data.notes.length === 0}
 		<Empty class="py-12">
 			<div class="flex flex-col items-center gap-1">
-				<h3 class="text-lg font-semibold tracking-tight">暂无手记</h3>
+				<h3 class="text-lg font-semibold tracking-tight">{m.admin_notes_empty()}</h3>
 				<p class="text-sm text-muted-foreground">
 					{data.filters.keyword || data.filters.status || data.filters.topic
-						? '没有符合条件的记录，试试清除筛选。'
-						: '还没有创建任何手记，点击上方按钮开始记录吧'}
+						? m.admin_notes_empty_filtered()
+						: m.admin_notes_empty_all()}
 				</p>
 			</div>
 			<div class="mt-4">
 				<Button href="/admin/notes/edit">
 					<IconPlus data-icon="inline-start" />
-					新建手记
+					{m.admin_notes_new()}
 				</Button>
 			</div>
 		</Empty>
@@ -248,24 +251,26 @@
 											href="/admin/notes/edit?id={note.id}"
 											class="line-clamp-2 block max-w-lg font-medium hover:text-primary lg:line-clamp-none lg:truncate"
 										>
-											{note.title || '(无标题)'}
+											{note.title || m.admin_posts_untitled()}
 										</a>
 										<Badge variant="outline" class="shrink-0 text-xs">{note.lang}</Badge>
 										{#if note.hasDraft}
-											<Badge variant="secondary" class="shrink-0 text-xs">有未发布改动</Badge>
+											<Badge variant="secondary" class="shrink-0 text-xs"
+												>{m.admin_posts_unpublished_changes()}</Badge
+											>
 										{/if}
 										{#if note.locked}
 											<IconLock
 												class="size-3.5 shrink-0 text-muted-foreground"
 												role="img"
-												aria-label="已加密"
+												aria-label={m.notes_locked()}
 											/>
 										{/if}
 										{#if note.pinned}
 											<IconPin
 												class="size-3.5 shrink-0 text-primary/70"
 												role="img"
-												aria-label="已置顶"
+												aria-label={m.admin_notes_pinned()}
 											/>
 										{/if}
 									</div>
@@ -352,7 +357,7 @@
 										size="icon"
 										class="size-8"
 										href="/admin/notes/edit?id={note.id}"
-										aria-label="编辑"
+										aria-label={m.admin_common_edit()}
 									>
 										<IconPencil class="size-4" />
 									</Button>
@@ -372,7 +377,7 @@
 														{#snippet child({ props })}
 															<a href="/admin/notes/edit?id={note.id}" {...props}>
 																<IconPencil data-icon="inline-start" />
-																编辑
+																{m.admin_common_edit()}
 															</a>
 														{/snippet}
 													</DropdownMenu.Item>
@@ -381,7 +386,7 @@
 															window.open(`/${note.lang}/notes/${note.slug}`, '_blank')}
 													>
 														<IconExternalLink data-icon="inline-start" />
-														在新窗口打开
+														{m.admin_posts_open_new_tab()}
 													</DropdownMenu.Item>
 												</DropdownMenu.Group>
 											</DropdownMenu.Content>
@@ -398,16 +403,22 @@
 		<!-- 分页 -->
 		<div class="flex items-center justify-between text-xs text-muted-foreground">
 			<span>
-				共 {data.totalCount} 篇{data.totalCount > 0 ? ` · 显示 ${showFrom}–${showTo}` : ''}
+				{m.admin_notes_total({ count: data.totalCount })}{data.totalCount > 0
+					? m.admin_posts_showing_range({ from: showFrom, to: showTo })
+					: ''}
 			</span>
 			{#if totalPages > 1}
 				<div class="flex items-center gap-2">
 					{#if data.page > 1}
-						<Button variant="outline" size="sm" href={pageHref(data.page - 1)}>上一页</Button>
+						<Button variant="outline" size="sm" href={pageHref(data.page - 1)}
+							>{m.admin_common_prev()}</Button
+						>
 					{/if}
 					<span>{data.page} / {totalPages}</span>
 					{#if data.page < totalPages}
-						<Button variant="outline" size="sm" href={pageHref(data.page + 1)}>下一页</Button>
+						<Button variant="outline" size="sm" href={pageHref(data.page + 1)}
+							>{m.admin_common_next()}</Button
+						>
 					{/if}
 				</div>
 			{/if}

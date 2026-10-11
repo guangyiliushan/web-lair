@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import type { ActionResult } from '@sveltejs/kit';
 	import type { PageData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -100,7 +101,7 @@
 </script>
 
 <svelte:head>
-	<title>专栏管理 - Lair Admin</title>
+	<title>{m.admin_notes_topics_title()} - Lair Admin</title>
 </svelte:head>
 
 {#if form?.error}
@@ -108,7 +109,7 @@
 		role="alert"
 		class="mb-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
 	>
-		<span class="shrink-0 font-medium">无法完成:</span>
+		<span class="shrink-0 font-medium">{m.admin_posts_edit_validation_failed()}</span>
 		<span class="min-w-0">{form.error}</span>
 	</div>
 {/if}
@@ -124,15 +125,15 @@
 					size="icon"
 					class="size-8"
 					onclick={backToList}
-					aria-label="返回列表"
+					aria-label={m.admin_common_back_to_list()}
 				>
 					<IconArrowLeft data-icon="inline-start" />
 				</Button>
-				<span class="text-sm font-medium">专栏详情</span>
+				<span class="text-sm font-medium">{m.admin_notes_topics_detail()}</span>
 			</div>
 			<div class="flex shrink-0 items-center gap-2">
 				<Button variant="outline" size="sm" onclick={openEdit}>
-					<IconPencil data-icon="inline-start" />编辑
+					<IconPencil data-icon="inline-start" />{m.admin_common_edit()}
 				</Button>
 				<form method="POST" action="?/delete" use:enhance>
 					<input type="hidden" name="id" value={topic.id} />
@@ -142,7 +143,7 @@
 						size="sm"
 						class="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
 					>
-						<IconTrash data-icon="inline-start" />删除
+						<IconTrash data-icon="inline-start" />{m.admin_common_delete()}
 					</Button>
 				</form>
 			</div>
@@ -166,7 +167,7 @@
 			</section>
 			<section>
 				<p class="rounded border bg-muted/50 px-4 py-6 text-center text-sm text-muted-foreground">
-					{data.noteCounts[topic.id] ?? 0} 篇手记来自此专栏
+					{m.admin_notes_topics_count_from({ count: data.noteCounts[topic.id] ?? 0 })}
 				</p>
 			</section>
 		</div>
@@ -174,19 +175,21 @@
 		<div class="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-4">
 			<div class="flex min-w-0 items-center gap-2">
 				<IconHash class="size-4 shrink-0 text-muted-foreground" />
-				<h2 class="truncate text-sm font-semibold">专栏列表</h2>
-				<span class="text-xs text-muted-foreground tabular-nums">{data.topics.length} 个</span>
+				<h2 class="truncate text-sm font-semibold">{m.admin_notes_topics_list()}</h2>
+				<span class="text-xs text-muted-foreground tabular-nums"
+					>{m.admin_notes_topics_count({ count: data.topics.length })}</span
+				>
 			</div>
 			<Button size="sm" variant="outline" onclick={openCreate}>
-				<IconPlus data-icon="inline-start" />新建
+				<IconPlus data-icon="inline-start" />{m.admin_common_new()}
 			</Button>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			{#if data.topics.length === 0}
 				<Empty class="py-12">
 					<div class="flex flex-col items-center gap-1">
-						<h3 class="text-lg font-semibold tracking-tight">暂无专栏</h3>
-						<p class="text-sm text-muted-foreground">创建专栏来归类你的手记</p>
+						<h3 class="text-lg font-semibold tracking-tight">{m.admin_notes_topics_empty()}</h3>
+						<p class="text-sm text-muted-foreground">{m.admin_notes_topics_empty_desc()}</p>
 					</div>
 				</Empty>
 			{:else}
@@ -213,7 +216,7 @@
 							</p>
 						</div>
 						<span class="text-xs text-muted-foreground tabular-nums"
-							>{data.noteCounts[topic.id] ?? 0} 篇</span
+							>{m.admin_notes_topics_note_count({ count: data.noteCounts[topic.id] ?? 0 })}</span
 						>
 					</button>
 				{/each}
@@ -227,10 +230,14 @@
 	<MasterDetail.Root>
 		<!-- ===== 左侧：专栏列表 ===== -->
 		<MasterDetail.Pane side="master" class="flex-1 lg:max-w-[340px] xl:max-w-[380px]">
-			<MasterDetail.Header icon={IconHash} title="专栏列表" count={data.topics.length}>
+			<MasterDetail.Header
+				icon={IconHash}
+				title={m.admin_notes_topics_list()}
+				count={data.topics.length}
+			>
 				<Button size="sm" variant="outline" onclick={openCreate}>
 					<IconPlus data-icon="inline-start" />
-					新建
+					{m.admin_common_new()}
 				</Button>
 			</MasterDetail.Header>
 
@@ -238,8 +245,8 @@
 				{#if data.topics.length === 0}
 					<Empty class="py-12">
 						<div class="flex flex-col items-center gap-1">
-							<h3 class="text-lg font-semibold tracking-tight">暂无专栏</h3>
-							<p class="text-sm text-muted-foreground">创建专栏来归类你的手记</p>
+							<h3 class="text-lg font-semibold tracking-tight">{m.admin_notes_topics_empty()}</h3>
+							<p class="text-sm text-muted-foreground">{m.admin_notes_topics_empty_desc()}</p>
 						</div>
 					</Empty>
 				{:else}
@@ -264,7 +271,9 @@
 									</p>
 								</div>
 								<span class="text-xs text-muted-foreground tabular-nums"
-									>{data.noteCounts[topic.id] ?? 0} 篇</span
+									>{m.admin_notes_topics_note_count({
+										count: data.noteCounts[topic.id] ?? 0
+									})}</span
 								>
 							</MasterDetail.Item>
 						{/each}
@@ -277,26 +286,38 @@
 		<MasterDetail.Pane side="detail" class="bg-surface-card hidden lg:flex">
 			{#if selectedTopic}
 				{@const topic = selectedTopic}
-				<MasterDetail.Header title="专栏详情">
+				<MasterDetail.Header title={m.admin_notes_topics_detail()}>
 					<div class="flex items-center gap-1">
 						<form method="POST" action="?/move" use:enhance>
 							<input type="hidden" name="id" value={topic.id} />
 							<input type="hidden" name="direction" value="up" />
-							<Button type="submit" variant="ghost" size="icon" class="size-8" aria-label="上移">
+							<Button
+								type="submit"
+								variant="ghost"
+								size="icon"
+								class="size-8"
+								aria-label={m.admin_notes_topics_move_up()}
+							>
 								<IconArrowUp class="size-4" />
 							</Button>
 						</form>
 						<form method="POST" action="?/move" use:enhance>
 							<input type="hidden" name="id" value={topic.id} />
 							<input type="hidden" name="direction" value="down" />
-							<Button type="submit" variant="ghost" size="icon" class="size-8" aria-label="下移">
+							<Button
+								type="submit"
+								variant="ghost"
+								size="icon"
+								class="size-8"
+								aria-label={m.admin_notes_topics_move_down()}
+							>
 								<IconArrowDown class="size-4" />
 							</Button>
 						</form>
 					</div>
 					<Button variant="outline" size="sm" onclick={openEdit}>
 						<IconPencil data-icon="inline-start" />
-						编辑
+						{m.admin_common_edit()}
 					</Button>
 					<form method="POST" action="?/delete" use:enhance>
 						<input type="hidden" name="id" value={topic.id} />
@@ -307,7 +328,7 @@
 							class="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
 						>
 							<IconTrash data-icon="inline-start" />
-							删除
+							{m.admin_common_delete()}
 						</Button>
 					</form>
 				</MasterDetail.Header>
@@ -330,7 +351,10 @@
 								</p>
 								<p class="mt-3 text-sm text-muted-foreground">{topic.description}</p>
 								<p class="mt-2 text-xs text-muted-foreground">
-									图标：{topic.icon ?? '（未设置）'} · 排序值：{topic.sortOrder}
+									{m.admin_notes_topics_meta({
+										icon: topic.icon ?? m.admin_notes_topics_not_set(),
+										sortOrder: topic.sortOrder
+									})}
 								</p>
 							</div>
 						</div>
@@ -340,7 +364,7 @@
 						<p
 							class="rounded border bg-muted/50 px-4 py-6 text-center text-sm text-muted-foreground"
 						>
-							{data.noteCounts[topic.id] ?? 0} 篇手记来自此专栏
+							{m.admin_notes_topics_count_from({ count: data.noteCounts[topic.id] ?? 0 })}
 						</p>
 					</section>
 				</div>
@@ -348,8 +372,8 @@
 				<div class="flex flex-1 items-center justify-center p-8">
 					<div class="flex flex-col items-center gap-2 text-center">
 						<IconHash class="size-10 text-muted-foreground/40" />
-						<h3 class="text-lg font-semibold tracking-tight">选择一个专栏</h3>
-						<p class="text-sm text-muted-foreground">从左侧列表中选择专栏以查看详情</p>
+						<h3 class="text-lg font-semibold tracking-tight">{m.admin_notes_topics_select()}</h3>
+						<p class="text-sm text-muted-foreground">{m.admin_notes_topics_select_desc()}</p>
 					</div>
 				</div>
 			{/if}
@@ -361,9 +385,15 @@
 <Dialog.Root bind:open={dialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>{dialogMode === 'create' ? '新建专栏' : '编辑专栏'}</Dialog.Title>
+			<Dialog.Title
+				>{dialogMode === 'create'
+					? m.admin_notes_topics_create()
+					: m.admin_notes_topics_edit()}</Dialog.Title
+			>
 			<Dialog.Description>
-				{dialogMode === 'create' ? '创建一个新的手记专栏' : '修改专栏信息'}
+				{dialogMode === 'create'
+					? m.admin_notes_topics_create_desc()
+					: m.admin_notes_topics_edit_desc()}
 			</Dialog.Description>
 		</Dialog.Header>
 		{#if form?.error}
@@ -379,11 +409,11 @@
 			{/if}
 			<div class="flex flex-col gap-4 px-6 pb-4">
 				<div class="flex flex-col gap-1.5">
-					<label for="topic-name" class="text-sm font-medium">名称</label>
+					<label for="topic-name" class="text-sm font-medium">{m.admin_notes_topics_name()}</label>
 					<Input
 						id="topic-name"
 						name="name"
-						placeholder="专栏名称"
+						placeholder={m.admin_notes_topics_name_ph()}
 						bind:value={editName}
 						oninput={onNameInput}
 						required
@@ -400,17 +430,19 @@
 					/>
 				</div>
 				<div class="flex flex-col gap-1.5">
-					<label for="topic-description" class="text-sm font-medium">描述</label>
+					<label for="topic-description" class="text-sm font-medium"
+						>{m.admin_notes_topics_description()}</label
+					>
 					<Textarea
 						id="topic-description"
 						name="description"
-						placeholder="专栏简介（可留空）"
+						placeholder={m.admin_notes_topics_desc_ph()}
 						bind:value={editDescription}
 						rows={3}
 					/>
 				</div>
 				<div class="flex flex-col gap-1.5">
-					<label for="topic-icon" class="text-sm font-medium">图标（Tabler 名）</label>
+					<label for="topic-icon" class="text-sm font-medium">{m.admin_notes_topics_icon()}</label>
 					<Input
 						id="topic-icon"
 						name="icon"
@@ -423,17 +455,21 @@
 							<option value={iconName}></option>
 						{/each}
 					</datalist>
-					<p class="text-xs text-muted-foreground">前台仅渲染白名单内的图标，其余留空显示。</p>
+					<p class="text-xs text-muted-foreground">{m.admin_notes_topics_icon_desc()}</p>
 				</div>
 				<div class="flex flex-col gap-1.5">
-					<label for="topic-sort" class="text-sm font-medium">排序值</label>
+					<label for="topic-sort" class="text-sm font-medium">{m.admin_notes_topics_sort()}</label>
 					<Input id="topic-sort" name="sortOrder" type="number" bind:value={editSortOrder} />
-					<p class="text-xs text-muted-foreground">数值小的在前；也可用详情页 ▲/▼ 调整。</p>
+					<p class="text-xs text-muted-foreground">{m.admin_notes_topics_sort_desc()}</p>
 				</div>
 			</div>
 			<Dialog.Footer>
-				<Button type="button" variant="outline" onclick={() => (dialogOpen = false)}>取消</Button>
-				<Button type="submit">{dialogMode === 'create' ? '创建' : '保存'}</Button>
+				<Button type="button" variant="outline" onclick={() => (dialogOpen = false)}
+					>{m.admin_common_cancel()}</Button
+				>
+				<Button type="submit"
+					>{dialogMode === 'create' ? m.admin_common_create() : m.admin_common_save()}</Button
+				>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>

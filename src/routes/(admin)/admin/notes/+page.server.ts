@@ -5,6 +5,7 @@ import { requireAdminRole } from '$lib/server/authz';
 import { draftsForNotes } from '$lib/server/services/note-drafts';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 const PAGE_SIZE = 20;
 // `scheduled` stays out of the N1 UI (registered) - it is still reachable
@@ -72,10 +73,15 @@ export const load: PageServerLoad = async ({ url }) => {
 	const withDrafts = await draftsForNotes(rows.map((row) => row.id));
 
 	return {
-		headerTitle: '手记',
+		headerTitle: m.admin_nav_notes(),
 		headerActions: [
-			{ label: '专栏', iconName: 'external-link', href: '/admin/notes/topics' },
-			{ label: '新建', iconName: 'plus', variant: 'default', href: '/admin/notes/edit' }
+			{ label: m.admin_notes_topics(), iconName: 'external-link', href: '/admin/notes/topics' },
+			{
+				label: m.admin_common_new(),
+				iconName: 'plus',
+				variant: 'default',
+				href: '/admin/notes/edit'
+			}
 		],
 		notes: rows.map((row) => ({ ...row, hasDraft: withDrafts.has(row.id) })),
 		totalCount: totals[0]?.count ?? 0,

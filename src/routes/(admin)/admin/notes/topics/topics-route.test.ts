@@ -29,6 +29,12 @@ vi.mock('$lib/server/authz', () => ({ requireAdminRole: vi.fn() }));
 vi.mock('$lib/server/db/pg-error', () => ({ pgErrorCode: pg.pgErrorCode }));
 
 import { actions } from './+page.server';
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
+
+// Action copy comes from the message catalog; pin the locale so assertions
+// stay in sync with the zh-cn catalog (same convention as the e2e fixtures
+// that assert Chinese copy).
+overwriteGetLocale(() => 'zh-cn');
 
 const TOPIC_ID = '44444444-4444-4444-4444-444444444444';
 
