@@ -1,10 +1,11 @@
 import { localizeHref, locales } from '$lib/paraglide/runtime';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Admin comment-queue target display (comment P3a, spec §9): resolve the
  * exclusive-arc target of a queue row into a type label, a human title and a
- * best-effort front link. Admin-only (the labels are hardcoded Chinese per
- * the admin surface convention) - it lives next to the admin components so
+ * best-effort front link. Admin-only: the type labels come from the message
+ * catalog (A2) - it lives next to the admin components so
  * site code does not grow a second copy.
  */
 export type CommentTargetKind = 'post' | 'note' | 'page';
@@ -30,10 +31,11 @@ export interface CommentTargetDisplay {
 	href: string | null;
 }
 
-const LABELS: Record<CommentTargetKind, string> = {
-	post: '博文',
-	note: '笔记',
-	page: '页面'
+// Message getters, not pre-evaluated strings: the locale resolves per request.
+const LABELS: Record<CommentTargetKind, () => string> = {
+	post: m.admin_nav_posts,
+	note: m.admin_nav_notes,
+	page: m.admin_nav_pages
 };
 
 /**
@@ -51,7 +53,7 @@ function firstText(value: Partial<Record<string, string>> | null): string | null
 
 /** Keep a short id hint: it is the only manual-location clue for a torn arc. */
 function missingTitle(id: string): string {
-	return `（未知 · ${id.slice(0, 8)}…）`;
+	return m.admin_comments_unknown_target({ id: id.slice(0, 8) });
 }
 
 /**
@@ -68,21 +70,21 @@ function frontHref(path: string, lang: string | null): string {
 export function commentTargetDisplay(entry: CommentTargetRow): CommentTargetDisplay | null {
 	if (entry.postId) {
 		return {
-			label: LABELS.post,
+			label: LABELS.post(),
 			title: entry.postTitle ?? missingTitle(entry.postId),
 			href: entry.postSlug ? frontHref(`/posts/${entry.postSlug}`, entry.postLang) : null
 		};
 	}
 	if (entry.noteId) {
 		return {
-			label: LABELS.note,
+			label: LABELS.note(),
 			title: entry.noteTitle ?? missingTitle(entry.noteId),
 			href: entry.noteSlug ? frontHref(`/notes/${entry.noteSlug}`, entry.noteLang) : null
 		};
 	}
 	if (entry.pageId) {
 		return {
-			label: LABELS.page,
+			label: LABELS.page(),
 			title: firstText(entry.pageTitle) ?? missingTitle(entry.pageId),
 			href: entry.pageSlug ? `/${entry.pageSlug}` : null
 		};

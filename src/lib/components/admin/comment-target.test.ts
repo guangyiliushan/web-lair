@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
 import { commentTargetDisplay, type CommentTargetRow } from './comment-target';
+
+// The type labels come from the message catalog; pin the locale so the label
+// expectations stay in sync with the zh-cn catalog (same convention as the
+// e2e fixtures that assert Chinese copy).
+overwriteGetLocale(() => 'zh-cn');
 
 function row(overrides: Partial<CommentTargetRow>): CommentTargetRow {
 	return {
@@ -56,7 +62,7 @@ describe('commentTargetDisplay', () => {
 			commentTargetDisplay(
 				row({ noteId: 'n1', noteTitle: '日记', noteSlug: 'diary-1', noteLang: 'ja' })
 			)
-		).toEqual({ label: '笔记', title: '日记', href: '/ja/notes/diary-1' });
+		).toEqual({ label: '手记', title: '日记', href: '/ja/notes/diary-1' });
 	});
 
 	it('flattens the pages jsonb title in the paraglide locale order', () => {

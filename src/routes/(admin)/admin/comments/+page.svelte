@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 	import IconInbox from '@tabler/icons-svelte-runes/icons/inbox';
@@ -15,9 +16,9 @@
 	let { data, form }: PageProps = $props();
 
 	const tabs = [
-		{ id: 'pending', label: '待审' },
-		{ id: 'approved', label: '已通过' },
-		{ id: 'rejected', label: '已拒绝' }
+		{ id: 'pending', label: m.admin_comments_tab_pending() },
+		{ id: 'approved', label: m.admin_comments_tab_approved() },
+		{ id: 'rejected', label: m.admin_comments_tab_rejected() }
 	] as const;
 
 	function formatDate(value: Date | string | null): string {
@@ -32,7 +33,7 @@
 </script>
 
 <svelte:head>
-	<title>评论管理 - Lair Admin</title>
+	<title>{m.admin_comments_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col bg-background">
@@ -73,8 +74,10 @@
 	{/if}
 	{#if form && 'reviewed' in form}
 		<p class="px-4 py-2 text-sm text-muted-foreground">
-			{form.decision === 'approve' ? '已通过' : '已拒绝'}
-			{form.reviewed} 条
+			{form.decision === 'approve'
+				? m.admin_comments_tab_approved()
+				: m.admin_comments_tab_rejected()}
+			{m.admin_comments_reviewed_count({ count: form.reviewed ?? 0 })}
 		</p>
 	{/if}
 
@@ -87,9 +90,11 @@
 					<IconInbox class="size-5 text-muted-foreground" />
 				</span>
 				<div class="space-y-1">
-					<div class="text-base font-semibold">全部处理完毕</div>
+					<div class="text-base font-semibold">{m.admin_comments_all_done()}</div>
 					<div class="text-sm text-muted-foreground">
-						{data.state === 'pending' ? '没有待审评论。' : '这里还没有记录。'}
+						{data.state === 'pending'
+							? m.admin_comments_empty_pending()
+							: m.admin_comments_empty_records()}
 					</div>
 				</div>
 			</div>
@@ -114,7 +119,9 @@
 								>
 									{avatarText(entry.author)}
 								</span>
-								<span class="truncate text-sm font-medium">{entry.author ?? '匿名'}</span>
+								<span class="truncate text-sm font-medium"
+									>{entry.author ?? m.admin_comments_anonymous()}</span
+								>
 							</div>
 							<p class="mt-1.5 text-sm whitespace-pre-wrap text-muted-foreground">{entry.text}</p>
 							<div
@@ -146,10 +153,11 @@
 										</span>
 									{/if}
 								{:else}
-									<span>其它目标</span>
+									<span>{m.admin_comments_other_targets()}</span>
 								{/if}
 								{#if entry.reviewedAt}
-									<span>审于 {formatDate(entry.reviewedAt)}</span>
+									<span>{m.admin_comments_reviewed_at({ date: formatDate(entry.reviewedAt) })}</span
+									>
 								{/if}
 							</div>
 						</div>
@@ -162,7 +170,7 @@
 					class="bg-surface-card flex shrink-0 items-center justify-end gap-2 border-t px-4 py-3"
 				>
 					<Button type="submit" name="decision" value="approve" size="sm" class="gap-1">
-						<IconCheck class="size-4" /> 通过
+						<IconCheck class="size-4" />{m.admin_comments_approve()}
 					</Button>
 					<Button
 						type="submit"
@@ -172,7 +180,7 @@
 						size="sm"
 						class="gap-1 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
 					>
-						<IconTrash class="size-4" /> 拒绝
+						<IconTrash class="size-4" />{m.admin_comments_reject()}
 					</Button>
 				</div>
 			{/if}
