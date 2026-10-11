@@ -5,6 +5,7 @@
 	import { page } from '$app/state';
 	import type { ActionResult } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import * as Select from '$lib/components/ui/select';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
@@ -296,7 +297,7 @@
 				// A guard bounced us (session expired): stop the retry loop and
 				// offer a re-login instead of blaming the network forever.
 				saveState = 'error';
-				saveError = '登录已失效，请重新登录后继续（修改尚未保存）';
+				saveError = m.admin_posts_edit_err_session_expired();
 				reauthUrl = result.location ?? null;
 			} else if (result.type === 'success') {
 				const d = result.data as {
@@ -336,22 +337,25 @@
 				};
 				if (result.status === 409) {
 					saveState = 'conflict';
-					conflictMessage = d.message ?? '内容已在其他窗口更新';
+					conflictMessage = d.message ?? m.admin_posts_edit_conflict_short();
 				} else {
 					// Prefer the graded field errors (e.g. a topic deleted while
 					// the editor held its id) over the generic message.
 					const graded = Object.values(d.errors ?? {}).filter(Boolean);
 					saveState = 'error';
-					saveError = graded.length > 0 ? graded.join('；') : (d.message ?? '保存失败');
+					saveError =
+						graded.length > 0
+							? graded.join(m.admin_posts_edit_error_join())
+							: (d.message ?? m.admin_posts_edit_err_save_failed());
 				}
 			} else {
 				saveState = 'error';
-				saveError = '网络异常，稍后将重试';
+				saveError = m.admin_posts_edit_err_network();
 				scheduleSave(THROTTLE_RETRY_MS);
 			}
 		} catch {
 			saveState = 'error';
-			saveError = '网络异常，稍后将重试';
+			saveError = m.admin_posts_edit_err_network();
 			scheduleSave(THROTTLE_RETRY_MS);
 		} finally {
 			inFlight = false;
@@ -415,10 +419,10 @@
 	afterNavigate(() => {
 		const params = page.url.searchParams;
 		let message: string | null = null;
-		if (params.get('published') === '1') message = '已发布';
-		else if (params.get('discarded') === '1') message = '草稿已丢弃';
-		else if (params.get('private') === '1') message = '已转为私密';
-		else if (params.get('restored') === '1') message = '已从回收站恢复';
+		if (params.get('published') === '1') message = m.admin_posts_status_published();
+		else if (params.get('discarded') === '1') message = m.admin_posts_edit_flash_discarded();
+		else if (params.get('private') === '1') message = m.admin_notes_edit_flash_private();
+		else if (params.get('restored') === '1') message = m.admin_notes_edit_flash_restored();
 		if (!message) return;
 		flash = message;
 		if (flashTimer) clearTimeout(flashTimer);
@@ -440,31 +444,33 @@
 	const saveLabel = $derived.by(() => {
 		switch (saveState) {
 			case 'saving':
-				return '保存中…';
+				return m.admin_posts_edit_saving();
 			case 'saved':
 				return lastSavedAt
-					? `已保存 ${formatDateTime(lastSavedAt, { timeStyle: 'medium' })}`
-					: '已保存';
+					? m.admin_posts_edit_saved_at({
+							time: formatDateTime(lastSavedAt, { timeStyle: 'medium' })
+						})
+					: m.admin_posts_edit_saved();
 			case 'dirty':
-				return '未保存的修改';
+				return m.admin_posts_edit_unsaved();
 			case 'throttled':
-				return '自动保存节流中，稍后重试…';
+				return m.admin_posts_edit_autosave_throttled();
 			case 'conflict':
-				return '冲突：服务端已有更新';
+				return m.admin_posts_edit_conflict_detected();
 			case 'error':
-				return saveError ?? '保存失败';
+				return saveError ?? m.admin_posts_edit_err_save_failed();
 			default:
 				return null;
 		}
 	});
 
 	const statusText = $derived.by(() => {
-		if (!data.note) return '新手记';
-		if (data.note.status === 'published') return '已发布';
-		if (data.note.status === 'private') return '私密';
-		if (data.note.status === 'scheduled') return '定时发布';
-		if (data.note.status === 'trash') return '回收站';
-		return '草稿';
+		if (!data.note) return m.admin_notes_edit_new();
+		if (data.note.status === 'published') return m.admin_posts_status_published();
+		if (data.note.status === 'private') return m.admin_notes_status_private();
+		if (data.note.status === 'scheduled') return m.admin_notes_edit_status_scheduled();
+		if (data.note.status === 'trash') return m.admin_posts_status_trash();
+		return m.admin_posts_status_draft();
 	});
 
 	// Static option list: no reactive dependency, computed once per module.
@@ -538,7 +544,7 @@
 					<span class="truncate">
 						{statusText}
 						{#if data.note}
-							· 修改于
+							{m.admin_posts_edit_modified()}
 							{formatDateTime(new Date(data.note.updatedAt ?? data.note.createdAt), {
 								dateStyle: 'short',
 								timeStyle: 'short'
@@ -547,14 +553,16 @@
 					</span>
 					{#if data.note && !data.note.placeholder && data.note.status !== 'draft'}
 						{#if data.draft}
-							<Badge variant="secondary" class="shrink-0">有未发布改动</Badge>
+							<Badge variant="secondary" class="shrink-0"
+								>{m.admin_posts_unpublished_changes()}</Badge
+							>
 						{/if}
 					{/if}
 					{#if data.note?.locked}
-						<IconLock class="size-3.5 shrink-0" role="img" aria-label="已加密" />
+						<IconLock class="size-3.5 shrink-0" role="img" aria-label={m.notes_locked()} />
 					{/if}
 					{#if data.note?.pinAt}
-						<IconPin class="size-3.5 shrink-0" role="img" aria-label="已置顶" />
+						<IconPin class="size-3.5 shrink-0" role="img" aria-label={m.admin_notes_pinned()} />
 					{/if}
 					{#if flash}
 						<span
@@ -579,8 +587,8 @@
 						type="button"
 						onclick={() => (settingsOpen = true)}
 						class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-						aria-label="手记设置"
-						title="手记设置"
+						aria-label={m.admin_notes_edit_settings()}
+						title={m.admin_notes_edit_settings()}
 					>
 						<IconSettings class="size-3.5" />
 					</button>
@@ -593,7 +601,7 @@
 						disabled={saveState === 'saving' || saveState === 'conflict'}
 					>
 						<IconDeviceFloppy class="size-3" />
-						保存草稿
+						{m.admin_posts_edit_save_draft()}
 					</Button>
 					<Button
 						type="button"
@@ -603,7 +611,7 @@
 						disabled={publishing || saveState === 'conflict'}
 					>
 						<IconCloudUpload class="size-3" />
-						发布
+						{m.admin_posts_edit_publish()}
 					</Button>
 				</div>
 			</div>
@@ -615,7 +623,7 @@
 						<div class="flex flex-wrap items-center justify-between gap-2">
 							<span
 								>{conflictMessage ??
-									'内容已在其他窗口更新'}——编辑已暂停，请先载入服务端最新内容。</span
+									m.admin_posts_edit_conflict_short()}{m.admin_posts_edit_conflict_frozen_suffix()}</span
 							>
 							<Button
 								type="button"
@@ -623,7 +631,7 @@
 								size="sm"
 								onclick={() => void reloadFromServer()}
 							>
-								载入服务端最新
+								{m.admin_posts_edit_load_latest()}
 							</Button>
 						</div>
 					</Alert.Description>
@@ -635,14 +643,14 @@
 				<Alert.Root variant="destructive" class="mb-3">
 					<Alert.Description>
 						<div class="flex flex-wrap items-center justify-between gap-2">
-							<span>{saveError ?? '登录状态已失效'}</span>
+							<span>{saveError ?? m.admin_posts_edit_err_session_invalid()}</span>
 							<Button
 								type="button"
 								variant="outline"
 								size="sm"
 								onclick={() => window.location.assign(reauthUrl ?? '/')}
 							>
-								重新登录
+								{m.admin_posts_edit_relogin()}
 							</Button>
 						</div>
 					</Alert.Description>
@@ -655,8 +663,8 @@
 					role="alert"
 					class="mb-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
 				>
-					<span class="shrink-0 font-medium">无法完成:</span>
-					<span class="min-w-0">{activeErrors.join('；')}</span>
+					<span class="shrink-0 font-medium">{m.admin_posts_edit_validation_failed()}</span>
+					<span class="min-w-0">{activeErrors.join(m.admin_posts_edit_error_join())}</span>
 				</div>
 			{/if}
 
@@ -664,9 +672,9 @@
 			<div class="group">
 				<input
 					name="title"
-					aria-label="标题"
+					aria-label={m.admin_notes_edit_title_label()}
 					class="w-full border-0 bg-transparent px-0 py-0 text-3xl font-semibold tracking-tight text-neutral-950 outline-none placeholder:font-medium placeholder:text-neutral-300 dark:text-neutral-50 dark:placeholder:text-neutral-700"
-					placeholder="输入标题..."
+					placeholder={m.admin_posts_edit_title_placeholder()}
 					bind:value={title}
 					oninput={onTitleInput}
 				/>
@@ -676,13 +684,13 @@
 						type="button"
 						class="-ml-1 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-xs text-muted-foreground transition-opacity duration-150 outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-accent/15"
 						onclick={() => (slugDialogOpen = true)}
-						aria-label="添加 slug"
+						aria-label={m.admin_posts_edit_add_slug()}
 					>
-						<span class="truncate">{slug ? `/${slug}` : '+ 添加 slug'}</span>
+						<span class="truncate">{slug ? `/${slug}` : m.admin_posts_edit_add_slug_label()}</span>
 						<IconPencil class="size-3 shrink-0" />
 					</button>
 					{#if title && !slug}
-						<span class="text-xs text-destructive">发布前需要填写 slug</span>
+						<span class="text-xs text-destructive">{m.admin_notes_edit_slug_required_hint()}</span>
 					{/if}
 				</div>
 			</div>
@@ -696,7 +704,7 @@
 				{#key `${loadedKey}@${editorEpoch}`}
 					<MarkdownEditor
 						initialMarkdown={contentMarkdown}
-						placeholder="输入正文..."
+						placeholder={m.admin_notes_edit_body_placeholder()}
 						stickyToolbar={true}
 						borderless={true}
 						class="min-h-0 flex-1"
@@ -716,8 +724,8 @@
 		<Dialog.Overlay />
 		<Dialog.Content class="sm:max-w-md">
 			<Dialog.Header>
-				<Dialog.Title>设置 Slug</Dialog.Title>
-				<Dialog.Description>URL 友好的标识符，用于手记链接。</Dialog.Description>
+				<Dialog.Title>{m.admin_posts_edit_slug_dialog_title()}</Dialog.Title>
+				<Dialog.Description>{m.admin_notes_edit_slug_dialog_desc()}</Dialog.Description>
 			</Dialog.Header>
 			<div class="px-6 pb-2">
 				<Input
@@ -728,18 +736,20 @@
 					value={slug}
 					oninput={onSlugInput}
 				/>
-				<p class="mt-1.5 text-xs text-muted-foreground">仅限小写字母、数字、汉字和连字符</p>
+				<p class="mt-1.5 text-xs text-muted-foreground">{m.admin_notes_edit_slug_rule()}</p>
 				{#if slug}
-					<p class="mt-1.5 font-mono text-xs text-muted-foreground">预览: /notes/{slug}</p>
+					<p class="mt-1.5 font-mono text-xs text-muted-foreground">
+						{m.admin_notes_edit_slug_preview()}{slug}
+					</p>
 				{/if}
 			</div>
 			<Dialog.Footer>
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="outline" {...props}>取消</Button>
+						<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button onclick={() => (slugDialogOpen = false)}>确定</Button>
+				<Button onclick={() => (slugDialogOpen = false)}>{m.admin_common_confirm()}</Button>
 			</Dialog.Footer>
 		</Dialog.Content>
 	</Dialog.Portal>
@@ -751,13 +761,13 @@
 		<Sheet.Overlay />
 		<Sheet.Content side="right" class="w-full sm:max-w-sm">
 			<Sheet.Header>
-				<Sheet.Title>手记设置</Sheet.Title>
-				<Sheet.Description>配置手记的元数据信息。</Sheet.Description>
+				<Sheet.Title>{m.admin_notes_edit_settings()}</Sheet.Title>
+				<Sheet.Description>{m.admin_notes_edit_settings_desc()}</Sheet.Description>
 				<Sheet.Close
 					class="absolute top-4 right-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
 				>
 					<IconX class="size-4" />
-					<span class="sr-only">关闭</span>
+					<span class="sr-only">{m.admin_common_close()}</span>
 				</Sheet.Close>
 			</Sheet.Header>
 			<div class="flex flex-col gap-5 overflow-y-auto px-6 py-4">
@@ -765,17 +775,19 @@
 				<div class="flex flex-col gap-1.5">
 					<div class="flex items-center gap-1.5 text-sm font-medium">
 						<IconLanguage class="size-4 text-muted-foreground" />
-						语言
+						{m.admin_posts_edit_lang_label()}
 					</div>
 					{#if noteId}
 						<div class="flex items-center gap-2 text-sm">
 							<Badge variant="outline">{lang}</Badge>
-							<span class="text-xs text-muted-foreground">创建后不可更改</span>
+							<span class="text-xs text-muted-foreground">{m.admin_posts_edit_lang_locked()}</span>
 						</div>
 					{:else}
 						<Select.Root type="single" bind:value={lang as never}>
-							<Select.Trigger id="settings-lang" aria-label="语言" class="w-full"
-								>{lang}</Select.Trigger
+							<Select.Trigger
+								id="settings-lang"
+								aria-label={m.admin_posts_edit_lang_label()}
+								class="w-full">{lang}</Select.Trigger
 							>
 							<Select.Portal>
 								<Select.Content class="z-[60]">
@@ -792,7 +804,7 @@
 				<div class="flex flex-col gap-1.5">
 					<label for="settings-topic" class="flex items-center gap-1.5 text-sm font-medium">
 						<IconCategory class="size-4 text-muted-foreground" />
-						专栏
+						{m.admin_notes_topics()}
 					</label>
 					<Select.Root
 						type="single"
@@ -801,12 +813,13 @@
 					>
 						<Select.Trigger id="settings-topic" class="w-full">
 							{topicId
-								? (data.topics.find((t) => t.id === topicId)?.name ?? '选择专栏')
-								: '（不设置）'}
+								? (data.topics.find((t) => t.id === topicId)?.name ??
+									m.admin_notes_edit_topic_select())
+								: m.admin_notes_edit_none()}
 						</Select.Trigger>
 						<Select.Portal>
 							<Select.Content class="z-[60]">
-								<Select.Item value={NONE}>（不设置）</Select.Item>
+								<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
 								{#each data.topics as topic (topic.id)}
 									<Select.Item value={topic.id}>{topic.name}</Select.Item>
 								{/each}
@@ -822,7 +835,7 @@
 				<div class="flex flex-col gap-1.5">
 					<label for="settings-mood" class="flex items-center gap-1.5 text-sm font-medium">
 						<IconMoodSmile class="size-4 text-muted-foreground" />
-						心情
+						{m.admin_notes_edit_mood()}
 					</label>
 					<Select.Root
 						type="single"
@@ -832,11 +845,11 @@
 						<Select.Trigger id="settings-mood" class="w-full">
 							{mood
 								? (NOTE_MOOD_LABELS[mood as (typeof NOTE_MOODS)[number]]?.['zh-cn'] ?? mood)
-								: '（不设置）'}
+								: m.admin_notes_edit_none()}
 						</Select.Trigger>
 						<Select.Portal>
 							<Select.Content class="z-[60]">
-								<Select.Item value={NONE}>（不设置）</Select.Item>
+								<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
 								{#each NOTE_MOODS as level (level)}
 									<Select.Item value={level}>{NOTE_MOOD_LABELS[level]['zh-cn']}</Select.Item>
 								{/each}
@@ -849,7 +862,7 @@
 				<div class="flex flex-col gap-1.5">
 					<div class="flex items-center gap-1.5 text-sm font-medium">
 						<IconMoodSmile class="size-4 text-muted-foreground" />
-						情绪
+						{m.admin_notes_edit_emotion()}
 					</div>
 					{#if noteId}
 						<form method="POST" action="?/emotions" use:enhance={rowActionHandler}>
@@ -869,12 +882,12 @@
 								{/each}
 							</div>
 							<Button type="submit" variant="outline" size="sm" class="mt-2 w-full">
-								保存情绪选择
+								{m.admin_notes_edit_emotion_save()}
 							</Button>
-							<p class="mt-1 text-xs text-muted-foreground">发布前后均可调整；仅作展示标签。</p>
+							<p class="mt-1 text-xs text-muted-foreground">{m.admin_notes_edit_emotion_hint()}</p>
 						</form>
 					{:else}
-						<p class="text-xs text-muted-foreground">首次保存后即可设置情绪标签。</p>
+						<p class="text-xs text-muted-foreground">{m.admin_notes_edit_emotion_hint_unsaved()}</p>
 					{/if}
 				</div>
 
@@ -882,7 +895,7 @@
 				<div class="flex flex-col gap-1.5">
 					<label for="settings-weather" class="flex items-center gap-1.5 text-sm font-medium">
 						<IconCloudRain class="size-4 text-muted-foreground" />
-						天气
+						{m.admin_notes_edit_weather()}
 					</label>
 					<Select.Root
 						type="single"
@@ -892,11 +905,11 @@
 						<Select.Trigger id="settings-weather" class="w-full">
 							{weatherCode
 								? (weatherOptions.find((o) => o.value === weatherCode)?.label ?? weatherCode)
-								: '（不设置）'}
+								: m.admin_notes_edit_none()}
 						</Select.Trigger>
 						<Select.Portal>
 							<Select.Content class="z-[60]">
-								<Select.Item value={NONE}>（不设置）</Select.Item>
+								<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
 								{#each weatherOptions as option (option.value)}
 									<Select.Item value={option.value}>{option.label}</Select.Item>
 								{/each}
@@ -906,7 +919,9 @@
 				</div>
 				<div class="flex items-end gap-3">
 					<div class="flex flex-1 flex-col gap-1.5">
-						<label for="settings-temp" class="text-sm font-medium">温度（°C）</label>
+						<label for="settings-temp" class="text-sm font-medium"
+							>{m.admin_notes_edit_temp()}</label
+						>
 						<Input
 							id="settings-temp"
 							type="number"
@@ -916,23 +931,25 @@
 						/>
 					</div>
 					<div class="flex flex-1 flex-col gap-1.5">
-						<label for="settings-location" class="text-sm font-medium">位置</label>
+						<label for="settings-location" class="text-sm font-medium"
+							>{m.admin_notes_edit_location()}</label
+						>
 						<Input id="settings-location" placeholder="Taipei" bind:value={location} />
 					</div>
 				</div>
 				<div class="flex items-end gap-3">
 					<div class="flex flex-1 flex-col gap-1.5">
-						<label for="settings-lat" class="text-sm font-medium">纬度</label>
+						<label for="settings-lat" class="text-sm font-medium">{m.admin_notes_edit_lat()}</label>
 						<Input id="settings-lat" placeholder="25.03" bind:value={latitude} />
 					</div>
 					<div class="flex flex-1 flex-col gap-1.5">
-						<label for="settings-lng" class="text-sm font-medium">经度</label>
+						<label for="settings-lng" class="text-sm font-medium">{m.admin_notes_edit_lng()}</label>
 						<Input id="settings-lng" placeholder="121.56" bind:value={longitude} />
 					</div>
 				</div>
 				<p class="-mt-3 text-xs text-muted-foreground">
 					<IconMapPin class="inline size-3" />
-					位置与坐标成对写入；空值表示不记录。
+					{m.admin_notes_edit_geo_hint()}
 				</p>
 
 				<!-- Row-level settings (never staged in drafts) -->
@@ -940,14 +957,14 @@
 					<div class="flex flex-col gap-2">
 						<div class="flex items-center gap-1.5 text-sm font-medium">
 							<IconMessage class="size-4 text-muted-foreground" />
-							行级设置
+							{m.admin_notes_edit_row_settings()}
 						</div>
 						<form method="POST" action="?/pin" use:enhance={rowActionHandler}>
 							<input type="hidden" name="id" value={noteId} />
 							<input type="hidden" name="value" value={data.note?.pinAt ? '0' : '1'} />
 							<Button type="submit" variant="outline" size="sm" class="w-full">
 								<IconPin class="size-4" />
-								{data.note?.pinAt ? '取消置顶' : '置顶'}
+								{data.note?.pinAt ? m.admin_notes_edit_unpin() : m.admin_notes_edit_pin()}
 							</Button>
 						</form>
 						<form method="POST" action="?/comments" use:enhance={rowActionHandler}>
@@ -955,7 +972,9 @@
 							<input type="hidden" name="value" value={data.note?.allowComment ? '0' : '1'} />
 							<Button type="submit" variant="outline" size="sm" class="w-full">
 								<IconMessage class="size-4" />
-								{data.note?.allowComment ? '关闭评论' : '开启评论'}
+								{data.note?.allowComment
+									? m.admin_notes_edit_comments_off()
+									: m.admin_notes_edit_comments_on()}
 							</Button>
 						</form>
 						<form method="POST" action="?/password" use:enhance={rowActionHandler}>
@@ -964,20 +983,20 @@
 								<Input
 									name="password"
 									type="password"
-									aria-label="新密码"
-									placeholder="设置/更新密码（至少 6 位，留空清除）"
+									aria-label={m.admin_notes_edit_password()}
+									placeholder={m.admin_notes_edit_password_ph()}
 									autocomplete="new-password"
 								/>
 								<Button type="submit" variant="outline" size="sm" class="shrink-0">
 									<IconLock class="size-3.5" />
-									保存
+									{m.admin_common_save()}
 								</Button>
 							</div>
 						</form>
 						<p class="text-xs text-muted-foreground">
-							当前状态：{data.note?.locked
-								? '已设置密码（修改或清除会立刻失效所有已解锁 cookie）'
-								: '未设置密码'}
+							{m.admin_notes_edit_pw_state_label()}{data.note?.locked
+								? m.admin_notes_edit_pw_on()
+								: m.admin_notes_edit_pw_off()}
 						</p>
 					</div>
 
@@ -985,19 +1004,21 @@
 					<div class="flex flex-col gap-2">
 						<div class="flex items-center gap-1.5 text-sm font-medium">
 							<IconLanguage class="size-4 text-muted-foreground" />
-							多语言版本
+							{m.admin_posts_edit_translations()}
 						</div>
 						{#if data.siblings.length > 0}
 							<div class="flex flex-wrap gap-1.5">
 								{#each data.siblings as s (s.id)}
 									<Badge variant={s.status === 'published' ? 'default' : 'outline'}>
-										{s.lang}·{s.status === 'published' ? '已发布' : '草稿'}
+										{s.lang}·{s.status === 'published'
+											? m.admin_posts_status_published()
+											: m.admin_posts_status_draft()}
 									</Badge>
 								{/each}
 							</div>
 						{:else}
 							<p class="text-xs text-muted-foreground">
-								暂无其他语言版本（翻译流水线随后续批次）。
+								{m.admin_notes_edit_no_translations()}
 							</p>
 						{/if}
 					</div>
@@ -1006,7 +1027,7 @@
 					<div class="flex flex-col gap-2">
 						<div class="flex items-center gap-1.5 text-sm font-medium">
 							<IconArchive class="size-4 text-muted-foreground" />
-							状态
+							{m.admin_common_status()}
 						</div>
 						{#if data.note?.status === 'trash'}
 							<form method="POST" action="?/status" use:enhance={formResultHandler}>
@@ -1014,7 +1035,7 @@
 								<input type="hidden" name="action" value="restore" />
 								<Button type="submit" variant="outline" size="sm" class="w-full">
 									<IconArrowBackUp class="size-4" />
-									从回收站恢复
+									{m.admin_notes_edit_restore()}
 								</Button>
 							</form>
 						{:else if data.note?.status === 'private'}
@@ -1023,7 +1044,7 @@
 								<input type="hidden" name="action" value="restore" />
 								<Button type="submit" variant="outline" size="sm" class="w-full">
 									<IconArrowBackUp class="size-4" />
-									恢复公开（回已发布或草稿）
+									{m.admin_notes_edit_restore_public()}
 								</Button>
 							</form>
 							<form method="POST" action="?/status" use:enhance={formResultHandler}>
@@ -1036,7 +1057,7 @@
 									class="w-full border-destructive/30 text-destructive hover:bg-destructive/10"
 								>
 									<IconArchive class="size-4" />
-									移入回收站
+									{m.admin_notes_edit_trash()}
 								</Button>
 							</form>
 						{:else}
@@ -1044,7 +1065,7 @@
 								<input type="hidden" name="id" value={noteId} />
 								<input type="hidden" name="action" value="private" />
 								<Button type="submit" variant="outline" size="sm" class="w-full">
-									转为私密（不上前台）
+									{m.admin_notes_edit_to_private()}
 								</Button>
 							</form>
 							<form method="POST" action="?/status" use:enhance={formResultHandler}>
@@ -1057,13 +1078,13 @@
 									class="w-full border-destructive/30 text-destructive hover:bg-destructive/10"
 								>
 									<IconArchive class="size-4" />
-									移入回收站
+									{m.admin_notes_edit_trash()}
 								</Button>
 							</form>
 						{/if}
 					</div>
 				{:else}
-					<p class="text-xs text-muted-foreground">首次保存后可配置置顶 / 评论开关 / 密码。</p>
+					<p class="text-xs text-muted-foreground">{m.admin_notes_edit_row_settings_hint()}</p>
 				{/if}
 
 				<!-- Danger zone -->
@@ -1077,28 +1098,26 @@
 									{...props}
 								>
 									<IconTrash class="size-4" />
-									丢弃草稿
+									{m.admin_posts_edit_discard_draft()}
 								</Button>
 							{/snippet}
 						</AlertDialog.Trigger>
 						<AlertDialog.Content>
 							<AlertDialog.Header>
-								<AlertDialog.Title>丢弃未发布的改动？</AlertDialog.Title>
+								<AlertDialog.Title>{m.admin_posts_edit_discard_title()}</AlertDialog.Title>
 								<AlertDialog.Description>
-									{draftId
-										? '将删除当前草稿。若是从未发布过的新手记，连占位记录一并删除。此操作不可撤销。'
-										: ''}
+									{draftId ? m.admin_notes_edit_discard_desc() : ''}
 								</AlertDialog.Description>
 							</AlertDialog.Header>
 							<AlertDialog.Footer>
-								<AlertDialog.Cancel>取消</AlertDialog.Cancel>
+								<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 								<AlertDialog.Action
 									onclick={() => {
 										const f = document.getElementById('discard-form');
 										if (f instanceof HTMLFormElement) f.requestSubmit();
 									}}
 								>
-									丢弃
+									{m.admin_posts_edit_discard_confirm()}
 								</AlertDialog.Action>
 							</AlertDialog.Footer>
 						</AlertDialog.Content>

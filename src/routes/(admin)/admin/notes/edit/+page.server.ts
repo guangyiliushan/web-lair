@@ -19,6 +19,7 @@ import {
 import { NOTE_MOODS } from '$lib/utils/note-meta';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * N1 notes editor (ledger §9.10 / §13.4): the notes row is the published
@@ -46,7 +47,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	// ?id= loads an existing note; without it this page creates a new note.
 	const id = url.searchParams.get('id');
-	if (id && !isUuid(id)) error(404, '手记不存在');
+	if (id && !isUuid(id)) error(404, m.admin_notes_edit_err_not_found());
 
 	let note = null;
 	let draft = null;
@@ -54,7 +55,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	if (id) {
 		const [row] = await db.select().from(notes).where(eq(notes.id, id)).limit(1);
-		if (!row) error(404, '手记不存在');
+		if (!row) error(404, m.admin_notes_edit_err_not_found());
 		note = {
 			id: row.id,
 			nid: row.nid,
@@ -107,9 +108,14 @@ export const load: PageServerLoad = async ({ url }) => {
 	}
 
 	return {
-		headerTitle: '手记',
+		headerTitle: m.admin_nav_notes(),
 		headerActions: [
-			{ label: '返回', iconName: 'arrow-left', variant: 'outline', href: '/admin/notes' }
+			{
+				label: m.admin_common_back(),
+				iconName: 'arrow-left',
+				variant: 'outline',
+				href: '/admin/notes'
+			}
 		],
 		topics: allTopics,
 		langs,
@@ -133,17 +139,18 @@ export const actions: Actions = {
 		const versionRaw = str(form, 'draftVersion').trim();
 		const langRaw = str(form, 'lang').trim();
 		const autosave = form.get('autosave') === '1';
-		if (rawId && !isUuid(rawId)) return fail(400, { message: '手记标识无效' });
-		if (draftId && !isUuid(draftId)) return fail(400, { message: '草稿标识无效' });
+		if (rawId && !isUuid(rawId)) return fail(400, { message: m.admin_notes_edit_err_bad_id() });
+		if (draftId && !isUuid(draftId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
 		// Malformed ids must never reach a uuid column (22P02 → 500).
 		const topicIdRaw = str(form, 'topicId').trim();
 		if (topicIdRaw && !isUuid(topicIdRaw)) {
-			return fail(400, { message: '专栏标识无效' });
+			return fail(400, { message: m.admin_notes_edit_err_bad_topic() });
 		}
 		// Closed vocabulary write-side guard (notes plan §8.1).
 		const moodRaw = str(form, 'mood').trim();
 		if (moodRaw && !(NOTE_MOODS as readonly string[]).includes(moodRaw)) {
-			return fail(400, { message: '心情取值无效' });
+			return fail(400, { message: m.admin_notes_edit_err_bad_mood() });
 		}
 
 		const result = await saveNoteDraftWork({
@@ -196,16 +203,19 @@ export const actions: Actions = {
 					retryAfterMs: result.retryAfterMs
 				};
 			case 'not-found':
-				return fail(404, { message: '手记不存在' });
+				return fail(404, { message: m.admin_notes_edit_err_not_found() });
 			case 'invalid':
 				// Graded write-side constraint failure (e.g. a topic deleted while
 				// the editor held its id): a form error, not a 500.
-				return fail(400, { errors: result.errors, message: '保存校验未通过' });
+				return fail(400, {
+					errors: result.errors,
+					message: m.admin_notes_edit_err_save_validation()
+				});
 			case 'conflict':
 				return fail(409, {
 					conflict: true,
 					server: result.server,
-					message: '内容已在其他窗口更新，请以服务端为准刷新后再编辑'
+					message: m.admin_posts_edit_err_conflict_long()
 				});
 		}
 	},
@@ -215,20 +225,24 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const draftId = str(form, 'draftId').trim();
-		if (!draftId || !isUuid(draftId)) return fail(400, { message: '草稿标识无效' });
+		if (!draftId || !isUuid(draftId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
 
 		const result = await publishNoteDraft(draftId);
 		switch (result.kind) {
 			case 'published':
 				throw redirect(303, `/admin/notes/edit?id=${result.noteId}&published=1`);
 			case 'invalid':
-				return fail(400, { errors: result.errors, message: '发布校验未通过' });
+				return fail(400, {
+					errors: result.errors,
+					message: m.admin_posts_edit_err_publish_validation()
+				});
 			case 'slug-taken':
-				return fail(400, { errors: { slug: '该 Slug 已被其他手记使用' } });
+				return fail(400, { errors: { slug: m.admin_notes_edit_err_slug_taken() } });
 			case 'busy':
-				return fail(409, { message: '并发操作冲突，请稍后重试' });
+				return fail(409, { message: m.admin_posts_edit_err_busy() });
 			case 'not-found':
-				return fail(404, { message: '草稿不存在' });
+				return fail(404, { message: m.admin_posts_edit_err_draft_not_found() });
 		}
 	},
 
@@ -237,11 +251,13 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const draftId = str(form, 'draftId').trim();
-		if (!draftId || !isUuid(draftId)) return fail(400, { message: '草稿标识无效' });
+		if (!draftId || !isUuid(draftId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
 
 		const result = await discardNoteDraft(draftId);
-		if (result.kind === 'not-found') return fail(404, { message: '草稿不存在' });
-		if (result.kind === 'busy') return fail(409, { message: '并发操作冲突，请稍后重试' });
+		if (result.kind === 'not-found')
+			return fail(404, { message: m.admin_posts_edit_err_draft_not_found() });
+		if (result.kind === 'busy') return fail(409, { message: m.admin_posts_edit_err_busy() });
 		if (result.removedPlaceholder) throw redirect(303, '/admin/notes?discarded=1');
 		if (result.noteId) throw redirect(303, `/admin/notes/edit?id=${result.noteId}&discarded=1`);
 		throw redirect(303, '/admin/notes?discarded=1');
@@ -253,13 +269,14 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = str(form, 'id').trim();
 		const action = str(form, 'action').trim();
-		if (!id || !isUuid(id)) return fail(400, { message: '手记标识无效' });
+		if (!id || !isUuid(id)) return fail(400, { message: m.admin_notes_edit_err_bad_id() });
 		if (action !== 'private' && action !== 'trash' && action !== 'restore') {
-			return fail(400, { message: '动作无效' });
+			return fail(400, { message: m.admin_notes_edit_err_bad_action() });
 		}
 
 		const result = await setNoteStatus(id, action);
-		if (result.kind === 'not-found') return fail(404, { message: '手记不存在' });
+		if (result.kind === 'not-found')
+			return fail(404, { message: m.admin_notes_edit_err_not_found() });
 		if (action === 'trash') throw redirect(303, '/admin/notes?trashed=1');
 		throw redirect(
 			303,
@@ -272,9 +289,10 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = str(form, 'id').trim();
-		if (!id || !isUuid(id)) return fail(400, { message: '手记标识无效' });
+		if (!id || !isUuid(id)) return fail(400, { message: m.admin_notes_edit_err_bad_id() });
 		const result = await setNotePin(id, str(form, 'value') === '1');
-		if (result.kind === 'not-found') return fail(404, { message: '手记不存在' });
+		if (result.kind === 'not-found')
+			return fail(404, { message: m.admin_notes_edit_err_not_found() });
 		return { success: true };
 	},
 
@@ -283,9 +301,10 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = str(form, 'id').trim();
-		if (!id || !isUuid(id)) return fail(400, { message: '手记标识无效' });
+		if (!id || !isUuid(id)) return fail(400, { message: m.admin_notes_edit_err_bad_id() });
 		const result = await setNoteAllowComment(id, str(form, 'value') === '1');
-		if (result.kind === 'not-found') return fail(404, { message: '手记不存在' });
+		if (result.kind === 'not-found')
+			return fail(404, { message: m.admin_notes_edit_err_not_found() });
 		return { success: true };
 	},
 
@@ -294,10 +313,11 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = str(form, 'id').trim();
-		if (!id || !isUuid(id)) return fail(400, { message: '手记标识无效' });
+		if (!id || !isUuid(id)) return fail(400, { message: m.admin_notes_edit_err_bad_id() });
 		const tokens = form.getAll('emotions').map((value) => value.toString());
 		const result = await setNoteEmotions(id, tokens);
-		if (result.kind === 'not-found') return fail(404, { message: '手记不存在' });
+		if (result.kind === 'not-found')
+			return fail(404, { message: m.admin_notes_edit_err_not_found() });
 		if (result.kind === 'invalid') return fail(400, { message: result.message });
 		return { success: true };
 	},
@@ -307,10 +327,11 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = str(form, 'id').trim();
-		if (!id || !isUuid(id)) return fail(400, { message: '手记标识无效' });
+		if (!id || !isUuid(id)) return fail(400, { message: m.admin_notes_edit_err_bad_id() });
 		const password = str(form, 'password');
 		const result = await setNotePassword(id, form.get('clear') === '1' ? '' : password);
-		if (result.kind === 'not-found') return fail(404, { message: '手记不存在' });
+		if (result.kind === 'not-found')
+			return fail(404, { message: m.admin_notes_edit_err_not_found() });
 		if (result.kind === 'invalid') return fail(400, { message: result.message });
 		return { success: true };
 	}
