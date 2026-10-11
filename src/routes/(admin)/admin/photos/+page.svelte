@@ -7,6 +7,8 @@
 	import { formatBytes } from '$lib/utils/format';
 	import { photoTileSrc } from '$lib/components/photos/photo-tile';
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
+	import { localeLabels } from '$lib/stores/locale.svelte';
 	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
@@ -43,10 +45,10 @@
 	);
 
 	const BULK_LABELS: Record<string, string> = {
-		show: '设为可见',
-		hide: '设为隐藏',
-		tag: '加标签',
-		delete: '删除'
+		show: m.admin_photos_bulk_show(),
+		hide: m.admin_photos_bulk_hide(),
+		tag: m.admin_photos_bulk_tag(),
+		delete: m.admin_common_delete()
 	};
 
 	let selectedIds = $state<string[]>([]);
@@ -66,9 +68,9 @@
 
 	const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.tif,.tiff';
 	const LOCALE_LABELS: Array<{ key: 'en' | 'zh-cn' | 'ja'; label: string }> = [
-		{ key: 'en', label: 'EN' },
-		{ key: 'zh-cn', label: '中文' },
-		{ key: 'ja', label: '日本語' }
+		{ key: 'en', label: localeLabels.en },
+		{ key: 'zh-cn', label: localeLabels['zh-cn'] },
+		{ key: 'ja', label: localeLabels.ja }
 	];
 
 	function rowTitle(row: PhotoRow): string {
@@ -87,35 +89,38 @@
 	}
 </script>
 
-<svelte:head><title>图床 - Lair Admin</title></svelte:head>
+<svelte:head><title>{m.admin_nav_photos()} - Lair Admin</title></svelte:head>
 
 <div class="flex flex-col gap-6">
 	{#if actionData.saved}
 		<div
 			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
 		>
-			已保存。
+			{m.admin_photos_saved()}
 		</div>
 	{/if}
 	{#if actionData.deleted}
 		<div
 			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
 		>
-			已移出图床{actionData.deleted.removeFile
+			{m.admin_photos_removed()}{actionData.deleted.removeFile
 				? actionData.deleted.fileDeleted
-					? '并删除文件'
+					? m.admin_photos_removed_deleted()
 					: actionData.deleted.fileBlocked
-						? '（文件仍被引用，未删除）'
+						? m.admin_photos_removed_file_blocked()
 						: actionData.deleted.fileDeleteFailed
-							? '（照片已移除；文件删除失败，可稍后重试）'
-							: '（文件未删除）'
-				: ''}。
+							? m.admin_photos_removed_failed()
+							: m.admin_photos_removed_not_deleted()
+				: ''}{m.admin_photos_period()}
 		</div>
 	{/if}
 	{#if actionData.bulkResult}
 		<div class="rounded-md border bg-background px-3 py-2 text-sm">
-			批量「{BULK_LABELS[actionData.bulkResult.op] ?? actionData.bulkResult.op}」：成功
-			{actionData.bulkResult.done} · 失败 {actionData.bulkResult.failed}
+			{m.admin_photos_bulk_summary({
+				op: BULK_LABELS[actionData.bulkResult.op] ?? actionData.bulkResult.op,
+				done: actionData.bulkResult.done,
+				failed: actionData.bulkResult.failed
+			})}
 		</div>
 	{/if}
 	{#if actionData.message}
@@ -131,8 +136,10 @@
 				<p class:opacity-60={!result.ok}>
 					{result.ok ? '✓' : '✗'}
 					{result.fileName}
-					{#if result.ok && result.added}→ 已入图床{/if}
-					{#if result.ok && result.galleryError}（{result.galleryError}）{/if}
+					{#if result.ok && result.added}{m.admin_photos_added()}{/if}
+					{#if result.ok && result.galleryError}{m.admin_photos_gallery_error({
+							error: result.galleryError
+						})}{/if}
 					{#if !result.ok}— {result.message ?? result.code}{/if}
 				</p>
 			{/each}
@@ -141,10 +148,13 @@
 
 	<section class="rounded-xl border bg-background p-4">
 		<h2 class="mb-1 text-sm font-medium">
-			上传到图床（≤ {data.limits.maxBatch} 个/批，单文件 ≤ {data.limits.maxBytes / 1024 / 1024}MB）
+			{m.admin_photos_upload_hint({
+				batch: data.limits.maxBatch,
+				size: data.limits.maxBytes / 1024 / 1024
+			})}
 		</h2>
 		<p class="mb-3 text-xs text-muted-foreground">
-			图片会上传并加入图床；目录批量导入请用 CLI：<code>pnpm media:import &lt;dir&gt;</code>
+			{m.admin_photos_upload_cli_hint()}<code>pnpm media:import &lt;dir&gt;</code>
 		</p>
 		<form
 			method="POST"
@@ -153,7 +163,7 @@
 			class="flex flex-wrap items-center gap-3"
 		>
 			<input
-				aria-label="选择要上传的图片"
+				aria-label={m.admin_photos_pick_files()}
 				type="file"
 				name="files"
 				multiple
@@ -162,7 +172,7 @@
 			/>
 			<Button type="submit" size="sm">
 				<IconUpload data-icon="inline-start" />
-				上传
+				{m.admin_media_upload()}
 			</Button>
 		</form>
 	</section>
@@ -170,20 +180,26 @@
 	<section class="flex flex-col gap-4">
 		<form method="GET" class="flex flex-wrap items-end gap-3">
 			<label class="grid gap-1 text-xs text-muted-foreground">
-				可见性
+				{m.admin_photos_visibility()}
 				<select
 					name="visibility"
 					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
 				>
-					<option value="all" selected={data.filters.visibility === 'all'}>全部</option>
-					<option value="visible" selected={data.filters.visibility === 'visible'}>可见</option>
-					<option value="hidden" selected={data.filters.visibility === 'hidden'}>隐藏</option>
+					<option value="all" selected={data.filters.visibility === 'all'}
+						>{m.admin_media_filter_all()}</option
+					>
+					<option value="visible" selected={data.filters.visibility === 'visible'}
+						>{m.admin_photos_visible()}</option
+					>
+					<option value="hidden" selected={data.filters.visibility === 'hidden'}
+						>{m.admin_photos_hidden()}</option
+					>
 				</select>
 			</label>
 			<label class="grid gap-1 text-xs text-muted-foreground">
-				标签
+				{m.admin_photos_tag()}
 				<select name="tag" class="h-9 rounded-md border bg-background px-2 text-sm text-foreground">
-					<option value="" selected={data.filters.tag === ''}>全部</option>
+					<option value="" selected={data.filters.tag === ''}>{m.admin_media_filter_all()}</option>
 					{#each data.tagOptions as option (option.id)}
 						<option value={option.id} selected={data.filters.tag === option.id}
 							>{option.name}</option
@@ -192,24 +208,32 @@
 				</select>
 			</label>
 			<label class="grid gap-1 text-xs text-muted-foreground">
-				Slug 关键词
+				{m.admin_photos_slug_keyword()}
 				<input
 					name="keyword"
 					value={data.filters.keyword}
-					placeholder="按 slug 搜索"
+					placeholder={m.admin_photos_slug_placeholder()}
 					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
 				/>
 			</label>
 			<label class="grid gap-1 text-xs text-muted-foreground">
-				时间
+				{m.admin_media_time()}
 				<select
 					name="since"
 					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
 				>
-					<option value="" selected={data.filters.since === ''}>全部</option>
-					<option value="7d" selected={data.filters.since === '7d'}>近 7 天</option>
-					<option value="30d" selected={data.filters.since === '30d'}>近 30 天</option>
-					<option value="90d" selected={data.filters.since === '90d'}>近 90 天</option>
+					<option value="" selected={data.filters.since === ''}
+						>{m.admin_media_filter_all()}</option
+					>
+					<option value="7d" selected={data.filters.since === '7d'}
+						>{m.admin_media_last_7d()}</option
+					>
+					<option value="30d" selected={data.filters.since === '30d'}
+						>{m.admin_media_last_30d()}</option
+					>
+					<option value="90d" selected={data.filters.since === '90d'}
+						>{m.admin_media_last_90d()}</option
+					>
 				</select>
 			</label>
 			<label class="flex items-center gap-2 pb-2 text-xs text-muted-foreground">
@@ -220,22 +244,22 @@
 					checked={data.filters.location}
 					class="size-4 rounded border"
 				/>
-				有位置
+				{m.admin_photos_has_geo()}
 			</label>
-			<Button type="submit" variant="secondary" size="sm">筛选</Button>
+			<Button type="submit" variant="secondary" size="sm">{m.admin_media_filter()}</Button>
 		</form>
 
 		{#if data.listTruncated}
 			<p class="text-xs text-muted-foreground">
-				仅显示前 {data.photos.length} 张（达到上限，请用筛选缩小范围）。
+				{m.admin_photos_cap_notice({ count: data.photos.length })}
 			</p>
 		{/if}
 
 		{#if data.photos.length === 0}
 			<Empty class="py-12">
 				<EmptyHeader>
-					<EmptyTitle>暂无照片</EmptyTitle>
-					<EmptyDescription>上传图片或从内容资产「加入图床」，照片会出现在这里。</EmptyDescription>
+					<EmptyTitle>{m.admin_photos_empty()}</EmptyTitle>
+					<EmptyDescription>{m.admin_photos_empty_desc()}</EmptyDescription>
 				</EmptyHeader>
 			</Empty>
 		{:else}
@@ -243,24 +267,26 @@
 				<div
 					class="flex flex-wrap items-center gap-3 rounded-xl border bg-background px-3 py-2 text-sm"
 				>
-					<span class="text-muted-foreground">已选 {selectedIds.length} 张</span>
+					<span class="text-muted-foreground"
+						>{m.admin_photos_selected_count({ count: selectedIds.length })}</span
+					>
 					<select
 						name="op"
-						aria-label="批量操作"
+						aria-label={m.admin_photos_bulk_actions()}
 						class="h-8 rounded-md border bg-background px-2 text-sm"
 					>
-						<option value="show">设为可见</option>
-						<option value="hide">设为隐藏</option>
-						<option value="tag">加标签</option>
+						<option value="show">{m.admin_photos_bulk_show()}</option>
+						<option value="hide">{m.admin_photos_bulk_hide()}</option>
+						<option value="tag">{m.admin_photos_bulk_tag()}</option>
 					</select>
 					<input
 						name="tags"
-						aria-label="标签（逗号分隔，仅「加标签」用）"
-						placeholder="标签（逗号分隔，仅「加标签」用）"
+						aria-label={m.admin_photos_tag_input()}
+						placeholder={m.admin_photos_tag_input()}
 						class="h-8 rounded-md border bg-background px-2 text-sm"
 					/>
 					<Button type="submit" variant="secondary" size="sm" disabled={selectedIds.length === 0}>
-						执行
+						{m.admin_photos_bulk_run()}
 					</Button>
 					<Button
 						type="button"
@@ -270,7 +296,7 @@
 						disabled={selectedIds.length === 0}
 						onclick={() => (bulkDeleteOpen = true)}
 					>
-						删除所选
+						{m.admin_photos_bulk_delete_selected()}
 					</Button>
 				</div>
 
@@ -285,21 +311,21 @@
 									name="ids"
 									value={row.id}
 									bind:group={selectedIds}
-									aria-label={`选择 ${rowTitle(row)}`}
+									aria-label={m.admin_photos_select_row({ title: rowTitle(row) })}
 									class="size-4 rounded border"
 								/>
 							</label>
 							{#if !row.isVisible}
 								<Badge variant="secondary" class="absolute top-2 right-2 z-10 text-xs">
 									<IconEyeOff class="mr-1 size-3" />
-									隐藏
+									{m.admin_photos_hidden()}
 								</Badge>
 							{/if}
 							<button
 								type="button"
 								class="block w-full"
 								onclick={() => (editingId = row.id)}
-								aria-label="编辑 {row.slug}"
+								aria-label={m.admin_photos_edit_row({ slug: row.slug })}
 							>
 								<img
 									src={thumbUrl(row)}
@@ -324,7 +350,9 @@
 										</span>
 									{/if}
 									{#if row.refCount > 0}
-										<span title="内容引用处数">引用 {row.refCount}</span>
+										<span title={m.admin_photos_ref_count_title()}
+											>{m.admin_photos_ref_count({ count: row.refCount })}</span
+										>
 									{/if}
 								</div>
 							</div>
@@ -338,8 +366,10 @@
 	{#if editing}
 		<aside class="rounded-xl border bg-background p-4">
 			<div class="mb-3 flex items-center justify-between">
-				<h2 class="text-sm font-medium">编辑照片</h2>
-				<Button variant="ghost" size="sm" onclick={() => (editingId = null)}>关闭</Button>
+				<h2 class="text-sm font-medium">{m.admin_photos_edit_panel()}</h2>
+				<Button variant="ghost" size="sm" onclick={() => (editingId = null)}
+					>{m.admin_common_close()}</Button
+				>
 			</div>
 			<div class="grid gap-4 lg:grid-cols-[280px_1fr]">
 				<div class="flex flex-col gap-2">
@@ -354,8 +384,10 @@
 							: ''}{formatBytes(editing.byteSize)} · {editing.fileName}
 					</p>
 					<p class="text-xs text-muted-foreground">
-						内容引用 {editing.refCount} 处{#if editing.tags.length}
-							· 标签：{editing.tags.map((tag) => tag.name).join('、')}{/if}
+						{m.admin_photos_ref_places({ count: editing.refCount })}{#if editing.tags.length}
+							{m.admin_photos_tags_line()}{editing.tags
+								.map((tag) => tag.name)
+								.join(m.admin_photos_tags_join())}{/if}
 					</p>
 					<a
 						class="inline-flex items-center gap-1 text-xs underline"
@@ -363,7 +395,7 @@
 						target="_blank"
 						rel="noreferrer"
 					>
-						<IconExternalLink class="size-3.5" />查看公开页（隐藏时为 404）
+						<IconExternalLink class="size-3.5" />{m.admin_photos_view_public()}
 					</a>
 				</div>
 				<form method="POST" action="?/update" class="flex flex-col gap-3">
@@ -371,7 +403,7 @@
 					<div class="grid gap-3 md:grid-cols-3">
 						{#each LOCALE_LABELS as locale (locale.key)}
 							<label class="grid gap-1 text-xs text-muted-foreground">
-								标题 · {locale.label}
+								{m.admin_photos_title_locale({ locale: locale.label })}
 								<input
 									name={`title_${locale.key}`}
 									value={editing.title?.[locale.key] ?? ''}
@@ -383,7 +415,7 @@
 					<div class="grid gap-3 md:grid-cols-3">
 						{#each LOCALE_LABELS as locale (locale.key)}
 							<label class="grid gap-1 text-xs text-muted-foreground">
-								描述 · {locale.label}
+								{m.admin_photos_desc_locale({ locale: locale.label })}
 								<input
 									name={`description_${locale.key}`}
 									value={editing.description?.[locale.key] ?? ''}
@@ -402,7 +434,7 @@
 							/>
 						</label>
 						<label class="grid gap-1 text-xs text-muted-foreground">
-							拍摄时间
+							{m.admin_photos_taken_at()}
 							<input
 								type="datetime-local"
 								name="takenAt"
@@ -418,11 +450,11 @@
 								checked={editing.isVisible}
 								class="size-4 rounded border"
 							/>
-							公开可见
+							{m.admin_photos_public_visible()}
 						</label>
 					</div>
 					<label class="grid gap-1 text-xs text-muted-foreground">
-						标签（逗号分隔；留空即清空）
+						{m.admin_photos_edit_tags()}
 						<input
 							name="tags"
 							value={editing.tags.map((tag) => tag.name).join(', ')}
@@ -430,7 +462,7 @@
 						/>
 					</label>
 					<div class="flex items-center gap-2">
-						<Button type="submit" size="sm">保存</Button>
+						<Button type="submit" size="sm">{m.admin_common_save()}</Button>
 						<Button
 							type="button"
 							variant="outline"
@@ -439,7 +471,7 @@
 							onclick={() => (deleteTarget = editing)}
 						>
 							<IconTrash data-icon="inline-start" />
-							移出图床
+							{m.admin_photos_remove()}
 						</Button>
 					</div>
 				</form>
@@ -454,21 +486,21 @@
 >
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>移出图床？</AlertDialog.Title>
+			<AlertDialog.Title>{m.admin_photos_remove_title()}</AlertDialog.Title>
 			<AlertDialog.Description>
 				“{deleteTarget?.slug}”
-				将从图床移除；底层文件默认保留（内容资产不删）。可勾选同时删除文件——仅当文件未被任何内容引用时才会真正删除。
+				{m.admin_photos_remove_desc()}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<form method="POST" action="?/delete">
 			<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
 			<label class="flex items-center gap-2 py-2 text-sm">
 				<input type="checkbox" name="removeFile" value="1" class="size-4 rounded border" />
-				同时删除文件（未被内容引用时）
+				{m.admin_photos_remove_also_file()}
 			</label>
 			<AlertDialog.Footer>
-				<AlertDialog.Cancel>取消</AlertDialog.Cancel>
-				<AlertDialog.Action type="submit">移出</AlertDialog.Action>
+				<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
+				<AlertDialog.Action type="submit">{m.admin_photos_remove_action()}</AlertDialog.Action>
 			</AlertDialog.Footer>
 		</form>
 	</AlertDialog.Content>
@@ -477,9 +509,11 @@
 <AlertDialog.Root open={bulkDeleteOpen} onOpenChange={(open) => (bulkDeleteOpen = open)}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>删除所选 {selectedIds.length} 张？</AlertDialog.Title>
+			<AlertDialog.Title
+				>{m.admin_photos_bulk_delete_title({ count: selectedIds.length })}</AlertDialog.Title
+			>
 			<AlertDialog.Description>
-				仅移出图床；底层文件保留（需要清理文件请到内容资产页）。
+				{m.admin_photos_bulk_delete_desc()}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<form method="POST" action="?/bulk">
@@ -488,8 +522,8 @@
 			{/each}
 			<input type="hidden" name="op" value="delete" />
 			<AlertDialog.Footer>
-				<AlertDialog.Cancel>取消</AlertDialog.Cancel>
-				<AlertDialog.Action type="submit">删除</AlertDialog.Action>
+				<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
+				<AlertDialog.Action type="submit">{m.admin_common_delete()}</AlertDialog.Action>
 			</AlertDialog.Footer>
 		</form>
 	</AlertDialog.Content>

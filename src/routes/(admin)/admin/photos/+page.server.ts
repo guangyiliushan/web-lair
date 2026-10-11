@@ -17,6 +17,7 @@ import {
 	updatePhoto
 } from '$lib/server/services/photos';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Admin gallery (§6.2): grid + filters, batch ops (visibility / tags /
@@ -52,7 +53,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	]);
 
 	return {
-		headerTitle: '图床',
+		headerTitle: m.admin_nav_photos(),
 		photos: rows.map((row) => ({
 			...row,
 			// The drawer's datetime-local value, rendered in the site timezone.
@@ -103,17 +104,18 @@ export const actions: Actions = {
 			UPLOAD_RATE_LIMIT.limit,
 			UPLOAD_RATE_LIMIT.windowSeconds
 		);
-		if (!rate.allowed) return fail(429, { message: '上传过于频繁，请稍后再试' });
+		if (!rate.allowed) return fail(429, { message: m.admin_media_err_rate() });
 		const form = await request.formData();
 		const uploads = form
 			.getAll('files')
 			.filter((entry): entry is File => entry instanceof File && entry.size > 0);
-		if (uploads.length === 0) return fail(400, { message: '请选择要上传的图片' });
+		if (uploads.length === 0) return fail(400, { message: m.admin_photos_err_no_files() });
 		if (uploads.length > MAX_BATCH_COUNT) {
-			return fail(400, { message: `一次最多上传 ${MAX_BATCH_COUNT} 个文件` });
+			return fail(400, { message: m.admin_media_err_too_many({ count: MAX_BATCH_COUNT }) });
 		}
 		const oversized = uploads.find((file) => file.size > MAX_UPLOAD_BYTES);
-		if (oversized) return fail(400, { message: `${oversized.name} 超过单文件上限` });
+		if (oversized)
+			return fail(400, { message: m.admin_media_err_too_big({ name: oversized.name }) });
 
 		try {
 			const results = await uploadFiles(
@@ -138,9 +140,9 @@ export const actions: Actions = {
 						added: created.kind === 'ok' || created.kind === 'already-in-gallery',
 						galleryError:
 							created.kind === 'not-image'
-								? '非图片文件（已入内容资产）'
+								? m.admin_photos_info_non_image()
 								: created.kind === 'source-missing'
-									? '对象缺失，未入图床'
+									? m.admin_photos_info_missing_object()
 									: null
 					});
 				} catch (error) {
@@ -154,7 +156,7 @@ export const actions: Actions = {
 					enriched.push({
 						...result,
 						added: false,
-						galleryError: '图床入库失败（文件已入内容资产）'
+						galleryError: m.admin_photos_info_gallery_failed()
 					});
 				}
 			}
@@ -169,14 +171,14 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = str(form, 'id');
-		if (!isUuid(id)) return fail(400, { message: '照片标识无效' });
+		if (!isUuid(id)) return fail(400, { message: m.admin_photos_err_bad_id() });
 
 		const siteTz = await getOption('site.timezone');
 		const takenRaw = str(form, 'takenAt').trim();
 		let takenAt: Date | null = null;
 		if (takenRaw !== '') {
 			takenAt = zonedNaiveToUtc(takenRaw.slice(0, 16), siteTz);
-			if (!takenAt) return fail(400, { message: '拍摄时间格式无效' });
+			if (!takenAt) return fail(400, { message: m.admin_photos_err_bad_taken_at() });
 		}
 
 		const result = await updatePhoto(id, {
@@ -187,11 +189,12 @@ export const actions: Actions = {
 			isVisible: form.get('isVisible') !== null,
 			tags: tagNamesFrom(form)
 		});
-		if (result.kind === 'not-found') return fail(404, { message: '照片不存在' });
+		if (result.kind === 'not-found') return fail(404, { message: m.admin_photos_err_not_found() });
 		if (result.kind === 'slug-invalid') {
-			return fail(400, { message: 'Slug 仅允许字母、数字、连字符（中文等文字保留）' });
+			return fail(400, { message: m.admin_photos_err_bad_slug() });
 		}
-		if (result.kind === 'slug-taken') return fail(409, { message: 'Slug 已存在' });
+		if (result.kind === 'slug-taken')
+			return fail(409, { message: m.admin_photos_err_slug_taken() });
 		return { saved: true };
 	},
 
@@ -203,12 +206,12 @@ export const actions: Actions = {
 			.map((value) => value.toString())
 			.filter((value) => isUuid(value));
 		const op = str(form, 'op');
-		if (ids.length === 0) return fail(400, { message: '请先选择照片' });
+		if (ids.length === 0) return fail(400, { message: m.admin_photos_err_no_selection() });
 		if (!['show', 'hide', 'tag', 'delete'].includes(op)) {
-			return fail(400, { message: '未知批量操作' });
+			return fail(400, { message: m.admin_photos_err_unknown_op() });
 		}
 		if (op === 'tag' && tagNamesFrom(form).length === 0) {
-			return fail(400, { message: '请输入标签名' });
+			return fail(400, { message: m.admin_photos_err_no_tag() });
 		}
 		let done = 0;
 		let failed = 0;
@@ -237,10 +240,10 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = str(form, 'id');
-		if (!isUuid(id)) return fail(400, { message: '照片标识无效' });
+		if (!isUuid(id)) return fail(400, { message: m.admin_photos_err_bad_id() });
 		const removeFile = form.get('removeFile') !== null;
 		const result = await removePhoto(id, { removeFile });
-		if (result.kind === 'not-found') return fail(404, { message: '照片不存在' });
+		if (result.kind === 'not-found') return fail(404, { message: m.admin_photos_err_not_found() });
 		return {
 			deleted: {
 				removeFile,
