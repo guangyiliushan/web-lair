@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { untrack } from 'svelte';
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -134,7 +135,7 @@
 </script>
 
 <svelte:head>
-	<title>AI 设定 - Lair Admin</title>
+	<title>{m.admin_settings_ai()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex flex-col gap-8">
@@ -148,21 +149,23 @@
 	<section class="flex flex-col gap-4">
 		<header class="flex flex-wrap items-start justify-between gap-3">
 			<div class="min-w-0">
-				<h2 class="text-base font-medium">AI 服务商</h2>
+				<h2 class="text-base font-medium">{m.admin_settings_ai_providers()}</h2>
 				<p class="mt-1 text-xs text-muted-foreground">
-					接入各家 AI / 本地部署 / 自组网端点。密钥不落库——这里只填写环境变量名。
+					{m.admin_settings_ai_providers_desc()}
 				</p>
 			</div>
 			<Button type="button" variant="outline" size="sm" onclick={openCreate}>
 				<IconPlus data-icon="inline-start" />
-				添加服务商
+				{m.admin_settings_ai_add_provider()}
 			</Button>
 		</header>
 
 		{#if actionForm?.providerTest}
 			<Alert.Root variant={actionForm.providerTest.ok ? 'default' : 'destructive'}>
 				<IconPlugConnected />
-				<Alert.Title>连接检测 · {actionForm.providerTest.name}</Alert.Title>
+				<Alert.Title
+					>{m.admin_settings_ai_test_title({ name: actionForm.providerTest.name })}</Alert.Title
+				>
 				<Alert.Description>{actionForm.providerTest.message}</Alert.Description>
 			</Alert.Root>
 		{/if}
@@ -173,8 +176,8 @@
 					<Empty.Media variant="icon">
 						<IconSettings />
 					</Empty.Media>
-					<Empty.Title>暂无服务商</Empty.Title>
-					<Empty.Description>添加第一个服务商后，AI 才会在启用之时可用。</Empty.Description>
+					<Empty.Title>{m.admin_settings_ai_empty()}</Empty.Title>
+					<Empty.Description>{m.admin_settings_ai_empty_desc()}</Empty.Description>
 				</Empty.Header>
 			</Empty.Root>
 		{:else}
@@ -188,9 +191,9 @@
 									>{AI_PROVIDER_KIND_LABELS[provider.kind as AiProviderKind]}</Badge
 								>
 								{#if provider.enabled}
-									<Badge>启用</Badge>
+									<Badge>{m.admin_common_enable()}</Badge>
 								{:else}
-									<Badge variant="outline">停用</Badge>
+									<Badge variant="outline">{m.admin_common_disable()}</Badge>
 								{/if}
 							</div>
 							<div
@@ -204,14 +207,14 @@
 										<IconKey class="size-3" />
 										{provider.apiKeyEnv}
 										{#if data.envSet[provider.id]}
-											<Badge variant="secondary">已设置</Badge>
+											<Badge variant="secondary">{m.admin_settings_ai_env_set()}</Badge>
 										{:else}
-											<Badge variant="destructive">未设置</Badge>
+											<Badge variant="destructive">{m.admin_settings_ai_env_unset()}</Badge>
 										{/if}
 									</span>
 								{/if}
 								{#if provider.models?.length}
-									<span>{provider.models.length} 个模型</span>
+									<span>{m.admin_settings_ai_model_count({ count: provider.models.length })}</span>
 								{/if}
 							</div>
 						</div>
@@ -220,16 +223,16 @@
 								<input type="hidden" name="id" value={provider.id} />
 								<Button type="submit" variant="outline" size="sm">
 									<IconPlugConnected data-icon="inline-start" />
-									测试连接
+									{m.admin_settings_ai_test()}
 								</Button>
 							</form>
 							<Button variant="outline" size="sm" onclick={() => openEdit(provider)}>
 								<IconPencil data-icon="inline-start" />
-								编辑
+								{m.admin_common_edit()}
 							</Button>
 							<Button variant="destructive" size="sm" onclick={() => (deleteTarget = provider)}>
 								<IconTrash data-icon="inline-start" />
-								删除
+								{m.admin_common_delete()}
 							</Button>
 						</div>
 					</div>
@@ -243,9 +246,9 @@
 	<!-- ── 功能位分配 ─────────────────────────────────────────────────── -->
 	<section class="flex flex-col gap-4">
 		<header>
-			<h2 class="text-base font-medium">功能位分配</h2>
+			<h2 class="text-base font-medium">{m.admin_settings_ai_assignments()}</h2>
 			<p class="mt-1 text-xs text-muted-foreground">
-				未分配的功能位视为关闭——AI 是扩展能力，不阻塞任何主流程。
+				{m.admin_settings_ai_assignments_desc()}
 			</p>
 		</header>
 		<form
@@ -270,11 +273,11 @@
 						onValueChange={() => (dirty = true)}
 					>
 						<Select.Trigger class="w-full">
-							{assignProviders[fn] || '不指定'}
+							{assignProviders[fn] || m.admin_settings_ai_no_provider()}
 						</Select.Trigger>
 						<Select.Portal>
 							<Select.Content>
-								<Select.Item value="">不指定</Select.Item>
+								<Select.Item value="">{m.admin_settings_ai_no_provider()}</Select.Item>
 								{#each data.providers as p (p.id)}
 									<Select.Item value={p.name}>{p.name}</Select.Item>
 								{/each}
@@ -284,14 +287,14 @@
 					<Input
 						name={`model_${fn}`}
 						bind:value={assignModels[fn]}
-						placeholder="使用服务商默认模型（可留空）"
+						placeholder={m.admin_settings_ai_model_placeholder()}
 					/>
 				</div>
 			{/each}
 			<div class="flex items-center justify-end">
 				<Button type="submit" size="sm">
 					<IconDeviceFloppy data-icon="inline-start" />
-					保存分配
+					{m.admin_settings_ai_save_assignments()}
 				</Button>
 			</div>
 		</form>
@@ -302,16 +305,15 @@
 	<!-- ── 开关与阈值 ─────────────────────────────────────────────────── -->
 	<section class="flex flex-col gap-6">
 		<header>
-			<h2 class="text-base font-medium">开关与阈值</h2>
-			<p class="mt-1 text-xs text-muted-foreground">审核漏斗、预算护栏、写作风格指南与翻译门槛。</p>
+			<h2 class="text-base font-medium">{m.admin_settings_ai_switches()}</h2>
+			<p class="mt-1 text-xs text-muted-foreground">{m.admin_settings_ai_switches_desc()}</p>
 		</header>
 
 		<Alert.Root>
 			<IconInfoCircle />
-			<Alert.Title>冻结默认（§3.3）</Alert.Title>
+			<Alert.Title>{m.admin_settings_ai_frozen_title()}</Alert.Title>
 			<Alert.Description>
-				翻译闸门 85 分、站点默认「先审」、摘要自动生成条件（正文 ≥100 字且无摘要）保持默认；
-				每篇的翻译模式与开关随写作链（P2/P3）落位。
+				{m.admin_settings_ai_frozen_desc()}
 			</Alert.Description>
 		</Alert.Root>
 
@@ -328,47 +330,51 @@
 					await update();
 				}}
 		>
-			<h3 class="text-sm font-semibold">评论分诊（审核）</h3>
+			<h3 class="text-sm font-semibold">{m.admin_settings_ai_triage()}</h3>
 			<div class="flex flex-col gap-3">
 				<div class="flex items-center justify-between gap-4">
 					<div>
-						<div class="text-sm font-medium">启用 AI 分诊</div>
-						<div class="text-xs text-muted-foreground">默认关闭；影子期先观察再放权。</div>
+						<div class="text-sm font-medium">{m.admin_settings_ai_triage_enabled()}</div>
+						<div class="text-xs text-muted-foreground">{m.admin_settings_ai_triage_hint()}</div>
 					</div>
 					<Switch
 						name="enabled"
 						bind:checked={mod.enabled}
 						onCheckedChange={() => (dirty = true)}
-						aria-label="启用 AI 分诊"
+						aria-label={m.admin_settings_ai_triage_enabled()}
 					/>
 				</div>
 				<div class="flex items-center justify-between gap-4">
 					<div>
-						<div class="text-sm font-medium">影子模式</div>
-						<div class="text-xs text-muted-foreground">只记录不执行（applied=false）。</div>
+						<div class="text-sm font-medium">{m.admin_settings_ai_shadow()}</div>
+						<div class="text-xs text-muted-foreground">{m.admin_settings_ai_shadow_hint()}</div>
 					</div>
 					<Switch
 						name="shadowMode"
 						bind:checked={mod.shadowMode}
 						onCheckedChange={() => (dirty = true)}
-						aria-label="影子模式"
+						aria-label={m.admin_settings_ai_shadow()}
 					/>
 				</div>
 				<div class="flex items-center justify-between gap-4">
 					<div>
-						<div class="text-sm font-medium">首评必审</div>
-						<div class="text-xs text-muted-foreground">新访客的第一条评论进入人工队列。</div>
+						<div class="text-sm font-medium">{m.admin_settings_ai_first_comment()}</div>
+						<div class="text-xs text-muted-foreground">
+							{m.admin_settings_ai_first_comment_hint()}
+						</div>
 					</div>
 					<Switch
 						name="firstCommentHold"
 						bind:checked={mod.firstCommentHold}
 						onCheckedChange={() => (dirty = true)}
-						aria-label="首评必审"
+						aria-label={m.admin_settings_ai_first_comment()}
 					/>
 				</div>
 				<div class="grid gap-3 sm:grid-cols-3">
 					<Field.Field>
-						<Field.Label for="mod-link-threshold">链接数阈值</Field.Label>
+						<Field.Label for="mod-link-threshold"
+							>{m.admin_settings_ai_link_threshold()}</Field.Label
+						>
 						<Input
 							id="mod-link-threshold"
 							name="linkThreshold"
@@ -379,7 +385,7 @@
 						/>
 					</Field.Field>
 					<Field.Field>
-						<Field.Label for="mod-allow">放行阈值</Field.Label>
+						<Field.Label for="mod-allow">{m.admin_settings_ai_allow_threshold()}</Field.Label>
 						<Input
 							id="mod-allow"
 							name="allow"
@@ -391,7 +397,7 @@
 						/>
 					</Field.Field>
 					<Field.Field>
-						<Field.Label for="mod-block">拦截阈值</Field.Label>
+						<Field.Label for="mod-block">{m.admin_settings_ai_block_threshold()}</Field.Label>
 						<Input
 							id="mod-block"
 							name="block"
@@ -404,22 +410,22 @@
 					</Field.Field>
 				</div>
 				<Field.Field>
-					<Field.Label for="mod-keywords">关键词（每行一个）</Field.Label>
+					<Field.Label for="mod-keywords">{m.admin_settings_ai_keywords()}</Field.Label>
 					<Textarea id="mod-keywords" name="keywords" rows={3} bind:value={modKeywords} />
 				</Field.Field>
 				<Field.Field>
-					<Field.Label for="mod-regexes">正则（每行一条，逐条校验）</Field.Label>
+					<Field.Label for="mod-regexes">{m.admin_settings_ai_regexes()}</Field.Label>
 					<Textarea id="mod-regexes" name="regexes" rows={3} bind:value={modRegexes} />
 				</Field.Field>
 				<Field.Field>
-					<Field.Label for="mod-trusted">信任用户（每行一个用户 ID）</Field.Label>
+					<Field.Label for="mod-trusted">{m.admin_settings_ai_trusted()}</Field.Label>
 					<Textarea id="mod-trusted" name="trustedUsers" rows={2} bind:value={modTrusted} />
 				</Field.Field>
 			</div>
 			<div class="flex items-center justify-end">
 				<Button type="submit" size="sm">
 					<IconDeviceFloppy data-icon="inline-start" />
-					保存审核设置
+					{m.admin_settings_ai_save_moderation()}
 				</Button>
 			</div>
 		</form>
@@ -437,10 +443,10 @@
 					await update();
 				}}
 		>
-			<h3 class="text-sm font-semibold">用量预算</h3>
+			<h3 class="text-sm font-semibold">{m.admin_settings_ai_budget()}</h3>
 			<div class="grid gap-3 sm:grid-cols-3">
 				<Field.Field>
-					<Field.Label for="budget-monthly">月度预算（0 = 不设）</Field.Label>
+					<Field.Label for="budget-monthly">{m.admin_settings_ai_budget_monthly()}</Field.Label>
 					<Input
 						id="budget-monthly"
 						name="monthly"
@@ -451,7 +457,7 @@
 					/>
 				</Field.Field>
 				<Field.Field>
-					<Field.Label for="budget-currency">货币</Field.Label>
+					<Field.Label for="budget-currency">{m.admin_settings_ai_currency()}</Field.Label>
 					<Input
 						id="budget-currency"
 						name="currency"
@@ -460,34 +466,34 @@
 					/>
 				</Field.Field>
 				<Field.Field>
-					<Field.Label for="budget-ratios">告警比例</Field.Label>
+					<Field.Label for="budget-ratios">{m.admin_settings_ai_alert_ratios()}</Field.Label>
 					<Input
 						id="budget-ratios"
 						name="alertRatios"
 						bind:value={alertRatiosText}
 						placeholder="0.8, 0.9, 1"
 					/>
-					<Field.Description>留空 = 默认 0.8, 0.9, 1</Field.Description>
+					<Field.Description>{m.admin_settings_ai_alert_ratios_desc()}</Field.Description>
 				</Field.Field>
 			</div>
 			<div class="flex items-center justify-between gap-4">
 				<div>
-					<div class="text-sm font-medium">超限停自动、保人工</div>
+					<div class="text-sm font-medium">{m.admin_settings_ai_budget_pause_label()}</div>
 					<div class="text-xs text-muted-foreground">
-						达到 100% 时暂停自动任务；手动操作不受影响。
+						{m.admin_settings_ai_budget_pause_hint()}
 					</div>
 				</div>
 				<Switch
 					name="pauseAutoOnExceed"
 					bind:checked={budget.pauseAutoOnExceed}
 					onCheckedChange={() => (dirty = true)}
-					aria-label="超限停自动"
+					aria-label={m.admin_settings_ai_budget_pause()}
 				/>
 			</div>
 			<div class="flex items-center justify-end">
 				<Button type="submit" size="sm">
 					<IconDeviceFloppy data-icon="inline-start" />
-					保存预算
+					{m.admin_settings_ai_save_budget()}
 				</Button>
 			</div>
 		</form>
@@ -505,21 +511,21 @@
 					await update();
 				}}
 		>
-			<h3 class="text-sm font-semibold">写作风格指南</h3>
+			<h3 class="text-sm font-semibold">{m.admin_settings_ai_style()}</h3>
 			<Field.Field>
-				<Field.Label for="style-guide">指南文本（注入写作工具与助手）</Field.Label>
+				<Field.Label for="style-guide">{m.admin_settings_ai_style_label()}</Field.Label>
 				<Textarea
 					id="style-guide"
 					name="text"
 					rows={5}
 					bind:value={styleGuideText}
-					placeholder="例如：语气直接，少用形容词；术语保持英文原样；正文默认 Markdown。"
+					placeholder={m.admin_settings_ai_style_ph()}
 				/>
 			</Field.Field>
 			<div class="flex items-center justify-end">
 				<Button type="submit" size="sm">
 					<IconDeviceFloppy data-icon="inline-start" />
-					保存风格指南
+					{m.admin_settings_ai_save_style()}
 				</Button>
 			</div>
 		</form>
@@ -537,10 +543,10 @@
 					await update();
 				}}
 		>
-			<h3 class="text-sm font-semibold">自动翻译（入队门槛）</h3>
+			<h3 class="text-sm font-semibold">{m.admin_settings_ai_translation()}</h3>
 			<div class="grid gap-3 sm:grid-cols-3">
 				<Field.Field>
-					<Field.Label for="translation-min-chars">最小字数</Field.Label>
+					<Field.Label for="translation-min-chars">{m.admin_settings_ai_min_chars()}</Field.Label>
 					<Input
 						id="translation-min-chars"
 						name="minChars"
@@ -549,27 +555,27 @@
 						step="1"
 						bind:value={translation.minChars}
 					/>
-					<Field.Description>低于门槛不产翻译候选；手动翻译不受限。</Field.Description>
+					<Field.Description>{m.admin_settings_ai_min_chars_desc()}</Field.Description>
 				</Field.Field>
 			</div>
 			<div class="flex items-center justify-between gap-4">
 				<div>
-					<div class="text-sm font-medium">手记参与自动翻译</div>
+					<div class="text-sm font-medium">{m.admin_settings_ai_notes_translate()}</div>
 					<div class="text-xs text-muted-foreground">
-						关闭后仅博文按门槛自动入队；手动翻译始终可用。
+						{m.admin_settings_ai_notes_translate_hint()}
 					</div>
 				</div>
 				<Switch
 					name="notesAuto"
 					bind:checked={translation.notesAuto}
 					onCheckedChange={() => (dirty = true)}
-					aria-label="手记参与自动翻译"
+					aria-label={m.admin_settings_ai_notes_translate()}
 				/>
 			</div>
 			<div class="flex items-center justify-end">
 				<Button type="submit" size="sm">
 					<IconDeviceFloppy data-icon="inline-start" />
-					保存翻译设置
+					{m.admin_settings_ai_save_translation()}
 				</Button>
 			</div>
 		</form>
@@ -595,10 +601,20 @@
 				<input type="hidden" name="id" value={editing.id} />
 			{/if}
 			<div class="flex items-center justify-between gap-3 border-b px-4 pb-3">
-				<Dialog.Title>{editing ? '编辑服务商' : '添加服务商'}</Dialog.Title>
+				<Dialog.Title
+					>{editing
+						? m.admin_settings_ai_edit_provider()
+						: m.admin_settings_ai_add_provider()}</Dialog.Title
+				>
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
+						<Button
+							variant="ghost"
+							size="icon"
+							class="size-7"
+							{...props}
+							aria-label={m.admin_common_close()}
+						>
 							<IconX class="size-4" />
 						</Button>
 					{/snippet}
@@ -608,7 +624,7 @@
 				<Field.Group>
 					<Field.Field data-invalid={providerErrors?.name ? true : undefined}>
 						<Field.Label for="provider-name">
-							名称 <span class="text-destructive">*</span>
+							{m.admin_settings_ai_field_name()} <span class="text-destructive">*</span>
 						</Field.Label>
 						<Input
 							id="provider-name"
@@ -623,7 +639,7 @@
 						{/if}
 					</Field.Field>
 					<Field.Field>
-						<Field.Label for="provider-kind">类型</Field.Label>
+						<Field.Label for="provider-kind">{m.admin_settings_ai_field_kind()}</Field.Label>
 						<Select.Root type="single" name="kind" bind:value={fieldKind}>
 							<Select.Trigger id="provider-kind" class="w-full">
 								{AI_PROVIDER_KIND_LABELS[fieldKind as keyof typeof AI_PROVIDER_KIND_LABELS] ??
@@ -647,15 +663,13 @@
 							placeholder={kindPlaceholder[fieldKind] ?? ''}
 							aria-invalid={providerErrors?.baseUrl ? true : undefined}
 						/>
-						<Field.Description
-							>仅支持 http(s) 链接；留空使用默认端点（OpenAI / DeepL）。</Field.Description
-						>
+						<Field.Description>{m.admin_settings_ai_kind_hint()}</Field.Description>
 						{#if providerErrors?.baseUrl}
 							<Field.Error>{providerErrors.baseUrl}</Field.Error>
 						{/if}
 					</Field.Field>
 					<Field.Field data-invalid={providerErrors?.apiKeyEnv ? true : undefined}>
-						<Field.Label for="provider-env">密钥环境变量名</Field.Label>
+						<Field.Label for="provider-env">{m.admin_settings_ai_field_env()}</Field.Label>
 						<Input
 							id="provider-env"
 							name="apiKeyEnv"
@@ -664,30 +678,29 @@
 							aria-invalid={providerErrors?.apiKeyEnv ? true : undefined}
 						/>
 						<Field.Description>
-							只填变量名（.env），需以 AI_ 开头（如
-							AI_OPENAI_KEY，与本站其它密钥隔离）；值永不落库、永不经由页面传输。留空 = 不需要密钥。
+							{m.admin_settings_ai_env_hint()}
 						</Field.Description>
 						{#if providerErrors?.apiKeyEnv}
 							<Field.Error>{providerErrors.apiKeyEnv}</Field.Error>
 						{/if}
 					</Field.Field>
 					<Field.Field>
-						<Field.Label for="provider-models">模型列表</Field.Label>
+						<Field.Label for="provider-models">{m.admin_settings_ai_field_models()}</Field.Label>
 						<Textarea
 							id="provider-models"
 							name="models"
 							rows={3}
 							bind:value={fieldModels}
-							placeholder="每行一个模型 ID（可留空，由服务商默认）"
+							placeholder={m.admin_settings_ai_models_ph()}
 						/>
 					</Field.Field>
 					<div class="flex items-center justify-between gap-4">
-						<Field.Label for="provider-enabled">启用</Field.Label>
+						<Field.Label for="provider-enabled">{m.admin_common_enable()}</Field.Label>
 						<Switch
 							id="provider-enabled"
 							name="enabled"
 							bind:checked={fieldEnabled}
-							aria-label="启用服务商"
+							aria-label={m.admin_settings_ai_enable_provider()}
 						/>
 					</div>
 				</Field.Group>
@@ -695,12 +708,12 @@
 			<div class="flex items-center justify-end gap-2 border-t px-4 pt-3">
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="outline" {...props}>取消</Button>
+						<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
 					{/snippet}
 				</Dialog.Close>
 				<Button type="submit" disabled={savingProvider}>
 					{#if savingProvider}<Spinner data-icon="inline-start" />{/if}
-					保存
+					{m.admin_common_save()}
 				</Button>
 			</div>
 		</form>
@@ -716,13 +729,13 @@
 >
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>删除服务商</AlertDialog.Title>
+			<AlertDialog.Title>{m.admin_settings_ai_delete_title()}</AlertDialog.Title>
 			<AlertDialog.Description>
-				将删除「{deleteTarget?.name ?? ''}」，并从功能位分配中移除它。此操作不可撤销。
+				{m.admin_settings_ai_delete_desc({ name: deleteTarget?.name ?? '' })}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 			<form
 				method="post"
 				action="?/deleteProvider"
@@ -733,7 +746,7 @@
 					}}
 			>
 				<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
-				<Button type="submit" variant="destructive">删除</Button>
+				<Button type="submit" variant="destructive">{m.admin_common_delete()}</Button>
 			</form>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

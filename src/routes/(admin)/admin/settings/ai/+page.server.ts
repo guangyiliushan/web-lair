@@ -16,11 +16,12 @@ import {
 import { isUuid } from '$lib/utils/uuid';
 import { AI_FUNCTIONS, type AiProviderKind } from '$lib/utils/ai-meta';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 function firstIssueMessage(error: z.ZodError): string {
 	const issue = error.issues[0];
 	const key = issue.path.join('.');
-	return key ? `${key}：${issue.message}` : issue.message;
+	return key ? m.admin_settings_ai_issue({ key: key, message: issue.message }) : issue.message;
 }
 
 /** Field-keyed errors plus a form-level fallback row. */
@@ -48,7 +49,7 @@ export const load: PageServerLoad = async () => {
 		getOption('ai.translation')
 	]);
 	return {
-		headerTitle: 'AI 设定',
+		headerTitle: m.admin_settings_ai(),
 		providers,
 		assignments,
 		moderation,
@@ -69,12 +70,12 @@ export const actions: Actions = {
 		const id = (form.get('id') ?? '').toString().trim();
 		// Malformed ids never reach the uuid column (P1.1 review lesson).
 		if (id && !isUuid(id)) {
-			return fail(400, { message: '服务商标识无效' } satisfies ProviderFailPayload);
+			return fail(400, { message: m.admin_settings_ai_err_bad_id() } satisfies ProviderFailPayload);
 		}
 		const parsed = providerInputSchema.safeParse(parseProviderForm(form));
 		if (!parsed.success) {
 			return fail(400, {
-				message: '请检查表单',
+				message: m.admin_settings_ai_err_check_form(),
 				providerErrors: providerFieldErrors(parsed.error)
 			});
 		}
@@ -106,19 +107,22 @@ export const actions: Actions = {
 					if (renamed > 0) await setOption('ai.assignments', next, tx);
 					return { found: true as const, renamed };
 				});
-				if (!outcome.found) return fail(404, { message: '服务商不存在' });
+				if (!outcome.found) return fail(404, { message: m.admin_settings_ai_err_not_found() });
 				if (outcome.renamed > 0) {
 					console.warn('[ai] provider renamed; assignments remapped', outcome.renamed);
-					return { message: `服务商已更新（并同步 ${outcome.renamed} 个功能位分配）` };
+					return { message: m.admin_settings_ai_flash_updated_synced({ count: outcome.renamed }) };
 				}
-				return { message: '服务商已更新' };
+				return { message: m.admin_settings_ai_flash_updated() };
 			}
 			await db.insert(aiProviders).values(parsed.data);
-			return { message: '服务商已创建' };
+			return { message: m.admin_settings_ai_flash_created() };
 		} catch (caught) {
 			if (pgErrorCode(caught) === '23505') {
 				console.warn('[ai] provider save rejected: duplicate name');
-				return fail(400, { message: '名称已存在', providerErrors: { name: '名称已存在' } });
+				return fail(400, {
+					message: m.admin_settings_ai_err_name_taken(),
+					providerErrors: { name: m.admin_settings_ai_err_name_taken() }
+				});
 			}
 			throw caught;
 		}
@@ -128,8 +132,8 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id) return fail(400, { message: '缺少服务商' });
-		if (!isUuid(id)) return fail(400, { message: '服务商标识无效' });
+		if (!id) return fail(400, { message: m.admin_settings_ai_err_missing() });
+		if (!isUuid(id)) return fail(400, { message: m.admin_settings_ai_err_bad_id() });
 		const outcome = await db.transaction(async (tx) => {
 			const deleted = await tx
 				.delete(aiProviders)
@@ -147,23 +151,28 @@ export const actions: Actions = {
 			if (removed > 0) await setOption('ai.assignments', next, tx);
 			return { found: true as const, name: deleted[0].name, removed };
 		});
-		if (!outcome.found) return fail(404, { message: '服务商不存在' });
+		if (!outcome.found) return fail(404, { message: m.admin_settings_ai_err_not_found() });
 		if (outcome.removed > 0) {
 			console.warn('[ai] provider deleted; assignments cleared', outcome.name, outcome.removed);
-			return { message: `已删除 ${outcome.name}（并移除 ${outcome.removed} 个功能位分配）` };
+			return {
+				message: m.admin_settings_ai_flash_deleted_removed({
+					name: outcome.name,
+					count: outcome.removed
+				})
+			};
 		}
 		console.warn('[ai] provider deleted', outcome.name);
-		return { message: `已删除 ${outcome.name}` };
+		return { message: m.admin_settings_ai_flash_deleted({ name: outcome.name }) };
 	},
 
 	testProvider: async ({ request }) => {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id) return fail(400, { message: '缺少服务商' });
-		if (!isUuid(id)) return fail(400, { message: '服务商标识无效' });
+		if (!id) return fail(400, { message: m.admin_settings_ai_err_missing() });
+		if (!isUuid(id)) return fail(400, { message: m.admin_settings_ai_err_bad_id() });
 		const [provider] = await db.select().from(aiProviders).where(eq(aiProviders.id, id)).limit(1);
-		if (!provider) return fail(404, { message: '服务商不存在' });
+		if (!provider) return fail(404, { message: m.admin_settings_ai_err_not_found() });
 		// Drizzle types the text column as string; the CHECK pins the enum.
 		const result = await testProviderConnection(
 			{
@@ -191,7 +200,7 @@ export const actions: Actions = {
 			if (!provider) continue;
 			if (!names.has(provider)) {
 				console.warn('[ai] assignments save rejected: unknown provider');
-				return fail(400, { message: `未知服务商：${provider}` });
+				return fail(400, { message: m.admin_settings_ai_err_unknown({ provider: provider }) });
 			}
 			next[fn] = { provider, ...(model ? { model } : {}) };
 		}
@@ -201,7 +210,7 @@ export const actions: Actions = {
 			if (caught instanceof z.ZodError) return fail(400, { message: firstIssueMessage(caught) });
 			throw caught;
 		}
-		return { message: '功能位分配已保存' };
+		return { message: m.admin_settings_ai_flash_assignments() };
 	},
 
 	saveModeration: async ({ request }) => {
@@ -217,15 +226,15 @@ export const actions: Actions = {
 		const linkRaw = raw('linkThreshold');
 		const allowRaw = raw('allow');
 		const blockRaw = raw('block');
-		if (linkRaw === '') return fail(400, { message: '链接数阈值不能为空' });
-		if (allowRaw === '') return fail(400, { message: '放行阈值不能为空' });
-		if (blockRaw === '') return fail(400, { message: '拦截阈值不能为空' });
+		if (linkRaw === '') return fail(400, { message: m.admin_settings_ai_err_link_empty() });
+		if (allowRaw === '') return fail(400, { message: m.admin_settings_ai_err_allow_empty() });
+		if (blockRaw === '') return fail(400, { message: m.admin_settings_ai_err_block_empty() });
 		const regexes = lines('regexes');
 		for (const pattern of regexes) {
 			try {
 				new RegExp(pattern);
 			} catch {
-				return fail(400, { message: `正则无效：${pattern}` });
+				return fail(400, { message: m.admin_settings_ai_err_regex({ pattern: pattern }) });
 			}
 		}
 		try {
@@ -245,7 +254,7 @@ export const actions: Actions = {
 			if (caught instanceof z.ZodError) return fail(400, { message: firstIssueMessage(caught) });
 			throw caught;
 		}
-		return { message: '审核设置已保存' };
+		return { message: m.admin_settings_ai_flash_moderation() };
 	},
 
 	saveBudget: async ({ request }) => {
@@ -254,7 +263,7 @@ export const actions: Actions = {
 		const monthlyRaw = (form.get('monthly') ?? '').toString().trim();
 		const monthly = monthlyRaw === '' ? 0 : Number(monthlyRaw);
 		if (!Number.isFinite(monthly) || monthly < 0) {
-			return fail(400, { message: '月度预算必须是不小于 0 的数字' });
+			return fail(400, { message: m.admin_settings_ai_err_budget() });
 		}
 		// Empty ratios mean "keep the defaults"; garbage is an explicit error
 		// (the old code inverted these - AI-2.1 review).
@@ -263,7 +272,7 @@ export const actions: Actions = {
 		if (ratiosRaw !== '') {
 			alertRatios = ratiosRaw.split(',').map((s) => Number(s.trim()));
 			if (alertRatios.some((r) => !Number.isFinite(r) || r <= 0 || r > 10)) {
-				return fail(400, { message: '告警比例应为小数（如 0.8, 0.9, 1）' });
+				return fail(400, { message: m.admin_settings_ai_err_ratios() });
 			}
 		}
 		try {
@@ -277,7 +286,7 @@ export const actions: Actions = {
 			if (caught instanceof z.ZodError) return fail(400, { message: firstIssueMessage(caught) });
 			throw caught;
 		}
-		return { message: '预算设置已保存' };
+		return { message: m.admin_settings_ai_flash_budget() };
 	},
 
 	saveStyleGuide: async ({ request }) => {
@@ -289,14 +298,14 @@ export const actions: Actions = {
 			if (caught instanceof z.ZodError) return fail(400, { message: firstIssueMessage(caught) });
 			throw caught;
 		}
-		return { message: '风格指南已保存' };
+		return { message: m.admin_settings_ai_flash_style() };
 	},
 
 	saveTranslation: async ({ request }) => {
 		await requireAdminRole();
 		const form = await request.formData();
 		const minCharsRaw = (form.get('minChars') ?? '').toString().trim();
-		if (minCharsRaw === '') return fail(400, { message: '最小字数不能为空' });
+		if (minCharsRaw === '') return fail(400, { message: m.admin_settings_ai_err_min_chars() });
 		try {
 			await setOption('ai.translation', {
 				minChars: Number(minCharsRaw),
@@ -306,6 +315,6 @@ export const actions: Actions = {
 			if (caught instanceof z.ZodError) return fail(400, { message: firstIssueMessage(caught) });
 			throw caught;
 		}
-		return { message: '翻译设置已保存' };
+		return { message: m.admin_settings_ai_flash_translation() };
 	}
 } satisfies Actions;
