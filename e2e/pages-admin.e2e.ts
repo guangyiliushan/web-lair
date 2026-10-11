@@ -58,26 +58,26 @@ async function rowIndex(page: Page, text: string): Promise<number> {
 }
 
 const aFirst = async (page: Page) =>
-	(await rowIndex(page, TITLE_A)) < (await rowIndex(page, TITLE_B));
+	(await rowIndex(page, TITLE_A_ZH)) < (await rowIndex(page, TITLE_B));
 const bFirst = async (page: Page) =>
-	(await rowIndex(page, TITLE_B)) < (await rowIndex(page, TITLE_A));
+	(await rowIndex(page, TITLE_B)) < (await rowIndex(page, TITLE_A_ZH));
 
 test('the registry lists defaults first and tags the fixture rows', async ({ page }) => {
 	await page.goto('/admin/pages');
 	await expect(page.getByText(/共 \d+ 页/)).toBeVisible();
-	await expect(row(page, TITLE_A)).toBeVisible();
+	await expect(row(page, TITLE_A_ZH)).toBeVisible();
 	await expect(row(page, TITLE_B)).toBeVisible();
-	await expect(row(page, 'About Me').getByText('默认')).toBeVisible();
-	await expect(row(page, TITLE_A).getByText('默认')).toHaveCount(0);
+	await expect(row(page, '关于我').getByText('默认')).toBeVisible();
+	await expect(row(page, TITLE_A_ZH).getByText('默认')).toHaveCount(0);
 	// The defaults pin outranks sort_order: A sorts at 0 yet stays below.
-	expect(await rowIndex(page, 'About Me')).toBeLessThan(await rowIndex(page, TITLE_A));
+	expect(await rowIndex(page, '关于我')).toBeLessThan(await rowIndex(page, TITLE_A_ZH));
 	// "新增" stays with the P5 md editor — no header action here.
 	await expect(page.getByRole('button', { name: '新建' })).toHaveCount(0);
 });
 
 test('▲/▼ reorders the fixture pair inside one list renumber', async ({ page }) => {
 	await page.goto('/admin/pages');
-	await expect(row(page, TITLE_A)).toBeVisible();
+	await expect(row(page, TITLE_A_ZH)).toBeVisible();
 	await expect.poll(() => aFirst(page)).toBe(true);
 
 	// Condition-guarded clicks: a hydration-swallowed first click retries
@@ -99,7 +99,7 @@ test('▲/▼ reorders the fixture pair inside one list renumber', async ({ page
 
 test('the eye toggle flips a row between visible and hidden', async ({ page }) => {
 	await page.goto('/admin/pages');
-	const rowA = row(page, TITLE_A);
+	const rowA = row(page, TITLE_A_ZH);
 	await expect(rowA.getByText('可见')).toBeVisible();
 
 	await expect(async () => {
@@ -127,7 +127,7 @@ test('the eye toggle flips a row between visible and hidden', async ({ page }) =
 
 test('default rows expose no delete and fold hiding behind a confirmation', async ({ page }) => {
 	await page.goto('/admin/pages');
-	const rowAbout = row(page, 'About Me');
+	const rowAbout = row(page, '关于我');
 	await expect(rowAbout).toBeVisible();
 	await expect(rowAbout.getByRole('button', { name: '删除' })).toHaveCount(0);
 

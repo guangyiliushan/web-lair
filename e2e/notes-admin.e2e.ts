@@ -27,6 +27,31 @@ function byText(page: Page, text: string | RegExp): Locator {
 	return page.getByText(text).filter({ visible: true });
 }
 
+/**
+ * The public /en/ surface persists `en` into the PARAGLIDE_LOCALE cookie (the
+ * locale strategy resolves url first, then cookie, and persists what it
+ * resolved). Restore this spec's zh-cn pin before returning to admin
+ * locators, or the admin chrome renders English and zh locators hang.
+ */
+async function repinLocale(page: Page) {
+	await page.context().addCookies(zhCnLocale.storageState.cookies);
+}
+
+/**
+ * A visit to an /en/-prefixed page leaves a late client navigation in flight,
+ * whose server responses persist `en` into the cookie *after* repinLocale ran
+ * (server-set cookies are invisible to document.cookie watchers). Wait the
+ * network out, repin, then hard-reload so the editor SSRs the pinned zh set
+ * on a fresh document with no strays.
+ */
+async function reloadOnPinnedLocale(page: Page, url: string) {
+	await page.waitForLoadState('networkidle');
+	await repinLocale(page);
+	await page.goto(url);
+	await repinLocale(page);
+	await page.reload();
+}
+
 function cleanup() {
 	psql(`delete from drafts where slug like 'e2e-note%'`);
 	psql(`delete from drafts where ref_id in (select id from notes where slug like 'e2e-note%')`);
@@ -169,6 +194,7 @@ test('publishes the draft: notes row, front page and admin list', async ({ page 
 	// Front page renders the published note.
 	await page.goto(`/en/notes/${SLUG}`);
 	await expect(page.getByRole('heading', { name: TITLE })).toBeVisible({ timeout: 15000 });
+	await repinLocale(page); // the /en/ visit persisted the cookie to en
 
 	// Admin list shows the row.
 	await page.goto('/admin/notes');
@@ -300,7 +326,7 @@ test('trash removes the note from the front; restore brings it back', async ({ p
 	const trashed = await page.goto(`/en/notes/${SLUG}`);
 	expect(trashed?.status()).toBe(404);
 
-	await page.goto(`/admin/notes/edit?id=${id}`);
+	await reloadOnPinnedLocale(page, `/admin/notes/edit?id=${id}`);
 	await openSheet(page);
 	await page.getByRole('button', { name: '从回收站恢复' }).click();
 	await expect(byText(page, '已从回收站恢复')).toBeVisible({ timeout: 15000 });
@@ -310,6 +336,7 @@ test('trash removes the note from the front; restore brings it back', async ({ p
 
 	const live = await page.goto(`/en/notes/${SLUG}`);
 	expect(live?.status()).toBe(200);
+	await repinLocale(page); // keep the serial follow-ups on the pinned locale
 });
 
 test('a stale tab hits the 409 conflict banner and can reload the server state', async ({
