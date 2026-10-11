@@ -8,6 +8,7 @@ import { NAV_ICON_NAMES } from '$lib/config/nav-icons';
 import { isReservedPageSlug } from '$lib/utils/page-meta';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const LOCALES = ['en', 'zh-cn', 'ja'] as const;
@@ -22,15 +23,20 @@ export const load: PageServerLoad = async ({ url }) => {
 	await requireAdminRole();
 
 	const id = url.searchParams.get('id');
-	if (!id || !isUuid(id)) error(404, '页面不存在');
+	if (!id || !isUuid(id)) error(404, m.admin_pages_err_not_found());
 
 	const [row] = await db.select().from(pages).where(eq(pages.id, id)).limit(1);
-	if (!row) error(404, '页面不存在');
+	if (!row) error(404, m.admin_pages_err_not_found());
 
 	return {
-		headerTitle: '编辑页面',
+		headerTitle: m.admin_pages_edit_title(),
 		headerActions: [
-			{ label: '返回', iconName: 'arrow-left', variant: 'outline', href: '/admin/pages' }
+			{
+				label: m.admin_common_back(),
+				iconName: 'arrow-left',
+				variant: 'outline',
+				href: '/admin/pages'
+			}
 		],
 		page: {
 			id: row.id,
@@ -64,7 +70,7 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = str(form, 'id');
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少页面 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_pages_err_missing_id() });
 		const pageId = id.toLowerCase();
 
 		const [row] = await db
@@ -72,27 +78,28 @@ export const actions: Actions = {
 			.from(pages)
 			.where(eq(pages.id, pageId))
 			.limit(1);
-		if (!row) return fail(404, { error: '页面不存在' });
+		if (!row) return fail(404, { error: m.admin_pages_err_not_found() });
 
 		const title = localizedFrom(form, 'title');
-		if (Object.keys(title).length === 0) return fail(400, { error: '标题至少填写一种语言' });
+		if (Object.keys(title).length === 0)
+			return fail(400, { error: m.admin_pages_err_title_required() });
 
 		const description = localizedFrom(form, 'description');
 		const icon = str(form, 'icon').trim();
 		if (icon !== '' && !(NAV_ICON_NAMES as readonly string[]).includes(icon)) {
-			return fail(400, { error: '图标不在白名单内（前台不会渲染）' });
+			return fail(400, { error: m.admin_pages_err_icon_whitelist() });
 		}
 		const externalUrl = str(form, 'externalUrl').trim();
 		if (externalUrl !== '' && !/^https?:\/\//.test(externalUrl)) {
-			return fail(400, { error: '外链必须是 http(s) 地址（留空 = 站内页面）' });
+			return fail(400, { error: m.admin_pages_err_bad_external() });
 		}
 
 		const slug = str(form, 'slug').trim().toLowerCase();
-		if (!slug) return fail(400, { error: 'Slug 不能为空' });
-		if (!SLUG_RE.test(slug)) return fail(400, { error: 'Slug 仅允许小写英文、数字和连字符' });
+		if (!slug) return fail(400, { error: m.admin_pages_err_slug_required() });
+		if (!SLUG_RE.test(slug)) return fail(400, { error: m.admin_pages_err_bad_slug() });
 		if (slug !== row.slug) {
-			if (row.isDefault) return fail(400, { error: '默认页 Slug 不可修改（种子锚点）' });
-			if (isReservedPageSlug(slug)) return fail(400, { error: '该 Slug 为保留词，请更换' });
+			if (row.isDefault) return fail(400, { error: m.admin_pages_err_slug_locked() });
+			if (isReservedPageSlug(slug)) return fail(400, { error: m.admin_pages_err_slug_reserved() });
 		}
 
 		let updated: { id: string }[];
@@ -111,9 +118,9 @@ export const actions: Actions = {
 		} catch (caught) {
 			// Only a unique violation is a user-visible conflict (topics pattern).
 			if (pgErrorCode(caught) !== '23505') throw caught;
-			return fail(409, { error: 'Slug 已存在' });
+			return fail(409, { error: m.admin_pages_err_slug_taken() });
 		}
-		if (updated.length === 0) return fail(404, { error: '页面不存在' });
+		if (updated.length === 0) return fail(404, { error: m.admin_pages_err_not_found() });
 		return { success: true };
 	}
 };

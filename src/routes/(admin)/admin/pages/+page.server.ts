@@ -7,6 +7,7 @@ import { requireAdminRole } from '$lib/server/authz';
 import { resolveLocalized } from '$lib/server/services/pages';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Pages admin v1 (P2, plan §4): the registry list with ▲/▼ reordering,
@@ -34,7 +35,7 @@ export const load: PageServerLoad = async () => {
 		.orderBy(desc(pages.isDefault), asc(pages.sortOrder), asc(pages.createdAt));
 
 	return {
-		headerTitle: '页面',
+		headerTitle: m.admin_nav_pages(),
 		pages: rows.map((row) => ({
 			...row,
 			title: resolveLocalized(row.title, locale) ?? row.slug
@@ -59,8 +60,9 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = str(form, 'id');
 		const direction = str(form, 'direction');
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少页面 ID' });
-		if (direction !== 'up' && direction !== 'down') return fail(400, { error: '方向无效' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_pages_err_missing_id() });
+		if (direction !== 'up' && direction !== 'down')
+			return fail(400, { error: m.admin_pages_err_bad_direction() });
 		const pageId = id.toLowerCase();
 
 		const result = await db.transaction(async (tx) => {
@@ -92,7 +94,7 @@ export const actions: Actions = {
 			return { kind: 'moved' as const };
 		});
 
-		if (result.kind === 'not-found') return fail(404, { error: '页面不存在' });
+		if (result.kind === 'not-found') return fail(404, { error: m.admin_pages_err_not_found() });
 		return { success: true };
 	},
 
@@ -101,8 +103,9 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = str(form, 'id');
 		const status = str(form, 'status');
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少页面 ID' });
-		if (status !== 'visible' && status !== 'hidden') return fail(400, { error: '状态无效' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_pages_err_missing_id() });
+		if (status !== 'visible' && status !== 'hidden')
+			return fail(400, { error: m.admin_pages_err_bad_status() });
 		const pageId = id.toLowerCase();
 
 		const updated = await db
@@ -110,7 +113,7 @@ export const actions: Actions = {
 			.set({ status })
 			.where(eq(pages.id, pageId))
 			.returning({ id: pages.id });
-		if (updated.length === 0) return fail(404, { error: '页面不存在' });
+		if (updated.length === 0) return fail(404, { error: m.admin_pages_err_not_found() });
 		return { success: true };
 	},
 
@@ -118,7 +121,7 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = str(form, 'id');
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少页面 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_pages_err_missing_id() });
 		const pageId = id.toLowerCase();
 
 		// Lock + guard + delete share one transaction (topics round-7 pattern).
@@ -135,8 +138,8 @@ export const actions: Actions = {
 			return { kind: 'deleted' as const };
 		});
 
-		if (result.kind === 'not-found') return fail(404, { error: '页面不存在' });
-		if (result.kind === 'protected') return fail(409, { error: '默认页不可删除（可改为隐藏）' });
+		if (result.kind === 'not-found') return fail(404, { error: m.admin_pages_err_not_found() });
+		if (result.kind === 'protected') return fail(409, { error: m.admin_pages_err_protected() });
 		return { success: true };
 	}
 };

@@ -10,6 +10,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import type { PageData } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconEye from '@tabler/icons-svelte-runes/icons/eye';
 	import IconEyeOff from '@tabler/icons-svelte-runes/icons/eye-off';
@@ -41,7 +42,7 @@
 </script>
 
 <svelte:head>
-	<title>页面管理 - Lair Admin</title>
+	<title>{m.admin_pages_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex flex-col gap-6">
@@ -56,7 +57,7 @@
 
 	<div class="relative flex h-10 shrink-0 items-center border-b">
 		<div class="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-			共 {data.pages.length} 页 · 默认页置前，其余按排序值。“新增”随 md 编辑器批次（P5）开放。
+			{m.admin_pages_hint({ count: data.pages.length })}
 		</div>
 		<div class="absolute top-0 right-0 flex h-full items-center pr-2">
 			<Separator orientation="vertical" class="h-3.5" />
@@ -72,8 +73,8 @@
 	{#if data.pages.length === 0}
 		<Empty class="py-12">
 			<div class="flex flex-col items-center gap-1">
-				<h3 class="text-lg font-semibold tracking-tight">暂无页面</h3>
-				<p class="text-sm text-muted-foreground">种子页缺失——运行 db:ensure-pages 恢复默认两页。</p>
+				<h3 class="text-lg font-semibold tracking-tight">{m.admin_pages_empty()}</h3>
+				<p class="text-sm text-muted-foreground">{m.admin_pages_seed_missing()}</p>
 			</div>
 		</Empty>
 	{:else}
@@ -81,12 +82,12 @@
 			<Table.Root class="table-fixed">
 				<Table.Header>
 					<Table.Row class="border-border">
-						<Table.Head>标题</Table.Head>
+						<Table.Head>{m.admin_pages_col_title()}</Table.Head>
 						<Table.Head class="hidden w-44 sm:table-cell">Slug</Table.Head>
-						<Table.Head class="hidden w-20 md:table-cell">状态</Table.Head>
-						<Table.Head class="w-28">排序</Table.Head>
-						<Table.Head class="hidden w-36 lg:table-cell">更新时间</Table.Head>
-						<Table.Head class="w-28 text-right">操作</Table.Head>
+						<Table.Head class="hidden w-20 md:table-cell">{m.admin_common_status()}</Table.Head>
+						<Table.Head class="w-28">{m.admin_pages_col_sort()}</Table.Head>
+						<Table.Head class="hidden w-36 lg:table-cell">{m.admin_pages_col_updated()}</Table.Head>
+						<Table.Head class="w-28 text-right">{m.admin_common_actions()}</Table.Head>
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
@@ -101,10 +102,12 @@
 										{page.title}
 									</a>
 									{#if page.isDefault}
-										<Badge variant="secondary" class="shrink-0 text-xs">默认</Badge>
+										<Badge variant="secondary" class="shrink-0 text-xs"
+											>{m.admin_pages_default()}</Badge
+										>
 									{/if}
 									<Badge variant="outline" class="shrink-0 text-xs">
-										{page.externalUrl ? '外链' : '站内'}
+										{page.externalUrl ? m.admin_pages_external() : m.admin_pages_internal()}
 									</Badge>
 								</div>
 							</Table.Cell>
@@ -116,7 +119,7 @@
 									variant={page.status === 'visible' ? 'default' : 'secondary'}
 									class="text-xs"
 								>
-									{page.status === 'visible' ? '可见' : '隐藏'}
+									{page.status === 'visible' ? m.admin_pages_visible() : m.admin_pages_hidden()}
 								</Badge>
 							</Table.Cell>
 							<Table.Cell class="w-28">
@@ -130,7 +133,7 @@
 											variant="ghost"
 											size="icon"
 											class="size-6"
-											aria-label="上移"
+											aria-label={m.admin_projects_move_up()}
 											disabled={index === 0 || index === firstExtraIndex}
 										>
 											<IconArrowUp class="size-3.5" />
@@ -142,7 +145,7 @@
 											variant="ghost"
 											size="icon"
 											class="size-6"
-											aria-label="下移"
+											aria-label={m.admin_projects_move_down()}
 											disabled={index === data.pages.length - 1 || index === lastDefaultIndex}
 										>
 											<IconArrowDown class="size-3.5" />
@@ -164,7 +167,7 @@
 										size="icon"
 										class="size-8"
 										href="/admin/pages/edit?id={page.id}"
-										aria-label="编辑"
+										aria-label={m.admin_common_edit()}
 									>
 										<IconPencil class="size-4" />
 									</Button>
@@ -174,7 +177,7 @@
 												variant="ghost"
 												size="icon"
 												class="size-8"
-												aria-label="隐藏"
+												aria-label={m.admin_pages_hide()}
 												onclick={() => (hideTarget = page)}
 											>
 												<IconEyeOff class="size-4" />
@@ -188,7 +191,7 @@
 													variant="ghost"
 													size="icon"
 													class="size-8"
-													aria-label="隐藏"
+													aria-label={m.admin_pages_hide()}
 												>
 													<IconEyeOff class="size-4" />
 												</Button>
@@ -203,7 +206,7 @@
 												variant="ghost"
 												size="icon"
 												class="size-8"
-												aria-label="显示"
+												aria-label={m.admin_pages_show()}
 											>
 												<IconEye class="size-4" />
 											</Button>
@@ -214,7 +217,7 @@
 											variant="ghost"
 											size="icon"
 											class="size-8 text-destructive hover:text-destructive"
-											aria-label="删除"
+											aria-label={m.admin_common_delete()}
 											onclick={() => (deleteTarget = page)}
 										>
 											<IconTrash class="size-4" />
@@ -233,16 +236,16 @@
 <AlertDialog.Root open={hideTarget !== null} onOpenChange={(open) => !open && (hideTarget = null)}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>隐藏默认页？</AlertDialog.Title>
+			<AlertDialog.Title>{m.admin_pages_hide_title()}</AlertDialog.Title>
 			<AlertDialog.Description>
-				“{hideTarget?.title}” 将从首页卡片、移动端菜单与页脚一起消失（直达仍可访问，不 404）。
+				{m.admin_pages_hide_desc({ title: hideTarget?.title ?? '' })}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if form?.error}
 			<p class="text-sm text-destructive">{form.error}</p>
 		{/if}
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 			<form
 				method="POST"
 				action="?/setStatus"
@@ -257,7 +260,9 @@
 			>
 				<input type="hidden" name="id" value={hideTarget?.id ?? ''} />
 				<input type="hidden" name="status" value="hidden" />
-				<AlertDialog.Action type="submit" disabled={submitting}>隐藏</AlertDialog.Action>
+				<AlertDialog.Action type="submit" disabled={submitting}
+					>{m.admin_pages_hide()}</AlertDialog.Action
+				>
 			</form>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
@@ -269,18 +274,18 @@
 >
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>删除页面？</AlertDialog.Title>
+			<AlertDialog.Title>{m.admin_pages_delete_title()}</AlertDialog.Title>
 			<AlertDialog.Description>
-				“{deleteTarget?.title}” 将被删除。{deleteTarget?.hasContent
-					? 'URL 将 404（数据即页面）。'
-					: '入口将下线；如果代码路由存在，直达仍可访问。'}
+				{m.admin_pages_delete_desc({ title: deleteTarget?.title ?? '' })}{deleteTarget?.hasContent
+					? m.admin_pages_delete_desc_data()
+					: m.admin_pages_delete_desc_code()}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if form?.error}
 			<p class="text-sm text-destructive">{form.error}</p>
 		{/if}
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 			<form
 				method="POST"
 				action="?/delete"
@@ -294,7 +299,9 @@
 				}}
 			>
 				<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
-				<AlertDialog.Action type="submit" disabled={submitting}>删除</AlertDialog.Action>
+				<AlertDialog.Action type="submit" disabled={submitting}
+					>{m.admin_common_delete()}</AlertDialog.Action
+				>
 			</form>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

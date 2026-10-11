@@ -29,7 +29,8 @@ vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: service.requireAdminRole }));
 vi.mock('$lib/paraglide/runtime', () => ({
 	getLocale: () => 'en',
-	locales: ['en', 'zh-cn', 'ja']
+	locales: ['en', 'zh-cn', 'ja'],
+	experimentalStaticLocale: undefined
 }));
 
 import { actions, load } from './+page.server';
