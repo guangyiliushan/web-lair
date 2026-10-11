@@ -8,6 +8,7 @@ import {
 import { mountDecorator } from '$lib/components/markdown/editor/decorator-mount';
 import DetailsDecorator from './details-decorator.svelte';
 import { createDefaultAlertContent } from '$lib/components/markdown/alert/alert-types';
+import { m } from '$lib/paraglide/messages';
 
 export type DetailsVariant = 'details' | 'spoiler';
 
@@ -22,9 +23,9 @@ export interface SerializedDetailsNode extends SerializedLexicalNode {
 	jsonContent: string;
 }
 
-const DEFAULT_SUMMARY: Record<DetailsVariant, string> = {
-	details: '详情',
-	spoiler: '剧透'
+const DEFAULT_SUMMARY: Record<DetailsVariant, () => string> = {
+	details: () => m.editor_details(),
+	spoiler: () => m.toolbar_spoiler()
 };
 
 /**
@@ -102,7 +103,7 @@ export class DetailsNode extends DecoratorNode<HTMLElement> {
 	}
 
 	getSummary(): string {
-		return this.__summary || DEFAULT_SUMMARY[this.__variant];
+		return this.__summary || (DEFAULT_SUMMARY[this.__variant]?.() ?? '');
 	}
 
 	isSummaryExplicit(): boolean {
@@ -161,7 +162,7 @@ export class DetailsNode extends DecoratorNode<HTMLElement> {
 				initialContent: this.__jsonContent,
 				parentEditor: editor
 			},
-			'⚠ 详情容器加载失败，按 Backspace 删除此块'
+			m.editor_crash_details()
 		);
 		const hostEl = editor.getElementByKey(this.__key);
 		if (hostEl) {

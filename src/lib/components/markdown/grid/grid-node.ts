@@ -8,6 +8,7 @@ import {
 import { mountDecorator } from '$lib/components/markdown/editor/decorator-mount';
 import GridDecorator from './grid-decorator.svelte';
 import { createDefaultAlertContent } from '$lib/components/markdown/alert/alert-types';
+import { m } from '$lib/paraglide/messages';
 
 export interface SerializedGridNode extends SerializedLexicalNode {
 	type: 'grid';
@@ -157,7 +158,7 @@ export class GridNode extends DecoratorNode<HTMLElement> {
 				initialContent: this.__jsonContent,
 				parentEditor: editor
 			},
-			'⚠ 网格容器加载失败，按 Backspace 删除此块'
+			m.editor_crash_grid()
 		);
 		const hostEl = editor.getElementByKey(this.__key);
 		if (hostEl) {

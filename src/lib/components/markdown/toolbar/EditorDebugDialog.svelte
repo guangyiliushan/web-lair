@@ -4,6 +4,7 @@
 	import IconCopy from '@tabler/icons-svelte-runes/icons/copy';
 	import IconDownload from '@tabler/icons-svelte-runes/icons/download';
 	import IconBug from '@tabler/icons-svelte-runes/icons/bug';
+	import { m } from '$lib/paraglide/messages';
 
 	type Props = {
 		open: boolean;
@@ -40,9 +41,9 @@
 			<Dialog.Header>
 				<Dialog.Title class="flex items-center gap-2">
 					<IconBug class="size-4" />
-					调试 · Editor State
+					{m.editor_debug_title()}
 				</Dialog.Title>
-				<Dialog.Description>当前 Lexical 编辑器状态的 JSON 序列化输出。</Dialog.Description>
+				<Dialog.Description>{m.editor_debug_desc()}</Dialog.Description>
 			</Dialog.Header>
 
 			<div class="max-h-[60vh] overflow-auto rounded-lg bg-muted/50 p-4">
@@ -53,11 +54,11 @@
 			<Dialog.Footer>
 				<Button variant="outline" onclick={handleDownload}>
 					<IconDownload data-icon="inline-start" />
-					下载
+					{m.editor_debug_download()}
 				</Button>
 				<Button onclick={handleCopy}>
 					<IconCopy data-icon="inline-start" />
-					复制
+					{m.editor_debug_copy()}
 				</Button>
 			</Dialog.Footer>
 		</Dialog.Content>

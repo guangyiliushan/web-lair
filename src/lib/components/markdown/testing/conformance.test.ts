@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { renderMarkdownToHtmlSync } from '$lib/components/markdown';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { conformanceCases } from './conformance-cases';
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
+
+// Default labels and fallbacks come from the message catalog; pin the locale
+// so the case expectations stay in sync with the zh-cn catalog (same
+// convention as the e2e fixtures that assert Chinese copy).
+overwriteGetLocale(() => 'zh-cn');
 
 /**
  * Dual-pipeline conformance test: the same case set must pass on both the

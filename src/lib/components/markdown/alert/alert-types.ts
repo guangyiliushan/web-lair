@@ -1,11 +1,13 @@
+import { m } from '$lib/paraglide/messages';
+
 export type AlertType = 'note' | 'tip' | 'important' | 'warning' | 'caution';
 
-export const ALERT_LABELS: Record<AlertType, string> = {
-	note: '备注',
-	tip: '提示',
-	important: '重要',
-	warning: '警告',
-	caution: '注意'
+export const ALERT_LABELS: Record<AlertType, () => string> = {
+	note: () => m.editor_alert_note(),
+	tip: () => m.editor_alert_tip(),
+	important: () => m.editor_alert_important(),
+	warning: () => m.editor_alert_warning(),
+	caution: () => m.editor_alert_caution()
 };
 
 export const DEFAULT_ALERT_TYPE: AlertType = 'note';

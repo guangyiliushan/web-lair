@@ -83,10 +83,10 @@
 	type BpLevel = 0 | 1 | 2 | 3 | 4;
 
 	const BLOCK_OPTIONS: BlockOption[] = [
-		{ type: 'paragraph', label: '正文', icon: IconArticle },
-		{ type: 'h1', label: '标题 1', icon: IconH1 },
-		{ type: 'h2', label: '标题 2', icon: IconH2 },
-		{ type: 'h3', label: '标题 3', icon: IconH3 }
+		{ type: 'paragraph', label: m.editor_block_paragraph(), icon: IconArticle },
+		{ type: 'h1', label: m.editor_block_h1(), icon: IconH1 },
+		{ type: 'h2', label: m.editor_block_h2(), icon: IconH2 },
+		{ type: 'h3', label: m.editor_block_h3(), icon: IconH3 }
 	];
 
 	// ── Props ──
@@ -228,7 +228,7 @@
 
 	function handleInsertMath() {
 		if (!editor) return;
-		const latex = window.prompt('输入 LaTeX 公式（如 \\frac{a}{b}）:', 'E=mc^2');
+		const latex = window.prompt(m.editor_prompt_latex(), 'E=mc^2');
 		if (latex === null) return;
 		insertMath(editor, latex.trim() || 'E=mc^2');
 	}
@@ -265,11 +265,11 @@
 
 	const ALL_OVERFLOW_GROUPS: OverflowGroupDef[] = [
 		{
-			heading: '文本格式',
+			heading: m.toolbar_text_formats(),
 			items: [
 				{
 					id: 'underline',
-					label: '下划线',
+					label: m.toolbar_underline(),
 					icon: IconUnderline,
 					shortcut: '⌘U',
 					action: () => formatText('underline'),
@@ -277,28 +277,28 @@
 				},
 				{
 					id: 'strikethrough',
-					label: '删除线',
+					label: m.toolbar_strikethrough(),
 					icon: IconStrikethrough,
 					action: () => formatText('strikethrough'),
 					minBp: 2
 				},
 				{
 					id: 'highlight',
-					label: '高亮',
+					label: m.toolbar_highlight(),
 					icon: IconHighlight,
 					action: () => formatText('highlight'),
 					minBp: 3
 				},
 				{
 					id: 'spoiler',
-					label: '剧透',
+					label: m.toolbar_spoiler(),
 					icon: IconEyeOff,
 					action: () => toggleSpoiler(editor!),
 					minBp: 3
 				},
 				{
 					id: 'inlineCode',
-					label: '行内代码',
+					label: m.toolbar_inline_code(),
 					icon: IconCode,
 					action: () => formatText('code'),
 					minBp: 1
@@ -306,11 +306,11 @@
 			]
 		},
 		{
-			heading: '编辑',
+			heading: m.editor_group_edit(),
 			items: [
 				{
 					id: 'undo',
-					label: '撤销',
+					label: m.toolbar_undo(),
 					icon: IconArrowBackUp,
 					shortcut: '⌘Z',
 					action: () => dispatchCmd(UNDO_COMMAND),
@@ -318,7 +318,7 @@
 				},
 				{
 					id: 'redo',
-					label: '重做',
+					label: m.toolbar_redo(),
 					icon: IconArrowForwardUp,
 					shortcut: '⌘⇧Z',
 					action: () => dispatchCmd(REDO_COMMAND),
@@ -327,54 +327,66 @@
 			]
 		},
 		{
-			heading: '列表与排版',
+			heading: m.editor_group_lists(),
 			items: [
 				{
 					id: 'bulletList',
-					label: '无序列表',
+					label: m.toolbar_ul(),
 					icon: IconList,
 					action: () => toggleBulletList(editor!),
 					minBp: 1
 				},
 				{
 					id: 'orderedList',
-					label: '有序列表',
+					label: m.toolbar_ol(),
 					icon: IconListNumbers,
 					action: () => toggleOrderedList(editor!),
 					minBp: 1
 				},
 				{
 					id: 'checkList',
-					label: '待办列表',
+					label: m.toolbar_todo(),
 					icon: IconListCheck,
 					action: () => applyBlockType('check'),
 					minBp: 1
 				},
 				{
 					id: 'quote',
-					label: '引用',
+					label: m.toolbar_quote(),
 					icon: IconBlockquote,
 					action: () => applyBlockType('quote'),
 					minBp: 2
 				},
 				{
 					id: 'horizontalRule',
-					label: '分割线',
+					label: m.toolbar_hr(),
 					icon: IconSeparator,
 					action: () => insertHorizontalRule(editor!),
 					disabled: () => toolbarState.inTable,
 					minBp: 2
 				},
-				{ id: 'table', label: '插入表格', icon: IconTable, action: handleInsertTable, minBp: 2 }
+				{
+					id: 'table',
+					label: m.toolbar_table(),
+					icon: IconTable,
+					action: handleInsertTable,
+					minBp: 2
+				}
 			]
 		},
 		{
-			heading: '插入',
+			heading: m.editor_group_insert(),
 			items: [
-				{ id: 'link', label: '链接', icon: IconLink, action: handleInsertLink, minBp: 0 },
+				{
+					id: 'link',
+					label: m.md_link_toolbar(),
+					icon: IconLink,
+					action: handleInsertLink,
+					minBp: 0
+				},
 				{
 					id: 'image',
-					label: '图片',
+					label: m.editor_insert_image(),
 					icon: IconPhoto,
 					action: handleInsertImage,
 					disabled: () => toolbarState.inTable,
@@ -382,7 +394,7 @@
 				},
 				{
 					id: 'codeBlock',
-					label: '代码块',
+					label: m.toolbar_code_block(),
 					icon: IconCodeDots,
 					action: handleInsertCodeBlock,
 					disabled: () => toolbarState.inTable,
@@ -390,14 +402,26 @@
 				},
 				...ALERT_TYPES.map((type): OverflowItemDef => ({
 					id: `callout-${type}`,
-					label: `Callout · ${ALERT_LABELS[type]}`,
+					label: `Callout · ${ALERT_LABELS[type]?.()}`,
 					icon: ALERT_ICONS[type],
 					action: () => insertAlert(editor!, type),
 					disabled: () => toolbarState.inTable,
 					minBp: 3
 				})),
-				{ id: 'tag', label: '标签', icon: IconTag, action: () => insertTag(editor!), minBp: 3 },
-				{ id: 'formula', label: '公式', icon: IconMath, action: handleInsertMath, minBp: 4 }
+				{
+					id: 'tag',
+					label: m.editor_insert_tag(),
+					icon: IconTag,
+					action: () => insertTag(editor!),
+					minBp: 3
+				},
+				{
+					id: 'formula',
+					label: m.editor_insert_math(),
+					icon: IconMath,
+					action: handleInsertMath,
+					minBp: 4
+				}
 			]
 		}
 	];
@@ -443,7 +467,7 @@
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Content class="min-w-40">
 			<DropdownMenu.Group>
-				<DropdownMenu.GroupHeading>块类型</DropdownMenu.GroupHeading>
+				<DropdownMenu.GroupHeading>{m.editor_group_block_type()}</DropdownMenu.GroupHeading>
 				{#each BLOCK_OPTIONS as option (option.type)}
 					{@const OptionIcon = option.icon}
 					<DropdownMenu.Item onclick={() => applyBlockType(option.type)}>
@@ -595,7 +619,7 @@
 		onmousedown={preventSelectionLoss}
 		disabled={toolbarState.inTable}
 		aria-label={m.toolbar_image()}
-		title={toolbarState.inTable ? '表格内不可插入图片' : '插入图片'}
+		title={toolbarState.inTable ? m.editor_disabled_image() : m.toolbar_image()}
 	>
 		<IconPhoto data-icon="inline-start" />
 	</Button>
@@ -659,7 +683,7 @@
 			onmousedown={preventSelectionLoss}
 			disabled={toolbarState.inTable}
 			aria-label={m.toolbar_hr()}
-			title={toolbarState.inTable ? '表格内不可插入分割线' : '分割线'}
+			title={toolbarState.inTable ? m.editor_disabled_hr() : m.toolbar_hr()}
 		>
 			<IconSeparator data-icon="inline-start" />
 		</Button>
@@ -684,7 +708,7 @@
 			onmousedown={preventSelectionLoss}
 			disabled={toolbarState.inTable}
 			aria-label={m.toolbar_code_block()}
-			title={toolbarState.inTable ? '表格内不可插入代码块' : '代码块'}
+			title={toolbarState.inTable ? m.editor_disabled_code() : m.toolbar_code_block()}
 		>
 			<IconCodeDots data-icon="inline-start" />
 		</Button>
@@ -699,7 +723,7 @@
 						onmousedown={preventSelectionLoss}
 						disabled={toolbarState.inTable}
 						aria-label={m.toolbar_callout()}
-						title={toolbarState.inTable ? '表格内不可插入 Callout' : 'Callout'}
+						title={toolbarState.inTable ? m.editor_disabled_callout() : m.toolbar_callout()}
 					>
 						<IconInfoCircle data-icon="inline-start" />
 					</Button>
@@ -709,7 +733,7 @@
 				{#each ALERT_TYPES as type (type)}
 					{@const Icon = ALERT_ICONS[type]}
 					<DropdownMenu.Item onclick={() => insertAlert(editor!, type)}>
-						<Icon data-icon="inline-start" />{ALERT_LABELS[type]}
+						<Icon data-icon="inline-start" />{ALERT_LABELS[type]?.()}
 					</DropdownMenu.Item>
 				{/each}
 			</DropdownMenu.Content>
@@ -759,7 +783,7 @@
 							<DropdownMenu.Item
 								onclick={item.action}
 								disabled={itemDisabled}
-								title={itemDisabled ? '表格内不可插入' : item.label}
+								title={itemDisabled ? m.editor_disabled_generic() : item.label}
 							>
 								<ItemIcon data-icon="inline-start" />
 								{item.label}

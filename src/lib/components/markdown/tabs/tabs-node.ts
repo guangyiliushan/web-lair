@@ -8,6 +8,7 @@ import {
 import { mountDecorator } from '$lib/components/markdown/editor/decorator-mount';
 import TabsDecorator from './tabs-decorator.svelte';
 import { createDefaultAlertContent } from '$lib/components/markdown/alert/alert-types';
+import { m } from '$lib/paraglide/messages';
 
 export interface SerializedTabEntry {
 	label: string;
@@ -48,7 +49,13 @@ export class TabsNode extends DecoratorNode<HTMLElement> {
 		this.__tabs =
 			tabs.length > 0
 				? tabs
-				: [{ label: '标签一', labelExplicit: false, jsonContent: createDefaultAlertContent() }];
+				: [
+						{
+							label: m.editor_default_tab(),
+							labelExplicit: false,
+							jsonContent: createDefaultAlertContent()
+						}
+					];
 	}
 
 	createDOM(): HTMLElement {
@@ -107,7 +114,7 @@ export class TabsNode extends DecoratorNode<HTMLElement> {
 				tabs: this.__tabs.map((t) => ({ label: t.label, jsonContent: t.jsonContent })),
 				parentEditor: editor
 			},
-			'⚠ 标签页容器加载失败，按 Backspace 删除此块'
+			m.editor_crash_tabs()
 		);
 		const hostEl = editor.getElementByKey(this.__key);
 		if (hostEl) {

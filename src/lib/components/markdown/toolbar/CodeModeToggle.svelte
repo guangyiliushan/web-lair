@@ -3,6 +3,7 @@
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import IconCode from '@tabler/icons-svelte-runes/icons/code';
 	import IconRichText from '@tabler/icons-svelte-runes/icons/writing';
+	import { m } from '$lib/paraglide/messages';
 
 	type Props = {
 		/** 当前是否为代码模式 */
@@ -22,8 +23,8 @@
 				size="icon-sm"
 				{...props}
 				onclick={onToggle}
-				aria-label={codeMode ? '切换到富文本模式' : '切换到代码模式'}
-				title={codeMode ? '切换到富文本模式' : '切换到代码模式'}
+				aria-label={codeMode ? m.editor_switch_rich() : m.editor_switch_code()}
+				title={codeMode ? m.editor_switch_rich() : m.editor_switch_code()}
 			>
 				{#if codeMode}
 					<IconRichText data-icon="inline-start" />
@@ -33,5 +34,5 @@
 			</Button>
 		{/snippet}
 	</Tooltip.Trigger>
-	<Tooltip.Content>{codeMode ? '富文本模式' : '代码模式'}</Tooltip.Content>
+	<Tooltip.Content>{codeMode ? m.editor_mode_rich() : m.editor_mode_code()}</Tooltip.Content>
 </Tooltip.Root>

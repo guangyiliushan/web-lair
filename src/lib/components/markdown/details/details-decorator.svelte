@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { m } from '$lib/paraglide/messages';
 	import { createEditor, $getNodeByKey as getLexicalNodeByKey, type LexicalEditor } from 'lexical';
 	import { registerRichText } from '@lexical/rich-text';
 	import { registerHistory, createEmptyHistoryState } from '@lexical/history';
@@ -110,7 +111,7 @@
 			role="textbox"
 			aria-multiline="true"
 			onfocusin={() => rememberDecoratorFocus(nodeKey)}
-			aria-label="容器内容"
+			aria-label={m.editor_aria_container()}
 		></div>
 	</div>
 </div>

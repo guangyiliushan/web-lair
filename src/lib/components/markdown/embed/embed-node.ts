@@ -11,6 +11,7 @@ import {
 import { mountDecorator } from '$lib/components/markdown/editor/decorator-mount';
 import EmbedCard from './EmbedCard.svelte';
 import { resolveProviderId, type EmbedProviderId } from './registry';
+import { m } from '$lib/paraglide/messages';
 
 // ── 组件级选中(编辑器内的嵌入卡)──
 //
@@ -213,7 +214,7 @@ export class EmbedNode extends DecoratorNode<HTMLElement> {
 					});
 				}
 			},
-			'⚠ 嵌入卡加载失败，按 Backspace 删除此块'
+			m.editor_crash_embed()
 		);
 		const hostEl = editor.getElementByKey(this.__key);
 		if (hostEl) {

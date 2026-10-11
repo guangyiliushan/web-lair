@@ -3,6 +3,7 @@ import type { Root, Paragraph } from 'mdast';
 import { visit } from 'unist-util-visit';
 import type { ContainerDirective } from 'mdast-util-directive';
 import { warnOnce } from './plugin-warnings';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Directive containers (spec 3.2) — the closed registry is
@@ -184,8 +185,8 @@ export const remarkContainerDirective: Plugin<[], Root> = () => {
 				const spoiler = name === 'spoiler';
 				warnUnknownKeys(name, spoiler ? SPOILER_KEYS : DETAILS_KEYS, attributes);
 				const summary = spoiler
-					? String(attributes?.label ?? '').trim() || '剧透'
-					: String(attributes?.summary ?? '').trim() || '详情';
+					? String(attributes?.label ?? '').trim() || m.toolbar_spoiler()
+					: String(attributes?.summary ?? '').trim() || m.editor_details();
 				const open = !spoiler && attributes != null && 'open' in attributes;
 				const data = directive.data ?? (directive.data = {});
 				data.hName = 'details';

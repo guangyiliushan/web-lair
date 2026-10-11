@@ -45,16 +45,16 @@
 	}
 
 	const TURN_INTO_ITEMS: TurnIntoItem[] = [
-		{ key: 'paragraph', label: '文本', icon: IconArticle },
-		{ key: 'h1', label: '标题 1', icon: IconHeading1 },
-		{ key: 'h2', label: '标题 2', icon: IconHeading2 },
-		{ key: 'h3', label: '标题 3', icon: IconHeading3 },
-		{ key: 'bullet', label: '无序列表', icon: IconList },
-		{ key: 'numbered', label: '有序列表', icon: IconListNumbers },
-		{ key: 'todo', label: '待办列表', icon: IconListCheck },
-		{ key: 'quote', label: '引用', icon: IconBlockquote },
-		{ key: 'divider', label: '分割线', icon: IconSeparator },
-		{ key: 'code', label: '代码块', icon: IconCodeDots }
+		{ key: 'paragraph', label: m.editor_block_text(), icon: IconArticle },
+		{ key: 'h1', label: m.editor_block_h1(), icon: IconHeading1 },
+		{ key: 'h2', label: m.editor_block_h2(), icon: IconHeading2 },
+		{ key: 'h3', label: m.editor_block_h3(), icon: IconHeading3 },
+		{ key: 'bullet', label: m.toolbar_ul(), icon: IconList },
+		{ key: 'numbered', label: m.toolbar_ol(), icon: IconListNumbers },
+		{ key: 'todo', label: m.toolbar_todo(), icon: IconListCheck },
+		{ key: 'quote', label: m.toolbar_quote(), icon: IconBlockquote },
+		{ key: 'divider', label: m.toolbar_hr(), icon: IconSeparator },
+		{ key: 'code', label: m.toolbar_code_block(), icon: IconCodeDots }
 	];
 
 	// ── Props ──
@@ -268,7 +268,7 @@
 		<DropdownMenu.Content align="start" side="bottom" sideOffset={4} class="w-48">
 			<!-- TURN INTO -->
 			<DropdownMenu.Group>
-				<DropdownMenu.Label>转换为</DropdownMenu.Label>
+				<DropdownMenu.Label>{m.editor_convert_to()}</DropdownMenu.Label>
 				{#each TURN_INTO_ITEMS as item (item.key)}
 					<DropdownMenu.Item onclick={() => handleTurnInto(item.key)}>
 						<item.icon />
@@ -281,18 +281,18 @@
 
 			<!-- ACTIONS -->
 			<DropdownMenu.Group>
-				<DropdownMenu.Label>操作</DropdownMenu.Label>
+				<DropdownMenu.Label>{m.editor_actions()}</DropdownMenu.Label>
 				<DropdownMenu.Item onclick={handleDuplicate}>
 					<IconCopy />
-					复制块
+					{m.editor_copy_block()}
 				</DropdownMenu.Item>
 				<DropdownMenu.Item onclick={handleMoveUp}>
 					<IconArrowUp />
-					上移
+					{m.editor_move_up()}
 				</DropdownMenu.Item>
 				<DropdownMenu.Item onclick={handleMoveDown}>
 					<IconArrowDown />
-					下移
+					{m.editor_move_down()}
 				</DropdownMenu.Item>
 			</DropdownMenu.Group>
 
@@ -301,7 +301,7 @@
 			<!-- Delete (destructive) -->
 			<DropdownMenu.Item variant="destructive" onclick={handleDelete}>
 				<IconTrash />
-				删除
+				{m.editor_delete()}
 			</DropdownMenu.Item>
 		</DropdownMenu.Content>
 	</DropdownMenu.Root>

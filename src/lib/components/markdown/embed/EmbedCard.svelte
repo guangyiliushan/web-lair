@@ -167,13 +167,13 @@
 		'gh-gist': 'GitHub',
 		tweet: 'X',
 		youtube: 'YouTube',
-		bilibili: '哔哩哔哩',
+		bilibili: m.editor_embed_bilibili(),
 		codesandbox: 'CodeSandbox',
 		arxiv: 'arXiv',
 		tmdb: 'TMDB',
 		bangumi: 'Bangumi',
-		'qq-music': 'QQ 音乐',
-		'netease-music': '网易云音乐',
+		'qq-music': m.editor_embed_qq_music(),
+		'netease-music': m.editor_embed_netease(),
 		leetcode: 'LeetCode'
 	} satisfies Record<Exclude<EmbedProviderId, 'lair'>, string>;
 	const label = $derived(

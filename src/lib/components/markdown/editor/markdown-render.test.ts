@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { renderMarkdownToHtmlSync } from './markdown-config';
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
+
+// Default labels and fallbacks come from the message catalog; pin the locale
+// so assertions stay in sync with the zh-cn catalog (same convention as the
+// e2e fixtures that assert Chinese copy).
+overwriteGetLocale(() => 'zh-cn');
 
 /**
  * Render-pipeline regression: final HTML of the client light pipeline

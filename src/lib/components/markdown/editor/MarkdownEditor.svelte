@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
+	import { m } from '$lib/paraglide/messages';
 	import { mount, unmount } from 'svelte';
 	import type { LexicalEditor } from 'lexical';
 	import { lexicalEditor } from '$lib/components/markdown/editor/lexical-action';
@@ -30,7 +31,7 @@
 		value,
 		initialMarkdown,
 		editable = true,
-		placeholder = '开始输入...',
+		placeholder = m.editor_placeholder_default(),
 		theme = 'default',
 		autofocus = false,
 		showToolbar = true,

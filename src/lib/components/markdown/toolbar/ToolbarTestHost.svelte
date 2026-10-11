@@ -5,10 +5,11 @@
 	// remaining viewport space.
 	import { Provider as TooltipProvider } from '../../ui/tooltip/index.js';
 	import MarkdownEditor from '../editor/MarkdownEditor.svelte';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		initialMarkdown = '',
-		placeholder = '输入正文...'
+		placeholder = m.editor_testhost_placeholder()
 	}: { initialMarkdown?: string; placeholder?: string } = $props();
 </script>
 

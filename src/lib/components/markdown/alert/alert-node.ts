@@ -8,6 +8,7 @@ import {
 import { mountDecorator } from '$lib/components/markdown/editor/decorator-mount';
 import AlertDecorator from './alert-decorator.svelte';
 import { DEFAULT_ALERT_TYPE, createDefaultAlertContent } from './alert-types';
+import { m } from '$lib/paraglide/messages';
 import type { AlertType } from './alert-types';
 
 export interface SerializedAlertNode extends SerializedLexicalNode {
@@ -89,7 +90,7 @@ export class AlertNode extends DecoratorNode<HTMLElement> {
 				initialContent: this.__jsonContent,
 				parentEditor: editor
 			},
-			'⚠ 告警组件加载失败，按 Backspace 删除此块'
+			m.editor_crash_alert()
 		);
 		const hostEl = editor.getElementByKey(this.__key);
 		if (hostEl) {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { m } from '$lib/paraglide/messages';
 	import { createEditor, $getNodeByKey as getLexicalNodeByKey, type LexicalEditor } from 'lexical';
 	import { registerRichText } from '@lexical/rich-text';
 	import { registerHistory, createEmptyHistoryState } from '@lexical/history';
@@ -119,7 +120,7 @@
 </script>
 
 <div class="rich-editor-tabs">
-	<div class="rich-editor-tabs-strip" role="tablist" aria-label="标签页">
+	<div class="rich-editor-tabs-strip" role="tablist" aria-label={m.editor_aria_tabs()}>
 		{#each tabs as tab, index (index)}
 			<button
 				type="button"
@@ -145,7 +146,7 @@
 			role="textbox"
 			aria-multiline="true"
 			onfocusin={() => rememberDecoratorFocus(nodeKey)}
-			aria-label="标签页内容"
+			aria-label={m.editor_aria_tabs_content()}
 		></div>
 	</div>
 </div>

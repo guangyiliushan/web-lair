@@ -3,6 +3,7 @@ import type { Root as HastRoot, Element } from 'hast';
 import { visit, SKIP } from 'unist-util-visit';
 import { META_ATTR, type CodeMeta } from './remark-code-meta';
 import { addClass } from './hast-class';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Code-fence info-string rendering (spec 3.3) — runs BEFORE rehype-pretty-code
@@ -68,7 +69,7 @@ export const rehypeCodeMeta: Plugin<[], HastRoot> = () => {
 				type: 'element',
 				tagName: 'summary',
 				properties: {},
-				children: [{ type: 'text', value: meta.title ?? '代码' }]
+				children: [{ type: 'text', value: meta.title ?? m.editor_code_default_title() }]
 			};
 			const details: Element = {
 				type: 'element',

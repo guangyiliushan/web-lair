@@ -8,6 +8,7 @@
 	import { AlertNode } from './alert-node';
 	import type { AlertType } from './alert-types';
 	import { ALERT_LABELS, ALERT_TYPES } from './alert-types';
+	import { m } from '$lib/paraglide/messages';
 	import { registerExitBlock } from './exit-block';
 
 	// ── Icons ──
@@ -93,7 +94,7 @@
 		caution: IconAlertOctagon
 	};
 	const TYPE_OPTIONS: { type: AlertType; label: string; icon: typeof IconInfoCircle }[] =
-		ALERT_TYPES.map((type) => ({ type, label: ALERT_LABELS[type], icon: ALERT_ICONS[type] }));
+		ALERT_TYPES.map((type) => ({ type, label: ALERT_LABELS[type]?.(), icon: ALERT_ICONS[type] }));
 
 	const currentOption = $derived(
 		TYPE_OPTIONS.find((o) => o.type === currentAlertType) ?? TYPE_OPTIONS[0]
@@ -217,7 +218,7 @@
 
 {#if runtimeError}
 	<div class="rich-editor-alert rich-editor-alert-error" contenteditable="false">
-		<p class="text-sm">内容损坏，按 Backspace 删除此块</p>
+		<p class="text-sm">{m.editor_corrupt_block()}</p>
 	</div>
 {:else}
 	<div class="rich-editor-alert rich-editor-alert-{currentAlertType}" contenteditable="false">
