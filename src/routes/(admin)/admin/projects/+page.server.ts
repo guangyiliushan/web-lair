@@ -22,6 +22,7 @@ import {
 	updateProjectFields
 } from '$lib/server/projects/service';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Admin projects surface (plan §4, batch A): the real review queue replacing
@@ -53,7 +54,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	const focusId = url.searchParams.get('id');
 	const focusRow = focusId && isUuid(focusId) ? await getProject(focusId) : null;
 	return {
-		headerTitle: '项目',
+		headerTitle: m.admin_nav_projects(),
 		filter,
 		counts,
 		targets,
@@ -75,35 +76,35 @@ function text(form: FormData, name: string): string | null {
 	return stringValue.length === 0 ? null : stringValue;
 }
 
-const SERVICE_ERROR_TEXT: Record<string, string> = {
-	'name-required': '名称为必填项',
-	'url-required': '主链接为必填项',
-	'bad-url': '链接必须是 http(s) 地址',
-	'external-id-required': '仓库导入缺少平台 ID（请使用「从链接导入」）',
-	'identity-mismatch': '仓库链接与所选平台不匹配',
-	duplicate: '已存在相同链接或仓库',
-	busy: '操作繁忙，请重试',
-	missing: '项目不存在'
+const SERVICE_ERROR_TEXT: Record<string, () => string> = {
+	'name-required': () => m.admin_projects_err_name_required(),
+	'url-required': () => m.admin_projects_err_url_required(),
+	'bad-url': () => m.admin_projects_err_bad_url(),
+	'external-id-required': () => m.admin_projects_err_external_id_required(),
+	'identity-mismatch': () => m.admin_projects_err_identity_mismatch(),
+	duplicate: () => m.admin_projects_err_duplicate(),
+	busy: () => m.admin_projects_err_busy(),
+	missing: () => m.admin_projects_err_missing()
 };
 
 function serviceFail(err: unknown) {
 	if (err instanceof ProjectsServiceError) {
-		if (err.code === 'busy') return fail(409, { error: SERVICE_ERROR_TEXT.busy });
+		if (err.code === 'busy') return fail(409, { error: SERVICE_ERROR_TEXT.busy?.() });
 		return fail(err.code === 'not_found' ? 404 : 400, {
-			error: SERVICE_ERROR_TEXT[err.message] ?? '操作失败'
+			error: SERVICE_ERROR_TEXT[err.message]?.() ?? m.admin_projects_err_failed()
 		});
 	}
 	throw err;
 }
 
-const IMPORT_ERROR_TEXT: Record<string, string> = {
-	'invalid-url': '链接无效（需要 https 地址）',
-	blocked: '该地址不允许抓取',
-	not_found: '未找到该页面或仓库（404）',
-	rate_limited: '平台限流，请稍后再试',
-	auth: '平台认证失败',
-	network: '网络错误，请稍后再试',
-	parse: '页面格式无法解析'
+const IMPORT_ERROR_TEXT: Record<string, () => string> = {
+	'invalid-url': () => m.admin_projects_import_err_invalid_url(),
+	blocked: () => m.admin_projects_import_err_blocked(),
+	not_found: () => m.admin_projects_import_err_not_found(),
+	rate_limited: () => m.admin_projects_import_err_rate_limited(),
+	auth: () => m.admin_projects_import_err_auth(),
+	network: () => m.admin_projects_import_err_network(),
+	parse: () => m.admin_projects_import_err_parse()
 };
 
 async function editFieldsFrom(form: FormData) {
@@ -132,7 +133,7 @@ export const actions: Actions = {
 		// target editor instead of queueing a guaranteed-empty run.
 		const targets = await getSyncTargets();
 		if (targets.length === 0) {
-			return fail(400, { error: '请先在「同步目标」中添加至少一个账号' });
+			return fail(400, { error: m.admin_projects_err_no_targets() });
 		}
 		const { deduplicated } = await enqueueSync();
 		return { success: true, flash: deduplicated ? 'sync-dedup' : 'sync-queued' };
@@ -143,7 +144,7 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const providerRaw = (form.get('provider') ?? 'site').toString();
 		if (!isProjectProvider(providerRaw)) {
-			return fail(400, { error: '未知的项目类型' });
+			return fail(400, { error: m.admin_projects_err_unknown_type() });
 		}
 		try {
 			const { id } = await createProject({
@@ -162,7 +163,7 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少项目 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_projects_err_missing_id() });
 		try {
 			await updateProjectFields(id, await editFieldsFrom(form));
 			return { success: true, flash: 'updated' };
@@ -175,9 +176,9 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const ids = idsFrom(form);
-		if (ids.length === 0) return fail(400, { error: '未选择项目' });
+		if (ids.length === 0) return fail(400, { error: m.admin_projects_err_no_selection() });
 		const to = (form.get('to') ?? '').toString();
-		if (!isProjectStatus(to)) return fail(400, { error: '未知的目标状态' });
+		if (!isProjectStatus(to)) return fail(400, { error: m.admin_projects_err_unknown_status() });
 		const { updated, skipped } = await setProjectStatus(ids, to);
 		return { success: true, flash: 'status-changed', updated, skipped };
 	},
@@ -186,10 +187,10 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!id || !isUuid(id)) return fail(400, { error: '缺少项目 ID' });
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_projects_err_missing_id() });
 		const move = (form.get('move') ?? '').toString();
 		if (move !== 'up' && move !== 'down' && move !== 'top') {
-			return fail(400, { error: '未知的排序动作' });
+			return fail(400, { error: m.admin_projects_err_unknown_action() });
 		}
 		try {
 			await moveProject(id, move);
@@ -205,9 +206,9 @@ export const actions: Actions = {
 		const single = (form.get('id') ?? '').toString();
 		const ids = idsFrom(form);
 		if (single && isUuid(single)) ids.push(single);
-		if (ids.length === 0) return fail(400, { error: '未选择项目' });
+		if (ids.length === 0) return fail(400, { error: m.admin_projects_err_no_selection() });
 		const deleted = await deleteProjects(ids);
-		if (deleted === 0) return fail(404, { error: '项目不存在' });
+		if (deleted === 0) return fail(404, { error: m.admin_projects_err_missing() });
 		return { success: true, flash: 'deleted', deleted };
 	},
 
@@ -215,10 +216,12 @@ export const actions: Actions = {
 		await requireAdminRole();
 		const form = await request.formData();
 		const url = (form.get('url') ?? '').toString().trim();
-		if (!url) return fail(400, { error: '请输入链接' });
+		if (!url) return fail(400, { error: m.admin_projects_err_url_needed() });
 		const result = await importPrefill(url);
 		if (!result.ok) {
-			return fail(400, { error: IMPORT_ERROR_TEXT[result.reason] ?? '抓取失败' });
+			return fail(400, {
+				error: IMPORT_ERROR_TEXT[result.reason]?.() ?? m.admin_projects_import_err_failed()
+			});
 		}
 		return { success: true, importResult: result.prefill };
 	},
@@ -243,7 +246,7 @@ export const actions: Actions = {
 			// (db down, ...) must surface honestly (review).
 			if (err instanceof ZodError) {
 				return fail(400, {
-					error: '同步目标校验失败：账号不能为空，同一平台账号不可重复'
+					error: m.admin_projects_err_targets_validation()
 				});
 			}
 			throw err;

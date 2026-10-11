@@ -350,7 +350,7 @@
 </script>
 
 <svelte:head>
-	<title>项目管理 - Lair Admin</title>
+	<title>{m.admin_projects_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -364,7 +364,7 @@
 			<div class="flex min-w-0 items-baseline gap-2">
 				<h1 class="truncate text-base font-semibold">{data.headerTitle}</h1>
 				<span class="shrink-0 text-xs text-muted-foreground tabular-nums">
-					{data.counts.all} 条
+					{m.admin_projects_count({ count: data.counts.all })}
 				</span>
 			</div>
 		</div>
@@ -438,7 +438,7 @@
 
 	<nav
 		class="flex shrink-0 flex-wrap items-center gap-1.5 border-b px-4 py-2"
-		aria-label="状态筛选"
+		aria-label={m.admin_projects_filter_aria()}
 	>
 		<a
 			href="?status=all"
@@ -474,7 +474,9 @@
 			{#each selectedIds as id (id)}
 				<input type="hidden" name="ids" value={id} />
 			{/each}
-			<span class="text-xs text-muted-foreground">已选 {selectedIds.length} 项</span>
+			<span class="text-xs text-muted-foreground"
+				>{m.admin_projects_selected_count({ count: selectedIds.length })}</span
+			>
 			<Button type="submit" size="sm" variant="outline" name="to" value="published">
 				{m.admin_projects_bulk_approve()}
 			</Button>
@@ -497,7 +499,7 @@
 				{m.admin_projects_bulk_delete()}
 			</Button>
 			<Button type="button" size="sm" variant="ghost" onclick={() => (selectedIds = [])}>
-				取消选择
+				{m.admin_projects_clear_selection()}
 			</Button>
 		</form>
 	{/if}
@@ -527,7 +529,7 @@
 								class="mt-1"
 								value={row.id}
 								bind:group={selectedIds}
-								aria-label="{row.name} 选择"
+								aria-label={m.admin_projects_select_row({ name: row.name })}
 							/>
 							<div
 								class="mt-0.5 flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/60 bg-muted/40"
@@ -651,7 +653,13 @@
 					<Dialog.Title>{m.admin_projects_edit_title()}</Dialog.Title>
 					<Dialog.Close>
 						{#snippet child({ props })}
-							<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
+							<Button
+								variant="ghost"
+								size="icon"
+								class="size-7"
+								{...props}
+								aria-label={m.admin_common_close()}
+							>
 								<IconX class="size-4" />
 							</Button>
 						{/snippet}
@@ -691,7 +699,7 @@
 						/>
 						{#if isSyncProvider(editing.provider)}
 							<p class="text-xs text-muted-foreground">
-								仓库行的主链接由同步维护（以平台 API 为准）。
+								{m.admin_projects_sync_url_hint()}
 							</p>
 						{/if}
 					</div>
@@ -740,10 +748,10 @@
 				<div class="flex justify-end gap-2 border-t px-5 py-3">
 					<Dialog.Close>
 						{#snippet child({ props })}
-							<Button variant="outline" {...props}>取消</Button>
+							<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
 						{/snippet}
 					</Dialog.Close>
-					<Button type="submit" disabled={submitting}>保存</Button>
+					<Button type="submit" disabled={submitting}>{m.admin_common_save()}</Button>
 				</div>
 			</form>
 		{/if}
@@ -766,7 +774,13 @@
 				<Dialog.Title>{m.admin_projects_new_title()}</Dialog.Title>
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
+						<Button
+							variant="ghost"
+							size="icon"
+							class="size-7"
+							{...props}
+							aria-label={m.admin_common_close()}
+						>
 							<IconX class="size-4" />
 						</Button>
 					{/snippet}
@@ -848,10 +862,10 @@
 			<div class="flex justify-end gap-2 border-t px-5 py-3">
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="outline" {...props}>取消</Button>
+						<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button type="submit" disabled={submitting}>创建</Button>
+				<Button type="submit" disabled={submitting}>{m.admin_common_create()}</Button>
 			</div>
 		</form>
 	</Dialog.Content>
@@ -865,7 +879,13 @@
 				<Dialog.Title>{m.admin_projects_import_title()}</Dialog.Title>
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
+						<Button
+							variant="ghost"
+							size="icon"
+							class="size-7"
+							{...props}
+							aria-label={m.admin_common_close()}
+						>
 							<IconX class="size-4" />
 						</Button>
 					{/snippet}
@@ -904,7 +924,7 @@
 			<div class="flex justify-end gap-2 border-t px-5 py-3">
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="outline" {...props}>取消</Button>
+						<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
 					{/snippet}
 				</Dialog.Close>
 				<Button type="submit" disabled={submitting}>
@@ -931,7 +951,13 @@
 				<Dialog.Title>{m.admin_projects_targets_title()}</Dialog.Title>
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
+						<Button
+							variant="ghost"
+							size="icon"
+							class="size-7"
+							{...props}
+							aria-label={m.admin_common_close()}
+						>
 							<IconX class="size-4" />
 						</Button>
 					{/snippet}
@@ -966,7 +992,7 @@
 							variant="ghost"
 							size="sm"
 							onclick={() => (targetRows = targetRows.filter((_, i) => i !== index))}
-							aria-label="移除"
+							aria-label={m.admin_projects_target_remove()}
 						>
 							<IconX class="size-3.5" />
 						</Button>
@@ -985,10 +1011,10 @@
 			<div class="flex justify-end gap-2 border-t px-5 py-3">
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="outline" {...props}>取消</Button>
+						<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button type="submit" disabled={submitting}>保存</Button>
+				<Button type="submit" disabled={submitting}>{m.admin_common_save()}</Button>
 			</div>
 		</form>
 	</Dialog.Content>
@@ -1006,7 +1032,7 @@
 		<div class="flex justify-end gap-2">
 			<!-- Cancel stays OUTSIDE the destructive form (original P1 find)
 			     and the wrapper now defaults type="button" too. -->
-			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 			<form method="post" action="?/delete" use:enhance={bulkSubmitter}>
 				{#each selectedIds as id (id)}
 					<input type="hidden" name="ids" value={id} />
