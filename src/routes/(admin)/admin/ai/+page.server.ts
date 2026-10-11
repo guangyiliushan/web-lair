@@ -5,6 +5,7 @@ import { aiAgentConversations, aiAgentMemories, aiAgentMessages, aiUsage } from 
 import { requireAdminRole } from '$lib/server/authz';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
+import { m } from '$lib/paraglide/messages';
 
 const MEMORY_LIMIT = 50;
 
@@ -87,51 +88,52 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString().trim();
 		const content = (form.get('content') ?? '').toString().trim();
-		if (!content) return fail(400, { message: '内容不能为空' });
-		if (content.length > 2000) return fail(400, { message: '内容过长（≤2000 字）' });
+		if (!content) return fail(400, { message: m.admin_ai_err_content_required() });
+		if (content.length > 2000) return fail(400, { message: m.admin_ai_err_content_too_long() });
 		if (id) {
-			if (!isUuid(id)) return fail(400, { message: '标识无效' });
+			if (!isUuid(id)) return fail(400, { message: m.admin_ai_err_bad_id() });
 			const updated = await db
 				.update(aiAgentMemories)
 				.set({ content })
 				.where(eq(aiAgentMemories.id, id))
 				.returning({ id: aiAgentMemories.id });
-			if (updated.length === 0) return fail(404, { message: '记忆卡不存在' });
-			return { message: '记忆卡已更新' };
+			if (updated.length === 0) return fail(404, { message: m.admin_ai_err_memory_not_found() });
+			return { message: m.admin_ai_flash_memory_updated() };
 		}
 		const [count] = await db
 			.select({ n: sql<number>`count(*)`.mapWith(Number) })
 			.from(aiAgentMemories);
-		if (count.n >= MEMORY_LIMIT) return fail(400, { message: `记忆卡上限 ${MEMORY_LIMIT} 条` });
+		if (count.n >= MEMORY_LIMIT)
+			return fail(400, { message: m.admin_ai_err_memory_limit({ count: MEMORY_LIMIT }) });
 		await db.insert(aiAgentMemories).values({ content });
-		return { message: '记忆卡已创建' };
+		return { message: m.admin_ai_flash_memory_created() };
 	},
 
 	deleteMemory: async ({ request }) => {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!isUuid(id)) return fail(400, { message: '标识无效' });
+		if (!isUuid(id)) return fail(400, { message: m.admin_ai_err_bad_id() });
 		const deleted = await db
 			.delete(aiAgentMemories)
 			.where(eq(aiAgentMemories.id, id))
 			.returning({ id: aiAgentMemories.id });
-		if (deleted.length === 0) return fail(404, { message: '记忆卡不存在' });
-		return { message: '记忆卡已删除' };
+		if (deleted.length === 0) return fail(404, { message: m.admin_ai_err_memory_not_found() });
+		return { message: m.admin_ai_flash_memory_deleted() };
 	},
 
 	archiveConversation: async ({ request }) => {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
-		if (!isUuid(id)) return fail(400, { message: '标识无效' });
+		if (!isUuid(id)) return fail(400, { message: m.admin_ai_err_bad_id() });
 		const archive = form.get('archive')?.toString() === 'true';
 		const updated = await db
 			.update(aiAgentConversations)
 			.set({ archivedAt: archive ? new Date() : null })
 			.where(eq(aiAgentConversations.id, id))
 			.returning({ id: aiAgentConversations.id });
-		if (updated.length === 0) return fail(404, { message: '会话不存在' });
-		return { message: archive ? '会话已归档' : '已取消归档' };
+		if (updated.length === 0) return fail(404, { message: m.admin_ai_err_session_not_found() });
+		return { message: archive ? m.admin_ai_flash_archived() : m.admin_ai_flash_unarchived() };
 	}
 } satisfies Actions;

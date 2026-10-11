@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { aiAgentMemories } from '$lib/server/db/ai';
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
+
+// Action copy comes from the message catalog; pin the locale so assertions
+// stay in sync with the zh-cn catalog (same convention as the e2e fixtures
+// that assert Chinese copy).
+overwriteGetLocale(() => 'zh-cn');
 
 /**
  * Route-level tests for the AI console actions (AI-2): memory-card CRUD

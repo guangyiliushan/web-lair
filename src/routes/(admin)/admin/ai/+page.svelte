@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import type { PageProps } from './$types';
+	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Spinner } from '$lib/components/ui/spinner';
@@ -72,10 +73,10 @@
 	}
 
 	const roleLabels: Record<string, string> = {
-		system: '系统',
-		user: '我',
-		assistant: '助手',
-		tool: '工具'
+		system: m.admin_ai_role_system(),
+		user: m.admin_ai_role_user(),
+		assistant: m.admin_ai_role_assistant(),
+		tool: m.admin_ai_role_tool()
 	};
 
 	// ── Memory-card dialog state ────────────────────────────────────────
@@ -113,15 +114,15 @@
 		<Tabs.List class="w-fit">
 			<Tabs.Trigger value="conversations">
 				<IconMessages data-icon="inline-start" />
-				对话台
+				{m.admin_ai_tab_conversations()}
 			</Tabs.Trigger>
 			<Tabs.Trigger value="memories">
 				<IconBrain data-icon="inline-start" />
-				记忆卡
+				{m.admin_ai_tab_memories()}
 			</Tabs.Trigger>
 			<Tabs.Trigger value="usage">
 				<IconChartBar data-icon="inline-start" />
-				用量
+				{m.admin_ai_tab_usage()}
 			</Tabs.Trigger>
 		</Tabs.List>
 
@@ -133,9 +134,9 @@
 						<Empty.Media variant="icon">
 							<IconRobot />
 						</Empty.Media>
-						<Empty.Title>还没有对话</Empty.Title>
+						<Empty.Title>{m.admin_ai_no_conversations()}</Empty.Title>
 						<Empty.Description>
-							管理对话随运行时批次接入；这里将展示会话、消息与线程摘要。
+							{m.admin_ai_conversations_desc()}
 						</Empty.Description>
 					</Empty.Header>
 				</Empty.Root>
@@ -144,7 +145,7 @@
 					<MasterDetail.Pane side="master" class="w-80 shrink-0">
 						<MasterDetail.Header
 							icon={IconMessages}
-							title="会话"
+							title={m.admin_ai_sessions_title()}
 							count={data.conversations.length}
 						/>
 						<MasterDetail.List>
@@ -156,14 +157,14 @@
 									<span class="min-w-0 flex-1">
 										<span class="flex items-center gap-2">
 											<span class="truncate text-sm font-medium">
-												{conversation.title ?? '未命名会话'}
+												{conversation.title ?? m.admin_ai_untitled_session()}
 											</span>
 											{#if conversation.archivedAt}
-												<Badge variant="secondary">已归档</Badge>
+												<Badge variant="secondary">{m.admin_ai_archived()}</Badge>
 											{/if}
 										</span>
 										<span class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-											<span>{conversation.messageCount} 条消息</span>
+											<span>{m.admin_ai_message_count({ count: conversation.messageCount })}</span>
 											<span>·</span>
 											<span>{formatDate(conversation.updatedAt ?? conversation.createdAt)}</span>
 										</span>
@@ -175,7 +176,9 @@
 					<MasterDetail.Pane side="detail">
 						{#if selected}
 							<div class="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-4">
-								<h2 class="truncate text-sm font-semibold">{selected.title ?? '未命名会话'}</h2>
+								<h2 class="truncate text-sm font-semibold">
+									{selected.title ?? m.admin_ai_untitled_session()}
+								</h2>
 								<form method="post" action="?/archiveConversation" use:enhance>
 									<input type="hidden" name="id" value={selected.id} />
 									<input
@@ -186,10 +189,10 @@
 									<Button type="submit" variant="outline" size="sm">
 										{#if selected.archivedAt}
 											<IconArchiveOff data-icon="inline-start" />
-											取消归档
+											{m.admin_ai_unarchive()}
 										{:else}
 											<IconArchive data-icon="inline-start" />
-											归档
+											{m.admin_ai_archive()}
 										{/if}
 									</Button>
 								</form>
@@ -197,12 +200,12 @@
 							<div class="min-h-0 flex-1 overflow-auto p-4">
 								{#if selected.summary}
 									<Alert.Root class="mb-4">
-										<Alert.Title>线程摘要</Alert.Title>
+										<Alert.Title>{m.admin_ai_summary()}</Alert.Title>
 										<Alert.Description>{selected.summary}</Alert.Description>
 									</Alert.Root>
 								{/if}
 								{#if data.messages.length === 0}
-									<p class="text-sm text-muted-foreground">这个会话还没有消息。</p>
+									<p class="text-sm text-muted-foreground">{m.admin_ai_no_messages()}</p>
 								{:else}
 									<div class="flex flex-col gap-3">
 										{#each data.messages as message (message.id)}
@@ -227,7 +230,7 @@
 							</div>
 						{:else}
 							<div class="flex h-full items-center justify-center p-6">
-								<p class="text-sm text-muted-foreground">从左侧选择一个会话。</p>
+								<p class="text-sm text-muted-foreground">{m.admin_ai_select_session()}</p>
 							</div>
 						{/if}
 					</MasterDetail.Pane>
@@ -240,14 +243,14 @@
 			<div class="flex flex-col gap-4">
 				<header class="flex flex-wrap items-center justify-between gap-3">
 					<div>
-						<h2 class="text-base font-medium">记忆卡</h2>
+						<h2 class="text-base font-medium">{m.admin_ai_tab_memories()}</h2>
 						<p class="mt-1 text-xs text-muted-foreground">
-							助手长期携带的笔记（上限 {data.memoryLimit} 条，当前 {data.memories.length} 条）。
+							{m.admin_ai_memory_hint({ limit: data.memoryLimit, count: data.memories.length })}
 						</p>
 					</div>
 					<Button type="button" variant="outline" size="sm" onclick={openMemoryCreate}>
 						<IconPlus data-icon="inline-start" />
-						新建记忆卡
+						{m.admin_ai_memory_new()}
 					</Button>
 				</header>
 
@@ -257,8 +260,8 @@
 							<Empty.Media variant="icon">
 								<IconBrain />
 							</Empty.Media>
-							<Empty.Title>还没有记忆卡</Empty.Title>
-							<Empty.Description>记下长期偏好与背景，助手在对话中携带。</Empty.Description>
+							<Empty.Title>{m.admin_ai_memory_empty()}</Empty.Title>
+							<Empty.Description>{m.admin_ai_memory_empty_desc()}</Empty.Description>
 						</Empty.Header>
 					</Empty.Root>
 				{:else}
@@ -271,7 +274,7 @@
 									<div class="flex items-center gap-2">
 										<Button variant="outline" size="sm" onclick={() => openMemoryEdit(memory)}>
 											<IconPencil data-icon="inline-start" />
-											编辑
+											{m.admin_common_edit()}
 										</Button>
 										<Button
 											variant="destructive"
@@ -279,7 +282,7 @@
 											onclick={() => (deleteMemoryTarget = memory)}
 										>
 											<IconTrash data-icon="inline-start" />
-											删除
+											{m.admin_common_delete()}
 										</Button>
 									</div>
 								</div>
@@ -294,14 +297,13 @@
 		<Tabs.Content value="usage" class="min-h-0 flex-1 overflow-auto">
 			<div class="flex flex-col gap-4">
 				<header>
-					<h2 class="text-base font-medium">用量</h2>
-					<p class="mt-1 text-xs text-muted-foreground">按月、按功能聚合（读侧视图）。</p>
+					<h2 class="text-base font-medium">{m.admin_ai_tab_usage()}</h2>
+					<p class="mt-1 text-xs text-muted-foreground">{m.admin_ai_usage_desc()}</p>
 				</header>
 				<Alert.Root>
-					<Alert.Title>口径</Alert.Title>
+					<Alert.Title>{m.admin_ai_usage_basis()}</Alert.Title>
 					<Alert.Description>
-						成本为估算值（OTel GenAI 语义，token 计费快照）；明细保留 24 个月，超限策略在「设定 →
-						开关与阈值」。
+						{m.admin_ai_usage_cost_note()}
 					</Alert.Description>
 				</Alert.Root>
 				{#if data.usage.length === 0}
@@ -310,20 +312,20 @@
 							<Empty.Media variant="icon">
 								<IconChartBar />
 							</Empty.Media>
-							<Empty.Title>暂无用量记录</Empty.Title>
-							<Empty.Description>接入运行时并产生调用后，这里按月汇总。</Empty.Description>
+							<Empty.Title>{m.admin_ai_usage_empty()}</Empty.Title>
+							<Empty.Description>{m.admin_ai_usage_empty_desc()}</Empty.Description>
 						</Empty.Header>
 					</Empty.Root>
 				{:else}
 					<Table.Root>
 						<Table.Header>
 							<Table.Row>
-								<Table.Head>月份</Table.Head>
-								<Table.Head>功能</Table.Head>
-								<Table.Head class="text-right">调用</Table.Head>
-								<Table.Head class="text-right">输入 tokens</Table.Head>
-								<Table.Head class="text-right">输出 tokens</Table.Head>
-								<Table.Head class="text-right">估算成本</Table.Head>
+								<Table.Head>{m.admin_ai_col_month()}</Table.Head>
+								<Table.Head>{m.admin_ai_col_task()}</Table.Head>
+								<Table.Head class="text-right">{m.admin_ai_col_calls()}</Table.Head>
+								<Table.Head class="text-right">{m.admin_ai_col_tokens_in()}</Table.Head>
+								<Table.Head class="text-right">{m.admin_ai_col_tokens_out()}</Table.Head>
+								<Table.Head class="text-right">{m.admin_ai_col_cost()}</Table.Head>
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
@@ -370,10 +372,18 @@
 				<input type="hidden" name="id" value={editingMemory.id} />
 			{/if}
 			<div class="flex items-center justify-between gap-3 border-b px-4 pb-3">
-				<Dialog.Title>{editingMemory ? '编辑记忆卡' : '新建记忆卡'}</Dialog.Title>
+				<Dialog.Title
+					>{editingMemory ? m.admin_ai_memory_edit() : m.admin_ai_memory_new()}</Dialog.Title
+				>
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="ghost" size="icon" class="size-7" {...props} aria-label="关闭">
+						<Button
+							variant="ghost"
+							size="icon"
+							class="size-7"
+							{...props}
+							aria-label={m.admin_common_close()}
+						>
 							<IconX class="size-4" />
 						</Button>
 					{/snippet}
@@ -382,14 +392,14 @@
 			<div class="px-4 py-4">
 				<Field.Group>
 					<Field.Field>
-						<Field.Label for="memory-content">内容</Field.Label>
+						<Field.Label for="memory-content">{m.admin_ai_memory_content()}</Field.Label>
 						<Textarea
 							id="memory-content"
 							name="content"
 							rows={5}
 							bind:value={memoryContent}
 							maxlength={2000}
-							placeholder="例如：站点的语言默认 en，译文以 zh-cn 为准；写作时保留英文术语。"
+							placeholder={m.admin_ai_memory_placeholder()}
 						/>
 					</Field.Field>
 				</Field.Group>
@@ -397,12 +407,12 @@
 			<div class="flex items-center justify-end gap-2 border-t px-4 pt-3">
 				<Dialog.Close>
 					{#snippet child({ props })}
-						<Button variant="outline" {...props}>取消</Button>
+						<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
 					{/snippet}
 				</Dialog.Close>
 				<Button type="submit" disabled={savingMemory}>
 					{#if savingMemory}<Spinner data-icon="inline-start" />{/if}
-					保存
+					{m.admin_common_save()}
 				</Button>
 			</div>
 		</form>
@@ -418,13 +428,15 @@
 >
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>删除记忆卡</AlertDialog.Title>
+			<AlertDialog.Title>{m.admin_ai_memory_delete_title()}</AlertDialog.Title>
 			<AlertDialog.Description>
-				将删除「{(deleteMemoryTarget?.content ?? '').slice(0, 40)}…」。此操作不可撤销。
+				{m.admin_ai_memory_delete_desc({
+					preview: (deleteMemoryTarget?.content ?? '').slice(0, 40)
+				})}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>取消</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 			<form
 				method="post"
 				action="?/deleteMemory"
@@ -435,7 +447,7 @@
 					}}
 			>
 				<input type="hidden" name="id" value={deleteMemoryTarget?.id ?? ''} />
-				<Button type="submit" variant="destructive">删除</Button>
+				<Button type="submit" variant="destructive">{m.admin_common_delete()}</Button>
 			</form>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
