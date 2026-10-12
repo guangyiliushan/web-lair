@@ -99,7 +99,6 @@ beforeEach(() => {
 });
 
 describe('(site)/[slug] load — universal md page', () => {
-
 	it('serves the current-locale body with the content-locales hreflang set', async () => {
 		state.selectResults = [[pageRow]];
 
@@ -238,9 +237,54 @@ describe('(site)/[slug] comment actions (P4 mount)', () => {
 		);
 
 		expect(result).toEqual({ submitted: 'pending' });
-		expect(service.resolveCommentPageTarget).toHaveBeenCalledWith('about', 'en');
-		expect(service.submitComment).toHaveBeenCalledWith(
-			expect.objectContaining({ targetType: 'page', targetId: 'p-1' })
+		expect(service.resolveCommentPageTarget).toHaveBeenCalledWith('en', 'about');
+		expect(service.submitComment).toHaveBeenCalledWith({
+			targetType: 'page',
+			targetId: 'p-1',
+			lang: 'en',
+			parentId: null,
+			text: 'hello page',
+			user: { id: 'u-1', name: 'Reader', emailVerified: true },
+			author: 'Reader',
+			avatar: null,
+			now: expect.any(Date)
+		});
+	});
+
+	it('maps the service failures onto the localized responses', async () => {
+		service.resolveCommentPageTarget.mockResolvedValue('p-1');
+		const cases: Array<[string, number, string]> = [
+			['throttled', 429, 'comment_throttled'],
+			['unverified', 403, 'comment_verify_hint'],
+			['parent-unavailable', 400, 'comment_error_parent'],
+			['target-unavailable', 404, 'comment_error_unavailable'],
+			['empty', 400, 'comment_error_generic'],
+			['too-long', 400, 'comment_error_generic']
+		];
+		for (const [kind, status, message] of cases) {
+			service.submitComment.mockResolvedValue({ kind });
+			const fd = new FormData();
+			fd.set('text', 'x');
+			const result = await actions.comment(
+				makeEvent('about', { request: { formData: vi.fn(async () => fd) } })
+			);
+			expect(result, kind).toMatchObject({ status, data: { message } });
+		}
+	});
+
+	it('reads the parentId for replies only, mirroring the posts host', async () => {
+		service.resolveCommentPageTarget.mockResolvedValue('p-1');
+		const fd = new FormData();
+		fd.set('text', 'r');
+		fd.set('parentId', 'aaaaaaaa-1111-1111-1111-111111111111');
+		const request = { request: { formData: vi.fn(async () => fd) } };
+
+		await actions.comment(makeEvent('about', request));
+		expect(service.submitComment).toHaveBeenCalledWith(expect.objectContaining({ parentId: null }));
+
+		await actions.reply(makeEvent('about', request));
+		expect(service.submitComment).toHaveBeenLastCalledWith(
+			expect.objectContaining({ parentId: 'aaaaaaaa-1111-1111-1111-111111111111' })
 		);
 	});
 

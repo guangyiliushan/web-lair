@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { psql } from './support';
+import { approveQueueRow, psql } from './support';
 import { zhCnLocale } from './locale-fixture';
 
 test.use(zhCnLocale);
@@ -47,13 +47,9 @@ test.afterAll(() => {
 });
 
 test('the owner approves a pending comment from the queue', async ({ page }) => {
-	await page.goto('/admin/comments');
-	await expect(page.getByText('pending item from e2e')).toBeVisible({ timeout: 10000 });
-
-	await page.locator(`input[name="ids"][value="${ACTIVE}"]`).check();
-	await page.getByRole('button', { name: '通过' }).click();
-
-	await expect(page.getByText('已通过 1 条')).toBeVisible();
+	// The retry budget inside approveQueueRow outlives the 30s test default.
+	test.setTimeout(120_000);
+	await approveQueueRow(page, ACTIVE, { rowText: 'pending item from e2e' });
 	expect(psql(`select state from comments where id = '${ACTIVE}'`)).toBe('approved');
 });
 

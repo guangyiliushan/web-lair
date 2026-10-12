@@ -114,7 +114,7 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 	// service re-check must agree on the visibility boundary.
 	const now = new Date();
 	const lang = getLocale();
-	const targetId = await resolveCommentPageTarget(event.params.slug, lang);
+	const targetId = await resolveCommentPageTarget(lang, event.params.slug);
 	if (!targetId) return fail(404, { message: m.comment_error_unavailable() });
 
 	const profile = event.locals.profile;
@@ -139,7 +139,6 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 			return fail(403, { message: m.comment_verify_hint() });
 		case 'empty':
 		case 'too-long':
-		case 'unsupported-target':
 			return fail(400, { message: m.comment_error_generic() });
 		case 'parent-unavailable':
 			return fail(400, { message: m.comment_error_parent() });

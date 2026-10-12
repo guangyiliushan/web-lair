@@ -185,7 +185,6 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 			return fail(403, { message: m.comment_verify_hint() });
 		case 'empty':
 		case 'too-long':
-		case 'unsupported-target':
 			return fail(400, { message: m.comment_error_generic() });
 		case 'parent-unavailable':
 			return fail(400, { message: m.comment_error_parent() });

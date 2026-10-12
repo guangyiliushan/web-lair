@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
-import { apiPost, psql, valkeyAlive, valkeyDel } from './support';
+import { apiPost, approveQueueRow, psql, valkeyAlive, valkeyDel } from './support';
 
 /**
  * Comment P3a acceptance (pages plan T7): guest guidance, submit -> pending,
@@ -209,6 +209,8 @@ test('reader submits -> pending with the own-pending badge; guests do not see it
 test('owner approves from the queue (post target) and the guest now sees it', async ({
 	browser
 }) => {
+	// The retry budget inside approveQueueRow outlives the 30s test default.
+	test.setTimeout(120_000);
 	const owner = await guestContext(browser);
 	const ownerPage = await owner.newPage();
 	await ownerPage.goto('/admin/comments');
@@ -224,9 +226,7 @@ test('owner approves from the queue (post target) and the guest now sees it', as
 	);
 
 	const commentId = psql(`select id from comments where text = '${T_READER}'`);
-	await ownerPage.locator(`input[name="ids"][value="${commentId}"]`).check();
-	await ownerPage.getByRole('button', { name: '通过' }).click();
-	await expect(ownerPage.getByText('已通过 1 条')).toBeVisible();
+	await approveQueueRow(ownerPage, commentId, { rowText: T_READER });
 	expect(psql(`select state from comments where id = '${commentId}'`)).toBe('approved');
 
 	const guest = await guestContext(browser);

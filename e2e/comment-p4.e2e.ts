@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
-import { apiPost, psql, valkeyDel } from './support';
+import { apiPost, approveQueueRow, psql, valkeyDel } from './support';
 
 /**
  * Comment P4 acceptance (pages plan T8): the reader self-service - edit ->
@@ -31,6 +31,8 @@ const T_R2 = 'e2e-p4 修订稿';
 const T_R3 = 'e2e-p4 二稿';
 const T_REPLY = 'e2e-p4 的回复';
 const T_PAGE = 'e2e-p4 页面评论';
+const T_OWNER1 = 'e2e-p4 站长初稿';
+const T_OWNER2 = 'e2e-p4 站长修订';
 const PAGE_TITLE = 'E2E 评论页面';
 
 /** Root-composer submit, scoped to the ?/comment form (composer conventions). */
@@ -156,7 +158,8 @@ async function openSurface(
  */
 async function editComment(page: Page, itemSelector: string, text: string) {
 	const item = page.locator(itemSelector);
-	const form = page.locator('form[action="?/edit"]');
+	// Scope to the item: a nested reply's surfaces must not satisfy the locator.
+	const form = item.locator('form[action="?/edit"]');
 	await expect(async () => {
 		if ((await form.count()) === 0) {
 			// .first(): a root item nests its replies' buttons too; the root's
@@ -171,18 +174,12 @@ async function editComment(page: Page, itemSelector: string, text: string) {
 	}).toPass({ timeout: 60000 });
 }
 
-/** Owner approves one queue row (target display asserted by the caller). */
-async function ownerApprove(browser: Browser, text: string, badge: string) {
+/** Owner approves one queue row through the shared fresh-page retry. */
+async function ownerApprove(browser: Browser, text: string) {
 	const owner = await guestContext(browser);
 	const ownerPage = await owner.newPage();
-	await ownerPage.goto('/admin/comments');
-	const row = ownerPage.locator('label').filter({ hasText: text });
-	await expect(row).toBeVisible({ timeout: 15000 });
-	await expect(row.getByText(badge, { exact: true })).toBeVisible();
 	const id = psql(`select id from comments where text = '${text}'`);
-	await ownerPage.locator(`input[name="ids"][value="${id}"]`).check();
-	await ownerPage.getByRole('button', { name: '通过' }).click();
-	await expect(ownerPage.getByText('已通过 1 条')).toBeVisible();
+	await approveQueueRow(ownerPage, id, { rowText: text });
 	expect(psql(`select state from comments where id = '${id}'`)).toBe('approved');
 	await owner.close();
 }
@@ -194,7 +191,10 @@ test('reader submits and edits: pending + edited_at, own row shows the marker', 
 }) => {
 	const page = await readerPage(browser);
 	await page.goto(POST_PATH);
-	await page.getByRole('textbox', { name: '评论内容' }).fill(T_R1);
+	const textarea = page.getByRole('textbox', { name: '评论内容' });
+	await textarea.fill(T_R1);
+	// Hydration gate: the fill only counts once the value stuck (house rule).
+	await expect(textarea).toHaveValue(T_R1);
 	await rootSubmit(page).click();
 	await expect(page.getByText(T_R1)).toBeVisible();
 	commentId = psql(`select id from comments where text = '${T_R1}'`);
@@ -216,7 +216,7 @@ test('reader submits and edits: pending + edited_at, own row shows the marker', 
 test('owner approves the edit; guests and other readers see no write entries', async ({
 	browser
 }) => {
-	await ownerApprove(browser, T_R2, '文章');
+	await ownerApprove(browser, T_R2);
 
 	const guest = await guestContext(browser);
 	const guestPage = await guest.newPage();
@@ -250,7 +250,7 @@ test('reader replies; the owner approves the reply', async ({ browser }) => {
 	clearWindow();
 	await page.close();
 
-	await ownerApprove(browser, T_REPLY, '文章');
+	await ownerApprove(browser, T_REPLY);
 });
 
 test('an edited root hides its subtree until the re-approval', async ({ browser }) => {
@@ -267,9 +267,12 @@ test('an edited root hides its subtree until the re-approval', async ({ browser 
 	await guestPage.goto(POST_PATH);
 	await expect(guestPage.getByText(T_R3)).toHaveCount(0);
 	await expect(guestPage.getByText(T_REPLY)).toHaveCount(0);
+	// Positive anchor: the page really rendered with zero visible comments -
+	// a 404/500 would fail this instead of passing the absences above.
+	await expect(guestPage.locator('#comments-title')).toContainText('(0)');
 	await guest.close();
 
-	await ownerApprove(browser, T_R3, '文章');
+	await ownerApprove(browser, T_R3);
 
 	const restored = await guestContext(browser);
 	const restoredPage = await restored.newPage();
@@ -317,7 +320,9 @@ test('the pages mount: a universal md page is commentable and the queue shows th
 }) => {
 	const page = await readerPage(browser);
 	await page.goto(PAGE_PATH);
-	await page.getByRole('textbox', { name: '评论内容' }).fill(T_PAGE);
+	const textarea = page.getByRole('textbox', { name: '评论内容' });
+	await textarea.fill(T_PAGE);
+	await expect(textarea).toHaveValue(T_PAGE);
 	await rootSubmit(page).click();
 	await expect(page.locator('[data-comment-id]').filter({ hasText: T_PAGE })).toBeVisible();
 	clearWindow();
@@ -332,6 +337,7 @@ test('the pages mount: a universal md page is commentable and the queue shows th
 	const guestPage = await guest.newPage();
 	await guestPage.goto(PAGE_PATH);
 	await expect(guestPage.getByText(T_PAGE)).toHaveCount(0);
+	await expect(guestPage.locator('#comments-title')).toContainText('(0)');
 	await guest.close();
 
 	const owner = await guestContext(browser);
@@ -341,5 +347,41 @@ test('the pages mount: a universal md page is commentable and the queue shows th
 	await expect(row).toBeVisible({ timeout: 15000 });
 	await expect(row.getByText('页面', { exact: true })).toBeVisible();
 	await expect(row.getByText(PAGE_TITLE)).toBeVisible();
+	await owner.close();
+});
+
+test('the owners edit auto-approves: public immediately with the edited marker', async ({
+	browser
+}) => {
+	const owner = await guestContext(browser);
+	const ownerPage = await owner.newPage();
+	// Visiting /admin first acquires the loopback owner session for this
+	// context (the same recipe as the p3a owner case).
+	await ownerPage.goto('/admin/comments');
+	await expect(ownerPage.getByRole('tab', { name: /待审/ })).toBeVisible({ timeout: 15000 });
+
+	await ownerPage.goto(POST_PATH);
+	const textarea = ownerPage.getByRole('textbox', { name: '评论内容' });
+	await textarea.fill(T_OWNER1);
+	await expect(textarea).toHaveValue(T_OWNER1);
+	await rootSubmit(ownerPage).click();
+	await expect(ownerPage.getByText('已发表。')).toBeVisible();
+
+	const ownerId = psql(`select id from comments where text = '${T_OWNER1}'`);
+	expect(psql(`select state from comments where id = '${ownerId}'`)).toBe('approved');
+
+	await editComment(ownerPage, `[data-comment-id="${ownerId}"]`, T_OWNER2);
+	// Auto-approved (ruling 5.3): the flash is the approved one and the
+	// comment never left the public surface.
+	await expect(ownerPage.getByText('已发表。')).toBeVisible();
+	expect(psql(`select state from comments where id = '${ownerId}'`)).toBe('approved');
+
+	const guest = await guestContext(browser);
+	const guestPage = await guest.newPage();
+	await guestPage.goto(POST_PATH);
+	const item = guestPage.locator(`[data-comment-id="${ownerId}"]`);
+	await expect(item.getByText(T_OWNER2)).toBeVisible();
+	await expect(item.getByText('已编辑')).toBeVisible();
+	await guest.close();
 	await owner.close();
 });

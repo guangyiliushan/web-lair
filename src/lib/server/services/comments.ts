@@ -6,6 +6,7 @@ import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isAdminRole } from '$lib/server/auth/owner';
 import { getCache } from '$lib/server/cache';
 import { rateLimit, type CacheStore } from '$lib/server/cache/store';
+import { locales } from '$lib/paraglide/runtime';
 import { isUuid } from '$lib/utils/uuid';
 import {
 	COMMENT_MAX_LENGTH,
@@ -120,7 +121,9 @@ export interface LoadThreadsInput {
  * then the replies that belong to the fetched roots, so replies can never be
  * orphaned by a row budget shared with the roots list. Each phase fetches one
  * extra row as a truncation probe (a full page without an extra row means the
- * list is genuinely capped).
+ * list is genuinely capped). A soft-deleted root that the assembly will drop
+ * still spends its slot (accepted 2026-10-12: the cap is a seatbelt, and the
+ * viewer-dependent SQL prefilter costs more than it saves).
  */
 export async function loadThreads(input: LoadThreadsInput): Promise<ThreadsPage> {
 	const condition = visibleCommentCondition(input.targetType, input.targetId, input.viewerId);
@@ -289,7 +292,11 @@ export async function resolveCommentPostTarget(
  * Mirrors the universal route's contract: non-external md rows whose
  * current-locale body exists (strict language serving, P1b ruling).
  */
-export async function resolveCommentPageTarget(slug: string, lang: string): Promise<string | null> {
+export async function resolveCommentPageTarget(lang: string, slug: string): Promise<string | null> {
+	// Locale tags are never page slugs (the universal route's read-side belt,
+	// mirrored here so a legacy locale-shaped row cannot collect comments its
+	// page can never display - review P3-1).
+	if ((locales as readonly string[]).includes(slug)) return null;
 	const row = await getPageBySlug(slug);
 	if (!row || row.externalUrl !== null || row.content === null) return null;
 	if (resolvePageContent(row.content, lang) === null) return null;
@@ -329,8 +336,7 @@ export type SubmitCommentResult =
 	| { kind: 'empty' }
 	| { kind: 'too-long'; max: number }
 	| { kind: 'target-unavailable' }
-	| { kind: 'parent-unavailable' }
-	| { kind: 'unsupported-target' };
+	| { kind: 'parent-unavailable' };
 
 export async function submitComment(input: SubmitCommentInput): Promise<SubmitCommentResult> {
 	const now = input.now ?? new Date();
@@ -487,7 +493,11 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		// The target or parent row was hard-deleted between validation and
 		// insert (FK violation): surface the same unavailable outcome instead
 		// of an unhandled 500 (database review).
-		if (pgErrorCode(caught) === '23503') return { kind: 'target-unavailable' };
+		if (pgErrorCode(caught) === '23503') {
+			// The likelier loser in a reply race is the parent row; a root
+			// submission can only lose its target (review P3-5).
+			return { kind: input.parentId ? 'parent-unavailable' : 'target-unavailable' };
+		}
 		throw caught;
 	}
 }
@@ -498,7 +508,7 @@ export interface EditCommentInput {
 	commentId: string;
 	text: string;
 	/** Signed-in author; the service is the authoritative ownership gate. */
-	user: { id: string; role?: unknown };
+	user: { id: string; role?: unknown; emailVerified?: boolean };
 	/** Test seam: cache store override (defaults to the process-wide store). */
 	cache?: CacheStore;
 	/** Test seam: clock. */
@@ -508,6 +518,7 @@ export interface EditCommentInput {
 export type EditCommentResult =
 	| { kind: 'updated'; state: 'pending' | 'approved' }
 	| { kind: 'throttled'; windowSeconds: number }
+	| { kind: 'unverified' }
 	| { kind: 'empty' }
 	| { kind: 'too-long'; max: number }
 	| { kind: 'unavailable' };
@@ -519,9 +530,17 @@ export type EditCommentResult =
  * `edited_at` stamp. Owner/admin edits auto-approve like their submissions
  * and skip the window. A missing row, a foreign author, a deleted row and a
  * rejected row are one indistinguishable `unavailable` (fail-closed).
+ * `pin` intentionally stays on an edit (a moderator signal on the row,
+ * restored with the re-approval); delete clears it instead (review P3-7).
  */
 export async function editComment(input: EditCommentInput): Promise<EditCommentResult> {
 	const now = input.now ?? new Date();
+
+	// Defense in depth (mirrors submitComment): the route checks too, but the
+	// service stays fail-closed when a future mount forgets the gate
+	// (review P3-2).
+	if (input.user.emailVerified !== true) return { kind: 'unverified' };
+
 	if (!isUuid(input.commentId)) return { kind: 'unavailable' };
 
 	const text = normalizeCommentText(input.text);
@@ -587,23 +606,28 @@ export async function editComment(input: EditCommentInput): Promise<EditCommentR
 			and(
 				eq(comments.id, row.id),
 				eq(comments.readerId, input.user.id),
-				eq(comments.isDeleted, false)
+				eq(comments.isDeleted, false),
+				// A concurrent rejection must not be revived by this write
+				// (review P2-1). `approved` deliberately stays allowed: the
+				// edit pulls it back to pending - the "审核后注入" guard.
+				inArray(comments.state, ['pending', 'approved'])
 			)
 		)
 		.returning({ id: comments.id });
-	if (updated.length === 0) return { kind: 'unavailable' }; // raced a delete
+	if (updated.length === 0) return { kind: 'unavailable' }; // raced a delete or a rejection
 
 	return { kind: 'updated', state };
 }
 
 export interface DeleteCommentInput {
 	commentId: string;
-	user: { id: string };
+	user: { id: string; emailVerified?: boolean };
 	/** Test seam: clock. */
 	now?: Date;
 }
 
-export type DeleteCommentResult = { kind: 'deleted' } | { kind: 'unavailable' };
+export type DeleteCommentResult =
+	{ kind: 'deleted' } | { kind: 'unverified' } | { kind: 'unavailable' };
 
 /**
  * Author-only soft delete (spec §6): the moderation axis stays untouched so
@@ -613,6 +637,10 @@ export type DeleteCommentResult = { kind: 'deleted' } | { kind: 'unavailable' };
  */
 export async function deleteComment(input: DeleteCommentInput): Promise<DeleteCommentResult> {
 	const now = input.now ?? new Date();
+
+	// Mirrors editComment: fail closed when the caller forgets the gate.
+	if (input.user.emailVerified !== true) return { kind: 'unverified' };
+
 	if (!isUuid(input.commentId)) return { kind: 'unavailable' };
 
 	const [row] = await db
@@ -641,7 +669,10 @@ export async function deleteComment(input: DeleteCommentInput): Promise<DeleteCo
 			and(
 				eq(comments.id, row.id),
 				eq(comments.readerId, input.user.id),
-				eq(comments.isDeleted, false)
+				eq(comments.isDeleted, false),
+				// Aligned with editComment: a concurrently rejected row must
+				// not pass through this window either (review P3-8).
+				inArray(comments.state, ['pending', 'approved'])
 			)
 		)
 		.returning({ id: comments.id });

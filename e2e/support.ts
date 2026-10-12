@@ -109,3 +109,29 @@ export async function openAdminSidebarMenu(page: Page) {
 export async function pickLocaleMenuItem(page: Page, label: string) {
 	await page.locator('[role="menuitemradio"]').filter({ hasText: label }).click();
 }
+
+/**
+ * Approve one comment-queue row through the SSR bulk form, with the house
+ * fresh-page retry (the notes-unlock lesson): under full-suite load the first
+ * native submit can hang without a banner, and a stale click on the same page
+ * eats the whole budget. Each attempt re-gotos; an attempt that finds the
+ * checkbox gone treats it as already-flipped, so a late-landing POST cannot
+ * double-bounce. Callers assert the resulting state in the database.
+ */
+export async function approveQueueRow(
+	page: Page,
+	commentId: string,
+	options: { rowText?: string } = {}
+) {
+	await expect(async () => {
+		await page.goto('/admin/comments');
+		const checkbox = page.locator(`input[name="ids"][value="${commentId}"]`);
+		if ((await checkbox.count()) === 0) return; // a previous attempt landed (row left the queue)
+		if (options.rowText) {
+			await expect(page.getByText(options.rowText)).toBeVisible({ timeout: 10000 });
+		}
+		await checkbox.check();
+		await page.getByRole('button', { name: '通过' }).click({ timeout: 5000 });
+		await expect(page.getByText('已通过 1 条')).toBeVisible({ timeout: 8000 });
+	}).toPass({ timeout: 90_000 });
+}

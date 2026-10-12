@@ -21,7 +21,9 @@ const { state } = vi.hoisted(() => {
 		resolveResult: 'post-1' as string | null,
 		resolveCalls: [] as unknown[][],
 		submitCalls: [] as Record<string, unknown>[],
-		submitResults: [] as { kind: string }[]
+		submitResults: [] as { kind: string }[],
+		editCalls: [] as Record<string, unknown>[],
+		deleteCalls: [] as Record<string, unknown>[]
 	};
 	return { state };
 });
@@ -44,6 +46,14 @@ vi.mock('$lib/server/services/comments', () => ({
 	submitComment: vi.fn(async (input: Record<string, unknown>) => {
 		state.submitCalls.push(input);
 		return state.submitResults.shift() ?? { kind: 'created', id: 'c1', state: 'pending' };
+	}),
+	editComment: vi.fn(async (input: Record<string, unknown>) => {
+		state.editCalls.push(input);
+		return { kind: 'updated', state: 'pending' };
+	}),
+	deleteComment: vi.fn(async (input: Record<string, unknown>) => {
+		state.deleteCalls.push(input);
+		return { kind: 'deleted' };
 	})
 }));
 vi.mock('$lib/paraglide/runtime', () => ({
@@ -86,6 +96,8 @@ beforeEach(() => {
 	state.resolveCalls = [];
 	state.submitCalls = [];
 	state.submitResults = [];
+	state.editCalls = [];
+	state.deleteCalls = [];
 	resolveMock.mockClear();
 });
 
@@ -141,6 +153,24 @@ describe('post comment actions', () => {
 		expect(state.submitCalls).toHaveLength(0);
 	});
 
+	it('routes edit and delete through the shared handlers (review P3-6)', async () => {
+		const editAction = actions.edit as (event: never) => Promise<Record<string, unknown>>;
+		const deleteAction = actions.delete as (event: never) => Promise<Record<string, unknown>>;
+
+		const editForm = fd({ id: 'aaaaaaaa-1111-1111-1111-111111111111', text: 'edited' });
+		expect(await editAction(makeEvent(editForm))).toEqual({ submitted: 'pending' });
+		expect(state.editCalls[0]).toMatchObject({
+			commentId: 'aaaaaaaa-1111-1111-1111-111111111111',
+			text: 'edited'
+		});
+
+		const deleteForm = fd({ id: 'aaaaaaaa-1111-1111-1111-111111111111' });
+		expect(await deleteAction(makeEvent(deleteForm))).toEqual({ deleted: true });
+		expect(state.deleteCalls[0]).toMatchObject({
+			commentId: 'aaaaaaaa-1111-1111-1111-111111111111'
+		});
+	});
+
 	it('maps every service result kind to the localized failure', async () => {
 		const cases: Array<[string, number, string]> = [
 			['throttled', 429, 'comment_throttled'],
@@ -148,8 +178,7 @@ describe('post comment actions', () => {
 			['parent-unavailable', 400, 'comment_error_parent'],
 			['target-unavailable', 404, 'comment_error_unavailable'],
 			['empty', 400, 'comment_error_generic'],
-			['too-long', 400, 'comment_error_generic'],
-			['unsupported-target', 400, 'comment_error_generic']
+			['too-long', 400, 'comment_error_generic']
 		];
 		for (const [kind, status, message] of cases) {
 			state.submitResults = [{ kind }];

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { m } from '$lib/paraglide/messages';
@@ -20,7 +21,9 @@
 		hint?: string;
 		/** Denser layout for inline reply/edit forms. */
 		compact?: boolean;
-		/** Focus the textarea on mount (inline replies opened by a click). */
+		/** Focus the textarea on mount through an explicit ref.focus(): the
+		 * native `autofocus` attribute is a no-op while the trigger keeps focus
+		 * (three-engine probes, review P1-1). */
 		autofocus?: boolean;
 		/** Present when the composer can be dismissed (inline reply/edit). */
 		onCancel?: () => void;
@@ -38,6 +41,11 @@
 		onCancel
 	}: Props = $props();
 	let submitting = $state(false);
+	let textareaEl = $state<HTMLTextAreaElement | null>(null);
+
+	onMount(() => {
+		if (autofocus) textareaEl?.focus();
+	});
 </script>
 
 <form
@@ -67,12 +75,12 @@
 		<input type="hidden" name="id" value={commentId} />
 	{/if}
 	<Textarea
+		bind:ref={textareaEl}
 		name="text"
 		required
 		maxlength={COMMENT_MAX_LENGTH}
 		rows={compact ? 2 : 3}
 		value={initialText}
-		{autofocus}
 		placeholder={m.comment_composer_placeholder()}
 		aria-label={m.comment_composer_label()}
 	/>

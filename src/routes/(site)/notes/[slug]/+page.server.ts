@@ -10,10 +10,7 @@ import { rateLimit } from '$lib/server/cache/store';
 import { getOption } from '$lib/server/config/options-registry';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { loadThreads, submitComment } from '$lib/server/services/comments';
-import {
-	commentDeleteAction,
-	commentEditAction
-} from '$lib/server/services/comments-actions';
+import { commentDeleteAction, commentEditAction } from '$lib/server/services/comments-actions';
 import {
 	findVisibleNote,
 	getNoteBody,
@@ -313,7 +310,6 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 			return fail(403, { message: m.comment_verify_hint() });
 		case 'empty':
 		case 'too-long':
-		case 'unsupported-target':
 			return fail(400, { message: m.comment_error_generic() });
 		case 'parent-unavailable':
 			return fail(400, { message: m.comment_error_parent() });
@@ -326,16 +322,19 @@ export const actions = {
 	unlock: handleUnlock,
 	comment: (event) => handleSubmit(event, false),
 	reply: (event) => handleSubmit(event, true),
-	// The reader write actions keep the locked-diary gate: an edit or a
-	// delete on a locked note requires the same unlocked session as a
-	// submission (spec §7).
+	// The reader write actions keep the locked-diary gate as a page-level UX
+	// layer (the authoritative gate is the ownership CAS in the service);
+	// auth runs first so anonymous requests get the login redirect, not a
+	// 404 that pretends the note is gone (review P3-2).
 	edit: async (event) => {
+		requireUser();
 		if (!(await resolveGatedNote(event, new Date()))) {
 			return fail(404, { message: m.comment_error_unavailable() });
 		}
 		return commentEditAction(event);
 	},
 	delete: async (event) => {
+		requireUser();
 		if (!(await resolveGatedNote(event, new Date()))) {
 			return fail(404, { message: m.comment_error_unavailable() });
 		}

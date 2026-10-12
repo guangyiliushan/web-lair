@@ -168,7 +168,9 @@ describe('paraglide message contract', () => {
 			}
 		}
 		expect(dynamic).toEqual([]);
-	});
+		// The walk reads every source file: on a loaded full-suite day it can
+		// exceed the 5s default (same family as the compiled-output check).
+	}, 15_000);
 
 	it('resolves every m.* usage in src to a key defined in every locale file', () => {
 		const localeMessages = Object.fromEntries(
@@ -186,7 +188,7 @@ describe('paraglide message contract', () => {
 			}
 		}
 		expect(missing).toEqual([]);
-	});
+	}, 15_000);
 
 	// The key scan walks every source file and every compiled locale module;
 	// on a loaded 10-worker day it can exceed the 5s default (the A batch
@@ -264,7 +266,7 @@ describe('paraglide message contract', () => {
 			}
 		}
 		expect(violations).toEqual([]);
-	});
+	}, 15_000);
 
 	it('never embeds m.* calls as literal text in Svelte template strings', () => {
 		// `title={`{m.bold()} (⌘B)`}` (missing $) ships the source code to the

@@ -20,6 +20,13 @@
 	}
 
 	let { targetType, threads, canComment, emailVerified, loginUrl, form = null }: Props = $props();
+
+	// A failed submission/action renders one section-level alert; pull focus
+	// to it so a reader deep in the thread is not left guessing (review P2-3).
+	let messageEl = $state<HTMLElement | null>(null);
+	$effect(() => {
+		if (form?.message) messageEl?.focus();
+	});
 </script>
 
 <section
@@ -29,7 +36,7 @@
 	data-comment-target={targetType}
 	data-slot="comments-section"
 >
-	<h2 id="comments-title" class="text-lg font-medium">
+	<h2 id="comments-title" tabindex="-1" class="text-lg font-medium">
 		{m.comment_title()}
 		<span class="text-muted-foreground">({threads.visibleCount})</span>
 	</h2>
@@ -47,7 +54,12 @@
 		</p>
 	{/if}
 	{#if form?.message}
-		<p class="mt-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+		<p
+			bind:this={messageEl}
+			class="mt-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+			role="alert"
+			tabindex="-1"
+		>
 			{form.message}
 		</p>
 	{/if}

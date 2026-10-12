@@ -302,6 +302,15 @@ describe('assembleThreads', () => {
 		const withReply = assembleThreads([own], [replyOwn], { viewerId: VIEWER });
 		expect(withReply.roots[0].replies[0].isMine).toBe(true);
 		expect(withReply.roots[0].replies[0].editedAt).toBe(edited);
+		// A foreign reply stays unflagged.
+		const replyOther = row({
+			id: 'p2',
+			parentCommentId: 'r1',
+			rootCommentId: 'r1',
+			readerId: 'someone-else'
+		});
+		const mixed = assembleThreads([own], [replyOwn, replyOther], { viewerId: VIEWER });
+		expect(mixed.roots[0].replies[1].isMine).toBe(false);
 	});
 
 	it('withholds the edit stamp and ownership on deleted placeholders', () => {
@@ -620,6 +629,16 @@ describe('submitComment', () => {
 		state.failWith = { cause: { code: '23503' } };
 		expect(await submitComment(input())).toEqual({ kind: 'target-unavailable' });
 
+		// A reply's FK loser is the parent row (review P3-5).
+		state.selectQueue = [
+			[{ id: TARGET, allowComment: true }],
+			[{ id: PARENT, postId: TARGET, state: 'approved', isDeleted: false }]
+		];
+		state.failWith = { cause: { code: '23503' } };
+		expect(await submitComment(input({ parentId: PARENT }))).toEqual({
+			kind: 'parent-unavailable'
+		});
+
 		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
 		state.failWith = { cause: { code: '42P01' } };
 		await expect(submitComment(input())).rejects.toMatchObject({ cause: { code: '42P01' } });
@@ -807,21 +826,27 @@ describe('submitComment page targets (P4 mount)', () => {
 describe('resolveCommentPageTarget', () => {
 	it('returns the id for a served md row and null for everything else', async () => {
 		state.selectQueue = [[{ id: TARGET, content: { en: 'body' }, externalUrl: null }]];
-		expect(await resolveCommentPageTarget('about', 'en')).toBe(TARGET);
+		expect(await resolveCommentPageTarget('en', 'about')).toBe(TARGET);
 
 		state.selectQueue = [
 			[],
 			[{ id: TARGET, content: null }],
 			[{ id: TARGET, content: { en: 'x' }, externalUrl: 'https://x' }]
 		];
-		expect(await resolveCommentPageTarget('nope', 'en')).toBeNull();
-		expect(await resolveCommentPageTarget('empty', 'en')).toBeNull();
-		expect(await resolveCommentPageTarget('ext', 'en')).toBeNull();
+		expect(await resolveCommentPageTarget('en', 'nope')).toBeNull();
+		expect(await resolveCommentPageTarget('en', 'empty')).toBeNull();
+		expect(await resolveCommentPageTarget('en', 'ext')).toBeNull();
 	});
 
 	it('requires the current language to carry a body', async () => {
 		state.selectQueue = [[{ id: TARGET, content: { en: 'body' }, externalUrl: null }]];
-		expect(await resolveCommentPageTarget('about', 'ja')).toBeNull();
+		expect(await resolveCommentPageTarget('ja', 'about')).toBeNull();
+	});
+
+	it('never resolves a locale-shaped slug (the read-side belt, mirrored)', async () => {
+		// No db work: the guard runs before getPageBySlug.
+		expect(await resolveCommentPageTarget('en', 'zh-cn')).toBeNull();
+		expect(selectMock).not.toHaveBeenCalled();
 	});
 });
 
@@ -840,7 +865,7 @@ describe('editComment', () => {
 		return {
 			commentId: ROW_ID,
 			text: 'new text',
-			user: { id: VIEWER, role: 'member' },
+			user: { id: VIEWER, role: 'member', emailVerified: true },
 			cache: fakeStore(async () => 1),
 			now: NOW,
 			...overrides
@@ -848,9 +873,10 @@ describe('editComment', () => {
 	}
 
 	it('stores the readers edit as pending with the edit stamp and a fresh review state', async () => {
+		const incr = vi.fn(async () => 1);
 		state.selectQueue = [[{ ...ROW }]];
 		state.updateResults = [[{ id: ROW_ID }]];
-		const result = await editComment(input());
+		const result = await editComment(input({ cache: fakeStore(incr) }));
 		expect(result).toEqual({ kind: 'updated', state: 'pending' });
 		expect(state.updates).toHaveLength(1);
 		expect(state.updates[0].table).toBe(comments);
@@ -866,7 +892,11 @@ describe('editComment', () => {
 		expect(query.sql).toContain('"comments"."id" = ');
 		expect(query.sql).toContain('"comments"."reader_id" = ');
 		expect(query.sql).toContain('"comments"."is_deleted" = ');
+		// A concurrently rejected row must not be revived (review P2-1).
+		expect(query.sql).toContain('"comments"."state" in ');
 		expect(query.params).toContain(VIEWER);
+		// The shared 60s<=2 window key (ruling 5): one bucket per reader.
+		expect(incr).toHaveBeenCalledWith('limits:comment:' + VIEWER, 60);
 	});
 
 	it('charges the shared window only after validation', async () => {
@@ -878,6 +908,24 @@ describe('editComment', () => {
 		});
 		expect(incr).toHaveBeenCalledTimes(1);
 		expect(state.updates).toHaveLength(0);
+	});
+
+	it('does not spend the window on validation or ownership failures', async () => {
+		const incr = vi.fn(async () => 1);
+		state.selectQueue = [[{ ...ROW, readerId: 'someone-else' }]];
+		expect(await editComment(input({ cache: fakeStore(incr) }))).toEqual({
+			kind: 'unavailable'
+		});
+		expect(await editComment(input({ text: '   ' }))).toEqual({ kind: 'empty' });
+		expect(incr).not.toHaveBeenCalled();
+	});
+
+	it('fails closed for unverified editors before any db work', async () => {
+		const result = await editComment(
+			input({ user: { id: VIEWER, role: 'member', emailVerified: false } })
+		);
+		expect(result).toEqual({ kind: 'unverified' });
+		expect(selectMock).not.toHaveBeenCalled();
 	});
 
 	it('validates text before any db work', async () => {
@@ -912,6 +960,14 @@ describe('editComment', () => {
 		});
 		expect(incr).not.toHaveBeenCalled();
 		expect(state.updates).toHaveLength(0);
+
+		// Whitespace around identical text still normalizes to a no-op.
+		state.selectQueue = [[{ ...ROW, text: 'new text' }]];
+		expect(await editComment(input({ text: '  new text  ' }))).toEqual({
+			kind: 'updated',
+			state: 'approved'
+		});
+		expect(state.updates).toHaveLength(0);
 	});
 
 	it('auto-approves owner/admin edits and skips their window', async () => {
@@ -919,7 +975,7 @@ describe('editComment', () => {
 		state.selectQueue = [[{ ...ROW, readerId: 'o1' }]];
 		state.updateResults = [[{ id: ROW_ID }]];
 		const result = await editComment(
-			input({ user: { id: 'o1', role: 'owner' }, cache: fakeStore(incr) })
+			input({ user: { id: 'o1', role: 'owner', emailVerified: true }, cache: fakeStore(incr) })
 		);
 		expect(incr).not.toHaveBeenCalled();
 		expect(result).toEqual({ kind: 'updated', state: 'approved' });
@@ -963,7 +1019,11 @@ describe('deleteComment', () => {
 	it('soft-deletes own rows, clears pin and never charges the window', async () => {
 		state.selectQueue = [[{ ...ROW, pin: true }]];
 		state.updateResults = [[{ id: ROW_ID }]];
-		const result = await deleteComment({ commentId: ROW_ID, user: { id: VIEWER }, now: NOW });
+		const result = await deleteComment({
+			commentId: ROW_ID,
+			user: { id: VIEWER, emailVerified: true },
+			now: NOW
+		});
 		expect(result).toEqual({ kind: 'deleted' });
 		expect(state.updates[0].values).toMatchObject({
 			isDeleted: true,
@@ -971,15 +1031,29 @@ describe('deleteComment', () => {
 			pin: false
 		});
 		const query = render(state.updateWheres[0]?.[0]);
+		expect(query.sql).toContain('"comments"."id" = ');
 		expect(query.sql).toContain('"comments"."reader_id" = ');
 		expect(query.sql).toContain('"comments"."is_deleted" = ');
+		// Aligned with the edit CAS (review P3-8).
+		expect(query.sql).toContain('"comments"."state" in ');
 	});
 
 	it('leaves the moderation axis untouched so the floor rule can hold', async () => {
+		// deleteComment deliberately never touches the limiter (no cache is even
+		// reachable here: getCache throws in this suite).
 		state.selectQueue = [[{ ...ROW }]];
 		state.updateResults = [[{ id: ROW_ID }]];
-		await deleteComment({ commentId: ROW_ID, user: { id: VIEWER }, now: NOW });
+		await deleteComment({ commentId: ROW_ID, user: { id: VIEWER, emailVerified: true }, now: NOW });
 		expect(state.updates[0].values).not.toHaveProperty('state');
+	});
+
+	it('fails closed for unverified deleters before any db work', async () => {
+		const result = await deleteComment({
+			commentId: ROW_ID,
+			user: { id: VIEWER, emailVerified: false }
+		});
+		expect(result).toEqual({ kind: 'unverified' });
+		expect(selectMock).not.toHaveBeenCalled();
 	});
 
 	it('fails closed for foreign, missing, deleted and rejected rows', async () => {
@@ -991,7 +1065,9 @@ describe('deleteComment', () => {
 		];
 		for (const rows of cases) {
 			state.selectQueue = [rows];
-			expect(await deleteComment({ commentId: ROW_ID, user: { id: VIEWER } })).toEqual({
+			expect(
+				await deleteComment({ commentId: ROW_ID, user: { id: VIEWER, emailVerified: true } })
+			).toEqual({
 				kind: 'unavailable'
 			});
 		}
@@ -999,13 +1075,17 @@ describe('deleteComment', () => {
 	});
 
 	it('rejects malformed ids and raced deletes', async () => {
-		expect(await deleteComment({ commentId: 'nope', user: { id: VIEWER } })).toEqual({
+		expect(
+			await deleteComment({ commentId: 'nope', user: { id: VIEWER, emailVerified: true } })
+		).toEqual({
 			kind: 'unavailable'
 		});
 		expect(selectMock).not.toHaveBeenCalled();
 		state.selectQueue = [[{ ...ROW }]];
 		state.updateResults = [[]];
-		expect(await deleteComment({ commentId: ROW_ID, user: { id: VIEWER } })).toEqual({
+		expect(
+			await deleteComment({ commentId: ROW_ID, user: { id: VIEWER, emailVerified: true } })
+		).toEqual({
 			kind: 'unavailable'
 		});
 	});

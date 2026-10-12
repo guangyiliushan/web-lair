@@ -529,4 +529,39 @@ describe('note comment actions', () => {
 		expect(result).toMatchObject({ status: 400, data: { message: 'comment_error_generic' } });
 		expect(service.editComment).not.toHaveBeenCalled();
 	});
+
+	it('lets a verified unlock session delete on the gated note (spec §7)', async () => {
+		service.findVisibleNote.mockResolvedValue(lockedNote);
+		service.verifyNoteUnlockToken.mockReturnValue(true);
+		const fd = new FormData();
+		fd.set('id', 'cccc1111-1111-1111-1111-111111111111');
+
+		const result = await actions.delete(
+			makeEvent({
+				cookies: { get: vi.fn(() => '123.sig'), set: vi.fn() },
+				request: { formData: vi.fn(async () => fd) }
+			}) as never
+		);
+
+		expect(result).toEqual({ deleted: true });
+		expect(service.deleteComment).toHaveBeenCalled();
+	});
+
+	it('asks anonymous writers to sign in before the gate (order mirrors submit)', async () => {
+		service.requireUser.mockImplementation(() => {
+			throw Object.assign(new Error('redirect'), {
+				status: 303,
+				location: '/login?redirectTo=%2Fen%2Fnotes%2Fhello'
+			});
+		});
+		const fd = new FormData();
+		fd.set('id', 'cccc1111-1111-1111-1111-111111111111');
+		fd.set('text', 'x');
+
+		await expect(
+			actions.edit(makeEvent({ request: { formData: vi.fn(async () => fd) } }) as never)
+		).rejects.toMatchObject({ status: 303 });
+		// The note was never even resolved: auth precedes the page gate.
+		expect(service.findVisibleNote).not.toHaveBeenCalled();
+	});
 });

@@ -24,6 +24,7 @@
 	let openReplyId = $state<string | null>(null);
 	let editingId = $state<string | null>(null);
 	let confirmingDeleteId = $state<string | null>(null);
+	let deleteBusy = $state(false);
 
 	function toggleReply(id: string) {
 		openReplyId = openReplyId === id ? null : id;
@@ -37,10 +38,18 @@
 		confirmingDeleteId = null;
 	}
 
-	function startDelete(id: string) {
+	async function startDelete(id: string) {
+		if (confirmingDeleteId === id) {
+			await cancelDelete(id);
+			return;
+		}
 		confirmingDeleteId = id;
 		editingId = null;
 		openReplyId = null;
+		// Announce the confirmation: focus its question text (tabindex -1)
+		// so SR users hear it without hunting (review P2-1).
+		await tick();
+		document.querySelector<HTMLElement>(`[data-delete-confirm-text="${id}"]`)?.focus();
 	}
 
 	/** Close an inline surface and hand focus back to its trigger (WCAG). */
@@ -88,9 +97,13 @@
 
 {#snippet editedMark(editedAt: Date | null)}
 	{#if editedAt}
-		<span class="text-xs text-muted-foreground" title={formatDateTime(editedAt)}>
+		<time
+			class="text-xs text-muted-foreground"
+			datetime={editedAt.toISOString()}
+			title={formatDateTime(editedAt)}
+		>
 			{m.comment_edited()}
-		</span>
+		</time>
 	{/if}
 {/snippet}
 
@@ -146,7 +159,13 @@
 				>
 					{m.comment_edit()}
 				</Button>
-				<Button variant="ghost" size="sm" data-delete-target={id} onclick={() => startDelete(id)}>
+				<Button
+					variant="ghost"
+					size="sm"
+					data-delete-target={id}
+					aria-expanded={confirmingDeleteId === id}
+					onclick={() => startDelete(id)}
+				>
 					{m.comment_delete()}
 				</Button>
 			{/if}
@@ -181,15 +200,34 @@
 			action="?/delete"
 			class="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2"
 			data-slot="comment-delete-confirm"
-			use:enhance
+			aria-busy={deleteBusy}
+			use:enhance={() => {
+				deleteBusy = true;
+				return async ({ result, update }) => {
+					await update();
+					deleteBusy = false;
+					if (result.type === 'success') {
+						// The confirm button vanishes with the row: park focus on the
+						// section title so keyboard users keep their place (review
+						// P2-2), and drop the stale expanded state.
+						editingId = null;
+						confirmingDeleteId = null;
+						document.getElementById('comments-title')?.focus();
+					}
+				};
+			}}
 		>
 			<input type="hidden" name="id" value={id} />
-			<p class="text-sm">{m.comment_delete_confirm()}</p>
+			<p class="text-sm" tabindex="-1" aria-live="polite" data-delete-confirm-text={id}>
+				{m.comment_delete_confirm()}
+			</p>
 			<div class="mt-2 flex items-center justify-end gap-2">
 				<Button type="button" variant="ghost" size="sm" onclick={() => cancelDelete(id)}>
 					{m.comment_cancel()}
 				</Button>
-				<Button type="submit" variant="destructive" size="sm">{m.comment_delete()}</Button>
+				<Button type="submit" variant="destructive" size="sm" disabled={deleteBusy}>
+					{m.comment_delete_confirm_action()}
+				</Button>
 			</div>
 		</form>
 	{/if}

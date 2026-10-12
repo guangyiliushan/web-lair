@@ -254,16 +254,26 @@ describe('CommentsSection', () => {
 		expect(document.querySelector('[data-delete-target="root-2"]')).toBeNull();
 	});
 
-	it('renders the edited marker with the edit time in its tooltip', async () => {
+	it('renders the edited marker as a time element with the edit stamp', async () => {
 		await render(CommentsSection, {
 			...BASE,
-			threads: threadsPage([root({ editedAt: new Date('2026-10-09T12:00:00Z') })])
+			threads: threadsPage([
+				root({ editedAt: new Date('2026-10-09T12:00:00Z') }),
+				root({ id: 'root-2' })
+			])
 		});
-		const marker = [...document.querySelectorAll('[data-comment-id="root-1"] span')].find(
+		const marker = [...document.querySelectorAll('[data-comment-id="root-1"] time')].find(
 			(el) => el.textContent?.trim() === '已编辑'
 		);
 		expect(marker).toBeTruthy();
+		expect(marker?.getAttribute('datetime')).toBe('2026-10-09T12:00:00.000Z');
 		expect(marker?.getAttribute('title')).toBeTruthy();
+		// A never-edited row carries no marker at all.
+		expect(
+			[...document.querySelectorAll('[data-comment-id="root-2"] time')].some(
+				(el) => el.textContent?.trim() === '已编辑'
+			)
+		).toBe(false);
 	});
 
 	it('opens the edit composer pre-filled with the row id and the ?/edit action', async () => {
@@ -282,6 +292,9 @@ describe('CommentsSection', () => {
 		expect(textarea?.value).toBe('你好');
 		expect(form?.textContent).toContain('修改后需重新审核。');
 		expect(form?.textContent).toContain('保存');
+		// The open path focuses the textarea through an explicit ref.focus()
+		// (review P1-1: the native autofocus attribute is a no-op here).
+		await expect.poll(() => document.activeElement === textarea).toBe(true);
 	});
 
 	it('asks for confirmation before posting a delete', async () => {
@@ -299,6 +312,12 @@ describe('CommentsSection', () => {
 		expect(confirm?.getAttribute('action')).toBe('?/delete');
 		expect(confirm?.querySelector('input[name="id"]')?.getAttribute('value')).toBe('root-1');
 		expect(confirm?.textContent).toContain('确定删除这条评论吗？');
+		// The action label is distinct from the trigger's (SR disambiguation,
+		// review P2-1).
+		expect(confirm?.textContent).toContain('确认删除');
+		expect(
+			document.querySelector('[data-delete-target="root-1"]')?.getAttribute('aria-expanded')
+		).toBe('true');
 		const cancel = confirm?.querySelector('button[type="button"]');
 		if (!cancel) throw new Error('cancel button not found');
 		await page.elementLocator(cancel).click();
@@ -306,6 +325,33 @@ describe('CommentsSection', () => {
 			.poll(() => document.querySelector('[data-slot="comment-delete-confirm"]'))
 			.toBeNull();
 		expect(document.querySelector('[data-edit-target="root-1"]')).not.toBeNull();
+	});
+
+	it('keeps the delete confirmation and the other surfaces mutually exclusive', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([root({ isMine: true })])
+		});
+		const clickBySelector = async (selector: string) => {
+			const element = document.querySelector(selector);
+			if (!element) throw new Error(`${selector} not found`);
+			await page.elementLocator(element).click();
+		};
+		const confirmVisible = () =>
+			document.querySelector('[data-slot="comment-delete-confirm"]') !== null;
+
+		await clickBySelector('[data-delete-target="root-1"]');
+		await expect.poll(confirmVisible).toBe(true);
+		await clickBySelector('[data-edit-target="root-1"]');
+		await expect.poll(() => document.querySelector('form[action="?/edit"]') !== null).toBe(true);
+		expect(confirmVisible()).toBe(false);
+
+		// The delete trigger is a real toggle (review P2-1).
+		await clickBySelector('[data-delete-target="root-1"]');
+		await expect.poll(confirmVisible).toBe(true);
+		expect(document.querySelector('form[action="?/edit"]')).toBeNull();
+		await clickBySelector('[data-delete-target="root-1"]');
+		await expect.poll(confirmVisible).toBe(false);
 	});
 
 	it('keeps reply and edit mutually exclusive per comment', async () => {
