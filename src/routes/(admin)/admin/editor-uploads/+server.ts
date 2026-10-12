@@ -106,6 +106,7 @@ export interface PickerItem {
 	id: string;
 	name: string;
 	url: string;
+	previewUrl: string;
 	fullUrl: string;
 	width: number | null;
 	height: number | null;
@@ -132,6 +133,9 @@ function toPickerItem(
 		id: row.id,
 		name,
 		url: photoTileSrc(row, 'thumb'),
+		// The insertion tier: body images default to @preview (Q11); the
+		// lightbox derives @full from it (GIFs: all three are the bare key).
+		previewUrl: photoTileSrc(row, 'preview'),
 		fullUrl: photoTileSrc(row, 'full'),
 		width: row.width,
 		height: row.height,

@@ -263,6 +263,7 @@ describe('GET /admin/editor-uploads (picker data)', () => {
 					id: 'file-1',
 					name: 'cover.png',
 					url: `/i/${FILE_KEY}@thumb`,
+					previewUrl: `/i/${FILE_KEY}@preview`,
 					fullUrl: `/i/${FILE_KEY}@full`,
 					width: 1,
 					height: 2,
