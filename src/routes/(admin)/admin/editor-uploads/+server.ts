@@ -1,6 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { UploadRejected, uploadFile } from '$lib/server/services/files';
+import { UploadRejected, listFiles, uploadFile } from '$lib/server/services/files';
+import { listAdminPhotos } from '$lib/server/services/photos';
+import { photoTileSrc } from '$lib/components/photos/photo-tile';
 import { MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
@@ -93,4 +95,73 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		});
 		return json({ code: 'server-error' }, { status: 500 });
 	}
+};
+
+/* ── Picker data surface (3a2, Q12 ruling) ─────────────────────────────── */
+
+/** Picker list cap: newest 60 per source; search narrows server-side. */
+const PICKER_LIMIT = 60;
+
+export interface PickerItem {
+	id: string;
+	name: string;
+	url: string;
+	fullUrl: string;
+	width: number | null;
+	height: number | null;
+	mimeType: string;
+	byteSize: number;
+	createdAt: string;
+}
+
+function toPickerItem(
+	row: {
+		id: string;
+		objectKey: string;
+		mimeType: string;
+		width: number | null;
+		height: number | null;
+		byteSize: number;
+		createdAt: Date;
+	},
+	name: string
+): PickerItem {
+	// photoTileSrc is the single source of the tier rule (GIF bare key,
+	// everything else @variant), shared with the public gallery.
+	return {
+		id: row.id,
+		name,
+		url: photoTileSrc(row, 'thumb'),
+		fullUrl: photoTileSrc(row, 'full'),
+		width: row.width,
+		height: row.height,
+		mimeType: row.mimeType,
+		byteSize: row.byteSize,
+		createdAt: row.createdAt.toISOString()
+	};
+}
+
+/**
+ * `GET /admin/editor-uploads?source=photos|files&q=` - the picker's list
+ * source (Q12): newest 60 per source, substring search narrowed in SQL by
+ * the services (photos by slug, files by file name; ILIKE metacharacters
+ * escaped there). Unknown/missing `source` falls back to files.
+ */
+export const GET: RequestHandler = async ({ url, locals }) => {
+	if (!locals.admin) {
+		return locals.user
+			? json({ code: 'forbidden' }, { status: 403 })
+			: json({ code: 'unauthorized' }, { status: 401 });
+	}
+	const source = url.searchParams.get('source') === 'photos' ? 'photos' : 'files';
+	const q = url.searchParams.get('q')?.trim() ?? '';
+	const items =
+		source === 'photos'
+			? (await listAdminPhotos({ slugKeyword: q || undefined }))
+					.slice(0, PICKER_LIMIT)
+					.map((row) => toPickerItem(row, row.slug))
+			: (await listFiles({ kind: 'image', keyword: q || undefined }))
+					.slice(0, PICKER_LIMIT)
+					.map((row) => toPickerItem(row, row.fileName));
+	return json({ items });
 };
