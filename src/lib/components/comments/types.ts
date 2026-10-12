@@ -48,4 +48,6 @@ export interface ThreadsPage {
 export interface CommentFormState {
 	submitted?: 'pending' | 'approved';
 	message?: string;
+	/** Soft-delete success flash (P4). */
+	deleted?: boolean;
 }

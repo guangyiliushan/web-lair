@@ -212,6 +212,15 @@ describe('CommentsSection', () => {
 		await expect.element(page.getByText('已提交，待审核。')).toBeInTheDocument();
 	});
 
+	it('flashes the soft-delete notice from the form result', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([root()]),
+			form: { deleted: true }
+		});
+		await expect.element(page.getByText('该评论已删除。')).toBeInTheDocument();
+	});
+
 	it('renders a failed submission as an alert', async () => {
 		await render(CommentsSection, {
 			...BASE,

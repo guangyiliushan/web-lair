@@ -21,6 +21,8 @@ const { dbMock, state, service } = vi.hoisted(() => {
 		loadThreads: vi.fn(),
 		getNoteMeta: vi.fn(),
 		submitComment: vi.fn(),
+		editComment: vi.fn(),
+		deleteComment: vi.fn(),
 		verifyNotePassword: vi.fn(),
 		verifyNoteUnlockToken: vi.fn(),
 		signNoteUnlockToken: vi.fn(),
@@ -54,7 +56,9 @@ vi.mock('$lib/server/services/note-gate', () => ({
 }));
 vi.mock('$lib/server/services/comments', () => ({
 	loadThreads: service.loadThreads,
-	submitComment: service.submitComment
+	submitComment: service.submitComment,
+	editComment: service.editComment,
+	deleteComment: service.deleteComment
 }));
 vi.mock('$lib/server/services/slug-resolver', () => ({
 	findSlugTargetId: service.findSlugTargetId
@@ -186,6 +190,8 @@ beforeEach(() => {
 	service.rateLimit.mockResolvedValue({ allowed: true, count: 1 });
 	service.requireUser.mockReturnValue({ id: 'u-1', name: 'Reader', emailVerified: true });
 	service.submitComment.mockResolvedValue({ kind: 'created', id: 'c-1', state: 'pending' });
+	service.editComment.mockResolvedValue({ kind: 'updated', state: 'pending' });
+	service.deleteComment.mockResolvedValue({ kind: 'deleted' });
 });
 
 describe('note detail load', () => {
@@ -450,5 +456,77 @@ describe('note comment actions', () => {
 		service.requireUser.mockReturnValue({ id: 'u-1', name: 'Reader', emailVerified: false });
 		const result = await actions.comment(makeEvent() as never);
 		expect(result).toMatchObject({ status: 403, data: { message: 'comment_verify_hint' } });
+	});
+
+	it('edits and deletes own comments through the shared handlers on an open note', async () => {
+		const fd = new FormData();
+		fd.set('id', 'cccc1111-1111-1111-1111-111111111111');
+		fd.set('text', 'edited text');
+		const request = { request: { formData: vi.fn(async () => fd) } };
+
+		const edited = await actions.edit(makeEvent(request) as never);
+		expect(edited).toEqual({ submitted: 'pending' });
+		expect(service.editComment).toHaveBeenCalledWith({
+			commentId: 'cccc1111-1111-1111-1111-111111111111',
+			text: 'edited text',
+			user: expect.objectContaining({ id: 'u-1' })
+		});
+
+		const deleted = await actions.delete(makeEvent(request) as never);
+		expect(deleted).toEqual({ deleted: true });
+		expect(service.deleteComment).toHaveBeenCalledWith({
+			commentId: 'cccc1111-1111-1111-1111-111111111111',
+			user: expect.objectContaining({ id: 'u-1' })
+		});
+	});
+
+	it('keeps edit and delete fail-closed on a gated note without the unlock session', async () => {
+		service.findVisibleNote.mockResolvedValue(lockedNote);
+		const fd = new FormData();
+		fd.set('id', 'cccc1111-1111-1111-1111-111111111111');
+		fd.set('text', 'edited text');
+		const request = { request: { formData: vi.fn(async () => fd) } };
+
+		expect(await actions.edit(makeEvent(request) as never)).toMatchObject({
+			status: 404,
+			data: { message: 'comment_error_unavailable' }
+		});
+		expect(await actions.delete(makeEvent(request) as never)).toMatchObject({
+			status: 404,
+			data: { message: 'comment_error_unavailable' }
+		});
+		expect(service.editComment).not.toHaveBeenCalled();
+		expect(service.deleteComment).not.toHaveBeenCalled();
+	});
+
+	it('lets a verified unlock session edit on the gated note (spec §7)', async () => {
+		service.findVisibleNote.mockResolvedValue(lockedNote);
+		service.verifyNoteUnlockToken.mockReturnValue(true);
+		const fd = new FormData();
+		fd.set('id', 'cccc1111-1111-1111-1111-111111111111');
+		fd.set('text', 'edited text');
+
+		const result = await actions.edit(
+			makeEvent({
+				cookies: { get: vi.fn(() => '123.sig'), set: vi.fn() },
+				request: { formData: vi.fn(async () => fd) }
+			}) as never
+		);
+
+		expect(result).toEqual({ submitted: 'pending' });
+		expect(service.editComment).toHaveBeenCalled();
+	});
+
+	it('rejects malformed ids before the service (shared guard)', async () => {
+		const fd = new FormData();
+		fd.set('id', 'not-a-uuid');
+		fd.set('text', 'x');
+
+		const result = await actions.edit(
+			makeEvent({ request: { formData: vi.fn(async () => fd) } }) as never
+		);
+
+		expect(result).toMatchObject({ status: 400, data: { message: 'comment_error_generic' } });
+		expect(service.editComment).not.toHaveBeenCalled();
 	});
 });

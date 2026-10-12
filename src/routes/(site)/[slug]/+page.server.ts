@@ -1,14 +1,21 @@
-import { error } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import { getLocale, localizeHref, locales } from '$lib/paraglide/runtime';
 import { m } from '$lib/paraglide/messages';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
+import { requireUser } from '$lib/server/authz';
+import {
+	loadThreads,
+	resolveCommentPageTarget,
+	submitComment
+} from '$lib/server/services/comments';
+import { commentDeleteAction, commentEditAction } from '$lib/server/services/comments-actions';
 import {
 	contentLocales,
 	getPageBySlug,
 	resolveLocalized,
 	resolvePageContent
 } from '$lib/server/services/pages';
-import type { PageServerLoad } from './$types';
+import type { Actions, PageServerLoad, RequestEvent } from './$types';
 
 /**
  * Universal md-page route (pages line P1b; 2026-10-03 rulings). Any-status
@@ -19,7 +26,7 @@ import type { PageServerLoad } from './$types';
  * their own file routes, which rank above this dynamic segment. `hidden` rows
  * stay directly reachable - hiding is a menu-level concern.
  */
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const lang = getLocale();
 
 	// Locale tags are never page slugs: the bare-language roots stay 404s by
@@ -66,9 +73,84 @@ export const load: PageServerLoad = async ({ params }) => {
 		path: `/${row.slug}`
 	}));
 
+	// Viewer state for the comment section (mirrors the posts/notes mounts;
+	// pages carry no per-row switch - plan §0 #46, so the threads always load).
+	const user = locals.user;
+	const emailVerified = Boolean(user?.emailVerified);
+	const canComment = Boolean(user) && emailVerified;
+	const loginUrl = user
+		? null
+		: `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
+
 	return {
 		seo: { path: `/${row.slug}`, alternates },
 		page: { slug: row.slug, title, description },
-		html
+		html,
+		viewer: { emailVerified, canComment, loginUrl },
+		discussion: await loadThreads({
+			targetType: 'page',
+			targetId: row.id,
+			viewerId: user?.id ?? null
+		})
 	};
 };
+
+/**
+ * Shared submit path for the comment/reply actions (mirrors the posts
+ * detail page): the target is resolved from the URL slug server-side, and
+ * the service re-validates it authoritatively.
+ */
+async function handleSubmit(event: RequestEvent, isReply: boolean) {
+	const user = requireUser();
+	if (!user.emailVerified) {
+		return fail(403, { message: m.comment_verify_hint() });
+	}
+
+	const form = await event.request.formData();
+	const text = form.get('text')?.toString() ?? '';
+	const parentId = isReply ? (form.get('parentId')?.toString() ?? null) : null;
+
+	// One timestamp for the whole submission: target resolution and the
+	// service re-check must agree on the visibility boundary.
+	const now = new Date();
+	const lang = getLocale();
+	const targetId = await resolveCommentPageTarget(event.params.slug, lang);
+	if (!targetId) return fail(404, { message: m.comment_error_unavailable() });
+
+	const profile = event.locals.profile;
+	const result = await submitComment({
+		targetType: 'page',
+		targetId,
+		lang,
+		parentId,
+		text,
+		user,
+		author: profile?.displayName ?? user.name ?? 'Reader',
+		avatar: profile?.avatarUrl ?? user.image ?? null,
+		now
+	});
+
+	switch (result.kind) {
+		case 'created':
+			return { submitted: result.state };
+		case 'throttled':
+			return fail(429, { message: m.comment_throttled() });
+		case 'unverified':
+			return fail(403, { message: m.comment_verify_hint() });
+		case 'empty':
+		case 'too-long':
+		case 'unsupported-target':
+			return fail(400, { message: m.comment_error_generic() });
+		case 'parent-unavailable':
+			return fail(400, { message: m.comment_error_parent() });
+		case 'target-unavailable':
+			return fail(404, { message: m.comment_error_unavailable() });
+	}
+}
+
+export const actions = {
+	comment: (event) => handleSubmit(event, false),
+	reply: (event) => handleSubmit(event, true),
+	edit: commentEditAction,
+	delete: commentDeleteAction
+} satisfies Actions;

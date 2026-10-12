@@ -11,6 +11,10 @@ import { getOption } from '$lib/server/config/options-registry';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { loadThreads, submitComment } from '$lib/server/services/comments';
 import {
+	commentDeleteAction,
+	commentEditAction
+} from '$lib/server/services/comments-actions';
+import {
 	findVisibleNote,
 	getNoteBody,
 	getNoteGateRecord,
@@ -251,6 +255,19 @@ async function handleUnlock(event: RequestEvent) {
 }
 
 /**
+ * Locked-diary gate shared by the reader write actions (submit / edit /
+ * delete): the note must be visible and either unlocked or carrying a valid
+ * unlock cookie; everything else stays fail-closed (spec §7).
+ */
+async function resolveGatedNote(event: RequestEvent, now: Date) {
+	const lang = getLocale();
+	const note = await findVisibleNote(lang, event.params.slug, now);
+	if (!note) return null;
+	const unlockVerified = !note.locked || (await isUnlockVerified(event.cookies, note.id, now));
+	return unlockVerified ? { note, unlockVerified } : null;
+}
+
+/**
  * Shared submit path for the comment/reply actions (mirrors the posts
  * detail page): the target is resolved from the URL slug server-side, and
  * the service re-validates it authoritatively.
@@ -270,17 +287,15 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 	// Resolve the target ourselves so the gate state is known before the
 	// service re-validates: an unlocked gated row is commentable (spec §7),
 	// everything else stays fail-closed.
-	const note = await findVisibleNote(lang, event.params.slug, now);
-	if (!note) return fail(404, { message: m.comment_error_unavailable() });
-	const unlockVerified = !note.locked || (await isUnlockVerified(event.cookies, note.id, now));
-	if (!unlockVerified) return fail(404, { message: m.comment_error_unavailable() });
+	const gate = await resolveGatedNote(event, now);
+	if (!gate) return fail(404, { message: m.comment_error_unavailable() });
 
 	const profile = event.locals.profile;
 	const result = await submitComment({
 		targetType: 'note',
-		targetId: note.id,
+		targetId: gate.note.id,
 		lang,
-		unlockVerified,
+		unlockVerified: gate.unlockVerified,
 		parentId,
 		text,
 		user,
@@ -310,5 +325,20 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 export const actions = {
 	unlock: handleUnlock,
 	comment: (event) => handleSubmit(event, false),
-	reply: (event) => handleSubmit(event, true)
+	reply: (event) => handleSubmit(event, true),
+	// The reader write actions keep the locked-diary gate: an edit or a
+	// delete on a locked note requires the same unlocked session as a
+	// submission (spec §7).
+	edit: async (event) => {
+		if (!(await resolveGatedNote(event, new Date()))) {
+			return fail(404, { message: m.comment_error_unavailable() });
+		}
+		return commentEditAction(event);
+	},
+	delete: async (event) => {
+		if (!(await resolveGatedNote(event, new Date()))) {
+			return fail(404, { message: m.comment_error_unavailable() });
+		}
+		return commentDeleteAction(event);
+	}
 } satisfies Actions;

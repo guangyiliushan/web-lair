@@ -11,6 +11,7 @@ import {
 	resolveCommentPostTarget,
 	submitComment
 } from '$lib/server/services/comments';
+import { commentDeleteAction, commentEditAction } from '$lib/server/services/comments-actions';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import { findSlugTargetId } from '$lib/server/services/slug-resolver';
 import { formatDate } from '$lib/utils/i18n';
@@ -195,5 +196,7 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 
 export const actions = {
 	comment: (event) => handleSubmit(event, false),
-	reply: (event) => handleSubmit(event, true)
+	reply: (event) => handleSubmit(event, true),
+	edit: commentEditAction,
+	delete: commentDeleteAction
 } satisfies Actions;

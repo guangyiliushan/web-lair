@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { tick } from 'svelte';
 	import IconPin from '@tabler/icons-svelte-runes/icons/pin';
 	import * as Avatar from '$lib/components/ui/avatar';
@@ -180,6 +181,7 @@
 			action="?/delete"
 			class="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2"
 			data-slot="comment-delete-confirm"
+			use:enhance
 		>
 			<input type="hidden" name="id" value={id} />
 			<p class="text-sm">{m.comment_delete_confirm()}</p>

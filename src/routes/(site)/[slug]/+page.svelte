@@ -1,9 +1,10 @@
 <script lang="ts">
+	import { CommentsSection } from '$lib/components/comments';
 	import { MarkdownRenderer } from '$lib/components/markdown';
 	import { SeoHead } from '$lib/components/seo';
 	import type { PageProps } from './$types';
 
-	let { data }: PageProps = $props();
+	let { data, form }: PageProps = $props();
 </script>
 
 <svelte:head>
@@ -26,4 +27,13 @@
 	<div class="mt-8">
 		<MarkdownRenderer html={data.html} prose />
 	</div>
+
+	<CommentsSection
+		targetType="page"
+		threads={data.discussion}
+		canComment={data.viewer.canComment}
+		emailVerified={data.viewer.emailVerified}
+		loginUrl={data.viewer.loginUrl}
+		form={form ?? null}
+	/>
 </article>

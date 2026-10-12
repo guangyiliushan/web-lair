@@ -8,14 +8,32 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * The db module is mocked with a queue of select results; the pages service
  * runs for real on top of it.
  */
-const { dbMock, state, renderMarkdownToHtml } = vi.hoisted(() => ({
+const { dbMock, state, service, renderMarkdownToHtml } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: { selectResults: [] as unknown[][] },
+	service: {
+		loadThreads: vi.fn(),
+		resolveCommentPageTarget: vi.fn(),
+		submitComment: vi.fn(),
+		commentEditAction: vi.fn(),
+		commentDeleteAction: vi.fn(),
+		requireUser: vi.fn()
+	},
 	renderMarkdownToHtml: vi.fn(async (md: string) => `<rendered>${md}</rendered>`)
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$lib/server/markdown', () => ({ renderMarkdownToHtml }));
+vi.mock('$lib/server/services/comments', () => ({
+	loadThreads: service.loadThreads,
+	resolveCommentPageTarget: service.resolveCommentPageTarget,
+	submitComment: service.submitComment
+}));
+vi.mock('$lib/server/services/comments-actions', () => ({
+	commentEditAction: service.commentEditAction,
+	commentDeleteAction: service.commentDeleteAction
+}));
+vi.mock('$lib/server/authz', () => ({ requireUser: service.requireUser }));
 vi.mock('$lib/paraglide/runtime', () => ({
 	getLocale: () => 'en',
 	localizeHref: (href: string, options?: { locale?: string }) =>
@@ -26,7 +44,7 @@ vi.mock('$lib/paraglide/messages', () => ({
 	m: new Proxy({}, { get: (_target, prop) => () => String(prop) })
 }));
 
-import { load } from './+page.server';
+import { actions, load } from './+page.server';
 
 function makeChain(result: unknown[]) {
 	const self: unknown = new Proxy(
@@ -56,18 +74,31 @@ const pageRow = {
 	sortOrder: 1
 };
 
-function makeEvent(slug = 'about') {
-	return { params: { slug } } as never;
+const threads = { roots: [], visibleCount: 0, truncated: false };
+
+function makeEvent(slug = 'about', overrides: Record<string, unknown> = {}) {
+	return {
+		params: { slug },
+		url: new URL('http://localhost/en/about'),
+		locals: { user: null, profile: null },
+		...overrides
+	} as never;
 }
 
-describe('(site)/[slug] load — universal md page', () => {
-	beforeEach(() => {
-		state.selectResults = [];
-		renderMarkdownToHtml.mockClear();
-		Object.assign(dbMock, {
-			select: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
-		});
+beforeEach(() => {
+	state.selectResults = [];
+	renderMarkdownToHtml.mockClear();
+	for (const fn of Object.values(service)) fn.mockReset?.();
+	service.loadThreads.mockResolvedValue(threads);
+	service.resolveCommentPageTarget.mockResolvedValue(null);
+	service.submitComment.mockResolvedValue({ kind: 'created', id: 'c-1', state: 'pending' });
+	service.requireUser.mockReturnValue({ id: 'u-1', name: 'Reader', emailVerified: true });
+	Object.assign(dbMock, {
+		select: vi.fn(() => makeChain(state.selectResults.shift() ?? []))
 	});
+});
+
+describe('(site)/[slug] load — universal md page', () => {
 
 	it('serves the current-locale body with the content-locales hreflang set', async () => {
 		state.selectResults = [[pageRow]];
@@ -76,6 +107,8 @@ describe('(site)/[slug] load — universal md page', () => {
 			seo: { path: string; alternates: { lang: string; path: string }[] };
 			page: { slug: string; title: string; description: string | null };
 			html: string;
+			viewer: { emailVerified: boolean; canComment: boolean; loginUrl: string | null };
+			discussion: unknown;
 		};
 
 		expect(renderMarkdownToHtml).toHaveBeenCalledWith('# About\n\nBody');
@@ -86,6 +119,19 @@ describe('(site)/[slug] load — universal md page', () => {
 			{ lang: 'zh-cn', path: '/about' }
 		]);
 		expect(data.page).toEqual({ slug: 'about', title: 'About Me', description: 'About desc' });
+		// P4 comment mount: guests get the login link; the threads always load
+		// (pages carry no per-row switch).
+		expect(data.viewer).toEqual({
+			emailVerified: false,
+			canComment: false,
+			loginUrl: '/login?redirectTo=%2Fen%2Fabout'
+		});
+		expect(data.discussion).toEqual(threads);
+		expect(service.loadThreads).toHaveBeenCalledWith({
+			targetType: 'page',
+			targetId: 'p-1',
+			viewerId: null
+		});
 	});
 
 	it('404s with an ordered language hint when the body lacks the locale (strict serving)', async () => {
@@ -161,5 +207,57 @@ describe('(site)/[slug] load — universal md page', () => {
 				available: [{ lang: 'zh-cn', href: '/zh-cn/about' }]
 			}
 		});
+	});
+
+	it('passes the viewer through: signed-in readers load their own threads', async () => {
+		state.selectResults = [[pageRow]];
+
+		const data = (await load(
+			makeEvent('about', {
+				locals: { user: { id: 'u-9', emailVerified: true }, profile: null }
+			})
+		)) as { viewer: { emailVerified: boolean; canComment: boolean; loginUrl: string | null } };
+
+		expect(data.viewer).toEqual({ emailVerified: true, canComment: true, loginUrl: null });
+		expect(service.loadThreads).toHaveBeenCalledWith({
+			targetType: 'page',
+			targetId: 'p-1',
+			viewerId: 'u-9'
+		});
+	});
+});
+
+describe('(site)/[slug] comment actions (P4 mount)', () => {
+	it('submits through the slug-resolved page target', async () => {
+		service.resolveCommentPageTarget.mockResolvedValue('p-1');
+		const fd = new FormData();
+		fd.set('text', 'hello page');
+
+		const result = await actions.comment(
+			makeEvent('about', { request: { formData: vi.fn(async () => fd) } })
+		);
+
+		expect(result).toEqual({ submitted: 'pending' });
+		expect(service.resolveCommentPageTarget).toHaveBeenCalledWith('about', 'en');
+		expect(service.submitComment).toHaveBeenCalledWith(
+			expect.objectContaining({ targetType: 'page', targetId: 'p-1' })
+		);
+	});
+
+	it('404s when the slug no longer resolves to a commentable page', async () => {
+		const fd = new FormData();
+		fd.set('text', 'x');
+
+		const result = await actions.comment(
+			makeEvent('about', { request: { formData: vi.fn(async () => fd) } })
+		);
+
+		expect(result).toMatchObject({ status: 404, data: { message: 'comment_error_unavailable' } });
+		expect(service.submitComment).not.toHaveBeenCalled();
+	});
+
+	it('wires edit and delete onto the shared handlers (single home)', () => {
+		expect(actions.edit).toBe(service.commentEditAction);
+		expect(actions.delete).toBe(service.commentDeleteAction);
 	});
 });

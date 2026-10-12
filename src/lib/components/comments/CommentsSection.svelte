@@ -41,6 +41,11 @@
 				: m.comment_submitted_pending()}
 		</p>
 	{/if}
+	{#if form?.deleted}
+		<p class="mt-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground" role="status">
+			{m.comment_deleted()}
+		</p>
+	{/if}
 	{#if form?.message}
 		<p class="mt-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
 			{form.message}
