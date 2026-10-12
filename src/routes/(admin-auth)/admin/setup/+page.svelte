@@ -15,7 +15,7 @@
 </script>
 
 <svelte:head>
-	<title>Setup Admin - Lair</title>
+	<title>{m.auth_setup_title()} - Lair</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center px-4 py-12">
@@ -38,10 +38,7 @@
 					role="alert"
 				>
 					<IconAlertTriangle class="mt-0.5 size-4 shrink-0" />
-					<span>
-						<strong>ADMIN_SETUP_TOKEN</strong> is not set. Set it to a long random string in your environment
-						variables to secure this page.
-					</span>
+					<span>{m.admin_setup_token_warning({ env: 'ADMIN_SETUP_TOKEN' })}</span>
 				</div>
 			{/if}
 
@@ -59,7 +56,13 @@
 				<Field.FieldGroup>
 					<Field.Field>
 						<Field.FieldLabel for="name">{m.auth_setup_display_name()}</Field.FieldLabel>
-						<Input id="name" name="name" type="text" autocomplete="name" placeholder="Admin" />
+						<Input
+							id="name"
+							name="name"
+							type="text"
+							autocomplete="name"
+							placeholder={m.admin_setup_name_placeholder()}
+						/>
 					</Field.Field>
 					<Field.Field>
 						<Field.FieldLabel for="email">{m.auth_admin_email()}</Field.FieldLabel>
@@ -91,7 +94,7 @@
 								name="setupToken"
 								type="password"
 								autocomplete="off"
-								placeholder="Enter the setup token from server config"
+								placeholder={m.admin_setup_token_placeholder()}
 								required
 							/>
 						</Field.Field>

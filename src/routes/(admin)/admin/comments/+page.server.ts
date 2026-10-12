@@ -1,4 +1,5 @@
 import { fail } from '@sveltejs/kit';
+import { m } from '$lib/paraglide/messages';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { comments } from '$lib/server/db/content/comment.schema';
@@ -76,7 +77,7 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const decision = form.get('decision')?.toString();
 		if (decision !== 'approve' && decision !== 'reject') {
-			return fail(400, { message: 'Unknown review decision.' });
+			return fail(400, { message: m.admin_comments_err_unknown_decision() });
 		}
 		// Same cap as the list query: one request must not flip the whole table.
 		// Non-uuid values are dropped before they reach the uuid column (PG
@@ -87,13 +88,13 @@ export const actions: Actions = {
 			.filter(isUuid)
 			.slice(0, 200);
 		if (ids.length === 0) {
-			return fail(400, { message: 'Select at least one comment first.' });
+			return fail(400, { message: m.admin_comments_err_select_first() });
 		}
 		// The capability is checked per decision, not by the coarse review
 		// marker (B2.1 review fix: declared actions and enforced actions match).
 		const allowed = decision === 'approve' ? await can.approveComment() : await can.rejectComment();
 		if (!allowed) {
-			return fail(403, { message: 'Comment review permission required.' });
+			return fail(403, { message: m.admin_comments_err_permission() });
 		}
 
 		// Only pending, non-deleted rows flip: the conditional update keeps a

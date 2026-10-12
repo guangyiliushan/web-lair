@@ -7,6 +7,7 @@ import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isReservedNoteSlug, NOTE_EMOTIONS, NOTE_MOODS } from '$lib/utils/note-meta';
 import { hashNotePassword, verifyNotePassword } from './note-gate';
 import { DRAFT_THROTTLE_MS } from './post-drafts';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Draft-flow service for notes (N1 admin; ledger §9.10 / §13.4, notes plan
@@ -282,7 +283,7 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 			// a graded form error, not a 500 with an autosave retry loop
 			// (round-7 review finding).
 			if (pgErrorCode(caught) === '23503') {
-				return { kind: 'invalid', errors: { topicId: '专栏不存在，请重新选择' } };
+				return { kind: 'invalid', errors: { topicId: m.admin_notes_edit_err_topic_missing() } };
 			}
 			throw caught;
 		}
@@ -333,7 +334,7 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 			// Placeholder slug collision (extremely unlikely): retry with a new one.
 			if (pgErrorCode(caught) === '23505' && attempt < 2) continue;
 			if (pgErrorCode(caught) === '23503') {
-				return { kind: 'invalid', errors: { topicId: '专栏不存在，请重新选择' } };
+				return { kind: 'invalid', errors: { topicId: m.admin_notes_edit_err_topic_missing() } };
 			}
 			throw caught;
 		}
@@ -385,7 +386,7 @@ async function updateExistingNoteDraft(
 			.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
 	} catch (caught) {
 		if (pgErrorCode(caught) === '23503') {
-			return { kind: 'invalid', errors: { topicId: '专栏不存在，请重新选择' } };
+			return { kind: 'invalid', errors: { topicId: m.admin_notes_edit_err_topic_missing() } };
 		}
 		throw caught;
 	}
@@ -435,14 +436,15 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 	const title = draft.title.trim();
 	const slug = (draft.slug ?? '').trim();
 	const mood = (draft.mood ?? '').trim();
-	if (!title) errors.title = '标题不能为空';
-	if (!slug) errors.slug = 'Slug 不能为空';
-	else if (!NOTE_SLUG_RE.test(slug)) errors.slug = 'Slug 仅允许 Unicode 字母、数字与连字符';
-	else if (slug !== slug.toLowerCase()) errors.slug = 'Slug 需为小写';
-	else if (isReservedNoteSlug(slug)) errors.slug = '该 Slug 为保留词，请更换';
-	else if (isNotePlaceholderSlug(slug)) errors.slug = '该 Slug 前缀由系统占位保留，请更换';
-	if (!(draft.content ?? '').trim()) errors.content = '正文不能为空';
-	if (mood && !(NOTE_MOODS as readonly string[]).includes(mood)) errors.mood = '心情取值无效';
+	if (!title) errors.title = m.admin_editor_err_title_required();
+	if (!slug) errors.slug = m.admin_editor_err_slug_required();
+	else if (!NOTE_SLUG_RE.test(slug)) errors.slug = m.admin_notes_edit_err_slug_charset();
+	else if (slug !== slug.toLowerCase()) errors.slug = m.admin_notes_edit_err_slug_lowercase();
+	else if (isReservedNoteSlug(slug)) errors.slug = m.admin_notes_edit_err_slug_reserved();
+	else if (isNotePlaceholderSlug(slug)) errors.slug = m.admin_editor_err_slug_reserved_prefix();
+	if (!(draft.content ?? '').trim()) errors.content = m.admin_editor_err_content_required();
+	if (mood && !(NOTE_MOODS as readonly string[]).includes(mood))
+		errors.mood = m.admin_notes_edit_err_bad_mood();
 	if (Object.keys(errors).length > 0) return { kind: 'invalid', errors };
 
 	try {
@@ -472,7 +474,7 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 			if (!finalTitle || !finalSlug || !(lockedDraft.content ?? '').trim()) {
 				return {
 					kind: 'invalid' as const,
-					errors: { form: '草稿内容已变化，请刷新后重试' } as Record<string, string>
+					errors: { form: m.admin_editor_err_stale_draft() } as Record<string, string>
 				};
 			}
 			if (
@@ -483,7 +485,7 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 			) {
 				return {
 					kind: 'invalid' as const,
-					errors: { slug: 'Slug 格式无效' } as Record<string, string>
+					errors: { slug: m.admin_editor_err_slug_invalid() } as Record<string, string>
 				};
 			}
 
@@ -524,7 +526,8 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 	} catch (caught) {
 		const code = pgErrorCode(caught);
 		if (code === '23505') return { kind: 'slug-taken' };
-		if (code === '23503') return { kind: 'invalid', errors: { topicId: '专栏不存在' } };
+		if (code === '23503')
+			return { kind: 'invalid', errors: { topicId: m.admin_notes_topics_err_not_found() } };
 		// Deadlock/serialization failures are retryable admin-action conflicts.
 		if (code === '40P01' || code === '40001') return { kind: 'busy' };
 		throw caught;
@@ -677,9 +680,9 @@ export async function setNotePassword(
 	// '' still clears; existing shorter hashes keep verifying (this gate is
 	// write-side only - the unlock path never rejects a stored password).
 	if (password !== '' && password.length < 6) {
-		return { kind: 'invalid', message: '密码至少 6 位' };
+		return { kind: 'invalid', message: m.admin_notes_edit_err_pw_short() };
 	}
-	if (password.length > 200) return { kind: 'invalid', message: '密码过长' };
+	if (password.length > 200) return { kind: 'invalid', message: m.admin_notes_edit_err_pw_long() };
 	const [note] = await db
 		.select({ id: notes.id, passwordHash: notes.passwordHash })
 		.from(notes)
@@ -714,7 +717,7 @@ export async function setNoteEmotions(
 ): Promise<NoteRowActionResult> {
 	const allowed = new Set<string>(NOTE_EMOTIONS);
 	if (tokens.some((token) => !allowed.has(token))) {
-		return { kind: 'invalid', message: '情绪取值无效' };
+		return { kind: 'invalid', message: m.admin_notes_edit_err_emotions_invalid() };
 	}
 	// Dedupe (a repeated checkbox submit may repeat a token) and merge with a
 	// single jsonb_set statement: the old read-modify-write could drop a

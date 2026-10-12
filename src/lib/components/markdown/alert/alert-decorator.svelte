@@ -228,7 +228,7 @@
 			bind:this={headerEl}
 			role="toolbar"
 			tabindex="-1"
-			aria-label="Alert type"
+			aria-label={m.editor_alert_type()}
 			onmouseenter={onHeaderEnter}
 			onmouseleave={onHeaderLeave}
 		>

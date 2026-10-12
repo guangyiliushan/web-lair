@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-	<title>{m.admin_settings_search_push()} - Lair Admin</title>
+	<title>{m.admin_settings_search_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -98,12 +98,14 @@
 
 					<!-- bingApiKey -->
 					<div class="space-y-1.5">
-						<label for="search-bingApiKey" class="text-sm">Bing API Key</label>
+						<label for="search-bingApiKey" class="text-sm"
+							>{m.admin_settings_search_bing_api_key()}</label
+						>
 						<Input
 							id="search-bingApiKey"
 							type="password"
 							bind:value={s.search.bingApiKey}
-							placeholder="Bing Webmaster API Key"
+							placeholder={m.admin_settings_search_bing_api_key_ph()}
 						/>
 					</div>
 				</div>

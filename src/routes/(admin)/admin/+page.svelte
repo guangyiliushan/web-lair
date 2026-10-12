@@ -287,13 +287,17 @@
 				<Card.Content>
 					<div class="grid gap-px bg-border sm:grid-cols-2">
 						<div class="bg-surface-card p-4">
-							<h3 class="mb-3 text-xs font-medium text-muted-foreground uppercase">Browser</h3>
+							<h3 class="mb-3 text-xs font-medium text-muted-foreground uppercase">
+								{m.admin_dashboard_traffic_browser()}
+							</h3>
 							<div class="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
 								{m.admin_common_empty()}
 							</div>
 						</div>
 						<div class="bg-surface-card p-4">
-							<h3 class="mb-3 text-xs font-medium text-muted-foreground uppercase">OS</h3>
+							<h3 class="mb-3 text-xs font-medium text-muted-foreground uppercase">
+								{m.admin_dashboard_traffic_os()}
+							</h3>
 							<div class="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
 								{m.admin_common_empty()}
 							</div>

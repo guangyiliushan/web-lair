@@ -1,4 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
+
+// The copy resolves from the catalog at call time; pin the locale so the
+// assertions stay in sync with the zh-cn catalog (same convention as
+// maintenance-form-utils.test.ts).
+overwriteGetLocale(() => 'zh-cn');
 
 /**
  * job-schedules service tests (J-3): the validation gate (5-field cron, Intl

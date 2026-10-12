@@ -8,7 +8,7 @@
 </script>
 
 <svelte:head>
-	<title>{m.admin_settings_system()} - Lair Admin</title>
+	<title>{m.admin_settings_system_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="space-y-10">

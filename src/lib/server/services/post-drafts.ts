@@ -6,6 +6,7 @@ import { slugTrackers } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { tagSlug } from '$lib/utils/slug';
 import { parseTags, SLUG_RE } from './posts';
+import { m } from '$lib/paraglide/messages';
 
 /**
  * Draft-flow service (P2, ledger §9.10 / §9.14.2-3): the editor never writes
@@ -362,13 +363,13 @@ export async function publishDraft(
 	const title = draft.title.trim();
 	const slug = (draft.slug ?? '').trim();
 	const categoryId = draft.categoryId ?? '';
-	if (!title) errors.title = '标题不能为空';
-	if (!slug) errors.slug = 'Slug 不能为空';
-	else if (!SLUG_RE.test(slug)) errors.slug = 'Slug 仅允许小写英文、数字和连字符';
+	if (!title) errors.title = m.admin_editor_err_title_required();
+	if (!slug) errors.slug = m.admin_editor_err_slug_required();
+	else if (!SLUG_RE.test(slug)) errors.slug = m.admin_posts_edit_err_slug_charset();
 	else if (slug.startsWith(PLACEHOLDER_SLUG_PREFIX))
-		errors.slug = '该 Slug 前缀由系统占位保留，请更换';
-	if (!categoryId) errors.categoryId = '请选择分类';
-	if (!(draft.content ?? '').trim()) errors.content = '正文不能为空';
+		errors.slug = m.admin_editor_err_slug_reserved_prefix();
+	if (!categoryId) errors.categoryId = m.admin_posts_edit_err_category_required();
+	if (!(draft.content ?? '').trim()) errors.content = m.admin_editor_err_content_required();
 	if (Object.keys(errors).length > 0) return { kind: 'invalid', errors };
 
 	if (categoryId) {
@@ -377,7 +378,8 @@ export async function publishDraft(
 			.from(categories)
 			.where(eq(categories.id, categoryId))
 			.limit(1);
-		if (!category) return { kind: 'invalid', errors: { categoryId: '分类不存在' } };
+		if (!category)
+			return { kind: 'invalid', errors: { categoryId: m.admin_posts_edit_err_category_missing() } };
 	}
 
 	try {
@@ -414,13 +416,13 @@ export async function publishDraft(
 			if (!finalTitle || !finalSlug || !finalCategoryId || !(lockedDraft.content ?? '').trim()) {
 				return {
 					kind: 'invalid' as const,
-					errors: { form: '草稿内容已变化，请刷新后重试' } as Record<string, string>
+					errors: { form: m.admin_editor_err_stale_draft() } as Record<string, string>
 				};
 			}
 			if (!SLUG_RE.test(finalSlug) || finalSlug.startsWith(PLACEHOLDER_SLUG_PREFIX)) {
 				return {
 					kind: 'invalid' as const,
-					errors: { slug: 'Slug 格式无效' } as Record<string, string>
+					errors: { slug: m.admin_editor_err_slug_invalid() } as Record<string, string>
 				};
 			}
 
@@ -470,7 +472,8 @@ export async function publishDraft(
 	} catch (caught) {
 		const code = pgErrorCode(caught);
 		if (code === '23505') return { kind: 'slug-taken' };
-		if (code === '23503') return { kind: 'invalid', errors: { categoryId: '分类不存在' } };
+		if (code === '23503')
+			return { kind: 'invalid', errors: { categoryId: m.admin_posts_edit_err_category_missing() } };
 		// Deadlock/serialization failures are retryable admin-action conflicts.
 		if (code === '40P01' || code === '40001') return { kind: 'busy' };
 		throw caught;

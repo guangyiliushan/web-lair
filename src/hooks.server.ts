@@ -127,5 +127,5 @@ export const handleError: HandleServerError = ({ error, event, status, message }
 		event.route.id ?? '-',
 		code ?? message ?? '-'
 	);
-	return { message: '服务器内部错误' };
+	return { message: 'Internal server error' };
 };

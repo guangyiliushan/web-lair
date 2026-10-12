@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AI_PROVIDER_KINDS, type AiProviderKind } from '$lib/utils/ai-meta';
+import { m } from '$lib/paraglide/messages';
 
 const envNamePattern = /^AI_[A-Z0-9_]+$/;
 
@@ -10,27 +11,32 @@ const envNamePattern = /^AI_[A-Z0-9_]+$/;
  */
 export const providerInputSchema = z
 	.object({
-		name: z.string().trim().min(1, '请填写名称').max(80, '名称过长'),
+		name: z
+			.string()
+			.trim()
+			.min(1, { error: () => m.admin_settings_ai_err_name_required() })
+			.max(80, { error: () => m.admin_settings_ai_err_name_too_long() }),
 		kind: z.enum(AI_PROVIDER_KINDS),
 		baseUrl: z
 			.string()
 			.trim()
-			.max(300, 'URL 过长')
+			.max(300, { error: () => m.admin_settings_ai_err_url_too_long() })
 			// http(s) only: the schema is the first gate against file:/javascript:
 			// and other schemes (AI-2.1 review - the probe fetches this URL).
-			.refine(
-				(v) => v === '' || (URL.canParse(v) && /^https?:\/\//i.test(v)),
-				'Base URL 需为 http(s) 链接'
-			),
+			.refine((v) => v === '' || (URL.canParse(v) && /^https?:\/\//i.test(v)), {
+				error: () => m.admin_settings_ai_err_base_url_format()
+			}),
 		apiKeyEnv: z
 			.string()
 			.trim()
-			.max(80, '变量名过长')
+			.max(80, { error: () => m.admin_settings_ai_err_env_too_long() })
 			// Namespaced allowlist: AI keys must live under AI_*, so the probe
 			// can never be pointed at BETTER_AUTH_SECRET / POSTGRES_PASSWORD
 			// and ship their values to an arbitrary endpoint (AI-2.1 review).
-			.refine((v) => v === '' || envNamePattern.test(v), '应以 AI_ 开头（如 AI_OPENAI_KEY）'),
-		modelsText: z.string().max(2000, '模型列表过长'),
+			.refine((v) => v === '' || envNamePattern.test(v), {
+				error: () => m.admin_settings_ai_err_env_prefix()
+			}),
+		modelsText: z.string().max(2000, { error: () => m.admin_settings_ai_err_models_too_long() }),
 		enabled: z.boolean()
 	})
 	.transform((v) => ({
@@ -107,14 +113,17 @@ export async function testProviderConnection(
 ): Promise<ProviderTestResult> {
 	try {
 		if (provider.kind === 'custom' && !provider.baseUrl) {
-			return { ok: false, message: '自定义服务商需要填写 Base URL' };
+			return { ok: false, message: m.admin_settings_ai_err_custom_base_url() };
 		}
 		const key = provider.apiKeyEnv ? getKey(provider.apiKeyEnv) : undefined;
 		if (provider.kind !== 'custom' && !provider.apiKeyEnv) {
-			return { ok: false, message: '未配置密钥环境变量' };
+			return { ok: false, message: m.admin_settings_ai_err_env_missing() };
 		}
 		if (provider.kind !== 'custom' && !key) {
-			return { ok: false, message: `环境变量 ${provider.apiKeyEnv} 未设置` };
+			return {
+				ok: false,
+				message: m.admin_settings_ai_err_env_unset({ name: provider.apiKeyEnv ?? '' })
+			};
 		}
 
 		let url: string;
@@ -134,14 +143,14 @@ export async function testProviderConnection(
 			signal: AbortSignal.timeout(TEST_TIMEOUT_MS)
 		});
 		return response.ok
-			? { ok: true, message: `连接成功（HTTP ${response.status}）` }
+			? { ok: true, message: m.admin_settings_ai_test_ok({ status: response.status }) }
 			: { ok: false, message: `HTTP ${response.status}` };
 	} catch (caught) {
 		const name = caught instanceof Error ? caught.name : '';
 		if (name === 'TimeoutError' || name === 'AbortError') {
-			return { ok: false, message: '连接超时（5s）' };
+			return { ok: false, message: m.admin_settings_ai_test_timeout() };
 		}
 		const message = caught instanceof Error ? caught.message : String(caught);
-		return { ok: false, message: `连接失败：${message}` };
+		return { ok: false, message: m.admin_settings_ai_test_failed({ message: message }) };
 	}
 }

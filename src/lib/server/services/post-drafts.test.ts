@@ -1,4 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
+
+// The copy resolves from the catalog at call time; pin the locale so the
+// assertions stay in sync with the zh-cn catalog (same convention as
+// maintenance-form-utils.test.ts).
+overwriteGetLocale(() => 'zh-cn');
 import { drafts, postRevisions, postTags, posts, tags } from '$lib/server/db/content';
 import { slugTrackers } from '$lib/server/db/system';
 

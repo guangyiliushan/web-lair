@@ -14,7 +14,7 @@
 </script>
 
 <svelte:head>
-	<title>Secure Admin Login</title>
+	<title>{m.admin_login_title()}</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center px-4 py-12">

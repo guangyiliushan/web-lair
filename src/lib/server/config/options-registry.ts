@@ -5,6 +5,7 @@ import { AI_FUNCTIONS } from '../../utils/ai-meta.ts';
 import { PROJECT_SYNC_PROVIDERS } from '../../utils/project-meta.ts';
 import { isValidIanaTimeZone } from '../../utils/timezone.ts';
 import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '../pg-timezone.ts';
+import { m } from '../../paraglide/messages.js';
 
 /** Site languages (same set as the posts `lang` CHECK, ledger §9.16). */
 export const OPTION_LANGS = ['en', 'zh-cn', 'ja'] as const;
@@ -56,7 +57,9 @@ export const optionRegistry = {
 		// fall back to this zone for the belongs-to date when their own
 		// `tz` is null; jobs reuse it as the `job_schedules.tz` default
 		// (ledger §24).
-		schema: z.string().refine(isValidIanaTimeZone, '无效的 IANA 时区名'),
+		schema: z
+			.string()
+			.refine(isValidIanaTimeZone, { error: () => m.admin_option_err_tz_invalid_iana() }),
 		default: 'UTC'
 	},
 	'notes.gate': {
@@ -86,12 +89,17 @@ export const optionRegistry = {
 		default: { monthly: 0, currency: 'USD', alertRatios: [0.8, 0.9, 1], pauseAutoOnExceed: true }
 	},
 	'ai.styleGuide': {
-		schema: z.object({ text: z.string().max(20000, '风格指南过长（≤20000 字）') }),
+		schema: z.object({
+			text: z.string().max(20000, { error: () => m.admin_option_err_style_too_long() })
+		}),
 		default: { text: '' }
 	},
 	'ai.translation': {
 		schema: z.object({
-			minChars: z.number('必须为数字').int('必须为整数').min(1, '至少为 1'),
+			minChars: z
+				.number({ error: () => m.admin_option_err_number() })
+				.int({ error: () => m.admin_option_err_int() })
+				.min(1, { error: () => m.admin_option_err_min1() }),
 			notesAuto: z.boolean()
 		}),
 		// Micro-content line (ledger §17.5 / plan §1.6, C2): auto-enqueue
@@ -108,16 +116,25 @@ export const optionRegistry = {
 			shadowMode: z.boolean(),
 			keywords: z.array(z.string()),
 			regexes: z.array(z.string()),
-			linkThreshold: z.number('必须为数字').int('必须为整数').nonnegative('不能小于 0'),
+			linkThreshold: z
+				.number({ error: () => m.admin_option_err_number() })
+				.int({ error: () => m.admin_option_err_int() })
+				.nonnegative({ error: () => m.admin_option_err_nonnegative() }),
 			firstCommentHold: z.boolean(),
 			trustedUsers: z.array(z.string()),
 			thresholds: z
 				.object({
-					allow: z.number('必须为数字').min(0, '必须在 0–1 之间').max(1, '必须在 0–1 之间'),
-					block: z.number('必须为数字').min(0, '必须在 0–1 之间').max(1, '必须在 0–1 之间')
+					allow: z
+						.number({ error: () => m.admin_option_err_number() })
+						.min(0, { error: () => m.admin_option_err_unit01() })
+						.max(1, { error: () => m.admin_option_err_unit01() }),
+					block: z
+						.number({ error: () => m.admin_option_err_number() })
+						.min(0, { error: () => m.admin_option_err_unit01() })
+						.max(1, { error: () => m.admin_option_err_unit01() })
 				})
 				// AI-2.1: cross-field order - "allow first, block above it".
-				.refine((t) => t.allow < t.block, '放行阈值需小于拦截阈值')
+				.refine((t) => t.allow < t.block, { error: () => m.admin_option_err_threshold_order() })
 		}),
 		// Per §3.3: rules first, AI off until enabled, shadow mode on, the
 		// WordPress-style link threshold, first comments held for review.
@@ -134,8 +151,14 @@ export const optionRegistry = {
 	},
 	'media.purge': {
 		schema: z.object({
-			pendingDays: z.number('必须为数字').int('必须为整数').positive('必须大于 0'),
-			detachedDays: z.number('必须为数字').int('必须为整数').positive('必须大于 0')
+			pendingDays: z
+				.number({ error: () => m.admin_option_err_number() })
+				.int({ error: () => m.admin_option_err_int() })
+				.positive({ error: () => m.admin_option_err_positive() }),
+			detachedDays: z
+				.number({ error: () => m.admin_option_err_number() })
+				.int({ error: () => m.admin_option_err_int() })
+				.positive({ error: () => m.admin_option_err_positive() })
 		}),
 		// Storage line §4.6: never-referenced `pending` blobs purge a week
 		// after their LAST event (dedupe hits refresh updated_at), `detached`
@@ -158,16 +181,32 @@ export const optionRegistry = {
 	'friends.checks': {
 		schema: z.object({
 			enabled: z.boolean(),
-			cadenceHours: z.number('必须为数字').int('必须为整数').min(1, '至少为 1 小时'),
-			failStreak: z.number('必须为数字').int('必须为整数').min(1, '至少为 1'),
-			backlinkStreak: z.number('必须为数字').int('必须为整数').min(1, '至少为 1'),
-			graceDays: z.number('必须为数字').int('必须为整数').min(1, '至少为 1 天'),
+			cadenceHours: z
+				.number({ error: () => m.admin_option_err_number() })
+				.int({ error: () => m.admin_option_err_int() })
+				.min(1, { error: () => m.admin_option_err_min1_hour() }),
+			failStreak: z
+				.number({ error: () => m.admin_option_err_number() })
+				.int({ error: () => m.admin_option_err_int() })
+				.min(1, { error: () => m.admin_option_err_min1() }),
+			backlinkStreak: z
+				.number({ error: () => m.admin_option_err_number() })
+				.int({ error: () => m.admin_option_err_int() })
+				.min(1, { error: () => m.admin_option_err_min1() }),
+			graceDays: z
+				.number({ error: () => m.admin_option_err_number() })
+				.int({ error: () => m.admin_option_err_int() })
+				.min(1, { error: () => m.admin_option_err_min1_day() }),
 			timeoutMs: z
-				.number('必须为数字')
-				.int('必须为整数')
-				.min(1000, '至少 1000ms')
-				.max(60000, '至多 60000ms'),
-			concurrency: z.number('必须为数字').int('必须为整数').min(1, '至少为 1').max(16, '至多 16')
+				.number({ error: () => m.admin_option_err_number() })
+				.int({ error: () => m.admin_option_err_int() })
+				.min(1000, { error: () => m.admin_option_err_min1000ms() })
+				.max(60000, { error: () => m.admin_option_err_max60000ms() }),
+			concurrency: z
+				.number({ error: () => m.admin_option_err_number() })
+				.int({ error: () => m.admin_option_err_int() })
+				.min(1, { error: () => m.admin_option_err_min1() })
+				.max(16, { error: () => m.admin_option_err_max16() })
 		}),
 		// Plan §2.6 defaults: daily cadence, 3-strike outage / 2-strike
 		// backlink loss before queueing, 30-day grace, 10s per fetch unit,
@@ -234,7 +273,10 @@ export const optionRegistry = {
 			.array(
 				z.object({
 					provider: z.enum(PROJECT_SYNC_PROVIDERS),
-					account: z.string().trim().min(1, '账号不能为空')
+					account: z
+						.string()
+						.trim()
+						.min(1, { error: () => m.admin_option_err_account_required() })
 				})
 			)
 			.refine(
@@ -244,7 +286,7 @@ export const optionRegistry = {
 							JSON.stringify([provider, account.toLowerCase()])
 						)
 					).size === targets.length,
-				'同一平台账号不能重复'
+				{ error: () => m.admin_option_err_account_dup() }
 			),
 		default: []
 	}
@@ -305,9 +347,7 @@ export async function setOption<K extends OptionKey>(
 			executor as unknown as PgTimeZoneExecutor | undefined
 		);
 		if (!accepted) {
-			throw new Error(
-				`时区 "${String(parsed)}" 不被 PostgreSQL 接受（pg_timezone_names）；已拒绝写入`
-			);
+			throw new Error(m.admin_option_err_tz_pg_rejected({ tz: String(parsed) }));
 		}
 	}
 	const database = executor ?? (await defaultExecutor());

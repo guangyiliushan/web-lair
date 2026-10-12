@@ -7,6 +7,7 @@ import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '../pg-timezone.
 import { isValidIanaTimeZone } from '../../utils/timezone.ts';
 import { assertCronExpr } from './due.ts';
 import { resolveJobDefinition } from './user-layer.ts';
+import { m } from '../../paraglide/messages.js';
 
 /**
  * Schedule management (J-3, plan §3.2/§5.7): the admin surface's cron CRUD.
@@ -68,21 +69,25 @@ export async function validateScheduleInput(
 ): Promise<ScheduleValidation> {
 	const cronExpr = input.cronExpr.trim();
 	const tz = input.tz.trim();
-	if (!cronExpr) return { ok: false, message: 'cron 表达式不能为空' };
-	if (!tz) return { ok: false, message: '时区不能为空' };
+	if (!cronExpr) return { ok: false, message: m.admin_maintenance_sched_err_cron_required() };
+	if (!tz) return { ok: false, message: m.admin_maintenance_sched_err_tz_required() };
 	try {
 		assertCronExpr(cronExpr);
 	} catch (error) {
-		return { ok: false, message: error instanceof Error ? error.message : 'cron 表达式不合法' };
+		return {
+			ok: false,
+			message: error instanceof Error ? error.message : m.admin_maintenance_sched_err_cron_invalid()
+		};
 	}
-	if (!isValidIanaTimeZone(tz)) return { ok: false, message: `无效的 IANA 时区名："${tz}"` };
+	if (!isValidIanaTimeZone(tz))
+		return { ok: false, message: m.admin_maintenance_sched_err_tz_iana_invalid({ tz: tz }) };
 	if (!(await isPgAcceptableTimeZone(tz, executor))) {
-		return { ok: false, message: `PostgreSQL 不接受该时区："${tz}"` };
+		return { ok: false, message: m.admin_maintenance_sched_err_tz_pg_rejected({ tz: tz }) };
 	}
 	try {
 		CronExpressionParser.parse(cronExpr, { tz });
 	} catch {
-		return { ok: false, message: `cron 表达式在时区 ${tz} 下无法解析` };
+		return { ok: false, message: m.admin_maintenance_sched_err_cron_tz_unparsable({ tz: tz }) };
 	}
 	return { ok: true, cronExpr, tz };
 }
@@ -104,7 +109,8 @@ export async function createSchedule(input: {
 }): Promise<CreateScheduleResult> {
 	const job = input.job.trim();
 	const definition = await resolveJobDefinition(job, input.dataDir);
-	if (!definition) return { kind: 'unknown-job', message: `未知的任务："${job}"` };
+	if (!definition)
+		return { kind: 'unknown-job', message: m.admin_maintenance_err_unknown({ name: job }) };
 	// The membership check rides on `execute`, which the ScheduleDb surface
 	// does not name - same cast the options registry uses (ledger §13.9).
 	const validation = await validateScheduleInput(input, input.db as unknown as PgTimeZoneExecutor);

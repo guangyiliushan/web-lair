@@ -410,7 +410,7 @@
 </script>
 
 <svelte:head>
-	<title>{title ? `${title} - Lair Admin` : 'New Post - Lair Admin'}</title>
+	<title>{title ? `${title} - Lair Admin` : `${m.admin_posts_new()} - Lair Admin`}</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 min-w-0 flex-col">

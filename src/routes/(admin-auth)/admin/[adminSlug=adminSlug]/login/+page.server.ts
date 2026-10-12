@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { m } from '$lib/paraglide/messages';
 import { APIError } from 'better-auth/api';
 import { auth } from '$lib/server/auth';
 import { ADMIN_BASE_PATH, assertAdminSlug } from '$lib/server/config/admin';
@@ -36,7 +37,7 @@ export const actions: Actions = {
 		});
 
 		if (!email || !password) {
-			return fail(400, { message: 'Email and password are required', redirectTo });
+			return fail(400, { message: m.admin_auth_err_email_password_required(), redirectTo });
 		}
 
 		// Set on every path that exits the try: the catch below returns a form
@@ -67,11 +68,11 @@ export const actions: Actions = {
 				const admitted =
 					getUserRole(result.user) !== null || (await isSiteOrganizationMember(result.user.id));
 				if (!admitted || !result.user.emailVerified) {
-					return fail(403, { message: 'This account cannot access admin', redirectTo });
+					return fail(403, { message: m.admin_auth_err_no_admin_access(), redirectTo });
 				}
 
 				if (!result.token) {
-					return fail(500, { message: 'Failed to establish admin session', redirectTo });
+					return fail(500, { message: m.admin_auth_err_session_failed(), redirectTo });
 				}
 
 				await pruneOtherSessions(result.user.id, result.token);
@@ -84,7 +85,7 @@ export const actions: Actions = {
 				});
 			}
 
-			return fail(500, { message: 'An unexpected error occurred', redirectTo });
+			return fail(500, { message: m.admin_auth_err_unexpected(), redirectTo });
 		}
 
 		if (twoFactorRequired) {

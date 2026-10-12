@@ -262,7 +262,7 @@
 	<section>
 		<div class="mb-4 flex items-center gap-2">
 			<IconKey class="size-5 text-muted-foreground" />
-			<h3 class="text-base font-semibold">API Token</h3>
+			<h3 class="text-base font-semibold">{m.admin_settings_account_api_token()}</h3>
 		</div>
 		<p class="mb-3 text-sm text-muted-foreground">
 			{m.admin_settings_account_tokens_hint()}
@@ -276,7 +276,7 @@
 	<section>
 		<div class="mb-4 flex items-center gap-2">
 			<IconShield class="size-5 text-muted-foreground" />
-			<h3 class="text-base font-semibold">Passkey</h3>
+			<h3 class="text-base font-semibold">{m.admin_settings_account_passkey()}</h3>
 		</div>
 		<p class="mb-3 text-sm text-muted-foreground">
 			{m.admin_settings_account_passkey_hint()}
@@ -312,7 +312,7 @@
 				<div class="grid gap-2 sm:grid-cols-2">
 					<div>
 						<label class="mb-1 block text-xs text-muted-foreground" for="github-client-id"
-							>Client ID</label
+							>{m.admin_settings_account_client_id()}</label
 						>
 						<Input
 							id="github-client-id"
@@ -322,7 +322,7 @@
 					</div>
 					<div>
 						<label class="mb-1 block text-xs text-muted-foreground" for="github-client-secret"
-							>Client Secret</label
+							>{m.admin_settings_account_client_secret()}</label
 						>
 						<Input
 							id="github-client-secret"
@@ -333,7 +333,9 @@
 					</div>
 				</div>
 				<div>
-					<span class="mb-1 block text-xs text-muted-foreground">Callback URL</span>
+					<span class="mb-1 block text-xs text-muted-foreground"
+						>{m.admin_settings_account_callback_url()}</span
+					>
 					<div class="flex items-center gap-2">
 						<code class="flex-1 truncate rounded-lg border bg-muted/50 px-2.5 py-1.5 text-xs">
 							{s.account.github.callbackUrl}
@@ -381,7 +383,7 @@
 				<div class="grid gap-2 sm:grid-cols-2">
 					<div>
 						<label class="mb-1 block text-xs text-muted-foreground" for="google-client-id"
-							>Client ID</label
+							>{m.admin_settings_account_client_id()}</label
 						>
 						<Input
 							id="google-client-id"
@@ -391,7 +393,7 @@
 					</div>
 					<div>
 						<label class="mb-1 block text-xs text-muted-foreground" for="google-client-secret"
-							>Client Secret</label
+							>{m.admin_settings_account_client_secret()}</label
 						>
 						<Input
 							id="google-client-secret"
@@ -402,7 +404,9 @@
 					</div>
 				</div>
 				<div>
-					<span class="mb-1 block text-xs text-muted-foreground">Callback URL</span>
+					<span class="mb-1 block text-xs text-muted-foreground"
+						>{m.admin_settings_account_callback_url()}</span
+					>
 					<div class="flex items-center gap-2">
 						<code class="flex-1 truncate rounded-lg border bg-muted/50 px-2.5 py-1.5 text-xs">
 							{s.account.google.callbackUrl}

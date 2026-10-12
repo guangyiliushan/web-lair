@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { timingSafeEqual } from 'node:crypto';
 import type { Actions, PageServerLoad } from './$types';
+import { m } from '$lib/paraglide/messages';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/auth.schema';
@@ -44,7 +45,7 @@ export const load: PageServerLoad = async () => {
 export const actions: Actions = {
 	setup: async (event) => {
 		if (await hasAnyAdminAccount()) {
-			return fail(403, { message: 'Admin already exists.' });
+			return fail(403, { message: m.admin_setup_err_admin_exists() });
 		}
 
 		const formData = await event.request.formData();
@@ -54,7 +55,7 @@ export const actions: Actions = {
 		const formSetupToken = formData.get('setupToken')?.toString() ?? '';
 
 		if (!email || !password) {
-			return fail(400, { message: 'Email and password are required.' });
+			return fail(400, { message: m.admin_auth_err_email_password_required() });
 		}
 
 		// Verify setup token
@@ -84,7 +85,7 @@ export const actions: Actions = {
 			// Raced with another bootstrap: drop the account we just created so it
 			// cannot linger as an orphan (no owner, no way in). Cascades to its profile.
 			await db.delete(user).where(eq(user.id, result.user.id));
-			return fail(403, { message: 'Admin already exists.' });
+			return fail(403, { message: m.admin_setup_err_admin_exists() });
 		}
 
 		// signUpEmail returns { token: null } while requireEmailVerification is on.
@@ -113,7 +114,7 @@ export const actions: Actions = {
 		} catch (caught) {
 			if (caught instanceof APIError) {
 				return fail(500, {
-					message: 'Account created but auto-login failed. Please sign in manually.'
+					message: m.admin_setup_err_autologin_failed()
 				});
 			}
 			throw caught;

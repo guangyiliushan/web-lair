@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { m } from '$lib/paraglide/messages';
 import { APIError } from 'better-auth/api';
 import { auth } from '$lib/server/auth';
 import { ADMIN_BASE_PATH, assertAdminSlug } from '$lib/server/config/admin';
@@ -69,7 +70,7 @@ export const actions: Actions = {
 		});
 
 		if (!code) {
-			return fail(400, { message: 'Enter your verification code.' });
+			return fail(400, { message: m.admin_auth_2fa_err_code_required() });
 		}
 
 		let result: VerifyResult | undefined;
@@ -94,7 +95,7 @@ export const actions: Actions = {
 				});
 			}
 			console.warn('[2fa] verification failed:', caught instanceof Error ? caught.message : caught);
-			return fail(500, { message: 'Verification failed. Try again.' });
+			return fail(500, { message: m.admin_auth_2fa_err_failed() });
 		}
 
 		const user = result?.user;
@@ -130,7 +131,7 @@ export const actions: Actions = {
 					);
 				}
 			}
-			return fail(403, { message: 'This account cannot access admin' });
+			return fail(403, { message: m.admin_auth_err_no_admin_access() });
 		}
 
 		if (sessionToken) {

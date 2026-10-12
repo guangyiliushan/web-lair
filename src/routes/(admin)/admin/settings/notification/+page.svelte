@@ -36,7 +36,7 @@
 </script>
 
 <svelte:head>
-	<title>Notifications - Lair Admin</title>
+	<title>{m.admin_settings_notification_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -171,12 +171,14 @@
 
 					<!-- smtpTls -->
 					<div class="flex items-center justify-between gap-4">
-						<label for="notif-smtpTls" class="text-sm">SMTP TLS</label>
+						<label for="notif-smtpTls" class="text-sm"
+							>{m.admin_settings_notification_smtp_tls()}</label
+						>
 						<button
 							type="button"
 							role="switch"
 							aria-checked={Boolean(s.notification.smtpTls)}
-							aria-label="SMTP TLS"
+							aria-label={m.admin_settings_notification_smtp_tls()}
 							id="notif-smtpTls"
 							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
 							class:bg-accent={s.notification.smtpTls}
@@ -245,7 +247,9 @@
 
 					<!-- barkKey -->
 					<div class="space-y-1.5">
-						<label for="notif-barkKey" class="text-sm">Bark Key</label>
+						<label for="notif-barkKey" class="text-sm"
+							>{m.admin_settings_notification_bark_key()}</label
+						>
 						<Input
 							id="notif-barkKey"
 							type="password"
@@ -314,7 +318,7 @@
 
 			<!-- Webhooks（J-3：只读端点列表 + 投递记录 + 重投） -->
 			<section>
-				<h3 class="mb-4 text-sm font-semibold">Webhooks</h3>
+				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_webhooks()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
 					{#if retryFlash}
 						<p
@@ -340,9 +344,7 @@
 										<span class="font-medium">{endpoint.name}</span>
 										<code class="text-muted-foreground">{endpoint.payloadUrl}</code>
 										<Badge variant={endpoint.isEnabled ? 'default' : 'outline'}>
-											{endpoint.isEnabled
-												? m.admin_common_enable()
-												: m.admin_common_disable()}
+											{endpoint.isEnabled ? m.admin_common_enable() : m.admin_common_disable()}
 										</Badge>
 										<span class="text-muted-foreground">{endpoint.events.join(' · ')}</span>
 									</li>

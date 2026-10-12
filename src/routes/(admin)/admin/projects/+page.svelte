@@ -728,19 +728,19 @@
 						<dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
 							<dt>{m.admin_projects_field_provider()}</dt>
 							<dd>{providerLabel(editing.provider)}</dd>
-							<dt>Status</dt>
+							<dt>{m.admin_projects_field_status()}</dt>
 							<dd>{statusLabel(editing.status)}</dd>
-							<dt>Language</dt>
+							<dt>{m.admin_projects_field_language()}</dt>
 							<dd>{editing.language ?? '—'}</dd>
-							<dt>Stars</dt>
+							<dt>{m.admin_projects_field_stars()}</dt>
 							<dd>{editing.stars ?? '—'}</dd>
-							<dt>Pushed</dt>
+							<dt>{m.admin_projects_field_pushed()}</dt>
 							<dd>{editing.pushedAt ? editing.pushedAt.toISOString().slice(0, 10) : '—'}</dd>
 							<dt>{m.admin_projects_last_run()}</dt>
 							<dd>
 								{editing.lastSyncedAt ? editing.lastSyncedAt.toISOString().slice(0, 10) : '—'}
 							</dd>
-							<dt>External ID</dt>
+							<dt>{m.admin_projects_field_external_id()}</dt>
 							<dd class="truncate">{editing.externalId ?? '—'}</dd>
 						</dl>
 					</section>

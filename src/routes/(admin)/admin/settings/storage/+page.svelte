@@ -12,7 +12,7 @@
 </script>
 
 <svelte:head>
-	<title>{m.admin_settings_storage()} - Lair Admin</title>
+	<title>{m.admin_settings_storage_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -59,7 +59,9 @@
 
 					<!-- s3Endpoint -->
 					<div class="space-y-1.5">
-						<label for="storage-s3Endpoint" class="text-sm">S3 Endpoint</label>
+						<label for="storage-s3Endpoint" class="text-sm"
+							>{m.admin_settings_storage_backup_s3_endpoint()}</label
+						>
 						<Input
 							id="storage-s3Endpoint"
 							bind:value={s.storage.s3Endpoint}
@@ -69,7 +71,9 @@
 
 					<!-- s3SecretId -->
 					<div class="space-y-1.5">
-						<label for="storage-s3SecretId" class="text-sm">S3 Secret ID</label>
+						<label for="storage-s3SecretId" class="text-sm"
+							>{m.admin_settings_storage_backup_s3_secret_id()}</label
+						>
 						<Input
 							id="storage-s3SecretId"
 							bind:value={s.storage.s3SecretId}
@@ -79,7 +83,9 @@
 
 					<!-- s3SecretKey -->
 					<div class="space-y-1.5">
-						<label for="storage-s3SecretKey" class="text-sm">S3 Secret Key</label>
+						<label for="storage-s3SecretKey" class="text-sm"
+							>{m.admin_settings_storage_backup_s3_secret_key()}</label
+						>
 						<Input
 							id="storage-s3SecretKey"
 							type="password"
@@ -90,7 +96,9 @@
 
 					<!-- s3Bucket -->
 					<div class="space-y-1.5">
-						<label for="storage-s3Bucket" class="text-sm">S3 Bucket</label>
+						<label for="storage-s3Bucket" class="text-sm"
+							>{m.admin_settings_storage_backup_s3_bucket()}</label
+						>
 						<Input
 							id="storage-s3Bucket"
 							bind:value={s.storage.s3Bucket}
@@ -100,7 +108,9 @@
 
 					<!-- s3Region -->
 					<div class="space-y-1.5">
-						<label for="storage-s3Region" class="text-sm">S3 Region</label>
+						<label for="storage-s3Region" class="text-sm"
+							>{m.admin_settings_storage_backup_s3_region()}</label
+						>
 						<Input id="storage-s3Region" bind:value={s.storage.s3Region} placeholder="us-east-1" />
 					</div>
 				</div>

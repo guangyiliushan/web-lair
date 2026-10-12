@@ -1,5 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { m } from '$lib/paraglide/messages';
 import { APIError } from 'better-auth/api';
 import { eq } from 'drizzle-orm';
 import { auth } from '$lib/server/auth';
@@ -66,7 +67,7 @@ export const actions: Actions = {
 		const password = formData.get('password')?.toString() ?? '';
 
 		if (!password) {
-			return fail(400, { message: 'Password is required.', step: 'enable' });
+			return fail(400, { message: m.admin_settings_account_err_pw_required(), step: 'enable' });
 		}
 
 		try {
@@ -78,7 +79,10 @@ export const actions: Actions = {
 			// The response is a union: the OTP variant only appears when a sendOTP
 			// provider is configured, which this deployment does not have.
 			if (!('totpURI' in result)) {
-				return fail(400, { message: 'TOTP is not available on this server.', step: 'enable' });
+				return fail(400, {
+					message: m.admin_settings_account_err_totp_unavailable(),
+					step: 'enable'
+				});
 			}
 
 			console.info('[2fa] enable started (pending activation)', {
@@ -91,7 +95,7 @@ export const actions: Actions = {
 				backupCodes: result.backupCodes
 			};
 		} catch (caught) {
-			return formError(caught, 'Could not start two-step verification.', 'enable', 'enable');
+			return formError(caught, m.admin_settings_account_err_2fa_start_failed(), 'enable', 'enable');
 		}
 	},
 
@@ -102,13 +106,18 @@ export const actions: Actions = {
 		const code = formData.get('code')?.toString().trim() ?? '';
 
 		if (!code) {
-			return fail(400, { message: 'Enter the 6-digit code.', step: 'activate' });
+			return fail(400, { message: m.admin_settings_account_err_code_required(), step: 'activate' });
 		}
 
 		try {
 			await auth.api.verifyTOTP({ body: { code }, headers: event.request.headers });
 		} catch (caught) {
-			return formError(caught, 'Could not activate two-step verification.', 'activate', 'activate');
+			return formError(
+				caught,
+				m.admin_settings_account_err_2fa_activate_failed(),
+				'activate',
+				'activate'
+			);
 		}
 
 		// The plugin rotated the current session (see the header comment): keep
@@ -119,7 +128,7 @@ export const actions: Actions = {
 		}
 
 		console.info('[2fa] activated', { userId });
-		return { message: 'Two-step verification is enabled.', step: 'done' as const };
+		return { message: m.admin_settings_account_msg_2fa_enabled(), step: 'done' as const };
 	},
 
 	disable: async (event) => {
@@ -128,7 +137,7 @@ export const actions: Actions = {
 		const password = formData.get('password')?.toString() ?? '';
 
 		if (!password) {
-			return fail(400, { message: 'Password is required.', step: 'disable' });
+			return fail(400, { message: m.admin_settings_account_err_pw_required(), step: 'disable' });
 		}
 
 		try {
@@ -137,7 +146,12 @@ export const actions: Actions = {
 				headers: event.request.headers
 			});
 		} catch (caught) {
-			return formError(caught, 'Could not disable two-step verification.', 'disable', 'disable');
+			return formError(
+				caught,
+				m.admin_settings_account_err_2fa_disable_failed(),
+				'disable',
+				'disable'
+			);
 		}
 
 		// Same rotation as activate: keep the fresh session, drop the rest.
@@ -147,7 +161,7 @@ export const actions: Actions = {
 		}
 
 		console.info('[2fa] disabled', { userId });
-		return { message: 'Two-step verification is disabled.', step: 'done' as const };
+		return { message: m.admin_settings_account_msg_2fa_disabled(), step: 'done' as const };
 	},
 
 	regenerateBackupCodes: async (event) => {
@@ -156,7 +170,7 @@ export const actions: Actions = {
 		const password = formData.get('password')?.toString() ?? '';
 
 		if (!password) {
-			return fail(400, { message: 'Password is required.', step: 'regenerate' });
+			return fail(400, { message: m.admin_settings_account_err_pw_required(), step: 'regenerate' });
 		}
 
 		try {
@@ -183,11 +197,16 @@ export const actions: Actions = {
 
 			return {
 				backupCodes: result.backupCodes,
-				message: 'New backup codes generated.',
+				message: m.admin_settings_account_msg_backup_codes(),
 				step: 'regenerated' as const
 			};
 		} catch (caught) {
-			return formError(caught, 'Could not regenerate backup codes.', 'regenerate', 'regenerate');
+			return formError(
+				caught,
+				m.admin_settings_account_err_backup_codes_failed(),
+				'regenerate',
+				'regenerate'
+			);
 		}
 	}
 };

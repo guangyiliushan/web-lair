@@ -16,7 +16,7 @@
 </script>
 
 <svelte:head>
-	<title>{m.admin_settings_user()} - Lair Admin</title>
+	<title>{m.admin_settings_user_title()} - Lair Admin</title>
 </svelte:head>
 
 <section class="space-y-4">

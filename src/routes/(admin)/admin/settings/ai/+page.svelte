@@ -136,7 +136,7 @@
 </script>
 
 <svelte:head>
-	<title>{m.admin_settings_ai()} - Lair Admin</title>
+	<title>{m.admin_settings_ai_title()} - Lair Admin</title>
 </svelte:head>
 
 <div class="flex flex-col gap-8">
@@ -659,7 +659,8 @@
 						</Select.Root>
 					</Field.Field>
 					<Field.Field data-invalid={providerErrors?.baseUrl ? true : undefined}>
-						<Field.Label for="provider-base-url">Base URL</Field.Label>
+						<Field.Label for="provider-base-url">{m.admin_settings_ai_field_base_url()}</Field.Label
+						>
 						<Input
 							id="provider-base-url"
 							name="baseUrl"

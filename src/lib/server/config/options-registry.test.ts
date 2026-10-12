@@ -1,4 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { overwriteGetLocale } from '$lib/paraglide/runtime';
+
+// The copy resolves from the catalog at call time; pin the locale so the
+// assertions stay in sync with the zh-cn catalog (same convention as
+// maintenance-form-utils.test.ts).
+overwriteGetLocale(() => 'zh-cn');
 
 /**
  * Unit tests for the options registry (AI-1.1): defaults, validation on both
