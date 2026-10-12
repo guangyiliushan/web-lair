@@ -14,12 +14,14 @@
 <div class="space-y-10">
 	<section class="space-y-4">
 		<header>
-			<h2 class="inline-flex items-center gap-2 text-base font-medium">Admin extras</h2>
+			<h2 class="inline-flex items-center gap-2 text-base font-medium">
+				{m.admin_settings_system_section_extras()}
+			</h2>
 		</header>
 		<div class="space-y-5">
 			<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
 				<div class="md:pt-1.5">
-					<div class="text-sm">Enable admin reverse proxy</div>
+					<div class="text-sm">{m.admin_settings_system_proxy_label()}</div>
 					<p class="mt-1 text-xs leading-5 text-muted-foreground">
 						Whether the admin dashboard can be accessed through the API
 					</p>
@@ -42,14 +44,14 @@
 				</div>
 			</div>
 			<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
-				<div class="md:pt-1.5"><div class="text-sm">Login page background</div></div>
+				<div class="md:pt-1.5"><div class="text-sm">{m.admin_settings_system_login_bg()}</div></div>
 				<div class="min-w-0"><Input type="text" value={s.system.loginBg} /></div>
 			</div>
 			<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
 				<div class="md:pt-1.5">
-					<div class="text-sm">Amap query API key</div>
+					<div class="text-sm">{m.admin_settings_system_amap_key()}</div>
 					<p class="mt-1 text-xs leading-5 text-muted-foreground">
-						Location lookup for diary entries
+						{m.admin_settings_system_amap_desc()}
 					</p>
 				</div>
 				<div class="min-w-0"><Input type="password" value={s.system.amapKey} /></div>
@@ -59,11 +61,15 @@
 
 	<section class="space-y-4">
 		<header>
-			<h2 class="inline-flex items-center gap-2 text-base font-medium">Feature toggles</h2>
+			<h2 class="inline-flex items-center gap-2 text-base font-medium">
+				{m.admin_settings_system_section_toggles()}
+			</h2>
 		</header>
 		<div class="space-y-5">
 			<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
-				<div class="md:pt-1.5"><div class="text-sm">Enable email subscription</div></div>
+				<div class="md:pt-1.5">
+					<div class="text-sm">{m.admin_settings_system_email_label()}</div>
+				</div>
 				<div class="md:flex md:justify-end md:pt-1">
 					<button
 						type="button"

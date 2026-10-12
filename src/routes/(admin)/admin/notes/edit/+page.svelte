@@ -935,7 +935,11 @@
 						<label for="settings-location" class="text-sm font-medium"
 							>{m.admin_notes_edit_location()}</label
 						>
-						<Input id="settings-location" placeholder="Taipei" bind:value={location} />
+						<Input
+							id="settings-location"
+							placeholder={m.admin_notes_edit_ph_city()}
+							bind:value={location}
+						/>
 					</div>
 				</div>
 				<div class="flex items-end gap-3">

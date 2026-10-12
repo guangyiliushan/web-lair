@@ -14,16 +14,20 @@
 <div class="space-y-10">
 	<section class="space-y-4">
 		<header>
-			<h2 class="inline-flex items-center gap-2 text-base font-medium">Third-party integrations</h2>
+			<h2 class="inline-flex items-center gap-2 text-base font-medium">
+				{m.admin_settings_integrations_section()}
+			</h2>
 		</header>
 		<div class="space-y-5">
-			{#each [['GitHub', 'github', true, 'Personal Access Token', 'Used when calling the GitHub API; fill in when you hit rate limits'], ['TMDB', 'tmdb', true, 'API Key', ''], ['Bangumi', 'bangumi', true, 'Access Token', ''], ['NeoDB', 'neodb', false, '', ''], ['Arxiv', 'arxiv', false, '', ''], ['Leetcode', 'leetcode', false, '', ''], ['NetEase Cloud Music', 'neteaseMusic', false, '', ''], ['QQ Music', 'qqMusic', false, '', '']] as [label, id, hasToken, tokenLabel, tokenDesc] (id)}
+			{#each [['GitHub', 'github', true, m.admin_settings_integrations_token_pat(), m.admin_settings_integrations_github_desc()], ['TMDB', 'tmdb', true, m.admin_settings_integrations_token_api_key(), ''], ['Bangumi', 'bangumi', true, m.admin_settings_integrations_token_access(), ''], ['NeoDB', 'neodb', false, '', ''], ['Arxiv', 'arxiv', false, '', ''], ['Leetcode', 'leetcode', false, '', ''], ['NetEase Cloud Music', 'neteaseMusic', false, '', ''], ['QQ Music', 'qqMusic', false, '', '']] as [label, id, hasToken, tokenLabel, tokenDesc] (id)}
 				{@const integration = s.integrations[id as keyof typeof s.integrations]}
 				<section class="space-y-3">
 					<h4 class="text-xs font-semibold text-muted-foreground uppercase">{label}</h4>
 					<div class="space-y-5">
 						<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
-							<div class="md:pt-1.5"><div class="text-sm">Enabled</div></div>
+							<div class="md:pt-1.5">
+								<div class="text-sm">{m.admin_settings_integrations_enabled()}</div>
+							</div>
 							<div class="md:flex md:justify-end md:pt-1">
 								<button
 									type="button"

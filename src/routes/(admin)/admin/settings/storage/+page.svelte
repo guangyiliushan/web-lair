@@ -65,7 +65,7 @@
 						<Input
 							id="storage-s3Endpoint"
 							bind:value={s.storage.s3Endpoint}
-							placeholder="https://s3.amazonaws.com"
+							placeholder={m.admin_settings_storage_ph_s3_endpoint()}
 						/>
 					</div>
 
@@ -77,7 +77,7 @@
 						<Input
 							id="storage-s3SecretId"
 							bind:value={s.storage.s3SecretId}
-							placeholder="Access Key ID"
+							placeholder={m.admin_settings_storage_ph_access_key_id()}
 						/>
 					</div>
 
@@ -90,7 +90,7 @@
 							id="storage-s3SecretKey"
 							type="password"
 							bind:value={s.storage.s3SecretKey}
-							placeholder="Secret Access Key"
+							placeholder={m.admin_settings_storage_ph_secret_access_key()}
 						/>
 					</div>
 
@@ -150,7 +150,7 @@
 						<Input
 							id="storage-s3ImageEndpoint"
 							bind:value={s.storage.s3ImageEndpoint}
-							placeholder="https://s3.amazonaws.com"
+							placeholder={m.admin_settings_storage_ph_s3_endpoint()}
 						/>
 					</div>
 
@@ -162,7 +162,7 @@
 						<Input
 							id="storage-s3ImageAccessKey"
 							bind:value={s.storage.s3ImageAccessKey}
-							placeholder="Access Key"
+							placeholder={m.admin_settings_storage_ph_access_key()}
 						/>
 					</div>
 
@@ -175,7 +175,7 @@
 							id="storage-s3ImageSecretKey"
 							type="password"
 							bind:value={s.storage.s3ImageSecretKey}
-							placeholder="Secret Key"
+							placeholder={m.admin_settings_storage_ph_secret_key()}
 						/>
 					</div>
 
@@ -199,7 +199,7 @@
 						<Input
 							id="storage-s3ImageRegion"
 							bind:value={s.storage.s3ImageRegion}
-							placeholder="auto"
+							placeholder={m.admin_settings_storage_ph_auto()}
 						/>
 					</div>
 

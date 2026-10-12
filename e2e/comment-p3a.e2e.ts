@@ -217,7 +217,7 @@ test('owner approves from the queue (post target) and the guest now sees it', as
 	// queue enhancement).
 	const row = ownerPage.locator('label').filter({ hasText: T_READER });
 	await expect(row).toBeVisible({ timeout: 15000 });
-	await expect(row.getByText('博文')).toBeVisible();
+	await expect(row.getByText('文章')).toBeVisible();
 	await expect(row.getByRole('link', { name: /E2E 评论文章/ })).toHaveAttribute(
 		'href',
 		'/zh-cn/posts/e2e-cmt-post'

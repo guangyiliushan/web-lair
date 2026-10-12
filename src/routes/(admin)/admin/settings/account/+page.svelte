@@ -317,7 +317,7 @@
 						<Input
 							id="github-client-id"
 							bind:value={s.account.github.clientId}
-							placeholder="GitHub OAuth App Client ID"
+							placeholder={m.admin_settings_account_ph_github_client_id()}
 						/>
 					</div>
 					<div>
@@ -328,7 +328,7 @@
 							id="github-client-secret"
 							type="password"
 							bind:value={s.account.github.clientSecret}
-							placeholder="GitHub OAuth App Client Secret"
+							placeholder={m.admin_settings_account_ph_github_client_secret()}
 						/>
 					</div>
 				</div>
@@ -388,7 +388,7 @@
 						<Input
 							id="google-client-id"
 							bind:value={s.account.google.clientId}
-							placeholder="Google OAuth Client ID"
+							placeholder={m.admin_settings_account_ph_google_client_id()}
 						/>
 					</div>
 					<div>
@@ -399,7 +399,7 @@
 							id="google-client-secret"
 							type="password"
 							bind:value={s.account.google.clientSecret}
-							placeholder="Google OAuth Client Secret"
+							placeholder={m.admin_settings_account_ph_google_client_secret()}
 						/>
 					</div>
 				</div>

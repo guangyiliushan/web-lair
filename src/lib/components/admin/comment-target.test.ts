@@ -35,7 +35,7 @@ describe('commentTargetDisplay', () => {
 					postLang: 'zh-cn'
 				})
 			)
-		).toEqual({ label: '博文', title: 'Hello world', href: '/zh-cn/posts/hello-world' });
+		).toEqual({ label: '文章', title: 'Hello world', href: '/zh-cn/posts/hello-world' });
 	});
 
 	it('falls back to the plain path for an unknown or missing language', () => {
@@ -51,7 +51,7 @@ describe('commentTargetDisplay', () => {
 		// The old queue showed an id fragment for dangling rows; it is the only
 		// manual-location clue left, so the fallback keeps it (code review).
 		expect(commentTargetDisplay(row({ postId: '12345678-aaaa-bbbb-cccc-dddddddddddd' }))).toEqual({
-			label: '博文',
+			label: '文章',
 			title: '（未知 · 12345678…）',
 			href: null
 		});

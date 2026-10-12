@@ -19,11 +19,13 @@
 	<section class="space-y-4">
 		<header class="flex flex-wrap items-start justify-between gap-3">
 			<div class="min-w-0">
-				<h2 class="inline-flex items-center gap-2 text-base font-medium">Site URLs</h2>
+				<h2 class="inline-flex items-center gap-2 text-base font-medium">
+					{m.admin_settings_site_section_urls()}
+				</h2>
 			</div>
 		</header>
 		<div class="space-y-5">
-			{#each [['Frontend URL', 'frontendUrl'], ['Admin dashboard URL', 'adminUrl'], ['API URL', 'apiUrl'], ['Gateway URL', 'gatewayUrl']] as [label, key] (key)}
+			{#each [[m.admin_settings_site_field_frontend_url(), 'frontendUrl'], [m.admin_settings_site_field_admin_url(), 'adminUrl'], [m.admin_settings_site_field_api_url(), 'apiUrl'], [m.admin_settings_site_field_gateway_url(), 'gatewayUrl']] as [label, key] (key)}
 				<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
 					<div class="md:pt-1.5"><div class="text-sm">{label}</div></div>
 					<div class="min-w-0">
@@ -36,11 +38,13 @@
 	<section class="space-y-4">
 		<header class="flex flex-wrap items-start justify-between gap-3">
 			<div class="min-w-0">
-				<h2 class="inline-flex items-center gap-2 text-base font-medium">SEO</h2>
+				<h2 class="inline-flex items-center gap-2 text-base font-medium">
+					{m.admin_settings_site_section_seo()}
+				</h2>
 			</div>
 		</header>
 		<div class="space-y-5">
-			{#each [['Site title', 'title'], ['Site description', 'description'], ['Light icon URL', 'lightIcon'], ['Dark icon URL', 'darkIcon']] as [label, key] (key)}
+			{#each [[m.admin_settings_site_field_title(), 'title'], [m.admin_settings_site_field_description(), 'description'], [m.admin_settings_site_field_light_icon(), 'lightIcon'], [m.admin_settings_site_field_dark_icon(), 'darkIcon']] as [label, key] (key)}
 				<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
 					<div class="md:pt-1.5"><div class="text-sm">{label}</div></div>
 					<div class="min-w-0">
@@ -49,7 +53,9 @@
 				</div>
 			{/each}
 			<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
-				<div class="md:pt-1.5"><div class="text-sm">Keywords</div></div>
+				<div class="md:pt-1.5">
+					<div class="text-sm">{m.admin_settings_site_field_keywords()}</div>
+				</div>
 				<div class="min-w-0">
 					<div class="space-y-2">
 						<div class="flex flex-wrap gap-2">

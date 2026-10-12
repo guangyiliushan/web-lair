@@ -115,7 +115,7 @@ test.describe('micro C3 admin', () => {
 		await page.goto('/admin');
 		const quick = page.locator('section', { hasText: '快速操作' }).first();
 		const cases: [string, string][] = [
-			['博文', `select count(*) from posts where status <> 'trash'`],
+			['文章', `select count(*) from posts where status <> 'trash'`],
 			['手记', 'select count(*) from notes'],
 			['摘录', 'select count(*) from quotes'],
 			['思考', 'select count(*) from thoughts'],
