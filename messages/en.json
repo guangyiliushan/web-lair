@@ -29,7 +29,16 @@
 	"admin_ai_memory_hint": "Notes the assistant carries long-term ({limit} max, {count} now).",
 	"admin_ai_memory_new": "New memory card",
 	"admin_ai_memory_placeholder": "e.g. The site defaults to en, translations follow zh-cn; keep technical terms in English when writing.",
-	"admin_ai_message_count": "{count} messages",
+	"admin_ai_message_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} message",
+				"countPlural=other": "{count} messages"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_ai_no_conversations": "No conversations yet",
 	"admin_ai_no_messages": "This session has no messages yet.",
 	"admin_ai_role_assistant": "Assistant",
@@ -67,19 +76,55 @@
 	"admin_categories_dialog_edit_desc": "Update the category info",
 	"admin_categories_empty": "No categories yet",
 	"admin_categories_err_has_posts": "This category still has posts and cannot be deleted",
-	"admin_categories_err_has_posts_count": "This category still has {count} posts and cannot be deleted",
+	"admin_categories_err_has_posts_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "This category still has {count} post and cannot be deleted",
+				"countPlural=other": "This category still has {count} posts and cannot be deleted"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_categories_err_missing_id": "Missing category ID",
 	"admin_categories_err_name_required": "Category name is required",
-	"admin_categories_err_placeholders": "This category has {count} unpublished placeholder drafts — discard them in Drafts first",
+	"admin_categories_err_placeholders": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "This category has {count} unpublished placeholder draft — discard them in Drafts first",
+				"countPlural=other": "This category has {count} unpublished placeholder drafts — discard them in Drafts first"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_categories_err_slug_required": "Slug is required",
 	"admin_categories_name": "Name",
 	"admin_categories_name_placeholder": "Category name",
 	"admin_categories_no_posts": "No posts",
-	"admin_categories_post_count": "{count} posts",
+	"admin_categories_post_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} post",
+				"countPlural=other": "{count} posts"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_categories_posts_heading": "Posts in this category",
 	"admin_categories_select": "Select a category",
 	"admin_categories_select_hint": "Pick a category on the left to view details",
-	"admin_categories_tags_count": "{count} items",
+	"admin_categories_tags_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} item",
+				"countPlural=other": "{count} items"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_categories_tags_heading": "Categories & tags",
 	"admin_categories_title": "Categories",
 	"admin_comments_all_done": "All caught up",
@@ -107,7 +152,16 @@
 	"admin_common_clear": "Clear",
 	"admin_common_close": "Close",
 	"admin_common_confirm": "Confirm",
-	"admin_common_count_entries": "{count} entries",
+	"admin_common_count_entries": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} entry",
+				"countPlural=other": "{count} entries"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_common_create": "Create",
 	"admin_common_delete": "Delete",
 	"admin_common_disable": "Disabled",
@@ -212,7 +266,16 @@
 	"admin_files_audit_run": "Run audit",
 	"admin_files_audit_title": "Triple-check fallback (read-only)",
 	"admin_files_audit_truncated": "Note: the scan hit the row cap — results may be incomplete.",
-	"admin_files_cap_notice": "Showing the first {count} items only (cap reached; narrow with filters).",
+	"admin_files_cap_notice": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "Showing the first {count} item only (cap reached; narrow with filters).",
+				"countPlural=other": "Showing the first {count} items only (cap reached; narrow with filters)."
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_files_col_dimensions": "Dimensions",
 	"admin_files_col_preview": "Preview",
 	"admin_files_col_refs": "Refs",
@@ -247,8 +310,26 @@
 	"admin_files_orphan_row": "① {key} ({name}, {days} days)",
 	"admin_files_purge_preview": "Purge preview (dry-run)",
 	"admin_files_purge_row": "{key} ({name}, {status}, {days} days)",
-	"admin_files_purge_summary": "Purge preview: {count} candidates (read-only, nothing deleted)",
-	"admin_files_ref_count": "{count} content refs",
+	"admin_files_purge_summary": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "Purge preview: {count} candidate (read-only, nothing deleted)",
+				"countPlural=other": "Purge preview: {count} candidates (read-only, nothing deleted)"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
+	"admin_files_ref_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} content ref",
+				"countPlural=other": "{count} content refs"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_files_status_attached": "Attached",
 	"admin_files_status_detached": "Detached",
 	"admin_files_status_pending": "Pending",
@@ -281,7 +362,16 @@
 	"admin_login_title": "Secure Admin Login",
 	"admin_maintenance_add_schedule": "Add schedule…",
 	"admin_maintenance_audit": "Audit (job / schedule events)",
-	"admin_maintenance_audit_cap": "Showing the latest {count} audit records only — audit filters ship later; query the database for older records.",
+	"admin_maintenance_audit_cap": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "Showing the latest {count} audit record only — audit filters ship later; query the database for older records.",
+				"countPlural=other": "Showing the latest {count} audit records only — audit filters ship later; query the database for older records."
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_maintenance_builtin_diff": "Built-in diff (read-only)",
 	"admin_maintenance_builtin_version": "Built-in version (repo)",
 	"admin_maintenance_check_not_passed": "Not passed",
@@ -351,7 +441,16 @@
 	"admin_maintenance_run_now": "Run now",
 	"admin_maintenance_run_typecheck": "Run type check",
 	"admin_maintenance_runner_label": "runner: ",
-	"admin_maintenance_runs_cap": "Showing the latest {count} runs only — narrow with filters for older records.",
+	"admin_maintenance_runs_cap": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "Showing the latest {count} run only — narrow with filters for older records.",
+				"countPlural=other": "Showing the latest {count} runs only — narrow with filters for older records."
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_maintenance_save_rejected": "Save rejected:",
 	"admin_maintenance_save_schedule": "Save schedule",
 	"admin_maintenance_save_try": "Save & try a run",
@@ -377,7 +476,16 @@
 	"admin_maintenance_suggested_cron": "Suggested cron: {hint}",
 	"admin_maintenance_tc_errors": " errors",
 	"admin_maintenance_tc_files": " files / ",
-	"admin_maintenance_tc_issues": "…{count} issues in total (the ledger result carries the full bounded list)",
+	"admin_maintenance_tc_issues": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "…{count} issue in total (the ledger result carries the full bounded list)",
+				"countPlural=other": "…{count} issues in total (the ledger result carries the full bounded list)"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_maintenance_tc_none": "No type-check records yet (click “Run type check” to queue one).",
 	"admin_maintenance_tc_timed_out": " · timed out",
 	"admin_maintenance_timeout": "Timeout {seconds}s",
@@ -388,7 +496,16 @@
 	"admin_master_detail_count": "{count}",
 	"admin_media_err_rate": "Too many uploads — try again later",
 	"admin_media_err_too_big": "{name} exceeds the per-file limit",
-	"admin_media_err_too_many": "At most {count} files per upload",
+	"admin_media_err_too_many": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "At most {count} file per upload",
+				"countPlural=other": "At most {count} files per upload"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_media_filter": "Filter",
 	"admin_media_filter_all": "All",
 	"admin_media_last_30d": "Last 30 days",
@@ -503,8 +620,26 @@
 	"admin_notes_status_private": "Private",
 	"admin_notes_title": "Notes",
 	"admin_notes_topics": "Topics",
-	"admin_notes_topics_count": "{count} topics",
-	"admin_notes_topics_count_from": "{count} notes from this topic",
+	"admin_notes_topics_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} topic",
+				"countPlural=other": "{count} topics"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
+	"admin_notes_topics_count_from": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} note from this topic",
+				"countPlural=other": "{count} notes from this topic"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_notes_topics_create": "New topic",
 	"admin_notes_topics_create_desc": "Create a new note topic",
 	"admin_notes_topics_desc_ph": "Topic description (optional)",
@@ -517,7 +652,16 @@
 	"admin_notes_topics_err_bad_direction": "Invalid direction",
 	"admin_notes_topics_err_duplicate": "Topic name or slug already exists",
 	"admin_notes_topics_err_icon_whitelist": "Icon not in the whitelist (won't render on the site)",
-	"admin_notes_topics_err_in_use": "This topic still has {count} notes; cannot delete (move them to another topic first)",
+	"admin_notes_topics_err_in_use": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "This topic still has {count} note; cannot delete (move them to another topic first)",
+				"countPlural=other": "This topic still has {count} notes; cannot delete (move them to another topic first)"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_notes_topics_err_missing_id": "Missing topic ID",
 	"admin_notes_topics_err_name_required": "Topic name is required",
 	"admin_notes_topics_err_not_found": "Topic not found",
@@ -531,13 +675,31 @@
 	"admin_notes_topics_name": "Name",
 	"admin_notes_topics_name_ph": "Topic name",
 	"admin_notes_topics_not_set": "(Not set)",
-	"admin_notes_topics_note_count": "{count} notes",
+	"admin_notes_topics_note_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} note",
+				"countPlural=other": "{count} notes"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_notes_topics_select": "Select a topic",
 	"admin_notes_topics_select_desc": "Pick a topic from the list to view details",
 	"admin_notes_topics_sort": "Sort order",
 	"admin_notes_topics_sort_desc": "Lower values come first; the detail pane also has ▲/▼ controls.",
 	"admin_notes_topics_title": "Topics",
-	"admin_notes_total": "{count} notes",
+	"admin_notes_total": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} note",
+				"countPlural=other": "{count} notes"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_option_err_account_dup": "Duplicate account for the same platform",
 	"admin_option_err_account_required": "Account is required",
 	"admin_option_err_int": "Must be an integer",
@@ -596,7 +758,16 @@
 	"admin_pages_hide": "Hide",
 	"admin_pages_hide_desc": "“{title}” disappears from the home cards, the mobile menu and the footer (direct visits still work — no 404).",
 	"admin_pages_hide_title": "Hide the default page?",
-	"admin_pages_hint": "{count} pages total · the default page is pinned first, the rest follow their sort values. “New” opens with the md editor batch (P5).",
+	"admin_pages_hint": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} page total · the default page is pinned first, the rest follow their sort values. “New” opens with the md editor batch (P5).",
+				"countPlural=other": "{count} pages total · the default page is pinned first, the rest follow their sort values. “New” opens with the md editor batch (P5)."
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_pages_internal": "Internal",
 	"admin_pages_md_page": "md page",
 	"admin_pages_saved": "Saved.",
@@ -614,7 +785,16 @@
 	"admin_photos_bulk_show": "Make visible",
 	"admin_photos_bulk_summary": "Bulk “{op}”: {done} succeeded · {failed} failed",
 	"admin_photos_bulk_tag": "Add tag",
-	"admin_photos_cap_notice": "Showing the first {count} photos only (cap reached; narrow with filters).",
+	"admin_photos_cap_notice": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "Showing the first {count} photo only (cap reached; narrow with filters).",
+				"countPlural=other": "Showing the first {count} photos only (cap reached; narrow with filters)."
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_photos_desc_locale": "Description · {locale}",
 	"admin_photos_edit_panel": "Edit photo",
 	"admin_photos_edit_row": "Edit {slug}",
@@ -639,9 +819,27 @@
 	"admin_photos_period": ".",
 	"admin_photos_pick_files": "Choose images to upload",
 	"admin_photos_public_visible": "Publicly visible",
-	"admin_photos_ref_count": "{count} refs",
+	"admin_photos_ref_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} ref",
+				"countPlural=other": "{count} refs"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_photos_ref_count_title": "Content reference count",
-	"admin_photos_ref_places": "Referenced by {count} items",
+	"admin_photos_ref_places": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "Referenced by {count} item",
+				"countPlural=other": "Referenced by {count} items"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_photos_remove": "Remove from gallery",
 	"admin_photos_remove_action": "Remove",
 	"admin_photos_remove_also_file": "Also delete the file (only when unreferenced)",
@@ -1010,12 +1208,30 @@
 	"admin_settings_ai_flash_budget": "Budget settings saved",
 	"admin_settings_ai_flash_created": "Provider created",
 	"admin_settings_ai_flash_deleted": "Deleted {name}",
-	"admin_settings_ai_flash_deleted_removed": "Deleted {name} (removed {count} assignments)",
+	"admin_settings_ai_flash_deleted_removed": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "Deleted {name} (removed {count} assignment)",
+				"countPlural=other": "Deleted {name} (removed {count} assignments)"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_settings_ai_flash_moderation": "Moderation settings saved",
 	"admin_settings_ai_flash_style": "Style guide saved",
 	"admin_settings_ai_flash_translation": "Translation settings saved",
 	"admin_settings_ai_flash_updated": "Provider updated",
-	"admin_settings_ai_flash_updated_synced": "Provider updated (synced {count} assignments)",
+	"admin_settings_ai_flash_updated_synced": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "Provider updated (synced {count} assignment)",
+				"countPlural=other": "Provider updated (synced {count} assignments)"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_settings_ai_frozen_desc": "Translation gate 85, site default “review first”, auto-summary conditions (body ≥100 chars and no summary) stay at defaults; per-post translation mode and switches ship with the writing chain (P2/P3).",
 	"admin_settings_ai_frozen_title": "Frozen defaults (§3.3)",
 	"admin_settings_ai_issue": "{key}: {message}",
@@ -1024,7 +1240,16 @@
 	"admin_settings_ai_link_threshold": "Link-count threshold",
 	"admin_settings_ai_min_chars": "Minimum characters",
 	"admin_settings_ai_min_chars_desc": "Below the threshold no translation candidates are produced; manual translation is unrestricted.",
-	"admin_settings_ai_model_count": "{count} models",
+	"admin_settings_ai_model_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} model",
+				"countPlural=other": "{count} models"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_settings_ai_model_placeholder": "Use the provider default model (may be empty)",
 	"admin_settings_ai_models_ph": "One model ID per line (empty = provider default)",
 	"admin_settings_ai_no_provider": "None",
@@ -1084,7 +1309,16 @@
 	"admin_settings_content_remove_ip": "Remove {ip}",
 	"admin_settings_content_show_location": "Show commenter location",
 	"admin_settings_content_title": "Content settings",
-	"admin_settings_count": "{count} items",
+	"admin_settings_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} item",
+				"countPlural=other": "{count} items"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"admin_settings_integrations": "Integrations",
 	"admin_settings_integrations_desc": "GitHub, TMDB, Bangumi, etc.",
 	"admin_settings_integrations_enabled": "Enabled",
@@ -1515,7 +1749,16 @@
 	"nav_pages": "Pages",
 	"nav_posts": "Posts",
 	"nav_posts_categories": "Categories",
-	"nav_posts_count": "{count} posts",
+	"nav_posts_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} post",
+				"countPlural=other": "{count} posts"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"nav_posts_recent": "Recent",
 	"nav_posts_view_all": "View all posts",
 	"nav_sign_in": "Sign in",
@@ -1527,7 +1770,16 @@
 	"nav_timeline_recent": "Recent Activity",
 	"nav_timeline_view_all": "View all",
 	"notes_back_to_all": "Back to notes",
-	"notes_count": "{count} notes",
+	"notes_count": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} note",
+				"countPlural=other": "{count} notes"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"notes_empty": "No notes yet.",
 	"notes_filter_all": "All",
 	"notes_filter_empty": "No notes match these filters.",

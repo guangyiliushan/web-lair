@@ -34,8 +34,17 @@ const settings = JSON.parse(
 const LOCALES = settings.locales;
 const BASE_LOCALE = settings.baseLocale;
 
-function readLocaleMessages(locale: string): Record<string, string> {
+/** A message value: a flat string, or an inlang variant array (pluralized). */
+type MessageValue = string | Array<{ match: Record<string, string> }>;
+
+function readLocaleMessages(locale: string): Record<string, MessageValue> {
 	return JSON.parse(readFileSync(join(MESSAGES_DIR, `${locale}.json`), 'utf8'));
+}
+
+/** Every renderable text of a message (a flat value has exactly one). */
+function extractTexts(value: MessageValue): string[] {
+	if (typeof value === 'string') return [value];
+	return value.flatMap((variant) => Object.values(variant.match));
 }
 
 function* walkSources(dir: string): Generator<string> {
@@ -224,9 +233,11 @@ describe('paraglide message contract', () => {
 		const empty: string[] = [];
 		for (const locale of LOCALES) {
 			for (const [key, value] of Object.entries(readLocaleMessages(locale))) {
-				if (typeof value !== 'string' || value.trim() === '') {
+				// Flat strings and every branch of a variant array must be non-empty.
+				const bad = extractTexts(value).some((text) => text.trim() === '');
+				if (bad) {
 					empty.push(
-						`${locale}.json:${key} is ${typeof value === 'string' ? 'empty' : typeof value}`
+						`${locale}.json:${key} is ${typeof value === 'string' ? 'empty' : 'empty in a variant branch'}`
 					);
 				}
 			}
@@ -240,8 +251,9 @@ describe('paraglide message contract', () => {
 		const violations: string[] = [];
 		for (const usage of usages) {
 			const message = baseMessages[usage.key];
-			if (typeof message !== 'string') continue;
-			const required = requiredPlaceholders(message);
+			if (message === undefined) continue;
+			// Variant messages: every branch text must have its placeholders provided.
+			const required = [...new Set(extractTexts(message).flatMap(requiredPlaceholders))];
 			if (required.length === 0 || usage.args === undefined) continue;
 			const provided = providedInputKeys(usage.args);
 			if (provided === undefined) continue; // dynamic inputs cannot be checked statically
