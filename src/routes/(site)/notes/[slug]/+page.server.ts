@@ -10,7 +10,11 @@ import { rateLimit } from '$lib/server/cache/store';
 import { getOption } from '$lib/server/config/options-registry';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { loadThreads, submitComment } from '$lib/server/services/comments';
-import { commentDeleteAction, commentEditAction } from '$lib/server/services/comments-actions';
+import {
+	commentDeleteAction,
+	commentEditAction,
+	commentSubmitResponse
+} from '$lib/server/services/comments-actions';
 import {
 	findVisibleNote,
 	getNoteBody,
@@ -301,21 +305,7 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 		now
 	});
 
-	switch (result.kind) {
-		case 'created':
-			return { submitted: result.state };
-		case 'throttled':
-			return fail(429, { message: m.comment_throttled() });
-		case 'unverified':
-			return fail(403, { message: m.comment_verify_hint() });
-		case 'empty':
-		case 'too-long':
-			return fail(400, { message: m.comment_error_generic() });
-		case 'parent-unavailable':
-			return fail(400, { message: m.comment_error_parent() });
-		case 'target-unavailable':
-			return fail(404, { message: m.comment_error_unavailable() });
-	}
+	return commentSubmitResponse(result);
 }
 
 export const actions = {

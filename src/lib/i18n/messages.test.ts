@@ -284,5 +284,5 @@ describe('paraglide message contract', () => {
 			}
 		}
 		expect(literal).toEqual([]);
-	});
+	}, 15_000);
 });

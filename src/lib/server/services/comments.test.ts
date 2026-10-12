@@ -496,6 +496,9 @@ describe('submitComment', () => {
 		const result = await submitComment(input({ cache: fakeStore(incr) }));
 		expect(result).toEqual({ kind: 'throttled', windowSeconds: 60 });
 		expect(incr).toHaveBeenCalledTimes(1);
+		// The shared window key (pre-release review 03-P3-1): submit and edit
+		// charge one and the same bucket per reader.
+		expect(incr).toHaveBeenCalledWith('limits:comment:' + VIEWER, 60);
 		expect(state.inserts).toHaveLength(0); // nothing was written
 	});
 
@@ -559,10 +562,24 @@ describe('submitComment', () => {
 	it('strips zero-width/bidi characters before validating and storing', async () => {
 		// An invisible-only "comment" must not pass the empty gate.
 		expect(await submitComment(input({ text: '\u200b\u200b\u200b' }))).toEqual({ kind: 'empty' });
+		// The gate also catches format chars outside FORMAT_CHARS: a
+		// ZWJ-only payload renders as nothing too (pre-release review 02-F1).
+		expect(await submitComment(input({ text: '\u200d\u200d' }))).toEqual({ kind: 'empty' });
+		expect(await submitComment(input({ text: '\u061c' }))).toEqual({ kind: 'empty' });
 		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
 		state.insertResults = [[{ id: 'new-7', state: 'pending' }]];
 		await submitComment(input({ text: 'hi\u200b\u200f there' }));
 		expect(state.inserts[0].values.text).toBe('hi there');
+		// ALM (U+061C) is a bidi mark: stripped before storage like the rest.
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'new-7b', state: 'pending' }]];
+		await submitComment(input({ text: 'hey\u061c there' }));
+		expect(state.inserts.at(-1)?.values.text).toBe('hey there');
+		// ZWJ itself stays in stored text (emoji sequences rely on it).
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'new-7c', state: 'pending' }]];
+		await submitComment(input({ text: 'a\u200db' }));
+		expect(state.inserts.at(-1)?.values.text).toBe('a\u200db');
 	});
 
 	it('sanitises the frozen author/avatar snapshot', async () => {
@@ -570,13 +587,14 @@ describe('submitComment', () => {
 		state.insertResults = [[{ id: 'new-8', state: 'pending' }]];
 		await submitComment(
 			input({
-				author: ` \u202eBad\u202c${'x'.repeat(100)}`,
+				author: ` \u202eBad\u061c\u202c${'x'.repeat(100)}`,
 				avatar: 'data:image/svg+xml,<svg></svg>'
 			})
 		);
 		const values = state.inserts[0].values;
 		expect(String(values.author).length).toBeLessThanOrEqual(64);
 		expect(values.author).not.toContain('\u202e');
+		expect(values.author).not.toContain('\u061c');
 		expect(values.avatar).toBeNull();
 
 		// A long but valid http(s) avatar is also refused above the cap.
@@ -895,6 +913,9 @@ describe('editComment', () => {
 		// A concurrently rejected row must not be revived (review P2-1).
 		expect(query.sql).toContain('"comments"."state" in ');
 		expect(query.params).toContain(VIEWER);
+		// The edit set never touches pin - a moderator signal survives
+		// (pre-release review 03-P3-3).
+		expect(state.updates[0].values).not.toHaveProperty('pin');
 		// The shared 60s<=2 window key (ruling 5): one bucket per reader.
 		expect(incr).toHaveBeenCalledWith('limits:comment:' + VIEWER, 60);
 	});
@@ -916,16 +937,23 @@ describe('editComment', () => {
 		expect(await editComment(input({ cache: fakeStore(incr) }))).toEqual({
 			kind: 'unavailable'
 		});
-		expect(await editComment(input({ text: '   ' }))).toEqual({ kind: 'empty' });
+		expect(await editComment(input({ text: '   ', cache: fakeStore(incr) }))).toEqual({
+			kind: 'empty'
+		});
 		expect(incr).not.toHaveBeenCalled();
 	});
 
 	it('fails closed for unverified editors before any db work', async () => {
+		const incr = vi.fn(async () => 1);
 		const result = await editComment(
-			input({ user: { id: VIEWER, role: 'member', emailVerified: false } })
+			input({
+				user: { id: VIEWER, role: 'member', emailVerified: false },
+				cache: fakeStore(incr)
+			})
 		);
 		expect(result).toEqual({ kind: 'unverified' });
 		expect(selectMock).not.toHaveBeenCalled();
+		expect(incr).not.toHaveBeenCalled();
 	});
 
 	it('validates text before any db work', async () => {
@@ -966,6 +994,14 @@ describe('editComment', () => {
 		expect(await editComment(input({ text: '  new text  ' }))).toEqual({
 			kind: 'updated',
 			state: 'approved'
+		});
+		expect(state.updates).toHaveLength(0);
+
+		// A pending row echoes its own state back (pre-release review 03-P3-4).
+		state.selectQueue = [[{ ...ROW, text: 'new text', state: 'pending' }]];
+		expect(await editComment(input({ text: 'new text' }))).toEqual({
+			kind: 'updated',
+			state: 'pending'
 		});
 		expect(state.updates).toHaveLength(0);
 	});
@@ -1013,11 +1049,9 @@ describe('editComment', () => {
 
 describe('deleteComment', () => {
 	const ROW_ID = '55555555-5555-5555-5555-555555555555';
-	const ROW = { id: ROW_ID, state: 'approved', isDeleted: false, readerId: VIEWER };
 	const NOW = new Date('2026-10-09T13:00:00Z');
 
 	it('soft-deletes own rows, clears pin and never charges the window', async () => {
-		state.selectQueue = [[{ ...ROW, pin: true }]];
 		state.updateResults = [[{ id: ROW_ID }]];
 		const result = await deleteComment({
 			commentId: ROW_ID,
@@ -1036,12 +1070,15 @@ describe('deleteComment', () => {
 		expect(query.sql).toContain('"comments"."is_deleted" = ');
 		// Aligned with the edit CAS (review P3-8).
 		expect(query.sql).toContain('"comments"."state" in ');
+		// The CAS runs on the id from the request itself (pre-release review
+		// 04-F1: the former pre-read is gone).
+		expect(query.params).toContain(ROW_ID);
+		expect(query.params).toContain(VIEWER);
 	});
 
 	it('leaves the moderation axis untouched so the floor rule can hold', async () => {
 		// deleteComment deliberately never touches the limiter (no cache is even
 		// reachable here: getCache throws in this suite).
-		state.selectQueue = [[{ ...ROW }]];
 		state.updateResults = [[{ id: ROW_ID }]];
 		await deleteComment({ commentId: ROW_ID, user: { id: VIEWER, emailVerified: true }, now: NOW });
 		expect(state.updates[0].values).not.toHaveProperty('state');
@@ -1054,24 +1091,18 @@ describe('deleteComment', () => {
 		});
 		expect(result).toEqual({ kind: 'unverified' });
 		expect(selectMock).not.toHaveBeenCalled();
+		expect(state.updates).toHaveLength(0);
 	});
 
-	it('fails closed for foreign, missing, deleted and rejected rows', async () => {
-		const cases: Array<Array<unknown>> = [
-			[[]],
-			[[{ ...ROW, readerId: 'someone-else' }]],
-			[[{ ...ROW, isDeleted: true }]],
-			[[{ ...ROW, state: 'rejected' }]]
-		];
-		for (const rows of cases) {
-			state.selectQueue = [rows];
-			expect(
-				await deleteComment({ commentId: ROW_ID, user: { id: VIEWER, emailVerified: true } })
-			).toEqual({
-				kind: 'unavailable'
-			});
-		}
-		expect(state.updates).toHaveLength(0);
+	it('fails closed when the row is foreign, missing, deleted or rejected', async () => {
+		// The former pre-read enumerated these cases; the single-statement
+		// CAS renders them one zero-row outcome (pre-release review 04-F1) -
+		// the four WHERE axes are pinned in the soft-delete test above.
+		state.updateResults = [[]];
+		expect(
+			await deleteComment({ commentId: ROW_ID, user: { id: VIEWER, emailVerified: true } })
+		).toEqual({ kind: 'unavailable' });
+		expect(state.updates).toHaveLength(1);
 	});
 
 	it('rejects malformed ids and raced deletes', async () => {
@@ -1081,7 +1112,6 @@ describe('deleteComment', () => {
 			kind: 'unavailable'
 		});
 		expect(selectMock).not.toHaveBeenCalled();
-		state.selectQueue = [[{ ...ROW }]];
 		state.updateResults = [[]];
 		expect(
 			await deleteComment({ commentId: ROW_ID, user: { id: VIEWER, emailVerified: true } })

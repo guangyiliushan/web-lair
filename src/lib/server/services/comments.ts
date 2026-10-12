@@ -16,7 +16,7 @@ import {
 	type ThreadsPage
 } from '$lib/components/comments/types';
 import { visibleNoteCondition } from './note-visibility';
-import { getPageBySlug, resolvePageContent } from './pages';
+import { getPageBySlug, servablePageBody } from './pages';
 import { visiblePostCondition } from './post-visibility';
 
 /**
@@ -241,17 +241,29 @@ export function assembleThreads(
  * and storage (security review): an "invisible-only" comment must not pass the
  * empty gate, and bidi controls must not survive into snapshots. ZWJ/ZWNJ are
  * deliberately kept - they are load-bearing inside emoji sequences and some
- * scripts.
+ * scripts. ALM (U+061C) and the invisible operators (U+2061-U+2064) join the
+ * set (pre-release review 02-F1).
  */
 const FORMAT_CHARS =
-	/[\u00ad\u200b\u200e\u200f\u2028\u2029\u202a-\u202e\u2060\u2066-\u2069\ufeff]/g;
+	/[\u00ad\u061c\u180e\u200b\u200e\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
 
 export function normalizeCommentText(raw: string): string {
 	return raw.replace(FORMAT_CHARS, '').trim();
 }
 
-// \p{Cc} = C0/C1 controls; plus the bidi overrides and shortcut marks.
-const AUTHOR_CONTROLS = /[\p{Cc}\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
+/**
+ * The empty gate (pre-release review 02-F1): text that renders as nothing
+ * must not pass, so the check strips every Unicode format char (\p{Cf} - a
+ * superset of FORMAT_CHARS that also covers a ZWJ/ZWNJ-only payload) before
+ * deciding. Stored text still keeps ZWJ/ZWNJ (emoji sequences).
+ */
+function hasVisibleText(text: string): boolean {
+	return text.replace(/\p{Cf}/gu, '').trim().length > 0;
+}
+
+// \p{Cc} = C0/C1 controls; plus the bidi overrides, the Arabic letter
+// mark and the shortcut marks (pre-release review 02-F1).
+const AUTHOR_CONTROLS = /[\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
 export const COMMENT_AUTHOR_MAX = 64;
 
 export function normalizeCommentAuthor(raw: string): string {
@@ -288,9 +300,11 @@ export async function resolveCommentPostTarget(
 
 /**
  * Resolve a commentable page id from a slug - the pages counterpart of
- * `resolveCommentPostTarget` (single home of the write-path predicate).
- * Mirrors the universal route's contract: non-external md rows whose
- * current-locale body exists (strict language serving, P1b ruling).
+ * `resolveCommentPostTarget`. Mirrors the universal route's contract:
+ * non-external md rows whose current-locale body exists (strict language
+ * serving, P1b ruling); the servability predicate itself is the shared
+ * `servablePageBody` the route and the submit re-check also use
+ * (pre-release review 01-P2-2).
  */
 export async function resolveCommentPageTarget(lang: string, slug: string): Promise<string | null> {
 	// Locale tags are never page slugs (the universal route's read-side belt,
@@ -298,8 +312,7 @@ export async function resolveCommentPageTarget(lang: string, slug: string): Prom
 	// page can never display - review P3-1).
 	if ((locales as readonly string[]).includes(slug)) return null;
 	const row = await getPageBySlug(slug);
-	if (!row || row.externalUrl !== null || row.content === null) return null;
-	if (resolvePageContent(row.content, lang) === null) return null;
+	if (!row || servablePageBody(row, lang) === null) return null;
 	return row.id;
 }
 
@@ -348,7 +361,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 
 	const text = normalizeCommentText(input.text);
 	const length = [...text].length;
-	if (length < COMMENT_MIN_LENGTH) return { kind: 'empty' };
+	if (length < COMMENT_MIN_LENGTH || !hasVisibleText(text)) return { kind: 'empty' };
 	if (length > COMMENT_MAX_LENGTH) return { kind: 'too-long', max: COMMENT_MAX_LENGTH };
 
 	// All three arcs are served since the P4 pages mount (notes since N1);
@@ -383,10 +396,10 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		if (!target || !target.allowComment) return { kind: 'target-unavailable' };
 	} else {
 		// Pages (P4 mount): every md row the universal route can serve is
-		// commentable - pages carry no per-row switch (plan §0 #46). External
-		// rows and empty content stay unreachable, exactly like the route's
-		// 404s; the current language must carry a body (strict language
-		// serving, P1b ruling 2026-10-03).
+		// commentable - pages carry no per-row switch (plan §0 #46). The
+		// servability predicate is shared with the resolver and the route
+		// (pre-release review 01-P2-2); the current language must carry a
+		// body (strict language serving, P1b ruling 2026-10-03).
 		const [target] = await db
 			.select({
 				id: pages.id,
@@ -396,9 +409,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 			.from(pages)
 			.where(eq(pages.id, input.targetId))
 			.limit(1);
-		if (!target || target.externalUrl !== null || target.content === null)
-			return { kind: 'target-unavailable' };
-		if (resolvePageContent(target.content, input.lang) === null)
+		if (!target || servablePageBody(target, input.lang) === null)
 			return { kind: 'target-unavailable' };
 	}
 
@@ -441,8 +452,10 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 
 	// Owner/admin posts skip the window (WordPress core exempts moderators);
 	// everyone else shares one cross-target window per reader (grill Q1/Q2).
-	// The window is charged only AFTER validation succeeded, so rejected
-	// submissions do not eat the reader's budget (review fix).
+	// The window is charged only AFTER validation succeeded, so validation
+	// failures never eat the reader's budget; a race loser (CAS 0 rows / FK
+	// 23503) keeps its charge - Valkey and PG share no transaction, so there
+	// is no cross-store rollback (pre-release review 05-P3-4).
 	const autoApprove = isAdminRole(input.user.role);
 	if (!autoApprove) {
 		const rate = await rateLimit(
@@ -532,6 +545,8 @@ export type EditCommentResult =
  * rejected row are one indistinguishable `unavailable` (fail-closed).
  * `pin` intentionally stays on an edit (a moderator signal on the row,
  * restored with the re-approval); delete clears it instead (review P3-7).
+ * Concurrent same-reader edits are last-write-wins - no OCC token, accepted
+ * and registered (pre-release review 08-F2).
  */
 export async function editComment(input: EditCommentInput): Promise<EditCommentResult> {
 	const now = input.now ?? new Date();
@@ -545,7 +560,7 @@ export async function editComment(input: EditCommentInput): Promise<EditCommentR
 
 	const text = normalizeCommentText(input.text);
 	const length = [...text].length;
-	if (length < COMMENT_MIN_LENGTH) return { kind: 'empty' };
+	if (length < COMMENT_MIN_LENGTH || !hasVisibleText(text)) return { kind: 'empty' };
 	if (length > COMMENT_MAX_LENGTH) return { kind: 'too-long', max: COMMENT_MAX_LENGTH };
 
 	const [row] = await db
@@ -633,7 +648,10 @@ export type DeleteCommentResult =
  * Author-only soft delete (spec §6): the moderation axis stays untouched so
  * an approved root with replies keeps its floor placeholder; `pin` drops -
  * a removed comment must not stay highlighted (ledger §19.10). Not
- * throttled: retraction is not a spam vector.
+ * throttled: retraction is not a spam vector. One single-statement CAS:
+ * the former pre-read was fully redundant with the UPDATE's predicate
+ * (pre-release review 04-F1). A replay answers 404 - state-idempotent, the
+ * response is not (registered, ledger §27).
  */
 export async function deleteComment(input: DeleteCommentInput): Promise<DeleteCommentResult> {
 	const now = input.now ?? new Date();
@@ -643,31 +661,12 @@ export async function deleteComment(input: DeleteCommentInput): Promise<DeleteCo
 
 	if (!isUuid(input.commentId)) return { kind: 'unavailable' };
 
-	const [row] = await db
-		.select({
-			id: comments.id,
-			state: comments.state,
-			isDeleted: comments.isDeleted,
-			readerId: comments.readerId
-		})
-		.from(comments)
-		.where(eq(comments.id, input.commentId))
-		.limit(1);
-	if (
-		!row ||
-		row.readerId !== input.user.id ||
-		row.isDeleted ||
-		(row.state !== 'pending' && row.state !== 'approved')
-	) {
-		return { kind: 'unavailable' };
-	}
-
 	const updated = await db
 		.update(comments)
 		.set({ isDeleted: true, deletedAt: now, pin: false })
 		.where(
 			and(
-				eq(comments.id, row.id),
+				eq(comments.id, input.commentId),
 				eq(comments.readerId, input.user.id),
 				eq(comments.isDeleted, false),
 				// Aligned with editComment: a concurrently rejected row must

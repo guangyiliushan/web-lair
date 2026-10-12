@@ -2,6 +2,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
+import { formatDateTime } from '$lib/utils/i18n';
 import CommentsSection from './CommentsSection.svelte';
 import type { ThreadReply, ThreadRoot, ThreadsPage } from './types';
 
@@ -58,6 +59,12 @@ const BASE = {
 	emailVerified: true,
 	loginUrl: null,
 	form: null
+};
+
+const clickBySelector = async (selector: string) => {
+	const element = document.querySelector(selector);
+	if (!element) throw new Error(`${selector} not found`);
+	await page.elementLocator(element).click();
 };
 
 describe('CommentsSection', () => {
@@ -229,6 +236,9 @@ describe('CommentsSection', () => {
 		});
 		const alert = document.querySelector('[role="alert"]');
 		expect(alert?.textContent).toContain('提交失败');
+		// The section pulls focus to the alert so the failure is not missed
+		// (pre-release review 03-P3-5).
+		await expect.poll(() => document.activeElement === alert).toBe(true);
 	});
 
 	it('shows the truncation note when the page was capped', async () => {
@@ -252,6 +262,17 @@ describe('CommentsSection', () => {
 		expect(document.querySelector('[data-edit-target="reply-1"]')).not.toBeNull();
 		expect(document.querySelector('[data-edit-target="root-2"]')).toBeNull();
 		expect(document.querySelector('[data-delete-target="root-2"]')).toBeNull();
+		// Row-scoped accessible names: N threads must not surface N identically
+		// named edit/delete buttons (pre-release review 07-P2-2).
+		expect(
+			document.querySelector('[data-edit-target="root-1"]')?.getAttribute('aria-label')
+		).toContain('Alice');
+		expect(
+			document.querySelector('[data-delete-target="root-1"]')?.getAttribute('aria-label')
+		).toContain('Alice');
+		expect(document.querySelector('[data-reply-target="root-1"]')?.getAttribute('aria-label')).toBe(
+			'回复 Alice'
+		);
 	});
 
 	it('renders the edited marker as a time element with the edit stamp', async () => {
@@ -267,7 +288,9 @@ describe('CommentsSection', () => {
 		);
 		expect(marker).toBeTruthy();
 		expect(marker?.getAttribute('datetime')).toBe('2026-10-09T12:00:00.000Z');
-		expect(marker?.getAttribute('title')).toBeTruthy();
+		// The tooltip pins the human-readable stamp itself (pre-release
+		// review 03-P3-5), not just its presence.
+		expect(marker?.getAttribute('title')).toBe(formatDateTime(new Date('2026-10-09T12:00:00Z')));
 		// A never-edited row carries no marker at all.
 		expect(
 			[...document.querySelectorAll('[data-comment-id="root-2"] time')].some(
@@ -295,6 +318,13 @@ describe('CommentsSection', () => {
 		// The open path focuses the textarea through an explicit ref.focus()
 		// (review P1-1: the native autofocus attribute is a no-op here).
 		await expect.poll(() => document.activeElement === textarea).toBe(true);
+
+		// The edit trigger toggles like reply/delete (pre-release review
+		// 07-P3-4).
+		const again = document.querySelector('[data-edit-target="root-1"]');
+		if (!again) throw new Error('edit button lost');
+		await page.elementLocator(again).click();
+		await expect.poll(() => document.querySelector('form[action="?/edit"]')).toBeNull();
 	});
 
 	it('asks for confirmation before posting a delete', async () => {
@@ -318,6 +348,14 @@ describe('CommentsSection', () => {
 		expect(
 			document.querySelector('[data-delete-target="root-1"]')?.getAttribute('aria-expanded')
 		).toBe('true');
+		const question = confirm?.querySelector('[data-delete-confirm-text]');
+		expect(question?.id).toBeTruthy();
+		// The action button points at the question (pre-release review 07-P3-3)
+		// and the question no longer carries a dead aria-live (07-P3-2).
+		expect(confirm?.querySelector('button[type="submit"]')?.getAttribute('aria-describedby')).toBe(
+			question?.id
+		);
+		expect(question?.getAttribute('aria-live')).toBeNull();
 		const cancel = confirm?.querySelector('button[type="button"]');
 		if (!cancel) throw new Error('cancel button not found');
 		await page.elementLocator(cancel).click();
@@ -332,11 +370,6 @@ describe('CommentsSection', () => {
 			...BASE,
 			threads: threadsPage([root({ isMine: true })])
 		});
-		const clickBySelector = async (selector: string) => {
-			const element = document.querySelector(selector);
-			if (!element) throw new Error(`${selector} not found`);
-			await page.elementLocator(element).click();
-		};
 		const confirmVisible = () =>
 			document.querySelector('[data-slot="comment-delete-confirm"]') !== null;
 
@@ -359,11 +392,6 @@ describe('CommentsSection', () => {
 			...BASE,
 			threads: threadsPage([root({ isMine: true })])
 		});
-		const clickBySelector = async (selector: string) => {
-			const element = document.querySelector(selector);
-			if (!element) throw new Error(`${selector} not found`);
-			await page.elementLocator(element).click();
-		};
 		await clickBySelector('[data-reply-target="root-1"]');
 		await expect.poll(() => document.querySelectorAll('textarea').length).toBe(2);
 		await clickBySelector('[data-edit-target="root-1"]');

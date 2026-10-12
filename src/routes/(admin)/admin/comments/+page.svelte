@@ -80,6 +80,9 @@
 			{m.admin_comments_reviewed_count({ count: form.reviewed ?? 0 })}
 		</p>
 	{/if}
+	{#if form && 'reviewed' in form && (form.stale ?? 0) > 0}
+		<p class="px-4 py-2 text-sm text-destructive">{m.admin_comments_stale_hint()}</p>
+	{/if}
 
 	{#if data.entries.length === 0}
 		<div class="flex flex-1 items-center justify-center p-6">
@@ -109,6 +112,14 @@
 					>
 						{#if data.state === 'pending'}
 							<input type="checkbox" name="ids" value={entry.id} class="mt-1" />
+							<!-- The edited_at this reviewer saw: the review CAS runs on it,
+							     so an edit made after this page loaded voids a stale approve
+							     (pre-release review 08-F1). 0 = never edited. -->
+							<input
+								type="hidden"
+								name="seen"
+								value={`${entry.id}:${entry.editedAt ? entry.editedAt.getTime() : 0}`}
+							/>
 						{:else}
 							<span class="mt-1 w-3.5"></span>
 						{/if}
@@ -158,6 +169,9 @@
 								{#if entry.reviewedAt}
 									<span>{m.admin_comments_reviewed_at({ date: formatDate(entry.reviewedAt) })}</span
 									>
+								{/if}
+								{#if entry.editedAt}
+									<span>{m.comment_edited()}</span>
 								{/if}
 							</div>
 						</div>

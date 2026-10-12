@@ -32,7 +32,13 @@
 		confirmingDeleteId = null;
 	}
 
-	function startEdit(id: string) {
+	async function startEdit(id: string) {
+		if (editingId === id) {
+			// Same toggle shape as the delete trigger (pre-release review
+			// 07-P3-4).
+			await cancelEdit(id);
+			return;
+		}
 		editingId = id;
 		openReplyId = null;
 		confirmingDeleteId = null;
@@ -143,7 +149,7 @@
 					size="sm"
 					data-reply-target={id}
 					aria-expanded={openReplyId === id}
-					aria-label={m.comment_replying_to({ name: author ?? '?' })}
+					aria-label={m.comment_reply_action({ name: author ?? '?' })}
 					onclick={() => toggleReply(id)}
 				>
 					{m.comment_reply()}
@@ -155,6 +161,7 @@
 					size="sm"
 					data-edit-target={id}
 					aria-expanded={editingId === id}
+					aria-label={m.comment_edit_aria({ name: author ?? '?' })}
 					onclick={() => startEdit(id)}
 				>
 					{m.comment_edit()}
@@ -164,6 +171,7 @@
 					size="sm"
 					data-delete-target={id}
 					aria-expanded={confirmingDeleteId === id}
+					aria-label={m.comment_delete_aria({ name: author ?? '?' })}
 					onclick={() => startDelete(id)}
 				>
 					{m.comment_delete()}
@@ -195,10 +203,13 @@
 		{/if}
 	{/if}
 	{#if confirmingDeleteId === id}
+		<!-- Neutral fill: the former destructive tint stacked under the button's
+		     own /10 fill and measured 3.67:1 in light mode - below AA (pre-release
+		     review 07-P2-3; the token-level fix is tracked separately). -->
 		<form
 			method="POST"
 			action="?/delete"
-			class="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2"
+			class="mt-2 rounded-md border border-destructive/30 bg-card px-3 py-2"
 			data-slot="comment-delete-confirm"
 			aria-busy={deleteBusy}
 			use:enhance={() => {
@@ -206,11 +217,12 @@
 				return async ({ result, update }) => {
 					await update();
 					deleteBusy = false;
-					if (result.type === 'success') {
-						// The confirm button vanishes with the row: park focus on the
-						// section title so keyboard users keep their place (review
-						// P2-2), and drop the stale expanded state.
-						editingId = null;
+					if (result.type === 'success' && confirmingDeleteId === id) {
+						// Park focus on the section title so keyboard users keep
+						// their place. Guarded to THIS surface: a user who moved
+						// to another composer while the request flew must not have
+						// that surface closed or its focus stolen (pre-release
+						// review 07-P2-1, the admin/delete-confirm shape).
 						confirmingDeleteId = null;
 						document.getElementById('comments-title')?.focus();
 					}
@@ -218,14 +230,31 @@
 			}}
 		>
 			<input type="hidden" name="id" value={id} />
-			<p class="text-sm" tabindex="-1" aria-live="polite" data-delete-confirm-text={id}>
+			<p
+				id={`comment-delete-question-${id}`}
+				class="text-sm"
+				tabindex="-1"
+				data-delete-confirm-text={id}
+			>
 				{m.comment_delete_confirm()}
 			</p>
 			<div class="mt-2 flex items-center justify-end gap-2">
-				<Button type="button" variant="ghost" size="sm" onclick={() => cancelDelete(id)}>
+				<Button
+					type="button"
+					variant="ghost"
+					size="sm"
+					disabled={deleteBusy}
+					onclick={() => cancelDelete(id)}
+				>
 					{m.comment_cancel()}
 				</Button>
-				<Button type="submit" variant="destructive" size="sm" disabled={deleteBusy}>
+				<Button
+					type="submit"
+					variant="destructive"
+					size="sm"
+					aria-describedby={`comment-delete-question-${id}`}
+					disabled={deleteBusy}
+				>
 					{m.comment_delete_confirm_action()}
 				</Button>
 			</div>

@@ -53,6 +53,30 @@ export function resolvePageContent(
 }
 
 /**
+ * Structural half of the "servable page" predicate - a non-external md row
+ * carrying a content object. Single home shared by the universal route's
+ * read-side guard and the comment write path (pre-release review 01-P2-2).
+ */
+export function isServablePageRow(row: {
+	content: LocalizedMarkdown | null;
+	externalUrl: string | null;
+}): boolean {
+	return row.externalUrl === null && row.content !== null;
+}
+
+/**
+ * Full servability for one locale: the structural half plus a resolved body.
+ * The route's missing-language hint stays route-owned (it needs the OTHER
+ * locales' list); every other check goes through this.
+ */
+export function servablePageBody(
+	row: { content: LocalizedMarkdown | null; externalUrl: string | null },
+	locale: string
+): string | null {
+	return isServablePageRow(row) ? resolvePageContent(row.content, locale) : null;
+}
+
+/**
  * Locales that actually carry body content, in the fixed order - the single
  * source for the missing-language hint, hreflang alternates and sitemap
  * inclusion (never re-derive this elsewhere).

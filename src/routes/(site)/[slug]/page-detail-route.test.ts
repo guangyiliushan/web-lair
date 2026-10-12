@@ -27,12 +27,23 @@ vi.mock('$lib/server/markdown', () => ({ renderMarkdownToHtml }));
 vi.mock('$lib/server/services/comments', () => ({
 	loadThreads: service.loadThreads,
 	resolveCommentPageTarget: service.resolveCommentPageTarget,
-	submitComment: service.submitComment
+	submitComment: service.submitComment,
+	// Imported by the real comments-actions adapter below; never called here
+	// (its handlers are mocked) but the binding must exist.
+	editComment: vi.fn(),
+	deleteComment: vi.fn()
 }));
-vi.mock('$lib/server/services/comments-actions', () => ({
-	commentEditAction: service.commentEditAction,
-	commentDeleteAction: service.commentDeleteAction
-}));
+vi.mock('$lib/server/services/comments-actions', async (importOriginal) => {
+	const actual =
+		await importOriginal<typeof import('$lib/server/services/comments-actions')>();
+	return {
+		commentEditAction: service.commentEditAction,
+		commentDeleteAction: service.commentDeleteAction,
+		// The real mapping: the route's submit path rides on it (pre-release
+		// review 01-P2-1) - the mock must not fake it away.
+		commentSubmitResponse: actual.commentSubmitResponse
+	};
+});
 vi.mock('$lib/server/authz', () => ({ requireUser: service.requireUser }));
 vi.mock('$lib/paraglide/runtime', () => ({
 	getLocale: () => 'en',
@@ -286,6 +297,18 @@ describe('(site)/[slug] comment actions (P4 mount)', () => {
 		expect(service.submitComment).toHaveBeenLastCalledWith(
 			expect.objectContaining({ parentId: 'aaaaaaaa-1111-1111-1111-111111111111' })
 		);
+	});
+
+	it('blocks unverified readers before resolution or submit (posts twin)', async () => {
+		service.requireUser.mockReturnValue({ id: 'u-1', name: 'Reader', emailVerified: false });
+		const fd = new FormData();
+		fd.set('text', 'hi');
+		const result = await actions.comment(
+			makeEvent('about', { request: { formData: vi.fn(async () => fd) } })
+		);
+		expect(result).toMatchObject({ status: 403, data: { message: 'comment_verify_hint' } });
+		expect(service.resolveCommentPageTarget).not.toHaveBeenCalled();
+		expect(service.submitComment).not.toHaveBeenCalled();
 	});
 
 	it('404s when the slug no longer resolves to a commentable page', async () => {

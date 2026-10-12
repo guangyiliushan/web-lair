@@ -8,12 +8,17 @@ import {
 	resolveCommentPageTarget,
 	submitComment
 } from '$lib/server/services/comments';
-import { commentDeleteAction, commentEditAction } from '$lib/server/services/comments-actions';
+import {
+	commentDeleteAction,
+	commentEditAction,
+	commentSubmitResponse
+} from '$lib/server/services/comments-actions';
 import {
 	contentLocales,
 	getPageBySlug,
+	isServablePageRow,
 	resolveLocalized,
-	resolvePageContent
+	servablePageBody
 } from '$lib/server/services/pages';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
 
@@ -40,12 +45,15 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 
 	const row = await getPageBySlug(params.slug);
 
-	if (!row || row.externalUrl !== null || !row.content) {
+	// The structural half of the servable-page predicate is shared with the
+	// comment write path (pre-release review 01-P2-2); the missing-language
+	// hint below stays route-owned.
+	if (!row || !isServablePageRow(row)) {
 		error(404, 'Not found');
 	}
 
 	const contentLangs = contentLocales(row.content);
-	const body = resolvePageContent(row.content, lang);
+	const body = servablePageBody(row, lang);
 
 	if (body === null) {
 		// The hint keeps its meaning only while some locale carries content; an
@@ -130,21 +138,7 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 		now
 	});
 
-	switch (result.kind) {
-		case 'created':
-			return { submitted: result.state };
-		case 'throttled':
-			return fail(429, { message: m.comment_throttled() });
-		case 'unverified':
-			return fail(403, { message: m.comment_verify_hint() });
-		case 'empty':
-		case 'too-long':
-			return fail(400, { message: m.comment_error_generic() });
-		case 'parent-unavailable':
-			return fail(400, { message: m.comment_error_parent() });
-		case 'target-unavailable':
-			return fail(404, { message: m.comment_error_unavailable() });
-	}
+	return commentSubmitResponse(result);
 }
 
 export const actions = {

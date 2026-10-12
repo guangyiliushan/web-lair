@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
-import { apiPost, approveQueueRow, psql, valkeyAlive, valkeyDel } from './support';
+import { approveQueueRow, bootstrapReader, psql, valkeyAlive, valkeyDel } from './support';
 
 /**
  * Comment P3a acceptance (pages plan T7): guest guidance, submit -> pending,
@@ -113,23 +113,8 @@ test.afterAll(async () => {
 
 /* ── auth fixtures ──────────────────────────────────────────────────────── */
 
-/** Sign-up + SQL-verify + explicit sign-in (spec §1 "已验证读者"). */
-async function bootstrapReader(context: BrowserContext, email: string) {
-	const page = await context.newPage();
-	const signUp = await apiPost(page, '/api/auth/sign-up/email', {
-		email,
-		name: email,
-		password: READER_PASSWORD
-	});
-	expect(signUp.ok()).toBeTruthy();
-	psql(`update "user" set email_verified = true where email = '${email}'`);
-	const signIn = await apiPost(page, '/api/auth/sign-in/email', {
-		email,
-		password: READER_PASSWORD
-	});
-	expect(signIn.ok()).toBeTruthy();
-	await page.close();
-}
+// bootstrapReader lives in support.ts (shared with comment-p4 - pre-release
+// review 04-F4).
 
 /**
  * Memoised signed-in contexts: one auth round per account for the whole file
@@ -141,7 +126,7 @@ let throttleContext: BrowserContext | null = null;
 async function readerPage(browser: Browser): Promise<Page> {
 	if (!readerContext) {
 		readerContext = await browser.newContext({ storageState: zhCnLocale.storageState });
-		await bootstrapReader(readerContext, READER_EMAIL);
+		await bootstrapReader(readerContext, READER_EMAIL, READER_PASSWORD);
 	}
 	return readerContext.newPage();
 }
@@ -149,7 +134,7 @@ async function readerPage(browser: Browser): Promise<Page> {
 async function throttlePage(browser: Browser): Promise<Page> {
 	if (!throttleContext) {
 		throttleContext = await browser.newContext({ storageState: zhCnLocale.storageState });
-		await bootstrapReader(throttleContext, THROTTLE_EMAIL);
+		await bootstrapReader(throttleContext, THROTTLE_EMAIL, READER_PASSWORD);
 	}
 	return throttleContext.newPage();
 }

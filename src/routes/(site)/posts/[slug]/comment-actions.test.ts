@@ -23,7 +23,9 @@ const { state } = vi.hoisted(() => {
 		submitCalls: [] as Record<string, unknown>[],
 		submitResults: [] as { kind: string }[],
 		editCalls: [] as Record<string, unknown>[],
-		deleteCalls: [] as Record<string, unknown>[]
+		deleteCalls: [] as Record<string, unknown>[],
+		editResults: [] as Array<Record<string, unknown>>,
+		deleteResults: [] as Array<Record<string, unknown>>
 	};
 	return { state };
 });
@@ -49,11 +51,11 @@ vi.mock('$lib/server/services/comments', () => ({
 	}),
 	editComment: vi.fn(async (input: Record<string, unknown>) => {
 		state.editCalls.push(input);
-		return { kind: 'updated', state: 'pending' };
+		return state.editResults.shift() ?? { kind: 'updated', state: 'pending' };
 	}),
 	deleteComment: vi.fn(async (input: Record<string, unknown>) => {
 		state.deleteCalls.push(input);
-		return { kind: 'deleted' };
+		return state.deleteResults.shift() ?? { kind: 'deleted' };
 	})
 }));
 vi.mock('$lib/paraglide/runtime', () => ({
@@ -98,6 +100,8 @@ beforeEach(() => {
 	state.submitResults = [];
 	state.editCalls = [];
 	state.deleteCalls = [];
+	state.editResults = [];
+	state.deleteResults = [];
 	resolveMock.mockClear();
 });
 
@@ -185,5 +189,58 @@ describe('post comment actions', () => {
 			const result = await commentAction(makeEvent(fd({ text: 'hi' })));
 			expect(result, kind).toMatchObject({ status, data: { message } });
 		}
+	});
+
+	it('maps every edit/delete failure onto the localized response', async () => {
+		// The three hosts share the edit/delete handlers, so this mapping has
+		// one home - and now one test home (pre-release review 03-P2-1).
+		const editAction = actions.edit as (event: never) => Promise<Record<string, unknown>>;
+		const deleteAction = actions.delete as (event: never) => Promise<Record<string, unknown>>;
+		const editForm = fd({ id: 'aaaaaaaa-1111-1111-1111-111111111111', text: 'edited' });
+		const editCases: Array<[Record<string, unknown>, number, string]> = [
+			[{ kind: 'throttled', windowSeconds: 60 }, 429, 'comment_throttled'],
+			[{ kind: 'unverified' }, 403, 'comment_action_unverified'],
+			[{ kind: 'unavailable' }, 404, 'comment_action_unavailable'],
+			[{ kind: 'empty' }, 400, 'comment_error_generic'],
+			[{ kind: 'too-long', max: 2000 }, 400, 'comment_error_generic']
+		];
+		for (const [result, status, message] of editCases) {
+			state.editResults = [result];
+			expect(await editAction(makeEvent(editForm)), String(result.kind)).toMatchObject({
+				status,
+				data: { message }
+			});
+		}
+		const deleteForm = fd({ id: 'aaaaaaaa-1111-1111-1111-111111111111' });
+		const deleteCases: Array<[Record<string, unknown>, number, string]> = [
+			[{ kind: 'unverified' }, 403, 'comment_action_unverified'],
+			[{ kind: 'unavailable' }, 404, 'comment_action_unavailable']
+		];
+		for (const [result, status, message] of deleteCases) {
+			state.deleteResults = [result];
+			expect(await deleteAction(makeEvent(deleteForm)), String(result.kind)).toMatchObject({
+				status,
+				data: { message }
+			});
+		}
+	});
+
+	it('pre-guards unverified readers on edit and delete before the service', async () => {
+		state.user = { id: 'u1', name: 'Alice', emailVerified: false, image: null };
+		const editForm = fd({ id: 'aaaaaaaa-1111-1111-1111-111111111111', text: 'x' });
+		const editResult = await actions.edit(makeEvent(editForm));
+		expect(editResult).toMatchObject({
+			status: 403,
+			data: { message: 'comment_action_unverified' }
+		});
+		expect(state.editCalls).toHaveLength(0);
+
+		const deleteForm = fd({ id: 'aaaaaaaa-1111-1111-1111-111111111111' });
+		const deleteResult = await actions.delete(makeEvent(deleteForm));
+		expect(deleteResult).toMatchObject({
+			status: 403,
+			data: { message: 'comment_action_unverified' }
+		});
+		expect(state.deleteCalls).toHaveLength(0);
 	});
 });

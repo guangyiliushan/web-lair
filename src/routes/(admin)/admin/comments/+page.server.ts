@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import { m } from '$lib/paraglide/messages';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { comments } from '$lib/server/db/content/comment.schema';
 import { notes } from '$lib/server/db/content/note.schema';
@@ -33,6 +33,7 @@ export const load: PageServerLoad = async (event) => {
 			ip: comments.ip,
 			createdAt: comments.createdAt,
 			reviewedAt: comments.reviewedAt,
+			editedAt: comments.editedAt,
 			postId: comments.postId,
 			postTitle: posts.title,
 			postSlug: posts.slug,
@@ -50,7 +51,10 @@ export const load: PageServerLoad = async (event) => {
 		.leftJoin(notes, eq(comments.noteId, notes.id))
 		.leftJoin(pages, eq(comments.pageId, pages.id))
 		.where(and(eq(comments.state, state), eq(comments.isDeleted, false)))
-		.orderBy(desc(comments.createdAt))
+		// Edited rows float to the position of their last touch: an old
+		// comment pulled back into review must not sink below the fold
+		// (pre-release review 05-P3-2).
+		.orderBy(sql`coalesce(${comments.editedAt}, ${comments.createdAt}) desc`)
 		.limit(200);
 
 	const grouped = await db
@@ -79,13 +83,26 @@ export const actions: Actions = {
 		if (decision !== 'approve' && decision !== 'reject') {
 			return fail(400, { message: m.admin_comments_err_unknown_decision() });
 		}
-		// Same cap as the list query: one request must not flip the whole table.
-		// Non-uuid values are dropped before they reach the uuid column (PG
-		// would raise 22P02 → 500; P1.1 review).
+		// Snapshot guard (pre-release review 08-F1): the queue form carries,
+		// per row, the `edited_at` the reviewer actually saw. Editing a
+		// pending row made its text mutable, so approving without this axis
+		// could put text the reviewer never read onto the public surface
+		// (TOCTOU). A row whose snapshot no longer matches stays untouched.
+		const snapshots = new Map<string, number>();
+		for (const raw of form.getAll('seen')) {
+			const [id, rawTs] = raw.toString().split(':');
+			const ts = Number(rawTs);
+			if (isUuid(id) && Number.isSafeInteger(ts) && ts >= 0) snapshots.set(id, ts);
+		}
+		// Same cap as the list query: one request must not flip the whole
+		// table. Non-uuid values are dropped before they reach the uuid
+		// column (PG would raise 22P02 → 500; P1.1 review); rows without a
+		// snapshot are not approvable at all.
 		const ids = form
 			.getAll('ids')
 			.map((value) => value.toString())
 			.filter(isUuid)
+			.filter((id) => snapshots.has(id))
 			.slice(0, 200);
 		if (ids.length === 0) {
 			return fail(400, { message: m.admin_comments_err_select_first() });
@@ -97,18 +114,35 @@ export const actions: Actions = {
 			return fail(403, { message: m.admin_comments_err_permission() });
 		}
 
-		// Only pending, non-deleted rows flip: the conditional update keeps a
-		// repeated submit (double click, replay) from overwriting a decision,
-		// and keeps the writable set identical to the visible one.
+		// Only pending, non-deleted rows flip, and only while the edited_at
+		// snapshot the reviewer saw still matches: the conditional update
+		// keeps a repeated submit (double click, replay) from overwriting a
+		// decision, keeps the writable set identical to the visible one, and
+		// cannot approve text the reviewer never read (pre-release review
+		// 08-F1).
 		const state = decision === 'approve' ? 'approved' : 'rejected';
+		const conditions: SQL<unknown>[] = ids.map((id) => {
+			const ts = snapshots.get(id) ?? 0;
+			const snapshot = ts === 0 ? isNull(comments.editedAt) : eq(comments.editedAt, new Date(ts));
+			return and(eq(comments.id, id), snapshot) as SQL<unknown>;
+		});
 		const updated = await db
 			.update(comments)
 			.set({ state, reviewedBy: reviewer.id, reviewedAt: new Date() })
 			.where(
-				and(inArray(comments.id, ids), eq(comments.state, 'pending'), eq(comments.isDeleted, false))
+				and(
+					inArray(comments.id, ids),
+					eq(comments.state, 'pending'),
+					eq(comments.isDeleted, false),
+					or(...conditions)
+				)
 			)
 			.returning({ id: comments.id });
 
-		return { reviewed: updated.length, decision };
+		// A shortfall means one or more rows changed underneath the reviewer
+		// (edited after load, or decided elsewhere): surface the count
+		// honestly so a stale click cannot masquerade as a full success.
+		const stale = ids.length - updated.length;
+		return { reviewed: updated.length, decision, stale };
 	}
 };

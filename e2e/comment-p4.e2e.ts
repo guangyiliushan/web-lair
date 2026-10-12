@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
-import { apiPost, approveQueueRow, psql, valkeyDel } from './support';
+import { approveQueueRow, bootstrapReader, psql, valkeyDel } from './support';
 
 /**
  * Comment P4 acceptance (pages plan T8): the reader self-service - edit ->
@@ -33,6 +33,8 @@ const T_REPLY = 'e2e-p4 的回复';
 const T_PAGE = 'e2e-p4 页面评论';
 const T_OWNER1 = 'e2e-p4 站长初稿';
 const T_OWNER2 = 'e2e-p4 站长修订';
+const T_RACE1 = 'e2e-p4 竞争初稿';
+const T_RACE2 = 'e2e-p4 竞争修订';
 const PAGE_TITLE = 'E2E 评论页面';
 
 /** Root-composer submit, scoped to the ?/comment form (composer conventions). */
@@ -90,23 +92,9 @@ test.afterAll(async () => {
 
 /* ── auth fixtures ──────────────────────────────────────────────────────── */
 
-/** Sign-up + SQL-verify + explicit sign-in (spec §1 "已验证读者"). */
-async function bootstrapReader(context: BrowserContext, email: string) {
-	const page = await context.newPage();
-	const signUp = await apiPost(page, '/api/auth/sign-up/email', {
-		email,
-		name: email,
-		password: READER_PASSWORD
-	});
-	expect(signUp.ok()).toBeTruthy();
-	psql(`update "user" set email_verified = true where email = '${email}'`);
-	const signIn = await apiPost(page, '/api/auth/sign-in/email', {
-		email,
-		password: READER_PASSWORD
-	});
-	expect(signIn.ok()).toBeTruthy();
-	await page.close();
-}
+// bootstrapReader lives in support.ts: the p3a/p4 copies were verbatim
+// (pre-release review 04-F4) and the support plumbing is already the shared
+// home (psql / apiPost / approveQueueRow).
 
 /** Memoised signed-in contexts: one auth round per account per file. */
 let readerContext: BrowserContext | null = null;
@@ -115,7 +103,7 @@ let otherContext: BrowserContext | null = null;
 async function readerPage(browser: Browser): Promise<Page> {
 	if (!readerContext) {
 		readerContext = await browser.newContext({ storageState: zhCnLocale.storageState });
-		await bootstrapReader(readerContext, READER_EMAIL);
+		await bootstrapReader(readerContext, READER_EMAIL, READER_PASSWORD);
 		readerUid = psql(`select id from "user" where email = '${READER_EMAIL}'`);
 	}
 	return readerContext.newPage();
@@ -124,7 +112,7 @@ async function readerPage(browser: Browser): Promise<Page> {
 async function otherPage(browser: Browser): Promise<Page> {
 	if (!otherContext) {
 		otherContext = await browser.newContext({ storageState: zhCnLocale.storageState });
-		await bootstrapReader(otherContext, OTHER_EMAIL);
+		await bootstrapReader(otherContext, OTHER_EMAIL, READER_PASSWORD);
 	}
 	return otherContext.newPage();
 }
@@ -240,8 +228,10 @@ test('reader replies; the owner approves the reply', async ({ browser }) => {
 	const page = await readerPage(browser);
 	await page.goto(POST_PATH);
 	const item = `[data-comment-id="${commentId}"]`;
-	const replyForm = 'form[action="?/reply"]';
-	await openSurface(page, item, /回复/, replyForm);
+	// Item-scoped: a sibling item's reply form must not satisfy the locator
+	// (pre-release review 03-P3-7).
+	const replyForm = `${item} form[action="?/reply"]`;
+	await openSurface(page, item, /回复/, 'form[action="?/reply"]');
 	await expect(async () => {
 		await page.locator(replyForm).locator('textarea').fill(T_REPLY);
 		await page.locator(replyForm).getByRole('button', { name: '发表' }).click();
@@ -291,12 +281,11 @@ test('reader soft-deletes the root: the placeholder keeps the reply, pin drops',
 	const page = await readerPage(browser);
 	await page.goto(POST_PATH);
 	const item = `[data-comment-id="${commentId}"]`;
+	// Item-scoped confirmation (pre-release review 03-P3-7).
+	const confirm = page.locator(`${item} [data-slot="comment-delete-confirm"]`);
 	await openSurface(page, item, '删除', '[data-slot="comment-delete-confirm"]');
 	await expect(async () => {
-		await page
-			.locator('[data-slot="comment-delete-confirm"]')
-			.getByRole('button', { name: '删除' })
-			.click();
+		await confirm.getByRole('button', { name: '删除' }).click();
 		expect(psql(`select is_deleted::text from comments where id = '${commentId}'`)).toBe('true');
 	}).toPass({ timeout: 60000 });
 	expect(
@@ -304,6 +293,11 @@ test('reader soft-deletes the root: the placeholder keeps the reply, pin drops',
 			`select is_deleted || '|' || (deleted_at is not null)::text || '|' || pin::text from comments where id = '${commentId}'`
 		)
 	).toBe('true|true|false');
+	// The success callback parks focus on the section title (pre-release
+	// review 03-P3-5).
+	await expect
+		.poll(() => page.evaluate(() => document.activeElement?.id ?? ''))
+		.toBe('comments-title');
 	await page.close();
 
 	const guest = await guestContext(browser);
@@ -342,9 +336,13 @@ test('the pages mount: a universal md page is commentable and the queue shows th
 
 	const owner = await guestContext(browser);
 	const ownerPage = await owner.newPage();
-	await ownerPage.goto('/admin/comments');
 	const row = ownerPage.locator('label').filter({ hasText: T_PAGE });
-	await expect(row).toBeVisible({ timeout: 15000 });
+	// Fresh-page retry: the single-shot wait bowed out under full load
+	// (pre-release review 03-P3-7).
+	await expect(async () => {
+		await ownerPage.goto('/admin/comments');
+		await expect(row).toBeVisible({ timeout: 8000 });
+	}).toPass({ timeout: 60000 });
 	await expect(row.getByText('页面', { exact: true })).toBeVisible();
 	await expect(row.getByText(PAGE_TITLE)).toBeVisible();
 	await owner.close();
@@ -383,5 +381,51 @@ test('the owners edit auto-approves: public immediately with the edited marker',
 	await expect(item.getByText(T_OWNER2)).toBeVisible();
 	await expect(item.getByText('已编辑')).toBeVisible();
 	await guest.close();
+	await owner.close();
+});
+
+test('an edit inside the approval window voids the stale queue click', async ({ browser }) => {
+	// TOCTOU guard (pre-release review 08-F1): the queue form snapshots the
+	// edited_at the reviewer saw; an author who edits after load must not
+	// ride a stale approve onto the public surface.
+	const seeded = await readerPage(browser);
+	await seeded.goto(POST_PATH);
+	const textarea = seeded.getByRole('textbox', { name: '评论内容' });
+	await textarea.fill(T_RACE1);
+	await expect(textarea).toHaveValue(T_RACE1);
+	await rootSubmit(seeded).click();
+	await expect(seeded.locator('[data-comment-id]').filter({ hasText: T_RACE1 })).toBeVisible();
+	clearWindow();
+	const raceId = psql(`select id from comments where text = '${T_RACE1}'`);
+	expect(psql(`select state from comments where id = '${raceId}'`)).toBe('pending');
+
+	const owner = await guestContext(browser);
+	const ownerPage = await owner.newPage();
+	await ownerPage.goto('/admin/comments');
+	await expect(ownerPage.getByRole('tab', { name: /待审/ })).toBeVisible({ timeout: 15000 });
+	const row = ownerPage.locator('label').filter({ hasText: T_RACE1 });
+	await expect(row).toBeVisible({ timeout: 15000 });
+
+	// The author edits while that queue page sits stale.
+	await editComment(seeded, `[data-comment-id="${raceId}"]`, T_RACE2);
+	clearWindow();
+
+	// The stale click must not approve the unseen text.
+	await row.getByRole('checkbox').check();
+	await expect(async () => {
+		await ownerPage.getByRole('button', { name: '通过' }).click({ timeout: 5000 });
+		await expect(ownerPage.getByText('未被本次操作包含')).toBeVisible({ timeout: 8000 });
+	}).toPass({ timeout: 30000 });
+	expect(psql(`select state from comments where id = '${raceId}'`)).toBe('pending');
+
+	// A fresh load shows the edit marker and approves the NEW text.
+	await ownerPage.goto('/admin/comments');
+	const freshRow = ownerPage.locator('label').filter({ hasText: T_RACE2 });
+	await expect(freshRow).toBeVisible({ timeout: 15000 });
+	await expect(freshRow.getByText('已编辑')).toBeVisible();
+	await approveQueueRow(ownerPage, raceId, { rowText: T_RACE2 });
+	expect(psql(`select state from comments where id = '${raceId}'`)).toBe('approved');
+
+	await seeded.close();
 	await owner.close();
 });

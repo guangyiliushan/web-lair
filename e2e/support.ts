@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { expect, type Page, type Response } from '@playwright/test';
+import { expect, type BrowserContext, type Page, type Response } from '@playwright/test';
 
 /**
  * Shared acceptance-test plumbing (comment P3a review follow-up): the docker
@@ -134,4 +134,27 @@ export async function approveQueueRow(
 		await page.getByRole('button', { name: '通过' }).click({ timeout: 5000 });
 		await expect(page.getByText('已通过 1 条')).toBeVisible({ timeout: 8000 });
 	}).toPass({ timeout: 90_000 });
+}
+
+/**
+ * Sign-up + SQL-verify + explicit sign-in (spec §1 "已验证读者"), shared by
+ * the comment specs (the two local copies were verbatim - pre-release review
+ * 04-F4). The password stays a caller parameter: each spec owns its fixture
+ * namespace.
+ */
+export async function bootstrapReader(context: BrowserContext, email: string, password: string) {
+	const page = await context.newPage();
+	const signUp = await apiPost(page, '/api/auth/sign-up/email', {
+		email,
+		name: email,
+		password
+	});
+	expect(signUp.ok()).toBeTruthy();
+	psql(`update "user" set email_verified = true where email = '${email}'`);
+	const signIn = await apiPost(page, '/api/auth/sign-in/email', {
+		email,
+		password
+	});
+	expect(signIn.ok()).toBeTruthy();
+	await page.close();
 }
