@@ -54,8 +54,8 @@ export function parseAlertMarker(text: string): { type: AlertType; rest: string 
 }
 
 /**
- * 默认空段落 editor state JSON。
- * 嵌套编辑器初始化时使用此值。
+ * Default empty-paragraph editor state JSON.
+ * Used when initializing the nested editor.
  */
 export function createDefaultAlertContent(): string {
 	return JSON.stringify({

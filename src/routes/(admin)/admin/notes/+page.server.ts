@@ -9,7 +9,7 @@ import { m } from '$lib/paraglide/messages';
 
 const PAGE_SIZE = 20;
 // `scheduled` stays out of the N1 UI (registered) - it is still reachable
-// through 全部 but has no filter chip of its own.
+// through All but has no filter chip of its own.
 const STATUSES = ['published', 'draft', 'private', 'trash'] as const;
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -69,7 +69,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			.orderBy(topics.sortOrder, topics.name)
 	]);
 
-	// A note with a pending drafts row carries the "有未发布改动" badge.
+	// A note with a pending drafts row carries the "Unpublished changes" badge.
 	const withDrafts = await draftsForNotes(rows.map((row) => row.id));
 
 	return {

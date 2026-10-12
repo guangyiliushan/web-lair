@@ -13,15 +13,15 @@ import EmbedCard from './EmbedCard.svelte';
 import { resolveProviderId, type EmbedProviderId } from './registry';
 import { m } from '$lib/paraglide/messages';
 
-// ── 组件级选中(编辑器内的嵌入卡)──
+// ── Component-level selection (embed card inside the editor) ──
 //
-// 为什么不用 Lexical NodeSelection:装饰器点击后 DOM selection 为空,
-// 而 Lexical 的 selection 重建路径($internalCreateRangeSelection)在普通
-// update 中会用 DOM selection 覆盖非 Range 选区(空 DOM 选区 → null,
-// Lexical.dev.mjs `$internalCreateRangeSelection` 的 useDOMSelection 分支)
-// ——NodeSelection 在此场景 inherently 不稳。组件级标记(`data-selected`)
-// 不进 Lexical 选区系统,行为可控可测;键盘方向键的 isKeyboardSelectable
-// 路径保留给 Lexical 自己(与点击路径互不干扰)。
+// Why not use Lexical NodeSelection: after a decorator click the DOM selection is empty,
+// and Lexical's selection-rebuild path ($internalCreateRangeSelection) during a normal
+// update overwrites a non-Range selection with the DOM selection (empty DOM selection → null,
+// the useDOMSelection branch of `$internalCreateRangeSelection` in Lexical.dev.mjs)
+// ——NodeSelection is inherently unstable in this scenario. The component-level flag (`data-selected`)
+// does not enter Lexical's selection system, so behavior is controllable and testable; the arrow-key isKeyboardSelectable
+// path is reserved for Lexical itself (it does not interfere with the click path).
 
 let selectedHost: HTMLElement | null = null;
 
@@ -30,13 +30,13 @@ function clearEmbedSelection(): void {
 	selectedHost = null;
 }
 
-/** 点击=选中(互斥),Backspace/Delete=删除节点,点击他处=清除。 */
+/** Click = select (exclusive), Backspace/Delete = delete the node, clicking elsewhere = clear. */
 function attachEmbedSelection(editor: LexicalEditor, hostEl: HTMLElement, key: NodeKey): void {
 	hostEl.addEventListener('click', (event) => {
 		const target = event.target as HTMLElement | null;
-		// 编辑行控件放行(preventDefault 会连带阻止 input 聚焦)
+		// Let the edit-row controls through (preventDefault would also block input focus)
 		if (target?.closest('.embed-edit-row, .embed-edit, input')) return;
-		// 拦截卡内链接/façade 在编辑器内的默认导航
+		// Block the default in-editor navigation of links/façades inside the card
 		event.preventDefault();
 		clearEmbedSelection();
 		selectedHost = hostEl;
@@ -60,7 +60,7 @@ function attachEmbedSelection(editor: LexicalEditor, hostEl: HTMLElement, key: N
 		editor.update(() => {
 			const node = $getNodeByKey(key);
 			node?.remove();
-			// 根被删空时补一个可编辑段落,光标有落点
+			// If the delete empties the root, append an editable paragraph so the cursor has a landing spot
 			const root = $getRoot();
 			if (root.getChildrenSize() === 0) root.append($createParagraphNode());
 		});
@@ -155,7 +155,7 @@ export class EmbedNode extends DecoratorNode<HTMLElement> {
 		return this.__tail;
 	}
 
-	/** In-place URL edit (editor-side "编辑" affordance). */
+	/** In-place URL edit (editor-side "Edit" affordance). */
 	setUrl(url: string): void {
 		const writable = this.getWritable();
 		writable.__url = url;
@@ -201,7 +201,7 @@ export class EmbedNode extends DecoratorNode<HTMLElement> {
 				title: this.__title,
 				editable: true,
 				onUrlChange: (url: string, title: string) => {
-					// 不触碰冻结实例:update 内按键取最新可写节点(官方模式)
+					// Do not touch the frozen instance: look the node up by key inside update to get the latest writable node (the official pattern)
 					editor.update(() => {
 						const node = $getNodeByKey(key);
 						if ($isEmbedNode(node)) {

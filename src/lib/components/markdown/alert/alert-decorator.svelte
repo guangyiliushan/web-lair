@@ -30,7 +30,7 @@
 
 	let { nodeKey, alertType, title, initialContent, parentEditor }: Props = $props();
 
-	// ── 状态 ──
+	// ── State ──
 	let nestedEditor: LexicalEditor | null = $state(null);
 	let contentEl: HTMLElement | undefined;
 	let currentAlertType = $derived(alertType);
@@ -41,12 +41,12 @@
 	let headerEl: HTMLElement | undefined = $state();
 	let dropdownTimeout: ReturnType<typeof setTimeout> | null = null;
 
-	// 同步 prop 变化到内部 state
+	// Sync prop changes into internal state
 	$effect(() => {
 		currentAlertType = alertType;
 	});
 
-	// ── 下拉 hover 打开 / mouseleave 关闭 ──
+	// ── Dropdown: open on hover / close on mouseleave ──
 	function onHeaderEnter() {
 		if (dropdownTimeout) {
 			clearTimeout(dropdownTimeout);
@@ -57,7 +57,7 @@
 	}
 	function onHeaderLeave() {
 		dropdownHover = false;
-		// 短暂延迟关闭，允许鼠标移到下拉菜单上
+		// Close after a short delay to let the pointer move onto the dropdown
 		dropdownTimeout = setTimeout(() => {
 			if (!dropdownHover) dropdownOpen = false;
 		}, 150);
@@ -76,7 +76,7 @@
 		}, 100);
 	}
 
-	// ── 同步控制 ──
+	// ── Sync control ──
 	const SYNC_DEBOUNCE_MS = 400;
 	let syncTimer: ReturnType<typeof setTimeout> | null = null;
 	let isApplyingParentSnapshot = false;
@@ -85,7 +85,7 @@
 	let unregisterExit: (() => void) | undefined;
 	let isCleaned = false;
 
-	// ── 类型选项 ──
+	// ── Type options ──
 	const ALERT_ICONS: Record<AlertType, typeof IconInfoCircle> = {
 		note: IconInfoCircle,
 		tip: IconBulb,
@@ -112,7 +112,7 @@
 		};
 	}
 
-	// ── 清理函数 ──
+	// ── Cleanup ──
 	function cleanup() {
 		if (isCleaned) return;
 		isCleaned = true;
@@ -124,7 +124,7 @@
 		nestedEditor?.setRootElement(null);
 	}
 
-	// ── 类型切换 ──
+	// ── Type switching ──
 	function changeAlertType(type: AlertType) {
 		parentEditor.update(() => {
 			const node = getLexicalNodeByKey(nodeKey);
@@ -134,7 +134,7 @@
 		});
 	}
 
-	// ── 初始化 ──
+	// ── Initialization ──
 	onMount(() => {
 		nestedEditor = createEditor({
 			namespace: 'alert-nested',
@@ -149,7 +149,7 @@
 		registerRichText(nestedEditor);
 		registerHistory(nestedEditor, createEmptyHistoryState(), 300);
 
-		// 注入初始内容
+		// Inject the initial content
 		try {
 			const state = nestedEditor.parseEditorState(initialContent);
 			nestedEditor.setEditorState(state);
@@ -159,7 +159,7 @@
 			console.error('Alert nested editor: failed to parse initial content', e);
 		}
 
-		// ── 子→父同步 ──
+		// ── Child → parent sync ──
 		unregisterUpdate = nestedEditor.registerUpdateListener(({ editorState }) => {
 			if (isApplyingParentSnapshot) return;
 			if (syncTimer) clearTimeout(syncTimer);
@@ -174,7 +174,7 @@
 			}, SYNC_DEBOUNCE_MS);
 		});
 
-		// ── 父→子同步 / 硬清理 ──
+		// ── Parent → child sync / hard cleanup ──
 		unregisterMutation = parentEditor.registerMutationListener(
 			AlertNode,
 			(mutations) => {
@@ -186,7 +186,7 @@
 					return;
 				}
 
-				// 'created' 或 'updated'
+				// 'created' or 'updated'
 				parentEditor.getEditorState().read(() => {
 					const node = getLexicalNodeByKey(nodeKey) as AlertNode | null;
 					if (!node || !nestedEditor) return;
@@ -209,7 +209,7 @@
 			{ skipInitialization: true }
 		);
 
-		// ── 键盘逃逸 ──
+		// ── Keyboard escape ──
 		unregisterExit = registerExitBlock(nestedEditor, parentEditor, nodeKey);
 	});
 
@@ -222,7 +222,7 @@
 	</div>
 {:else}
 	<div class="rich-editor-alert rich-editor-alert-{currentAlertType}" contenteditable="false">
-		<!-- Header: 匹配参考设计的紧凑型标题栏 -->
+		<!-- Header: compact title bar matching the reference design -->
 		<div
 			class="rich-editor-alert-header rich-editor-alert-header-{currentAlertType}"
 			bind:this={headerEl}
@@ -244,7 +244,7 @@
 				<IconChevronDown class="rich-editor-alert-chevron" aria-hidden="true" />
 				{#if title}<span class="rich-editor-alert-title">{title}</span>{/if}
 			</button>
-			<!-- 类型切换下拉菜单 -->
+			<!-- Alert-type switcher dropdown -->
 			{#if dropdownOpen}
 				<div
 					class="rich-editor-alert-dropdown"

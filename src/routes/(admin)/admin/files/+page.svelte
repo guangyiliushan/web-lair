@@ -83,7 +83,7 @@
 
 	/**
 	 * Public content URL: webp `@full` for transcoded photos, the ORIGINAL
-	 * key for GIFs (plan §4.3 直通 — the original is the public tier) and for
+	 * key for GIFs (plan §4.3 pass-through — the original is the public tier) and for
 	 * attachments (public once registered; /i enforces the registry check).
 	 */
 	function publicUrl(row: FileRow): string {

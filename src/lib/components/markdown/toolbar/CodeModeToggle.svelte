@@ -6,9 +6,9 @@
 	import { m } from '$lib/paraglide/messages';
 
 	type Props = {
-		/** 当前是否为代码模式 */
+		/** Whether code mode is currently active */
 		codeMode: boolean;
-		/** 切换模式回调 */
+		/** Callback to toggle the mode */
 		onToggle: () => void;
 	};
 

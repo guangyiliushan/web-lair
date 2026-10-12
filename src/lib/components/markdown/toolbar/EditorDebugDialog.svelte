@@ -17,7 +17,7 @@
 		try {
 			await navigator.clipboard.writeText(editorStateJson);
 		} catch {
-			// 剪贴板 API 可能在非 HTTPS 环境不可用
+			// The clipboard API may be unavailable in non-HTTPS contexts
 		}
 	}
 

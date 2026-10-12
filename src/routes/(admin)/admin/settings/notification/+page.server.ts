@@ -11,10 +11,10 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * 通知设置 · Webhooks 区块 (J-3, grill R1-5): read-only endpoint list +
+ * Notification settings · Webhooks section (J-3, grill R1-5): read-only endpoint list +
  * delivery log with a retry action. Endpoint CRUD is deliberately NOT here
  * (registered as a separate small batch). Retry semantics follow plan §26 /
- * runbook §7: 复制新 queued 行 - the failed row stays for the record, and the
+ * runbook §7: copy a new queued row - the failed row stays for the record, and the
  * drain picks the copy up within ≤1 tick. No audit row: the ledger §26
  * roster v1 covers only the job.* and schedule.* events, and the delivery rows
  * themselves are the trail.
@@ -82,7 +82,7 @@ export const actions: Actions = {
 			.where(eq(webhookDeliveries.id, id))
 			.limit(1);
 		if (!delivery) return fail(404, { message: m.admin_settings_notification_err_not_found() });
-		// Assertion 87: 失败可重投 - a queued/succeeded row has nothing to retry.
+		// Assertion 87: failed rows can be re-queued - a queued/succeeded row has nothing to retry.
 		if (delivery.status !== 'failed')
 			return fail(400, { message: m.admin_settings_notification_err_not_failed() });
 		const [endpoint] = await db

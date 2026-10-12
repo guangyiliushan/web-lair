@@ -92,7 +92,7 @@
 </script>
 
 <div class="space-y-8">
-	<!-- Section: 两步验证（真实功能 · B3）-->
+	<!-- Section: Two-step verification (real feature · B3) -->
 	<section>
 		<div class="mb-4 flex items-center justify-between">
 			<div class="flex items-center gap-2">
@@ -197,7 +197,7 @@
 
 	<Separator.Root />
 
-	<!-- Section: 登录设备 -->
+	<!-- Section: Signed-in devices -->
 	<section>
 		<div class="mb-4 flex items-center justify-between">
 			<div class="flex items-center gap-2">
@@ -241,7 +241,7 @@
 
 	<Separator.Root />
 
-	<!-- Section: 修改密码 -->
+	<!-- Section: Change password -->
 	<section>
 		<div class="mb-4 flex items-center gap-2">
 			<IconLock class="size-5 text-muted-foreground" />
@@ -286,7 +286,7 @@
 
 	<Separator.Root />
 
-	<!-- Section: OAuth 登录 -->
+	<!-- Section: OAuth sign-in -->
 	<section>
 		<div class="mb-4 flex items-center gap-2">
 			<IconGlobe class="size-5 text-muted-foreground" />

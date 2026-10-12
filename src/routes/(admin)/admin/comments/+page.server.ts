@@ -23,7 +23,7 @@ export const load: PageServerLoad = async (event) => {
 
 	// Comment P3a queue enhancement (spec §9): resolve the exclusive-arc
 	// target for all three kinds so note/page rows stop falling into
-	// "其它目标"; quote/block context lands with P3b (anchors).
+	// "other targets"; quote/block context lands with P3b (anchors).
 	const entries = await db
 		.select({
 			id: comments.id,

@@ -59,7 +59,7 @@ export class AlertNode extends DecoratorNode<HTMLElement> {
 	}
 
 	// ── DOM ──
-	// 签名：createDOM(config: EditorConfig, editor: LexicalEditor): HTMLElement
+	// Signature: createDOM(config: EditorConfig, editor: LexicalEditor): HTMLElement
 	createDOM(config: EditorConfig, editor: LexicalEditor): HTMLElement {
 		void config;
 		void editor;
@@ -69,13 +69,13 @@ export class AlertNode extends DecoratorNode<HTMLElement> {
 		return div;
 	}
 
-	// 签名：updateDOM(prevNode: DecoratorNode<HTMLElement>, dom: HTMLElement, config: EditorConfig): boolean
+	// Signature: updateDOM(prevNode: DecoratorNode<HTMLElement>, dom: HTMLElement, config: EditorConfig): boolean
 	updateDOM(): boolean {
 		return false;
 	}
 
 	// ── Decorator ──
-	// 签名：decorate(editor: LexicalEditor, config: EditorConfig): null | HTMLElement
+	// Signature: decorate(editor: LexicalEditor, config: EditorConfig): null | HTMLElement
 	decorate(editor: LexicalEditor, config: EditorConfig): HTMLElement {
 		void config;
 		const container = document.createElement('div');
@@ -100,7 +100,7 @@ export class AlertNode extends DecoratorNode<HTMLElement> {
 		return container;
 	}
 
-	// ── 行为 ──
+	// ── Behavior ──
 	isInline(): boolean {
 		return false;
 	}
@@ -109,7 +109,7 @@ export class AlertNode extends DecoratorNode<HTMLElement> {
 		return true;
 	}
 
-	// ── 数据写回 ──
+	// ── Data write-back ──
 	setAlertType(type: AlertType): void {
 		this.getWritable().__alertType = type;
 	}

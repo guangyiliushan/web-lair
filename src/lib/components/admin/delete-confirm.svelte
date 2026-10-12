@@ -13,7 +13,7 @@
 		id: string;
 		/** Form action to submit to (default `?/delete`). */
 		action?: string;
-		/** Confirm button label (default 删除). */
+		/** Confirm button label (default: Delete). */
 		confirmLabel?: string;
 		/** Action failure text rendered inside the dialog (a page banner hides behind the overlay). */
 		error?: string | null;

@@ -117,7 +117,7 @@
 <!-- Desktop: MasterDetail -->
 <div class="hidden min-h-0 flex-1 sm:flex">
 	<MasterDetail.Root class="h-[calc(100vh-10rem)]">
-		<!-- 侧边栏：标签列表 -->
+		<!-- Sidebar: tag list -->
 		<MasterDetail.Pane side="master" class="w-80 shrink-0">
 			<MasterDetail.Header
 				icon={IconTag}
@@ -153,7 +153,7 @@
 			</MasterDetail.List>
 		</MasterDetail.Pane>
 
-		<!-- 主面板：标签详情（只读） -->
+		<!-- Main panel: tag details (read-only) -->
 		<MasterDetail.Pane side="detail">
 			{#if selectedTag}
 				<MasterDetail.Header title={m.admin_tags_detail()} />

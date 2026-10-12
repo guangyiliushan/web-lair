@@ -31,7 +31,7 @@
 
 	<div class="min-h-0 flex-1 overflow-auto">
 		<div class="space-y-8 p-6">
-			<!-- 备份 -->
+			<!-- Backup -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_storage_backup()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
@@ -116,7 +116,7 @@
 				</div>
 			</section>
 
-			<!-- 图片存储 -->
+			<!-- Image storage -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_storage_images()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
@@ -239,7 +239,7 @@
 				</div>
 			</section>
 
-			<!-- 评论图片上传 -->
+			<!-- Comment image upload -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_storage_comment_upload()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">

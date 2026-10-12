@@ -104,7 +104,7 @@ export const remarkContainerDirective: Plugin<[], Root> = () => {
 			// Unregistered text/leaf directives are restored to their literal
 			// source. The closed L2 set has no text/leaf directives at all
 			// (spec 2), and micromark-extension-directive otherwise happily parses
-			// a bare `:word` out of ordinary prose (`12:30`, `说明:内容`) into an
+			// a bare `:word` out of ordinary prose (`12:30`, `note:content`) into an
 			// unrendered node — which silently swallowed the text after the colon
 			// (spec 5: content is never swallowed).
 			if (node.type === 'textDirective' || node.type === 'leafDirective') {

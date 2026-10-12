@@ -76,11 +76,11 @@
 </svelte:head>
 
 <MasterDetail.Root class="h-[calc(100vh-10rem)]">
-	<!-- ===== 左侧：读者列表 ===== -->
+	<!-- ===== Left: reader list ===== -->
 	<MasterDetail.Pane side="master" class="w-80 shrink-0">
 		<MasterDetail.Header icon={IconUsers} title={m.admin_readers()} count={readers.length} />
 
-		<!-- 角色筛选标签（带计数） -->
+		<!-- Role filter chips (with counts) -->
 		<div class="flex flex-wrap gap-2 border-b px-4 py-3">
 			{#each roleFilters as role (role)}
 				<button
@@ -101,7 +101,7 @@
 			{/each}
 		</div>
 
-		<!-- 搜索栏 -->
+		<!-- Search bar -->
 		<div class="flex shrink-0 items-center gap-2 border-b px-4 py-3">
 			<div class="relative min-w-0 flex-1">
 				<IconSearch
@@ -161,14 +161,14 @@
 		</MasterDetail.List>
 	</MasterDetail.Pane>
 
-	<!-- ===== 右侧：读者详情 ===== -->
+	<!-- ===== Right: reader details ===== -->
 	<MasterDetail.Pane side="detail">
 		{#if selectedReader}
 			{@const reader = selectedReader}
 			<MasterDetail.Header title={m.admin_readers_detail()} />
 
 			<div class="flex min-h-0 flex-1 flex-col">
-				<!-- 用户信息概览 -->
+				<!-- User info overview -->
 				<div class="flex items-center gap-3 border-b px-4 py-3">
 					<img
 						alt=""
@@ -204,7 +204,7 @@
 
 				<div class="min-h-0 flex-1 overflow-auto p-4">
 					<div class="flex flex-col gap-6">
-						<!-- 身份信息 -->
+						<!-- Identity info -->
 						<section class="flex flex-col gap-3">
 							<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
 								{m.admin_readers_section_identity()}
@@ -254,7 +254,7 @@
 							</div>
 						</section>
 
-						<!-- 活动信息 -->
+						<!-- Activity info -->
 						<section class="flex flex-col gap-3">
 							<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
 								{m.admin_readers_section_activity()}
@@ -283,7 +283,7 @@
 					</div>
 				</div>
 
-				<!-- 底部操作栏 -->
+				<!-- Bottom action bar -->
 				<div class="flex flex-wrap items-center gap-2 border-t px-4 py-3">
 					<Button variant="outline" size="sm" disabled={reader.role === 'owner'}>
 						<IconUserStar class="size-4" />

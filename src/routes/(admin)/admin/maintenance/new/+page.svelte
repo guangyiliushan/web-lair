@@ -27,7 +27,7 @@
 	// (kept for parity with the [name] page). The optimistic-lock token
 	// advances only when the response belongs to the name currently in the
 	// input: a rename while the POST is in flight must not adopt the old
-	// target's hash (J-3 复核 v2 #4).
+	// target's hash (J-3 review v2 #4).
 	const enhanceKeepBuffer: SubmitFunction =
 		({ formData }) =>
 		async ({ result }) => {

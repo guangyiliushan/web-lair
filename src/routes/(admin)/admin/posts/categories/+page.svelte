@@ -186,7 +186,7 @@
 <!-- Desktop: MasterDetail -->
 <div class="hidden min-h-0 flex-1 sm:flex">
 	<MasterDetail.Root class="h-[calc(100vh-10rem)]">
-		<!-- 侧边栏：分类列表 -->
+		<!-- Sidebar: category list -->
 		<MasterDetail.Pane side="master" class="w-80 shrink-0">
 			<MasterDetail.Header
 				icon={IconFolder}
@@ -233,7 +233,7 @@
 			</MasterDetail.List>
 		</MasterDetail.Pane>
 
-		<!-- 主面板：分类详情 -->
+		<!-- Main panel: category details -->
 		<MasterDetail.Pane side="detail">
 			{#if selectedCategory}
 				<MasterDetail.Header title={m.admin_categories_detail()}>
@@ -305,7 +305,7 @@
 	</MasterDetail.Root>
 </div>
 
-<!-- 新建/编辑分类对话框 -->
+<!-- New / edit category dialog -->
 <Dialog.Root bind:open={dialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>

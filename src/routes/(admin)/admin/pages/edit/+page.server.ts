@@ -15,7 +15,7 @@ const LOCALES = ['en', 'zh-cn', 'ja'] as const;
 
 /**
  * Pages metadata editor (P2): title / description jsonb (three locales),
- * icon, external_url and slug. Body editing (and "新增") belongs to P5's md
+ * icon, external_url and slug. Body editing (and "New") belongs to P5's md
  * editor; default rows keep a read-only slug (db:ensure-pages anchors on the
  * slug) and code rows show a route-sync warning for slug changes.
  */

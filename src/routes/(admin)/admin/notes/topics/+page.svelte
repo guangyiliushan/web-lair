@@ -228,7 +228,7 @@
 <!-- Desktop: MasterDetail -->
 <div class="hidden min-h-0 flex-1 sm:flex">
 	<MasterDetail.Root>
-		<!-- ===== 左侧：专栏列表 ===== -->
+		<!-- ===== Left: topic list ===== -->
 		<MasterDetail.Pane side="master" class="flex-1 lg:max-w-[340px] xl:max-w-[380px]">
 			<MasterDetail.Header
 				icon={IconHash}
@@ -282,7 +282,7 @@
 			</MasterDetail.List>
 		</MasterDetail.Pane>
 
-		<!-- ===== 右侧：专栏详情 ===== -->
+		<!-- ===== Right: topic details ===== -->
 		<MasterDetail.Pane side="detail" class="bg-surface-card hidden lg:flex">
 			{#if selectedTopic}
 				{@const topic = selectedTopic}
@@ -381,7 +381,7 @@
 	</MasterDetail.Root>
 </div>
 
-<!-- 新建/编辑专栏对话框 -->
+<!-- New / edit topic dialog -->
 <Dialog.Root bind:open={dialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>

@@ -87,7 +87,7 @@
 		</div>
 	{/if}
 
-	<!-- ① 脚本（含调度 inline） -->
+	<!-- ① Scripts (with inline schedules) -->
 	<section>
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="text-sm font-semibold">{m.admin_maintenance_scripts()}</h2>
@@ -252,7 +252,7 @@
 		</div>
 	</section>
 
-	<!-- ② 运行台账 -->
+	<!-- ② Run ledger -->
 	<section>
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="text-sm font-semibold">{m.admin_maintenance_ledger()}</h2>
@@ -404,7 +404,7 @@
 		{/if}
 	</section>
 
-	<!-- ③ 审计 -->
+	<!-- ③ Audit -->
 	<section>
 		<h2 class="mb-4 text-sm font-semibold">{m.admin_maintenance_audit()}</h2>
 		{#if data.activities.length === 0}

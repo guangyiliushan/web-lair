@@ -13,7 +13,7 @@ import { m } from '$lib/paraglide/messages';
 
 /**
  * /admin/maintenance/new (J-3): create a user-only job - the missing half of
- * "自由增删改" (the editor page handles existing names; a fresh name has no
+ * "free create / delete / edit" (the editor page handles existing names; a fresh name has no
  * file, so saving here is exactly the `baseHash: null` creation path). The
  * save gate validates the name (alias/device/length rules); on success both
  * actions redirect - plain save lands on the [name] page, save-and-run lands

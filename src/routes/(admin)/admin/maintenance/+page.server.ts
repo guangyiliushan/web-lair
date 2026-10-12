@@ -27,7 +27,7 @@ import { m } from '$lib/paraglide/messages';
  * /admin/maintenance (J-3, plan §5.7): the jobs platform surface. Loads the
  * three regions - scripts (registry ∪ user layer), the run ledger, and the
  * job/schedule audit trail - plus the latest jobs.typecheck summary. Actions
- * cover manual runs ("立即执行" / "运行类型检查") and the schedule CRUD; the
+ * cover manual runs ("Run now" / "Run type check") and the schedule CRUD; the
  * editor/fork/revert/save actions live on the [name] route (§5.6 lazy import).
  */
 
@@ -143,7 +143,7 @@ export const load: PageServerLoad = async ({ url }) => {
 };
 
 export const actions: Actions = {
-	/** 手动排队一次（plan §4.4，试运行同路径；唯一索引去重）。 */
+	/** Queue one manual run (plan §4.4; a try-a-run uses the same path; unique index dedupes). */
 	run: async ({ request, locals }) => {
 		await requireAdminRole();
 		const form = await request.formData();
@@ -173,7 +173,7 @@ export const actions: Actions = {
 		return { queued: true, name, deduplicated: queued.deduplicated };
 	},
 
-	/** 运行类型检查（enqueue `jobs.typecheck`）。 */
+	/** Run the type check (enqueues `jobs.typecheck`). */
 	typecheck: async ({ locals }) => {
 		await requireAdminRole();
 		let queued;

@@ -30,7 +30,7 @@
 	// Double-submit guard (C3 review): kit does not merge submissions.
 	let submitting = $state(false);
 
-	// Dashboard 撰写 deep link: /admin/quotes?add=1 opens the dialog once.
+	// Dashboard write deep link: /admin/quotes?add=1 opens the dialog once.
 	let addConsumed = false;
 	$effect(() => {
 		if (!addConsumed && page.url.searchParams.get('add') === '1') {
@@ -123,7 +123,7 @@
 		</div>
 	</header>
 
-	<!-- 添加 / 编辑摘录对话框 -->
+	<!-- Add / edit quote dialog -->
 	<Dialog.Root bind:open={dialogOpen}>
 		<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>
 			<form
@@ -213,7 +213,7 @@
 		onclose={() => (deleteTarget = null)}
 	/>
 
-	<!-- 摘录列表（流式加载：先骨架后内容，ui-ux C1） -->
+	<!-- Quote list (streamed loading: skeleton first, then content, ui-ux C1) -->
 	<div class="min-h-0 flex-1 overflow-auto">
 		{#await data.rows}
 			<div class="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-6" aria-hidden="true">

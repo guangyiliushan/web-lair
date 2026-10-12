@@ -87,7 +87,7 @@
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
-	<!-- 页面头部 -->
+	<!-- Page header -->
 	<header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
 		<div class="flex min-w-0 items-center gap-2">
 			<h2 class="inline-flex items-center gap-2 text-lg font-semibold">
@@ -114,7 +114,7 @@
 		</div>
 	</header>
 
-	<!-- 状态标签栏 -->
+	<!-- State tabs bar -->
 	<div class="shrink-0 border-b px-4 py-2">
 		<div class="inline-flex flex-wrap gap-1 rounded-sm border bg-background p-1">
 			{#each states as state (state)}
@@ -139,7 +139,7 @@
 		</div>
 	</div>
 
-	<!-- 数据表格 -->
+	<!-- Data table -->
 	<div class="min-h-0 flex-1 overflow-auto">
 		<Table.Root>
 			<Table.Header class="sticky top-0 z-10 bg-muted/50">
@@ -159,7 +159,7 @@
 				{:else}
 					{#each friends as friend (friend.id)}
 						<Table.Row class="align-top">
-							<!-- 名称 -->
+							<!-- Name -->
 							<Table.Cell>
 								<div class="flex items-center gap-3">
 									<div
@@ -178,11 +178,11 @@
 									</a>
 								</div>
 							</Table.Cell>
-							<!-- 描述 -->
+							<!-- Description -->
 							<Table.Cell class="max-w-[18rem] text-muted-foreground">
 								<span class="line-clamp-2">{friend.description}</span>
 							</Table.Cell>
-							<!-- 网址 -->
+							<!-- URL -->
 							<Table.Cell class="max-w-[18rem]">
 								<a
 									class="truncate text-muted-foreground hover:underline"
@@ -193,17 +193,17 @@
 									{friend.url}
 								</a>
 							</Table.Cell>
-							<!-- 类型 -->
+							<!-- Type -->
 							<Table.Cell class="text-muted-foreground">{friend.type}</Table.Cell>
-							<!-- 邮箱 -->
+							<!-- Email -->
 							<Table.Cell>
 								<span class="text-muted-foreground/70">{friend.email}</span>
 							</Table.Cell>
-							<!-- 创建时间 -->
+							<!-- Created -->
 							<Table.Cell class="whitespace-nowrap text-muted-foreground"
 								>{friend.createdAt}</Table.Cell
 							>
-							<!-- 操作 -->
+							<!-- Actions -->
 							<Table.Cell class="text-right">
 								<div class="flex justify-end gap-1">
 									<Button variant="outline" size="sm" class="h-8 gap-1 px-2 text-xs">
@@ -228,7 +228,7 @@
 	</div>
 </div>
 
-<!-- 新增友链对话框 -->
+<!-- Add friend dialog -->
 <Dialog.Root bind:open={addDialogOpen}>
 	<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>
 		<form

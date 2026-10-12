@@ -130,11 +130,11 @@
 		const blockRect = element.getBoundingClientRect();
 		const rootRect = rootElement.getBoundingClientRect();
 
-		// 使用 page-relative 坐标（加上 scroll 偏移）
+		// Use page-relative coordinates (add scroll offsets)
 		top = blockRect.top + window.scrollY;
 		left = rootRect.left + window.scrollX - HANDLE_OFFSET;
 
-		// 读取 nodeKey
+		// Read the nodeKey
 		editor.read(() => {
 			const node = getLexicalNearestNodeFromDOM(element);
 			nodeKey = node?.getKey() ?? null;

@@ -22,9 +22,9 @@ import { m } from '$lib/paraglide/messages';
  * CodeMirror mounts client-side behind a route-level dynamic import, saves
  * ride the J-2 optimistic lock (`baseHash` = the hash the editor loaded,
  * `bundle.user?.hash ?? null` - see the saveScript JSDoc), and the fork
- * lifecycle (首次保存即创建副本 / 恢复内置 / 忽略更新 / 硬删) hangs off the
+ * lifecycle (first save forks / restore built-in / ignore update / hard delete) hangs off the
  * same page. The editor NEVER auto-adopts a server value after an action:
- * conflict/reload is an explicit choice ("载入服务端最新"), mirroring the
+ * conflict/reload is an explicit choice ("Load latest from server"), mirroring the
  * drafts 409 precedent.
  */
 
@@ -69,7 +69,7 @@ export const actions: Actions = {
 		return { saved: true, hash: result.hash, created: result.created, forked: result.forked };
 	},
 
-	/** 保存并试运行 (plan §4.4): save, then queue one manual run. */
+	/** Save & try a run (plan §4.4): save, then queue one manual run. */
 	saveRun: async ({ request, params, locals }) => {
 		await requireAdminRole();
 		const dataDir = resolveDataDir();
@@ -123,7 +123,7 @@ export const actions: Actions = {
 				via: 'save-and-run'
 			}
 		});
-		// 跳台账 (plan §4.4): the fresh queued row in the ledger is the feedback.
+		// Jump to the ledger (plan §4.4): the fresh queued row in the ledger is the feedback.
 		redirect(303, '/admin/maintenance');
 	},
 

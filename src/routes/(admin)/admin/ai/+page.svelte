@@ -126,7 +126,7 @@
 			</Tabs.Trigger>
 		</Tabs.List>
 
-		<!-- ── 对话台 ─────────────────────────────────────────────────── -->
+		<!-- ── Conversations ─────────────────────────────────────────────────── -->
 		<Tabs.Content value="conversations" class="min-h-0 flex-1">
 			{#if data.conversations.length === 0}
 				<Empty.Root class="h-full border">
@@ -238,7 +238,7 @@
 			{/if}
 		</Tabs.Content>
 
-		<!-- ── 记忆卡 ─────────────────────────────────────────────────── -->
+		<!-- ── Memory cards ─────────────────────────────────────────────────── -->
 		<Tabs.Content value="memories" class="min-h-0 flex-1 overflow-auto">
 			<div class="flex flex-col gap-4">
 				<header class="flex flex-wrap items-center justify-between gap-3">
@@ -293,7 +293,7 @@
 			</div>
 		</Tabs.Content>
 
-		<!-- ── 用量 ───────────────────────────────────────────────────── -->
+		<!-- ── Usage ───────────────────────────────────────────────────── -->
 		<Tabs.Content value="usage" class="min-h-0 flex-1 overflow-auto">
 			<div class="flex flex-col gap-4">
 				<header>

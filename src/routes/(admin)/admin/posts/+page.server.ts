@@ -22,7 +22,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? Math.min(rawPage, 10_000) : 1;
 
 	// P2: the list reads the real table; a post with a pending drafts row
-	// carries the "有未发布改动" badge.
+	// carries the "Unpublished changes" badge.
 	const conditions = [];
 	if ((STATUSES as readonly string[]).includes(statusRaw)) {
 		conditions.push(eq(posts.status, statusRaw));

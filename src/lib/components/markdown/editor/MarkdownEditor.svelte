@@ -15,7 +15,7 @@
 	import TableCellMenu from '$lib/components/markdown/toolbar/TableCellMenu.svelte';
 	import LinkHoverEditor from '$lib/components/markdown/toolbar/LinkHoverEditor.svelte';
 
-	// Lexical 编辑器全局样式（由 PostCSS 处理 @apply / Tailwind 指令）
+	// Global styles for the Lexical editor (PostCSS processes the @apply / Tailwind directives)
 	import '$lib/components/markdown/editor/lexical-editor.css';
 
 	import { $convertToMarkdownString as convertToMarkdown } from '@lexical/markdown';
@@ -55,7 +55,7 @@
 	/** Code-mode edits handed to the rebuilt editor after leaving code mode. */
 	let pendingMarkdown = $state<string | null>(null);
 
-	// ── 代码模式行号 gutter ──
+	// ── Code-mode line-number gutter ──
 	const lineNumbers = $derived(
 		Array.from({ length: codeModeText.split('\n').length }, (_, i) => i + 1)
 	);
@@ -72,7 +72,7 @@
 	let blockHandleApp: ReturnType<typeof mount> | null = null;
 
 	$effect(() => {
-		// 当 editor 就绪且 editable 时挂载 block handle
+		// Mount the block handle when the editor is ready and editable
 		if (editor && editable) {
 			blockHandleApp = mount(BlockHandleToolbar, {
 				target: document.body,
@@ -98,10 +98,10 @@
 		onChange?.(detail);
 	}
 
-	// 代码模式 → 切换回富文本时，将编辑后的 markdown 同步回 Lexical
+	// Code mode → rich text: sync the edited markdown back into Lexical
 	function toggleCodeMode() {
 		if (!codeMode) {
-			// 进入代码模式：从 Lexical 导出 markdown（保留标题/列表/Tag/Alert 等格式）
+			// Entering code mode: export the markdown from Lexical (preserves heading/list/Tag/Alert formatting)
 			editor?.getEditorState().read(() => {
 				codeModeText = convertToMarkdown(EDITOR_TRANSFORMERS);
 			});
@@ -113,7 +113,7 @@
 		codeMode = !codeMode;
 	}
 
-	// 代码模式下手动输入时同步 onChange
+	// Sync onChange while typing manually in code mode
 	function onCodeModeInput(e: Event) {
 		const target = e.currentTarget as HTMLTextAreaElement;
 		codeModeText = target.value;
@@ -125,7 +125,7 @@
 		});
 	}
 
-	// ── 数学编辑（批 B）：点击公式打开编辑对话框 ──
+	// ── Math editing (batch B): clicking a formula opens the edit dialog ──
 	let mathDialogOpen = $state(false);
 	let mathNodeKey = $state<string | null>(null);
 	let mathLatex = $state('');
@@ -167,20 +167,20 @@
 			<CodeModeToggle {codeMode} onToggle={toggleCodeMode} />
 		</div>
 
-		<!-- 浮动格式工具栏：选中文本时出现 -->
+		<!-- Floating format toolbar: appears when text is selected -->
 		<FloatingFormatToolbar {editor} />
 
-		<!-- 浮动表格菜单：光标进入表格单元格时出现 -->
+		<!-- Floating table menu: appears when the cursor enters a table cell -->
 		<TableCellMenu {editor} />
 
-		<!-- 链接原位编辑浮层：光标落入链接内时出现 -->
+		<!-- In-place link editor overlay: appears when the cursor lands inside a link -->
 		<LinkHoverEditor {editor} />
 	{/if}
 
 	<!-- Editor area -->
 	<div class="min-h-0 flex-1">
 		{#if codeMode}
-			<!-- 代码模式：纯文本编辑（无框视觉 + 行号 gutter，随内容自动增高，由页面统一滚动） -->
+			<!-- Code mode: plain-text editing (borderless look + line-number gutter, auto-grows with content, the page is the only scroll container) -->
 			<div
 				class={cn(
 					'flex min-h-48 w-full overflow-hidden',
@@ -206,7 +206,7 @@
 				></textarea>
 			</div>
 		{:else}
-			<!-- 富文本模式：Lexical 编辑器 -->
+			<!-- Rich-text mode: the Lexical editor -->
 			<div
 				use:lexicalEditor={{
 					initialMarkdown: pendingMarkdown ?? value ?? initialMarkdown,

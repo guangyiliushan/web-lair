@@ -10,7 +10,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Admin 摘录 CRUD (C3): real rows from `quotes` (content required; author /
+ * Admin quotes CRUD (C3): real rows from `quotes` (content required; author /
  * source optional). The load and every action follow the P2 contract -
  * requireAdminRole first, uuid entry guard, explicit 400s; unknown ids answer
  * 404 through the `returning` probe. The list itself streams as a deferred

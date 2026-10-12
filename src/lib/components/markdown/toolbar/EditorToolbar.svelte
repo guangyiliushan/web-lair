@@ -31,7 +31,7 @@
 	import ImageInsertDialog from './ImageInsertDialog.svelte';
 	import CodeBlockInsertDialog from './CodeBlockInsertDialog.svelte';
 
-	// ── 图标 ──
+	// ── Icons ──
 	import IconH1 from '@tabler/icons-svelte-runes/icons/h-1';
 	import IconH2 from '@tabler/icons-svelte-runes/icons/h-2';
 	import IconH3 from '@tabler/icons-svelte-runes/icons/h-3';
@@ -70,7 +70,7 @@
 	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
 	import IconArticle from '@tabler/icons-svelte-runes/icons/article';
 
-	// ── 类型 ──
+	// ── Types ──
 	type BlockType = 'paragraph' | 'h1' | 'h2' | 'h3' | 'bullet' | 'number' | 'check' | 'quote';
 
 	interface BlockOption {
@@ -79,7 +79,7 @@
 		icon: typeof IconArticle;
 	}
 
-	/** 断点级别: 0=mobile, 1=sm(~420px), 2=md(~650px), 3=lg(~900px), 4=xl(~950px) */
+	/** Breakpoint level: 0=mobile, 1=sm(~420px), 2=md(~650px), 3=lg(~900px), 4=xl(~950px) */
 	type BpLevel = 0 | 1 | 2 | 3 | 4;
 
 	const BLOCK_OPTIONS: BlockOption[] = [
@@ -97,13 +97,13 @@
 
 	let { editor, class: className }: Props = $props();
 
-	// ── 基于 toolbar wrapper 实际宽度的断点阈值（确保零内部溢出）──
+	// ── Breakpoint thresholds based on the toolbar wrapper's actual width (ensures zero internal overflow) ──
 	const BP_THRESHOLDS = { xl: 950, lg: 900, md: 650, sm: 420 } as const;
 
-	// SSR fallback：用视口宽度做初始估算，避免 hydration 闪烁
+	// SSR fallback: use the viewport width for the initial estimate to avoid hydration flicker
 	let viewportWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
 
-	// ResizeObserver 测量 toolbar 自身根元素的实际渲染宽度
+	// ResizeObserver measures the actual rendered width of the toolbar's own root element
 	let wrapperEl = $state<HTMLElement | null>(null);
 	let wrapperWidth = $state(0);
 
@@ -116,7 +116,7 @@
 		return () => ro.disconnect();
 	});
 
-	// wrapperWidth > 0 表示已完成首次实测；未完成时用 viewportWidth fallback
+	// wrapperWidth > 0 means the first real measurement is done; until then use the viewportWidth fallback
 	const effectiveWidth = $derived(wrapperWidth > 0 ? wrapperWidth : viewportWidth);
 
 	let bp: BpLevel = $derived.by(() => {
@@ -128,7 +128,7 @@
 		return 0;
 	});
 
-	// ── 工具栏状态 ──
+	// ── Toolbar state ──
 	let toolbarState = $state<ToolbarState>(emptyToolbarState());
 
 	let debugOpen = $state(false);
@@ -147,7 +147,7 @@
 		return unregister;
 	});
 
-	// ── 通用工具函数 ──
+	// ── Common utility functions ──
 	function dispatchCmd(cmd: AnyLexicalCommand, payload?: unknown) {
 		editor?.dispatchCommand(cmd, payload);
 	}
@@ -196,8 +196,8 @@
 
 	function handleInsertLink() {
 		if (!editor) return;
-		// 原位编辑浮层接管(window.prompt 在内嵌浏览器/自动化环境不可用,
-		// 且打断编辑上下文);选区语义由 LinkHoverEditor 内部处理。
+		// The in-place editing overlay takes over (window.prompt is unavailable in embedded browsers/automation environments,
+		// and it interrupts the editing context); selection semantics are handled inside LinkHoverEditor.
 		openLinkEditor();
 	}
 
@@ -233,19 +233,19 @@
 		insertMath(editor, latex.trim() || 'E=mc^2');
 	}
 
-	// 当前激活的块选项
+	// The currently active block option
 	let activeBlock = $derived(
 		BLOCK_OPTIONS.find((o) => o.type === toolbarState.blockType) ?? BLOCK_OPTIONS[0]
 	);
 
-	// ── 溢出菜单定义 ──
+	// ── Overflow menu definition ──
 	interface OverflowItemDef {
 		id: string;
 		label: string;
 		icon: typeof IconArticle;
 		shortcut?: string;
 		action: () => void;
-		/** 工具栏可见的最低断点；bp < minBp 时进溢出菜单，99 = 永远溢出 */
+		/** Lowest breakpoint at which the toolbar shows this item; enters the overflow menu when bp < minBp, 99 = always overflow */
 		minBp: BpLevel | 99;
 		disabled?: () => boolean;
 	}
@@ -435,7 +435,7 @@
 
 	let overflowNotEmpty = $derived(overflowGroups.length > 0);
 
-	// 移动端隐藏分隔符
+	// Hide separators on mobile
 	let sepClass = $derived(cn(bp < 1 && 'hidden'));
 	let ActiveBlockIcon = $derived(activeBlock.icon);
 </script>
@@ -449,7 +449,7 @@
 	role="toolbar"
 	aria-label={m.toolbar_editor()}
 >
-	<!-- ═══════════ 块类型下拉 (Tier 0) ═══════════ -->
+	<!-- ═══════════ Block type dropdown (Tier 0) ═══════════ -->
 	<DropdownMenu.Root>
 		<DropdownMenu.Trigger>
 			{#snippet child({ props })}
@@ -479,7 +479,7 @@
 		</DropdownMenu.Content>
 	</DropdownMenu.Root>
 
-	<!-- ═══════════ 撤销/重做 (Tier 1: sm+) ═══════════ -->
+	<!-- ═══════════ Undo/redo (Tier 1: sm+) ═══════════ -->
 	{#if bp >= 1}
 		<Separator orientation="vertical" decorative class={sepClass} />
 		<Button
@@ -504,7 +504,7 @@
 		</Button>
 	{/if}
 
-	<!-- ═══════════ 文本格式：B / I / U / S / Code (Tier 0/1/2) ═══════════ -->
+	<!-- ═══════════ Text formats: B / I / U / S / Code (Tier 0/1/2) ═══════════ -->
 	<Separator orientation="vertical" decorative class={sepClass} />
 
 	<Button
@@ -569,7 +569,7 @@
 		</Button>
 	{/if}
 
-	<!-- ═══════════ 高亮 (Tier 3: lg+) ═══════════ -->
+	<!-- ═══════════ Highlight (Tier 3: lg+) ═══════════ -->
 	{#if bp >= 3}
 		<Button
 			variant={toolbarState.isHighlight ? 'secondary' : 'ghost'}
@@ -584,7 +584,7 @@
 		</Button>
 	{/if}
 
-	<!-- ═══════════ 剧透 (Tier 3: lg+) ═══════════ -->
+	<!-- ═══════════ Spoiler (Tier 3: lg+) ═══════════ -->
 	{#if bp >= 3}
 		<Button
 			variant={toolbarState.isSpoiler ? 'secondary' : 'ghost'}
@@ -599,7 +599,7 @@
 		</Button>
 	{/if}
 
-	<!-- ═══════════ 链接 / 图片 (Tier 0) ═══════════ -->
+	<!-- ═══════════ Link / image (Tier 0) ═══════════ -->
 	<Separator orientation="vertical" decorative class={sepClass} />
 
 	<Button
@@ -624,7 +624,7 @@
 		<IconPhoto data-icon="inline-start" />
 	</Button>
 
-	<!-- ═══════════ 列表（互斥）(Tier 1: sm+) ═══════════ -->
+	<!-- ═══════════ Lists (mutually exclusive) (Tier 1: sm+) ═══════════ -->
 	{#if bp >= 1}
 		<Separator orientation="vertical" decorative class={sepClass} />
 
@@ -662,7 +662,7 @@
 		</Button>
 	{/if}
 
-	<!-- ═══════════ 引用 / 分割线 / 表格 (Tier 2: md+) ═══════════ -->
+	<!-- ═══════════ Blockquote / divider / table (Tier 2: md+) ═══════════ -->
 	{#if bp >= 2}
 		<Separator orientation="vertical" decorative class={sepClass} />
 
@@ -699,7 +699,7 @@
 		</Button>
 	{/if}
 
-	<!-- ═══════════ 代码块 / Callout / Tag (Tier 3: lg+) ═══════════ -->
+	<!-- ═══════════ Code block / Callout / Tag (Tier 3: lg+) ═══════════ -->
 	{#if bp >= 3}
 		<Button
 			variant="ghost"
@@ -753,7 +753,7 @@
 
 	<div class="flex-1"></div>
 
-	<!-- ═══════════ 溢出菜单（动态内容）═══════════ -->
+	<!-- ═══════════ Overflow menu (dynamic content) ═══════════ -->
 	{#if overflowNotEmpty}
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
@@ -798,7 +798,7 @@
 		</DropdownMenu.Root>
 	{/if}
 
-	<!-- ═══════════ 调试（始终最右）═══════════ -->
+	<!-- ═══════════ Debug (always far right) ═══════════ -->
 	<Button
 		variant="ghost"
 		size="icon-sm"

@@ -128,7 +128,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 export const actions: Actions = {
 	/**
-	 * Autosave (`autosave=1`) and the manual "保存草稿" share this action;
+	 * Autosave (`autosave=1`) and the manual "Save draft" share this action;
 	 * conflicts answer 409 so the client refuses to overwrite (§9.10).
 	 */
 	save: async ({ request, locals }) => {
@@ -263,7 +263,7 @@ export const actions: Actions = {
 		throw redirect(303, '/admin/notes?discarded=1');
 	},
 
-	/** Row-level status actions: 转 private / 入 trash / trash 恢复. */
+	/** Row-level status actions: move to private / move to trash / restore from trash. */
 	status: async ({ request }) => {
 		await requireAdminRole();
 		const form = await request.formData();

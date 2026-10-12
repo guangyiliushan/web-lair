@@ -132,7 +132,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 export const actions: Actions = {
 	/**
-	 * Autosave (`autosave=1`) and the manual "保存草稿" share this action.
+	 * Autosave (`autosave=1`) and the manual "Save draft" share this action.
 	 * Returns `{ saved }` payloads; conflicts answer 409 so the client can
 	 * refuse to overwrite (§9.10).
 	 */

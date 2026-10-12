@@ -15,7 +15,7 @@
 	 * Script editor page (J-3, plan §5.6): CodeMirror behind a route-level
 	 * dynamic import; the local `code`/`baseHash` pair is the optimistic-lock
 	 * state and is NEVER auto-adopted from load data - after a 409 the user
-	 * explicitly chooses "载入服务端最新" (drafts precedent). Mod-S submits the
+	 * explicitly chooses "Load latest from server" (drafts precedent). Mod-S submits the
 	 * save form.
 	 */
 
@@ -29,10 +29,10 @@
 	// data flips (created, or `forked` - which reports "builtin-backed" and
 	// therefore re-flips on EVERY save of such a script), refresh it FIRST
 	// and re-apply the action afterwards: invalidateAll clears `page.form`
-	// (sveltejs/kit#13825), so applying before it would wipe the 已保存 flash
-	// (J-3 复核 v2 #1). `pristine` is the SUBMITTED snapshot, not the live
+	// (sveltejs/kit#13825), so applying before it would wipe the saved flash
+	// (J-3 review v2 #1). `pristine` is the SUBMITTED snapshot, not the live
 	// buffer: edits typed while the POST is in flight are not saved and must
-	// keep the unsaved-changes guard armed (J-3 复核 v2 #2).
+	// keep the unsaved-changes guard armed (J-3 review v2 #2).
 	const enhanceKeepBuffer: SubmitFunction =
 		({ formData }) =>
 		async ({ result }) => {
@@ -104,8 +104,8 @@
 	// a save-and-run whose enqueue half failed (`hash` rides the fail payload;
 	// retrying against a stale token would fake a 409, J-3 review P3-R2-2).
 	// `pristine` advances in the submit callback from the SUBMITTED snapshot
-	// (复核 v2 #2); `reverted` rewrites both the buffer and the token: after
-	// 恢复内置 the user file is gone, so the old hash can never match again
+	// (review v2 #2); `reverted` rewrites both the buffer and the token: after
+	// a restore to built-in, the user file is gone, so the old hash can never match again
 	// (review F1).
 	$effect(() => {
 		if (typeof form?.hash === 'string') {

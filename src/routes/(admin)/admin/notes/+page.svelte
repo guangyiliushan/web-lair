@@ -119,7 +119,7 @@
 			{flash}
 		</div>
 	{/if}
-	<!-- 搜索和筛选工具栏 -->
+	<!-- Search and filter toolbar -->
 	<div class="relative flex h-10 shrink-0 items-center border-b">
 		<form
 			class="relative flex h-full min-w-0 flex-1 items-center self-stretch"
@@ -212,16 +212,16 @@
 				</DropdownMenu.Group>
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
-		<!-- 操作列占位 — 与表格 w-20 对齐 -->
+		<!-- Actions column placeholder — aligns with the table's w-20 -->
 		<div class="w-20"></div>
-		<!-- 分隔符和刷新按钮：绝对定位，不参与 flex 布局 -->
+		<!-- Separator and refresh button: absolutely positioned, outside the flex layout -->
 		<div class="absolute top-0 right-0 flex h-full items-center pr-2">
 			<Separator orientation="vertical" class="h-3.5" />
 			<RefreshButton onclick={() => invalidateAll()} />
 		</div>
 	</div>
 
-	<!-- 手记列表 -->
+	<!-- Notes list -->
 	{#if data.notes.length === 0}
 		<Empty class="py-12">
 			<div class="flex flex-col items-center gap-1">
@@ -275,7 +275,7 @@
 											/>
 										{/if}
 									</div>
-									<!-- 紧凑模式元信息行：lg 以下显示 -->
+									<!-- Compact-mode meta row: shown below lg -->
 									<div
 										class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground sm:gap-x-3 xl:hidden"
 									>
@@ -362,7 +362,7 @@
 									>
 										<IconPencil class="size-4" />
 									</Button>
-									<!-- 桌面/平板：三点菜单 -->
+									<!-- Desktop/tablet: three-dot menu -->
 									<span class="hidden sm:contents">
 										<DropdownMenu.Root>
 											<DropdownMenu.Trigger>
@@ -401,7 +401,7 @@
 			</Table.Root>
 		</div>
 
-		<!-- 分页 -->
+		<!-- Pagination -->
 		<div class="flex items-center justify-between text-xs text-muted-foreground">
 			<span>
 				{m.admin_notes_total({ count: data.totalCount })}{data.totalCount > 0

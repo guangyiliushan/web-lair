@@ -28,7 +28,7 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// 实时数据
+	// Realtime data
 	const realtimeStats = [
 		{
 			label: m.admin_dashboard_realtime_online(),
@@ -53,7 +53,7 @@
 		}
 	];
 
-	// 快速操作（计数真化：C3；微记三卡的「撰写」深链 ?add=1 自动打开添加对话框）
+	// Quick actions (counts made real: C3; the "Write" deep links on the three micro-content cards auto-open the add dialog via ?add=1)
 	const quickActions = $derived([
 		{
 			title: m.admin_nav_posts(),
@@ -92,7 +92,7 @@
 		}
 	]);
 
-	// 数据统计
+	// Data statistics
 	const dataStats = [
 		{ label: m.admin_dashboard_stat_pages(), value: 10, icon: IconFiles },
 		{ label: m.admin_dashboard_stat_categories(), value: 7, icon: IconChartBar },
@@ -118,7 +118,7 @@
 </script>
 
 <div class="flex flex-col gap-6">
-	<!-- 欢迎标题 -->
+	<!-- Welcome heading -->
 	<div class="flex items-center justify-between">
 		<div>
 			<h1 class="text-2xl font-bold tracking-tight">{m.admin_dashboard_welcome()}</h1>
@@ -134,7 +134,7 @@
 		</Button>
 	</div>
 
-	<!-- 实时数据 -->
+	<!-- Realtime data -->
 	<section class="flex flex-col gap-2 sm:gap-3">
 		<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
 			{m.admin_dashboard_section_realtime()}
@@ -158,7 +158,7 @@
 		</div>
 	</section>
 
-	<!-- 快速操作 -->
+	<!-- Quick actions -->
 	<section class="flex flex-col gap-2 sm:gap-3">
 		<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
 			{m.admin_dashboard_section_quick()}
@@ -204,7 +204,7 @@
 		</div>
 	</section>
 
-	<!-- 数据统计 -->
+	<!-- Data statistics -->
 	<section class="flex flex-col gap-2 sm:gap-3">
 		<div class="flex items-center justify-between">
 			<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
@@ -244,13 +244,13 @@
 
 	<Separator />
 
-	<!-- ## 数据洞察 -->
+	<!-- ## Data insights -->
 	<section class="flex flex-col gap-2 sm:gap-3">
 		<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
 			{m.admin_dashboard_section_insights()}
 		</h2>
 
-		<!-- 发布趋势 + 分类分布 -->
+		<!-- Publishing trend + category split -->
 		<div class="mt-6 grid gap-4 xl:grid-cols-2">
 			<ChartPanel
 				title={m.admin_dashboard_chart_publish_title()}
@@ -266,7 +266,7 @@
 			/>
 		</div>
 
-		<!-- 评论活动 + 流量来源 -->
+		<!-- Comment activity + traffic sources -->
 		<div class="grid gap-4 xl:grid-cols-2">
 			<ChartPanel
 				title={m.admin_dashboard_chart_comments_title()}
@@ -275,7 +275,7 @@
 				empty={true}
 			/>
 
-			<!-- 流量来源 -->
+			<!-- Traffic sources -->
 			<Card.Root>
 				<Card.Header>
 					<div class="flex items-center gap-2">
@@ -307,7 +307,7 @@
 			</Card.Root>
 		</div>
 
-		<!-- 热门文章 + 标签云 -->
+		<!-- Popular posts + tag cloud -->
 		<div class="grid gap-4 xl:grid-cols-2">
 			<ChartPanel
 				title={m.admin_dashboard_chart_hot_title()}
@@ -326,7 +326,7 @@
 
 	<Separator />
 
-	<!-- ## 系统操作 -->
+	<!-- ## System operations -->
 	<section class="flex flex-col gap-2 sm:gap-3">
 		<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
 			{m.admin_dashboard_section_system()}
@@ -383,6 +383,6 @@
 
 	<Separator />
 
-	<!-- ## 账号登录信息 -->
+	<!-- ## Account login info -->
 	<LoginStat lastLoginTime="2026/07/06 19:09" lastLoginIp={null} />
 </div>

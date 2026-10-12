@@ -145,7 +145,7 @@
 	{/if}
 </div>
 
-<!-- 丢弃确认（共享一个对话框；表单的 draftId 跟随目标更新） -->
+<!-- Discard confirmation (one shared dialog; the form's draftId follows the target) -->
 <AlertDialog.Root
 	open={discardTarget !== null}
 	onOpenChange={(open) => {

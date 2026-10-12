@@ -146,7 +146,7 @@
 		</Alert.Root>
 	{/if}
 
-	<!-- ── 服务商 ─────────────────────────────────────────────────────── -->
+	<!-- ── Providers ──────────────────────────────────────────────────── -->
 	<section class="flex flex-col gap-4">
 		<header class="flex flex-wrap items-start justify-between gap-3">
 			<div class="min-w-0">
@@ -244,7 +244,7 @@
 
 	<Separator.Root />
 
-	<!-- ── 功能位分配 ─────────────────────────────────────────────────── -->
+	<!-- ── Feature assignments ────────────────────────────────────────── -->
 	<section class="flex flex-col gap-4">
 		<header>
 			<h2 class="text-base font-medium">{m.admin_settings_ai_assignments()}</h2>
@@ -303,7 +303,7 @@
 
 	<Separator.Root />
 
-	<!-- ── 开关与阈值 ─────────────────────────────────────────────────── -->
+	<!-- ── Toggles and thresholds ─────────────────────────────────────── -->
 	<section class="flex flex-col gap-6">
 		<header>
 			<h2 class="text-base font-medium">{m.admin_settings_ai_switches()}</h2>
@@ -318,7 +318,7 @@
 			</Alert.Description>
 		</Alert.Root>
 
-		<!-- 评论分诊 -->
+		<!-- Comment triage -->
 		<form
 			method="post"
 			action="?/saveModeration"
@@ -431,7 +431,7 @@
 			</div>
 		</form>
 
-		<!-- 预算 -->
+		<!-- Budget -->
 		<form
 			method="post"
 			action="?/saveBudget"
@@ -499,7 +499,7 @@
 			</div>
 		</form>
 
-		<!-- 风格指南 -->
+		<!-- Style guide -->
 		<form
 			method="post"
 			action="?/saveStyleGuide"
@@ -531,7 +531,7 @@
 			</div>
 		</form>
 
-		<!-- 翻译门槛 -->
+		<!-- Translation threshold -->
 		<form
 			method="post"
 			action="?/saveTranslation"

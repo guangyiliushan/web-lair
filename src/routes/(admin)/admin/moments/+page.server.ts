@@ -12,7 +12,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Admin 微记 CRUD (C3): content + kind (`life|tech|media|other`, app-validated
+ * Admin moments CRUD (C3): content + kind (`life|tech|media|other`, app-validated
  * with the DB CHECK as backstop) + read-only up/down counters. The load and
  * every action follow the P2 contract; the list streams for the ui-ux C1
  * Skeleton.

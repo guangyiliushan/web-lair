@@ -11,7 +11,7 @@ import { m } from '$lib/paraglide/messages';
 
 /**
  * Pages admin v1 (P2, plan §4): the registry list with ▲/▼ reordering,
- * visible/hidden toggling and confirmed deletion. "新增" stays with P5 (the
+ * visible/hidden toggling and confirmed deletion. "New" stays with P5 (the
  * md editor); `is_default` rows are protected here (no delete) and keep a
  * read-only slug in the editor (db:ensure-pages anchors on the slug).
  */

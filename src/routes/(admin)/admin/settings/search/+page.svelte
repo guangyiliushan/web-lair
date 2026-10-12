@@ -29,7 +29,7 @@
 
 	<div class="min-h-0 flex-1 overflow-auto">
 		<div class="space-y-8 p-6">
-			<!-- Baidu 推送 -->
+			<!-- Baidu push -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_search_baidu()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
@@ -70,7 +70,7 @@
 				</div>
 			</section>
 
-			<!-- Bing 推送 -->
+			<!-- Bing push -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_search_bing()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">

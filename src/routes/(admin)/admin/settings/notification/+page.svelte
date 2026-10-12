@@ -12,7 +12,7 @@
 	let { data }: PageProps = $props();
 	let s = $derived(data.settings);
 
-	// Webhooks 区块（J-3）：重投动作结果随 page.form 回显。
+	// Webhooks section (J-3): the re-queue action result is echoed back via page.form.
 	const form = $derived(
 		page.form as { status?: number; message?: string; retried?: boolean } | null | undefined
 	);
@@ -59,7 +59,7 @@
 
 	<div class="min-h-0 flex-1 overflow-auto">
 		<div class="space-y-8 p-6">
-			<!-- Email 通知 -->
+			<!-- Email notifications -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_email()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
@@ -219,7 +219,7 @@
 				</div>
 			</section>
 
-			<!-- Bark 通知 -->
+			<!-- Bark notifications -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_bark()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
@@ -316,7 +316,7 @@
 				</div>
 			</section>
 
-			<!-- Webhooks（J-3：只读端点列表 + 投递记录 + 重投） -->
+			<!-- Webhooks (J-3: read-only endpoint list + delivery log + re-queue) -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_webhooks()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
