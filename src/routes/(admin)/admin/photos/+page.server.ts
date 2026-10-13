@@ -6,7 +6,12 @@ import { zonedNaiveOf, zonedNaiveToUtc } from '$lib/server/media/exif';
 import { MAX_BATCH_COUNT, MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
-import { uploadFiles, UploadRejected } from '$lib/server/services/files';
+import {
+	UPLOAD_RATE_LIMIT,
+	uploadFiles,
+	uploadRateLimitKey,
+	UploadRejected
+} from '$lib/server/services/files';
 import {
 	PHOTO_LIST_LIMIT,
 	addPhotoTags,
@@ -26,7 +31,6 @@ import { m } from '$lib/paraglide/messages';
  */
 
 const SINCE_DAYS = { '7d': 7, '30d': 30, '90d': 90 } as const;
-const UPLOAD_RATE_LIMIT = { limit: 60, windowSeconds: 10 * 60 };
 const VISIBILITIES = ['all', 'visible', 'hidden'] as const;
 const LOCALES = ['en', 'zh-cn', 'ja'] as const;
 
@@ -100,7 +104,7 @@ export const actions: Actions = {
 		// Same fail-open seatbelt as /admin/files (plan §7).
 		const rate = await rateLimit(
 			getCache(),
-			`limits:upload:${locals.user?.id ?? 'anonymous'}`,
+			uploadRateLimitKey(locals.user?.id),
 			UPLOAD_RATE_LIMIT.limit,
 			UPLOAD_RATE_LIMIT.windowSeconds
 		);

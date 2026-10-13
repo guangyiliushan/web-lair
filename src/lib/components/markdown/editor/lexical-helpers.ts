@@ -159,11 +159,17 @@ export function insertLink(editor: LexicalEditor, url: string) {
  * 插入图片（ImageNode，WYSIWYG）。
  * 编辑器内直接渲染 <img>，保存时由 imageTransformer 导出 ![alt](src)。
  */
-export function insertImage(editor: LexicalEditor, url: string, alt: string = '') {
+export function insertImage(
+	editor: LexicalEditor,
+	url: string,
+	alt: string = '',
+	tailAttrs: string = ''
+) {
 	editor.update(() => {
 		// Same root-level contract as the other block inserts; the utility
-		// appends the caret-carrying paragraph itself.
-		$insertNodeToNearestRoot($createImageNode(url, alt));
+		// appends the caret-carrying paragraph itself. `tailAttrs` is the
+		// raw inner text of `{...}` (spec 2 #7, e.g. `width=480 height=320`).
+		$insertNodeToNearestRoot($createImageNode(url, alt, tailAttrs));
 	});
 }
 

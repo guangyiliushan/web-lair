@@ -216,9 +216,9 @@
 		insertCodeBlock(editor, language);
 	}
 
-	function handleImageInsert(url: string, alt: string) {
+	function handleImageInsert(url: string, alt: string, tailAttrs: string) {
 		if (!editor) return;
-		insertImage(editor, url, alt);
+		insertImage(editor, url, alt, tailAttrs);
 	}
 
 	function handleInsertTable() {

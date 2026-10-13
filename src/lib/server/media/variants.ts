@@ -12,7 +12,8 @@ const MAX_DECODE_PIXELS = 100_000_000;
 
 /** Long-edge boxes for the derived variants (ledger §21 / plan §4.3). */
 const THUMB_BOX = 480;
-const PREVIEW_BOX = 2560;
+/** Exported for the embed-tier drift guard (photo-tile.test.ts). */
+export const PREVIEW_BOX = 2560;
 const THUMB_QUALITY = 80;
 const PREVIEW_QUALITY = 85;
 const FULL_QUALITY = 92;

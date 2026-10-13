@@ -63,6 +63,32 @@ export function photoTileSrc(
 	return `/i/${variantKeyFor(tile.objectKey, variant)}`;
 }
 
+/**
+ * The preview box of the variant pipeline, mirrored here because this module
+ * is browser-importable while the pipeline's home pulls in sharp. A
+ * drift-guard test welds the two values (photo-tile.test.ts imports both).
+ */
+export const EMBED_PREVIEW_LONG_EDGE = 2560;
+
+/**
+ * The body-image URL (Q11, refined by the 3a review round): GIFs and other
+ * pass-through formats travel as their bare key; images embed as `@preview`
+ * when the pipeline produced one (source long edge above the preview box)
+ * and as `@full` otherwise. Below that box `@preview` does not exist, so
+ * this choice IS the object-existence rule - an unconditional `@preview`
+ * 404s for every reader on nearly every screenshot. Embed URLs always carry
+ * a variant suffix; bare non-GIF keys stay admin-only (Q11 constraint).
+ */
+export function photoEmbedSrc(
+	tile: Pick<PhotoTile, 'mimeType' | 'objectKey' | 'width' | 'height'>
+): string {
+	if (tile.mimeType === 'image/gif' || !tile.mimeType.startsWith('image/')) {
+		return `/i/${tile.objectKey}`;
+	}
+	const longEdge = Math.max(tile.width ?? 0, tile.height ?? 0);
+	return `/i/${variantKeyFor(tile.objectKey, longEdge > EMBED_PREVIEW_LONG_EDGE ? 'preview' : 'full')}`;
+}
+
 /** Slim shape for the public map markers (ST-2d). */
 export interface MapPhoto {
 	slug: string;

@@ -312,6 +312,18 @@ export async function uploadFiles(
 // ---------------------------------------------------------------------------
 
 export const FILE_LIST_LIMIT = 200;
+
+/**
+ * Shared upload bucket (plan §7): the admin files page, the gallery page and
+ * the editor uploads endpoint used to carry three hand-synced copies of the
+ * same limit/key - a review-round drift finding.
+ */
+export const UPLOAD_RATE_LIMIT = { limit: 60, windowSeconds: 10 * 60 };
+
+/** Bucket key for the shared upload limit (single spelling). */
+export function uploadRateLimitKey(userId: string | null | undefined): string {
+	return `limits:upload:${userId ?? 'anonymous'}`;
+}
 /** Guard for the text-scanning audit phases (§11: paginate as content grows). */
 const SCAN_LIMIT = 2000;
 
@@ -405,7 +417,7 @@ export async function listFiles(
 		})
 		.from(files)
 		.where(conditions.length > 0 ? and(...conditions) : undefined)
-		.orderBy(orphanOrder ?? desc(files.createdAt))
+		.orderBy(orphanOrder ?? desc(files.createdAt), desc(files.id))
 		.limit(FILE_LIST_LIMIT);
 	return rows.map((row) => ({ ...row, status: row.status as FileStatus }));
 }

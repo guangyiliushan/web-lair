@@ -3,11 +3,13 @@ import { requireAdminRole } from '$lib/server/authz';
 import { isUuid } from '$lib/utils/uuid';
 import {
 	FILE_LIST_LIMIT,
+	UPLOAD_RATE_LIMIT,
 	deleteFile,
 	listFiles,
 	listPurgeCandidates,
 	runMediaAudit,
 	uploadFiles,
+	uploadRateLimitKey,
 	UploadRejected
 } from '$lib/server/services/files';
 import { createPhotoFromFile } from '$lib/server/services/photos';
@@ -29,9 +31,6 @@ const KINDS = ['image', 'file'] as const;
 const STATUSES = ['pending', 'attached', 'detached'] as const;
 /** §6.1 time filter presets (URL state). */
 const SINCE_DAYS = { '7d': 7, '30d': 30, '90d': 90 } as const;
-
-/** Upload rate window (plan §7): generous for a single admin, still bounded. */
-const UPLOAD_RATE_LIMIT = { limit: 60, windowSeconds: 10 * 60 };
 
 export const load: PageServerLoad = async ({ url }) => {
 	await requireAdminRole();
@@ -70,7 +69,7 @@ export const actions: Actions = {
 		// a gate — a dead Valkey still lets every upload through.
 		const rate = await rateLimit(
 			getCache(),
-			`limits:upload:${locals.user?.id ?? 'anonymous'}`,
+			uploadRateLimitKey(locals.user?.id),
 			UPLOAD_RATE_LIMIT.limit,
 			UPLOAD_RATE_LIMIT.windowSeconds
 		);

@@ -125,3 +125,20 @@ describe('spec 3.4 embed decision', () => {
 		}
 	});
 });
+
+describe('storage-line variant URLs (review round 1)', () => {
+	const key = '/i/ab/' + 'a'.repeat(62) + '.jpg';
+
+	it('reads the extension through the variant suffix', () => {
+		expect(imageExtension(`${key}@thumb`)).toBe('jpg');
+		expect(imageExtension(`${key}@preview`)).toBe('jpg');
+		expect(imageExtension(`${key}@full`)).toBe('jpg');
+		expect(imageExtension(`${key}@preview?v=1`)).toBe('jpg');
+	});
+
+	it('decides variant image URLs as images, not cards', () => {
+		for (const suffix of ['@thumb', '@preview', '@full']) {
+			expect(decideImage({ url: `${key}${suffix}` })).toEqual({ kind: 'image' });
+		}
+	});
+});

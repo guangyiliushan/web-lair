@@ -47,8 +47,13 @@ const IMAGE_EXTENSIONS = new Set([
 /** Site-internal card paths (spec 3.4: lair posts / notes / thoughts). */
 const SITE_EMBED_PATH_REGEX = /^\/(posts|notes|thoughts)\//;
 
+/** Storage-line variant suffix (`/i/<key>@thumb|preview|full`): it trails
+ * the extension, so it comes off before the extension match (review round
+ * 1: variant URLs were falling through to generic embed cards). */
+const STORAGE_VARIANT_SUFFIX = /@(thumb|preview|full)$/;
+
 export function imageExtension(url: string): string | null {
-	const clean = url.split(/[?#]/, 1)[0];
+	const clean = url.split(/[?#]/, 1)[0].replace(STORAGE_VARIANT_SUFFIX, '');
 	const match = /\.([A-Za-z0-9]+)$/.exec(clean);
 	return match ? match[1].toLowerCase() : null;
 }
