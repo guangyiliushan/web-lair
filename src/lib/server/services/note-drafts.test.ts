@@ -413,6 +413,28 @@ describe('note draft flow', () => {
 		const rendered = render(state.selectWheres[0]);
 		expect(rendered.sql).toContain('"drafts"."ref_type"');
 		expect(rendered.params).toContain('note');
+		// Attaching to published content syncs the submitted body's refs too.
+		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'note', id: NOTE_ID }, []);
+	});
+
+	it('syncs the reference diff when the first draft attaches to a published note (Q15)', async () => {
+		const KEY = `ab/${'a'.repeat(64)}.png`;
+		state.selectQueue = [[], [{ id: NOTE_ID }]];
+		state.insertResults = [[{ id: DRAFT_ID, version: 1, updatedAt: new Date() }]];
+		const result = await saveNoteDraftWork({
+			noteId: NOTE_ID,
+			payload: { ...payloadFromRow(BASE_DRAFT), slug: '', content: `edited /i/${KEY}@full body` },
+			autosave: false
+		});
+		expect(result.kind).toBe('saved');
+		expect(syncMock).toHaveBeenCalledTimes(1);
+		const call = syncMock.mock.calls[0] as unknown as [
+			unknown,
+			{ type: string; id: string },
+			string[]
+		];
+		expect(call[1]).toEqual({ type: 'note', id: NOTE_ID });
+		expect(call[2]).toEqual([KEY]);
 	});
 
 	it('maps a concurrent draft creation (23505) to a conflict', async () => {

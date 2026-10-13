@@ -186,20 +186,31 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 			.limit(1);
 		if (!post) return { kind: 'not-found' };
 		try {
-			const [created] = await db
-				.insert(drafts)
-				.values({
-					refType: 'post',
-					refId: post.id,
-					...draftUpdateSet(payload),
-					version: 1,
-					baseVersion: post.version,
-					author: input.author ?? null,
-					// Application-level updated_at (§9.7): the column has no
-					// DB default and $onUpdate only runs on updates.
-					updatedAt: new Date()
-				})
-				.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+			// Attaching the first draft to published content is a save path
+			// too: the content write and the reference diff share one
+			// transaction (Q15), the submitted body being the desired set.
+			const created = await db.transaction(async (tx) => {
+				const [row] = await tx
+					.insert(drafts)
+					.values({
+						refType: 'post',
+						refId: post.id,
+						...draftUpdateSet(payload),
+						version: 1,
+						baseVersion: post.version,
+						author: input.author ?? null,
+						// Application-level updated_at (§9.7): the column has no
+						// DB default and $onUpdate only runs on updates.
+						updatedAt: new Date()
+					})
+					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+				await syncFileReferences(
+					tx,
+					{ type: 'post', id: post.id },
+					keysFromContent(payload.content)
+				);
+				return row;
+			});
 			return {
 				kind: 'saved',
 				draftId: created.id,

@@ -284,6 +284,31 @@ describe('saveDraftWork', () => {
 		expect(result).toMatchObject({ kind: 'saved', draftId: 'draft-1', postId: 'post-1' });
 		expect(state.inserts[0].table).toBe(drafts);
 		expect(state.inserts[0].values).toMatchObject({ refId: 'post-1', baseVersion: 5 });
+		// Attaching to published content syncs the submitted body's refs too.
+		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'post', id: 'post-1' }, []);
+	});
+
+	it('syncs the reference diff when the first draft attaches to a published post (Q15)', async () => {
+		const KEY = `ab/${'a'.repeat(64)}.png`;
+		state.selectQueue = [[], [{ id: 'post-1', version: 5 }]];
+		state.insertResults = [[{ id: 'draft-1', version: 1, updatedAt: new Date() }]];
+		const result = await saveDraftWork({
+			draftId: null,
+			postId: 'post-1',
+			expectedVersion: null,
+			payload: payload({ content: `edited /i/${KEY}@full body` }),
+			author: null,
+			autosave: false
+		});
+		expect(result.kind).toBe('saved');
+		expect(syncMock).toHaveBeenCalledTimes(1);
+		const call = syncMock.mock.calls[0] as unknown as [
+			unknown,
+			{ type: string; id: string },
+			string[]
+		];
+		expect(call[1]).toEqual({ type: 'post', id: 'post-1' });
+		expect(call[2]).toEqual([KEY]);
 	});
 
 	it('translates a concurrent draft creation (23505) into a conflict', async () => {

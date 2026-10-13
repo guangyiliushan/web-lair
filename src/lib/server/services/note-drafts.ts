@@ -245,21 +245,32 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 			.limit(1);
 		if (!note) return { kind: 'not-found' };
 		try {
-			const [created] = await db
-				.insert(drafts)
-				.values({
-					refType: 'note',
-					refId: note.id,
-					...noteDraftUpdateSet(payload),
-					version: 1,
-					// Notes have no row version counter: the draft's own
-					// optimistic version plus the one-draft-per-note unique
-					// cover every documented conflict scenario (N1 decision).
-					baseVersion: null,
-					author: input.author ?? null,
-					updatedAt: new Date()
-				})
-				.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+			// Attaching the first draft to published content is a save path
+			// too: the content write and the reference diff share one
+			// transaction (Q15), the submitted body being the desired set.
+			const created = await db.transaction(async (tx) => {
+				const [row] = await tx
+					.insert(drafts)
+					.values({
+						refType: 'note',
+						refId: note.id,
+						...noteDraftUpdateSet(payload),
+						version: 1,
+						// Notes have no row version counter: the draft's own
+						// optimistic version plus the one-draft-per-note unique
+						// cover every documented conflict scenario (N1 decision).
+						baseVersion: null,
+						author: input.author ?? null,
+						updatedAt: new Date()
+					})
+					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+				await syncFileReferences(
+					tx,
+					{ type: 'note', id: note.id },
+					keysFromContent(payload.content)
+				);
+				return row;
+			});
 			return {
 				kind: 'saved',
 				draftId: created.id,
