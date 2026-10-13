@@ -18,7 +18,7 @@ import { slugTrackers } from '$lib/server/db/system';
  * so removing a lock/transaction turns the suite red (mutation teeth, P2
  * review finding).
  */
-const { dbMock, state } = vi.hoisted(() => ({
+const { dbMock, state, syncMock } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		selectQueue: [] as unknown[][],
@@ -30,11 +30,19 @@ const { dbMock, state } = vi.hoisted(() => ({
 		inserts: [] as { table: unknown; values: Record<string, unknown> }[],
 		forCalls: [] as unknown[],
 		failWith: undefined as unknown
-	}
+	},
+	syncMock: vi.fn(async () => ({ added: 0, removed: 0, missing: 0, attached: 0, detached: 0 }))
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
+// The reference diff runs in the content transaction; its own teeth live in
+// file-references.test.ts. Here we pin WHERE it is called from and with which
+// target/keys (plus the Q6 no-op autosave short-circuit).
+vi.mock('./file-references', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('./file-references')>();
+	return { ...actual, syncFileReferences: syncMock };
+});
 
 import {
 	DRAFT_THROTTLE_MS,
@@ -162,6 +170,7 @@ function resetState(withTransaction = true) {
 	state.deletes = [];
 	state.forCalls = [];
 	state.failWith = undefined;
+	syncMock.mockClear();
 	const executors = makeExecutors();
 	Object.assign(dbMock, {
 		...executors,
@@ -257,6 +266,8 @@ describe('saveDraftWork', () => {
 			slug: 'new-slug',
 			tags: ['t1', 't2']
 		});
+		// Materialization carries the first reference diff too (Q15).
+		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'post', id: 'post-9' }, []);
 	});
 
 	it('creates the first draft for an existing post with the posts version as base', async () => {
@@ -324,6 +335,9 @@ describe('saveDraftWork', () => {
 		});
 		expect(result).toMatchObject({ kind: 'unchanged', version: 3 });
 		expect(state.updates).toHaveLength(0);
+		// The Q6 autosave short-circuit: identical payloads never reach the
+		// reference scan.
+		expect(syncMock).not.toHaveBeenCalled();
 	});
 
 	it('throttles autosaves within the server window and lets manual saves through', async () => {
@@ -424,6 +438,29 @@ describe('saveDraftWork', () => {
 		});
 		expect(result).toMatchObject({ kind: 'conflict', server: { version: 9 } });
 	});
+
+	it('syncs the draft target references inside the save transaction (Q6/Q15)', async () => {
+		const KEY = `ab/${'a'.repeat(64)}.png`;
+		state.selectQueue = [[{ ...BASE_DRAFT }]];
+		state.updateResults = [[{ id: 'draft-1', version: 4, updatedAt: new Date() }]];
+		const result = await saveDraftWork({
+			draftId: 'draft-1',
+			postId: null,
+			expectedVersion: null,
+			payload: payload({ content: `body /i/${KEY}@full more` }),
+			author: null,
+			autosave: false
+		});
+		expect(result).toMatchObject({ kind: 'saved', version: 4 });
+		expect(syncMock).toHaveBeenCalledTimes(1);
+		const call = syncMock.mock.calls[0] as unknown as [
+			unknown,
+			{ type: string; id: string },
+			string[]
+		];
+		expect(call[1]).toEqual({ type: 'post', id: 'post-1' });
+		expect(call[2]).toEqual([KEY]);
+	});
 });
 
 describe('publishDraft', () => {
@@ -523,6 +560,31 @@ describe('publishDraft', () => {
 
 		expect(state.deletes.some((d) => d.table === drafts)).toBe(true);
 		expect(state.deletes.some((d) => d.table === postTags)).toBe(true);
+		// The published body's reference set lands in the same transaction.
+		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'post', id: 'post-1' }, []);
+	});
+
+	it('writes the published body reference set in the publish transaction (Q15)', async () => {
+		const KEY = `ab/${'a'.repeat(64)}.png`;
+		const draft = { ...BASE_DRAFT, slug: 'new-slug', baseVersion: 2 };
+		state.selectQueue = [
+			[draft],
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }],
+			[{ id: 'cat-1' }],
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }],
+			[{ ...draft, content: `body /i/${KEY}@preview tail` }]
+		];
+		state.insertResults = [[{ id: 't1' }], []];
+		const result = await publishDraft('draft-1', null);
+		expect(result.kind).toBe('published');
+		expect(syncMock).toHaveBeenCalledTimes(1);
+		const call = syncMock.mock.calls[0] as unknown as [
+			unknown,
+			{ type: string; id: string },
+			string[]
+		];
+		expect(call[1]).toEqual({ type: 'post', id: 'post-1' });
+		expect(call[2]).toEqual([KEY]);
 	});
 
 	it('publishes a user slug that keeps the same name (no tracker)', async () => {
@@ -627,6 +689,20 @@ describe('discardDraft', () => {
 		expect(state.forCalls).toEqual(['update']);
 		expect(state.deletes.map((d) => d.table)).toEqual([drafts, posts]);
 		expect(state.selectQueue).toHaveLength(0);
+		// A removed placeholder leaves no content behind: its references go
+		// (Q15 deletion hook).
+		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'post', id: 'post-1' }, []);
+	});
+
+	it('reverts the reference set to the published body on discard (Q15)', async () => {
+		const KEY = `ab/${'a'.repeat(64)}.png`;
+		state.selectQueue = [
+			[{ ...BASE_DRAFT }],
+			[{ id: 'post-1', status: 'published', version: 4, content: `live /i/${KEY} body` }]
+		];
+		const result = await discardDraft('draft-1');
+		expect(result).toEqual({ kind: 'discarded', postId: 'post-1', removedPlaceholder: false });
+		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'post', id: 'post-1' }, [KEY]);
 	});
 
 	it('keeps a published post when only its working copy is discarded', async () => {

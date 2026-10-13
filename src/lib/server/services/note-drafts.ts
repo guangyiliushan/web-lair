@@ -4,6 +4,7 @@ import { db } from '$lib/server/db';
 import { drafts, notes } from '$lib/server/db/content';
 import { slugTrackers } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
+import { keysFromContent, syncFileReferences } from './file-references';
 import { isReservedNoteSlug, NOTE_EMOTIONS, NOTE_MOODS } from '$lib/utils/note-meta';
 import { hashNotePassword, verifyNotePassword } from './note-gate';
 import { DRAFT_THROTTLE_MS } from './post-drafts';
@@ -321,6 +322,12 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+				// References ride the materialization transaction (Q15).
+				await syncFileReferences(
+					tx,
+					{ type: 'note', id: createdNote.id },
+					keysFromContent(payload.content)
+				);
 				return { noteId: createdNote.id, draft: createdDraft };
 			});
 			return {
@@ -379,11 +386,27 @@ async function updateExistingNoteDraft(
 	const expected = input.expectedVersion ?? draft.version;
 	let updated: { id: string; version: number; updatedAt: Date | null }[];
 	try {
-		updated = await db
-			.update(drafts)
-			.set({ ...noteDraftUpdateSet(payload), version: draft.version + 1, updatedAt: new Date() })
-			.where(and(eq(drafts.id, draft.id), eq(drafts.version, expected)))
-			.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+		// Content write + reference diff share one transaction (Q15); the
+		// hash gate above keeps no-op autosaves from re-scanning (Q6).
+		updated = await db.transaction(async (tx) => {
+			const rows = await tx
+				.update(drafts)
+				.set({
+					...noteDraftUpdateSet(payload),
+					version: draft.version + 1,
+					updatedAt: new Date()
+				})
+				.where(and(eq(drafts.id, draft.id), eq(drafts.version, expected)))
+				.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+			if (rows.length > 0 && draft.refId) {
+				await syncFileReferences(
+					tx,
+					{ type: 'note', id: draft.refId },
+					keysFromContent(payload.content)
+				);
+			}
+			return rows;
+		});
 	} catch (caught) {
 		if (pgErrorCode(caught) === '23503') {
 			return { kind: 'invalid', errors: { topicId: m.admin_notes_edit_err_topic_missing() } };
@@ -521,6 +544,14 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 
 			await tx.delete(drafts).where(eq(drafts.id, lockedDraft.id));
 
+			// The published body's key set is the durable reference set
+			// (Q15: same transaction as the content write).
+			await syncFileReferences(
+				tx,
+				{ type: 'note', id: locked.id },
+				keysFromContent(lockedDraft.content)
+			);
+
 			return { kind: 'published' as const, noteId: locked.id };
 		});
 	} catch (caught) {
@@ -554,7 +585,12 @@ export async function discardNoteDraft(draftId: string): Promise<DiscardNoteResu
 			if (draft.refId) {
 				// Lock order matches publishNoteDraft (notes → drafts).
 				const [note] = await tx
-					.select({ id: notes.id, status: notes.status, publishedAt: notes.publishedAt })
+					.select({
+						id: notes.id,
+						status: notes.status,
+						publishedAt: notes.publishedAt,
+						content: notes.content
+					})
 					.from(notes)
 					.where(eq(notes.id, draft.refId))
 					.limit(1)
@@ -565,11 +601,20 @@ export async function discardNoteDraft(draftId: string): Promise<DiscardNoteResu
 					.returning({ id: drafts.id });
 				// The draft vanished under us (published concurrently).
 				if (deleted.length === 0) return { kind: 'not-found' as const };
+				// Revert references to the published body; a placeholder row is
+				// deleted right below, so its references must go with it (Q15
+				// deletion hooks).
+				const placeholder = Boolean(note && note.publishedAt == null && note.status === 'draft');
+				await syncFileReferences(
+					tx,
+					{ type: 'note', id: draft.refId },
+					placeholder ? [] : keysFromContent(note?.content)
+				);
 				let removedPlaceholder = false;
 				// A never-published note goes with its draft: notes have no
 				// version counter, so "never published" = no publishedAt AND
 				// still in the draft status (N1 decision).
-				if (note && note.publishedAt == null && note.status === 'draft') {
+				if (note && placeholder) {
 					await tx.delete(notes).where(eq(notes.id, note.id));
 					removedPlaceholder = true;
 				}

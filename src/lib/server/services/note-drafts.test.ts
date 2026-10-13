@@ -19,7 +19,7 @@ import { slugTrackers } from '$lib/server/db/system';
  * write, every lock clause and every WHERE condition (rendered with the real
  * dialect) - removing a lock/transaction/condition turns the suite red.
  */
-const { dbMock, state } = vi.hoisted(() => ({
+const { dbMock, state, syncMock } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		selectQueue: [] as unknown[][],
@@ -34,11 +34,19 @@ const { dbMock, state } = vi.hoisted(() => ({
 		updateWheres: [] as unknown[],
 		transactions: 0,
 		failWith: undefined as unknown
-	}
+	},
+	syncMock: vi.fn(async () => ({ added: 0, removed: 0, missing: 0, attached: 0, detached: 0 }))
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
+// The reference diff runs in the content transaction; its own teeth live in
+// file-references.test.ts. Here we pin WHERE it is called from and with which
+// target/keys (plus the Q6 no-op autosave short-circuit).
+vi.mock('./file-references', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('./file-references')>();
+	return { ...actual, syncFileReferences: syncMock };
+});
 
 import {
 	discardNoteDraft,
@@ -194,6 +202,7 @@ describe('note draft flow', () => {
 		state.updateWheres = [];
 		state.transactions = 0;
 		state.failWith = undefined;
+		syncMock.mockClear();
 		Object.assign(dbMock, {
 			...makeExecutors(),
 			transaction: vi.fn(async (callback: (tx: unknown) => unknown) => {
@@ -235,6 +244,8 @@ describe('note draft flow', () => {
 		});
 		expect(result).toMatchObject({ kind: 'unchanged', version: 3, noteId: NOTE_ID });
 		expect(state.updates).toHaveLength(0);
+		// Q6 short-circuit: identical payloads never reach the reference scan.
+		expect(syncMock).not.toHaveBeenCalled();
 	});
 
 	it('canonicalises temperature to the numeric(4,1) scale so hashes round-trip', async () => {
@@ -362,6 +373,26 @@ describe('note draft flow', () => {
 		expect(rendered.params).toContain(3);
 	});
 
+	it('syncs the note target references inside the save transaction (Q6/Q15)', async () => {
+		const KEY = `ab/${'a'.repeat(64)}.png`;
+		state.selectQueue = [[BASE_DRAFT]];
+		state.updateResults = [[{ id: DRAFT_ID, version: 4, updatedAt: new Date() }]];
+		const result = await saveNoteDraftWork({
+			draftId: DRAFT_ID,
+			payload: { ...payloadFromRow(BASE_DRAFT), content: `body /i/${KEY}@preview tail` },
+			autosave: false
+		});
+		expect(result).toMatchObject({ kind: 'saved', version: 4 });
+		expect(syncMock).toHaveBeenCalledTimes(1);
+		const call = syncMock.mock.calls[0] as unknown as [
+			unknown,
+			{ type: string; id: string },
+			string[]
+		];
+		expect(call[1]).toEqual({ type: 'note', id: NOTE_ID });
+		expect(call[2]).toEqual([KEY]);
+	});
+
 	it('creates a draft row for an existing note without one', async () => {
 		state.selectQueue = [[], [{ id: NOTE_ID }]];
 		state.insertResults = [[{ id: DRAFT_ID, version: 1, updatedAt: new Date() }]];
@@ -460,6 +491,7 @@ describe('note draft flow', () => {
 		const renderedPublishedAt = render(noteUpdate?.values.publishedAt);
 		expect(renderedPublishedAt.sql).toContain('coalesce');
 		expect(renderedPublishedAt.sql).toContain('"notes"."published_at"');
+		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'note', id: NOTE_ID }, []);
 	});
 
 	it('keeps a same-slug or placeholder-slug publish free of tracker rows', async () => {
@@ -545,6 +577,7 @@ describe('note draft flow', () => {
 		expect(result).toEqual({ kind: 'discarded', noteId: NOTE_ID, removedPlaceholder: true });
 		expect(state.transactions).toBe(1);
 		expect(state.deletes.map((entry) => entry.table)).toEqual([drafts, notes]);
+		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'note', id: NOTE_ID }, []);
 	});
 
 	it('keeps the note row when it was ever published (publishedAt decides)', async () => {
@@ -562,6 +595,25 @@ describe('note draft flow', () => {
 		state.deleteResults = [[{ id: DRAFT_ID }]];
 		const published = await discardNoteDraft(DRAFT_ID);
 		expect(published).toEqual({ kind: 'discarded', noteId: NOTE_ID, removedPlaceholder: false });
+	});
+
+	it('reverts the reference set to the published body on discard (Q15)', async () => {
+		const KEY = `ab/${'a'.repeat(64)}.png`;
+		state.selectQueue = [
+			[BASE_DRAFT],
+			[
+				{
+					id: NOTE_ID,
+					status: 'published',
+					publishedAt: new Date(),
+					content: `live /i/${KEY} body`
+				}
+			]
+		];
+		state.deleteResults = [[{ id: DRAFT_ID }]];
+		const result = await discardNoteDraft(DRAFT_ID);
+		expect(result).toEqual({ kind: 'discarded', noteId: NOTE_ID, removedPlaceholder: false });
+		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'note', id: NOTE_ID }, [KEY]);
 	});
 
 	it('sets, keeps and clears the password hash (same value never re-salts)', async () => {

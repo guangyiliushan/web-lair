@@ -5,6 +5,7 @@ import { db } from '$lib/server/db';
 import { pages } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
 import { resolveLocalized } from '$lib/server/services/pages';
+import { syncFileReferences } from '$lib/server/services/file-references';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
@@ -135,6 +136,10 @@ export const actions: Actions = {
 			if (!row) return { kind: 'not-found' as const };
 			if (row.isDefault) return { kind: 'protected' as const };
 			await tx.delete(pages).where(eq(pages.id, pageId));
+			// A hard-deleted page leaves no content behind: clear its
+			// references in the same transaction (Q15 deletion hook) so the
+			// images it mentioned become detachable again.
+			await syncFileReferences(tx, { type: 'page', id: pageId }, []);
 			return { kind: 'deleted' as const };
 		});
 

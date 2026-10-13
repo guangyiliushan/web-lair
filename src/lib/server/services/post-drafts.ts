@@ -4,6 +4,7 @@ import { db } from '$lib/server/db';
 import { categories, drafts, postRevisions, postTags, posts, tags } from '$lib/server/db/content';
 import { slugTrackers } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
+import { keysFromContent, syncFileReferences } from './file-references';
 import { tagSlug } from '$lib/utils/slug';
 import { parseTags, SLUG_RE } from './posts';
 import { m } from '$lib/paraglide/messages';
@@ -257,6 +258,12 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+				// References ride the materialization transaction (Q15).
+				await syncFileReferences(
+					tx,
+					{ type: 'post', id: createdPost.id },
+					keysFromContent(payload.content)
+				);
 				return { postId: createdPost.id, draft: createdDraft };
 			});
 			return {
@@ -311,11 +318,24 @@ async function updateExistingDraft(
 	}
 
 	const expected = input.expectedVersion ?? draft.version;
-	const updated = await db
-		.update(drafts)
-		.set({ ...draftUpdateSet(payload), version: draft.version + 1, updatedAt: new Date() })
-		.where(and(eq(drafts.id, draft.id), eq(drafts.version, expected)))
-		.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+	// Content write + reference diff share one transaction (Q15); the
+	// hash/unchanged gate above is the autosave short-circuit (Q6) - a no-op
+	// autosave never re-scans the content.
+	const updated = await db.transaction(async (tx) => {
+		const rows = await tx
+			.update(drafts)
+			.set({ ...draftUpdateSet(payload), version: draft.version + 1, updatedAt: new Date() })
+			.where(and(eq(drafts.id, draft.id), eq(drafts.version, expected)))
+			.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+		if (rows.length > 0 && draft.refId) {
+			await syncFileReferences(
+				tx,
+				{ type: 'post', id: draft.refId },
+				keysFromContent(payload.content)
+			);
+		}
+		return rows;
+	});
 
 	if (updated.length === 0) {
 		// Lost the conditional update to a concurrent save.
@@ -467,6 +487,14 @@ export async function publishDraft(
 
 			await tx.delete(drafts).where(eq(drafts.id, lockedDraft.id));
 
+			// The published body's key set is the durable reference set
+			// (Q15: same transaction as the content write).
+			await syncFileReferences(
+				tx,
+				{ type: 'post', id: locked.id },
+				keysFromContent(lockedDraft.content)
+			);
+
 			return { kind: 'published' as const, postId: locked.id, version: nextVersion };
 		});
 	} catch (caught) {
@@ -503,7 +531,12 @@ export async function discardDraft(draftId: string): Promise<DiscardResult> {
 				// and a discard on the same target cannot deadlock; the seed row
 				// is then re-checked on the locked post, not check-then-act.
 				const [post] = await tx
-					.select({ id: posts.id, status: posts.status, version: posts.version })
+					.select({
+						id: posts.id,
+						status: posts.status,
+						version: posts.version,
+						content: posts.content
+					})
 					.from(posts)
 					.where(eq(posts.id, draft.refId))
 					.limit(1)
@@ -514,9 +547,18 @@ export async function discardDraft(draftId: string): Promise<DiscardResult> {
 					.returning({ id: drafts.id });
 				// The draft vanished under us (published concurrently).
 				if (deleted.length === 0) return { kind: 'not-found' as const };
+				// Revert references to the published body; a placeholder row is
+				// deleted right below, so its references must go with it (Q15
+				// deletion hooks: pages hard-delete + placeholder delete).
+				const placeholder = Boolean(post && post.version === 0 && post.status === 'draft');
+				await syncFileReferences(
+					tx,
+					{ type: 'post', id: draft.refId },
+					placeholder ? [] : keysFromContent(post?.content)
+				);
 				let removedPlaceholder = false;
 				// A never-published placeholder goes with its draft (§9.14.3).
-				if (post && post.version === 0 && post.status === 'draft') {
+				if (post && placeholder) {
 					await tx.delete(posts).where(eq(posts.id, post.id));
 					removedPlaceholder = true;
 				}

@@ -11,8 +11,9 @@ import { PgDialect } from 'drizzle-orm/pg-core';
  * dropped WHERE, a dropped lock, a wrong order or an unprotected default
  * turns red.
  */
-const { dbMock, state, service } = vi.hoisted(() => ({
+const { dbMock, state, service, syncCheck } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
+	syncCheck: vi.fn(async () => ({ added: 0, removed: 0, missing: 0, attached: 0, detached: 0 })),
 	state: {
 		selectQueue: [] as unknown[][],
 		returningQueue: [] as unknown[][],
@@ -27,6 +28,9 @@ const { dbMock, state, service } = vi.hoisted(() => ({
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: service.requireAdminRole }));
+// The reference cleanup runs inside the delete transaction; its own teeth
+// live in file-references.test.ts - here we pin that a hard delete calls it.
+vi.mock('$lib/server/services/file-references', () => ({ syncFileReferences: syncCheck }));
 vi.mock('$lib/paraglide/runtime', () => ({
 	getLocale: () => 'en',
 	locales: ['en', 'zh-cn', 'ja'],
@@ -94,6 +98,7 @@ describe('admin pages list (P2)', () => {
 		state.forCalls = [];
 		state.deletes = [];
 		service.requireAdminRole.mockClear();
+		syncCheck.mockClear();
 		Object.assign(dbMock, {
 			select: vi.fn(() => selectChain()),
 			update: vi.fn(() => ({
@@ -274,6 +279,9 @@ describe('admin pages list (P2)', () => {
 		expect(state.deletes).toHaveLength(1);
 		expect(dialect.sqlToQuery(state.deletes[0] as never).params).toEqual([PAGE_ID]);
 		expect(dbMock.transaction).toHaveBeenCalled();
+		// Q15 deletion hook: a hard-deleted page clears its references (the
+		// empty desired set) inside the same transaction.
+		expect(syncCheck).toHaveBeenCalledWith(expect.anything(), { type: 'page', id: PAGE_ID }, []);
 
 		state.selectQueue = [[]];
 		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toMatchObject({
