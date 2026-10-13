@@ -1,0 +1,292 @@
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { psql } from './support';
+import { zhCnLocale } from './locale-fixture';
+
+/**
+ * Reference lifecycle, live teeth (ST-3 3b1, Q15 "T4 four paths"): draft save,
+ * publish, discard and page hard-delete maintain `file_references` and the
+ * file status machine against the real database - including the two-targets
+ * edge (one image in a post AND a note: losing one keeps the file attached)
+ * and the final flip to `detached` with its clock anchor once the working
+ * content drops the image ("draft drops the image -> detached -> TTL").
+ */
+test.use(zhCnLocale);
+
+const CATEGORY = '00000000-0000-7000-8000-000000000022';
+const CATEGORY_NAME = 'E2E Refs';
+const POST_TITLE = 'e2e refs lifecycle';
+const POST_SLUG = 'e2e-refs-lifecycle';
+const NOTE_TITLE = 'e2e refs note';
+const NOTE_SLUG = 'e2e-refs-note';
+const PAGE_TITLE = 'E2E Refs Page';
+const PAGE_SLUG = 'e2e-refs-page';
+
+// Valid 1x1 PNG (the endpoint sniffs magic bytes; sharp decodes it).
+const PNG_B64 =
+	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+/** Bare object key learned from the first saved payload (serial file). */
+let KEY = '';
+
+function byText(page: Page, text: string | RegExp): Locator {
+	return page.getByText(text).filter({ visible: true });
+}
+
+function cleanup() {
+	psql(`delete from drafts where title ilike 'e2e refs%'`);
+	psql(`delete from drafts where ref_id in (select id from posts where slug like 'e2e-refs%')`);
+	psql(`delete from drafts where ref_id in (select id from notes where slug like 'e2e-refs%')`);
+	psql(
+		`delete from file_references where ref_id in (select id from posts where slug like 'e2e-refs%')`
+	);
+	psql(
+		`delete from file_references where ref_id in (select id from notes where slug like 'e2e-refs%')`
+	);
+	psql(
+		`delete from file_references where ref_id in (select id from pages where slug = '${PAGE_SLUG}')`
+	);
+	psql(`delete from slug_trackers where slug like 'e2e-refs%'`);
+	psql(`delete from posts where slug like 'e2e-refs%' or title ilike 'e2e refs lifecycle%'`);
+	psql(`delete from notes where slug like 'e2e-refs%' or title ilike 'e2e refs note%'`);
+	psql(`delete from pages where slug = '${PAGE_SLUG}'`);
+}
+
+// A serial chain owning fixed fixture rows on the shared dev database - never
+// run this file twice concurrently.
+test.describe.configure({ mode: 'serial', timeout: 300_000 });
+
+test.beforeAll(() => {
+	cleanup();
+	psql(`delete from categories where id = '${CATEGORY}' or slug = 'e2e-refs-cat'`);
+	psql(
+		`insert into categories (id, name, slug) values ('${CATEGORY}', '${CATEGORY_NAME}', 'e2e-refs-cat') on conflict (id) do update set name = excluded.name, slug = excluded.slug`
+	);
+});
+
+test.afterAll(() => {
+	cleanup();
+	psql(`delete from categories where slug = 'e2e-refs-cat'`);
+});
+
+/** Hydration gate: probe until the slug chip reacts (house pattern). */
+async function fillTitle(page: Page, value: string) {
+	const titleInput = page.locator('input[name="title"]');
+	await expect(async () => {
+		await titleInput.click();
+		await page.keyboard.press('Control+A');
+		await page.keyboard.type('probe');
+		await expect(byText(page, '/probe')).toBeVisible({ timeout: 1500 });
+	}).toPass({ timeout: 30000 });
+	await titleInput.click();
+	await page.keyboard.press('Control+A');
+	await page.keyboard.type(value);
+	await expect(titleInput).toHaveValue(value, { timeout: 5000 });
+}
+
+async function typeIntoEditor(page: Page, text: string) {
+	const editor = page.getByRole('textbox', { name: '输入正文...' });
+	await expect(editor).toBeVisible({ timeout: 10000 });
+	const probe = text.trim().split(/\s+/)[0];
+	await expect(async () => {
+		const current = await editor.innerText();
+		if (!current.includes(probe)) {
+			await editor.click();
+			await page.keyboard.press('Control+End');
+			await page.keyboard.type(text);
+		}
+		await expect(editor).toContainText(probe, { timeout: 2000 });
+	}).toPass({ timeout: 25000 });
+}
+
+async function pickCategory(page: Page) {
+	const sheetOpen = async () => await page.locator('#settings-category').isVisible();
+	await expect(async () => {
+		if (!(await sheetOpen())) {
+			await page.getByRole('button', { name: '文章设置' }).click();
+		}
+		await expect(page.locator('#settings-category')).toBeVisible({ timeout: 10000 });
+	}).toPass({ timeout: 20000 });
+	await expect(async () => {
+		await page.locator('#settings-category').click();
+		await page
+			.locator('[data-slot="select-item"]')
+			.filter({ hasText: CATEGORY_NAME })
+			.click({ timeout: 3000 });
+		await expect(page.locator('#settings-category')).toContainText(CATEGORY_NAME, {
+			timeout: 2000
+		});
+	}).toPass({ timeout: 25000 });
+	await page.keyboard.press('Escape');
+}
+
+async function manualSave(page: Page) {
+	await page.getByRole('button', { name: '保存草稿' }).click({ timeout: 5000 });
+	await expect(byText(page, /已保存/).first()).toBeVisible({ timeout: 60000 });
+}
+
+/** Uploads the shared 1x1 PNG through the picker's assets tab. */
+async function uploadViaPicker(page: Page) {
+	await page.locator('button[aria-label="插入图片"]').click();
+	const dialog = page.getByRole('dialog', { name: '插入图片' });
+	await expect(dialog).toBeVisible({ timeout: 10000 });
+	await dialog.getByRole('tab', { name: '内容资产' }).click();
+	await dialog.locator('input[type="file"]').setInputFiles({
+		name: 'e2e-refs.png',
+		mimeType: 'image/png',
+		buffer: Buffer.from(PNG_B64, 'base64')
+	});
+	// The thumbnail URL lives on an authenticated route; poll the inserted
+	// image element itself instead.
+	await expect(page.locator('[data-lexical-editor="true"] img').first()).toBeVisible({
+		timeout: 30000
+	});
+	await dialog.getByRole('button', { name: '取消' }).click();
+	await expect(dialog).toBeHidden({ timeout: 10000 });
+}
+
+function refCount(refType: string, refId: string): string {
+	return psql(
+		`select count(*) from file_references fr join files f on f.id = fr.file_id where f.object_key = '${KEY}' and fr.ref_type = '${refType}' and fr.ref_id = '${refId}'`
+	);
+}
+
+function fileStatus(): string {
+	return psql(`select status from files where object_key = '${KEY}'`);
+}
+
+function noteRefId(): string {
+	return psql(
+		`select coalesce((select ref_id from drafts where ref_type = 'note' and title = '${NOTE_TITLE}'), (select id from notes where title = '${NOTE_TITLE}'))`
+	);
+}
+
+test('note draft autosave attaches the uploaded file and writes the note reference', async ({
+	page
+}) => {
+	await page.goto('/admin/notes/edit');
+	await fillTitle(page, NOTE_TITLE);
+	await typeIntoEditor(page, 'refs note body');
+	await uploadViaPicker(page);
+	await manualSave(page);
+
+	const payload = psql(`select content from drafts where title = '${NOTE_TITLE}'`);
+	const match = payload.match(/\/i\/([0-9a-f]{2}\/[0-9a-f]{64}(?:\.[a-z0-9]{1,10})?)/);
+	expect(match).not.toBeNull();
+	KEY = match![1];
+	expect(refCount('note', noteRefId())).toBe('1');
+	expect(fileStatus()).toBe('attached');
+});
+
+test('a second target shares the image (dedupe): both references live', async ({ page }) => {
+	await page.goto('/admin/posts/edit');
+	await fillTitle(page, POST_TITLE);
+	await pickCategory(page);
+	await typeIntoEditor(page, 'refs post body');
+	await uploadViaPicker(page);
+	await manualSave(page);
+
+	const postId = psql(`select ref_id from drafts where slug = '${POST_SLUG}'`);
+	expect(refCount('post', postId)).toBe('1');
+	expect(refCount('note', noteRefId())).toBe('1');
+	expect(fileStatus()).toBe('attached');
+});
+
+test('discarding a working copy drops its references; the other target keeps the file attached', async ({
+	page
+}) => {
+	const postId = psql(`select ref_id from drafts where slug = '${POST_SLUG}'`);
+	await page.goto('/admin/drafts');
+	const row = page.getByRole('row').filter({ hasText: POST_TITLE });
+	await expect(row.first()).toBeVisible({ timeout: 10000 });
+	await expect(async () => {
+		await row.first().getByRole('button', { name: '丢弃草稿' }).click();
+		await expect(page.getByRole('alertdialog')).toBeVisible({ timeout: 3000 });
+	}).toPass({ timeout: 20000 });
+	await page.getByRole('button', { name: '丢弃', exact: true }).click();
+	await expect(byText(page, '草稿已丢弃。')).toBeVisible({ timeout: 15000 });
+
+	// The never-published placeholder goes with its draft; the note's
+	// reference keeps the shared file attached (the two-targets edge).
+	expect(psql(`select count(*) from drafts where ref_id = '${postId}'`)).toBe('0');
+	expect(psql(`select count(*) from posts where id = '${postId}'`)).toBe('0');
+	expect(refCount('post', postId)).toBe('0');
+	expect(refCount('note', noteRefId())).toBe('1');
+	expect(fileStatus()).toBe('attached');
+});
+
+test('page hard-delete clears its references inside the delete transaction', async ({ page }) => {
+	psql(
+		`insert into pages (slug, title, content, content_format) values ('${PAGE_SLUG}', '{"en":"${PAGE_TITLE}"}'::jsonb, '{"en":"fixture /i/${KEY}@full body"}'::jsonb, 'markdown')`
+	);
+	const pageId = psql(`select id from pages where slug = '${PAGE_SLUG}'`);
+	psql(
+		`insert into file_references (file_id, ref_type, ref_id) select id, 'page', '${pageId}' from files where object_key = '${KEY}'`
+	);
+	expect(refCount('page', pageId)).toBe('1');
+
+	await page.goto('/admin/pages');
+	const row = page.getByRole('row').filter({ hasText: PAGE_TITLE });
+	await expect(row.first()).toBeVisible({ timeout: 15000 });
+	await row.first().getByRole('button', { name: '删除' }).click();
+	const dialog = page.getByRole('alertdialog');
+	await expect(dialog).toBeVisible({ timeout: 10000 });
+	await dialog.getByRole('button', { name: '删除', exact: true }).click();
+	await expect(page.getByRole('row').filter({ hasText: PAGE_TITLE })).toHaveCount(0, {
+		timeout: 15000
+	});
+
+	expect(psql(`select count(*) from pages where slug = '${PAGE_SLUG}'`)).toBe('0');
+	expect(refCount('page', pageId)).toBe('0');
+	expect(refCount('note', noteRefId())).toBe('1');
+	expect(fileStatus()).toBe('attached');
+});
+
+test('publish keeps the reference set of the published body', async ({ page }) => {
+	const noteId = noteRefId();
+	await page.goto(`/admin/notes/edit?id=${noteId}`);
+	await expect(page.locator('input[name="title"]')).toHaveValue(NOTE_TITLE, { timeout: 15000 });
+	await expect(async () => {
+		await page.getByRole('button', { name: '发布' }).click();
+		await page.waitForURL(/published=1/, { timeout: 15000 });
+	}).toPass({ timeout: 30000 });
+
+	expect(psql(`select count(*) from drafts where ref_id = '${noteId}'`)).toBe('0');
+	expect(refCount('note', noteId)).toBe('1');
+	expect(fileStatus()).toBe('attached');
+});
+
+test('dropping the image from the working content flips the file to detached (with anchor)', async ({
+	page
+}) => {
+	const noteId = noteRefId();
+	await page.goto(`/admin/notes/edit?id=${noteId}`);
+	await expect(page.locator('input[name="title"]')).toHaveValue(NOTE_TITLE, { timeout: 15000 });
+	// The reopened working copy renders the image (CRLF-safe import: a
+	// FormData-normalized `\r\n` used to degrade this line to link text).
+	await expect(page.locator('[data-lexical-editor="true"] img')).toHaveCount(1, {
+		timeout: 15000
+	});
+	// Remove the image through code mode: drop the image line, leave code mode
+	// (the rich editor rebuilds from the edited markdown), then save.
+	await page.getByRole('button', { name: '切换到代码模式' }).click();
+	const codeArea = page.locator('textarea');
+	await expect(codeArea).toBeVisible({ timeout: 10000 });
+	const markdown = await codeArea.inputValue();
+	expect(markdown).toContain('/i/');
+	const stripped = markdown
+		.split('\n')
+		.filter((line) => !line.includes('/i/'))
+		.join('\n')
+		.trim();
+	await codeArea.fill(stripped);
+	await page.getByRole('button', { name: '切换到富文本模式' }).click();
+	await expect(page.locator('[data-lexical-editor="true"] img')).toHaveCount(0, {
+		timeout: 15000
+	});
+	await manualSave(page);
+
+	// "Draft drops the image -> detached -> TTL" (Q15 edge case); the mention
+	// scan remains the safety net until the published body stops mentioning it.
+	expect(refCount('note', noteId)).toBe('0');
+	expect(fileStatus()).toBe('detached');
+	expect(psql(`select detached_at is not null from files where object_key = '${KEY}'`)).toBe('t');
+});
