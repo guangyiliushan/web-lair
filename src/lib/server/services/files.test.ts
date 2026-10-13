@@ -198,6 +198,24 @@ describe('uploadFile', () => {
 		expect(updateChain.set).toHaveBeenCalledWith({ updatedAt: expect.any(Date) });
 	});
 
+	it('refreshes the detached anchor when a detached row is reused (purge window)', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([{ ...EXISTING_ROW, status: 'detached' }]));
+
+		const result = await uploadFile(
+			{ fileName: 'renamed.jpg', bytes: JPEG, uploadedBy: 'u1' },
+			{ storage: storageMock }
+		);
+
+		expect(result).toEqual({ ...EXISTING_ROW, status: 'detached', deduplicated: true });
+		// A reuse landing in the re-upload -> first-save window must restart
+		// the detached TTL clock, or a purge deletes bytes just handed out
+		// (review round 2).
+		expect(updateChain.set).toHaveBeenCalledWith({
+			updatedAt: expect.any(Date),
+			detachedAt: expect.any(Date)
+		});
+	});
+
 	it('uploads original + variants then writes the registry row (zero orphans)', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		processImageMock.mockResolvedValueOnce(PROCESSED);
@@ -861,7 +879,7 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		// The same key in three locales AND twice in the en body: the old
-		// collect pushed five rows and the admin panel's keyed each crashed
+		// collect pushed four rows and the admin panel's keyed each crashed
 		// on duplicates.
 		dbMock.select.mockReturnValueOnce(
 			selectChain([

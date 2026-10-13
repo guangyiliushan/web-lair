@@ -146,16 +146,22 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 	const contentHash = createHash('sha256').update(input.bytes).digest('hex');
 	const existing = await findFileByHash(contentHash, database);
 	if (existing) {
-		// A dedupe hit is a USE: refresh the last-event anchor so the TTL
-		// purge (pending anchors on updated_at since the round-3 ruling)
-		// never deletes content that was handed out moments ago. The touch
-		// must be CONFIRMED (review round 1): if a purge deleted the row
-		// between the lookup and the touch, the update hits 0 rows and we
-		// fall through to a fresh insert — reporting a deleted row as a
-		// dedupe hit would hand callers a file whose bytes are gone.
+		// A dedupe hit is a USE: refresh the TTL anchor before anything can
+		// delete content that was handed out moments ago. The anchor is
+		// per-status (review round 2): pending rows anchor on `updated_at`
+		// (round-3 ruling), but detached rows anchor on `detached_at` -
+		// touching only `updated_at` left the purge window open for a
+		// detached row that was just re-delivered and not yet referenced.
+		// The touch must be CONFIRMED (review round 1): if a purge deleted
+		// the row between the lookup and the touch, the update hits 0 rows
+		// and we fall through to a fresh insert — reporting a deleted row
+		// as a dedupe hit would hand callers a file whose bytes are gone.
 		const touched = await database
 			.update(files)
-			.set({ updatedAt: new Date() })
+			.set({
+				updatedAt: new Date(),
+				...(existing.status === 'detached' ? { detachedAt: new Date() } : {})
+			})
 			.where(eq(files.id, existing.id))
 			.returning({ id: files.id });
 		if (touched.length > 0) return { ...existing, deduplicated: true };
@@ -669,9 +675,11 @@ export async function purgeMedia(
 	if (!options.dryRun && !truncated) {
 		for (const candidate of candidates) {
 			if (mentioned.has(candidate.objectKey)) continue;
-			// Anchor re-verify (review round 1): a dedupe USE landing after
-			// the snapshot refreshes updated_at; the recorded TTL cutoff
-			// turns that into `reused` → skipped, never deleted.
+			// Anchor re-verify (review rounds 1+2): a dedupe USE landing
+			// after the snapshot refreshes the row's TTL anchor (updated_at
+			// for pending, detached_at for detached); the recorded cutoff
+			// then fails the reuse check and the candidate is skipped as
+			// `reused` — never deleted.
 			const ttlDays = candidate.status === 'detached' ? detachedDays : pendingDays;
 			const cutoff = new Date(now - ttlDays * DAY_MS);
 			try {
