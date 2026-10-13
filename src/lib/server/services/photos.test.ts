@@ -589,9 +589,26 @@ describe('listAdminPhotos', () => {
 });
 
 describe('listPhotoNeighbors', () => {
-	it('returns the adjacent visible rows around the cursor', async () => {
-		dbMock.select.mockReturnValueOnce(selectChain([{ slug: 'newer', title: { en: 'N' } }]));
-		dbMock.select.mockReturnValueOnce(selectChain([{ slug: 'older', title: null }]));
+	const NEWER_ROW = {
+		id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+		slug: 'newer',
+		title: { en: 'N' },
+		description: null,
+		objectKey: 'aa/aa.jpg',
+		fileName: 'aa.jpg',
+		mimeType: 'image/jpeg',
+		width: 10,
+		height: 10,
+		thumbhash: null,
+		byteSize: 123
+	};
+	const OLDER_ROW = { ...NEWER_ROW, id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', slug: 'older' };
+
+	it('returns the adjacent visible rows with the viewer field set and the feed position', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([NEWER_ROW]));
+		dbMock.select.mockReturnValueOnce(selectChain([OLDER_ROW]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ count: 2 }]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ count: 5 }]));
 
 		const result = await listPhotoNeighbors({
 			sortAt: new Date('2026-01-01T00:00:00Z'),
@@ -599,21 +616,29 @@ describe('listPhotoNeighbors', () => {
 		});
 
 		expect(result).toEqual({
-			newer: { slug: 'newer', title: { en: 'N' } },
-			older: { slug: 'older', title: null }
+			newer: NEWER_ROW,
+			older: OLDER_ROW,
+			position: { index: 3, total: 5 }
 		});
-		expect(dbMock.select).toHaveBeenCalledTimes(2);
+		expect(dbMock.select).toHaveBeenCalledTimes(4);
+		// Neighbour rows carry the viewer fields, which live on `files`.
+		const firstChain = dbMock.select.mock.results[0].value as {
+			innerJoin: ReturnType<typeof vi.fn>;
+		};
+		expect(firstChain.innerJoin.mock.calls[0][0]).toBe(filesTable);
 	});
 
-	it('returns null neighbours at the feed boundaries', async () => {
+	it('returns null neighbours and the boundary position at the feed edges', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ count: 0 }]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ count: 0 }]));
 
 		await expect(
 			listPhotoNeighbors({
 				sortAt: new Date('2026-01-01T00:00:00Z'),
 				id: '11111111-1111-1111-1111-111111111111'
 			})
-		).resolves.toEqual({ newer: null, older: null });
+		).resolves.toEqual({ newer: null, older: null, position: { index: 1, total: 0 } });
 	});
 });

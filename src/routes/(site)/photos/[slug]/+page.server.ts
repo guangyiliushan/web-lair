@@ -31,7 +31,10 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		error(404, 'Not found');
 	}
 
-	const neighbors = await listPhotoNeighbors({
+	// Neighbours now carry the viewer field set + the feed position (3c):
+	// the overlay opens straight from the SSR payload and only fetches when
+	// it walks past the ±1 window.
+	const { newer, older, position } = await listPhotoNeighbors({
 		sortAt: row.takenAt ?? row.createdAt,
 		id: row.id
 	});
@@ -39,6 +42,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	return {
 		seo: { path: `/photos/${row.slug}` },
 		photo: row,
-		neighbors
+		neighbors: { newer, older },
+		position
 	};
 };

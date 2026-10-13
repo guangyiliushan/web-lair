@@ -11,6 +11,7 @@ import {
 } from '$lib/server/media/exif-makernotes';
 import { tagSlug, titleSlug } from '$lib/utils/slug';
 import { deleteFile } from './files';
+import type { PhotoTileText } from '$lib/components/photos/photo-tile';
 import type { ObjectStoragePort } from '$lib/server/storage/port';
 
 /**
@@ -682,11 +683,6 @@ export function getVisiblePhotoById(
 	return loadVisibleDetail(eq(photos.id, id), deps);
 }
 
-export interface PhotoNeighbor {
-	slug: string;
-	title: LocalizedText | null;
-}
-
 /**
  * Adjacent visible photos for the viewer. The feed orders by
  * `(sort_at, id) DESC`, so `newer` is the row before the current one (tuple
@@ -694,38 +690,110 @@ export interface PhotoNeighbor {
  * are single-row keyset reads on the same tuple the list paginates on —
  * hidden rows are filtered identically on both faces.
  */
+/**
+ * Fields the overlay viewer needs to render a photo without a second page
+ * load (3c): the tile surface plus the registry byte size for the T16/T10
+ * loading policy. Deliberately a subset of the detail payload - the overlay
+ * never reads EXIF.
+ */
+const PUBLIC_VIEWER_FIELDS = {
+	id: photos.id,
+	slug: photos.slug,
+	title: photos.title,
+	description: photos.description,
+	objectKey: files.objectKey,
+	fileName: files.fileName,
+	mimeType: files.mimeType,
+	width: files.width,
+	height: files.height,
+	thumbhash: files.thumbhash,
+	byteSize: files.byteSize
+} as const;
+
+export interface PublicViewerPhoto {
+	id: string;
+	slug: string;
+	title: PhotoTileText;
+	description: PhotoTileText;
+	objectKey: string;
+	fileName: string;
+	mimeType: string;
+	width: number | null;
+	height: number | null;
+	thumbhash: string | null;
+	byteSize: number;
+}
+
+/** 1-based feed position for the「i / N」counter (newest first). */
+export interface PhotoFeedPosition {
+	index: number;
+	total: number;
+}
+
+/**
+ * Adjacent visible rows around the cursor plus the feed position. The
+ * neighbours now carry the viewer field set (3c) so the overlay can open and
+ * cycle with zero round-trips for ±1; the API endpoint composes the same
+ * call for the lazy fetches past ±1.
+ */
 export async function listPhotoNeighbors(
 	current: { sortAt: Date; id: string },
 	deps: PhotosDeps = {}
-): Promise<{ newer: PhotoNeighbor | null; older: PhotoNeighbor | null }> {
+): Promise<{
+	newer: PublicViewerPhoto | null;
+	older: PublicViewerPhoto | null;
+	position: PhotoFeedPosition;
+}> {
 	const { database } = await resolveDeps(deps);
 	const sortAt = current.sortAt.toISOString();
-	const fields = { slug: photos.slug, title: photos.title };
-	const [newerRows, olderRows] = await Promise.all([
+	const cursor = sql`(${SORT_KEY}, ${photos.id})`;
+	const [newerRows, olderRows, newerCountRows, totalCountRows] = await Promise.all([
 		database
-			.select(fields)
+			.select(PUBLIC_VIEWER_FIELDS)
 			.from(photos)
+			.innerJoin(files, eq(photos.fileId, files.id))
 			.where(
 				and(
 					eq(photos.isVisible, true),
-					sql`(${SORT_KEY}, ${photos.id}) > (${sortAt}::timestamptz, ${current.id}::uuid)`
+					sql`${cursor} > (${sortAt}::timestamptz, ${current.id}::uuid)`
 				)
 			)
 			.orderBy(sql`${SORT_KEY} asc, ${photos.id} asc`)
 			.limit(1),
 		database
-			.select(fields)
+			.select(PUBLIC_VIEWER_FIELDS)
+			.from(photos)
+			.innerJoin(files, eq(photos.fileId, files.id))
+			.where(
+				and(
+					eq(photos.isVisible, true),
+					sql`${cursor} < (${sortAt}::timestamptz, ${current.id}::uuid)`
+				)
+			)
+			.orderBy(sql`${SORT_KEY} desc, ${photos.id} desc`)
+			.limit(1),
+		database
+			.select({ count: sql<number>`count(*)::int` })
 			.from(photos)
 			.where(
 				and(
 					eq(photos.isVisible, true),
-					sql`(${SORT_KEY}, ${photos.id}) < (${sortAt}::timestamptz, ${current.id}::uuid)`
+					sql`${cursor} > (${sortAt}::timestamptz, ${current.id}::uuid)`
 				)
-			)
-			.orderBy(sql`${SORT_KEY} desc, ${photos.id} desc`)
-			.limit(1)
+			),
+		database
+			.select({ count: sql<number>`count(*)::int` })
+			.from(photos)
+			.where(eq(photos.isVisible, true))
 	]);
-	return { newer: newerRows[0] ?? null, older: olderRows[0] ?? null };
+	return {
+		newer: newerRows[0] ?? null,
+		older: olderRows[0] ?? null,
+		position: {
+			index: (newerCountRows[0]?.count ?? 0) + 1,
+			total: totalCountRows[0]?.count ?? 0
+		}
+	};
 }
 
 export interface PublicPhotoFilters {

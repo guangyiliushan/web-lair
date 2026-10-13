@@ -69,7 +69,11 @@ function makeEvent(slug = 'sunset', search = '') {
 beforeEach(() => {
 	vi.clearAllMocks();
 	service.findSlugTargetId.mockResolvedValue(null);
-	service.listPhotoNeighbors.mockResolvedValue({ newer: null, older: null });
+	service.listPhotoNeighbors.mockResolvedValue({
+		newer: null,
+		older: null,
+		position: { index: 1, total: 1 }
+	});
 });
 
 describe('(site)/photos/[slug] load — viewer', () => {
@@ -77,13 +81,15 @@ describe('(site)/photos/[slug] load — viewer', () => {
 		service.getVisiblePhotoBySlug.mockResolvedValue(PHOTO);
 		service.listPhotoNeighbors.mockResolvedValue({
 			newer: { slug: 'newer', title: null },
-			older: { slug: 'older', title: null }
+			older: { slug: 'older', title: null },
+			position: { index: 2, total: 5 }
 		});
 
 		const data = (await load(makeEvent())) as {
 			seo: { path: string };
 			photo: { slug: string };
 			neighbors: { newer: { slug: string } | null; older: { slug: string } | null };
+			position: { index: number; total: number };
 		};
 
 		expect(data.seo).toEqual({ path: '/photos/sunset' });
@@ -94,6 +100,7 @@ describe('(site)/photos/[slug] load — viewer', () => {
 			sortAt: PHOTO.takenAt,
 			id: PHOTO.id
 		});
+		expect(data.position).toEqual({ index: 2, total: 5 });
 	});
 
 	it('redirects a retired slug once, preserving the query string', async () => {
