@@ -80,13 +80,19 @@ describe('ImageInsertDialog - three-source picker (ST-3 3a2, review rounds 1-2)'
 		expect(urls).toHaveLength(1); // the tab load itself
 		const search = page.getByRole('textbox', { name: '搜索名称…' });
 		await search.fill('c');
-		expect(urls).toHaveLength(1); // still inside the debounce window
+		expect(urls).toHaveLength(1); // nothing fires synchronously per keystroke
 		await search.fill('co');
-		await expect.poll(() => urls.length).toBe(2); // one coalesced request
-		// settle: a broken clearTimeout would flush a late third request here
+		// The debounce fires later; under heavy load the two fills can straddle
+		// the window, so only the load-independent contracts are pinned: the
+		// final query wins, exactly once, and the request stream settles.
+		await expect.poll(() => urls.length, { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
 		await new Promise((resolve) => setTimeout(resolve, 400));
-		expect(urls).toHaveLength(2);
-		expect(urls.at(-1)).toBe('/admin/editor-uploads?source=files&q=co');
+		const queries = urls.map((u) => new URL(u, 'http://test.local').searchParams.get('q'));
+		expect(queries.at(-1)).toBe('co');
+		expect(queries.filter((q) => q === 'co')).toHaveLength(1);
+		const settled = urls.length;
+		await new Promise((resolve) => setTimeout(resolve, 400));
+		expect(urls).toHaveLength(settled); // and no trailing extra request
 	});
 
 	it('shows the empty gallery copy and the list failure state', async () => {

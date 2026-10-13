@@ -7,20 +7,15 @@
 	import { Spinner } from '$lib/components/ui/spinner';
 	import IconPhoto from '@tabler/icons-svelte-runes/icons/photo';
 	import { m } from '$lib/paraglide/messages';
-
-	/**
-	 * Picker item as served by the editor-uploads endpoint (3a2). A client
-	 * component cannot import from a `+server` module, so the shape is a
-	 * structural mirror - the server exports its copy for the route tests.
-	 */
-	interface PickerItem {
-		id: string;
-		name: string;
-		url: string;
-		previewUrl: string;
-		width: number | null;
-		height: number | null;
-	}
+	import {
+		EDITOR_UPLOADS_ENDPOINT as ENDPOINT,
+		EditorUploadError,
+		altFromName,
+		tailAttrsOf,
+		uploadEditorImage,
+		type PickerItem
+	} from '$lib/media/editor-uploads';
+	import { uploadErrorCopy } from '$lib/components/markdown/editor/upload-feedback';
 
 	type Tab = 'url' | 'photos' | 'files';
 	type PickerSource = 'photos' | 'files';
@@ -32,9 +27,6 @@
 	};
 
 	let { open = $bindable(), onInsert }: Props = $props();
-
-	/** Fixed admin route; a prop nobody sets stays out (review round 1). */
-	const ENDPOINT = '/admin/editor-uploads';
 
 	let tab = $state<Tab>('url');
 	let urlInput = $state<HTMLInputElement | null>(null);
@@ -116,46 +108,6 @@
 		searchTimer = setTimeout(() => void loadList(), 300);
 	}
 
-	/** "cover.png" → "cover". Markdown-bracket metacharacters and newlines are
-	 *  stripped so a file name cannot inject extra image/link structure into
-	 *  the emitted markdown (the renderer sanitizes HTML, not markdown). */
-	function altFromName(name: string): string {
-		return name
-			.replace(/\.[a-z0-9]{1,10}$/i, '')
-			.replace(/[\\[\]()\n\r]/g, '')
-			.slice(0, 128);
-	}
-
-	/** Inner `{width=W height=H}` text when both dimensions are known (Q11). */
-	function tailAttrsOf(dims: { width?: number | null; height?: number | null }): string {
-		return dims.width != null && dims.height != null
-			? `width=${dims.width} height=${dims.height}`
-			: '';
-	}
-
-	/** Closed failure-code set → localized copy (Q10 asks for readable copy,
-	 *  including 429); unknown codes fall back to the raw code. */
-	function uploadErrorCopy(code: string | null): string {
-		switch (code) {
-			case 'too-large':
-				return m.image_upload_err_too_large();
-			case 'throttled':
-				return m.image_upload_err_throttled();
-			case 'unsupported-type':
-				return m.image_upload_err_unsupported_type();
-			case 'unauthorized':
-				return m.image_upload_err_unauthorized();
-			case 'forbidden':
-				return m.image_upload_err_forbidden();
-			case 'server-error':
-				return m.image_upload_err_server();
-			case 'network':
-				return m.image_upload_err_network();
-			default:
-				return m.image_upload_failed({ code: code ?? '' });
-		}
-	}
-
 	/** Every programmatic close funnels through here so state always resets
 	 *  (bits-ui's own close paths land in handleOpenChange below). */
 	function closeDialog() {
@@ -190,38 +142,19 @@
 		for (const file of files) {
 			try {
 				processed += 1;
-				const form = new FormData();
-				form.set('file', file);
-				const response = await fetch(ENDPOINT, {
-					method: 'POST',
-					headers: { accept: 'application/json' },
-					body: form
-				});
+				const result = await uploadEditorImage(file);
 				if (batch !== uploadBatch) return; // the dialog closed mid-batch
-				const body = (await response.json().catch(() => null)) as {
-					url?: string;
-					width?: number | null;
-					height?: number | null;
-					code?: string;
-				} | null;
-				if (!response.ok || !body?.url) {
-					failed = true;
-					uploadState = 'error';
-					uploadError = body?.code ?? `HTTP ${response.status}`;
-					// Files after the failure are skipped; say so instead of
-					// dropping them silently (review round 2).
-					uploadSkipped = files.length - processed;
-					break;
-				}
 				// Uploads insert immediately; the dialog stays open so a batch
 				// can continue - each success lands at the caret.
-				onInsert(body.url, altFromName(file.name), tailAttrsOf(body));
-			} catch {
+				onInsert(result.url, altFromName(file.name), tailAttrsOf(result));
+			} catch (error) {
 				if (batch !== uploadBatch) return;
-				uploadState = 'error';
-				uploadError = 'network';
-				uploadSkipped = files.length - processed;
 				failed = true;
+				uploadState = 'error';
+				uploadError = error instanceof EditorUploadError ? error.code : 'network';
+				// Files after the failure are skipped; say so instead of
+				// dropping them silently (review round 2).
+				uploadSkipped = files.length - processed;
 				break;
 			}
 		}

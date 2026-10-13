@@ -9,6 +9,7 @@ import {
 } from '$lib/server/services/files';
 import { listAdminPhotos } from '$lib/server/services/photos';
 import { photoEmbedSrc, photoTileSrc } from '$lib/components/photos/photo-tile';
+import type { PickerItem } from '$lib/media/editor-uploads';
 import { MAX_UPLOAD_BYTES, sniffUpload } from '$lib/server/media/sniff';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
@@ -122,21 +123,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 /** Picker list cap: newest 60 per source; search narrows server-side. */
 const PICKER_LIMIT = 60;
 
-/**
- * The picker payload (mirrored by ImageInsertDialog.svelte; the contract is
- * deliberately minimal - every field has a consumer in the dialog). The
- * endpoint exports the server-side copy for the route tests; type-only
- * imports from `+server` are not reachable from client components, so the
- * dialog carries its own structural copy.
+/*
+ * The picker payload type lives in `$lib/media/editor-uploads` - single
+ * source for the endpoint, the dialog and the paste/drop plugin (review
+ * round 2, Q16). The server imports the type only.
  */
-export interface PickerItem {
-	id: string;
-	name: string;
-	url: string;
-	previewUrl: string;
-	width: number | null;
-	height: number | null;
-}
 
 function toPickerItem(
 	row: {

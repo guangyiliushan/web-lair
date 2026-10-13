@@ -38,6 +38,10 @@ import { $isAlertNode } from '$lib/components/markdown/alert/alert-node';
 import { EDITOR_NODES } from '$lib/components/markdown/editor/editor-nodes';
 import { EDITOR_THEME } from '$lib/components/markdown/editor/editor-shared';
 import {
+	registerEditorUploads,
+	type EditorUploadStatus
+} from '$lib/components/markdown/editor/upload-plugin';
+import {
 	EDITOR_TRANSFORMERS,
 	$unescapeImportedText,
 	normalizeChecklistMarkers
@@ -63,6 +67,8 @@ export interface LexicalActionOptions {
 	}) => void;
 	/** 将 editor 实例抛出给 Svelte $state */
 	onEditorReady?: (editor: LexicalEditor) => void;
+	/** Paste/drop image uploads (3a3): status for the editor chrome. */
+	onUploadStatus?: (status: EditorUploadStatus) => void;
 }
 
 /**
@@ -158,6 +164,14 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 		}
 	});
 
+	// Paste/drop image uploads (3a3): @lexical/rich-text routes local
+	// pasted/dropped files into the DRAG_DROP_PASTE command; the plugin
+	// consumes them (local images only, up to three in flight, each result
+	// inserted as it lands).
+	const unregisterUploads = registerEditorUploads(editor, (status) =>
+		optionsRef.current.onUploadStatus?.(status)
+	);
+
 	// 加载初始内容
 	editor.update(
 		() => {
@@ -251,6 +265,7 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 			unregisterTablePlugin();
 			unregisterHorizontalRule();
 			unregisterSelectionVisual();
+			unregisterUploads();
 			markedSelectionEls = [];
 			node.removeEventListener('focus', focusListener, true);
 			node.removeEventListener('blur', blurListener, true);

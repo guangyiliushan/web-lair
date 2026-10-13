@@ -14,6 +14,8 @@
 	import CodeModeToggle from '$lib/components/markdown/toolbar/CodeModeToggle.svelte';
 	import TableCellMenu from '$lib/components/markdown/toolbar/TableCellMenu.svelte';
 	import LinkHoverEditor from '$lib/components/markdown/toolbar/LinkHoverEditor.svelte';
+	import { uploadErrorCopy } from '$lib/components/markdown/editor/upload-feedback';
+	import type { EditorUploadStatus } from '$lib/components/markdown/editor/upload-plugin';
 
 	// Global styles for the Lexical editor (PostCSS processes the @apply / Tailwind directives)
 	import '$lib/components/markdown/editor/lexical-editor.css';
@@ -54,6 +56,8 @@
 	let codeModeText = $state('');
 	/** Code-mode edits handed to the rebuilt editor after leaving code mode. */
 	let pendingMarkdown = $state<string | null>(null);
+	/** Paste/drop upload status from the editor pipeline (3a3). */
+	let uploadStatus = $state<EditorUploadStatus>({ uploading: 0, lastErrorCode: null });
 
 	// ── Code-mode line-number gutter ──
 	const lineNumbers = $derived(
@@ -214,7 +218,8 @@
 					placeholder,
 					autofocus,
 					onChange: handleChange,
-					onEditorReady: handleEditorReady
+					onEditorReady: handleEditorReady,
+					onUploadStatus: (status) => (uploadStatus = status)
 				}}
 				role="textbox"
 				aria-multiline="true"
@@ -232,6 +237,16 @@
 			></div>
 		{/if}
 	</div>
+
+	{#if uploadStatus.uploading > 0 || uploadStatus.lastErrorCode !== null}
+		<div role="status" class="px-1 pt-2 text-xs">
+			{#if uploadStatus.uploading > 0}
+				<span class="text-muted-foreground">{m.image_uploading()}</span>
+			{:else}
+				<span class="text-destructive">{uploadErrorCopy(uploadStatus.lastErrorCode)}</span>
+			{/if}
+		</div>
+	{/if}
 
 	<MathEditDialog
 		bind:open={mathDialogOpen}
