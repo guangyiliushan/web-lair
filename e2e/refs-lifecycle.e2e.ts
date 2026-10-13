@@ -21,9 +21,12 @@ const NOTE_SLUG = 'e2e-refs-note';
 const PAGE_TITLE = 'E2E Refs Page';
 const PAGE_SLUG = 'e2e-refs-page';
 
-// Valid 1x1 PNG (the endpoint sniffs magic bytes; sharp decodes it).
+// Valid 1x1 PNG, unique bytes on purpose: the registry is content-addressed,
+// so sharing a fixture image with another spec would share its `files` row
+// (and its references) across specs. The endpoint sniffs magic bytes; sharp
+// decodes it.
 const PNG_B64 =
-	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWMQFJf9DwABxwFFFH1wbAAAAABJRU5ErkJggg==';
 /** Bare object key learned from the first saved payload (serial file). */
 let KEY = '';
 
@@ -244,6 +247,11 @@ test('publish keeps the reference set of the published body', async ({ page }) =
 	const noteId = noteRefId();
 	await page.goto(`/admin/notes/edit?id=${noteId}`);
 	await expect(page.locator('input[name="title"]')).toHaveValue(NOTE_TITLE, { timeout: 15000 });
+	// Empty-tooth guard (review): drop the reference the draft save wrote so
+	// only the publish sync can put it back - deleting the publish sync
+	// leaves this red.
+	psql(`delete from file_references where ref_type = 'note' and ref_id = '${noteId}'`);
+	expect(refCount('note', noteId)).toBe('0');
 	await expect(async () => {
 		await page.getByRole('button', { name: '发布' }).click();
 		await page.waitForURL(/published=1/, { timeout: 15000 });
@@ -268,7 +276,7 @@ test('dropping the image from the working content flips the file to detached (wi
 	// Remove the image through code mode: drop the image line, leave code mode
 	// (the rich editor rebuilds from the edited markdown), then save.
 	await page.getByRole('button', { name: '切换到代码模式' }).click();
-	const codeArea = page.locator('textarea');
+	const codeArea = page.getByRole('textbox', { name: '输入正文...' });
 	await expect(codeArea).toBeVisible({ timeout: 10000 });
 	const markdown = await codeArea.inputValue();
 	expect(markdown).toContain('/i/');
