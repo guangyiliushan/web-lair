@@ -7,13 +7,15 @@
 	import {
 		FLOATER_DELAY_MS,
 		shouldLoadFullOnDemand,
+		streamImageBytes,
 		type ConnectionLike,
 		type ViewerImageSource
 	} from './viewer-load';
 
 	/**
-	 * Progressive full-image stage for the page viewer (plan §4.5, T10/T16 —
-	 * the overlay viewer keeps its own copy for v1.1).
+	 * Progressive full-image stage for the page viewer (plan §4.5, T10/T16).
+	 * The streaming pump is the shared `viewer-load.streamImageBytes` (Q5);
+	 * this component owns the phase machine and the floater DOM.
 	 *
 	 * - Policy: ≤8MB and no metered signal → auto-load; over threshold or
 	 *   saveData/2G → an explicit "load full image" button.
@@ -95,28 +97,14 @@
 		const ctl = new AbortController();
 		controller = ctl;
 		try {
-			const response = await fetch(fullSrc, { signal: ctl.signal });
-			if (!response.ok) throw new Error(`full image ${response.status}`);
-			const length = Number(response.headers.get('content-length'));
-			if (Number.isFinite(length) && length > 0) totalBytes = length;
-			let blob: Blob;
-			const reader = response.body?.getReader();
-			if (reader) {
-				const chunks: BlobPart[] = [];
-				for (;;) {
-					const { done, value } = await reader.read();
-					if (done) break;
-					// Zero-copy: the reader hands Uint8Array views whose buffer
-					// type TS cannot prove is a plain ArrayBuffer (BlobPart
-					// wants one); the bytes are identical at runtime.
-					chunks.push(value as unknown as BlobPart);
-					loadedBytes += value.byteLength;
+			const blob = await streamImageBytes(fullSrc, {
+				signal: ctl.signal,
+				fallbackTotal: totalBytes,
+				onProgress: (progress) => {
+					loadedBytes = progress.loaded;
+					if (progress.total !== null) totalBytes = progress.total;
 				}
-				blob = new Blob(chunks, { type: response.headers.get('content-type') ?? '' });
-			} else {
-				blob = await response.blob();
-				loadedBytes = blob.size;
-			}
+			});
 			if (ctl.signal.aborted) return;
 			if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
 			objectUrl = URL.createObjectURL(blob);

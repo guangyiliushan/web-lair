@@ -125,3 +125,43 @@ describe('streamImageBytes (3c)', () => {
 		}
 	});
 });
+
+describe('streamImageBytes edge branches (3c review 03 P3-7)', () => {
+	it('falls back to response.blob() when the body is not streamable', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(null, { status: 200 }))
+		);
+		try {
+			const progress: Array<{ loaded: number; total: number | null }> = [];
+			const blob = await streamImageBytes('/i/x@full', {
+				signal: new AbortController().signal,
+				onProgress: (p) => progress.push({ ...p })
+			});
+			expect(blob.size).toBe(0);
+			expect(progress).toEqual([{ loaded: 0, total: null }]);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('ignores an invalid Content-Length and keeps the fallback total', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () => new Response(new Uint8Array([1, 2]), { headers: { 'content-length': 'abc' } })
+			)
+		);
+		try {
+			const progress: Array<{ loaded: number; total: number | null }> = [];
+			await streamImageBytes('/i/x@full', {
+				signal: new AbortController().signal,
+				fallbackTotal: 4242,
+				onProgress: (p) => progress.push({ ...p })
+			});
+			expect(progress[0]?.total).toBe(4242);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+});

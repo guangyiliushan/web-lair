@@ -27,7 +27,7 @@ export interface ConnectionLike {
 	effectiveType?: string;
 }
 
-export interface StreamProgress {
+interface StreamProgress {
 	loaded: number;
 	total: number | null;
 }
