@@ -29,3 +29,12 @@ export function variantKeyFor(objectKey: string, variant: VariantName): string {
  */
 export const KEY_PATTERN =
 	/^([0-9a-f]{2})\/\1[0-9a-f]{62}(\.[a-z0-9]{1,10})?(?:@(thumb|preview|full))?$/;
+
+/**
+ * In-content mention pattern (`/i/<key>` inside markdown; used by the media
+ * mention scan and the reference sync - single source per the Q15 ruling).
+ * Group 1 = the bare key; an `@variant` suffix is tolerated and stripped by
+ * capture. Global flag: take matches via `String.prototype.matchAll`.
+ */
+export const I_KEY_PATTERN =
+	/\/i\/([0-9a-f]{2}\/[0-9a-f]{64}(?:\.[a-z0-9]{1,10})?)(?:@(?:thumb|preview|full))?/g;

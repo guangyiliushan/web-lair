@@ -500,13 +500,33 @@ describe('deleteFile', () => {
 	});
 
 	it('blocks deletion while stored content still mentions the key (transition guard)', async () => {
-		// The shared mention scan runs first (posts / drafts / notes; hit in
-		// a post body), then the guard re-reads the row before deciding.
+		// The shared mention scan runs first (posts / drafts / notes / pages;
+		// hit in a post body), then the guard re-reads the row before deciding.
 		dbMock.select.mockReturnValueOnce(
 			selectChain([{ id: 'p-1', content: `inline /i/${BASE_KEY} here` }])
 		);
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ objectKey: BASE_KEY }]));
+
+		expect(await deleteFile('file-1', {}, { storage: storageMock })).toEqual({
+			kind: 'mentioned'
+		});
+		expect(dbMock.transaction).not.toHaveBeenCalled();
+		expect(storageMock.delete).not.toHaveBeenCalled();
+	});
+
+	it('blocks deletion when only a page body mentions the key (3b1 first-aid)', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		// Page bodies are per-locale jsonb: the mention sits in the ja body.
+		dbMock.select.mockReturnValueOnce(
+			selectChain([
+				{ id: 'page-1', content: { en: 'no images here', ja: `図 /i/${BASE_KEY} あり` } }
+			])
+		);
 		dbMock.select.mockReturnValueOnce(selectChain([{ objectKey: BASE_KEY }]));
 
 		expect(await deleteFile('file-1', {}, { storage: storageMock })).toEqual({
@@ -626,7 +646,8 @@ describe('purgeMedia', () => {
 
 	it('dry-run reports candidates but deletes nothing', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([stalePending]));
-		// Mention scan: posts / drafts / notes (empty).
+		// Mention scan: posts / drafts / notes / pages (empty).
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
@@ -642,7 +663,8 @@ describe('purgeMedia', () => {
 
 	it('execution deletes the objects and the row (references re-checked)', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([stalePending]));
-		// Mention scan: posts / drafts / notes (empty → nothing is skipped).
+		// Mention scan: posts / drafts / notes / pages (empty → nothing is skipped).
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
@@ -672,6 +694,7 @@ describe('purgeMedia', () => {
 		dbMock.select.mockReturnValueOnce(
 			selectChain([{ id: 'd1', content: `see /i/${mentionedKey} inline` }])
 		);
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 
 		const outcome = await purgeMedia({ dryRun: false }, { storage: storageMock });
@@ -713,6 +736,7 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 			content: 'no keys here'
 		}));
 		dbMock.select.mockReturnValueOnce(selectChain(bulk)); // posts at the cap
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([{ objectKey: BASE_KEY }]));
@@ -780,6 +804,7 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 		dbMock.select.mockReturnValueOnce(selectChain(bulk));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 
 		const outcome = await purgeMedia({ dryRun: false }, { storage: storageMock });
 
@@ -793,6 +818,7 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 	it('purgeMedia tags a reused candidate when its anchor moved after the snapshot', async () => {
 		const future = new Date(Date.now() + 60_000);
 		dbMock.select.mockReturnValueOnce(selectChain([stalePending]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
@@ -816,6 +842,7 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 
 	it('purgeMedia records a candidate that vanished before the delete as gone', async () => {
 		dbMock.select.mockReturnValueOnce(selectChain([stalePending]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));

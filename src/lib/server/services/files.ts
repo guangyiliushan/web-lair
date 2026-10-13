@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import { and, desc, eq, inArray, like, sql } from 'drizzle-orm';
-import { drafts, files, notes, photos, posts } from '$lib/server/db/content';
+import { drafts, files, notes, pages, photos, posts } from '$lib/server/db/content';
 import type { FileStatus } from '$lib/server/db/content/file.schema';
 import { fileReferences } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { getOption } from '$lib/server/config/options-registry';
-import { VARIANT_NAMES, objectKeyFor, variantKeyFor } from '$lib/media/keys';
+import { I_KEY_PATTERN, VARIANT_NAMES, objectKeyFor, variantKeyFor } from '$lib/media/keys';
 import type { ObjectStoragePort } from '$lib/server/storage/port';
 import { processImage, readImageSize } from '$lib/server/media/variants';
 import {
@@ -723,24 +723,23 @@ export interface MediaAuditReport {
 	brokenLinks: BrokenLink[];
 	/** ③ registry row exists but the object is absent from storage. */
 	missingObjects: MissingObject[];
-	scannedSources: { posts: number; drafts: number; notes: number };
+	scannedSources: { posts: number; drafts: number; notes: number; pages: number };
 	/** True when any scan hit its row cap — results may be incomplete. */
 	truncated: boolean;
 }
 
-const I_KEY_PATTERN =
-	/\/i\/([0-9a-f]{2}\/[0-9a-f]{64}(?:\.[a-z0-9]{1,10})?)(?:@(?:thumb|preview|full))?/g;
-
 interface MentionScan {
 	/** Every `/i/<key>` mention in stored content (variant suffix stripped). */
 	mentions: BrokenLink[];
-	counts: { posts: number; drafts: number; notes: number };
+	counts: { posts: number; drafts: number; notes: number; pages: number };
 	truncated: boolean;
 }
 
 /**
- * Content mention scan shared by the read-only audit (check ②) and the
- * purge guard. `pages` joins once its P0 remodel lands (§11 registration).
+ * Content mention scan shared by the read-only audit (check ②) and the purge
+ * guard. Covers posts / drafts / notes / pages - the 3b₁ first-aid
+ * (2026-10-13): page bodies were the production gap, so a page-body image
+ * stayed purge-eligible until its TTL ran out.
  */
 async function scanMentions(database: FilesDb): Promise<MentionScan> {
 	const postRows = await database
@@ -755,6 +754,10 @@ async function scanMentions(database: FilesDb): Promise<MentionScan> {
 		.select({ id: notes.id, content: notes.content })
 		.from(notes)
 		.limit(SCAN_LIMIT);
+	const pageRows = await database
+		.select({ id: pages.id, content: pages.content })
+		.from(pages)
+		.limit(SCAN_LIMIT);
 
 	const mentions: BrokenLink[] = [];
 	const collect = (refType: string, rows: Array<{ id: string; content: string | null }>) => {
@@ -768,14 +771,30 @@ async function scanMentions(database: FilesDb): Promise<MentionScan> {
 	collect('post', postRows);
 	collect('draft', draftRows);
 	collect('note', noteRows);
+	// Page bodies are per-locale jsonb: scan every locale's body (duplicate
+	// keys across locales collapse for the in-use guard's purposes).
+	collect(
+		'page',
+		pageRows.flatMap((row) =>
+			Object.values(row.content ?? {})
+				.filter((body): body is string => typeof body === 'string')
+				.map((body) => ({ id: row.id, content: body }))
+		)
+	);
 
 	return {
 		mentions,
-		counts: { posts: postRows.length, drafts: draftRows.length, notes: noteRows.length },
+		counts: {
+			posts: postRows.length,
+			drafts: draftRows.length,
+			notes: noteRows.length,
+			pages: pageRows.length
+		},
 		truncated:
 			postRows.length >= SCAN_LIMIT ||
 			draftRows.length >= SCAN_LIMIT ||
-			noteRows.length >= SCAN_LIMIT
+			noteRows.length >= SCAN_LIMIT ||
+			pageRows.length >= SCAN_LIMIT
 	};
 }
 
