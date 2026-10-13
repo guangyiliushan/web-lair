@@ -42,3 +42,13 @@ export function titleSlug(title: string): string {
 		.slice(0, TITLE_SLUG_MAX)
 		.replace(/^-+|-+$/g, '');
 }
+
+/**
+ * Grammar of generated slugs (the exact output alphabet of `titleSlug`).
+ * Used to reject non-slug input BEFORE it reaches the database, so an
+ * unparseable value answers 404 like any other unknown slug instead of
+ * surfacing a driver-level 500.
+ */
+export function isPhotoSlug(value: string): boolean {
+	return /^[\p{L}\p{N}-]{1,120}$/u.test(value);
+}

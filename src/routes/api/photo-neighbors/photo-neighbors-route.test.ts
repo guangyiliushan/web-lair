@@ -46,7 +46,14 @@ describe('GET /api/photo-neighbors', () => {
 		expect(service.listPhotoNeighbors).not.toHaveBeenCalled();
 	});
 
-	it('returns the photo, its neighbours and the feed position', async () => {
+	it('answers 404 for input that is not a slug, before touching the service', async () => {
+		await expect(
+			GET({ url: new URL('http://localhost/api/photo-neighbors?slug=%00bad!') } as never)
+		).rejects.toMatchObject({ status: 404 });
+		expect(service.getVisiblePhotoBySlug).not.toHaveBeenCalled();
+	});
+
+	it('returns the slug echo, the neighbours and the feed position', async () => {
 		service.getVisiblePhotoBySlug.mockResolvedValue(PHOTO);
 		service.listPhotoNeighbors.mockResolvedValue({
 			newer: { slug: 'newer' },
@@ -59,14 +66,33 @@ describe('GET /api/photo-neighbors', () => {
 		} as never);
 
 		expect(response.status).toBe(200);
+		expect(response.headers.get('cache-control')).toBe('private, max-age=0, must-revalidate');
 		const payload = (await response.json()) as Record<string, unknown>;
-		expect(payload.photo).toMatchObject({ slug: 'sunset' });
+		expect(payload.slug).toBe('sunset');
 		expect(payload.newer).toEqual({ slug: 'newer' });
 		expect(payload.older).toBeNull();
 		expect(payload.position).toEqual({ index: 2, total: 7 });
 		// The cursor mirrors the detail loader: taken_at wins over created_at.
 		expect(service.listPhotoNeighbors).toHaveBeenCalledWith({
 			sortAt: PHOTO.takenAt,
+			id: PHOTO.id
+		});
+	});
+
+	it('falls back to created_at for the cursor when taken_at is null', async () => {
+		service.getVisiblePhotoBySlug.mockResolvedValue({ ...PHOTO, takenAt: null });
+		service.listPhotoNeighbors.mockResolvedValue({
+			newer: null,
+			older: null,
+			position: { index: 1, total: 1 }
+		});
+
+		await GET({
+			url: new URL('http://localhost/api/photo-neighbors?slug=sunset')
+		} as never);
+
+		expect(service.listPhotoNeighbors).toHaveBeenCalledWith({
+			sortAt: PHOTO.createdAt,
 			id: PHOTO.id
 		});
 	});
