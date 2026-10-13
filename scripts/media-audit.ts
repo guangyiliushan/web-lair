@@ -35,7 +35,7 @@ if (report.truncated) {
 	);
 }
 console.log(
-	`  scanned: posts=${report.scannedSources.posts} drafts=${report.scannedSources.drafts} notes=${report.scannedSources.notes}`
+	`  scanned: posts=${report.scannedSources.posts} drafts=${report.scannedSources.drafts} notes=${report.scannedSources.notes} pages=${report.scannedSources.pages}`
 );
 console.log(`  orphan  (no refs, not a photo, past TTL): ${report.orphans.length}`);
 for (const row of report.orphans) {

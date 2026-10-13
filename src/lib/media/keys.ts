@@ -35,6 +35,9 @@ export const KEY_PATTERN =
  * mention scan and the reference sync - single source per the Q15 ruling).
  * Group 1 = the bare key; an `@variant` suffix is tolerated and stripped by
  * capture. Global flag: take matches via `String.prototype.matchAll`.
+ *
+ * Deliberately laxer than KEY_PATTERN (no directory backreference):
+ * this is the mention-scan side and must be a superset of it.
  */
 export const I_KEY_PATTERN =
 	/\/i\/([0-9a-f]{2}\/[0-9a-f]{64}(?:\.[a-z0-9]{1,10})?)(?:@(?:thumb|preview|full))?/g;

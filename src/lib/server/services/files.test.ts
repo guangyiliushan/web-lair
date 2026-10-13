@@ -54,6 +54,7 @@ import {
 	isRegisteredKey,
 	listPurgeCandidates,
 	purgeMedia,
+	runMediaAudit,
 	uploadFile,
 	uploadFiles
 } from './files';
@@ -852,5 +853,36 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 
 		expect(outcome.skipped).toEqual([{ objectKey: 'aa/a.jpg', reason: 'gone' }]);
 		expect(outcome.deleted).toEqual([]);
+	});
+
+	it('audit collapses duplicate mentions to one broken link per (target, key)', async () => {
+		const duplicateKey = `ab/${'d'.repeat(64)}.png`;
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		// The same key in three locales AND twice in the en body: the old
+		// collect pushed five rows and the admin panel's keyed each crashed
+		// on duplicates.
+		dbMock.select.mockReturnValueOnce(
+			selectChain([
+				{
+					id: 'page-1',
+					content: {
+						en: `a /i/${duplicateKey} b /i/${duplicateKey} c`,
+						zh: `x /i/${duplicateKey} y`,
+						ja: `z /i/${duplicateKey} w`
+					}
+				}
+			])
+		);
+		dbMock.select.mockReturnValueOnce(selectChain([])); // known keys: none
+		dbMock.select.mockReturnValueOnce(selectChain([])); // registry rows: none
+		dbMock.select.mockReturnValueOnce(selectChain([])); // purge candidates: none
+
+		const report = await runMediaAudit({ storage: storageMock });
+
+		expect(report.brokenLinks).toEqual([{ refType: 'page', refId: 'page-1', key: duplicateKey }]);
+		expect(report.scannedSources.pages).toBe(1);
+		expect(report.truncated).toBe(false);
 	});
 });

@@ -760,10 +760,17 @@ async function scanMentions(database: FilesDb): Promise<MentionScan> {
 		.limit(SCAN_LIMIT);
 
 	const mentions: BrokenLink[] = [];
+	const seenLinks = new Set<string>();
 	const collect = (refType: string, rows: Array<{ id: string; content: string | null }>) => {
 		for (const row of rows) {
 			if (!row.content) continue;
 			for (const match of row.content.matchAll(I_KEY_PATTERN)) {
+				// One link per (target, key): pages expand per locale and a single
+				// body can repeat a key - duplicates would feed the admin panel's
+				// keyed each a duplicate key and crash it.
+				const dedupeKey = `${refType}|${row.id}|${match[1]}`;
+				if (seenLinks.has(dedupeKey)) continue;
+				seenLinks.add(dedupeKey);
 				mentions.push({ refType, refId: row.id, key: match[1] });
 			}
 		}
