@@ -541,6 +541,7 @@
 
 		<!-- Counter (top centre) + close (top right) -->
 		<p
+			data-photos-viewer-counter
 			class="absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 font-mono text-xs text-white/90"
 		>
 			{currentPosition.index} / {currentPosition.total}
