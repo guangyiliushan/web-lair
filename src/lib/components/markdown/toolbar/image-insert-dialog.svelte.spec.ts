@@ -68,31 +68,50 @@ describe('ImageInsertDialog - three-source picker (ST-3 3a2, review rounds 1-2)'
 		expect(onInsert).toHaveBeenCalledWith(`/i/${KEY}@preview`, 'sunset', 'width=3000 height=1500');
 	});
 
-	it('debounces keystrokes: nothing inside the window, one coalesced request after', async () => {
-		const urls: string[] = [];
+	it('debounces keystrokes: every search request trails its input by the window', async () => {
+		const requests: Array<{ url: string; at: number }> = [];
 		const fetchMock = vi.fn(async (input?: RequestInfo | URL) => {
-			urls.push(String(input));
+			requests.push({ url: String(input), at: performance.now() });
 			return okJson({ items: [] });
 		});
 		vi.stubGlobal('fetch', fetchMock);
 		await render(ImageInsertDialog, { open: true, onInsert: vi.fn() });
 		await page.getByRole('tab', { name: '内容资产' }).click();
-		expect(urls).toHaveLength(1); // the tab load itself
+		expect(requests).toHaveLength(1); // the tab load itself
 		const search = page.getByRole('textbox', { name: '搜索名称…' });
+		// Deterministic debounce tooth: stamp every input event, then require
+		// each search request to trail the input of its own query by roughly
+		// the 300ms window. Load inflates the request and input clocks equally,
+		// so the inequality survives a busy machine - while a debounce-free
+		// regression (request fired synchronously per keystroke) cannot.
+		const inputs: Array<{ value: string; at: number }> = [];
+		const inputEl = (await search.element()) as HTMLInputElement;
+		inputEl.addEventListener('input', () => {
+			inputs.push({ value: inputEl.value, at: performance.now() });
+		});
 		await search.fill('c');
-		expect(urls).toHaveLength(1); // nothing fires synchronously per keystroke
+		// No mid-flight request-count assertion here: under heavy load the
+		// debounce window can elapse between fill() and the next statement (the
+		// straddle already tolerated below). The pinned contracts are the
+		// timing relation above and the settle behaviour after.
 		await search.fill('co');
-		// The debounce fires later; under heavy load the two fills can straddle
-		// the window, so only the load-independent contracts are pinned: the
-		// final query wins, exactly once, and the request stream settles.
-		await expect.poll(() => urls.length, { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
+		await expect.poll(() => requests.length, { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
 		await new Promise((resolve) => setTimeout(resolve, 400));
-		const queries = urls.map((u) => new URL(u, 'http://test.local').searchParams.get('q'));
+		const queryOf = (url: string) => new URL(url, 'http://test.local').searchParams.get('q');
+		const queries = requests.map((request) => queryOf(request.url));
 		expect(queries.at(-1)).toBe('co');
 		expect(queries.filter((q) => q === 'co')).toHaveLength(1);
-		const settled = urls.length;
+		for (const [index, request] of requests.entries()) {
+			if (index === 0) continue; // the tab load has no input to trail
+			const query = queryOf(request.url);
+			if (query === null) continue;
+			const trigger = [...inputs].reverse().find((entry) => entry.value === query);
+			expect(trigger, `no input event recorded for q=${query}`).toBeDefined();
+			expect(request.at - trigger!.at).toBeGreaterThanOrEqual(280);
+		}
+		const settled = requests.length;
 		await new Promise((resolve) => setTimeout(resolve, 400));
-		expect(urls).toHaveLength(settled); // and no trailing extra request
+		expect(requests).toHaveLength(settled); // and no trailing extra request
 	});
 
 	it('shows the empty gallery copy and the list failure state', async () => {
