@@ -430,7 +430,8 @@ const QUOTE_PREFIX_REGEX = /^>\s?/;
  * imports as unchecked and the next export rewrites `- [X]` to
  * `- [ ]`. Lowercase the marker on list lines before importing.
  */
-export function normalizeChecklistMarkers(markdown: string): string {
+/** Internal step of {@link normalizeMarkdownForImport}; not exported. */
+function normalizeChecklistMarkers(markdown: string): string {
 	// No regex here on purpose: the core's CHECK_LIST shape needs a
 	// whitespace class that is awkward to spell in a literal and easy to
 	// mangle across tooling layers; plain string ops are exact.
@@ -461,16 +462,45 @@ export function normalizeChecklistMarkers(markdown: string): string {
  * normalize field values). Line-anchored element transformers fail on the
  * trailing `\r` - the image rule's `$` anchor degraded an image to "!" +
  * link text on reopen (caught by the refs-lifecycle e2e) - so normalize to
- * LF here. A `\r` also used to double as the whitespace that a bare marker
- * line needs (`- [ ]`, `-`, `#`, `>` - core CHECK_LIST/QUOTE regExps want a
- * trailing space): pad those lines first so pre-fix and post-fix parses
- * agree. The padding only touches lines that actually end with `\r`.
+ * LF here.
+ *
+ * A `\r` also used to double as the whitespace some bare marker lines need
+ * (`- [ ]`, `[ ]`, `-`, `#`, `>` - core CHECK_LIST/QUOTE regExps want a
+ * trailing space): those lines get one space before the CRs go, so the
+ * pre-fix and post-fix parses agree for content stored through the form.
+ * Two guards keep that pass honest (review round 2): lone CRs are promoted
+ * to CRLF first (a lone `\r` hides its line end from the padding match),
+ * and lines inside ``` / ~~~ fences are returned byte-identical (a fence
+ * body line that happens to be a bare marker - diff fragments, `#` comment
+ * lines in examples - must not be silently rewritten on open+save).
  */
 export function normalizeMarkdownForImport(markdown: string): string {
-	const padded = markdown.replace(
-		/^([ \t]*(?:[-*+][ \t]*\[[ xX]?\]|[-*+]|\d+\.|#{1,6}|>))\r$/gm,
-		'$1 \r'
-	);
+	const withCrlfEnds = markdown.replace(/\r(?!\n)/g, '\r\n');
+	let fence: { char: string; length: number } | null = null;
+	const padded = withCrlfEnds
+		.split('\n')
+		.map((line) => {
+			const bare = line.endsWith('\r') ? line.slice(0, -1) : line;
+			const opener = /^ {0,3}(`{3,}|~{3,})/.exec(bare);
+			if (opener) {
+				const marker = opener[1];
+				if (!fence) {
+					fence = { char: marker[0], length: marker.length };
+				} else {
+					const rest = bare.slice(opener[0].length).trim();
+					if (marker[0] === fence.char && marker.length >= fence.length && rest === '') {
+						fence = null;
+					}
+				}
+				return line;
+			}
+			if (fence) return line;
+			return line.replace(
+				/^([ \t]*(?:[-*+][ \t]*\[[ xX]?\]|\[[ xX]?\]|[-*+]|\d+\.|#{1,6}|>))\r$/,
+				'$1 \r'
+			);
+		})
+		.join('\n');
 	return normalizeChecklistMarkers(padded.replace(/\r\n?/g, '\n'));
 }
 

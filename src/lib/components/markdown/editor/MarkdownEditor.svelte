@@ -204,6 +204,7 @@
 					bind:value={codeModeText}
 					oninput={onCodeModeInput}
 					{placeholder}
+					aria-label={placeholder}
 					spellcheck="false"
 					wrap="off"
 					class="min-h-48 w-full flex-1 resize-none overflow-y-hidden bg-transparent px-3 py-3 font-mono text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/50"

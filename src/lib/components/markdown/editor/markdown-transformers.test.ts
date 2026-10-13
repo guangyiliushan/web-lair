@@ -874,7 +874,7 @@ describe('alert json <-> markdown helpers', () => {
 		expect(normalizeMarkdownForImport('- [ ]\n')).toBe('- [ ]\n');
 	});
 
-	it('imports a CRLF bare checkbox as a checklist (CR-era parity)', () => {
+	it('imports CRLF bare markers with CR-era parity (check/heading/quote/bullet)', () => {
 		const editor: LexicalEditor = createEditor({
 			namespace: 'markdown-transformers-test',
 			nodes: EDITOR_NODES,
@@ -884,13 +884,36 @@ describe('alert json <-> markdown helpers', () => {
 		});
 		editor.update(
 			() => {
-				$convertFromMarkdownString(normalizeMarkdownForImport('- [ ]\r\n'), EDITOR_TRANSFORMERS);
+				$convertFromMarkdownString(
+					normalizeMarkdownForImport('- [ ]\r\n-\r\n#\r\n>\r\n'),
+					EDITOR_TRANSFORMERS
+				);
 			},
 			{ discrete: true }
 		);
-		editor.getEditorState().read(() => {
-			expect($getRoot().getFirstChild()?.getType()).toBe('list');
-		});
+		// listType (not the node type) separates CHECK_LIST from
+		// UNORDERED_LIST - both are 'list' nodes, so a bare type assertion
+		// could never fail (review round 2).
+		const json = JSON.stringify(editor.getEditorState().toJSON());
+		expect(json).toContain('"listType":"check"');
+		expect(json).toContain('"listType":"bullet"');
+		expect(json).toContain('"tag":"h1"');
+		expect(json).toContain('"type":"quote"');
+	});
+
+	it('leaves fenced code untouched (bare marker lines inside stay byte-identical)', () => {
+		const input = '```diff\r\n-old line\r\n-\r\n+new line\r\n```\r\n~~~\r\n#\r\n~~~\r\n';
+		expect(normalizeMarkdownForImport(input)).toBe(
+			'```diff\n-old line\n-\n+new line\n```\n~~~\n#\n~~~\n'
+		);
+	});
+
+	it('pads lone-CR line ends too (promoted to CRLF before the pass)', () => {
+		expect(normalizeMarkdownForImport('- [ ]\r- [x]\r')).toBe('- [ ] \n- [x] \n');
+	});
+
+	it('pads a bullet-less task line (the CR era parsed it as a checklist)', () => {
+		expect(normalizeMarkdownForImport('[ ]\r\n')).toBe('[ ] \n');
 	});
 
 	it('folds entity-carried CRs so the round trip is a fixed point', () => {
