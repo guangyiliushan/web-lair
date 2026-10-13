@@ -457,16 +457,21 @@ export function normalizeChecklistMarkers(markdown: string): string {
  * Input normalization for every editor import boundary (main editor and the
  * nested temporary editors).
  *
- * Browsers normalize form field values to CRLF while serializing a `FormData`
- * body (HTML entry-list rules), so stored content comes back as CRLF with a
- * trailing newline. Line-anchored element transformers - the image rule's
- * `$`-anchored regExp, hr, ... - then fail on the trailing `\r`, and the core
- * LINK transformer eats the `[alt](url)` part: on reopen an image degrades to
- * literal `!` + link + `{attrs}` text. Normalize CRLF / lone CR to LF once at
- * this boundary, then fold the checklist markers as before.
+ * CRLF content comes from the FormData transport (HTML entry-list rules
+ * normalize field values). Line-anchored element transformers fail on the
+ * trailing `\r` - the image rule's `$` anchor degraded an image to "!" +
+ * link text on reopen (caught by the refs-lifecycle e2e) - so normalize to
+ * LF here. A `\r` also used to double as the whitespace that a bare marker
+ * line needs (`- [ ]`, `-`, `#`, `>` - core CHECK_LIST/QUOTE regExps want a
+ * trailing space): pad those lines first so pre-fix and post-fix parses
+ * agree. The padding only touches lines that actually end with `\r`.
  */
 export function normalizeMarkdownForImport(markdown: string): string {
-	return normalizeChecklistMarkers(markdown.replace(/\r\n?/g, '\n'));
+	const padded = markdown.replace(
+		/^([ \t]*(?:[-*+][ \t]*\[[ xX]?\]|[-*+]|\d+\.|#{1,6}|>))\r$/gm,
+		'$1 \r'
+	);
+	return normalizeChecklistMarkers(padded.replace(/\r\n?/g, '\n'));
 }
 
 export function $unescapeImportedText(): void {
@@ -479,7 +484,11 @@ export function $unescapeImportedText(): void {
 		const parent = node.getParent();
 		if (parent && (parent.getType() === 'code' || parent.getType() === 'code-highlight')) continue;
 		const text = node.getTextContent();
-		const next = unescape(text);
+		// Fold control newlines that entered via numeric entities (`&#13;`):
+		// the core decodes them AFTER the import boundary, and a CR left in a
+		// text node splits the line on the next reopen - a non-fixed round
+		// trip. HTML would fold these to spaces anyway.
+		const next = unescape(text).replace(/[\r\n]/g, ' ');
 		if (next !== text) node.setTextContent(next);
 	}
 }

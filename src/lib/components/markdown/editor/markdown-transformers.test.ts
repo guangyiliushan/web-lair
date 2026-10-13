@@ -33,7 +33,6 @@ import {
 	alertTransformer,
 	alertJsonToMarkdown,
 	markdownToAlertJson,
-	normalizeChecklistMarkers,
 	normalizeMarkdownForImport,
 	$unescapeImportedText
 } from './markdown-transformers';
@@ -52,7 +51,7 @@ function roundtrip(markdown: string): string {
 	});
 	editor.update(
 		() => {
-			$convertFromMarkdownString(normalizeChecklistMarkers(markdown), EDITOR_TRANSFORMERS);
+			$convertFromMarkdownString(normalizeMarkdownForImport(markdown), EDITOR_TRANSFORMERS);
 			$unescapeImportedText();
 		},
 		{ discrete: true }
@@ -87,7 +86,7 @@ function treeTypes(markdown: string): string[] {
 	});
 	editor.update(
 		() => {
-			$convertFromMarkdownString(normalizeChecklistMarkers(markdown), EDITOR_TRANSFORMERS);
+			$convertFromMarkdownString(normalizeMarkdownForImport(markdown), EDITOR_TRANSFORMERS);
 			$unescapeImportedText();
 		},
 		{ discrete: true }
@@ -732,7 +731,7 @@ describe('import escape symmetry (fixpoint)', () => {
 		});
 		editor.update(
 			() => {
-				$convertFromMarkdownString(normalizeChecklistMarkers(markdown), EDITOR_TRANSFORMERS);
+				$convertFromMarkdownString(normalizeMarkdownForImport(markdown), EDITOR_TRANSFORMERS);
 				$unescapeImportedText();
 			},
 			{ discrete: true }
@@ -864,6 +863,53 @@ describe('alert json <-> markdown helpers', () => {
 			const children = $getRoot().getChildren();
 			expect(children).toHaveLength(2);
 			expect($isImageNode(children[1])).toBe(true);
+		});
+	});
+
+	it('pads bare marker lines that used to lean on the CR as whitespace', () => {
+		expect(normalizeMarkdownForImport('- [ ]\r\n- [x]\r\n-\r\n#\r\n>\r\n')).toBe(
+			'- [ ] \n- [x] \n- \n# \n> \n'
+		);
+		// LF content (editor-produced) is untouched: no CR, no padding.
+		expect(normalizeMarkdownForImport('- [ ]\n')).toBe('- [ ]\n');
+	});
+
+	it('imports a CRLF bare checkbox as a checklist (CR-era parity)', () => {
+		const editor: LexicalEditor = createEditor({
+			namespace: 'markdown-transformers-test',
+			nodes: EDITOR_NODES,
+			onError: (error: Error) => {
+				throw error;
+			}
+		});
+		editor.update(
+			() => {
+				$convertFromMarkdownString(normalizeMarkdownForImport('- [ ]\r\n'), EDITOR_TRANSFORMERS);
+			},
+			{ discrete: true }
+		);
+		editor.getEditorState().read(() => {
+			expect($getRoot().getFirstChild()?.getType()).toBe('list');
+		});
+	});
+
+	it('folds entity-carried CRs so the round trip is a fixed point', () => {
+		const editor: LexicalEditor = createEditor({
+			namespace: 'markdown-transformers-test',
+			nodes: EDITOR_NODES,
+			onError: (error: Error) => {
+				throw error;
+			}
+		});
+		editor.update(
+			() => {
+				$convertFromMarkdownString(normalizeMarkdownForImport('a&#13;b\n'), EDITOR_TRANSFORMERS);
+				$unescapeImportedText();
+			},
+			{ discrete: true }
+		);
+		editor.getEditorState().read(() => {
+			expect($getRoot().getTextContent()).toBe('a b');
 		});
 	});
 });
