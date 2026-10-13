@@ -38,14 +38,17 @@ function cleanup() {
 	psql(`delete from drafts where title ilike 'e2e refs%'`);
 	psql(`delete from drafts where ref_id in (select id from posts where slug like 'e2e-refs%')`);
 	psql(`delete from drafts where ref_id in (select id from notes where slug like 'e2e-refs%')`);
+	// Match the same populations the row deletes below cover: placeholder
+	// rows carry a `draft-` slug, so title must join the predicate or a
+	// crashed run leaves orphan references behind (review round 2).
 	psql(
-		`delete from file_references where ref_id in (select id from posts where slug like 'e2e-refs%')`
+		`delete from file_references where ref_type = 'post' and ref_id in (select id from posts where slug like 'e2e-refs%' or title ilike 'e2e refs lifecycle%')`
 	);
 	psql(
-		`delete from file_references where ref_id in (select id from notes where slug like 'e2e-refs%')`
+		`delete from file_references where ref_type = 'note' and ref_id in (select id from notes where slug like 'e2e-refs%' or title ilike 'e2e refs note%')`
 	);
 	psql(
-		`delete from file_references where ref_id in (select id from pages where slug = '${PAGE_SLUG}')`
+		`delete from file_references where ref_type = 'page' and ref_id in (select id from pages where slug = '${PAGE_SLUG}')`
 	);
 	psql(`delete from slug_trackers where slug like 'e2e-refs%'`);
 	psql(`delete from posts where slug like 'e2e-refs%' or title ilike 'e2e refs lifecycle%'`);

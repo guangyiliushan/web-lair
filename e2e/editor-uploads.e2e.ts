@@ -34,9 +34,12 @@ function cleanup() {
 		`delete from drafts where ref_id in (select id from posts where slug like 'e2e-editor-uploads%')`
 	);
 	// 3b1+: saving a draft writes file_references; ref_id has no FK, so the
-	// rows must be cleaned explicitly or they linger as orphans on the dev DB.
+	// rows must be cleaned explicitly or they linger as orphans on the dev
+	// DB. This spec never publishes, so its placeholder posts keep the
+	// `draft-` slug - match by title, same as the posts delete below
+	// (review round 2: the slug-only predicate matched zero rows).
 	psql(
-		`delete from file_references where ref_id in (select id from posts where slug like 'e2e-editor-uploads%')`
+		`delete from file_references where ref_type = 'post' and ref_id in (select id from posts where slug like 'e2e-editor-uploads%' or title ilike 'e2e editor uploads%')`
 	);
 	psql(`delete from slug_trackers where slug like 'e2e-editor-uploads%'`);
 	psql(
