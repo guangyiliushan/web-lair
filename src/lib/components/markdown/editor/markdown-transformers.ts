@@ -301,7 +301,10 @@ function inlineMarkdownToSpecs(markdown: string): SpecNode[] {
 			const root = $getRoot();
 			root.clear();
 			try {
-				$convertFromMarkdownString(normalizeChecklistMarkers(markdown), NESTED_EDITOR_TRANSFORMERS);
+				$convertFromMarkdownString(
+					normalizeMarkdownForImport(markdown),
+					NESTED_EDITOR_TRANSFORMERS
+				);
 				$unescapeImportedText();
 			} catch {
 				root.clear();
@@ -450,6 +453,22 @@ export function normalizeChecklistMarkers(markdown: string): string {
 		.join(lineBreak);
 }
 
+/**
+ * Input normalization for every editor import boundary (main editor and the
+ * nested temporary editors).
+ *
+ * Browsers normalize form field values to CRLF while serializing a `FormData`
+ * body (HTML entry-list rules), so stored content comes back as CRLF with a
+ * trailing newline. Line-anchored element transformers - the image rule's
+ * `$`-anchored regExp, hr, ... - then fail on the trailing `\r`, and the core
+ * LINK transformer eats the `[alt](url)` part: on reopen an image degrades to
+ * literal `!` + link + `{attrs}` text. Normalize CRLF / lone CR to LF once at
+ * this boundary, then fold the checklist markers as before.
+ */
+export function normalizeMarkdownForImport(markdown: string): string {
+	return normalizeChecklistMarkers(markdown.replace(/\r\n?/g, '\n'));
+}
+
 export function $unescapeImportedText(): void {
 	const unescape = (text: string) => text.replace(/\\([!-/:-@[-`{-~])/g, '$1');
 	for (const node of $getRoot().getAllTextNodes()) {
@@ -526,7 +545,7 @@ export function markdownToAlertJson(markdown: string): string {
 				root.clear();
 				try {
 					$convertFromMarkdownString(
-						normalizeChecklistMarkers(markdown),
+						normalizeMarkdownForImport(markdown),
 						NESTED_EDITOR_TRANSFORMERS
 					);
 					$unescapeImportedText();

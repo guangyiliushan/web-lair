@@ -44,7 +44,7 @@ import {
 import {
 	EDITOR_TRANSFORMERS,
 	$unescapeImportedText,
-	normalizeChecklistMarkers
+	normalizeMarkdownForImport
 } from '$lib/components/markdown/editor/markdown-transformers';
 
 export interface LexicalActionOptions {
@@ -179,7 +179,7 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 			const md = optionsRef.current.initialMarkdown;
 			if (md) {
 				try {
-					$convertFromMarkdownString(normalizeChecklistMarkers(md), transformers);
+					$convertFromMarkdownString(normalizeMarkdownForImport(md), transformers);
 					$unescapeImportedText();
 				} catch {
 					root.clear();

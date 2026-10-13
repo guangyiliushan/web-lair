@@ -34,6 +34,7 @@ import {
 	alertJsonToMarkdown,
 	markdownToAlertJson,
 	normalizeChecklistMarkers,
+	normalizeMarkdownForImport,
 	$unescapeImportedText
 } from './markdown-transformers';
 
@@ -831,6 +832,38 @@ describe('alert json <-> markdown helpers', () => {
 			expect($isImageNode(first)).toBe(true);
 			const serialized: SerializedImageNode = (first as ImageNode).exportJSON();
 			expect(serialized.tailAttrs).toBe('width=480');
+		});
+	});
+
+	it('LF-normalizes import input so CRLF cannot break line-anchored rules', () => {
+		// FormData submission normalizes field values to CRLF (HTML entry-list
+		// rules), so stored content round-trips with CRLF + a trailing newline.
+		expect(normalizeMarkdownForImport('a\r\nb\rc\nd')).toBe('a\nb\nc\nd');
+	});
+
+	it('imports CRLF content: the image line stays an ImageNode', () => {
+		const editor: LexicalEditor = createEditor({
+			namespace: 'markdown-transformers-test',
+			nodes: EDITOR_NODES,
+			onError: (error: Error) => {
+				throw error;
+			}
+		});
+		editor.update(
+			() => {
+				$convertFromMarkdownString(
+					normalizeMarkdownForImport(
+						'refs note body\r\n\r\n![a](/i/63/aa.png@full) {width=1 height=1}\r\n'
+					),
+					EDITOR_TRANSFORMERS
+				);
+			},
+			{ discrete: true }
+		);
+		editor.getEditorState().read(() => {
+			const children = $getRoot().getChildren();
+			expect(children).toHaveLength(2);
+			expect($isImageNode(children[1])).toBe(true);
 		});
 	});
 });
