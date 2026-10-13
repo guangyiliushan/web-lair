@@ -29,8 +29,9 @@ export const KEY_FACTOR = 1.5;
 /** Double-click target scale (Q13: 1x <-> 2x). */
 export const DOUBLE_TAP_SCALE = 2;
 /** Swipe-down closes only at fit scale and past this distance (Q13). */
-export const SWIPE_CLOSE_MAX_SCALE = 1.05;
-export const SWIPE_CLOSE_MIN_PX = 80;
+const SWIPE_CLOSE_MAX_SCALE = 1.05;
+// Q13 wording is strictly past 80px: exactly 80 must NOT close.
+const SWIPE_CLOSE_MIN_PX = 80;
 /** "Is it zoomed" threshold deciding navigate-vs-pan (Q13). */
 const ZOOM_EPSILON = 0.01;
 
@@ -159,5 +160,5 @@ export function panBy(
 
 /** Swipe-down close predicate: fit scale (≤1.05) and downward ≥80px (Q13). */
 export function shouldCloseOnSwipe(transform: ViewerTransform, deltaYDown: number): boolean {
-	return transform.scale <= SWIPE_CLOSE_MAX_SCALE && deltaYDown >= SWIPE_CLOSE_MIN_PX;
+	return transform.scale <= SWIPE_CLOSE_MAX_SCALE && deltaYDown > SWIPE_CLOSE_MIN_PX;
 }

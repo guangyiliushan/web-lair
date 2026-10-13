@@ -22,8 +22,17 @@
 	 * page keyboard handler steps aside while it is open (the overlay owns
 	 * the arrows then). Closing after cycling re-syncs the page. */
 	let overlayOpen = $state(false);
+	/** Slug the overlay was opened on: if the page payload has moved on by the
+	 * time the overlay closes (same-route browser Back), the close must not
+	 * navigate back and undo that navigation (review 08 F1). */
+	let openedSlug: string | null = null;
+	/** Set before a viewer-driven navigation; the effect below broadcasts the
+	 * landed photo once the new payload renders (review 07 P2-3). */
+	let announceAfterNavigation = false;
+	let pageAnnouncement = $state('');
 
 	function openOverlay() {
+		openedSlug = data.photo.slug;
 		overlayOpen = true;
 	}
 
@@ -36,10 +45,28 @@
 	}
 
 	function handleOverlayClosed(slug: string) {
-		if (slug && slug !== data.photo.slug) {
-			void goto(siteHref(`/photos/${slug}`), { replaceState: true });
-		}
+		const opened = openedSlug;
+		openedSlug = null;
+		if (!slug || slug === data.photo.slug) return;
+		// The payload diverged from what the overlay opened on: a browser
+		// Back/Forward already chose the destination - never drag it back.
+		if (opened !== null && data.photo.slug !== opened) return;
+		announceAfterNavigation = true;
+		void goto(siteHref(`/photos/${slug}`), { replaceState: true });
 	}
+
+	// Broadcast the landed photo after a viewer-driven navigation (the overlay's
+	// live region unmounts with it; Q13 "SPA focus management" needs both the
+	// focus return and this announcement).
+	$effect(() => {
+		if (!announceAfterNavigation) return;
+		announceAfterNavigation = false;
+		pageAnnouncement = m.photos_viewer_announce({
+			title: photoTitle(tile, getLocale()),
+			index: String(data.position.index),
+			total: String(data.position.total)
+		});
+	});
 
 	const tile: PhotoTile = $derived(data.photo);
 	const title = $derived(photoTitle(tile, getLocale()));
@@ -87,13 +114,24 @@
 		) {
 			return;
 		}
-		if (event.key === 'ArrowLeft' && newerHref) void goto(newerHref);
-		else if (event.key === 'ArrowRight' && olderHref) void goto(olderHref);
+		if (event.key === 'ArrowLeft' && newerHref) {
+			announceAfterNavigation = true;
+			void goto(newerHref);
+		} else if (event.key === 'ArrowRight' && olderHref) {
+			announceAfterNavigation = true;
+			void goto(olderHref);
+		}
 	}
 
 	function onSwipe(event: SwipeCustomEvent) {
-		if (event.detail.direction === 'left' && olderHref) void goto(olderHref);
-		else if (event.detail.direction === 'right' && newerHref) void goto(newerHref);
+		if (overlayOpen) return; // the overlay owns gestures while open
+		if (event.detail.direction === 'left' && olderHref) {
+			announceAfterNavigation = true;
+			void goto(olderHref);
+		} else if (event.detail.direction === 'right' && newerHref) {
+			announceAfterNavigation = true;
+			void goto(newerHref);
+		}
 	}
 </script>
 
@@ -188,3 +226,5 @@
 	position={data.position}
 	onClosed={handleOverlayClosed}
 />
+
+<p class="sr-only" aria-live="polite">{pageAnnouncement}</p>

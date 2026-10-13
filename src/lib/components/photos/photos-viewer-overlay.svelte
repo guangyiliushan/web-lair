@@ -6,6 +6,8 @@
 	import { getLocale } from '$lib/paraglide/runtime';
 	import { formatBytes } from '$lib/utils/format';
 	import { siteHref } from '$lib/utils/href';
+	import { isPhotoSlug } from '$lib/utils/slug';
+	import { IconX } from '@tabler/icons-svelte-runes';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { usePan, usePinch, type PanCustomEvent, type PinchCustomEvent } from 'svelte-gestures';
 	import {
@@ -69,7 +71,17 @@
 
 	let stageEl = $state<HTMLDivElement | null>(null);
 	let imageEl = $state<HTMLImageElement | null>(null);
-	let closeButton = $state<HTMLButtonElement | null>(null);
+	let closeButton = $state<HTMLElement | null>(null);
+	/** The src that failed to load: clicks on a broken image pass through to
+	 * the stage so the backdrop still closes (review 08: the broken img
+	 * otherwise balloons over the whole stage and eats the tap). Keyed by src -
+	 * resetting on unrelated state changes once un-broke a still-broken image. */
+	let brokenSrc = $state<string | null>(null);
+	/** The photo the overlay opened on; the page payload diverging from it while
+	 * open means a browser Back/Forward re-loaded the route underneath. */
+	let openedSnapshotId: string | null = null;
+	/** Set by closeSilently(): skip the parent onClosed (no re-sync navigation). */
+	let suppressClosed = false;
 
 	const connection: ConnectionLike | null =
 		typeof navigator === 'undefined'
@@ -118,9 +130,26 @@
 		} else {
 			// Every close path (button / Esc / backdrop / swipe) lands here;
 			// bits-ui does not call onOpenChange for programmatic closes, so
-			// this transition is the single source for the parent callback.
+			// this transition is the single source for the parent callback -
+			// except closeSilently(): the page already navigated itself and
+			// must not be dragged back by a close-time re-sync.
 			teardown();
-			onClosed?.(current.slug);
+			if (suppressClosed) {
+				suppressClosed = false;
+			} else {
+				onClosed?.(current.slug);
+			}
+		}
+	});
+
+	// The page can re-load underneath an open overlay (browser Back/Forward
+	// on the same route re-runs the load without remounting this component):
+	// the walked position no longer matches the page payload, so close
+	// silently and let the navigation stand (review 08 F1).
+	$effect(() => {
+		if (!open) return;
+		if (openedSnapshotId !== null && photo.id !== openedSnapshotId) {
+			closeSilently();
 		}
 	});
 
@@ -132,19 +161,28 @@
 		current = photo;
 		currentNeighbors = neighbors;
 		currentPosition = position;
+		openedSnapshotId = photo.id;
+		suppressClosed = false;
 		transform = identity();
 		smooth = false;
 		announcement = '';
 		historySync(photo.slug);
 		scheduleAnnounce();
-		prefetchAround();
 		void startLoad();
+	}
+
+	function closeSilently(): void {
+		suppressClosed = true;
+		open = false;
 	}
 
 	function teardown() {
 		loadToken += 1;
+		navToken += 1;
 		controller?.abort();
 		controller = null;
+		windowController?.abort();
+		windowController = null;
 		clearTimers();
 		cardVisible = false;
 		cardHiding = false;
@@ -165,12 +203,17 @@
 	}
 
 	async function startLoad(force = false): Promise<void> {
+		// Invalidate any in-flight load FIRST: the on-demand early return must
+		// not leave the previous photo's stream alive with a still-valid token
+		// (it would land as THIS photo's blob and hide the load button -
+		// review 01 P1).
+		const token = ++loadToken;
+		controller?.abort();
+		controller = null;
 		if (!force && onDemand) {
 			phase = 'waiting';
 			return;
 		}
-		const token = ++loadToken;
-		controller?.abort();
 		const ctl = new AbortController();
 		controller = ctl;
 		phase = 'loading';
@@ -191,6 +234,7 @@
 				signal: ctl.signal,
 				fallbackTotal: totalBytes,
 				onProgress: (progress) => {
+					if (token !== loadToken) return; // superseded stream
 					loadedBytes = progress.loaded;
 					if (progress.total !== null) totalBytes = progress.total;
 				}
@@ -224,6 +268,7 @@
 
 	// ── Navigation (Q13: ←→ neighbours; URL via history.replaceState) ──
 	let navToken = 0;
+	let windowController: AbortController | null = null;
 	async function navigate(direction: 'newer' | 'older'): Promise<void> {
 		const target = direction === 'newer' ? currentNeighbors.newer : currentNeighbors.older;
 		if (!target) return;
@@ -255,40 +300,60 @@
 	}
 
 	async function extendWindow(slug: string, token: number): Promise<void> {
+		windowController?.abort();
+		const ctl = new AbortController();
+		windowController = ctl;
 		try {
-			const response = await fetch(`/api/photo-neighbors?slug=${encodeURIComponent(slug)}`);
-			if (!response.ok) return;
+			const response = await fetch(`/api/photo-neighbors?slug=${encodeURIComponent(slug)}`, {
+				signal: ctl.signal
+			});
+			if (!response.ok) {
+				if (import.meta.env.DEV) {
+					console.warn('[photos-viewer] neighbour window failed', slug, response.status);
+				}
+				return;
+			}
 			const payload = (await response.json()) as {
-				photo?: { slug?: string };
-				newer?: PhotoViewerSource | null;
-				older?: PhotoViewerSource | null;
-				position?: { index: number; total: number };
+				slug: string;
+				newer: PhotoViewerSource | null;
+				older: PhotoViewerSource | null;
+				position: { index: number; total: number };
 			};
-			if (token !== navToken || payload.photo?.slug !== slug) return;
+			if (token !== navToken || payload.slug !== slug) return;
 			currentNeighbors = { newer: payload.newer ?? null, older: payload.older ?? null };
-			if (payload.position) currentPosition = payload.position;
-		} catch {
+			currentPosition = payload.position;
+		} catch (error) {
+			if (ctl.signal.aborted) return;
 			// Offline: the provisional window still allows backtracking.
+			if (import.meta.env.DEV) {
+				console.warn('[photos-viewer] neighbour window failed', slug, error);
+			}
 		}
 	}
 
 	function historySync(slug: string): void {
+		// Defence in depth: slugs are DB-generated and already validated, and a
+		// malformed value must never reach the address bar (siteHref passes
+		// non-root paths through verbatim - review 02 P3-3).
+		if (!isPhotoSlug(slug)) return;
 		const href = siteHref(`/photos/${slug}`);
 		try {
 			// Kit's shallow replace keeps the router snapshot in sync. It throws
-			// when the router has not started (isolated mounts / cold boot), so
-			// fall back to the raw history API there — never before hydration.
+			// when the router has not started (dev / isolated mounts), so fall
+			// back to the raw history API there; both branches clear state.
 			replaceState(href, {});
 		} catch {
-			if (typeof history !== 'undefined') history.replaceState(history.state, '', href);
+			if (typeof history !== 'undefined') history.replaceState({}, '', href);
 		}
 	}
 
 	// ── Prefetch ±1 (Q13: thumb + preview only) ──
 	const prefetched = new SvelteSet<string>();
 	function preloadOnce(src: string): void {
-		if (prefetched.has(src)) return;
-		prefetched.add(src);
+		// The cache is bookkeeping, not signal: untrack its reads/writes so the
+		// prefetch effect does not re-trigger on its own adds.
+		if (untrack(() => prefetched.has(src))) return;
+		untrack(() => prefetched.add(src));
 		const image = new Image();
 		image.src = src;
 	}
@@ -390,15 +455,34 @@
 		} else if (key === '0') {
 			smooth = true;
 			transform = reset();
-		} else if (key === 'ArrowLeft') {
-			void navigate('newer');
-		} else if (key === 'ArrowRight') {
-			void navigate('older');
+		} else if (
+			key === 'ArrowLeft' ||
+			key === 'ArrowRight' ||
+			key === 'ArrowUp' ||
+			key === 'ArrowDown'
+		) {
+			event.preventDefault();
+			if (event.shiftKey) {
+				// WCAG 2.5.7 (plan §5.3): a non-drag path for panning, effective
+				// while zoomed; plain arrows keep navigating neighbours.
+				const dx = key === 'ArrowLeft' ? PAN_KEY_STEP : key === 'ArrowRight' ? -PAN_KEY_STEP : 0;
+				const dy = key === 'ArrowUp' ? PAN_KEY_STEP : key === 'ArrowDown' ? -PAN_KEY_STEP : 0;
+				smooth = true;
+				transform = panBy(transform, dx, dy, viewportSize(), contentSize());
+			} else if (key === 'ArrowLeft') {
+				void navigate('newer');
+			} else if (key === 'ArrowRight') {
+				void navigate('older');
+			}
+			return;
 		} else {
 			return;
 		}
 		event.preventDefault();
 	}
+
+	/** Viewport-fraction pan step for the keyboard path (2.5.7). */
+	const PAN_KEY_STEP = 80;
 
 	// ── Touch/pointer gestures (unzoomed: swipe = navigate / down-close; zoomed: pan) ──
 	let panStart: { x: number; y: number } | null = null;
@@ -422,9 +506,17 @@
 		}
 	}
 
-	function onPanDown(): void {
-		panStart = null;
-		panLast = null;
+	function onPanDown(event: CustomEvent): void {
+		// The first `pan` event arrives on the first move - using it as the
+		// origin would silently drop the down-to-first-move segment (the probe
+		// behind review 08 F3 showed a 100px swipe measuring 50px). The down
+		// dispatch carries the pointer's node-relative position: use it.
+		const detail = (event as CustomEvent<{ x?: number; y?: number }>).detail;
+		panStart =
+			typeof detail?.x === 'number' && typeof detail?.y === 'number'
+				? { x: detail.x, y: detail.y }
+				: null;
+		panLast = panStart;
 		panMoved = false;
 	}
 
@@ -440,11 +532,12 @@
 		}
 		panStart = null;
 		panLast = null;
-		// The synthetic click that follows a drag fires before this timer: it
-		// is suppressed by panMoved, while the next clean tap may close.
+		// The synthetic click after a drag must stay suppressed even when the UA
+		// delivers it in a later task (touch): hold the flag for a short window,
+		// then let the next clean tap close again.
 		setTimeout(() => {
 			panMoved = false;
-		}, 0);
+		}, 300);
 	}
 
 	let pinchBase: ViewerTransform | null = null;
@@ -452,11 +545,16 @@
 		const { scale, center } = event.detail;
 		if (!pinchBase) pinchBase = transform;
 		smooth = false;
+		// The library reports `center` relative to the bound node (it already
+		// subtracted the node rect): convert to stage-centre coords directly -
+		// centerCoords() expects client coords and would subtract the rect
+		// twice (masked today only because the stage fills the viewport).
+		const viewport = viewportSize();
 		transform = zoomAt(
 			pinchBase,
 			scale,
-			centerCoords(center.x, center.y),
-			viewportSize(),
+			{ x: center.x - viewport.width / 2, y: center.y - viewport.height / 2 },
+			viewport,
 			contentSize()
 		);
 	}
@@ -489,11 +587,13 @@
 <Dialog.Root bind:open>
 	<Dialog.Content
 		showCloseButton={false}
-		class="fixed inset-0 top-0 left-0 z-50 h-full w-full max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 bg-transparent p-0 shadow-none ring-0 outline-none sm:max-w-none data-open:zoom-in-100 data-closed:zoom-out-100"
+		class="fixed inset-0 top-0 left-0 z-50 h-full w-full max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 bg-transparent p-0 shadow-none ring-0 outline-none motion-reduce:animate-none sm:max-w-none"
 		onOpenAutoFocus={handleOpenAutoFocus}
 	>
 		<Dialog.Title class="sr-only">{title}</Dialog.Title>
-		<Dialog.Description class="sr-only">{alt}</Dialog.Description>
+		{#if alt !== title}
+			<Dialog.Description class="sr-only">{alt}</Dialog.Description>
+		{/if}
 		<div class="absolute inset-0 bg-black/[0.92]" aria-hidden="true"></div>
 
 		<div
@@ -501,7 +601,7 @@
 			data-photos-viewer-stage
 			class="absolute inset-0 flex touch-none items-center justify-center overflow-hidden"
 			use:wheelListener
-			{...usePan(onPan, () => ({ touchAction: 'none' }), {
+			{...usePan(onPan, () => ({ touchAction: 'none', delay: 0 }), {
 				onpandown: onPanDown,
 				onpanup: onPanUp
 			})}
@@ -514,7 +614,7 @@
 					bind:this={imageEl}
 					class="max-h-full max-w-full rounded-lg object-contain select-none {smooth
 						? 'transition-transform duration-150 ease-out motion-reduce:transition-none'
-						: ''}"
+						: ''} {brokenSrc === displaySrc ? 'pointer-events-none' : ''}"
 					src={displaySrc}
 					{alt}
 					draggable="false"
@@ -524,6 +624,10 @@
 						? `background-image:url(${placeholder});background-size:cover;background-position:center;`
 						: ''}"
 					decoding="async"
+					onerror={() => (brokenSrc = displaySrc)}
+					onload={() => {
+						if (brokenSrc === displaySrc) brokenSrc = null;
+					}}
 					data-phase={phase}
 				/>
 			{:else}
@@ -542,36 +646,25 @@
 		<!-- Counter (top centre) + close (top right) -->
 		<p
 			data-photos-viewer-counter
-			class="absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 font-mono text-xs text-white/90"
+			class="absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 font-mono text-xs text-white/90 [text-shadow:0_1px_3px_rgb(0_0_0/0.8)]"
 		>
 			{currentPosition.index} / {currentPosition.total}
 		</p>
-		<button
-			bind:this={closeButton}
-			type="button"
-			class="absolute top-3 right-3 z-20 flex size-10 items-center justify-center rounded-full bg-black/50 text-xl leading-none text-white transition-colors hover:bg-black/70 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
+		<Dialog.Close
+			bind:ref={closeButton}
+			class="absolute top-3 right-3 z-20 flex size-10 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70 focus-visible:shadow-[0_0_0_2px_rgba(0,0,0,0.6)] focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
 			aria-label={m.photos_viewer_close()}
-			onclick={() => (open = false)}
 		>
-			<svg
-				viewBox="0 0 24 24"
-				class="size-5"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				aria-hidden="true"
-			>
-				<path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
-			</svg>
-		</button>
+			<IconX class="size-5" aria-hidden="true" />
+		</Dialog.Close>
 
 		<!-- Bottom bar: prev / caption (= alt, Q13) / next -->
 		<div
-			class="absolute inset-x-0 bottom-0 z-20 flex items-center gap-2 bg-gradient-to-t from-black/70 to-transparent px-3 pt-10 pb-3"
+			class="absolute inset-x-0 bottom-0 z-20 flex items-center gap-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pt-10 pb-3"
 		>
 			<button
 				type="button"
-				class="flex size-10 shrink-0 items-center justify-center rounded-full bg-black/50 text-2xl leading-none text-white transition-colors hover:bg-black/70 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-black/50"
+				class="flex size-10 shrink-0 items-center justify-center rounded-full bg-black/50 text-2xl leading-none text-white transition-colors hover:bg-black/70 focus-visible:shadow-[0_0_0_2px_rgba(0,0,0,0.6)] focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-black/50"
 				aria-label={m.photos_prev()}
 				disabled={!currentNeighbors.newer}
 				onclick={() => void navigate('newer')}
@@ -580,13 +673,14 @@
 			</button>
 			<p
 				data-photos-viewer-caption
-				class="min-w-0 flex-1 truncate text-center text-sm text-white/90"
+				aria-hidden="true"
+				class="min-w-0 flex-1 truncate text-center text-sm text-white/90 [text-shadow:0_1px_3px_rgb(0_0_0/0.8)]"
 			>
 				{alt}
 			</p>
 			<button
 				type="button"
-				class="flex size-10 shrink-0 items-center justify-center rounded-full bg-black/50 text-2xl leading-none text-white transition-colors hover:bg-black/70 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-black/50"
+				class="flex size-10 shrink-0 items-center justify-center rounded-full bg-black/50 text-2xl leading-none text-white transition-colors hover:bg-black/70 focus-visible:shadow-[0_0_0_2px_rgba(0,0,0,0.6)] focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-black/50"
 				aria-label={m.photos_next()}
 				disabled={!currentNeighbors.older}
 				onclick={() => void navigate('older')}
@@ -653,7 +747,7 @@
 					<span class="whitespace-nowrap">{m.photos_viewer_load_failed()}</span>
 					<button
 						type="button"
-						class="rounded-md border border-white/30 px-3 py-1.5 text-sm transition-colors hover:bg-white/10"
+						class="rounded-md border border-white/45 px-3 py-1.5 text-sm transition-colors hover:bg-white/10"
 						onclick={() => void startLoad(true)}
 					>
 						{m.photos_viewer_retry()}
