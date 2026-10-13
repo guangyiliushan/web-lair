@@ -2,6 +2,7 @@ import { page, userEvent } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
+import { SEARCH_DEBOUNCE_MS } from '$lib/media/editor-uploads';
 import ImageInsertDialog from './ImageInsertDialog.svelte';
 import ImageInsertDialogHost from './ImageInsertDialogHost.svelte';
 
@@ -68,6 +69,10 @@ describe('ImageInsertDialog - three-source picker (ST-3 3a2, review rounds 1-2)'
 		expect(onInsert).toHaveBeenCalledWith(`/i/${KEY}@preview`, 'sunset', 'width=3000 height=1500');
 	});
 
+	it('pins the debounce window literal (the timing tooth reads it)', () => {
+		expect(SEARCH_DEBOUNCE_MS).toBe(300);
+	});
+
 	it('debounces keystrokes: every search request trails its input by the window', async () => {
 		const requests: Array<{ url: string; at: number }> = [];
 		const fetchMock = vi.fn(async (input?: RequestInfo | URL) => {
@@ -107,7 +112,7 @@ describe('ImageInsertDialog - three-source picker (ST-3 3a2, review rounds 1-2)'
 			if (query === null) continue;
 			const trigger = [...inputs].reverse().find((entry) => entry.value === query);
 			expect(trigger, `no input event recorded for q=${query}`).toBeDefined();
-			expect(request.at - trigger!.at).toBeGreaterThanOrEqual(280);
+			expect(request.at - trigger!.at).toBeGreaterThanOrEqual(SEARCH_DEBOUNCE_MS - 20);
 		}
 		const settled = requests.length;
 		await new Promise((resolve) => setTimeout(resolve, 400));

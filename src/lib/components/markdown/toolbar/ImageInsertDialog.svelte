@@ -10,6 +10,7 @@
 	import {
 		EDITOR_UPLOADS_ENDPOINT as ENDPOINT,
 		EditorUploadError,
+		SEARCH_DEBOUNCE_MS,
 		altFromName,
 		tailAttrsOf,
 		uploadEditorImage,
@@ -105,7 +106,7 @@
 
 	function handleSearchInput() {
 		clearSearchTimer();
-		searchTimer = setTimeout(() => void loadList(), 300);
+		searchTimer = setTimeout(() => void loadList(), SEARCH_DEBOUNCE_MS);
 	}
 
 	/** Every programmatic close funnels through here so state always resets

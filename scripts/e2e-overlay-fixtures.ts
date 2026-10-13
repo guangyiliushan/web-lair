@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { OVERLAY_FIXTURE_DIMENSIONS, OVERLAY_FIXTURE_KEYS } from '../e2e/overlay-fixture-keys';
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
 import { RustFsStorage } from '../src/lib/server/storage/rustfs';
 
@@ -11,34 +12,32 @@ import { RustFsStorage } from '../src/lib/server/storage/rustfs';
  * the keys satisfy KEY_PATTERN's directory backreference. Re-run after a
  * bucket wipe:
  *
- *   pnpm exec tsx --env-file=.env scripts/e2e-overlay-fixtures.ts
+ *   pnpm e2e:overlay-fixtures
+ * (or: pnpm exec tsx --env-file=.env scripts/e2e-overlay-fixtures.ts)
  */
-const TARGETS = [
-	{ key: `ab/ab${'1'.repeat(62)}.gif`, shade: 0 },
-	{ key: `ab/ab${'2'.repeat(62)}.gif`, shade: 1 },
-	{ key: `ab/ab${'3'.repeat(62)}.gif`, shade: 2 }
-];
+const TARGETS = Object.values(OVERLAY_FIXTURE_KEYS);
+const BACKGROUND = { r: 72, g: 96, b: 160 };
 
 async function main(): Promise<void> {
 	const storage = new RustFsStorage(storageConfigFromEnv(process.env));
 	await storage.ensureBucket();
-	for (const target of TARGETS) {
+	for (const key of TARGETS) {
 		const bytes = await sharp({
 			create: {
-				width: 800,
-				height: 600,
+				width: OVERLAY_FIXTURE_DIMENSIONS.width,
+				height: OVERLAY_FIXTURE_DIMENSIONS.height,
 				channels: 3,
-				background: { r: 60 + target.shade * 60, g: 120 - target.shade * 30, b: 180 }
+				background: BACKGROUND
 			}
 		})
 			.gif()
 			.toBuffer();
-		const { etag } = await storage.put(target.key, new Uint8Array(bytes), {
+		const { etag } = await storage.put(key, new Uint8Array(bytes), {
 			contentType: 'image/gif'
 		});
-		const head = await storage.head(target.key);
+		const head = await storage.head(key);
 		console.log(
-			`put ${target.key} (${bytes.byteLength} B, etag=${etag ?? 'n/a'}, head=${head?.byteSize} B)`
+			`put ${key} (${bytes.byteLength} B, etag=${etag ?? 'n/a'}, head=${head?.byteSize} B)`
 		);
 	}
 	console.log('overlay e2e fixture bytes ready.');

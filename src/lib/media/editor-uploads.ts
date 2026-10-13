@@ -8,6 +8,9 @@
 /** Same-origin admin endpoint (single-file multipart POST / picker GET). */
 export const EDITOR_UPLOADS_ENDPOINT = '/admin/editor-uploads';
 
+/** Picker search debounce window (ms): keystrokes coalesce into one query. */
+export const SEARCH_DEBOUNCE_MS = 300;
+
 /** Picker list item as served by `GET ?source=photos|files`. */
 export interface PickerItem {
 	id: string;

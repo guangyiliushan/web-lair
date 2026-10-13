@@ -47,6 +47,7 @@
 		"db:ensure-pages": "tsx --env-file=.env scripts/ensure-pages.ts",
 		"db:verify-pages": "tsx --env-file=.env scripts/verify-pages.ts",
 		"storage:smoke": "tsx --env-file=.env scripts/storage-smoke.ts",
+		"e2e:overlay-fixtures": "tsx --env-file=.env scripts/e2e-overlay-fixtures.ts",
 		"media:audit": "tsx --env-file=.env scripts/media-audit.ts",
 		"media:import": "tsx --env-file=.env scripts/media-import.ts",
 		"maps:publish": "tsx --env-file=.env scripts/maps-publish.ts",

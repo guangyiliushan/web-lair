@@ -60,10 +60,8 @@ import {
 	listPhotoNeighbors,
 	photoSlugBase,
 	removePhoto,
-	updatePhoto,
-	type PublicViewerPhoto
+	updatePhoto
 } from './photos';
-import type { PhotoViewerSource } from '$lib/components/photos/photo-tile';
 
 interface Chain {
 	from: () => Chain;
@@ -76,6 +74,45 @@ interface Chain {
 		resolve: (value: unknown[]) => unknown,
 		reject?: (e: unknown) => unknown
 	) => Promise<unknown>;
+}
+
+/** Column names referenced by a drizzle SQL condition (walks queryChunks). */
+function columnsOf(condition: unknown): string[] {
+	const names = new Set<string>();
+	const walk = (node: unknown): void => {
+		if (node == null || typeof node !== 'object') return;
+		if (Array.isArray(node)) {
+			for (const item of node) walk(item);
+			return;
+		}
+		const record = node as { name?: unknown; queryChunks?: unknown[]; value?: unknown };
+		if (typeof record.name === 'string') names.add(record.name);
+		if (Array.isArray(record.queryChunks)) walk(record.queryChunks);
+	};
+	walk(condition);
+	return [...names];
+}
+
+/** Raw string fragments of a drizzle SQL condition (operators like `>` / `<`). */
+function stringsOf(condition: unknown): string[] {
+	const found: string[] = [];
+	const walk = (node: unknown): void => {
+		if (node == null) return;
+		if (typeof node === 'string') {
+			found.push(node);
+			return;
+		}
+		if (typeof node !== 'object') return;
+		if (Array.isArray(node)) {
+			for (const item of node) walk(item);
+			return;
+		}
+		const record = node as { queryChunks?: unknown[]; value?: unknown };
+		if (Array.isArray(record.queryChunks)) walk(record.queryChunks);
+		else if (Array.isArray(record.value)) walk(record.value);
+	};
+	walk(condition);
+	return found;
 }
 
 function selectChain(rows: unknown[]): Chain {
@@ -590,18 +627,6 @@ describe('listAdminPhotos', () => {
 	});
 });
 
-// Compile-time weld: the client viewer surface (PhotoViewerSource) and the
-// server projection (PublicViewerPhoto) must stay mutually assignable.
-type ViewerWeldA = PublicViewerPhoto extends PhotoViewerSource ? true : never;
-type ViewerWeldB = PhotoViewerSource extends PublicViewerPhoto ? true : never;
-
-describe('viewer payload weld (3c)', () => {
-	it('keeps the client and server viewer shapes mutually assignable', () => {
-		const weld: [ViewerWeldA, ViewerWeldB] = [true, true];
-		expect(weld).toEqual([true, true]);
-	});
-});
-
 describe('listPhotoNeighbors', () => {
 	const NEWER_ROW = {
 		id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
@@ -640,6 +665,30 @@ describe('listPhotoNeighbors', () => {
 			innerJoin: ReturnType<typeof vi.fn>;
 		};
 		expect(firstChain.innerJoin.mock.calls[0][0]).toBe(filesTable);
+		// Every statement filters visibility and the counts mirror the
+		// neighbour ranges (review 03 P1 / 05 P2: unasserted counts once let a
+		// dropped `is_visible` or a flipped range direction survive the gate).
+		const chains = dbMock.select.mock.results.map(
+			(result) =>
+				result.value as {
+					where: ReturnType<typeof vi.fn>;
+				}
+		);
+		for (const chain of chains) {
+			expect(chain.where).toHaveBeenCalledTimes(1);
+			expect(columnsOf(chain.where.mock.calls[0]?.[0])).toContain('is_visible');
+		}
+		const newerOps = stringsOf(chains[0].where.mock.calls[0]?.[0]);
+		const olderOps = stringsOf(chains[1].where.mock.calls[0]?.[0]);
+		const newerCountOps = stringsOf(chains[2].where.mock.calls[0]?.[0]);
+		const totalOps = stringsOf(chains[3].where.mock.calls[0]?.[0]);
+		// The operator fragments arrive as separate string chunks: join first.
+		expect(newerOps.join(' ')).toContain('>');
+		expect(olderOps.join(' ')).toContain('<');
+		expect(newerCountOps.join(' ')).toContain('>');
+		expect(newerCountOps.join(' ')).not.toContain('<');
+		expect(totalOps.join(' ')).not.toContain('>');
+		expect(totalOps.join(' ')).not.toContain('<');
 	});
 
 	it('returns null neighbours and the boundary position at the feed edges', async () => {

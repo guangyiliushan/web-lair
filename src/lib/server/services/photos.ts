@@ -684,13 +684,6 @@ export function getVisiblePhotoById(
 }
 
 /**
- * Adjacent visible photos for the viewer. The feed orders by
- * `(sort_at, id) DESC`, so `newer` is the row before the current one (tuple
- * GREATER, first page of the tail) and `older` the row after it. Both sides
- * are single-row keyset reads on the same tuple the list paginates on —
- * hidden rows are filtered identically on both faces.
- */
-/**
  * Fields the overlay viewer needs to render a photo without a second page
  * load (3c): the tile surface plus the registry byte size for the T16/T10
  * loading policy. Deliberately a subset of the detail payload - the overlay
@@ -710,11 +703,12 @@ const PUBLIC_VIEWER_FIELDS = {
 	byteSize: files.byteSize
 } as const;
 
-/** Single source with the client viewer surface (welded in photos.test.ts). */
+/** Single source with the client viewer surface; the return annotations below
+ * are the compile-time weld (a dropped projection field fails `pnpm check`). */
 export type PublicViewerPhoto = PhotoViewerSource;
 
-/** 1-based feed position for the「i / N」counter (newest first). */
-export interface PhotoFeedPosition {
+/** 1-based feed position for the "i / N" counter (newest first). */
+interface PhotoFeedPosition {
 	index: number;
 	total: number;
 }
