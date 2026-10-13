@@ -4,10 +4,14 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
  * Reference maintenance unit teeth (ST-3 3b1; Q6 flip matrix + Q15 diff):
- * add -> attached, last-ref removal -> detached with anchor, an image still
- * referenced by ANOTHER target stays attached, pending rows are never
- * dragged into detached, unknown keys are skipped (registry row gone) and a
- * 23503 race between resolve and insert degrades to a skip.
+ * add -> attached (unconditional, lock-taking update), LAST-ref removal ->
+ * detached with a `now()` anchor, a file still referenced by ANOTHER target
+ * stays attached, pending rows are never dragged into detached, unknown keys
+ * are skipped with a warning, and both concurrency guards hold - the resolve
+ * takes FOR KEY SHARE (no in-transaction 23503: postgres.js aborts the whole
+ * transaction on any statement error, so a catch would be a lie) and the
+ * remove branch locks its candidates FOR NO KEY UPDATE before deciding.
+ * WHERE clauses are pinned as full dialect snapshots, not fragments.
  */
 const { executor, state } = vi.hoisted(() => {
 	type Row = Record<string, unknown>;
@@ -16,7 +20,7 @@ const { executor, state } = vi.hoisted(() => {
 		inserts: [] as { values: Record<string, unknown> }[],
 		updates: [] as { values: Record<string, unknown>; where?: unknown }[],
 		deletes: [] as { where?: unknown }[],
-		failNextInsert: null as unknown as Error | null
+		locks: [] as string[]
 	};
 	const chain = () => {
 		const c: Record<string, unknown> = {};
@@ -26,6 +30,11 @@ const { executor, state } = vi.hoisted(() => {
 			where: ret,
 			innerJoin: ret,
 			limit: ret,
+			orderBy: ret,
+			for: (mode: string) => {
+				state.locks.push(mode);
+				return c;
+			},
 			then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
 				Promise.resolve(state.selectQueue.shift() ?? []).then(res, rej)
 		});
@@ -36,11 +45,6 @@ const { executor, state } = vi.hoisted(() => {
 		insert: vi.fn(() => ({
 			values: (values: Record<string, unknown>) => ({
 				onConflictDoNothing: async () => {
-					if (state.failNextInsert) {
-						const error = state.failNextInsert;
-						state.failNextInsert = null;
-						throw error;
-					}
 					state.inserts.push({ values });
 				}
 			})
@@ -75,7 +79,8 @@ beforeEach(() => {
 	state.inserts = [];
 	state.updates = [];
 	state.deletes = [];
-	state.failNextInsert = null;
+	state.locks = [];
+	vi.restoreAllMocks();
 });
 
 describe('keysFromContent', () => {
@@ -96,74 +101,92 @@ describe('keysFromContent', () => {
 });
 
 describe('syncFileReferences', () => {
-	it('adds a new reference and flips the file to attached', async () => {
-		state.selectQueue = [
-			[], // existing refs for the target
-			[{ id: 'file-1', objectKey: KEY }] // resolve
-		];
-		const summary = await syncFileReferences(executor, { type: 'post', id: 'post-1' }, [KEY]);
-		expect(summary).toMatchObject({ added: 1, attached: 1, removed: 0, detached: 0, missing: 0 });
+	it('adds a reference: KEY SHARE resolve + unconditional attach update', async () => {
+		state.selectQueue = [[], [{ id: 'file-1', objectKey: KEY }]];
+		await syncFileReferences(executor, { type: 'post', id: 'post-1' }, [KEY]);
+		expect(state.locks).toEqual(['key share']);
 		expect(state.inserts).toEqual([
 			{ values: { fileId: 'file-1', refType: 'post', refId: 'post-1' } }
 		]);
 		expect(state.updates).toHaveLength(1);
 		expect(state.updates[0].values).toEqual({ status: 'attached', detachedAt: null });
-		// Only rows that are not already attached are touched.
 		const rendered = render(state.updates[0].where);
-		expect(rendered.sql).toContain('"files"."status" <>');
+		expect(rendered.sql).toBe('"files"."id" in ($1)');
+		expect(rendered.params).toEqual(['file-1']);
+		expect(state.selectQueue).toHaveLength(0);
 	});
 
-	it('detaches with the clock anchor when the LAST reference disappears', async () => {
+	it('detaches with a now() anchor when the LAST reference disappears', async () => {
 		state.selectQueue = [
-			[{ fileId: 'file-1', objectKey: KEY }], // existing refs
-			[] // remaining references after the delete: none
+			[{ fileId: 'file-1', objectKey: KEY }],
+			[], // candidate row lock (result unused)
+			[] // remaining references: none
 		];
-		const summary = await syncFileReferences(executor, { type: 'post', id: 'post-1' }, []);
-		expect(summary).toMatchObject({ removed: 1, detached: 1, added: 0 });
+		await syncFileReferences(executor, { type: 'post', id: 'post-1' }, []);
+		expect(state.locks).toEqual(['no key update']);
 		expect(state.deletes).toHaveLength(1);
+		const del = render(state.deletes[0].where);
+		expect(del.sql).toBe(
+			'("file_references"."ref_type" = $1 and "file_references"."ref_id" = $2 and "file_references"."file_id" in ($3))'
+		);
+		expect(del.params).toEqual(['post', 'post-1', 'file-1']);
 		expect(state.updates).toHaveLength(1);
 		expect(state.updates[0].values.status).toBe('detached');
-		expect(state.updates[0].values.detachedAt).toBeInstanceOf(Date);
-		// pending must STAY pending: the detach update is pinned to attached.
-		const rendered = render(state.updates[0].where);
-		expect(rendered.sql).toContain('"files"."status" =');
-		expect(rendered.params).toContain('attached');
+		const anchor = render(state.updates[0].values.detachedAt as unknown as SQL);
+		expect(anchor.sql).toBe('now()');
+		const upd = render(state.updates[0].where);
+		expect(upd.sql).toBe('("files"."id" in ($1) and "files"."status" = $2)');
+		expect(upd.params).toEqual(['file-1', 'attached']);
+		expect(state.selectQueue).toHaveLength(0);
 	});
 
 	it('keeps the file attached while another target still references it', async () => {
 		state.selectQueue = [
 			[{ fileId: 'file-1', objectKey: KEY }],
-			[{ fileId: 'file-1' }] // another post's ref survives
+			[], // candidate row lock
+			[{ fileId: 'file-1' }] // another target's reference survives
 		];
-		const summary = await syncFileReferences(executor, { type: 'post', id: 'post-1' }, []);
-		expect(summary).toMatchObject({ removed: 1, detached: 0 });
+		await syncFileReferences(executor, { type: 'post', id: 'post-1' }, []);
+		expect(state.locks).toEqual(['no key update']);
 		expect(state.deletes).toHaveLength(1);
 		expect(state.updates).toHaveLength(0);
+		expect(state.selectQueue).toHaveLength(0);
 	});
 
-	it('is a no-op when the desired set already matches (idempotent re-sync)', async () => {
+	it('is a no-op when the desired set already matches (ordered drain)', async () => {
 		state.selectQueue = [[{ fileId: 'file-1', objectKey: KEY }]];
-		const summary = await syncFileReferences(executor, { type: 'post', id: 'post-1' }, [KEY]);
-		expect(summary).toEqual({ added: 0, removed: 0, missing: 0, attached: 0, detached: 0 });
+		await syncFileReferences(executor, { type: 'post', id: 'post-1' }, [KEY]);
 		expect(state.inserts).toHaveLength(0);
 		expect(state.updates).toHaveLength(0);
 		expect(state.deletes).toHaveLength(0);
+		expect(state.locks).toEqual([]);
+		expect(state.selectQueue).toHaveLength(0);
 	});
 
-	it('skips desired keys with no registry row', async () => {
-		state.selectQueue = [[], []]; // no existing refs, nothing resolves
-		const summary = await syncFileReferences(executor, { type: 'post', id: 'post-1' }, [KEY]);
-		expect(summary).toMatchObject({ added: 0, missing: 1 });
-		expect(state.inserts).toHaveLength(0);
-		expect(state.updates).toHaveLength(0);
+	it('handles a mixed diff: attaches the new key and detaches the old one in order', async () => {
+		const OLD_KEY = `12/${'c'.repeat(64)}.png`;
+		state.selectQueue = [
+			[{ fileId: 'file-old', objectKey: OLD_KEY }],
+			[{ id: 'file-new', objectKey: KEY }],
+			[], // candidate row lock for the removed old file
+			[] // remaining references: none
+		];
+		await syncFileReferences(executor, { type: 'post', id: 'post-1' }, [KEY]);
+		expect(state.locks).toEqual(['key share', 'no key update']);
+		expect(state.inserts).toHaveLength(1);
+		expect(state.deletes).toHaveLength(1);
+		expect(state.updates.map((row) => row.values.status)).toEqual(['attached', 'detached']);
+		expect(state.selectQueue).toHaveLength(0);
 	});
 
-	it('degrades a 23503 race (file removed between resolve and insert) to a skip', async () => {
-		state.selectQueue = [[], [{ id: 'file-1', objectKey: KEY }]];
-		state.failNextInsert = Object.assign(new Error('fk'), { cause: { code: '23503' } });
-		const summary = await syncFileReferences(executor, { type: 'post', id: 'post-1' }, [KEY]);
-		expect(summary).toMatchObject({ added: 0, missing: 1 });
+	it('skips desired keys with no registry row and warns (dangling image)', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		state.selectQueue = [[], []];
+		await syncFileReferences(executor, { type: 'post', id: 'post-1' }, [KEY]);
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][1]).toEqual({ refType: 'post', refId: 'post-1', missing: 1 });
 		expect(state.inserts).toHaveLength(0);
 		expect(state.updates).toHaveLength(0);
+		expect(state.selectQueue).toHaveLength(0);
 	});
 });

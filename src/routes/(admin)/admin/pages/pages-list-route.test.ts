@@ -13,7 +13,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
  */
 const { dbMock, state, service, syncCheck } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
-	syncCheck: vi.fn(async () => ({ added: 0, removed: 0, missing: 0, attached: 0, detached: 0 })),
+	syncCheck: vi.fn(async () => {}),
 	state: {
 		selectQueue: [] as unknown[][],
 		returningQueue: [] as unknown[][],
@@ -21,7 +21,8 @@ const { dbMock, state, service, syncCheck } = vi.hoisted(() => ({
 		executes: [] as { sql: string; params: unknown[] }[],
 		statusUpdates: [] as { values: Record<string, unknown>; target: string }[],
 		forCalls: [] as unknown[],
-		deletes: [] as unknown[]
+		deletes: [] as unknown[],
+		tx: null as unknown
 	},
 	service: { requireAdminRole: vi.fn() }
 }));
@@ -110,7 +111,10 @@ describe('admin pages list (P2)', () => {
 					})
 				}))
 			})),
-			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(makeTx()))
+			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
+				state.tx = makeTx();
+				return cb(state.tx);
+			})
 		});
 	});
 
@@ -281,7 +285,7 @@ describe('admin pages list (P2)', () => {
 		expect(dbMock.transaction).toHaveBeenCalled();
 		// Q15 deletion hook: a hard-deleted page clears its references (the
 		// empty desired set) inside the same transaction.
-		expect(syncCheck).toHaveBeenCalledWith(expect.anything(), { type: 'page', id: PAGE_ID }, []);
+		expect(syncCheck).toHaveBeenCalledWith(state.tx, { type: 'page', id: PAGE_ID }, []);
 
 		state.selectQueue = [[]];
 		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toMatchObject({

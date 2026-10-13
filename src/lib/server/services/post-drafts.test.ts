@@ -29,9 +29,10 @@ const { dbMock, state, syncMock } = vi.hoisted(() => ({
 		deletes: [] as { table: unknown }[],
 		inserts: [] as { table: unknown; values: Record<string, unknown> }[],
 		forCalls: [] as unknown[],
-		failWith: undefined as unknown
+		failWith: undefined as unknown,
+		txExecutors: null as unknown
 	},
-	syncMock: vi.fn(async () => ({ added: 0, removed: 0, missing: 0, attached: 0, detached: 0 }))
+	syncMock: vi.fn(async () => {})
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
@@ -172,10 +173,15 @@ function resetState(withTransaction = true) {
 	state.failWith = undefined;
 	syncMock.mockClear();
 	const executors = makeExecutors();
+	// A distinct object so tests can prove sync ran on the TRANSACTION
+	// executor, not on the bare db (Q15's strongest contract).
+	state.txExecutors = makeExecutors();
 	Object.assign(dbMock, {
 		...executors,
 		...(withTransaction
-			? { transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(executors)) }
+			? {
+					transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(state.txExecutors))
+				}
 			: {})
 	});
 }
@@ -267,7 +273,7 @@ describe('saveDraftWork', () => {
 			tags: ['t1', 't2']
 		});
 		// Materialization carries the first reference diff too (Q15).
-		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'post', id: 'post-9' }, []);
+		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-9' }, []);
 	});
 
 	it('creates the first draft for an existing post with the posts version as base', async () => {
@@ -285,7 +291,7 @@ describe('saveDraftWork', () => {
 		expect(state.inserts[0].table).toBe(drafts);
 		expect(state.inserts[0].values).toMatchObject({ refId: 'post-1', baseVersion: 5 });
 		// Attaching to published content syncs the submitted body's refs too.
-		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'post', id: 'post-1' }, []);
+		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, []);
 	});
 
 	it('syncs the reference diff when the first draft attaches to a published post (Q15)', async () => {
@@ -307,6 +313,7 @@ describe('saveDraftWork', () => {
 			{ type: string; id: string },
 			string[]
 		];
+		expect(call[0]).toBe(state.txExecutors);
 		expect(call[1]).toEqual({ type: 'post', id: 'post-1' });
 		expect(call[2]).toEqual([KEY]);
 	});
@@ -462,6 +469,8 @@ describe('saveDraftWork', () => {
 			autosave: false
 		});
 		expect(result).toMatchObject({ kind: 'conflict', server: { version: 9 } });
+		// The conditional update lost: the loser must not touch references.
+		expect(syncMock).not.toHaveBeenCalled();
 	});
 
 	it('syncs the draft target references inside the save transaction (Q6/Q15)', async () => {
@@ -483,6 +492,7 @@ describe('saveDraftWork', () => {
 			{ type: string; id: string },
 			string[]
 		];
+		expect(call[0]).toBe(state.txExecutors);
 		expect(call[1]).toEqual({ type: 'post', id: 'post-1' });
 		expect(call[2]).toEqual([KEY]);
 	});
@@ -586,7 +596,7 @@ describe('publishDraft', () => {
 		expect(state.deletes.some((d) => d.table === drafts)).toBe(true);
 		expect(state.deletes.some((d) => d.table === postTags)).toBe(true);
 		// The published body's reference set lands in the same transaction.
-		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'post', id: 'post-1' }, []);
+		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, []);
 	});
 
 	it('writes the published body reference set in the publish transaction (Q15)', async () => {
@@ -608,6 +618,7 @@ describe('publishDraft', () => {
 			{ type: string; id: string },
 			string[]
 		];
+		expect(call[0]).toBe(state.txExecutors);
 		expect(call[1]).toEqual({ type: 'post', id: 'post-1' });
 		expect(call[2]).toEqual([KEY]);
 	});
@@ -716,7 +727,7 @@ describe('discardDraft', () => {
 		expect(state.selectQueue).toHaveLength(0);
 		// A removed placeholder leaves no content behind: its references go
 		// (Q15 deletion hook).
-		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'post', id: 'post-1' }, []);
+		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, []);
 	});
 
 	it('reverts the reference set to the published body on discard (Q15)', async () => {
@@ -727,7 +738,7 @@ describe('discardDraft', () => {
 		];
 		const result = await discardDraft('draft-1');
 		expect(result).toEqual({ kind: 'discarded', postId: 'post-1', removedPlaceholder: false });
-		expect(syncMock).toHaveBeenCalledWith(expect.anything(), { type: 'post', id: 'post-1' }, [KEY]);
+		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, [KEY]);
 	});
 
 	it('keeps a published post when only its working copy is discarded', async () => {
