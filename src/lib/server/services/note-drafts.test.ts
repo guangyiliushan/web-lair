@@ -422,6 +422,7 @@ describe('note draft flow', () => {
 		expect(rendered.params).toContain('note');
 		// Attaching to published content syncs the submitted body's refs too.
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'note', id: NOTE_ID }, []);
+		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
 
 	it('syncs the reference diff when the first draft attaches to a published note (Q15)', async () => {
@@ -522,6 +523,7 @@ describe('note draft flow', () => {
 		expect(renderedPublishedAt.sql).toContain('coalesce');
 		expect(renderedPublishedAt.sql).toContain('"notes"."published_at"');
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'note', id: NOTE_ID }, []);
+		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
 
 	it('keeps a same-slug or placeholder-slug publish free of tracker rows', async () => {
@@ -608,6 +610,7 @@ describe('note draft flow', () => {
 		expect(state.transactions).toBe(1);
 		expect(state.deletes.map((entry) => entry.table)).toEqual([drafts, notes]);
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'note', id: NOTE_ID }, []);
+		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
 
 	it('keeps the note row when it was ever published (publishedAt decides)', async () => {
@@ -644,6 +647,7 @@ describe('note draft flow', () => {
 		const result = await discardNoteDraft(DRAFT_ID);
 		expect(result).toEqual({ kind: 'discarded', noteId: NOTE_ID, removedPlaceholder: false });
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'note', id: NOTE_ID }, [KEY]);
+		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
 
 	it('sets, keeps and clears the password hash (same value never re-salts)', async () => {

@@ -274,6 +274,7 @@ describe('saveDraftWork', () => {
 		});
 		// Materialization carries the first reference diff too (Q15).
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-9' }, []);
+		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
 
 	it('creates the first draft for an existing post with the posts version as base', async () => {
@@ -292,6 +293,7 @@ describe('saveDraftWork', () => {
 		expect(state.inserts[0].values).toMatchObject({ refId: 'post-1', baseVersion: 5 });
 		// Attaching to published content syncs the submitted body's refs too.
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, []);
+		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
 
 	it('syncs the reference diff when the first draft attaches to a published post (Q15)', async () => {
@@ -597,6 +599,7 @@ describe('publishDraft', () => {
 		expect(state.deletes.some((d) => d.table === postTags)).toBe(true);
 		// The published body's reference set lands in the same transaction.
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, []);
+		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
 
 	it('writes the published body reference set in the publish transaction (Q15)', async () => {
@@ -728,6 +731,7 @@ describe('discardDraft', () => {
 		// A removed placeholder leaves no content behind: its references go
 		// (Q15 deletion hook).
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, []);
+		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
 
 	it('reverts the reference set to the published body on discard (Q15)', async () => {
@@ -739,6 +743,7 @@ describe('discardDraft', () => {
 		const result = await discardDraft('draft-1');
 		expect(result).toEqual({ kind: 'discarded', postId: 'post-1', removedPlaceholder: false });
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, [KEY]);
+		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
 
 	it('keeps a published post when only its working copy is discarded', async () => {

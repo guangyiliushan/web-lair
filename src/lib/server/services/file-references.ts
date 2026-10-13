@@ -22,10 +22,19 @@ import { I_KEY_PATTERN } from '$lib/media/keys';
  *   it a zero-row no-op that took no lock) and the remove branch locks its
  *   candidates `FOR NO KEY UPDATE` before deciding the detach - together they
  *   serialize concurrent attach vs detach so `status` cannot drift against
- *   the Q6 matrix.
+ *   the Q6 matrix. The KEY SHARE -> NO KEY UPDATE upgrade inside one
+ *   transaction is exempt from self-conflict (heap-layer upgrade), so the
+ *   attach update never waits on the resolve above.
  */
 
-/** Transaction-or-db executor (same structural shape as post-drafts). */
+/**
+ * Transaction-or-db executor (same structural shape as post-drafts).
+ *
+ * Write paths MUST pass their surrounding transaction: the concurrency
+ * guarantees (the FOR KEY SHARE resolve and the status writes below) only
+ * hold inside one, and a bare `db` executor would silently lose both the FK
+ * protection and the atomicity with the content write.
+ */
 export type RefsExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Unique bare `/i/<key>` object keys mentioned in stored markdown. */
@@ -102,9 +111,10 @@ export async function syncFileReferences(
 	}
 
 	if (removeIds.length > 0) {
-		// Lock the candidates first (ordered): an in-flight attach takes the
-		// same row lock at its unconditional update, so the remaining-reference
-		// snapshot below cannot miss it.
+		// Lock the candidates first (ordered; the result is deliberately
+		// discarded - this SELECT exists for its row locks): an in-flight
+		// attach takes the same row lock at its unconditional update, so the
+		// remaining-reference snapshot below cannot miss it.
 		await executor
 			.select({ id: files.id })
 			.from(files)

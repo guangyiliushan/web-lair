@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
@@ -20,19 +20,33 @@ const { executor, state } = vi.hoisted(() => {
 		inserts: [] as { values: Record<string, unknown> }[],
 		updates: [] as { values: Record<string, unknown>; where?: unknown }[],
 		deletes: [] as { where?: unknown }[],
-		locks: [] as string[]
+		locks: [] as string[],
+		lockTables: [] as unknown[],
+		selectWheres: [] as unknown[],
+		orderBys: [] as unknown[][]
 	};
 	const chain = () => {
 		const c: Record<string, unknown> = {};
+		let fromTable: unknown;
 		const ret = () => c;
 		Object.assign(c, {
-			from: ret,
-			where: ret,
+			from: (table: unknown) => {
+				fromTable = table;
+				return c;
+			},
+			where: (cond?: unknown) => {
+				state.selectWheres.push(cond);
+				return c;
+			},
 			innerJoin: ret,
 			limit: ret,
-			orderBy: ret,
+			orderBy: (...args: unknown[]) => {
+				state.orderBys.push(args);
+				return c;
+			},
 			for: (mode: string) => {
 				state.locks.push(mode);
+				state.lockTables.push(fromTable);
 				return c;
 			},
 			then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
@@ -65,8 +79,16 @@ const { executor, state } = vi.hoisted(() => {
 	return { executor, state };
 });
 
+// The executor is cast to the production type for call sites; keep typed
+// mock handles for history/ordering assertions.
+const selectMock = executor.select as unknown as Mock;
+const insertMock = executor.insert as unknown as Mock;
+const updateMock = executor.update as unknown as Mock;
+const deleteMock = executor.delete as unknown as Mock;
+
 vi.mock('$lib/server/db', () => ({ db: executor }));
 
+import { files as filesTable } from '$lib/server/db/content';
 import { keysFromContent, syncFileReferences, type RefsExecutor } from './file-references';
 
 const dialect = new PgDialect();
@@ -80,7 +102,17 @@ beforeEach(() => {
 	state.updates = [];
 	state.deletes = [];
 	state.locks = [];
+	state.lockTables = [];
+	state.selectWheres = [];
+	state.orderBys = [];
 	vi.restoreAllMocks();
+	// invocationCallOrder accumulates across tests for plain vi.fn mocks
+	// (restoreAllMocks only touches spies) - clear histories explicitly so
+	// the ordering teeth below read THIS test's call sequence.
+	selectMock.mockClear();
+	insertMock.mockClear();
+	updateMock.mockClear();
+	deleteMock.mockClear();
 });
 
 describe('keysFromContent', () => {
@@ -113,6 +145,19 @@ describe('syncFileReferences', () => {
 		const rendered = render(state.updates[0].where);
 		expect(rendered.sql).toBe('"files"."id" in ($1)');
 		expect(rendered.params).toEqual(['file-1']);
+		// Scope snapshots for the two SELECTs the mutation matrix used to
+		// walk through (review round 2): existing refs are read for THIS
+		// target only, and the resolve is by object_key.
+		const existingWhere = render(state.selectWheres[0]);
+		expect(existingWhere.sql).toBe(
+			'("file_references"."ref_type" = $1 and "file_references"."ref_id" = $2)'
+		);
+		expect(existingWhere.params).toEqual(['post', 'post-1']);
+		const resolveWhere = render(state.selectWheres[1]);
+		expect(resolveWhere.sql).toBe('"files"."object_key" in ($1)');
+		expect(resolveWhere.params).toEqual([KEY]);
+		// The KEY SHARE lock belongs to the resolve SELECT (which reads files).
+		expect(state.lockTables[0]).toBe(filesTable);
 		expect(state.selectQueue).toHaveLength(0);
 	});
 
@@ -137,6 +182,27 @@ describe('syncFileReferences', () => {
 		const upd = render(state.updates[0].where);
 		expect(upd.sql).toBe('("files"."id" in ($1) and "files"."status" = $2)');
 		expect(upd.params).toEqual(['file-1', 'attached']);
+		// Query scopes (review round 2): both the candidate lock and the
+		// remaining-refs snapshot target the removed ids on the right tables.
+		expect(state.lockTables[0]).toBe(filesTable);
+		expect(state.orderBys).toContainEqual([filesTable.id]);
+		const existingWhere = render(state.selectWheres[0]);
+		expect(existingWhere.params).toEqual(['post', 'post-1']);
+		const lockWhere = render(state.selectWheres[1]);
+		expect(lockWhere.sql).toBe('"files"."id" in ($1)');
+		expect(lockWhere.params).toEqual(['file-1']);
+		const remainingWhere = render(state.selectWheres[2]);
+		expect(remainingWhere.sql).toBe('"file_references"."file_id" in ($1)');
+		expect(remainingWhere.params).toEqual(['file-1']);
+		// Ordering teeth (review round 2): the candidate lock runs BEFORE the
+		// DELETE and the remaining snapshot runs AFTER it. Moving the pre-lock
+		// used to keep the whole suite green.
+		expect(selectMock.mock.invocationCallOrder[1]).toBeLessThan(
+			deleteMock.mock.invocationCallOrder[0]
+		);
+		expect(selectMock.mock.invocationCallOrder[2]).toBeGreaterThan(
+			deleteMock.mock.invocationCallOrder[0]
+		);
 		expect(state.selectQueue).toHaveLength(0);
 	});
 
@@ -184,6 +250,7 @@ describe('syncFileReferences', () => {
 		state.selectQueue = [[], []];
 		await syncFileReferences(executor, { type: 'post', id: 'post-1' }, [KEY]);
 		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toBe('[refs] skipped missing keys');
 		expect(warn.mock.calls[0][1]).toEqual({ refType: 'post', refId: 'post-1', missing: 1 });
 		expect(state.inserts).toHaveLength(0);
 		expect(state.updates).toHaveLength(0);

@@ -286,6 +286,7 @@ describe('admin pages list (P2)', () => {
 		// Q15 deletion hook: a hard-deleted page clears its references (the
 		// empty desired set) inside the same transaction.
 		expect(syncCheck).toHaveBeenCalledWith(state.tx, { type: 'page', id: PAGE_ID }, []);
+		expect((syncCheck.mock.calls[0] as unknown[])[0]).toBe(state.tx);
 
 		state.selectQueue = [[]];
 		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toMatchObject({
