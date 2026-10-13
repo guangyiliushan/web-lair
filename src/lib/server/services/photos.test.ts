@@ -60,8 +60,10 @@ import {
 	listPhotoNeighbors,
 	photoSlugBase,
 	removePhoto,
-	updatePhoto
+	updatePhoto,
+	type PublicViewerPhoto
 } from './photos';
+import type { PhotoViewerSource } from '$lib/components/photos/photo-tile';
 
 interface Chain {
 	from: () => Chain;
@@ -585,6 +587,18 @@ describe('listAdminPhotos', () => {
 		};
 		expect(chain.from.mock.calls[0][0]).toBe(photosTable);
 		expect(chain.innerJoin.mock.calls[0][0]).toBe(filesTable);
+	});
+});
+
+// Compile-time weld: the client viewer surface (PhotoViewerSource) and the
+// server projection (PublicViewerPhoto) must stay mutually assignable.
+type ViewerWeldA = PublicViewerPhoto extends PhotoViewerSource ? true : never;
+type ViewerWeldB = PhotoViewerSource extends PublicViewerPhoto ? true : never;
+
+describe('viewer payload weld (3c)', () => {
+	it('keeps the client and server viewer shapes mutually assignable', () => {
+		const weld: [ViewerWeldA, ViewerWeldB] = [true, true];
+		expect(weld).toEqual([true, true]);
 	});
 });
 

@@ -8,6 +8,7 @@
 		type PhotoTile
 	} from '$lib/components/photos/photo-tile';
 	import PhotosViewerImage from '$lib/components/photos/photos-viewer-image.svelte';
+	import PhotosViewerOverlay from '$lib/components/photos/photos-viewer-overlay.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime';
 	import { siteHref } from '$lib/utils/href';
@@ -16,6 +17,29 @@
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	/** Overlay viewer v1.1 (3c): opening it hands the page payload over; the
+	 * page keyboard handler steps aside while it is open (the overlay owns
+	 * the arrows then). Closing after cycling re-syncs the page. */
+	let overlayOpen = $state(false);
+
+	function openOverlay() {
+		overlayOpen = true;
+	}
+
+	function onFigureClick(event: MouseEvent) {
+		// The stage hosts its own controls (load-full / retry): clicks there
+		// keep their meaning; anything else on the stage opens the overlay.
+		const target = event.target;
+		if (target instanceof HTMLElement && target.closest('button, a')) return;
+		openOverlay();
+	}
+
+	function handleOverlayClosed(slug: string) {
+		if (slug && slug !== data.photo.slug) {
+			void goto(siteHref(`/photos/${slug}`), { replaceState: true });
+		}
+	}
 
 	const tile: PhotoTile = $derived(data.photo);
 	const title = $derived(photoTitle(tile, getLocale()));
@@ -51,6 +75,7 @@
 	);
 
 	function onKeydown(event: KeyboardEvent) {
+		if (overlayOpen) return; // the overlay viewer owns keys while open
 		if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
 		// Never hijack arrows from text entry or IME composition (round-3
 		// review: a future control on this route would navigate mid-typing).
@@ -84,8 +109,9 @@
 	     visible title lives in the sticky metadata bar below). -->
 	<h1 class="sr-only">{title}</h1>
 	<figure
-		class="flex min-h-[40vh] items-center justify-center"
+		class="flex min-h-[40vh] cursor-zoom-in items-center justify-center"
 		{...useSwipe(onSwipe, () => ({ timeframe: 350, minSwipeDistance: 60, touchAction: 'pan-y' }))}
+		onclick={onFigureClick}
 	>
 		<!-- Progressive stage (T10/T16, plan §4.5): thumb first, streamed full
 		     with a 300ms-delayed progress floater; >8MB or metered → on-demand.
@@ -118,6 +144,13 @@
 			{/if}
 		</div>
 		<div class="flex shrink-0 items-center gap-1">
+			<button
+				type="button"
+				class="rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+				onclick={openOverlay}
+			>
+				{m.photos_viewer_open()}
+			</button>
 			{#if newerHref}
 				<a
 					class="rounded-md px-2.5 py-1 text-lg leading-none transition-colors hover:bg-muted"
@@ -147,3 +180,11 @@
 		</div>
 	</div>
 </article>
+
+<PhotosViewerOverlay
+	bind:open={overlayOpen}
+	photo={data.photo}
+	neighbors={data.neighbors}
+	position={data.position}
+	onClosed={handleOverlayClosed}
+/>

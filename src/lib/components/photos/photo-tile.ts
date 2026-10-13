@@ -40,13 +40,36 @@ export function photoText(value: PhotoTileText, locale: string): string | null {
 }
 
 /** Display title: localized → en → any → slug. */
-export function photoTitle(tile: PhotoTile, locale: string): string {
+export function photoTitle(tile: Pick<PhotoTile, 'title' | 'slug'>, locale: string): string {
 	return photoText(tile.title, locale) ?? tile.slug;
 }
 
 /** Alt text chain (§5.3): title → description → file name. */
-export function photoAlt(tile: PhotoTile, locale: string): string {
+export function photoAlt(
+	tile: Pick<PhotoTile, 'title' | 'description' | 'fileName'>,
+	locale: string
+): string {
 	return photoText(tile.title, locale) ?? photoText(tile.description, locale) ?? tile.fileName;
+}
+
+/**
+ * The photo surface the overlay viewer consumes (3c): the neighbour payload
+ * fields plus `byteSize` for the loading policy. The server mirrors it as
+ * `PublicViewerPhoto` (type-welded in photos.test.ts), and the page's
+ * `PublicPhotoDetail` is a superset.
+ */
+export interface PhotoViewerSource {
+	id: string;
+	slug: string;
+	title: PhotoTileText;
+	description: PhotoTileText;
+	objectKey: string;
+	fileName: string;
+	mimeType: string;
+	width: number | null;
+	height: number | null;
+	thumbhash: string | null;
+	byteSize: number | null;
 }
 
 /**

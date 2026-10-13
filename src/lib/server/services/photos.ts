@@ -11,7 +11,7 @@ import {
 } from '$lib/server/media/exif-makernotes';
 import { tagSlug, titleSlug } from '$lib/utils/slug';
 import { deleteFile } from './files';
-import type { PhotoTileText } from '$lib/components/photos/photo-tile';
+import type { PhotoViewerSource } from '$lib/components/photos/photo-tile';
 import type { ObjectStoragePort } from '$lib/server/storage/port';
 
 /**
@@ -710,19 +710,8 @@ const PUBLIC_VIEWER_FIELDS = {
 	byteSize: files.byteSize
 } as const;
 
-export interface PublicViewerPhoto {
-	id: string;
-	slug: string;
-	title: PhotoTileText;
-	description: PhotoTileText;
-	objectKey: string;
-	fileName: string;
-	mimeType: string;
-	width: number | null;
-	height: number | null;
-	thumbhash: string | null;
-	byteSize: number;
-}
+/** Single source with the client viewer surface (welded in photos.test.ts). */
+export type PublicViewerPhoto = PhotoViewerSource;
 
 /** 1-based feed position for the「i / N」counter (newest first). */
 export interface PhotoFeedPosition {
