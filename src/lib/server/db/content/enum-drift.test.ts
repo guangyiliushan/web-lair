@@ -10,11 +10,16 @@ import { NOTE_MOODS, NOTES_STATUSES } from './note.schema';
 import { PROJECT_PROVIDERS, PROJECT_STATUSES } from './project.schema';
 import { DRAFT_REF_TYPES } from './draft.schema';
 import { SLUG_TRACKER_TYPES } from '../system/slug-tracker.schema';
+import { FILE_REF_TYPES } from '../system/file-reference.schema';
 import { MOMENT_KINDS } from '$lib/utils/moment-meta';
 
 // Guards the reviewed "enum dual-source" risk: the TS constants consumed by
 // services and the literals baked into the single baseline must not drift.
 const BASELINE = readFileSync('drizzle/0000_baseline.sql', 'utf8');
+// file_references_ref_type_check was widened by the ST-3 3b2 append migration:
+// the LATEST definition lives there, so the pin reads the append file (the
+// baseline keeps the original four values as history).
+const APPEND_3B2 = readFileSync('drizzle/0001_lively_sister_grimm.sql', 'utf8');
 
 function checkLiterals(constraint: string): string[] {
 	const line = BASELINE.split('\n').find((l) => l.includes(`CONSTRAINT "${constraint}" CHECK`));
@@ -61,6 +66,15 @@ describe('enum drift guard', () => {
 
 	it('drafts_ref_type_check literals match DRAFT_REF_TYPES', () => {
 		expect(new Set(checkLiterals('drafts_ref_type_check'))).toEqual(new Set(DRAFT_REF_TYPES));
+	});
+
+	it('file_references_ref_type_check literals match FILE_REF_TYPES (append migration)', () => {
+		const line = APPEND_3B2.split('\n').find((entry) =>
+			entry.includes('CONSTRAINT "file_references_ref_type_check" CHECK')
+		);
+		expect(line).toBeDefined();
+		const literals = [...new Set([...line!.matchAll(/'([^']+)'/g)].map((match) => match[1]))];
+		expect(new Set(literals)).toEqual(new Set(FILE_REF_TYPES));
 	});
 
 	it('slug_trackers_type_check literals match SLUG_TRACKER_TYPES', () => {

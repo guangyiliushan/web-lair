@@ -623,15 +623,25 @@ async function dbChecks(): Promise<void> {
 			'A7 FK leading-index gaps'
 		);
 
-		// A8 - migration ledger vs baseline file.
+		// A8 - migration ledger vs the journal (3b2: appends are expected). One
+		// ledger row per journal entry, the LATEST row's hash equal to the
+		// newest SQL file's sha256, and the baseline hash pinned as present.
 		const migs = await sql`select hash from drizzle.__drizzle_migrations order by created_at desc`;
 		expect(
 			migs.length === journal.entries.length,
 			`A8 drizzle.__drizzle_migrations rows=${migs.length}, journal entries=${journal.entries.length}`
 		);
+		const latestTag = journal.entries[journal.entries.length - 1]?.tag ?? '0000_baseline';
+		const latestSha = createHash('sha256')
+			.update(readFileSync(fileURLToPath(new URL(`../drizzle/${latestTag}.sql`, import.meta.url))))
+			.digest('hex');
 		expect(
-			migs[0]?.hash === sha,
-			`A8 latest migration hash ${migs[0]?.hash} != sha256(baseline) ${sha}`
+			migs[0]?.hash === latestSha,
+			`A8 latest migration hash ${migs[0]?.hash} != sha256(${latestTag}.sql) ${latestSha}`
+		);
+		expect(
+			migs.some((row) => row.hash === sha),
+			`A8 baseline hash ${sha} missing from the ledger`
 		);
 		expect(
 			journal.entries[0]?.tag === '0000_baseline',
