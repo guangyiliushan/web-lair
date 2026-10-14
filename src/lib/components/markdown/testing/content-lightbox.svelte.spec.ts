@@ -1,12 +1,11 @@
 import { page, userEvent } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 // Pin the UI locale inside the browser iframe (node-side setup cannot reach it).
 overwriteGetLocale(() => 'zh-cn');
 
 import MarkdownRenderer from '../editor/MarkdownRenderer.svelte';
-import LightboxSwapHarness from './lightbox-swap-harness.svelte';
 import { attachContentLightbox } from '../content-lightbox';
 import { plainImageItem } from '$lib/components/photos/viewer-source';
 
@@ -20,7 +19,8 @@ import { plainImageItem } from '$lib/components/photos/viewer-source';
  * self-contained SVG data URLs - they decode immediately (no network) and
  * pass through the adapter untouched. Direct `attachContentLightbox` cases
  * pin the skip rules and the layout-neutrality deterministically; the swap
- * case pins the review-3d close-on-rerender guard.
+ * cases pin the review-3d close-on-rerender guard and its empty-swap
+ * complement.
  */
 const svg = (width: number, height: number, fill: string) =>
 	`data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}'%3E%3Crect width='100%25' height='100%25' fill='${fill}'/%3E%3C/svg%3E`;
@@ -47,6 +47,24 @@ async function mount(): Promise<void> {
 	// the enhancement has actually reached (no fixed-sleep window).
 	await expect.poll(() => enhanced().length).toBe(2);
 }
+
+/** Self-built DOM nodes, removed after each test (review 3d round 2,
+ * 03-P3-5: a mid-test assertion failure must not leak nodes into the next
+ * case - the library's cleanup only covers render() containers). */
+const hosts: HTMLElement[] = [];
+function track<T extends HTMLElement>(el: T): T {
+	hosts.push(el);
+	document.body.appendChild(el);
+	return el;
+}
+function createHost(html: string): HTMLElement {
+	const el = track(document.createElement('div'));
+	el.innerHTML = html;
+	return el;
+}
+afterEach(() => {
+	for (const el of hosts.splice(0)) el.remove();
+});
 
 describe('content lightbox (3d)', () => {
 	it('enhances loadable article images into focusable controls (the image itself)', async () => {
@@ -77,13 +95,13 @@ describe('content lightbox (3d)', () => {
 	});
 
 	it('skips embed-card internals and in-link images even when loaded (direct attach)', async () => {
-		const host = document.createElement('div');
-		host.innerHTML = [
-			`<div class="embed-card-mount"><img src="${svg(16, 16, '%23ff0000')}" alt="favicon" /></div>`,
-			`<p><a href="#anchor"><img src="${svg(24, 24, '%2300ff00')}" alt="链内" /></a></p>`,
-			`<p><img src="${svg(32, 32, '%230000ff')}" alt="普通" /></p>`
-		].join('\n');
-		document.body.appendChild(host);
+		const host = createHost(
+			[
+				`<div class="embed-card-mount"><img src="${svg(16, 16, '%23ff0000')}" alt="favicon" /></div>`,
+				`<p><a href="#anchor"><img src="${svg(24, 24, '%2300ff00')}" alt="链内" /></a></p>`,
+				`<p><img src="${svg(32, 32, '%230000ff')}" alt="普通" /></p>`
+			].join('\n')
+		);
 		const images = [...host.querySelectorAll<HTMLImageElement>('img')];
 		await expect
 			.poll(() => images.every((image) => image.complete && image.naturalWidth > 0))
@@ -102,15 +120,12 @@ describe('content lightbox (3d)', () => {
 			new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
 		);
 		expect(onOpen).toHaveBeenCalledTimes(1);
-		host.remove();
 	});
 
 	it('never enhances a broken image (deterministic: decoded failure first)', async () => {
-		const host = document.createElement('div');
 		// Malformed data URL: errors deterministically (a missing path never
 		// settles in the vitest browser server - probed).
-		host.innerHTML = '<img src="data:image/png;base64,AAAA" alt="坏图" />';
-		document.body.appendChild(host);
+		const host = createHost('<img src="data:image/png;base64,AAAA" alt="坏图" />');
 		const image = host.querySelector<HTMLImageElement>('img')!;
 		await expect.poll(() => image.complete && image.naturalWidth === 0).toBe(true);
 		const onOpen = vi.fn();
@@ -118,13 +133,10 @@ describe('content lightbox (3d)', () => {
 		expect(image.hasAttribute('data-content-lightbox')).toBe(false);
 		image.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 		expect(onOpen).not.toHaveBeenCalled();
-		host.remove();
 	});
 
 	it('enhancement is layout-neutral (no wrapper inserted, same box)', async () => {
-		const host = document.createElement('div');
-		host.innerHTML = `<p><img src="${svg(40, 30, '%235580c0')}" alt="几何" /></p>`;
-		document.body.appendChild(host);
+		const host = createHost(`<p><img src="${svg(40, 30, '%235580c0')}" alt="几何" /></p>`);
 		const image = host.querySelector<HTMLImageElement>('img')!;
 		const paragraph = image.parentElement;
 		await expect.poll(() => image.complete && image.naturalWidth > 0).toBe(true);
@@ -133,24 +145,41 @@ describe('content lightbox (3d)', () => {
 		expect(image.hasAttribute('data-content-lightbox')).toBe(true);
 		expect(image.parentElement).toBe(paragraph);
 		expect(image.getBoundingClientRect().toJSON()).toEqual(before);
-		host.remove();
+		// Natural size and alt map through the adapter (round 2, 03-P3-1).
+		const mapped = plainImageItem(image);
+		expect(mapped.width).toBe(40);
+		expect(mapped.height).toBe(30);
+		expect(mapped.alt).toBe('几何');
 	});
 
 	it('derives @full from a live DOM img (absolute-URL seam, review 3d P1)', () => {
 		const key = `ab/ab${'1'.repeat(62)}`;
-		const img = document.createElement('img');
+		const img = track(document.createElement('img'));
 		img.setAttribute('src', `/i/${key}.png@preview`);
-		document.body.appendChild(img);
 		// IDL reads are absolute - the seam the derivation must survive.
 		expect(img.src.startsWith('http')).toBe(true);
 		expect(plainImageItem(img).fullSrc).toBe(`/i/${key}.png@full`);
-		const gif = document.createElement('img');
+		// The read-order contract (round 2, 03-P3-1): a real srcset cannot
+		// discriminate here - at DPR 1 the default /i/ candidate wins the
+		// selection and a pending resource never settles in the vitest server
+		// (probed: complete stays false and currentSrc stays empty). The
+		// structural double pins the priority directly: currentSrc first,
+		// the src attribute as the empty-currentSrc fallback.
+		const otherKey = `ab/ab${'2'.repeat(62)}`;
+		const origin = location.origin; // same-origin absolutes: the live form
+		const fake = {
+			src: `${origin}/i/${key}.png@preview`,
+			currentSrc: `${origin}/i/${otherKey}.png@preview`,
+			alt: '',
+			naturalWidth: 0,
+			naturalHeight: 0
+		} as unknown as HTMLImageElement;
+		expect(plainImageItem(fake).fullSrc).toBe(`/i/${otherKey}.png@full`);
+		expect(plainImageItem({ ...fake, currentSrc: '' }).fullSrc).toBe(`/i/${key}.png@full`);
+		const gif = track(document.createElement('img'));
 		gif.setAttribute('src', '/i/ab/legacy.gif@preview');
-		document.body.appendChild(gif);
 		const gifItem = plainImageItem(gif);
 		expect(gifItem.fullSrc).toBe(gifItem.src); // GIF stays single-layer
-		img.remove();
-		gif.remove();
 	});
 
 	it('opens the overlay on activation and restores focus to the image on Esc', async () => {
@@ -206,7 +235,7 @@ describe('content lightbox (3d)', () => {
 	it('closes an open lightbox when the content swaps and re-enhances the fresh tree', async () => {
 		const htmlA = `<p><img src="${svg(40, 30, '%235580c0')}" alt="旧图" /></p>`;
 		const htmlB = `<p><img src="${svg(40, 30, '%23aa3333')}" alt="新图" /></p>`;
-		await render(LightboxSwapHarness, { htmlA, htmlB });
+		const rendered = await render(MarkdownRenderer, { html: htmlA });
 		await expect
 			.poll(() => !!document.querySelector('img[alt="旧图"][data-content-lightbox]'))
 			.toBe(true);
@@ -214,12 +243,30 @@ describe('content lightbox (3d)', () => {
 		oldImg.focus();
 		oldImg.click();
 		await expect.element(page.getByRole('dialog')).toBeVisible();
-		// Programmatic click: a modal dialog blocks pointer hit-testing on
-		// purpose (the real-world trigger is an SPA navigation).
-		document.querySelector<HTMLButtonElement>('button')!.click();
+		// A prop update is the real-world trigger (SPA navigation hands the
+		// renderer fresh html); the library primitive replaces the harness
+		// fixture that used to toggle it (review 3d round 2, 04 P3-1).
+		await rendered.rerender({ html: htmlB });
 		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 		await expect.poll(() => document.querySelectorAll('img[data-content-lightbox]').length).toBe(1);
 		expect(document.querySelector('img[alt="旧图"]')).toBeNull();
 		expect(document.querySelector('img[alt="新图"][data-content-lightbox]')).not.toBeNull();
+	});
+
+	it('closes the lightbox when the article leaves (swap to empty)', async () => {
+		const htmlA = `<p><img src="${svg(40, 30, '%235580c0')}" alt="旧图" /></p>`;
+		const rendered = await render(MarkdownRenderer, { html: htmlA });
+		await expect
+			.poll(() => !!document.querySelector('img[alt="旧图"][data-content-lightbox]'))
+			.toBe(true);
+		const oldImg = document.querySelector<HTMLImageElement>('img[alt="旧图"]')!;
+		oldImg.focus();
+		oldImg.click();
+		await expect.element(page.getByRole('dialog')).toBeVisible();
+		// The article-unmounting branch must close too (review 3d round 2,
+		// 08 F1: the close write now runs before the article guard).
+		await rendered.rerender({ html: '' });
+		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+		expect(document.querySelector('article')).toBeNull();
 	});
 });

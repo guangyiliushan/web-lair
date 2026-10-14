@@ -7,6 +7,7 @@ overwriteGetLocale(() => 'zh-cn');
 
 import PhotosViewerOverlay from './photos-viewer-overlay.svelte';
 import type { PhotoViewerSource } from './photo-tile';
+import { plainImageItem } from './viewer-source';
 
 /**
  * Overlay viewer v1.1 (3c): shell open/close, counter/caption, keyboard
@@ -403,7 +404,7 @@ describe('overlay viewer plain mode (3d article lightbox)', () => {
 		});
 		try {
 			await render(PhotosViewerOverlay, { open: true, plain: plainSource });
-			const button = page.getByRole('button', { name: '加载原图' });
+			const button = page.getByRole('button', { name: '加载原图', exact: true });
 			await expect.element(button).toBeVisible();
 			// Nothing may stream before the tap.
 			const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
@@ -415,6 +416,30 @@ describe('overlay viewer plain mode (3d article lightbox)', () => {
 		} finally {
 			delete (navigator as unknown as Record<string, unknown>).connection;
 		}
+	});
+
+	it('adapter to overlay combo: a live DOM img derives and pumps @full', async () => {
+		// The composition point neither side's unit tests covered (review 3d
+		// round 2, 01 P2-1): real <img> -> plainImageItem -> shared pump.
+		const img = document.createElement('img');
+		img.setAttribute('src', `/i/${PLAIN_KEY}.png@preview`);
+		document.body.appendChild(img);
+		const source = plainImageItem(img);
+		img.remove();
+		expect(source.fullSrc).toBe(`/i/${PLAIN_KEY}.png@full`);
+		await render(PhotosViewerOverlay, { open: true, plain: source });
+		const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+		await expect
+			.poll(() => fetchMock.mock.calls.some((call) => String(call[0]).includes('@full')))
+			.toBe(true);
+		await expect
+			.poll(
+				() =>
+					document
+						.querySelector<HTMLImageElement>('[data-photos-viewer-stage] img')
+						?.src.startsWith('blob:') ?? false
+			)
+			.toBe(true);
 	});
 
 	it('upgrades to the derived @full frame via the shared pump', async () => {
