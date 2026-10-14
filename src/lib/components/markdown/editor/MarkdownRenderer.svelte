@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, mount, unmount } from 'svelte';
+	import { onDestroy, mount, unmount, untrack } from 'svelte';
 	import { cn } from '$lib/utils';
 	import {
 		renderMarkdownToHtmlSync,
@@ -34,7 +34,6 @@
 	let articleEl: HTMLElement | undefined = $state();
 	const cardInstances: Array<ReturnType<typeof mount>> = [];
 	let detachMagnet: (() => void) | null = null;
-	let detachLightbox: (() => void) | null = null;
 	let uid = '';
 
 	// Content lightbox (3d): set on first open and kept mounted afterwards so
@@ -50,12 +49,16 @@
 		void renderedHtml;
 		const article = articleEl;
 		if (!article) return;
+		// A re-rendered article (SPA navigation) while the lightbox is open
+		// would keep showing the previous content with its focus-restore
+		// target already gone - close it before re-enhancing (review 3d,
+		// the plain-face mirror of the 3c Back guard). untrack: the effect
+		// must not re-run because of its own state write.
+		if (untrack(() => lightboxOpen)) lightboxOpen = false;
 		for (const instance of cardInstances) unmount(instance);
 		cardInstances.length = 0;
 		detachMagnet?.();
 		detachMagnet = null;
-		detachLightbox?.();
-		detachLightbox = null;
 		uid ||= Math.random().toString(36).slice(2, 8);
 		enhanceTabs(article, uid);
 		enhanceCarousels(article);
@@ -76,7 +79,8 @@
 		// cleanup runs both on the next {@html} swap and on destroy.
 		detachMagnet = attachMagnetLinks(article);
 		// Article images open the shared overlay viewer (3d content lightbox).
-		detachLightbox = attachContentLightbox(article, (source) => {
+		// Node-level listeners only; nothing to detach (review 3d).
+		attachContentLightbox(article, (source) => {
 			lightboxSource = source;
 			lightboxOpen = true;
 		});
@@ -96,8 +100,6 @@
 		cardInstances.length = 0;
 		detachMagnet?.();
 		detachMagnet = null;
-		detachLightbox?.();
-		detachLightbox = null;
 	});
 
 	/**

@@ -26,6 +26,7 @@
 		EMBED_PROVIDER_DOMAINS,
 		type EmbedProviderId
 	} from '$lib/components/markdown/embed/registry';
+	import { EMBED_MOUNT_CLASS } from '$lib/components/markdown/embed/mount-class';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
@@ -248,7 +249,7 @@
 		allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
 	></iframe>
 {:else}
-	<div bind:this={cardEl} class="embed-card-mount" class:embed-enriched={!!meta} style={cardStyle}>
+	<div bind:this={cardEl} class={EMBED_MOUNT_CLASS} class:embed-enriched={!!meta} style={cardStyle}>
 		{#if meta?.kind === 'repo' && langColor}
 			<div class="embed-tint" aria-hidden="true"></div>
 			<div class="embed-spotlight" aria-hidden="true"></div>

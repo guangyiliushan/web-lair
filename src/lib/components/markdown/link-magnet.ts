@@ -19,6 +19,7 @@
  * - CSS custom properties in pseudo-element styles (MDN: CSS/--*) carry
  *   the pointer position from JS to CSS without inline transforms.
  */
+import { EMBED_MOUNT_CLASS } from '$lib/components/markdown/embed/mount-class';
 
 const MAGNET_SELECTOR = 'a[href^="http"]';
 
@@ -37,7 +38,7 @@ export function attachMagnetLinks(container: HTMLElement): () => void {
 		const target = (event.target as HTMLElement | null)?.closest?.(
 			MAGNET_SELECTOR
 		) as HTMLAnchorElement | null;
-		if (!target || target.closest('.embed-card-mount')) {
+		if (!target || target.closest(`.${EMBED_MOUNT_CLASS}`)) {
 			clearStamp();
 			return;
 		}

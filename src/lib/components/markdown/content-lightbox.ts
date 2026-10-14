@@ -18,25 +18,31 @@
  * block image inside an inline wrapper collapses the line box: 78px -> 37px
  * in the probe). Carrying `role="button"` + `tabindex` on the image itself
  * is the only formulation that is BOTH layout-neutral and focusable; the
- * aria-label, keyboard activation and skip rules follow Q14 unchanged.
+ * aria-label, keyboard activation and skip rules follow Q14 unchanged. (An
+ * independent review re-verified the probe from the specs: box-less
+ * elements are not focusable in any current engine, and even once CSSWG
+ * lands focusability, a box-less element still cannot draw its own focus
+ * ring.)
  *
  * DOM scraping instead of re-parsing the source (Q4 ruling): the enhancement
- * sees exactly what the renderer produced. Images that have not finished
- * loading get a one-shot `load` listener (a broken image never loads, so it
- * is skipped by construction).
+ * sees exactly what the renderer produced. An image that has not finished
+ * loading gets a one-shot `{ once: true }` load listener (a broken image
+ * never loads, so it is skipped by construction; the listener removes
+ * itself, and a re-render discards the node along with it - the node-level
+ * listener precedent from the tabs enhancement, so attach returns nothing,
+ * review 3d).
  */
 import { m } from '$lib/paraglide/messages';
 import { plainImageItem, type PlainImageSource } from '$lib/components/photos/viewer-source';
+import { EMBED_MOUNT_CLASS } from '$lib/components/markdown/embed/mount-class';
 
 /** Marker attribute on the enhanced images; doubles as the re-entry guard. */
-export const CONTENT_LIGHTBOX_ATTR = 'data-content-lightbox';
+const CONTENT_LIGHTBOX_ATTR = 'data-content-lightbox';
 
 export function attachContentLightbox(
 	article: HTMLElement,
 	onOpen: (source: PlainImageSource) => void
-): () => void {
-	const cleanups: Array<() => void> = [];
-
+): void {
 	/** Turns a loaded image into the lightbox control (idempotent). */
 	function enhance(img: HTMLImageElement): void {
 		img.setAttribute(CONTENT_LIGHTBOX_ATTR, '');
@@ -44,11 +50,20 @@ export function attachContentLightbox(
 		img.tabIndex = 0;
 		img.classList.add(
 			'cursor-zoom-in',
-			'rounded-lg',
 			'focus-visible:ring-2',
 			'focus-visible:ring-ring',
 			'focus-visible:ring-offset-2',
-			'focus-visible:outline-none'
+			// The ring's offset band follows the page background (the dark
+			// theme otherwise shows a hard white band); the corner radius
+			// comes from the article's own `[&_img]:rounded-lg` - no
+			// duplicate class here (review 3d).
+			'focus-visible:ring-offset-background',
+			// Transparent outline: invisible normally, but forced-colors mode
+			// substitutes a system colour, so Windows high-contrast users
+			// keep a visible focus indicator (review 3d, a11y).
+			'focus-visible:outline-2',
+			'focus-visible:outline-offset-2',
+			'focus-visible:outline-transparent'
 		);
 		const alt = (img.getAttribute('alt') ?? '').trim();
 		img.setAttribute(
@@ -66,28 +81,18 @@ export function attachContentLightbox(
 
 	function consider(img: HTMLImageElement): void {
 		if (img.hasAttribute(CONTENT_LIGHTBOX_ATTR)) return; // already enhanced
-		if (img.closest('a')) return; // in-link images keep the link behavior
-		if (img.closest('.embed-card-mount')) return; // embed internals untouched
-		if (img.complete && img.naturalWidth === 0) return; // broken: skip (Q14)
+		if (img.closest(`a, .${EMBED_MOUNT_CLASS}`)) return; // in-link / embed internals
 		if (!img.complete) {
-			// Wait for the first successful decode; broken loads never fire.
-			const onLoad = () => {
-				img.removeEventListener('load', onLoad);
-				if (img.naturalWidth > 0) enhance(img);
-			};
-			img.addEventListener('load', onLoad);
-			cleanups.push(() => img.removeEventListener('load', onLoad));
+			// Wait for the first successful decode; broken loads never fire
+			// `load`, so a broken image is skipped by construction.
+			img.addEventListener('load', () => consider(img), { once: true });
 			return;
 		}
+		if (img.naturalWidth === 0) return; // broken: skip (Q14)
 		enhance(img);
 	}
 
 	for (const img of article.querySelectorAll<HTMLImageElement>('img')) {
 		consider(img);
 	}
-
-	return () => {
-		for (const cleanup of cleanups) cleanup();
-		cleanups.length = 0;
-	};
 }
