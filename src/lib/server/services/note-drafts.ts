@@ -4,7 +4,7 @@ import { db } from '$lib/server/db';
 import { drafts, notes } from '$lib/server/db/content';
 import { slugTrackers } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
-import { dropDraftReferences, keysFromContent, syncFileReferences } from './file-references';
+import { keysFromContent, syncFileReferences } from './file-references';
 import { isReservedNoteSlug, NOTE_EMOTIONS, NOTE_MOODS } from '$lib/utils/note-meta';
 import { hashNotePassword, verifyNotePassword } from './note-gate';
 import { DRAFT_THROTTLE_MS } from './post-drafts';
@@ -571,8 +571,8 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 				{ type: 'note', id: locked.id },
 				keysFromContent(lockedDraft.content)
 			);
-			// The draft's own refs leave with the draft row (3b2).
-			await dropDraftReferences(tx, lockedDraft.id);
+			// The draft's own refs leave with the draft row (3b2: full clear).
+			await syncFileReferences(tx, { type: 'draft', id: lockedDraft.id }, []);
 
 			return { kind: 'published' as const, noteId: locked.id };
 		});
@@ -627,15 +627,15 @@ export async function discardNoteDraft(draftId: string): Promise<DiscardNoteResu
 				// deleted right below, so its references must go with it (Q15
 				// deletion hooks).
 				const placeholder = Boolean(note && note.publishedAt == null && note.status === 'draft');
-				// The restore-sync heals any legacy interim rows written under the
-				// target identity before 3b2; the drop then removes this draft's
-				// own refs (a draft-only image flips detached inside it).
+				// The restore-sync heals legacy interim rows written under the
+				// target identity before 3b2; the full clear then removes this
+				// draft's own refs (a draft-only image flips detached inside it).
 				await syncFileReferences(
 					tx,
 					{ type: 'note', id: draft.refId },
 					placeholder ? [] : keysFromContent(note?.content)
 				);
-				await dropDraftReferences(tx, draft.id);
+				await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
 				let removedPlaceholder = false;
 				// A never-published note goes with its draft: notes have no
 				// version counter, so "never published" = no publishedAt AND
@@ -652,7 +652,7 @@ export async function discardNoteDraft(draftId: string): Promise<DiscardNoteResu
 				.where(eq(drafts.id, draft.id))
 				.returning({ id: drafts.id });
 			if (deleted.length === 0) return { kind: 'not-found' as const };
-			await dropDraftReferences(tx, draft.id);
+			await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
 			return { kind: 'discarded' as const, noteId: null, removedPlaceholder: false };
 		});
 	} catch (caught) {

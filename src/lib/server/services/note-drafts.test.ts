@@ -19,7 +19,7 @@ import { slugTrackers } from '$lib/server/db/system';
  * write, every lock clause and every WHERE condition (rendered with the real
  * dialect) - removing a lock/transaction/condition turns the suite red.
  */
-const { dbMock, state, syncMock, dropMock } = vi.hoisted(() => ({
+const { dbMock, state, syncMock } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		selectQueue: [] as unknown[][],
@@ -36,8 +36,7 @@ const { dbMock, state, syncMock, dropMock } = vi.hoisted(() => ({
 		failWith: undefined as unknown,
 		txExecutors: null as unknown
 	},
-	syncMock: vi.fn(async () => {}),
-	dropMock: vi.fn(async () => {})
+	syncMock: vi.fn(async () => {})
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
@@ -47,7 +46,7 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 // target/keys (plus the Q6 no-op autosave short-circuit).
 vi.mock('./file-references', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('./file-references')>();
-	return { ...actual, syncFileReferences: syncMock, dropDraftReferences: dropMock };
+	return { ...actual, syncFileReferences: syncMock };
 });
 
 import {
@@ -205,7 +204,6 @@ describe('note draft flow', () => {
 		state.transactions = 0;
 		state.failWith = undefined;
 		syncMock.mockClear();
-		dropMock.mockClear();
 		Object.assign(dbMock, {
 			...makeExecutors(),
 			transaction: vi.fn(async (callback: (tx: unknown) => unknown) => {
@@ -504,6 +502,9 @@ describe('note draft flow', () => {
 		const noteInsert = state.inserts.find((entry) => entry.table === notes);
 		expect(noteInsert?.values).toMatchObject({ title: 'First', lang: 'zh-cn', status: 'draft' });
 		expect(isNotePlaceholderSlug(String(noteInsert?.values.slug))).toBe(true);
+		// References ride the materialization transaction under the draft's
+		// own identity (3b2).
+		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: DRAFT_ID }, []);
 	});
 
 	it('publishes the locked draft: full field copy, tracker, draft removal', async () => {
@@ -540,12 +541,23 @@ describe('note draft flow', () => {
 		const renderedPublishedAt = render(noteUpdate?.values.publishedAt);
 		expect(renderedPublishedAt.sql).toContain('coalesce');
 		expect(renderedPublishedAt.sql).toContain('"notes"."published_at"');
-		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'note', id: NOTE_ID }, []);
+		expect(syncMock).toHaveBeenCalledTimes(2);
+		expect(syncMock).toHaveBeenNthCalledWith(
+			1,
+			state.txExecutors,
+			{ type: 'note', id: NOTE_ID },
+			[]
+		);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
-		// The draft's own refs leave with the draft row (3b2), after the
-		// durable note set (sync-then-drop order).
-		expect(dropMock).toHaveBeenCalledWith(state.txExecutors, DRAFT_ID);
-		expect(syncMock.mock.invocationCallOrder[0]).toBeLessThan(dropMock.mock.invocationCallOrder[0]);
+		// The draft's own refs leave with the draft row (3b2) as a full
+		// clear, after the durable note set (sync-then-clear order).
+		expect(syncMock).toHaveBeenNthCalledWith(
+			2,
+			state.txExecutors,
+			{ type: 'draft', id: DRAFT_ID },
+			[]
+		);
+		expect(syncMock.mock.invocationCallOrder[0]).toBeLessThan(syncMock.mock.invocationCallOrder[1]);
 	});
 
 	it('keeps a same-slug or placeholder-slug publish free of tracker rows', async () => {
@@ -631,9 +643,20 @@ describe('note draft flow', () => {
 		expect(result).toEqual({ kind: 'discarded', noteId: NOTE_ID, removedPlaceholder: true });
 		expect(state.transactions).toBe(1);
 		expect(state.deletes.map((entry) => entry.table)).toEqual([drafts, notes]);
-		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'note', id: NOTE_ID }, []);
+		expect(syncMock).toHaveBeenCalledTimes(2);
+		expect(syncMock).toHaveBeenNthCalledWith(
+			1,
+			state.txExecutors,
+			{ type: 'note', id: NOTE_ID },
+			[]
+		);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
-		expect(dropMock).toHaveBeenCalledWith(state.txExecutors, DRAFT_ID);
+		expect(syncMock).toHaveBeenNthCalledWith(
+			2,
+			state.txExecutors,
+			{ type: 'draft', id: DRAFT_ID },
+			[]
+		);
 	});
 
 	it('keeps the note row when it was ever published (publishedAt decides)', async () => {
@@ -669,10 +692,38 @@ describe('note draft flow', () => {
 		state.deleteResults = [[{ id: DRAFT_ID }]];
 		const result = await discardNoteDraft(DRAFT_ID);
 		expect(result).toEqual({ kind: 'discarded', noteId: NOTE_ID, removedPlaceholder: false });
-		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'note', id: NOTE_ID }, [KEY]);
+		expect(syncMock).toHaveBeenCalledTimes(2);
+		expect(syncMock).toHaveBeenNthCalledWith(1, state.txExecutors, { type: 'note', id: NOTE_ID }, [
+			KEY
+		]);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
-		// The draft's own refs leave with its row (3b2).
-		expect(dropMock).toHaveBeenCalledWith(state.txExecutors, DRAFT_ID);
+		// The draft's own refs leave with its row (3b2) as a full clear.
+		expect(syncMock).toHaveBeenNthCalledWith(
+			2,
+			state.txExecutors,
+			{ type: 'draft', id: DRAFT_ID },
+			[]
+		);
+	});
+
+	it('answers not-found when the draft vanished before the delete', async () => {
+		state.selectQueue = [
+			[BASE_DRAFT],
+			[{ id: NOTE_ID, status: 'published', publishedAt: new Date() }]
+		];
+		state.deleteResults = [[]];
+		const result = await discardNoteDraft(DRAFT_ID);
+		expect(result).toEqual({ kind: 'not-found' });
+		expect(state.deletes.map((entry) => entry.table)).toEqual([drafts]);
+		expect(syncMock).not.toHaveBeenCalled();
+	});
+
+	it('answers plain not-found when the draft does not exist', async () => {
+		state.selectQueue = [[]];
+		const result = await discardNoteDraft(DRAFT_ID);
+		expect(result).toEqual({ kind: 'not-found' });
+		expect(state.deletes).toHaveLength(0);
+		expect(syncMock).not.toHaveBeenCalled();
 	});
 
 	it('sets, keeps and clears the password hash (same value never re-salts)', async () => {

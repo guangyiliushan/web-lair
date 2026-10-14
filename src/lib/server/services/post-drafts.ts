@@ -4,7 +4,7 @@ import { db } from '$lib/server/db';
 import { categories, drafts, postRevisions, postTags, posts, tags } from '$lib/server/db/content';
 import { slugTrackers } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
-import { dropDraftReferences, keysFromContent, syncFileReferences } from './file-references';
+import { keysFromContent, syncFileReferences } from './file-references';
 import { tagSlug } from '$lib/utils/slug';
 import { parseTags, SLUG_RE } from './posts';
 import { m } from '$lib/paraglide/messages';
@@ -50,6 +50,11 @@ interface NormalizedDraft {
 	content: string;
 }
 
+/** CRLF (and lone CR) to LF - the one canonicalization point for drafts. */
+function canonicalLf(value: string): string {
+	return value.replace(/\r\n?/g, '\n');
+}
+
 function normalizePayload(payload: DraftPayload): NormalizedDraft {
 	return {
 		title: payload.title ?? '',
@@ -61,7 +66,7 @@ function normalizePayload(payload: DraftPayload): NormalizedDraft {
 		// submits CRLF-normalized text and the hash basis below hashes this
 		// exact value - normalizing here keeps hash and stored row in sync
 		// and makes the stored content the canonical shape for imports.
-		content: (payload.content ?? '').replace(/\r\n?/g, '\n')
+		content: canonicalLf(payload.content ?? '')
 	};
 }
 
@@ -208,9 +213,8 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
-				// Draft-phase references key on the DRAFT's own identity (3b2):
-				// the published post's ref set keeps describing the published
-				// body until a publish re-keys it (Q6/Q15).
+				// Draft identity (3b2): the published post's ref set keeps
+				// describing the published body until publish re-keys it.
 				await syncFileReferences(
 					tx,
 					{ type: 'draft', id: row.id },
@@ -276,8 +280,8 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
-				// References ride the materialization transaction (Q15) under
-				// the DRAFT identity (3b2).
+				// References ride the materialization transaction (Q15), keyed
+				// on the draft's own identity (3b2).
 				await syncFileReferences(
 					tx,
 					{ type: 'draft', id: createdDraft.id },
@@ -348,7 +352,7 @@ async function updateExistingDraft(
 			.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
 		if (rows.length > 0) {
 			// Draft identity (3b2): the working copy's refs never touch the
-			// published post's ref set.
+			// published set.
 			await syncFileReferences(
 				tx,
 				{ type: 'draft', id: draft.id },
@@ -515,8 +519,8 @@ export async function publishDraft(
 				{ type: 'post', id: locked.id },
 				keysFromContent(lockedDraft.content)
 			);
-			// The draft's own refs leave with the draft row (3b2).
-			await dropDraftReferences(tx, lockedDraft.id);
+			// The draft's own refs leave with the draft row (3b2: full clear).
+			await syncFileReferences(tx, { type: 'draft', id: lockedDraft.id }, []);
 
 			return { kind: 'published' as const, postId: locked.id, version: nextVersion };
 		});
@@ -574,15 +578,15 @@ export async function discardDraft(draftId: string): Promise<DiscardResult> {
 				// deleted right below, so its references must go with it (Q15
 				// deletion hooks: pages hard-delete + placeholder delete).
 				const placeholder = Boolean(post && post.version === 0 && post.status === 'draft');
-				// The restore-sync heals any legacy interim rows written under the
-				// target identity before 3b2; the drop then removes this draft's
-				// own refs (a draft-only image flips detached inside it).
+				// The restore-sync heals legacy interim rows written under the
+				// target identity before 3b2; the full clear then removes this
+				// draft's own refs (a draft-only image flips detached inside it).
 				await syncFileReferences(
 					tx,
 					{ type: 'post', id: draft.refId },
 					placeholder ? [] : keysFromContent(post?.content)
 				);
-				await dropDraftReferences(tx, draft.id);
+				await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
 				let removedPlaceholder = false;
 				// A never-published placeholder goes with its draft (§9.14.3).
 				if (post && placeholder) {
@@ -597,7 +601,7 @@ export async function discardDraft(draftId: string): Promise<DiscardResult> {
 				.where(eq(drafts.id, draft.id))
 				.returning({ id: drafts.id });
 			if (deleted.length === 0) return { kind: 'not-found' as const };
-			await dropDraftReferences(tx, draft.id);
+			await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
 			return { kind: 'discarded' as const, postId: null, removedPlaceholder: false };
 		});
 	} catch (caught) {
@@ -664,7 +668,7 @@ export async function createTranslationDraft(
 					slug: null,
 					categoryId: source.categoryId,
 					tags: [],
-					content: source.content,
+					content: source.content == null ? null : canonicalLf(source.content),
 					contentFormat: source.contentFormat ?? 'markdown',
 					summary: source.summary,
 					version: 1,
@@ -673,9 +677,8 @@ export async function createTranslationDraft(
 					updatedAt: new Date()
 				})
 				.returning({ id: drafts.id });
-			// The copied body's keys become this draft's own refs (3b2):
-			// otherwise a later source edit could orphan an image the
-			// translation draft still carries once the mention scan retires.
+			// The copied body's keys become this draft's own refs (3b2): a
+			// later source edit must not orphan an image the draft carries.
 			await syncFileReferences(
 				tx,
 				{ type: 'draft', id: translationDraft.id },

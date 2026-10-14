@@ -9,10 +9,22 @@ import { I_KEY_PATTERN } from '$lib/media/keys';
 /**
  * Reference maintenance (storage line §4.6; ST-3 3b1). The write side lives
  * in the SAME transaction as the content write (Q15): save / publish /
- * discard (posts + notes, keyed by the draft's target identity) and page
- * hard-delete call `syncFileReferences` with the content's bare `/i/<key>`
- * set. The 'draft' refType value lands with the 3b2 CHECK append; until then
- * the mention scan keeps covering drafts (Q8 clause C).
+ * discard (posts + notes) and page hard-delete call `syncFileReferences`
+ * with the content's bare `/i/<key>` set. Draft-phase references are keyed
+ * by the draft's OWN identity (`{draft, draftId}`; ST-3 3b2), so a save
+ * never touches the published target's set: publish re-keys the content to
+ * `{post|note, id}` first and then clears the draft scope, and discard
+ * restores the target set and clears the draft scope.
+ *
+ * Empty-desired contract (3b2): passing `[]` clears the ENTIRE scope in one
+ * call - the remove branch deletes every reference of `(type, id)` and
+ * re-evaluates the status machine. Draft discard and page hard-delete use
+ * this form directly; there is no separate "clear" helper.
+ *
+ * Deleting `drafts` rows (publish, discard, any future maintenance path)
+ * MUST pair with a same-transaction `syncFileReferences(tx, {type: 'draft',
+ * id}, [])`, otherwise the draft's references become orphans that audit
+ * check (4) reports and no cleaner can attribute.
  *
  * Concurrency contract (review round 1, 2026-10-13):
  * - the resolve SELECT takes `FOR KEY SHARE` on the registry rows, so a
@@ -163,44 +175,5 @@ export async function syncFileReferences(
 				.set({ status: 'detached', detachedAt: sql`now()` })
 				.where(and(inArray(files.id, detachIds), eq(files.status, 'attached')));
 		}
-	}
-}
-
-/**
- * Drops every reference a draft wrote under its OWN identity and re-evaluates
- * the status machine for the affected files (ST-3 3b2: draft-phase refs are
- * keyed `{draft, draftId}`; publish/discard delete the draft row and must
- * take its refs with them - a draft-only image flips to `detached` here with
- * the usual clock anchor). Same locking discipline as the remove branch
- * above: candidates are locked ordered `FOR NO KEY UPDATE` first so a
- * concurrent attach cannot race the remaining-reference snapshot.
- */
-export async function dropDraftReferences(executor: RefsExecutor, draftId: string): Promise<void> {
-	const removed = await executor
-		.select({ fileId: fileReferences.fileId })
-		.from(fileReferences)
-		.where(and(eq(fileReferences.refType, 'draft'), eq(fileReferences.refId, draftId)));
-	const fileIds = [...new Set(removed.map((row) => row.fileId))];
-	if (fileIds.length === 0) return;
-	await executor
-		.select({ id: files.id })
-		.from(files)
-		.where(inArray(files.id, fileIds))
-		.orderBy(files.id)
-		.for('no key update');
-	await executor
-		.delete(fileReferences)
-		.where(and(eq(fileReferences.refType, 'draft'), eq(fileReferences.refId, draftId)));
-	const remaining = await executor
-		.select({ fileId: fileReferences.fileId })
-		.from(fileReferences)
-		.where(inArray(fileReferences.fileId, fileIds));
-	const stillReferenced = new Set(remaining.map((row) => row.fileId));
-	const detachIds = fileIds.filter((id) => !stillReferenced.has(id));
-	if (detachIds.length > 0) {
-		await executor
-			.update(files)
-			.set({ status: 'detached', detachedAt: sql`now()` })
-			.where(and(inArray(files.id, detachIds), eq(files.status, 'attached')));
 	}
 }

@@ -2,17 +2,25 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '$lib/server/db/schema';
-import { dropDraftReferences, syncFileReferences } from './file-references';
+import { syncFileReferences } from './file-references';
 
 /**
  * Service-level reference lifecycle on a REAL scratch database (ST-3 3b2;
  * register: "two-connection integration teeth - run the window on a scratch
  * container"). Skipped unless REFS_SCRATCH_URL points at a migrated scratch
- * database (baseline + the 3b2 append apply), so the default suite stays
- * offline. Drives the real `syncFileReferences` / `dropDraftReferences`
- * wiring across separate connections: draft-identity writes, publish
- * re-keying, the detach with a `now()` anchor, and the attach-vs-detach
- * interleavings the locking discipline exists for.
+ * database (the single baseline applied; the ref_type check already includes
+ * 'draft'), so the default suite stays offline. Run it explicitly with:
+ *   REFS_SCRATCH_URL=... pnpm exec vitest run --project server \
+ *     src/lib/server/services/file-references.integration.test.ts
+ * (or `pnpm test:integration-refs` with the variable exported).
+ *
+ * Drives the real `syncFileReferences` wiring across separate connections:
+ * draft-identity writes, publish re-keying plus the full-clear form that
+ * replaced `dropDraftReferences`, the detach with a `now()` anchor, and the
+ * attach-vs-detach interleavings the locking discipline exists for. The two
+ * interleave cases are probabilistic by nature (Promise.all may serialize
+ * either way and both orders end in the same state) - they are repeated and
+ * the end-state assertions are the deterministic half of the contract.
  */
 const url = process.env.REFS_SCRATCH_URL;
 const K1 = `55/55${'a'.repeat(62)}.png`;
@@ -21,10 +29,13 @@ const K3 = `55/55${'c'.repeat(62)}.png`;
 const K4 = `55/55${'d'.repeat(62)}.png`;
 
 describe.skipIf(!url)('reference lifecycle on a scratch database (3b2)', () => {
-	const sqlA = postgres(url!, { max: 2 });
-	const sqlB = postgres(url!, { max: 2 });
-	const dbA = drizzle(sqlA, { schema });
-	const dbB = drizzle(sqlB, { schema });
+	// Pools are constructed inside beforeAll so a skipped suite never builds
+	// a connection at all (02 review: the factory-time build silently fell
+	// back to localhost when the env var was missing).
+	let sqlA: ReturnType<typeof postgres>;
+	let sqlB: ReturnType<typeof postgres>;
+	let dbA: ReturnType<typeof drizzle<typeof schema>>;
+	let dbB: ReturnType<typeof drizzle<typeof schema>>;
 
 	async function cleanup() {
 		await sqlA`delete from file_references where file_id in (select id from files where file_name like 'refs-integ-%')`;
@@ -49,6 +60,10 @@ describe.skipIf(!url)('reference lifecycle on a scratch database (3b2)', () => {
 	}
 
 	beforeAll(async () => {
+		sqlA = postgres(url!, { max: 2 });
+		sqlB = postgres(url!, { max: 2 });
+		dbA = drizzle(sqlA, { schema });
+		dbB = drizzle(sqlB, { schema });
 		await cleanup();
 		await seedFiles([K1, K2, K3, K4]);
 	});
@@ -58,7 +73,7 @@ describe.skipIf(!url)('reference lifecycle on a scratch database (3b2)', () => {
 		await sqlB.end();
 	});
 
-	it('draft save keys on the draft identity; publish re-keys and drops the draft refs', async () => {
+	it('draft save keys on the draft identity; publish re-keys and clears the draft refs', async () => {
 		await syncFileReferences(dbA, { type: 'draft', id: 'd1000000-0000-4000-8000-000000000001' }, [
 			K1
 		]);
@@ -68,7 +83,11 @@ describe.skipIf(!url)('reference lifecycle on a scratch database (3b2)', () => {
 		await syncFileReferences(dbA, { type: 'post', id: 'a1000000-0000-4000-8000-000000000001' }, [
 			K1
 		]);
-		await dropDraftReferences(dbA, 'd1000000-0000-4000-8000-000000000001');
+		await syncFileReferences(
+			dbA,
+			{ type: 'draft', id: 'd1000000-0000-4000-8000-000000000001' },
+			[]
+		);
 		expect(await refsFor(K1)).toEqual(['post:a1000000']);
 		expect((await fileState(K1))?.status).toBe('attached');
 	});
@@ -77,7 +96,11 @@ describe.skipIf(!url)('reference lifecycle on a scratch database (3b2)', () => {
 		await syncFileReferences(dbA, { type: 'draft', id: 'd2000000-0000-4000-8000-000000000002' }, [
 			K2
 		]);
-		await dropDraftReferences(dbA, 'd2000000-0000-4000-8000-000000000002');
+		await syncFileReferences(
+			dbA,
+			{ type: 'draft', id: 'd2000000-0000-4000-8000-000000000002' },
+			[]
+		);
 		expect(await refsFor(K2)).toEqual([]);
 		const state = await fileState(K2);
 		expect(state?.status).toBe('detached');
@@ -85,44 +108,64 @@ describe.skipIf(!url)('reference lifecycle on a scratch database (3b2)', () => {
 	});
 
 	it('a shared file stays attached while any reference remains', async () => {
+		// Self-sufficient (03 review): build a second reference here instead
+		// of leaning on the first case's leftover post ref.
+		await syncFileReferences(dbA, { type: 'page', id: 'e3000000-0000-4000-8000-000000000003' }, [
+			K1
+		]);
 		await syncFileReferences(dbA, { type: 'draft', id: 'd3000000-0000-4000-8000-000000000003' }, [
 			K1
 		]);
-		await dropDraftReferences(dbA, 'd3000000-0000-4000-8000-000000000003');
-		expect(await refsFor(K1)).toEqual(['post:a1000000']);
+		await syncFileReferences(
+			dbA,
+			{ type: 'draft', id: 'd3000000-0000-4000-8000-000000000003' },
+			[]
+		);
+		expect(await refsFor(K1)).toContain('page:e3000000');
 		expect((await fileState(K1))?.status).toBe('attached');
 	});
 
 	it('interleaved attach vs detach on two connections converge (attach then remove)', async () => {
-		await syncFileReferences(dbA, { type: 'draft', id: 'd4000000-0000-4000-8000-000000000004' }, [
-			K3
-		]);
-		await Promise.all([
-			dbA.transaction(async (tx) =>
-				syncFileReferences(tx, { type: 'draft', id: 'd5000000-0000-4000-8000-000000000005' }, [K3])
-			),
-			dbB.transaction(async (tx) => dropDraftReferences(tx, 'd4000000-0000-4000-8000-000000000004'))
-		]);
-		expect(await refsFor(K3)).toEqual(['draft:d5000000']);
-		expect((await fileState(K3))?.status).toBe('attached');
+		for (let round = 0; round < 2; round += 1) {
+			await syncFileReferences(dbA, { type: 'draft', id: 'd4000000-0000-4000-8000-000000000004' }, [
+				K3
+			]);
+			await Promise.all([
+				dbA.transaction(async (tx) =>
+					syncFileReferences(tx, { type: 'draft', id: 'd5000000-0000-4000-8000-000000000005' }, [
+						K3
+					])
+				),
+				dbB.transaction(async (tx) =>
+					syncFileReferences(tx, { type: 'draft', id: 'd4000000-0000-4000-8000-000000000004' }, [])
+				)
+			]);
+			expect(await refsFor(K3)).toEqual(['draft:d5000000']);
+			expect((await fileState(K3))?.status).toBe('attached');
+		}
 	});
 
 	it('interleaved detach vs attach cannot lose the surviving reference', async () => {
-		await syncFileReferences(dbA, { type: 'draft', id: 'd6000000-0000-4000-8000-000000000006' }, [
-			K4
-		]);
-		await Promise.all([
-			dbB.transaction(async (tx) =>
-				dropDraftReferences(tx, 'd6000000-0000-4000-8000-000000000006')
-			),
-			dbA.transaction(async (tx) =>
-				syncFileReferences(tx, { type: 'draft', id: 'd7000000-0000-4000-8000-000000000007' }, [K4])
-			)
-		]);
-		// Either serialization order lands here: the surviving draft ref
-		// survives and the file is attached (a lost reference would leave the
-		// file detached or drop d7000000 - the locking discipline forbids it).
-		expect(await refsFor(K4)).toEqual(['draft:d7000000']);
-		expect((await fileState(K4))?.status).toBe('attached');
+		for (let round = 0; round < 2; round += 1) {
+			await syncFileReferences(dbA, { type: 'draft', id: 'd6000000-0000-4000-8000-000000000006' }, [
+				K4
+			]);
+			await Promise.all([
+				dbB.transaction(async (tx) =>
+					syncFileReferences(tx, { type: 'draft', id: 'd6000000-0000-4000-8000-000000000006' }, [])
+				),
+				dbA.transaction(async (tx) =>
+					syncFileReferences(tx, { type: 'draft', id: 'd7000000-0000-4000-8000-000000000007' }, [
+						K4
+					])
+				)
+			]);
+			// Either serialization order lands here: the surviving draft ref
+			// survives and the file is attached (a lost reference would leave
+			// the file detached or drop d7000000 - the locking discipline
+			// forbids it).
+			expect(await refsFor(K4)).toEqual(['draft:d7000000']);
+			expect((await fileState(K4))?.status).toBe('attached');
+		}
 	});
 });

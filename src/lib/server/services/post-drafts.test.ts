@@ -18,7 +18,7 @@ import { slugTrackers } from '$lib/server/db/system';
  * so removing a lock/transaction turns the suite red (mutation teeth, P2
  * review finding).
  */
-const { dbMock, state, syncMock, dropMock } = vi.hoisted(() => ({
+const { dbMock, state, syncMock } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		selectQueue: [] as unknown[][],
@@ -32,8 +32,7 @@ const { dbMock, state, syncMock, dropMock } = vi.hoisted(() => ({
 		failWith: undefined as unknown,
 		txExecutors: null as unknown
 	},
-	syncMock: vi.fn(async () => {}),
-	dropMock: vi.fn(async () => {})
+	syncMock: vi.fn(async () => {})
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
@@ -44,7 +43,7 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 // sync-then-drop order on publish/discard).
 vi.mock('./file-references', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('./file-references')>();
-	return { ...actual, syncFileReferences: syncMock, dropDraftReferences: dropMock };
+	return { ...actual, syncFileReferences: syncMock };
 });
 
 import {
@@ -174,7 +173,6 @@ function resetState(withTransaction = true) {
 	state.forCalls = [];
 	state.failWith = undefined;
 	syncMock.mockClear();
-	dropMock.mockClear();
 	const executors = makeExecutors();
 	// A distinct object so tests can prove sync ran on the TRANSACTION
 	// executor, not on the bare db (Q15's strongest contract).
@@ -623,13 +621,25 @@ describe('publishDraft', () => {
 		expect(state.deletes.some((d) => d.table === drafts)).toBe(true);
 		expect(state.deletes.some((d) => d.table === postTags)).toBe(true);
 		// The published body's reference set lands in the same transaction...
-		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, []);
+		expect(syncMock).toHaveBeenCalledTimes(2);
+		expect(syncMock).toHaveBeenNthCalledWith(
+			1,
+			state.txExecutors,
+			{ type: 'post', id: 'post-1' },
+			[]
+		);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
-		// ...and the draft's own refs leave with the draft row (3b2), after
-		// the durable set so no file can transiently lose every reference.
-		expect(dropMock).toHaveBeenCalledWith(state.txExecutors, 'draft-1');
-		expect((dropMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
-		expect(syncMock.mock.invocationCallOrder[0]).toBeLessThan(dropMock.mock.invocationCallOrder[0]);
+		// ...and the draft's own refs leave with the draft row (3b2) as a
+		// full clear, after the durable set so no file can transiently lose
+		// every reference.
+		expect(syncMock).toHaveBeenNthCalledWith(
+			2,
+			state.txExecutors,
+			{ type: 'draft', id: 'draft-1' },
+			[]
+		);
+		expect((syncMock.mock.calls[1] as unknown[])[0]).toBe(state.txExecutors);
+		expect(syncMock.mock.invocationCallOrder[0]).toBeLessThan(syncMock.mock.invocationCallOrder[1]);
 	});
 
 	it('writes the published body reference set in the publish transaction (Q15)', async () => {
@@ -645,7 +655,7 @@ describe('publishDraft', () => {
 		state.insertResults = [[{ id: 't1' }], []];
 		const result = await publishDraft('draft-1', null);
 		expect(result.kind).toBe('published');
-		expect(syncMock).toHaveBeenCalledTimes(1);
+		expect(syncMock).toHaveBeenCalledTimes(2);
 		const call = syncMock.mock.calls[0] as unknown as [
 			unknown,
 			{ type: string; id: string },
@@ -654,6 +664,13 @@ describe('publishDraft', () => {
 		expect(call[0]).toBe(state.txExecutors);
 		expect(call[1]).toEqual({ type: 'post', id: 'post-1' });
 		expect(call[2]).toEqual([KEY]);
+		// The draft scope is cleared right after (3b2 full clear).
+		expect(syncMock).toHaveBeenNthCalledWith(
+			2,
+			state.txExecutors,
+			{ type: 'draft', id: 'draft-1' },
+			[]
+		);
 	});
 
 	it('publishes a user slug that keeps the same name (no tracker)', async () => {
@@ -772,10 +789,18 @@ describe('discardDraft', () => {
 		];
 		const result = await discardDraft('draft-1');
 		expect(result).toEqual({ kind: 'discarded', postId: 'post-1', removedPlaceholder: false });
-		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, [KEY]);
+		expect(syncMock).toHaveBeenCalledTimes(2);
+		expect(syncMock).toHaveBeenNthCalledWith(1, state.txExecutors, { type: 'post', id: 'post-1' }, [
+			KEY
+		]);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
-		// The draft's own refs leave with its row (3b2).
-		expect(dropMock).toHaveBeenCalledWith(state.txExecutors, 'draft-1');
+		// The draft's own refs leave with its row (3b2) as a full clear.
+		expect(syncMock).toHaveBeenNthCalledWith(
+			2,
+			state.txExecutors,
+			{ type: 'draft', id: 'draft-1' },
+			[]
+		);
 	});
 
 	it('keeps a published post when only its working copy is discarded', async () => {
@@ -783,7 +808,13 @@ describe('discardDraft', () => {
 		const result = await discardDraft('draft-1');
 		expect(result).toEqual({ kind: 'discarded', postId: 'post-1', removedPlaceholder: false });
 		expect(state.deletes.map((d) => d.table)).toEqual([drafts]);
-		expect(dropMock).toHaveBeenCalledWith(state.txExecutors, 'draft-1');
+		expect(syncMock).toHaveBeenCalledTimes(2);
+		expect(syncMock).toHaveBeenNthCalledWith(
+			2,
+			state.txExecutors,
+			{ type: 'draft', id: 'draft-1' },
+			[]
+		);
 	});
 
 	it('answers not-found when the draft vanished before the delete', async () => {
@@ -792,7 +823,7 @@ describe('discardDraft', () => {
 		const result = await discardDraft('draft-1');
 		expect(result).toEqual({ kind: 'not-found' });
 		expect(state.deletes.map((d) => d.table)).toEqual([drafts]);
-		expect(dropMock).not.toHaveBeenCalled();
+		expect(syncMock).not.toHaveBeenCalled();
 	});
 
 	it('answers plain not-found when the draft does not exist', async () => {
@@ -800,7 +831,7 @@ describe('discardDraft', () => {
 		const result = await discardDraft('draft-1');
 		expect(result).toEqual({ kind: 'not-found' });
 		expect(state.deletes).toHaveLength(0);
-		expect(dropMock).not.toHaveBeenCalled();
+		expect(syncMock).not.toHaveBeenCalled();
 	});
 
 	it('reports a deadlock as busy (40P01)', async () => {
