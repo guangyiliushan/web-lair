@@ -826,6 +826,15 @@ describe('discardDraft', () => {
 		expect(syncMock).not.toHaveBeenCalled();
 	});
 
+	it('discards a draft that never carried a target (refId null) and clears its refs', async () => {
+		state.selectQueue = [[{ ...BASE_DRAFT, refId: null }]];
+		state.deleteResults = [[{ id: 'draft-1' }]];
+		const result = await discardDraft('draft-1');
+		expect(result).toEqual({ kind: 'discarded', postId: null, removedPlaceholder: false });
+		expect(syncMock).toHaveBeenCalledTimes(1);
+		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: 'draft-1' }, []);
+	});
+
 	it('answers plain not-found when the draft does not exist', async () => {
 		state.selectQueue = [[]];
 		const result = await discardDraft('draft-1');
@@ -912,5 +921,29 @@ describe('createTranslationDraft', () => {
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: 'draft-9' }, [
 			KEY
 		]);
+	});
+
+	it('normalizes a CRLF source body before prefill and ref extraction (3b2)', async () => {
+		const KEY = `ab/${'a'.repeat(64)}.png`;
+		state.selectQueue = [
+			[
+				{
+					id: 'post-1',
+					lang: 'en',
+					title: 'Source title',
+					content: `first\r\nsecond /i/${KEY}\r\n`,
+					summary: null,
+					contentFormat: 'markdown',
+					categoryId: 'cat-1',
+					translationGroup: 'group-1',
+					translatedFromPostId: null
+				}
+			],
+			[]
+		];
+		state.insertResults = [[{ id: 'post-9' }], [{ id: 'draft-9' }]];
+		await createTranslationDraft('post-1', 'zh-cn', null);
+		const prefill = state.inserts.find((i) => i.table === drafts);
+		expect(prefill?.values.content).toBe(`first\nsecond /i/${KEY}\n`);
 	});
 });

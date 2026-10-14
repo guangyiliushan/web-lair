@@ -219,6 +219,41 @@ describe('syncFileReferences', () => {
 		expect(state.selectQueue).toHaveLength(0);
 	});
 
+	it('detaches only the removed files that lost every reference (batch, round 2)', async () => {
+		// Formerly the deleted dropDraftReferences case 4: two files lose
+		// their refs in ONE call and only the truly-lost one detaches (the
+		// first id survives via another target, so a first-only or
+		// all-or-nothing filter both turn red here).
+		state.selectQueue = [
+			[
+				{ fileId: 'file-1', objectKey: KEY },
+				{ fileId: 'file-2', objectKey: OTHER_KEY }
+			],
+			[], // candidate row lock (ordered)
+			[{ fileId: 'file-1' }] // file-1 still referenced elsewhere
+		];
+		await syncFileReferences(executor, { type: 'post', id: 'post-1' }, []);
+		expect(state.deletes).toHaveLength(1);
+		const del = render(state.deletes[0].where);
+		expect(del.params).toEqual(['post', 'post-1', 'file-1', 'file-2']);
+		expect(state.updates).toHaveLength(1);
+		const upd = render(state.updates[0].where);
+		expect(upd.sql).toBe('("files"."id" in ($1) and "files"."status" = $2)');
+		expect(upd.params).toEqual(['file-2', 'attached']);
+		expect(state.selectQueue).toHaveLength(0);
+	});
+
+	it('is a no-op for an empty scope with an empty desired set (full-clear shape)', async () => {
+		// The deleted drop helper's case 1 input shape: nothing to remove in
+		// the (scope), so the full clear writes nothing at all.
+		state.selectQueue = [[]];
+		await syncFileReferences(executor, { type: 'draft', id: 'draft-1' }, []);
+		expect(state.deletes).toHaveLength(0);
+		expect(state.updates).toHaveLength(0);
+		expect(state.locks).toHaveLength(0);
+		expect(state.selectQueue).toHaveLength(0);
+	});
+
 	it('is a no-op when the desired set already matches (ordered drain)', async () => {
 		state.selectQueue = [[{ fileId: 'file-1', objectKey: KEY }]];
 		await syncFileReferences(executor, { type: 'post', id: 'post-1' }, [KEY]);

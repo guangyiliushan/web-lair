@@ -19,8 +19,10 @@ import { syncFileReferences } from './file-references';
  * replaced `dropDraftReferences`, the detach with a `now()` anchor, and the
  * attach-vs-detach interleavings the locking discipline exists for. The two
  * interleave cases are probabilistic by nature (Promise.all may serialize
- * either way and both orders end in the same state) - they are repeated and
- * the end-state assertions are the deterministic half of the contract.
+ * either way and both orders end in the same state); each round re-clears
+ * the survivor first so its attach arm really inserts again (a bare repeat
+ * would degenerate into a no-op replay - 01/03 review round 2), and the
+ * end-state assertions are the deterministic half of the contract.
  */
 const url = process.env.REFS_SCRATCH_URL;
 const K1 = `55/55${'a'.repeat(62)}.png`;
@@ -127,6 +129,13 @@ describe.skipIf(!url)('reference lifecycle on a scratch database (3b2)', () => {
 
 	it('interleaved attach vs detach on two connections converge (attach then remove)', async () => {
 		for (let round = 0; round < 2; round += 1) {
+			// Re-arm the attach arm: without this the round-2 attach would be
+			// a no-op (its reference already survived round 1).
+			await syncFileReferences(
+				dbA,
+				{ type: 'draft', id: 'd5000000-0000-4000-8000-000000000005' },
+				[]
+			);
 			await syncFileReferences(dbA, { type: 'draft', id: 'd4000000-0000-4000-8000-000000000004' }, [
 				K3
 			]);
@@ -147,6 +156,13 @@ describe.skipIf(!url)('reference lifecycle on a scratch database (3b2)', () => {
 
 	it('interleaved detach vs attach cannot lose the surviving reference', async () => {
 		for (let round = 0; round < 2; round += 1) {
+			// Same re-arm as the sibling case (round 2 must sample a fresh
+			// attach against the detach).
+			await syncFileReferences(
+				dbA,
+				{ type: 'draft', id: 'd7000000-0000-4000-8000-000000000007' },
+				[]
+			);
 			await syncFileReferences(dbA, { type: 'draft', id: 'd6000000-0000-4000-8000-000000000006' }, [
 				K4
 			]);

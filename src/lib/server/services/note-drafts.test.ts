@@ -718,6 +718,15 @@ describe('note draft flow', () => {
 		expect(syncMock).not.toHaveBeenCalled();
 	});
 
+	it('discards a draft that never carried a target (refId null) and clears its refs', async () => {
+		state.selectQueue = [[{ ...BASE_DRAFT, refId: null }]];
+		state.deleteResults = [[{ id: DRAFT_ID }]];
+		const result = await discardNoteDraft(DRAFT_ID);
+		expect(result).toEqual({ kind: 'discarded', noteId: null, removedPlaceholder: false });
+		expect(syncMock).toHaveBeenCalledTimes(1);
+		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: DRAFT_ID }, []);
+	});
+
 	it('answers plain not-found when the draft does not exist', async () => {
 		state.selectQueue = [[]];
 		const result = await discardNoteDraft(DRAFT_ID);

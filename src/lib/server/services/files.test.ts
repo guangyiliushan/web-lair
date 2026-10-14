@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { getTableName } from 'drizzle-orm';
+import { getTableName, type SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { MAX_BATCH_COUNT, MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
 import { files as filesTable, photos as photosTable } from '$lib/server/db/content';
 import { fileReferences } from '$lib/server/db/system';
@@ -937,9 +938,11 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 			dbMock.select.mockReturnValueOnce(selectChain([], driftFroms));
 		}
 		const countFroms: string[] = [];
+		const countFilters: unknown[] = [];
 		for (const value of [2, 1, 3]) {
-			dbMock.$count.mockImplementationOnce((table: unknown) => {
+			dbMock.$count.mockImplementationOnce((table: unknown, filter: unknown) => {
 				countFroms.push(getTableName(table as never));
+				countFilters.push(filter);
 				return Promise.resolve(value);
 			});
 		}
@@ -961,6 +964,28 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 			'pages',
 			'drafts',
 			'comments'
+		]);
+		// Arm predicates (ring-2): the recorded filters are rendered and
+		// pinned, so swapping the status arms or dropping an arm's ref_type
+		// (or the constraint-less belt) turns red instead of staying green.
+		const render = (filter: unknown) => new PgDialect().sqlToQuery(filter as SQL);
+		const filters = countFilters.map(render);
+		// params[0] is the status literal; the trailing entry is the mocked
+		// subquery fragment (rendered as a bound value in this harness).
+		expect(filters[0].sql).toContain('"files"."status" = $1');
+		expect(filters[0].params[0]).toBe('detached');
+		expect(filters[1].sql).toContain('"files"."status" = $1');
+		expect(filters[1].params[0]).toBe('attached');
+		expect(filters[2].sql).toContain('"file_references"."ref_type" = $1');
+		expect(filters[2].sql).toContain('not in (');
+		// String params alternate with the mocked subquery fragments; the
+		// first five literals pin the five ref_type arms.
+		expect(filters[2].params.filter((param) => typeof param === 'string').slice(0, 5)).toEqual([
+			'post',
+			'note',
+			'page',
+			'draft',
+			'comment'
 		]);
 	});
 });
