@@ -152,70 +152,86 @@ function providedInputKeys(args: string | undefined): string[] | undefined {
 	return [...trimmed.slice(1, end).matchAll(/(\w+)\s*(?::|,|\})/g)].map((match) => match[1]);
 }
 
+// The walker-family tests scan every source file (and every compiled locale
+// module); on a loaded full-suite day the transform phase can stretch the
+// same scan past the 5s default. One shared, deliberately generous budget
+// for the whole family - the earlier single-test bump left siblings at 15s
+// (review 3d, 06 P2-1). If this ever needs raising again, split the walk by
+// directory first instead.
+const WALK_TIMEOUT_MS = 30_000;
+
 describe('paraglide message contract', () => {
-	it('only accesses messages through static m.key() calls', () => {
-		// Bracket access (m["nav.home"], m[key]) is valid paraglide but invisible
-		// to the key scanner; fail here so the scanner gets extended instead of
-		// silently missing usages.
-		const dynamic: string[] = [];
-		for (const filePath of walkSources(join(ROOT, 'src'))) {
-			const source = readFileSync(filePath, 'utf8');
-			if (SHADOWED_M_PATTERN.test(source)) continue;
-			for (const match of source.matchAll(/\bm\s*\[/g)) {
-				const index = match.index;
-				if (index === undefined) continue;
-				dynamic.push(`${filePath}:${source.slice(0, index).split('\n').length}`);
-			}
-		}
-		expect(dynamic).toEqual([]);
-		// The walk reads every source file: on a loaded full-suite day it can
-		// exceed the 5s default (same family as the compiled-output check).
-		// The tree keeps growing (ST-3); the budget is deliberately generous so
-		// a slow transform phase cannot redden a healthy scan.
-	}, 30_000);
-
-	it('resolves every m.* usage in src to a key defined in every locale file', () => {
-		const localeMessages = Object.fromEntries(
-			LOCALES.map((locale) => [locale, readLocaleMessages(locale)])
-		);
-		const usages = collectUsages();
-		expect(usages.length).toBeGreaterThan(0);
-
-		const missing: string[] = [];
-		for (const usage of usages) {
-			for (const locale of LOCALES) {
-				if (!(usage.key in localeMessages[locale])) {
-					missing.push(`${usage.key} @ ${usage.site} has no "${locale}" entry`);
+	it(
+		'only accesses messages through static m.key() calls',
+		() => {
+			// Bracket access (m["nav.home"], m[key]) is valid paraglide but invisible
+			// to the key scanner; fail here so the scanner gets extended instead of
+			// silently missing usages.
+			const dynamic: string[] = [];
+			for (const filePath of walkSources(join(ROOT, 'src'))) {
+				const source = readFileSync(filePath, 'utf8');
+				if (SHADOWED_M_PATTERN.test(source)) continue;
+				for (const match of source.matchAll(/\bm\s*\[/g)) {
+					const index = match.index;
+					if (index === undefined) continue;
+					dynamic.push(`${filePath}:${source.slice(0, index).split('\n').length}`);
 				}
 			}
-		}
-		expect(missing).toEqual([]);
-	}, 15_000);
+			expect(dynamic).toEqual([]);
+		},
+		WALK_TIMEOUT_MS
+	);
+
+	it(
+		'resolves every m.* usage in src to a key defined in every locale file',
+		() => {
+			const localeMessages = Object.fromEntries(
+				LOCALES.map((locale) => [locale, readLocaleMessages(locale)])
+			);
+			const usages = collectUsages();
+			expect(usages.length).toBeGreaterThan(0);
+
+			const missing: string[] = [];
+			for (const usage of usages) {
+				for (const locale of LOCALES) {
+					if (!(usage.key in localeMessages[locale])) {
+						missing.push(`${usage.key} @ ${usage.site} has no "${locale}" entry`);
+					}
+				}
+			}
+			expect(missing).toEqual([]);
+		},
+		WALK_TIMEOUT_MS
+	);
 
 	// The key scan walks every source file and every compiled locale module;
 	// on a loaded 10-worker day it can exceed the 5s default (the A batch
 	// grew the message set). Explicit budget; registered in the W4 receipts.
-	it('exports every used key from the compiled output, so m.key() cannot be undefined at runtime', () => {
-		const usages = collectUsages();
-		const usedKeys = [...new Set(usages.map((usage) => usage.key))];
-		expect(usedKeys.length).toBeGreaterThan(0);
+	it(
+		'exports every used key from the compiled output, so m.key() cannot be undefined at runtime',
+		() => {
+			const usages = collectUsages();
+			const usedKeys = [...new Set(usages.map((usage) => usage.key))];
+			expect(usedKeys.length).toBeGreaterThan(0);
 
-		const compiledFiles = [join(PARAGLIDE_OUT, 'messages', '_index.js')].concat(
-			LOCALES.map((locale) => join(PARAGLIDE_OUT, 'messages', `${locale}.js`))
-		);
-		const stale: string[] = [];
-		for (const file of compiledFiles) {
-			const compiled = readFileSync(file, 'utf8');
-			for (const key of usedKeys) {
-				if (!compiled.includes(`export const ${key} `)) {
-					stale.push(
-						`${key} missing from ${file} — run any vite process (dev / build / vitest) to regenerate; the bare paraglide-js CLI is banned since P3-a (it drops urlPatterns/routeStrategies)`
-					);
+			const compiledFiles = [join(PARAGLIDE_OUT, 'messages', '_index.js')].concat(
+				LOCALES.map((locale) => join(PARAGLIDE_OUT, 'messages', `${locale}.js`))
+			);
+			const stale: string[] = [];
+			for (const file of compiledFiles) {
+				const compiled = readFileSync(file, 'utf8');
+				for (const key of usedKeys) {
+					if (!compiled.includes(`export const ${key} `)) {
+						stale.push(
+							`${key} missing from ${file} — run any vite process (dev / build / vitest) to regenerate; the bare paraglide-js CLI is banned since P3-a (it drops urlPatterns/routeStrategies)`
+						);
+					}
 				}
 			}
-		}
-		expect(stale).toEqual([]);
-	}, 15_000);
+			expect(stale).toEqual([]);
+		},
+		WALK_TIMEOUT_MS
+	);
 
 	it('defines an identical key set in every locale file', () => {
 		const baseKeys = Object.keys(readLocaleMessages(BASE_LOCALE)).sort();
@@ -249,42 +265,52 @@ describe('paraglide message contract', () => {
 		expect(empty).toEqual([]);
 	});
 
-	it('passes every message placeholder at call sites that use a literal inputs object', () => {
-		const baseMessages = readLocaleMessages(BASE_LOCALE);
-		const usages = collectUsages();
-		const violations: string[] = [];
-		for (const usage of usages) {
-			const message = baseMessages[usage.key];
-			if (message === undefined) continue;
-			// Variant messages: every branch text must have its placeholders provided.
-			const required = [...new Set(extractTexts(message).flatMap(requiredPlaceholders))];
-			if (required.length === 0 || usage.args === undefined) continue;
-			const provided = providedInputKeys(usage.args);
-			if (provided === undefined) continue; // dynamic inputs cannot be checked statically
-			for (const name of required) {
-				if (!provided.includes(name)) {
-					violations.push(`${usage.key} needs {${name}} but the call @ ${usage.site} passes none`);
+	it(
+		'passes every message placeholder at call sites that use a literal inputs object',
+		() => {
+			const baseMessages = readLocaleMessages(BASE_LOCALE);
+			const usages = collectUsages();
+			const violations: string[] = [];
+			for (const usage of usages) {
+				const message = baseMessages[usage.key];
+				if (message === undefined) continue;
+				// Variant messages: every branch text must have its placeholders provided.
+				const required = [...new Set(extractTexts(message).flatMap(requiredPlaceholders))];
+				if (required.length === 0 || usage.args === undefined) continue;
+				const provided = providedInputKeys(usage.args);
+				if (provided === undefined) continue; // dynamic inputs cannot be checked statically
+				for (const name of required) {
+					if (!provided.includes(name)) {
+						violations.push(
+							`${usage.key} needs {${name}} but the call @ ${usage.site} passes none`
+						);
+					}
 				}
 			}
-		}
-		expect(violations).toEqual([]);
-	}, 15_000);
+			expect(violations).toEqual([]);
+		},
+		WALK_TIMEOUT_MS
+	);
 
-	it('never embeds m.* calls as literal text in Svelte template strings', () => {
-		// `title={`{m.bold()} (⌘B)`}` (missing $) ships the source code to the
-		// user's tooltip. `{` directly after a backtick or quote is always such a
-		// bug; `title={m.bold()}` and `${m.bold()}` are the correct forms.
-		const literal: string[] = [];
-		const pattern = /(?<=`)\{m\.[a-z_]+\(\)|(?<=['"])\{m\.[a-z_]+\(\)/g;
-		for (const filePath of walkSources(join(ROOT, 'src'))) {
-			if (!filePath.endsWith('.svelte')) continue;
-			const source = readFileSync(filePath, 'utf8');
-			for (const match of source.matchAll(pattern)) {
-				const index = match.index;
-				if (index === undefined) continue;
-				literal.push(`${filePath}:${source.slice(0, index).split('\n').length}`);
+	it(
+		'never embeds m.* calls as literal text in Svelte template strings',
+		() => {
+			// `title={`{m.bold()} (⌘B)`}` (missing $) ships the source code to the
+			// user's tooltip. `{` directly after a backtick or quote is always such a
+			// bug; `title={m.bold()}` and `${m.bold()}` are the correct forms.
+			const literal: string[] = [];
+			const pattern = /(?<=`)\{m\.[a-z_]+\(\)|(?<=['"])\{m\.[a-z_]+\(\)/g;
+			for (const filePath of walkSources(join(ROOT, 'src'))) {
+				if (!filePath.endsWith('.svelte')) continue;
+				const source = readFileSync(filePath, 'utf8');
+				for (const match of source.matchAll(pattern)) {
+					const index = match.index;
+					if (index === undefined) continue;
+					literal.push(`${filePath}:${source.slice(0, index).split('\n').length}`);
+				}
 			}
-		}
-		expect(literal).toEqual([]);
-	}, 15_000);
+			expect(literal).toEqual([]);
+		},
+		WALK_TIMEOUT_MS
+	);
 });
