@@ -7,6 +7,14 @@ import { themeStore } from '$lib/stores/theme.svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
+// The dev-mode module graph exceeds the default 250-entry resource timing
+// buffer; late entries (the lazily imported mermaid chunk) get dropped and
+// the lazy-load oracle below would read 0 forever. Raise the cap before the
+// graph fills (probed: buffer was full at exactly 250 with no mermaid entry).
+if (typeof performance.setResourceTimingBufferSize === 'function') {
+	performance.setResourceTimingBufferSize(2000);
+}
+
 // Browser-project spec: the mermaid execution side (spec 3.3 / 7).
 //
 // The oracle matters here: mermaid appends scaffolding (`.mermaid > div >
