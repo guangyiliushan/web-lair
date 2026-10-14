@@ -375,3 +375,68 @@ describe('overlay viewer shell (3c)', () => {
 		expect(recorded.some((src) => src.includes('@preview'))).toBe(false);
 	});
 });
+describe('overlay viewer plain mode (3d article lightbox)', () => {
+	const PLAIN_KEY = `ab/ab${'9'.repeat(62)}`;
+	const plainSource = {
+		src: `/i/${PLAIN_KEY}.png@preview`,
+		fullSrc: `/i/${PLAIN_KEY}.png@full`,
+		alt: '正文插图',
+		width: 1200,
+		height: 800,
+		mimeType: null
+	};
+
+	it('shows the image and caption with no feed chrome', async () => {
+		await render(PhotosViewerOverlay, { open: true, plain: plainSource });
+		await expect.poll(() => captionText()).toBe('正文插图');
+		await expect(page.getByRole('heading', { name: '正文插图' })).toBeInTheDocument();
+		// Feed chrome is absent: no counter, no neighbour buttons.
+		expect(document.querySelector('[data-photos-viewer-counter]')).toBeNull();
+		expect(document.querySelector('[data-photos-viewer-stage] img')).not.toBeNull();
+	});
+
+	it('upgrades to the derived @full frame via the shared pump', async () => {
+		await render(PhotosViewerOverlay, { open: true, plain: plainSource });
+		const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+		await expect
+			.poll(() => fetchMock.mock.calls.some((call) => String(call[0]).includes('@full')))
+			.toBe(true);
+		await expect
+			.poll(
+				() =>
+					document
+						.querySelector<HTMLImageElement>('[data-photos-viewer-stage] img')
+						?.src.startsWith('blob:') ?? false
+			)
+			.toBe(true);
+	});
+
+	it('passes external sources through without any fetch (no CORS bomb)', async () => {
+		const external = {
+			src: 'https://cdn.example.com/pic.png',
+			fullSrc: 'https://cdn.example.com/pic.png',
+			alt: '外链图',
+			width: 640,
+			height: 480,
+			mimeType: null
+		};
+		await render(PhotosViewerOverlay, { open: true, plain: external });
+		await expect.poll(() => captionText()).toBe('外链图');
+		await new Promise((resolve) => setTimeout(resolve, 120));
+		const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+		expect(fetchMock.mock.calls.some((call) => String(call[0]).includes('cdn.example.com'))).toBe(
+			false
+		);
+		const image = document.querySelector<HTMLImageElement>('[data-photos-viewer-stage] img');
+		expect(image?.src).toContain('cdn.example.com');
+	});
+
+	it('closes via the close button and reports the empty slug once', async () => {
+		const onClosed = vi.fn<(slug: string) => void>();
+		await render(PhotosViewerOverlay, { open: true, plain: plainSource, onClosed });
+		await page.getByRole('button', { name: '关闭查看器' }).click();
+		await expect.poll(() => onClosed.mock.calls.length).toBe(1);
+		expect(onClosed).toHaveBeenCalledWith('');
+		await expect.poll(() => captionText()).toBe('');
+	});
+});

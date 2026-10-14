@@ -18,6 +18,7 @@
 		thumbhashDataUrl,
 		type PhotoViewerSource
 	} from './photo-tile';
+	import { plainLabel, type PlainImageSource } from './viewer-source';
 	import {
 		FLOATER_DELAY_MS,
 		shouldLoadFullOnDemand,
@@ -47,22 +48,37 @@
 	 * window the component fetches `/api/photo-neighbors` and shallow-syncs the
 	 * URL (kit `replaceState`, raw history before the router starts; Q13). The
 	 * parent decides what closing does with a navigated URL (`onClosed`).
+	 *
+	 * Source adaptation (3d): the same shell serves the article lightbox via
+	 * `plain` - a single content image with no neighbours, no counter and no
+	 * URL sync (the feed-only machinery simply sees `current === null`).
 	 */
 	interface Props {
 		open: boolean;
-		photo: PhotoViewerSource;
-		neighbors: { newer: PhotoViewerSource | null; older: PhotoViewerSource | null };
-		position: { index: number; total: number };
-		/** Fired once per close with the (possibly navigated) slug. */
+		/** Photo-feed mode inputs (page viewer); ignored when `plain` is set. */
+		photo?: PhotoViewerSource | null;
+		neighbors?: { newer: PhotoViewerSource | null; older: PhotoViewerSource | null };
+		position?: { index: number; total: number };
+		/** Single-image content mode (3d article lightbox). */
+		plain?: PlainImageSource | null;
+		/** Fired once per close with the (possibly navigated) slug ('' in plain). */
 		onClosed?: (slug: string) => void;
 	}
 
-	let { open = $bindable(false), photo, neighbors, position, onClosed }: Props = $props();
+	let {
+		open = $bindable(false),
+		photo = null,
+		neighbors = { newer: null, older: null },
+		position = { index: 1, total: 1 },
+		plain = null,
+		onClosed
+	}: Props = $props();
 
 	// Initial captures only; `initialize()` re-syncs them from the props on
 	// every open, so `untrack` documents the intent (and silences
 	// state_referenced_locally).
-	let current = $state(untrack(() => photo));
+	let current = $state<PhotoViewerSource | null>(untrack(() => photo));
+	let plainItem = $state<PlainImageSource | null>(untrack(() => plain));
 	let currentNeighbors = $state(untrack(() => neighbors));
 	let currentPosition = $state(untrack(() => position));
 	let transform = $state<ViewerTransform>(identity());
@@ -103,15 +119,50 @@
 	let hideTimer: ReturnType<typeof setTimeout> | null = null;
 	let announceTimer: ReturnType<typeof setTimeout> | null = null;
 
-	const onDemand = $derived(shouldLoadFullOnDemand(current.byteSize, connection));
-	const isGif = $derived(current.mimeType === 'image/gif');
-	// GIFs have no tier to show before the click (photoTileSrc returns the
-	// original for every tier), so they hold the layout box until ready.
-	const interimSrc = $derived(isGif ? null : photoTileSrc(current, 'thumb'));
-	const placeholder = $derived(thumbhashDataUrl(current.thumbhash));
+	// ── Per-item dispatchers (source adaptation; 3d) ──
+	function byteSizeOf(): number | null {
+		return plainItem ? null : (current?.byteSize ?? null);
+	}
+	function byteSizeLabel(): string {
+		const size = byteSizeOf();
+		return size !== null ? formatBytes(size) : '—';
+	}
+	function interimOf(): string | null {
+		if (plainItem) return plainItem.src;
+		if (!current) return null;
+		// GIFs have no tier to show before the click (photoTileSrc returns the
+		// original for every tier), so they hold the layout box until ready.
+		return current.mimeType === 'image/gif' ? null : photoTileSrc(current, 'thumb');
+	}
+	function fullOf(): string | null {
+		if (plainItem) return plainItem.fullSrc;
+		return current ? photoTileSrc(current, 'full') : null;
+	}
+	function widthOf(): number | null {
+		return plainItem ? plainItem.width : (current?.width ?? null);
+	}
+	function heightOf(): number | null {
+		return plainItem ? plainItem.height : (current?.height ?? null);
+	}
+	function labelOf(): string {
+		if (plainItem) return plainLabel(plainItem);
+		return current ? photoAlt(current, getLocale()) : '';
+	}
+	function titleOf(): string {
+		if (plainItem) return plainLabel(plainItem);
+		return current ? photoTitle(current, getLocale()) : '';
+	}
+
+	const onDemand = $derived(
+		plainItem
+			? shouldLoadFullOnDemand(null, connection)
+			: shouldLoadFullOnDemand(byteSizeOf(), connection)
+	);
+	const interimSrc = $derived(interimOf());
+	const placeholder = $derived(thumbhashDataUrl(plainItem ? null : (current?.thumbhash ?? null)));
 	const displaySrc = $derived(objectUrl ?? interimSrc);
-	const alt = $derived(photoAlt(current, getLocale()));
-	const title = $derived(photoTitle(current, getLocale()));
+	const alt = $derived(labelOf());
+	const title = $derived(titleOf());
 	const fraction = $derived(
 		totalBytes !== null && totalBytes > 0 ? Math.min(1, loadedBytes / totalBytes) : null
 	);
@@ -137,7 +188,7 @@
 			if (suppressClosed) {
 				suppressClosed = false;
 			} else {
-				onClosed?.(current.slug);
+				onClosed?.(current?.slug ?? '');
 			}
 		}
 	});
@@ -148,7 +199,7 @@
 	// silently and let the navigation stand (review 08 F1).
 	$effect(() => {
 		if (!open) return;
-		if (openedSnapshotId !== null && photo.id !== openedSnapshotId) {
+		if (openedSnapshotId !== null && (photo?.id ?? null) !== openedSnapshotId) {
 			closeSilently();
 		}
 	});
@@ -158,15 +209,23 @@
 	onDestroy(teardown);
 
 	function initialize() {
-		current = photo;
-		currentNeighbors = neighbors;
-		currentPosition = position;
-		openedSnapshotId = photo.id;
+		plainItem = plain ?? null;
+		if (plainItem) {
+			current = null;
+			currentNeighbors = { newer: null, older: null };
+			currentPosition = { index: 1, total: 1 };
+			openedSnapshotId = null;
+		} else {
+			current = photo ?? null;
+			currentNeighbors = neighbors;
+			currentPosition = position;
+			openedSnapshotId = photo?.id ?? null;
+		}
 		suppressClosed = false;
 		transform = identity();
 		smooth = false;
 		announcement = '';
-		historySync(photo.slug);
+		if (current) historySync(current.slug);
 		scheduleAnnounce();
 		void startLoad();
 	}
@@ -210,15 +269,25 @@
 		const token = ++loadToken;
 		controller?.abort();
 		controller = null;
+		if (plainItem === null && current === null) return;
+		if (plainItem !== null && plainItem.fullSrc === plainItem.src) {
+			// Content mode where the displayed frame already IS the full image
+			// (external URLs, bare GIF keys): nothing to stream (3d).
+			phase = 'ready';
+			return;
+		}
 		if (!force && onDemand) {
 			phase = 'waiting';
 			return;
 		}
+		const fullSrc = fullOf();
+		if (fullSrc === null) return;
 		const ctl = new AbortController();
 		controller = ctl;
 		phase = 'loading';
 		loadedBytes = 0;
-		totalBytes = typeof current.byteSize === 'number' ? current.byteSize : null;
+		const fallbackSize = byteSizeOf();
+		totalBytes = typeof fallbackSize === 'number' ? fallbackSize : null;
 		announcement = '';
 		cardHiding = false;
 		if (floaterTimer) clearTimeout(floaterTimer);
@@ -230,7 +299,7 @@
 			if (phase === 'loading') cardVisible = true;
 		}, FLOATER_DELAY_MS);
 		try {
-			const blob = await streamImageBytes(photoTileSrc(current, 'full'), {
+			const blob = await streamImageBytes(fullSrc, {
 				signal: ctl.signal,
 				fallbackTotal: totalBytes,
 				onProgress: (progress) => {
@@ -270,6 +339,7 @@
 	let navToken = 0;
 	let windowController: AbortController | null = null;
 	async function navigate(direction: 'newer' | 'older'): Promise<void> {
+		if (!current) return; // plain mode: nothing to walk
 		const target = direction === 'newer' ? currentNeighbors.newer : currentNeighbors.older;
 		if (!target) return;
 		const previous = current;
@@ -377,9 +447,10 @@
 
 	// ── Announcements (terminal load states + settled position, W3C 4.1.3) ──
 	function scheduleAnnounce(): void {
+		if (!current) return; // plain mode has no feed position to announce
 		if (announceTimer) clearTimeout(announceTimer);
 		announceTimer = setTimeout(() => {
-			if (!open) return;
+			if (!open || !current) return;
 			announcement = m.photos_viewer_announce({
 				title: photoTitle(current, getLocale()),
 				index: String(currentPosition.index),
@@ -618,8 +689,8 @@
 					src={displaySrc}
 					{alt}
 					draggable="false"
-					width={current.width ?? undefined}
-					height={current.height ?? undefined}
+					width={widthOf() ?? undefined}
+					height={heightOf() ?? undefined}
 					style="{transformStyle}{!objectUrl && placeholder
 						? `background-image:url(${placeholder});background-size:cover;background-position:center;`
 						: ''}"
@@ -634,8 +705,8 @@
 				<!-- On-demand GIF: no tier exists before the click; hold the box. -->
 				<div
 					class="max-h-full w-full max-w-full rounded-lg bg-muted/40"
-					style={current.width && current.height
-						? `aspect-ratio:${current.width}/${current.height};${transformStyle}`
+					style={widthOf() && heightOf()
+						? `aspect-ratio:${widthOf()}/${heightOf()};${transformStyle}`
 						: `min-height:40vh;${transformStyle}`}
 					aria-hidden="true"
 					data-phase={phase}
@@ -644,12 +715,14 @@
 		</div>
 
 		<!-- Counter (top centre) + close (top right) -->
-		<p
-			data-photos-viewer-counter
-			class="absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 font-mono text-xs text-white/90 [text-shadow:0_1px_3px_rgb(0_0_0/0.8)]"
-		>
-			{currentPosition.index} / {currentPosition.total}
-		</p>
+		{#if !plainItem}
+			<p
+				data-photos-viewer-counter
+				class="absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 font-mono text-xs text-white/90 [text-shadow:0_1px_3px_rgb(0_0_0/0.8)]"
+			>
+				{currentPosition.index} / {currentPosition.total}
+			</p>
+		{/if}
 		<Dialog.Close
 			bind:ref={closeButton}
 			class="absolute top-3 right-3 z-20 flex size-10 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70 focus-visible:shadow-[0_0_0_2px_rgba(0,0,0,0.6)] focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
@@ -662,15 +735,17 @@
 		<div
 			class="absolute inset-x-0 bottom-0 z-20 flex items-center gap-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pt-10 pb-3"
 		>
-			<button
-				type="button"
-				class="flex size-10 shrink-0 items-center justify-center rounded-full bg-black/50 text-2xl leading-none text-white transition-colors hover:bg-black/70 focus-visible:shadow-[0_0_0_2px_rgba(0,0,0,0.6)] focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-black/50"
-				aria-label={m.photos_prev()}
-				disabled={!currentNeighbors.newer}
-				onclick={() => void navigate('newer')}
-			>
-				<span aria-hidden="true">‹</span>
-			</button>
+			{#if !plainItem}
+				<button
+					type="button"
+					class="flex size-10 shrink-0 items-center justify-center rounded-full bg-black/50 text-2xl leading-none text-white transition-colors hover:bg-black/70 focus-visible:shadow-[0_0_0_2px_rgba(0,0,0,0.6)] focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-black/50"
+					aria-label={m.photos_prev()}
+					disabled={!currentNeighbors.newer}
+					onclick={() => void navigate('newer')}
+				>
+					<span aria-hidden="true">‹</span>
+				</button>
+			{/if}
 			<p
 				data-photos-viewer-caption
 				aria-hidden="true"
@@ -678,15 +753,17 @@
 			>
 				{alt}
 			</p>
-			<button
-				type="button"
-				class="flex size-10 shrink-0 items-center justify-center rounded-full bg-black/50 text-2xl leading-none text-white transition-colors hover:bg-black/70 focus-visible:shadow-[0_0_0_2px_rgba(0,0,0,0.6)] focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-black/50"
-				aria-label={m.photos_next()}
-				disabled={!currentNeighbors.older}
-				onclick={() => void navigate('older')}
-			>
-				<span aria-hidden="true">›</span>
-			</button>
+			{#if !plainItem}
+				<button
+					type="button"
+					class="flex size-10 shrink-0 items-center justify-center rounded-full bg-black/50 text-2xl leading-none text-white transition-colors hover:bg-black/70 focus-visible:shadow-[0_0_0_2px_rgba(0,0,0,0.6)] focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-black/50"
+					aria-label={m.photos_next()}
+					disabled={!currentNeighbors.older}
+					onclick={() => void navigate('older')}
+				>
+					<span aria-hidden="true">›</span>
+				</button>
+			{/if}
 		</div>
 
 		<!-- Loading floater / on-demand button (own DOM; shared policy) -->
@@ -697,9 +774,7 @@
 					class="rounded-xl border border-white/20 bg-black/60 px-4 py-2.5 text-sm text-white backdrop-blur transition-colors hover:bg-black/80"
 					onclick={() => void startLoad(true)}
 				>
-					{m.photos_viewer_load_full({
-						size: current.byteSize !== null ? formatBytes(current.byteSize) : '—'
-					})}
+					{m.photos_viewer_load_full({ size: byteSizeLabel() })}
 				</button>
 			</div>
 		{:else if cardVisible}
