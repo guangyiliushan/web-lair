@@ -89,7 +89,12 @@ const deleteMock = executor.delete as unknown as Mock;
 vi.mock('$lib/server/db', () => ({ db: executor }));
 
 import { files as filesTable } from '$lib/server/db/content';
-import { keysFromContent, syncFileReferences, type RefsExecutor } from './file-references';
+import {
+	dropDraftReferences,
+	keysFromContent,
+	syncFileReferences,
+	type RefsExecutor
+} from './file-references';
 
 const dialect = new PgDialect();
 const render = (cond: unknown) => dialect.sqlToQuery(cond as SQL);
@@ -255,5 +260,55 @@ describe('syncFileReferences', () => {
 		expect(state.inserts).toHaveLength(0);
 		expect(state.updates).toHaveLength(0);
 		expect(state.selectQueue).toHaveLength(0);
+	});
+});
+
+describe('dropDraftReferences (3b2)', () => {
+	it('is a no-op when the draft wrote no references', async () => {
+		state.selectQueue = [[]];
+		await dropDraftReferences(executor, 'draft-1');
+		expect(state.deletes).toHaveLength(0);
+		expect(state.updates).toHaveLength(0);
+		expect(state.locks).toHaveLength(0);
+	});
+
+	it('removes the draft refs (locked, ordered) and detaches the lost file', async () => {
+		state.selectQueue = [
+			[{ fileId: 'file-1' }], // refs of this draft
+			[], // candidate row lock (result unused)
+			[] // remaining references: none
+		];
+		await dropDraftReferences(executor, 'draft-1');
+		expect(state.locks).toEqual(['no key update']);
+		expect(state.lockTables[0]).toBe(filesTable);
+		expect(state.orderBys).toHaveLength(1); // ordered candidate lock
+		const scope = render(state.selectWheres[0]);
+		expect(scope.sql).toBe(
+			'("file_references"."ref_type" = $1 and "file_references"."ref_id" = $2)'
+		);
+		expect(scope.params).toEqual(['draft', 'draft-1']);
+		expect(state.deletes).toHaveLength(1);
+		const del = render(state.deletes[0].where);
+		expect(del.sql).toBe('("file_references"."ref_type" = $1 and "file_references"."ref_id" = $2)');
+		expect(del.params).toEqual(['draft', 'draft-1']);
+		expect(state.updates).toHaveLength(1);
+		expect(state.updates[0].values.status).toBe('detached');
+		expect(render(state.updates[0].values.detachedAt).sql).toBe('now()');
+	});
+
+	it('keeps a file attached while another reference remains', async () => {
+		state.selectQueue = [[{ fileId: 'file-1' }], [], [{ fileId: 'file-1' }]];
+		await dropDraftReferences(executor, 'draft-1');
+		expect(state.deletes).toHaveLength(1);
+		expect(state.updates).toHaveLength(0);
+	});
+
+	it('detaches only the files that actually lost every reference', async () => {
+		state.selectQueue = [[{ fileId: 'file-1' }, { fileId: 'file-2' }], [], [{ fileId: 'file-2' }]];
+		await dropDraftReferences(executor, 'draft-1');
+		expect(state.updates).toHaveLength(1);
+		const where = render(state.updates[0].where);
+		expect(where.sql).toBe('("files"."id" in ($1) and "files"."status" = $2)');
+		expect(where.params).toEqual(['file-1', 'attached']);
 	});
 });

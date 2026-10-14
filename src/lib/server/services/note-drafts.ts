@@ -4,7 +4,7 @@ import { db } from '$lib/server/db';
 import { drafts, notes } from '$lib/server/db/content';
 import { slugTrackers } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
-import { keysFromContent, syncFileReferences } from './file-references';
+import { dropDraftReferences, keysFromContent, syncFileReferences } from './file-references';
 import { isReservedNoteSlug, NOTE_EMOTIONS, NOTE_MOODS } from '$lib/utils/note-meta';
 import { hashNotePassword, verifyNotePassword } from './note-gate';
 import { DRAFT_THROTTLE_MS } from './post-drafts';
@@ -125,7 +125,10 @@ function normalizeNotePayload(payload: NoteDraftPayload): NormalizedNoteDraft {
 		temperatureC: normalizeTemperature(payload.temperatureC ?? null),
 		coordinates: normalizeCoordinates(payload.latitude ?? '', payload.longitude ?? ''),
 		location: (payload.location ?? '').trim(),
-		content: payload.content ?? ''
+		// Canonical LF at the service entry (3b1 review 05-P3-6): FormData
+		// submits CRLF-normalized text and the hash basis below hashes this
+		// exact value - normalizing here keeps hash and stored row in sync.
+		content: (payload.content ?? '').replace(/\r\n?/g, '\n')
 	};
 }
 
@@ -264,9 +267,12 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
+				// Draft-phase references key on the DRAFT's own identity (3b2):
+				// the published note's ref set keeps describing the published
+				// body until a publish re-keys it (Q6/Q15).
 				await syncFileReferences(
 					tx,
-					{ type: 'note', id: note.id },
+					{ type: 'draft', id: row.id },
 					keysFromContent(payload.content)
 				);
 				return row;
@@ -333,10 +339,11 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
-				// References ride the materialization transaction (Q15).
+				// References ride the materialization transaction (Q15) under
+				// the DRAFT identity (3b2).
 				await syncFileReferences(
 					tx,
-					{ type: 'note', id: createdNote.id },
+					{ type: 'draft', id: createdDraft.id },
 					keysFromContent(payload.content)
 				);
 				return { noteId: createdNote.id, draft: createdDraft };
@@ -409,10 +416,12 @@ async function updateExistingNoteDraft(
 				})
 				.where(and(eq(drafts.id, draft.id), eq(drafts.version, expected)))
 				.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
-			if (rows.length > 0 && draft.refId) {
+			if (rows.length > 0) {
+				// Draft identity (3b2): the working copy's refs never touch the
+				// published note's ref set.
 				await syncFileReferences(
 					tx,
-					{ type: 'note', id: draft.refId },
+					{ type: 'draft', id: draft.id },
 					keysFromContent(payload.content)
 				);
 			}
@@ -562,6 +571,8 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 				{ type: 'note', id: locked.id },
 				keysFromContent(lockedDraft.content)
 			);
+			// The draft's own refs leave with the draft row (3b2).
+			await dropDraftReferences(tx, lockedDraft.id);
 
 			return { kind: 'published' as const, noteId: locked.id };
 		});
@@ -616,11 +627,15 @@ export async function discardNoteDraft(draftId: string): Promise<DiscardNoteResu
 				// deleted right below, so its references must go with it (Q15
 				// deletion hooks).
 				const placeholder = Boolean(note && note.publishedAt == null && note.status === 'draft');
+				// The restore-sync heals any legacy interim rows written under the
+				// target identity before 3b2; the drop then removes this draft's
+				// own refs (a draft-only image flips detached inside it).
 				await syncFileReferences(
 					tx,
 					{ type: 'note', id: draft.refId },
 					placeholder ? [] : keysFromContent(note?.content)
 				);
+				await dropDraftReferences(tx, draft.id);
 				let removedPlaceholder = false;
 				// A never-published note goes with its draft: notes have no
 				// version counter, so "never published" = no publishedAt AND
@@ -637,6 +652,7 @@ export async function discardNoteDraft(draftId: string): Promise<DiscardNoteResu
 				.where(eq(drafts.id, draft.id))
 				.returning({ id: drafts.id });
 			if (deleted.length === 0) return { kind: 'not-found' as const };
+			await dropDraftReferences(tx, draft.id);
 			return { kind: 'discarded' as const, noteId: null, removedPlaceholder: false };
 		});
 	} catch (caught) {

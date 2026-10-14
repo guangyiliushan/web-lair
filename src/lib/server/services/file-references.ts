@@ -1,5 +1,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { db } from '$lib/server/db';
+// Type-only: the module never touches the connection itself (the executor is
+// injected), and a value import would keep node scripts from reusing it.
+import type { db } from '$lib/server/db';
 import { files } from '$lib/server/db/content';
 import { fileReferences, type FileRefType } from '$lib/server/db/system';
 import { I_KEY_PATTERN } from '$lib/media/keys';
@@ -42,6 +44,23 @@ export function keysFromContent(content: string | null | undefined): string[] {
 	if (!content) return [];
 	const keys = new Set<string>();
 	for (const match of content.matchAll(I_KEY_PATTERN)) keys.add(match[1]);
+	return [...keys];
+}
+
+/**
+ * `keysFromContent` over a per-locale jsonb body map (pages): every locale's
+ * markdown is scanned and the key sets union (3b2 backfill; the mention scan
+ * flattens the same way).
+ */
+export function keysFromLocalizedContent(
+	content: Record<string, unknown> | null | undefined
+): string[] {
+	const keys = new Set<string>();
+	for (const body of Object.values(content ?? {})) {
+		if (typeof body === 'string') {
+			for (const key of keysFromContent(body)) keys.add(key);
+		}
+	}
 	return [...keys];
 }
 
@@ -144,5 +163,44 @@ export async function syncFileReferences(
 				.set({ status: 'detached', detachedAt: sql`now()` })
 				.where(and(inArray(files.id, detachIds), eq(files.status, 'attached')));
 		}
+	}
+}
+
+/**
+ * Drops every reference a draft wrote under its OWN identity and re-evaluates
+ * the status machine for the affected files (ST-3 3b2: draft-phase refs are
+ * keyed `{draft, draftId}`; publish/discard delete the draft row and must
+ * take its refs with them - a draft-only image flips to `detached` here with
+ * the usual clock anchor). Same locking discipline as the remove branch
+ * above: candidates are locked ordered `FOR NO KEY UPDATE` first so a
+ * concurrent attach cannot race the remaining-reference snapshot.
+ */
+export async function dropDraftReferences(executor: RefsExecutor, draftId: string): Promise<void> {
+	const removed = await executor
+		.select({ fileId: fileReferences.fileId })
+		.from(fileReferences)
+		.where(and(eq(fileReferences.refType, 'draft'), eq(fileReferences.refId, draftId)));
+	const fileIds = [...new Set(removed.map((row) => row.fileId))];
+	if (fileIds.length === 0) return;
+	await executor
+		.select({ id: files.id })
+		.from(files)
+		.where(inArray(files.id, fileIds))
+		.orderBy(files.id)
+		.for('no key update');
+	await executor
+		.delete(fileReferences)
+		.where(and(eq(fileReferences.refType, 'draft'), eq(fileReferences.refId, draftId)));
+	const remaining = await executor
+		.select({ fileId: fileReferences.fileId })
+		.from(fileReferences)
+		.where(inArray(fileReferences.fileId, fileIds));
+	const stillReferenced = new Set(remaining.map((row) => row.fileId));
+	const detachIds = fileIds.filter((id) => !stillReferenced.has(id));
+	if (detachIds.length > 0) {
+		await executor
+			.update(files)
+			.set({ status: 'detached', detachedAt: sql`now()` })
+			.where(and(inArray(files.id, detachIds), eq(files.status, 'attached')));
 	}
 }

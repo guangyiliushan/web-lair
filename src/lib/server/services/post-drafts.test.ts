@@ -18,7 +18,7 @@ import { slugTrackers } from '$lib/server/db/system';
  * so removing a lock/transaction turns the suite red (mutation teeth, P2
  * review finding).
  */
-const { dbMock, state, syncMock } = vi.hoisted(() => ({
+const { dbMock, state, syncMock, dropMock } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		selectQueue: [] as unknown[][],
@@ -32,17 +32,19 @@ const { dbMock, state, syncMock } = vi.hoisted(() => ({
 		failWith: undefined as unknown,
 		txExecutors: null as unknown
 	},
-	syncMock: vi.fn(async () => {})
+	syncMock: vi.fn(async () => {}),
+	dropMock: vi.fn(async () => {})
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 // The reference diff runs in the content transaction; its own teeth live in
 // file-references.test.ts. Here we pin WHERE it is called from and with which
-// target/keys (plus the Q6 no-op autosave short-circuit).
+// identity/keys (plus the Q6 no-op autosave short-circuit and the 3b2
+// sync-then-drop order on publish/discard).
 vi.mock('./file-references', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('./file-references')>();
-	return { ...actual, syncFileReferences: syncMock };
+	return { ...actual, syncFileReferences: syncMock, dropDraftReferences: dropMock };
 });
 
 import {
@@ -172,6 +174,7 @@ function resetState(withTransaction = true) {
 	state.forCalls = [];
 	state.failWith = undefined;
 	syncMock.mockClear();
+	dropMock.mockClear();
 	const executors = makeExecutors();
 	// A distinct object so tests can prove sync ran on the TRANSACTION
 	// executor, not on the bare db (Q15's strongest contract).
@@ -272,9 +275,30 @@ describe('saveDraftWork', () => {
 			slug: 'new-slug',
 			tags: ['t1', 't2']
 		});
-		// Materialization carries the first reference diff too (Q15).
-		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-9' }, []);
+		// Materialization carries the first reference diff too (Q15), under
+		// the draft identity the row just got (3b2).
+		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: 'draft-9' }, []);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
+	});
+
+	it('normalizes CRLF and lone-CR submissions to LF at the service entry (3b1 05-P3-6)', async () => {
+		// Hash basis and stored row must agree: same payload in any line
+		// ending hashes identically and lands as canonical LF.
+		expect(draftHash({ ...payload(), content: 'line one\r\nline two\r' })).toBe(
+			draftHash({ ...payload(), content: 'line one\nline two\n' })
+		);
+		state.selectQueue = [[], [{ id: 'post-1', version: 5 }]];
+		state.insertResults = [[{ id: 'draft-1', version: 1, updatedAt: new Date() }]];
+		await saveDraftWork({
+			draftId: null,
+			postId: 'post-1',
+			expectedVersion: null,
+			payload: payload({ content: 'line one\r\nline two\r' }),
+			author: null,
+			autosave: false
+		});
+		const insert = state.inserts.find((entry) => entry.table === drafts);
+		expect(insert?.values).toMatchObject({ content: 'line one\nline two\n' });
 	});
 
 	it('creates the first draft for an existing post with the posts version as base', async () => {
@@ -291,8 +315,9 @@ describe('saveDraftWork', () => {
 		expect(result).toMatchObject({ kind: 'saved', draftId: 'draft-1', postId: 'post-1' });
 		expect(state.inserts[0].table).toBe(drafts);
 		expect(state.inserts[0].values).toMatchObject({ refId: 'post-1', baseVersion: 5 });
-		// Attaching to published content syncs the submitted body's refs too.
-		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, []);
+		// Attaching to published content syncs the submitted body's refs too
+		// (draft identity, 3b2: the post's own set is untouched here).
+		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: 'draft-1' }, []);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
 
@@ -316,7 +341,7 @@ describe('saveDraftWork', () => {
 			string[]
 		];
 		expect(call[0]).toBe(state.txExecutors);
-		expect(call[1]).toEqual({ type: 'post', id: 'post-1' });
+		expect(call[1]).toEqual({ type: 'draft', id: 'draft-1' });
 		expect(call[2]).toEqual([KEY]);
 	});
 
@@ -475,7 +500,7 @@ describe('saveDraftWork', () => {
 		expect(syncMock).not.toHaveBeenCalled();
 	});
 
-	it('syncs the draft target references inside the save transaction (Q6/Q15)', async () => {
+	it('syncs the draft-identity references inside the save transaction (Q6/Q15)', async () => {
 		const KEY = `ab/${'a'.repeat(64)}.png`;
 		state.selectQueue = [[{ ...BASE_DRAFT }]];
 		state.updateResults = [[{ id: 'draft-1', version: 4, updatedAt: new Date() }]];
@@ -495,7 +520,7 @@ describe('saveDraftWork', () => {
 			string[]
 		];
 		expect(call[0]).toBe(state.txExecutors);
-		expect(call[1]).toEqual({ type: 'post', id: 'post-1' });
+		expect(call[1]).toEqual({ type: 'draft', id: 'draft-1' });
 		expect(call[2]).toEqual([KEY]);
 	});
 });
@@ -597,9 +622,14 @@ describe('publishDraft', () => {
 
 		expect(state.deletes.some((d) => d.table === drafts)).toBe(true);
 		expect(state.deletes.some((d) => d.table === postTags)).toBe(true);
-		// The published body's reference set lands in the same transaction.
+		// The published body's reference set lands in the same transaction...
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, []);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
+		// ...and the draft's own refs leave with the draft row (3b2), after
+		// the durable set so no file can transiently lose every reference.
+		expect(dropMock).toHaveBeenCalledWith(state.txExecutors, 'draft-1');
+		expect((dropMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
+		expect(syncMock.mock.invocationCallOrder[0]).toBeLessThan(dropMock.mock.invocationCallOrder[0]);
 	});
 
 	it('writes the published body reference set in the publish transaction (Q15)', async () => {
@@ -744,6 +774,8 @@ describe('discardDraft', () => {
 		expect(result).toEqual({ kind: 'discarded', postId: 'post-1', removedPlaceholder: false });
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, [KEY]);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
+		// The draft's own refs leave with its row (3b2).
+		expect(dropMock).toHaveBeenCalledWith(state.txExecutors, 'draft-1');
 	});
 
 	it('keeps a published post when only its working copy is discarded', async () => {
@@ -751,6 +783,7 @@ describe('discardDraft', () => {
 		const result = await discardDraft('draft-1');
 		expect(result).toEqual({ kind: 'discarded', postId: 'post-1', removedPlaceholder: false });
 		expect(state.deletes.map((d) => d.table)).toEqual([drafts]);
+		expect(dropMock).toHaveBeenCalledWith(state.txExecutors, 'draft-1');
 	});
 
 	it('answers not-found when the draft vanished before the delete', async () => {
@@ -759,6 +792,7 @@ describe('discardDraft', () => {
 		const result = await discardDraft('draft-1');
 		expect(result).toEqual({ kind: 'not-found' });
 		expect(state.deletes.map((d) => d.table)).toEqual([drafts]);
+		expect(dropMock).not.toHaveBeenCalled();
 	});
 
 	it('answers plain not-found when the draft does not exist', async () => {
@@ -766,6 +800,7 @@ describe('discardDraft', () => {
 		const result = await discardDraft('draft-1');
 		expect(result).toEqual({ kind: 'not-found' });
 		expect(state.deletes).toHaveLength(0);
+		expect(dropMock).not.toHaveBeenCalled();
 	});
 
 	it('reports a deadlock as busy (40P01)', async () => {
@@ -803,13 +838,14 @@ describe('createTranslationDraft', () => {
 	});
 
 	it('copies the prefill into the new draft (§9.20.4)', async () => {
+		const KEY = `ab/${'a'.repeat(64)}.png`;
 		state.selectQueue = [
 			[
 				{
 					id: 'post-1',
 					lang: 'en',
 					title: 'Source title',
-					content: 'Source body',
+					content: `Source /i/${KEY}@full body`,
 					summary: 'Source summary',
 					contentFormat: 'markdown',
 					categoryId: 'cat-1',
@@ -819,7 +855,7 @@ describe('createTranslationDraft', () => {
 			],
 			[]
 		];
-		state.insertResults = [[{ id: 'post-9' }], []];
+		state.insertResults = [[{ id: 'post-9' }], [{ id: 'draft-9' }]];
 		const result = await createTranslationDraft('post-1', 'zh-cn', 'user-1');
 		expect(result).toEqual({ kind: 'created', postId: 'post-9' });
 		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
@@ -836,9 +872,14 @@ describe('createTranslationDraft', () => {
 		expect(prefill?.values).toMatchObject({
 			refId: 'post-9',
 			title: 'Source title',
-			content: 'Source body',
+			content: `Source /i/${KEY}@full body`,
 			summary: 'Source summary',
 			slug: null
 		});
+		// The copied body's keys become the translation draft's own refs
+		// (3b2) inside the same transaction.
+		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: 'draft-9' }, [
+			KEY
+		]);
 	});
 });
