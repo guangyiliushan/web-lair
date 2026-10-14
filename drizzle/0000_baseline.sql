@@ -536,7 +536,7 @@ CREATE TABLE "file_references" (
 	"ref_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "file_references_file_id_ref_type_ref_id_pk" PRIMARY KEY("file_id","ref_type","ref_id"),
-	CONSTRAINT "file_references_ref_type_check" CHECK ("file_references"."ref_type" in ('post', 'note', 'page', 'comment'))
+	CONSTRAINT "file_references_ref_type_check" CHECK ("file_references"."ref_type" in ('post', 'note', 'page', 'comment', 'draft'))
 );
 --> statement-breakpoint
 CREATE TABLE "job_runs" (

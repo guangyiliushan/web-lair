@@ -1,2 +1,0 @@
-ALTER TABLE "file_references" DROP CONSTRAINT "file_references_ref_type_check";--> statement-breakpoint
-ALTER TABLE "file_references" ADD CONSTRAINT "file_references_ref_type_check" CHECK ("file_references"."ref_type" in ('post', 'note', 'page', 'comment', 'draft'));

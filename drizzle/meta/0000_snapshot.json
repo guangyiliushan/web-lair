@@ -1,5 +1,5 @@
 {
-  "id": "8cd59559-9da8-490e-a4fe-8051203aa802",
+  "id": "7ff5b39a-f105-42f2-9caa-b0740ff3ab56",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -5403,7 +5403,7 @@
       "checkConstraints": {
         "file_references_ref_type_check": {
           "name": "file_references_ref_type_check",
-          "value": "\"file_references\".\"ref_type\" in ('post', 'note', 'page', 'comment')"
+          "value": "\"file_references\".\"ref_type\" in ('post', 'note', 'page', 'comment', 'draft')"
         }
       },
       "isRLSEnabled": false

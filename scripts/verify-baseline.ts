@@ -623,22 +623,31 @@ async function dbChecks(): Promise<void> {
 			'A7 FK leading-index gaps'
 		);
 
-		// A8 - migration ledger vs the journal (3b2: appends are expected). One
-		// ledger row per journal entry, the LATEST row's hash equal to the
-		// newest SQL file's sha256, and the baseline hash pinned as present.
+		// A8 - migration ledger vs the journal (single baseline). One ledger
+		// row per journal entry; the ordered latest row's hash equals the
+		// newest SQL file's sha256; EVERY entry's file hash is present in the
+		// ledger (the per-tag loop keeps the middle stable when appends are
+		// later folded back in); the baseline hash stays pinned as present.
 		const migs = await sql`select hash from drizzle.__drizzle_migrations order by created_at desc`;
 		expect(
 			migs.length === journal.entries.length,
 			`A8 drizzle.__drizzle_migrations rows=${migs.length}, journal entries=${journal.entries.length}`
 		);
-		const latestTag = journal.entries[journal.entries.length - 1]?.tag ?? '0000_baseline';
-		const latestSha = createHash('sha256')
-			.update(readFileSync(fileURLToPath(new URL(`../drizzle/${latestTag}.sql`, import.meta.url))))
-			.digest('hex');
+		const latestTag = journal.entries.at(-1)?.tag;
+		expect(latestTag != null, 'A8 journal has no entries');
+		const fileSha = (tag: string) =>
+			createHash('sha256')
+				.update(readFileSync(fileURLToPath(new URL(`../drizzle/${tag}.sql`, import.meta.url))))
+				.digest('hex');
+		const latestSha = fileSha(latestTag!);
 		expect(
 			migs[0]?.hash === latestSha,
 			`A8 latest migration hash ${migs[0]?.hash} != sha256(${latestTag}.sql) ${latestSha}`
 		);
+		const ledgerHashes = new Set(migs.map((row) => row.hash));
+		for (const entry of journal.entries) {
+			expect(ledgerHashes.has(fileSha(entry.tag)), `A8 ledger is missing sha256 for ${entry.tag}`);
+		}
 		expect(
 			migs.some((row) => row.hash === sha),
 			`A8 baseline hash ${sha} missing from the ledger`
