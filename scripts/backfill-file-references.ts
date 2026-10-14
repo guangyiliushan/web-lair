@@ -29,8 +29,15 @@ if (!DATABASE_URL) {
 }
 const apply = process.argv.includes('--apply');
 // Target banner without credentials: the last human-readable gate before an
-// --apply run can write.
-const target = new URL(DATABASE_URL);
+// --apply run can write. An unparseable DSN fails here (before any
+// connection) with a masked message - never the raw string (02 review).
+let target: URL;
+try {
+	target = new URL(DATABASE_URL);
+} catch {
+	console.error('DATABASE_URL is not a parseable DSN (masked on purpose).');
+	process.exit(1);
+}
 console.log(
 	`backfill-file-references @ ${new Date().toISOString()} (${apply ? 'APPLY' : 'dry-run'}) target: ${target.host}${target.pathname}`
 );
@@ -179,4 +186,9 @@ main()
 		console.error(error);
 		process.exitCode = 1;
 	})
-	.finally(() => sql.end());
+	.finally(async () => {
+		// Settle end() rejections here: the chain is floating, and an
+		// unhandled rejection would crash with an extra stack after the
+		// summary already landed (02 review).
+		await sql.end().catch(() => {});
+	});

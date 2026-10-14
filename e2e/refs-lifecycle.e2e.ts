@@ -68,6 +68,12 @@ function cleanup() {
 	psql(`delete from posts where slug like 'e2e-refs%' or title ilike 'e2e refs lifecycle%'`);
 	psql(`delete from notes where slug like 'e2e-refs%' or title ilike 'e2e refs note%'`);
 	psql(`delete from pages where slug = '${PAGE_SLUG}'`);
+	// The files rows stay (content-addressed), but an attached row that just
+	// lost its last reference must leave the attached state or audit check
+	// (2) reports it after every run (ring-2 02-P3-3).
+	psql(
+		`update files set status = 'detached', detached_at = now(), updated_at = now() where file_name like 'e2e-refs%' and status = 'attached' and not exists (select 1 from file_references fr2 where fr2.file_id = files.id)`
+	);
 }
 
 // A serial chain owning fixed fixture rows on the shared dev database - never

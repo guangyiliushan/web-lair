@@ -58,6 +58,12 @@ function cleanup() {
 	psql(
 		`delete from posts where slug like 'e2e-editor-uploads%' or title ilike 'e2e editor uploads%'`
 	);
+	// The files rows stay (content-addressed), but an attached row that just
+	// lost its last reference must leave the attached state or audit check
+	// (2) reports it after every run (ring-2 02-P3-3).
+	psql(
+		`update files set status = 'detached', detached_at = now(), updated_at = now() where (file_name like 'e2e-upload%' or file_name like 'e2e-drop%') and status = 'attached' and not exists (select 1 from file_references fr2 where fr2.file_id = files.id)`
+	);
 	psql(`delete from "user" where email = '${READER_EMAIL}'`);
 }
 
