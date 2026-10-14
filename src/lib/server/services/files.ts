@@ -1,17 +1,5 @@
 import { createHash } from 'node:crypto';
-import {
-	and,
-	count,
-	desc,
-	eq,
-	exists,
-	inArray,
-	like,
-	notExists,
-	notInArray,
-	or,
-	sql
-} from 'drizzle-orm';
+import { and, desc, eq, exists, inArray, like, notExists, notInArray, or, sql } from 'drizzle-orm';
 import { comments, drafts, files, notes, pages, photos, posts } from '$lib/server/db/content';
 import type { FileStatus } from '$lib/server/db/content/file.schema';
 import { fileReferences } from '$lib/server/db/system';
@@ -876,37 +864,14 @@ export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditRep
 	// pointing at a deleted target means a deletion hook was missed; the two
 	// status counters flag flip-matrix violations the write side cannot
 	// produce (crash/legacy intermediate states). Expressed through the same
-	// select surface as the rest of the audit (no raw execute), so the
-	// FilesDb contract stays as it was.
-	const refExists = () =>
-		exists(
-			database
-				.select({ one: sql`1` })
-				.from(fileReferences)
-				.where(eq(fileReferences.fileId, files.id))
-		);
-	const [detachedRows] = [
-		await database
-			.select({ n: count() })
-			.from(files)
-			.where(and(eq(files.status, 'detached'), refExists()))
-	];
-	const [attachedRows] = [
-		await database
-			.select({ n: count() })
-			.from(files)
-			.where(
-				and(
-					eq(files.status, 'attached'),
-					notExists(
-						database
-							.select({ one: sql`1` })
-							.from(fileReferences)
-							.where(eq(fileReferences.fileId, files.id))
-					)
-				)
-			)
-	];
+	// builder surface as the rest of the audit (FilesDb keeps select/$count;
+	// no raw execute) with one subquery per arm so every target table stays
+	// explicit and assertable.
+	const refCount = (fileId: typeof files.id) =>
+		database
+			.select({ one: sql`1` })
+			.from(fileReferences)
+			.where(eq(fileReferences.fileId, fileId));
 	const targetGone = (
 		table: typeof posts | typeof notes | typeof pages | typeof drafts | typeof comments
 	) =>
@@ -916,26 +881,28 @@ export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditRep
 				.from(table)
 				.where(eq(table.id, fileReferences.refId))
 		);
-	const [orphanRows] = [
-		await database
-			.select({ n: count() })
-			.from(fileReferences)
-			.where(
-				or(
-					and(eq(fileReferences.refType, 'post'), targetGone(posts)),
-					and(eq(fileReferences.refType, 'note'), targetGone(notes)),
-					and(eq(fileReferences.refType, 'page'), targetGone(pages)),
-					and(eq(fileReferences.refType, 'draft'), targetGone(drafts)),
-					and(eq(fileReferences.refType, 'comment'), targetGone(comments)),
-					notInArray(fileReferences.refType, ['post', 'note', 'page', 'draft', 'comment'])
-				)
-			)
-	];
-	const referenceDrift: ReferenceDrift = {
-		detachedWithRefs: Number(detachedRows?.[0]?.n ?? 0),
-		attachedWithoutRefs: Number(attachedRows?.[0]?.n ?? 0),
-		orphanRefs: Number(orphanRows?.[0]?.n ?? 0)
-	};
+	const detachedWithRefs = await database.$count(
+		files,
+		and(eq(files.status, 'detached'), exists(refCount(files.id)))
+	);
+	const attachedWithoutRefs = await database.$count(
+		files,
+		and(eq(files.status, 'attached'), notExists(refCount(files.id)))
+	);
+	const orphanRefs = await database.$count(
+		fileReferences,
+		or(
+			and(eq(fileReferences.refType, 'post'), targetGone(posts)),
+			and(eq(fileReferences.refType, 'note'), targetGone(notes)),
+			and(eq(fileReferences.refType, 'page'), targetGone(pages)),
+			and(eq(fileReferences.refType, 'draft'), targetGone(drafts)),
+			and(eq(fileReferences.refType, 'comment'), targetGone(comments)),
+			// Belt for a constraint-less database: unknown ref_type values
+			// count as orphans (unreachable while the CHECK is in place).
+			notInArray(fileReferences.refType, ['post', 'note', 'page', 'draft', 'comment'])
+		)
+	);
+	const referenceDrift: ReferenceDrift = { detachedWithRefs, attachedWithoutRefs, orphanRefs };
 
 	return {
 		generatedAt: new Date().toISOString(),

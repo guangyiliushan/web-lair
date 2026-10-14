@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
+import { getTableName } from 'drizzle-orm';
 import { MAX_BATCH_COUNT, MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
 import { files as filesTable, photos as photosTable } from '$lib/server/db/content';
 import { fileReferences } from '$lib/server/db/system';
@@ -82,9 +83,12 @@ interface SelectChain extends PromiseLike<unknown[]> {
 	for: () => SelectChain;
 }
 
-function selectChain(rows: unknown[]): SelectChain {
+function selectChain(rows: unknown[], recordFrom?: string[]): SelectChain {
 	const chain = {
-		from: vi.fn(() => chain),
+		from: vi.fn((table: unknown) => {
+			recordFrom?.push(getTableName(table as never));
+			return chain;
+		}),
 		where: vi.fn(() => chain),
 		orderBy: vi.fn(() => chain),
 		limit: vi.fn(() => chain),
@@ -895,12 +899,15 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 		);
 		dbMock.select.mockReturnValueOnce(selectChain([])); // known keys: none
 		dbMock.select.mockReturnValueOnce(selectChain([])); // registry rows: none
-		// Drift check ④: every counter builds one outer select plus its
-		// subquery builder(s) - 10 selects in call order (counts live in the
-		// outer slots; the subquery results are never awaited).
-		for (let index = 0; index < 10; index += 1) {
+		// Drift check ④: the three counters are $count calls; their subquery
+		// builders still consume select slots (7 in call order) and the
+		// results are never awaited.
+		for (let index = 0; index < 7; index += 1) {
 			dbMock.select.mockReturnValueOnce(selectChain([]));
 		}
+		dbMock.$count.mockResolvedValueOnce(0);
+		dbMock.$count.mockResolvedValueOnce(0);
+		dbMock.$count.mockResolvedValueOnce(0);
 		dbMock.select.mockReturnValueOnce(selectChain([])); // purge candidates: none
 
 		const report = await runMediaAudit({ storage: storageMock });
@@ -921,16 +928,20 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([]));
 		dbMock.select.mockReturnValueOnce(selectChain([])); // registry rows: none
-		// Drift check ④ slots in call order: detached outer, detached subquery,
-		// attached outer, attached subquery, orphan outer, then the five
-		// targetGone subqueries (posts/notes/pages/drafts/comments).
-		dbMock.select.mockReturnValueOnce(selectChain([{ n: '2' }]));
-		dbMock.select.mockReturnValueOnce(selectChain([]));
-		dbMock.select.mockReturnValueOnce(selectChain([{ n: '1' }]));
-		dbMock.select.mockReturnValueOnce(selectChain([]));
-		dbMock.select.mockReturnValueOnce(selectChain([{ n: '3' }]));
-		for (let index = 0; index < 5; index += 1) {
-			dbMock.select.mockReturnValueOnce(selectChain([]));
+		// Drift check ④ arm pinning: the three counters are $count calls
+		// (recorded tables files/files/file_references) and every subquery
+		// builder still consumes a select slot - the recorded FROM sequence
+		// pins the comments arm (a missing arm turns the sequence red).
+		const driftFroms: string[] = [];
+		for (let index = 0; index < 7; index += 1) {
+			dbMock.select.mockReturnValueOnce(selectChain([], driftFroms));
+		}
+		const countFroms: string[] = [];
+		for (const value of [2, 1, 3]) {
+			dbMock.$count.mockImplementationOnce((table: unknown) => {
+				countFroms.push(getTableName(table as never));
+				return Promise.resolve(value);
+			});
 		}
 		dbMock.select.mockReturnValueOnce(selectChain([])); // purge candidates: none
 
@@ -941,5 +952,15 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 			attachedWithoutRefs: 1,
 			orphanRefs: 3
 		});
+		expect(countFroms).toEqual(['files', 'files', 'file_references']);
+		expect(driftFroms).toEqual([
+			'file_references',
+			'file_references',
+			'posts',
+			'notes',
+			'pages',
+			'drafts',
+			'comments'
+		]);
 	});
 });
