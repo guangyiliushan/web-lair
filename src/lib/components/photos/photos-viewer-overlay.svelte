@@ -59,7 +59,11 @@
 		photo?: PhotoViewerSource | null;
 		neighbors?: { newer: PhotoViewerSource | null; older: PhotoViewerSource | null };
 		position?: { index: number; total: number };
-		/** Single-image content mode (3d article lightbox). */
+		/**
+		 * Single-image content mode (3d article lightbox). The two modes are
+		 * mutually exclusive: each host supplies exactly one of `photo` /
+		 * `plain` (feeding `neighbors`/`position` only with the former).
+		 */
 		plain?: PlainImageSource | null;
 		/** Fired once per close with the (possibly navigated) slug ('' in plain). */
 		onClosed?: (slug: string) => void;
@@ -153,11 +157,9 @@
 		return current ? photoTitle(current, getLocale()) : '';
 	}
 
-	const onDemand = $derived(
-		plainItem
-			? shouldLoadFullOnDemand(null, connection)
-			: shouldLoadFullOnDemand(byteSizeOf(), connection)
-	);
+	// `byteSizeOf()` is null for plain items, so one call covers both modes
+	// (review 3d: the previous ternary was per-case identical).
+	const onDemand = $derived(shouldLoadFullOnDemand(byteSizeOf(), connection));
 	const interimSrc = $derived(interimOf());
 	const placeholder = $derived(thumbhashDataUrl(plainItem ? null : (current?.thumbhash ?? null)));
 	const displaySrc = $derived(objectUrl ?? interimSrc);
@@ -209,18 +211,14 @@
 	onDestroy(teardown);
 
 	function initialize() {
+		// The two modes are mutually exclusive by contract (see Props): the
+		// feed host passes photo/neighbors/position, the article lightbox
+		// passes plain - and `plain` wins if both were ever supplied.
 		plainItem = plain ?? null;
-		if (plainItem) {
-			current = null;
-			currentNeighbors = { newer: null, older: null };
-			currentPosition = { index: 1, total: 1 };
-			openedSnapshotId = null;
-		} else {
-			current = photo ?? null;
-			currentNeighbors = neighbors;
-			currentPosition = position;
-			openedSnapshotId = photo?.id ?? null;
-		}
+		current = plainItem ? null : (photo ?? null);
+		currentNeighbors = neighbors;
+		currentPosition = position;
+		openedSnapshotId = plainItem ? null : (photo?.id ?? null);
 		suppressClosed = false;
 		transform = identity();
 		smooth = false;
@@ -662,7 +660,7 @@
 		onOpenAutoFocus={handleOpenAutoFocus}
 	>
 		<Dialog.Title class="sr-only">{title}</Dialog.Title>
-		{#if alt !== title}
+		{#if alt && alt !== title}
 			<Dialog.Description class="sr-only">{alt}</Dialog.Description>
 		{/if}
 		<div class="absolute inset-0 bg-black/[0.92]" aria-hidden="true"></div>
@@ -771,10 +769,12 @@
 			<div class="absolute right-4 bottom-20 z-30">
 				<button
 					type="button"
-					class="rounded-xl border border-white/20 bg-black/60 px-4 py-2.5 text-sm text-white backdrop-blur transition-colors hover:bg-black/80"
+					class="rounded-xl border border-white/20 bg-black/60 px-4 py-2.5 text-sm text-white backdrop-blur transition-colors hover:bg-black/80 focus-visible:shadow-[0_0_0_2px_rgba(0,0,0,0.6)] focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
 					onclick={() => void startLoad(true)}
 				>
-					{m.photos_viewer_load_full({ size: byteSizeLabel() })}
+					{plainItem
+						? m.photos_viewer_load_full_plain()
+						: m.photos_viewer_load_full({ size: byteSizeLabel() })}
 				</button>
 			</div>
 		{:else if cardVisible}
@@ -822,7 +822,7 @@
 					<span class="whitespace-nowrap">{m.photos_viewer_load_failed()}</span>
 					<button
 						type="button"
-						class="rounded-md border border-white/45 px-3 py-1.5 text-sm transition-colors hover:bg-white/10"
+						class="rounded-md border border-white/45 px-3 py-1.5 text-sm transition-colors hover:bg-white/10 focus-visible:shadow-[0_0_0_2px_rgba(0,0,0,0.6)] focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
 						onclick={() => void startLoad(true)}
 					>
 						{m.photos_viewer_retry()}

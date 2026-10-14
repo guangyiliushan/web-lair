@@ -1866,6 +1866,7 @@
 	"photos_viewer_close": "Close viewer",
 	"photos_viewer_load_failed": "The full image could not be loaded.",
 	"photos_viewer_load_full": "Load full image ({size})",
+	"photos_viewer_load_full_plain": "Load full image",
 	"photos_viewer_loaded": "Full image loaded",
 	"photos_viewer_loading": "Loading…",
 	"photos_viewer_loading_detail": "Loading {loaded} / {total} ({percent}%)",

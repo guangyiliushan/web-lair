@@ -382,8 +382,7 @@ describe('overlay viewer plain mode (3d article lightbox)', () => {
 		fullSrc: `/i/${PLAIN_KEY}.png@full`,
 		alt: '正文插图',
 		width: 1200,
-		height: 800,
-		mimeType: null
+		height: 800
 	};
 
 	it('shows the image and caption with no feed chrome', async () => {
@@ -392,7 +391,30 @@ describe('overlay viewer plain mode (3d article lightbox)', () => {
 		await expect(page.getByRole('heading', { name: '正文插图' })).toBeInTheDocument();
 		// Feed chrome is absent: no counter, no neighbour buttons.
 		expect(document.querySelector('[data-photos-viewer-counter]')).toBeNull();
+		await expect.element(page.getByRole('button', { name: '上一张' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: '下一张' })).not.toBeInTheDocument();
 		expect(document.querySelector('[data-photos-viewer-stage] img')).not.toBeNull();
+	});
+
+	it('waits for an explicit tap on metered connections (plain: no size to quote)', async () => {
+		Object.defineProperty(navigator, 'connection', {
+			value: { saveData: true },
+			configurable: true
+		});
+		try {
+			await render(PhotosViewerOverlay, { open: true, plain: plainSource });
+			const button = page.getByRole('button', { name: '加载原图' });
+			await expect.element(button).toBeVisible();
+			// Nothing may stream before the tap.
+			const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+			expect(fetchMock.mock.calls.some((call) => String(call[0]).includes('@full'))).toBe(false);
+			await button.click();
+			await expect
+				.poll(() => fetchMock.mock.calls.some((call) => String(call[0]).includes('@full')))
+				.toBe(true);
+		} finally {
+			delete (navigator as unknown as Record<string, unknown>).connection;
+		}
 	});
 
 	it('upgrades to the derived @full frame via the shared pump', async () => {
@@ -417,8 +439,7 @@ describe('overlay viewer plain mode (3d article lightbox)', () => {
 			fullSrc: 'https://cdn.example.com/pic.png',
 			alt: '外链图',
 			width: 640,
-			height: 480,
-			mimeType: null
+			height: 480
 		};
 		await render(PhotosViewerOverlay, { open: true, plain: external });
 		await expect.poll(() => captionText()).toBe('外链图');

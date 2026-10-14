@@ -1605,6 +1605,7 @@
 	"photos_viewer_close": "ビューアを閉じる",
 	"photos_viewer_load_failed": "原寸を読み込めませんでした。",
 	"photos_viewer_load_full": "原寸を読み込む（{size}）",
+	"photos_viewer_load_full_plain": "原寸を読み込む",
 	"photos_viewer_loaded": "原寸を読み込みました",
 	"photos_viewer_loading": "読み込み中…",
 	"photos_viewer_loading_detail": "読み込み済み {loaded} / {total}（{percent}%）",
