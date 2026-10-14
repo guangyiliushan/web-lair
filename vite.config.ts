@@ -88,6 +88,8 @@ export default defineConfig({
 					},
 					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
 					exclude: ['src/lib/server/**'],
+					// One resource-timing floor for every browser spec (review 3d).
+					setupFiles: ['./src/lib/testing/client-setup.ts'],
 					// Browser interactions need headroom when the machine is
 					// loaded (concurrent suites, review probes): the 15 s
 					// default turns slow-but-correct runs into false negatives.
