@@ -8,6 +8,9 @@
 	import EmbedCard from '$lib/components/markdown/embed/EmbedCard.svelte';
 	import type { EmbedProviderId } from '$lib/components/markdown/embed/registry';
 	import { attachMagnetLinks } from '$lib/components/markdown/link-magnet';
+	import { attachContentLightbox } from '$lib/components/markdown/content-lightbox';
+	import PhotosViewerOverlay from '$lib/components/photos/photos-viewer-overlay.svelte';
+	import type { PlainImageSource } from '$lib/components/photos/viewer-source';
 	import { scheduleMermaidRender } from './mermaid-client';
 	import { m } from '$lib/paraglide/messages';
 	import { themeStore } from '$lib/stores/theme.svelte';
@@ -31,7 +34,13 @@
 	let articleEl: HTMLElement | undefined = $state();
 	const cardInstances: Array<ReturnType<typeof mount>> = [];
 	let detachMagnet: (() => void) | null = null;
+	let detachLightbox: (() => void) | null = null;
 	let uid = '';
+
+	// Content lightbox (3d): set on first open and kept mounted afterwards so
+	// the dialog's close animation and focus restore are never cut short.
+	let lightboxSource = $state<PlainImageSource | null>(null);
+	let lightboxOpen = $state(false);
 
 	// The enhancement is reactive: `{@html}` swaps the article's children
 	// whenever the rendered HTML changes, so the effect re-runs after every
@@ -45,6 +54,8 @@
 		cardInstances.length = 0;
 		detachMagnet?.();
 		detachMagnet = null;
+		detachLightbox?.();
+		detachLightbox = null;
 		uid ||= Math.random().toString(36).slice(2, 8);
 		enhanceTabs(article, uid);
 		enhanceCarousels(article);
@@ -64,6 +75,11 @@
 		// zero-offset text and uses LinkHoverEditor instead). The returned
 		// cleanup runs both on the next {@html} swap and on destroy.
 		detachMagnet = attachMagnetLinks(article);
+		// Article images open the shared overlay viewer (3d content lightbox).
+		detachLightbox = attachContentLightbox(article, (source) => {
+			lightboxSource = source;
+			lightboxOpen = true;
+		});
 	});
 
 	// A theme flip re-renders the diagrams (their palette is baked at render
@@ -80,6 +96,8 @@
 		cardInstances.length = 0;
 		detachMagnet?.();
 		detachMagnet = null;
+		detachLightbox?.();
+		detachLightbox = null;
 	});
 
 	/**
@@ -188,4 +206,8 @@
 		<!-- eslint-disable-next-line svelte/no-at-html-tags -- Safe: HTML is sanitized by rehype-sanitize -->
 		{@html renderedHtml}
 	</article>
+{/if}
+
+{#if lightboxSource}
+	<PhotosViewerOverlay bind:open={lightboxOpen} plain={lightboxSource} />
 {/if}

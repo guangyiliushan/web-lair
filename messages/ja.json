@@ -1609,6 +1609,7 @@
 	"photos_viewer_loading": "読み込み中…",
 	"photos_viewer_loading_detail": "読み込み済み {loaded} / {total}（{percent}%）",
 	"photos_viewer_open": "大きく表示",
+	"photos_viewer_open_alt": "大きく表示：{alt}",
 	"photos_viewer_retry": "再試行",
 	"posts_back_to_top": "トップへ戻る",
 	"posts_browse": "一覧",

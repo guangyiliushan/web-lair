@@ -1609,6 +1609,7 @@
 	"photos_viewer_loading": "加载中…",
 	"photos_viewer_loading_detail": "已加载 {loaded} / {total}（{percent}%）",
 	"photos_viewer_open": "查看大图",
+	"photos_viewer_open_alt": "查看大图：{alt}",
 	"photos_viewer_retry": "重试",
 	"posts_back_to_top": "回到顶部",
 	"posts_browse": "浏览",

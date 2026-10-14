@@ -1870,6 +1870,7 @@
 	"photos_viewer_loading": "Loading…",
 	"photos_viewer_loading_detail": "Loading {loaded} / {total} ({percent}%)",
 	"photos_viewer_open": "View larger",
+	"photos_viewer_open_alt": "View larger: {alt}",
 	"photos_viewer_retry": "Retry",
 	"posts_back_to_top": "Back to top",
 	"posts_browse": "Browse",
