@@ -47,14 +47,17 @@
 	// nodes are enhanced and the new anchors upgraded again.
 	$effect(() => {
 		void renderedHtml;
+		// A re-rendered article (SPA navigation) while the lightbox is open
+		// would keep showing the previous content with its modal trap still
+		// armed - close it before re-enhancing (review 3d, the plain-face
+		// mirror of the 3c Back guard). Runs before the article guard so a
+		// swap-to-empty also closes (review 3d round 2, 08 F1). The restore
+		// target is gone with the old tree, so focus lands on body - the same
+		// outcome as a full page load, accepted (review 3d round 2, 08 F3).
+		// untrack: the effect must not re-run because of its own state write.
+		if (untrack(() => lightboxOpen)) lightboxOpen = false;
 		const article = articleEl;
 		if (!article) return;
-		// A re-rendered article (SPA navigation) while the lightbox is open
-		// would keep showing the previous content with its focus-restore
-		// target already gone - close it before re-enhancing (review 3d,
-		// the plain-face mirror of the 3c Back guard). untrack: the effect
-		// must not re-run because of its own state write.
-		if (untrack(() => lightboxOpen)) lightboxOpen = false;
 		for (const instance of cardInstances) unmount(instance);
 		cardInstances.length = 0;
 		detachMagnet?.();

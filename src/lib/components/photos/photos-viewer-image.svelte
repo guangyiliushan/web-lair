@@ -184,7 +184,7 @@
 	<div class="fixed right-4 bottom-4 z-30">
 		<button
 			type="button"
-			class="photos-viewer-load rounded-xl border bg-background/90 px-4 py-2.5 text-sm shadow-sm backdrop-blur transition-colors hover:bg-muted"
+			class="photos-viewer-load rounded-xl border bg-background/90 px-4 py-2.5 text-sm shadow-sm backdrop-blur transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-transparent"
 			onclick={() => void loadFull()}
 		>
 			{m.photos_viewer_load_full({
@@ -254,7 +254,7 @@
 			<span class="whitespace-nowrap">{m.photos_viewer_load_failed()}</span>
 			<button
 				type="button"
-				class="photos-viewer-retry rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-muted"
+				class="photos-viewer-retry rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-transparent"
 				onclick={() => void loadFull()}
 			>
 				{m.photos_viewer_retry()}

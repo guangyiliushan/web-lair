@@ -216,8 +216,11 @@
 		// passes plain - and `plain` wins if both were ever supplied.
 		plainItem = plain ?? null;
 		current = plainItem ? null : (photo ?? null);
-		currentNeighbors = neighbors;
-		currentPosition = position;
+		// Full zeroing for plain (review 3d round 2, 08 F2): structural
+		// enforcement, not just the host contract - a hypothetical future
+		// host passing both must not trigger neighbour prefetch.
+		currentNeighbors = plainItem ? { newer: null, older: null } : neighbors;
+		currentPosition = plainItem ? { index: 1, total: 1 } : position;
 		openedSnapshotId = plainItem ? null : (photo?.id ?? null);
 		suppressClosed = false;
 		transform = identity();
@@ -656,7 +659,7 @@
 <Dialog.Root bind:open>
 	<Dialog.Content
 		showCloseButton={false}
-		class="fixed inset-0 top-0 left-0 z-50 h-full w-full max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 bg-transparent p-0 shadow-none ring-0 outline-none motion-reduce:animate-none sm:max-w-none"
+		class="fixed inset-0 top-0 left-0 z-50 h-full w-full max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 bg-transparent p-0 shadow-none ring-0 outline-none motion-reduce:animate-none! sm:max-w-none"
 		onOpenAutoFocus={handleOpenAutoFocus}
 	>
 		<Dialog.Title class="sr-only">{title}</Dialog.Title>
