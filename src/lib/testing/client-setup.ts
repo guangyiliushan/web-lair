@@ -7,4 +7,9 @@
  * a late entry (a false green: embed-card-mount's "no twitter request").
  * One raise here covers the whole project (review 3d, 03/06).
  */
-performance.setResourceTimingBufferSize(2000);
+// Guard: the raise must never break a worker on an engine that lacks the
+// API (Chromium/Firefox ship it today; a future non-Chromium instance would
+// otherwise fail the whole project - review 3d round 2, 01 P3-4 / 02 P3-2).
+if (typeof performance.setResourceTimingBufferSize === 'function') {
+	performance.setResourceTimingBufferSize(2000);
+}

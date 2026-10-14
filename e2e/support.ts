@@ -1,4 +1,3 @@
-import AxeBuilder from '@axe-core/playwright';
 import { execFileSync } from 'node:child_process';
 import { expect, type BrowserContext, type Page, type Response } from '@playwright/test';
 
@@ -167,6 +166,9 @@ export async function bootstrapReader(context: BrowserContext, email: string, pa
  * copies).
  */
 export async function expectNoCriticalAxe(page: Page, label: string): Promise<void> {
+	// Lazy import: 27 specs import this module; only three call the gate, so
+	// axe-core's parse cost stays off their workers (review 3d round 2, 01 P3-1).
+	const { default: AxeBuilder } = await import('@axe-core/playwright');
 	const results = await new AxeBuilder({ page }).analyze();
 	const summary = results.violations.map(
 		(violation) => `${violation.impact}: ${violation.id} (${violation.nodes.length})`

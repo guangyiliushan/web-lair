@@ -1,7 +1,6 @@
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
-import { psql } from './support';
+import { expectNoCriticalAxe, psql } from './support';
 
 /**
  * WCAG 2.2 AA baseline for the public photo surfaces (T11's automated half,
@@ -36,9 +35,6 @@ function seed(): void {
 	);
 }
 
-const CRITICAL = (violations: Array<{ impact?: string | null }>) =>
-	violations.filter((violation) => violation.impact === 'critical');
-
 test.describe.configure({ mode: 'serial', timeout: 180_000 });
 test.use(zhCnLocale);
 
@@ -66,12 +62,7 @@ test.describe('photos a11y baseline', () => {
 		test(`no critical axe violations on the public ${name}`, async ({ page }) => {
 			await page.goto(path);
 			await expect(page.locator('h1').first()).toBeVisible({ timeout: 20_000 });
-			const results = await new AxeBuilder({ page }).analyze();
-			const summary = results.violations.map(
-				(violation) => `${violation.impact}: ${violation.id} (${violation.nodes.length})`
-			);
-			if (summary.length > 0) console.log(`[axe:${name}]`, summary.join(' | '));
-			expect(CRITICAL(results.violations), JSON.stringify(summary)).toEqual([]);
+			await expectNoCriticalAxe(page, name);
 		});
 	}
 

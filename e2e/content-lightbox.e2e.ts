@@ -162,9 +162,10 @@ test.describe('content lightbox (3d)', () => {
 		const html = await response.text();
 		// Element-shaped, not substring: the bare URL also ships inside the
 		// hydration payload, so `toContain` alone would stay green even if
-		// the <img> element were dropped (review 3d, 03 P2-6). KEY_INTERNAL
-		// is dir/hex + extension - dots escaped for the regex.
-		const escaped = KEY_INTERNAL.replace(/[.]/g, '\\.');
+		// the <img> element were dropped (review 3d, 03 P2-6). The generic
+		// escape keeps the pattern safe if a fixture key ever carries other
+		// metacharacters (review 3d round 2, 02 P3-1).
+		const escaped = KEY_INTERNAL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 		expect(html).toMatch(new RegExp(`<img[^>]+src="/i/${escaped}"`));
 		expect(html).not.toContain('data-content-lightbox');
 	});

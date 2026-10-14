@@ -204,9 +204,9 @@ describe('paraglide message contract', () => {
 		WALK_TIMEOUT_MS
 	);
 
-	// The key scan walks every source file and every compiled locale module;
-	// on a loaded 10-worker day it can exceed the 5s default (the A batch
-	// grew the message set). Explicit budget; registered in the W4 receipts.
+	// Same walker family as the budget constant above; the shared
+	// WALK_TIMEOUT_MS covers this compiled-output scan too (review 3d
+	// round 2, 01 P3-7).
 	it(
 		'exports every used key from the compiled output, so m.key() cannot be undefined at runtime',
 		() => {
