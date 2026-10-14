@@ -3,12 +3,15 @@ import { psql } from './support';
 import { zhCnLocale } from './locale-fixture';
 
 /**
- * Reference lifecycle, live teeth (ST-3 3b1, Q15 "T4 four paths"): draft save,
- * publish, discard and page hard-delete maintain `file_references` and the
- * file status machine against the real database - including the two-targets
- * edge (one image in a post AND a note: losing one keeps the file attached)
- * and the final flip to `detached` with its clock anchor once the working
- * content drops the image ("draft drops the image -> detached -> TTL").
+ * Reference lifecycle, live teeth (ST-3 3b1 + 3b2 draft identity, Q15 "T4
+ * four paths"): draft save, publish, discard and page hard-delete maintain
+ * `file_references` and the file status machine against the real database.
+ * Since 3b2 the draft-phase refs are keyed `{draft, draftId}`: a save never
+ * touches the published identity's set; publish re-keys the durable set and
+ * drops the draft refs; discarding a working copy that merely dropped a
+ * PUBLISHED image keeps the file attached (the interim 3b1 behavior detached
+ * it - the flip to `detached` now needs the file to lose every reference,
+ * which the scratch-database harness drives at the service level).
  */
 test.use(zhCnLocale);
 
@@ -17,7 +20,6 @@ const CATEGORY_NAME = 'E2E Refs';
 const POST_TITLE = 'e2e refs lifecycle';
 const POST_SLUG = 'e2e-refs-lifecycle';
 const NOTE_TITLE = 'e2e refs note';
-const NOTE_SLUG = 'e2e-refs-note';
 const PAGE_TITLE = 'E2E Refs Page';
 const PAGE_SLUG = 'e2e-refs-page';
 
@@ -35,6 +37,11 @@ function byText(page: Page, text: string | RegExp): Locator {
 }
 
 function cleanup() {
+	// Draft-identity refs go with their draft rows (3b2); clean them first so
+	// a crashed run cannot leave orphan reference rows behind.
+	psql(
+		`delete from file_references where ref_type = 'draft' and ref_id in (select id from drafts where title ilike 'e2e refs%' or ref_id in (select id from posts where slug like 'e2e-refs%') or ref_id in (select id from notes where slug like 'e2e-refs%'))`
+	);
 	psql(`delete from drafts where title ilike 'e2e refs%'`);
 	psql(`delete from drafts where ref_id in (select id from posts where slug like 'e2e-refs%')`);
 	psql(`delete from drafts where ref_id in (select id from notes where slug like 'e2e-refs%')`);
@@ -178,7 +185,11 @@ test('note draft autosave attaches the uploaded file and writes the note referen
 	const match = payload.match(/\/i\/([0-9a-f]{2}\/[0-9a-f]{64}(?:\.[a-z0-9]{1,10})?)/);
 	expect(match).not.toBeNull();
 	KEY = match![1];
-	expect(refCount('note', noteRefId())).toBe('1');
+	// Draft identity (3b2): the working copy's refs key on the DRAFT row; the
+	// note's own identity stays untouched until publish.
+	const noteDraftId = psql(`select id from drafts where title = '${NOTE_TITLE}'`);
+	expect(refCount('draft', noteDraftId)).toBe('1');
+	expect(refCount('note', noteRefId())).toBe('0');
 	expect(fileStatus()).toBe('attached');
 });
 
@@ -191,8 +202,12 @@ test('a second target shares the image (dedupe): both references live', async ({
 	await manualSave(page);
 
 	const postId = psql(`select ref_id from drafts where slug = '${POST_SLUG}'`);
-	expect(refCount('post', postId)).toBe('1');
-	expect(refCount('note', noteRefId())).toBe('1');
+	const postDraftId = psql(`select id from drafts where slug = '${POST_SLUG}'`);
+	// Both saves wrote under their DRAFT identities; the target identities
+	// have not been touched (3b2).
+	expect(refCount('draft', postDraftId)).toBe('1');
+	expect(refCount('post', postId)).toBe('0');
+	expect(refCount('draft', psql(`select id from drafts where title = '${NOTE_TITLE}'`))).toBe('1');
 	expect(fileStatus()).toBe('attached');
 });
 
@@ -200,6 +215,8 @@ test('discarding a working copy drops its references; the other target keeps the
 	page
 }) => {
 	const postId = psql(`select ref_id from drafts where slug = '${POST_SLUG}'`);
+	// Captured while the draft row still exists (the discard deletes it).
+	const postDraftId = psql(`select id from drafts where slug = '${POST_SLUG}'`);
 	await page.goto('/admin/drafts');
 	const row = page.getByRole('row').filter({ hasText: POST_TITLE });
 	await expect(row.first()).toBeVisible({ timeout: 10000 });
@@ -210,12 +227,18 @@ test('discarding a working copy drops its references; the other target keeps the
 	await page.getByRole('button', { name: '丢弃', exact: true }).click();
 	await expect(byText(page, '草稿已丢弃。')).toBeVisible({ timeout: 15000 });
 
-	// The never-published placeholder goes with its draft; the note's
-	// reference keeps the shared file attached (the two-targets edge).
+	// The never-published placeholder goes with its draft AND the draft's
+	// own refs leave with the row (3b2); the note draft's reference keeps
+	// the shared file attached (the two-targets edge).
 	expect(psql(`select count(*) from drafts where ref_id = '${postId}'`)).toBe('0');
 	expect(psql(`select count(*) from posts where id = '${postId}'`)).toBe('0');
 	expect(refCount('post', postId)).toBe('0');
-	expect(refCount('note', noteRefId())).toBe('1');
+	expect(
+		psql(
+			`select count(*) from file_references where ref_type = 'draft' and ref_id = '${postDraftId}'`
+		)
+	).toBe('0');
+	expect(refCount('draft', psql(`select id from drafts where title = '${NOTE_TITLE}'`))).toBe('1');
 	expect(fileStatus()).toBe('attached');
 });
 
@@ -242,12 +265,13 @@ test('page hard-delete clears its references inside the delete transaction', asy
 
 	expect(psql(`select count(*) from pages where slug = '${PAGE_SLUG}'`)).toBe('0');
 	expect(refCount('page', pageId)).toBe('0');
-	expect(refCount('note', noteRefId())).toBe('1');
+	expect(refCount('draft', psql(`select id from drafts where title = '${NOTE_TITLE}'`))).toBe('1');
 	expect(fileStatus()).toBe('attached');
 });
 
 test('publish keeps the reference set of the published body', async ({ page }) => {
 	const noteId = noteRefId();
+	const noteDraftId = psql(`select id from drafts where title = '${NOTE_TITLE}'`);
 	await page.goto(`/admin/notes/edit?id=${noteId}`);
 	await expect(page.locator('input[name="title"]')).toHaveValue(NOTE_TITLE, { timeout: 15000 });
 	// Empty-tooth guard (review): drop the reference the draft save wrote so
@@ -262,6 +286,12 @@ test('publish keeps the reference set of the published body', async ({ page }) =
 
 	expect(psql(`select count(*) from drafts where ref_id = '${noteId}'`)).toBe('0');
 	expect(refCount('note', noteId)).toBe('1');
+	// The draft's own refs left with the row (3b2).
+	expect(
+		psql(
+			`select count(*) from file_references where ref_type = 'draft' and ref_id = '${noteDraftId}'`
+		)
+	).toBe('0');
 	expect(fileStatus()).toBe('attached');
 });
 
@@ -295,9 +325,13 @@ test('dropping the image from the working content flips the file to detached (wi
 	});
 	await manualSave(page);
 
-	// "Draft drops the image -> detached -> TTL" (Q15 edge case); the mention
-	// scan remains the safety net until the published body stops mentioning it.
-	expect(refCount('note', noteId)).toBe('0');
-	expect(fileStatus()).toBe('detached');
-	expect(psql(`select detached_at is not null from files where object_key = '${KEY}'`)).toBe('t');
+	// 3b2 flip: the working copy's refs are its own - dropping the image from
+	// the DRAFT no longer detaches a file the PUBLISHED body still references
+	// (the interim 3b1 behavior did, protected only by the mention scan). The
+	// published identity keeps the key; the fresh working copy wrote nothing.
+	const workingDraftId = psql(`select id from drafts where ref_id = '${noteId}'`);
+	expect(refCount('draft', workingDraftId)).toBe('0');
+	expect(refCount('note', noteId)).toBe('1');
+	expect(fileStatus()).toBe('attached');
+	expect(psql(`select detached_at is not null from files where object_key = '${KEY}'`)).toBe('f');
 });
