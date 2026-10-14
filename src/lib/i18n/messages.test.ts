@@ -170,7 +170,9 @@ describe('paraglide message contract', () => {
 		expect(dynamic).toEqual([]);
 		// The walk reads every source file: on a loaded full-suite day it can
 		// exceed the 5s default (same family as the compiled-output check).
-	}, 15_000);
+		// The tree keeps growing (ST-3); the budget is deliberately generous so
+		// a slow transform phase cannot redden a healthy scan.
+	}, 30_000);
 
 	it('resolves every m.* usage in src to a key defined in every locale file', () => {
 		const localeMessages = Object.fromEntries(
