@@ -29,15 +29,28 @@ function byText(page: Page, text: string | RegExp): Locator {
 }
 
 function cleanup() {
+	// Fallback for a run that crashed after the draft rows were deleted:
+	// the drafts-side predicate below cannot see those refs any more, so
+	// also clear draft refs on this fixture's own files (file names come
+	// from the fixture payloads).
+	psql(
+		`delete from file_references fr using files f where fr.file_id = f.id and fr.ref_type = 'draft' and (f.file_name like 'e2e-upload%' or f.file_name like 'e2e-drop%')`
+	);
+	// 3b2: saving a draft writes file_references under the DRAFT's own
+	// identity; ref_id has no FK, so the rows must be deleted BEFORE their
+	// draft rows (or as orphans they feed audit check 4 on the dev DB).
+	// Mirrors the refs-lifecycle cleanup - keep the two in sync.
+	psql(
+		`delete from file_references where ref_type = 'draft' and ref_id in (select id from drafts where title ilike 'e2e editor uploads%' or ref_id in (select id from posts where slug like 'e2e-editor-uploads%'))`
+	);
 	psql(`delete from drafts where title ilike 'e2e editor uploads%'`);
 	psql(
 		`delete from drafts where ref_id in (select id from posts where slug like 'e2e-editor-uploads%')`
 	);
-	// 3b1+: saving a draft writes file_references; ref_id has no FK, so the
-	// rows must be cleaned explicitly or they linger as orphans on the dev
-	// DB. This spec never publishes, so its placeholder posts keep the
-	// `draft-` slug - match by title, same as the posts delete below
-	// (review round 2: the slug-only predicate matched zero rows).
+	// Historical post-identity rows (3b1 era / crashed runs): this spec
+	// never publishes, so its placeholder posts keep the `draft-` slug -
+	// match by title too (review round 2: the slug-only predicate matched
+	// zero rows).
 	psql(
 		`delete from file_references where ref_type = 'post' and ref_id in (select id from posts where slug like 'e2e-editor-uploads%' or title ilike 'e2e editor uploads%')`
 	);

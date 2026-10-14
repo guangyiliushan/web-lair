@@ -916,6 +916,33 @@ describe('alert json <-> markdown helpers', () => {
 		expect(normalizeMarkdownForImport('[ ]\r\n')).toBe('[ ] \n');
 	});
 
+	it('keeps a literal LF soft wrap as a linebreak, not a folded space (3b1 XC8-9)', () => {
+		// Probe-locked behaviour: the core import turns a soft wrap into a
+		// linebreak node, so the entity fold (which only touches text nodes)
+		// must leave it alone - and the round trip stays a fixed point.
+		const editor: LexicalEditor = createEditor({
+			namespace: 'markdown-transformers-test',
+			nodes: EDITOR_NODES,
+			onError: (error: Error) => {
+				throw error;
+			}
+		});
+		editor.update(
+			() => {
+				$convertFromMarkdownString(normalizeMarkdownForImport('a\nb\n'), EDITOR_TRANSFORMERS);
+				$unescapeImportedText();
+			},
+			{ discrete: true }
+		);
+		editor.getEditorState().read(() => {
+			expect($getRoot().getTextContent()).toBe('a\nb');
+		});
+		// The export drops the trailing newline; the soft wrap itself is the
+		// fixed point across further passes.
+		expect(roundtrip('a\nb\n')).toBe('a\nb');
+		expect(roundtrip('a\nb')).toBe('a\nb');
+	});
+
 	it('folds entity-carried CRs so the round trip is a fixed point', () => {
 		const editor: LexicalEditor = createEditor({
 			namespace: 'markdown-transformers-test',

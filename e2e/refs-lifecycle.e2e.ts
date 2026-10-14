@@ -37,6 +37,13 @@ function byText(page: Page, text: string | RegExp): Locator {
 }
 
 function cleanup() {
+	// Fallback for a run that crashed between deleting the draft rows and
+	// this cleanup: those draft refs cannot be found through the drafts
+	// subquery below any more, so also clear draft refs on this fixture's
+	// own files (file names come from the fixture payloads).
+	psql(
+		`delete from file_references fr using files f where fr.file_id = f.id and fr.ref_type = 'draft' and f.file_name like 'e2e-refs%'`
+	);
 	// Draft-identity refs go with their draft rows (3b2); clean them first so
 	// a crashed run cannot leave orphan reference rows behind.
 	psql(
@@ -172,7 +179,7 @@ function noteRefId(): string {
 	);
 }
 
-test('note draft autosave attaches the uploaded file and writes the note reference', async ({
+test('note draft autosave attaches the uploaded file under the DRAFT reference identity', async ({
 	page
 }) => {
 	await page.goto('/admin/notes/edit');
@@ -274,9 +281,10 @@ test('publish keeps the reference set of the published body', async ({ page }) =
 	const noteDraftId = psql(`select id from drafts where title = '${NOTE_TITLE}'`);
 	await page.goto(`/admin/notes/edit?id=${noteId}`);
 	await expect(page.locator('input[name="title"]')).toHaveValue(NOTE_TITLE, { timeout: 15000 });
-	// Empty-tooth guard (review): drop the reference the draft save wrote so
-	// only the publish sync can put it back - deleting the publish sync
-	// leaves this red.
+	// Empty-tooth guard (review): clear the note-identity set so only the
+	// publish sync can fill it - deleting the publish sync leaves this red.
+	// (3b2: draft saves write the DRAFT identity, so this delete only bites
+	// legacy note-identity rows; the refCount below reads on the result.)
 	psql(`delete from file_references where ref_type = 'note' and ref_id = '${noteId}'`);
 	expect(refCount('note', noteId)).toBe('0');
 	await expect(async () => {
@@ -295,7 +303,7 @@ test('publish keeps the reference set of the published body', async ({ page }) =
 	expect(fileStatus()).toBe('attached');
 });
 
-test('dropping the image from the working content flips the file to detached (with anchor)', async ({
+test('dropping the image from the working copy keeps the published reference attached', async ({
 	page
 }) => {
 	const noteId = noteRefId();
