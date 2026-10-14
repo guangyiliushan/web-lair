@@ -1,8 +1,7 @@
-import AxeBuilder from '@axe-core/playwright';
 import { expect, request, test } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
 import { OVERLAY_FIXTURE_KEYS } from './overlay-fixture-keys';
-import { ORIGIN, psql } from './support';
+import { expectNoCriticalAxe, ORIGIN, psql } from './support';
 
 /**
  * T11 for the overlay viewer v1.1 (plan §5.3; the carry-over items split out
@@ -94,9 +93,6 @@ function expectedCounter(slug: string): string {
 	const total = Number(psql(`select count(*) from photos where is_visible`));
 	return `${index} / ${total}`;
 }
-
-const CRITICAL = (violations: Array<{ impact?: string | null }>) =>
-	violations.filter((violation) => violation.impact === 'critical');
 
 test.describe.configure({ mode: 'serial', timeout: 240_000 });
 test.use(zhCnLocale);
@@ -302,12 +298,7 @@ test.describe('overlay viewer v1.1 (T11)', () => {
 		await page.goto(`/zh-cn/photos/${FIX}-mid`);
 		await page.getByRole('button', { name: '查看大图' }).click();
 		await expect(page.getByRole('dialog')).toBeVisible();
-		const results = await new AxeBuilder({ page }).analyze();
-		const summary = results.violations.map(
-			(violation) => `${violation.impact}: ${violation.id} (${violation.nodes.length})`
-		);
-		if (summary.length > 0) console.log('[axe:overlay]', summary.join(' | '));
-		expect(CRITICAL(results.violations), JSON.stringify(summary)).toEqual([]);
+		await expectNoCriticalAxe(page, 'overlay');
 		for (const control of [
 			page.getByRole('button', { name: '关闭查看器' }),
 			page.getByRole('button', { name: '上一张' }),

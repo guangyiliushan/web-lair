@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { execFileSync } from 'node:child_process';
 import { expect, type BrowserContext, type Page, type Response } from '@playwright/test';
 
@@ -157,4 +158,22 @@ export async function bootstrapReader(context: BrowserContext, email: string, pa
 	});
 	expect(signIn.ok()).toBeTruthy();
 	await page.close();
+}
+
+/**
+ * Axe gate for the content/overlay specs: zero critical violations, with the
+ * impact summary logged so a serious/moderate drift stays visible. One home
+ * for the filter copy (review 3d, 03 P3-7 - the two specs carried verbatim
+ * copies).
+ */
+export async function expectNoCriticalAxe(page: Page, label: string): Promise<void> {
+	const results = await new AxeBuilder({ page }).analyze();
+	const summary = results.violations.map(
+		(violation) => `${violation.impact}: ${violation.id} (${violation.nodes.length})`
+	);
+	if (summary.length > 0) console.log(`[axe:${label}]`, summary.join(' | '));
+	expect(
+		results.violations.filter((violation) => violation.impact === 'critical'),
+		JSON.stringify(summary)
+	).toEqual([]);
 }
