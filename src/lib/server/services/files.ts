@@ -1,6 +1,18 @@
 import { createHash } from 'node:crypto';
-import { and, desc, eq, inArray, like, sql } from 'drizzle-orm';
-import { drafts, files, notes, pages, photos, posts } from '$lib/server/db/content';
+import {
+	and,
+	count,
+	desc,
+	eq,
+	exists,
+	inArray,
+	like,
+	notExists,
+	notInArray,
+	or,
+	sql
+} from 'drizzle-orm';
+import { comments, drafts, files, notes, pages, photos, posts } from '$lib/server/db/content';
 import type { FileStatus } from '$lib/server/db/content/file.schema';
 import { fileReferences } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
@@ -731,9 +743,23 @@ export interface MediaAuditReport {
 	brokenLinks: BrokenLink[];
 	/** ③ registry row exists but the object is absent from storage. */
 	missingObjects: MissingObject[];
+	/** ④ reference-table drift + orphan rows (3b2 backfill reconciliation). */
+	referenceDrift: ReferenceDrift;
 	scannedSources: { posts: number; drafts: number; notes: number; pages: number };
 	/** True when any scan hit its row cap — results may be incomplete. */
 	truncated: boolean;
+}
+
+/** Check ④ (ST-3 3b2): the reference table must stay consistent with the flip
+ * matrix - flags states the write side cannot produce (a crashed or legacy
+ * run) and rows whose target vanished without the deletion hook. */
+export interface ReferenceDrift {
+	/** refs>0 but status='detached' (a flip was skipped). */
+	detachedWithRefs: number;
+	/** status='attached' but refs=0 (a detach was skipped). */
+	attachedWithoutRefs: number;
+	/** file_references rows whose target row no longer exists. */
+	orphanRefs: number;
 }
 
 interface MentionScan {
@@ -846,11 +872,77 @@ export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditRep
 		if (!head) missingObjects.push(row);
 	}
 
+	// ④ Reference-table drift (3b2). Orphans are checked per ref_type: a row
+	// pointing at a deleted target means a deletion hook was missed; the two
+	// status counters flag flip-matrix violations the write side cannot
+	// produce (crash/legacy intermediate states). Expressed through the same
+	// select surface as the rest of the audit (no raw execute), so the
+	// FilesDb contract stays as it was.
+	const refExists = () =>
+		exists(
+			database
+				.select({ one: sql`1` })
+				.from(fileReferences)
+				.where(eq(fileReferences.fileId, files.id))
+		);
+	const [detachedRows] = [
+		await database
+			.select({ n: count() })
+			.from(files)
+			.where(and(eq(files.status, 'detached'), refExists()))
+	];
+	const [attachedRows] = [
+		await database
+			.select({ n: count() })
+			.from(files)
+			.where(
+				and(
+					eq(files.status, 'attached'),
+					notExists(
+						database
+							.select({ one: sql`1` })
+							.from(fileReferences)
+							.where(eq(fileReferences.fileId, files.id))
+					)
+				)
+			)
+	];
+	const targetGone = (
+		table: typeof posts | typeof notes | typeof pages | typeof drafts | typeof comments
+	) =>
+		notExists(
+			database
+				.select({ one: sql`1` })
+				.from(table)
+				.where(eq(table.id, fileReferences.refId))
+		);
+	const [orphanRows] = [
+		await database
+			.select({ n: count() })
+			.from(fileReferences)
+			.where(
+				or(
+					and(eq(fileReferences.refType, 'post'), targetGone(posts)),
+					and(eq(fileReferences.refType, 'note'), targetGone(notes)),
+					and(eq(fileReferences.refType, 'page'), targetGone(pages)),
+					and(eq(fileReferences.refType, 'draft'), targetGone(drafts)),
+					and(eq(fileReferences.refType, 'comment'), targetGone(comments)),
+					notInArray(fileReferences.refType, ['post', 'note', 'page', 'draft', 'comment'])
+				)
+			)
+	];
+	const referenceDrift: ReferenceDrift = {
+		detachedWithRefs: Number(detachedRows?.[0]?.n ?? 0),
+		attachedWithoutRefs: Number(attachedRows?.[0]?.n ?? 0),
+		orphanRefs: Number(orphanRows?.[0]?.n ?? 0)
+	};
+
 	return {
 		generatedAt: new Date().toISOString(),
 		orphans: await listPurgeCandidates({ storage, db: database }),
 		brokenLinks,
 		missingObjects,
+		referenceDrift,
 		scannedSources: counts,
 		truncated: sourcesTruncated || registryRows.length >= SCAN_LIMIT
 	};

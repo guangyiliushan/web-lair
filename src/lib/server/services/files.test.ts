@@ -895,6 +895,12 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 		);
 		dbMock.select.mockReturnValueOnce(selectChain([])); // known keys: none
 		dbMock.select.mockReturnValueOnce(selectChain([])); // registry rows: none
+		// Drift check ④: every counter builds one outer select plus its
+		// subquery builder(s) - 10 selects in call order (counts live in the
+		// outer slots; the subquery results are never awaited).
+		for (let index = 0; index < 10; index += 1) {
+			dbMock.select.mockReturnValueOnce(selectChain([]));
+		}
 		dbMock.select.mockReturnValueOnce(selectChain([])); // purge candidates: none
 
 		const report = await runMediaAudit({ storage: storageMock });
@@ -902,5 +908,38 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 		expect(report.brokenLinks).toEqual([{ refType: 'page', refId: 'page-1', key: duplicateKey }]);
 		expect(report.scannedSources.pages).toBe(1);
 		expect(report.truncated).toBe(false);
+		expect(report.referenceDrift).toEqual({
+			detachedWithRefs: 0,
+			attachedWithoutRefs: 0,
+			orphanRefs: 0
+		});
+	});
+
+	it('audit check ④ surfaces reference drift counters (3b2)', async () => {
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([])); // registry rows: none
+		// Drift check ④ slots in call order: detached outer, detached subquery,
+		// attached outer, attached subquery, orphan outer, then the five
+		// targetGone subqueries (posts/notes/pages/drafts/comments).
+		dbMock.select.mockReturnValueOnce(selectChain([{ n: '2' }]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ n: '1' }]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ n: '3' }]));
+		for (let index = 0; index < 5; index += 1) {
+			dbMock.select.mockReturnValueOnce(selectChain([]));
+		}
+		dbMock.select.mockReturnValueOnce(selectChain([])); // purge candidates: none
+
+		const report = await runMediaAudit({ storage: storageMock });
+
+		expect(report.referenceDrift).toEqual({
+			detachedWithRefs: 2,
+			attachedWithoutRefs: 1,
+			orphanRefs: 3
+		});
 	});
 });

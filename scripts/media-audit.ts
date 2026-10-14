@@ -51,8 +51,18 @@ console.log(`  missing (row present, object absent): ${report.missingObjects.len
 for (const row of report.missingObjects) {
 	console.log(`      - ${row.objectKey}  (${row.fileName})`);
 }
+const drift = report.referenceDrift;
+console.log(
+	`  drift   refs (3b2): detached+refs=${drift.detachedWithRefs} attached+no-refs=${drift.attachedWithoutRefs} orphan-refs=${drift.orphanRefs}`
+);
 
-const findings = report.orphans.length + report.brokenLinks.length + report.missingObjects.length;
+const findings =
+	report.orphans.length +
+	report.brokenLinks.length +
+	report.missingObjects.length +
+	drift.detachedWithRefs +
+	drift.attachedWithoutRefs +
+	drift.orphanRefs;
 if (findings === 0) {
 	console.log('clean.');
 } else {

@@ -39,6 +39,7 @@
 		"db:ensure-org": "tsx --env-file=.env scripts/ensure-site-org.ts",
 		"db:verify-review": "tsx --env-file=.env scripts/verify-review-idempotency.ts",
 		"db:verify-baseline": "tsx --env-file-if-exists=.env scripts/verify-baseline.ts",
+		"db:backfill-refs": "tsx --env-file=.env scripts/backfill-file-references.ts",
 		"db:verify-jobs": "tsx --env-file=.env scripts/verify-jobs-drain.ts",
 		"jobs:drain": "node --env-file=.env jobs/drain.ts",
 		"jobs:enqueue": "node --env-file=.env scripts/jobs-enqueue.ts",
