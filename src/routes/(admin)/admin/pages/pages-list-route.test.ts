@@ -3,13 +3,14 @@ import { sql } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Route-level tests for the P2 pages admin (T6 unit side): the chrome order +
- * locale-fallback title in load, the ▲/▼ swap as a full renumber inside one
- * locked transaction, the cross-group/edge no-ops, the status whitelist, the
- * delete guards (uuid / default protection / locked re-check) and the
- * guard-order binding. The db module is mocked with a recording chain so a
- * dropped WHERE, a dropped lock, a wrong order or an unprotected default
- * turns red.
+ * Route-level tests for the P2 pages admin (T6 unit side) and the P5-3
+ * create action: the chrome order + locale-fallback title in load, the ▲/▼
+ * swap as a full renumber inside one locked transaction, the cross-group/edge
+ * no-ops, the status whitelist, the delete guards (uuid / default protection /
+ * locked re-check), the guard-order binding, and the direct external-entry
+ * insert (no draft). The db module is mocked with a recording chain so a
+ * dropped WHERE, a dropped lock, a wrong order, an unprotected default or an
+ * unvalidated create turns red.
  */
 const { dbMock, state, service, syncCheck } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -22,6 +23,8 @@ const { dbMock, state, service, syncCheck } = vi.hoisted(() => ({
 		statusUpdates: [] as { values: Record<string, unknown>; target: string }[],
 		forCalls: [] as unknown[],
 		deletes: [] as unknown[],
+		inserts: [] as { values: Record<string, unknown> }[],
+		nextThrow: null as unknown,
 		tx: null as unknown
 	},
 	service: { requireAdminRole: vi.fn() }
@@ -32,6 +35,11 @@ vi.mock('$lib/server/authz', () => ({ requireAdminRole: service.requireAdminRole
 // The reference cleanup runs inside the delete transaction; its own teeth
 // live in file-references.test.ts - here we pin that a hard delete calls it.
 vi.mock('$lib/server/services/file-references', () => ({ syncFileReferences: syncCheck }));
+// The draft- prefix guard for「新增」外链 (P5-3) lives in the draft service;
+// its own teeth live in page-drafts.test.ts.
+vi.mock('$lib/server/services/page-drafts', () => ({
+	isPagePlaceholderSlug: (slug: string) => slug.startsWith('draft-')
+}));
 vi.mock('$lib/paraglide/runtime', () => ({
 	getLocale: () => 'en',
 	locales: ['en', 'zh-cn', 'ja'],
@@ -98,10 +106,27 @@ describe('admin pages list (P2)', () => {
 		state.statusUpdates = [];
 		state.forCalls = [];
 		state.deletes = [];
+		state.inserts = [];
+		state.nextThrow = null;
 		service.requireAdminRole.mockClear();
 		syncCheck.mockClear();
 		Object.assign(dbMock, {
 			select: vi.fn(() => selectChain()),
+			insert: vi.fn(() => ({
+				values: vi.fn((values: Record<string, unknown>) => {
+					state.inserts.push({ values });
+					return {
+						returning: vi.fn(async () => {
+							if (state.nextThrow) {
+								const thrown = state.nextThrow;
+								state.nextThrow = null;
+								throw thrown;
+							}
+							return state.returningQueue.shift() ?? [];
+						})
+					};
+				})
+			})),
 			update: vi.fn(() => ({
 				set: vi.fn((values: Record<string, unknown>) => ({
 					where: vi.fn((cond: unknown) => {
@@ -292,5 +317,84 @@ describe('admin pages list (P2)', () => {
 		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toMatchObject({
 			status: 404
 		});
+	});
+});
+
+describe('admin pages list · create external entry (P5-3)', () => {
+	beforeEach(() => {
+		state.inserts = [];
+		state.returningQueue = [];
+		state.nextThrow = null;
+		service.requireAdminRole.mockClear();
+		syncCheck.mockClear();
+		Object.assign(dbMock, {
+			insert: vi.fn(() => ({
+				values: vi.fn((values: Record<string, unknown>) => {
+					state.inserts.push({ values });
+					return {
+						returning: vi.fn(async () => {
+							if (state.nextThrow) {
+								const thrown = state.nextThrow;
+								state.nextThrow = null;
+								throw thrown;
+							}
+							return state.returningQueue.shift() ?? [];
+						})
+					};
+				})
+			}))
+		});
+	});
+
+	it('inserts a direct external row after the validation chain (no draft)', async () => {
+		state.returningQueue = [[{ id: PAGE_ID }]];
+		const result = await actions.create!(
+			formEvent({
+				'title_zh-cn': ' 买杯咖啡 ',
+				slug: ' Buy-Me-a-Coffee ',
+				icon: 'coffee',
+				externalUrl: ' https://ko-fi.example/me ',
+				description_en: ' Thanks '
+			}) as never
+		);
+		expect(result).toMatchObject({ success: true, id: PAGE_ID });
+		expect(service.requireAdminRole).toHaveBeenCalledTimes(1);
+		expect(state.inserts).toHaveLength(1);
+		expect(state.inserts[0].values).toEqual({
+			title: { 'zh-cn': '买杯咖啡' },
+			description: { en: 'Thanks' },
+			icon: 'coffee',
+			externalUrl: 'https://ko-fi.example/me',
+			slug: 'buy-me-a-coffee',
+			status: 'visible',
+			contentFormat: 'markdown'
+		});
+	});
+
+	it('rejects every invalid create payload before touching the insert', async () => {
+		const cases: Record<string, string>[] = [
+			{ title_en: '  ', slug: 'x', externalUrl: 'https://x.example' }, // title
+			{ title_en: 'X', slug: '', externalUrl: 'https://x.example' }, // slug required
+			// 'bad_Slug' lowercases to 'bad_slug'; the underscore still fails the charset.
+			{ title_en: 'X', slug: 'bad_Slug', externalUrl: 'https://x.example' }, // slug charset
+			{ title_en: 'X', slug: 'admin', externalUrl: 'https://x.example' }, // reserved
+			{ title_en: 'X', slug: 'draft-taken', externalUrl: 'https://x.example' }, // draft- prefix
+			{ title_en: 'X', slug: 'ok', icon: 'evil', externalUrl: 'https://x.example' }, // icon
+			{ title_en: 'X', slug: 'ok' }, // external URL missing
+			{ title_en: 'X', slug: 'ok', externalUrl: 'ftp://x' } // external URL scheme
+		];
+		for (const fields of cases) {
+			const result = await actions.create!(formEvent(fields) as never);
+			expect(result, JSON.stringify(fields)).toMatchObject({ status: 400 });
+		}
+		expect(state.inserts).toHaveLength(0);
+	});
+
+	it('maps a duplicate slug to a 409 conflict', async () => {
+		state.nextThrow = Object.assign(new Error('duplicate key'), { code: '23505' });
+		const result = await actions.create!(
+			formEvent({ title_en: 'X', slug: 'taken', externalUrl: 'https://x.example' }) as never
+		);
+		expect(result).toMatchObject({ status: 409 });
 	});
 });

@@ -37,19 +37,24 @@ const LOCALES = ['en', 'zh-cn', 'ja'] as const;
 export const load: PageServerLoad = async ({ url }) => {
 	await requireAdminRole();
 
+	// ?id= loads an existing row; WITHOUT it the page is new (P5-3): the
+	// editor materializes the placeholder row on the first draft save
+	// (auto-draft, mirroring the notes editor).
 	const id = url.searchParams.get('id');
-	if (!id || !isUuid(id)) error(404, m.admin_pages_err_not_found());
+	if (id && !isUuid(id)) error(404, m.admin_pages_err_not_found());
 
-	const [row] = await db.select().from(pages).where(eq(pages.id, id)).limit(1);
-	if (!row) error(404, m.admin_pages_err_not_found());
-
-	const [draftRow, defaultLangOption] = await Promise.all([
-		loadPageDraftByPageId(row.id),
-		getOption('site.default_lang')
-	]);
+	const defaultLangOption = await getOption('site.default_lang');
 	const defaultLang = (LOCALES as readonly string[]).includes(defaultLangOption)
 		? defaultLangOption
 		: LOCALES[0];
+
+	let row: typeof pages.$inferSelect | null = null;
+	let draftRow: Awaited<ReturnType<typeof loadPageDraftByPageId>> = null;
+	if (id) {
+		[row] = await db.select().from(pages).where(eq(pages.id, id)).limit(1);
+		if (!row) error(404, m.admin_pages_err_not_found());
+		draftRow = await loadPageDraftByPageId(row.id);
+	}
 
 	return {
 		headerTitle: m.admin_pages_edit_title(),
@@ -63,19 +68,37 @@ export const load: PageServerLoad = async ({ url }) => {
 		],
 		langs: [...LOCALES],
 		defaultLang,
-		page: {
-			id: row.id,
-			slug: row.slug,
-			title: row.title,
-			description: row.description ?? {},
-			icon: row.icon ?? '',
-			externalUrl: row.externalUrl ?? '',
-			isDefault: row.isDefault,
-			status: row.status,
-			hasContent: row.content !== null,
-			placeholder: isPagePlaceholderSlug(row.slug),
-			updatedAt: row.updatedAt
-		},
+		page: row
+			? {
+					id: row.id,
+					slug: row.slug,
+					title: row.title,
+					description: row.description ?? {},
+					icon: row.icon ?? '',
+					externalUrl: row.externalUrl ?? '',
+					isDefault: row.isDefault,
+					status: row.status,
+					hasContent: row.content !== null,
+					placeholder: isPagePlaceholderSlug(row.slug),
+					newPage: false,
+					updatedAt: row.updatedAt
+				}
+			: {
+					// New-mode virtual target (P5-3): the editor runs on an
+					// empty payload; the first draft save materializes the row.
+					id: '',
+					slug: '',
+					title: {} as LocalizedText,
+					description: {} as LocalizedText,
+					icon: '',
+					externalUrl: '',
+					isDefault: false,
+					status: 'hidden',
+					hasContent: false,
+					placeholder: true,
+					newPage: true,
+					updatedAt: null
+				},
 		draft: draftRow
 			? {
 					id: draftRow.id,

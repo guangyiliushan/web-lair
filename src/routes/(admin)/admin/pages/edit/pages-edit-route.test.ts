@@ -477,4 +477,27 @@ describe('pages editor · load', () => {
 		await expect(load(loadEvent(PAGE_ID))).rejects.toMatchObject({ status: 404 });
 		expect(service.loadPageDraftByPageId).not.toHaveBeenCalled();
 	});
+
+	it('answers new-mode (no id) with a virtual editor target (P5-3)', async () => {
+		const data = (await load(loadEvent())) as {
+			page: Record<string, unknown>;
+			draft: unknown;
+			defaultLang: string;
+		};
+		expect(service.requireAdminRole).toHaveBeenCalledTimes(1);
+		expect(data.page).toMatchObject({
+			id: '',
+			newPage: true,
+			placeholder: true,
+			hasContent: false,
+			status: 'hidden',
+			isDefault: false,
+			updatedAt: null
+		});
+		expect(data.draft).toBeNull();
+		// The virtual target never touches the database or the draft service.
+		expect(dbMock.select).not.toHaveBeenCalled();
+		expect(service.loadPageDraftByPageId).not.toHaveBeenCalled();
+		expect(data.defaultLang).toBe('en');
+	});
 });

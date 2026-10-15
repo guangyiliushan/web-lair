@@ -768,14 +768,15 @@
 		{
 			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
-				"countPlural=one": "{count} page total · the default page is pinned first, the rest follow their sort values. “New” opens with the md editor batch (P5).",
-				"countPlural=other": "{count} pages total · the default page is pinned first, the rest follow their sort values. “New” opens with the md editor batch (P5)."
+				"countPlural=one": "{count} page total · the default page is pinned first, the rest follow their sort values.",
+				"countPlural=other": "{count} pages total · the default page is pinned first, the rest follow their sort values."
 			},
 			"selectors": ["countPlural"]
 		}
 	],
 	"admin_pages_internal": "Internal",
 	"admin_pages_md_page": "md page",
+	"admin_pages_new_external": "New external entry",
 	"admin_pages_saved": "Saved.",
 	"admin_pages_seed_missing": "Seed pages are missing — run db:ensure-pages to restore the default two pages.",
 	"admin_pages_show": "Show",

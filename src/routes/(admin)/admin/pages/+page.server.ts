@@ -4,17 +4,28 @@ import { getLocale } from '$lib/paraglide/runtime';
 import { db } from '$lib/server/db';
 import { pages } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
+import { pgErrorCode } from '$lib/server/db/pg-error';
 import { resolveLocalized } from '$lib/server/services/pages';
+import { isPagePlaceholderSlug } from '$lib/server/services/page-drafts';
 import { syncFileReferences } from '$lib/server/services/file-references';
+import { NAV_ICON_NAMES } from '$lib/config/nav-icons';
+import { isReservedPageSlug } from '$lib/utils/page-meta';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const LOCALES = ['en', 'zh-cn', 'ja'] as const;
+
 /**
  * Pages admin v1 (P2, plan §4): the registry list with ▲/▼ reordering,
- * visible/hidden toggling and confirmed deletion. "New" stays with P5 (the
- * md editor); `is_default` rows are protected here (no delete) and keep a
- * read-only slug in the editor (db:ensure-pages anchors on the slug).
+ * visible/hidden toggling and confirmed deletion. 「New」 was withheld for P5
+ * and lands here as P5-3: the md type starts in the draft editor
+ * (`/admin/pages/edit` without an id - the editor materializes the placeholder
+ * row on its first save), the external entry inserts DIRECTLY from the list
+ * dialog (`?/create`, no draft - ledger §19.10). `is_default` rows stay
+ * protected (no delete) and keep a read-only slug in the editor
+ * (db:ensure-pages anchors on the slug).
  */
 export const load: PageServerLoad = async () => {
 	await requireAdminRole();
@@ -48,7 +59,73 @@ function str(form: FormData, key: string): string {
 	return (form.get(key) ?? '').toString();
 }
 
+function localizedFrom(form: FormData, prefix: string): Record<string, string> {
+	const result: Record<string, string> = {};
+	for (const locale of LOCALES) {
+		const value = str(form, `${prefix}_${locale}`).trim();
+		if (value !== '') result[locale] = value;
+	}
+	return result;
+}
+
 export const actions: Actions = {
+	/**
+	 * 「新增」外链条目 (P5-3): direct insert, no draft - the row IS the content
+	 * registry entry (external_url + optionally a code-route registration on
+	 * the site side). The md type never reaches this action: it starts in the
+	 * draft editor instead.
+	 */
+	create: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+
+		const title = localizedFrom(form, 'title');
+		if (Object.keys(title).length === 0)
+			return fail(400, { error: m.admin_pages_err_title_required() });
+
+		const slug = str(form, 'slug').trim().toLowerCase();
+		if (!slug) return fail(400, { error: m.admin_pages_err_slug_required() });
+		if (!SLUG_RE.test(slug)) return fail(400, { error: m.admin_pages_err_bad_slug() });
+		if (isReservedPageSlug(slug)) return fail(400, { error: m.admin_pages_err_slug_reserved() });
+		// The draft- prefix is reserved for never-published placeholder rows.
+		if (isPagePlaceholderSlug(slug))
+			return fail(400, { error: m.admin_editor_err_slug_reserved_prefix() });
+
+		const icon = str(form, 'icon').trim();
+		if (icon !== '' && !(NAV_ICON_NAMES as readonly string[]).includes(icon)) {
+			return fail(400, { error: m.admin_pages_err_icon_whitelist() });
+		}
+		// An external entry without its URL would be a dead menu item.
+		const externalUrl = str(form, 'externalUrl').trim();
+		if (!externalUrl || !/^https?:\/\//.test(externalUrl)) {
+			return fail(400, { error: m.admin_pages_err_bad_external() });
+		}
+
+		const description = localizedFrom(form, 'description');
+
+		try {
+			const [created] = await db
+				.insert(pages)
+				.values({
+					title,
+					description: Object.keys(description).length > 0 ? description : null,
+					icon: icon === '' ? null : icon,
+					externalUrl,
+					slug,
+					status: 'visible',
+					// content stays null: external entries are registry rows
+					// (and content_format has no DB default).
+					contentFormat: 'markdown'
+				})
+				.returning({ id: pages.id });
+			return { success: true, id: created.id };
+		} catch (caught) {
+			// Only a unique violation is a user-visible conflict (topics pattern).
+			if (pgErrorCode(caught) !== '23505') throw caught;
+			return fail(409, { error: m.admin_pages_err_slug_taken() });
+		}
+	},
+
 	/**
 	 * ▲/▼: full-list renumber inside one transaction. The locking read
 	 * serializes concurrent moves (P2 review); cross-group targets - the

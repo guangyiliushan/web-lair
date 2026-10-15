@@ -1,14 +1,19 @@
 <script lang="ts">
-	import { invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
 	import * as Table from '$lib/components/ui/table';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Empty } from '$lib/components/ui/empty';
 	import { RefreshButton } from '$lib/components/admin/refresh-button';
 	import { Separator } from '$lib/components/ui/separator';
 	import { formatDateTime } from '$lib/utils/i18n';
+	import { locales } from '$lib/paraglide/runtime';
+	import { localeLabels } from '$lib/stores/locale.svelte';
 	import type { PageData } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
@@ -17,9 +22,18 @@
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconArrowUp from '@tabler/icons-svelte-runes/icons/arrow-up';
 	import IconArrowDown from '@tabler/icons-svelte-runes/icons/arrow-down';
+	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 
 	let { data, form }: { data: PageData; form: { success?: boolean; error?: string } | null } =
 		$props();
+
+	/** Locale rows for the external-entry dialog (same shape as the editor). */
+	const LOCALES = locales.map((code) => ({ code, label: localeLabels[code] }));
+
+	/** 「新增」双类型 (P5-3): the md type starts in the draft editor; the
+	 * external entry inserts directly from the dialog below (no draft). */
+	let createExternalOpen = $state(false);
+	let creating = $state(false);
 
 	type PageRow = (typeof data.pages)[number];
 
@@ -59,7 +73,27 @@
 		<div class="min-w-0 flex-1 truncate text-xs text-muted-foreground">
 			{m.admin_pages_hint({ count: data.pages.length })}
 		</div>
-		<div class="absolute top-0 right-0 flex h-full items-center pr-2">
+		<div class="absolute top-0 right-0 flex h-full items-center gap-1.5 pr-2">
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger>
+					{#snippet child({ props })}
+						<Button {...props} size="sm" variant="outline" class="h-7 gap-1 px-2.5 text-xs">
+							<IconPlus class="size-3" />
+							{m.admin_common_new()}
+						</Button>
+					{/snippet}
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="end">
+					<DropdownMenu.Group>
+						<DropdownMenu.Item onSelect={() => goto('/admin/pages/edit')}>
+							{m.admin_pages_md_page()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onSelect={() => (createExternalOpen = true)}>
+							{m.admin_pages_external()}
+						</DropdownMenu.Item>
+					</DropdownMenu.Group>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
 			<Separator orientation="vertical" class="h-3.5" />
 			<RefreshButton
 				onclick={() => {
@@ -306,3 +340,83 @@
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>
+
+<!-- External-entry dialog (P5-3): direct insert, no draft -->
+<Dialog.Root
+	open={createExternalOpen}
+	onOpenChange={(open) => !open && (createExternalOpen = false)}
+>
+	<Dialog.Portal>
+		<Dialog.Overlay />
+		<Dialog.Content class="sm:max-w-lg">
+			<Dialog.Header>
+				<Dialog.Title>{m.admin_pages_new_external()}</Dialog.Title>
+			</Dialog.Header>
+			<form
+				method="POST"
+				action="?/create"
+				use:enhance={() => {
+					creating = true;
+					return async ({ result, update }) => {
+						await update();
+						creating = false;
+						if (result.type === 'success') {
+							createExternalOpen = false;
+							invalidateAll();
+						}
+					};
+				}}
+				class="flex flex-col gap-4 px-6 pb-6"
+			>
+				<section class="flex flex-col gap-2">
+					<h3 class="text-sm font-semibold">{m.admin_pages_edit_title_section()}</h3>
+					{#each LOCALES as locale (locale.code)}
+						<div class="flex items-center gap-3">
+							<span class="w-16 shrink-0 text-xs text-muted-foreground">{locale.label}</span>
+							<Input name="title_{locale.code}" />
+						</div>
+					{/each}
+				</section>
+				<section class="flex flex-col gap-2">
+					<h3 class="text-sm font-semibold">{m.admin_pages_edit_desc_section()}</h3>
+					{#each LOCALES as locale (locale.code)}
+						<div class="flex items-center gap-3">
+							<span class="w-16 shrink-0 text-xs text-muted-foreground">{locale.label}</span>
+							<Input name="description_{locale.code}" />
+						</div>
+					{/each}
+				</section>
+				<section class="flex flex-col gap-2">
+					<h3 class="text-sm font-semibold">{m.admin_pages_edit_props()}</h3>
+					<div class="flex items-center gap-3">
+						<span class="w-16 shrink-0 text-xs text-muted-foreground"
+							>{m.admin_pages_edit_icon()}</span
+						>
+						<Input name="icon" placeholder={m.admin_pages_edit_icon_ph()} />
+					</div>
+					<div class="flex items-center gap-3">
+						<span class="w-16 shrink-0 text-xs text-muted-foreground"
+							>{m.admin_pages_edit_external()}</span
+						>
+						<Input name="externalUrl" placeholder={m.admin_pages_edit_external_ph()} />
+					</div>
+					<div class="flex items-center gap-3">
+						<span class="w-16 shrink-0 text-xs text-muted-foreground">Slug</span>
+						<Input name="slug" class="font-mono" placeholder="my-link" />
+					</div>
+				</section>
+				{#if form?.error}
+					<p class="text-sm text-destructive">{form.error}</p>
+				{/if}
+				<Dialog.Footer>
+					<Dialog.Close>
+						{#snippet child({ props })}
+							<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
+						{/snippet}
+					</Dialog.Close>
+					<Button type="submit" disabled={creating}>{m.admin_common_save()}</Button>
+				</Dialog.Footer>
+			</form>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

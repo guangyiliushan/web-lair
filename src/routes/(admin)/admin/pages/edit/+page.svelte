@@ -52,7 +52,7 @@
 	/** Locale list for the P2 metadata form (label objects). */
 	const LOCALES = locales.map((code) => ({ code, label: localeLabels[code] }));
 
-	const editMode = $derived(data.page.hasContent);
+	const editMode = $derived(data.page.hasContent || data.page.newPage);
 
 	// ── Draft-editor state ───────────────────────────────────────────────
 	let titleMap = $state<Record<string, string>>({});
@@ -475,6 +475,13 @@
 		return m.admin_pages_visible();
 	});
 
+	/** New pages carry no row yet: the modified stamp is skipped entirely. */
+	const updatedLabel = $derived(
+		data.page.updatedAt
+			? formatDateTime(new Date(data.page.updatedAt), { dateStyle: 'short', timeStyle: 'short' })
+			: null
+	);
+
 	const heading = $derived(titleMap[activeLocale] || '');
 
 	let beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
@@ -540,11 +547,10 @@
 						></span>
 						<span class="truncate">
 							{statusText}
-							{m.admin_posts_edit_modified()}
-							{formatDateTime(new Date(data.page.updatedAt), {
-								dateStyle: 'short',
-								timeStyle: 'short'
-							})}
+							{#if updatedLabel}
+								{m.admin_posts_edit_modified()}
+								{updatedLabel}
+							{/if}
 						</span>
 						{#if data.draft && !data.page.placeholder}
 							<Badge variant="secondary" class="shrink-0"
@@ -569,16 +575,18 @@
 								{saveLabel}
 							</span>
 						{/if}
-						<!-- Properties (icon / external_url) button -->
-						<button
-							type="button"
-							onclick={() => (settingsOpen = true)}
-							class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-							aria-label={m.admin_pages_edit_props()}
-							title={m.admin_pages_edit_props()}
-						>
-							<IconSettings class="size-3.5" />
-						</button>
+						<!-- Properties (icon / external_url) button (real rows only) -->
+						{#if pageId}
+							<button
+								type="button"
+								onclick={() => (settingsOpen = true)}
+								class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+								aria-label={m.admin_pages_edit_props()}
+								title={m.admin_pages_edit_props()}
+							>
+								<IconSettings class="size-3.5" />
+							</button>
+						{/if}
 						<Button
 							type="button"
 							variant="outline"
@@ -618,9 +626,11 @@
 						</Button>
 					{/each}
 					<span class="mx-1 h-4 w-px bg-border"></span>
-					<Badge variant={data.page.isDefault ? 'secondary' : 'outline'} class="text-xs">
-						{data.page.isDefault ? m.admin_pages_default_page() : m.admin_pages_extra_page()}
-					</Badge>
+					{#if !data.page.newPage}
+						<Badge variant={data.page.isDefault ? 'secondary' : 'outline'} class="text-xs">
+							{data.page.isDefault ? m.admin_pages_default_page() : m.admin_pages_extra_page()}
+						</Badge>
+					{/if}
 					<Badge variant="outline" class="text-xs">{m.admin_pages_md_page()}</Badge>
 				</div>
 
