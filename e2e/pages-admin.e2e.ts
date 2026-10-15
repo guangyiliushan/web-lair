@@ -54,6 +54,10 @@ function cleanup(): void {
 }
 
 test.beforeAll(() => {
+	// Locale premise (三审 G4): the draft titles land in the default-language
+	// slot; pin it once for the whole (serial) file so a default_lang drift
+	// fails at the start instead of surfacing as scattered assertion diffs.
+	expect(psql(`select value from options where name = 'site.default_lang'`) || '').toBe('en');
 	cleanup();
 	psql(
 		`insert into pages (slug, title, description, icon, external_url, status, sort_order, is_default, content, content_format) values ('${SLUG_A}', '{"en":"${TITLE_A}","zh-cn":"${TITLE_A_ZH}"}'::jsonb, null, null, null, 'visible', 0, false, '{"en":"# E2E admin body A","zh-cn":"# E2E 管理页甲正文"}'::jsonb, 'markdown')`
@@ -392,11 +396,6 @@ test('creating an md page end-to-end: dual locale, save, publish, render', async
 });
 
 test('a never-published placeholder reopens in the draft editor (B1)', async ({ page }) => {
-	// Locale premise (R2-7): the title lands in the default-language slot;
-	// pin it so a default_lang drift fails loud instead of leaking fixtures
-	// behind the `->>'en'` lookup.
-	expect(psql(`select value from options where name = 'site.default_lang'`) || '').toBe('en');
-
 	await page.goto('/admin/pages');
 	await expect(async () => {
 		await page.getByRole('button', { name: '新建' }).click();
@@ -423,11 +422,13 @@ test('a never-published placeholder reopens in the draft editor (B1)', async ({ 
 	});
 	await expect(titleInput).toHaveValue('E2E Admin Reload', { timeout: 15_000 });
 	await expect(page.getByRole('button', { name: '发布' })).toBeVisible();
-	// The retired P2 form's own submit ("保存", exact) must not render.
-	await expect(page.getByRole('button', { name: '保存', exact: true })).toHaveCount(0);
+	// The P2 metadata form must not render for this row: its (unreached)
+	// title field is the structural probe (三审 F3) - copy-free, unlike the
+	// "保存" button that stays hidden only behind the closed Sheet.
+	await expect(page.locator('input[name="title_en"]')).toHaveCount(0);
 
 	const pageId = psql(
-		`select ref_id from drafts where ref_type = 'page' and payload->'title'->>'en' = 'E2E Admin Reload'`
+		`select ref_id from drafts where ref_type = 'page' and payload::text like '%E2E Admin Reload%'`
 	);
 	expect(pageId).not.toBe('');
 	expect(psql(`select slug from pages where id = '${pageId}'`)).toMatch(/^draft-/);

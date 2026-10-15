@@ -25,6 +25,7 @@ const { dbMock, state, service, syncCheck } = vi.hoisted(() => ({
 		forCalls: [] as unknown[],
 		deletes: [] as { table?: unknown; cond: unknown }[],
 		deleteResults: [] as unknown[][],
+		deleteThrow: null as unknown,
 		inserts: [] as { values: Record<string, unknown> }[],
 		nextThrow: null as unknown,
 		tx: null as unknown
@@ -93,10 +94,16 @@ function makeTx(): Record<string, unknown> {
 		},
 		// Supports both `await tx.delete(t).where(...)` and the R2-3 cascade
 		// shape `...where(...).returning({ id })`; rows come from the
-		// deleteResults queue, one entry per delete call.
+		// deleteResults queue, one entry per delete call. `deleteThrow`
+		// injects a failure (e.g. a 40P01-shaped error) for the busy mapping.
 		delete: (table: unknown) => ({
 			where: (cond: unknown) => {
 				state.deletes.push({ table, cond });
+				if (state.deleteThrow) {
+					const thrown = state.deleteThrow;
+					state.deleteThrow = null;
+					throw thrown;
+				}
 				const rows = state.deleteResults.shift() ?? [];
 				return Object.assign(Promise.resolve(rows), { returning: async () => rows });
 			}
@@ -115,6 +122,7 @@ describe('admin pages list (P2)', () => {
 		state.forCalls = [];
 		state.deletes = [];
 		state.deleteResults = [];
+		state.deleteThrow = null;
 		state.inserts = [];
 		state.nextThrow = null;
 		service.requireAdminRole.mockClear();
@@ -335,6 +343,14 @@ describe('admin pages list (P2)', () => {
 			status: 404
 		});
 	});
+
+	it('maps a deadlock / serialization failure to 409 busy (R2-3)', async () => {
+		state.selectQueue = [[{ id: PAGE_ID, isDefault: false }]];
+		state.deleteThrow = Object.assign(new Error('deadlock detected'), { code: '40P01' });
+		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toMatchObject({
+			status: 409
+		});
+	});
 });
 
 describe('admin pages list · create external entry (P5-3)', () => {
@@ -350,6 +366,7 @@ describe('admin pages list · create external entry (P5-3)', () => {
 		state.forCalls = [];
 		state.deletes = [];
 		state.deleteResults = [];
+		state.deleteThrow = null;
 		state.inserts = [];
 		state.nextThrow = null;
 		state.tx = null;

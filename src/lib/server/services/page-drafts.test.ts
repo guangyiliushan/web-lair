@@ -758,6 +758,22 @@ describe('page draft flow', () => {
 		});
 		expect(result).toEqual({ kind: 'not-found' });
 		expect(state.inserts).toHaveLength(0);
+		// The attach tx locks the page row FIRST (R2-2; 三审 F1): dropping
+		// the .for('update') must fail the suite.
+		expect(state.forCalls).toEqual(['update']);
+	});
+
+	it('answers not-found when the target page vanished before the attach (R2-2/F1)', async () => {
+		state.selectQueue = [[], []];
+		const result = await savePageDraftWork({
+			pageId: PAGE_ID,
+			slug: 'x',
+			payload: payloadFromRow(BASE_DRAFT),
+			autosave: false
+		});
+		expect(result).toEqual({ kind: 'not-found' });
+		expect(state.inserts).toHaveLength(0);
+		expect(state.forCalls).toEqual(['update']);
 	});
 
 	it('accepts the attach when the row is a never-published placeholder (M3)', async () => {
@@ -770,6 +786,7 @@ describe('page draft flow', () => {
 			autosave: false
 		});
 		expect(result).toMatchObject({ kind: 'saved', version: 1 });
+		expect(state.forCalls).toEqual(['update']);
 	});
 
 	it('syncs the submitted body keys when the first draft attaches (T3)', async () => {
@@ -869,6 +886,10 @@ describe('page draft flow', () => {
 		];
 		const result = await publishPageDraft(DRAFT_ID);
 		expect(result).toEqual({ kind: 'not-found' });
+		// The guard must short-circuit BEFORE the transaction (三审 G1): a
+		// mutation dropping it would otherwise reach the tx and answer the
+		// same not-found from the locked-row check, silently.
+		expect(state.forCalls).toHaveLength(0);
 	});
 
 	it('keeps the placeholder write set free of the row-level columns (T5)', async () => {

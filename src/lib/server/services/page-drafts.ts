@@ -50,8 +50,10 @@ export function isPagePlaceholderSlug(slug: string): boolean {
 /**
  * Rows the draft editor owns (B1/R2-5 review): md rows plus their
  * never-published placeholder form. THE single predicate source - the edit
- * route's load and `?/save`, this service's attach / publish guards and the
- * admin list all consume it, so no consumer can drift.
+ * route's load and `?/save`, this service's attach / publish guards all
+ * consume it, so no consumer can drift. (The admin list only needs
+ * `isPagePlaceholderSlug` for its delete-dialog copy; nothing else should
+ * grow a parallel predicate.)
  */
 export function isPageEditorRow(row: { content: unknown; slug: string }): boolean {
 	return row.content !== null || isPagePlaceholderSlug(row.slug);
@@ -493,6 +495,9 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 				.limit(1)
 				.for('update');
 			if (!locked) return { kind: 'not-found' as const };
+			// Belt to the snapshot guard above (R2-4 / 三审 F2): the locked
+			// row is the authoritative face check.
+			if (!isPageEditorRow(locked)) return { kind: 'not-found' as const };
 
 			const [lockedDraft] = await tx
 				.select()
