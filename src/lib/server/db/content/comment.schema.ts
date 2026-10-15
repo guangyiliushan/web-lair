@@ -103,6 +103,10 @@ export const comments = pgTable(
 		index('comments_page_idx')
 			.on(table.pageId)
 			.where(sql`${table.pageId} is not null`),
+		// W1 P5 (2026-10-14): pages thread query shape (mirrors the note/post thread index).
+		index('comments_page_thread_idx')
+			.on(table.pageId, table.parentCommentId, table.pin, table.createdAt)
+			.where(sql`${table.pageId} is not null`),
 		index('comments_reviewed_by_idx')
 			.on(table.reviewedBy)
 			.where(sql`${table.reviewedBy} is not null`),

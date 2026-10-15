@@ -165,7 +165,9 @@ CREATE TABLE "drafts" (
 	"temperature_c" numeric(4, 1),
 	"coordinates" jsonb,
 	"location" text,
-	CONSTRAINT "drafts_ref_type_check" CHECK ("drafts"."ref_type" in ('post', 'page', 'note'))
+	"payload" jsonb,
+	CONSTRAINT "drafts_ref_type_check" CHECK ("drafts"."ref_type" in ('post', 'page', 'note')),
+	CONSTRAINT "drafts_payload_object_check" CHECK ("drafts"."payload" is null or jsonb_typeof("drafts"."payload") = 'object')
 );
 --> statement-breakpoint
 CREATE TABLE "files" (
@@ -787,6 +789,7 @@ CREATE INDEX "comments_parent_idx" ON "comments" USING btree ("parent_comment_id
 CREATE INDEX "comments_note_idx" ON "comments" USING btree ("note_id") WHERE "comments"."note_id" is not null;--> statement-breakpoint
 CREATE INDEX "comments_note_thread_idx" ON "comments" USING btree ("note_id","parent_comment_id","pin","created_at") WHERE "comments"."note_id" is not null;--> statement-breakpoint
 CREATE INDEX "comments_page_idx" ON "comments" USING btree ("page_id") WHERE "comments"."page_id" is not null;--> statement-breakpoint
+CREATE INDEX "comments_page_thread_idx" ON "comments" USING btree ("page_id","parent_comment_id","pin","created_at") WHERE "comments"."page_id" is not null;--> statement-breakpoint
 CREATE INDEX "comments_reviewed_by_idx" ON "comments" USING btree ("reviewed_by") WHERE "comments"."reviewed_by" is not null;--> statement-breakpoint
 CREATE INDEX "comments_review_idx" ON "comments" USING btree ("state","created_at") WHERE "comments"."state" = 'pending';--> statement-breakpoint
 CREATE UNIQUE INDEX "drafts_ref_uniq" ON "drafts" USING btree ("ref_type","ref_id") WHERE "drafts"."ref_id" is not null;--> statement-breakpoint

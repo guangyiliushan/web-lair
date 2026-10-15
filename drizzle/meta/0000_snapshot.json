@@ -1,5 +1,5 @@
 {
-  "id": "7ff5b39a-f105-42f2-9caa-b0740ff3ab56",
+  "id": "16013467-0cc3-4ed3-bc18-112429e343e8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1183,6 +1183,40 @@
           "method": "btree",
           "with": {}
         },
+        "comments_page_thread_idx": {
+          "name": "comments_page_thread_idx",
+          "columns": [
+            {
+              "expression": "page_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "parent_comment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "pin",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"comments\".\"page_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "comments_reviewed_by_idx": {
           "name": "comments_reviewed_by_idx",
           "columns": [
@@ -1469,6 +1503,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -1606,6 +1646,10 @@
         "drafts_ref_type_check": {
           "name": "drafts_ref_type_check",
           "value": "\"drafts\".\"ref_type\" in ('post', 'page', 'note')"
+        },
+        "drafts_payload_object_check": {
+          "name": "drafts_payload_object_check",
+          "value": "\"drafts\".\"payload\" is null or jsonb_typeof(\"drafts\".\"payload\") = 'object'"
         }
       },
       "isRLSEnabled": false

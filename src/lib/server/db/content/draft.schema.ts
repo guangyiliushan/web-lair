@@ -14,6 +14,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { user } from '../auth.schema';
 import { categories } from './category.schema';
+import type { LocalizedMarkdown, LocalizedText } from './localized';
 import { topics } from './topic.schema';
 
 /**
@@ -25,6 +26,15 @@ import { topics } from './topic.schema';
  */
 /** Draft ref_type whitelist (notes plan v0.3 §7.3). */
 export const DRAFT_REF_TYPES = ['post', 'page', 'note'] as const;
+
+/** Page draft payload (pages line P5, ledger §19.10): the three-locale editing
+ * surface of an md page draft ({title, description, content}); the slug keeps
+ * the shared drafts.slug column. */
+export interface PageDraftPayload {
+	title: LocalizedText;
+	description: LocalizedText | null;
+	content: LocalizedMarkdown;
+}
 
 export const drafts = pgTable(
 	'drafts',
@@ -60,7 +70,10 @@ export const drafts = pgTable(
 			latitude: number;
 			longitude: number;
 		} | null>(),
-		location: text('location')
+		location: text('location'),
+		// Pages line P5 (2026-10-14): page drafts stage their three-locale
+		// editing surface here; publish copies it onto the pages row.
+		payload: jsonb('payload').$type<PageDraftPayload>()
 	},
 	(table) => [
 		uniqueIndex('drafts_ref_uniq')
@@ -75,6 +88,10 @@ export const drafts = pgTable(
 			.on(table.categoryId)
 			.where(sql`${table.categoryId} is not null`),
 		check('drafts_ref_type_check', sql`${table.refType} in ('post', 'page', 'note')`),
+		check(
+			'drafts_payload_object_check',
+			sql`${table.payload} is null or jsonb_typeof(${table.payload}) = 'object'`
+		),
 		// §11-A2: the topic_id SET NULL FK needs a leading (partial) index.
 		index('drafts_topic_idx')
 			.on(table.topicId)

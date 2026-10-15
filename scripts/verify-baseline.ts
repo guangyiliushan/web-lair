@@ -36,7 +36,7 @@ const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', impo
 const JOURNAL_PATH = fileURLToPath(new URL('../drizzle/meta/_journal.json', import.meta.url));
 const VISUALIZER_PATH = fileURLToPath(new URL('../.drizzle/visualizer.json', import.meta.url));
 
-const EXPECTED = { tables: 48, indexes: 114, checks: 69, fks: 46, uuidv7: 36 };
+const EXPECTED = { tables: 48, indexes: 115, checks: 70, fks: 46, uuidv7: 36 };
 
 const EXPECTED_TABLE_NAMES: string[] = [
 	'account',
@@ -196,7 +196,8 @@ const REQUIRED_CONSTRAINT_NAMES: string[] = [
 	'translations_target_arc_check',
 	'translations_target_lang_check',
 	'webhook_deliveries_status_check',
-	'webhooks_payload_url_check'
+	'webhooks_payload_url_check',
+	'drafts_payload_object_check'
 ];
 
 /** Index predicate pins (checked against the baseline text; each must match). */
@@ -283,6 +284,10 @@ const PREDICATE_PINS: Array<[string, RegExp]> = [
 	[
 		'comments_note_thread_idx',
 		/CREATE INDEX "comments_note_thread_idx" .*WHERE "comments"\."note_id" is not null/
+	],
+	[
+		'comments_page_thread_idx',
+		/CREATE INDEX "comments_page_thread_idx" .*WHERE "comments"\."page_id" is not null/
 	]
 ];
 
@@ -300,6 +305,7 @@ const COLUMN_TYPE_PINS: Array<[string, string, string]> = [
 	['notes', 'temperature_c', 'numeric'],
 	['drafts', 'weather_code', 'smallint'],
 	['drafts', 'temperature_c', 'numeric'],
+	['drafts', 'payload', 'jsonb'],
 	['posts', 'allow_comment', 'boolean']
 ];
 
