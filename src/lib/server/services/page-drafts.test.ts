@@ -249,7 +249,7 @@ describe('page draft flow', () => {
 	});
 
 	it('answers unchanged when the payload equals the stored draft', async () => {
-		state.selectQueue = [[BASE_DRAFT], [{ id: PAGE_ID }]];
+		state.selectQueue = [[BASE_DRAFT]];
 		const result = await savePageDraftWork({
 			draftId: DRAFT_ID,
 			slug: BASE_DRAFT.slug,
@@ -263,7 +263,7 @@ describe('page draft flow', () => {
 	});
 
 	it('throttles autosave but lets a manual save through; the window expires', async () => {
-		state.selectQueue = [[{ ...BASE_DRAFT, updatedAt: new Date() }], [{ id: PAGE_ID }]];
+		state.selectQueue = [[{ ...BASE_DRAFT, updatedAt: new Date() }]];
 		const throttled = await savePageDraftWork({
 			draftId: DRAFT_ID,
 			slug: BASE_DRAFT.slug,
@@ -275,7 +275,10 @@ describe('page draft flow', () => {
 		expect(state.updates).toHaveLength(0);
 
 		// Past the 30s window an autosave is allowed again.
-		state.selectQueue = [[{ ...BASE_DRAFT, updatedAt: new Date(Date.now() - 31_000) }], [{ id: PAGE_ID }]];
+		state.selectQueue = [
+			[{ ...BASE_DRAFT, updatedAt: new Date(Date.now() - 31_000) }],
+			[{ id: PAGE_ID }]
+		];
 		state.updateResults = [[{ id: DRAFT_ID, version: 4, updatedAt: new Date() }]];
 		const afterWindow = await savePageDraftWork({
 			draftId: DRAFT_ID,
@@ -298,7 +301,7 @@ describe('page draft flow', () => {
 	});
 
 	it('refuses a stale optimistic version with the server state attached', async () => {
-		state.selectQueue = [[BASE_DRAFT], [{ id: PAGE_ID }]];
+		state.selectQueue = [[BASE_DRAFT]];
 		const result = await savePageDraftWork({
 			draftId: DRAFT_ID,
 			expectedVersion: 2,
@@ -476,12 +479,9 @@ describe('page draft flow', () => {
 		// W1 divergence 4: pages write no slug tracker - zero inserts at all.
 		expect(state.inserts).toHaveLength(0);
 		expect(syncMock).toHaveBeenCalledTimes(2);
-		expect(syncMock).toHaveBeenNthCalledWith(
-			1,
-			state.txExecutors,
-			{ type: 'page', id: PAGE_ID },
-			[KEY]
-		);
+		expect(syncMock).toHaveBeenNthCalledWith(1, state.txExecutors, { type: 'page', id: PAGE_ID }, [
+			KEY
+		]);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 		// The draft's own refs leave with the draft row (3b2) as a full
 		// clear, after the durable page set (sync-then-clear order).
@@ -491,9 +491,7 @@ describe('page draft flow', () => {
 			{ type: 'draft', id: DRAFT_ID },
 			[]
 		);
-		expect(syncMock.mock.invocationCallOrder[0]).toBeLessThan(
-			syncMock.mock.invocationCallOrder[1]
-		);
+		expect(syncMock.mock.invocationCallOrder[0]).toBeLessThan(syncMock.mock.invocationCallOrder[1]);
 	});
 
 	it('keeps the status of an ever-published row on re-publish (conditional flip)', async () => {
@@ -548,15 +546,19 @@ describe('page draft flow', () => {
 	});
 
 	it('rejects invalid publish payloads branch by branch before any transaction', async () => {
-		const cases: { payload: Partial<PageDraftPayload>; slug?: string; key: string; match?: string }[] =
-			[
-				{ payload: { title: { en: '   ' } }, key: 'title', match: '语言' },
-				{ payload: {}, slug: '', key: 'slug', match: '不能为空' },
-				{ payload: {}, slug: 'Hello', key: 'slug', match: '小写' },
-				{ payload: {}, slug: 'admin', key: 'slug', match: '保留词' },
-				{ payload: {}, slug: 'draft-taken', key: 'slug', match: '占位' },
-				{ payload: { content: { ja: '  ' } }, key: 'content', match: '正文' }
-			];
+		const cases: {
+			payload: Partial<PageDraftPayload>;
+			slug?: string;
+			key: string;
+			match?: string;
+		}[] = [
+			{ payload: { title: { en: '   ' } }, key: 'title', match: '语言' },
+			{ payload: {}, slug: '', key: 'slug', match: '不能为空' },
+			{ payload: {}, slug: 'Hello', key: 'slug', match: '小写' },
+			{ payload: {}, slug: 'admin', key: 'slug', match: '保留词' },
+			{ payload: {}, slug: 'draft-taken', key: 'slug', match: '占位' },
+			{ payload: { content: { ja: '  ' } }, key: 'content', match: '正文' }
+		];
 		for (const testCase of cases) {
 			const draft = {
 				...BASE_DRAFT,
@@ -664,12 +666,9 @@ describe('page draft flow', () => {
 		expect(result).toEqual({ kind: 'discarded', pageId: PAGE_ID, removedPlaceholder: false });
 		expect(state.deletes.map((entry) => entry.table)).toEqual([drafts]);
 		expect(syncMock).toHaveBeenCalledTimes(2);
-		expect(syncMock).toHaveBeenNthCalledWith(
-			1,
-			state.txExecutors,
-			{ type: 'page', id: PAGE_ID },
-			[KEY]
-		);
+		expect(syncMock).toHaveBeenNthCalledWith(1, state.txExecutors, { type: 'page', id: PAGE_ID }, [
+			KEY
+		]);
 		// The draft's own refs leave with its row (3b2) as a full clear.
 		expect(syncMock).toHaveBeenNthCalledWith(
 			2,
@@ -744,6 +743,9 @@ describe('page draft flow', () => {
 			autosave: false
 		});
 		expect(result).toEqual({ kind: 'not-found' });
+		// The not-found precedes any write (R2-7: the belt is pre-write by
+		// construction, pinned here instead of resting on the harness default).
+		expect(state.updates).toHaveLength(0);
 	});
 
 	it('refuses to attach a draft to a non-editor row (code/external, M3)', async () => {
@@ -799,6 +801,18 @@ describe('page draft flow', () => {
 		expect(state.deletes.map((entry) => entry.table)).toEqual([drafts]);
 	});
 
+	it('keeps a published row on discard even when its slug wears the prefix (R2-7)', async () => {
+		state.selectQueue = [
+			[BASE_DRAFT],
+			[{ id: PAGE_ID, slug: 'draft-legacy', content: { en: 'x' }, isDefault: false }]
+		];
+		state.deleteResults = [[{ id: DRAFT_ID }]];
+		const result = await discardPageDraft(DRAFT_ID);
+		expect(result).toEqual({ kind: 'discarded', pageId: PAGE_ID, removedPlaceholder: false });
+		// The row stays: only the draft is deleted.
+		expect(state.deletes.map((entry) => entry.table)).toEqual([drafts]);
+	});
+
 	it('keeps a default row on discard even with a placeholder-shaped slug (T2)', async () => {
 		state.selectQueue = [
 			[BASE_DRAFT],
@@ -846,6 +860,15 @@ describe('page draft flow', () => {
 		const result = await publishPageDraft(DRAFT_ID);
 		expect(result.kind).toBe('invalid');
 		if (result.kind === 'invalid') expect(result.errors.slug).toBeTruthy();
+	});
+
+	it('refuses to publish a draft attached to a non-editor row (R2-4)', async () => {
+		state.selectQueue = [
+			[{ ...BASE_DRAFT, slug: 'ok-slug' }],
+			[{ id: PAGE_ID, slug: 'live-slug', content: null, isDefault: false }]
+		];
+		const result = await publishPageDraft(DRAFT_ID);
+		expect(result).toEqual({ kind: 'not-found' });
 	});
 
 	it('keeps the placeholder write set free of the row-level columns (T5)', async () => {

@@ -565,6 +565,7 @@
 	"admin_pages_delete_desc": "「{title}」は削除されます。",
 	"admin_pages_delete_desc_code": "エントリは非公開になります。コードルートが存在する場合、直接アクセスは可能です。",
 	"admin_pages_delete_desc_data": "URL は 404 になります（データがページそのもの）。",
+	"admin_pages_delete_desc_placeholder": "このページは未公開です。削除すると下書きとファイル参照も破棄されます。",
 	"admin_pages_delete_title": "ページを削除しますか？",
 	"admin_pages_edit_body_placeholder": "ページを書く…",
 	"admin_pages_edit_desc_section": "説明（任意）",

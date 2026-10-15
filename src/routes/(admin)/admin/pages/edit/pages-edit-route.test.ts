@@ -23,7 +23,11 @@ const { dbMock, state, service } = vi.hoisted(() => ({
 		publishPageDraft: vi.fn(),
 		discardPageDraft: vi.fn(),
 		loadPageDraftByPageId: vi.fn(),
-		isPagePlaceholderSlug: vi.fn((slug: string) => slug.startsWith('draft-'))
+		isPagePlaceholderSlug: vi.fn((slug: string) => slug.startsWith('draft-')),
+		isPageEditorRow: vi.fn(
+			(row: { content: unknown; slug: string }) =>
+				row.content !== null || row.slug.startsWith('draft-')
+		)
 	}
 }));
 
@@ -37,7 +41,8 @@ vi.mock('$lib/server/services/page-drafts', () => ({
 	publishPageDraft: service.publishPageDraft,
 	discardPageDraft: service.discardPageDraft,
 	loadPageDraftByPageId: service.loadPageDraftByPageId,
-	isPagePlaceholderSlug: service.isPagePlaceholderSlug
+	isPagePlaceholderSlug: service.isPagePlaceholderSlug,
+	isPageEditorRow: service.isPageEditorRow
 }));
 
 import { actions, load } from './+page.server';
@@ -151,25 +156,31 @@ describe('admin page editor · metadata save (P2)', () => {
 
 		// icon not whitelisted
 		state.selectQueue = [[baseRow]];
-		expect((await run('save', { id: PAGE_ID, title_en: 'X', icon: 'evil', slug: 'about' })).status).toBe(
-			400
-		);
+		expect(
+			(await run('save', { id: PAGE_ID, title_en: 'X', icon: 'evil', slug: 'about' })).status
+		).toBe(400);
 
 		// bad external URL
 		state.selectQueue = [[baseRow]];
 		expect(
-			(await run('save', { id: PAGE_ID, title_en: 'X', externalUrl: 'ftp://x', slug: 'about' })).status
+			(await run('save', { id: PAGE_ID, title_en: 'X', externalUrl: 'ftp://x', slug: 'about' }))
+				.status
 		).toBe(400);
 
 		// reserved slug on change
 		state.selectQueue = [[baseRow]];
 		expect((await run('save', { id: PAGE_ID, title_en: 'X', slug: 'admin' })).status).toBe(400);
 
+		// draft- prefix rename refused (R2-1: the prefix flips the row into
+		// the editor domain while external_url may stay set - a black hole)
+		state.selectQueue = [[baseRow]];
+		expect((await run('save', { id: PAGE_ID, title_en: 'X', slug: 'draft-x1' })).status).toBe(400);
+
 		// default-row slug change refused
 		state.selectQueue = [[{ ...baseRow, isDefault: true }]];
-		expect(
-			(await run('save', { id: PAGE_ID, title_en: 'X', slug: 'about-next' })).status
-		).toBe(400);
+		expect((await run('save', { id: PAGE_ID, title_en: 'X', slug: 'about-next' })).status).toBe(
+			400
+		);
 	});
 
 	it('saves trimmed jsonb and maps duplicate slug to 409', async () => {
@@ -220,9 +231,9 @@ describe('admin page editor · metadata save (P2)', () => {
 		// A non-unique-violation error bubbles instead of mapping to 409.
 		state.selectQueue = [[baseRow]];
 		state.nextThrow = new Error('boom');
-		await expect(actions.save!(formEvent({ id: PAGE_ID, title_en: 'X', slug: 'about' }) as never)).rejects.toThrow(
-			'boom'
-		);
+		await expect(
+			actions.save!(formEvent({ id: PAGE_ID, title_en: 'X', slug: 'about' }) as never)
+		).rejects.toThrow('boom');
 	});
 
 	it('narrows md-row saves to the row properties (icon / external_url only)', async () => {
@@ -494,6 +505,37 @@ describe('pages editor · load', () => {
 	it('404s unknown ids and never asks the draft service for a missing row', async () => {
 		state.selectQueue = [[]];
 		await expect(load(loadEvent(PAGE_ID))).rejects.toMatchObject({ status: 404 });
+		expect(service.loadPageDraftByPageId).not.toHaveBeenCalled();
+	});
+
+	it('flags code / external rows as NOT editor rows (R2-7)', async () => {
+		state.selectQueue = [
+			[
+				{
+					id: PAGE_ID,
+					slug: 'live-slug',
+					title: { en: 'Code page' },
+					description: null,
+					icon: null,
+					externalUrl: 'https://example.com',
+					isDefault: false,
+					status: 'visible',
+					content: null,
+					updatedAt: new Date('2026-10-01T00:00:00Z')
+				}
+			]
+		];
+		const data = (await load(loadEvent(PAGE_ID))) as {
+			page: Record<string, unknown>;
+			draft: unknown;
+		};
+		expect(data.page).toMatchObject({
+			placeholder: false,
+			hasContent: false,
+			editorMode: false
+		});
+		// R2-4: a non-editor row never gets a draft handed out.
+		expect(data.draft).toBeNull();
 		expect(service.loadPageDraftByPageId).not.toHaveBeenCalled();
 	});
 

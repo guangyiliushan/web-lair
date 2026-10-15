@@ -7,6 +7,7 @@ import { getOption } from '$lib/server/config/options-registry';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import {
 	discardPageDraft,
+	isPageEditorRow,
 	isPagePlaceholderSlug,
 	loadPageDraftByPageId,
 	publishPageDraft,
@@ -21,15 +22,9 @@ import { m } from '$lib/paraglide/messages';
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const LOCALES = ['en', 'zh-cn', 'ja'] as const;
 
-/**
- * Rows the draft editor owns (B1 review): md rows and their never-published
- * placeholder form. ONE predicate source - `?/save` narrows on the same
- * expression and the load projection hands `editorMode` to the client, so
- * the three consumers cannot drift apart.
- */
-function isEditorRow(row: { content: unknown; slug: string }): boolean {
-	return row.content !== null || isPagePlaceholderSlug(row.slug);
-}
+// The editor-ownership predicate lives in the service (isPageEditorRow):
+// THE single source (R2-5 review) shared by this route's load / `?/save`,
+// the service's attach / publish guards and the admin list.
 
 /**
  * Pages editor. Two shapes share the route (P5-2 single-source rule):
@@ -63,7 +58,10 @@ export const load: PageServerLoad = async ({ url }) => {
 	if (id) {
 		[row] = await db.select().from(pages).where(eq(pages.id, id)).limit(1);
 		if (!row) error(404, m.admin_pages_err_not_found());
-		draftRow = await loadPageDraftByPageId(row.id);
+		// Only editor rows hand out a draft (R2-4 review): the P2 form never
+		// publishes, so a legacy / hand-written draft on a code / external
+		// row must not resurface here at all.
+		if (isPageEditorRow(row)) draftRow = await loadPageDraftByPageId(row.id);
 	}
 
 	return {
@@ -91,7 +89,7 @@ export const load: PageServerLoad = async ({ url }) => {
 					hasContent: row.content !== null,
 					placeholder: isPagePlaceholderSlug(row.slug),
 					newPage: false,
-					editorMode: isEditorRow(row),
+					editorMode: isPageEditorRow(row),
 					updatedAt: row.updatedAt
 				}
 			: {
@@ -175,10 +173,10 @@ export const actions: Actions = {
 			return fail(400, { error: m.admin_pages_err_bad_external() });
 		}
 
-		if (isEditorRow(row)) {
+		if (isPageEditorRow(row)) {
 			// md row (incl. its never-published placeholder form): properties
-			// only - the editor owns everything else. Same predicate as the
-			// load projection's `editorMode` (B1/M3 review).
+			// only - the editor owns everything else (R2-5: same predicate as
+			// the load projection's `editorMode`).
 			const updated = await db
 				.update(pages)
 				.set({
@@ -203,6 +201,12 @@ export const actions: Actions = {
 		if (slug !== row.slug) {
 			if (row.isDefault) return fail(400, { error: m.admin_pages_err_slug_locked() });
 			if (isReservedPageSlug(slug)) return fail(400, { error: m.admin_pages_err_slug_reserved() });
+			// The draft- prefix means "the draft editor owns this row" since
+			// B1 (R2-1 review): letting the metadata form mint one would flip
+			// a code / external row into the editor while its external_url
+			// stays set - published content the site then 404s forever.
+			if (isPagePlaceholderSlug(slug))
+				return fail(400, { error: m.admin_editor_err_slug_reserved_prefix() });
 		}
 
 		let updated: { id: string }[];

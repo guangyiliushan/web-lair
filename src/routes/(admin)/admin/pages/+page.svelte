@@ -310,9 +310,11 @@
 		<AlertDialog.Header>
 			<AlertDialog.Title>{m.admin_pages_delete_title()}</AlertDialog.Title>
 			<AlertDialog.Description>
-				{m.admin_pages_delete_desc({ title: deleteTarget?.title ?? '' })}{deleteTarget?.hasContent
-					? m.admin_pages_delete_desc_data()
-					: m.admin_pages_delete_desc_code()}
+				{m.admin_pages_delete_desc({ title: deleteTarget?.title ?? '' })}{deleteTarget?.placeholder
+					? m.admin_pages_delete_desc_placeholder()
+					: deleteTarget?.hasContent
+						? m.admin_pages_delete_desc_data()
+						: m.admin_pages_delete_desc_code()}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if form?.error}

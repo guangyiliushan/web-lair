@@ -47,6 +47,16 @@ export function isPagePlaceholderSlug(slug: string): boolean {
 	return slug.startsWith(PLACEHOLDER_SLUG_PREFIX);
 }
 
+/**
+ * Rows the draft editor owns (B1/R2-5 review): md rows plus their
+ * never-published placeholder form. THE single predicate source - the edit
+ * route's load and `?/save`, this service's attach / publish guards and the
+ * admin list all consume it, so no consumer can drift.
+ */
+export function isPageEditorRow(row: { content: unknown; slug: string }): boolean {
+	return row.content !== null || isPagePlaceholderSlug(row.slug);
+}
+
 /** Unique-enough placeholder slug; the real slug is required at publish. */
 function pageTempSlug(): string {
 	return `${PLACEHOLDER_SLUG_PREFIX}${randomBytes(5).toString('hex')}`;
@@ -204,22 +214,27 @@ export async function savePageDraftWork(input: SavePageDraftInput): Promise<Save
 		const existing = await loadPageDraftByPageId(input.pageId);
 		if (existing) return updateExistingPageDraft(existing, normalized, input);
 
-		const [page] = await db
-			.select({ id: pages.id, content: pages.content, slug: pages.slug })
-			.from(pages)
-			.where(eq(pages.id, input.pageId))
-			.limit(1);
-		if (!page) return { kind: 'not-found' };
-		// Only editor rows accept drafts (M3 review): blindly attaching to a
-		// code / external row would let the publish transaction flip it into
-		// an md page with no editor path ever having shown that face.
-		if (page.content === null && !isPagePlaceholderSlug(page.slug))
-			return { kind: 'not-found' };
+		const targetPageId = input.pageId;
 		try {
-			// Attaching the first draft to a published content row is a save
-			// path too: the content write and the reference diff share one
-			// transaction (Q15), the submitted locales being the desired set.
+			// Attaching the first draft is a save path too: the content write
+			// and the reference diff share one transaction (Q15), the
+			// submitted locales being the desired set. The page row is locked
+			// FIRST (the pages → drafts → files order every writer follows)
+			// so a concurrent hard-delete cannot slip its cascade between the
+			// row check and the insert (R2-2 review).
 			const created = await db.transaction(async (tx) => {
+				const [page] = await tx
+					.select({ id: pages.id, content: pages.content, slug: pages.slug })
+					.from(pages)
+					.where(eq(pages.id, targetPageId))
+					.limit(1)
+					.for('update');
+				if (!page) return null;
+				// Only editor rows accept drafts (M3 review): blindly
+				// attaching to a code / external row would let the publish
+				// transaction flip it into an md page with no editor path
+				// ever having shown that face.
+				if (!isPageEditorRow(page)) return null;
 				const [row] = await tx
 					.insert(drafts)
 					.values({
@@ -244,13 +259,14 @@ export async function savePageDraftWork(input: SavePageDraftInput): Promise<Save
 					{ type: 'draft', id: row.id },
 					keysFromLocalizedContent(normalized.content)
 				);
-				return row;
+				return { ...row, pageId: page.id };
 			});
+			if (created === null) return { kind: 'not-found' };
 			return {
 				kind: 'saved',
 				draftId: created.id,
 				version: created.version,
-				pageId: page.id,
+				pageId: created.pageId,
 				updatedAt: created.updatedAt
 			};
 		} catch (caught) {
@@ -442,6 +458,10 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 
 	const [page] = await db.select().from(pages).where(eq(pages.id, draft.refId)).limit(1);
 	if (!page) return { kind: 'not-found' };
+	// Publishing is what actually flips a row's face: refuse rows the editor
+	// never owned (R2-4 review) - a legacy / hand-written draft must not turn
+	// a code / external row into an md page.
+	if (!isPageEditorRow(page)) return { kind: 'not-found' };
 
 	const errors: Record<string, string> = {};
 	const normalized = normalizePageDraft(draft.slug, draft.payload);
@@ -484,11 +504,7 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 
 			const final = normalizePageDraft(lockedDraft.slug, lockedDraft.payload);
 			const finalSlug = final.slug;
-			if (
-				!hasNonBlankLocale(final.title) ||
-				!finalSlug ||
-				!hasNonBlankLocale(final.content)
-			) {
+			if (!hasNonBlankLocale(final.title) || !finalSlug || !hasNonBlankLocale(final.content)) {
 				return {
 					kind: 'invalid' as const,
 					errors: { form: m.admin_editor_err_stale_draft() } as Record<string, string>
@@ -594,7 +610,9 @@ export async function discardPageDraft(draftId: string): Promise<DiscardPageResu
 				// content null is the ruling's marker; the draft- slug adds
 				// the "created by the 新增 flow" belt - a publish rewrites
 				// the slug, so a published row never carries it, and any
-				// mismatch keeps the row on the safe side).
+				// mismatch keeps the row on the safe side). NOTE: this is
+				// NOT !isPageEditorRow - that negation is the code row; the
+				// removal gate needs content null AND the prefix together.
 				const placeholder = Boolean(
 					page && !page.isDefault && page.content == null && isPagePlaceholderSlug(page.slug)
 				);

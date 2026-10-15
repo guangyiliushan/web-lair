@@ -57,13 +57,18 @@ function routeSegments(): string[] {
 		.map((entry) => entry.name);
 }
 
+/** Non-blank locale values of a title map (shape check stays in the assert). */
+function titleLocales(title: unknown): string[] {
+	if (!title || typeof title !== 'object' || Array.isArray(title)) return [];
+	return Object.values(title as Record<string, unknown>).filter(
+		(value): value is string => typeof value === 'string' && value.trim().length > 0
+	);
+}
+
 function assertTitleHasLocale(title: unknown, slug: string): void {
 	if (!title || typeof title !== 'object' || Array.isArray(title))
 		fail(`pages.${slug}.title is not an object`);
-	const values = Object.values(title as Record<string, unknown>).filter(
-		(value) => typeof value === 'string' && value.trim().length > 0
-	);
-	if (values.length === 0) fail(`pages.${slug}.title has no locale`);
+	if (titleLocales(title).length === 0) fail(`pages.${slug}.title has no locale`);
 }
 
 async function main(): Promise<void> {
@@ -114,18 +119,18 @@ async function main(): Promise<void> {
 			if (row.content_format !== 'markdown') fail(`invalid content_format for ${slug}`);
 			// Placeholder rows are editor working state, not registry entries:
 			// the title may legitimately be empty until the first publish
-			// (W1 ruling; exempted by slug prefix - the default rows get the
-			// same kind of exemption via DEFAULT_SLUG_SET above). Keep a
-			// warning so a stale placeholder stays observable.
-			if (slug.startsWith('draft-')) {
-				const hasTitle = Object.values(row.title ?? {}).some(
-					(value) => typeof value === 'string' && value.trim().length > 0
-				);
-				if (!hasTitle)
-					warnings.push(`placeholder row without a title yet: /${slug} (draft in progress)`);
-				continue;
+			// (W1 ruling). The exemption is bounded (R2-6 review): the
+			// placeholder identity REQUIRES content to stay null, the title
+			// gate degrades to a warning, and every other check below still
+			// runs for these rows (no early continue).
+			const isPlaceholder = slug.startsWith('draft-');
+			if (isPlaceholder && row.content !== null)
+				fail(`placeholder slug carries published content: /${slug}`);
+			if (!isPlaceholder) {
+				assertTitleHasLocale(row.title, slug);
+			} else if (titleLocales(row.title).length === 0) {
+				warnings.push(`placeholder row without a title yet: /${slug} (draft in progress)`);
 			}
-			assertTitleHasLocale(row.title, slug);
 			if (row.is_default) defaults.add(slug);
 			if (routeNames.includes(slug))
 				warnings.push(

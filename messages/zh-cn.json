@@ -565,6 +565,7 @@
 	"admin_pages_delete_desc": "“{title}” 将被删除。",
 	"admin_pages_delete_desc_code": "入口将下线；如果代码路由存在，直达仍可访问。",
 	"admin_pages_delete_desc_data": "URL 将 404（数据即页面）。",
+	"admin_pages_delete_desc_placeholder": "该页面尚未发布：删除将同时丢弃它的草稿与文件引用。",
 	"admin_pages_delete_title": "删除页面？",
 	"admin_pages_edit_body_placeholder": "写下你的页面…",
 	"admin_pages_edit_desc_section": "描述（可选）",

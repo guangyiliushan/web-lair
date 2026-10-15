@@ -50,6 +50,9 @@ export const load: PageServerLoad = async () => {
 		headerTitle: m.admin_nav_pages(),
 		pages: rows.map((row) => ({
 			...row,
+			// Placeholder rows get their own delete-dialog copy (R2-8): the
+			// hard delete takes the draft and its file references with it.
+			placeholder: isPagePlaceholderSlug(row.slug),
 			title: resolveLocalized(row.title, locale) ?? row.slug
 		}))
 	};
@@ -203,36 +206,48 @@ export const actions: Actions = {
 		const pageId = id.toLowerCase();
 
 		// Lock + guard + delete share one transaction (topics round-7 pattern).
-		const result = await db.transaction(async (tx) => {
-			const [row] = await tx
-				.select({ id: pages.id, isDefault: pages.isDefault })
-				.from(pages)
-				.where(eq(pages.id, pageId))
-				.limit(1)
-				.for('update');
-			if (!row) return { kind: 'not-found' as const };
-			if (row.isDefault) return { kind: 'protected' as const };
-			// The draft rows go with the page (M1 review): ref_id is
-			// polymorphic so no FK can cascade, and a surviving draft keeps
-			// its file_references (and the files) forever attached.
-			const draftRows = await tx
-				.select({ id: drafts.id })
-				.from(drafts)
-				.where(and(eq(drafts.refType, 'page'), eq(drafts.refId, pageId)));
-			await tx.delete(pages).where(eq(pages.id, pageId));
-			for (const draft of draftRows) {
-				await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
-				await tx.delete(drafts).where(eq(drafts.id, draft.id));
-			}
-			// A hard-deleted page leaves no content behind: clear its
-			// references in the same transaction (Q15 deletion hook) so the
-			// images it mentioned become detachable again.
-			await syncFileReferences(tx, { type: 'page', id: pageId }, []);
-			return { kind: 'deleted' as const };
-		});
+		const result = await db
+			.transaction(async (tx) => {
+				const [row] = await tx
+					.select({ id: pages.id, isDefault: pages.isDefault })
+					.from(pages)
+					.where(eq(pages.id, pageId))
+					.limit(1)
+					.for('update');
+				if (!row) return { kind: 'not-found' as const };
+				if (row.isDefault) return { kind: 'protected' as const };
+				// The draft rows go with the page (M1 review): ref_id is
+				// polymorphic so no FK can cascade, and a surviving draft keeps
+				// its file_references (and the files) forever attached. Drafts
+				// are deleted FIRST (R2-3 review): drafts → files is the lock
+				// order publish / discard / save all follow, so the reference
+				// syncs below can neither deadlock against a concurrent save nor
+				// let its hidden updates slip past the cleanup.
+				const draftRows = await tx
+					.delete(drafts)
+					.where(and(eq(drafts.refType, 'page'), eq(drafts.refId, pageId)))
+					.returning({ id: drafts.id });
+				await tx.delete(pages).where(eq(pages.id, pageId));
+				for (const draft of draftRows) {
+					await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
+				}
+				// A hard-deleted page leaves no content behind: clear its
+				// references in the same transaction (Q15 deletion hook) so the
+				// images it mentioned become detachable again.
+				await syncFileReferences(tx, { type: 'page', id: pageId }, []);
+				return { kind: 'deleted' as const };
+			})
+			.catch((caught) => {
+				// Deadlock / serialization failures are retryable admin
+				// conflicts (same mapping as publish / discard; R2-3 review).
+				const code = pgErrorCode(caught);
+				if (code === '40P01' || code === '40001') return { kind: 'busy' as const };
+				throw caught;
+			});
 
 		if (result.kind === 'not-found') return fail(404, { error: m.admin_pages_err_not_found() });
 		if (result.kind === 'protected') return fail(409, { error: m.admin_pages_err_protected() });
+		if (result.kind === 'busy') return fail(409, { error: m.admin_posts_edit_err_busy() });
 		return { success: true };
 	}
 };

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
+import { drafts, pages } from '$lib/server/db/content';
 
 /**
  * Route-level tests for the P2 pages admin (T6 unit side) and the P5-3
@@ -22,7 +23,8 @@ const { dbMock, state, service, syncCheck } = vi.hoisted(() => ({
 		executes: [] as { sql: string; params: unknown[] }[],
 		statusUpdates: [] as { values: Record<string, unknown>; target: string }[],
 		forCalls: [] as unknown[],
-		deletes: [] as unknown[],
+		deletes: [] as { table?: unknown; cond: unknown }[],
+		deleteResults: [] as unknown[][],
 		inserts: [] as { values: Record<string, unknown> }[],
 		nextThrow: null as unknown,
 		tx: null as unknown
@@ -89,9 +91,14 @@ function makeTx(): Record<string, unknown> {
 			const rendered = dialect.sqlToQuery(query as never);
 			state.executes.push({ sql: rendered.sql, params: rendered.params });
 		},
-		delete: () => ({
-			where: async (cond: unknown) => {
-				state.deletes.push(cond);
+		// Supports both `await tx.delete(t).where(...)` and the R2-3 cascade
+		// shape `...where(...).returning({ id })`; rows come from the
+		// deleteResults queue, one entry per delete call.
+		delete: (table: unknown) => ({
+			where: (cond: unknown) => {
+				state.deletes.push({ table, cond });
+				const rows = state.deleteResults.shift() ?? [];
+				return Object.assign(Promise.resolve(rows), { returning: async () => rows });
 			}
 		})
 	});
@@ -107,6 +114,7 @@ describe('admin pages list (P2)', () => {
 		state.statusUpdates = [];
 		state.forCalls = [];
 		state.deletes = [];
+		state.deleteResults = [];
 		state.inserts = [];
 		state.nextThrow = null;
 		service.requireAdminRole.mockClear();
@@ -302,16 +310,21 @@ describe('admin pages list (P2)', () => {
 		expect(state.deletes).toHaveLength(0);
 		expect(state.forCalls).toContain('update');
 
-		state.selectQueue = [[{ id: PAGE_ID, isDefault: false }], [{ id: DRAFT_ID }]];
+		state.selectQueue = [[{ id: PAGE_ID, isDefault: false }]];
+		state.deleteResults = [[{ id: DRAFT_ID }], []];
 		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toEqual({
 			success: true
 		});
-		// Both deletes recorded: the page and its cascaded draft (M1 review).
+		// Drafts go first (R2-3 review: drafts → files lock order), then the
+		// page: both deletes recorded in that order.
 		expect(state.deletes).toHaveLength(2);
-		expect(dialect.sqlToQuery(state.deletes[0] as never).params).toEqual([PAGE_ID]);
+		expect(state.deletes[0].table).toBe(drafts);
+		expect(dialect.sqlToQuery(state.deletes[0].cond as never).params).toEqual(['page', PAGE_ID]);
+		expect(state.deletes[1].table).toBe(pages);
+		expect(dialect.sqlToQuery(state.deletes[1].cond as never).params).toEqual([PAGE_ID]);
 		expect(dbMock.transaction).toHaveBeenCalled();
-		// Q15 deletion hooks: the page's references AND the cascaded draft's
-		// references are cleared inside the same transaction, in order.
+		// Q15 deletion hooks: the cascaded draft's references AND the page's
+		// are cleared inside the same transaction, in order.
 		expect(syncCheck).toHaveBeenCalledTimes(2);
 		expect(syncCheck).toHaveBeenNthCalledWith(1, state.tx, { type: 'draft', id: DRAFT_ID }, []);
 		expect(syncCheck).toHaveBeenNthCalledWith(2, state.tx, { type: 'page', id: PAGE_ID }, []);
@@ -336,6 +349,7 @@ describe('admin pages list · create external entry (P5-3)', () => {
 		state.statusUpdates = [];
 		state.forCalls = [];
 		state.deletes = [];
+		state.deleteResults = [];
 		state.inserts = [];
 		state.nextThrow = null;
 		state.tx = null;

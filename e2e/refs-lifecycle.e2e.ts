@@ -384,6 +384,9 @@ test('a page draft keys the upload under its draft identity; publish re-keys it 
 	// re-keys the durable reference set onto the page identity; the draft's
 	// own refs leave with its row.
 	await expect(async () => {
+		// Idempotent retry (R2-7): a landed publish must not be re-clicked -
+		// the draft row is gone by then and the retry would 404 forever.
+		if (psql(`select count(*) from drafts where ref_id = '${pageId}'`) === '0') return;
 		await page.getByRole('button', { name: '发布' }).click();
 		await page.waitForURL(/published=1/, { timeout: 20_000 });
 	}).toPass({ timeout: 40_000 });

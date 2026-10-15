@@ -727,6 +727,7 @@
 	"admin_pages_delete_desc": "“{title}” will be deleted. ",
 	"admin_pages_delete_desc_code": "The entry goes offline; if a code route exists, direct visits still work.",
 	"admin_pages_delete_desc_data": "The URL will 404 (data is the page).",
+	"admin_pages_delete_desc_placeholder": "This page was never published - deleting it also discards its draft and file references.",
 	"admin_pages_delete_title": "Delete page?",
 	"admin_pages_edit_body_placeholder": "Write your page…",
 	"admin_pages_edit_desc_section": "Description (optional)",

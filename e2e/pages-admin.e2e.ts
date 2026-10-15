@@ -37,17 +37,19 @@ function byText(page: Page, text: string | RegExp): Locator {
 function cleanup(): void {
 	// Order matters: draft-identity refs first, then the editor-created
 	// placeholder rows (found through the draft payloads while those rows
-	// exist), then the fixture rows themselves.
+	// exist), then the fixture rows themselves. Draft matching is by raw
+	// payload text (R2-7): locale-agnostic, so an env whose default_lang is
+	// not `en` cannot leak fixtures behind the `->>'en'` slot.
 	psql(
-		`delete from file_references where ref_type = 'draft' and ref_id in (select id from drafts where ref_type = 'page' and payload->'title'->>'en' like 'E2E Admin%')`
+		`delete from file_references where ref_type = 'draft' and ref_id in (select id from drafts where ref_type = 'page' and payload::text like '%E2E Admin%')`
 	);
 	psql(
-		`delete from pages where slug like 'draft-%' and id in (select ref_id from drafts where ref_type = 'page' and payload->'title'->>'en' like 'E2E Admin%')`
+		`delete from pages where slug like 'draft-%' and id in (select ref_id from drafts where ref_type = 'page' and payload::text like '%E2E Admin%')`
 	);
 	psql(
 		`delete from file_references where ref_type = 'page' and ref_id in (select id from pages where slug like 'e2e-admin-%')`
 	);
-	psql(`delete from drafts where ref_type = 'page' and payload->'title'->>'en' like 'E2E Admin%'`);
+	psql(`delete from drafts where ref_type = 'page' and payload::text like '%E2E Admin%'`);
 	psql(`delete from pages where slug like 'e2e-admin-%'`);
 }
 
@@ -390,6 +392,11 @@ test('creating an md page end-to-end: dual locale, save, publish, render', async
 });
 
 test('a never-published placeholder reopens in the draft editor (B1)', async ({ page }) => {
+	// Locale premise (R2-7): the title lands in the default-language slot;
+	// pin it so a default_lang drift fails loud instead of leaking fixtures
+	// behind the `->>'en'` lookup.
+	expect(psql(`select value from options where name = 'site.default_lang'`) || '').toBe('en');
+
 	await page.goto('/admin/pages');
 	await expect(async () => {
 		await page.getByRole('button', { name: '新建' }).click();
@@ -430,6 +437,13 @@ test('deleting a fixture row works through the confirmation', async ({ page }) =
 	await page.goto('/admin/pages');
 	const rowB = row(page, TITLE_B);
 	await expect(rowB).toBeVisible();
+
+	// Give row B a pending draft so the cascade assertion below has teeth
+	// (R2-7: without a draft the same assertion passes vacuously).
+	psql(
+		`insert into drafts (ref_type, ref_id, payload, version) values ('page', '${idB}', '{"title":{"en":"E2E Admin B draft"}}'::jsonb, 1)`
+	);
+	expect(psql(`select count(*) from drafts where ref_id = '${idB}'`)).toBe('1');
 
 	await expect(async () => {
 		if ((await page.getByText('删除页面？').count()) === 0) {
