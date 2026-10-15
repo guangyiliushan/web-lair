@@ -1,9 +1,17 @@
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { pages, type LocalizedText } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
+import { getOption } from '$lib/server/config/options-registry';
 import { pgErrorCode } from '$lib/server/db/pg-error';
+import {
+	discardPageDraft,
+	isPagePlaceholderSlug,
+	loadPageDraftByPageId,
+	publishPageDraft,
+	savePageDraftWork
+} from '$lib/server/services/page-drafts';
 import { NAV_ICON_NAMES } from '$lib/config/nav-icons';
 import { isReservedPageSlug } from '$lib/utils/page-meta';
 import { isUuid } from '$lib/utils/uuid';
@@ -14,10 +22,17 @@ const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const LOCALES = ['en', 'zh-cn', 'ja'] as const;
 
 /**
- * Pages metadata editor (P2): title / description jsonb (three locales),
- * icon, external_url and slug. Body editing (and "New") belongs to P5's md
- * editor; default rows keep a read-only slug (db:ensure-pages anchors on the
- * slug) and code rows show a route-sync warning for slug changes.
+ * Pages editor. Two shapes share the route (P5-2 single-source rule):
+ *
+ * - md rows (`content` not null): the md editor is the SINGLE SOURCE - the
+ *   title / description / content / slug editing surface lives in one
+ *   `drafts.payload` (ledger §19.10) and only the publish transaction writes
+ *   the row. `?/save` is narrowed there to the row properties (icon /
+ *   external_url), which are never staged in drafts.
+ * - code / external rows (`content` null): the P2 metadata form, unchanged.
+ *
+ * Draft actions mirror the notes editor (`?/saveDraft` / `?/publish` /
+ * `?/discard`); conflicts answer 409 so the client refuses to overwrite.
  */
 export const load: PageServerLoad = async ({ url }) => {
 	await requireAdminRole();
@@ -27,6 +42,14 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	const [row] = await db.select().from(pages).where(eq(pages.id, id)).limit(1);
 	if (!row) error(404, m.admin_pages_err_not_found());
+
+	const [draftRow, defaultLangOption] = await Promise.all([
+		loadPageDraftByPageId(row.id),
+		getOption('site.default_lang')
+	]);
+	const defaultLang = (LOCALES as readonly string[]).includes(defaultLangOption)
+		? defaultLangOption
+		: LOCALES[0];
 
 	return {
 		headerTitle: m.admin_pages_edit_title(),
@@ -38,6 +61,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				href: '/admin/pages'
 			}
 		],
+		langs: [...LOCALES],
+		defaultLang,
 		page: {
 			id: row.id,
 			slug: row.slug,
@@ -46,9 +71,22 @@ export const load: PageServerLoad = async ({ url }) => {
 			icon: row.icon ?? '',
 			externalUrl: row.externalUrl ?? '',
 			isDefault: row.isDefault,
+			status: row.status,
 			hasContent: row.content !== null,
+			placeholder: isPagePlaceholderSlug(row.slug),
 			updatedAt: row.updatedAt
-		}
+		},
+		draft: draftRow
+			? {
+					id: draftRow.id,
+					version: draftRow.version,
+					slug: draftRow.slug,
+					title: draftRow.payload?.title ?? {},
+					description: draftRow.payload?.description ?? {},
+					content: draftRow.payload?.content ?? {},
+					updatedAt: draftRow.updatedAt
+				}
+			: null
 	};
 };
 
@@ -56,16 +94,24 @@ function str(form: FormData, key: string): string {
 	return (form.get(key) ?? '').toString();
 }
 
-function localizedFrom(form: FormData, prefix: string): LocalizedText {
+function localizedFrom(form: FormData, prefix: string, trim = true): LocalizedText {
 	const result: LocalizedText = {};
 	for (const locale of LOCALES) {
-		const value = str(form, `${prefix}_${locale}`).trim();
+		const raw = str(form, `${prefix}_${locale}`);
+		const value = trim ? raw.trim() : raw;
 		if (value !== '') result[locale] = value;
 	}
 	return result;
 }
 
 export const actions: Actions = {
+	/**
+	 * Row-properties direct save. For md rows (content !== null) this writes
+	 * ONLY the row-level properties (icon / external_url): title /
+	 * description / content / slug are draft-owned there (single source) and
+	 * travel through the draft actions below. Code / external rows keep the
+	 * full P2 metadata write.
+	 */
 	save: async ({ request }) => {
 		await requireAdminRole();
 		const form = await request.formData();
@@ -74,17 +120,17 @@ export const actions: Actions = {
 		const pageId = id.toLowerCase();
 
 		const [row] = await db
-			.select({ id: pages.id, slug: pages.slug, isDefault: pages.isDefault })
+			.select({
+				id: pages.id,
+				slug: pages.slug,
+				isDefault: pages.isDefault,
+				content: pages.content
+			})
 			.from(pages)
 			.where(eq(pages.id, pageId))
 			.limit(1);
 		if (!row) return fail(404, { error: m.admin_pages_err_not_found() });
 
-		const title = localizedFrom(form, 'title');
-		if (Object.keys(title).length === 0)
-			return fail(400, { error: m.admin_pages_err_title_required() });
-
-		const description = localizedFrom(form, 'description');
 		const icon = str(form, 'icon').trim();
 		if (icon !== '' && !(NAV_ICON_NAMES as readonly string[]).includes(icon)) {
 			return fail(400, { error: m.admin_pages_err_icon_whitelist() });
@@ -93,6 +139,26 @@ export const actions: Actions = {
 		if (externalUrl !== '' && !/^https?:\/\//.test(externalUrl)) {
 			return fail(400, { error: m.admin_pages_err_bad_external() });
 		}
+
+		if (row.content !== null) {
+			// md row: properties only - the editor owns everything else.
+			const updated = await db
+				.update(pages)
+				.set({
+					icon: icon === '' ? null : icon,
+					externalUrl: externalUrl === '' ? null : externalUrl
+				})
+				.where(eq(pages.id, pageId))
+				.returning({ id: pages.id });
+			if (updated.length === 0) return fail(404, { error: m.admin_pages_err_not_found() });
+			return { success: true };
+		}
+
+		const title = localizedFrom(form, 'title');
+		if (Object.keys(title).length === 0)
+			return fail(400, { error: m.admin_pages_err_title_required() });
+
+		const description = localizedFrom(form, 'description');
 
 		const slug = str(form, 'slug').trim().toLowerCase();
 		if (!slug) return fail(400, { error: m.admin_pages_err_slug_required() });
@@ -122,5 +188,122 @@ export const actions: Actions = {
 		}
 		if (updated.length === 0) return fail(404, { error: m.admin_pages_err_not_found() });
 		return { success: true };
+	},
+
+	/**
+	 * Draft autosave (`autosave=1`) and the manual "Save draft" share this
+	 * action; conflicts answer 409 so the client refuses to overwrite. The
+	 * three-locale maps travel as `title_<locale>` / `description_<locale>` /
+	 * `content_<locale>` fields; the slug rides its own field.
+	 */
+	saveDraft: async ({ request, locals }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const rawId = str(form, 'id').trim();
+		const draftId = str(form, 'draftId').trim();
+		const versionRaw = str(form, 'draftVersion').trim();
+		const autosave = form.get('autosave') === '1';
+		// Malformed ids must never reach a uuid column (22P02 → 500).
+		if (rawId && !isUuid(rawId)) return fail(400, { message: m.admin_pages_err_missing_id() });
+		if (draftId && !isUuid(draftId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
+
+		const result = await savePageDraftWork({
+			draftId: draftId || null,
+			pageId: rawId || null,
+			// A non-numeric version is treated as "not provided" (mirrors the
+			// notes editor's permanent-409 review finding).
+			expectedVersion: /^\d+$/.test(versionRaw) ? Number(versionRaw) : null,
+			slug: str(form, 'slug').trim().toLowerCase(),
+			payload: {
+				title: localizedFrom(form, 'title'),
+				description: localizedFrom(form, 'description'),
+				// Markdown bodies are NOT trimmed: leading indentation is
+				// meaningful in code blocks (LF canonicalisation lives in the
+				// service).
+				content: localizedFrom(form, 'content', false)
+			},
+			author: locals.admin?.userId ?? locals.user?.id ?? null,
+			autosave
+		});
+
+		switch (result.kind) {
+			case 'saved':
+				return {
+					saved: true,
+					draftId: result.draftId,
+					draftVersion: result.version,
+					pageId: result.pageId || null,
+					updatedAt: result.updatedAt
+				};
+			case 'unchanged':
+				return {
+					saved: false,
+					reason: result.kind,
+					draftId: result.draftId,
+					draftVersion: result.version,
+					pageId: result.pageId || null
+				};
+			case 'throttled':
+				return {
+					saved: false,
+					reason: result.kind,
+					draftId: result.draftId,
+					draftVersion: result.version,
+					pageId: result.pageId || null,
+					retryAfterMs: result.retryAfterMs
+				};
+			case 'not-found':
+				return fail(404, { message: m.admin_pages_err_not_found() });
+			case 'conflict':
+				return fail(409, {
+					conflict: true,
+					server: result.server,
+					message: m.admin_posts_edit_err_conflict_long()
+				});
+		}
+	},
+
+	/** Publish transaction: copy the locked draft onto the pages row. */
+	publish: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const draftId = str(form, 'draftId').trim();
+		if (!draftId || !isUuid(draftId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
+
+		const result = await publishPageDraft(draftId);
+		switch (result.kind) {
+			case 'published':
+				throw redirect(303, `/admin/pages/edit?id=${result.pageId}&published=1`);
+			case 'invalid':
+				return fail(400, {
+					errors: result.errors,
+					message: m.admin_posts_edit_err_publish_validation()
+				});
+			case 'slug-taken':
+				return fail(400, { errors: { slug: m.admin_pages_err_slug_taken() } });
+			case 'busy':
+				return fail(409, { message: m.admin_posts_edit_err_busy() });
+			case 'not-found':
+				return fail(404, { message: m.admin_posts_edit_err_draft_not_found() });
+		}
+	},
+
+	/** Explicit discard: a never-published page goes with its draft. */
+	discard: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const draftId = str(form, 'draftId').trim();
+		if (!draftId || !isUuid(draftId))
+			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
+
+		const result = await discardPageDraft(draftId);
+		if (result.kind === 'not-found')
+			return fail(404, { message: m.admin_posts_edit_err_draft_not_found() });
+		if (result.kind === 'busy') return fail(409, { message: m.admin_posts_edit_err_busy() });
+		if (result.removedPlaceholder) throw redirect(303, '/admin/pages?discarded=1');
+		if (result.pageId) throw redirect(303, `/admin/pages/edit?id=${result.pageId}&discarded=1`);
+		throw redirect(303, '/admin/pages?discarded=1');
 	}
 };
