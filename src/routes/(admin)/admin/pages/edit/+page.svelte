@@ -52,7 +52,7 @@
 	/** Locale list for the P2 metadata form (label objects). */
 	const LOCALES = locales.map((code) => ({ code, label: localeLabels[code] }));
 
-	const editMode = $derived(data.page.hasContent || data.page.newPage);
+	const editMode = $derived(data.page.editorMode);
 
 	// ── Draft-editor state ───────────────────────────────────────────────
 	let titleMap = $state<Record<string, string>>({});
@@ -801,7 +801,7 @@
 				</Sheet.Header>
 				<div class="flex flex-col gap-5 overflow-y-auto px-6 py-4">
 					<form method="POST" action="?/save" use:enhance={propsHandler} class="flex flex-col gap-5">
-						<input type="hidden" name="id" value={data.page.id} />
+						<input type="hidden" name="id" value={pageId ?? data.page.id} />
 						<div class="flex flex-col gap-1.5">
 							<label for="props-icon" class="text-sm font-medium"
 								>{m.admin_pages_edit_icon()}</label

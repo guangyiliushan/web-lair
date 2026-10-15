@@ -1,29 +1,53 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { psql } from './support';
 import { zhCnLocale } from './locale-fixture';
 
 test.use(zhCnLocale);
 
 /**
- * pages-line P2 acceptance (roadmap W3 #6, T6): the admin registry list and
- * the metadata editor against the real page and the real database. The
+ * pages-line acceptance: P2 registry (T6) + P5 md editor draft flow (T10) +
+ * route resolution (T11), against the real page and the real database. The
  * localhost origin auto-authenticates as the site owner (same as
  * auth.e2e.ts / TAILSCALE_ALLOW_LOOPBACK in the playwright webServer env).
- * Fixtures live under `e2e-admin-%` and are cleaned in beforeAll/afterAll.
+ *
+ * Fixtures live under `e2e-admin-%`; the editor-created pages additionally
+ * carry `E2E Admin` titles (their placeholder slugs are `draft-…` until the
+ * publish), so cleanup keys on the draft payload titles for those.
  */
 
 const SLUG_A = 'e2e-admin-a';
+const SLUG_A2 = 'e2e-admin-a2';
 const SLUG_B = 'e2e-admin-b';
 const TITLE_A = 'E2E Admin A';
 const TITLE_A_ZH = 'E2E 管理页甲';
 const TITLE_B = 'E2E Admin B';
+const NEW_SLUG = 'e2e-admin-new';
+const NEW_TITLE_EN = 'E2E Admin New';
+const NEW_TITLE_ZH = 'E2E 管理页新页';
 
 let idA = '';
 let idB = '';
 
-test.describe.configure({ mode: 'serial', timeout: 120_000 });
+test.describe.configure({ mode: 'serial', timeout: 300_000 });
+
+function byText(page: Page, text: string | RegExp): Locator {
+	return page.getByText(text).filter({ visible: true });
+}
 
 function cleanup(): void {
+	// Order matters: draft-identity refs first, then the editor-created
+	// placeholder rows (found through the draft payloads while those rows
+	// exist), then the fixture rows themselves.
+	psql(
+		`delete from file_references where ref_type = 'draft' and ref_id in (select id from drafts where ref_type = 'page' and payload->'title'->>'en' like 'E2E Admin%')`
+	);
+	psql(
+		`delete from pages where slug like 'draft-%' and id in (select ref_id from drafts where ref_type = 'page' and payload->'title'->>'en' like 'E2E Admin%')`
+	);
+	psql(
+		`delete from file_references where ref_type = 'page' and ref_id in (select id from pages where slug like 'e2e-admin-%')`
+	);
+	psql(`delete from drafts where ref_type = 'page' and payload->'title'->>'en' like 'E2E Admin%'`);
 	psql(`delete from pages where slug like 'e2e-admin-%'`);
 }
 
@@ -62,7 +86,43 @@ const aFirst = async (page: Page) =>
 const bFirst = async (page: Page) =>
 	(await rowIndex(page, TITLE_B)) < (await rowIndex(page, TITLE_A_ZH));
 
-test('the registry lists defaults first and tags the fixture rows', async ({ page }) => {
+/** Open the slug dialog (if needed), set the value, confirm. */
+async function setSlug(page: Page, value: string) {
+	await expect(async () => {
+		if (!(await page.locator('input[name="slug-input"]').isVisible())) {
+			await page.getByRole('button', { name: '添加 slug' }).click();
+		}
+		await expect(page.locator('input[name="slug-input"]')).toBeVisible({ timeout: 5000 });
+	}).toPass({ timeout: 30_000 });
+	await page.locator('input[name="slug-input"]').fill(value);
+	await page.getByRole('button', { name: '确定' }).click();
+	await expect(page.locator('input[name="slug-input"]')).toBeHidden({ timeout: 5000 });
+}
+
+/** Type into the PAGES editor body (its placeholder is the pages copy). */
+async function typeIntoPageEditor(page: Page, text: string) {
+	const editor = page.getByRole('textbox', { name: /写下你的页面/ });
+	await expect(editor).toBeVisible({ timeout: 15_000 });
+	const probe = text.trim().split(/\s+/)[0];
+	await expect(async () => {
+		const current = await editor.innerText();
+		if (!current.includes(probe)) {
+			await editor.click();
+			await page.keyboard.press('Control+End');
+			await page.keyboard.type(text);
+		}
+		await expect(editor).toContainText(probe, { timeout: 2000 });
+	}).toPass({ timeout: 30_000 });
+}
+
+async function manualSave(page: Page) {
+	await page.getByRole('button', { name: '保存草稿' }).click({ timeout: 5000 });
+	await expect(byText(page, /已保存/).first()).toBeVisible({ timeout: 60_000 });
+}
+
+test('the registry lists defaults first, tags the fixtures, and opens the dual-type New menu', async ({
+	page
+}) => {
 	await page.goto('/admin/pages');
 	await expect(page.getByText(/共 \d+ 页/)).toBeVisible();
 	await expect(row(page, TITLE_A_ZH)).toBeVisible();
@@ -71,8 +131,16 @@ test('the registry lists defaults first and tags the fixture rows', async ({ pag
 	await expect(row(page, TITLE_A_ZH).getByText('默认')).toHaveCount(0);
 	// The defaults pin outranks sort_order: A sorts at 0 yet stays below.
 	expect(await rowIndex(page, '关于我')).toBeLessThan(await rowIndex(page, TITLE_A_ZH));
-	// "新增" stays with the P5 md editor — no header action here.
-	await expect(page.getByRole('button', { name: '新建' })).toHaveCount(0);
+	// 「新增」双类型 (P5-3): the toolbar menu offers the md editor target and
+	// the direct external-entry dialog.
+	await expect(async () => {
+		await page.getByRole('button', { name: '新建' }).click();
+		await expect(page.getByRole('menuitem', { name: 'md 页面' })).toBeVisible({
+			timeout: 3000
+		});
+	}).toPass({ timeout: 30_000 });
+	await expect(page.getByRole('menuitem', { name: '外链' })).toBeVisible();
+	await page.keyboard.press('Escape');
 });
 
 test('▲/▼ reorders the fixture pair inside one list renumber', async ({ page }) => {
@@ -143,52 +211,219 @@ test('default rows expose no delete and fold hiding behind a confirmation', asyn
 	await expect(rowAbout.getByText('可见')).toBeVisible();
 });
 
-test('the editor saves localized titles and carries the slug rules', async ({ page }) => {
+test('the editor publishes a draft with a localized title and blocks reserved slugs', async ({
+	page
+}) => {
 	await page.goto(`/admin/pages/edit?id=${idA}`);
 	await expect(page.getByText('额外页')).toBeVisible();
 	await expect(page.getByText('md 页面')).toBeVisible();
-	await expect(page.locator('input[name="slug"]')).toHaveValue(SLUG_A);
+	await expect(byText(page, `/${SLUG_A}`)).toBeVisible();
 
-	// Reserved slug is refused by the server-side whitelist.
-	await page.locator('input[name="slug"]').fill('admin');
+	// Reserved slugs are refused AT PUBLISH (the draft flow validates inside
+	// the publish transaction, not on the retired direct form).
 	await expect(async () => {
-		// Always start from a fresh page: a submit that stalls under heavy
-		// load must not poison the retry (the old closure kept fighting a
-		// dead page until the budget was gone).
 		await page.goto(`/admin/pages/edit?id=${idA}`);
-		await page.locator('input[name="slug"]').fill('admin');
-		await page.getByRole('button', { name: '保存' }).click({ timeout: 5000 });
-		await expect(page.getByRole('alert')).toContainText('保留词', { timeout: 10_000 });
-	}).toPass({ timeout: 90_000 });
+		await setSlug(page, 'admin');
+		await page.getByRole('button', { name: '发布' }).click();
+		await expect(page.getByRole('alert')).toContainText('保留词', { timeout: 20_000 });
+	}).toPass({ timeout: 120_000 });
 	expect(psql(`select slug from pages where id = '${idA}'`)).toBe(SLUG_A);
 
-	// Fix the zh-cn title and move the slug; both persist.
-	await page.locator('input[name="title_zh-cn"]').fill('E2E 管理页甲改');
-	await page.locator('input[name="slug"]').fill(`${SLUG_A}2`);
+	// Fix the slug, edit the zh-cn title through the locale switcher, then
+	// publish: the draft merges per language and the row lands renamed.
 	await expect(async () => {
+		// Idempotent retry (P5-5 T7): an attempt that already landed must not
+		// re-run against the post-publish state.
+		if (psql(`select slug from pages where id = '${idA}'`) === SLUG_A2) return;
 		await page.goto(`/admin/pages/edit?id=${idA}`);
-		await page.locator('input[name="title_zh-cn"]').fill('E2E 管理页甲改');
-		await page.locator('input[name="slug"]').fill(`${SLUG_A}2`);
-		await page.getByRole('button', { name: '保存' }).click({ timeout: 5000 });
-		await expect(page.getByRole('status')).toContainText('已保存', { timeout: 10_000 });
-	}).toPass({ timeout: 90_000 });
+		await setSlug(page, SLUG_A2);
+		// Locale switch signal: the title input swaps to the seeded zh-cn
+		// title; a swallowed click keeps the en title and fails the gate.
+		const titleInput = page.locator('input[aria-label="标题"]');
+		await expect(async () => {
+			await page.getByRole('button', { name: '简体中文' }).click();
+			await expect(titleInput).toHaveValue(TITLE_A_ZH, { timeout: 3000 });
+		}).toPass({ timeout: 30_000 });
+		await expect(async () => {
+			await titleInput.click();
+			await page.keyboard.press('Control+A');
+			await page.keyboard.type('E2E 管理页甲改');
+			await expect(titleInput).toHaveValue('E2E 管理页甲改', { timeout: 2000 });
+		}).toPass({ timeout: 30_000 });
+		await page.getByRole('button', { name: '发布' }).click();
+		await page.waitForURL(/published=1/, { timeout: 20_000 });
+	}).toPass({ timeout: 150_000 });
 
 	expect(psql(`select title->>'zh-cn' from pages where id = '${idA}'`)).toBe('E2E 管理页甲改');
-	expect(psql(`select slug from pages where id = '${idA}'`)).toBe(`${SLUG_A}2`);
+	expect(psql(`select slug from pages where id = '${idA}'`)).toBe(SLUG_A2);
+	// Divergence 4: pages keep NO slug tracker (no 301 by decision).
+	expect(psql(`select count(*) from slug_trackers where slug = '${SLUG_A}'`)).toBe('0');
 
 	// The renamed slug serves; the old one is gone (no 301 by decision).
 	const old = await page.goto(`/zh-cn/${SLUG_A}`);
 	expect(old?.status()).toBe(404);
-	const fresh = await page.goto(`/zh-cn/${SLUG_A}2`);
+	const fresh = await page.goto(`/zh-cn/${SLUG_A2}`);
 	expect(fresh?.status()).toBe(200);
 	await expect(page.getByRole('heading', { name: 'E2E 管理页甲改' }).first()).toBeVisible();
 });
 
-test('the default row keeps a read-only slug in the editor', async ({ page }) => {
+test('the default row keeps a read-only slug in the dialog', async ({ page }) => {
 	const aboutId = psql(`select id from pages where slug = 'about'`);
 	await page.goto(`/admin/pages/edit?id=${aboutId}`);
-	await expect(page.locator('input[name="slug"]')).toHaveAttribute('readonly', '');
-	await expect(page.getByText(/默认页 Slug 不可修改/)).toBeVisible();
+	await expect(async () => {
+		if (!(await page.locator('input[name="slug-input"]').isVisible())) {
+			await page.getByRole('button', { name: '添加 slug' }).click();
+		}
+		await expect(page.locator('input[name="slug-input"]')).toBeVisible({ timeout: 5000 });
+	}).toPass({ timeout: 30_000 });
+	await expect(page.locator('input[name="slug-input"]')).toHaveAttribute('readonly', '');
+	await expect(byText(page, /默认页 Slug 不可修改/)).toBeVisible();
+});
+
+test('the external-entry dialog inserts a link row directly (no draft)', async ({ page }) => {
+	await page.goto('/admin/pages');
+	await expect(async () => {
+		await page.getByRole('button', { name: '新建' }).click();
+		await expect(page.getByRole('menuitem', { name: '外链' })).toBeVisible({ timeout: 3000 });
+	}).toPass({ timeout: 30_000 });
+	await page.getByRole('menuitem', { name: '外链' }).click();
+
+	const dialog = page.getByRole('dialog', { name: '新增外链条目' });
+	await expect(dialog).toBeVisible({ timeout: 10_000 });
+	await dialog.locator('input[name="title_en"]').fill('E2E Admin Link');
+	await dialog.locator('input[name="slug"]').fill('e2e-admin-link');
+	await dialog.locator('input[name="externalUrl"]').fill('https://example.com/e2e');
+	await dialog.getByRole('button', { name: '保存' }).click();
+
+	const linkRow = page.getByRole('row').filter({ hasText: 'E2E Admin Link' });
+	await expect(linkRow).toBeVisible({ timeout: 20_000 });
+	await expect(linkRow.getByText('外链')).toBeVisible();
+	expect(psql(`select external_url from pages where slug = 'e2e-admin-link'`)).toBe(
+		'https://example.com/e2e'
+	);
+	// No draft was involved: the inserted row IS the artifact.
+	expect(
+		psql(
+			`select count(*) from drafts where ref_id = (select id from pages where slug = 'e2e-admin-link')`
+		)
+	).toBe('0');
+});
+
+test('creating an md page end-to-end: dual locale, save, publish, render', async ({ page }) => {
+	await page.goto('/admin/pages');
+	await expect(async () => {
+		await page.getByRole('button', { name: '新建' }).click();
+		await expect(page.getByRole('menuitem', { name: 'md 页面' })).toBeVisible({ timeout: 3000 });
+	}).toPass({ timeout: 30_000 });
+	await page.getByRole('menuitem', { name: 'md 页面' }).click();
+	await page.waitForURL(/\/admin\/pages\/edit$/, { timeout: 15_000 });
+
+	// A brand-new page starts on the default language (en).
+	const titleInput = page.locator('input[aria-label="标题"]');
+	await expect(async () => {
+		await titleInput.click();
+		await page.keyboard.press('Control+A');
+		await page.keyboard.type(NEW_TITLE_EN);
+		await expect(titleInput).toHaveValue(NEW_TITLE_EN, { timeout: 2000 });
+	}).toPass({ timeout: 30_000 });
+	await typeIntoPageEditor(page, 'e2e-new-body-marker en body');
+
+	// Locale switch contract (W1 Q3): flush the en working copy, remount on
+	// the empty zh body, then fill the zh title + body - the mount signal is
+	// the title input swapping from the en value to ''.
+	await expect(async () => {
+		await page.getByRole('button', { name: '简体中文' }).click();
+		await expect(titleInput).toHaveValue('', { timeout: 3000 });
+	}).toPass({ timeout: 30_000 });
+	await expect(async () => {
+		await titleInput.click();
+		await page.keyboard.press('Control+A');
+		await page.keyboard.type(NEW_TITLE_ZH);
+		await expect(titleInput).toHaveValue(NEW_TITLE_ZH, { timeout: 2000 });
+	}).toPass({ timeout: 30_000 });
+	await typeIntoPageEditor(page, '管理页正文标记 zh body');
+
+	await setSlug(page, NEW_SLUG);
+	await manualSave(page);
+
+	// The first save materialized the placeholder row and anchored the URL;
+	// the draft carries BOTH locales (save = merge per language).
+	await expect.poll(() => page.url()).toContain('id=');
+	const pageId = psql(`select ref_id from drafts where ref_type = 'page' and slug = '${NEW_SLUG}'`);
+	expect(pageId).not.toBe('');
+	expect(psql(`select slug from pages where id = '${pageId}'`)).toMatch(/^draft-/);
+	expect(psql(`select payload->'title'->>'en' from drafts where ref_id = '${pageId}'`)).toBe(
+		NEW_TITLE_EN
+	);
+	expect(psql(`select payload->'title'->>'zh-cn' from drafts where ref_id = '${pageId}'`)).toBe(
+		NEW_TITLE_ZH
+	);
+
+	await expect(async () => {
+		// Idempotent retry (P5-5 T7): treat an already-published row as done.
+		if (psql(`select slug from pages where id = '${pageId}'`) === NEW_SLUG) return;
+		await page.getByRole('button', { name: '发布' }).click();
+		await page.waitForURL(/published=1/, { timeout: 20_000 });
+	}).toPass({ timeout: 60_000 });
+
+	// First publish flips the placeholder visible and lands the slug.
+	expect(psql(`select slug from pages where id = '${pageId}'`)).toBe(NEW_SLUG);
+	expect(psql(`select status from pages where id = '${pageId}'`)).toBe('visible');
+	expect(psql(`select title->>'zh-cn' from pages where id = '${pageId}'`)).toBe(NEW_TITLE_ZH);
+	expect(psql(`select content->>'en' from pages where id = '${pageId}'`)).toContain(
+		'e2e-new-body-marker'
+	);
+	expect(psql(`select content->>'zh-cn' from pages where id = '${pageId}'`)).toContain(
+		'管理页正文标记'
+	);
+	expect(psql(`select count(*) from drafts where ref_id = '${pageId}'`)).toBe('0');
+
+	// The published row renders at its zh-cn and bare (en) URLs.
+	const freshZh = await page.goto(`/zh-cn/${NEW_SLUG}`);
+	expect(freshZh?.status()).toBe(200);
+	await expect(page.getByRole('heading', { name: NEW_TITLE_ZH }).first()).toBeVisible();
+	const freshEn = await page.goto(`/${NEW_SLUG}`);
+	expect(freshEn?.status()).toBe(200);
+	await expect(
+		page.getByRole('heading', { name: /E2E Admin New|E2E 管理页新页/ }).first()
+	).toBeVisible();
+});
+
+test('a never-published placeholder reopens in the draft editor (B1)', async ({ page }) => {
+	await page.goto('/admin/pages');
+	await expect(async () => {
+		await page.getByRole('button', { name: '新建' }).click();
+		await expect(page.getByRole('menuitem', { name: 'md 页面' })).toBeVisible({ timeout: 3000 });
+	}).toPass({ timeout: 30_000 });
+	await page.getByRole('menuitem', { name: 'md 页面' }).click();
+
+	const titleInput = page.locator('input[aria-label="标题"]');
+	await expect(async () => {
+		await titleInput.click();
+		await page.keyboard.press('Control+A');
+		await page.keyboard.type('E2E Admin Reload');
+		await expect(titleInput).toHaveValue('E2E Admin Reload', { timeout: 2000 });
+	}).toPass({ timeout: 30_000 });
+	await typeIntoPageEditor(page, 'e2e-reload-marker body');
+	await manualSave(page);
+
+	// Reload the anchored URL: a placeholder row (content null, draft- slug)
+	// must reopen in the EDITOR, never the retired metadata form (B1 fix).
+	await expect.poll(() => page.url()).toContain('id=');
+	await page.reload();
+	await expect(page.getByRole('textbox', { name: /写下你的页面/ })).toBeVisible({
+		timeout: 20_000
+	});
+	await expect(titleInput).toHaveValue('E2E Admin Reload', { timeout: 15_000 });
+	await expect(page.getByRole('button', { name: '发布' })).toBeVisible();
+	// The retired P2 form's own submit ("保存", exact) must not render.
+	await expect(page.getByRole('button', { name: '保存', exact: true })).toHaveCount(0);
+
+	const pageId = psql(
+		`select ref_id from drafts where ref_type = 'page' and payload->'title'->>'en' = 'E2E Admin Reload'`
+	);
+	expect(pageId).not.toBe('');
+	expect(psql(`select slug from pages where id = '${pageId}'`)).toMatch(/^draft-/);
 });
 
 test('deleting a fixture row works through the confirmation', async ({ page }) => {
@@ -209,11 +444,40 @@ test('deleting a fixture row works through the confirmation', async ({ page }) =
 		timeout: 15_000
 	});
 	expect(psql(`select count(*) from pages where slug = '${SLUG_B}'`)).toBe('0');
-	expect(idB).not.toBe('');
+	// The cascade leaves no dangling draft rows for the deleted page (M1).
+	expect(psql(`select count(*) from drafts where ref_id = '${idB}'`)).toBe('0');
 });
 
 test('a malformed id answers 404 instead of crashing', async ({ page }) => {
 	const response = await page.goto('/admin/pages/edit?id=not-a-uuid');
 	expect(response?.status()).toBe(404);
 	await expect(page.getByText('页面不存在')).toBeVisible();
+});
+
+test('T11 · an unknown slug answers 404', async ({ page }) => {
+	const response = await page.goto('/zh-cn/e2e-admin-no-such-page');
+	expect(response?.status()).toBe(404);
+});
+
+test('T11 · an external entry 404s at its own slug (menu link only)', async ({ page }) => {
+	const response = await page.goto('/zh-cn/e2e-admin-link');
+	expect(response?.status()).toBe(404);
+});
+
+test('T11 · a page row colliding with a code route never shadows it', async ({ page }) => {
+	// The row is injected through raw SQL on purpose: the reserved list keeps
+	// `photos` out of reach for every editor path, and the read-side order
+	// (file routes above the dynamic [slug]) is exactly what this pins.
+	// Premise guard (P5-5 T7): never blow away a row that already exists.
+	expect(psql(`select count(*) from pages where slug = 'photos'`)).toBe('0');
+	psql(
+		`insert into pages (slug, title, content, content_format) values ('photos', '{"en":"E2E Admin Collide"}'::jsonb, '{"en":"collision body"}'::jsonb, 'markdown')`
+	);
+	try {
+		const response = await page.goto('/zh-cn/photos');
+		expect(response?.status()).toBe(200);
+		await expect(page.getByText('collision body')).toHaveCount(0);
+	} finally {
+		psql(`delete from pages where slug = 'photos'`);
+	}
 });

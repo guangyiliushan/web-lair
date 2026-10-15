@@ -249,6 +249,20 @@ describe('admin page editor · metadata save (P2)', () => {
 		await run('save', { id: PAGE_ID, icon: '', externalUrl: '' });
 		expect(state.setCalls[1]).toEqual({ icon: null, externalUrl: null });
 	});
+
+	it('treats a never-published placeholder like an md row (props-only save, B1/M3)', async () => {
+		state.selectQueue = [[{ id: PAGE_ID, slug: 'draft-abc123', isDefault: false, content: null }]];
+		state.returningQueue = [[{ id: PAGE_ID }]];
+		const ok = await run('save', {
+			id: PAGE_ID,
+			icon: 'coffee',
+			externalUrl: '',
+			title_en: 'SHOULD NOT LAND',
+			slug: 'should-not-land'
+		});
+		expect(ok.data).toEqual({ success: true });
+		expect(state.setCalls[0]).toEqual({ icon: 'coffee', externalUrl: null });
+	});
 });
 
 describe('pages editor · draft actions (P5-2)', () => {
@@ -460,7 +474,12 @@ describe('pages editor · load', () => {
 			defaultLang: string;
 		};
 		expect(service.requireAdminRole).toHaveBeenCalledTimes(1);
-		expect(data.page).toMatchObject({ placeholder: true, hasContent: false, description: {} });
+		expect(data.page).toMatchObject({
+			placeholder: true,
+			hasContent: false,
+			editorMode: true,
+			description: {}
+		});
 		expect(data.draft).toMatchObject({
 			id: DRAFT_ID,
 			version: 2,
@@ -490,6 +509,7 @@ describe('pages editor · load', () => {
 			newPage: true,
 			placeholder: true,
 			hasContent: false,
+			editorMode: true,
 			status: 'hidden',
 			isDefault: false,
 			updatedAt: null

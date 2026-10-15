@@ -49,6 +49,7 @@ vi.mock('$lib/paraglide/runtime', () => ({
 import { actions, load } from './+page.server';
 
 const PAGE_ID = '11111111-1111-1111-1111-111111111111';
+const DRAFT_ID = '44444444-4444-4444-4444-444444444444';
 const OTHER_A = '22222222-2222-2222-2222-222222222222';
 const OTHER_B = '33333333-3333-3333-3333-333333333333';
 const dialect = new PgDialect();
@@ -301,16 +302,19 @@ describe('admin pages list (P2)', () => {
 		expect(state.deletes).toHaveLength(0);
 		expect(state.forCalls).toContain('update');
 
-		state.selectQueue = [[{ id: PAGE_ID, isDefault: false }]];
+		state.selectQueue = [[{ id: PAGE_ID, isDefault: false }], [{ id: DRAFT_ID }]];
 		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toEqual({
 			success: true
 		});
-		expect(state.deletes).toHaveLength(1);
+		// Both deletes recorded: the page and its cascaded draft (M1 review).
+		expect(state.deletes).toHaveLength(2);
 		expect(dialect.sqlToQuery(state.deletes[0] as never).params).toEqual([PAGE_ID]);
 		expect(dbMock.transaction).toHaveBeenCalled();
-		// Q15 deletion hook: a hard-deleted page clears its references (the
-		// empty desired set) inside the same transaction.
-		expect(syncCheck).toHaveBeenCalledWith(state.tx, { type: 'page', id: PAGE_ID }, []);
+		// Q15 deletion hooks: the page's references AND the cascaded draft's
+		// references are cleared inside the same transaction, in order.
+		expect(syncCheck).toHaveBeenCalledTimes(2);
+		expect(syncCheck).toHaveBeenNthCalledWith(1, state.tx, { type: 'draft', id: DRAFT_ID }, []);
+		expect(syncCheck).toHaveBeenNthCalledWith(2, state.tx, { type: 'page', id: PAGE_ID }, []);
 		expect((syncCheck.mock.calls[0] as unknown[])[0]).toBe(state.tx);
 
 		state.selectQueue = [[]];
@@ -321,13 +325,37 @@ describe('admin pages list (P2)', () => {
 });
 
 describe('admin pages list · create external entry (P5-3)', () => {
+	// Full reset (P5-5 T6): the hoisted mock is module-level shared state; a
+	// describe that only clears half of it inherits the previous describe's
+	// last state the moment its tests start touching select/update.
 	beforeEach(() => {
-		state.inserts = [];
+		state.selectQueue = [];
 		state.returningQueue = [];
+		state.orderArgs = [];
+		state.executes = [];
+		state.statusUpdates = [];
+		state.forCalls = [];
+		state.deletes = [];
+		state.inserts = [];
 		state.nextThrow = null;
+		state.tx = null;
 		service.requireAdminRole.mockClear();
 		syncCheck.mockClear();
 		Object.assign(dbMock, {
+			select: vi.fn(() => selectChain()),
+			update: vi.fn(() => ({
+				set: vi.fn((values: Record<string, unknown>) => ({
+					where: vi.fn((cond: unknown) => {
+						const params = dialect.sqlToQuery(cond as never).params;
+						state.statusUpdates.push({ values, target: String(params[0]) });
+						return { returning: vi.fn(async () => state.returningQueue.shift() ?? []) };
+					})
+				}))
+			})),
+			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
+				state.tx = makeTx();
+				return cb(state.tx);
+			}),
 			insert: vi.fn(() => ({
 				values: vi.fn((values: Record<string, unknown>) => {
 					state.inserts.push({ values });

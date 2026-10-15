@@ -112,6 +112,19 @@ async function main(): Promise<void> {
 			}
 			if (!['visible', 'hidden'].includes(row.status)) fail(`invalid status for ${slug}`);
 			if (row.content_format !== 'markdown') fail(`invalid content_format for ${slug}`);
+			// Placeholder rows are editor working state, not registry entries:
+			// the title may legitimately be empty until the first publish
+			// (W1 ruling; exempted by slug prefix - the default rows get the
+			// same kind of exemption via DEFAULT_SLUG_SET above). Keep a
+			// warning so a stale placeholder stays observable.
+			if (slug.startsWith('draft-')) {
+				const hasTitle = Object.values(row.title ?? {}).some(
+					(value) => typeof value === 'string' && value.trim().length > 0
+				);
+				if (!hasTitle)
+					warnings.push(`placeholder row without a title yet: /${slug} (draft in progress)`);
+				continue;
+			}
 			assertTitleHasLocale(row.title, slug);
 			if (row.is_default) defaults.add(slug);
 			if (routeNames.includes(slug))

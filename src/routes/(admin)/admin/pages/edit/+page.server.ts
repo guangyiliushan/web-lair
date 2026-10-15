@@ -22,6 +22,16 @@ const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const LOCALES = ['en', 'zh-cn', 'ja'] as const;
 
 /**
+ * Rows the draft editor owns (B1 review): md rows and their never-published
+ * placeholder form. ONE predicate source - `?/save` narrows on the same
+ * expression and the load projection hands `editorMode` to the client, so
+ * the three consumers cannot drift apart.
+ */
+function isEditorRow(row: { content: unknown; slug: string }): boolean {
+	return row.content !== null || isPagePlaceholderSlug(row.slug);
+}
+
+/**
  * Pages editor. Two shapes share the route (P5-2 single-source rule):
  *
  * - md rows (`content` not null): the md editor is the SINGLE SOURCE - the
@@ -81,6 +91,7 @@ export const load: PageServerLoad = async ({ url }) => {
 					hasContent: row.content !== null,
 					placeholder: isPagePlaceholderSlug(row.slug),
 					newPage: false,
+					editorMode: isEditorRow(row),
 					updatedAt: row.updatedAt
 				}
 			: {
@@ -97,6 +108,7 @@ export const load: PageServerLoad = async ({ url }) => {
 					hasContent: false,
 					placeholder: true,
 					newPage: true,
+					editorMode: true,
 					updatedAt: null
 				},
 		draft: draftRow
@@ -163,8 +175,10 @@ export const actions: Actions = {
 			return fail(400, { error: m.admin_pages_err_bad_external() });
 		}
 
-		if (row.content !== null) {
-			// md row: properties only - the editor owns everything else.
+		if (isEditorRow(row)) {
+			// md row (incl. its never-published placeholder form): properties
+			// only - the editor owns everything else. Same predicate as the
+			// load projection's `editorMode` (B1/M3 review).
 			const updated = await db
 				.update(pages)
 				.set({

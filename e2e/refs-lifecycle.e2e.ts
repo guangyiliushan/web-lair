@@ -47,11 +47,14 @@ function cleanup() {
 	// Draft-identity refs go with their draft rows (3b2); clean them first so
 	// a crashed run cannot leave orphan reference rows behind.
 	psql(
-		`delete from file_references where ref_type = 'draft' and ref_id in (select id from drafts where title ilike 'e2e refs%' or ref_id in (select id from posts where slug like 'e2e-refs%') or ref_id in (select id from notes where slug like 'e2e-refs%'))`
+		`delete from file_references where ref_type = 'draft' and ref_id in (select id from drafts where title ilike 'e2e refs%' or ref_id in (select id from posts where slug like 'e2e-refs%') or ref_id in (select id from notes where slug like 'e2e-refs%') or ref_id in (select id from pages where slug = '${PAGE_SLUG}'))`
 	);
 	psql(`delete from drafts where title ilike 'e2e refs%'`);
 	psql(`delete from drafts where ref_id in (select id from posts where slug like 'e2e-refs%')`);
 	psql(`delete from drafts where ref_id in (select id from notes where slug like 'e2e-refs%')`);
+	psql(
+		`delete from drafts where ref_type = 'page' and ref_id in (select id from pages where slug = '${PAGE_SLUG}')`
+	);
 	// Match the same populations the row deletes below cover: placeholder
 	// rows carry a `draft-` slug, so title must join the predicate or a
 	// crashed run leaves orphan references behind (review round 2).
@@ -348,4 +351,46 @@ test('dropping the image from the working copy keeps the published reference att
 	expect(refCount('note', noteId)).toBe('1');
 	expect(fileStatus()).toBe('attached');
 	expect(psql(`select detached_at is not null from files where object_key = '${KEY}'`)).toBe('f');
+});
+
+test('a page draft keys the upload under its draft identity; publish re-keys it (P5)', async ({
+	page
+}) => {
+	// A plain md row (no image) as the edit target; the upload below enters
+	// through the editor's picker, exactly like a writer's flow. The route
+	// and the draft chain are the P5 additions (the old direct form never
+	// had one).
+	psql(
+		`insert into pages (slug, title, content, content_format) values ('${PAGE_SLUG}', '{"en":"${PAGE_TITLE}"}'::jsonb, '{"en":"fixture page body"}'::jsonb, 'markdown')`
+	);
+	const pageId = psql(`select id from pages where slug = '${PAGE_SLUG}'`);
+
+	await page.goto(`/admin/pages/edit?id=${pageId}`);
+	await expect(page.getByRole('textbox', { name: /写下你的页面/ })).toBeVisible({
+		timeout: 15_000
+	});
+	await uploadViaPicker(page);
+	await manualSave(page);
+
+	// Draft identity (3b2): the editor's working copy keys the ref on its
+	// draft row; the page identity stays untouched until publish.
+	const draftId = psql(`select id from drafts where ref_type = 'page' and ref_id = '${pageId}'`);
+	expect(draftId).not.toBe('');
+	expect(refCount('draft', draftId)).toBe('1');
+	expect(refCount('page', pageId)).toBe('0');
+	expect(fileStatus()).toBe('attached');
+
+	// Publish copies the localized body (keysFromLocalizedContent union) and
+	// re-keys the durable reference set onto the page identity; the draft's
+	// own refs leave with its row.
+	await expect(async () => {
+		await page.getByRole('button', { name: '发布' }).click();
+		await page.waitForURL(/published=1/, { timeout: 20_000 });
+	}).toPass({ timeout: 40_000 });
+	expect(psql(`select count(*) from drafts where ref_id = '${pageId}'`)).toBe('0');
+	expect(refCount('page', pageId)).toBe('1');
+	expect(
+		psql(`select count(*) from file_references where ref_type = 'draft' and ref_id = '${draftId}'`)
+	).toBe('0');
+	expect(fileStatus()).toBe('attached');
 });

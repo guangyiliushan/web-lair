@@ -205,11 +205,16 @@ export async function savePageDraftWork(input: SavePageDraftInput): Promise<Save
 		if (existing) return updateExistingPageDraft(existing, normalized, input);
 
 		const [page] = await db
-			.select({ id: pages.id })
+			.select({ id: pages.id, content: pages.content, slug: pages.slug })
 			.from(pages)
 			.where(eq(pages.id, input.pageId))
 			.limit(1);
 		if (!page) return { kind: 'not-found' };
+		// Only editor rows accept drafts (M3 review): blindly attaching to a
+		// code / external row would let the publish transaction flip it into
+		// an md page with no editor path ever having shown that face.
+		if (page.content === null && !isPagePlaceholderSlug(page.slug))
+			return { kind: 'not-found' };
 		try {
 			// Attaching the first draft to a published content row is a save
 			// path too: the content write and the reference diff share one
@@ -353,6 +358,20 @@ async function updateExistingPageDraft(
 			kind: 'conflict',
 			server: { draftId: draft.id, version: draft.version, updatedAt: draft.updatedAt }
 		};
+	}
+
+	// The target row must still exist before a write may claim success (M1
+	// review): the list delete cascades drafts, so a surviving draft with a
+	// missing page is a legacy orphan - answer not-found instead of the
+	// false `saved` the old path returned. Sits AFTER the hash/version gates
+	// so no-op autosaves never pay the lookup.
+	if (pageId !== '') {
+		const [target] = await db
+			.select({ id: pages.id })
+			.from(pages)
+			.where(eq(pages.id, pageId))
+			.limit(1);
+		if (!target) return { kind: 'not-found' };
 	}
 
 	const expected = input.expectedVersion ?? draft.version;

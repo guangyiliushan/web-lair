@@ -1,8 +1,8 @@
 import { fail } from '@sveltejs/kit';
-import { asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { getLocale } from '$lib/paraglide/runtime';
 import { db } from '$lib/server/db';
-import { pages } from '$lib/server/db/content';
+import { drafts, pages } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { resolveLocalized } from '$lib/server/services/pages';
@@ -212,7 +212,18 @@ export const actions: Actions = {
 				.for('update');
 			if (!row) return { kind: 'not-found' as const };
 			if (row.isDefault) return { kind: 'protected' as const };
+			// The draft rows go with the page (M1 review): ref_id is
+			// polymorphic so no FK can cascade, and a surviving draft keeps
+			// its file_references (and the files) forever attached.
+			const draftRows = await tx
+				.select({ id: drafts.id })
+				.from(drafts)
+				.where(and(eq(drafts.refType, 'page'), eq(drafts.refId, pageId)));
 			await tx.delete(pages).where(eq(pages.id, pageId));
+			for (const draft of draftRows) {
+				await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
+				await tx.delete(drafts).where(eq(drafts.id, draft.id));
+			}
 			// A hard-deleted page leaves no content behind: clear its
 			// references in the same transaction (Q15 deletion hook) so the
 			// images it mentioned become detachable again.
