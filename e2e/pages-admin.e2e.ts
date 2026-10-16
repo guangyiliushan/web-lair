@@ -50,10 +50,15 @@ function cleanup(): void {
 }
 
 test.beforeAll(() => {
-	// Locale premise (三审 G4): the draft titles land in the default-language
-	// slot; pin it once for the whole (serial) file so a default_lang drift
-	// fails at the start instead of surfacing as scattered assertion diffs.
-	expect(psql(`select value from options where name = 'site.default_lang'`) || '').toBe('en');
+	// Effective default language (G4; rebuilt-DB reality): the live DB was
+	// rebuilt without the options row, and the app's registry fallback is
+	// 'en' - assert the EFFECTIVE value so a deliberate drift to another
+	// locale still fails here.
+	expect(
+		psql(
+			`select coalesce((select value #>> '{}' from options where name = 'site.default_lang'), 'en')`
+		)
+	).toBe('en');
 	cleanup();
 	psql(
 		`insert into pages (slug, title, description, icon, external_url, status, sort_order, is_default, content, content_format) values ('${SLUG_A}', '{"en":"${TITLE_A}","zh-cn":"${TITLE_A_ZH}"}'::jsonb, null, null, null, 'visible', 0, false, '{"en":"# E2E admin body A","zh-cn":"# E2E 管理页甲正文"}'::jsonb, 'markdown')`
