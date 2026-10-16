@@ -262,6 +262,23 @@ export const optionRegistry = {
 		// Public "our link info" block on /friends (plan §2.6).
 		default: { name: 'Web Lair', description: '', avatar: '' }
 	},
+	'presence.enabled': {
+		// Realtime batch (ledger §23): master switch for the presence feature
+		// (heartbeats, the SSE stream, the reader badge, the dashboard cards).
+		schema: z.boolean(),
+		default: true
+	},
+	'presence.readerView': {
+		// Reader-side "N reading now" badge plus the position density strip.
+		schema: z.boolean(),
+		default: true
+	},
+	'presence.readerDots': {
+		// Individual position dots in the reader view; the admin view always
+		// shows dots on content pages regardless of this switch.
+		schema: z.boolean(),
+		default: false
+	},
 	'projects.sync_targets': {
 		// Projects line §2.5: the accounts the sync job pulls public
 		// repositories from; empty by default (the admin surface prompts for
