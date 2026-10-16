@@ -1899,6 +1899,17 @@
 	"posts_tag_heading": "Tag",
 	"posts_tags_empty": "No tags yet.",
 	"posts_tags_title": "Tags",
+	"presence_density_label": "Reading position distribution",
+	"presence_readers_now": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"match": {
+				"countPlural=one": "{count} person is reading",
+				"countPlural=other": "{count} people are reading"
+			},
+			"selectors": ["countPlural"]
+		}
+	],
 	"projects_badge_archived": "Archived",
 	"projects_badge_other": "Other",
 	"projects_badge_site": "Site",

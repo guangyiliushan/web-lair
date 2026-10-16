@@ -1,3 +1,4 @@
+import { getOption } from '$lib/server/config/options-registry';
 import { getPublicOrigin } from '$lib/server/origin';
 import {
 	loadNotesMegaData,
@@ -15,6 +16,13 @@ export const load: LayoutServerLoad = async ({ parent }) => {
 		loadTimelineMegaData(),
 		loadPagesMegaData()
 	]);
+	// Presence config lands in one place (register R-7): every (site) surface
+	// consumes it from the layout data and never re-reads it per component.
+	const [presenceEnabled, presenceReaderView, presenceReaderDots] = await Promise.all([
+		getOption('presence.enabled'),
+		getOption('presence.readerView'),
+		getOption('presence.readerDots')
+	]);
 
 	return {
 		auth,
@@ -25,6 +33,11 @@ export const load: LayoutServerLoad = async ({ parent }) => {
 		postsData,
 		notesData,
 		timelineData,
-		pagesData
+		pagesData,
+		presence: {
+			enabled: presenceEnabled,
+			readerView: presenceReaderView,
+			readerDots: presenceReaderDots
+		}
 	};
 };

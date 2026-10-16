@@ -153,6 +153,7 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 	return {
 		seo: { path: `/notes/${note.slug}`, alternates },
 		note: {
+			id: note.id,
 			slug: note.slug,
 			title: note.title,
 			date: noteDateLabel(note.publishedAt, meta?.tz ?? null, siteTz),

@@ -127,6 +127,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			alternates
 		},
 		post: {
+			id: row.id,
 			slug: row.slug,
 			title: row.title,
 			date: row.publishedAt ? formatDate(row.publishedAt) : '',

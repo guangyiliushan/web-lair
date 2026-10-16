@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { CommentsSection } from '$lib/components/comments';
 	import { MarkdownRenderer } from '$lib/components/markdown';
+	import { ContentPresence } from '$lib/components/presence';
 	import { SeoHead } from '$lib/components/seo';
 	import { localizeHref } from '$lib/paraglide/runtime';
 	import type { PageProps } from './$types';
@@ -15,12 +16,13 @@
 <SeoHead path={data.seo.path} alternates={data.seo.alternates} />
 
 <article class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0">
-	<header class="border-b border-border/50 pb-6">
+	<header class="relative border-b border-border/50 pb-6">
 		<h1 class="text-3xl font-normal">{data.post.title}</h1>
 		<div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
 			<span class="whitespace-nowrap">{data.post.date}</span>
 			<span class="text-muted-foreground/40">·</span>
 			<span class="text-primary">{data.post.category}</span>
+			<ContentPresence contentId={data.post.id} config={data.presence} />
 		</div>
 	</header>
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { CommentsSection } from '$lib/components/comments';
 	import { MarkdownRenderer } from '$lib/components/markdown';
+	import { ContentPresence } from '$lib/components/presence';
 	import { SeoHead } from '$lib/components/seo';
 	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 	import { m } from '$lib/paraglide/messages';
@@ -54,7 +55,7 @@
 <SeoHead path={data.seo.path} alternates={data.seo.alternates} />
 
 <article class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0">
-	<header class="border-b border-border/50 pb-6">
+	<header class="relative border-b border-border/50 pb-6">
 		<div class="flex items-center gap-2">
 			<h1 class="text-3xl font-normal">{data.note.title}</h1>
 			{#if !gateClosed && data.note.pinAt}
@@ -90,6 +91,7 @@
 						{data.note.topic.name}
 					</a>
 				{/if}
+				<ContentPresence contentId={data.note.id} config={data.presence} />
 			</div>
 		{/if}
 	</header>

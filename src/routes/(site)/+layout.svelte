@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Header from '$lib/components/layout/Header.svelte';
 	import Footer from '$lib/components/layout/Footer.svelte';
+	import { PresenceHeartbeat } from '$lib/components/presence';
 	import { localizeHref } from '$lib/paraglide/runtime';
 	import type { LayoutProps } from './$types';
 
@@ -25,4 +26,5 @@
 		</main>
 	</div>
 	<Footer pages={data.pagesData.footerDefaults} />
+	<PresenceHeartbeat enabled={data.presence.enabled} />
 </div>

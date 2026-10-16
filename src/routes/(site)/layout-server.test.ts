@@ -17,6 +17,14 @@ vi.mock('$lib/server/nav-data', () => ({
 	loadTimelineMegaData: vi.fn(async () => null),
 	loadPagesMegaData: vi.fn(async () => null)
 }));
+vi.mock('$lib/server/config/options-registry', () => ({
+	getOption: vi.fn(async (key: string) => {
+		if (key === 'presence.enabled') return true;
+		if (key === 'presence.readerView') return true;
+		if (key === 'presence.readerDots') return false;
+		throw new Error(`unexpected option key: ${key}`);
+	})
+}));
 
 import { load } from './+layout.server';
 
@@ -38,5 +46,12 @@ describe('(site) layout server', () => {
 			siteOrigin: string | null;
 		};
 		expect(data.siteOrigin).toBeNull();
+	});
+
+	it('exposes the presence config for the shell and the detail widgets (R-7)', async () => {
+		const data = (await load({ parent: async () => ({ auth: null }) } as never)) as {
+			presence: { enabled: boolean; readerView: boolean; readerDots: boolean };
+		};
+		expect(data.presence).toEqual({ enabled: true, readerView: true, readerDots: false });
 	});
 });

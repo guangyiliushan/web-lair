@@ -1638,6 +1638,8 @@
 	"posts_tag_heading": "标签",
 	"posts_tags_empty": "暂无标签。",
 	"posts_tags_title": "标签",
+	"presence_density_label": "阅读位置分布",
+	"presence_readers_now": "{count} 人正在读",
 	"projects_badge_archived": "已归档",
 	"projects_badge_other": "其他",
 	"projects_badge_site": "网站",

@@ -1638,6 +1638,8 @@
 	"posts_tag_heading": "タグ",
 	"posts_tags_empty": "タグはまだありません。",
 	"posts_tags_title": "タグ",
+	"presence_density_label": "読書位置の分布",
+	"presence_readers_now": "{count}人が読んでいます",
 	"projects_badge_archived": "アーカイブ済み",
 	"projects_badge_other": "その他",
 	"projects_badge_site": "サイト",
