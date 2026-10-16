@@ -728,6 +728,35 @@ describe('purgeMedia', () => {
 		expect(storageMock.delete).not.toHaveBeenCalled();
 		expect(dbMock.delete).not.toHaveBeenCalled();
 	});
+
+	it('sees a mention carried only by a page-draft payload (T13)', async () => {
+		const sha = 'b'.repeat(64);
+		const mentionedKey = `ab/${sha}.png`;
+		dbMock.select.mockReturnValueOnce(selectChain([{ ...stalePending, objectKey: mentionedKey }]));
+		// Mention scan: posts / drafts (payload-only page draft) / notes / pages.
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(
+			selectChain([
+				{
+					id: 'd2',
+					content: null,
+					payload: {
+						title: {},
+						description: null,
+						content: { en: `body /i/${mentionedKey}@full`, 'zh-cn': '正文无键' }
+					}
+				}
+			])
+		);
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+
+		const outcome = await purgeMedia({ dryRun: false }, { storage: storageMock });
+
+		expect(outcome.skipped).toEqual([{ objectKey: mentionedKey, reason: 'mentioned' }]);
+		expect(outcome.deleted).toEqual([]);
+		expect(storageMock.delete).not.toHaveBeenCalled();
+	});
 });
 
 describe('isRegisteredKey', () => {

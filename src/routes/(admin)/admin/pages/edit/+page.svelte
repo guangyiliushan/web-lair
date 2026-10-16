@@ -81,6 +81,8 @@
 	let saveError = $state<string | null>(null);
 	let conflictMessage = $state<string | null>(null);
 	let inFlight = false;
+	/** Set by the teardown effect: a destroyed component must not re-arm. */
+	let disposed = false;
 	let pendingResave = false;
 	let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -230,16 +232,19 @@
 		if (!data.draft && draftId !== null) {
 			draftId = null;
 			draftVersion = null;
-			// Same stale-timer trap as onPublish (P5 e2e finding): a debounce
-			// scheduled before the draft vanished must not re-attach later.
-			if (autosaveTimer) {
-				clearTimeout(autosaveTimer);
-				autosaveTimer = null;
-			}
 		}
 		// untrack (T16): the dirty test stringifies the whole payload - the
 		// effect must not re-run on every keystroke through that read.
 		if (untrack(isDirty)) return; // keep the working copy; id state already tracks the save
+		// Non-dirty refresh path: kill any debounce armed against the vanished
+		// draft before re-seeding, else it would re-attach a phantom draft
+		// against the just-published row (P5 e2e finding). The DIRTY branch
+		// keeps its timer on purpose - re-saving the kept working copy as a
+		// fresh draft is exactly what it is for (four-review #2 refinement).
+		if (autosaveTimer) {
+			clearTimeout(autosaveTimer);
+			autosaveTimer = null;
+		}
 		applyAll();
 	});
 
@@ -262,6 +267,10 @@
 
 	/** One scheduler for both the debounce and the throttle/error retry. */
 	function scheduleSave(delayMs: number) {
+		// A destroyed component must not re-arm (four-review #2: a runSave
+		// continuation can land after teardown, when the cleanup inside the
+		// teardown effect can no longer reach it).
+		if (disposed) return;
 		if (autosaveTimer) clearTimeout(autosaveTimer);
 		autosaveTimer = setTimeout(() => {
 			autosaveTimer = null;
@@ -517,6 +526,9 @@
 		};
 		window.addEventListener('beforeunload', beforeUnloadHandler);
 		return () => {
+			// A destroyed component must not re-arm timers from in-flight
+			// continuations (four-review #2/#6).
+			disposed = true;
 			if (beforeUnloadHandler) window.removeEventListener('beforeunload', beforeUnloadHandler);
 			if (autosaveTimer) clearTimeout(autosaveTimer);
 			if (flashTimer) clearTimeout(flashTimer);

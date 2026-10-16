@@ -185,10 +185,13 @@ describe('admin pages list (P2)', () => {
 			]
 		];
 
-		const data = (await load({} as never)) as { pages: { title: string }[] };
+		const data = (await load({} as never)) as { pages: { title: string; hasDraft: boolean }[] };
 
 		expect(service.requireAdminRole).toHaveBeenCalledTimes(1);
 		expect(data.pages[0].title).toBe('关于我');
+		// The FALSE direction too (four-review #1: `hasDraft: true` used to
+		// survive the suite - the badge would have been always-on).
+		expect(data.pages[0].hasDraft).toBe(false);
 		const fragments = state.orderArgs[0].map((arg) => dialect.sqlToQuery(sql`${arg}`).sql);
 		const orderSql = fragments.join(' | ');
 		// Relative order and per-key directions, not mere token presence.

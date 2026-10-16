@@ -342,9 +342,7 @@
 					? m.admin_pages_delete_desc_placeholder()
 					: deleteTarget?.hasContent
 						? m.admin_pages_delete_desc_data()
-						: m.admin_pages_delete_desc_code()}{!deleteTarget?.placeholder && deleteTarget?.hasDraft
-					? ` ${m.admin_pages_delete_desc_draft()}`
-					: ''}
+						: m.admin_pages_delete_desc_code()}{#if !deleteTarget?.placeholder && deleteTarget?.hasDraft}{` ${m.admin_pages_delete_desc_draft()}`}{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if form?.error}

@@ -108,6 +108,10 @@ export const load: PageServerLoad = async ({ url }) => {
 					placeholder: true,
 					newPage: true,
 					editorMode: true,
+					// Shape symmetry with the row branch (four-review #6): the
+					// client seeds through `?? {}` anyway, but an explicit {}
+					// keeps the load contract identical on both branches.
+					content: {},
 					updatedAt: null
 				},
 		draft: draftRow
@@ -324,9 +328,9 @@ export const actions: Actions = {
 					message: m.admin_posts_edit_err_publish_validation()
 				});
 			case 'slug-taken':
-				// Field-level 400, unlike the metadata form's 409: the editor
-				// shows it inline next to the slug input (T9 review - the
-				// difference is deliberate, do not "align" it away).
+				// Field-level 400, unlike the metadata form's 409 (T9 review -
+				// deliberate). The message surfaces in the publish banner
+				// (four-review #6: there is no inline slug-input rendering).
 				return fail(400, { errors: { slug: m.admin_pages_err_slug_taken() } });
 			case 'busy':
 				return fail(409, { message: m.admin_posts_edit_err_busy() });

@@ -379,6 +379,12 @@ test('creating an md page end-to-end: dual locale, save, publish, render', async
 		'管理页正文标记'
 	);
 	expect(psql(`select count(*) from drafts where ref_id = '${pageId}'`)).toBe('0');
+	// Stale-debounce guard (four-review #1/#6): a debounce armed before the
+	// publish could land an attach inside its 2.5s window; wait it out before
+	// asserting absence - a bounded fixed wait is the honest way to prove
+	// this negative (AUTOSAVE_DEBOUNCE_MS = 2500 in the editor).
+	await page.waitForTimeout(2_800);
+	expect(psql(`select count(*) from drafts where ref_id = '${pageId}'`)).toBe('0');
 
 	// The published row renders at its zh-cn and bare (en) URLs.
 	const freshZh = await page.goto(`/zh-cn/${NEW_SLUG}`);

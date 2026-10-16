@@ -799,6 +799,18 @@ async function scanMentions(database: FilesDb): Promise<MentionScan> {
 	};
 	collect('post', postRows);
 	collect('draft', draftRows);
+	// Page drafts stage their bodies in `payload.content` (per-locale jsonb;
+	// their row-level content column stays null - T13 review): scan every
+	// locale too, else a page draft's images stay invisible to the audit and
+	// to the purge guard's in-use check.
+	collect(
+		'draft',
+		draftRows.flatMap((row) =>
+			Object.values(row.payload?.content ?? {})
+				.filter((body): body is string => typeof body === 'string')
+				.map((body) => ({ id: row.id, content: body }))
+		)
+	);
 	collect('note', noteRows);
 	// Page bodies are per-locale jsonb: scan every locale's body (duplicate
 	// keys across locales collapse for the in-use guard's purposes).

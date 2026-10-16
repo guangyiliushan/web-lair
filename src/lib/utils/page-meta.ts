@@ -44,11 +44,10 @@ export function isReservedPageSlug(slug: string): boolean {
 
 /**
  * Marker for the auto-generated slug of never-published placeholder rows.
- * One literal for the whole pages line (F6b review): the service, the admin
- * routes (via the service re-export) and both verify scripts read it here,
+ * One literal for the whole pages line (F6b review): the service (re-exported
+ * for the admin routes and tests) and scripts/verify-pages.ts read it here,
  * so the verify-pages exemption and the editor's ownership predicate share
- * the exact same prefix. (post/note draft services keep their own local
- * copies - same value, their lines' call.)
+ * the exact same prefix. (scripts/verify-baseline.ts does not consume it.)
  */
 export const PAGE_PLACEHOLDER_SLUG_PREFIX = 'draft-';
 

@@ -47,8 +47,15 @@ export const load: PageServerLoad = async () => {
 		.orderBy(desc(pages.isDefault), asc(pages.sortOrder), asc(pages.createdAt));
 
 	// Rows with a pending draft ride the list as「未发布改动」(T11 review);
-	// the same set feeds the delete dialog's draft hint (R2-8).
-	const draftSet = await draftsForPages(rows.map((row) => row.id));
+	// the same set feeds the delete dialog's draft hint (R2-8). Advisory
+	// signal only - a drafts read failure must not take the whole list down
+	// (four-review #6); the delete path cascades regardless of the hint.
+	let draftSet: ReadonlySet<string> = new Set();
+	try {
+		draftSet = await draftsForPages(rows.map((row) => row.id));
+	} catch {
+		// Keep the list; the badge/hint simply stay off for this round.
+	}
 
 	return {
 		headerTitle: m.admin_nav_pages(),

@@ -282,12 +282,16 @@ const PREDICATE_PINS: Array<[string, RegExp]> = [
 	],
 	['drafts_topic_idx', /CREATE INDEX "drafts_topic_idx" .*WHERE "drafts"\."topic_id" is not null/],
 	[
+		'comments_post_thread_idx',
+		/^CREATE INDEX "comments_post_thread_idx" .*\("post_id","parent_comment_id","pin","created_at"\) WHERE "comments"\."post_id" is not null$/
+	],
+	[
 		'comments_note_thread_idx',
-		/CREATE INDEX "comments_note_thread_idx" .*WHERE "comments"\."note_id" is not null/
+		/^CREATE INDEX "comments_note_thread_idx" .*\("note_id","parent_comment_id","pin","created_at"\) WHERE "comments"\."note_id" is not null$/
 	],
 	[
 		'comments_page_thread_idx',
-		/CREATE INDEX "comments_page_thread_idx" .*\("page_id","parent_comment_id","pin","created_at"\) WHERE "comments"\."page_id" is not null/
+		/^CREATE INDEX "comments_page_thread_idx" .*\("page_id","parent_comment_id","pin","created_at"\) WHERE "comments"\."page_id" is not null$/
 	]
 ];
 
