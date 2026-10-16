@@ -35,7 +35,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { createServer as createNetServer } from 'node:net';
+import { connect as netConnect, createServer as createNetServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -160,6 +160,20 @@ function spawnDrain(extraEnv: Record<string, string> = {}): {
 	// this script runs with may carry it); the heartbeat scenario passes an
 	// explicit local URL back in.
 	delete env.JOBS_HEARTBEAT_URL;
+	// Fixture drains talk to loopback fixture servers ONLY: scrub any ambient
+	// proxy config. With NODE_USE_ENV_PROXY + HTTP(S)_PROXY exported (the
+	// paraglide build recipe), node's fetch routes even 127.0.0.1 through the
+	// proxy - and a closed-port delivery then receives the proxy's HTTP 502
+	// instead of a network error (root cause of the "unreachable endpoint"
+	// reds, 2026-10-17: detail `code=502 port=… err=HTTP 502`).
+	delete env.HTTP_PROXY;
+	delete env.HTTPS_PROXY;
+	delete env.http_proxy;
+	delete env.https_proxy;
+	delete env.ALL_PROXY;
+	delete env.all_proxy;
+	delete env.NODE_USE_ENV_PROXY;
+	env.NO_PROXY = '*';
 	const child = spawn(process.execPath, ['jobs/drain.ts'], {
 		cwd: repoRoot,
 		env: { ...env, DATABASE_URL: scratchUrl, DATA_DIR: fixtureDataDir, ...extraEnv }
@@ -1050,10 +1064,37 @@ async function reserveClosedPort(): Promise<number> {
 	});
 }
 
+/**
+ * The OS can hand a just-released ephemeral port to another process under
+ * load, so confirm nothing answers before wiring the fixture (cheap
+ * insurance; the 2026-10-16/17 reds on this check turned out to be
+ * proxy-env poisoning, not reuse - see the scrub in spawnDrain).
+ */
+async function reserveDefinitelyClosedPort(): Promise<number> {
+	for (let attempt = 0; attempt < 8; attempt++) {
+		const port = await reserveClosedPort();
+		const stolen = await new Promise<boolean>((resolve) => {
+			const socket = netConnect({ port, host: '127.0.0.1' });
+			let settled = false;
+			const finish = (value: boolean) => {
+				if (settled) return;
+				settled = true;
+				socket.destroy();
+				resolve(value);
+			};
+			socket.once('connect', () => finish(true));
+			socket.once('error', () => finish(false));
+			socket.setTimeout(250, () => finish(false));
+		});
+		if (!stolen) return port;
+	}
+	throw new Error('could not obtain a definitely-closed port after 8 attempts');
+}
+
 async function deadEndpointRecordsNetworkFailure(): Promise<void> {
 	section('delivery: unreachable endpoint -> failed, no response code, sanitized error');
 	await resetLedger();
-	const deadPort = await reserveClosedPort();
+	const deadPort = await reserveDefinitelyClosedPort();
 	const [endpoint] = await db
 		.insert(webhooks)
 		.values({
@@ -1071,7 +1112,7 @@ async function deadEndpointRecordsNetworkFailure(): Promise<void> {
 	check(
 		'unreachable endpoint -> failed, response_code NULL',
 		delivery?.status === 'failed' && delivery?.responseCode === null,
-		`status=${delivery?.status}`
+		`status=${delivery?.status} code=${delivery?.responseCode} port=${deadPort} err=${delivery?.error?.slice(0, 80) ?? ''}`
 	);
 	check(
 		'network error recorded and sanitized (no params tail, capped at 500)',
