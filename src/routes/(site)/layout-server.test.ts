@@ -6,8 +6,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * feeds — deleting or bypassing this wiring used to leave every gate green
  * while silently re-introducing the request-origin fallback in production.
  */
-const { envState } = vi.hoisted(() => ({
-	envState: { env: {} as Record<string, string | undefined> }
+const { envState, optionState } = vi.hoisted(() => ({
+	envState: { env: {} as Record<string, string | undefined> },
+	optionState: {
+		enabled: true,
+		readerView: true,
+		readerDots: false,
+		throwOn: null as string | null
+	}
 }));
 
 vi.mock('$env/dynamic/private', () => envState);
@@ -19,9 +25,10 @@ vi.mock('$lib/server/nav-data', () => ({
 }));
 vi.mock('$lib/server/config/options-registry', () => ({
 	getOption: vi.fn(async (key: string) => {
-		if (key === 'presence.enabled') return true;
-		if (key === 'presence.readerView') return true;
-		if (key === 'presence.readerDots') return false;
+		if (optionState.throwOn === key) throw new Error('settings unavailable');
+		if (key === 'presence.enabled') return optionState.enabled;
+		if (key === 'presence.readerView') return optionState.readerView;
+		if (key === 'presence.readerDots') return optionState.readerDots;
 		throw new Error(`unexpected option key: ${key}`);
 	})
 }));
@@ -31,6 +38,10 @@ import { load } from './+layout.server';
 describe('(site) layout server', () => {
 	beforeEach(() => {
 		delete envState.env.ORIGIN;
+		optionState.enabled = true;
+		optionState.readerView = true;
+		optionState.readerDots = false;
+		optionState.throwOn = null;
 	});
 
 	it('exposes the public ORIGIN for the SEO head', async () => {
@@ -64,5 +75,23 @@ describe('(site) layout server', () => {
 			locals: { admin: { userId: 'admin-1' } }
 		} as never)) as { presence: { readerDots: boolean } };
 		expect(data.presence.readerDots).toBe(true);
+	});
+
+	it('flows a stored false through (enabled reaches the page data)', async () => {
+		optionState.enabled = false;
+		const data = (await load({
+			parent: async () => ({ auth: null }),
+			locals: {}
+		} as never)) as { presence: { enabled: boolean } };
+		expect(data.presence.enabled).toBe(false);
+	});
+
+	it('fails open to the registry defaults when a settings read fails', async () => {
+		optionState.throwOn = 'presence.readerDots';
+		const data = (await load({
+			parent: async () => ({ auth: null }),
+			locals: {}
+		} as never)) as { presence: { enabled: boolean; readerView: boolean; readerDots: boolean } };
+		expect(data.presence).toEqual({ enabled: true, readerView: true, readerDots: false });
 	});
 });

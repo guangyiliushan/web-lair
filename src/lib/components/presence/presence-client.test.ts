@@ -4,6 +4,7 @@ import {
 	getOrCreatePresenceToken,
 	openPresenceStream,
 	positionBucket,
+	sendPresenceHeartbeat,
 	shouldTrackPath,
 	startPresenceHeartbeat,
 	STREAM_COLD_RETRY_LIMIT,
@@ -99,6 +100,21 @@ describe('shouldTrackPath', () => {
 		]) {
 			expect(shouldTrackPath(excluded), excluded).toBe(false);
 		}
+		// Language-prefixed forms (reroute keeps page.url prefixed): the
+		// canonicalisation closes the /zh-cn/account bypass (review finding).
+		for (const prefixed of [
+			'/en/account',
+			'/zh-cn/account/security',
+			'/zh-cn/login',
+			'/ja/register',
+			'/en/forgot-password',
+			'/zh-cn/reset-password',
+			'/ja/verify-email'
+		]) {
+			expect(shouldTrackPath(prefixed), prefixed).toBe(false);
+		}
+		expect(shouldTrackPath('/zh-cn/posts/hello')).toBe(true);
+		expect(shouldTrackPath('/en/notes/topics/travel')).toBe(true);
 	});
 });
 
@@ -129,6 +145,16 @@ describe('presence token', () => {
 		});
 		const storage = memoryStorage();
 		expect(getOrCreatePresenceToken(storage)).toBe('abababab-abab-4bab-abab-abababababab');
+	});
+
+	it('prefers crypto.randomUUID when available (tier 1)', () => {
+		vi.stubGlobal('crypto', {
+			randomUUID: () => '12345678-1234-4123-8123-123456789abc',
+			getRandomValues: () => {
+				throw new Error('tier 2 must not be reached');
+			}
+		});
+		expect(getOrCreatePresenceToken(memoryStorage())).toBe('12345678-1234-4123-8123-123456789abc');
 	});
 
 	it('falls through to Math.random when crypto is gutted', () => {
@@ -222,6 +248,37 @@ describe('site heartbeat loop', () => {
 		stop();
 		expect(doc.listenerCount('visibilitychange')).toBe(0);
 	});
+
+	it('uses the 15s default cadence when no interval is given', async () => {
+		const send = vi.fn(async () => {});
+		const stop = startPresenceHeartbeat({ token: 't', send, document: fakeDocument() });
+		expect(send).toHaveBeenCalledTimes(1);
+		await vi.advanceTimersByTimeAsync(15_000);
+		expect(send).toHaveBeenCalledTimes(2);
+		stop();
+	});
+});
+
+describe('sendPresenceHeartbeat wire shape', () => {
+	it('posts the json contract with keepalive and swallows a network failure', async () => {
+		const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+		await sendPresenceHeartbeat(
+			't',
+			{ contentId: 'c', bucket: 3 },
+			fetchMock as unknown as typeof fetch
+		);
+		const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('/api/presence/heartbeat');
+		expect(init.method).toBe('POST');
+		expect(init.keepalive).toBe(true);
+		expect(JSON.parse(String(init.body))).toEqual({ token: 't', c: 'c', bucket: 3 });
+		const failing = vi.fn(async () => {
+			throw new Error('offline');
+		});
+		await expect(
+			sendPresenceHeartbeat('t', {}, failing as unknown as typeof fetch)
+		).resolves.toBeUndefined();
+	});
 });
 
 describe('presence stream watchdog', () => {
@@ -301,6 +358,34 @@ describe('presence stream watchdog', () => {
 		expect(FakeEventSource.instances).toHaveLength(STREAM_COLD_RETRY_LIMIT + 1);
 		await vi.advanceTimersByTimeAsync(600_000);
 		expect(FakeEventSource.instances).toHaveLength(STREAM_COLD_RETRY_LIMIT + 1);
+		stop();
+	});
+
+	it('caps the backoff at 60s (the 5th cold delay is 60s, not 80s)', async () => {
+		const stop = openPresenceStream({ url: 'u', onSnapshot: () => {}, eventSource: ctor });
+		// Four cold fatals: delays 5s, 10s, 20s, 40s (literal in/out, so a
+		// changed base or a dropped exponent turns this red).
+		const delays = [5_000, 10_000, 20_000, 40_000];
+		const stillWaiting: number[] = [1, 2, 3, 4];
+		for (let round = 0; round < delays.length; round += 1) {
+			const current = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+			current.fatal();
+			await vi.advanceTimersByTimeAsync(delays[round] - 1);
+			expect(FakeEventSource.instances).toHaveLength(stillWaiting[round]);
+			await vi.advanceTimersByTimeAsync(1);
+		}
+		expect(FakeEventSource.instances).toHaveLength(5);
+		// The 5th delay would be 80s uncapped: 59s must NOT have rebuilt…
+		FakeEventSource.instances[4].fatal();
+		await vi.advanceTimersByTimeAsync(59_000);
+		expect(FakeEventSource.instances).toHaveLength(5);
+		// …and by 61s the capped 60s delay has (uncapped would still wait).
+		await vi.advanceTimersByTimeAsync(2_000);
+		expect(FakeEventSource.instances).toHaveLength(6);
+		// The 6th cold fatal crosses the cap: quiet, no further instances.
+		FakeEventSource.instances[5].fatal();
+		await vi.advanceTimersByTimeAsync(600_000);
+		expect(FakeEventSource.instances).toHaveLength(6);
 		stop();
 	});
 

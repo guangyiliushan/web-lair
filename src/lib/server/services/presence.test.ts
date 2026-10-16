@@ -124,6 +124,13 @@ describe('presence service (site / content / day / peak)', () => {
 		const store = new MemoryCacheStore();
 		const deps = { store, now: () => T0, timezone: 'UTC' };
 		await touchPresence({ token: 'tok', contentId: 'doc', bucket: 99 }, deps);
+		// Observable at the store, not only at read: the write-side guard must
+		// keep a junk bucket out of the key entirely (a reader-side skip alone
+		// would pass the read assertion above while still writing '99:tok').
+		expect(await store.zcountAbove('presence:c:doc', -Infinity)).toBe(0);
+		await touchPresence({ token: 'tok', contentId: 'doc', bucket: -1 }, deps);
+		await touchPresence({ token: 'tok', contentId: 'doc', bucket: 20 }, deps);
+		expect(await store.zcountAbove('presence:c:doc', -Infinity)).toBe(0);
 		expect(await readContentPresence('doc', deps)).toEqual({
 			count: 0,
 			histogram: histogramWith({})
@@ -136,6 +143,86 @@ describe('presence service (site / content / day / peak)', () => {
 			count: 1,
 			histogram: histogramWith({ 5: 1 })
 		});
+	});
+
+	it('collapses a moving token to its newest bucket (M7)', async () => {
+		let now = T0;
+		const store = new MemoryCacheStore({ clock: () => now });
+		const deps = { store, now: () => now, timezone: 'UTC' };
+		await touchPresence({ token: 'tok-a', contentId: 'doc', bucket: 3 }, deps);
+		now += 5_000;
+		await touchPresence({ token: 'tok-a', contentId: 'doc', bucket: 12 }, deps);
+		// Two members for one tab: the reader counts once, at the NEWEST
+		// bucket (a member-count read would answer 2 with a split histogram).
+		expect(await readContentPresence('doc', deps)).toEqual({
+			count: 1,
+			histogram: histogramWith({ 12: 1 })
+		});
+		expect(await readContentDots('doc', deps)).toEqual([12]);
+	});
+
+	it('caps the dots payload at the latest five readers', async () => {
+		const store = new MemoryCacheStore();
+		const deps = { store, now: () => T0, timezone: 'UTC' };
+		const sec = Math.floor(T0 / 1000);
+		for (let index = 0; index < 7; index += 1) {
+			await store.zadd('presence:c:doc', `${index}:tok-${index}`, sec - 30 + index * 3);
+		}
+		// Seven active readers: the count sees all seven, the dots payload
+		// keeps only the five most recently active (buckets 2..6, oldest-first).
+		expect(await readContentPresence('doc', deps)).toEqual({
+			count: 7,
+			histogram: histogramWith({ 0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1 })
+		});
+		expect(await readContentDots('doc', deps)).toEqual([2, 3, 4, 5, 6]);
+	});
+
+	it('refreshes the TTL on every write instead of NX (R-1)', async () => {
+		let now = T0;
+		const store = new MemoryCacheStore({ clock: () => now });
+		const deps = { store, now: () => now, timezone: 'UTC' };
+		await touchPresence({ token: 'tok-a' }, deps);
+		// Age the key's TTL artificially, then beat again: a refreshing EXPIRE
+		// restores ~48h; an NX-style expire would leave the 100s TTL in place.
+		await store.expire('presence:site', 100);
+		now += 50_000;
+		await touchPresence({ token: 'tok-a' }, deps);
+		now += 60_000; // 110s after the short TTL was set: NX would be gone
+		expect(await store.zcountAbove('presence:site', -Infinity)).toBe(1);
+		// The refreshed TTL really is ~48h: a +49h jump expires the key.
+		now += 49 * 60 * 60 * 1000;
+		expect(await store.zcountAbove('presence:site', -Infinity)).toBe(0);
+	});
+
+	it('reads at the window edge with an exclusive cutoff', async () => {
+		const store = new MemoryCacheStore();
+		const deps = { store, now: () => T0, timezone: 'UTC' };
+		const sec = Math.floor(T0 / 1000);
+		await store.zadd('presence:site', 'edge-old', sec - 61);
+		await store.zadd('presence:site', 'edge-exact', sec - 60);
+		await store.zadd('presence:site', 'edge-fresh', sec - 59);
+		// 61s out and the EXACT cutoff are excluded; a 59s-old beat stays.
+		expect((await readSitePresence(deps))?.site).toBe(1);
+	});
+
+	it('peaks by the sentinel VALUE, not the member count (3 -> 2 -> 5)', async () => {
+		let now = T0;
+		const store = new MemoryCacheStore({ clock: () => now });
+		const deps = { store, now: () => now, timezone: 'UTC' };
+		await touchPresence({ token: 'tok-a' }, deps);
+		await touchPresence({ token: 'tok-b' }, deps);
+		await touchPresence({ token: 'tok-c' }, deps);
+		now += 61_000; // a, b, c age out
+		await touchPresence({ token: 'tok-d' }, deps);
+		await touchPresence({ token: 'tok-e' }, deps);
+		now += 61_000; // d, e age out
+		for (const token of ['tok-f', 'tok-g', 'tok-h', 'tok-i', 'tok-j']) {
+			await touchPresence({ token }, deps);
+		}
+		// Sentinel members {1,2,3,2,1,…}: the peak is the largest VALUE (5),
+		// never the number of members (a length-based read would answer 4).
+		expect((await readSitePresence(deps))?.peak).toBe(5);
+		expect((await readSitePresence(deps))?.site).toBe(5);
 	});
 
 	it('honours site.timezone for the day buckets (mocked Asia/Tokyo)', async () => {

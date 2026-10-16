@@ -107,6 +107,11 @@ describe('options registry (AI-1.1)', () => {
 			pendingDays: 7,
 			detachedDays: 30
 		});
+		// Realtime presence (review gate): readerDots is the privacy-facing
+		// default — it must stay OFF for readers out of the box.
+		await expect(getOption('presence.enabled')).resolves.toBe(true);
+		await expect(getOption('presence.readerView')).resolves.toBe(true);
+		await expect(getOption('presence.readerDots')).resolves.toBe(false);
 	});
 
 	it('returns a valid stored value as-is', async () => {

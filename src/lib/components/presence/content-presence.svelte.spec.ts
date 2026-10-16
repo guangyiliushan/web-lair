@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mount, unmount } from 'svelte';
 import { render } from 'vitest-browser-svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 import ContentPresence from './content-presence.svelte';
@@ -96,6 +97,7 @@ describe('content presence widget', () => {
 		expect(strip).not.toBeNull();
 		expect(strip?.getAttribute('aria-hidden')).toBe('true');
 		expect(strip?.getAttribute('title')).toBe('Reading position distribution');
+		expect(document.querySelector('.sr-only')?.textContent).toBe('Reading position distribution');
 		source.emit('snapshot', { content: { count: 1, hist: histogram([3, 1]) } });
 		await vi.waitFor(() => expect(countText()).toBe('1 person is reading'));
 	});
@@ -129,6 +131,24 @@ describe('content presence widget', () => {
 		expect(body.c).toBe(CONTENT);
 		expect(body.token).toBe(sessionStorage.getItem('wl.presence.token'));
 		expect(badge()).toBeNull();
+	});
+
+	it('shows the dots without the badge when only readerDots is on (admin view)', async () => {
+		await render(ContentPresence, {
+			contentId: CONTENT,
+			config: { enabled: true, readerView: false, readerDots: true }
+		});
+		expect(FakeEventSource.instances).toHaveLength(1);
+		const source = FakeEventSource.instances[0];
+		source.emit('snapshot', {
+			content: { count: 2, hist: histogram([3, 1]) },
+			dots: [3, 11]
+		});
+		await vi.waitFor(() =>
+			expect(document.querySelectorAll('[data-presence-dot]')).toHaveLength(2)
+		);
+		expect(badge()).toBeNull();
+		expect(document.querySelector('[data-slot="presence-strip"]')).not.toBeNull();
 	});
 
 	it('draws anonymous dots only when readerDots is on', async () => {
@@ -168,5 +188,93 @@ describe('content presence widget', () => {
 		expect(body.c).toBe(CONTENT);
 		expect(body.token).toMatch(/^[0-9a-f-]{36}$/);
 		expect(body.bucket).toBeTypeOf('number');
+	});
+});
+
+describe('position early reporting (D2)', () => {
+	const mountedFns: Array<() => void> = [];
+	let fetchMock: ReturnType<typeof vi.fn>;
+	let nowMs = 0;
+
+	async function nextFrames(): Promise<void> {
+		await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+	}
+
+	async function mountInArticle() {
+		const article = document.createElement('article');
+		const host = document.createElement('div');
+		article.appendChild(host);
+		document.body.appendChild(article);
+		let rectTop = 900; // 10% through a 1000px article in a 1000px viewport
+		article.getBoundingClientRect = () =>
+			({
+				top: rectTop,
+				height: 1000,
+				left: 0,
+				right: 0,
+				bottom: rectTop + 1000,
+				width: 0,
+				x: 0,
+				y: rectTop,
+				toJSON: () => ({})
+			}) as DOMRect;
+		const instance = mount(ContentPresence, {
+			target: host,
+			props: { contentId: CONTENT, config: { enabled: true, readerView: true, readerDots: false } }
+		});
+		mountedFns.push(() => unmount(instance));
+		return { setTop: (value: number) => void (rectTop = value) };
+	}
+
+	beforeEach(() => {
+		mountedFns.length = 0;
+		FakeEventSource.instances = [];
+		fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+		vi.stubGlobal('fetch', fetchMock);
+		vi.stubGlobal('EventSource', FakeEventSource);
+		sessionStorage.clear();
+		nowMs = 0;
+		vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
+		Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1000 });
+	});
+	afterEach(() => {
+		while (mountedFns.length > 0) mountedFns.pop()!();
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		delete (window as unknown as Record<string, unknown>).innerHeight;
+	});
+
+	it('reports early only past the 5s floor AND on a ≥2% move', async () => {
+		const { setTop } = await mountInArticle();
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1)); // immediate beat
+
+		nowMs = 6_000; // floor satisfied (lastReportedAt starts at 0)
+		setTop(900); // 10%
+		window.dispatchEvent(new Event('scroll'));
+		await nextFrames();
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+
+		nowMs = 12_000;
+		setTop(905); // 9.5% — a <2% move must stay silent
+		window.dispatchEvent(new Event('scroll'));
+		await nextFrames();
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+
+		setTop(700); // 30% — a big move at the same instant reports (floor met)
+		window.dispatchEvent(new Event('scroll'));
+		await nextFrames();
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+
+		nowMs = 13_000; // inside the 5s floor: a big move stays silent
+		setTop(300); // 70%
+		window.dispatchEvent(new Event('scroll'));
+		await nextFrames();
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+
+		nowMs = 18_000; // floor past: a ≥2% move reports again
+		setTop(310); // 69% — still far past the last REPORTED 30%
+		window.dispatchEvent(new Event('scroll'));
+		await nextFrames();
+		expect(fetchMock).toHaveBeenCalledTimes(4);
 	});
 });

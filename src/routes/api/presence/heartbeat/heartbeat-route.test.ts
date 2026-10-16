@@ -8,9 +8,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * exact service arguments. The presence service and the limiter are mocked;
  * the constants the endpoint welds (bucket count) come from the real module.
  */
-const { state, rateLimitMock, touchMock } = vi.hoisted(() => {
+const { state, rateLimitMock, touchMock, getOptionMock } = vi.hoisted(() => {
 	const state = {
 		store: { tag: 'store' },
+		getCacheThrows: false,
 		rate: { allowed: true, count: 1 },
 		rateCalls: [] as unknown[][],
 		touches: [] as { input: unknown; deps: unknown }[]
@@ -22,11 +23,19 @@ const { state, rateLimitMock, touchMock } = vi.hoisted(() => {
 	const touchMock = vi.fn(async (input: unknown, deps: unknown) => {
 		state.touches.push({ input, deps });
 	});
-	return { state, rateLimitMock, touchMock };
+	return { state, rateLimitMock, touchMock, getOptionMock: vi.fn() };
 });
 
-vi.mock('$lib/server/cache', () => ({ getCache: () => state.store }));
+vi.mock('$lib/server/cache', () => ({
+	getCache: () => {
+		if (state.getCacheThrows) throw new Error('malformed VALKEY_URL');
+		return state.store;
+	}
+}));
 vi.mock('$lib/server/cache/store', () => ({ rateLimit: rateLimitMock }));
+// Pinned as a NOT-called spy: the endpoint is a dumb writer that never
+// reads options (register C1); a future enable-gate would fail this test.
+vi.mock('$lib/server/config/options-registry', () => ({ getOption: getOptionMock }));
 vi.mock('$lib/server/services/presence', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/server/services/presence')>();
 	return { ...actual, touchPresence: touchMock };
@@ -55,8 +64,10 @@ async function post(
 describe('presence heartbeat route', () => {
 	beforeEach(() => {
 		state.rate = { allowed: true, count: 1 };
+		state.getCacheThrows = false;
 		state.rateCalls = [];
 		state.touches = [];
+		getOptionMock.mockClear();
 	});
 
 	it('answers 415 for non-JSON or missing content types', async () => {
@@ -92,7 +103,7 @@ describe('presence heartbeat route', () => {
 		const response = await post(JSON.stringify({ token: TOKEN }));
 		expect(response.status).toBe(429);
 		expect(response.headers.get('x-retry-after')).toBe('60');
-		expect(state.rateCalls).toEqual([[state.store, presenceHeartbeatLimitKey(TOKEN), 15, 60]]);
+		expect(state.rateCalls).toEqual([[state.store, presenceHeartbeatLimitKey(TOKEN), 30, 60]]);
 		expect(state.touches).toHaveLength(0);
 	});
 
@@ -112,7 +123,7 @@ describe('presence heartbeat route', () => {
 				deps: { store: state.store }
 			}
 		]);
-		expect(state.rateCalls).toEqual([[state.store, presenceHeartbeatLimitKey(TOKEN), 15, 60]]);
+		expect(state.rateCalls).toEqual([[state.store, presenceHeartbeatLimitKey(TOKEN), 30, 60]]);
 	});
 
 	it('records a site beat without content fields', async () => {
@@ -127,5 +138,18 @@ describe('presence heartbeat route', () => {
 			'application/json; charset=utf-8'
 		);
 		expect(response.status).toBe(204);
+	});
+
+	it('stays 204 when the cache store cannot be constructed (fail-open)', async () => {
+		state.getCacheThrows = true;
+		const response = await post(JSON.stringify({ token: TOKEN }));
+		expect(response.status).toBe(204);
+		expect(state.touches).toHaveLength(0);
+	});
+
+	it('never reads options (a dumb writer, register C1)', async () => {
+		const response = await post(JSON.stringify({ token: TOKEN }));
+		expect(response.status).toBe(204);
+		expect(getOptionMock).not.toHaveBeenCalled();
 	});
 });

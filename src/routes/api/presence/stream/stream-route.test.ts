@@ -16,19 +16,31 @@ const { state } = vi.hoisted(() => ({
 	state: {
 		enabled: true,
 		readerDots: false,
+		enabledThrows: false,
+		readerDotsThrows: false,
+		getCacheThrows: false,
 		store: null as unknown
 	}
 }));
 
-vi.mock('$lib/server/cache', () => ({ getCache: () => state.store }));
+vi.mock('$lib/server/cache', () => ({
+	getCache: () => {
+		if (state.getCacheThrows) throw new Error('malformed VALKEY_URL');
+		return state.store;
+	}
+}));
 vi.mock('$lib/server/config/options-registry', () => ({
-	getOption: vi.fn(async (key: string) =>
-		key === 'presence.enabled'
-			? state.enabled
-			: key === 'presence.readerDots'
-				? state.readerDots
-				: 'UTC'
-	)
+	getOption: vi.fn(async (key: string) => {
+		if (key === 'presence.enabled') {
+			if (state.enabledThrows) throw new Error('settings unavailable');
+			return state.enabled;
+		}
+		if (key === 'presence.readerDots') {
+			if (state.readerDotsThrows) throw new Error('settings unavailable');
+			return state.readerDots;
+		}
+		return 'UTC';
+	})
 }));
 
 import { GET } from './+server';
@@ -84,6 +96,9 @@ describe('presence stream route', () => {
 	beforeEach(() => {
 		state.enabled = true;
 		state.readerDots = false;
+		state.enabledThrows = false;
+		state.readerDotsThrows = false;
+		state.getCacheThrows = false;
 		state.store = new MemoryCacheStore();
 	});
 
@@ -211,6 +226,52 @@ describe('presence stream route', () => {
 		adminAc.abort();
 	});
 
+	it('degrades a construction failure to a null frame instead of killing the stream', async () => {
+		state.getCacheThrows = true;
+		const ac = new AbortController();
+		const response = await requestStream({ c: CONTENT, signal: ac.signal });
+		expect(response.status).toBe(200);
+		const text = await readUntil(
+			(response.body as ReadableStream<Uint8Array>).getReader(),
+			(candidate) => candidate.includes('event: snapshot')
+		);
+		// The service swallow plus the pump's catch both land here: a broken
+		// VALKEY_URL must surface as a degraded frame, never a dead stream.
+		expect(snapshotPayload(text)).toEqual({ content: null });
+		ac.abort();
+	});
+
+	it('keeps the stream alive when the enabled read fails (fail-open)', async () => {
+		state.enabledThrows = true;
+		const ac = new AbortController();
+		const response = await requestStream({ c: CONTENT, signal: ac.signal });
+		expect(response.status).toBe(200);
+		const text = await readUntil(
+			(response.body as ReadableStream<Uint8Array>).getReader(),
+			(candidate) => candidate.includes('event: snapshot')
+		);
+		expect(snapshotPayload(text)).toEqual({ content: { count: 0, hist: histogram() } });
+		ac.abort();
+	});
+
+	it('sends no dots to a reader when the readerDots read fails (fail-closed)', async () => {
+		state.readerDotsThrows = true;
+		const store = state.store as MemoryCacheStore;
+		const nowSec = Math.floor(Date.now() / 1000);
+		await store.zadd(`presence:c:${CONTENT}`, `3:${TOKEN_A}`, nowSec);
+		const ac = new AbortController();
+		const response = await requestStream({ c: CONTENT, signal: ac.signal });
+		const text = await readUntil(
+			(response.body as ReadableStream<Uint8Array>).getReader(),
+			(candidate) => candidate.includes('event: snapshot')
+		);
+		// Exact-shape assertion: the payload carries content and NO dots key.
+		expect(snapshotPayload(text)).toEqual({
+			content: { count: 1, hist: histogram([3, 1]) }
+		});
+		ac.abort();
+	});
+
 	it('ticks a snapshot every 5s, a keepalive every 15s, and aborts clean', async () => {
 		vi.useFakeTimers();
 		try {
@@ -238,6 +299,23 @@ describe('presence stream route', () => {
 				done = (await reader.read()).done;
 			}
 			expect(done).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('clears the tick timer on the reader.cancel() path (the real teardown)', async () => {
+		// kit's node layer closes the body via reader.cancel(); the request
+		// signal is only a belt, so the cancel branch needs its own teeth.
+		vi.useFakeTimers();
+		try {
+			const ac = new AbortController();
+			const response = await requestStream({ c: CONTENT, signal: ac.signal });
+			const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+			await readUntil(reader, (text) => text.includes('event: snapshot'));
+			expect(vi.getTimerCount()).toBe(1);
+			await reader.cancel();
+			expect(vi.getTimerCount()).toBe(0);
 		} finally {
 			vi.useRealTimers();
 		}

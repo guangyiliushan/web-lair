@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryCacheStore } from './memory';
-import { ValkeyCacheStore } from './valkey';
+import { exclusiveLowerBound, ValkeyCacheStore } from './valkey';
 import { cached, rateLimit, type CacheStore } from './store';
 
 function throwingStore(): CacheStore {
@@ -78,8 +78,10 @@ describe('MemoryCacheStore presence primitives', () => {
 	it('trims at or below the cutoff and drops the emptied key', async () => {
 		const store = new MemoryCacheStore();
 		await store.zadd('z', 'old', 100);
+		await store.zadd('z', 'edge', 150);
 		await store.zadd('z', 'new', 200);
 		await store.ztrim('z', 150);
+		// Below (100) AND exactly-at (150) the cutoff are both gone.
 		expect(await store.zrangeAbove('z', -Infinity)).toEqual([{ member: 'new', score: 200 }]);
 		await store.ztrim('z', 999);
 		expect(await store.zcountAbove('z', -Infinity)).toBe(0);
@@ -197,7 +199,9 @@ describe('rateLimit()', () => {
 
 describe('ValkeyCacheStore (fail-open against a dead endpoint)', () => {
 	it('degrades: KV/presence writes no-op, incr and presence reads rethrow', async () => {
-		const store = new ValkeyCacheStore('redis://127.0.0.1:6399');
+		// Reserved-range port nothing listens on in dev/CI (review finding:
+		// 6399 sat close to real services).
+		const store = new ValkeyCacheStore('redis://127.0.0.1:63990');
 		expect(await store.get('k')).toBeNull();
 		await expect(store.set('k', 1, 60)).resolves.toBeUndefined();
 		await expect(store.incr('k', 60)).rejects.toThrow();
@@ -212,4 +216,12 @@ describe('ValkeyCacheStore (fail-open against a dead endpoint)', () => {
 		await expect(store.scard('k')).rejects.toThrow();
 		await store.quit();
 	}, 30_000);
+});
+
+describe('exclusiveLowerBound (Valkey window syntax)', () => {
+	it('renders the exclusive-score syntax for finite bounds and infinities', () => {
+		expect(exclusiveLowerBound(200)).toBe('(200');
+		expect(exclusiveLowerBound(-Infinity)).toBe('-inf');
+		expect(exclusiveLowerBound(Infinity)).toBe('+inf');
+	});
 });
