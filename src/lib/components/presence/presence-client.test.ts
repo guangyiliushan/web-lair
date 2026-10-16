@@ -8,7 +8,8 @@ import {
 	shouldTrackPath,
 	startPresenceHeartbeat,
 	STREAM_COLD_RETRY_LIMIT,
-	STREAM_RETRY_BASE_MS
+	STREAM_RETRY_BASE_MS,
+	STREAM_SETTLE_PROBE_MS
 } from './presence-client';
 
 /**
@@ -349,15 +350,97 @@ describe('presence stream watchdog', () => {
 		stop();
 	});
 
-	it('gives up after the cold-retry cap (a 204-disabled stream cannot loop)', async () => {
+	it('gives up the fast loop after the cold-retry cap (no retry burst)', async () => {
 		const stop = openPresenceStream({ url: 'u', onSnapshot: () => {}, eventSource: ctor });
 		for (let round = 0; round <= STREAM_COLD_RETRY_LIMIT; round += 1) {
 			FakeEventSource.instances[FakeEventSource.instances.length - 1].fatal();
 			await vi.advanceTimersByTimeAsync(60_000);
 		}
 		expect(FakeEventSource.instances).toHaveLength(STREAM_COLD_RETRY_LIMIT + 1);
-		await vi.advanceTimersByTimeAsync(600_000);
+		// The sixth fatal crosses the cap: settled, no further instance until
+		// the slow probe window (pinned in the settle test below).
+		FakeEventSource.instances[STREAM_COLD_RETRY_LIMIT].fatal();
+		await vi.advanceTimersByTimeAsync(60_000);
 		expect(FakeEventSource.instances).toHaveLength(STREAM_COLD_RETRY_LIMIT + 1);
+		stop();
+	});
+
+	it('settles to a single probe every 10 minutes after the cap', async () => {
+		expect(STREAM_SETTLE_PROBE_MS).toBe(600_000);
+		const stop = openPresenceStream({ url: 'u', onSnapshot: () => {}, eventSource: ctor });
+		// Burn through the cap: five rebuilds, then a fatal that crosses it.
+		for (let round = 0; round <= STREAM_COLD_RETRY_LIMIT; round += 1) {
+			FakeEventSource.instances[FakeEventSource.instances.length - 1].fatal();
+			await vi.advanceTimersByTimeAsync(60_000);
+		}
+		expect(FakeEventSource.instances).toHaveLength(6);
+		// 60s of the settle window are already spent: 539_999ms must stay
+		// quiet, the next millisecond brings the probe.
+		await vi.advanceTimersByTimeAsync(539_999);
+		expect(FakeEventSource.instances).toHaveLength(6);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeEventSource.instances).toHaveLength(7);
+		// A missed probe re-arms the window WITHOUT a retry burst.
+		FakeEventSource.instances[6].fatal();
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(FakeEventSource.instances).toHaveLength(7);
+		await vi.advanceTimersByTimeAsync(539_999);
+		expect(FakeEventSource.instances).toHaveLength(7);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeEventSource.instances).toHaveLength(8);
+		stop();
+	});
+
+	it('suspends while hidden and resumes with reset counters when visible', async () => {
+		const doc = fakeDocument();
+		const stop = openPresenceStream({
+			url: 'u',
+			onSnapshot: () => {},
+			eventSource: ctor,
+			document: doc
+		});
+		// Two cold fatals leave a 10s retry pending and attempt=2.
+		FakeEventSource.instances[0].fatal();
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(FakeEventSource.instances).toHaveLength(2);
+		FakeEventSource.instances[1].fatal();
+		doc.visibilityState = 'hidden';
+		doc.fire('visibilitychange');
+		expect(vi.getTimerCount()).toBe(0); // pending retry cleared on suspend
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(FakeEventSource.instances).toHaveLength(2); // silent while hidden
+		doc.visibilityState = 'visible';
+		doc.fire('visibilitychange');
+		expect(FakeEventSource.instances).toHaveLength(3); // immediate resume
+		// Counters were reset: the next fatal waits the BASE delay (5s), not
+		// the 20s the pre-suspend chain would have reached.
+		FakeEventSource.instances[2].fatal();
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(FakeEventSource.instances).toHaveLength(4);
+		stop();
+		expect(doc.listenerCount('visibilitychange')).toBe(0);
+	});
+
+	it('a visibility flip revives a settled (capped) stream', async () => {
+		const doc = fakeDocument();
+		const stop = openPresenceStream({
+			url: 'u',
+			onSnapshot: () => {},
+			eventSource: ctor,
+			document: doc
+		});
+		for (let round = 0; round <= STREAM_COLD_RETRY_LIMIT; round += 1) {
+			FakeEventSource.instances[FakeEventSource.instances.length - 1].fatal();
+			await vi.advanceTimersByTimeAsync(60_000);
+		}
+		expect(FakeEventSource.instances).toHaveLength(6);
+		// Hidden clears the pending settle timer; visible reconnects at once
+		// (the recovery path for a deploy-window outage / re-enabled feature).
+		doc.visibilityState = 'hidden';
+		doc.fire('visibilitychange');
+		doc.visibilityState = 'visible';
+		doc.fire('visibilitychange');
+		expect(FakeEventSource.instances).toHaveLength(7);
 		stop();
 	});
 
@@ -382,9 +465,9 @@ describe('presence stream watchdog', () => {
 		// …and by 61s the capped 60s delay has (uncapped would still wait).
 		await vi.advanceTimersByTimeAsync(2_000);
 		expect(FakeEventSource.instances).toHaveLength(6);
-		// The 6th cold fatal crosses the cap: quiet, no further instances.
+		// The 6th cold fatal crosses the cap: settled (no burst pending).
 		FakeEventSource.instances[5].fatal();
-		await vi.advanceTimersByTimeAsync(600_000);
+		await vi.advanceTimersByTimeAsync(60_000);
 		expect(FakeEventSource.instances).toHaveLength(6);
 		stop();
 	});

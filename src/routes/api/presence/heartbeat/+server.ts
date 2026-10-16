@@ -19,8 +19,9 @@ import { PRESENCE_HEARTBEAT_RATE_LIMIT, presenceHeartbeatLimitKey } from './limi
  * CSRF carriers out — kit only origin-checks form content types), strict
  * `token` / `c` / `bucket` validation (400, before the limiter so a junk
  * token never spends a bucket), per-token bucket `limits:presence:<token>`
- * 15/60s fail-open (429 + X-Retry-After when exceeded — the client is a dumb
- * interval and only needs to know it may drop this beat).
+ * 30/60s fail-open (M6; the budget math lives in limit.ts), 429 +
+ * X-Retry-After when exceeded — the client is a dumb interval and only needs
+ * to know it may drop this beat).
  */
 
 export const prerender = false;

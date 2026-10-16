@@ -48,7 +48,9 @@ test.afterAll(() => {
 	// date-scoped keys (presence:day:<date> / presence:max:<date>) are
 	// deliberately NOT cleaned: they cannot be namespaced, deleting them
 	// would wipe the dev database's real "today" numbers, and they carry a
-	// 48h TTL — each run adds at most four tabs to today's counters.
+	// 48h TTL — each run adds at most six tabs (five test pages plus the
+	// double-tab case) to today's counters, and the peak sentinel can be
+	// nudged by tabs that closed within the 60s window.
 	valkeyDel(CONTENT_KEY);
 	valkeyDel('wl:presence:site');
 	psql(`delete from posts where slug like 'e2e-rt-%'`);
@@ -116,7 +118,13 @@ test('the window read ignores an aged-out member (a raw ZCARD would say 2)', asy
 				if (chunk.done) break;
 				acc += decoder.decode(chunk.value, { stream: true });
 				const line = acc.split('\n').find((row) => row.startsWith('data: '));
-				if (line) return JSON.parse(line.slice('data: '.length));
+				if (line) {
+					try {
+						return JSON.parse(line.slice('data: '.length));
+					} catch {
+						// a half-arrived frame: keep reading until it completes
+					}
+				}
 			}
 			return null;
 		} finally {
@@ -125,7 +133,9 @@ test('the window read ignores an aged-out member (a raw ZCARD would say 2)', asy
 	}, POST);
 	const expectedHist = new Array<number>(20).fill(0);
 	expectedHist[0] = 1;
-	expect(first).toEqual({ content: { count: 1, hist: expectedHist } });
+	// Field-level match: an exact-shape toEqual would go red the day the site
+	// flips presence.readerDots on (the frame would then carry a dots key).
+	expect(first).toMatchObject({ content: { count: 1, hist: expectedHist } });
 	expect(valkey('ZCARD', CONTENT_KEY)).toBe('2'); // the ghost is still on the SET
 	await context.close();
 });
@@ -149,10 +159,31 @@ test('a beat refreshes the key TTL instead of leaving the short one (R-1)', asyn
 	await expect(badgeCount(page)).toHaveText('1 人正在读', { timeout: 30_000 });
 	// Age the key's TTL hard, then wait for the next beat (≤15s away): a
 	// refreshing EXPIRE restores ~48h; an NX-style expire leaves ≤90s and
-	// the poll times out.
-	valkey('EXPIRE', CONTENT_KEY, '90');
+	// the poll times out. The receipt proves the key was present (a missing
+	// key would silently rebuild with a fresh TTL and pass).
+	expect(valkey('EXPIRE', CONTENT_KEY, '90')).toBe('1');
 	await expect
 		.poll(() => Number(valkey('TTL', CONTENT_KEY)), { timeout: 30_000 })
 		.toBeGreaterThan(100_000);
+	await context.close();
+});
+
+test('the site heartbeat mounts on public pages (site key gains the tab token)', async ({
+	browser
+}) => {
+	// Pins the (site)/+layout.svelte mount line and the enabled pass-through
+	// (review finding: deleting them used to leave every gate green) — the
+	// page's immediate beat must land in the site window with its own token.
+	const context = await browser.newContext({ storageState: zhCnLocale.storageState });
+	const page = await context.newPage();
+	await page.goto('/');
+	// The token lands on hydration (the heartbeat effect's first beat); wait
+	// for it instead of racing the mount.
+	await page.waitForFunction(() => sessionStorage.getItem('wl.presence.token') !== null);
+	const token = await page.evaluate(() => sessionStorage.getItem('wl.presence.token'));
+	expect(token).toMatch(/^[0-9a-f-]{36}$/i);
+	await expect
+		.poll(() => valkey('ZSCORE', 'wl:presence:site', token as string), { timeout: 20_000 })
+		.toMatch(/^\d+$/);
 	await context.close();
 });

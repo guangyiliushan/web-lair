@@ -72,6 +72,18 @@ describe('content presence widget', () => {
 		vi.unstubAllGlobals();
 	});
 
+	it('stays fully inert when presence is disabled (no stream, no beats, no UI)', async () => {
+		await render(ContentPresence, {
+			contentId: CONTENT,
+			config: { enabled: false, readerView: true, readerDots: true }
+		});
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(FakeEventSource.instances).toHaveLength(0);
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(badge()).toBeNull();
+		expect(document.querySelector('[data-slot="presence-strip"]')).toBeNull();
+	});
+
 	it('opens exactly one stream for the content id and hides until data arrives', async () => {
 		await render(ContentPresence, {
 			contentId: CONTENT,
@@ -222,9 +234,14 @@ describe('position early reporting (D2)', () => {
 			target: host,
 			props: { contentId: CONTENT, config: { enabled: true, readerView: true, readerDots: false } }
 		});
-		mountedFns.push(() => unmount(instance));
+		mountedFns.push(() => {
+			unmount(instance);
+			article.remove();
+		});
 		return { setTop: (value: number) => void (rectTop = value) };
 	}
+
+	let previousInnerHeight = 0;
 
 	beforeEach(() => {
 		mountedFns.length = 0;
@@ -235,16 +252,20 @@ describe('position early reporting (D2)', () => {
 		sessionStorage.clear();
 		nowMs = 0;
 		vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
+		previousInnerHeight = window.innerHeight;
 		Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1000 });
 	});
 	afterEach(() => {
 		while (mountedFns.length > 0) mountedFns.pop()!();
 		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
-		delete (window as unknown as Record<string, unknown>).innerHeight;
+		Object.defineProperty(window, 'innerHeight', {
+			configurable: true,
+			value: previousInnerHeight
+		});
 	});
 
-	it('reports early only past the 5s floor AND on a ≥2% move', async () => {
+	it('reports early only past the 5s floor AND on a ≥2% move (boundaries pinned)', async () => {
 		const { setTop } = await mountInArticle();
 		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1)); // immediate beat
 
@@ -254,27 +275,60 @@ describe('position early reporting (D2)', () => {
 		await nextFrames();
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 
-		nowMs = 12_000;
-		setTop(905); // 9.5% — a <2% move must stay silent
-		window.dispatchEvent(new Event('scroll'));
-		await nextFrames();
-		expect(fetchMock).toHaveBeenCalledTimes(2);
-
-		setTop(700); // 30% — a big move at the same instant reports (floor met)
+		nowMs = 11_000; // floor exactly 5000ms …
+		setTop(880); // … and exactly +2.0%: both boundaries report
 		window.dispatchEvent(new Event('scroll'));
 		await nextFrames();
 		expect(fetchMock).toHaveBeenCalledTimes(3);
 
-		nowMs = 13_000; // inside the 5s floor: a big move stays silent
-		setTop(300); // 70%
+		nowMs = 16_000; // floor met again …
+		setTop(861); // … but +1.9%: below the delta boundary, silent
 		window.dispatchEvent(new Event('scroll'));
 		await nextFrames();
 		expect(fetchMock).toHaveBeenCalledTimes(3);
 
-		nowMs = 18_000; // floor past: a ≥2% move reports again
-		setTop(310); // 69% — still far past the last REPORTED 30%
+		nowMs = 21_000;
+		setTop(800); // 20% — a genuine move reports
 		window.dispatchEvent(new Event('scroll'));
 		await nextFrames();
 		expect(fetchMock).toHaveBeenCalledTimes(4);
+
+		nowMs = 21_500; // inside the 5s floor: a big move stays silent
+		setTop(600); // 40%
+		window.dispatchEvent(new Event('scroll'));
+		await nextFrames();
+		expect(fetchMock).toHaveBeenCalledTimes(4);
+
+		nowMs = 26_000; // floor exactly 5000ms again: +4% reports
+		setTop(760); // 24%
+		window.dispatchEvent(new Event('scroll'));
+		await nextFrames();
+		expect(fetchMock).toHaveBeenCalledTimes(5);
+
+		nowMs = 30_999; // floor short by 1ms (4999 since the 26000 report)
+		setTop(400); // 60%
+		window.dispatchEvent(new Event('scroll'));
+		await nextFrames();
+		expect(fetchMock).toHaveBeenCalledTimes(5);
+
+		nowMs = 31_000; // floor exactly 5000ms: the same move reports now
+		setTop(380); // 62%
+		window.dispatchEvent(new Event('scroll'));
+		await nextFrames();
+		expect(fetchMock).toHaveBeenCalledTimes(6);
+	});
+
+	it('coalesces same-frame scrolls into one rAF (throttle guard)', async () => {
+		const rafSpy = vi.spyOn(globalThis, 'requestAnimationFrame');
+		const { setTop } = await mountInArticle();
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+		rafSpy.mockClear();
+		nowMs = 6_000;
+		setTop(700); // 30% — a big move: one coalesced frame, one report
+		window.dispatchEvent(new Event('scroll'));
+		window.dispatchEvent(new Event('scroll'));
+		await new Promise((resolve) => setTimeout(resolve, 80));
+		expect(rafSpy).toHaveBeenCalledTimes(1);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 });

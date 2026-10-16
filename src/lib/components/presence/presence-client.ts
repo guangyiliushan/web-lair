@@ -184,47 +184,102 @@ export interface PresenceStreamOptions {
 	onSnapshot: (payload: unknown) => void;
 	/** Injectable for tests; defaults to the global EventSource. */
 	eventSource?: StreamConstructor;
+	/** Injectable visibility source for tests; defaults to the global document. */
+	document?: VisibilitySource;
 }
 
 export const STREAM_RETRY_BASE_MS = 5_000;
 export const STREAM_RETRY_MAX_MS = 60_000;
 /** Rebuild attempts that never opened: bounded so a 204/4xx cannot loop. */
 export const STREAM_COLD_RETRY_LIMIT = 5;
+/**
+ * After the cold-retry cap the stream degrades to ONE probe per 10 minutes
+ * instead of going silent forever (review finding): a deploy-window 502 left
+ * the tab dark until a reload, and a re-enabled feature never revived it.
+ * One attempt per interval is not a loop — the disabled-204 guarantee holds.
+ */
+export const STREAM_SETTLE_PROBE_MS = 10 * 60_000;
 
 /**
  * One EventSource per tab (register C2/D5) with the fatal-failure watchdog
- * (C3). The spec never retries a non-200 (including the deliberate 204 for a
- * disabled feature) — readyState is CLOSED and nothing auto-recovers — so we
- * rebuild with exponential backoff capped at 60s. CONNECTING errors stay the
- * browser's job (it is already retrying). An intentional stop() and a server
- * that keeps failing cold both go quiet instead of looping.
+ * (C3): non-200 failures are permanent per the spec, so we rebuild with
+ * exponential backoff capped at 60s; after the cold cap the stream settles to
+ * a single probe every 10 minutes, and a visibilitychange back to visible
+ * suspends/resumes with reset counters (a hidden tab also stops holding a
+ * connection — the HTTP/1.1 six-connection budget). CONNECTING errors stay
+ * the browser's job; stop() goes silent for good.
  */
 export function openPresenceStream(options: PresenceStreamOptions): () => void {
 	const Constructor = options.eventSource ?? (EventSource as unknown as StreamConstructor);
+	const doc = options.document ?? (typeof document === 'undefined' ? undefined : document);
 	let source: StreamEventSource | null = null;
 	let retryTimer: ReturnType<typeof setTimeout> | null = null;
+	let settleTimer: ReturnType<typeof setTimeout> | null = null;
 	let attempt = 0;
 	let coldRetries = 0;
 	let stopped = false;
+	let suspended = false;
+	let probing = false;
 
-	const stop = (): void => {
-		if (stopped) return;
-		stopped = true;
+	const clearTimers = (): void => {
 		if (retryTimer !== null) {
 			clearTimeout(retryTimer);
 			retryTimer = null;
 		}
+		if (settleTimer !== null) {
+			clearTimeout(settleTimer);
+			settleTimer = null;
+		}
+	};
+
+	const onVisibility = (): void => {
+		if (stopped) return;
+		if (doc?.visibilityState === 'hidden') {
+			// Release the connection while backgrounded (h1.1 budget); this is
+			// not a failure, so the cold counter stays put.
+			suspended = true;
+			clearTimers();
+			source?.close();
+			source = null;
+		} else if (suspended) {
+			// Back to the foreground: a fresh attempt with reset counters, so a
+			// deploy-window outage or a re-enabled feature recovers here too.
+			suspended = false;
+			coldRetries = 0;
+			attempt = 0;
+			connect();
+		}
+	};
+
+	const stop = (): void => {
+		if (stopped) return;
+		stopped = true;
+		clearTimers();
 		source?.close();
 		source = null;
+		doc?.removeEventListener('visibilitychange', onVisibility);
+	};
+
+	const scheduleSettleProbe = (): void => {
+		if (stopped || settleTimer !== null) return;
+		settleTimer = setTimeout(() => {
+			settleTimer = null;
+			if (stopped || suspended) return;
+			coldRetries = 0;
+			attempt = 0;
+			probing = true;
+			connect();
+		}, STREAM_SETTLE_PROBE_MS);
 	};
 
 	const connect = (): void => {
-		if (stopped) return;
+		if (stopped || suspended) return;
 		const current = new Constructor(options.url);
 		source = current;
 		current.addEventListener('open', () => {
 			attempt = 0;
 			coldRetries = 0;
+			probing = false;
 		});
 		current.addEventListener('snapshot', (event) => {
 			const data = (event as MessageEvent).data;
@@ -236,13 +291,17 @@ export function openPresenceStream(options: PresenceStreamOptions): () => void {
 			}
 		});
 		current.addEventListener('error', () => {
-			if (stopped || current !== source) return;
+			if (stopped || suspended || current !== source) return;
 			// CONNECTING (0) → the browser reconnects on its own; CLOSED (2) →
 			// fatal (non-200 / 204 stop / bad MIME) and nothing retries.
 			if (current.readyState !== 2) return;
 			coldRetries += 1;
-			if (coldRetries > STREAM_COLD_RETRY_LIMIT) {
-				stop();
+			if (coldRetries > STREAM_COLD_RETRY_LIMIT || probing) {
+				// Cap reached, or a settle probe missed: quiet until the next
+				// slow probe instead of a retry burst or permanent silence.
+				source = null;
+				current.close();
+				scheduleSettleProbe();
 				return;
 			}
 			const delay = Math.min(STREAM_RETRY_BASE_MS * 2 ** attempt, STREAM_RETRY_MAX_MS);
@@ -256,6 +315,7 @@ export function openPresenceStream(options: PresenceStreamOptions): () => void {
 		});
 	};
 
+	doc?.addEventListener('visibilitychange', onVisibility);
 	connect();
 	return stop;
 }

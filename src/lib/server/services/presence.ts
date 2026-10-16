@@ -109,12 +109,15 @@ function parseBucket(member: string): number | null {
 
 /**
  * Collapse the content members to one entry per token, keeping each token's
- * NEWEST bucket. Members arrive score-ascending (zrangeAbove), so a later
- * occurrence always wins; delete+set re-inserts the token at the tail of the
- * Map, which leaves the values in "latest activity" order for the dots cap.
- * A scrolling reader leaves a trail of `<bucket>:<token>` members inside the
- * window — counting members would inflate the badge (review finding M7), so
- * every content read goes through here.
+ * NEWEST bucket. Members arrive ascending by (score, member); scores are
+ * integer seconds, so when one token writes twice within the same second the
+ * lexicographic member order arbitrates (bucket 12 loses to bucket 5) — that
+ * same-second tie is accepted (self-heals next beat). `delete`+`set`
+ * re-inserts the token at the tail of the Map, which leaves the values in
+ * latest-activity order for the dots cap. A scrolling reader leaves a trail
+ * of `<bucket>:<token>` members inside the window — counting members would
+ * inflate the badge (review finding M7), so every content read goes through
+ * here.
  */
 function latestBuckets(members: { member: string }[]): Map<string, number> {
 	const latest = new Map<string, number>();
@@ -122,6 +125,7 @@ function latestBuckets(members: { member: string }[]): Map<string, number> {
 		const bucket = parseBucket(member);
 		if (bucket === null) continue;
 		const token = member.slice(member.indexOf(':') + 1);
+		if (token === '') continue; // a bare '3:' prefix must not count as a reader
 		latest.delete(token);
 		latest.set(token, bucket);
 	}

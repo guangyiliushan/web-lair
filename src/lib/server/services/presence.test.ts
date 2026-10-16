@@ -4,6 +4,7 @@ import type { CacheStore } from '$lib/server/cache/store';
 import {
 	dateStamp,
 	PRESENCE_BUCKETS,
+	PRESENCE_DOTS_LIMIT,
 	readContentDots,
 	readContentPresence,
 	readSitePresence,
@@ -14,6 +15,14 @@ import {
 // test can tell the configured zone apart from a hardcoded UTC fallback.
 vi.mock('$lib/server/config/options-registry', () => ({
 	getOption: vi.fn(async () => 'Asia/Tokyo')
+}));
+// The process-wide cache resolves lazily; every test below passes an explicit
+// store, so this factory only fires in the getCache-failure describe (the
+// service must swallow a malformed VALKEY_URL there, review finding).
+vi.mock('$lib/server/cache', () => ({
+	getCache: () => {
+		throw new Error('malformed VALKEY_URL');
+	}
 }));
 
 const T0 = Date.UTC(2026, 9, 16, 12, 0, 0); // 2026-10-16T12:00:00Z
@@ -143,6 +152,13 @@ describe('presence service (site / content / day / peak)', () => {
 			count: 1,
 			histogram: histogramWith({ 5: 1 })
 		});
+		// A bare bucket prefix ('3:') must not count as a reader (the token
+		// slice would otherwise be an empty string).
+		await store.zadd('presence:c:doc3', '3:', sec);
+		expect(await readContentPresence('doc3', deps)).toEqual({
+			count: 0,
+			histogram: histogramWith({})
+		});
 	});
 
 	it('collapses a moving token to its newest bucket (M7)', async () => {
@@ -174,7 +190,33 @@ describe('presence service (site / content / day / peak)', () => {
 			count: 7,
 			histogram: histogramWith({ 0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1 })
 		});
-		expect(await readContentDots('doc', deps)).toEqual([2, 3, 4, 5, 6]);
+		const dots = await readContentDots('doc', deps);
+		expect(dots).toEqual([2, 3, 4, 5, 6]);
+		expect(dots).toHaveLength(PRESENCE_DOTS_LIMIT); // the export is consumed here
+	});
+
+	it('keeps the dots in latest-activity order when a token moves (delete+reinsert)', async () => {
+		const store = new MemoryCacheStore();
+		const deps = { store, now: () => T0, timezone: 'UTC' };
+		const sec = Math.floor(T0 / 1000);
+		// Two movers (double buckets) interleaved with singles inside the
+		// window. Latest activity order: f(55) c(45) d(40) e(35) a(30) b(25),
+		// so the cap keeps buckets [4,5,6,7,8] ascending. A Map without the
+		// delete+reinsert would fixate first-occurrence order (a,b,c,d,e,f)
+		// and answer [8,4,5,6,3] here.
+		await store.zadd('presence:c:doc', '1:tok-a', sec - 50);
+		await store.zadd('presence:c:doc', '7:tok-a', sec - 30);
+		await store.zadd('presence:c:doc', '2:tok-b', sec - 48);
+		await store.zadd('presence:c:doc', '8:tok-b', sec - 25);
+		await store.zadd('presence:c:doc', '4:tok-c', sec - 45);
+		await store.zadd('presence:c:doc', '5:tok-d', sec - 40);
+		await store.zadd('presence:c:doc', '6:tok-e', sec - 35);
+		await store.zadd('presence:c:doc', '3:tok-f', sec - 55);
+		expect(await readContentDots('doc', deps)).toEqual([4, 5, 6, 7, 8]);
+		expect(await readContentPresence('doc', deps)).toEqual({
+			count: 6,
+			histogram: histogramWith({ 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1 })
+		});
 	});
 
 	it('refreshes the TTL on every write instead of NX (R-1)', async () => {
@@ -219,10 +261,14 @@ describe('presence service (site / content / day / peak)', () => {
 		for (const token of ['tok-f', 'tok-g', 'tok-h', 'tok-i', 'tok-j']) {
 			await touchPresence({ token }, deps);
 		}
-		// Sentinel members {1,2,3,2,1,…}: the peak is the largest VALUE (5),
-		// never the number of members (a length-based read would answer 4).
 		expect((await readSitePresence(deps))?.peak).toBe(5);
 		expect((await readSitePresence(deps))?.site).toBe(5);
+		// The sampled sequence alone cannot discriminate max-from-length
+		// (upserted members {1..5}: a length read would also answer 5); a
+		// synthetic sentinel member ABOVE every count pins the max read
+		// (a length read would answer 6 here).
+		await store.zadd('presence:max:2026-10-16', '9', 9);
+		expect((await readSitePresence(deps))?.peak).toBe(9);
 	});
 
 	it('honours site.timezone for the day buckets (mocked Asia/Tokyo)', async () => {
@@ -242,5 +288,18 @@ describe('presence service (site / content / day / peak)', () => {
 		expect(await readSitePresence(deps)).toBeNull();
 		expect(await readContentPresence('doc', deps)).toBeNull();
 		expect(await readContentDots('doc', deps)).toBeNull();
+	});
+});
+
+describe('getCache construction failures (fail-open at the service boundary)', () => {
+	it('degrades every read to null and keeps touch quiet', async () => {
+		// No deps.store anywhere here: each call falls to the throwing
+		// getCache mock, and the service must swallow it — this is the
+		// dashboard's only defense against a malformed VALKEY_URL (it calls
+		// readSitePresence directly from its load).
+		await expect(touchPresence({ token: 'tok' })).resolves.toBeUndefined();
+		expect(await readSitePresence()).toBeNull();
+		expect(await readContentPresence('doc')).toBeNull();
+		expect(await readContentDots('doc')).toBeNull();
 	});
 });

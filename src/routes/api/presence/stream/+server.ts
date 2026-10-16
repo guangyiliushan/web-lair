@@ -94,10 +94,12 @@ export const GET: RequestHandler = async ({ url, request, locals }) => {
 						stop();
 					}
 				} catch {
-					// Snapshot assembly failed (e.g. the cache store could not
-					// be constructed): degrade THIS frame and keep the stream
-					// at 200 — a 5xx-class failure would kill SSE for good
-					// (WHATWG §9.2 never retries a non-200).
+					// Defense layer, currently unreachable: the service swallows
+					// its own construction/store failures, so snapshotFor only
+					// rejects if a future change adds a bare await here. If it
+					// ever does, degrade THIS frame and keep the stream at 200
+					// — a 5xx-class failure would kill SSE for good (WHATWG
+					// §9.2 never retries a non-200).
 					if (!finished) {
 						const degraded =
 							candidate !== null ? { content: null } : { site: null, day: null, peak: null };
