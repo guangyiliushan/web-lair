@@ -54,6 +54,20 @@ describe('presence heartbeat mount', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it('stops beating after unmount (the effect cleanup runs)', async () => {
+		const clearSpy = vi.spyOn(globalThis, 'clearInterval');
+		const { unmount } = await render(PresenceHeartbeat, { enabled: true });
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+		clearSpy.mockClear();
+		await unmount();
+		// Without the effect's returned stop function the 15s interval would
+		// keep beating after unmount and nothing would clear it here.
+		expect(clearSpy).toHaveBeenCalled();
+		const callsAfterUnmount = fetchMock.mock.calls.length;
+		await new Promise((resolve) => setTimeout(resolve, 60));
+		expect(fetchMock).toHaveBeenCalledTimes(callsAfterUnmount);
+	});
+
 	it.each(['/login', '/zh-cn/account', '/ja/verify-email', '/en/register'])(
 		'never beats on the excluded surface %s',
 		async (pathname) => {

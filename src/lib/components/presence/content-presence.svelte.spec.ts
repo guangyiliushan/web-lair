@@ -324,6 +324,24 @@ describe('position early reporting (D2)', () => {
 		expect(fetchMock).toHaveBeenCalledTimes(7);
 	});
 
+	it('releases the stream and listeners on unmount (cleanup teeth)', async () => {
+		const { unmount } = await render(ContentPresence, {
+			contentId: CONTENT,
+			config: { enabled: true, readerView: true, readerDots: false }
+		});
+		await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+		const source = FakeEventSource.instances[0];
+		const callsBefore = fetchMock.mock.calls.length;
+		await unmount();
+		// stopStream ran: the EventSource is closed (deleting the cleanup line
+		// would leave readyState at its initial 0 and turn this red).
+		expect(source.readyState).toBe(2);
+		// The scroll listener is gone: a big move cannot produce a report.
+		window.dispatchEvent(new Event('scroll'));
+		await new Promise((resolve) => setTimeout(resolve, 60));
+		expect(fetchMock.mock.calls.length).toBe(callsBefore);
+	});
+
 	it('coalesces same-frame scrolls into one rAF (throttle guard)', async () => {
 		const nativeRaf = requestAnimationFrame.bind(globalThis);
 		const rafSpy = vi.spyOn(globalThis, 'requestAnimationFrame');

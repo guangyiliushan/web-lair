@@ -527,6 +527,55 @@ describe('presence stream watchdog', () => {
 		stop();
 	});
 
+	it('a probe killed by a suspend does not demote the next failure (resume clears the flag)', async () => {
+		const doc = fakeDocument();
+		const stop = openPresenceStream({
+			url: 'u',
+			onSnapshot: () => {},
+			eventSource: ctor,
+			document: doc
+		});
+		for (let round = 0; round <= STREAM_COLD_RETRY_LIMIT; round += 1) {
+			FakeEventSource.instances[FakeEventSource.instances.length - 1].fatal();
+			await vi.advanceTimersByTimeAsync(60_000);
+		}
+		expect(FakeEventSource.instances).toHaveLength(6);
+		await vi.advanceTimersByTimeAsync(539_999);
+		await vi.advanceTimersByTimeAsync(1); // the settle probe fires (probing=true)
+		expect(FakeEventSource.instances).toHaveLength(7);
+		doc.visibilityState = 'hidden';
+		doc.fire('visibilitychange'); // kills the in-flight probe
+		doc.visibilityState = 'visible';
+		doc.fire('visibilitychange'); // resume must clear `probing` too
+		expect(FakeEventSource.instances).toHaveLength(8);
+		FakeEventSource.instances[7].fatal();
+		await vi.advanceTimersByTimeAsync(5_000); // base retry, not settle silence
+		expect(FakeEventSource.instances).toHaveLength(9);
+		stop();
+	});
+
+	it('ignores redundant visibilitychange events while already visible', async () => {
+		const doc = fakeDocument();
+		const send = vi.fn(async () => {});
+		const stopHeartbeat = startPresenceHeartbeat({ token: 't', send, document: doc });
+		const stopStream = openPresenceStream({
+			url: 'u',
+			onSnapshot: () => {},
+			eventSource: ctor,
+			document: doc
+		});
+		expect(send).toHaveBeenCalledTimes(1);
+		expect(FakeEventSource.instances).toHaveLength(1);
+		doc.fire('visibilitychange'); // still visible: both must no-op
+		doc.fire('visibilitychange');
+		expect(send).toHaveBeenCalledTimes(1);
+		expect(FakeEventSource.instances).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(15_000);
+		expect(send).toHaveBeenCalledTimes(2); // cadence intact, not doubled
+		stopHeartbeat();
+		stopStream();
+	});
+
 	it('caps the backoff at 60s (the 5th cold delay is 60s, not 80s)', async () => {
 		const stop = openPresenceStream({ url: 'u', onSnapshot: () => {}, eventSource: ctor });
 		// Four cold fatals: delays 5s, 10s, 20s, 40s (literal in/out, so a

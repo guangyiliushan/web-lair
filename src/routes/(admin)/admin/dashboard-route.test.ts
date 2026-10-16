@@ -12,7 +12,8 @@ const { dbMock, state, service, presenceService } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		selectQueue: [] as unknown[][],
-		presenceEnabled: true
+		presenceEnabled: true,
+		enabledThrows: false
 	},
 	service: { requireAdminRole: vi.fn() },
 	presenceService: { readSitePresence: vi.fn() }
@@ -25,7 +26,10 @@ vi.mock('$lib/server/services/presence', () => ({
 }));
 vi.mock('$lib/server/config/options-registry', () => ({
 	getOption: vi.fn(async (key: string) => {
-		if (key === 'presence.enabled') return state.presenceEnabled;
+		if (key === 'presence.enabled') {
+			if (state.enabledThrows) throw new Error('settings unavailable');
+			return state.presenceEnabled;
+		}
 		throw new Error(`unexpected option key: ${key}`);
 	})
 }));
@@ -53,6 +57,7 @@ beforeEach(() => {
 		[{ count: 1 }]
 	];
 	state.presenceEnabled = true;
+	state.enabledThrows = false;
 	service.requireAdminRole.mockClear();
 	presenceService.readSitePresence.mockReset();
 	presenceService.readSitePresence.mockResolvedValue(null);
@@ -89,5 +94,23 @@ describe('admin dashboard load (realtime R4)', () => {
 
 		expect(presenceService.readSitePresence).not.toHaveBeenCalled();
 		expect(data.presence).toEqual({ enabled: false, site: null, day: null, peak: null });
+	});
+
+	it('stops before any db work when the guard rejects (repo precedent)', async () => {
+		service.requireAdminRole.mockRejectedValueOnce(new Error('denied'));
+		await expect(load({} as never)).rejects.toThrow('denied');
+		expect(dbMock.select).not.toHaveBeenCalled();
+		expect(presenceService.readSitePresence).not.toHaveBeenCalled();
+	});
+
+	it('fails open on a settings read failure (cards render, the read still runs)', async () => {
+		state.enabledThrows = true;
+		presenceService.readSitePresence.mockResolvedValue({ site: 1, day: 2, peak: 3 });
+
+		const data = (await load({} as never)) as {
+			presence: { enabled: boolean; site: number | null; day: number | null; peak: number | null };
+		};
+
+		expect(data.presence).toEqual({ enabled: true, site: 1, day: 2, peak: 3 });
 	});
 });

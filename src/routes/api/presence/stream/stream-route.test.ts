@@ -43,7 +43,7 @@ vi.mock('$lib/server/config/options-registry', () => ({
 	})
 }));
 
-import { GET } from './+server';
+import { GET, HEAD } from './+server';
 import { PRESENCE_SNAPSHOT_MS } from './snapshot';
 
 const TOKEN_A = '6f3a2b9c-0d4e-4c8a-9b1f-2f9c4d7e8a11';
@@ -108,6 +108,24 @@ describe('presence stream route', () => {
 		const response = await requestStream({ c: CONTENT, signal: ac.signal });
 		expect(response.status).toBe(204);
 		expect(response.body).toBeNull();
+	});
+
+	it('answers HEAD without opening a stream (a bodyless probe must not spin timers)', async () => {
+		vi.useFakeTimers();
+		try {
+			const url = new URL(`http://localhost/api/presence/stream?c=${CONTENT}`);
+			const response = await HEAD({
+				url,
+				request: new Request(url, { method: 'HEAD' }),
+				locals: { admin: null, user: null }
+			} as never);
+			expect(response.status).toBe(204);
+			expect(response.body).toBeNull();
+			expect(response.headers.get('cache-control')).toBe('no-store');
+			expect(vi.getTimerCount()).toBe(0);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('rejects a malformed content id and a reader stream without ?c', async () => {
