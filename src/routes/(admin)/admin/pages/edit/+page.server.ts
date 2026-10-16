@@ -88,6 +88,10 @@ export const load: PageServerLoad = async ({ url }) => {
 					placeholder: isPagePlaceholderSlug(row.slug),
 					newPage: false,
 					editorMode: isPageEditorRow(row),
+					// The published body rides along so the editor can seed its
+					// working copy when no draft exists (P5 e2e finding: the
+					// first edit of an existing page must carry its body).
+					content: row.content ?? {},
 					updatedAt: row.updatedAt
 				}
 			: {

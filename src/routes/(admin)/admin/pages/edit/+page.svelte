@@ -187,7 +187,11 @@
 		const row = data.page;
 		titleMap = seedMap(draft?.title ?? row.title);
 		descMap = seedMap(draft?.description ?? row.description);
-		contentMap = { ...(draft?.content ?? {}) };
+		// Seed the working copy from the DRAFT when one exists, else from the
+		// PUBLISHED body (P5 e2e finding): an existing page opened for its
+		// first edit must carry its body - seeding only from the draft left
+		// the editor blank and the publish failed the content gate.
+		contentMap = { ...(draft?.content ?? row.content ?? {}) };
 		slug = typeof draft?.slug === 'string' ? draft.slug : row.placeholder ? '' : row.slug;
 		activeLocale = chooseLocale();
 		markdown = contentMap[activeLocale] ?? '';
@@ -226,6 +230,12 @@
 		if (!data.draft && draftId !== null) {
 			draftId = null;
 			draftVersion = null;
+			// Same stale-timer trap as onPublish (P5 e2e finding): a debounce
+			// scheduled before the draft vanished must not re-attach later.
+			if (autosaveTimer) {
+				clearTimeout(autosaveTimer);
+				autosaveTimer = null;
+			}
 		}
 		// untrack (T16): the dirty test stringifies the whole payload - the
 		// effect must not re-run on every keystroke through that read.
@@ -390,6 +400,14 @@
 	async function onPublish() {
 		if (saveState === 'conflict' || publishing) return;
 		publishing = true;
+		// Kill the pending debounce (P5 e2e finding): a stale autosave that
+		// fires after the publish transaction deleted the draft would
+		// re-attach a fresh draft against the just-published row (phantom
+		// "unpublished changes").
+		if (autosaveTimer) {
+			clearTimeout(autosaveTimer);
+			autosaveTimer = null;
+		}
 		try {
 			if (!draftId || isDirty()) {
 				// Flush the working copy first; only real end-states

@@ -507,6 +507,31 @@ describe('pages editor · load', () => {
 		expect(service.loadPageDraftByPageId).not.toHaveBeenCalled();
 	});
 
+	it('hands the published body through for working-copy seeding (P5 e2e fix)', async () => {
+		state.selectQueue = [
+			[
+				{
+					id: PAGE_ID,
+					slug: 'live-slug',
+					title: { en: 'Live page' },
+					description: null,
+					icon: null,
+					externalUrl: null,
+					isDefault: false,
+					status: 'visible',
+					content: { en: '# Body', 'zh-cn': '# 正文' },
+					updatedAt: new Date('2026-10-01T00:00:00Z')
+				}
+			]
+		];
+		const data = (await load(loadEvent(PAGE_ID))) as {
+			page: Record<string, unknown>;
+			draft: unknown;
+		};
+		expect(data.page).toMatchObject({ content: { en: '# Body', 'zh-cn': '# 正文' } });
+		expect(data.draft).toBeNull();
+	});
+
 	it('flags code / external rows as NOT editor rows (R2-7)', async () => {
 		state.selectQueue = [
 			[

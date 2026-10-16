@@ -262,9 +262,15 @@ test('page hard-delete clears its references inside the delete transaction', asy
 	await page.goto('/admin/pages');
 	const row = page.getByRole('row').filter({ hasText: PAGE_TITLE });
 	await expect(row.first()).toBeVisible({ timeout: 15000 });
-	await row.first().getByRole('button', { name: '删除' }).click();
+	// Click-pair retry (house pattern): the SSR trigger renders before
+	// Svelte hydrates, so a single click can be swallowed under load.
 	const dialog = page.getByRole('alertdialog');
-	await expect(dialog).toBeVisible({ timeout: 10000 });
+	await expect(async () => {
+		if ((await dialog.count()) === 0) {
+			await row.first().getByRole('button', { name: '删除' }).click();
+		}
+		await expect(dialog).toBeVisible({ timeout: 3000 });
+	}).toPass({ timeout: 30_000 });
 	await dialog.getByRole('button', { name: '删除', exact: true }).click();
 	await expect(page.getByRole('row').filter({ hasText: PAGE_TITLE })).toHaveCount(0, {
 		timeout: 15000
