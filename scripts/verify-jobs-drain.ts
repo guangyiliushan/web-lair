@@ -25,7 +25,10 @@
 // gate negatives) and T10 (user jobs end-to-end: hot update, fork override,
 // run-scoped SDK binding), T11 (delete lifecycle on a real database), T12
 // (admin edit mid-tick -> config-snapshot CAS; toggle race on a real DB) and
-// the scaffold-degradation guard. T8 (Kuma wiring) to §25.
+// the scaffold-degradation guard; SY S1 adds the audit-path outbox
+// (`recordActivity` fans out one `queued` delivery per subscribed endpoint -
+// single insert-select, `@>` matching, Standard Webhooks recommended payload
+// shape). T8 (Kuma wiring) to §25.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -39,6 +42,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { asc, eq } from 'drizzle-orm';
 import postgres, { type ReservedSql } from 'postgres';
 import { activities } from '../src/lib/server/db/system/activity.schema';
+import { recordActivity } from '../src/lib/server/audit';
 import { jobRuns } from '../src/lib/server/db/system/job-run.schema';
 import { jobSchedules } from '../src/lib/server/db/system/job-schedule.schema';
 import { webhookDeliveries } from '../src/lib/server/db/system/webhook-delivery.schema';
@@ -1614,10 +1618,89 @@ async function main(): Promise<void> {
 	await t12MidTickConfigChange();
 	await t12bToggleCasRealDb();
 	await scaffoldFailureDegrades();
+	await s1ProducerOutbox();
 
 	console.log(
 		`\n${failures === 0 ? 'ALL' : `${failures} of`} ${checks} checks ${failures === 0 ? 'passed' : 'FAILED'}`
 	);
+}
+
+/**
+ * S1 producer (SY batch): the audit path enqueues one `queued` delivery per
+ * subscribed endpoint - a single insert-select statement, payload in the
+ * Standard Webhooks recommended shape. Runs against the throwaway database.
+ */
+async function s1ProducerOutbox(): Promise<void> {
+	section('S1 producer: recordActivity -> queued deliveries (outbox)');
+	const tag = `s1-outbox-${Date.now().toString(36)}`;
+	const secret = 'whsec_cHJvYmU=';
+
+	const [subscribed] = await db
+		.insert(webhooks)
+		.values({
+			name: `${tag}-sub`,
+			payloadUrl: `${httpBase}/probe`,
+			events: ['probe.outbox'],
+			secret,
+			isEnabled: true
+		})
+		.returning({ id: webhooks.id });
+	await db.insert(webhooks).values({
+		name: `${tag}-disabled`,
+		payloadUrl: `${httpBase}/probe`,
+		events: ['probe.outbox'],
+		secret,
+		isEnabled: false
+	});
+	await db.insert(webhooks).values({
+		name: `${tag}-empty`,
+		payloadUrl: `${httpBase}/probe`,
+		events: [],
+		secret,
+		isEnabled: true
+	});
+
+	await recordActivity(db, { event: 'probe.outbox', actorId: null, payload: { n: 1 } });
+	const activityRows = await db
+		.select()
+		.from(activities)
+		.where(eq(activities.event, 'probe.outbox'));
+	check(
+		'audit row written on the same call path',
+		activityRows.length === 1,
+		`got ${activityRows.length}`
+	);
+
+	const deliveries = await db
+		.select()
+		.from(webhookDeliveries)
+		.where(eq(webhookDeliveries.event, 'probe.outbox'));
+	check(
+		'exactly one delivery queued (enabled subscribed endpoint only)',
+		deliveries.length === 1,
+		`got ${deliveries.length}`
+	);
+	const delivery = deliveries[0];
+	check('delivery targets the subscribed endpoint', delivery?.webhookId === subscribed.id);
+	check('delivery is queued', delivery?.status === 'queued');
+	const body = delivery?.payload as {
+		type?: string;
+		timestamp?: string;
+		data?: { n?: number };
+	} | null;
+	check('payload.type mirrors the event', body?.type === 'probe.outbox');
+	check(
+		'payload.timestamp is ISO 8601',
+		typeof body?.timestamp === 'string' && new Date(body.timestamp).toISOString() === body.timestamp
+	);
+	check('payload.data passes the audit payload through', body?.data?.n === 1);
+
+	await recordActivity(db, { event: 'probe.other', actorId: null, payload: { n: 2 } });
+	const unmatched = await db
+		.select()
+		.from(webhookDeliveries)
+		.where(eq(webhookDeliveries.event, 'probe.other'));
+	check('unsubscribed event enqueues nothing', unmatched.length === 0, `got ${unmatched.length}`);
 }
 
 let scenarioError: unknown = null;

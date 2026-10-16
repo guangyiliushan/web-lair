@@ -41,7 +41,7 @@ import type { GateError } from './save-gate.ts';
  * handle as an argument, like every other server service.
  */
 
-type ScriptDb = Pick<typeof import('$lib/server/db').db, 'insert' | 'transaction'>;
+type ScriptDb = Pick<typeof import('$lib/server/db').db, 'insert' | 'transaction' | 'execute'>;
 
 export interface ScriptSourceInfo {
 	code: string;

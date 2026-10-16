@@ -66,6 +66,9 @@ function makeDb(
 				auditRows.push(row);
 			})
 		})),
+		// Outbox enqueue no-op (SY S1): the real recordActivity also fans out
+		// deliveries through `execute`; this fake only asserts the audit row.
+		execute: vi.fn(async () => []),
 		transaction: vi.fn(async (fn: (tx: unknown) => unknown) => {
 			if (options.transactionThrows) throw new Error('tx boom');
 			let deleteCall = 0;
@@ -89,7 +92,9 @@ function makeDb(
 					values: vi.fn(async (row: Record<string, unknown>) => {
 						auditRows.push(row);
 					})
-				}))
+				})),
+				// Same outbox no-op for the delete path (recordActivity(tx, ...)).
+				execute: vi.fn(async () => [])
 			};
 			return fn(tx);
 		})
