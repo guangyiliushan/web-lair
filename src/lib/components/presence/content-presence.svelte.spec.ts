@@ -316,9 +316,16 @@ describe('position early reporting (D2)', () => {
 		window.dispatchEvent(new Event('scroll'));
 		await nextFrames();
 		expect(fetchMock).toHaveBeenCalledTimes(6);
+
+		nowMs = 36_000; // floor exactly 5000ms; a ≥2% ROLLBACK reports too
+		setTop(900); // 10% — |10 − 62| = 52
+		window.dispatchEvent(new Event('scroll'));
+		await nextFrames();
+		expect(fetchMock).toHaveBeenCalledTimes(7);
 	});
 
 	it('coalesces same-frame scrolls into one rAF (throttle guard)', async () => {
+		const nativeRaf = requestAnimationFrame.bind(globalThis);
 		const rafSpy = vi.spyOn(globalThis, 'requestAnimationFrame');
 		const { setTop } = await mountInArticle();
 		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -327,7 +334,9 @@ describe('position early reporting (D2)', () => {
 		setTop(700); // 30% — a big move: one coalesced frame, one report
 		window.dispatchEvent(new Event('scroll'));
 		window.dispatchEvent(new Event('scroll'));
-		await new Promise((resolve) => setTimeout(resolve, 80));
+		// Two NATIVE frames (unspied) flush the single scheduled callback —
+		// deterministic, unlike a wall-clock sleep.
+		await new Promise((resolve) => nativeRaf(() => nativeRaf(resolve)));
 		expect(rafSpy).toHaveBeenCalledTimes(1);
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});

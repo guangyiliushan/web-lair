@@ -7,10 +7,12 @@ import { psql, valkey, valkeyAlive, valkeyDel } from './support';
  * heartbeat -> window -> SSE chain on a fixture post — the stream header
  * contract, the window-vs-cardinality probe over a live ghost member (no
  * page-mount interference: a load-bearing rewrite after the review found
- * the old badge-based pin could not fail), the two-tabs fan-in, and the
- * refreshing-TTL probe. Fixtures are namespaced `e2e-rt` and removed in
- * teardown; the spec runs serial against the production preview and the
- * live Valkey.
+ * the old badge-based pin could not fail), the two-tabs fan-in, the
+ * refreshing-TTL probe, and the site-key mount pin (a public page's beat
+ * lands in wl:presence:site with the tab token — closing the "deleting the
+ * layout mount line stays green" review finding). Fixtures are namespaced
+ * `e2e-rt` and removed in teardown; the spec runs serial against the
+ * production preview and the live Valkey.
  *
  * Isolation (review note): every assertion reads the fixture CONTENT key,
  * which only this spec writes — parallel workers cannot pollute it (R-2);
@@ -181,7 +183,7 @@ test('the site heartbeat mounts on public pages (site key gains the tab token)',
 	// for it instead of racing the mount.
 	await page.waitForFunction(() => sessionStorage.getItem('wl.presence.token') !== null);
 	const token = await page.evaluate(() => sessionStorage.getItem('wl.presence.token'));
-	expect(token).toMatch(/^[0-9a-f-]{36}$/i);
+	expect(token).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
 	await expect
 		.poll(() => valkey('ZSCORE', 'wl:presence:site', token as string), { timeout: 20_000 })
 		.toMatch(/^\d+$/);

@@ -16,10 +16,15 @@
 	 */
 
 	interface Props {
-		enabled?: boolean;
+		/**
+		 * Required on purpose (review finding): the (site) layout must pass
+		 * `data.presence.enabled` explicitly — omitting the prop now fails
+		 * svelte-check instead of silently defaulting to on.
+		 */
+		enabled: boolean;
 	}
 
-	let { enabled = true }: Props = $props();
+	let { enabled }: Props = $props();
 
 	const tracked = $derived(enabled && shouldTrackPath(page.url.pathname));
 

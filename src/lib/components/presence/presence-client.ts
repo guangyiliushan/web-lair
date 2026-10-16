@@ -201,7 +201,7 @@ export const STREAM_COLD_RETRY_LIMIT = 5;
 export const STREAM_SETTLE_PROBE_MS = 10 * 60_000;
 
 /**
- * One EventSource per tab (register C2/D5) with the fatal-failure watchdog
+ * One EventSource per tab (register C2/C3) with the fatal-failure watchdog
  * (C3): non-200 failures are permanent per the spec, so we rebuild with
  * exponential backoff capped at 60s; after the cold cap the stream settles to
  * a single probe every 10 minutes, and a visibilitychange back to visible
@@ -242,11 +242,14 @@ export function openPresenceStream(options: PresenceStreamOptions): () => void {
 			source?.close();
 			source = null;
 		} else if (suspended) {
-			// Back to the foreground: a fresh attempt with reset counters, so a
+			// Back to the foreground: a fresh attempt with reset counters
+			// (including the probe flag — a probe killed by the suspend must
+			// not demote the next failure straight to settle), so a
 			// deploy-window outage or a re-enabled feature recovers here too.
 			suspended = false;
 			coldRetries = 0;
 			attempt = 0;
+			probing = false;
 			connect();
 		}
 	};
@@ -264,6 +267,8 @@ export function openPresenceStream(options: PresenceStreamOptions): () => void {
 		if (stopped || settleTimer !== null) return;
 		settleTimer = setTimeout(() => {
 			settleTimer = null;
+			// Defensive only: every suspend/stop path clears this timer first,
+			// so the guard is currently unreachable (kept for future callers).
 			if (stopped || suspended) return;
 			coldRetries = 0;
 			attempt = 0;
@@ -316,7 +321,14 @@ export function openPresenceStream(options: PresenceStreamOptions): () => void {
 	};
 
 	doc?.addEventListener('visibilitychange', onVisibility);
-	connect();
+	// A document that starts hidden (a tab opened in the background) never
+	// fires visibilitychange until first activation (MDN Page Visibility), so
+	// it must not connect now — only the first 'visible' brings the stream.
+	if (doc?.visibilityState === 'hidden') {
+		suspended = true;
+	} else {
+		connect();
+	}
 	return stop;
 }
 

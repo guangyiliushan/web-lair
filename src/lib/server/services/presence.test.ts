@@ -200,10 +200,11 @@ describe('presence service (site / content / day / peak)', () => {
 		const deps = { store, now: () => T0, timezone: 'UTC' };
 		const sec = Math.floor(T0 / 1000);
 		// Two movers (double buckets) interleaved with singles inside the
-		// window. Latest activity order: f(55) c(45) d(40) e(35) a(30) b(25),
-		// so the cap keeps buckets [4,5,6,7,8] ascending. A Map without the
-		// delete+reinsert would fixate first-occurrence order (a,b,c,d,e,f)
-		// and answer [8,4,5,6,3] here.
+		// window. Members arrive score-ascending (f,a,b,c,d,e,a,b), so the
+		// latest-activity order is f,c,d,e,a,b and the cap keeps buckets
+		// [4,5,6,7,8] ascending. A Map WITHOUT the delete+reinsert would
+		// keep first-occurrence insertion order (f,a,b,c,d,e) and answer
+		// [7,8,4,5,6] here (review-corrected arithmetic).
 		await store.zadd('presence:c:doc', '1:tok-a', sec - 50);
 		await store.zadd('presence:c:doc', '7:tok-a', sec - 30);
 		await store.zadd('presence:c:doc', '2:tok-b', sec - 48);
@@ -216,6 +217,27 @@ describe('presence service (site / content / day / peak)', () => {
 		expect(await readContentPresence('doc', deps)).toEqual({
 			count: 6,
 			histogram: histogramWith({ 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1 })
+		});
+	});
+
+	it('keeps latest-activity order distinct from plain bucket order (a falling mover)', async () => {
+		const store = new MemoryCacheStore();
+		const deps = { store, now: () => T0, timezone: 'UTC' };
+		const sec = Math.floor(T0 / 1000);
+		// x moves 9 -> 3 (back up the page); activity order p,q,r,s,t,x keeps
+		// its reinserted tail, so the capped payload is [2,4,5,6,3]. A
+		// sort-by-bucket implementation would answer [2,3,4,5,6] instead.
+		await store.zadd('presence:c:doc', '1:p', sec - 50);
+		await store.zadd('presence:c:doc', '2:q', sec - 48);
+		await store.zadd('presence:c:doc', '9:x', sec - 45);
+		await store.zadd('presence:c:doc', '4:r', sec - 40);
+		await store.zadd('presence:c:doc', '5:s', sec - 35);
+		await store.zadd('presence:c:doc', '6:t', sec - 30);
+		await store.zadd('presence:c:doc', '3:x', sec - 25);
+		expect(await readContentDots('doc', deps)).toEqual([2, 4, 5, 6, 3]);
+		expect(await readContentPresence('doc', deps)).toEqual({
+			count: 6,
+			histogram: histogramWith({ 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1 })
 		});
 	});
 

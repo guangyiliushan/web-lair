@@ -444,6 +444,89 @@ describe('presence stream watchdog', () => {
 		stop();
 	});
 
+	it('stays offline when the document starts hidden, then connects on first visible', async () => {
+		// A background-opened tab never fires visibilitychange until its first
+		// activation (MDN Page Visibility), so it must not connect up front.
+		const doc = fakeDocument('hidden');
+		const stop = openPresenceStream({
+			url: 'u',
+			onSnapshot: () => {},
+			eventSource: ctor,
+			document: doc
+		});
+		expect(FakeEventSource.instances).toHaveLength(0);
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(FakeEventSource.instances).toHaveLength(0);
+		doc.visibilityState = 'visible';
+		doc.fire('visibilitychange');
+		expect(FakeEventSource.instances).toHaveLength(1);
+		stop();
+	});
+
+	it('closes a LIVE connection on hidden (not only a dead one)', async () => {
+		const doc = fakeDocument();
+		const stop = openPresenceStream({
+			url: 'u',
+			onSnapshot: () => {},
+			eventSource: ctor,
+			document: doc
+		});
+		const live = FakeEventSource.instances[0];
+		live.emit('open'); // a healthy stream is running
+		doc.visibilityState = 'hidden';
+		doc.fire('visibilitychange');
+		expect(live.closed).toBe(true); // the h1.1 budget line
+		expect(vi.getTimerCount()).toBe(0);
+		doc.visibilityState = 'visible';
+		doc.fire('visibilitychange');
+		expect(FakeEventSource.instances).toHaveLength(2);
+		stop();
+	});
+
+	it('resets the cold budget on resume (a near-cap tab is not demoted to settle)', async () => {
+		const doc = fakeDocument();
+		const stop = openPresenceStream({
+			url: 'u',
+			onSnapshot: () => {},
+			eventSource: ctor,
+			document: doc
+		});
+		// Five cold fatals (delays 5/10/20/40/60s): coldRetries=5, right at the
+		// cap — one more without the resume reset would settle the stream.
+		for (const delay of [5_000, 10_000, 20_000, 40_000, 60_000]) {
+			FakeEventSource.instances[FakeEventSource.instances.length - 1].fatal();
+			await vi.advanceTimersByTimeAsync(delay);
+		}
+		expect(FakeEventSource.instances).toHaveLength(6);
+		doc.visibilityState = 'hidden';
+		doc.fire('visibilitychange');
+		doc.visibilityState = 'visible';
+		doc.fire('visibilitychange');
+		expect(FakeEventSource.instances).toHaveLength(7);
+		FakeEventSource.instances[6].fatal();
+		await vi.advanceTimersByTimeAsync(5_000); // base delay proves the reset
+		expect(FakeEventSource.instances).toHaveLength(8);
+		stop();
+	});
+
+	it('a probe that opens returns the stream to the normal retry chain', async () => {
+		const stop = openPresenceStream({ url: 'u', onSnapshot: () => {}, eventSource: ctor });
+		for (let round = 0; round <= STREAM_COLD_RETRY_LIMIT; round += 1) {
+			FakeEventSource.instances[FakeEventSource.instances.length - 1].fatal();
+			await vi.advanceTimersByTimeAsync(60_000);
+		}
+		expect(FakeEventSource.instances).toHaveLength(6);
+		await vi.advanceTimersByTimeAsync(539_999);
+		expect(FakeEventSource.instances).toHaveLength(6);
+		await vi.advanceTimersByTimeAsync(1); // the settle probe fires
+		expect(FakeEventSource.instances).toHaveLength(7);
+		FakeEventSource.instances[6].emit('open'); // probe succeeded …
+		FakeEventSource.instances[6].fatal(); // … then an ordinary hiccup
+		await vi.advanceTimersByTimeAsync(5_000); // base delay, not settle
+		expect(FakeEventSource.instances).toHaveLength(8);
+		stop();
+	});
+
 	it('caps the backoff at 60s (the 5th cold delay is 60s, not 80s)', async () => {
 		const stop = openPresenceStream({ url: 'u', onSnapshot: () => {}, eventSource: ctor });
 		// Four cold fatals: delays 5s, 10s, 20s, 40s (literal in/out, so a
