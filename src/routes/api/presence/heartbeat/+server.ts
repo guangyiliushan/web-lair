@@ -3,6 +3,7 @@ import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
 import { PRESENCE_BUCKETS, touchPresence } from '$lib/server/services/presence';
 import { isUuid } from '$lib/utils/uuid';
+import { PRESENCE_HEARTBEAT_RATE_LIMIT, presenceHeartbeatLimitKey } from './limit';
 
 /**
  * Presence heartbeat (realtime batch R2, ledger §23 / plan §B): one small
@@ -23,12 +24,6 @@ import { isUuid } from '$lib/utils/uuid';
  */
 
 export const prerender = false;
-
-export const PRESENCE_HEARTBEAT_RATE_LIMIT = { limit: 15, windowSeconds: 60 } as const;
-
-export function presenceHeartbeatLimitKey(token: string): string {
-	return `limits:presence:${token}`;
-}
 
 interface HeartbeatInput {
 	token: string;

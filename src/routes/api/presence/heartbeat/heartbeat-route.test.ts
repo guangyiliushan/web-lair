@@ -32,7 +32,8 @@ vi.mock('$lib/server/services/presence', async (importOriginal) => {
 	return { ...actual, touchPresence: touchMock };
 });
 
-import { POST, presenceHeartbeatLimitKey } from './+server';
+import { POST } from './+server';
+import { presenceHeartbeatLimitKey } from './limit';
 
 const TOKEN = '6f3a2b9c-0d4e-4c8a-9b1f-2f9c4d7e8a11';
 const CONTENT = '0d9e4b2a-7c31-4f5e-8a6b-1c2d3e4f5a6b';

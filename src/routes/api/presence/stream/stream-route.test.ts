@@ -31,7 +31,8 @@ vi.mock('$lib/server/config/options-registry', () => ({
 	)
 }));
 
-import { GET, PRESENCE_SNAPSHOT_MS } from './+server';
+import { GET } from './+server';
+import { PRESENCE_SNAPSHOT_MS } from './snapshot';
 
 const TOKEN_A = '6f3a2b9c-0d4e-4c8a-9b1f-2f9c4d7e8a11';
 const TOKEN_B = 'a1b2c3d4-e5f6-4789-8abc-def012345678';
