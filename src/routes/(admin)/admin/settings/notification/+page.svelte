@@ -409,12 +409,13 @@
 					{#if flash}
 						<p
 							role="status"
+							data-slot="webhook-flash"
 							class="text-sm {flash.kind === 'error' ? 'text-destructive' : 'text-foreground'}"
 						>
 							{flash.text}
 						</p>
 						{#if flash.secret}
-							<div class="space-y-1 rounded-md border border-dashed p-2">
+							<div data-slot="secret-reveal" class="space-y-1 rounded-md border border-dashed p-2">
 								<p class="text-xs text-muted-foreground">
 									{m.admin_settings_notification_secret_shown_once()}
 								</p>
@@ -445,7 +446,7 @@
 						{:else}
 							<ul class="space-y-1">
 								{#each data.webhookEndpoints as endpoint (endpoint.id)}
-									<li class="flex flex-wrap items-center gap-2 text-xs">
+									<li data-slot="endpoint-row" class="flex flex-wrap items-center gap-2 text-xs">
 										<span class="font-medium">{endpoint.name}</span>
 										<code class="text-muted-foreground">{endpoint.payloadUrl}</code>
 										<Badge variant={endpoint.isEnabled ? 'default' : 'outline'}>
