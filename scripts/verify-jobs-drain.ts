@@ -288,6 +288,8 @@ interface CapturedRequest {
 }
 
 let stallDeliveries = true;
+/** S3: answers 500 while positive, then 200 - exercises the manual-retry arc. */
+let flakyRemaining = 0;
 const captured: CapturedRequest[] = [];
 const httpServer = createServer((request: IncomingMessage, response: ServerResponse) => {
 	let body = '';
@@ -296,6 +298,12 @@ const httpServer = createServer((request: IncomingMessage, response: ServerRespo
 		const path = request.url ?? '';
 		captured.push({ path, method: request.method ?? '', headers: request.headers, body });
 		if (path.startsWith('/stall') && stallDeliveries) return; // never respond -> fetch hangs
+		if (path.startsWith('/flaky-s3') && flakyRemaining > 0) {
+			flakyRemaining -= 1;
+			response.statusCode = 500;
+			response.end('flaky');
+			return;
+		}
 		if (path.startsWith('/fail500')) {
 			response.statusCode = 500;
 			response.end('nope');
@@ -361,11 +369,12 @@ async function createEndpoint(
 	name: string,
 	path: string,
 	secret: string,
-	isEnabled = true
+	isEnabled = true,
+	events: string[] = ['test.event']
 ): Promise<string> {
 	const [row] = await db
 		.insert(webhooks)
-		.values({ name, payloadUrl: `${httpBase}${path}`, events: ['test.event'], secret, isEnabled })
+		.values({ name, payloadUrl: `${httpBase}${path}`, events, secret, isEnabled })
 		.returning({ id: webhooks.id });
 	return row.id;
 }
@@ -1619,6 +1628,7 @@ async function main(): Promise<void> {
 	await t12bToggleCasRealDb();
 	await scaffoldFailureDegrades();
 	await s1ProducerOutbox();
+	await s3PipelineDelivery();
 
 	console.log(
 		`\n${failures === 0 ? 'ALL' : `${failures} of`} ${checks} checks ${failures === 0 ? 'passed' : 'FAILED'}`
@@ -1701,6 +1711,142 @@ async function s1ProducerOutbox(): Promise<void> {
 		.from(webhookDeliveries)
 		.where(eq(webhookDeliveries.event, 'probe.other'));
 	check('unsubscribed event enqueues nothing', unmatched.length === 0, `got ${unmatched.length}`);
+}
+
+/**
+ * S3 pipeline (SY batch): the full arc - recordActivity -> a `queued` row ->
+ * ONE drain tick -> signed POST -> terminal row. Also pins the 410 loop back
+ * to the event source, and the manual-retry contract (copy the failed row as
+ * a new queued row; <=1 tick pickup; v1 keeps the original and issues a NEW
+ * webhook-id - the registered stable-id deviation).
+ */
+async function s3PipelineDelivery(): Promise<void> {
+	section('S3 pipeline: recordActivity -> queued -> drain delivers (end-to-end)');
+	await resetLedger();
+	captured.length = 0;
+	const secret = 'whsec_cHJvYmU=';
+
+	// (1) Success arc: the audit path queues, one tick delivers.
+	const okId = await createEndpoint('s3-ok', '/s3-ok', secret, true, ['probe.pipeline']);
+	await recordActivity(db, { event: 'probe.pipeline', actorId: null, payload: { round: 1 } });
+	const queued = await db
+		.select()
+		.from(webhookDeliveries)
+		.where(eq(webhookDeliveries.event, 'probe.pipeline'));
+	check(
+		'audit event -> exactly one queued delivery for the subscriber',
+		queued.length === 1 && queued[0]?.status === 'queued' && queued[0]?.webhookId === okId,
+		`rows=${queued.length}`
+	);
+	const deliveryId = queued[0]?.id;
+
+	await runDrainOnce();
+	const delivered = deliveryId ? await deliveryById(deliveryId) : undefined;
+	check(
+		'one tick delivers: succeeded @200 with deliveredAt, error cleared',
+		delivered?.status === 'succeeded' &&
+			delivered?.responseCode === 200 &&
+			delivered?.deliveredAt != null &&
+			delivered?.error === null,
+		`status=${delivered?.status} code=${delivered?.responseCode}`
+	);
+	const okPosts = captured.filter((r) => r.path.startsWith('/s3-ok'));
+	check('receiver got exactly one POST', okPosts.length === 1, `posts=${okPosts.length}`);
+	const request = okPosts[okPosts.length - 1];
+	check(
+		'signature verifies against the endpoint secret',
+		request !== undefined && signatureOf(request, secret)
+	);
+	check(
+		'webhook-id header is the delivery row id (stable id contract)',
+		request?.headers['webhook-id'] === deliveryId
+	);
+	const body = request ? (JSON.parse(request.body) as Record<string, unknown>) : {};
+	check(
+		'body is the outbox payload shape (type/timestamp/data)',
+		body.type === 'probe.pipeline' &&
+			typeof body.timestamp === 'string' &&
+			(body.data as { round?: number } | undefined)?.round === 1
+	);
+	const second = await runDrainOnce();
+	const afterSecond = deliveryId ? await deliveryById(deliveryId) : undefined;
+	check(
+		'second tick is a no-op for terminal rows',
+		second.code === 0 &&
+			captured.filter((r) => r.path.startsWith('/s3-ok')).length === 1 &&
+			afterSecond?.status === 'succeeded'
+	);
+
+	// (2) 410 arc: Gone disables the endpoint AND the event source stops queueing.
+	const goneId = await createEndpoint('s3-gone', '/gone410-s3', secret, true, ['probe.gone']);
+	await recordActivity(db, { event: 'probe.gone', actorId: null, payload: {} });
+	await runDrainOnce();
+	const goneRows = await db
+		.select()
+		.from(webhookDeliveries)
+		.where(eq(webhookDeliveries.event, 'probe.gone'));
+	check(
+		'410 -> failed with response_code 410',
+		goneRows.length === 1 && goneRows[0]?.status === 'failed' && goneRows[0]?.responseCode === 410,
+		`status=${goneRows[0]?.status} code=${goneRows[0]?.responseCode}`
+	);
+	const [goneEndpoint] = await db.select().from(webhooks).where(eq(webhooks.id, goneId));
+	check('410 disables the endpoint', goneEndpoint?.isEnabled === false);
+	await recordActivity(db, { event: 'probe.gone', actorId: null, payload: {} });
+	const goneAfter = await db
+		.select()
+		.from(webhookDeliveries)
+		.where(eq(webhookDeliveries.event, 'probe.gone'));
+	check(
+		'post-410 events enqueue nothing (disabled skip at the source)',
+		goneAfter.length === 1,
+		`rows=${goneAfter.length}`
+	);
+
+	// (3) Manual-retry arc (mirrors the J-3 retry action): copy the failed row
+	// as a NEW queued row; one tick later it is delivered, the original stays.
+	const flakyId = await createEndpoint('s3-flaky', '/flaky-s3', secret, true, ['probe.retry']);
+	flakyRemaining = 1;
+	await recordActivity(db, { event: 'probe.retry', actorId: null, payload: { round: 3 } });
+	await runDrainOnce();
+	const [firstAttempt] = await db
+		.select()
+		.from(webhookDeliveries)
+		.where(eq(webhookDeliveries.event, 'probe.retry'));
+	check(
+		'first attempt failed (500) with exactly one request sent',
+		firstAttempt?.status === 'failed' &&
+			firstAttempt?.responseCode === 500 &&
+			captured.filter((r) => r.path.startsWith('/flaky-s3')).length === 1,
+		`status=${firstAttempt?.status}`
+	);
+	const [copy] = await db
+		.insert(webhookDeliveries)
+		.values({
+			webhookId: flakyId,
+			event: 'probe.retry',
+			payload: firstAttempt?.payload ?? null,
+			status: 'queued'
+		})
+		.returning({ id: webhookDeliveries.id });
+	await runDrainOnce();
+	const copied = await deliveryById(copy.id);
+	check(
+		'manual retry re-queue is drained within one tick: succeeded @200',
+		copied?.status === 'succeeded' && copied?.responseCode === 200,
+		`status=${copied?.status} code=${copied?.responseCode}`
+	);
+	check(
+		'the original failed row stays for the record',
+		(firstAttempt ? await deliveryById(firstAttempt.id) : undefined)?.status === 'failed'
+	);
+	const flakyPosts = captured.filter((r) => r.path.startsWith('/flaky-s3'));
+	check(
+		'retry issues a NEW webhook-id (v1 new-row retry; stable-id deviation registered)',
+		flakyPosts.length === 2 &&
+			flakyPosts[1]?.headers['webhook-id'] === copy.id &&
+			flakyPosts[1]?.headers['webhook-id'] !== flakyPosts[0]?.headers['webhook-id']
+	);
 }
 
 let scenarioError: unknown = null;
