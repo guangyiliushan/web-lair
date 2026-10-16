@@ -158,7 +158,14 @@ function fakeStore(incr: () => Promise<number>): CacheStore {
 	return {
 		get: async () => null,
 		set: async () => undefined,
-		incr
+		incr,
+		zadd: async () => undefined,
+		ztrim: async () => undefined,
+		zcountAbove: async () => 0,
+		zrangeAbove: async () => [],
+		sadd: async () => undefined,
+		scard: async () => 0,
+		expire: async () => undefined
 	};
 }
 

@@ -1,13 +1,15 @@
 import Valkey from 'iovalkey';
-import { CACHE_PREFIX, type CacheStore } from './store';
+import { CACHE_PREFIX, type CacheStore, type ScoredMember } from './store';
 
 /**
  * Valkey-backed store (iovalkey — the valkey.io-listed client that ships pure
  * JS and therefore runs everywhere, including Windows dev; ledger §21).
- * Degradation contract: get/set swallow infrastructure errors (miss /
- * no-op); `incr` rethrows so `rateLimit()` owns the fail-open decision. One
- * warning per outage keeps an outage visible without flooding logs; a
- * recovery line re-arms the warning for the next outage.
+ * Degradation contract: KV access and the presence writes (zadd/ztrim/sadd/
+ * expire) swallow infrastructure errors; `incr` and the presence reads
+ * (zcountAbove/zrangeAbove/scard) rethrow so their callers (`rateLimit()` /
+ * `services/presence.ts`) own the fail-open decision. One warning per outage
+ * keeps an outage visible without flooding logs; a recovery line re-arms the
+ * warning for the next outage.
  */
 export class ValkeyCacheStore implements CacheStore {
 	readonly #client: Valkey;
@@ -95,8 +97,87 @@ export class ValkeyCacheStore implements CacheStore {
 		return count;
 	}
 
+	async zadd(key: string, member: string, score: number): Promise<void> {
+		try {
+			await this.#ready();
+			this.#noteSuccess();
+			await this.#client.zadd(CACHE_PREFIX + key, score, member);
+		} catch (error) {
+			this.#warn(error);
+		}
+	}
+
+	async ztrim(key: string, maxScore: number): Promise<void> {
+		try {
+			await this.#ready();
+			this.#noteSuccess();
+			await this.#client.zremrangebyscore(CACHE_PREFIX + key, '-inf', maxScore);
+		} catch (error) {
+			this.#warn(error);
+		}
+	}
+
+	async zcountAbove(key: string, minScore: number): Promise<number> {
+		await this.#ready();
+		this.#noteSuccess();
+		return this.#client.zcount(CACHE_PREFIX + key, exclusiveLowerBound(minScore), '+inf');
+	}
+
+	async zrangeAbove(key: string, minScore: number): Promise<ScoredMember[]> {
+		await this.#ready();
+		this.#noteSuccess();
+		const flat = await this.#client.zrangebyscore(
+			CACHE_PREFIX + key,
+			exclusiveLowerBound(minScore),
+			'+inf',
+			'WITHSCORES'
+		);
+		const members: ScoredMember[] = [];
+		for (let index = 0; index + 1 < flat.length; index += 2) {
+			members.push({ member: flat[index], score: Number(flat[index + 1]) });
+		}
+		return members;
+	}
+
+	async sadd(key: string, member: string): Promise<void> {
+		try {
+			await this.#ready();
+			this.#noteSuccess();
+			await this.#client.sadd(CACHE_PREFIX + key, member);
+		} catch (error) {
+			this.#warn(error);
+		}
+	}
+
+	async scard(key: string): Promise<number> {
+		await this.#ready();
+		this.#noteSuccess();
+		return this.#client.scard(CACHE_PREFIX + key);
+	}
+
+	async expire(key: string, ttlSeconds: number): Promise<void> {
+		try {
+			await this.#ready();
+			this.#noteSuccess();
+			await this.#client.expire(CACHE_PREFIX + key, ttlSeconds);
+		} catch (error) {
+			this.#warn(error);
+		}
+	}
+
 	/** Lifecycle hook for scripts/tests: close the connection. */
 	async quit(): Promise<void> {
 		await this.#client.quit().catch(() => {});
 	}
+}
+
+/**
+ * Exclusive lower bound for the window reads: `(min` keeps the read boundary
+ * consistent with the write-side trim (members at or below the cutoff are
+ * dead). ±Infinity map to the infinities ZCOUNT/ZRANGEBYSCORE accept.
+ */
+function exclusiveLowerBound(minScore: number): string {
+	if (minScore === -Infinity) return '-inf';
+	if (minScore === Infinity) return '+inf';
+	return `(${minScore}`;
 }

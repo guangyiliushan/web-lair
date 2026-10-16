@@ -1,10 +1,22 @@
 /**
- * Cache layer contract (storage line §7, ledger §21): a small key/value port
- * that fronts Valkey. Consumers go through {@link cached} / {@link rateLimit};
- * PG stays the single source of truth and the cache must be loseable at any
- * moment (restart, outage) without affecting correctness — every helper and
- * both store implementations are fail-open by contract (T14).
+ * Cache layer contract (storage line §7, ledger §21; presence surface added
+ * with the realtime batch, ledger §23): a small port that fronts Valkey.
+ * Consumers go through {@link cached} / {@link rateLimit} and the sorted-set
+ * primitives behind `services/presence.ts`; PG stays the single source of
+ * truth and the cache must be loseable at any moment (restart, outage)
+ * without affecting correctness.
+ *
+ * Failure split (T14): the KV writes and the presence writes below are
+ * best-effort (implementations swallow infrastructure failures), while
+ * `incr` and the presence READS MAY throw — their callers (`rateLimit`, the
+ * presence service) own the fail-open decision, because for them "zero" and
+ * "unavailable" are different answers.
  */
+
+export interface ScoredMember {
+	member: string;
+	score: number;
+}
 
 export interface CacheStore {
 	get<T>(key: string): Promise<T | null>;
@@ -15,6 +27,30 @@ export interface CacheStore {
 	 * decides what a dead cache means for the caller (it allows the action).
 	 */
 	incr(key: string, windowSeconds: number): Promise<number>;
+	/**
+	 * Sorted-set surface for presence (ledger §23): members scored by epoch
+	 * seconds and windowed by score comparison. `zadd` / `ztrim` / `sadd` /
+	 * `expire` are best-effort (swallow failures like `set`); `zcountAbove` /
+	 * `zrangeAbove` / `scard` MAY throw like `incr` — the presence service
+	 * decides what an unavailable cache renders ("—" / hidden badge).
+	 */
+	zadd(key: string, member: string, score: number): Promise<void>;
+	/** Drop members scored at or below `maxScore` (ZREMRANGEBYSCORE -inf max). */
+	ztrim(key: string, maxScore: number): Promise<void>;
+	/** Count members scored strictly above `minScore` (ZCOUNT (min +inf). */
+	zcountAbove(key: string, minScore: number): Promise<number>;
+	/** Members scored strictly above `minScore`, ascending by (score, member). */
+	zrangeAbove(key: string, minScore: number): Promise<ScoredMember[]>;
+	/** Add one member to a plain set (SADD). */
+	sadd(key: string, member: string): Promise<void>;
+	/** Cardinality of a plain set (SCARD). */
+	scard(key: string): Promise<number>;
+	/**
+	 * (Re)set the key TTL (EXPIRE). Refresh semantics, deliberately NOT NX:
+	 * a presence key must never die while it is still being written
+	 * (2026-10-16 review, R-1).
+	 */
+	expire(key: string, ttlSeconds: number): Promise<void>;
 }
 
 /** Key namespace (plan §7): everything the app puts in Valkey sits under it. */

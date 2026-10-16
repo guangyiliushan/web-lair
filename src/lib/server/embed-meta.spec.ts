@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleEmbedMetaRequest, parseGithubTarget } from '$lib/server/embed-meta';
 import { MemoryCacheStore } from '$lib/server/cache/memory';
-import type { CacheStore } from '$lib/server/cache/store';
+import type { CacheStore, ScoredMember } from '$lib/server/cache/store';
 
 function requestFor(url: string): URL {
 	return new URL(`http://localhost/api/embed-meta?url=${encodeURIComponent(url)}`);
@@ -28,6 +28,27 @@ function brokenStore(): CacheStore {
 			throw new Error('cache down');
 		}),
 		incr: vi.fn(async (): Promise<number> => {
+			throw new Error('cache down');
+		}),
+		zadd: vi.fn(async (): Promise<void> => {
+			throw new Error('cache down');
+		}),
+		ztrim: vi.fn(async (): Promise<void> => {
+			throw new Error('cache down');
+		}),
+		zcountAbove: vi.fn(async (): Promise<number> => {
+			throw new Error('cache down');
+		}),
+		zrangeAbove: vi.fn(async (): Promise<ScoredMember[]> => {
+			throw new Error('cache down');
+		}),
+		sadd: vi.fn(async (): Promise<void> => {
+			throw new Error('cache down');
+		}),
+		scard: vi.fn(async (): Promise<number> => {
+			throw new Error('cache down');
+		}),
+		expire: vi.fn(async (): Promise<void> => {
 			throw new Error('cache down');
 		})
 	};
