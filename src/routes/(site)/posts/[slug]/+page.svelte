@@ -22,7 +22,9 @@
 			<span class="whitespace-nowrap">{data.post.date}</span>
 			<span class="text-muted-foreground/40">·</span>
 			<span class="text-primary">{data.post.category}</span>
-			<ContentPresence contentId={data.post.id} config={data.presence} />
+			{#key data.post.id}
+				<ContentPresence contentId={data.post.id} config={data.presence} />
+			{/key}
 		</div>
 	</header>
 

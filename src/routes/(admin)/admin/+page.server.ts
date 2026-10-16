@@ -27,7 +27,7 @@ export const load: PageServerLoad = async () => {
 		db.select({ count: sql<number>`count(*)`.mapWith(Number) }).from(thoughts),
 		db.select({ count: sql<number>`count(*)`.mapWith(Number) }).from(moments)
 	]);
-	const presenceEnabled = await getOption('presence.enabled');
+	const presenceEnabled = await readPresenceEnabled();
 	const realtime = presenceEnabled ? await readSitePresence() : null;
 	return {
 		headerTitle: m.admin_nav_dashboard(),
@@ -46,3 +46,12 @@ export const load: PageServerLoad = async () => {
 		}
 	};
 };
+
+/** Fail-open like the (site) layout: a settings blip renders "—" cards. */
+async function readPresenceEnabled(): Promise<boolean> {
+	try {
+		return await getOption('presence.enabled');
+	} catch {
+		return true;
+	}
+}

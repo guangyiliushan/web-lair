@@ -16,7 +16,9 @@ const NO_EXPIRY = Number.POSITIVE_INFINITY;
  * and as the semantic reference for the Valkey implementation. Sorted sets
  * order by (score asc, member lexicographic) and abandon a key when its last
  * member is trimmed — both mirror observed Valkey behaviour (live probe,
- * 2026-10-16).
+ * 2026-10-16). Deliberate divergence (review note): values are stored and
+ * returned BY REFERENCE here, while Valkey round-trips JSON — callers must
+ * not mutate a cached value in place.
  */
 export class MemoryCacheStore implements CacheStore {
 	readonly #entries = new Map<string, Entry>();

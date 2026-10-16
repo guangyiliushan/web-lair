@@ -55,7 +55,8 @@
 	const maxHistogram = $derived(Math.max(1, ...histogram));
 
 	$effect(() => {
-		if (!config.enabled || typeof window === 'undefined') return;
+		// Browser-only by construction: $effect never runs during SSR.
+		if (!config.enabled) return;
 		const token = getOrCreatePresenceToken();
 		const article = root?.closest('article') ?? null;
 
@@ -73,12 +74,12 @@
 			if (raf !== 0) return;
 			raf = requestAnimationFrame(() => {
 				raf = 0;
-				const percent = readPercent();
+				// The 5s floor first: whole window frames skip the forced
+				// layout read entirely (the AND's truth value is unchanged).
 				const now = Date.now();
-				if (
-					Math.abs(percent - lastReportedPercent) >= PRESENCE_POSITION_DELTA &&
-					now - lastReportedAt >= PRESENCE_POSITION_MS
-				) {
+				if (now - lastReportedAt < PRESENCE_POSITION_MS) return;
+				const percent = readPercent();
+				if (Math.abs(percent - lastReportedPercent) >= PRESENCE_POSITION_DELTA) {
 					lastReportedPercent = percent;
 					lastReportedAt = now;
 					void sendPresenceHeartbeat(token, {
@@ -163,7 +164,7 @@
 						{#each dots as bucket, index (index)}
 							<span
 								class="absolute size-1 rounded-full bg-primary/60"
-								style="left: {((bucket + 0.5) * 100) / histogram.length}%; top: {-7 -
+								style="left: {((bucket + 0.5) * 100) / Math.max(1, histogram.length)}%; top: {-7 -
 									(index % 3) * 3}px"
 								data-presence-dot
 							></span>

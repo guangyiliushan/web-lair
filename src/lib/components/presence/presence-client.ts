@@ -1,5 +1,6 @@
 import { COOKIE_SURFACES } from '$lib/config/locale-surfaces';
 import { deLocalizeUrl } from '$lib/paraglide/runtime';
+import { isUuid } from '$lib/utils/uuid';
 
 /**
  * Presence client engine (realtime R3, ledger §23): token, heartbeat loop,
@@ -15,8 +16,6 @@ export const PRESENCE_POSITION_MS = 5_000;
 export const PRESENCE_POSITION_DELTA = 2;
 
 export const PRESENCE_TOKEN_KEY = 'wl.presence.token';
-
-const TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Site-heartbeat mount filter (register R-6): the cookie surfaces minus the
@@ -69,9 +68,9 @@ export function getOrCreatePresenceToken(storage?: Pick<Storage, 'getItem' | 'se
 	if (target) {
 		try {
 			const existing = target.getItem(PRESENCE_TOKEN_KEY);
-			// A stale value that fails the server's uuid gate is replaced, so
-			// every heartbeat of this tab is accepted (review R-3).
-			if (existing && TOKEN_RE.test(existing)) return existing;
+			// A stale value that fails the server's isUuid gate is replaced
+			// (register R-3; the validator is shared, not a second regex).
+			if (existing && isUuid(existing)) return existing;
 			const token = randomUuid();
 			target.setItem(PRESENCE_TOKEN_KEY, token);
 			return token;

@@ -1,5 +1,6 @@
 import { getOption } from '$lib/server/config/options-registry';
 import { getPublicOrigin } from '$lib/server/origin';
+import { effectiveReaderDots } from '$lib/server/services/presence';
 import {
 	loadNotesMegaData,
 	loadPagesMegaData,
@@ -39,7 +40,7 @@ export const load: LayoutServerLoad = async ({ parent, locals }) => {
 		presence: {
 			enabled: presenceOptions.enabled,
 			readerView: presenceOptions.readerView,
-			readerDots: presenceOptions.readerDots || Boolean(locals.admin)
+			readerDots: effectiveReaderDots(presenceOptions.readerDots, Boolean(locals.admin))
 		}
 	};
 };

@@ -17,7 +17,10 @@ export const zhCnLocale = {
 				// cookie even though the runtime defaults them.
 				httpOnly: false,
 				secure: false,
-				sameSite: 'Lax'
+				// The literal type matters: Playwright's storageState wants
+				// "Lax"|"Strict"|"None", and a bare string here poisons every
+				// spec's test.use() (caught when e2e/ first got a type gate).
+				sameSite: 'Lax' as const
 			}
 		],
 		origins: []

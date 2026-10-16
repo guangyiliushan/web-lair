@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { expect, type BrowserContext, type Page, type Response } from '@playwright/test';
+import { expect, type APIResponse, type BrowserContext, type Page } from '@playwright/test';
 
 /**
  * Shared acceptance-test plumbing (comment P3a review follow-up): the docker
@@ -86,7 +86,7 @@ export async function apiPost(
 	path: string,
 	data: Record<string, unknown>,
 	attempt = 0
-): Promise<Response> {
+): Promise<APIResponse> {
 	const apiPath = path.replace(/^\/api\/auth/, '');
 	if (RATE_LIMITED.test(apiPath)) {
 		const now = Date.now();

@@ -1,5 +1,6 @@
 import type { RequestHandler } from './$types';
 import { getOption } from '$lib/server/config/options-registry';
+import { effectiveReaderDots } from '$lib/server/services/presence';
 import { isUuid } from '$lib/utils/uuid';
 import { PRESENCE_KEEPALIVE_TICKS, PRESENCE_SNAPSHOT_MS, snapshotFor } from './snapshot';
 
@@ -13,8 +14,10 @@ import { PRESENCE_KEEPALIVE_TICKS, PRESENCE_SNAPSHOT_MS, snapshotFor } from './s
  * Status discipline (WHATWG §9.2): while streaming the response is ALWAYS
  * 200 — the spec makes any non-200 (or non-`text/event-stream`) a permanent
  * failure the browser never retries, so a dead cache degrades fields to null
- * inside the payload instead. The one deliberate non-200 is
- * `presence.enabled === false` → 204, the spec's stop-reconnecting signal.
+ * inside the payload instead. The only deliberate non-200s are the 204s and
+ * the two pre-stream rejects: `presence.enabled === false` → 204 (the
+ * spec's stop-reconnecting signal) and HEAD → 204 (a bodyless probe must not
+ * spin up a stream; kit 2.70 runs GET for HEAD unless a HEAD export exists).
  *
  * Scoping (register R-5/R-6): `?c=<uuid>` streams the content slice for
  * readers; the anonymous position dots go to admins always and to readers
@@ -27,6 +30,10 @@ import { PRESENCE_KEEPALIVE_TICKS, PRESENCE_SNAPSHOT_MS, snapshotFor } from './s
  */
 
 export const prerender = false;
+
+/** A bodyless probe must not open a stream (kit runs GET for HEAD otherwise). */
+export const HEAD: RequestHandler = () =>
+	new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
 
 export const GET: RequestHandler = async ({ url, request, locals }) => {
 	let enabled = true;
@@ -49,11 +56,13 @@ export const GET: RequestHandler = async ({ url, request, locals }) => {
 	// read: one settings lookup per connection, never per tick.
 	let dots = admin;
 	if (!dots) {
+		let readerDotsOption = false;
 		try {
-			dots = await getOption('presence.readerDots');
+			readerDotsOption = await getOption('presence.readerDots');
 		} catch {
 			// fail-open: no dots on a settings read failure
 		}
+		dots = effectiveReaderDots(readerDotsOption, admin);
 	}
 
 	const encoder = new TextEncoder();

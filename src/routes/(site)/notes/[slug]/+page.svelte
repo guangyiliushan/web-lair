@@ -91,7 +91,9 @@
 						{data.note.topic.name}
 					</a>
 				{/if}
-				<ContentPresence contentId={data.note.id} config={data.presence} />
+				{#key data.note.id}
+					<ContentPresence contentId={data.note.id} config={data.presence} />
+				{/key}
 			</div>
 		{/if}
 	</header>

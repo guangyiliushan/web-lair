@@ -30,6 +30,16 @@ export const PRESENCE_BUCKETS = 20;
 /** Dots payload cap: the most recently active readers (privacy/clutter). */
 export const PRESENCE_DOTS_LIMIT = 5;
 
+/**
+ * The single predicate for the effective dots permission (review finding):
+ * the public option OR an admin viewer — admins always receive dots on
+ * content pages (register E2). Used by the (site) layout AND the stream
+ * endpoint so the two sides cannot drift.
+ */
+export function effectiveReaderDots(optionValue: boolean, isAdmin: boolean): boolean {
+	return optionValue || isAdmin;
+}
+
 const SITE_KEY = 'presence:site';
 const contentKey = (contentId: string) => `presence:c:${contentId}`;
 const dayKey = (date: string) => `presence:day:${date}`;
@@ -208,11 +218,21 @@ export async function readSitePresence(deps: PresenceDeps = {}): Promise<SitePre
 	}
 }
 
-/** Per-content reader count + 5% position histogram; `null` = unavailable. */
-export async function readContentPresence(
+/**
+ * One content slice per read (review finding): count, histogram and the
+ * capped dots all derive from a SINGLE zrangeAbove + collapse, so the stream
+ * tick no longer pays two full key scans when dots are on.
+ */
+export interface ContentSlice {
+	count: number;
+	histogram: number[];
+	dots: number[];
+}
+
+export async function readContentSlice(
 	contentId: string,
 	deps: PresenceDeps = {}
-): Promise<ContentPresence | null> {
+): Promise<ContentSlice | null> {
 	let store: CacheStore;
 	try {
 		store = deps.store ?? getCache();
@@ -222,13 +242,26 @@ export async function readContentPresence(
 	const cutoff = Math.floor((deps.now?.() ?? Date.now()) / 1000) - PRESENCE_WINDOW_SECONDS;
 	try {
 		const members = await store.zrangeAbove(contentKey(contentId), cutoff);
-		const latest = latestBuckets(members);
+		const latest = [...latestBuckets(members).values()];
 		const histogram = new Array<number>(PRESENCE_BUCKETS).fill(0);
-		for (const bucket of latest.values()) histogram[bucket] += 1;
-		return { count: latest.size, histogram };
+		for (const bucket of latest) histogram[bucket] += 1;
+		return {
+			count: latest.length,
+			histogram,
+			dots: latest.slice(Math.max(0, latest.length - PRESENCE_DOTS_LIMIT))
+		};
 	} catch {
 		return null;
 	}
+}
+
+/** Per-content reader count + 5% position histogram; `null` = unavailable. */
+export async function readContentPresence(
+	contentId: string,
+	deps: PresenceDeps = {}
+): Promise<ContentPresence | null> {
+	const slice = await readContentSlice(contentId, deps);
+	return slice === null ? null : { count: slice.count, histogram: slice.histogram };
 }
 
 /**
@@ -239,18 +272,6 @@ export async function readContentDots(
 	contentId: string,
 	deps: PresenceDeps = {}
 ): Promise<number[] | null> {
-	let store: CacheStore;
-	try {
-		store = deps.store ?? getCache();
-	} catch {
-		return null; // construction failure = unavailable, never a 500
-	}
-	const cutoff = Math.floor((deps.now?.() ?? Date.now()) / 1000) - PRESENCE_WINDOW_SECONDS;
-	try {
-		const members = await store.zrangeAbove(contentKey(contentId), cutoff);
-		const dots = [...latestBuckets(members).values()];
-		return dots.slice(Math.max(0, dots.length - PRESENCE_DOTS_LIMIT));
-	} catch {
-		return null;
-	}
+	const slice = await readContentSlice(contentId, deps);
+	return slice === null ? null : slice.dots;
 }

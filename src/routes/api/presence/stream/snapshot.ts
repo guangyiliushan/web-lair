@@ -1,6 +1,5 @@
 import {
-	readContentDots,
-	readContentPresence,
+	readContentSlice,
 	readSitePresence,
 	type PresenceDeps
 } from '$lib/server/services/presence';
@@ -34,11 +33,14 @@ export async function snapshotFor(
 	deps: PresenceDeps = {}
 ): Promise<PresenceSnapshot> {
 	if (contentId !== null) {
-		const content = await readContentPresence(contentId, deps);
+		// Single read per tick (review finding): the slice carries count,
+		// histogram AND the capped dots, so dots-on connections stop paying a
+		// second full-key scan.
+		const slice = await readContentSlice(contentId, deps);
 		const snapshot: PresenceSnapshot = {
-			content: content === null ? null : { count: content.count, hist: content.histogram }
+			content: slice === null ? null : { count: slice.count, hist: slice.histogram }
 		};
-		if (scope.dots) snapshot.dots = await readContentDots(contentId, deps);
+		if (scope.dots) snapshot.dots = slice === null ? null : slice.dots;
 		return snapshot;
 	}
 	const site = scope.admin ? await readSitePresence(deps) : null;

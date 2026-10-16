@@ -14,6 +14,11 @@
  * The header is the custom `X-Retry-After` (register C1); no consumer reads
  * it yet (the client silently keeps beating). Revisit the standard
  * `Retry-After` spelling if a consumer ever needs it.
+ *
+ * Nature of the bucket (review note): the key is the CLIENT-MINTED token, so
+ * per-token throttling only bounds a well-behaved tab — it is not abuse
+ * protection (a script can rotate tokens freely). The entry-side gates
+ * (deployment batch) are the load-bearing wall for that threat class.
  */
 export const PRESENCE_HEARTBEAT_RATE_LIMIT = { limit: 30, windowSeconds: 60 } as const;
 
