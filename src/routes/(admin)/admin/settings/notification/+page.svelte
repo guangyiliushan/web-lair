@@ -2,28 +2,84 @@
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import { page } from '$app/state';
+	import { enhance } from '$app/forms';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Select from '$lib/components/ui/select';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import IconMail from '@tabler/icons-svelte-runes/icons/mail';
 	import IconDeviceFloppy from '@tabler/icons-svelte-runes/icons/device-floppy';
+	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
+	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
+	import IconKey from '@tabler/icons-svelte-runes/icons/key';
+	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 
 	let { data }: PageProps = $props();
 	let s = $derived(data.settings);
 
-	// Webhooks section (J-3): the re-queue action result is echoed back via page.form.
+	interface EndpointRow {
+		id: string;
+		name: string;
+		payloadUrl: string;
+		events: string[];
+		isEnabled: boolean;
+		secretPreview: string;
+	}
+
+	// Action results are echoed back via page.form. `op` routes dialog-scoped
+	// failures into their dialog; the top flash carries success + row-level
+	// outcomes, including the ONE-TIME secret reveal after create/rotate.
 	const form = $derived(
-		page.form as { status?: number; message?: string; retried?: boolean } | null | undefined
+		page.form as
+			| {
+					status?: number;
+					message?: string;
+					op?: string;
+					retried?: boolean;
+					created?: boolean;
+					updated?: boolean;
+					removed?: boolean;
+					rotated?: boolean;
+					secret?: string;
+			  }
+			| null
+			| undefined
 	);
-	const retryFlash = $derived.by(() => {
+	const flash = $derived.by(() => {
 		if (!form) return null;
 		if (form.retried)
-			return { kind: 'ok' as const, text: m.admin_settings_notification_requeued() };
-		if (form.message && !form.retried) {
-			// `form.status` is never set by kit (J-3 review R4-1): the
-			// payload keys carry the signal.
-			return { kind: 'error' as const, text: String(form.message) };
+			return { kind: 'ok' as const, text: m.admin_settings_notification_requeued(), secret: null };
+		if (form.created)
+			return {
+				kind: 'ok' as const,
+				text: m.admin_settings_notification_endpoint_created(),
+				secret: form.secret ?? null
+			};
+		if (form.updated)
+			return {
+				kind: 'ok' as const,
+				text: m.admin_settings_notification_endpoint_updated(),
+				secret: null
+			};
+		if (form.removed)
+			return {
+				kind: 'ok' as const,
+				text: m.admin_settings_notification_endpoint_removed(),
+				secret: null
+			};
+		if (form.rotated)
+			return {
+				kind: 'ok' as const,
+				text: m.admin_settings_notification_secret_rotated(),
+				secret: form.secret ?? null
+			};
+		// Dialog-scoped failures render inside their dialog; row-level failures
+		// (toggle) and legacy retry failures land here. `form.status` is never
+		// set by kit (J-3 review R4-1): the payload keys carry the signal.
+		if (form.message && (form.op === undefined || form.op === 'toggle')) {
+			return { kind: 'error' as const, text: String(form.message), secret: null };
 		}
 		return null;
 	});
@@ -32,6 +88,36 @@
 		if (status === 'failed') return 'destructive';
 		if (status === 'succeeded') return 'default';
 		return 'outline';
+	}
+
+	// Endpoint editor dialog (create when `editingId === null`, edit prefills).
+	let endpointDialogOpen = $state(false);
+	let editingId = $state<string | null>(null);
+	let formName = $state('');
+	let formPayloadUrl = $state('');
+	let formEvents = $state<string[]>([]);
+	let endpointPending = $state(false);
+
+	let deleteTarget = $state<EndpointRow | null>(null);
+	let deletePending = $state(false);
+	let rotateTarget = $state<EndpointRow | null>(null);
+	let rotatePending = $state(false);
+	let retryPendingId = $state<string | null>(null);
+
+	function openEndpointDialog(endpoint: EndpointRow | null) {
+		editingId = endpoint?.id ?? null;
+		formName = endpoint?.name ?? '';
+		formPayloadUrl = endpoint?.payloadUrl ?? '';
+		formEvents = endpoint ? [...endpoint.events] : [];
+		endpointDialogOpen = true;
+	}
+
+	function closeEndpointDialog() {
+		endpointDialogOpen = false;
+		editingId = null;
+		formName = '';
+		formPayloadUrl = '';
+		formEvents = [];
 	}
 </script>
 
@@ -320,19 +406,38 @@
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_webhooks()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
-					{#if retryFlash}
+					{#if flash}
 						<p
 							role="status"
-							class="text-sm {retryFlash.kind === 'error' ? 'text-destructive' : 'text-foreground'}"
+							class="text-sm {flash.kind === 'error' ? 'text-destructive' : 'text-foreground'}"
 						>
-							{retryFlash.text}
+							{flash.text}
 						</p>
+						{#if flash.secret}
+							<div class="space-y-1 rounded-md border border-dashed p-2">
+								<p class="text-xs text-muted-foreground">
+									{m.admin_settings_notification_secret_shown_once()}
+								</p>
+								<code class="block text-xs break-all">{flash.secret}</code>
+							</div>
+						{/if}
 					{/if}
 
 					<div class="space-y-2">
-						<p class="text-xs font-medium text-muted-foreground">
-							{m.admin_settings_notification_endpoints()}
-						</p>
+						<div class="flex items-center justify-between gap-2">
+							<p class="text-xs font-medium text-muted-foreground">
+								{m.admin_settings_notification_endpoints()}
+							</p>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onclick={() => openEndpointDialog(null)}
+							>
+								<IconPlus class="size-3.5" />
+								{m.admin_settings_notification_add_endpoint()}
+							</Button>
+						</div>
 						{#if data.webhookEndpoints.length === 0}
 							<p class="text-xs text-muted-foreground">
 								{m.admin_settings_notification_no_endpoints()}
@@ -347,6 +452,50 @@
 											{endpoint.isEnabled ? m.admin_common_enable() : m.admin_common_disable()}
 										</Badge>
 										<span class="text-muted-foreground">{endpoint.events.join(' · ')}</span>
+										<span class="text-muted-foreground"
+											>{m.admin_settings_notification_endpoint_secret()}:
+											<code>{endpoint.secretPreview}</code></span
+										>
+										<span class="ml-auto flex items-center gap-1">
+											<Button
+												type="button"
+												variant="ghost"
+												size="sm"
+												aria-label={m.admin_common_edit()}
+												onclick={() => openEndpointDialog(endpoint)}
+											>
+												<IconPencil class="size-3.5" />
+											</Button>
+											<form method="POST" action="?/toggle">
+												<input type="hidden" name="id" value={endpoint.id} />
+												<input
+													type="hidden"
+													name="enabled"
+													value={endpoint.isEnabled ? 'false' : 'true'}
+												/>
+												<Button type="submit" variant="ghost" size="sm">
+													{endpoint.isEnabled ? m.admin_common_disable() : m.admin_common_enable()}
+												</Button>
+											</form>
+											<Button
+												type="button"
+												variant="ghost"
+												size="sm"
+												aria-label={m.admin_settings_notification_rotate_secret()}
+												onclick={() => (rotateTarget = endpoint)}
+											>
+												<IconKey class="size-3.5" />
+											</Button>
+											<Button
+												type="button"
+												variant="ghost"
+												size="sm"
+												aria-label={m.admin_common_delete()}
+												onclick={() => (deleteTarget = endpoint)}
+											>
+												<IconTrash class="size-3.5" />
+											</Button>
+										</span>
 									</li>
 								{/each}
 							</ul>
@@ -387,9 +536,23 @@
 													? `HTTP ${delivery.responseCode}`
 													: m.admin_settings_notification_no_response()}
 											</span>
-											<form method="POST" action="?/retry">
+											<form
+												method="POST"
+												action="?/retry"
+												use:enhance={() => {
+													retryPendingId = delivery.id;
+													return async ({ update }) => {
+														await update();
+														retryPendingId = null;
+													};
+												}}
+											>
 												<input type="hidden" name="id" value={delivery.id} />
-												<Button type="submit" variant="outline" size="sm"
+												<Button
+													type="submit"
+													variant="outline"
+													size="sm"
+													disabled={retryPendingId === delivery.id}
 													>{m.admin_settings_notification_requeue()}</Button
 												>
 											</form>
@@ -404,3 +567,153 @@
 		</div>
 	</div>
 </div>
+
+<!-- Endpoint editor (create when no id; edit prefills) - SY S2 -->
+<Dialog.Root open={endpointDialogOpen} onOpenChange={(open) => !open && closeEndpointDialog()}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title
+				>{editingId
+					? m.admin_settings_notification_edit_endpoint()
+					: m.admin_settings_notification_add_endpoint()}</Dialog.Title
+			>
+		</Dialog.Header>
+		<form
+			method="POST"
+			action={editingId ? '?/update' : '?/create'}
+			class="space-y-4"
+			use:enhance={() => {
+				endpointPending = true;
+				return async ({ result, update }) => {
+					await update();
+					endpointPending = false;
+					if (result.type === 'success') closeEndpointDialog();
+				};
+			}}
+		>
+			{#if editingId}
+				<input type="hidden" name="id" value={editingId} />
+			{/if}
+			<div class="space-y-1.5">
+				<label for="hook-name" class="text-sm"
+					>{m.admin_settings_notification_endpoint_name()}</label
+				>
+				<Input id="hook-name" name="name" bind:value={formName} required maxlength={120} />
+			</div>
+			<div class="space-y-1.5">
+				<label for="hook-url" class="text-sm">{m.admin_settings_notification_endpoint_url()}</label>
+				<Input
+					id="hook-url"
+					name="payloadUrl"
+					bind:value={formPayloadUrl}
+					required
+					maxlength={2048}
+					placeholder="https://example.com/hooks/lair"
+				/>
+			</div>
+			<fieldset class="space-y-1.5">
+				<legend class="text-sm">{m.admin_settings_notification_endpoint_events()}</legend>
+				<div class="grid grid-cols-2 gap-1">
+					{#each data.webhookEventRoster as eventName (eventName)}
+						<label class="flex items-center gap-2 text-xs">
+							<input
+								type="checkbox"
+								name="events"
+								value={eventName}
+								bind:group={formEvents}
+								class="size-3.5 accent-accent"
+							/>
+							<span class="font-mono">{eventName}</span>
+						</label>
+					{/each}
+				</div>
+			</fieldset>
+			{#if form?.message && form.op === (editingId ? 'update' : 'create')}
+				<p class="text-sm text-destructive">{form.message}</p>
+			{/if}
+			<Dialog.Footer>
+				<Button type="button" variant="outline" onclick={closeEndpointDialog}
+					>{m.admin_common_cancel()}</Button
+				>
+				<Button type="submit" disabled={endpointPending}>{m.admin_common_save()}</Button>
+			</Dialog.Footer>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Delete confirm (cascades the delivery log) - SY S2 -->
+<AlertDialog.Root
+	open={deleteTarget !== null}
+	onOpenChange={(open) => !open && (deleteTarget = null)}
+>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{m.admin_common_delete()}</AlertDialog.Title>
+			<AlertDialog.Description>
+				{m.admin_settings_notification_delete_endpoint()}
+				{#if deleteTarget}<span class="font-medium">({deleteTarget.name})</span>{/if}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		{#if form?.message && form.op === 'remove'}
+			<p class="text-sm text-destructive">{form.message}</p>
+		{/if}
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
+			<form
+				method="POST"
+				action="?/remove"
+				use:enhance={() => {
+					deletePending = true;
+					return async ({ result, update }) => {
+						await update();
+						deletePending = false;
+						if (result.type === 'success') deleteTarget = null;
+					};
+				}}
+			>
+				<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
+				<AlertDialog.Action type="submit" disabled={deletePending}
+					>{m.admin_common_delete()}</AlertDialog.Action
+				>
+			</form>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
+
+<!-- Secret rotation confirm - SY S2 -->
+<AlertDialog.Root
+	open={rotateTarget !== null}
+	onOpenChange={(open) => !open && (rotateTarget = null)}
+>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{m.admin_settings_notification_rotate_secret()}</AlertDialog.Title>
+			<AlertDialog.Description>
+				{m.admin_settings_notification_rotate_secret_confirm()}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		{#if form?.message && form.op === 'rotate'}
+			<p class="text-sm text-destructive">{form.message}</p>
+		{/if}
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
+			<form
+				method="POST"
+				action="?/rotate"
+				use:enhance={() => {
+					rotatePending = true;
+					return async ({ result, update }) => {
+						await update();
+						rotatePending = false;
+						if (result.type === 'success') rotateTarget = null;
+					};
+				}}
+			>
+				<input type="hidden" name="id" value={rotateTarget?.id ?? ''} />
+				<AlertDialog.Action type="submit" disabled={rotatePending}
+					>{m.admin_settings_notification_rotate_secret()}</AlertDialog.Action
+				>
+			</form>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
