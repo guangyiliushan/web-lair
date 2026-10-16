@@ -487,7 +487,6 @@ describe('pages editor · load', () => {
 		expect(service.requireAdminRole).toHaveBeenCalledTimes(1);
 		expect(data.page).toMatchObject({
 			placeholder: true,
-			hasContent: false,
 			editorMode: true,
 			description: {}
 		});
@@ -531,7 +530,6 @@ describe('pages editor · load', () => {
 		};
 		expect(data.page).toMatchObject({
 			placeholder: false,
-			hasContent: false,
 			editorMode: false
 		});
 		// R2-4: a non-editor row never gets a draft handed out.
@@ -550,7 +548,6 @@ describe('pages editor · load', () => {
 			id: '',
 			newPage: true,
 			placeholder: true,
-			hasContent: false,
 			editorMode: true,
 			status: 'hidden',
 			isDefault: false,

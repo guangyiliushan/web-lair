@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { DEFAULT_PAGE_SLUGS } from './_shared/pages';
-import { PAGE_RESERVED_SLUGS } from '../src/lib/utils/page-meta';
+import { isPagePlaceholderSlug, PAGE_RESERVED_SLUGS } from '../src/lib/utils/page-meta';
 
 const DB_URL = process.env.DATABASE_URL;
 if (!DB_URL) {
@@ -123,7 +123,7 @@ async function main(): Promise<void> {
 			// placeholder identity REQUIRES content to stay null, the title
 			// gate degrades to a warning, and every other check below still
 			// runs for these rows (no early continue).
-			const isPlaceholder = slug.startsWith('draft-');
+			const isPlaceholder = isPagePlaceholderSlug(slug);
 			if (isPlaceholder && row.content !== null)
 				fail(`placeholder slug carries published content: /${slug}`);
 			if (!isPlaceholder) {

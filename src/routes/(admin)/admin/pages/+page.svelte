@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll, afterNavigate } from '$app/navigation';
 	import { enhance } from '$app/forms';
+	import { page } from '$app/state';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -46,6 +47,21 @@
 	// assignment; the next submission resyncs it from `form`.
 	let errorText = $derived(form?.error ?? null);
 
+	// ?discarded=1 flash (T12): transient banner after a discard redirects
+	// back to the list (mirrors the editor's afterNavigate handling; NOT an
+	// $effect - replaceState throws before the router is initialized).
+	let flash = $state<string | null>(null);
+	let flashTimer: ReturnType<typeof setTimeout> | null = null;
+	afterNavigate(() => {
+		if (page.url.searchParams.get('discarded') !== '1') return;
+		flash = m.admin_posts_edit_flash_discarded();
+		if (flashTimer) clearTimeout(flashTimer);
+		flashTimer = setTimeout(() => (flash = null), 3500);
+		const url = new URL(page.url);
+		url.searchParams.delete('discarded');
+		goto(url.pathname + url.search, { replaceState: true, noScroll: true });
+	});
+
 	// ▲/▼ dead zones (P2 review): defaults render first, so the first extra
 	// row cannot move up and the last default row cannot move down.
 	let submitting = $state(false);
@@ -70,8 +86,15 @@
 	{/if}
 
 	<div class="relative flex h-10 shrink-0 items-center border-b">
-		<div class="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-			{m.admin_pages_hint({ count: data.pages.length })}
+		<div class="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground">
+			<span class="truncate">{m.admin_pages_hint({ count: data.pages.length })}</span>
+			{#if flash}
+				<span
+					class="shrink-0 rounded-sm bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400"
+				>
+					{flash}
+				</span>
+			{/if}
 		</div>
 		<div class="absolute top-0 right-0 flex h-full items-center gap-1.5 pr-2">
 			<DropdownMenu.Root>
@@ -143,6 +166,11 @@
 									<Badge variant="outline" class="shrink-0 text-xs">
 										{page.externalUrl ? m.admin_pages_external() : m.admin_pages_internal()}
 									</Badge>
+									{#if page.hasDraft}
+										<Badge variant="secondary" class="shrink-0 text-xs"
+											>{m.admin_posts_unpublished_changes()}</Badge
+										>
+									{/if}
 								</div>
 							</Table.Cell>
 							<Table.Cell class="hidden w-44 sm:table-cell">
@@ -314,7 +342,9 @@
 					? m.admin_pages_delete_desc_placeholder()
 					: deleteTarget?.hasContent
 						? m.admin_pages_delete_desc_data()
-						: m.admin_pages_delete_desc_code()}
+						: m.admin_pages_delete_desc_code()}{!deleteTarget?.placeholder && deleteTarget?.hasDraft
+					? ` ${m.admin_pages_delete_desc_draft()}`
+					: ''}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if form?.error}
@@ -350,7 +380,7 @@
 >
 	<Dialog.Portal>
 		<Dialog.Overlay />
-		<Dialog.Content class="sm:max-w-lg">
+		<Dialog.Content class="max-h-[85vh] overflow-y-auto sm:max-w-lg">
 			<Dialog.Header>
 				<Dialog.Title>{m.admin_pages_new_external()}</Dialog.Title>
 			</Dialog.Header>
@@ -374,7 +404,7 @@
 					<h3 class="text-sm font-semibold">{m.admin_pages_edit_title_section()}</h3>
 					{#each LOCALES as locale (locale.code)}
 						<div class="flex items-center gap-3">
-							<span class="w-16 shrink-0 text-xs text-muted-foreground">{locale.label}</span>
+							<span class="w-20 shrink-0 text-xs text-muted-foreground">{locale.label}</span>
 							<Input name="title_{locale.code}" />
 						</div>
 					{/each}
@@ -383,7 +413,7 @@
 					<h3 class="text-sm font-semibold">{m.admin_pages_edit_desc_section()}</h3>
 					{#each LOCALES as locale (locale.code)}
 						<div class="flex items-center gap-3">
-							<span class="w-16 shrink-0 text-xs text-muted-foreground">{locale.label}</span>
+							<span class="w-20 shrink-0 text-xs text-muted-foreground">{locale.label}</span>
 							<Input name="description_{locale.code}" />
 						</div>
 					{/each}
@@ -391,24 +421,24 @@
 				<section class="flex flex-col gap-2">
 					<h3 class="text-sm font-semibold">{m.admin_pages_edit_props()}</h3>
 					<div class="flex items-center gap-3">
-						<span class="w-16 shrink-0 text-xs text-muted-foreground"
+						<span class="w-20 shrink-0 text-xs text-muted-foreground"
 							>{m.admin_pages_edit_icon()}</span
 						>
 						<Input name="icon" placeholder={m.admin_pages_edit_icon_ph()} />
 					</div>
 					<div class="flex items-center gap-3">
-						<span class="w-16 shrink-0 text-xs text-muted-foreground"
+						<span class="w-20 shrink-0 text-xs text-muted-foreground"
 							>{m.admin_pages_edit_external()}</span
 						>
 						<Input name="externalUrl" placeholder={m.admin_pages_edit_external_ph()} />
 					</div>
 					<div class="flex items-center gap-3">
-						<span class="w-16 shrink-0 text-xs text-muted-foreground">Slug</span>
-						<Input name="slug" class="font-mono" placeholder="my-link" />
+						<span class="w-20 shrink-0 text-xs text-muted-foreground">{m.admin_common_slug()}</span>
+						<Input name="slug" class="font-mono" placeholder={m.admin_common_slug_ph()} />
 					</div>
 				</section>
 				{#if form?.error}
-					<p class="text-sm text-destructive">{form.error}</p>
+					<p role="alert" class="text-sm text-destructive">{form.error}</p>
 				{/if}
 				<Dialog.Footer>
 					<Dialog.Close>

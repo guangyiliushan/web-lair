@@ -17,6 +17,7 @@
 	import * as Alert from '$lib/components/ui/alert';
 	import { MarkdownEditor } from '$lib/components/markdown';
 	import { formatDateTime } from '$lib/utils/i18n';
+	import { normalizeSlug } from '$lib/utils/slug';
 	import IconDeviceFloppy from '@tabler/icons-svelte-runes/icons/device-floppy';
 	import IconCloudUpload from '@tabler/icons-svelte-runes/icons/cloud-upload';
 	import IconSettings from '@tabler/icons-svelte-runes/icons/settings';
@@ -25,7 +26,10 @@
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconLanguage from '@tabler/icons-svelte-runes/icons/language';
 
-	let { data, form }: {
+	let {
+		data,
+		form
+	}: {
 		data: PageData;
 		form: {
 			success?: boolean;
@@ -223,7 +227,9 @@
 			draftId = null;
 			draftVersion = null;
 		}
-		if (isDirty()) return; // keep the working copy; id state already tracks the save
+		// untrack (T16): the dirty test stringifies the whole payload - the
+		// effect must not re-run on every keystroke through that read.
+		if (untrack(isDirty)) return; // keep the working copy; id state already tracks the save
 		applyAll();
 	});
 
@@ -409,16 +415,13 @@
 		editorEpoch += 1;
 	}
 
-	function pageSlugify(input: string): string {
-		return input
-			.toLowerCase()
-			.replace(/[^a-z0-9-]+/g, '-')
-			.replace(/-{2,}/g, '-')
-			.replace(/^-+|-+$/g, '');
-	}
-
+	/** Slug input canonicalization (T15): the ruled exact replacement -
+	 * lowercase, non-alphanumerics to hyphens, then the shared `normalizeSlug`
+	 * (hyphen collapse + edge trim). 17/17 vector parity with the retired
+	 * local implementation (E2 experiment, P5-5 rulings). */
 	function onSlugInput(e: Event) {
-		slug = pageSlugify((e.currentTarget as HTMLInputElement).value);
+		const raw = (e.currentTarget as HTMLInputElement).value;
+		slug = normalizeSlug(raw.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
 	}
 
 	// Transient banners for ?published=1 / ?discarded=1. afterNavigate (not
@@ -538,7 +541,9 @@
 				<div
 					class="group mb-3 flex min-h-7 items-center justify-between gap-3 opacity-60 transition-opacity duration-200 hover:opacity-100"
 				>
-					<div class="flex min-w-0 items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+					<div
+						class="flex min-w-0 items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400"
+					>
 						<span
 							aria-hidden="true"
 							class="inline-block size-1.5 shrink-0 rounded-full {saveState === 'conflict'
@@ -626,7 +631,7 @@
 						</Button>
 					{/each}
 					<span class="mx-1 h-4 w-px bg-border"></span>
-					{#if !data.page.newPage}
+					{#if !data.page.placeholder}
 						<Badge variant={data.page.isDefault ? 'secondary' : 'outline'} class="text-xs">
 							{data.page.isDefault ? m.admin_pages_default_page() : m.admin_pages_extra_page()}
 						</Badge>
@@ -689,7 +694,7 @@
 				<!-- Title + description inputs (active locale) -->
 				<div class="group">
 					<input
-						aria-label={m.admin_pages_col_title()}
+						aria-label={m.admin_pages_edit_title_label()}
 						class="w-full border-0 bg-transparent px-0 py-0 text-3xl font-semibold tracking-tight text-neutral-950 outline-none placeholder:font-medium placeholder:text-neutral-300 dark:text-neutral-50 dark:placeholder:text-neutral-700"
 						placeholder={m.admin_posts_edit_title_placeholder()}
 						bind:value={titleMap[activeLocale]}
@@ -708,11 +713,13 @@
 							onclick={() => (slugDialogOpen = true)}
 							aria-label={m.admin_posts_edit_add_slug()}
 						>
-							<span class="truncate">{slug ? `/${slug}` : m.admin_posts_edit_add_slug_label()}</span>
+							<span class="truncate">{slug ? `/${slug}` : m.admin_posts_edit_add_slug_label()}</span
+							>
 							<IconPencil class="size-3 shrink-0" />
 						</button>
 						{#if (titleMap[activeLocale] ?? '') !== '' && !slug}
-							<span class="text-xs text-destructive">{m.admin_notes_edit_slug_required_hint()}</span>
+							<span class="text-xs text-destructive">{m.admin_notes_edit_slug_required_hint()}</span
+							>
 						{/if}
 					</div>
 				</div>
@@ -800,11 +807,18 @@
 					</Sheet.Close>
 				</Sheet.Header>
 				<div class="flex flex-col gap-5 overflow-y-auto px-6 py-4">
-					<form method="POST" action="?/save" use:enhance={propsHandler} class="flex flex-col gap-5">
+					<form
+						method="POST"
+						action="?/save"
+						use:enhance={propsHandler}
+						class="flex flex-col gap-5"
+					>
+						<!-- Live pageId (M4): new-mode state starts as '' (never
+						     null) - the `??` fallback only guards null, and an
+						     empty id is rejected server-side with a clean 400. -->
 						<input type="hidden" name="id" value={pageId ?? data.page.id} />
 						<div class="flex flex-col gap-1.5">
-							<label for="props-icon" class="text-sm font-medium"
-								>{m.admin_pages_edit_icon()}</label
+							<label for="props-icon" class="text-sm font-medium">{m.admin_pages_edit_icon()}</label
 							>
 							<Input
 								id="props-icon"
@@ -896,7 +910,7 @@
 				{data.page.isDefault ? m.admin_pages_default_page() : m.admin_pages_extra_page()}
 			</Badge>
 			<Badge variant="outline" class="text-xs">
-				{data.page.hasContent ? m.admin_pages_md_page() : m.admin_pages_code_page()}
+				{m.admin_pages_code_page()}
 			</Badge>
 			<span>slug: <span class="font-mono">{data.page.slug}</span></span>
 		</div>
@@ -951,7 +965,9 @@
 			<section class="flex flex-col gap-3">
 				<h2 class="text-sm font-semibold">{m.admin_pages_edit_props()}</h2>
 				<label class="flex items-center gap-3">
-					<span class="w-20 shrink-0 text-xs text-muted-foreground">{m.admin_pages_edit_icon()}</span>
+					<span class="w-20 shrink-0 text-xs text-muted-foreground"
+						>{m.admin_pages_edit_icon()}</span
+					>
 					<input
 						type="text"
 						name="icon"
@@ -986,12 +1002,10 @@
 					<p class="text-xs text-muted-foreground">
 						{m.admin_pages_edit_slug_default_hint()}
 					</p>
-				{:else if !data.page.hasContent}
+				{:else}
 					<p class="text-xs text-amber-600 dark:text-amber-400">
 						{m.admin_pages_edit_slug_code_hint()}
 					</p>
-				{:else}
-					<p class="text-xs text-muted-foreground">{m.admin_pages_edit_slug_note()}</p>
 				{/if}
 			</section>
 
@@ -1002,4 +1016,3 @@
 		</form>
 	</div>
 {/if}
-

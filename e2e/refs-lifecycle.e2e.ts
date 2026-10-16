@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { psql } from './support';
+import { expect, test, type Page } from '@playwright/test';
+import { byText, manualSave, psql } from './support';
 import { zhCnLocale } from './locale-fixture';
 
 /**
@@ -31,10 +31,6 @@ const PNG_B64 =
 	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWMQFJf9DwABxwFFFH1wbAAAAABJRU5ErkJggg==';
 /** Bare object key learned from the first saved payload (serial file). */
 let KEY = '';
-
-function byText(page: Page, text: string | RegExp): Locator {
-	return page.getByText(text).filter({ visible: true });
-}
 
 function cleanup() {
 	// Fallback for a run that crashed between deleting the draft rows and
@@ -145,11 +141,6 @@ async function pickCategory(page: Page) {
 		});
 	}).toPass({ timeout: 25000 });
 	await page.keyboard.press('Escape');
-}
-
-async function manualSave(page: Page) {
-	await page.getByRole('button', { name: '保存草稿' }).click({ timeout: 5000 });
-	await expect(byText(page, /已保存/).first()).toBeVisible({ timeout: 60000 });
 }
 
 /** Uploads the shared 1x1 PNG through the picker's assets tab. */

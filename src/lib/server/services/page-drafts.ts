@@ -10,9 +10,18 @@ import type {
 } from '$lib/server/db/content';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { keysFromLocalizedContent, syncFileReferences } from './file-references';
-import { isReservedPageSlug } from '$lib/utils/page-meta';
+import {
+	isPagePlaceholderSlug,
+	isReservedPageSlug,
+	PAGE_PLACEHOLDER_SLUG_PREFIX
+} from '$lib/utils/page-meta';
 import { DRAFT_THROTTLE_MS } from './post-drafts';
 import { m } from '$lib/paraglide/messages';
+
+// The placeholder predicate lives in $lib/utils/page-meta (F6b review):
+// re-exported so the existing service-level import surface (routes, tests)
+// keeps working while the script layer shares the same single source.
+export { isPagePlaceholderSlug };
 
 /**
  * Draft-flow service for md pages (pages line P5-1; ledger §19.10, plan v0.8
@@ -40,13 +49,6 @@ import { m } from '$lib/paraglide/messages';
  * `content is null` only, and there are no note-style row-level settings
  * (pin / password / …) to keep outside the draft.
  */
-/** Marker for the auto-generated slug of never-published placeholder rows. */
-const PLACEHOLDER_SLUG_PREFIX = 'draft-';
-
-export function isPagePlaceholderSlug(slug: string): boolean {
-	return slug.startsWith(PLACEHOLDER_SLUG_PREFIX);
-}
-
 /**
  * Rows the draft editor owns (B1/R2-5 review): md rows plus their
  * never-published placeholder form. THE single predicate source - the edit
@@ -61,7 +63,7 @@ export function isPageEditorRow(row: { content: unknown; slug: string }): boolea
 
 /** Unique-enough placeholder slug; the real slug is required at publish. */
 function pageTempSlug(): string {
-	return `${PLACEHOLDER_SLUG_PREFIX}${randomBytes(5).toString('hex')}`;
+	return `${PAGE_PLACEHOLDER_SLUG_PREFIX}${randomBytes(5).toString('hex')}`;
 }
 
 /** The three editable locales in canonical order - the payload key order is
@@ -75,16 +77,12 @@ interface NormalizedPageDraft {
 	content: LocalizedMarkdown;
 }
 
-/** LF (and lone CR) to LF - the one canonicalization point for page drafts. */
-function canonicalLf(value: string): string {
-	return value.replace(/\r\n?/g, '\n');
-}
-
 /**
  * Keep only the three known locales and drop empty strings (markdown bodies
- * are additionally LF-canonicalized): jsonb round-trips preserve key order,
- * so the stored payload and the hash basis share this exact shape and a
- * dropped locale can never fake a change.
+ * are additionally LF-canonicalized). BOTH the stored payload and the hash
+ * basis are REBUILT through this function (fixed PAGE_LOCALES order) on
+ * every read and write, so the comparison never depends on jsonb's own key
+ * order - jsonb does NOT preserve insertion order (T8 review).
  */
 function localeMap(
 	value: LocalizedText | LocalizedMarkdown | null | undefined,
@@ -94,7 +92,7 @@ function localeMap(
 	for (const locale of PAGE_LOCALES) {
 		const raw = value?.[locale];
 		if (typeof raw !== 'string') continue;
-		const normalized = markdown ? canonicalLf(raw) : raw;
+		const normalized = markdown ? raw.replace(/\r\n?/g, '\n') : raw;
 		if (normalized === '') continue;
 		out[locale] = normalized;
 	}
@@ -124,10 +122,15 @@ function pageDraftUpdateSet(value: NormalizedPageDraft) {
 		slug: value.slug === '' ? null : value.slug,
 		payload: {
 			title: value.title,
-			description: Object.keys(value.description).length === 0 ? null : value.description,
+			description: foldLocalized(value.description),
 			content: value.content
 		}
 	};
+}
+
+/** ''-and-absent are the same edit: fold an empty locale map to null (T15). */
+function foldLocalized(value: Record<string, string>): Record<string, string> | null {
+	return Object.keys(value).length === 0 ? null : value;
 }
 
 /** The "hash 不变不写" comparison basis (§9.10) - payload + slug vs stored
@@ -454,6 +457,21 @@ export type PublishPageResult =
  * the regex itself rejects the dots in robots.txt / sitemap.xml shapes). */
 const PAGE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+/**
+ * The slug gate shared by the outer validation and the locked re-check
+ * (T10 review): one implementation, so the two passes cannot drift. The
+ * order mirrors the P2 editor - required -> shape -> default-locked ->
+ * reserved (own-slug equality exempt) -> placeholder prefix.
+ */
+function slugErrorFor(slug: string, page: { slug: string; isDefault: boolean }): string | null {
+	if (!slug) return m.admin_pages_err_slug_required();
+	if (!PAGE_SLUG_RE.test(slug)) return m.admin_pages_err_bad_slug();
+	if (page.isDefault && slug !== page.slug) return m.admin_pages_err_slug_locked();
+	if (isReservedPageSlug(slug) && slug !== page.slug) return m.admin_pages_err_slug_reserved();
+	if (isPagePlaceholderSlug(slug)) return m.admin_editor_err_slug_reserved_prefix();
+	return null;
+}
+
 export async function publishPageDraft(draftId: string): Promise<PublishPageResult> {
 	const draft = await loadPageDraftById(draftId);
 	if (!draft || !draft.refId) return { kind: 'not-found' };
@@ -467,17 +485,9 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 
 	const errors: Record<string, string> = {};
 	const normalized = normalizePageDraft(draft.slug, draft.payload);
-	const slug = normalized.slug;
 	if (!hasNonBlankLocale(normalized.title)) errors.title = m.admin_pages_err_title_required();
-	if (!slug) errors.slug = m.admin_pages_err_slug_required();
-	else if (!PAGE_SLUG_RE.test(slug)) errors.slug = m.admin_pages_err_bad_slug();
-	// Slug-change gates, in the P2 editor's order: a default row refuses any
-	// change outright (seed anchors); reserved words cannot be newly taken -
-	// a row keeping its own slug is exempt by equality (page-meta contract).
-	else if (page.isDefault && slug !== page.slug) errors.slug = m.admin_pages_err_slug_locked();
-	else if (isReservedPageSlug(slug) && slug !== page.slug)
-		errors.slug = m.admin_pages_err_slug_reserved();
-	else if (isPagePlaceholderSlug(slug)) errors.slug = m.admin_editor_err_slug_reserved_prefix();
+	const slugError = slugErrorFor(normalized.slug, page);
+	if (slugError) errors.slug = slugError;
 	if (!hasNonBlankLocale(normalized.content))
 		errors.content = m.admin_editor_err_content_required();
 	if (Object.keys(errors).length > 0) return { kind: 'invalid', errors };
@@ -515,12 +525,10 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 					errors: { form: m.admin_editor_err_stale_draft() } as Record<string, string>
 				};
 			}
-			if (
-				!PAGE_SLUG_RE.test(finalSlug) ||
-				(isReservedPageSlug(finalSlug) && finalSlug !== locked.slug) ||
-				isPagePlaceholderSlug(finalSlug) ||
-				(locked.isDefault && finalSlug !== locked.slug)
-			) {
+			// The same gate as the outer pass (T10): everything it rejects
+			// answers the generic stale-draft slug error, because the row
+			// moved between the two passes.
+			if (slugErrorFor(finalSlug, locked) !== null) {
 				return {
 					kind: 'invalid' as const,
 					errors: { slug: m.admin_editor_err_slug_invalid() } as Record<string, string>
@@ -541,7 +549,7 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 				.set({
 					slug: finalSlug,
 					title: final.title,
-					description: Object.keys(final.description).length === 0 ? null : final.description,
+					description: foldLocalized(final.description),
 					content: final.content,
 					contentFormat: lockedDraft.contentFormat,
 					updatedAt: new Date(),

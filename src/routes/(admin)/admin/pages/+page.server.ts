@@ -6,7 +6,7 @@ import { drafts, pages } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { resolveLocalized } from '$lib/server/services/pages';
-import { isPagePlaceholderSlug } from '$lib/server/services/page-drafts';
+import { draftsForPages, isPagePlaceholderSlug } from '$lib/server/services/page-drafts';
 import { syncFileReferences } from '$lib/server/services/file-references';
 import { NAV_ICON_NAMES } from '$lib/config/nav-icons';
 import { isReservedPageSlug } from '$lib/utils/page-meta';
@@ -46,6 +46,10 @@ export const load: PageServerLoad = async () => {
 		.from(pages)
 		.orderBy(desc(pages.isDefault), asc(pages.sortOrder), asc(pages.createdAt));
 
+	// Rows with a pending draft ride the list as「未发布改动」(T11 review);
+	// the same set feeds the delete dialog's draft hint (R2-8).
+	const draftSet = await draftsForPages(rows.map((row) => row.id));
+
 	return {
 		headerTitle: m.admin_nav_pages(),
 		pages: rows.map((row) => ({
@@ -53,6 +57,7 @@ export const load: PageServerLoad = async () => {
 			// Placeholder rows get their own delete-dialog copy (R2-8): the
 			// hard delete takes the draft and its file references with it.
 			placeholder: isPagePlaceholderSlug(row.slug),
+			hasDraft: draftSet.has(row.id),
 			title: resolveLocalized(row.title, locale) ?? row.slug
 		}))
 	};

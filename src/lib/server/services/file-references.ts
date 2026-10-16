@@ -9,12 +9,13 @@ import { I_KEY_PATTERN } from '$lib/media/keys';
 /**
  * Reference maintenance (storage line §4.6; ST-3 3b1). The write side lives
  * in the SAME transaction as the content write (Q15): save / publish /
- * discard (posts + notes) and page hard-delete call `syncFileReferences`
- * with the content's bare `/i/<key>` set. Draft-phase references are keyed
- * by the draft's OWN identity (`{draft, draftId}`; ST-3 3b2), so a save
- * never touches the published target's set: publish re-keys the content to
- * `{post|note, id}` first and then clears the draft scope, and discard
- * restores the target set and clears the draft scope.
+ * discard (posts + notes + pages) and page hard-delete call
+ * `syncFileReferences` with the content's bare `/i/<key>` set. Draft-phase
+ * references are keyed by the draft's OWN identity (`{draft, draftId}`;
+ * ST-3 3b2), so a save never touches the published target's set: publish
+ * re-keys the content to `{post|note|page, id}` first and then clears the
+ * draft scope, and discard restores the target set and clears the draft
+ * scope.
  *
  * Empty-desired contract (3b2): passing `[]` clears the ENTIRE scope in one
  * call - the remove branch deletes every reference of `(type, id)` and

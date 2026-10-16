@@ -57,6 +57,7 @@ import {
 	publishPageDraft,
 	savePageDraftWork
 } from './page-drafts';
+import { m } from '$lib/paraglide/messages';
 
 const dialect = new PgDialect();
 const render = (expression: unknown) => dialect.sqlToQuery(expression as SQL);
@@ -876,7 +877,10 @@ describe('page draft flow', () => {
 		];
 		const result = await publishPageDraft(DRAFT_ID);
 		expect(result.kind).toBe('invalid');
-		if (result.kind === 'invalid') expect(result.errors.slug).toBeTruthy();
+		// The exact catalog copy, pinned (T10 review): the message flows
+		// from the shared slug gate and must not drift silently.
+		if (result.kind === 'invalid')
+			expect(result.errors.slug).toBe(m.admin_editor_err_slug_invalid());
 	});
 
 	it('refuses to publish a draft attached to a non-editor row (R2-4)', async () => {

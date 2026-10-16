@@ -287,7 +287,7 @@ const PREDICATE_PINS: Array<[string, RegExp]> = [
 	],
 	[
 		'comments_page_thread_idx',
-		/CREATE INDEX "comments_page_thread_idx" .*WHERE "comments"\."page_id" is not null/
+		/CREATE INDEX "comments_page_thread_idx" .*\("page_id","parent_comment_id","pin","created_at"\) WHERE "comments"\."page_id" is not null/
 	]
 ];
 

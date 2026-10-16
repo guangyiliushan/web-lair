@@ -74,7 +74,6 @@ export const load: PageServerLoad = async ({ url }) => {
 				href: '/admin/pages'
 			}
 		],
-		langs: [...LOCALES],
 		defaultLang,
 		page: row
 			? {
@@ -86,7 +85,6 @@ export const load: PageServerLoad = async ({ url }) => {
 					externalUrl: row.externalUrl ?? '',
 					isDefault: row.isDefault,
 					status: row.status,
-					hasContent: row.content !== null,
 					placeholder: isPagePlaceholderSlug(row.slug),
 					newPage: false,
 					editorMode: isPageEditorRow(row),
@@ -103,7 +101,6 @@ export const load: PageServerLoad = async ({ url }) => {
 					externalUrl: '',
 					isDefault: false,
 					status: 'hidden',
-					hasContent: false,
 					placeholder: true,
 					newPage: true,
 					editorMode: true,
@@ -323,6 +320,9 @@ export const actions: Actions = {
 					message: m.admin_posts_edit_err_publish_validation()
 				});
 			case 'slug-taken':
+				// Field-level 400, unlike the metadata form's 409: the editor
+				// shows it inline next to the slug input (T9 review - the
+				// difference is deliberate, do not "align" it away).
 				return fail(400, { errors: { slug: m.admin_pages_err_slug_taken() } });
 			case 'busy':
 				return fail(409, { message: m.admin_posts_edit_err_busy() });

@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { psql } from './support';
+import { expect, test, type Page } from '@playwright/test';
+import { byText, manualSave, psql } from './support';
 import { zhCnLocale } from './locale-fixture';
 
 test.use(zhCnLocale);
@@ -29,10 +29,6 @@ let idA = '';
 let idB = '';
 
 test.describe.configure({ mode: 'serial', timeout: 300_000 });
-
-function byText(page: Page, text: string | RegExp): Locator {
-	return page.getByText(text).filter({ visible: true });
-}
 
 function cleanup(): void {
 	// Order matters: draft-identity refs first, then the editor-created
@@ -119,11 +115,6 @@ async function typeIntoPageEditor(page: Page, text: string) {
 		}
 		await expect(editor).toContainText(probe, { timeout: 2000 });
 	}).toPass({ timeout: 30_000 });
-}
-
-async function manualSave(page: Page) {
-	await page.getByRole('button', { name: '保存草稿' }).click({ timeout: 5000 });
-	await expect(byText(page, /已保存/).first()).toBeVisible({ timeout: 60_000 });
 }
 
 test('the registry lists defaults first, tags the fixtures, and opens the dual-type New menu', async ({

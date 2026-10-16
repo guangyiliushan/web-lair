@@ -13,8 +13,9 @@ import { drafts, pages } from '$lib/server/db/content';
  * dropped WHERE, a dropped lock, a wrong order, an unprotected default or an
  * unvalidated create turns red.
  */
-const { dbMock, state, service, syncCheck } = vi.hoisted(() => ({
+const { dbMock, draftsForPagesMock, state, service, syncCheck } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
+	draftsForPagesMock: vi.fn(),
 	syncCheck: vi.fn(async () => {}),
 	state: {
 		selectQueue: [] as unknown[][],
@@ -41,7 +42,8 @@ vi.mock('$lib/server/services/file-references', () => ({ syncFileReferences: syn
 // The draft- prefix guard for「新增」外链 (P5-3) lives in the draft service;
 // its own teeth live in page-drafts.test.ts.
 vi.mock('$lib/server/services/page-drafts', () => ({
-	isPagePlaceholderSlug: (slug: string) => slug.startsWith('draft-')
+	isPagePlaceholderSlug: (slug: string) => slug.startsWith('draft-'),
+	draftsForPages: draftsForPagesMock
 }));
 vi.mock('$lib/paraglide/runtime', () => ({
 	getLocale: () => 'en',
@@ -112,54 +114,60 @@ function makeTx(): Record<string, unknown> {
 	return c;
 }
 
-describe('admin pages list (P2)', () => {
-	beforeEach(() => {
-		state.selectQueue = [];
-		state.returningQueue = [];
-		state.orderArgs = [];
-		state.executes = [];
-		state.statusUpdates = [];
-		state.forCalls = [];
-		state.deletes = [];
-		state.deleteResults = [];
-		state.deleteThrow = null;
-		state.inserts = [];
-		state.nextThrow = null;
-		service.requireAdminRole.mockClear();
-		syncCheck.mockClear();
-		Object.assign(dbMock, {
-			select: vi.fn(() => selectChain()),
-			insert: vi.fn(() => ({
-				values: vi.fn((values: Record<string, unknown>) => {
-					state.inserts.push({ values });
-					return {
-						returning: vi.fn(async () => {
-							if (state.nextThrow) {
-								const thrown = state.nextThrow;
-								state.nextThrow = null;
-								throw thrown;
-							}
-							return state.returningQueue.shift() ?? [];
-						})
-					};
-				})
-			})),
-			update: vi.fn(() => ({
-				set: vi.fn((values: Record<string, unknown>) => ({
-					where: vi.fn((cond: unknown) => {
-						const params = dialect.sqlToQuery(cond as never).params;
-						state.statusUpdates.push({ values, target: String(params[0]) });
-						return { returning: vi.fn(async () => state.returningQueue.shift() ?? []) };
+// Shared harness reset (P5-5 T15/P1): the hoisted mock is module-level
+// state both describes share - ONE beforeEach at the top level instead of
+// two near-identical copies that can drift (the T6 review's point).
+beforeEach(() => {
+	state.selectQueue = [];
+	state.returningQueue = [];
+	state.orderArgs = [];
+	state.executes = [];
+	state.statusUpdates = [];
+	state.forCalls = [];
+	state.deletes = [];
+	state.deleteResults = [];
+	state.deleteThrow = null;
+	state.inserts = [];
+	state.nextThrow = null;
+	state.tx = null;
+	service.requireAdminRole.mockClear();
+	syncCheck.mockClear();
+	draftsForPagesMock.mockReset();
+	draftsForPagesMock.mockResolvedValue(new Set());
+	Object.assign(dbMock, {
+		select: vi.fn(() => selectChain()),
+		insert: vi.fn(() => ({
+			values: vi.fn((values: Record<string, unknown>) => {
+				state.inserts.push({ values });
+				return {
+					returning: vi.fn(async () => {
+						if (state.nextThrow) {
+							const thrown = state.nextThrow;
+							state.nextThrow = null;
+							throw thrown;
+						}
+						return state.returningQueue.shift() ?? [];
 					})
-				}))
-			})),
-			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
-				state.tx = makeTx();
-				return cb(state.tx);
+				};
 			})
-		});
+		})),
+		update: vi.fn(() => ({
+			set: vi.fn((values: Record<string, unknown>) => ({
+				where: vi.fn((cond: unknown) => {
+					const params = dialect.sqlToQuery(cond as never).params;
+					state.statusUpdates.push({ values, target: String(params[0]) });
+					return { returning: vi.fn(async () => state.returningQueue.shift() ?? []) };
+				})
+			}))
+		})),
+		transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
+			state.tx = makeTx();
+			return cb(state.tx);
+		})
 	});
+});
 
+describe('admin pages list (P2)', () => {
 	it('lists rows in chrome order with the locale fallback title', async () => {
 		state.selectQueue = [
 			[
@@ -193,6 +201,31 @@ describe('admin pages list (P2)', () => {
 		expect(fragments[0].toLowerCase()).toContain('desc');
 		expect(fragments[1].toLowerCase()).toContain('asc');
 		expect(fragments[2].toLowerCase()).toContain('asc');
+	});
+
+	it('marks rows that carry a pending draft (T11)', async () => {
+		state.selectQueue = [
+			[
+				{
+					id: PAGE_ID,
+					slug: 'about',
+					title: { en: 'About' },
+					externalUrl: null,
+					status: 'visible',
+					sortOrder: 1,
+					isDefault: false,
+					hasContent: true,
+					updatedAt: new Date('2026-10-01T00:00:00Z')
+				}
+			]
+		];
+		draftsForPagesMock.mockResolvedValueOnce(new Set([PAGE_ID]));
+
+		const data = (await load({} as never)) as { pages: { hasDraft: boolean }[] };
+
+		expect(data.pages[0].hasDraft).toBe(true);
+		// The service receives exactly the rendered row ids.
+		expect(draftsForPagesMock).toHaveBeenCalledWith([PAGE_ID]);
 	});
 
 	it('reorders with a full renumber inside one locked transaction (swap pinned)', async () => {
@@ -354,56 +387,7 @@ describe('admin pages list (P2)', () => {
 });
 
 describe('admin pages list · create external entry (P5-3)', () => {
-	// Full reset (P5-5 T6): the hoisted mock is module-level shared state; a
-	// describe that only clears half of it inherits the previous describe's
-	// last state the moment its tests start touching select/update.
-	beforeEach(() => {
-		state.selectQueue = [];
-		state.returningQueue = [];
-		state.orderArgs = [];
-		state.executes = [];
-		state.statusUpdates = [];
-		state.forCalls = [];
-		state.deletes = [];
-		state.deleteResults = [];
-		state.deleteThrow = null;
-		state.inserts = [];
-		state.nextThrow = null;
-		state.tx = null;
-		service.requireAdminRole.mockClear();
-		syncCheck.mockClear();
-		Object.assign(dbMock, {
-			select: vi.fn(() => selectChain()),
-			update: vi.fn(() => ({
-				set: vi.fn((values: Record<string, unknown>) => ({
-					where: vi.fn((cond: unknown) => {
-						const params = dialect.sqlToQuery(cond as never).params;
-						state.statusUpdates.push({ values, target: String(params[0]) });
-						return { returning: vi.fn(async () => state.returningQueue.shift() ?? []) };
-					})
-				}))
-			})),
-			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
-				state.tx = makeTx();
-				return cb(state.tx);
-			}),
-			insert: vi.fn(() => ({
-				values: vi.fn((values: Record<string, unknown>) => {
-					state.inserts.push({ values });
-					return {
-						returning: vi.fn(async () => {
-							if (state.nextThrow) {
-								const thrown = state.nextThrow;
-								state.nextThrow = null;
-								throw thrown;
-							}
-							return state.returningQueue.shift() ?? [];
-						})
-					};
-				})
-			}))
-		});
-	});
+	// The shared top-level beforeEach resets the whole harness (P5-5 T15/P1).
 
 	it('inserts a direct external row after the validation chain (no draft)', async () => {
 		state.returningQueue = [[{ id: PAGE_ID }]];

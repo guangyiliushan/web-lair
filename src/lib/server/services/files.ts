@@ -769,7 +769,7 @@ async function scanMentions(database: FilesDb): Promise<MentionScan> {
 		.from(posts)
 		.limit(SCAN_LIMIT);
 	const draftRows = await database
-		.select({ id: drafts.id, content: drafts.content })
+		.select({ id: drafts.id, content: drafts.content, payload: drafts.payload })
 		.from(drafts)
 		.limit(SCAN_LIMIT);
 	const noteRows = await database

@@ -18,6 +18,24 @@ export function psql(sql: string): string {
 	).trim();
 }
 
+/**
+ * Visible-only text locator (P5-5 T15): this helper had grown a sixth copy
+ * inside e2e/pages-admin.e2e.ts - one home now, next to psql.
+ */
+export function byText(page: Page, text: string | RegExp) {
+	return page.getByText(text).filter({ visible: true });
+}
+
+/**
+ * Manual draft save through the editor toolbar: click and wait for the
+ * "已保存" banner (the pages/refs specs carried verbatim copies that had
+ * already drifted on the timeout notation; P5-5 T15).
+ */
+export async function manualSave(page: Page) {
+	await page.getByRole('button', { name: '保存草稿' }).click({ timeout: 5000 });
+	await expect(byText(page, /已保存/).first()).toBeVisible({ timeout: 60_000 });
+}
+
 /** Throttle keys live in Valkey; drop them best-effort (container may be down). */
 export function valkeyDel(key: string) {
 	try {
