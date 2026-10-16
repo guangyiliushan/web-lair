@@ -36,6 +36,17 @@ export async function manualSave(page: Page) {
 	await expect(byText(page, /已保存/).first()).toBeVisible({ timeout: 60_000 });
 }
 
+/**
+ * Run one valkey-cli command and return its trimmed reply (THROWS on
+ * failure - for assertions and fixture setup; use valkeyDel for best-effort
+ * cleanup).
+ */
+export function valkey(...args: string[]): string {
+	return execFileSync('docker', ['exec', 'web-lair-valkey-1', 'valkey-cli', ...args], {
+		encoding: 'utf8'
+	}).trim();
+}
+
 /** Throttle keys live in Valkey; drop them best-effort (container may be down). */
 export function valkeyDel(key: string) {
 	try {
