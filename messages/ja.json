@@ -1116,6 +1116,8 @@
 	"admin_settings_notification_bark_server": "Bark サーバー",
 	"admin_settings_notification_comment_notify": "コメント通知",
 	"admin_settings_notification_copy_secret": "シークレットをコピー",
+	"admin_settings_notification_copy_secret_done": "クリップボードにコピーしました。",
+	"admin_settings_notification_copy_secret_failed": "コピーに失敗しました——選択して手動でコピーしてください。",
 	"admin_settings_notification_delete_endpoint": "エンドポイント「{name}」を削除しますか？配信ログも一緒に削除されます。",
 	"admin_settings_notification_delete_endpoint_title": "エンドポイントを削除しますか？",
 	"admin_settings_notification_desc": "メールとBarkプッシュ",

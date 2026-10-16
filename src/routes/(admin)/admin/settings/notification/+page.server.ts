@@ -29,7 +29,15 @@ import { m } from '$lib/paraglide/messages';
  *   `new URL()` accepts `https:example.com` / uppercase schemes and folds
  *   them to lowercase with `//`, while the DB CHECK `^https?://` is
  *   case-sensitive - storing the raw string let accepted inputs hit 23514
- *   as an unhandled 500).
+ *   as an unhandled 500). The create/update writes still map a 23514 to a
+ *   400 as defense in depth (review round-2 N1).
+ * - Endpoint CRUD writes no activity rows either - same ruling as retry
+ *   above: the §26 roster v1 covers only the job.* and schedule.* events
+ *   (round-2 R1-3).
+ * - Registered hazard (round-2 N2): an admin delete racing an in-flight
+ *   410 delivery can deadlock (40P01, ABBA on the webhook/delivery row
+ *   locks) - rare, no corruption (one tx aborts; the drain side rolls
+ *   back to queued); the delete surfaces it as an unhandled 500, accepted.
  */
 
 const NAME_MAX_LENGTH = 120;
@@ -197,17 +205,25 @@ export const actions: Actions = {
 			return fail(400, { op: 'create', message: m.admin_settings_notification_err_name_dup() });
 		}
 		const secret = generateWebhookSecret();
-		const [row] = await db
-			.insert(webhooks)
-			.values({
-				name: parsed.name,
-				payloadUrl: parsed.payloadUrl,
-				events: parsed.events,
-				secret
-			})
-			.returning({ id: webhooks.id });
-		// The only reveal of the raw secret - exactly once, right here.
-		return { op: 'create', created: true, id: row.id, secret };
+		try {
+			const [row] = await db
+				.insert(webhooks)
+				.values({
+					name: parsed.name,
+					payloadUrl: parsed.payloadUrl,
+					events: parsed.events,
+					secret
+				})
+				.returning({ id: webhooks.id });
+			// The only reveal of the raw secret - exactly once, right here.
+			return { op: 'create', created: true, id: row.id, secret };
+		} catch (error) {
+			// Defense in depth behind the normalized-href guard (round-2 N1).
+			if (pgErrorCode(error) === '23514') {
+				return fail(400, { op: 'create', message: m.admin_settings_notification_err_url() });
+			}
+			throw error;
+		}
 	},
 
 	update: async ({ request }) => {
@@ -224,11 +240,20 @@ export const actions: Actions = {
 		if (await endpointNameTaken(parsed.name, id)) {
 			return fail(400, { op: 'update', message: m.admin_settings_notification_err_name_dup() });
 		}
-		const updated = await db
-			.update(webhooks)
-			.set({ name: parsed.name, payloadUrl: parsed.payloadUrl, events: parsed.events })
-			.where(eq(webhooks.id, id))
-			.returning({ id: webhooks.id });
+		let updated: { id: string }[] = [];
+		try {
+			updated = await db
+				.update(webhooks)
+				.set({ name: parsed.name, payloadUrl: parsed.payloadUrl, events: parsed.events })
+				.where(eq(webhooks.id, id))
+				.returning({ id: webhooks.id });
+		} catch (error) {
+			// Defense in depth behind the normalized-href guard (round-2 N1).
+			if (pgErrorCode(error) === '23514') {
+				return fail(400, { op: 'update', message: m.admin_settings_notification_err_url() });
+			}
+			throw error;
+		}
 		if (updated.length === 0) {
 			return fail(404, {
 				op: 'update',

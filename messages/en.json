@@ -1350,6 +1350,8 @@
 	"admin_settings_notification_bark_server": "Bark server",
 	"admin_settings_notification_comment_notify": "Comment notifications",
 	"admin_settings_notification_copy_secret": "Copy secret",
+	"admin_settings_notification_copy_secret_done": "Copied to the clipboard.",
+	"admin_settings_notification_copy_secret_failed": "Copy failed - select the key and copy it manually.",
 	"admin_settings_notification_delete_endpoint": "Delete “{name}”? Its delivery log is deleted with it.",
 	"admin_settings_notification_delete_endpoint_title": "Delete endpoint?",
 	"admin_settings_notification_desc": "Email and Bark push",

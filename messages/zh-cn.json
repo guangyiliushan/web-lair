@@ -1116,6 +1116,8 @@
 	"admin_settings_notification_bark_server": "Bark 服务器",
 	"admin_settings_notification_comment_notify": "评论通知",
 	"admin_settings_notification_copy_secret": "复制密钥",
+	"admin_settings_notification_copy_secret_done": "已复制到剪贴板。",
+	"admin_settings_notification_copy_secret_failed": "复制失败——请手动选择并复制。",
 	"admin_settings_notification_delete_endpoint": "删除端点「{name}」？其投递日志将一并删除。",
 	"admin_settings_notification_delete_endpoint_title": "删除端点？",
 	"admin_settings_notification_desc": "邮件与 Bark 推送",

@@ -12,6 +12,9 @@ import { psql } from './support';
  */
 
 const HOOK = 'e2e-sy-hook';
+// Mixed-case stored name: the discriminating direction for the
+// case-insensitive dup check (round-2 SYT-3).
+const HOOK_MIXED = 'e2e-sy-Mixed';
 const HOOK_RENAMED = 'e2e-sy-target';
 const HOOK_URL = 'https://example.com/e2e-sy';
 const MARKER_CRON = '37 5 * * *';
@@ -108,8 +111,24 @@ test.describe('SY webhooks (admin)', () => {
 		await dialog.getByRole('button', { name: '保存' }).click({ timeout: 10_000 });
 		await expect(dialog).toContainText('已存在同名端点');
 		expect(psql(`select count(*) from webhooks where name ilike '${HOOK}'`)).toBe('1');
-		await dialog.getByRole('button', { name: '取消' }).click();
-		await expect(dialog).toBeHidden();
+		// The discriminating direction (round-2 SYT-3): a mixed-case STORED
+		// name must reject a lowercase lookup - a one-sided lower($1)
+		// regression passes the caps-vs-lower case above but fails this one.
+		await dialog.getByLabel('名称').fill(HOOK_MIXED);
+		await dialog.getByRole('button', { name: '保存' }).click({ timeout: 10_000 });
+		await expect(dialog).toBeHidden({ timeout: 10_000 });
+		expect(psql(`select count(*) from webhooks where name = '${HOOK_MIXED}'`)).toBe('1');
+		await page.getByRole('button', { name: '新建端点' }).click({ timeout: 10_000 });
+		const mixedDialog = page.getByRole('dialog');
+		await mixedDialog.getByLabel('名称').fill(HOOK_MIXED.toLowerCase());
+		await mixedDialog.getByLabel('回调地址').fill(HOOK_URL);
+		await mixedDialog.getByRole('button', { name: '保存' }).click({ timeout: 10_000 });
+		await expect(mixedDialog).toContainText('已存在同名端点', { timeout: 10_000 });
+		expect(
+			psql(`select count(*) from webhooks where lower(name) = '${HOOK_MIXED.toLowerCase()}'`)
+		).toBe('1');
+		await mixedDialog.getByRole('button', { name: '取消' }).click();
+		await expect(mixedDialog).toBeHidden();
 	});
 
 	test('edit: the dialog prefills and saving renames the endpoint', async ({ page }) => {

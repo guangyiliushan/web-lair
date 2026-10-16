@@ -31,8 +31,12 @@ const { mocks, state } = vi.hoisted(() => {
 		updateSets: [] as unknown[],
 		updateTables: [] as unknown[],
 		updateRows: [{ id: 'updated-row' }] as unknown[],
+		updateError: null as Error | null,
+		updateWheres: [] as unknown[],
 		deleteTables: [] as unknown[],
 		deleteRows: [{ id: 'deleted-row' }] as unknown[],
+		deleteWheres: [] as unknown[],
+		selectCount: 0,
 		whereConds: [] as unknown[]
 	};
 	const mocks = {
@@ -59,7 +63,12 @@ vi.mock('$lib/server/db', () => {
 		})
 	});
 	const db = {
-		select: makeSelect,
+		// selectCount makes the "no db work before the guard" assertions real
+		// (review round-2 SYT-5: selectQueue-only assertions were tautological).
+		select: () => {
+			state.selectCount += 1;
+			return makeSelect();
+		},
 		insert: (table: unknown) => {
 			state.insertTables.push(table);
 			return {
@@ -79,25 +88,48 @@ vi.mock('$lib/server/db', () => {
 			return {
 				set: (values: unknown) => {
 					state.updateSets.push(values);
-					return { where: () => ({ returning: async () => state.updateRows }) };
+					return {
+						where: (cond: unknown) => {
+							state.updateWheres.push(cond);
+							return {
+								returning: async () => {
+									if (state.updateError) throw state.updateError;
+									return state.updateRows;
+								}
+							};
+						}
+					};
 				}
 			};
 		},
 		delete: (table: unknown) => {
 			state.deleteTables.push(table);
 			return {
-				where: () => ({ returning: async () => state.deleteRows })
+				where: (cond: unknown) => {
+					state.deleteWheres.push(cond);
+					return { returning: async () => state.deleteRows };
+				}
 			};
 		}
 	};
 	return { db };
 });
-vi.mock('$lib/server/db/system', () => ({ webhooks: {}, webhookDeliveries: {} }));
+// Real table objects (columns included): the compiled SQL of recorded
+// predicates keeps real column names (`"webhooks"."name"`), which the
+// round-2 SYT-1/SYT-3 write-predicate teeth rely on. Only the db CLIENT is
+// faked.
+vi.mock('$lib/server/db/system', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/server/db/system')>();
+	return { webhooks: actual.webhooks, webhookDeliveries: actual.webhookDeliveries };
+});
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: mocks.requireAdminRole }));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: vi.fn(async () => 'Etc/UTC') }));
 
 import { actions, load } from './+page.server';
-import { webhooks as webhooksMock } from '$lib/server/db/system';
+import {
+	webhookDeliveries as webhookDeliveriesMock,
+	webhooks as webhooksMock
+} from '$lib/server/db/system';
 import { maskWebhookSecret } from '$lib/server/webhooks/secret';
 
 const guardMock = vi.mocked(mocks.requireAdminRole);
@@ -151,8 +183,12 @@ function resetState() {
 	state.updateSets = [];
 	state.updateTables = [];
 	state.updateRows = [{ id: 'updated-row' }];
+	state.updateError = null;
+	state.updateWheres = [];
 	state.deleteTables = [];
 	state.deleteRows = [{ id: 'deleted-row' }];
+	state.deleteWheres = [];
+	state.selectCount = 0;
 	state.whereConds = [];
 }
 
@@ -172,7 +208,7 @@ describe('notification webhooks retry', () => {
 	it('rejects malformed ids before touching the db', async () => {
 		const bad = await callRetry({ id: 'nope' });
 		expect(bad.result).toMatchObject({ status: 400 });
-		expect(state.selectQueue).toHaveLength(0);
+		expect(state.selectCount).toBe(0);
 	});
 
 	it('404s unknown deliveries and refuses non-failed rows', async () => {
@@ -253,6 +289,8 @@ describe('notification webhooks retry', () => {
 			payload: { a: 1 },
 			status: 'queued'
 		});
+		// The copy must target the deliveries table (round-2 SYT-1).
+		expect(state.insertTables[0]).toBe(webhookDeliveriesMock);
 	});
 });
 
@@ -282,7 +320,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		}
 		expect(state.insertValues).toHaveLength(0);
 		expect(state.updateSets).toHaveLength(0);
-		expect(state.selectQueue).toHaveLength(0);
+		expect(state.selectCount).toBe(0);
 	});
 
 	it('create validates name/url/events before any db work', async () => {
@@ -300,7 +338,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 			events: ['page.saved']
 		});
 		expect(unknownEvent.result).toMatchObject({ status: 400 });
-		expect(state.selectQueue).toHaveLength(0);
+		expect(state.selectCount).toBe(0);
 		expect(state.insertValues).toHaveLength(0);
 	});
 
@@ -317,8 +355,10 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		const { result } = await callAction('create', validForm);
 		expect(result).toMatchObject({ status: 400, data: { op: 'create' } });
 		expect(state.insertValues).toHaveLength(0);
-		// The dup lookup is case-insensitive at the SQL layer.
-		expect(sqlOf(state.whereConds[0])).toContain('lower(');
+		// The dup lookup is case-insensitive at the SQL layer: the name COLUMN
+		// must sit inside lower(...) (round-2 SYT-3: a bare 'lower(' match also
+		// passed a one-sided lower($1) regression).
+		expect(sqlOf(state.whereConds[0])).toMatch(/lower\([^)]*name[^)]*\)/);
 	});
 
 	it('create inserts a generated whsec_ secret and reveals it exactly once', async () => {
@@ -377,9 +417,10 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		const dup = await callAction('update', { ...validForm, id: WEBHOOK_ID });
 		expect(dup.result).toMatchObject({ status: 400, data: { op: 'update' } });
 		expect(state.updateSets).toHaveLength(0);
-		// The self-exclusion rides on the recorded predicate: lower(...) AND <>.
+		// The self-exclusion rides on the recorded predicate: the name column
+		// inside lower(...) AND <> (round-2 SYT-3).
 		const dupSql = sqlOf(state.whereConds[0]);
-		expect(dupSql).toContain('lower(');
+		expect(dupSql).toMatch(/lower\([^)]*name[^)]*\)/);
 		expect(dupSql).toContain('<>');
 
 		state.selectQueue.push([]);
@@ -398,6 +439,21 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 			payloadUrl: 'https://example.com/hook',
 			events: ['job.run', 'schedule.toggle']
 		});
+		// The write predicate must target the row id (round-2 SYT-1: write
+		// WHEREs are recorded so a dropped/mis-aimed predicate turns red).
+		expect(sqlOf(state.updateWheres[0])).toContain('"id"');
+	});
+
+	it('update stores the normalized href like create (round-2 SYT-4)', async () => {
+		state.selectQueue.push([]);
+		await callAction('update', {
+			...validForm,
+			id: WEBHOOK_ID,
+			payloadUrl: 'HTTPS://Example.com/Edit'
+		});
+		expect((state.updateSets[0] as { payloadUrl: string }).payloadUrl).toBe(
+			'https://example.com/Edit'
+		);
 	});
 
 	it('delete guards the id, 404s a vanished endpoint and succeeds otherwise', async () => {
@@ -410,6 +466,8 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		const ok = await callAction('delete', { id: WEBHOOK_ID });
 		expect(ok.result).toMatchObject({ op: 'delete', deleted: true });
 		expect(state.deleteTables[0]).toBe(webhooksMock);
+		// The delete predicate must target the row id (round-2 SYT-1).
+		expect(sqlOf(state.deleteWheres[0])).toContain('"id"');
 	});
 
 	it('toggle demands an explicit boolean and writes the desired state', async () => {
@@ -421,6 +479,8 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(off.result).toMatchObject({ op: 'toggle', toggled: true });
 		expect(state.updateTables[0]).toBe(webhooksMock);
 		expect(state.updateSets[0]).toEqual({ isEnabled: false });
+		// The toggle predicate must target the row id (round-2 SYT-1).
+		expect(sqlOf(state.updateWheres[0])).toContain('"id"');
 
 		state.updateRows = [];
 		const gone = await callAction('toggle', { id: WEBHOOK_ID, enabled: 'true' });
@@ -436,9 +496,27 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		const set = state.updateSets[0] as { secret: string };
 		expect(set.secret).toMatch(/^whsec_[A-Za-z0-9+/]{43}=$/);
 		expect(result?.secret).toBe(set.secret);
+		// The rotate predicate must target the row id (round-2 SYT-1).
+		expect(sqlOf(state.updateWheres[0])).toContain('"id"');
 		state.updateRows = [];
 		const gone = await callAction('rotate', { id: WEBHOOK_ID });
 		expect(gone.result).toMatchObject({ status: 404, data: { op: 'rotate' } });
+	});
+
+	it('maps a 23514 CHECK violation to a 400 instead of an unhandled 500 (round-2 N1)', async () => {
+		state.insertError = Object.assign(new Error('check violation'), { code: '23514' });
+		const created = await callAction('create', validForm);
+		expect(created.result).toMatchObject({ status: 400, data: { op: 'create' } });
+		state.insertError = null;
+		state.updateError = Object.assign(new Error('check violation'), { code: '23514' });
+		state.selectQueue.push([]);
+		const updated = await callAction('update', { ...validForm, id: WEBHOOK_ID });
+		expect(updated.result).toMatchObject({ status: 400, data: { op: 'update' } });
+		state.updateError = null;
+		// Anything else keeps propagating (fail loud).
+		state.insertError = new Error('some other db error');
+		const { thrown } = await callAction('create', validForm);
+		expect(thrown).toBeTruthy();
 	});
 
 	it('load masks the secret and never ships the raw value', async () => {

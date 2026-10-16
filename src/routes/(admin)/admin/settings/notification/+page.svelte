@@ -117,11 +117,24 @@
 	let rotatePending = $state(false);
 	let retryPendingId = $state<string | null>(null);
 	let togglePendingId = $state<string | null>(null);
+	// One-time plaintext reveal in DEDICATED state (review round-2 SY-UI-03):
+	// deriving it from the page-wide form slot meant any unrelated submission
+	// (a toggle, a retry) replaced page.form and silently wiped it mid-copy.
+	let revealedSecret = $state<string | null>(null);
+	let copyState = $state<'idle' | 'ok' | 'failed'>('idle');
+	// A failure whose dialog session moved on is surfaced here instead of
+	// being dropped silently (review round-2 SY-UI-06).
+	let pageNotice = $state<string | null>(null);
 
 	function openEndpointDialog(endpoint: EndpointRow | null) {
 		editorToken += 1;
 		editorError = null;
 		endpointPending = false;
+		// A create/edit session starts clean: drop any previous reveal and the
+		// last stale-failure notice.
+		revealedSecret = null;
+		copyState = 'idle';
+		pageNotice = null;
 		editingId = endpoint?.id ?? null;
 		formName = endpoint?.name ?? '';
 		formPayloadUrl = endpoint?.payloadUrl ?? '';
@@ -174,7 +187,16 @@
 	}
 
 	async function copySecret() {
-		if (flash?.secret) await navigator.clipboard.writeText(flash.secret);
+		if (!revealedSecret) return;
+		try {
+			// Absent outside secure contexts (review round-2 SY-UI-01): guard
+			// and report instead of an unhandled rejection with no feedback.
+			if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+			await navigator.clipboard.writeText(revealedSecret);
+			copyState = 'ok';
+		} catch {
+			copyState = 'failed';
+		}
 	}
 </script>
 
@@ -463,29 +485,45 @@
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_webhooks()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
-					{#if flash}
-						<div role="status" data-slot="webhook-flash" class="space-y-2">
-							<p class="text-sm {flash.kind === 'error' ? 'text-destructive' : 'text-foreground'}">
+					<!-- Persistent status region (review round-2 SY-UI-04: a live
+					     region must exist before its content arrives). The one-time
+					     reveal lives in dedicated state (SY-UI-03) so unrelated
+					     submissions cannot wipe it. -->
+					<div role="status" class="space-y-2">
+						{#if flash}
+							<p
+								data-slot="webhook-flash"
+								class="text-sm {flash.kind === 'error' ? 'text-destructive' : 'text-foreground'}"
+							>
 								{flash.text}
 							</p>
-							{#if flash.secret}
-								<div
-									data-slot="secret-reveal"
-									class="space-y-1 rounded-md border border-dashed p-2"
-								>
-									<p class="text-xs text-muted-foreground">
-										{m.admin_settings_notification_secret_shown_once()}
-									</p>
-									<div class="flex items-start gap-2">
-										<code class="min-w-0 flex-1 text-xs break-all">{flash.secret}</code>
-										<Button type="button" variant="outline" size="sm" onclick={copySecret}
-											>{m.admin_settings_notification_copy_secret()}</Button
-										>
-									</div>
+						{/if}
+						{#if pageNotice}
+							<p class="text-sm text-destructive">{pageNotice}</p>
+						{/if}
+						{#if revealedSecret}
+							<div data-slot="secret-reveal" class="space-y-1 rounded-md border border-dashed p-2">
+								<p class="text-xs text-muted-foreground">
+									{m.admin_settings_notification_secret_shown_once()}
+								</p>
+								<div class="flex items-start gap-2">
+									<code class="min-w-0 flex-1 text-xs break-all">{revealedSecret}</code>
+									<Button type="button" variant="outline" size="sm" onclick={copySecret}
+										>{m.admin_settings_notification_copy_secret()}</Button
+									>
 								</div>
-							{/if}
-						</div>
-					{/if}
+								{#if copyState === 'ok'}
+									<p class="text-xs text-muted-foreground">
+										{m.admin_settings_notification_copy_secret_done()}
+									</p>
+								{:else if copyState === 'failed'}
+									<p class="text-xs text-destructive">
+										{m.admin_settings_notification_copy_secret_failed()}
+									</p>
+								{/if}
+							</div>
+						{/if}
+					</div>
 
 					<div class="space-y-2">
 						<div class="flex items-center justify-between gap-2">
@@ -537,7 +575,10 @@
 													togglePendingId = endpoint.id;
 													return async ({ update }) => {
 														await update();
-														togglePendingId = null;
+														// Conditional clear (round-2 N3/SY-UI-05): only the
+														// submitter clears its own marker, so a response for
+														// one row cannot re-enable another row mid-flight.
+														if (togglePendingId === endpoint.id) togglePendingId = null;
 													};
 												}}
 											>
@@ -625,7 +666,8 @@
 													retryPendingId = delivery.id;
 													return async ({ update }) => {
 														await update();
-														retryPendingId = null;
+														// Conditional clear (round-2 N3/SY-UI-05).
+														if (retryPendingId === delivery.id) retryPendingId = null;
 													};
 												}}
 											>
@@ -669,10 +711,21 @@
 				endpointPending = true;
 				return async ({ result, update }) => {
 					await update();
-					if (token !== editorToken) return; // the surface moved on
+					if (token !== editorToken) {
+						// The surface moved on: keep this dialog clean, but do
+						// not drop the failure silently (round-2 SY-UI-06).
+						if (result.type === 'failure') pageNotice = failureMessage(result.data);
+						return;
+					}
 					endpointPending = false;
-					if (result.type === 'success') closeEndpointDialog();
-					else if (result.type === 'failure') editorError = failureMessage(result.data);
+					if (result.type === 'success') {
+						const secret = (result.data as { secret?: unknown } | null)?.secret;
+						if (typeof secret === 'string') {
+							revealedSecret = secret;
+							copyState = 'idle';
+						}
+						closeEndpointDialog();
+					} else if (result.type === 'failure') editorError = failureMessage(result.data);
 				};
 			}}
 		>
@@ -714,7 +767,7 @@
 				</div>
 			</fieldset>
 			{#if editorError}
-				<p class="text-sm text-destructive">{editorError}</p>
+				<p role="alert" class="text-sm text-destructive">{editorError}</p>
 			{/if}
 			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={closeEndpointDialog}
@@ -739,7 +792,7 @@
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if deleteError}
-			<p class="text-sm text-destructive">{deleteError}</p>
+			<p role="alert" class="text-sm text-destructive">{deleteError}</p>
 		{/if}
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
@@ -751,7 +804,10 @@
 					deletePending = true;
 					return async ({ result, update }) => {
 						await update();
-						if (token !== deleteToken) return;
+						if (token !== deleteToken) {
+							if (result.type === 'failure') pageNotice = failureMessage(result.data);
+							return;
+						}
 						deletePending = false;
 						if (result.type === 'success') closeDeleteDialog();
 						else if (result.type === 'failure') deleteError = failureMessage(result.data);
@@ -780,7 +836,7 @@
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if rotateError}
-			<p class="text-sm text-destructive">{rotateError}</p>
+			<p role="alert" class="text-sm text-destructive">{rotateError}</p>
 		{/if}
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
@@ -792,10 +848,19 @@
 					rotatePending = true;
 					return async ({ result, update }) => {
 						await update();
-						if (token !== rotateToken) return;
+						if (token !== rotateToken) {
+							if (result.type === 'failure') pageNotice = failureMessage(result.data);
+							return;
+						}
 						rotatePending = false;
-						if (result.type === 'success') closeRotateDialog();
-						else if (result.type === 'failure') rotateError = failureMessage(result.data);
+						if (result.type === 'success') {
+							const secret = (result.data as { secret?: unknown } | null)?.secret;
+							if (typeof secret === 'string') {
+								revealedSecret = secret;
+								copyState = 'idle';
+							}
+							closeRotateDialog();
+						} else if (result.type === 'failure') rotateError = failureMessage(result.data);
 					};
 				}}
 			>

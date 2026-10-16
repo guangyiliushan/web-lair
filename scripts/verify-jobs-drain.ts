@@ -74,6 +74,12 @@ const fixtureDataDir = await mkdtemp(join(tmpdir(), 'wl-jobs-verify-data-'));
 
 let checks = 0;
 let failures = 0;
+// Denominator guard (round-2 SYT-9): a silently skipped scenario/check must
+// turn the harness red instead of printing "ALL n checks passed". 163 = the
+// pre-self-check checks (161 + the 2 probe read-backs); this self-check's
+// own increment makes 164 printed. The comparison reads the counter at
+// argument-evaluation time, i.e. before its own increment.
+const EXPECTED_CHECKS = 163;
 
 function check(name: string, ok: boolean, detail = ''): void {
 	checks += 1;
@@ -1767,12 +1773,41 @@ async function s1ProducerOutbox(): Promise<void> {
 			isEnabled: true
 		})
 		.returning({ id: webhooks.id });
+	const probeError = new Error('probe rollback');
+	let txSaw = { activities: 0, deliveries: 0 };
+	let probeCaught: unknown = null;
 	await db
 		.transaction(async (tx) => {
 			await recordActivity(tx, { event: 'probe.rollback', actorId: null, payload: {} });
-			throw new Error('probe rollback');
+			// Read back INSIDE the tx (round-2 SYT-2): the probe must prove it
+			// wrote before rolling back, else a tx path that never wrote would
+			// pass vacuously.
+			txSaw = {
+				activities: (
+					await tx.select().from(activities).where(eq(activities.event, 'probe.rollback'))
+				).length,
+				deliveries: (
+					await tx
+						.select()
+						.from(webhookDeliveries)
+						.where(eq(webhookDeliveries.event, 'probe.rollback'))
+				).length
+			};
+			throw probeError;
 		})
-		.catch(() => undefined);
+		.catch((error: unknown) => {
+			probeCaught = error;
+		});
+	check(
+		'tx probe wrote the audit row AND its delivery inside the transaction',
+		txSaw.activities === 1 && txSaw.deliveries === 1,
+		`inTx=${txSaw.activities}/${txSaw.deliveries}`
+	);
+	check(
+		'tx probe rolled back via its own sentinel (not a mid-write failure)',
+		probeCaught === probeError,
+		`caught=${probeCaught instanceof Error ? probeCaught.message : String(probeCaught)}`
+	);
 	const rolledBackActivities = await db
 		.select()
 		.from(activities)
@@ -2013,5 +2048,10 @@ try {
 		/* best-effort */
 	}
 }
+check(
+	'harness self-check: every expected check ran (a silent skip turns red)',
+	checks === EXPECTED_CHECKS,
+	`ran=${checks}/${EXPECTED_CHECKS}`
+);
 if (scenarioError) process.exitCode = 1;
 else process.exitCode = failures === 0 ? 0 : 1;
