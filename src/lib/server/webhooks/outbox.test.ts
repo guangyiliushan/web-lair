@@ -36,7 +36,10 @@ describe('buildDeliveryPayload', () => {
 
 describe('enqueueWebhookDeliveries', () => {
 	it('compiles to one insert ... select with the @> subscription test', async () => {
-		const execute = vi.fn(async (_query: unknown) => []);
+		const execute = vi.fn(async (query: SQL) => {
+			void query; // the compiled statement is asserted from the recorded call
+			return [];
+		});
 		await enqueueWebhookDeliveries({ execute } as never, {
 			event: 'job.run',
 			payload: { name: 'x' }
