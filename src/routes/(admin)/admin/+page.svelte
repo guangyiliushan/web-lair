@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { PageData } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime';
@@ -6,6 +7,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import { ChartPanel, MaintenanceCard, LoginStat } from '$lib/components/admin';
+	import { openPresenceStream } from '$lib/components/presence';
 	import IconArticle from '@tabler/icons-svelte-runes/icons/article';
 	import IconNotebook from '@tabler/icons-svelte-runes/icons/notebook';
 	import IconQuote from '@tabler/icons-svelte-runes/icons/quote';
@@ -28,30 +30,61 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// Realtime data
-	const realtimeStats = [
+	// Realtime data (E1): SSR initial values from the presence service, kept
+	// live over the admin SSE stream; null = disabled/unavailable -> "—".
+	// Initial captures only - `untrack` documents the intent and silences
+	// state_referenced_locally (the photos-viewer-overlay precedent).
+	const realtime = $state({
+		site: untrack(() => data.presence.site) as number | null,
+		day: untrack(() => data.presence.day) as number | null,
+		peak: untrack(() => data.presence.peak) as number | null
+	});
+	let realtimeUpdatedAt = $state<string | null>(null);
+
+	$effect(() => {
+		if (!data.presence.enabled) return;
+		return openPresenceStream({
+			url: '/api/presence/stream',
+			onSnapshot: (payload) => {
+				const snapshot = payload as {
+					site: number | null;
+					day: number | null;
+					peak: number | null;
+				};
+				realtime.site = snapshot.site;
+				realtime.day = snapshot.day;
+				realtime.peak = snapshot.peak;
+				realtimeUpdatedAt = timeLabel();
+			}
+		});
+	});
+
+	const realtimeStats = $derived([
 		{
+			metric: 'site',
 			label: m.admin_dashboard_realtime_online(),
-			value: 15,
+			value: realtime.site,
 			icon: IconActivity,
 			color: 'text-emerald-500',
 			bgColor: 'bg-emerald-500/10'
 		},
 		{
+			metric: 'day',
 			label: m.admin_dashboard_realtime_today(),
-			value: 638,
+			value: realtime.day,
 			icon: IconUsers,
 			color: 'text-blue-500',
 			bgColor: 'bg-blue-500/10'
 		},
 		{
+			metric: 'peak',
 			label: m.admin_dashboard_realtime_peak(),
-			value: 24,
+			value: realtime.peak,
 			icon: IconTrendingUp,
 			color: 'text-violet-500',
 			bgColor: 'bg-violet-500/10'
 		}
-	];
+	]);
 
 	// Quick actions (counts made real: C3; the "Write" deep links on the three micro-content cards auto-open the add dialog via ?add=1)
 	const quickActions = $derived([
@@ -108,13 +141,15 @@
 		{ label: m.admin_dashboard_stat_site_likes(), value: '3,775', icon: IconTrendingUp }
 	];
 
-	const lastUpdated = $state(
-		new Date().toLocaleTimeString(getLocale(), {
+	function timeLabel(): string {
+		return new Date().toLocaleTimeString(getLocale(), {
 			hour: '2-digit',
 			minute: '2-digit',
 			second: '2-digit'
-		})
-	);
+		});
+	}
+
+	const lastUpdated = $state(timeLabel());
 </script>
 
 <div class="flex flex-col gap-6">
@@ -136,11 +171,18 @@
 
 	<!-- Realtime data -->
 	<section class="flex flex-col gap-2 sm:gap-3">
-		<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
-			{m.admin_dashboard_section_realtime()}
-		</h2>
+		<div class="flex items-center justify-between">
+			<h2 class="text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:text-sm">
+				{m.admin_dashboard_section_realtime()}
+			</h2>
+			{#if realtimeUpdatedAt}
+				<span class="text-[10px] text-muted-foreground sm:text-xs" data-slot="realtime-updated">
+					{m.admin_dashboard_updated_at({ time: realtimeUpdatedAt })}
+				</span>
+			{/if}
+		</div>
 		<div class="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-			{#each realtimeStats as stat (stat.label)}
+			{#each realtimeStats as stat (stat.metric)}
 				<Card.Root>
 					<Card.Content class="flex items-center gap-3 p-4 sm:gap-4 sm:p-6">
 						<div
@@ -149,7 +191,9 @@
 							<stat.icon class="size-5 sm:size-6 {stat.color}" />
 						</div>
 						<div>
-							<p class="text-xl font-bold sm:text-2xl">{stat.value}</p>
+							<p class="text-xl font-bold tabular-nums sm:text-2xl" data-metric={stat.metric}>
+								{stat.value ?? '—'}
+							</p>
 							<p class="text-xs text-muted-foreground sm:text-sm">{stat.label}</p>
 						</div>
 					</Card.Content>

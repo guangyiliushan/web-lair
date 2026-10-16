@@ -35,23 +35,34 @@ describe('(site) layout server', () => {
 
 	it('exposes the public ORIGIN for the SEO head', async () => {
 		envState.env.ORIGIN = 'https://public.example';
-		const data = (await load({ parent: async () => ({ auth: null }) } as never)) as {
+		const data = (await load({ parent: async () => ({ auth: null }), locals: {} } as never)) as {
 			siteOrigin: string | null;
 		};
 		expect(data.siteOrigin).toBe('https://public.example');
 	});
 
 	it('passes null when ORIGIN is unset (SeoHead falls back to the request origin)', async () => {
-		const data = (await load({ parent: async () => ({ auth: null }) } as never)) as {
+		const data = (await load({ parent: async () => ({ auth: null }), locals: {} } as never)) as {
 			siteOrigin: string | null;
 		};
 		expect(data.siteOrigin).toBeNull();
 	});
 
 	it('exposes the presence config for the shell and the detail widgets (R-7)', async () => {
-		const data = (await load({ parent: async () => ({ auth: null }) } as never)) as {
+		const data = (await load({
+			parent: async () => ({ auth: null }),
+			locals: {}
+		} as never)) as {
 			presence: { enabled: boolean; readerView: boolean; readerDots: boolean };
 		};
 		expect(data.presence).toEqual({ enabled: true, readerView: true, readerDots: false });
+	});
+
+	it('flips readerDots on for an admin viewer (E2)', async () => {
+		const data = (await load({
+			parent: async () => ({ auth: null }),
+			locals: { admin: { userId: 'admin-1' } }
+		} as never)) as { presence: { readerDots: boolean } };
+		expect(data.presence.readerDots).toBe(true);
 	});
 });
