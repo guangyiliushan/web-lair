@@ -17,11 +17,13 @@ describe('generateWebhookSecret', () => {
 });
 
 describe('maskWebhookSecret', () => {
-	it('keeps the prefix + last four, hides the body', () => {
+	it('keeps the prefix + last four real characters (padding dropped), hides the body', () => {
 		const secret = generateWebhookSecret();
 		const masked = maskWebhookSecret(secret);
+		const body = secret.replace(/=+$/, '');
 		expect(masked.startsWith('whsec_')).toBe(true);
-		expect(masked.endsWith(secret.slice(-4))).toBe(true);
+		expect(masked.endsWith(body.slice(-4))).toBe(true);
+		expect(masked.endsWith('=')).toBe(false);
 		expect(masked).not.toContain(secret.slice(8, 20));
 		expect(masked.length).toBeLessThan(secret.length);
 	});

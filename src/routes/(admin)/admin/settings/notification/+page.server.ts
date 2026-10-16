@@ -25,6 +25,11 @@ import { m } from '$lib/paraglide/messages';
  *   value is revealed exactly once in the create/rotate action result.
  *   Names are soft-rejected case-insensitively at the application layer
  *   (no DB constraint - the 10-13 grill G3 ruling).
+ * - Stored payload URLs are the WHATWG-normalized `href` (review round-1:
+ *   `new URL()` accepts `https:example.com` / uppercase schemes and folds
+ *   them to lowercase with `//`, while the DB CHECK `^https?://` is
+ *   case-sensitive - storing the raw string let accepted inputs hit 23514
+ *   as an unhandled 500).
  */
 
 const NAME_MAX_LENGTH = 120;
@@ -56,7 +61,9 @@ function parseEndpointForm(form: FormData): ParsedEndpointForm {
 	if (!events.every(isWebhookEventName)) {
 		return { ok: false, message: m.admin_settings_notification_err_events() };
 	}
-	return { ok: true, name, payloadUrl, events };
+	// Store the normalized form, not the raw string: the column CHECK
+	// (`^https?://`) must hold for everything this validator accepts.
+	return { ok: true, name, payloadUrl: parsedUrl.href, events };
 }
 
 /** Case-insensitive name soft-reject (G3); `exceptId` excludes self on edit. */
@@ -208,7 +215,10 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = endpointId(form);
 		if (!id)
-			return fail(400, { op: 'update', message: m.admin_settings_notification_err_bad_id() });
+			return fail(400, {
+				op: 'update',
+				message: m.admin_settings_notification_err_endpoint_bad_id()
+			});
 		const parsed = parseEndpointForm(form);
 		if (!parsed.ok) return fail(400, { op: 'update', message: parsed.message });
 		if (await endpointNameTaken(parsed.name, id)) {
@@ -220,25 +230,34 @@ export const actions: Actions = {
 			.where(eq(webhooks.id, id))
 			.returning({ id: webhooks.id });
 		if (updated.length === 0) {
-			return fail(404, { op: 'update', message: m.admin_settings_notification_err_not_found() });
+			return fail(404, {
+				op: 'update',
+				message: m.admin_settings_notification_err_endpoint_not_found()
+			});
 		}
 		return { op: 'update', updated: true };
 	},
 
-	remove: async ({ request }) => {
+	delete: async ({ request }) => {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = endpointId(form);
 		if (!id)
-			return fail(400, { op: 'remove', message: m.admin_settings_notification_err_bad_id() });
-		const removed = await db
+			return fail(400, {
+				op: 'delete',
+				message: m.admin_settings_notification_err_endpoint_bad_id()
+			});
+		const deleted = await db
 			.delete(webhooks)
 			.where(eq(webhooks.id, id))
 			.returning({ id: webhooks.id });
-		if (removed.length === 0) {
-			return fail(404, { op: 'remove', message: m.admin_settings_notification_err_not_found() });
+		if (deleted.length === 0) {
+			return fail(404, {
+				op: 'delete',
+				message: m.admin_settings_notification_err_endpoint_not_found()
+			});
 		}
-		return { op: 'remove', removed: true };
+		return { op: 'delete', deleted: true };
 	},
 
 	toggle: async ({ request }) => {
@@ -246,7 +265,10 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = endpointId(form);
 		if (!id)
-			return fail(400, { op: 'toggle', message: m.admin_settings_notification_err_bad_id() });
+			return fail(400, {
+				op: 'toggle',
+				message: m.admin_settings_notification_err_endpoint_bad_id()
+			});
 		const rawEnabled = (form.get('enabled') ?? '').toString();
 		if (rawEnabled !== 'true' && rawEnabled !== 'false') {
 			return fail(400, { op: 'toggle', message: m.admin_settings_notification_err_bad_request() });
@@ -257,7 +279,10 @@ export const actions: Actions = {
 			.where(eq(webhooks.id, id))
 			.returning({ id: webhooks.id });
 		if (toggled.length === 0) {
-			return fail(404, { op: 'toggle', message: m.admin_settings_notification_err_not_found() });
+			return fail(404, {
+				op: 'toggle',
+				message: m.admin_settings_notification_err_endpoint_not_found()
+			});
 		}
 		return { op: 'toggle', toggled: true };
 	},
@@ -267,7 +292,10 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = endpointId(form);
 		if (!id)
-			return fail(400, { op: 'rotate', message: m.admin_settings_notification_err_bad_id() });
+			return fail(400, {
+				op: 'rotate',
+				message: m.admin_settings_notification_err_endpoint_bad_id()
+			});
 		const secret = generateWebhookSecret();
 		const rotated = await db
 			.update(webhooks)
@@ -275,7 +303,10 @@ export const actions: Actions = {
 			.where(eq(webhooks.id, id))
 			.returning({ id: webhooks.id });
 		if (rotated.length === 0) {
-			return fail(404, { op: 'rotate', message: m.admin_settings_notification_err_not_found() });
+			return fail(404, {
+				op: 'rotate',
+				message: m.admin_settings_notification_err_endpoint_not_found()
+			});
 		}
 		// Same reveal rule as create: the new secret is shown exactly once.
 		return { op: 'rotate', rotated: true, secret };

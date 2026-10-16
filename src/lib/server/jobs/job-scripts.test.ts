@@ -60,6 +60,11 @@ function makeDb(
 	} = {}
 ) {
 	const auditRows: Record<string, unknown>[] = [];
+	// Distinct spies for the two outbox hosts (review round-1 SY-T1): the
+	// delete path must fan out through the TX executor, save/fork/revert
+	// through the outer one - swapping them turns a test red.
+	const outerExecute = vi.fn(async () => []);
+	const txExecute = vi.fn(async () => []);
 	const db = {
 		insert: vi.fn(() => ({
 			values: vi.fn(async (row: Record<string, unknown>) => {
@@ -67,8 +72,8 @@ function makeDb(
 			})
 		})),
 		// Outbox enqueue no-op (SY S1): the real recordActivity also fans out
-		// deliveries through `execute`; this fake only asserts the audit row.
-		execute: vi.fn(async () => []),
+		// deliveries through `execute`.
+		execute: outerExecute,
 		transaction: vi.fn(async (fn: (tx: unknown) => unknown) => {
 			if (options.transactionThrows) throw new Error('tx boom');
 			let deleteCall = 0;
@@ -94,12 +99,12 @@ function makeDb(
 					})
 				})),
 				// Same outbox no-op for the delete path (recordActivity(tx, ...)).
-				execute: vi.fn(async () => [])
+				execute: txExecute
 			};
 			return fn(tx);
 		})
 	};
-	return { db: db as unknown as ScriptDb, auditRows, raw: db };
+	return { db: db as unknown as ScriptDb, auditRows, raw: db, outerExecute, txExecute };
 }
 
 afterEach(async () => {
@@ -143,7 +148,7 @@ describe('listScripts / getScript', () => {
 describe('saveScript', { timeout: 30_000 }, () => {
 	it('creates a user-only script with an audit row', async () => {
 		const dataDir = await tempDataDir();
-		const { db, auditRows } = makeDb();
+		const { db, auditRows, outerExecute, txExecute } = makeDb();
 		const result = await saveScript({
 			dataDir,
 			name: 'my-task',
@@ -164,6 +169,10 @@ describe('saveScript', { timeout: 30_000 }, () => {
 			actorId: 'admin-1',
 			payload: { name: 'my-task', created: true, forked: false }
 		});
+		// The save-path outbox fan-out rides the OUTER executor (SY-T1 tooth):
+		// moving recordActivity(db, ...) to a tx or a module-level db turns red.
+		expect(outerExecute).toHaveBeenCalledTimes(1);
+		expect(txExecute).not.toHaveBeenCalled();
 	});
 
 	it('rejects gate failures without writing the file', async () => {
@@ -463,7 +472,7 @@ describe('revertToBuiltin', () => {
 describe('deleteUserJob', () => {
 	it('cleans schedules + queued + running in one transaction and keeps history', async () => {
 		const dataDir = await tempDataDir();
-		const { db, auditRows, raw } = makeDb({
+		const { db, auditRows, raw, outerExecute, txExecute } = makeDb({
 			scheduleRows: [{ id: 's1' }, { id: 's2' }],
 			queuedRows: [{ id: 'q1' }],
 			runningRows: [{ id: 'r1' }, { id: 'r2' }]
@@ -483,6 +492,11 @@ describe('deleteUserJob', () => {
 			actorId: 'admin-1',
 			payload: { name: 'my-task', schedules: 2, queued: 1, running: 2 }
 		});
+		// The delete-path outbox fan-out rides the TX executor; the outer
+		// executor stays untouched (SY-T1 tooth: recordActivity(tx, ...) can
+		// no longer be quietly swapped for the plain db).
+		expect(txExecute).toHaveBeenCalledTimes(1);
+		expect(outerExecute).not.toHaveBeenCalled();
 	});
 
 	it('keeps the file until the transaction commits: a failed tx is retryable (review R06)', async () => {

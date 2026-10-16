@@ -1711,6 +1711,56 @@ async function s1ProducerOutbox(): Promise<void> {
 		.from(webhookDeliveries)
 		.where(eq(webhookDeliveries.event, 'probe.other'));
 	check('unsubscribed event enqueues nothing', unmatched.length === 0, `got ${unmatched.length}`);
+
+	// Same-call-path contract (S1 grill; review round-1 SY-T1): the outbox
+	// fan-out rides the CALLER'S transaction - a rolled-back audit row must
+	// leave no delivery behind. This is the real-PG proof the unit fakes
+	// cannot give (swapping the executor for a pool connection turns red).
+	const [rollbackEndpoint] = await db
+		.insert(webhooks)
+		.values({
+			name: `${tag}-rollback`,
+			payloadUrl: `${httpBase}/probe`,
+			events: ['probe.rollback'],
+			secret,
+			isEnabled: true
+		})
+		.returning({ id: webhooks.id });
+	await db
+		.transaction(async (tx) => {
+			await recordActivity(tx, { event: 'probe.rollback', actorId: null, payload: {} });
+			throw new Error('probe rollback');
+		})
+		.catch(() => undefined);
+	const rolledBackActivities = await db
+		.select()
+		.from(activities)
+		.where(eq(activities.event, 'probe.rollback'));
+	const rolledBackDeliveries = await db
+		.select()
+		.from(webhookDeliveries)
+		.where(eq(webhookDeliveries.event, 'probe.rollback'));
+	check(
+		'tx rollback: neither the audit row nor its delivery survives',
+		rolledBackActivities.length === 0 && rolledBackDeliveries.length === 0,
+		`rows=${rolledBackActivities.length}/${rolledBackDeliveries.length}`
+	);
+	await recordActivity(db, { event: 'probe.rollback', actorId: null, payload: {} });
+	const committedActivities = await db
+		.select()
+		.from(activities)
+		.where(eq(activities.event, 'probe.rollback'));
+	const committedDeliveries = await db
+		.select()
+		.from(webhookDeliveries)
+		.where(eq(webhookDeliveries.event, 'probe.rollback'));
+	check(
+		'control: the same event on plain db commits both rows for the subscriber',
+		committedActivities.length === 1 &&
+			committedDeliveries.length === 1 &&
+			committedDeliveries[0]?.webhookId === rollbackEndpoint.id,
+		`rows=${committedActivities.length}/${committedDeliveries.length}`
+	);
 }
 
 /**
@@ -1846,6 +1896,23 @@ async function s3PipelineDelivery(): Promise<void> {
 		flakyPosts.length === 2 &&
 			flakyPosts[1]?.headers['webhook-id'] === copy.id &&
 			flakyPosts[1]?.headers['webhook-id'] !== flakyPosts[0]?.headers['webhook-id']
+	);
+
+	// C3 hardening (review round-1): a NULL payload row must be recorded
+	// loudly, never degraded into a silent bare-`{}` POST.
+	const postsBeforeNull = captured.filter((r) => r.path.startsWith('/flaky-s3')).length;
+	const [nullDelivery] = await db
+		.insert(webhookDeliveries)
+		.values({ webhookId: flakyId, event: 'probe.null', payload: null, status: 'queued' })
+		.returning({ id: webhookDeliveries.id });
+	await runDrainOnce();
+	const nullRow = await deliveryById(nullDelivery.id);
+	check(
+		'null payload -> failed loudly with the "payload missing" marker, no POST',
+		nullRow?.status === 'failed' &&
+			nullRow?.error === 'payload missing' &&
+			captured.filter((r) => r.path.startsWith('/flaky-s3')).length === postsBeforeNull,
+		`status=${nullRow?.status} error=${nullRow?.error}`
 	);
 }
 

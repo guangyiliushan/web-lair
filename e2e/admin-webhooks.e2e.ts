@@ -67,19 +67,21 @@ test.describe('SY webhooks (admin)', () => {
 		await expect(
 			page.locator('[data-slot="webhook-flash"]').filter({ visible: true })
 		).toContainText('端点已创建', { timeout: 20_000 });
-		// The one-time reveal: full secret + the copy-now hint.
+		// The one-time reveal: the FULL raw secret + the copy-now hint.
 		const reveal = page.locator('[data-slot="secret-reveal"]').filter({ visible: true });
 		await expect(reveal).toBeVisible();
 		await expect(reveal).toContainText('whsec_');
 		await expect(reveal).toContainText('只会显示这一次');
 
-		// DB truth: generated secret + the roster event.
+		// DB truth: generated secret + the roster event; the reveal shows the
+		// SAME value as the DB (a masked or stale reveal must turn this red).
 		expect(
 			psql(
 				`select secret like 'whsec_%' and events = '{schedule.create}' from webhooks where name = '${HOOK}'`
 			)
 		).toBe('t');
 		const raw = psql(`select secret from webhooks where name = '${HOOK}'`);
+		await expect(reveal).toContainText(raw);
 
 		// A fresh load: the reveal is gone, the row shows the mask only, and
 		// the raw secret appears NOWHERE in the rendered markup.
@@ -101,6 +103,11 @@ test.describe('SY webhooks (admin)', () => {
 		await expect(dialog).toBeVisible();
 		await expect(dialog).toContainText('已存在同名端点', { timeout: 10_000 });
 		expect(psql(`select count(*) from webhooks where name = '${HOOK}'`)).toBe('1');
+		// Case-insensitive too: the same name in caps is refused as well.
+		await dialog.getByLabel('名称').fill(HOOK.toUpperCase());
+		await dialog.getByRole('button', { name: '保存' }).click({ timeout: 10_000 });
+		await expect(dialog).toContainText('已存在同名端点');
+		expect(psql(`select count(*) from webhooks where name ilike '${HOOK}'`)).toBe('1');
 		await dialog.getByRole('button', { name: '取消' }).click();
 		await expect(dialog).toBeHidden();
 	});
@@ -113,6 +120,12 @@ test.describe('SY webhooks (admin)', () => {
 			await row.getByRole('button', { name: '编辑' }).click({ timeout: 5000 });
 			const dialog = page.getByRole('dialog');
 			await expect(dialog.getByLabel('名称')).toHaveValue(HOOK, { timeout: 5000 });
+			// Saving the unchanged name must pass: the dup check excludes self.
+			await dialog.getByRole('button', { name: '保存' }).click({ timeout: 5000 });
+			await expect(dialog).toBeHidden({ timeout: 5000 });
+			expect(psql(`select count(*) from webhooks where name = '${HOOK}'`)).toBe('1');
+			// Then the actual rename.
+			await endpointRow(page, HOOK).getByRole('button', { name: '编辑' }).click({ timeout: 5000 });
 			await dialog.getByLabel('名称').fill(HOOK_RENAMED);
 			await dialog.getByRole('button', { name: '保存' }).click({ timeout: 5000 });
 			await expect(dialog).toBeHidden({ timeout: 5000 });
@@ -121,6 +134,7 @@ test.describe('SY webhooks (admin)', () => {
 			page.locator('[data-slot="webhook-flash"]').filter({ visible: true })
 		).toContainText('端点已更新');
 		expect(psql(`select count(*) from webhooks where name = '${HOOK_RENAMED}'`)).toBe('1');
+		expect(psql(`select count(*) from webhooks where name = '${HOOK}'`)).toBe('0');
 	});
 
 	test('toggle: disable then re-enable persists', async ({ page }) => {
@@ -192,6 +206,10 @@ test.describe('SY webhooks (admin)', () => {
 		const after = psql(`select secret from webhooks where name = '${HOOK_RENAMED}'`);
 		expect(after.startsWith('whsec_')).toBe(true);
 		expect(after).not.toBe(before);
+		// The rotated reveal shows the NEW value itself, not a mask.
+		await expect(
+			page.locator('[data-slot="secret-reveal"]').filter({ visible: true })
+		).toContainText(after);
 	});
 
 	test('delete: confirm removes the endpoint and its delivery log cascades', async ({ page }) => {

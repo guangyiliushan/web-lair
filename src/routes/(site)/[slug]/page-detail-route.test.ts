@@ -34,8 +34,7 @@ vi.mock('$lib/server/services/comments', () => ({
 	deleteComment: vi.fn()
 }));
 vi.mock('$lib/server/services/comments-actions', async (importOriginal) => {
-	const actual =
-		await importOriginal<typeof import('$lib/server/services/comments-actions')>();
+	const actual = await importOriginal<typeof import('$lib/server/services/comments-actions')>();
 	return {
 		commentEditAction: service.commentEditAction,
 		commentDeleteAction: service.commentDeleteAction,

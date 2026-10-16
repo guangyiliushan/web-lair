@@ -632,8 +632,24 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 				.where(eq(webhookDeliveries.id, delivery.id));
 			return 'disabled';
 		}
+		if (delivery.payload === null) {
+			// Unreachable by construction (the outbox always writes the shaped
+			// {type,timestamp,data} body); a NULL row must not degrade into a
+			// silently unshaped `{}` POST - record it loudly instead (review
+			// round-1 C3).
+			await tx
+				.update(webhookDeliveries)
+				.set({
+					status: 'failed',
+					responseCode: null,
+					error: 'payload missing',
+					deliveredAt: now
+				})
+				.where(eq(webhookDeliveries.id, delivery.id));
+			return 'failed';
+		}
 
-		const body = JSON.stringify(delivery.payload ?? {});
+		const body = JSON.stringify(delivery.payload);
 		const timestampSeconds = Math.floor(now.getTime() / 1000);
 		const headers = webhookHeaders(endpoint.secret, delivery.id, timestampSeconds, body);
 		try {

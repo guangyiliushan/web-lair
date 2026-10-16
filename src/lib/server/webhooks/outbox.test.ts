@@ -52,6 +52,7 @@ describe('enqueueWebhookDeliveries', () => {
 		expect(text).toContain('from "webhooks"');
 		expect(text).toContain('@> array[');
 		expect(text).toContain('::text');
+		expect(text).toContain('is_enabled');
 		expect(compiled.params).toContain('job.run');
 		const body = compiled.params.find(
 			(entry) => typeof entry === 'string' && entry.includes('"type":"job.run"')
@@ -62,5 +63,14 @@ describe('enqueueWebhookDeliveries', () => {
 			timestamp: expect.any(String),
 			data: { name: 'x' }
 		});
+	});
+
+	it('propagates an enqueue failure (fail loud, review round-1)', async () => {
+		const execute = vi.fn(async () => {
+			throw new Error('boom');
+		});
+		await expect(
+			enqueueWebhookDeliveries({ execute } as never, { event: 'job.run' })
+		).rejects.toThrow('boom');
 	});
 });

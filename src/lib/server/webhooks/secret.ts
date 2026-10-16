@@ -16,8 +16,10 @@ export function generateWebhookSecret(): string {
  * Display mask - the load path must never carry the raw secret to the admin
  * client. Keeps the recognizable prefix and the last four characters
  * (`whsec_…AbCd`); the full value is revealed exactly once, in the
- * create/rotate action result.
+ * create/rotate action result. The base64 padding (`=`) is dropped from the
+ * mask so the tail shows four real characters (review round-1 C4).
  */
 export function maskWebhookSecret(secret: string): string {
-	return `${secret.slice(0, 6)}\u2026${secret.slice(-4)}`;
+	const body = secret.replace(/=+$/, '');
+	return `${body.slice(0, 6)}\u2026${body.slice(-4)}`;
 }

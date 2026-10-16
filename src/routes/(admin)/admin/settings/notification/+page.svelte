@@ -40,7 +40,7 @@
 					retried?: boolean;
 					created?: boolean;
 					updated?: boolean;
-					removed?: boolean;
+					deleted?: boolean;
 					rotated?: boolean;
 					secret?: string;
 			  }
@@ -63,10 +63,10 @@
 				text: m.admin_settings_notification_endpoint_updated(),
 				secret: null
 			};
-		if (form.removed)
+		if (form.deleted)
 			return {
 				kind: 'ok' as const,
-				text: m.admin_settings_notification_endpoint_removed(),
+				text: m.admin_settings_notification_endpoint_deleted_ok(),
 				secret: null
 			};
 		if (form.rotated)
@@ -75,9 +75,11 @@
 				text: m.admin_settings_notification_secret_rotated(),
 				secret: form.secret ?? null
 			};
-		// Dialog-scoped failures render inside their dialog; row-level failures
-		// (toggle) and legacy retry failures land here. `form.status` is never
-		// set by kit (J-3 review R4-1): the payload keys carry the signal.
+		// Success flashes: create/update/delete/rotate/retry; the toggle relies
+		// on the badge flip instead. Dialog-scoped failures render inside their
+		// dialog; row-level failures (toggle) and legacy retry failures land
+		// here. `form.status` is never set by kit (J-3 review R4-1): the payload
+		// keys carry the signal.
 		if (form.message && (form.op === undefined || form.op === 'toggle')) {
 			return { kind: 'error' as const, text: String(form.message), secret: null };
 		}
@@ -97,14 +99,29 @@
 	let formPayloadUrl = $state('');
 	let formEvents = $state<string[]>([]);
 	let endpointPending = $state(false);
+	// Dialog-local failure text (review round-1 SY-UI-01): rendering straight
+	// from page.form leaked the previous attempt's error into a freshly
+	// reopened dialog; each surface now captures its own failure.
+	let editorError = $state<string | null>(null);
+	let deleteError = $state<string | null>(null);
+	let rotateError = $state<string | null>(null);
+	// Submission epochs (review round-1 SY-UI-02): a late response must not
+	// close or write into a dialog the user has since closed / re-opened.
+	let editorToken = 0;
+	let deleteToken = 0;
+	let rotateToken = 0;
 
 	let deleteTarget = $state<EndpointRow | null>(null);
 	let deletePending = $state(false);
 	let rotateTarget = $state<EndpointRow | null>(null);
 	let rotatePending = $state(false);
 	let retryPendingId = $state<string | null>(null);
+	let togglePendingId = $state<string | null>(null);
 
 	function openEndpointDialog(endpoint: EndpointRow | null) {
+		editorToken += 1;
+		editorError = null;
+		endpointPending = false;
 		editingId = endpoint?.id ?? null;
 		formName = endpoint?.name ?? '';
 		formPayloadUrl = endpoint?.payloadUrl ?? '';
@@ -113,11 +130,51 @@
 	}
 
 	function closeEndpointDialog() {
+		editorToken += 1;
+		editorError = null;
+		endpointPending = false;
 		endpointDialogOpen = false;
 		editingId = null;
 		formName = '';
 		formPayloadUrl = '';
 		formEvents = [];
+	}
+
+	function openDeleteDialog(endpoint: EndpointRow) {
+		deleteToken += 1;
+		deleteError = null;
+		deletePending = false;
+		deleteTarget = endpoint;
+	}
+
+	function closeDeleteDialog() {
+		deleteToken += 1;
+		deleteError = null;
+		deletePending = false;
+		deleteTarget = null;
+	}
+
+	function openRotateDialog(endpoint: EndpointRow) {
+		rotateToken += 1;
+		rotateError = null;
+		rotatePending = false;
+		rotateTarget = endpoint;
+	}
+
+	function closeRotateDialog() {
+		rotateToken += 1;
+		rotateError = null;
+		rotatePending = false;
+		rotateTarget = null;
+	}
+
+	function failureMessage(data: unknown): string | null {
+		const message = (data as { message?: unknown } | null | undefined)?.message;
+		return typeof message === 'string' ? message : null;
+	}
+
+	async function copySecret() {
+		if (flash?.secret) await navigator.clipboard.writeText(flash.secret);
 	}
 </script>
 
@@ -407,21 +464,27 @@
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_webhooks()}</h3>
 				<div class="space-y-4 rounded-lg border p-4">
 					{#if flash}
-						<p
-							role="status"
-							data-slot="webhook-flash"
-							class="text-sm {flash.kind === 'error' ? 'text-destructive' : 'text-foreground'}"
-						>
-							{flash.text}
-						</p>
-						{#if flash.secret}
-							<div data-slot="secret-reveal" class="space-y-1 rounded-md border border-dashed p-2">
-								<p class="text-xs text-muted-foreground">
-									{m.admin_settings_notification_secret_shown_once()}
-								</p>
-								<code class="block text-xs break-all">{flash.secret}</code>
-							</div>
-						{/if}
+						<div role="status" data-slot="webhook-flash" class="space-y-2">
+							<p class="text-sm {flash.kind === 'error' ? 'text-destructive' : 'text-foreground'}">
+								{flash.text}
+							</p>
+							{#if flash.secret}
+								<div
+									data-slot="secret-reveal"
+									class="space-y-1 rounded-md border border-dashed p-2"
+								>
+									<p class="text-xs text-muted-foreground">
+										{m.admin_settings_notification_secret_shown_once()}
+									</p>
+									<div class="flex items-start gap-2">
+										<code class="min-w-0 flex-1 text-xs break-all">{flash.secret}</code>
+										<Button type="button" variant="outline" size="sm" onclick={copySecret}
+											>{m.admin_settings_notification_copy_secret()}</Button
+										>
+									</div>
+								</div>
+							{/if}
+						</div>
 					{/if}
 
 					<div class="space-y-2">
@@ -448,7 +511,7 @@
 								{#each data.webhookEndpoints as endpoint (endpoint.id)}
 									<li data-slot="endpoint-row" class="flex flex-wrap items-center gap-2 text-xs">
 										<span class="font-medium">{endpoint.name}</span>
-										<code class="text-muted-foreground">{endpoint.payloadUrl}</code>
+										<code class="break-all text-muted-foreground">{endpoint.payloadUrl}</code>
 										<Badge variant={endpoint.isEnabled ? 'default' : 'outline'}>
 											{endpoint.isEnabled ? m.admin_common_enable() : m.admin_common_disable()}
 										</Badge>
@@ -462,19 +525,37 @@
 												type="button"
 												variant="ghost"
 												size="sm"
-												aria-label={m.admin_common_edit()}
+												aria-label={`${m.admin_common_edit()} (${endpoint.name})`}
 												onclick={() => openEndpointDialog(endpoint)}
 											>
 												<IconPencil class="size-3.5" />
 											</Button>
-											<form method="POST" action="?/toggle">
+											<form
+												method="POST"
+												action="?/toggle"
+												use:enhance={() => {
+													togglePendingId = endpoint.id;
+													return async ({ update }) => {
+														await update();
+														togglePendingId = null;
+													};
+												}}
+											>
 												<input type="hidden" name="id" value={endpoint.id} />
 												<input
 													type="hidden"
 													name="enabled"
 													value={endpoint.isEnabled ? 'false' : 'true'}
 												/>
-												<Button type="submit" variant="ghost" size="sm">
+												<Button
+													type="submit"
+													variant="ghost"
+													size="sm"
+													disabled={togglePendingId === endpoint.id}
+													aria-label={`${
+														endpoint.isEnabled ? m.admin_common_disable() : m.admin_common_enable()
+													} (${endpoint.name})`}
+												>
 													{endpoint.isEnabled ? m.admin_common_disable() : m.admin_common_enable()}
 												</Button>
 											</form>
@@ -482,8 +563,8 @@
 												type="button"
 												variant="ghost"
 												size="sm"
-												aria-label={m.admin_settings_notification_rotate_secret()}
-												onclick={() => (rotateTarget = endpoint)}
+												aria-label={`${m.admin_settings_notification_rotate_secret()} (${endpoint.name})`}
+												onclick={() => openRotateDialog(endpoint)}
 											>
 												<IconKey class="size-3.5" />
 											</Button>
@@ -491,8 +572,8 @@
 												type="button"
 												variant="ghost"
 												size="sm"
-												aria-label={m.admin_common_delete()}
-												onclick={() => (deleteTarget = endpoint)}
+												aria-label={`${m.admin_common_delete()} (${endpoint.name})`}
+												onclick={() => openDeleteDialog(endpoint)}
 											>
 												<IconTrash class="size-3.5" />
 											</Button>
@@ -584,11 +665,14 @@
 			action={editingId ? '?/update' : '?/create'}
 			class="space-y-4"
 			use:enhance={() => {
+				const token = ++editorToken;
 				endpointPending = true;
 				return async ({ result, update }) => {
 					await update();
+					if (token !== editorToken) return; // the surface moved on
 					endpointPending = false;
 					if (result.type === 'success') closeEndpointDialog();
+					else if (result.type === 'failure') editorError = failureMessage(result.data);
 				};
 			}}
 		>
@@ -622,15 +706,15 @@
 								name="events"
 								value={eventName}
 								bind:group={formEvents}
-								class="size-3.5 accent-accent"
+								class="size-3.5 accent-primary"
 							/>
 							<span class="font-mono">{eventName}</span>
 						</label>
 					{/each}
 				</div>
 			</fieldset>
-			{#if form?.message && form.op === (editingId ? 'update' : 'create')}
-				<p class="text-sm text-destructive">{form.message}</p>
+			{#if editorError}
+				<p class="text-sm text-destructive">{editorError}</p>
 			{/if}
 			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={closeEndpointDialog}
@@ -645,30 +729,32 @@
 <!-- Delete confirm (cascades the delivery log) - SY S2 -->
 <AlertDialog.Root
 	open={deleteTarget !== null}
-	onOpenChange={(open) => !open && (deleteTarget = null)}
+	onOpenChange={(open) => !open && closeDeleteDialog()}
 >
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>{m.admin_common_delete()}</AlertDialog.Title>
+			<AlertDialog.Title>{m.admin_settings_notification_delete_endpoint_title()}</AlertDialog.Title>
 			<AlertDialog.Description>
-				{m.admin_settings_notification_delete_endpoint()}
-				{#if deleteTarget}<span class="font-medium">({deleteTarget.name})</span>{/if}
+				{m.admin_settings_notification_delete_endpoint({ name: deleteTarget?.name ?? '' })}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
-		{#if form?.message && form.op === 'remove'}
-			<p class="text-sm text-destructive">{form.message}</p>
+		{#if deleteError}
+			<p class="text-sm text-destructive">{deleteError}</p>
 		{/if}
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 			<form
 				method="POST"
-				action="?/remove"
+				action="?/delete"
 				use:enhance={() => {
+					const token = ++deleteToken;
 					deletePending = true;
 					return async ({ result, update }) => {
 						await update();
+						if (token !== deleteToken) return;
 						deletePending = false;
-						if (result.type === 'success') deleteTarget = null;
+						if (result.type === 'success') closeDeleteDialog();
+						else if (result.type === 'failure') deleteError = failureMessage(result.data);
 					};
 				}}
 			>
@@ -684,17 +770,17 @@
 <!-- Secret rotation confirm - SY S2 -->
 <AlertDialog.Root
 	open={rotateTarget !== null}
-	onOpenChange={(open) => !open && (rotateTarget = null)}
+	onOpenChange={(open) => !open && closeRotateDialog()}
 >
 	<AlertDialog.Content>
 		<AlertDialog.Header>
 			<AlertDialog.Title>{m.admin_settings_notification_rotate_secret()}</AlertDialog.Title>
 			<AlertDialog.Description>
-				{m.admin_settings_notification_rotate_secret_confirm()}
+				{m.admin_settings_notification_rotate_secret_confirm({ name: rotateTarget?.name ?? '' })}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
-		{#if form?.message && form.op === 'rotate'}
-			<p class="text-sm text-destructive">{form.message}</p>
+		{#if rotateError}
+			<p class="text-sm text-destructive">{rotateError}</p>
 		{/if}
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
@@ -702,11 +788,14 @@
 				method="POST"
 				action="?/rotate"
 				use:enhance={() => {
+					const token = ++rotateToken;
 					rotatePending = true;
 					return async ({ result, update }) => {
 						await update();
+						if (token !== rotateToken) return;
 						rotatePending = false;
-						if (result.type === 'success') rotateTarget = null;
+						if (result.type === 'success') closeRotateDialog();
+						else if (result.type === 'failure') rotateError = failureMessage(result.data);
 					};
 				}}
 			>

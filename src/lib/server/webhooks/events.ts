@@ -9,6 +9,13 @@
  * Names must satisfy the activities CHECK format
  * (`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`) - the SQL contract is pinned by the
  * unit teeth, so a future roster addition cannot drift from the constraint.
+ *
+ * v1 semantics note (review round-1 C2): `job.run` fires when an admin
+ * ENQUEUES a manual run (the maintenance run / save-and-run actions);
+ * schedule-driven executions and run terminal states are NOT emitted in v1
+ * (the job_runs ledger is their record). Per-event `data` shapes follow the
+ * emitting call sites; a formal per-event schema is a registered docs-pass
+ * item (C5).
  */
 export const WEBHOOK_EVENT_ROSTER = [
 	'job.delete',

@@ -35,4 +35,31 @@ describe('WEBHOOK_EVENT_ROSTER', () => {
 			expect(isWebhookEventName(stranger)).toBe(false);
 		}
 	});
+
+	it('producer call sites stay inside the roster (source scan, review round-1)', async () => {
+		// The literal-string emitters under these roots must all be roster
+		// members; a new producer event that forgets the roster turns red.
+		// (The `job.save`/`job.fork` ternary in job-scripts.ts is not a literal
+		// match - it is pinned by the roster literals and the jobs tests.)
+		const { readFileSync, readdirSync, statSync } = await import('node:fs');
+		const { join } = await import('node:path');
+		const roots = ['src/lib/server/jobs', 'src/routes/(admin)/admin/maintenance'];
+		const files: string[] = [];
+		const walk = (dir: string) => {
+			for (const entry of readdirSync(dir)) {
+				const path = join(dir, entry);
+				if (statSync(path).isDirectory()) walk(path);
+				else if (path.endsWith('.ts') && !path.endsWith('.test.ts')) files.push(path);
+			}
+		};
+		roots.forEach(walk);
+		const offenders: string[] = [];
+		for (const file of files) {
+			const text = readFileSync(file, 'utf8');
+			for (const match of text.matchAll(/\bevent:\s*'([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)'/g)) {
+				if (!isWebhookEventName(match[1])) offenders.push(`${file}: ${match[1]}`);
+			}
+		}
+		expect(offenders).toEqual([]);
+	});
 });

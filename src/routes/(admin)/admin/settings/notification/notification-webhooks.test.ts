@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 /**
  * Route-level tests for the notification Webhooks actions. J-3 covered the
@@ -11,17 +13,27 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * case-insensitively (no DB constraint - the G3 ruling), secrets are
  * server-generated `whsec_` values revealed exactly once, and the update
  * write set is asserted EXACTLY (secret/isEnabled must stay untouched).
+ *
+ * Review round-1 teeth: the mock now records the TARGET TABLE of every
+ * write and the WHERE conditions of every select, so a write moved to the
+ * wrong table or a lost `lower(...)`/`<>` predicate turns a test red; the
+ * stored URL must be the normalized `href`, the load must never ship the
+ * raw secret, and the empty selection is pinned as intentional.
  */
 
 const { mocks, state } = vi.hoisted(() => {
 	const state = {
 		selectQueue: [] as unknown[][],
 		insertValues: [] as unknown[],
+		insertTables: [] as unknown[],
 		insertRows: [{ id: 'new-delivery' }] as unknown[],
 		insertError: null as Error | null,
 		updateSets: [] as unknown[],
+		updateTables: [] as unknown[],
 		updateRows: [{ id: 'updated-row' }] as unknown[],
-		deleteRows: [{ id: 'deleted-row' }] as unknown[]
+		deleteTables: [] as unknown[],
+		deleteRows: [{ id: 'deleted-row' }] as unknown[],
+		whereConds: [] as unknown[]
 	};
 	const mocks = {
 		requireAdminRole: vi.fn(async () => {})
@@ -32,34 +44,51 @@ const { mocks, state } = vi.hoisted(() => {
 vi.mock('$lib/server/db', () => {
 	const makeSelect = () => ({
 		from: () => ({
-			orderBy: async () => state.selectQueue.shift() ?? [],
-			where: () => ({
-				limit: async () => state.selectQueue.shift() ?? []
-			})
+			orderBy: () => {
+				const rows = state.selectQueue.shift() ?? [];
+				// The load's endpoints query awaits the orderBy result directly;
+				// the deliveries query chains `.limit(50)` after it - support both.
+				return Object.assign(rows, { limit: async () => rows });
+			},
+			where: (cond: unknown) => {
+				state.whereConds.push(cond);
+				return {
+					limit: async () => state.selectQueue.shift() ?? []
+				};
+			}
 		})
 	});
 	const db = {
 		select: makeSelect,
-		insert: () => ({
-			values: (values: unknown) => {
-				state.insertValues.push(values);
-				return {
-					returning: async () => {
-						if (state.insertError) throw state.insertError;
-						return state.insertRows;
-					}
-				};
-			}
-		}),
-		update: () => ({
-			set: (values: unknown) => {
-				state.updateSets.push(values);
-				return { where: () => ({ returning: async () => state.updateRows }) };
-			}
-		}),
-		delete: () => ({
-			where: () => ({ returning: async () => state.deleteRows })
-		})
+		insert: (table: unknown) => {
+			state.insertTables.push(table);
+			return {
+				values: (values: unknown) => {
+					state.insertValues.push(values);
+					return {
+						returning: async () => {
+							if (state.insertError) throw state.insertError;
+							return state.insertRows;
+						}
+					};
+				}
+			};
+		},
+		update: (table: unknown) => {
+			state.updateTables.push(table);
+			return {
+				set: (values: unknown) => {
+					state.updateSets.push(values);
+					return { where: () => ({ returning: async () => state.updateRows }) };
+				}
+			};
+		},
+		delete: (table: unknown) => {
+			state.deleteTables.push(table);
+			return {
+				where: () => ({ returning: async () => state.deleteRows })
+			};
+		}
 	};
 	return { db };
 });
@@ -68,6 +97,8 @@ vi.mock('$lib/server/authz', () => ({ requireAdminRole: mocks.requireAdminRole }
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: vi.fn(async () => 'Etc/UTC') }));
 
 import { actions, load } from './+page.server';
+import { webhooks as webhooksMock } from '$lib/server/db/system';
+import { maskWebhookSecret } from '$lib/server/webhooks/secret';
 
 const guardMock = vi.mocked(mocks.requireAdminRole);
 const DELIVERY_ID = '33333333-3333-7333-8333-333333333333';
@@ -106,16 +137,29 @@ function callRetry(fields: Record<string, string | string[]>) {
 	return callAction('retry', fields);
 }
 
+/** Rendered SQL of a recorded where-condition (lowercased for contains). */
+function sqlOf(cond: unknown): string {
+	return new PgDialect().sqlToQuery(cond as SQL).sql.toLowerCase();
+}
+
+function resetState() {
+	state.selectQueue = [];
+	state.insertValues = [];
+	state.insertTables = [];
+	state.insertRows = [{ id: 'new-delivery' }];
+	state.insertError = null;
+	state.updateSets = [];
+	state.updateTables = [];
+	state.updateRows = [{ id: 'updated-row' }];
+	state.deleteTables = [];
+	state.deleteRows = [{ id: 'deleted-row' }];
+	state.whereConds = [];
+}
+
 describe('notification webhooks retry', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		state.selectQueue = [];
-		state.insertValues = [];
-		state.insertRows = [{ id: 'new-delivery' }];
-		state.insertError = null;
-		state.updateSets = [];
-		state.updateRows = [{ id: 'updated-row' }];
-		state.deleteRows = [{ id: 'deleted-row' }];
+		resetState();
 	});
 
 	it('runs requireAdminRole first', async () => {
@@ -221,17 +265,11 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		state.selectQueue = [];
-		state.insertValues = [];
-		state.insertRows = [{ id: 'new-delivery' }];
-		state.insertError = null;
-		state.updateSets = [];
-		state.updateRows = [{ id: 'updated-row' }];
-		state.deleteRows = [{ id: 'deleted-row' }];
+		resetState();
 	});
 
 	it('every CRUD action runs requireAdminRole first', async () => {
-		for (const name of ['create', 'update', 'remove', 'toggle', 'rotate']) {
+		for (const name of ['create', 'update', 'delete', 'toggle', 'rotate']) {
 			guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
 			const { thrown } = await callAction(name, {
 				id: WEBHOOK_ID,
@@ -266,29 +304,60 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(state.insertValues).toHaveLength(0);
 	});
 
+	it('create is bounded by the length limits', async () => {
+		const longName = await callAction('create', { ...validForm, name: 'x'.repeat(121) });
+		expect(longName.result).toMatchObject({ status: 400, data: { op: 'create' } });
+		const longUrl = await callAction('create', { ...validForm, payloadUrl: 'a'.repeat(2049) });
+		expect(longUrl.result).toMatchObject({ status: 400 });
+		expect(state.insertValues).toHaveLength(0);
+	});
+
 	it('create soft-rejects a duplicate name (case-insensitive, G3)', async () => {
 		state.selectQueue.push([{ id: 'existing' }]);
 		const { result } = await callAction('create', validForm);
 		expect(result).toMatchObject({ status: 400, data: { op: 'create' } });
 		expect(state.insertValues).toHaveLength(0);
+		// The dup lookup is case-insensitive at the SQL layer.
+		expect(sqlOf(state.whereConds[0])).toContain('lower(');
 	});
 
 	it('create inserts a generated whsec_ secret and reveals it exactly once', async () => {
 		state.insertRows = [{ id: WEBHOOK_ID }];
 		const { result } = await callAction('create', validForm);
 		expect(result).toMatchObject({ op: 'create', created: true, id: WEBHOOK_ID });
+		expect(state.insertTables[0]).toBe(webhooksMock);
 		const inserted = state.insertValues[0] as Record<string, unknown>;
 		expect(inserted.name).toBe('ops');
 		expect(inserted.payloadUrl).toBe('https://example.com/hook');
 		expect(inserted.events).toEqual(['job.run', 'schedule.toggle']);
-		expect(String(inserted.secret)).toMatch(/^whsec_[A-Za-z0-9+/=]+$/);
+		// 32 random bytes -> exactly 44 base64 chars incl. the padding `=`.
+		expect(String(inserted.secret)).toMatch(/^whsec_[A-Za-z0-9+/]{43}=$/);
 		expect(result?.secret).toBe(inserted.secret);
+	});
+
+	it('create stores the normalized href for odd-but-valid urls (review round-1)', async () => {
+		state.insertRows = [{ id: WEBHOOK_ID }];
+		await callAction('create', { ...validForm, payloadUrl: 'https:example.com' });
+		await callAction('create', { ...validForm, payloadUrl: 'HTTPS://Example.com' });
+		expect((state.insertValues[0] as { payloadUrl: string }).payloadUrl).toBe(
+			'https://example.com/'
+		);
+		expect((state.insertValues[1] as { payloadUrl: string }).payloadUrl).toBe(
+			'https://example.com/'
+		);
 	});
 
 	it('create dedupes repeated event fields', async () => {
 		state.insertRows = [{ id: WEBHOOK_ID }];
 		await callAction('create', { ...validForm, events: ['job.run', 'job.run'] });
 		expect((state.insertValues[0] as { events: string[] }).events).toEqual(['job.run']);
+	});
+
+	it('create accepts an empty event selection (mirrors the schema; never fires)', async () => {
+		state.insertRows = [{ id: WEBHOOK_ID }];
+		const { result } = await callAction('create', { ...validForm, events: [] });
+		expect(result).toMatchObject({ op: 'create', created: true });
+		expect((state.insertValues[0] as { events: string[] }).events).toEqual([]);
 	});
 
 	it('update validates the id and form before any db work', async () => {
@@ -308,6 +377,10 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		const dup = await callAction('update', { ...validForm, id: WEBHOOK_ID });
 		expect(dup.result).toMatchObject({ status: 400, data: { op: 'update' } });
 		expect(state.updateSets).toHaveLength(0);
+		// The self-exclusion rides on the recorded predicate: lower(...) AND <>.
+		const dupSql = sqlOf(state.whereConds[0]);
+		expect(dupSql).toContain('lower(');
+		expect(dupSql).toContain('<>');
 
 		state.selectQueue.push([]);
 		state.updateRows = [];
@@ -319,6 +392,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		state.selectQueue.push([]);
 		const { result } = await callAction('update', { ...validForm, id: WEBHOOK_ID });
 		expect(result).toMatchObject({ op: 'update', updated: true });
+		expect(state.updateTables[0]).toBe(webhooksMock);
 		expect(state.updateSets[0]).toEqual({
 			name: 'ops',
 			payloadUrl: 'https://example.com/hook',
@@ -326,15 +400,16 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		});
 	});
 
-	it('remove guards the id, 404s a vanished endpoint and succeeds otherwise', async () => {
-		const badId = await callAction('remove', { id: 'nope' });
-		expect(badId.result).toMatchObject({ status: 400, data: { op: 'remove' } });
+	it('delete guards the id, 404s a vanished endpoint and succeeds otherwise', async () => {
+		const badId = await callAction('delete', { id: 'nope' });
+		expect(badId.result).toMatchObject({ status: 400, data: { op: 'delete' } });
 		state.deleteRows = [];
-		const gone = await callAction('remove', { id: WEBHOOK_ID });
-		expect(gone.result).toMatchObject({ status: 404, data: { op: 'remove' } });
+		const gone = await callAction('delete', { id: WEBHOOK_ID });
+		expect(gone.result).toMatchObject({ status: 404, data: { op: 'delete' } });
 		state.deleteRows = [{ id: WEBHOOK_ID }];
-		const ok = await callAction('remove', { id: WEBHOOK_ID });
-		expect(ok.result).toMatchObject({ op: 'remove', removed: true });
+		const ok = await callAction('delete', { id: WEBHOOK_ID });
+		expect(ok.result).toMatchObject({ op: 'delete', deleted: true });
+		expect(state.deleteTables[0]).toBe(webhooksMock);
 	});
 
 	it('toggle demands an explicit boolean and writes the desired state', async () => {
@@ -344,6 +419,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 
 		const off = await callAction('toggle', { id: WEBHOOK_ID, enabled: 'false' });
 		expect(off.result).toMatchObject({ op: 'toggle', toggled: true });
+		expect(state.updateTables[0]).toBe(webhooksMock);
 		expect(state.updateSets[0]).toEqual({ isEnabled: false });
 
 		state.updateRows = [];
@@ -356,11 +432,34 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(badId.result).toMatchObject({ status: 400, data: { op: 'rotate' } });
 		const { result } = await callAction('rotate', { id: WEBHOOK_ID });
 		expect(result).toMatchObject({ op: 'rotate', rotated: true });
+		expect(state.updateTables[0]).toBe(webhooksMock);
 		const set = state.updateSets[0] as { secret: string };
-		expect(set.secret).toMatch(/^whsec_[A-Za-z0-9+/=]+$/);
+		expect(set.secret).toMatch(/^whsec_[A-Za-z0-9+/]{43}=$/);
 		expect(result?.secret).toBe(set.secret);
 		state.updateRows = [];
 		const gone = await callAction('rotate', { id: WEBHOOK_ID });
 		expect(gone.result).toMatchObject({ status: 404, data: { op: 'rotate' } });
+	});
+
+	it('load masks the secret and never ships the raw value', async () => {
+		const raw = 'whsec_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+		state.selectQueue.push([
+			{
+				id: WEBHOOK_ID,
+				name: 'ops',
+				payloadUrl: 'https://example.com/hook',
+				events: ['job.run'],
+				isEnabled: true,
+				secret: raw
+			}
+		]);
+		state.selectQueue.push([]);
+		const data = (await load({} as never)) as {
+			webhookEndpoints: Record<string, unknown>[];
+		};
+		const endpoint = data.webhookEndpoints[0];
+		expect(endpoint).not.toHaveProperty('secret');
+		expect(endpoint.secretPreview).toBe(maskWebhookSecret(raw));
+		expect(String(endpoint.secretPreview)).toMatch(/^whsec_\u2026[^=]{4}$/);
 	});
 });
