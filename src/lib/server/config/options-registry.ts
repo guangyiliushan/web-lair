@@ -274,8 +274,11 @@ export const optionRegistry = {
 		default: true
 	},
 	'presence.readerDots': {
-		// Individual position dots in the reader view; the admin view always
-		// shows dots on content pages regardless of this switch.
+		// Individual position dots on the READER widget's dots layer; the
+		// effective flag for a viewer is this option OR an admin session
+		// (admins always see dots on content pages). The badge/histogram
+		// layer is gated by presence.readerView instead — the two switches
+		// are independent (review finding).
 		schema: z.boolean(),
 		default: false
 	},

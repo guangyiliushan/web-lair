@@ -47,12 +47,14 @@ export function valkey(...args: string[]): string {
 	}).trim();
 }
 
-/** Throttle keys live in Valkey; drop them best-effort (container may be down). */
+/**
+ * Throttle keys live in Valkey; drop them best-effort (container may be down).
+ * Routes through valkey() so the docker exec wiring has exactly ONE home
+ * (review finding: the three helpers each carried their own copy).
+ */
 export function valkeyDel(key: string) {
 	try {
-		execFileSync('docker', ['exec', 'web-lair-valkey-1', 'valkey-cli', 'DEL', key], {
-			encoding: 'utf8'
-		});
+		valkey('DEL', key);
 	} catch {
 		// fail-open by contract: no Valkey means the limiter was never engaged.
 	}
@@ -60,13 +62,7 @@ export function valkeyDel(key: string) {
 
 export function valkeyAlive(): boolean {
 	try {
-		return (
-			execFileSync('docker', ['exec', 'web-lair-valkey-1', 'valkey-cli', 'PING'], {
-				encoding: 'utf8'
-			})
-				.trim()
-				.toUpperCase() === 'PONG'
-		);
+		return valkey('PING').toUpperCase() === 'PONG';
 	} catch {
 		return false;
 	}

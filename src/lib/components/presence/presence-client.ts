@@ -1,4 +1,5 @@
 import { COOKIE_SURFACES } from '$lib/config/locale-surfaces';
+import { deLocalizeUrl } from '$lib/paraglide/runtime';
 
 /**
  * Presence client engine (realtime R3, ledger §23): token, heartbeat loop,
@@ -19,11 +20,16 @@ const TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
 
 /**
  * Site-heartbeat mount filter (register R-6): the cookie surfaces minus the
- * home page — /account and the five auth pages never heartbeat.
+ * home page — /account and the five auth pages never heartbeat. The pathname
+ * is canonicalised first (deLocalizeUrl, the official Paraglide reroute
+ * recipe): SvelteKit's reroute keeps the address bar — and `page.url` — on
+ * the language-prefixed form, so a raw match would let /zh-cn/account and
+ * friends beat (review finding).
  */
 export function shouldTrackPath(pathname: string): boolean {
+	const canonical = deLocalizeUrl(new URL(pathname, 'https://placeholder.invalid')).pathname;
 	return !COOKIE_SURFACES.some(
-		(surface) => surface !== '/' && (pathname === surface || pathname.startsWith(`${surface}/`))
+		(surface) => surface !== '/' && (canonical === surface || canonical.startsWith(`${surface}/`))
 	);
 }
 

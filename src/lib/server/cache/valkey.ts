@@ -175,8 +175,9 @@ export class ValkeyCacheStore implements CacheStore {
  * Exclusive lower bound for the window reads: `(min` keeps the read boundary
  * consistent with the write-side trim (members at or below the cutoff are
  * dead). ±Infinity map to the infinities ZCOUNT/ZRANGEBYSCORE accept.
+ * Exported for the syntax pins in store.test.ts (review finding).
  */
-function exclusiveLowerBound(minScore: number): string {
+export function exclusiveLowerBound(minScore: number): string {
 	if (minScore === -Infinity) return '-inf';
 	if (minScore === Infinity) return '+inf';
 	return `(${minScore}`;

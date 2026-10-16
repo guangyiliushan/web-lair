@@ -60,20 +60,27 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 	if (!input) return new Response(null, { status: 400 });
 
-	const store = getCache();
-	const rate = await rateLimit(
-		store,
-		presenceHeartbeatLimitKey(input.token),
-		PRESENCE_HEARTBEAT_RATE_LIMIT.limit,
-		PRESENCE_HEARTBEAT_RATE_LIMIT.windowSeconds
-	);
-	if (!rate.allowed) {
-		return new Response(null, {
-			status: 429,
-			headers: { 'x-retry-after': String(PRESENCE_HEARTBEAT_RATE_LIMIT.windowSeconds) }
-		});
-	}
+	// Cache construction may throw on a malformed VALKEY_URL; the endpoint is
+	// a dumb writer whose contract is "always 204" — a configuration fault
+	// drops the beat instead of surfacing a 500 (review finding).
+	try {
+		const store = getCache();
+		const rate = await rateLimit(
+			store,
+			presenceHeartbeatLimitKey(input.token),
+			PRESENCE_HEARTBEAT_RATE_LIMIT.limit,
+			PRESENCE_HEARTBEAT_RATE_LIMIT.windowSeconds
+		);
+		if (!rate.allowed) {
+			return new Response(null, {
+				status: 429,
+				headers: { 'x-retry-after': String(PRESENCE_HEARTBEAT_RATE_LIMIT.windowSeconds) }
+			});
+		}
 
-	await touchPresence(input, { store });
+		await touchPresence(input, { store });
+	} catch {
+		// fail-open: a dead cache never answers anything but 204 here
+	}
 	return new Response(null, { status: 204 });
 };

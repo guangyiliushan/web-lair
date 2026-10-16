@@ -12,11 +12,17 @@
 	} from './presence-client';
 
 	/**
-	 * Reader presence widget (realtime R3, ledger §23): the "N reading now"
-	 * badge (meta row, right side) and the 20-segment position density strip
+	 * Reader presence widget (realtime R3/R4, ledger §23): the "N reading
+	 * now" badge (meta row) and the 20-segment position density strip
 	 * (absolutely anchored under the header, so appearing/disappearing never
 	 * shifts layout; the page header is `relative`). Counts include the
 	 * current reader; the badge hides for 0 and for degraded snapshots.
+	 *
+	 * Display gates are per-layer (review finding): `readerView` owns the
+	 * badge + histogram (reader-facing), `readerDots` owns the anonymous
+	 * dots layer (the site option OR an admin viewer, register E2). The
+	 * stream opens while EITHER layer is wanted, so admin dots survive
+	 * `readerView=false`, while heartbeats always flow.
 	 */
 
 	interface PresenceConfig {
@@ -87,26 +93,28 @@
 			token,
 			context: () => ({ contentId, bucket: positionBucket(readPercent()) })
 		});
-		// The stream feeds the reader display only; readerView off hides the
-		// widget but the heartbeats keep flowing (admin stats stay live).
-		const stopStream = config.readerView
-			? openPresenceStream({
-					url: `/api/presence/stream?c=${encodeURIComponent(contentId)}`,
-					onSnapshot: (payload) => {
-						const data = payload as PresencePayload;
-						const content = data.content;
-						if (content === null || content === undefined) {
-							count = null;
-							histogram = [];
-							dots = [];
-							return;
+		// The stream feeds the reader display AND the admin dots layer; it
+		// stays closed only when both are off — heartbeats keep flowing
+		// either way (admin stats stay live).
+		const stopStream =
+			config.readerView || config.readerDots
+				? openPresenceStream({
+						url: `/api/presence/stream?c=${encodeURIComponent(contentId)}`,
+						onSnapshot: (payload) => {
+							const data = payload as PresencePayload;
+							const content = data.content;
+							if (content === null || content === undefined) {
+								count = null;
+								histogram = [];
+								dots = [];
+								return;
+							}
+							count = content.count;
+							histogram = Array.isArray(content.hist) ? content.hist : [];
+							dots = Array.isArray(data.dots) ? data.dots : [];
 						}
-						count = content.count;
-						histogram = Array.isArray(content.hist) ? content.hist : [];
-						dots = Array.isArray(data.dots) ? data.dots : [];
-					}
-				})
-			: null;
+					})
+				: null;
 		window.addEventListener('scroll', onScroll, { passive: true });
 
 		return () => {
@@ -119,17 +127,19 @@
 </script>
 
 <span class="contents" bind:this={root}>
-	{#if config.enabled && config.readerView && count !== null && count >= 1}
-		<span class="ml-auto inline-flex items-center gap-1.5" data-slot="presence-badge">
-			<span class="relative flex size-1.5" aria-hidden="true">
-				<span
-					class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/60 motion-reduce:animate-none"
-				></span>
-				<span class="relative inline-flex size-1.5 rounded-full bg-emerald-500"></span>
+	{#if config.enabled && (config.readerView || config.readerDots) && count !== null && count >= 1}
+		{#if config.readerView}
+			<span class="ml-auto inline-flex items-center gap-1.5" data-slot="presence-badge">
+				<span class="relative flex size-1.5" aria-hidden="true">
+					<span
+						class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/60 motion-reduce:animate-none"
+					></span>
+					<span class="relative inline-flex size-1.5 rounded-full bg-emerald-500"></span>
+				</span>
+				<span data-slot="presence-count">{m.presence_readers_now({ count: count })}</span>
 			</span>
-			<span data-slot="presence-count">{m.presence_readers_now({ count: count })}</span>
-		</span>
-		{#if histogram.length > 0}
+		{/if}
+		{#if (config.readerView && histogram.length > 0) || (config.readerDots && dots.length > 0)}
 			<span
 				class="absolute inset-x-0 top-full mt-2 block"
 				aria-hidden="true"
@@ -137,16 +147,18 @@
 				data-slot="presence-strip"
 			>
 				<span class="relative block">
-					<span class="flex h-0.5 items-stretch gap-px">
-						{#each histogram as value, index (index)}
-							<span
-								class="flex-1 rounded-[1px] bg-primary"
-								style="opacity: {value === 0
-									? 0.08
-									: Math.min(1, 0.25 + (0.75 * value) / maxHistogram)}"
-							></span>
-						{/each}
-					</span>
+					{#if config.readerView}
+						<span class="flex h-0.5 items-stretch gap-px">
+							{#each histogram as value, index (index)}
+								<span
+									class="flex-1 rounded-[1px] bg-primary"
+									style="opacity: {value === 0
+										? 0.08
+										: Math.min(1, 0.25 + (0.75 * value) / maxHistogram)}"
+								></span>
+							{/each}
+						</span>
+					{/if}
 					{#if config.readerDots && dots.length > 0}
 						{#each dots as bucket, index (index)}
 							<span
@@ -159,7 +171,9 @@
 					{/if}
 				</span>
 			</span>
-			<span class="sr-only">{m.presence_density_label()}</span>
+			{#if config.readerView}
+				<span class="sr-only">{m.presence_density_label()}</span>
+			{/if}
 		{/if}
 	{/if}
 </span>

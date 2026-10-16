@@ -93,6 +93,16 @@ export const GET: RequestHandler = async ({ url, request, locals }) => {
 					if (!finished && !write(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`)) {
 						stop();
 					}
+				} catch {
+					// Snapshot assembly failed (e.g. the cache store could not
+					// be constructed): degrade THIS frame and keep the stream
+					// at 200 — a 5xx-class failure would kill SSE for good
+					// (WHATWG §9.2 never retries a non-200).
+					if (!finished) {
+						const degraded =
+							candidate !== null ? { content: null } : { site: null, day: null, peak: null };
+						if (!write(`event: snapshot\ndata: ${JSON.stringify(degraded)}\n\n`)) stop();
+					}
 				} finally {
 					pumping = false;
 				}
@@ -111,6 +121,9 @@ export const GET: RequestHandler = async ({ url, request, locals }) => {
 				void pump();
 			}, PRESENCE_SNAPSHOT_MS);
 
+			// Fallback teardown only: kit's node layer disposes the response
+			// body via reader.cancel() (the primary path); a GET body is
+			// already complete, so the request signal rarely fires here.
 			request.signal.addEventListener('abort', stop, { once: true });
 		},
 		cancel() {

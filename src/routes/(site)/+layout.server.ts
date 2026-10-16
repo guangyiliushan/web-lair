@@ -10,21 +10,20 @@ import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ parent, locals }) => {
 	const { auth } = await parent();
-	const [postsData, notesData, timelineData, pagesData] = await Promise.all([
+	// Presence config lands in one place (register R-7): every (site) surface
+	// consumes it from the layout data and never re-reads it per component.
+	// `readerDots` is the EFFECTIVE dots permission: the public option or an
+	// admin viewer (the stream hands admins the dots regardless of the
+	// option — register E2; the widget gates badge/histogram on `readerView`
+	// and the dots layer on this flag). The reads join the page's single
+	// batch (no extra serial phase) and a settings blip fails OPEN to the
+	// registry defaults — a config read must never 500 every public page.
+	const [postsData, notesData, timelineData, pagesData, presenceOptions] = await Promise.all([
 		loadPostsMegaData(),
 		loadNotesMegaData(),
 		loadTimelineMegaData(),
-		loadPagesMegaData()
-	]);
-	// Presence config lands in one place (register R-7): every (site) surface
-	// consumes it from the layout data and never re-reads it per component.
-	// `readerDots` is the EFFECTIVE display permission: the public option or
-	// an admin viewer - the stream hands admins the dots regardless of the
-	// option (register E2), so the widget just renders what it receives.
-	const [presenceEnabled, presenceReaderView, presenceReaderDots] = await Promise.all([
-		getOption('presence.enabled'),
-		getOption('presence.readerView'),
-		getOption('presence.readerDots')
+		loadPagesMegaData(),
+		loadPresenceOptions()
 	]);
 
 	return {
@@ -38,9 +37,27 @@ export const load: LayoutServerLoad = async ({ parent, locals }) => {
 		timelineData,
 		pagesData,
 		presence: {
-			enabled: presenceEnabled,
-			readerView: presenceReaderView,
-			readerDots: presenceReaderDots || Boolean(locals.admin)
+			enabled: presenceOptions.enabled,
+			readerView: presenceOptions.readerView,
+			readerDots: presenceOptions.readerDots || Boolean(locals.admin)
 		}
 	};
 };
+
+/** The three presence keys; the registry defaults on any failure (fail-open). */
+async function loadPresenceOptions(): Promise<{
+	enabled: boolean;
+	readerView: boolean;
+	readerDots: boolean;
+}> {
+	try {
+		const [enabled, readerView, readerDots] = await Promise.all([
+			getOption('presence.enabled'),
+			getOption('presence.readerView'),
+			getOption('presence.readerDots')
+		]);
+		return { enabled, readerView, readerDots };
+	} catch {
+		return { enabled: true, readerView: true, readerDots: false };
+	}
+}

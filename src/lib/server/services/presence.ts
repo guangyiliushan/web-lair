@@ -27,6 +27,8 @@ import { getOption } from '$lib/server/config/options-registry';
 export const PRESENCE_WINDOW_SECONDS = 60;
 export const PRESENCE_TTL_SECONDS = 48 * 60 * 60;
 export const PRESENCE_BUCKETS = 20;
+/** Dots payload cap: the most recently active readers (privacy/clutter). */
+export const PRESENCE_DOTS_LIMIT = 5;
 
 const SITE_KEY = 'presence:site';
 const contentKey = (contentId: string) => `presence:c:${contentId}`;
@@ -105,6 +107,27 @@ function parseBucket(member: string): number | null {
 	return Number.isInteger(bucket) && bucket >= 0 && bucket < PRESENCE_BUCKETS ? bucket : null;
 }
 
+/**
+ * Collapse the content members to one entry per token, keeping each token's
+ * NEWEST bucket. Members arrive score-ascending (zrangeAbove), so a later
+ * occurrence always wins; delete+set re-inserts the token at the tail of the
+ * Map, which leaves the values in "latest activity" order for the dots cap.
+ * A scrolling reader leaves a trail of `<bucket>:<token>` members inside the
+ * window — counting members would inflate the badge (review finding M7), so
+ * every content read goes through here.
+ */
+function latestBuckets(members: { member: string }[]): Map<string, number> {
+	const latest = new Map<string, number>();
+	for (const { member } of members) {
+		const bucket = parseBucket(member);
+		if (bucket === null) continue;
+		const token = member.slice(member.indexOf(':') + 1);
+		latest.delete(token);
+		latest.set(token, bucket);
+	}
+	return latest;
+}
+
 function isWritableBucket(bucket: number | undefined): bucket is number {
 	return (
 		bucket !== undefined && Number.isInteger(bucket) && bucket >= 0 && bucket < PRESENCE_BUCKETS
@@ -121,7 +144,12 @@ export async function touchPresence(
 	input: PresenceHeartbeat,
 	deps: PresenceDeps = {}
 ): Promise<void> {
-	const store = deps.store ?? getCache();
+	let store: CacheStore;
+	try {
+		store = deps.store ?? getCache();
+	} catch {
+		return; // cache construction failure (e.g. malformed VALKEY_URL): drop the beat
+	}
 	const nowMs = deps.now?.() ?? Date.now();
 	const nowSec = Math.floor(nowMs / 1000);
 	const cutoff = nowSec - PRESENCE_WINDOW_SECONDS;
@@ -149,7 +177,12 @@ export async function touchPresence(
 
 /** Site-wide numbers for the admin dashboard; `null` = cache unavailable. */
 export async function readSitePresence(deps: PresenceDeps = {}): Promise<SitePresence | null> {
-	const store = deps.store ?? getCache();
+	let store: CacheStore;
+	try {
+		store = deps.store ?? getCache();
+	} catch {
+		return null; // construction failure = unavailable, never a 500
+	}
 	const nowMs = deps.now?.() ?? Date.now();
 	const timezone = deps.timezone ?? (await resolveSiteTimezone(nowMs));
 	const date = dateStamp(nowMs, timezone);
@@ -176,40 +209,43 @@ export async function readContentPresence(
 	contentId: string,
 	deps: PresenceDeps = {}
 ): Promise<ContentPresence | null> {
-	const store = deps.store ?? getCache();
+	let store: CacheStore;
+	try {
+		store = deps.store ?? getCache();
+	} catch {
+		return null; // construction failure = unavailable, never a 500
+	}
 	const cutoff = Math.floor((deps.now?.() ?? Date.now()) / 1000) - PRESENCE_WINDOW_SECONDS;
 	try {
 		const members = await store.zrangeAbove(contentKey(contentId), cutoff);
+		const latest = latestBuckets(members);
 		const histogram = new Array<number>(PRESENCE_BUCKETS).fill(0);
-		let count = 0;
-		for (const { member } of members) {
-			const bucket = parseBucket(member);
-			if (bucket !== null) {
-				histogram[bucket] += 1;
-				count += 1;
-			}
-		}
-		return { count, histogram };
+		for (const bucket of latest.values()) histogram[bucket] += 1;
+		return { count: latest.size, histogram };
 	} catch {
 		return null;
 	}
 }
 
-/** Anonymous position dots (bucket per active member) for the admin view. */
+/**
+ * Anonymous position dots (bucket per active token, newest bucket), capped to
+ * the latest PRESENCE_DOTS_LIMIT readers in latest-activity order.
+ */
 export async function readContentDots(
 	contentId: string,
 	deps: PresenceDeps = {}
 ): Promise<number[] | null> {
-	const store = deps.store ?? getCache();
+	let store: CacheStore;
+	try {
+		store = deps.store ?? getCache();
+	} catch {
+		return null; // construction failure = unavailable, never a 500
+	}
 	const cutoff = Math.floor((deps.now?.() ?? Date.now()) / 1000) - PRESENCE_WINDOW_SECONDS;
 	try {
 		const members = await store.zrangeAbove(contentKey(contentId), cutoff);
-		const dots: number[] = [];
-		for (const { member } of members) {
-			const bucket = parseBucket(member);
-			if (bucket !== null) dots.push(bucket);
-		}
-		return dots;
+		const dots = [...latestBuckets(members).values()];
+		return dots.slice(Math.max(0, dots.length - PRESENCE_DOTS_LIMIT));
 	} catch {
 		return null;
 	}
