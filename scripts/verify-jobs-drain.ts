@@ -75,10 +75,11 @@ const fixtureDataDir = await mkdtemp(join(tmpdir(), 'wl-jobs-verify-data-'));
 let checks = 0;
 let failures = 0;
 // Denominator guard (round-2 SYT-9): a silently skipped scenario/check must
-// turn the harness red instead of printing "ALL n checks passed". 163 = the
-// pre-self-check checks (161 + the 2 probe read-backs); this self-check's
-// own increment makes 164 printed. The comparison reads the counter at
-// argument-evaluation time, i.e. before its own increment.
+// turn the harness red instead of printing a green total. 163 = the real
+// checks (161 + the 2 probe read-backs); this self-check's own increment
+// makes the ALL summary print 164. The comparison reads the counter at
+// argument-evaluation time, i.e. before its own increment (round-3 SY3-5:
+// the summary now prints AFTER this check).
 const EXPECTED_CHECKS = 163;
 
 function check(name: string, ok: boolean, detail = ''): void {
@@ -1677,6 +1678,12 @@ async function main(): Promise<void> {
 	await s1ProducerOutbox();
 	await s3PipelineDelivery();
 
+	check(
+		'harness self-check: every expected check ran (a silent skip turns red)',
+		checks === EXPECTED_CHECKS,
+		`ran=${checks}/${EXPECTED_CHECKS}`
+	);
+
 	console.log(
 		`\n${failures === 0 ? 'ALL' : `${failures} of`} ${checks} checks ${failures === 0 ? 'passed' : 'FAILED'}`
 	);
@@ -2048,10 +2055,5 @@ try {
 		/* best-effort */
 	}
 }
-check(
-	'harness self-check: every expected check ran (a silent skip turns red)',
-	checks === EXPECTED_CHECKS,
-	`ran=${checks}/${EXPECTED_CHECKS}`
-);
 if (scenarioError) process.exitCode = 1;
 else process.exitCode = failures === 0 ? 0 : 1;

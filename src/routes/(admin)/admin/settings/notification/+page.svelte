@@ -30,7 +30,9 @@
 
 	// Action results are echoed back via page.form. `op` routes dialog-scoped
 	// failures into their dialog; the top flash carries success + row-level
-	// outcomes, including the ONE-TIME secret reveal after create/rotate.
+	// outcomes. The ONE-TIME secret reveal lives in `revealedSecret` -
+	// dedicated state captured from the enhance results (round-2 SY-UI-03;
+	// the flash slot deliberately does NOT carry the secret any more).
 	const form = $derived(
 		page.form as
 			| {
@@ -42,7 +44,6 @@
 					updated?: boolean;
 					deleted?: boolean;
 					rotated?: boolean;
-					secret?: string;
 			  }
 			| null
 			| undefined
@@ -50,38 +51,22 @@
 	const flash = $derived.by(() => {
 		if (!form) return null;
 		if (form.retried)
-			return { kind: 'ok' as const, text: m.admin_settings_notification_requeued(), secret: null };
+			return { kind: 'ok' as const, text: m.admin_settings_notification_requeued() };
 		if (form.created)
-			return {
-				kind: 'ok' as const,
-				text: m.admin_settings_notification_endpoint_created(),
-				secret: form.secret ?? null
-			};
+			return { kind: 'ok' as const, text: m.admin_settings_notification_endpoint_created() };
 		if (form.updated)
-			return {
-				kind: 'ok' as const,
-				text: m.admin_settings_notification_endpoint_updated(),
-				secret: null
-			};
+			return { kind: 'ok' as const, text: m.admin_settings_notification_endpoint_updated() };
 		if (form.deleted)
-			return {
-				kind: 'ok' as const,
-				text: m.admin_settings_notification_endpoint_deleted_ok(),
-				secret: null
-			};
+			return { kind: 'ok' as const, text: m.admin_settings_notification_endpoint_deleted_ok() };
 		if (form.rotated)
-			return {
-				kind: 'ok' as const,
-				text: m.admin_settings_notification_secret_rotated(),
-				secret: form.secret ?? null
-			};
+			return { kind: 'ok' as const, text: m.admin_settings_notification_secret_rotated() };
 		// Success flashes: create/update/delete/rotate/retry; the toggle relies
 		// on the badge flip instead. Dialog-scoped failures render inside their
 		// dialog; row-level failures (toggle) and legacy retry failures land
 		// here. `form.status` is never set by kit (J-3 review R4-1): the payload
 		// keys carry the signal.
 		if (form.message && (form.op === undefined || form.op === 'toggle')) {
-			return { kind: 'error' as const, text: String(form.message), secret: null };
+			return { kind: 'error' as const, text: String(form.message) };
 		}
 		return null;
 	});
@@ -157,6 +142,9 @@
 		deleteToken += 1;
 		deleteError = null;
 		deletePending = false;
+		// Stale-failure notices belong to the surface that raised them
+		// (round-3 SY3-3).
+		pageNotice = null;
 		deleteTarget = endpoint;
 	}
 
@@ -171,6 +159,9 @@
 		rotateToken += 1;
 		rotateError = null;
 		rotatePending = false;
+		// Stale-failure notices belong to the surface that raised them
+		// (round-3 SY3-3).
+		pageNotice = null;
 		rotateTarget = endpoint;
 	}
 
@@ -711,6 +702,19 @@
 				endpointPending = true;
 				return async ({ result, update }) => {
 					await update();
+					// The reveal lives in the page region, not the dialog: capture
+					// the one-time secret even when the submitted dialog has moved
+					// on (a stale-epoch success would otherwise lose the only
+					// plaintext copy; review round-3 F1/SY3-1). A success also
+					// supersedes any stale-failure notice.
+					if (result.type === 'success') {
+						const secret = (result.data as { secret?: unknown } | null)?.secret;
+						if (typeof secret === 'string') {
+							revealedSecret = secret;
+							copyState = 'idle';
+						}
+						pageNotice = null;
+					}
 					if (token !== editorToken) {
 						// The surface moved on: keep this dialog clean, but do
 						// not drop the failure silently (round-2 SY-UI-06).
@@ -718,14 +722,8 @@
 						return;
 					}
 					endpointPending = false;
-					if (result.type === 'success') {
-						const secret = (result.data as { secret?: unknown } | null)?.secret;
-						if (typeof secret === 'string') {
-							revealedSecret = secret;
-							copyState = 'idle';
-						}
-						closeEndpointDialog();
-					} else if (result.type === 'failure') editorError = failureMessage(result.data);
+					if (result.type === 'success') closeEndpointDialog();
+					else if (result.type === 'failure') editorError = failureMessage(result.data);
 				};
 			}}
 		>
@@ -848,19 +846,23 @@
 					rotatePending = true;
 					return async ({ result, update }) => {
 						await update();
-						if (token !== rotateToken) {
-							if (result.type === 'failure') pageNotice = failureMessage(result.data);
-							return;
-						}
-						rotatePending = false;
+						// Capture the fresh secret even on a moved-on epoch (round-3
+						// F1/SY3-1); a success supersedes any stale-failure notice.
 						if (result.type === 'success') {
 							const secret = (result.data as { secret?: unknown } | null)?.secret;
 							if (typeof secret === 'string') {
 								revealedSecret = secret;
 								copyState = 'idle';
 							}
-							closeRotateDialog();
-						} else if (result.type === 'failure') rotateError = failureMessage(result.data);
+							pageNotice = null;
+						}
+						if (token !== rotateToken) {
+							if (result.type === 'failure') pageNotice = failureMessage(result.data);
+							return;
+						}
+						rotatePending = false;
+						if (result.type === 'success') closeRotateDialog();
+						else if (result.type === 'failure') rotateError = failureMessage(result.data);
 					};
 				}}
 			>

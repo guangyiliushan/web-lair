@@ -114,13 +114,12 @@ vi.mock('$lib/server/db', () => {
 	};
 	return { db };
 });
-// Real table objects (columns included): the compiled SQL of recorded
-// predicates keeps real column names (`"webhooks"."name"`), which the
-// round-2 SYT-1/SYT-3 write-predicate teeth rely on. Only the db CLIENT is
-// faked.
+// The whole barrel passes through (round-3 SY3-4): the real tables keep
+// their column names for the write-predicate teeth; only the db CLIENT is
+// faked (separate mock).
 vi.mock('$lib/server/db/system', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/server/db/system')>();
-	return { webhooks: actual.webhooks, webhookDeliveries: actual.webhookDeliveries };
+	return { ...actual };
 });
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: mocks.requireAdminRole }));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: vi.fn(async () => 'Etc/UTC') }));
@@ -441,7 +440,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		});
 		// The write predicate must target the row id (round-2 SYT-1: write
 		// WHEREs are recorded so a dropped/mis-aimed predicate turns red).
-		expect(sqlOf(state.updateWheres[0])).toContain('"id"');
+		expect(sqlOf(state.updateWheres[0])).toContain('"webhooks"."id"');
 	});
 
 	it('update stores the normalized href like create (round-2 SYT-4)', async () => {
@@ -467,7 +466,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(ok.result).toMatchObject({ op: 'delete', deleted: true });
 		expect(state.deleteTables[0]).toBe(webhooksMock);
 		// The delete predicate must target the row id (round-2 SYT-1).
-		expect(sqlOf(state.deleteWheres[0])).toContain('"id"');
+		expect(sqlOf(state.deleteWheres[0])).toContain('"webhooks"."id"');
 	});
 
 	it('toggle demands an explicit boolean and writes the desired state', async () => {
@@ -480,7 +479,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(state.updateTables[0]).toBe(webhooksMock);
 		expect(state.updateSets[0]).toEqual({ isEnabled: false });
 		// The toggle predicate must target the row id (round-2 SYT-1).
-		expect(sqlOf(state.updateWheres[0])).toContain('"id"');
+		expect(sqlOf(state.updateWheres[0])).toContain('"webhooks"."id"');
 
 		state.updateRows = [];
 		const gone = await callAction('toggle', { id: WEBHOOK_ID, enabled: 'true' });
@@ -497,7 +496,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(set.secret).toMatch(/^whsec_[A-Za-z0-9+/]{43}=$/);
 		expect(result?.secret).toBe(set.secret);
 		// The rotate predicate must target the row id (round-2 SYT-1).
-		expect(sqlOf(state.updateWheres[0])).toContain('"id"');
+		expect(sqlOf(state.updateWheres[0])).toContain('"webhooks"."id"');
 		state.updateRows = [];
 		const gone = await callAction('rotate', { id: WEBHOOK_ID });
 		expect(gone.result).toMatchObject({ status: 404, data: { op: 'rotate' } });

@@ -123,7 +123,9 @@ test.describe('SY webhooks (admin)', () => {
 		await mixedDialog.getByLabel('名称').fill(HOOK_MIXED.toLowerCase());
 		await mixedDialog.getByLabel('回调地址').fill(HOOK_URL);
 		await mixedDialog.getByRole('button', { name: '保存' }).click({ timeout: 10_000 });
-		await expect(mixedDialog).toContainText('已存在同名端点', { timeout: 10_000 });
+		await expect(mixedDialog.locator('[role="alert"]')).toContainText('已存在同名端点', {
+			timeout: 10_000
+		});
 		expect(
 			psql(`select count(*) from webhooks where lower(name) = '${HOOK_MIXED.toLowerCase()}'`)
 		).toBe('1');

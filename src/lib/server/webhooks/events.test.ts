@@ -40,6 +40,8 @@ describe('WEBHOOK_EVENT_ROSTER', () => {
 		// The literal-string emitters under these roots must all be roster
 		// members; a new producer event that forgets the roster turns red.
 		// (Single- and double-quoted literals; round-2 SYT-8 widened quotes.
+		//  Anchored on a non-quote boundary so a JSON `"event":"x.y"`
+		//  substring is not mistaken for a producer (round-3 SY3-7).
 		//  Template literals and other roots are outside this guard's scope.)
 		// (The `job.save`/`job.fork` ternary in job-scripts.ts is not a literal
 		// match - it is pinned by the roster literals and the jobs tests.)
@@ -58,7 +60,9 @@ describe('WEBHOOK_EVENT_ROSTER', () => {
 		const offenders: string[] = [];
 		for (const file of files) {
 			const text = readFileSync(file, 'utf8');
-			for (const match of text.matchAll(/\bevent:\s*['"]([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)['"]/g)) {
+			for (const match of text.matchAll(
+				/(?:^|[^\w"'])event:\s*['"]([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)['"]/g
+			)) {
 				if (!isWebhookEventName(match[1])) offenders.push(`${file}: ${match[1]}`);
 			}
 		}
