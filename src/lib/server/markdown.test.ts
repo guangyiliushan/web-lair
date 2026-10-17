@@ -117,4 +117,47 @@ describe('mark splitting preserves every block text (spec §12.6)', () => {
 		const unmarkedHtml = await stringifyMarkdownTree(await renderMarkdownTree(testCase.input));
 		expect(stripTags(markedHtml)).toBe(stripTags(unmarkedHtml));
 	});
+
+	it('keeps every block text on a long mixed article after marking', async () => {
+		const markdown = [
+			'# Heading one',
+			'',
+			'Opening paragraph with `inline code`, a [link](https://example.com) and **strong** text.',
+			'',
+			'## Section two',
+			'',
+			'- first bullet',
+			'- second bullet with $x^2$ math',
+			'',
+			'| a | b |',
+			'| --- | --- |',
+			'| 1 | 2 |',
+			'',
+			'> quoted paragraph',
+			'',
+			'```ts',
+			'const a = 1;',
+			'```',
+			'',
+			'Closing paragraph with a footnote[^1].',
+			'',
+			'[^1]: footnote text'
+		].join('\n');
+		const tree = await renderMarkdownTree(markdown);
+		const blocks = collectAnchorBlocks(tree);
+		const before = blocks.map((block) => block.text);
+		const marks = blocks
+			.filter((block) => codePointCount(block.text) >= 6)
+			.map((block) => ({
+				commentId: `probe-${block.ord}`,
+				blockOrd: block.ord,
+				start: 1,
+				end: Math.min(5, codePointCount(block.text)),
+				pending: block.ord % 2 === 0
+			}));
+		applyAnchorMarks(blocks, marks);
+		expect(collectAnchorBlocks(tree).map((block) => block.text)).toEqual(before);
+		const marked = await stringifyMarkdownTree(tree);
+		expect(stripTags(marked)).toBe(stripTags(await renderMarkdownToHtml(markdown)));
+	});
 });

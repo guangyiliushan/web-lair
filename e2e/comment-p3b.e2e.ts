@@ -159,3 +159,59 @@ test('the moderation queue shows the quote and its context window', async ({ bro
 	await expect(row.locator('[data-slot="comment-anchor-context"]')).toContainText('含');
 	await context.close();
 });
+
+test('the list jump link is keyboard activatable and targets the mark', async ({ page }) => {
+	await page.goto(POST_PATH);
+	const link = page.locator('a[href^="#c-"]').first();
+	await link.focus();
+	await expect(link).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(/#c-/);
+	const id = (await link.getAttribute('href'))!.slice(1);
+	const mark = page.locator(`[id="${id}"]`);
+	await expect(mark).toBeVisible();
+	// `:target` paints the passage, so the deep link is visibly resolved even
+	// without reading the address bar (WCAG 1.4.1 non-colour cue is the wavy
+	// underline itself; this asserts the target state is real).
+	const background = await mark.evaluate((node) => getComputedStyle(node).backgroundColor);
+	expect(background).not.toBe('rgba(0, 0, 0, 0)');
+});
+
+test('the mark underline keeps a 3:1 contrast against the page background', async ({ page }) => {
+	await page.goto(POST_PATH);
+	const ratio = await page.evaluate(() => {
+		const mark = document.querySelector('.wl-cm');
+		if (!mark) return null;
+		const canvas = document.createElement('canvas');
+		const context = canvas.getContext('2d');
+		if (!context) return null;
+		const luminance = (color: string): number => {
+			context.clearRect(0, 0, 1, 1);
+			context.fillStyle = color;
+			context.fillRect(0, 0, 1, 1);
+			const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+			const channel = (value: number) => {
+				const s = value / 255;
+				return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+			};
+			return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+		};
+		const transparent = (color: string) => color === 'rgba(0, 0, 0, 0)' || color === 'transparent';
+		let background = 'rgb(255, 255, 255)';
+		for (const node of [document.documentElement, document.body]) {
+			const color = getComputedStyle(node).backgroundColor;
+			if (!transparent(color)) {
+				background = color;
+				break;
+			}
+		}
+		const foreground = getComputedStyle(mark).textDecorationColor;
+		const a = luminance(foreground);
+		const b = luminance(background);
+		return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+	});
+	expect(ratio).not.toBeNull();
+	// WCAG 2.2 SC 1.4.11 (non-text contrast) for the anchor underline.
+	expect(ratio as number).toBeGreaterThanOrEqual(3);
+});
+

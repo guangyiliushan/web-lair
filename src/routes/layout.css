@@ -672,7 +672,11 @@
 		text-decoration: underline wavy;
 		text-decoration-thickness: 1px;
 		text-underline-offset: 3px;
-		text-decoration-color: color-mix(in oklch, var(--primary) 70%, transparent);
+		/* `--primary` alone is a light teal: measured 2.90:1 against the page
+		   background, below the 3:1 WCAG 2.2 SC 1.4.11 floor. Mixing 40% of the
+		   foreground keeps it recognisably the accent colour while clearing the
+		   floor in both themes (the foreground flips with the theme). */
+		text-decoration-color: color-mix(in oklch, var(--primary) 60%, var(--foreground));
 		scroll-margin-top: 5rem;
 	}
 	.wl-cm-pending {
