@@ -661,6 +661,9 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 				redirect: 'manual',
 				signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS)
 			});
+			// The terminal stamp is the attempt-CLOSE time, not the claim time
+			// (nine-dimension DB-03: a slow POST must not record ~0 latency).
+			const finishedAt = deps.now();
 			if (response.ok) {
 				await tx
 					.update(webhookDeliveries)
@@ -668,7 +671,7 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 						status: 'succeeded',
 						responseCode: response.status,
 						error: null,
-						deliveredAt: now
+						deliveredAt: finishedAt
 					})
 					.where(eq(webhookDeliveries.id, delivery.id));
 				return 'sent';
@@ -679,7 +682,7 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 					status: 'failed',
 					responseCode: response.status,
 					error: `HTTP ${response.status}`,
-					deliveredAt: now
+					deliveredAt: finishedAt
 				})
 				.where(eq(webhookDeliveries.id, delivery.id));
 			if (response.status === 410) {
@@ -690,13 +693,14 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 			}
 			return 'failed';
 		} catch (err) {
+			const finishedAt = deps.now();
 			await tx
 				.update(webhookDeliveries)
 				.set({
 					status: 'failed',
 					responseCode: null,
 					error: errorText(err),
-					deliveredAt: now
+					deliveredAt: finishedAt
 				})
 				.where(eq(webhookDeliveries.id, delivery.id));
 			return 'failed';

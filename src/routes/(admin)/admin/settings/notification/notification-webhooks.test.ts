@@ -392,11 +392,10 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect((state.insertValues[0] as { events: string[] }).events).toEqual(['job.run']);
 	});
 
-	it('create accepts an empty event selection (mirrors the schema; never fires)', async () => {
-		state.insertRows = [{ id: WEBHOOK_ID }];
+	it('create refuses an empty event selection (nine-dimension DB-01: silent black hole)', async () => {
 		const { result } = await callAction('create', { ...validForm, events: [] });
-		expect(result).toMatchObject({ op: 'create', created: true });
-		expect((state.insertValues[0] as { events: string[] }).events).toEqual([]);
+		expect(result).toMatchObject({ status: 400, data: { op: 'create' } });
+		expect(state.insertValues).toHaveLength(0);
 	});
 
 	it('update validates the id and form before any db work', async () => {
@@ -470,6 +469,9 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 	});
 
 	it('toggle demands an explicit boolean and writes the desired state', async () => {
+		const badId = await callAction('toggle', { id: 'nope', enabled: 'true' });
+		expect(badId.result).toMatchObject({ status: 400, data: { op: 'toggle' } });
+		expect(state.updateSets).toHaveLength(0);
 		const bad = await callAction('toggle', { id: WEBHOOK_ID, enabled: 'yes' });
 		expect(bad.result).toMatchObject({ status: 400, data: { op: 'toggle' } });
 		expect(state.updateSets).toHaveLength(0);
@@ -493,6 +495,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(result).toMatchObject({ op: 'rotate', rotated: true });
 		expect(state.updateTables[0]).toBe(webhooksMock);
 		const set = state.updateSets[0] as { secret: string };
+		expect(state.updateSets[0]).toEqual({ secret: set.secret });
 		expect(set.secret).toMatch(/^whsec_[A-Za-z0-9+/]{43}=$/);
 		expect(result?.secret).toBe(set.secret);
 		// The rotate predicate must target the row id (round-2 SYT-1).
@@ -500,6 +503,29 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		state.updateRows = [];
 		const gone = await callAction('rotate', { id: WEBHOOK_ID });
 		expect(gone.result).toMatchObject({ status: 404, data: { op: 'rotate' } });
+	});
+
+	it('refuses credentialed payload urls (nine-dimension SY-L2-01)', async () => {
+		const { result } = await callAction('create', {
+			...validForm,
+			payloadUrl: 'https://admin:hunter2@hooks.example.com/path'
+		});
+		expect(result).toMatchObject({ status: 400, data: { op: 'create' } });
+		expect(state.insertValues).toHaveLength(0);
+	});
+
+	it('accepts exactly-at-the-boundary name and url (nine-dimension SYF-1)', async () => {
+		state.insertRows = [{ id: WEBHOOK_ID }];
+		const longUrl = 'https://example.com/' + 'a'.repeat(2048 - 'https://example.com/'.length);
+		expect(longUrl).toHaveLength(2048);
+		const atName = await callAction('create', {
+			...validForm,
+			name: 'x'.repeat(120),
+			payloadUrl: longUrl
+		});
+		expect(atName.result).toMatchObject({ op: 'create', created: true });
+		expect((state.insertValues[0] as { name: string }).name).toBe('x'.repeat(120));
+		expect((state.insertValues[0] as { payloadUrl: string }).payloadUrl).toBe(longUrl);
 	});
 
 	it('maps a 23514 CHECK violation to a 400 instead of an unhandled 500 (round-2 N1)', async () => {

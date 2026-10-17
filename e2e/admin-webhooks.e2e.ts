@@ -102,6 +102,9 @@ test.describe('SY webhooks (admin)', () => {
 		const dialog = page.getByRole('dialog');
 		await dialog.getByLabel('名称').fill(HOOK);
 		await dialog.getByLabel('回调地址').fill(HOOK_URL);
+		// The empty-selection guard fires before the dup check (nine-dimension
+		// DB-01), so this negative case must select an event to reach it.
+		await dialog.getByRole('checkbox', { name: 'job.run' }).check();
 		await dialog.getByRole('button', { name: '保存' }).click({ timeout: 10_000 });
 		await expect(dialog).toBeVisible();
 		await expect(dialog).toContainText('已存在同名端点', { timeout: 10_000 });
@@ -122,6 +125,10 @@ test.describe('SY webhooks (admin)', () => {
 		const mixedDialog = page.getByRole('dialog');
 		await mixedDialog.getByLabel('名称').fill(HOOK_MIXED.toLowerCase());
 		await mixedDialog.getByLabel('回调地址').fill(HOOK_URL);
+		// A fresh dialog session starts with no events selected (formEvents
+		// resets on open), so the empty-selection guard must be cleared again
+		// to reach the dup check.
+		await mixedDialog.getByRole('checkbox', { name: 'job.run' }).check();
 		await mixedDialog.getByRole('button', { name: '保存' }).click({ timeout: 10_000 });
 		await expect(mixedDialog.locator('[role="alert"]')).toContainText('已存在同名端点', {
 			timeout: 10_000

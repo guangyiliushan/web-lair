@@ -65,7 +65,22 @@ function parseEndpointForm(form: FormData): ParsedEndpointForm {
 	if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
 		return { ok: false, message: m.admin_settings_notification_err_url() };
 	}
+	// Credentialed URLs (user:pass@host) are refused: Request construction
+	// throws on them (fetch spec), so such an endpoint could never deliver -
+	// and the password would sit in payload_url and on screen in clear text
+	// (nine-dimension SY-L2-01, verified against the fetch/URL specs).
+	if (parsedUrl.username || parsedUrl.password) {
+		return { ok: false, message: m.admin_settings_notification_err_url() };
+	}
 	const events = [...new Set(form.getAll('events').map((value) => value.toString()))];
+	if (events.length === 0) {
+		// An empty subscription matches nothing (`events @> array[event]`) and
+		// would deliver forever-nothing - a silent black hole (nine-dimension
+		// DB-01 / NOTIF-SY-11). This deliberately reverses the S2 "empty
+		// mirrors the schema" intent; a cardinality CHECK is registered for
+		// the next schema window.
+		return { ok: false, message: m.admin_settings_notification_err_events_empty() };
+	}
 	if (!events.every(isWebhookEventName)) {
 		return { ok: false, message: m.admin_settings_notification_err_events() };
 	}
@@ -135,10 +150,13 @@ export const load: PageServerLoad = async () => {
 		webhookEndpoints,
 		webhookEventRoster: [...WEBHOOK_EVENT_ROSTER],
 		webhookDeliveries: deliveryRows.map((row) => {
+			// The FK cascade removes a deleted endpoint's deliveries, so this
+			// lookup is total by construction (nine-dimension DB-04: the dead
+			// "endpoint deleted" fallback and its message key are retired).
 			const endpoint = byId.get(row.webhookId);
 			return {
 				...row,
-				webhookName: endpoint?.name ?? m.admin_settings_notification_endpoint_deleted(),
+				webhookName: endpoint?.name ?? '',
 				createdLabel: formatDateTime(row.createdAt, { timeZone: siteTz })
 			};
 		})
@@ -240,7 +258,9 @@ export const actions: Actions = {
 		if (await endpointNameTaken(parsed.name, id)) {
 			return fail(400, { op: 'update', message: m.admin_settings_notification_err_name_dup() });
 		}
-		let updated: { id: string }[] = [];
+		// Assigned on the try path; every catch path returns or rethrows, so
+		// the definite-assignment analysis below is sound without an init.
+		let updated: { id: string }[];
 		try {
 			updated = await db
 				.update(webhooks)
@@ -309,7 +329,11 @@ export const actions: Actions = {
 				message: m.admin_settings_notification_err_endpoint_not_found()
 			});
 		}
-		return { op: 'toggle', toggled: true };
+		return {
+			op: 'toggle',
+			toggled: true,
+			message: m.admin_settings_notification_toggled_ok()
+		};
 	},
 
 	rotate: async ({ request }) => {

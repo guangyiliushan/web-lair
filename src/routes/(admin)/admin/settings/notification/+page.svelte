@@ -44,6 +44,7 @@
 					updated?: boolean;
 					deleted?: boolean;
 					rotated?: boolean;
+					toggled?: boolean;
 			  }
 			| null
 			| undefined
@@ -65,6 +66,12 @@
 		// dialog; row-level failures (toggle) and legacy retry failures land
 		// here. `form.status` is never set by kit (J-3 review R4-1): the payload
 		// keys carry the signal.
+		// A toggle success now carries a message (nine-dimension NOTIF-SY-04:
+		// the badge flip alone announced nothing to AT users) and must render
+		// as an OK flash, not through the error branch below.
+		if (form.toggled && form.message) {
+			return { kind: 'ok' as const, text: String(form.message) };
+		}
 		if (form.message && (form.op === undefined || form.op === 'toggle')) {
 			return { kind: 'error' as const, text: String(form.message) };
 		}
@@ -92,6 +99,9 @@
 	let rotateError = $state<string | null>(null);
 	// Submission epochs (review round-1 SY-UI-02): a late response must not
 	// close or write into a dialog the user has since closed / re-opened.
+	// Non-reactive on purpose: these counters are only compared inside the
+	// enhance callbacks - never read from the template or a $derived/$effect
+	// (nine-dimension SY8-6: adding a template read would silently pin them).
 	let editorToken = 0;
 	let deleteToken = 0;
 	let rotateToken = 0;
@@ -115,10 +125,10 @@
 		editorToken += 1;
 		editorError = null;
 		endpointPending = false;
-		// A create/edit session starts clean: drop any previous reveal and the
-		// last stale-failure notice.
-		revealedSecret = null;
-		copyState = 'idle';
+		// A create/edit session clears the last stale-failure notice, but the
+		// one-time reveal deliberately SURVIVES opening the editor (nine-
+		// dimension SY8-3: clicking Add/Edit must not destroy a secret the
+		// admin has not copied yet; create/rotate successes supersede it).
 		pageNotice = null;
 		editingId = endpoint?.id ?? null;
 		formName = endpoint?.name ?? '';
@@ -131,11 +141,11 @@
 		editorToken += 1;
 		editorError = null;
 		endpointPending = false;
+		// The form content is kept until the next open (which re-seeds it):
+		// bits-ui paints the closing animation for ~100 ms, and clearing here
+		// flashed an empty "Add endpoint" frame plus swapped the form action
+		// mid-exit (nine-dimension SY8-5).
 		endpointDialogOpen = false;
-		editingId = null;
-		formName = '';
-		formPayloadUrl = '';
-		formEvents = [];
 	}
 
 	function openDeleteDialog(endpoint: EndpointRow) {
@@ -175,6 +185,17 @@
 	function failureMessage(data: unknown): string | null {
 		const message = (data as { message?: unknown } | null | undefined)?.message;
 		return typeof message === 'string' ? message : null;
+	}
+
+	// One-time secret capture shared by the editor and rotate callbacks
+	// (nine-dimension SY9-1: the round-3 fix had landed twice by hand).
+	function captureSecret(data: unknown): void {
+		const secret = (data as { secret?: unknown } | null)?.secret;
+		if (typeof secret === 'string') {
+			revealedSecret = secret;
+			copyState = 'idle';
+		}
+		pageNotice = null;
 	}
 
 	async function copySecret() {
@@ -480,6 +501,10 @@
 					     region must exist before its content arrives). The one-time
 					     reveal lives in dedicated state (SY-UI-03) so unrelated
 					     submissions cannot wipe it. -->
+					<!-- The status region stays text-only: the interactive reveal
+					     moved out of it (nine-dimension NOTIF-SY-05: aria-atomic
+					     re-announced the credential and the button on every copy
+					     state change). -->
 					<div role="status" class="space-y-2">
 						{#if flash}
 							<p
@@ -492,35 +517,35 @@
 						{#if pageNotice}
 							<p class="text-sm text-destructive">{pageNotice}</p>
 						{/if}
-						{#if revealedSecret}
-							<div data-slot="secret-reveal" class="space-y-1 rounded-md border border-dashed p-2">
-								<p class="text-xs text-muted-foreground">
-									{m.admin_settings_notification_secret_shown_once()}
-								</p>
-								<div class="flex items-start gap-2">
-									<code class="min-w-0 flex-1 text-xs break-all">{revealedSecret}</code>
-									<Button type="button" variant="outline" size="sm" onclick={copySecret}
-										>{m.admin_settings_notification_copy_secret()}</Button
-									>
-								</div>
-								{#if copyState === 'ok'}
-									<p class="text-xs text-muted-foreground">
-										{m.admin_settings_notification_copy_secret_done()}
-									</p>
-								{:else if copyState === 'failed'}
-									<p class="text-xs text-destructive">
-										{m.admin_settings_notification_copy_secret_failed()}
-									</p>
-								{/if}
-							</div>
-						{/if}
 					</div>
+					{#if revealedSecret}
+						<div data-slot="secret-reveal" class="space-y-1 rounded-md border border-dashed p-2">
+							<p class="text-xs text-muted-foreground">
+								{m.admin_settings_notification_secret_shown_once()}
+							</p>
+							<div class="flex items-start gap-2">
+								<code class="min-w-0 flex-1 text-xs break-all">{revealedSecret}</code>
+								<Button type="button" variant="outline" size="sm" onclick={copySecret}
+									>{m.admin_settings_notification_copy_secret()}</Button
+								>
+							</div>
+							{#if copyState === 'ok'}
+								<p role="status" class="text-xs text-muted-foreground">
+									{m.admin_settings_notification_copy_secret_done()}
+								</p>
+							{:else if copyState === 'failed'}
+								<p role="alert" class="text-xs text-destructive">
+									{m.admin_settings_notification_copy_secret_failed()}
+								</p>
+							{/if}
+						</div>
+					{/if}
 
 					<div class="space-y-2">
 						<div class="flex items-center justify-between gap-2">
-							<p class="text-xs font-medium text-muted-foreground">
+							<h4 class="text-xs font-medium text-muted-foreground">
 								{m.admin_settings_notification_endpoints()}
-							</p>
+							</h4>
 							<Button
 								type="button"
 								variant="outline"
@@ -553,11 +578,11 @@
 											<Button
 												type="button"
 												variant="ghost"
-												size="sm"
+												size="icon-sm"
 												aria-label={`${m.admin_common_edit()} (${endpoint.name})`}
 												onclick={() => openEndpointDialog(endpoint)}
 											>
-												<IconPencil class="size-3.5" />
+												<IconPencil />
 											</Button>
 											<form
 												method="POST"
@@ -594,20 +619,20 @@
 											<Button
 												type="button"
 												variant="ghost"
-												size="sm"
+												size="icon-sm"
 												aria-label={`${m.admin_settings_notification_rotate_secret()} (${endpoint.name})`}
 												onclick={() => openRotateDialog(endpoint)}
 											>
-												<IconKey class="size-3.5" />
+												<IconKey />
 											</Button>
 											<Button
 												type="button"
 												variant="ghost"
-												size="sm"
+												size="icon-sm"
 												aria-label={`${m.admin_common_delete()} (${endpoint.name})`}
 												onclick={() => openDeleteDialog(endpoint)}
 											>
-												<IconTrash class="size-3.5" />
+												<IconTrash />
 											</Button>
 										</span>
 									</li>
@@ -617,9 +642,9 @@
 					</div>
 
 					<div class="space-y-2">
-						<p class="text-xs font-medium text-muted-foreground">
+						<h4 class="text-xs font-medium text-muted-foreground">
 							{m.admin_settings_notification_recent_deliveries()}
-						</p>
+						</h4>
 						{#if data.webhookDeliveries.length === 0}
 							<p class="text-xs text-muted-foreground">
 								{m.admin_settings_notification_no_deliveries()}
@@ -685,7 +710,7 @@
 
 <!-- Endpoint editor (create when no id; edit prefills) - SY S2 -->
 <Dialog.Root open={endpointDialogOpen} onOpenChange={(open) => !open && closeEndpointDialog()}>
-	<Dialog.Content class="sm:max-w-md">
+	<Dialog.Content class="sm:max-w-md" interactOutsideBehavior="ignore">
 		<Dialog.Header>
 			<Dialog.Title
 				>{editingId
@@ -705,16 +730,8 @@
 					// The reveal lives in the page region, not the dialog: capture
 					// the one-time secret even when the submitted dialog has moved
 					// on (a stale-epoch success would otherwise lose the only
-					// plaintext copy; review round-3 F1/SY3-1). A success also
-					// supersedes any stale-failure notice.
-					if (result.type === 'success') {
-						const secret = (result.data as { secret?: unknown } | null)?.secret;
-						if (typeof secret === 'string') {
-							revealedSecret = secret;
-							copyState = 'idle';
-						}
-						pageNotice = null;
-					}
+					// plaintext copy; review round-3 F1/SY3-1).
+					if (result.type === 'success') captureSecret(result.data);
 					if (token !== editorToken) {
 						// The surface moved on: keep this dialog clean, but do
 						// not drop the failure silently (round-2 SY-UI-06).
@@ -734,17 +751,28 @@
 				<label for="hook-name" class="text-sm"
 					>{m.admin_settings_notification_endpoint_name()}</label
 				>
-				<Input id="hook-name" name="name" bind:value={formName} required maxlength={120} />
+				<Input
+					id="hook-name"
+					name="name"
+					bind:value={formName}
+					required
+					maxlength={120}
+					aria-invalid={editorError ? true : undefined}
+					aria-describedby={editorError ? 'endpoint-editor-error' : undefined}
+				/>
 			</div>
 			<div class="space-y-1.5">
 				<label for="hook-url" class="text-sm">{m.admin_settings_notification_endpoint_url()}</label>
 				<Input
 					id="hook-url"
 					name="payloadUrl"
+					type="url"
 					bind:value={formPayloadUrl}
 					required
 					maxlength={2048}
 					placeholder="https://example.com/hooks/lair"
+					aria-invalid={editorError ? true : undefined}
+					aria-describedby={editorError ? 'endpoint-editor-error' : undefined}
 				/>
 			</div>
 			<fieldset class="space-y-1.5">
@@ -765,7 +793,9 @@
 				</div>
 			</fieldset>
 			{#if editorError}
-				<p role="alert" class="text-sm text-destructive">{editorError}</p>
+				<p id="endpoint-editor-error" role="alert" class="text-sm text-destructive">
+					{editorError}
+				</p>
 			{/if}
 			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={closeEndpointDialog}
@@ -813,7 +843,7 @@
 				}}
 			>
 				<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
-				<AlertDialog.Action type="submit" disabled={deletePending}
+				<AlertDialog.Action type="submit" variant="destructive" disabled={deletePending}
 					>{m.admin_common_delete()}</AlertDialog.Action
 				>
 			</form>
@@ -847,15 +877,8 @@
 					return async ({ result, update }) => {
 						await update();
 						// Capture the fresh secret even on a moved-on epoch (round-3
-						// F1/SY3-1); a success supersedes any stale-failure notice.
-						if (result.type === 'success') {
-							const secret = (result.data as { secret?: unknown } | null)?.secret;
-							if (typeof secret === 'string') {
-								revealedSecret = secret;
-								copyState = 'idle';
-							}
-							pageNotice = null;
-						}
+						// F1/SY3-1).
+						if (result.type === 'success') captureSecret(result.data);
 						if (token !== rotateToken) {
 							if (result.type === 'failure') pageNotice = failureMessage(result.data);
 							return;
