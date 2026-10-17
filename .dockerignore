@@ -1,0 +1,16 @@
+node_modules
+.svelte-kit
+build
+data
+coverage
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.github
+e2e
+notes
+docs
+*.log
+src/lib/paraglide
