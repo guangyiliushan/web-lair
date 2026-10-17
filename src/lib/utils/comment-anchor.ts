@@ -167,6 +167,62 @@ export function isAnchorBlock(el: AnchorElementShape): boolean {
 
 /* ── Text normalization ─────────────────────────────────────────────────── */
 
+/* ── Shared folding (both pipelines map their own nodes through this) ───── */
+
+export interface FoldSegment<T> {
+	/** Raw text of one text node (or run), in document order. */
+	value: string;
+	/** Owner-specific handle (hast Text+parent, DOM Text+parent, ...). */
+	ref: T;
+}
+
+export interface FoldPoint<T> {
+	ref: T;
+	/** UTF-16 offset of this code point inside the segment's raw text. */
+	offset: number;
+	/** UTF-16 length of this code point (1, or 2 for a surrogate pair). */
+	length: number;
+}
+
+/**
+ * Fold a block's raw segments into its normalized text (spec §3) while keeping
+ * a code-point -> raw-offset map. This is the one place the two pipelines can
+ * disagree if reimplemented, so both call it with their own node handle.
+ *
+ * Concatenate first, then fold globally: collapsing per segment would turn
+ * `"a " + inline-math(void) + " b"` into `"a  b"` (measured in the 2026-10-17
+ * grill). Leading/trailing runs disappear; void runs contribute nothing.
+ */
+export function foldSegments<T>(segments: readonly FoldSegment<T>[]): {
+	text: string;
+	points: FoldPoint<T>[];
+} {
+	let text = '';
+	const points: FoldPoint<T>[] = [];
+	let pendingSpace: FoldPoint<T> | null = null;
+	for (const segment of segments) {
+		let offset = 0;
+		for (const ch of segment.value) {
+			const length = ch.length;
+			if (/\s/.test(ch)) {
+				if (text.length > 0 && pendingSpace === null) {
+					pendingSpace = { ref: segment.ref, offset, length };
+				}
+			} else {
+				if (pendingSpace) {
+					text += ' ';
+					points.push(pendingSpace);
+					pendingSpace = null;
+				}
+				text += ch;
+				points.push({ ref: segment.ref, offset, length });
+			}
+			offset += length;
+		}
+	}
+	return { text, points };
+}
+
 /* ── Code point helpers ─────────────────────────────────────────────────── */
 
 /** Length in Unicode code points (never UTF-16 units). */

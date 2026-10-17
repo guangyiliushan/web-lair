@@ -29,6 +29,7 @@ import {
 	codePointLength,
 	codePointSlice,
 	codePointToUtf16,
+	foldSegments,
 	isAnchorBlock,
 	isAnchorSkipped,
 	splitsSurrogatePair,
@@ -252,42 +253,33 @@ export function collectAnchorBlocks(tree: HastRoot): AnchorBlock[] {
 
 function buildBlock(element: Element, segments: RawSegment[]): AnchorBlock | null {
 	if (segments.length === 0) return null;
-	const points: AnchorTextPoint[] = [];
-	let text = '';
-	let pendingSpace: AnchorTextPoint | null = null;
-
-	for (const segment of segments) {
-		// Iterate code points; `ch.length` is the UTF-16 width we must record.
-		let offset = 0;
-		for (const ch of segment.value) {
-			const length = ch.length;
-			if (/\s/.test(ch)) {
-				// A whitespace run folds to one space; remember where it started
-				// and emit it only once a following non-space proves it is internal
-				// (leading runs and trailing runs therefore disappear, matching
-				// `collapseBlockText`).
-				if (text.length > 0 && pendingSpace === null) {
-					pendingSpace = { node: segment.node, parent: segment.parent, offset, length };
-				}
-			} else {
-				if (pendingSpace) {
-					text += ' ';
-					points.push(pendingSpace);
-					pendingSpace = null;
-				}
-				text += ch;
-				points.push({ node: segment.node, parent: segment.parent, offset, length });
-			}
-			offset += length;
-		}
-	}
-
-	if (text.length === 0) return null;
+	// One folding implementation for both pipelines: the DOM walker feeds its own
+	// node handles through the same `foldSegments` (spec §3).
+	const folded = foldSegments(
+		segments.map((segment) => ({
+			value: segment.value,
+			ref: { node: segment.node, parent: segment.parent }
+		}))
+	);
+	if (folded.text.length === 0) return null;
+	const points: AnchorTextPoint[] = folded.points.map((point) => ({
+		node: point.ref.node,
+		parent: point.ref.parent,
+		offset: point.offset,
+		length: point.length
+	}));
 	// `text` is code points joined; verify the invariant the walkers rely on.
-	if (codePointLength(text) !== points.length) {
+	if (codePointLength(folded.text) !== points.length) {
 		throw new Error('[comment-anchor] block text/point map diverged');
 	}
-	return { ord: -1, hash: hashBlockText(text), occ: 0, text, points, element };
+	return {
+		ord: -1,
+		hash: hashBlockText(folded.text),
+		occ: 0,
+		text: folded.text,
+		points,
+		element
+	};
 }
 
 /* ── Resolution ─────────────────────────────────────────────────────────── */
