@@ -1,4 +1,4 @@
-import { applyAction } from '$app/forms';
+import { applyAction, deserialize } from '$app/forms';
 import { invalidateAll } from '$app/navigation';
 import type { ActionResult } from '@sveltejs/kit';
 
@@ -10,6 +10,15 @@ import type { ActionResult } from '@sveltejs/kit';
  * request, so a 10 x 25MB selection never becomes a single 250MB body under
  * adapter-node's BODY_SIZE_LIMIT (26M). Results are merged and applied once so
  * the pages keep rendering `form.uploadResults` exactly as before.
+ *
+ * Protocol note: SvelteKit serializes action data with devalue, so the JSON
+ * body's `data` field is a STRING. `response.json()` would hand us a string and
+ * silently lose every result — the client half of the protocol is
+ * `deserialize()` (the same function `use:enhance` uses internally).
+ *
+ * Rate accounting: the admin upload bucket counts one unit per request
+ * (60/10min per user), so ten files spend ten units. The CLI import
+ * (`pnpm media:import`) stays the bulk path; the form is for small batches.
  */
 export interface UploadOutcome {
 	fileName: string;
@@ -28,31 +37,67 @@ export async function uploadEachFile(options: {
 	/** Route-relative action URL, e.g. `?/upload`. */
 	action: string;
 	files: File[];
+	/** Per-file cap from the page's `limits` (25MB today). */
+	maxBytes: number;
 	fallbackMessage: string;
-}): Promise<{ results: UploadOutcome[]; message?: string }> {
+}): Promise<{ results: UploadOutcome[]; message?: string; redirected?: boolean }> {
 	const results: UploadOutcome[] = [];
 	let message: string | undefined;
 
 	for (const file of options.files) {
+		if (file.size > options.maxBytes) {
+			// Skip the doomed request: adapter-node rejects an oversized body
+			// with a plain-text 400 before the action runs.
+			results.push({
+				fileName: file.name,
+				ok: false,
+				code: 'too-large',
+				message: options.fallbackMessage
+			});
+			continue;
+		}
+
 		const body = new FormData();
 		body.append('files', file);
 		try {
 			const response = await fetch(options.action, {
 				method: 'POST',
 				body,
-				// SvelteKit's programmatic form-action protocol: JSON in, JSON out.
-				headers: { 'x-sveltekit-action': 'true' }
+				headers: { accept: 'application/json', 'x-sveltekit-action': 'true' }
 			});
-			const result = (await response.json()) as ActionResult;
+			const result = deserialize(await response.text());
+
+			if (result.type === 'redirect') {
+				// Session expired mid-batch: let applyAction navigate to login and
+				// stop sending the remaining files unauthenticated.
+				await applyAction(result);
+				return { results, message, redirected: true };
+			}
+
 			if (result.type === 'success' || result.type === 'failure') {
 				const data = (result.data ?? {}) as UploadActionData;
-				if (data.uploadResults) results.push(...data.uploadResults);
+				if (data.uploadResults) {
+					results.push(...data.uploadResults);
+				} else {
+					results.push({
+						fileName: file.name,
+						ok: false,
+						message: data.message ?? options.fallbackMessage
+					});
+				}
 				if (data.message) message = data.message;
 			} else if (result.type === 'error') {
-				message = result.error?.message ?? options.fallbackMessage;
+				results.push({
+					fileName: file.name,
+					ok: false,
+					message: result.error?.message ?? options.fallbackMessage
+				});
 			}
 		} catch (error) {
-			message = error instanceof Error ? error.message : options.fallbackMessage;
+			// Non-JSON body (413/500), a redirect to HTML, or a network failure.
+			message = options.fallbackMessage;
+			results.push({ fileName: file.name, ok: false, message: options.fallbackMessage });
+			console.warn('[upload] request failed', file.name, error);
 		}
 	}
 
@@ -66,7 +111,8 @@ export async function applyUploadResults(outcome: {
 	message?: string;
 }): Promise<void> {
 	const anyOk = outcome.results.some((result) => result.ok);
-	const data: UploadActionData = { uploadResults: outcome.results };
+	const data: UploadActionData = {};
+	if (outcome.results.length > 0) data.uploadResults = outcome.results;
 	if (outcome.message) data.message = outcome.message;
 	await applyAction({
 		type: anyOk ? 'success' : 'failure',

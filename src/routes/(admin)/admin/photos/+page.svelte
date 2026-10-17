@@ -31,6 +31,7 @@
 		const input = form.querySelector<HTMLInputElement>('input[name="files"]');
 		const files = Array.from(input?.files ?? []);
 		if (files.length === 0) return;
+		if (uploading) return;
 		if (files.length > data.limits.maxBatch) {
 			await applyUploadResults({
 				results: [],
@@ -43,8 +44,10 @@
 			const outcome = await uploadEachFile({
 				action: '?/upload',
 				files,
+				maxBytes: data.limits.maxBytes,
 				fallbackMessage: m.admin_media_err_upload_failed()
 			});
+			if (outcome.redirected) return;
 			await applyUploadResults(outcome);
 		} finally {
 			uploading = false;
