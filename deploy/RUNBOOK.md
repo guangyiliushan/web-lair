@@ -6,13 +6,13 @@
 
 ## 0. Host prerequisites
 
-| Item                                                     | Check                                            |
-| -------------------------------------------------------- | ------------------------------------------------ |
-| Docker Engine + compose plugin                           | `docker version && docker compose version`       |
-| Tailscale up (SSH / Kuma only via tailnet)               | `tailscale status`                               |
-| Time sync (TLS, TOTP, DB timestamps)                     | `timedatectl` → `System clock synchronized: yes` |
-| Only 80/443 public                                       | `ss -lntp \| grep -E ':(80                       | 443)\b'`; everything else bound to `127.0.0.1` or tailnet |
-| Deploy user uid/gid 1000 (matches the image `node` user) | `id -u`                                          |
+| Item                                                     | Check                                                                                 |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Docker Engine + compose plugin                           | `docker version && docker compose version`                                            |
+| Tailscale up (SSH / Kuma only via tailnet)               | `tailscale status`                                                                    |
+| Time sync (TLS, TOTP, DB timestamps)                     | `timedatectl` → `System clock synchronized: yes`                                      |
+| Only 80/443 public                                       | `ss -lntp \| grep -E ':(80\|443)\b'`; everything else bound to `127.0.0.1` or tailnet |
+| Deploy user uid/gid 1000 (matches the image `node` user) | `id -u`                                                                               |
 
 ## 1. First deploy
 
@@ -27,17 +27,34 @@ $EDITOR .env      # see §1.1 for the required keys
 
 ### 1.1 Required `.env` keys
 
-| Key                                                   | Value                                                           |
-| ----------------------------------------------------- | --------------------------------------------------------------- |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | strong, unique                                                  |
-| `BETTER_AUTH_SECRET`                                  | ≥32 chars, high entropy                                         |
-| `ORIGIN`                                              | `https://<domain>` (no trailing slash)                          |
-| `DOMAIN`                                              | same host, used by Caddy                                        |
-| `ACME_EMAIL`                                          | Let's Encrypt expiry notices                                    |
-| `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`             | object-store credentials                                        |
-| `DATA_DIR`                                            | absolute host path, e.g. `/srv/web-lair/data`                   |
-| `MAIL_*`                                              | see §1.2                                                        |
-| `OWNER_EMAIL` / `OWNER_PASSWORD`                      | first owner seed (`pnpm db:seed-owner` from the host, dev only) |
+| Key                                                   | Value                                                                                                             |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | strong, unique, **URL-safe** (`openssl rand -hex 32`) — the password is interpolated into `DATABASE_URL` verbatim |
+| `BETTER_AUTH_SECRET`                                  | ≥32 chars, high entropy                                                                                           |
+| `ORIGIN`                                              | `https://<domain>` (no trailing slash)                                                                            |
+| `DOMAIN`                                              | same host, used by Caddy                                                                                          |
+| `ACME_EMAIL`                                          | Let's Encrypt expiry notices                                                                                      |
+| `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`             | object-store credentials                                                                                          |
+| `DATA_DIR`                                            | absolute host path, e.g. `/srv/web-lair/data`                                                                     |
+| `MAIL_*`                                              | see §1.2                                                                                                          |
+| `OWNER_EMAIL` / `OWNER_PASSWORD`                      | first owner seed (`pnpm db:seed-owner` from the host, dev only)                                                   |
+
+Create the data directory with the image's uid **before** the first start —
+Docker would otherwise create it as root and the `node` user (uid 1000) could
+not write the job scaffold:
+
+```bash
+sudo install -d -m 0750 -o 1000 -g 1000 /srv/web-lair/data
+```
+
+Backup credentials go in their own file (not `.env`), so the app container
+never sees the credential that can delete the offsite repository:
+
+```bash
+cp deploy/backup.env.example deploy/backup.env
+chmod 600 deploy/backup.env
+$EDITOR deploy/backup.env      # RESTIC_* + AWS_* + BACKUP_PING_URL
+```
 
 ### 1.2 Mail route probes (deploy note Q7)
 
@@ -55,7 +72,9 @@ curl -s https://api.ipify.org; dig +short -x "$(curl -s https://api.ipify.org)"
 ```
 
 - 25 open **and** PTR matches the sending subdomain **and** not PBL-listed → set
-  `MAIL_ENABLED=true`, `MAIL_SMTP_HOST=127.0.0.1` (local MTA) and skip the relay.
+  `MAIL_ENABLED=true`, `MAIL_SMTP_HOST=host.docker.internal` (a host MTA) and skip
+  the relay. The app runs in its own network namespace: `127.0.0.1` there is the
+  container, not the box — compose maps the host gateway for this reason.
 - Any red → point `MAIL_SMTP_HOST/PORT/USER/PASS` at the relay; the app code is
   unchanged (one env switch).
 
@@ -77,6 +96,9 @@ export HTTP_PROXY= HTTPS_PROXY=        # the box has no local proxy
 ### 1.4 Migrate, then start
 
 ```bash
+mkdir -p /srv/web-lair/backup
+docker compose exec -T db pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB" \
+  > "/srv/web-lair/backup/pre-migrate-$(date +%F_%H%M).dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
 docker compose --profile prod up -d
 docker compose --profile prod ps          # all healthy
@@ -101,6 +123,9 @@ address (confirmation link must land on `/subscribe/confirm`), upload one photo
 cd /srv/web-lair/app
 git fetch && git checkout <new-sha>
 docker compose --profile prod build app
+mkdir -p /srv/web-lair/backup
+docker compose exec -T db pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB" \
+  > "/srv/web-lair/backup/pre-migrate-$(date +%F_%H%M).dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
 docker compose --profile prod up -d
 ```
@@ -129,18 +154,27 @@ Backup set:
 4. `.env` + compose/Caddyfile + **restic password** (offline copy).
 
 ```bash
-# nightly (systemd timer)
-docker compose exec -T db pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB" > /srv/web-lair/backup/pg.dump
-restic -r "$RESTIC_REPOSITORY" backup /srv/web-lair/backup /srv/web-lair/data /var/lib/docker/volumes/<project>_rustfsdata/_data /srv/web-lair/app/.env
-restic -r "$RESTIC_REPOSITORY" forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+# what the nightly unit runs (deploy/systemd/web-lair-backup.timer)
+/srv/web-lair/app/deploy/backup/backup.sh
 ```
 
-- Weekly: `restic check --read-data-subset=5%`.
+Credentials come from `deploy/backup.env` (mode 600, loaded by the systemd
+unit — never from `.env`, so the app container cannot read them).
+
+The script dumps PG to a temp file, validates it with `pg_restore -l`, swaps it
+over `pg.dump` (a failed night never truncates yesterday's good copy), resolves
+the RustFS volume from the running container, then runs restic with
+`--retry-lock 30m` and the retention policy.
+
+- Weekly: `web-lair-backup-check.timer` runs `restic check --read-data-subset=5%`
+  (the nightly job only backs up).
 - Monthly drill: restore to a **separate** directory and, for PG, into a
   **scratch** database on a different port; compare row counts and sample media
   hashes. The drill never touches the production database.
-- A failed backup must fail the dead-man ping (§5) — silent failure is the
-  failure mode that matters.
+- A failed backup must fail **its own** check: `BACKUP_PING_URL` is pinged only
+  on success and is deliberately separate from the 5-minute liveness URL
+  (`DEADMAN_PING_URL`) — sharing one check would make a silent backup failure
+  invisible on the next liveness tick.
 
 ## 5. Monitoring
 
@@ -156,14 +190,19 @@ Kuma setup: create monitors, then paste the push URL into `JOBS_HEARTBEAT_URL`
 
 ## 6. Background timers (drain)
 
-`deploy/systemd/web-lair-drain.service` + `.timer` run every minute:
-
-```ini
-[Service]
-Type=oneshot
-WorkingDirectory=/srv/web-lair/app
-ExecStart=/usr/bin/docker compose run --rm --no-deps app node jobs/drain.ts
+```bash
+sudo cp deploy/systemd/*.service deploy/systemd/*.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now web-lair-drain.timer web-lair-deadman.timer web-lair-backup.timer web-lair-backup-check.timer
+systemctl list-timers --all | grep web-lair      # verification
 ```
+
+| Unit                          | Cadence                         | Job                                                                       |
+| ----------------------------- | ------------------------------- | ------------------------------------------------------------------------- |
+| `web-lair-drain.timer`        | 1 min                           | `docker compose --profile prod run --rm --no-deps app node jobs/drain.ts` |
+| `web-lair-deadman.timer`      | 5 min                           | liveness ping (`DEADMAN_PING_URL`), skipped when unset                    |
+| `web-lair-backup.timer`       | 03:30 daily (`Persistent=true`) | `deploy/backup/backup.sh`                                                 |
+| `web-lair-backup-check.timer` | Sundays 04:30                   | `restic check --read-data-subset=5%`                                      |
 
 `run --rm` (not `exec`) so each tick is an independent container and a dead app
 container cannot masquerade as a running timer. Exit codes: 0 tick done,
