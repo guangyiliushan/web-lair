@@ -2,6 +2,8 @@ import { fail, type ActionFailure, type RequestEvent } from '@sveltejs/kit';
 import { m } from '$lib/paraglide/messages';
 import { requireUser } from '$lib/server/authz';
 import { isUuid } from '$lib/utils/uuid';
+import { parseCommentAnchorDraft } from '$lib/server/comment-anchor';
+import type { CommentAnchorDraft } from '$lib/utils/comment-anchor';
 import { deleteComment, editComment, type SubmitCommentResult } from './comments';
 
 /**
@@ -29,6 +31,25 @@ async function readCommentActionForm(
 }
 
 /**
+ * Segment-anchor fields carried by a `?/comment` submission (comment P3b).
+ * Absent fields = an article-level comment; present-but-malformed is rejected
+ * by the caller instead of silently degrading to an article comment.
+ */
+export type AnchorDraftRead =
+	{ kind: 'none' } | { kind: 'ok'; draft: CommentAnchorDraft } | { kind: 'invalid' };
+
+export function readCommentAnchorDraft(form: FormData): AnchorDraftRead {
+	if (form.get('anchorOrd') === null) return { kind: 'none' };
+	const draft = parseCommentAnchorDraft({
+		ord: Number(form.get('anchorOrd')),
+		start: Number(form.get('anchorStart')),
+		end: Number(form.get('anchorEnd')),
+		exact: form.get('anchorExact')?.toString() ?? ''
+	});
+	return draft ? { kind: 'ok', draft } : { kind: 'invalid' };
+}
+
+/**
  * Shared submit/reply outcome mapping (pre-release review 01-P2-1/04-F2):
  * the three hosts carried this switch verbatim - a new SubmitCommentResult
  * arm must now land here once. The annotated return type keeps the switch
@@ -50,6 +71,8 @@ export function commentSubmitResponse(
 			return fail(400, { message: m.comment_error_generic() });
 		case 'parent-unavailable':
 			return fail(400, { message: m.comment_error_parent() });
+		case 'stale-anchor':
+			return fail(400, { message: m.comment_error_stale_anchor() });
 		case 'target-unavailable':
 			return fail(404, { message: m.comment_error_unavailable() });
 	}

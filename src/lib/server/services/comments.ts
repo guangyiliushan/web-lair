@@ -10,11 +10,27 @@ import { locales } from '$lib/paraglide/runtime';
 import { isUuid } from '$lib/utils/uuid';
 import {
 	COMMENT_MAX_LENGTH,
+	type CommentAnchorView,
 	type CommentTargetType,
 	type ThreadReply,
 	type ThreadRoot,
 	type ThreadsPage
 } from '$lib/components/comments/types';
+import {
+	collectAnchorBlocks,
+	commentAnchorSchema,
+	parseCommentAnchor,
+	parseCommentAnchorDraft,
+	resolveAnchor,
+	resolveAnchorDraft,
+	type AnchorBlock,
+	type AnchorMark
+} from '$lib/server/comment-anchor';
+import {
+	quoteDisplay,
+	type CommentAnchor,
+	type CommentAnchorDraft
+} from '$lib/utils/comment-anchor';
 import { visibleNoteCondition } from './note-visibility';
 import { getPageBySlug, servablePageBody } from './pages';
 import { visiblePostCondition } from './post-visibility';
@@ -39,6 +55,16 @@ export const THREAD_REPLY_LIMIT = 500;
 
 /** Per-reader submission window (spec §1: 60s <= 2; grill Q1/Q2). */
 export const COMMENT_RATE_LIMIT = { limit: 2, windowSeconds: 60 } as const;
+
+/**
+ * Segment-anchor validation budget (2026-10-17 grill G1). Anchor submissions
+ * render the whole body (Shiki/KaTeX) *before* the comment window is charged,
+ * so without this second, coarse limit a verified reader could loop stale
+ * anchors and burn CPU with no per-user bound. 10 attempts/min keeps honest
+ * stale retries cheap and still bounds the ramp; owner/admin skip it like the
+ * main window.
+ */
+export const ANCHOR_RATE_LIMIT = { limit: 10, windowSeconds: 60 } as const;
 
 /** Text bounds (spec §1): normalise first, then count code points. */
 export const COMMENT_MIN_LENGTH = 1;
@@ -70,7 +96,9 @@ const commentColumns = {
 	editedAt: comments.editedAt,
 	// Authoring identity stays server-side: the assembly converts it into the
 	// boolean `isMine` so the client never receives reader ids (P4).
-	readerId: comments.readerId
+	readerId: comments.readerId,
+	// Stored segment anchor (P3b): resolved in the assembly, never serialized raw.
+	anchor: comments.anchor
 };
 
 export interface CommentRow {
@@ -87,6 +115,8 @@ export interface CommentRow {
 	rootCommentId: string | null;
 	editedAt: Date | null;
 	readerId: string | null;
+	/** Stored jsonb anchor; `unknown` on purpose (Zod decides, not the row type). */
+	anchor?: unknown;
 }
 
 /**
@@ -126,6 +156,41 @@ export interface LoadThreadsInput {
  * viewer-dependent SQL prefilter costs more than it saves).
  */
 export async function loadThreads(input: LoadThreadsInput): Promise<ThreadsPage> {
+	const rows = await fetchThreadRows(input);
+	return assembleDiscussion(rows.rootRows, rows.replyRows, {
+		truncated: rows.truncated,
+		viewerId: input.viewerId
+	}).threads;
+}
+
+export interface LoadDiscussionInput extends LoadThreadsInput {
+	/** Block directory of the body being rendered (comment P3b). */
+	blocks: AnchorBlock[];
+}
+
+/**
+ * Segment-aware read (spec §7): same query, plus anchor resolution against the
+ * rendered block directory. The marks are applied to the tree by the caller
+ * (`renderDiscussion`); `threads.orphans` holds the roots whose anchor no
+ * longer resolves. Anchors never reach the page payload — the view model only
+ * carries the display quote and the rendered target id.
+ */
+export async function loadDiscussion(input: LoadDiscussionInput): Promise<DiscussionRead> {
+	const rows = await fetchThreadRows(input);
+	return assembleDiscussion(rows.rootRows, rows.replyRows, {
+		truncated: rows.truncated,
+		viewerId: input.viewerId,
+		blocks: input.blocks
+	});
+}
+
+interface ThreadRows {
+	rootRows: CommentRow[];
+	replyRows: CommentRow[];
+	truncated: boolean;
+}
+
+async function fetchThreadRows(input: LoadThreadsInput): Promise<ThreadRows> {
 	const condition = visibleCommentCondition(input.targetType, input.targetId, input.viewerId);
 
 	const rootRowsFetched = await db
@@ -153,10 +218,20 @@ export async function loadThreads(input: LoadThreadsInput): Promise<ThreadsPage>
 		replyRows = repliesTruncated ? replyRowsFetched.slice(0, THREAD_REPLY_LIMIT) : replyRowsFetched;
 	}
 
-	return assembleThreads(rootRows, replyRows, {
-		truncated: rootsTruncated || repliesTruncated,
-		viewerId: input.viewerId
-	});
+	return { rootRows, replyRows, truncated: rootsTruncated || repliesTruncated };
+}
+
+export interface AssemblyOptions {
+	truncated?: boolean;
+	viewerId?: string | null;
+	/** When present, segment anchors are resolved and marks are produced. */
+	blocks?: AnchorBlock[];
+}
+
+export interface DiscussionRead {
+	threads: ThreadsPage;
+	/** Marks to apply to the rendered tree; server-side only, never serialized. */
+	marks: AnchorMark[];
 }
 
 /**
@@ -166,8 +241,25 @@ export async function loadThreads(input: LoadThreadsInput): Promise<ThreadsPage>
 export function assembleThreads(
 	rootRows: CommentRow[],
 	replyRows: CommentRow[],
-	options: { truncated?: boolean; viewerId?: string | null } = {}
+	options: AssemblyOptions = {}
 ): ThreadsPage {
+	return assembleDiscussion(rootRows, replyRows, options).threads;
+}
+
+/**
+ * Assembly + anchor resolution (comment P3b, spec §7): a root whose stored
+ * anchor resolves keeps its main-list slot and gets a quote chip; one whose
+ * anchor no longer resolves moves to `orphans` (the folded "original text
+ * changed" area with its own count). Marks are emitted for surviving anchored
+ * roots only — a deleted floor placeholder keeps its underline, a fully
+ * vanished thread does not. Without `blocks` (article-level readers) an
+ * anchored row is orphaned: fail-visible beats silently dropping the chip.
+ */
+export function assembleDiscussion(
+	rootRows: CommentRow[],
+	replyRows: CommentRow[],
+	options: AssemblyOptions = {}
+): DiscussionRead {
 	const viewerId = options.viewerId ?? null;
 	const isMine = (row: CommentRow) => viewerId !== null && row.readerId === viewerId;
 	const repliesByRoot = new Map<string, CommentRow[]>();
@@ -180,7 +272,34 @@ export function assembleThreads(
 		else repliesByRoot.set(row.rootCommentId, [row]);
 	}
 
+	const anchorOf = (
+		row: CommentRow
+	): { view: CommentAnchorView | null; mark: AnchorMark | null } => {
+		const raw = parseCommentAnchor(row.anchor);
+		if (!raw) return { view: null, mark: null };
+		const view: CommentAnchorView = {
+			quote: quoteDisplay(raw.quote.exact),
+			orphaned: false,
+			targetId: null
+		};
+		if (!options.blocks) return { view: { ...view, orphaned: true }, mark: null };
+		const resolved = resolveAnchor(options.blocks, raw);
+		if (!resolved) return { view: { ...view, orphaned: true }, mark: null };
+		return {
+			view,
+			mark: {
+				commentId: row.id,
+				blockOrd: resolved.block.ord,
+				start: resolved.start,
+				end: resolved.end,
+				pending: row.state === 'pending'
+			}
+		};
+	};
+
 	const roots: ThreadRoot[] = [];
+	const orphans: ThreadRoot[] = [];
+	const marks: AnchorMark[] = [];
 	for (const row of rootRows) {
 		const visibleReplies = repliesByRoot.get(row.id) ?? [];
 		// A deleted root keeps the floor only while visible replies remain;
@@ -210,7 +329,8 @@ export function assembleThreads(
 					: null
 		}));
 
-		roots.push({
+		const anchor = anchorOf(row);
+		const entry: ThreadRoot = {
 			id: row.id,
 			text: row.isDeleted ? '' : row.text,
 			author: row.isDeleted ? null : row.author,
@@ -224,14 +344,32 @@ export function assembleThreads(
 			createdAt: row.createdAt,
 			pin: row.pin,
 			isDeleted: row.isDeleted,
+			anchor: anchor.view,
 			replies
-		});
+		};
+		if (anchor.view?.orphaned) {
+			orphans.push(entry);
+			continue;
+		}
+		roots.push(entry);
+		if (anchor.mark) marks.push(anchor.mark);
 	}
 
 	let visibleCount = 0;
 	for (const root of roots) visibleCount += 1 + root.replies.length;
+	let orphanCount = 0;
+	for (const root of orphans) orphanCount += 1 + root.replies.length;
 
-	return { roots, visibleCount, truncated: options.truncated ?? false };
+	return {
+		threads: {
+			roots,
+			orphans,
+			visibleCount,
+			orphanCount,
+			truncated: options.truncated ?? false
+		},
+		marks
+	};
 }
 
 /* ── Write path ─────────────────────────────────────────────────────────── */
@@ -331,6 +469,8 @@ export interface SubmitCommentInput {
 	unlockVerified?: boolean;
 	/** Root comment id when this submission is a reply. */
 	parentId?: string | null;
+	/** Segment anchor draft (P3b); null/absent = article-level comment. */
+	anchor?: CommentAnchorDraft | null;
 	text: string;
 	/** Signed-in reader; the route resolves the display snapshot. */
 	user: { id: string; role?: unknown; emailVerified?: boolean };
@@ -349,7 +489,9 @@ export type SubmitCommentResult =
 	| { kind: 'empty' }
 	| { kind: 'too-long'; max: number }
 	| { kind: 'target-unavailable' }
-	| { kind: 'parent-unavailable' };
+	| { kind: 'parent-unavailable' }
+	/** The selected text no longer matches the current body (spec §6). */
+	| { kind: 'stale-anchor' };
 
 export async function submitComment(input: SubmitCommentInput): Promise<SubmitCommentResult> {
 	const now = input.now ?? new Date();
@@ -363,6 +505,10 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	const length = [...text].length;
 	if (length < COMMENT_MIN_LENGTH || !hasVisibleText(text)) return { kind: 'empty' };
 	if (length > COMMENT_MAX_LENGTH) return { kind: 'too-long', max: COMMENT_MAX_LENGTH };
+
+	// Anchors belong to roots only (spec §2). A reply carrying one is either a
+	// stale client or a crafted form; reject before any target or render work.
+	if (input.parentId && input.anchor) return { kind: 'stale-anchor' };
 
 	// All three arcs are served since the P4 pages mount (notes since N1);
 	// each branch below keeps its own authoritative re-check.
@@ -450,6 +596,46 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		rootCommentId = parent.rootCommentId ?? parent.id;
 	}
 
+	// Segment anchor (spec §6): authoritative re-derivation against the CURRENT
+	// body. The client supplies only ord/range/exact; hash, occurrence and the
+	// quote context are recomputed here, so a stale or forged payload cannot
+	// define them. Pages stay deferred (their single row carries all locales).
+	let anchorValue: CommentAnchor | null = null;
+	if (input.anchor) {
+		if (input.targetType === 'page') return { kind: 'stale-anchor' };
+		// Charge the anchor-validation budget BEFORE the renderer runs: the official
+		// rate-limiter patterns check before the protected work, and this path is
+		// the only one that pays a full document render before the main window.
+		if (!isAdminRole(input.user.role)) {
+			const guard = await rateLimit(
+				input.cache ?? getCache(),
+				`limits:comment-anchor:${input.user.id}`,
+				ANCHOR_RATE_LIMIT.limit,
+				ANCHOR_RATE_LIMIT.windowSeconds
+			);
+			if (!guard.allowed) {
+				return { kind: 'throttled', windowSeconds: ANCHOR_RATE_LIMIT.windowSeconds };
+			}
+			if (guard.count === 0) {
+				console.warn('[comments] anchor limiter store unavailable; failing open');
+			}
+		}
+		const body = await loadTargetBody(input, now);
+		if (body === null) return { kind: 'target-unavailable' };
+		const draft = parseCommentAnchorDraft(input.anchor);
+		if (!draft) return { kind: 'stale-anchor' };
+		// Loaded lazily: the renderer drags in Shiki/KaTeX, and this module is also
+		// imported by scripts and by every comment test that never touches anchors.
+		const { renderMarkdownTree } = await import('$lib/server/markdown');
+		const tree = await renderMarkdownTree(body);
+		const resolved = resolveAnchorDraft(collectAnchorBlocks(tree), draft, input.lang);
+		if (resolved.kind !== 'ok') return { kind: 'stale-anchor' };
+		// Belt: the value that reaches jsonb must be readable by the same schema
+		// the read path uses (a 1-code-point range once slipped through here).
+		if (!commentAnchorSchema.safeParse(resolved.anchor).success) return { kind: 'stale-anchor' };
+		anchorValue = resolved.anchor;
+	}
+
 	// Owner/admin posts skip the window (WordPress core exempts moderators);
 	// everyone else shares one cross-target window per reader (grill Q1/Q2).
 	// The window is charged only AFTER validation succeeded, so validation
@@ -497,6 +683,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 				isOwnerReply: autoApprove,
 				parentCommentId,
 				rootCommentId,
+				anchor: anchorValue,
 				reviewedBy: autoApprove ? input.user.id : null,
 				reviewedAt: autoApprove ? now : null
 			})
@@ -513,6 +700,51 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		}
 		throw caught;
 	}
+}
+
+/**
+ * Current body markdown for anchor validation, re-read with the same
+ * visibility/gate predicates the submission already passed. Deliberately
+ * lazy (anchored submissions only) and shared by every arc: a second copy in
+ * the routes would be the place the ruler drifts.
+ */
+async function loadTargetBody(input: SubmitCommentInput, now: Date): Promise<string | null> {
+	if (input.targetType === 'post') {
+		const [row] = await db
+			.select({ content: posts.content })
+			.from(posts)
+			.where(
+				and(
+					eq(posts.id, input.targetId),
+					eq(posts.lang, input.lang),
+					// Second query: re-check the switch so a concurrent "comments off"
+					// cannot land a comment through the narrow gap.
+					eq(posts.allowComment, true),
+					visiblePostCondition(now)
+				)
+			)
+			.limit(1);
+		return row?.content ?? null;
+	}
+	if (input.targetType === 'note') {
+		const gateClause = input.unlockVerified ? [] : [isNull(notes.passwordHash)];
+		const [row] = await db
+			.select({ content: notes.content })
+			.from(notes)
+			.where(
+				and(
+					eq(notes.id, input.targetId),
+					eq(notes.lang, input.lang),
+					eq(notes.allowComment, true),
+					visibleNoteCondition(now),
+					...gateClause
+				)
+			)
+			.limit(1);
+		return row?.content ?? null;
+	}
+	// Pages: segment comments deferred (spec §1) - never validated here.
+	return null;
 }
 
 /* ── Reader self-service: edit / soft-delete (P4, ledger §19.10) ────────── */

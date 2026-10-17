@@ -31,16 +31,40 @@ export interface ThreadReply extends CommentView {
 	replyToAuthor: string | null;
 }
 
+/**
+ * Segment-anchor view data (comment P3b). Display-only: the stored payload
+ * (hash/occ/ord/range/exact/prefix/suffix) never leaves the server — the page
+ * carries just what the list and the deep link need.
+ */
+export interface CommentAnchorView {
+	/** Quote chip text, already capped in code points (spec §8). */
+	quote: string;
+	/** False when resolution failed -> the root moves to the folded orphan area. */
+	orphaned: boolean;
+	/** The `#c-…` id actually rendered (a cluster representative), null if none. */
+	targetId: string | null;
+}
+
 export interface ThreadRoot extends CommentView {
 	pin: boolean;
 	isDeleted: boolean;
+	/** Segment anchor, or null for an article-level comment (spec §2). */
+	anchor: CommentAnchorView | null;
 	/** Visible replies only, in display order. */
 	replies: ThreadReply[];
 }
 
 export interface ThreadsPage {
+	/** Article-level roots plus roots whose anchor resolved, in display order. */
 	roots: ThreadRoot[];
+	/**
+	 * Roots whose anchor no longer resolves (folded "original text changed"
+	 * area). Optional so a producer that predates P3b still renders: the
+	 * section derives 0 / [] instead of crashing on `undefined.length`.
+	 */
+	orphans?: ThreadRoot[];
 	visibleCount: number;
+	orphanCount?: number;
 	truncated: boolean;
 }
 

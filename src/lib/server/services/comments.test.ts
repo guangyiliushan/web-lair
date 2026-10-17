@@ -32,6 +32,21 @@ const { dbMock, state } = vi.hoisted(() => ({
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
+// submitComment loads the renderer lazily for anchored submissions; stub it with
+// a one-paragraph tree so the write-path tests stay fast and deterministic.
+vi.mock('$lib/server/markdown', () => ({
+	renderMarkdownTree: vi.fn(async (markdown: string) => ({
+		type: 'root',
+		children: [
+			{
+				type: 'element',
+				tagName: 'p',
+				properties: {},
+				children: markdown ? [{ type: 'text', value: markdown }] : []
+			}
+		]
+	}))
+}));
 vi.mock('$lib/server/cache', () => ({
 	getCache: () => {
 		throw new Error('tests must pass an explicit cache store');
@@ -415,6 +430,66 @@ describe('submitComment', () => {
 			...overrides
 		};
 	}
+
+	it('rejects an anchor on a reply before any target or render work', async () => {
+		const result = await submitComment(
+			input({ parentId: PARENT, anchor: { ord: 0, start: 0, end: 2, exact: 'ab' } })
+		);
+		expect(result).toEqual({ kind: 'stale-anchor' });
+		expect(state.selectQueue).toHaveLength(0);
+		expect(state.inserts).toHaveLength(0);
+	});
+
+	it('stores a server-derived anchor for a matching draft', async () => {
+		state.selectQueue = [
+			[{ id: TARGET, allowComment: true }],
+			[{ content: 'Hello anchored world.' }]
+		];
+		state.insertResults = [[{ id: 'new-anchored', state: 'pending' }]];
+		const result = await submitComment(
+			input({ anchor: { ord: 0, start: 6, end: 14, exact: 'anchored' } })
+		);
+		expect(result).toEqual({ kind: 'created', id: 'new-anchored', state: 'pending' });
+		const value = state.inserts[0].values.anchor as {
+			v: number;
+			lang: string;
+			block: { hash: string; occ: number; ord: number };
+			range: { start: number; end: number };
+			quote: { exact: string; prefix: string; suffix: string };
+		};
+		expect(value).toMatchObject({
+			v: 1,
+			lang: 'en',
+			block: { ord: 0, occ: 0 },
+			range: { start: 6, end: 14 },
+			quote: { exact: 'anchored', prefix: 'Hello ', suffix: ' world.' }
+		});
+		expect(value.block.hash).toMatch(/^[0-9a-f]{10}$/);
+	});
+
+	it('rejects a stale anchor and stores nothing', async () => {
+		state.selectQueue = [[{ id: TARGET, allowComment: true }], [{ content: 'Hello world.' }]];
+		const result = await submitComment(
+			input({ anchor: { ord: 0, start: 0, end: 4, exact: 'nope' } })
+		);
+		expect(result).toEqual({ kind: 'stale-anchor' });
+		expect(state.inserts).toHaveLength(0);
+	});
+
+	it('bounds anchor validation with its own coarse budget before rendering', async () => {
+		// The anchor bucket is exhausted while the comment window is not.
+		const store: CacheStore = {
+			...fakeStore(async () => 1),
+			incr: async (key: string) => (key.startsWith('limits:comment-anchor:') ? 11 : 1)
+		};
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		const result = await submitComment(
+			input({ anchor: { ord: 0, start: 6, end: 14, exact: 'anchored' }, cache: store })
+		);
+		expect(result).toEqual({ kind: 'throttled', windowSeconds: 60 });
+		// Rejected before the expensive body render: only the target select ran.
+		expect(state.wheres).toHaveLength(1);
+	});
 
 	it('stores a readers root comment as pending with the frozen snapshot', async () => {
 		state.selectQueue = [[{ id: TARGET, allowComment: true }]];

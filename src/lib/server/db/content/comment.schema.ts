@@ -15,6 +15,7 @@ import { user } from '../auth.schema';
 import { notes } from './note.schema';
 import { pages } from './page.schema';
 import { posts } from './post.schema';
+import type { CommentAnchor } from '$lib/utils/comment-anchor';
 
 /**
  * Comment threads with an exclusive-arc target (ledger §9.5/§11-A2): exactly
@@ -67,7 +68,9 @@ export const comments = pgTable(
 		meta: jsonb('meta').$type<Record<string, unknown> | null>(),
 		readerId: text('reader_id').references(() => user.id, { onDelete: 'set null' }),
 		editedAt: timestamp('edited_at', { withTimezone: true }),
-		anchor: jsonb('anchor').$type<Record<string, unknown> | null>(),
+		// Type-only narrowing (comment P3b): `$type` is a TS-level annotation and
+		// produces no DDL, so the anchor contract lives in the application layer.
+		anchor: jsonb('anchor').$type<CommentAnchor | null>(),
 		isOwnerReply: boolean('is_owner_reply').notNull().default(false),
 		countryCode: text('country_code')
 	},
