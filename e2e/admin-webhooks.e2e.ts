@@ -52,13 +52,21 @@ test.describe('SY webhooks (admin)', () => {
 			.filter({ hasText: name })
 			.first();
 
+	// Hydration-tolerant open: a click that lands before the settings island
+	// hydrates is a no-op, so retry the click until the dialog appears.
+	async function openCreateDialog(page: Page) {
+		await expect(async () => {
+			await page.getByRole('button', { name: '新建端点' }).click({ timeout: 5_000 });
+			await expect(page.getByRole('dialog')).toBeVisible({ timeout: 2_000 });
+		}).toPass({ timeout: 30_000 });
+		return page.getByRole('dialog');
+	}
+
 	test('create: dialog -> generated secret revealed once -> masked row', async ({ page }) => {
 		await page.goto('/admin/settings/notification');
 		await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 20_000 });
 
-		await page.getByRole('button', { name: '新建端点' }).click({ timeout: 10_000 });
-		const dialog = page.getByRole('dialog');
-		await expect(dialog).toBeVisible({ timeout: 10_000 });
+		const dialog = await openCreateDialog(page);
 		// The event picker is roster-driven: all nine v1 events, as checkboxes.
 		await expect(dialog.getByRole('checkbox')).toHaveCount(9);
 		await dialog.getByLabel('名称').fill(HOOK);
@@ -98,8 +106,10 @@ test.describe('SY webhooks (admin)', () => {
 
 	test('create negative: a duplicate name is soft-rejected inside the dialog', async ({ page }) => {
 		await page.goto('/admin/settings/notification');
-		await page.getByRole('button', { name: '新建端点' }).click({ timeout: 10_000 });
-		const dialog = page.getByRole('dialog');
+		// Hydration gate: a click before the settings island mounts is a no-op
+		// and the dialog then never opens (SvelteKit island hydration is async).
+		await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 20_000 });
+		const dialog = await openCreateDialog(page);
 		await dialog.getByLabel('名称').fill(HOOK);
 		await dialog.getByLabel('回调地址').fill(HOOK_URL);
 		// The empty-selection guard fires before the dup check (nine-dimension
@@ -121,8 +131,7 @@ test.describe('SY webhooks (admin)', () => {
 		await dialog.getByRole('button', { name: '保存' }).click({ timeout: 10_000 });
 		await expect(dialog).toBeHidden({ timeout: 10_000 });
 		expect(psql(`select count(*) from webhooks where name = '${HOOK_MIXED}'`)).toBe('1');
-		await page.getByRole('button', { name: '新建端点' }).click({ timeout: 10_000 });
-		const mixedDialog = page.getByRole('dialog');
+		const mixedDialog = await openCreateDialog(page);
 		await mixedDialog.getByLabel('名称').fill(HOOK_MIXED.toLowerCase());
 		await mixedDialog.getByLabel('回调地址').fill(HOOK_URL);
 		// A fresh dialog session starts with no events selected (formEvents
