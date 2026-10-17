@@ -54,11 +54,12 @@ export const actions: Actions = {
 		const lang = isSubscriptionLang(locale) ? locale : 'en';
 		const outcome = await requestSubscription({ email, lang, source: 'subscribe-page' });
 
-		if (outcome.kind === 'pending') {
+		if (outcome.kind === 'pending' && outcome.send !== false) {
 			const origin = (env.ORIGIN ?? '').replace(/\/$/, '');
 			const url = `${origin}/${lang}/subscribe/confirm?token=${outcome.token}`;
+			const optOut = `${origin}/${lang}/unsubscribe?token=${outcome.token}`;
 			try {
-				await sendMailOrDevLog({ to: email, ...subscriptionConfirmMail(lang, url) });
+				await sendMailOrDevLog({ to: email, ...subscriptionConfirmMail(lang, url, optOut) });
 			} catch (error) {
 				console.error('[subscribe] confirmation mail failed', error);
 				return fail(503, { message: m.subscribe_err_mail() });

@@ -54,22 +54,26 @@ export function resetPasswordMail(lang: MailLang, url: string): RenderedMail {
 	}
 }
 
-export function subscriptionConfirmMail(lang: MailLang, url: string): RenderedMail {
+export function subscriptionConfirmMail(
+	lang: MailLang,
+	url: string,
+	unsubscribeUrl: string
+): RenderedMail {
 	switch (lang) {
 		case 'zh-cn':
 			return {
 				subject: '确认订阅',
-				text: `请打开下面的链接确认订阅：\n\n${url}\n\n如果这不是你本人的操作，忽略本邮件即可，地址不会被加入名单。\n`
+				text: `请打开下面的链接确认订阅：\n\n${url}\n\n如果这不是你本人的操作，忽略本邮件即可，地址不会被加入名单。\n如要彻底阻止该地址接收邮件：\n${unsubscribeUrl}\n`
 			};
 		case 'ja':
 			return {
 				subject: '購読の確認',
-				text: `以下のリンクを開いて購読を確定してください。\n\n${url}\n\n心当たりがない場合はこのメールを破棄してください。アドレスは登録されません。\n`
+				text: `以下のリンクを開いて購読を確定してください。\n\n${url}\n\n心当たりがない場合はこのメールを破棄してください。アドレスは登録されません。\n今後このアドレスへの配信を完全に止める場合：\n${unsubscribeUrl}\n`
 			};
 		default:
 			return {
 				subject: 'Confirm your subscription',
-				text: `Open the link below to confirm your subscription:\n\n${url}\n\nIf you did not request this, ignore this email — the address stays off the list.\n`
+				text: `Open the link below to confirm your subscription:\n\n${url}\n\nIf you did not request this, ignore this email — the address stays off the list.\nTo block this address permanently:\n${unsubscribeUrl}\n`
 			};
 	}
 }

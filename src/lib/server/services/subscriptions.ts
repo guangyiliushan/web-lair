@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { subscriptions } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
@@ -24,6 +24,8 @@ const EMAIL_MAX = 254;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** 32 random bytes, base64url → 43 chars. */
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
+/** A still-pending address is not re-mailed (nor its live link voided) inside this window. */
+const RESEND_COOLDOWN_MS = 15 * 60 * 1000;
 
 export function normalizeEmail(raw: string): string | null {
 	const email = raw.trim().toLowerCase();
@@ -45,7 +47,7 @@ export function isSubscriptionToken(value: string): boolean {
 }
 
 export type RequestSubscriptionResult =
-	{ kind: 'pending'; token: string } | { kind: 'already-subscribed' };
+	{ kind: 'pending'; token: string; send: boolean } | { kind: 'already-subscribed' };
 
 export async function requestSubscription(input: {
 	email: string;
@@ -60,12 +62,21 @@ export async function requestSubscription(input: {
 
 	if (existing?.status === 'subscribed') return { kind: 'already-subscribed' };
 
+	// Cooldown: a pending address keeps the token already mailed to it and gets
+	// no second message — a form spammer cannot flood an inbox or void the link
+	// the recipient already holds.
+	const updatedAt = existing?.updatedAt instanceof Date ? existing.updatedAt.getTime() : 0;
+	if (existing?.status === 'pending' && Date.now() - updatedAt < RESEND_COOLDOWN_MS) {
+		return { kind: 'pending', token: existing.token, send: false };
+	}
+
 	const token = newSubscriptionToken();
 	if (existing) {
 		// pending (resend) or unsubscribed (re-subscribe): a fresh token is the
 		// only valid confirmation link; verified_at returns to null per the
 		// monotonic-timestamp CHECK.
-		await db
+		// Conditional write: a concurrent confirm must win over this resubmit.
+		const updated = await db
 			.update(subscriptions)
 			.set({
 				status: 'pending',
@@ -74,8 +85,10 @@ export async function requestSubscription(input: {
 				source: input.source,
 				verifiedAt: null
 			})
-			.where(eq(subscriptions.id, existing.id));
-		return { kind: 'pending', token };
+			.where(and(eq(subscriptions.id, existing.id), ne(subscriptions.status, 'subscribed')))
+			.returning({ id: subscriptions.id });
+		if (updated.length === 0) return { kind: 'already-subscribed' };
+		return { kind: 'pending', token, send: true };
 	}
 
 	try {
@@ -94,13 +107,15 @@ export async function requestSubscription(input: {
 				.from(subscriptions)
 				.where(eq(subscriptions.email, input.email))
 				.limit(1);
-			if (again?.status === 'subscribed') return { kind: 'already-subscribed' };
-			return { kind: 'pending', token: again?.token ?? token };
+			if (!again) throw error;
+			if (again.status === 'subscribed') return { kind: 'already-subscribed' };
+			// The concurrent winner owns the mail for this address.
+			return { kind: 'pending', token: again.token, send: false };
 		}
 		throw error;
 	}
 
-	return { kind: 'pending', token };
+	return { kind: 'pending', token, send: true };
 }
 
 export interface SubscriptionLookup {
@@ -109,13 +124,19 @@ export interface SubscriptionLookup {
 }
 
 export async function subscriptionByToken(token: string): Promise<SubscriptionLookup | null> {
-	if (!isSubscriptionToken(token)) return null;
+	if (!isSubscriptionToken(token)) {
+		console.warn('[subscribe] token rejected: malformed');
+		return null;
+	}
 	const [row] = await db
 		.select()
 		.from(subscriptions)
 		.where(eq(subscriptions.token, token))
 		.limit(1);
-	if (!row) return null;
+	if (!row) {
+		console.warn('[subscribe] token rejected: unknown');
+		return null;
+	}
 	return { status: row.status as SubscriptionStatus, email: row.email };
 }
 
@@ -139,6 +160,13 @@ export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
 	const row = await subscriptionByToken(token);
 	if (!row) return 'invalid';
 	if (row.status === 'unsubscribed') return 'already-unsubscribed';
+	if (row.status === 'pending') {
+		// Never confirmed: there is nothing to suppress, and the CHECK requires
+		// verified_at on any non-pending row. Drop the row so no confirmation
+		// mail can reach an address that asked to opt out.
+		await db.delete(subscriptions).where(eq(subscriptions.token, token));
+		return 'unsubscribed';
+	}
 	await db
 		.update(subscriptions)
 		.set({ status: 'unsubscribed', unsubscribedAt: new Date() })

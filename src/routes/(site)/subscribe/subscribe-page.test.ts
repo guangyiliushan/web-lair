@@ -7,7 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * cannot be sent.
  */
 const { state, requestSubscriptionMock, sendMailMock, rateLimitMock } = vi.hoisted(() => {
-	const state = { env: { ORIGIN: 'https://lair.example' } as Record<string, string> };
+	const state = {
+		env: { ORIGIN: 'https://lair.example' } as Record<string, string>,
+		locale: 'zh-cn'
+	};
 	const requestSubscriptionMock = vi.fn();
 	const sendMailMock = vi.fn();
 	const rateLimitMock = vi.fn(async () => ({ allowed: true, count: 1 }));
@@ -15,7 +18,7 @@ const { state, requestSubscriptionMock, sendMailMock, rateLimitMock } = vi.hoist
 });
 
 vi.mock('$env/dynamic/private', () => ({ env: state.env }));
-vi.mock('$lib/paraglide/runtime', () => ({ getLocale: () => 'zh-cn' }));
+vi.mock('$lib/paraglide/runtime', () => ({ getLocale: () => state.locale }));
 vi.mock('$lib/paraglide/messages', () => ({
 	m: {
 		subscribe_err_email: () => 'err-email',
@@ -78,6 +81,12 @@ describe('subscribe action', () => {
 		};
 		expect(result.status).toBe(429);
 		expect(result.data.message).toBe('err-rate');
+		expect(rateLimitMock).toHaveBeenCalledWith(
+			expect.anything(),
+			'limits:subscribe:203.0.113.7',
+			10,
+			3600
+		);
 		expect(requestSubscriptionMock).not.toHaveBeenCalled();
 	});
 
@@ -90,12 +99,36 @@ describe('subscribe action', () => {
 			lang: 'zh-cn',
 			source: 'subscribe-page'
 		});
+		expect(sendMailMock).toHaveBeenCalledTimes(1);
 		expect(sendMailMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				to: 'reader@example.com',
+				subject: '确认订阅',
 				text: expect.stringContaining('https://lair.example/zh-cn/subscribe/confirm?token=tok_1')
 			})
 		);
+		expect(sendMailMock.mock.calls[0]![0].text).toContain(
+			'https://lair.example/zh-cn/unsubscribe?token=tok_1'
+		);
+	});
+
+	it('falls back to English for a locale outside the supported set', async () => {
+		state.locale = 'de';
+		requestSubscriptionMock.mockResolvedValueOnce({ kind: 'pending', token: 'tok_2' });
+		await actions.default(event({ email: 'a@b.co' }));
+		expect(requestSubscriptionMock).toHaveBeenCalledWith(expect.objectContaining({ lang: 'en' }));
+		state.locale = 'zh-cn';
+	});
+
+	it('does not re-send while a pending link is still inside its cooldown', async () => {
+		requestSubscriptionMock.mockResolvedValueOnce({
+			kind: 'pending',
+			token: 'tok_1',
+			send: false
+		});
+		const result = await actions.default(event({ email: 'a@b.co' }));
+		expect(result).toEqual({ success: true });
+		expect(sendMailMock).not.toHaveBeenCalled();
 	});
 
 	it('does not send a mail for an already-subscribed address but keeps the same answer', async () => {
