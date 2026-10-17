@@ -1,6 +1,8 @@
 import { error } from '@sveltejs/kit';
 import { isRegisteredKey } from '$lib/server/services/files';
 import { getStorage } from '$lib/server/storage';
+import { getCache } from '$lib/server/cache';
+import { rateLimit } from '$lib/server/cache/store';
 import { KEY_PATTERN } from '$lib/media/keys';
 import type { RequestHandler } from './$types';
 
@@ -29,6 +31,9 @@ const ATTACHMENT_EXTS = new Set(['pdf', 'zip', 'txt', 'md']);
 
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 const PRIVATE = 'private, no-store';
+
+/** One gallery page bursts 30+ images; the bucket only catches scrapers. */
+const MEDIA_RATE_LIMIT = { limit: 300, windowSeconds: 60 } as const;
 
 interface Access {
 	key: string;
@@ -62,7 +67,41 @@ function objectHeaders(access: Access, contentType: string | null): Headers {
 	return headers;
 }
 
-export const GET: RequestHandler = async ({ params, locals }) => {
+/**
+ * `getClientAddress()` throws when adapter-node cannot resolve an address
+ * (dev without ADDRESS_HEADER); that collapses to one shared bucket, which is
+ * exactly the fail-open shape we want.
+ */
+async function throttled(getClientAddress: () => string): Promise<boolean> {
+	const address = (() => {
+		try {
+			return getClientAddress() || 'unknown';
+		} catch {
+			// dev without ADDRESS_HEADER: one shared bucket
+			return 'unknown';
+		}
+	})();
+	const result = await rateLimit(
+		getCache(),
+		`limits:i:${address}`,
+		MEDIA_RATE_LIMIT.limit,
+		MEDIA_RATE_LIMIT.windowSeconds
+	);
+	return !result.allowed;
+}
+
+function tooManyRequests(): Response {
+	return new Response(null, {
+		status: 429,
+		headers: {
+			'retry-after': String(MEDIA_RATE_LIMIT.windowSeconds),
+			'cache-control': 'no-store'
+		}
+	});
+}
+
+export const GET: RequestHandler = async ({ params, locals, getClientAddress }) => {
+	if (await throttled(getClientAddress)) return tooManyRequests();
 	const access = await resolveAccess(params, locals);
 
 	const object = await getStorage().get(access.key);
@@ -74,7 +113,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	return new Response(object.body, { headers });
 };
 
-export const HEAD: RequestHandler = async ({ params, locals }) => {
+export const HEAD: RequestHandler = async ({ params, locals, getClientAddress }) => {
+	if (await throttled(getClientAddress)) return tooManyRequests();
 	const access = await resolveAccess(params, locals);
 
 	const object = await getStorage().head(access.key);

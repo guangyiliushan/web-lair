@@ -5,9 +5,12 @@ const storageMock = vi.hoisted(() => ({
 	head: vi.fn()
 }));
 const isRegisteredKeyMock = vi.hoisted(() => vi.fn());
+const rateLimitMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$lib/server/storage', () => ({ getStorage: () => storageMock }));
 vi.mock('$lib/server/services/files', () => ({ isRegisteredKey: isRegisteredKeyMock }));
+vi.mock('$lib/server/cache', () => ({ getCache: () => ({}) }));
+vi.mock('$lib/server/cache/store', () => ({ rateLimit: rateLimitMock }));
 
 import { GET, HEAD } from './[...key]/+server';
 
@@ -22,7 +25,11 @@ const DOC_KEY = `${SHA.slice(0, 2)}/${SHA}.pdf`;
 const ADMIN_LOCALS = { admin: { userId: 'admin-1', role: 'owner' } };
 
 function event(key: string, locals: unknown = {}) {
-	return { params: { key }, locals } as unknown as Parameters<typeof GET>[0];
+	return {
+		params: { key },
+		locals,
+		getClientAddress: () => '203.0.113.9'
+	} as unknown as Parameters<typeof GET>[0];
 }
 
 function bodyOf(text: string): ReadableStream<Uint8Array> {
@@ -33,6 +40,8 @@ beforeEach(() => {
 	storageMock.get.mockReset();
 	storageMock.head.mockReset();
 	isRegisteredKeyMock.mockReset();
+	rateLimitMock.mockReset();
+	rateLimitMock.mockResolvedValue({ allowed: true, count: 1 });
 });
 
 describe('/i/<key> proxy (T9)', () => {
@@ -209,5 +218,21 @@ describe('/i/<key> proxy (T9)', () => {
 	it('HEAD maps missing objects to 404', async () => {
 		storageMock.head.mockResolvedValueOnce(null);
 		await expect(HEAD(event(VARIANT_KEY))).rejects.toMatchObject({ status: 404 });
+	});
+
+	it('throttles a client over the media bucket without touching storage', async () => {
+		rateLimitMock.mockResolvedValueOnce({ allowed: false, count: 301 });
+		const res = await GET(event(VARIANT_KEY));
+		expect(res.status).toBe(429);
+		expect(res.headers.get('retry-after')).toBe('60');
+		expect(rateLimitMock).toHaveBeenCalledWith(expect.anything(), 'limits:i:203.0.113.9', 300, 60);
+		expect(storageMock.get).not.toHaveBeenCalled();
+	});
+
+	it('limits HEAD too (HEAD must not be a free bypass)', async () => {
+		rateLimitMock.mockResolvedValueOnce({ allowed: false, count: 301 });
+		const res = await HEAD(event(VARIANT_KEY));
+		expect(res.status).toBe(429);
+		expect(storageMock.head).not.toHaveBeenCalled();
 	});
 });
