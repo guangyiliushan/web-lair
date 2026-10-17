@@ -36,14 +36,27 @@
 	let activeThread = $state<ThreadRoot | null>(null);
 	let threadRect = $state<{ left: number; top: number } | null>(null);
 	let panelEl = $state<HTMLElement | null>(null);
+	/** Narrow viewport: composer and thread become bottom sheets (spec §5). */
+	let narrow = $state(false);
+	/** Desktop hover summary card (spec §7); decorative, never interactive. */
+	let hovered = $state<{ root: ThreadRoot; left: number; top: number; above: boolean } | null>(
+		null
+	);
 
 	let scheduleTimer = 0;
+	let hoverTimer = 0;
 
 	function refreshBlocks(host: HTMLElement) {
 		blocks = collectDomBlocks(host);
 	}
 
+	function clearHover() {
+		window.clearTimeout(hoverTimer);
+		hovered = null;
+	}
+
 	function hideFloating() {
+		clearHover();
 		if (composerOpen) return;
 		selected = null;
 	}
@@ -65,6 +78,7 @@
 
 	function openComposer() {
 		if (!selected) return;
+		clearHover();
 		composerOpen = true;
 	}
 
@@ -77,6 +91,7 @@
 	function openThread(mark: Element) {
 		const commentId = mark.getAttribute('data-cid');
 		if (!commentId) return;
+		clearHover();
 		const rect = mark.getBoundingClientRect();
 		threadRect = {
 			left: Math.min(Math.max(rect.left, 8), Math.max(8, window.innerWidth - 360)),
@@ -96,16 +111,32 @@
 		threadRect = null;
 	}
 
+	function showHover(mark: Element, commentId: string) {
+		if (composerOpen || activeThread) return;
+		const root = threads.roots.find((item) => item.id === commentId);
+		if (!root) return;
+		const rect = mark.getBoundingClientRect();
+		const above = rect.top > 110;
+		hovered = {
+			root,
+			left: Math.min(Math.max(rect.left, 8), Math.max(8, window.innerWidth - 272)),
+			top: above ? rect.top - 8 : rect.bottom + 8,
+			above
+		};
+	}
+
 	$effect(() => {
 		const host = container;
 		if (!host) return;
 		refreshBlocks(host);
+		const hoverCapable = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 		const onSelectionEvent = () => scheduleSelection(host);
 		const onPointerUp = () => scheduleSelection(host);
 		const onScroll = () => hideFloating();
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== 'Escape') return;
+			clearHover();
 			if (composerOpen) closeComposer();
 			else if (activeThread) closeThread();
 		};
@@ -114,6 +145,23 @@
 			const mark = target?.closest?.('.wl-cm');
 			if (!mark || !host.contains(mark)) return;
 			openThread(mark);
+		};
+		const onPointerOver = (event: PointerEvent) => {
+			if (!hoverCapable || event.pointerType !== 'mouse') return;
+			const target = event.target as Element | null;
+			const mark = target?.closest?.('.wl-cm');
+			if (!mark || !host.contains(mark)) return;
+			const commentId = mark.getAttribute('data-cid');
+			if (!commentId) return;
+			window.clearTimeout(hoverTimer);
+			// Hover is a preview, not a control: delay it so a passing pointer
+			// does not flicker cards over the text.
+			hoverTimer = window.setTimeout(() => showHover(mark, commentId), 150);
+		};
+		const onPointerOut = (event: PointerEvent) => {
+			const target = event.target as Element | null;
+			if (!target?.closest?.('.wl-cm')) return;
+			clearHover();
 		};
 		const onDocPointerDown = (event: PointerEvent) => {
 			const target = event.target as Node | null;
@@ -135,6 +183,8 @@
 		document.addEventListener('keydown', onKeyDown);
 		document.addEventListener('pointerdown', onDocPointerDown);
 		host.addEventListener('click', onClick);
+		host.addEventListener('pointerover', onPointerOver);
+		host.addEventListener('pointerout', onPointerOut);
 
 		return () => {
 			window.clearTimeout(scheduleTimer);
@@ -145,7 +195,21 @@
 			document.removeEventListener('keydown', onKeyDown);
 			document.removeEventListener('pointerdown', onDocPointerDown);
 			host.removeEventListener('click', onClick);
+			host.removeEventListener('pointerover', onPointerOver);
+			host.removeEventListener('pointerout', onPointerOut);
 		};
+	});
+
+	// Desktop popover / mobile bottom sheet (spec §5). CSS cannot switch the
+	// inline position, so the shape is a state decision.
+	$effect(() => {
+		const query = window.matchMedia('(max-width: 40rem)');
+		const update = () => {
+			narrow = query.matches;
+		};
+		update();
+		query.addEventListener('change', update);
+		return () => query.removeEventListener('change', update);
 	});
 
 	// Keep the composer panel focused when it opens (popover etiquette).
@@ -166,6 +230,21 @@
 <!-- Client-only mount marker: e2e readiness (hydration) and block count for diagnostics. -->
 <span data-slot="segment-layer" data-blocks={blocks.length} hidden></span>
 
+{#if hovered && !selected && !composerOpen && !activeThread}
+	<!-- Desktop preview only: aria-hidden because the popover is the surface. -->
+	<div
+		class="pointer-events-none fixed z-40 w-64 max-w-[calc(100vw-1rem)] rounded-md border border-border bg-popover p-2 text-xs text-popover-foreground shadow-md"
+		class:-translate-y-full={hovered.above}
+		style={`left:${hovered.left}px;top:${hovered.top}px`}
+		aria-hidden="true"
+		data-slot="comment-mark-hover"
+	>
+		<p class="line-clamp-2 text-muted-foreground">{hovered.root.anchor?.quote ?? ''}</p>
+		<p class="mt-1 truncate font-medium">{hovered.root.author ?? ''}</p>
+		<p class="line-clamp-2 text-muted-foreground">{hovered.root.text}</p>
+	</div>
+{/if}
+
 {#if selected && !composerOpen && !activeThread}
 	<button
 		type="button"
@@ -181,12 +260,18 @@
 {#if composerOpen && selected}
 	<div
 		bind:this={panelEl}
-		class="fixed z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card p-3 shadow-xl"
-		style={floatingStyle}
+		class={narrow
+			? 'fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-auto rounded-t-xl border-t border-border bg-card p-4 shadow-xl'
+			: 'fixed z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card p-3 shadow-xl'}
+		style={narrow ? '' : floatingStyle}
 		role="dialog"
 		aria-label={m.comment_segment_action()}
 		data-slot="comment-selection-panel"
+		data-shape={narrow ? 'sheet' : 'popover'}
 	>
+		{#if narrow}
+			<div class="mx-auto mb-2 h-1 w-10 rounded-full bg-border" aria-hidden="true"></div>
+		{/if}
 		<p class="mb-2 line-clamp-2 text-xs text-muted-foreground">
 			{m.comment_segment_quote({ quote: selected.exact })}
 		</p>
@@ -229,11 +314,14 @@
 
 {#if activeThread && threadRect}
 	<div
-		class="fixed z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card shadow-xl"
-		style={`left:${threadRect.left}px;top:${threadRect.top}px`}
+		class={narrow
+			? 'fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-auto rounded-t-xl border-t border-border bg-card shadow-xl'
+			: 'fixed z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card shadow-xl'}
+		style={narrow ? '' : `left:${threadRect.left}px;top:${threadRect.top}px`}
 		role="dialog"
 		aria-label={m.comment_segment_thread()}
 		data-slot="comment-thread-popover"
+		data-shape={narrow ? 'sheet' : 'popover'}
 	>
 		<div class="flex items-center justify-between border-b border-border/50 px-3 py-2">
 			<span class="text-xs font-medium text-muted-foreground">{m.comment_segment_thread()}</span>

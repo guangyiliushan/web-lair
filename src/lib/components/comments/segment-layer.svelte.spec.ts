@@ -39,6 +39,46 @@ async function select(paragraph: HTMLElement, needle: string) {
 	await new Promise((resolve) => setTimeout(resolve, 200));
 }
 
+/** Force media-query answers so shape/hover branches are testable headlessly. */
+function mockMatchMedia(matches: (query: string) => boolean): () => void {
+	const original = window.matchMedia;
+	window.matchMedia = ((query: string) => ({
+		matches: matches(query),
+		media: query,
+		onchange: null,
+		addEventListener: () => {},
+		removeEventListener: () => {},
+		addListener: () => {},
+		removeListener: () => {},
+		dispatchEvent: () => false
+	})) as typeof window.matchMedia;
+	return () => {
+		window.matchMedia = original;
+	};
+}
+
+const layerThreads: ThreadsPage = {
+	roots: [
+		{
+			id: 'root-1',
+			text: '就地线程内容',
+			author: 'Alice',
+			avatar: null,
+			isOwner: false,
+			isPending: false,
+			createdAt: new Date('2026-10-01T00:00:00Z'),
+			editedAt: null,
+			isMine: false,
+			pin: false,
+			isDeleted: false,
+			anchor: { quote: '选中', orphaned: false, targetId: 'c-root-1' },
+			replies: []
+		}
+	],
+	visibleCount: 1,
+	truncated: false
+};
+
 afterEach(() => {
 	for (const element of hosts.splice(0)) element.remove();
 	window.getSelection()?.removeAllRanges();
@@ -131,27 +171,6 @@ describe('segment comment layer', () => {
 
 	it('opens the in-place thread when a mark is clicked', async () => {
 		const container = host('<p>前文<span class="wl-cm" data-cid="root-1">选中</span>后文</p>');
-		const layerThreads: ThreadsPage = {
-			roots: [
-				{
-					id: 'root-1',
-					text: '就地线程内容',
-					author: 'Alice',
-					avatar: null,
-					isOwner: false,
-					isPending: false,
-					createdAt: new Date('2026-10-01T00:00:00Z'),
-					editedAt: null,
-					isMine: false,
-					pin: false,
-					isDeleted: false,
-					anchor: { quote: '选中', orphaned: false, targetId: 'c-root-1' },
-					replies: []
-				}
-			],
-			visibleCount: 1,
-			truncated: false
-		};
 		render(SegmentCommentLayer, {
 			container,
 			threads: layerThreads,
@@ -165,5 +184,54 @@ describe('segment comment layer', () => {
 		const popover = document.querySelector<HTMLElement>('[data-slot="comment-thread-popover"]');
 		expect(popover).not.toBeNull();
 		expect(popover?.textContent).toContain('就地线程内容');
+	});
+
+	it('shows the summary card while hovering a mark (desktop pointer)', async () => {
+		const restore = mockMatchMedia((query) => query.includes('hover'));
+		try {
+			const container = host('<p>前文<span class="wl-cm" data-cid="root-1">选中</span>后文</p>');
+			render(SegmentCommentLayer, {
+				container,
+				threads: layerThreads,
+				canComment: true,
+				loginUrl: null
+			});
+			const mark = container.querySelector('.wl-cm') as HTMLElement;
+			mark.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+			await new Promise((resolve) => setTimeout(resolve, 220));
+			const card = document.querySelector<HTMLElement>('[data-slot="comment-mark-hover"]');
+			expect(card).not.toBeNull();
+			expect(card?.textContent).toContain('就地线程内容');
+			expect(card?.textContent).toContain('Alice');
+			expect(card?.getAttribute('aria-hidden')).toBe('true');
+			mark.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerType: 'mouse' }));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(document.querySelector('[data-slot="comment-mark-hover"]')).toBeNull();
+		} finally {
+			restore();
+		}
+	});
+
+	it('renders the composer as a bottom sheet on narrow viewports', async () => {
+		const restore = mockMatchMedia((query) => query.includes('max-width'));
+		try {
+			const container = host('<p>第一段：选择这段文字来评论。</p>');
+			const paragraph = container.querySelector('p') as HTMLElement;
+			render(SegmentCommentLayer, {
+				container,
+				threads,
+				canComment: true,
+				loginUrl: null
+			});
+			await select(paragraph, '选择这段文字');
+			document.querySelector<HTMLButtonElement>('[data-slot="comment-selection-action"]')?.click();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			const panel = document.querySelector<HTMLElement>('[data-slot="comment-selection-panel"]');
+			expect(panel?.getAttribute('data-shape')).toBe('sheet');
+			expect(panel?.className).toContain('inset-x-0');
+			expect(panel?.getAttribute('style')).toBe('');
+		} finally {
+			restore();
+		}
 	});
 });
