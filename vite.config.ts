@@ -13,6 +13,26 @@ const dirname =
 /** Cookie-first chain for the exempt surfaces (ledger §9.18.1/§9.18.3). */
 const COOKIE_CHAIN = ['cookie', 'preferredLanguage', 'baseLocale'] as const;
 
+/**
+ * Port for the Vitest browser API server.
+ *
+ * Vitest defaults to 63315, which on Windows can land inside a Hyper-V/WSL
+ * reserved range (this host reserves 63269-63368, so bind() fails with EACCES
+ * on ::1). `port: 0` is not an escape hatch: vitest resolves a falsy port back
+ * to the default (`resolveApiServerConfig`), and it does not retry on EADDRINUSE
+ * for the browser server. Default to a port below the Windows ephemeral range
+ * (49152+) so the OS never hands it out, and let any machine or checkout override
+ * it when the default is taken.
+ */
+function browserApiPort(): number {
+	const raw = process.env.VITEST_BROWSER_API_PORT;
+	const port = Number(raw ?? 5199);
+	if (!Number.isInteger(port) || port < 1 || port > 65535) {
+		throw new Error(`VITEST_BROWSER_API_PORT must be a TCP port (1-65535), got "${raw}"`);
+	}
+	return port;
+}
+
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
 	plugins: [
@@ -78,6 +98,7 @@ export default defineConfig({
 						enabled: true,
 						provider: playwright(),
 						testerHtmlPath: './vitest-tester.html',
+						api: { host: '127.0.0.1', port: browserApiPort() },
 						viewport: { width: 1280, height: 720 },
 						instances: [
 							{
