@@ -9,12 +9,14 @@ import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
 import { getOption } from '$lib/server/config/options-registry';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
-import { loadThreads, submitComment } from '$lib/server/services/comments';
+import { submitComment } from '$lib/server/services/comments';
 import {
 	commentDeleteAction,
 	commentEditAction,
-	commentSubmitResponse
+	commentSubmitResponse,
+	readCommentAnchorDraft
 } from '$lib/server/services/comments-actions';
+import { renderDiscussion } from '$lib/server/services/comment-render';
 import {
 	findVisibleNote,
 	getNoteBody,
@@ -129,8 +131,6 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 				coordinates: note.coordinates,
 				location: note.location
 			};
-	const html = body ? await renderMarkdownToHtml(body) : '';
-
 	// hreflang set: every visible language of the translation group, in
 	// locale order - self included; x-default stays deferred.
 	const localeOrder = locales as readonly string[];
@@ -150,6 +150,20 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 		? null
 		: `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
 
+	// Open threads own the render: block directory + segment marks are derived
+	// from the same tree the reader gets (comment P3b). A locked diary renders
+	// no body at all, so the plain renderer path stays empty.
+	const rendered =
+		note.allowComment && open
+			? await renderDiscussion({
+					markdown: body,
+					targetType: 'note',
+					targetId: note.id,
+					viewerId: user?.id ?? null
+				})
+			: null;
+	const html = rendered ? rendered.html : body ? await renderMarkdownToHtml(body) : '';
+
 	return {
 		seo: { path: `/notes/${note.slug}`, alternates },
 		note: {
@@ -168,10 +182,7 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 		html,
 		gate: { locked: note.locked, unlocked },
 		viewer: { emailVerified, canComment, loginUrl },
-		discussion:
-			note.allowComment && open
-				? await loadThreads({ targetType: 'note', targetId: note.id, viewerId: user?.id ?? null })
-				: null
+		discussion: rendered?.discussion ?? null
 	};
 };
 
@@ -292,6 +303,11 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 	const gate = await resolveGatedNote(event, now);
 	if (!gate) return fail(404, { message: m.comment_error_unavailable() });
 
+	// Anchors belong to roots (spec §2): replies never carry one, even if the
+	// form smuggles the fields in.
+	const anchorRead = isReply ? ({ kind: 'none' } as const) : readCommentAnchorDraft(form);
+	if (anchorRead.kind === 'invalid') return fail(400, { message: m.comment_error_generic() });
+
 	const profile = event.locals.profile;
 	const result = await submitComment({
 		targetType: 'note',
@@ -299,6 +315,7 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 		lang,
 		unlockVerified: gate.unlockVerified,
 		parentId,
+		anchor: anchorRead.kind === 'ok' ? anchorRead.draft : null,
 		text,
 		user,
 		author: profile?.displayName ?? user.name ?? 'Reader',

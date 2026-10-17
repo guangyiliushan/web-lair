@@ -122,6 +122,48 @@ describe('post comment actions', () => {
 		expect(state.submitCalls).toHaveLength(0);
 	});
 
+	it('forwards a valid segment-anchor draft and rejects a malformed one', async () => {
+		const ok = await commentAction(
+			makeEvent(
+				fd({
+					text: 'anchored',
+					anchorOrd: '1',
+					anchorStart: '0',
+					anchorEnd: '4',
+					anchorExact: 'text'
+				})
+			)
+		);
+		expect(ok).toEqual({ submitted: 'pending' });
+		expect(state.submitCalls[0]?.anchor).toEqual({ ord: 1, start: 0, end: 4, exact: 'text' });
+
+		state.submitCalls = [];
+		const bad = await commentAction(
+			makeEvent(
+				fd({ text: 'anchored', anchorOrd: '1', anchorStart: '0', anchorEnd: '1', anchorExact: 'x' })
+			)
+		);
+		expect(bad).toMatchObject({ status: 400, data: { message: 'comment_error_generic' } });
+		expect(state.submitCalls).toHaveLength(0);
+	});
+
+	it('never forwards an anchor on a reply (anchors live on roots)', async () => {
+		const result = await replyAction(
+			makeEvent(
+				fd({
+					text: 'reply',
+					parentId: '00000000-0000-7000-8000-000000000001',
+					anchorOrd: '0',
+					anchorStart: '0',
+					anchorEnd: '2',
+					anchorExact: 'ab'
+				})
+			)
+		);
+		expect(result).toEqual({ submitted: 'pending' });
+		expect(state.submitCalls[0]?.anchor).toBeNull();
+	});
+
 	it('resolves the target through the service resolver and freezes the snapshot', async () => {
 		state.profile = { displayName: 'Dee', avatarUrl: 'https://cdn.example/a.png' };
 		const result = await commentAction(makeEvent(fd({ text: 'hello' })));

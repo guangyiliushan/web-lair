@@ -6,16 +6,14 @@ import { db } from '$lib/server/db';
 import { categories, posts } from '$lib/server/db/content';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { requireUser } from '$lib/server/authz';
-import {
-	loadThreads,
-	resolveCommentPostTarget,
-	submitComment
-} from '$lib/server/services/comments';
+import { resolveCommentPostTarget, submitComment } from '$lib/server/services/comments';
 import {
 	commentDeleteAction,
 	commentEditAction,
-	commentSubmitResponse
+	commentSubmitResponse,
+	readCommentAnchorDraft
 } from '$lib/server/services/comments-actions';
+import { renderDiscussion } from '$lib/server/services/comment-render';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import { findSlugTargetId } from '$lib/server/services/slug-resolver';
 import { formatDate } from '$lib/utils/i18n';
@@ -109,8 +107,6 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		.sort((a, b) => localeOrder.indexOf(a.lang) - localeOrder.indexOf(b.lang))
 		.map((sibling) => ({ lang: sibling.lang, path: `/posts/${sibling.slug}` }));
 
-	const html = row.content ? await renderMarkdownToHtml(row.content) : '';
-
 	// Viewer state for the comment section (spec §1 "已验证读者"): guests get
 	// the login link with a return path to this localized URL; signed-in
 	// readers need a verified email before they can submit.
@@ -120,6 +116,23 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const loginUrl = user
 		? null
 		: `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
+
+	// When the thread is open the comment read path owns rendering: it derives
+	// the block directory from the same tree and applies segment marks before
+	// serializing (comment P3b). Closed threads keep the plain renderer.
+	const rendered = row.allowComment
+		? await renderDiscussion({
+				markdown: row.content ?? '',
+				targetType: 'post',
+				targetId: row.id,
+				viewerId: user?.id ?? null
+			})
+		: null;
+	const html = rendered
+		? rendered.html
+		: row.content
+			? await renderMarkdownToHtml(row.content)
+			: '';
 
 	return {
 		seo: {
@@ -135,13 +148,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		},
 		html,
 		viewer: { emailVerified, canComment, loginUrl },
-		discussion: row.allowComment
-			? await loadThreads({
-					targetType: 'post',
-					targetId: row.id,
-					viewerId: user?.id ?? null
-				})
-			: null
+		discussion: rendered?.discussion ?? null
 	};
 };
 
@@ -168,12 +175,18 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 	const targetId = await resolveCommentPostTarget(lang, event.params.slug, now);
 	if (!targetId) return fail(404, { message: m.comment_error_unavailable() });
 
+	// Anchors belong to roots (spec §2): replies never carry one, even if the
+	// form smuggles the fields in.
+	const anchorRead = isReply ? ({ kind: 'none' } as const) : readCommentAnchorDraft(form);
+	if (anchorRead.kind === 'invalid') return fail(400, { message: m.comment_error_generic() });
+
 	const profile = event.locals.profile;
 	const result = await submitComment({
 		targetType: 'post',
 		targetId,
 		lang,
 		parentId,
+		anchor: anchorRead.kind === 'ok' ? anchorRead.draft : null,
 		text,
 		user,
 		author: profile?.displayName ?? user.name ?? 'Reader',

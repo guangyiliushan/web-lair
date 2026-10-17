@@ -31,6 +31,11 @@ vi.mock('$lib/paraglide/messages', () => ({
 	m: new Proxy({}, { get: (_target, prop) => () => String(prop) })
 }));
 vi.mock('$lib/server/markdown', () => ({ renderMarkdownToHtml: vi.fn(async () => '') }));
+vi.mock('$lib/server/services/comment-render', () => ({
+	// Slug-fallback tests do not exercise the thread read path; the route only
+	// needs the rendered pair (comment P3b entry).
+	renderDiscussion: vi.fn(async () => ({ html: '', discussion: null }))
+}));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
 import { load } from './+page.server';

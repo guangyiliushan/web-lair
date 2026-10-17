@@ -69,6 +69,18 @@ vi.mock('$lib/server/config/options-registry', () => ({
 vi.mock('$lib/server/markdown', () => ({
 	renderMarkdownToHtml: service.renderMarkdownToHtml
 }));
+// The route renders through the comment read entry (comment P3b); pass the
+// input through so the existing `loadThreads` / renderer assertions stay the
+// contract under test.
+vi.mock('$lib/server/services/comment-render', () => ({
+	renderDiscussion: vi.fn(async (input: { markdown: string } & Record<string, unknown>) => {
+		const { markdown, ...rest } = input;
+		return {
+			html: await service.renderMarkdownToHtml(markdown),
+			discussion: await service.loadThreads(rest)
+		};
+	})
+}));
 vi.mock('$lib/server/authz', () => ({
 	requireUser: service.requireUser
 }));
