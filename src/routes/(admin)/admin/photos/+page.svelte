@@ -8,6 +8,7 @@
 	import { photoTileSrc } from '$lib/components/photos/photo-tile';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { applyUploadResults, uploadEachFile } from '$lib/utils/upload-each';
 	import { locales } from '$lib/paraglide/runtime';
 	import { localeLabels } from '$lib/stores/locale.svelte';
 	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
@@ -20,6 +21,36 @@
 	let { data, form }: PageProps = $props();
 
 	type PhotoRow = (typeof data.photos)[number];
+
+	let uploading = $state(false);
+
+	/** Q4 (deploy note): one request per file keeps every body under BODY_SIZE_LIMIT. */
+	async function uploadAll(event: SubmitEvent) {
+		event.preventDefault();
+		const form = event.currentTarget as HTMLFormElement;
+		const input = form.querySelector<HTMLInputElement>('input[name="files"]');
+		const files = Array.from(input?.files ?? []);
+		if (files.length === 0) return;
+		if (files.length > data.limits.maxBatch) {
+			await applyUploadResults({
+				results: [],
+				message: m.admin_media_err_too_many({ count: data.limits.maxBatch })
+			});
+			return;
+		}
+		uploading = true;
+		try {
+			const outcome = await uploadEachFile({
+				action: '?/upload',
+				files,
+				fallbackMessage: m.admin_media_err_upload_failed()
+			});
+			await applyUploadResults(outcome);
+		} finally {
+			uploading = false;
+			if (input) input.value = '';
+		}
+	}
 	type UploadResult = {
 		fileName: string;
 		ok: boolean;
@@ -158,6 +189,7 @@
 			action="?/upload"
 			enctype="multipart/form-data"
 			class="flex flex-wrap items-center gap-3"
+			onsubmit={uploadAll}
 		>
 			<input
 				aria-label={m.admin_photos_pick_files()}
@@ -167,7 +199,7 @@
 				accept={ACCEPT}
 				class="text-sm file:mr-3 file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm"
 			/>
-			<Button type="submit" size="sm">
+			<Button type="submit" size="sm" disabled={uploading}>
 				<IconUpload data-icon="inline-start" />
 				{m.admin_media_upload()}
 			</Button>
