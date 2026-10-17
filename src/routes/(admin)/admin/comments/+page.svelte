@@ -135,6 +135,22 @@
 								>
 							</div>
 							<p class="mt-1.5 text-sm whitespace-pre-wrap text-muted-foreground">{entry.text}</p>
+							{#if entry.anchorQuote}
+								<!-- Segment anchor (P3b): the quote the reader selected plus
+								     its context window, straight from the stored anchor. -->
+								<div class="mt-1.5 space-y-0.5 text-xs" data-slot="comment-anchor-context">
+									<!-- Border instead of CJK quote marks: the admin i18n guard
+									     forbids hardcoded CJK, and a rule reads better anyway. -->
+									<p
+										class="line-clamp-3 border-l-2 border-border pl-2 break-words text-foreground/80"
+									>
+										{entry.anchorQuote}
+									</p>
+									{#if entry.anchorContext}
+										<p class="truncate text-muted-foreground/70">{entry.anchorContext}</p>
+									{/if}
+								</div>
+							{/if}
 							<div
 								class="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground/70"
 							>

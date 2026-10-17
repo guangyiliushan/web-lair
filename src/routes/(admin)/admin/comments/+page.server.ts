@@ -7,6 +7,7 @@ import { notes } from '$lib/server/db/content/note.schema';
 import { pages } from '$lib/server/db/content/page.schema';
 import { posts } from '$lib/server/db/content/post.schema';
 import { can, requireCommentReviewer } from '$lib/server/authz';
+import { parseCommentAnchor } from '$lib/server/comment-anchor';
 import { isUuid } from '$lib/utils/uuid';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -24,7 +25,7 @@ export const load: PageServerLoad = async (event) => {
 	// Comment P3a queue enhancement (spec §9): resolve the exclusive-arc
 	// target for all three kinds so note/page rows stop falling into
 	// "other targets"; quote/block context lands with P3b (anchors).
-	const entries = await db
+	const rows = await db
 		.select({
 			id: comments.id,
 			author: comments.author,
@@ -44,7 +45,8 @@ export const load: PageServerLoad = async (event) => {
 			noteLang: notes.lang,
 			pageId: comments.pageId,
 			pageTitle: pages.title,
-			pageSlug: pages.slug
+			pageSlug: pages.slug,
+			anchor: comments.anchor
 		})
 		.from(comments)
 		.leftJoin(posts, eq(comments.postId, posts.id))
@@ -56,6 +58,25 @@ export const load: PageServerLoad = async (event) => {
 		// (pre-release review 05-P3-2).
 		.orderBy(sql`coalesce(${comments.editedAt}, ${comments.createdAt}) desc`)
 		.limit(200);
+
+	// Segment anchors (comment P3b): the queue shows the quoted text plus its
+	// prefix/suffix window. Deliberately no block snapshot and no re-render of
+	// the target body here - the context comes from the anchor itself.
+	const entries = rows.map((row) => {
+		// Never ship the stored payload (hash/occ/ord/range/exact/prefix/suffix)
+		// to the browser: the queue renders only the excerpt and its context.
+		const { anchor: rawAnchor, ...rest } = row;
+		const anchor = parseCommentAnchor(rawAnchor);
+		return {
+			...rest,
+			anchorQuote: anchor?.quote.exact ?? null,
+			// The quote already has its own line; context contributes what sits
+			// around it (prefix + suffix), without repeating the exact text.
+			anchorContext: anchor
+				? [anchor.quote.prefix, anchor.quote.suffix].filter((part) => part.length > 0).join(' ')
+				: null
+		};
+	});
 
 	const grouped = await db
 		.select({ state: comments.state, count: sql<number>`count(*)::int` })
