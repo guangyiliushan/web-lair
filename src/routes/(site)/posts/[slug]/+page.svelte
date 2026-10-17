@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { CommentsSection } from '$lib/components/comments';
+	import { CommentsSection, SegmentCommentLayer } from '$lib/components/comments';
 	import { MarkdownRenderer } from '$lib/components/markdown';
 	import { ContentPresence } from '$lib/components/presence';
 	import { SeoHead } from '$lib/components/seo';
@@ -7,6 +7,9 @@
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
+
+	// Segment comments need the live article root (selection -> anchor).
+	let articleHost = $state<HTMLElement | null>(null);
 </script>
 
 <svelte:head>
@@ -28,9 +31,19 @@
 		</div>
 	</header>
 
-	<div class="mt-8">
+	<div class="mt-8" bind:this={articleHost}>
 		<MarkdownRenderer html={data.html} prose />
 	</div>
+
+	{#if data.discussion && articleHost}
+		<SegmentCommentLayer
+			container={articleHost}
+			threads={data.discussion}
+			canComment={data.viewer.canComment}
+			loginUrl={data.viewer.loginUrl}
+			form={form ?? null}
+		/>
+	{/if}
 
 	{#if data.discussion}
 		<CommentsSection

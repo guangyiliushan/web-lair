@@ -27,6 +27,8 @@
 		autofocus?: boolean;
 		/** Present when the composer can be dismissed (inline reply/edit). */
 		onCancel?: () => void;
+		/** Extra hidden fields (segment-anchor payload, comment P3b). */
+		hiddenValues?: Record<string, string>;
 	}
 
 	let {
@@ -38,7 +40,8 @@
 		hint,
 		compact = false,
 		autofocus = false,
-		onCancel
+		onCancel,
+		hiddenValues = {}
 	}: Props = $props();
 	let submitting = $state(false);
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
@@ -74,6 +77,9 @@
 	{#if commentId}
 		<input type="hidden" name="id" value={commentId} />
 	{/if}
+	{#each Object.entries(hiddenValues) as [name, value] (name)}
+		<input type="hidden" {name} {value} />
+	{/each}
 	<Textarea
 		bind:ref={textareaEl}
 		name="text"
