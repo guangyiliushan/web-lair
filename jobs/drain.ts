@@ -38,6 +38,22 @@ if (!databaseUrl) {
 	process.exit(2);
 }
 
+// A webhook POST through an ambient HTTP proxy is a known-misdiagnosis trap:
+// the proxy answers 502/504 for an unreachable receiver, and the delivery
+// segment would record that as a RECEIVER failure (nine-dimension Q3 / the S4
+// incident; see the jobs-drain runbook §7). We do NOT scrub the environment
+// (an operator may genuinely need an egress proxy) - warn when the proxy trio
+// is ambient without any NO_PROXY coverage.
+if (
+	process.env.NODE_USE_ENV_PROXY &&
+	(process.env.HTTP_PROXY || process.env.HTTPS_PROXY) &&
+	!process.env.NO_PROXY
+) {
+	console.warn(
+		'[drain] NODE_USE_ENV_PROXY + HTTP(S)_PROXY are set without NO_PROXY: webhook deliveries may be routed through the proxy and a proxy 502 would be recorded as a receiver failure (runbook §7).'
+	);
+}
+
 const client = postgres(databaseUrl, { max: 5, onnotice: () => {} });
 const db = drizzle(client);
 

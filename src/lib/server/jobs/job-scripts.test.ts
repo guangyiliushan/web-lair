@@ -60,9 +60,14 @@ function makeDb(
 	} = {}
 ) {
 	const auditRows: Record<string, unknown>[] = [];
-	// Distinct spies for the two outbox hosts (review round-1 SY-T1): the
-	// delete path must fan out through the TX executor, save/fork/revert
-	// through the outer one - swapping them turns a test red.
+	// Outbox-host spies, re-scoped for the savepoint wrapper (nine-dimension
+	// Q4): the fan-out now rides `executor.transaction()`, so the discriminator
+	// is WHICH executor's nested transaction is entered - the outer db for
+	// save/fork/revert, the caller's tx for delete. Entering the wrong one (or
+	// dropping the wrapper) turns these counts red.
+	const outerTxCalls = vi.fn();
+	const txTxCalls = vi.fn();
+	const savepointExecute = vi.fn(async () => []);
 	const outerExecute = vi.fn(async () => []);
 	const txExecute = vi.fn(async () => []);
 	const db = {
@@ -75,6 +80,7 @@ function makeDb(
 		// deliveries through `execute`.
 		execute: outerExecute,
 		transaction: vi.fn(async (fn: (tx: unknown) => unknown) => {
+			outerTxCalls();
 			if (options.transactionThrows) throw new Error('tx boom');
 			let deleteCall = 0;
 			const tx = {
@@ -99,12 +105,18 @@ function makeDb(
 					})
 				})),
 				// Same outbox no-op for the delete path (recordActivity(tx, ...)).
-				execute: txExecute
+				execute: txExecute,
+				// Nested = SAVEPOINT on the caller's tx (drizzle postgres-js):
+				// the outbox wrapper enters THIS on the delete path.
+				transaction: vi.fn(async (fn: (sp: unknown) => unknown) => {
+					txTxCalls();
+					return fn({ execute: savepointExecute });
+				})
 			};
 			return fn(tx);
 		})
 	};
-	return { db: db as unknown as ScriptDb, auditRows, raw: db, outerExecute, txExecute };
+	return { db: db as unknown as ScriptDb, auditRows, raw: db, outerTxCalls, txTxCalls };
 }
 
 afterEach(async () => {
@@ -148,7 +160,7 @@ describe('listScripts / getScript', () => {
 describe('saveScript', { timeout: 30_000 }, () => {
 	it('creates a user-only script with an audit row', async () => {
 		const dataDir = await tempDataDir();
-		const { db, auditRows, outerExecute, txExecute } = makeDb();
+		const { db, auditRows, outerTxCalls, txTxCalls } = makeDb();
 		const result = await saveScript({
 			dataDir,
 			name: 'my-task',
@@ -171,8 +183,10 @@ describe('saveScript', { timeout: 30_000 }, () => {
 		});
 		// The save-path outbox fan-out rides the OUTER executor (SY-T1 tooth):
 		// moving recordActivity(db, ...) to a tx or a module-level db turns red.
-		expect(outerExecute).toHaveBeenCalledTimes(1);
-		expect(txExecute).not.toHaveBeenCalled();
+		// The fan-out entered the OUTER db's transaction (a savepoint when the
+		// caller already holds one) and never the caller-tx one.
+		expect(outerTxCalls).toHaveBeenCalled();
+		expect(txTxCalls).not.toHaveBeenCalled();
 	});
 
 	it('rejects gate failures without writing the file', async () => {
@@ -472,7 +486,7 @@ describe('revertToBuiltin', () => {
 describe('deleteUserJob', () => {
 	it('cleans schedules + queued + running in one transaction and keeps history', async () => {
 		const dataDir = await tempDataDir();
-		const { db, auditRows, raw, outerExecute, txExecute } = makeDb({
+		const { db, auditRows, raw, outerTxCalls, txTxCalls } = makeDb({
 			scheduleRows: [{ id: 's1' }, { id: 's2' }],
 			queuedRows: [{ id: 'q1' }],
 			runningRows: [{ id: 'r1' }, { id: 'r2' }]
@@ -495,8 +509,10 @@ describe('deleteUserJob', () => {
 		// The delete-path outbox fan-out rides the TX executor; the outer
 		// executor stays untouched (SY-T1 tooth: recordActivity(tx, ...) can
 		// no longer be quietly swapped for the plain db).
-		expect(txExecute).toHaveBeenCalledTimes(1);
-		expect(outerExecute).not.toHaveBeenCalled();
+		// Delete: the fan-out entered the CALLER's tx as a nested savepoint
+		// (exactly once) - never a fresh outer transaction of its own.
+		expect(txTxCalls).toHaveBeenCalledTimes(1);
+		expect(outerTxCalls).toHaveBeenCalled(); // the business tx itself
 	});
 
 	it('keeps the file until the transaction commits: a failed tx is retryable (review R06)', async () => {

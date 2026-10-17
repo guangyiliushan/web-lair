@@ -15,7 +15,18 @@ import { enqueueWebhookDeliveries } from './webhooks/outbox.ts';
  * call path, riding the caller's transaction when one is in scope. Failures
  * propagate - outbound deliveries are never silently dropped.
  */
-type AuditExecutor = Pick<typeof import('$lib/server/db').db, 'insert' | 'execute'>;
+/**
+ * Structural executor contract: the fan-out needs the caller's transaction
+ * channel, so `transaction` is typed as "runs a callback with something that
+ * can execute" rather than the app db's full schema-parameterised signature -
+ * the drain harness builds its own schema-less drizzle client, and both must
+ * satisfy this (nine-dimension Q4 type seam).
+ */
+type AuditTx = Pick<typeof import('$lib/server/db').db, 'execute'>;
+type AuditExecutor = AuditTx & {
+	insert: Pick<typeof import('$lib/server/db').db, 'insert'>['insert'];
+	transaction: <T>(callback: (savepoint: AuditTx) => Promise<T>) => Promise<T>;
+};
 
 export interface ActivityInput {
 	/** Dotted, lowercase event name (schema CHECK; roster = ledger §26). */

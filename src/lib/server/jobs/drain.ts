@@ -53,6 +53,9 @@ class DrainAbortedError extends Error {}
 /** Queued rows inspected per claim round; rounded pages loop until empty. */
 const QUEUE_BATCH = 20;
 
+/** Wall-clock budget for one delivery segment (nine-dimension Q2). */
+const DELIVERY_SEGMENT_BUDGET_MS = 45_000;
+
 export interface DrainDeps {
 	db: JobsDb;
 	/** Try to take the job's session advisory lock; null means it is held elsewhere. */
@@ -552,7 +555,15 @@ function createLogger(log: (line: string) => void, job: string): JobLogger {
 // ---------------------------------------------------------------------------
 
 async function runDeliverySegment(deps: ResolvedDeps, stats: DrainSummary): Promise<void> {
+	// Bounded like the runs segment (QUEUE_BATCH) PLUS a wall-clock budget: a
+	// black-holed receiver costs up to DELIVERY_TIMEOUT_MS per row, so the
+	// count cap alone could still run QUEUE_BATCH x 15s; the deadline keeps a
+	// tick near one interval (nine-dimension Q2). Leftovers are picked up by
+	// the next tick (FOR UPDATE SKIP LOCKED keeps concurrent ticks safe).
+	const deadline = deps.now().getTime() + DELIVERY_SEGMENT_BUDGET_MS;
+	let processed = 0;
 	for (;;) {
+		if (processed >= QUEUE_BATCH || deps.now().getTime() >= deadline) break;
 		let outcome: DeliveryOutcome | null;
 		try {
 			outcome = await deliverOne(deps);
@@ -571,6 +582,7 @@ async function runDeliverySegment(deps: ResolvedDeps, stats: DrainSummary): Prom
 		if (outcome === 'sent') stats.deliveries.sent += 1;
 		else if (outcome === 'disabled') stats.deliveries.skippedDisabled += 1;
 		else stats.deliveries.failed += 1;
+		processed += 1;
 	}
 }
 

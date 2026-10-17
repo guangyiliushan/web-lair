@@ -35,15 +35,24 @@ describe('buildDeliveryPayload', () => {
 });
 
 describe('enqueueWebhookDeliveries', () => {
-	it('compiles to one insert ... select with the @> subscription test', async () => {
+	function fakeExecutor(execute: ReturnType<typeof vi.fn>) {
+		const transaction = vi.fn(
+			async (cb: (savepoint: { execute: typeof execute }) => Promise<unknown>) => cb({ execute })
+		);
+		return { executor: { execute, transaction } as never, transaction };
+	}
+
+	it('compiles to one insert ... select with the @> test, inside executor.transaction (Q4)', async () => {
 		const execute = vi.fn(async (query: SQL) => {
 			void query; // the compiled statement is asserted from the recorded call
 			return [];
 		});
-		await enqueueWebhookDeliveries({ execute } as never, {
+		const { executor, transaction } = fakeExecutor(execute);
+		await enqueueWebhookDeliveries(executor, {
 			event: 'job.run',
 			payload: { name: 'x' }
 		});
+		expect(transaction).toHaveBeenCalledTimes(1);
 		expect(execute).toHaveBeenCalledTimes(1);
 		const compiled = new PgDialect().sqlToQuery(execute.mock.calls[0][0] as SQL);
 		const text = compiled.sql.toLowerCase();
@@ -65,12 +74,18 @@ describe('enqueueWebhookDeliveries', () => {
 		});
 	});
 
-	it('propagates an enqueue failure (fail loud, review round-1)', async () => {
-		const execute = vi.fn(async () => {
+	it('swallows ONLY a 23503 (endpoint vanished) and keeps other failures loud', async () => {
+		const fkExecute = vi.fn(async () => {
+			throw Object.assign(new Error('fk violation'), { code: '23503' });
+		});
+		await expect(
+			enqueueWebhookDeliveries(fakeExecutor(fkExecute).executor, { event: 'job.run' })
+		).resolves.toBeUndefined();
+		const boomExecute = vi.fn(async () => {
 			throw new Error('boom');
 		});
 		await expect(
-			enqueueWebhookDeliveries({ execute } as never, { event: 'job.run' })
+			enqueueWebhookDeliveries(fakeExecutor(boomExecute).executor, { event: 'job.run' })
 		).rejects.toThrow('boom');
 	});
 });
