@@ -28,13 +28,11 @@ import {
 	ANCHOR_VERSION,
 	codePointLength,
 	codePointSlice,
-	codePointToUtf16,
 	foldSegments,
 	isAnchorBlock,
 	isAnchorSkipped,
 	isGraphemeBoundary,
 	splitsSurrogatePair,
-	utf16ToCodePoint,
 	type AnchorBlockRef,
 	type AnchorElementShape,
 	type CommentAnchor,
@@ -62,35 +60,37 @@ const rangeSchema = z
 	);
 
 /** Stored anchor shape (comments.anchor::jsonb, spec §4). */
-export const commentAnchorSchema = z.object({
-	v: z.literal(ANCHOR_VERSION),
-	lang: z.string().min(2).max(16),
-	block: z.object({
-		hash: z.string().regex(new RegExp(`^[0-9a-f]{${ANCHOR_HASH_HEX_LENGTH}}$`)),
-		occ: z.number().int().min(0),
-		ord: z.number().int().min(0)
-	}),
-	range: rangeSchema,
-	quote: z.object({
-		exact: codePointMax(ANCHOR_MAX_LENGTH).refine(
-			(value) => codePointLength(value) >= ANCHOR_MIN_LENGTH,
-			{ message: `exact must be at least ${ANCHOR_MIN_LENGTH} code points` }
-		),
-		prefix: codePointMax(ANCHOR_PREFIX_MAX),
-		suffix: codePointMax(ANCHOR_SUFFIX_MAX)
+export const commentAnchorSchema = z
+	.object({
+		v: z.literal(ANCHOR_VERSION),
+		lang: z.string().min(2).max(16),
+		block: z.object({
+			hash: z.string().regex(new RegExp(`^[0-9a-f]{${ANCHOR_HASH_HEX_LENGTH}}$`)),
+			occ: z.number().int().min(0),
+			ord: z.number().int().min(0)
+		}),
+		range: rangeSchema,
+		quote: z.object({
+			exact: codePointMax(ANCHOR_MAX_LENGTH).refine(
+				(value) => codePointLength(value) >= ANCHOR_MIN_LENGTH,
+				{ message: `exact must be at least ${ANCHOR_MIN_LENGTH} code points` }
+			),
+			prefix: codePointMax(ANCHOR_PREFIX_MAX),
+			suffix: codePointMax(ANCHOR_SUFFIX_MAX)
+		})
 	})
-}).superRefine((anchor, ctx) => {
-	// A stored row whose quote and range disagree would make the resolver search
-	// an arbitrary string; every app write satisfies this, so the check costs
-	// nothing and catches corrupted/manual rows at the boundary.
-	if (codePointLength(anchor.quote.exact) !== anchor.range.end - anchor.range.start) {
-		ctx.addIssue({
-			code: z.ZodIssueCode.custom,
-			path: ['quote', 'exact'],
-			message: 'quote length must equal the stored range'
-		});
-	}
-});
+	.superRefine((anchor, ctx) => {
+		// A stored row whose quote and range disagree would make the resolver search
+		// an arbitrary string; every app write satisfies this, so the check costs
+		// nothing and catches corrupted/manual rows at the boundary.
+		if (codePointLength(anchor.quote.exact) !== anchor.range.end - anchor.range.start) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ['quote', 'exact'],
+				message: 'quote length must equal the stored range'
+			});
+		}
+	});
 
 /**
  * What the client actually submits. Prefix/suffix are deliberately absent:
@@ -364,13 +364,7 @@ export function resolveAnchor(blocks: AnchorBlock[], anchor: CommentAnchor): Res
 		if (!isGraphemeBoundary(block.text, picked.start)) continue;
 		if (!isGraphemeBoundary(block.text, picked.end)) continue;
 		const identityKnown = block.hash === anchor.block.hash;
-		const contextOk = contextMatches(
-			block,
-			picked.start,
-			picked.end,
-			quote.prefix,
-			quote.suffix
-		);
+		const contextOk = contextMatches(block, picked.start, picked.end, quote.prefix, quote.suffix);
 		if (identityKnown || contextOk || globallyUniqueQuote) {
 			return { block, start: picked.start, end: picked.end };
 		}
@@ -516,7 +510,11 @@ export function resolveAnchorDraft(
 			return accept(ordBlock, draft.start, draft.end);
 		}
 		// The quote moved inside the same block (text before the selection changed).
-		const found = pickOccurrence(ordBlock, { exact: draft.exact, prefix: '', suffix: '' }, draft.start);
+		const found = pickOccurrence(
+			ordBlock,
+			{ exact: draft.exact, prefix: '', suffix: '' },
+			draft.start
+		);
 		if (found) return accept(ordBlock, found.start, found.end);
 	}
 	// With a fingerprint, only blocks of the length the reader actually saw are
@@ -526,8 +524,7 @@ export function resolveAnchorDraft(
 		.filter((block) => Math.abs(block.ord - draft.ord) <= 2)
 		.filter(
 			(block) =>
-				draft.blockLength === undefined ||
-				codePointLength(block.text) === draft.blockLength
+				draft.blockLength === undefined || codePointLength(block.text) === draft.blockLength
 		)
 		.sort((a, b) => Math.abs(a.ord - draft.ord) - Math.abs(b.ord - draft.ord));
 	// Without client context a window hit is only safe when the quote is unique
@@ -535,7 +532,11 @@ export function resolveAnchorDraft(
 	// the reader, and guessing would store a permanently wrong anchor.
 	const quoteBlocks = blocks.filter((block) => block.text.includes(draft.exact)).length;
 	for (const block of window) {
-		const found = pickOccurrence(block, { exact: draft.exact, prefix: '', suffix: '' }, draft.start);
+		const found = pickOccurrence(
+			block,
+			{ exact: draft.exact, prefix: '', suffix: '' },
+			draft.start
+		);
 		if (!found) continue;
 		if (quoteBlocks > 1 && block.ord !== draft.ord) return { kind: 'stale' };
 		return accept(block, found.start, found.end);

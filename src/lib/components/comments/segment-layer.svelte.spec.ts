@@ -282,4 +282,3 @@ describe('segment comment layer', () => {
 		expect(document.activeElement).toBe(mark);
 	});
 });
-

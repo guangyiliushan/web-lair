@@ -148,9 +148,7 @@ describe('post comment actions', () => {
 
 		// A partial payload is a broken client, not an article-level comment.
 		state.submitCalls = [];
-		const partial = await commentAction(
-			makeEvent(fd({ text: 'anchored', anchorOrd: '1' }))
-		);
+		const partial = await commentAction(makeEvent(fd({ text: 'anchored', anchorOrd: '1' })));
 		expect(partial).toMatchObject({ status: 400, data: { message: 'comment_error_generic' } });
 		expect(state.submitCalls).toHaveLength(0);
 

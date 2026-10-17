@@ -30,7 +30,11 @@ function anchorIn(block: AnchorBlock, needle: string): CommentAnchor {
 		quote: {
 			exact: codePointSlice(block.text, codePointStart, codePointEnd),
 			prefix: codePointSlice(block.text, Math.max(0, codePointStart - 12), codePointStart),
-			suffix: codePointSlice(block.text, codePointEnd, Math.min(codePointLength(block.text), codePointEnd + 12))
+			suffix: codePointSlice(
+				block.text,
+				codePointEnd,
+				Math.min(codePointLength(block.text), codePointEnd + 12)
+			)
 		}
 	};
 }
@@ -47,7 +51,15 @@ async function resolveIn(markdown: string, anchor: CommentAnchor) {
 		: null;
 }
 
-const BASE = ['## 标题', '', '第一段：锚点句子在中间。尾巴。', '', '第二段：另一段内容。', '', '第三段：结束。'].join('\n');
+const BASE = [
+	'## 标题',
+	'',
+	'第一段：锚点句子在中间。尾巴。',
+	'',
+	'第二段：另一段内容。',
+	'',
+	'第三段：结束。'
+].join('\n');
 
 async function baseAnchor(): Promise<CommentAnchor> {
 	const blocks = await blocksOf(BASE);

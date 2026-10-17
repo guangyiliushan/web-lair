@@ -214,4 +214,3 @@ test('the mark underline keeps a 3:1 contrast against the page background', asyn
 	// WCAG 2.2 SC 1.4.11 (non-text contrast) for the anchor underline.
 	expect(ratio as number).toBeGreaterThanOrEqual(3);
 });
-

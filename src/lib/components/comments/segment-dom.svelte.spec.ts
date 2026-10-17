@@ -227,5 +227,3 @@ describe('selection to anchor', () => {
 		});
 	});
 });
-
-

@@ -461,21 +461,37 @@ describe('anchor schemas', () => {
 
 	it('rejects a stored quote whose length disagrees with its range', () => {
 		expect(
-			parseCommentAnchor({ ...valid, range: { start: 3, end: 9 }, quote: { ...valid.quote, exact: '选区文本' } })
+			parseCommentAnchor({
+				...valid,
+				range: { start: 3, end: 9 },
+				quote: { ...valid.quote, exact: '选区文本' }
+			})
 		).toBeNull();
 		expect(
-			parseCommentAnchor({ ...valid, range: { start: 3, end: 4 }, quote: { ...valid.quote, exact: '选' } })
+			parseCommentAnchor({
+				...valid,
+				range: { start: 3, end: 4 },
+				quote: { ...valid.quote, exact: '选' }
+			})
 		).toBeNull();
 	});
 
 	it('counts quote bounds in code points', () => {
 		const exact = '👨‍👩‍👧‍👦'.repeat(20); // 140 code points, 220 UTF-16 units
 		expect(
-			parseCommentAnchor({ ...valid, range: { start: 0, end: 140 }, quote: { exact, prefix: '', suffix: '' } })
+			parseCommentAnchor({
+				...valid,
+				range: { start: 0, end: 140 },
+				quote: { exact, prefix: '', suffix: '' }
+			})
 		).not.toBeNull();
 		const tooLong = '👨‍👩‍👧‍👦'.repeat(80); // 560 code points
 		expect(
-			parseCommentAnchor({ ...valid, range: { start: 0, end: 560 }, quote: { exact: tooLong, prefix: '', suffix: '' } })
+			parseCommentAnchor({
+				...valid,
+				range: { start: 0, end: 560 },
+				quote: { exact: tooLong, prefix: '', suffix: '' }
+			})
 		).toBeNull();
 	});
 

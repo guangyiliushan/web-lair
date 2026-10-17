@@ -88,9 +88,7 @@ async function selectInParagraph(page: Page, paragraphContains: string, needle: 
 	// container), so data-ready is the hydration signal for every case here.
 	await page.waitForFunction(
 		() =>
-			document
-				.querySelector('[data-slot="segment-layer"]')
-				?.getAttribute('data-ready') === 'true',
+			document.querySelector('[data-slot="segment-layer"]')?.getAttribute('data-ready') === 'true',
 		undefined,
 		{ timeout: 30_000 }
 	);
@@ -204,9 +202,7 @@ test('clicking a mark opens the in-place thread', async ({ page }) => {
 	// layer's listeners exist.
 	await page.waitForFunction(
 		() =>
-			document
-				.querySelector('[data-slot="segment-layer"]')
-				?.getAttribute('data-ready') === 'true',
+			document.querySelector('[data-slot="segment-layer"]')?.getAttribute('data-ready') === 'true',
 		undefined,
 		{ timeout: 30_000 }
 	);

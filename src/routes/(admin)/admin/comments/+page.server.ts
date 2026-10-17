@@ -82,9 +82,7 @@ export const load: PageServerLoad = async (event) => {
 			anchorContext: gated
 				? null
 				: anchor
-					? [anchor.quote.prefix, anchor.quote.suffix]
-							.filter((part) => part.length > 0)
-							.join(' ')
+					? [anchor.quote.prefix, anchor.quote.suffix].filter((part) => part.length > 0).join(' ')
 					: null
 		};
 	});
