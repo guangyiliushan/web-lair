@@ -299,52 +299,70 @@ function inRange(block: AnchorBlock, start: number, end: number): boolean {
 }
 
 /**
- * Read-side resolution (spec §7): L0 range check on the stored ord, L1 exact
- * search inside the block(s) with the stored hash, L2 a ±2 block window around
- * ord with prefix/suffix matching, then miss (the caller renders it in the
- * folded "original text changed" area).
+ * Read-side resolution (spec §7): the stored ordinal first, then blocks that
+ * still carry the stored content hash, then a ±2 neighbour window. Inside a
+ * block the quote decides, and the stored range/prefix/suffix only break ties:
  *
- * The hash is a fast path, not an authority: a typo fix elsewhere in the block
- * keeps the quote valid, which is exactly what the quote selectors are for
- * (W3C: positions are "very brittle", quote selectors are the fallback).
+ * - one occurrence of `exact` -> that occurrence (a typo elsewhere in the block
+ *   must not orphan a quote that is still intact);
+ * - several occurrences -> the one whose prefix/suffix still match; if none or
+ *   several match, the stored range if it is an occurrence, else the nearest
+ *   occurrence to it;
+ * - no occurrence -> this block cannot host the anchor (miss / next candidate).
+ *
+ * The hash is a fast path, not an authority: positions are "very brittle"
+ * (W3C §4.2.5) and the quote selectors are the real anchor.
  */
 export function resolveAnchor(blocks: AnchorBlock[], anchor: CommentAnchor): ResolvedAnchor | null {
-	const byOrd = blocks.find((block) => block.ord === anchor.block.ord);
-	if (
-		byOrd &&
-		inRange(byOrd, anchor.range.start, anchor.range.end) &&
-		sliceOf(byOrd, anchor.range.start, anchor.range.end) === anchor.quote.exact &&
-		// The range alone is not enough: the same sentence can occur twice in one
-		// block, and a stale range would then point at the wrong occurrence.
-		contextMatches(
-			byOrd,
-			anchor.range.start,
-			anchor.range.end,
-			anchor.quote.prefix,
-			anchor.quote.suffix
-		)
-	) {
-		return { block: byOrd, start: anchor.range.start, end: anchor.range.end };
-	}
+	const quote = anchor.quote;
+	const hint = anchor.range.start;
+	const byDistance = (a: AnchorBlock, b: AnchorBlock) =>
+		Math.abs(a.ord - anchor.block.ord) - Math.abs(b.ord - anchor.block.ord);
 
-	// L1: same content hash somewhere in the document, nearest ord first.
-	const sameHash = blocks
-		.filter((block) => block.hash === anchor.block.hash)
-		.sort((a, b) => Math.abs(a.ord - anchor.block.ord) - Math.abs(b.ord - anchor.block.ord));
-	for (const block of sameHash) {
-		const found = searchExact(block, anchor.quote.exact, anchor.quote.prefix, anchor.quote.suffix);
-		if (found) return found;
-	}
+	const candidates: AnchorBlock[] = [];
+	const stored = blocks.find((block) => block.ord === anchor.block.ord);
+	if (stored) candidates.push(stored);
+	candidates.push(
+		...blocks
+			.filter((block) => block.hash === anchor.block.hash && block !== stored)
+			.sort(byDistance)
+	);
+	candidates.push(
+		...blocks
+			.filter(
+				(block) =>
+					block !== stored &&
+					block.hash !== anchor.block.hash &&
+					Math.abs(block.ord - anchor.block.ord) <= 2
+			)
+			.sort(byDistance)
+	);
 
-	// L2: neighbours of the stored ord (insert/remove of other blocks shifted it).
-	const window = blocks
-		.filter((block) => Math.abs(block.ord - anchor.block.ord) <= 2)
-		.sort((a, b) => Math.abs(a.ord - anchor.block.ord) - Math.abs(b.ord - anchor.block.ord));
-	for (const block of window) {
-		const found = searchExact(block, anchor.quote.exact, anchor.quote.prefix, anchor.quote.suffix);
-		if (found) return found;
+	for (const block of candidates) {
+		const picked = pickOccurrence(block, quote, hint);
+		if (picked) return { block, start: picked.start, end: picked.end };
 	}
 	return null;
+}
+
+interface Occurrence {
+	start: number;
+	end: number;
+}
+
+/** Every occurrence of `exact` in the block, as code point ranges. */
+function occurrencesOf(block: AnchorBlock, exact: string): Occurrence[] {
+	if (exact.length === 0) return [];
+	const found: Occurrence[] = [];
+	let from = 0;
+	while (from <= block.text.length) {
+		const at = block.text.indexOf(exact, from);
+		if (at < 0) break;
+		const start = utf16ToCodePoint(block.text, at);
+		found.push({ start, end: start + codePointLength(exact) });
+		from = at + Math.max(1, exact.length);
+	}
+	return found;
 }
 
 /** Prefix/suffix around a candidate range, compared in code points. */
@@ -365,29 +383,34 @@ function contextMatches(
 	return prefixOk && suffixOk;
 }
 
-/** Locate `exact` inside one block; context disambiguates repeated text. */
-function searchExact(
+/**
+ * Which occurrence of the quote this block means. `hint` is the stored start
+ * offset: it is only consulted when the text alone is ambiguous.
+ */
+function pickOccurrence(
 	block: AnchorBlock,
-	exact: string,
-	prefix: string,
-	suffix: string
-): ResolvedAnchor | null {
-	const codePoints = Array.from(block.text);
-	const prefixLength = codePointLength(prefix);
-	const suffixLength = codePointLength(suffix);
-	let from = 0;
-	while (true) {
-		const at = block.text.indexOf(exact, from);
-		if (at < 0) return null;
-		const start = utf16ToCodePoint(block.text, at);
-		const end = start + codePointLength(exact);
-		const before = codePoints.slice(Math.max(0, start - prefixLength), start).join('');
-		const after = codePoints.slice(end, end + suffixLength).join('');
-		const prefixOk = prefix.length === 0 || before.endsWith(prefix);
-		const suffixOk = suffix.length === 0 || after.startsWith(suffix);
-		if (prefixOk && suffixOk) return { block, start, end };
-		from = at + Math.max(1, exact.length);
-	}
+	quote: CommentAnchor['quote'],
+	hint: number
+): Occurrence | null {
+	const occurrences = occurrencesOf(block, quote.exact);
+	if (occurrences.length === 0) return null;
+	if (occurrences.length === 1) return occurrences[0];
+
+	const contextual = occurrences.filter((occurrence) =>
+		contextMatches(block, occurrence.start, occurrence.end, quote.prefix, quote.suffix)
+	);
+	if (contextual.length === 1) return contextual[0];
+	if (contextual.length > 1) return nearest(contextual, hint);
+
+	// No context survived (the surrounding text was edited): trust the stored
+	// range only if it is itself an occurrence; otherwise this is ambiguous.
+	return occurrences.find((occurrence) => occurrence.start === hint) ?? null;
+}
+
+function nearest(occurrences: Occurrence[], hint: number): Occurrence {
+	return occurrences.reduce((best, current) =>
+		Math.abs(current.start - hint) < Math.abs(best.start - hint) ? current : best
+	);
 }
 
 /**
@@ -421,15 +444,15 @@ export function resolveAnchorDraft(
 			return accept(ordBlock, draft.start, draft.end);
 		}
 		// The quote moved inside the same block (text before the selection changed).
-		const found = searchExact(ordBlock, draft.exact, '', '');
-		if (found) return accept(found.block, found.start, found.end);
+		const found = pickOccurrence(ordBlock, { exact: draft.exact, prefix: '', suffix: '' }, draft.start);
+		if (found) return accept(ordBlock, found.start, found.end);
 	}
 	const window = blocks
 		.filter((block) => Math.abs(block.ord - draft.ord) <= 2)
 		.sort((a, b) => Math.abs(a.ord - draft.ord) - Math.abs(b.ord - draft.ord));
 	for (const block of window) {
-		const found = searchExact(block, draft.exact, '', '');
-		if (found) return accept(found.block, found.start, found.end);
+		const found = pickOccurrence(block, { exact: draft.exact, prefix: '', suffix: '' }, draft.start);
+		if (found) return accept(block, found.start, found.end);
 	}
 	return { kind: 'stale' };
 }
