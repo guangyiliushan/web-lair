@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the web-lair restic check weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30
+RandomizedDelaySec=30m
+Persistent=true
+Unit=web-lair-backup-check.service
+
+[Install]
+WantedBy=timers.target

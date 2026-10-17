@@ -1,14 +1,18 @@
 [Unit]
 Description=web-lair jobs drain (one tick per minute)
 Documentation=deploy/RUNBOOK.md
-After=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
 Requires=docker.service
 
 [Service]
 Type=oneshot
 WorkingDirectory=/srv/web-lair/app
 # `run --rm` (not exec): every tick is its own container, so a dead app
-# container cannot masquerade as a running timer. Exit 1 = infrastructure
-# failure (alert), 2 = configuration missing.
-ExecStart=/usr/bin/docker compose run --rm --no-deps app node jobs/drain.ts
-TimeoutStartSec=120
+# container cannot masquerade as a running timer. `--profile prod` is required
+# because the app service is profile-gated. Exit 1 = infrastructure failure
+# (alert), 2 = configuration missing.
+ExecStart=/usr/bin/docker compose --profile prod run --rm --no-deps --stop-timeout 10 app node jobs/drain.ts
+# Must stay below the 1-minute timer: an overrunning tick would skip the next
+# one while the unit is still activating.
+TimeoutStartSec=50

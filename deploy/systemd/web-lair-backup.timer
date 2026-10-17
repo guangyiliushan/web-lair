@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the web-lair backup nightly
+
+[Timer]
+OnCalendar=*-*-* 03:30
+RandomizedDelaySec=15m
+Persistent=true
+Unit=web-lair-backup.service
+
+[Install]
+WantedBy=timers.target

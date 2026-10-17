@@ -26,7 +26,8 @@ try {
 	await migrate(drizzle(client), { migrationsFolder: './drizzle' });
 	console.log('[migrate] migrations applied');
 } catch (error) {
-	console.error('[migrate] failed:', error instanceof Error ? error.message : error);
+	console.error('[migrate] failed:', error);
+	console.error('[migrate] ABORT — do not start the app; restore the pre-migration dump first');
 	process.exitCode = 1;
 } finally {
 	await client.end();

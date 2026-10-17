@@ -1,0 +1,14 @@
+[Unit]
+Description=web-lair nightly restic backup
+Documentation=deploy/RUNBOOK.md
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/web-lair/app
+EnvironmentFile=/srv/web-lair/app/deploy/backup.env
+ExecStart=/srv/web-lair/app/deploy/backup/backup.sh
+# First full upload of a large media set over a home uplink can take hours.
+TimeoutStartSec=6h

@@ -16,8 +16,11 @@
 	}
 
 	# JSON access log for Sentinel (L2 analytics) — ledger §25 / plan §C.3.
-	log {
-		output file /data/access.log {
+	# Confirm/unsubscribe carry a permanent bearer token in the query string;
+	# logging their URIs would hand every log reader control of any subscriber.
+	@logged not path */subscribe/confirm* */unsubscribe* /api/auth/*
+	log @logged {
+		output file /var/log/caddy/access.log {
 			roll_size 100mb
 			roll_keep 10
 		}
