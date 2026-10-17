@@ -44,7 +44,8 @@ export function readCommentAnchorDraft(form: FormData): AnchorDraftRead {
 		ord: Number(form.get('anchorOrd')),
 		start: Number(form.get('anchorStart')),
 		end: Number(form.get('anchorEnd')),
-		exact: form.get('anchorExact')?.toString() ?? ''
+		exact: form.get('anchorExact')?.toString() ?? '',
+		blockLength: form.get('anchorLength') === null ? undefined : Number(form.get('anchorLength'))
 	});
 	return draft ? { kind: 'ok', draft } : { kind: 'invalid' };
 }

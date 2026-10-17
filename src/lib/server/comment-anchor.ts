@@ -90,7 +90,9 @@ export const commentAnchorDraftSchema = z
 		exact: codePointMax(ANCHOR_MAX_LENGTH).refine(
 			(value) => codePointLength(value) >= ANCHOR_MIN_LENGTH,
 			{ message: `exact must be at least ${ANCHOR_MIN_LENGTH} code points` }
-		)
+		),
+		/** Code points of the block the reader selected (stale-ord fingerprint). */
+		blockLength: z.number().int().min(0).optional()
 	})
 	// Same [2, 500] window as the stored anchor: a draft the read schema would
 	// reject must never reach the database (it would silently degrade to "no
@@ -436,7 +438,15 @@ export function resolveAnchorDraft(
 			: { kind: 'stale' };
 
 	const ordBlock = blocks.find((block) => block.ord === draft.ord);
-	if (ordBlock) {
+	// The ordinal alone is only trusted when the block is the one the reader
+	// saw: an insertion above shifts ordinals, and a repeated quote in the
+	// shifted block would otherwise bind to the wrong passage. Length is a
+	// cheap fingerprint, not a hash (spec §5 M11).
+	const ordBlockIsStale =
+		!!ordBlock &&
+		draft.blockLength !== undefined &&
+		codePointLength(ordBlock.text) !== draft.blockLength;
+	if (ordBlock && !ordBlockIsStale) {
 		if (
 			inRange(ordBlock, draft.start, draft.end) &&
 			sliceOf(ordBlock, draft.start, draft.end) === draft.exact
@@ -447,8 +457,16 @@ export function resolveAnchorDraft(
 		const found = pickOccurrence(ordBlock, { exact: draft.exact, prefix: '', suffix: '' }, draft.start);
 		if (found) return accept(ordBlock, found.start, found.end);
 	}
+	// With a fingerprint, only blocks of the length the reader actually saw are
+	// candidates. No candidate means the article changed under the selection:
+	// stale beats binding the quote to a lookalike block.
 	const window = blocks
 		.filter((block) => Math.abs(block.ord - draft.ord) <= 2)
+		.filter(
+			(block) =>
+				draft.blockLength === undefined ||
+				codePointLength(block.text) === draft.blockLength
+		)
 		.sort((a, b) => Math.abs(a.ord - draft.ord) - Math.abs(b.ord - draft.ord));
 	for (const block of window) {
 		const found = pickOccurrence(block, { exact: draft.exact, prefix: '', suffix: '' }, draft.start);
@@ -599,6 +617,11 @@ export function applyAnchorMarks(
 					};
 					if (!idPlaced.has(cluster)) {
 						properties.id = `c-${cluster.ids[0]}`;
+						// The first span of a cluster is the keyboard entry point:
+						// marks were mouse-only before (WCAG 2.1.1).
+						properties.tabIndex = 0;
+						properties.role = 'button';
+						properties.ariaHaspopup = 'dialog';
 						idPlaced.add(cluster);
 						for (const id of cluster.ids) placed.set(id, `c-${cluster.ids[0]}`);
 					}

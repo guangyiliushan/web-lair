@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { codePointLength, codePointSlice } from '$lib/utils/comment-anchor';
-import {
-	collectAnchorBlocks,
-	resolveAnchor,
-	type AnchorBlock,
-	type CommentAnchor
-} from './comment-anchor';
+import { codePointLength, codePointSlice, type CommentAnchor } from '$lib/utils/comment-anchor';
+import { collectAnchorBlocks, resolveAnchor, type AnchorBlock } from './comment-anchor';
 import { renderMarkdownTree } from './markdown';
 
 /**

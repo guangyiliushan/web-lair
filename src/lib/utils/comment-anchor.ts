@@ -80,6 +80,12 @@ export interface CommentAnchorDraft {
 	start: number;
 	end: number;
 	exact: string;
+	/**
+	 * Code points of the block the reader selected. Optional because older
+	 * clients omit it; when present the server refuses to trust `ord` against a
+	 * block of a different length (stale-ord fingerprint, spec §5 M11).
+	 */
+	blockLength?: number;
 }
 
 /* ── Block model (single source for both walkers) ───────────────────────── */

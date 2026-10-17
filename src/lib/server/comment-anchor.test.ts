@@ -250,6 +250,21 @@ describe('resolveAnchorDraft (write side, spec §6)', () => {
 		expect(result.anchor.range.start).toBe(4);
 	});
 
+	it('treats a mismatched block length as a stale ordinal (fingerprint)', () => {
+		const { blocks } = fixture();
+		const draft = { ord: 1, start: 4, end: 15, exact: 'quick brown', blockLength: 999 };
+		// The slice at ord 1 still matches, but the reader saw a different block:
+		// the ordinal must not be trusted (B2 review, angle 7).
+		expect(resolveAnchorDraft(blocks, draft, 'en').kind).toBe('stale');
+	});
+
+	it('accepts the fingerprint when it matches', () => {
+		const { blocks } = fixture();
+		const length = [...blocks[1].text].length;
+		const draft = { ord: 1, start: 4, end: 15, exact: 'quick brown', blockLength: length };
+		expect(resolveAnchorDraft(blocks, draft, 'en').kind).toBe('ok');
+	});
+
 	it('tolerates an ord shift within the ±2 window', () => {
 		const { blocks } = fixture();
 		const draft = { ord: 3, start: 4, end: 15, exact: 'quick brown' };
