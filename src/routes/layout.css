@@ -663,6 +663,26 @@
 		scroll-margin-top: 4rem;
 	}
 
+	/* ── Segment-comment marks (comment P3b, spec §7/§8) ──
+	   A reader must see WHAT is commented on without hovering: wavy underline
+	   for other readers, dashed for the viewer's own pending row, and a target
+	   pulse after a "jump to source". Contrast is the primary token at 70% over
+	   the page background (WCAG 1.4.11 wants ≥3:1 for the non-text cue). */
+	.wl-cm {
+		text-decoration: underline wavy;
+		text-decoration-thickness: 1px;
+		text-underline-offset: 3px;
+		text-decoration-color: color-mix(in oklch, var(--primary) 70%, transparent);
+		scroll-margin-top: 5rem;
+	}
+	.wl-cm-pending {
+		text-decoration-style: dashed;
+	}
+	.wl-cm:target {
+		background: color-mix(in oklch, var(--primary) 14%, transparent);
+		border-radius: 2px;
+	}
+
 	.mermaid {
 		background: var(--muted);
 		border-radius: var(--radius-lg);

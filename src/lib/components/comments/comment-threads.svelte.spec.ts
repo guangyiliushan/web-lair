@@ -23,6 +23,7 @@ function root(overrides: Partial<ThreadRoot> = {}): ThreadRoot {
 		isMine: false,
 		pin: false,
 		isDeleted: false,
+		anchor: null,
 		replies: [],
 		...overrides
 	};
@@ -47,7 +48,9 @@ function reply(overrides: Partial<ThreadReply> = {}): ThreadReply {
 function threadsPage(roots: ThreadRoot[], overrides: Partial<ThreadsPage> = {}): ThreadsPage {
 	return {
 		roots,
+		orphans: [],
 		visibleCount: roots.reduce((sum, item) => sum + 1 + item.replies.length, 0),
+		orphanCount: 0,
 		truncated: false,
 		...overrides
 	};
@@ -398,5 +401,72 @@ describe('CommentsSection', () => {
 		await expect.poll(() => document.querySelector('form[action="?/edit"]') !== null).toBe(true);
 		expect(document.querySelector('form[action="?/reply"]')).toBeNull();
 		expect(document.querySelectorAll('textarea').length).toBe(2);
+	});
+});
+
+describe('CommentsSection segment anchors (P3b)', () => {
+	it('renders the quote chip and the jump link for a resolved anchor', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([
+				root({ anchor: { quote: '被选中的文字', orphaned: false, targetId: 'c-root-1' } })
+			])
+		});
+		const chip = document.querySelector('[data-slot="comment-anchor"]');
+		expect(chip?.textContent).toContain('被选中的文字');
+		const link = page.getByRole('link', { name: '跳至原文' });
+		await expect.element(link).toBeInTheDocument();
+		await expect.element(link).toHaveAttribute('href', '#c-root-1');
+	});
+
+	it('folds orphaned anchors away from the main list and keeps them countable', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([], {
+				orphans: [
+					root({
+						id: 'orphan-1',
+						anchor: { quote: '已消失的文字', orphaned: true, targetId: null }
+					})
+				],
+				orphanCount: 1
+			})
+		});
+
+		// The count sits next to the main one (never silently hidden).
+		const count = document.querySelector('[data-slot="comment-orphan-count"]');
+		expect(count?.textContent).toContain('条评论无法对应正文');
+
+		// Folded by default, with the quote inside and no jump link (no target).
+		const fold = document.querySelector(
+			'[data-slot="comment-orphans"]'
+		) as HTMLDetailsElement | null;
+		expect(fold).not.toBeNull();
+		expect(fold?.open).toBe(false);
+		expect(fold?.textContent).toContain('已消失的文字');
+		expect(fold?.querySelector('a[href^="#c-"]')).toBeNull();
+	});
+
+	it('does not claim "no comments" while orphaned threads exist', async () => {
+		await render(CommentsSection, {
+			...BASE,
+			threads: threadsPage([], {
+				orphans: [
+					root({ id: 'orphan-1', anchor: { quote: '旧文', orphaned: true, targetId: null } })
+				],
+				orphanCount: 1
+			})
+		});
+		// The empty state and the fold must never contradict each other.
+		expect(document.body.textContent).not.toContain('还没有评论');
+		await expect.element(page.getByRole('heading', { name: /评论/ })).toHaveTextContent('(0)');
+		const fold = document.querySelector('[data-slot="comment-orphans"]');
+		expect(fold?.textContent).toContain('原文已修改');
+		expect(fold?.querySelector('summary')?.textContent).toContain('(1)');
+	});
+
+	it('renders no chip for an article-level comment', async () => {
+		await render(CommentsSection, { ...BASE, threads: threadsPage([root()]) });
+		expect(document.querySelector('[data-slot="comment-anchor"]')).toBeNull();
 	});
 });

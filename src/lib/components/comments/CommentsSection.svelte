@@ -21,6 +21,11 @@
 
 	let { targetType, threads, canComment, emailVerified, loginUrl, form = null }: Props = $props();
 
+	// P3b view-model compat: `orphans`/`orphanCount` are optional so producers
+	// from before segment anchors keep rendering (derive instead of crashing).
+	const orphans = $derived(threads.orphans ?? []);
+	const orphanCount = $derived(threads.orphanCount ?? orphans.length);
+
 	// A failed submission/action renders one section-level alert; pull focus
 	// to it so a reader deep in the thread is not left guessing (review P2-3).
 	let messageEl = $state<HTMLElement | null>(null);
@@ -39,6 +44,13 @@
 	<h2 id="comments-title" tabindex="-1" class="text-lg font-medium">
 		{m.comment_title()}
 		<span class="text-muted-foreground">({threads.visibleCount})</span>
+		{#if orphanCount > 0}
+			<!-- Orphaned threads are visible, never silently hidden (spec §8):
+			     the count sits next to the main one, the threads in the fold below. -->
+			<span class="ml-2 text-xs text-muted-foreground" data-slot="comment-orphan-count">
+				{m.comment_orphan_count({ count: orphanCount })}
+			</span>
+		{/if}
 	</h2>
 
 	{#if form?.submitted}
@@ -79,7 +91,7 @@
 		{/if}
 	</div>
 
-	{#if threads.roots.length === 0}
+	{#if threads.roots.length === 0 && orphans.length === 0}
 		<p class="mt-6 text-sm text-muted-foreground">{m.comment_empty()}</p>
 	{:else}
 		<ul class="mt-2">
@@ -91,5 +103,23 @@
 
 	{#if threads.truncated}
 		<p class="mt-4 text-xs text-muted-foreground">{m.comment_truncated()}</p>
+	{/if}
+
+	{#if orphans.length > 0}
+		<!-- Folded "original text changed" area (spec §7): quote-first, own count,
+		     never part of the main list numbering. -->
+		<details class="mt-6 rounded-md border border-border/50 px-3 py-2" data-slot="comment-orphans">
+			<summary
+				class="cursor-pointer rounded-sm text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+			>
+				{m.comment_orphan_title()} ({orphanCount})
+			</summary>
+			<p class="mt-2 text-xs text-muted-foreground">{m.comment_orphan_hint()}</p>
+			<ul class="mt-2">
+				{#each orphans as root (root.id)}
+					<CommentItem {root} {canComment} />
+				{/each}
+			</ul>
+		</details>
 	{/if}
 </section>

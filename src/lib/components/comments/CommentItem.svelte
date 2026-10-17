@@ -289,6 +289,28 @@
 				<div class="mt-1.5 text-sm leading-relaxed break-words">
 					{@render commentBody(root.text)}
 				</div>
+				{#if root.anchor}
+					<!-- Segment-anchor chip (P3b): the quoted text plus the deep link
+					     back to the marked passage. Orphaned anchors have no target. -->
+					<div
+						class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
+						data-slot="comment-anchor"
+					>
+						<!-- `text-foreground/80` (≈11:1) instead of the muted token:
+						     12px muted on the chip fill measured 4.33:1 (WCAG 1.4.3). -->
+						<span class="max-w-full truncate rounded bg-muted/60 px-2 py-0.5 text-foreground/80">
+							“{root.anchor.quote}”
+						</span>
+						{#if root.anchor.orphaned}
+							<Badge variant="secondary">{m.comment_orphan_title()}</Badge>
+						{:else if root.anchor.targetId}
+							<a
+								class="rounded-sm text-primary underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+								href={`#${root.anchor.targetId}`}>{m.comment_jump_to_source()}</a
+							>
+						{/if}
+					</div>
+				{/if}
 				{@render itemActions(root.id, root.text, root.author, root.isPending, root.isMine)}
 			</div>
 		</article>
