@@ -30,7 +30,10 @@ import {
 } from '$lib/components/markdown/plugins/rehype-raw-html-whitelist';
 import { rehypeMermaid } from '$lib/components/markdown/plugins/rehype-mermaid';
 import { rehypeCodeLines } from '$lib/components/markdown/plugins/rehype-code-lines';
-import { buildSanitizeSchema } from '$lib/components/markdown';
+// Import the schema from its module of origin: the barrel re-exports the
+// whole editor graph (Lexical, mermaid, KaTeX components), which turned every
+// server-side test that touches the pipeline into a multi-minute transform.
+import { buildSanitizeSchema } from '$lib/components/markdown/editor/markdown-config';
 
 /**
  * 管线 Processor 的精确类型。
@@ -141,6 +144,30 @@ export async function renderMarkdownToHtml(markdown: string): Promise<string> {
 	const processor = await getProcessor();
 	const result = await processor.process(markdown);
 	return String(result);
+}
+
+/**
+ * Tree-mode rendering for the segment-comment marking pass (comment P3b, spec
+ * §7). The caller needs the transformed hast tree — block directory first, then
+ * `span.wl-cm` marks — and only then the HTML.
+ *
+ * Why not a plugin: a frozen unified processor rejects `.use()` ("Cannot call
+ * `use` on a frozen processor", measured 2026-10-17), and rebuilding the whole
+ * chain per request would re-initialise Shiki. `run()` + `stringify()` on THIS
+ * instance stay on the same compiler, so `renderMarkdownDocument(md).html` is
+ * byte-identical to `renderMarkdownToHtml(md)` when no mark is applied — the
+ * equivalence test pins that.
+ */
+export async function renderMarkdownTree(markdown: string): Promise<HastRoot> {
+	if (!markdown?.trim()) return { type: 'root', children: [] };
+	const processor = await getProcessor();
+	return (await processor.run(processor.parse(markdown))) as HastRoot;
+}
+
+/** Serialize a (possibly marked) tree with the singleton processor's compiler. */
+export async function stringifyMarkdownTree(tree: HastRoot): Promise<string> {
+	const processor = await getProcessor();
+	return processor.stringify(tree);
 }
 
 /** 清除 processor 缓存（主要用于测试和热重载场景） */
