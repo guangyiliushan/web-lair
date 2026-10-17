@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import type { ActionData } from './$types';
+	import type { ActionData, PageData } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import * as Card from '$lib/components/ui/card';
 	import * as Field from '$lib/components/ui/field';
@@ -9,7 +9,7 @@
 	import IconMail from '@tabler/icons-svelte-runes/icons/mail';
 	import IconAlertCircle from '@tabler/icons-svelte-runes/icons/alert-circle';
 
-	let { form }: { form: ActionData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
 <div class="flex w-full flex-col items-center justify-center">
@@ -26,6 +26,15 @@
 				>
 					<IconAlertCircle class="size-4 shrink-0" />
 					<span>{form.message}</span>
+				</div>
+			{/if}
+
+			{#if !data.mailConfigured}
+				<div
+					class="mb-6 rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground"
+					role="status"
+				>
+					{m.auth_register_mail_unconfigured()}
 				</div>
 			{/if}
 

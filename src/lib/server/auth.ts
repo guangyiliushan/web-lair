@@ -25,6 +25,13 @@ import { env } from '$env/dynamic/private';
 import { getRequestEvent } from '$app/server';
 import { db } from '$lib/server/db';
 import { userProfiles } from '$lib/server/db/account/user-profile.schema';
+import { sendMailOrDevLog } from '$lib/server/mail/transport';
+import {
+	isMailLang,
+	resetPasswordMail,
+	type MailLang,
+	verifyEmailMail
+} from '$lib/server/mail/templates';
 
 function deriveRpId(origin: string): string {
 	try {
@@ -45,9 +52,17 @@ function generateSlug(name: string): string {
 	);
 }
 
-function devLogMail(label: string, url: string) {
-	if (import.meta.env.DEV) {
-		console.log(`[better-auth] ${label}: ${url}`);
+/**
+ * Auth mail language: the site default (options `site.default_lang`), read
+ * lazily so a missing options table cannot break sign-in. Falls back to English.
+ */
+async function siteMailLang(): Promise<MailLang> {
+	try {
+		const { getOption } = await import('$lib/server/config/options-registry');
+		const lang = await getOption('site.default_lang');
+		return typeof lang === 'string' && isMailLang(lang) ? lang : 'en';
+	} catch {
+		return 'en';
 	}
 }
 
@@ -70,14 +85,14 @@ export const auth = betterAuth({
 	emailAndPassword: {
 		enabled: true,
 		requireEmailVerification: true,
-		sendResetPassword: async ({ url }) => {
-			devLogMail('Password reset link', url);
+		sendResetPassword: async ({ user, url }) => {
+			await sendMailOrDevLog({ to: user.email, ...resetPasswordMail(await siteMailLang(), url) });
 		}
 	},
 
 	emailVerification: {
-		sendVerificationEmail: async ({ url }) => {
-			devLogMail('Verify email link', url);
+		sendVerificationEmail: async ({ user, url }) => {
+			await sendMailOrDevLog({ to: user.email, ...verifyEmailMail(await siteMailLang(), url) });
 		}
 	},
 

@@ -2,12 +2,13 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
+import { isMailConfigured } from '$lib/server/mail/transport';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
 		redirect(302, '/admin');
 	}
-	return {};
+	return { mailConfigured: isMailConfigured() };
 };
 
 export const actions: Actions = {

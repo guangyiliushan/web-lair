@@ -22,7 +22,13 @@ export default defineConfig({
 		// (B3.1 bootstrapping finding - the challenge/page flows lost their
 		// session cookie). Pinning the http origin makes the preview behave like
 		// a real deployment on its own scheme.
-		env: { TAILSCALE_ALLOW_LOOPBACK: 'true', ORIGIN: 'http://localhost:4173' }
+		env: {
+			TAILSCALE_ALLOW_LOOPBACK: 'true',
+			ORIGIN: 'http://localhost:4173',
+			// Mail is unconfigured in tests: the transport logs the message
+			// instead of failing (production keeps the fail-loud contract).
+			MAIL_DEV_LOG: 'true'
+		}
 	},
 	testDir: 'e2e',
 	testMatch: '**/*.e2e.{ts,js}'
