@@ -38,7 +38,13 @@ function anchorIn(block: AnchorBlock, needle: string): CommentAnchor {
 async function resolveIn(markdown: string, anchor: CommentAnchor) {
 	const blocks = await blocksOf(markdown);
 	const resolved = resolveAnchor(blocks, anchor);
-	return resolved ? { text: resolved.block.text, exact: codePointSlice(resolved.block.text, resolved.start, resolved.end) } : null;
+	return resolved
+		? {
+				text: resolved.block.text,
+				hash: resolved.block.hash,
+				exact: codePointSlice(resolved.block.text, resolved.start, resolved.end)
+			}
+		: null;
 }
 
 const BASE = ['## 标题', '', '第一段：锚点句子在中间。尾巴。', '', '第二段：另一段内容。', '', '第三段：结束。'].join('\n');
@@ -54,7 +60,9 @@ describe('spec §12.2 edit matrix', () => {
 	it('改字 elsewhere in the same block still resolves the quote', async () => {
 		const anchor = await baseAnchor();
 		const edited = BASE.replace('尾巴。', '尾巴改过了。');
-		expect(await resolveIn(edited, anchor)).toMatchObject({ exact: '锚点句子' });
+		const resolved = await resolveIn(edited, anchor);
+		expect(resolved).toMatchObject({ exact: '锚点句子' });
+		expect(resolved?.text).toContain('第一段');
 	});
 
 	it('插句 above shifts the ordinal and still resolves (L2 window)', async () => {
@@ -67,6 +75,16 @@ describe('spec §12.2 edit matrix', () => {
 		const anchor = await baseAnchor();
 		const edited = BASE.replace('第一段：锚点句子', '锚点句子');
 		expect(await resolveIn(edited, anchor)).toMatchObject({ exact: '锚点句子' });
+	});
+
+	it('an inserted paragraph carrying the same quote does not steal the anchor', async () => {
+		const anchor = await baseAnchor();
+		// The new paragraph sits exactly at the old ordinal and contains the same
+		// quote: only identity (the unchanged hash) can tell them apart.
+		const edited = BASE.replace('## 标题\n\n', '## 标题\n\n锚点句子插入段。\n\n');
+		const resolved = await resolveIn(edited, anchor);
+		expect(resolved?.hash).toBe(anchor.block.hash);
+		expect(resolved?.text).toContain('第一段');
 	});
 
 	it('重排 far away still resolves through the unchanged block hash', async () => {

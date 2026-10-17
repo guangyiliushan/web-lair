@@ -145,6 +145,30 @@ describe('post comment actions', () => {
 		);
 		expect(bad).toMatchObject({ status: 400, data: { message: 'comment_error_generic' } });
 		expect(state.submitCalls).toHaveLength(0);
+
+		// A partial payload is a broken client, not an article-level comment.
+		state.submitCalls = [];
+		const partial = await commentAction(
+			makeEvent(fd({ text: 'anchored', anchorOrd: '1' }))
+		);
+		expect(partial).toMatchObject({ status: 400, data: { message: 'comment_error_generic' } });
+		expect(state.submitCalls).toHaveLength(0);
+
+		// Oversized exact is rejected before any code-point expansion.
+		state.submitCalls = [];
+		const oversized = await commentAction(
+			makeEvent(
+				fd({
+					text: 'anchored',
+					anchorOrd: '1',
+					anchorStart: '0',
+					anchorEnd: '4',
+					anchorExact: 'x'.repeat(2001)
+				})
+			)
+		);
+		expect(oversized).toMatchObject({ status: 400, data: { message: 'comment_error_generic' } });
+		expect(state.submitCalls).toHaveLength(0);
 	});
 
 	it('never forwards an anchor on a reply (anchors live on roots)', async () => {

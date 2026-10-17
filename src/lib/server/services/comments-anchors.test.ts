@@ -80,9 +80,11 @@ describe('assembleDiscussion (comment P3b read side)', () => {
 
 	it('moves an unresolved anchor to the folded area with its replies', () => {
 		const blocks = collectAnchorBlocks(body());
+		const missing = 'text that no longer exists';
 		const stale = {
 			...anchorFor(blocks, 'Second'),
-			quote: { exact: 'text that no longer exists', prefix: '', suffix: '' }
+			range: { start: 0, end: [...missing].length },
+			quote: { exact: missing, prefix: '', suffix: '' }
 		};
 		const reply = row({
 			id: 'reply-1',
@@ -121,7 +123,9 @@ describe('assembleDiscussion (comment P3b read side)', () => {
 		});
 		expect(threads.roots[0].isDeleted).toBe(true);
 		expect(threads.roots[0].text).toBe('');
-		expect(threads.roots[0].anchor?.orphaned).toBe(false);
+		// The passage text stays in the article; the placeholder no longer ships
+		// its historical quote (payload hygiene, B1 review angle 4).
+		expect(threads.roots[0].anchor).toBeNull();
 		expect(marks).toHaveLength(1);
 	});
 

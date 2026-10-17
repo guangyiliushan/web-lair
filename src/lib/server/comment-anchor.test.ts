@@ -104,6 +104,7 @@ describe('collectAnchorBlocks (spec §2/§3)', () => {
 
 describe('hashBlockText', () => {
 	it('is a 10 hex sha256 prefix and deterministic', () => {
+		expect(hashBlockText('hello')).toBe('2cf24dba5f');
 		const a = hashBlockText('hello');
 		expect(a).toMatch(/^[0-9a-f]{10}$/);
 		expect(hashBlockText('hello')).toBe(a);
@@ -215,6 +216,33 @@ describe('resolveAnchor (read side, L0→L1→L2)', () => {
 		expect(resolveAnchor(rewritten, anchor)).toBeNull();
 	});
 
+	it('enumerates overlapping occurrences of the quote', () => {
+		const blocks = collectAnchorBlocks(root(p(text('ababa'))));
+		const anchor = {
+			v: 1 as const,
+			lang: 'en',
+			block: { hash: blocks[0].hash, occ: 0, ord: 0 },
+			range: { start: 2, end: 5 },
+			quote: { exact: 'aba', prefix: 'ab', suffix: '' }
+		};
+		// The second "aba" starts inside the first one; stopping at the end of
+		// each match hid it and resolved to the wrong span.
+		expect(resolveAnchor(blocks, anchor)?.start).toBe(2);
+	});
+
+	it('uses the hint inside an overlapping run when context is ambiguous', () => {
+		const blocks = collectAnchorBlocks(root(p(text('aaaa'))));
+		const anchor = {
+			v: 1 as const,
+			lang: 'en',
+			block: { hash: blocks[0].hash, occ: 0, ord: 0 },
+			range: { start: 1, end: 4 },
+			quote: { exact: 'aaa', prefix: '', suffix: '' }
+		};
+		// Both occurrences match the (empty) context; the stored start decides.
+		expect(resolveAnchor(blocks, anchor)?.start).toBe(1);
+	});
+
 	it('resolves duplicate blocks by occ/context rather than by hash alone', () => {
 		const tree = root(p(text('same sentence here')), p(text('same sentence here')));
 		const blocks = collectAnchorBlocks(tree);
@@ -324,6 +352,8 @@ describe('applyAnchorMarks (spec §7/§12.6)', () => {
 	});
 
 	it('splits across inline elements and places the id only once', () => {
+		// (the id must land on the first span: a deep link to the tail would
+		// scroll past the marked sentence)
 		const tree = root(p(text('hello '), el('strong', [text('bold')]), text(' tail')));
 		const blocks = collectAnchorBlocks(tree);
 		const placed = applyAnchorMarks(blocks, [
@@ -342,6 +372,9 @@ describe('applyAnchorMarks (spec §7/§12.6)', () => {
 		const ids = spans.filter((spanEl) => spanEl.properties?.id);
 		expect(ids).toHaveLength(1);
 		expect(ids[0].properties?.id).toBe('c-c1');
+		// First span in document order: a deep link to a later fragment would
+		// scroll past the start of the marked sentence.
+		expect(spans[0].properties?.id).toBe('c-c1');
 		expect(plain(blocks[0].element)).toBe('hello bold tail');
 		expect(placed.get('c1')).toBe('c-c1');
 	});
@@ -410,7 +443,7 @@ describe('anchor schemas', () => {
 		v: 1,
 		lang: 'zh-cn',
 		block: { hash: 'abcdef0123', occ: 1, ord: 4 },
-		range: { start: 3, end: 9 },
+		range: { start: 3, end: 7 },
 		quote: { exact: '选区文本', prefix: '', suffix: '' }
 	};
 
@@ -426,14 +459,23 @@ describe('anchor schemas', () => {
 		expect(parseCommentAnchor({ ...valid, range: { start: 5, end: 600 } })).toBeNull();
 	});
 
+	it('rejects a stored quote whose length disagrees with its range', () => {
+		expect(
+			parseCommentAnchor({ ...valid, range: { start: 3, end: 9 }, quote: { ...valid.quote, exact: '选区文本' } })
+		).toBeNull();
+		expect(
+			parseCommentAnchor({ ...valid, range: { start: 3, end: 4 }, quote: { ...valid.quote, exact: '选' } })
+		).toBeNull();
+	});
+
 	it('counts quote bounds in code points', () => {
 		const exact = '👨‍👩‍👧‍👦'.repeat(20); // 140 code points, 220 UTF-16 units
 		expect(
-			parseCommentAnchor({ ...valid, quote: { exact, prefix: '', suffix: '' } })
+			parseCommentAnchor({ ...valid, range: { start: 0, end: 140 }, quote: { exact, prefix: '', suffix: '' } })
 		).not.toBeNull();
 		const tooLong = '👨‍👩‍👧‍👦'.repeat(80); // 560 code points
 		expect(
-			parseCommentAnchor({ ...valid, quote: { exact: tooLong, prefix: '', suffix: '' } })
+			parseCommentAnchor({ ...valid, range: { start: 0, end: 560 }, quote: { exact: tooLong, prefix: '', suffix: '' } })
 		).toBeNull();
 	});
 

@@ -39,13 +39,32 @@ export type AnchorDraftRead =
 	{ kind: 'none' } | { kind: 'ok'; draft: CommentAnchorDraft } | { kind: 'invalid' };
 
 export function readCommentAnchorDraft(form: FormData): AnchorDraftRead {
-	if (form.get('anchorOrd') === null) return { kind: 'none' };
+	const fields = ['anchorOrd', 'anchorStart', 'anchorEnd', 'anchorExact'] as const;
+	const present = fields.filter((field) => form.get(field) !== null);
+	if (present.length === 0) return { kind: 'none' };
+	// A partial payload used to degrade into an article-level comment; it is a
+	// broken client, so say so instead of silently dropping the anchor.
+	if (present.length !== fields.length) return { kind: 'invalid' };
+
+	const raw = fields.map((field) => form.get(field)?.toString() ?? '');
+	// Cap before Zod expands the string into code points: the anchor limiter
+	// runs later, so an oversized exact must not be materialised first.
+	if (raw[3].length > 2000) return { kind: 'invalid' };
+	const numeric = raw.slice(0, 3).map((value) => Number(value));
+	if (numeric.some((value) => !Number.isInteger(value) || value < 0)) return { kind: 'invalid' };
+
+	const lengthRaw = form.get('anchorLength');
+	const blockLength = lengthRaw === null ? undefined : Number(lengthRaw);
+	if (blockLength !== undefined && (!Number.isInteger(blockLength) || blockLength < 0)) {
+		return { kind: 'invalid' };
+	}
+
 	const draft = parseCommentAnchorDraft({
-		ord: Number(form.get('anchorOrd')),
-		start: Number(form.get('anchorStart')),
-		end: Number(form.get('anchorEnd')),
-		exact: form.get('anchorExact')?.toString() ?? '',
-		blockLength: form.get('anchorLength') === null ? undefined : Number(form.get('anchorLength'))
+		ord: numeric[0],
+		start: numeric[1],
+		end: numeric[2],
+		exact: raw[3],
+		blockLength
 	});
 	return draft ? { kind: 'ok', draft } : { kind: 'invalid' };
 }

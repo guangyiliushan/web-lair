@@ -359,7 +359,7 @@ export function assembleDiscussion(
 			createdAt: row.createdAt,
 			pin: row.pin,
 			isDeleted: row.isDeleted,
-			anchor: anchor.view,
+			anchor: row.isDeleted ? null : anchor.view,
 			replies
 		};
 		if (anchor.view?.orphaned) {

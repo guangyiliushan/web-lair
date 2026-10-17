@@ -33,6 +33,7 @@ import {
 	isAnchorBlock,
 	isAnchorSkipped,
 	isGraphemeBoundary,
+	splitsSurrogatePair,
 	utf16ToCodePoint,
 	type AnchorBlockRef,
 	type AnchorElementShape,
@@ -71,10 +72,24 @@ export const commentAnchorSchema = z.object({
 	}),
 	range: rangeSchema,
 	quote: z.object({
-		exact: codePointMax(ANCHOR_MAX_LENGTH).refine((value) => value.length > 0),
+		exact: codePointMax(ANCHOR_MAX_LENGTH).refine(
+			(value) => codePointLength(value) >= ANCHOR_MIN_LENGTH,
+			{ message: `exact must be at least ${ANCHOR_MIN_LENGTH} code points` }
+		),
 		prefix: codePointMax(ANCHOR_PREFIX_MAX),
 		suffix: codePointMax(ANCHOR_SUFFIX_MAX)
 	})
+}).superRefine((anchor, ctx) => {
+	// A stored row whose quote and range disagree would make the resolver search
+	// an arbitrary string; every app write satisfies this, so the check costs
+	// nothing and catches corrupted/manual rows at the boundary.
+	if (codePointLength(anchor.quote.exact) !== anchor.range.end - anchor.range.start) {
+		ctx.addIssue({
+			code: z.ZodIssueCode.custom,
+			path: ['quote', 'exact'],
+			message: 'quote length must equal the stored range'
+		});
+	}
 });
 
 /**
@@ -301,48 +316,64 @@ function inRange(block: AnchorBlock, start: number, end: number): boolean {
 }
 
 /**
- * Read-side resolution (spec §7): the stored ordinal first, then blocks that
- * still carry the stored content hash, then a ±2 neighbour window. Inside a
- * block the quote decides, and the stored range/prefix/suffix only break ties:
+ * Read-side resolution (spec §7), in order:
  *
- * - one occurrence of `exact` -> that occurrence (a typo elsewhere in the block
- *   must not orphan a quote that is still intact);
- * - several occurrences -> the one whose prefix/suffix still match; if none or
- *   several match, the stored range if it is an occurrence, else the nearest
- *   occurrence to it;
- * - no occurrence -> this block cannot host the anchor (miss / next candidate).
+ * 1. blocks that still carry the stored content hash (identity outranks
+ *    position: an inserted paragraph at the old ordinal must not steal the
+ *    comment just because it happens to contain the same short quote),
+ * 2. the block at the stored ordinal,
+ * 3. the ±2 neighbour window (blocks that moved after an insert/delete).
  *
- * The hash is a fast path, not an authority: positions are "very brittle"
- * (W3C §4.2.5) and the quote selectors are the real anchor.
+ * Inside a block the quote decides. Context (prefix/suffix) is required only
+ * when identity is unknown; a quote that occurs in exactly one block may be
+ * accepted without context, which is what keeps a typo elsewhere in the block
+ * from orphaning an intact anchor.
  */
 export function resolveAnchor(blocks: AnchorBlock[], anchor: CommentAnchor): ResolvedAnchor | null {
 	const quote = anchor.quote;
 	const hint = anchor.range.start;
-	const byDistance = (a: AnchorBlock, b: AnchorBlock) =>
-		Math.abs(a.ord - anchor.block.ord) - Math.abs(b.ord - anchor.block.ord);
+	const distance = (block: AnchorBlock) => Math.abs(block.ord - anchor.block.ord);
+	const byDistance = (a: AnchorBlock, b: AnchorBlock) => distance(a) - distance(b);
+
+	const stored = blocks.find((block) => block.ord === anchor.block.ord) ?? null;
+	const quoteBlocks = blocks.filter((block) => block.text.includes(quote.exact));
+	// A context-less match is only trustworthy when the quote pins exactly one
+	// block; otherwise it is the inserted-paragraph trap.
+	const globallyUniqueQuote = quoteBlocks.length === 1;
 
 	const candidates: AnchorBlock[] = [];
-	const stored = blocks.find((block) => block.ord === anchor.block.ord);
-	if (stored) candidates.push(stored);
-	candidates.push(
-		...blocks
-			.filter((block) => block.hash === anchor.block.hash && block !== stored)
-			.sort(byDistance)
-	);
-	candidates.push(
-		...blocks
-			.filter(
-				(block) =>
-					block !== stored &&
-					block.hash !== anchor.block.hash &&
-					Math.abs(block.ord - anchor.block.ord) <= 2
-			)
-			.sort(byDistance)
-	);
+	const seen = new Set<AnchorBlock>();
+	const push = (block: AnchorBlock) => {
+		if (seen.has(block)) return;
+		seen.add(block);
+		candidates.push(block);
+	};
+	blocks
+		.filter((block) => block.hash === anchor.block.hash)
+		.sort(byDistance)
+		.forEach(push);
+	if (stored) push(stored);
+	blocks
+		.filter((block) => distance(block) <= 2)
+		.sort(byDistance)
+		.forEach(push);
 
 	for (const block of candidates) {
 		const picked = pickOccurrence(block, quote, hint);
-		if (picked) return { block, start: picked.start, end: picked.end };
+		if (!picked) continue;
+		if (!isGraphemeBoundary(block.text, picked.start)) continue;
+		if (!isGraphemeBoundary(block.text, picked.end)) continue;
+		const identityKnown = block.hash === anchor.block.hash;
+		const contextOk = contextMatches(
+			block,
+			picked.start,
+			picked.end,
+			quote.prefix,
+			quote.suffix
+		);
+		if (identityKnown || contextOk || globallyUniqueQuote) {
+			return { block, start: picked.start, end: picked.end };
+		}
 	}
 	return null;
 }
@@ -352,17 +383,48 @@ interface Occurrence {
 	end: number;
 }
 
-/** Every occurrence of `exact` in the block, as code point ranges. */
+/** Guard against a two-code-point quote repeated across a huge paragraph. */
+const MAX_OCCURRENCES = 200;
+
+const codePointCache = new WeakMap<AnchorBlock, string[]>();
+function codePointsOf(block: AnchorBlock): string[] {
+	let cached = codePointCache.get(block);
+	if (!cached) {
+		cached = Array.from(block.text);
+		codePointCache.set(block, cached);
+	}
+	return cached;
+}
+
+/**
+ * Every occurrence of `exact`, as code point ranges. Overlapping matches are
+ * enumerated too (`"aba"` in `"ababa"` occurs at 0 and 2): stopping at the end
+ * of each match hid valid stored occurrences and made unchanged text resolve to
+ * the wrong span or orphan. The scan advances one code point at a time and
+ * keeps a running code-point counter, so the whole enumeration is linear.
+ */
 function occurrencesOf(block: AnchorBlock, exact: string): Occurrence[] {
 	if (exact.length === 0) return [];
+	const text = block.text;
+	const exactLength = codePointLength(exact);
 	const found: Occurrence[] = [];
 	let from = 0;
-	while (from <= block.text.length) {
-		const at = block.text.indexOf(exact, from);
+	let scanUtf16 = 0;
+	let scanCodePoint = 0;
+	while (found.length < MAX_OCCURRENCES) {
+		const at = text.indexOf(exact, from);
 		if (at < 0) break;
-		const start = utf16ToCodePoint(block.text, at);
-		found.push({ start, end: start + codePointLength(exact) });
-		from = at + Math.max(1, exact.length);
+		if (splitsSurrogatePair(text, at)) {
+			from = at + 1;
+			continue;
+		}
+		while (scanUtf16 < at) {
+			const value = text.codePointAt(scanUtf16) ?? 0;
+			scanUtf16 += value > 0xffff ? 2 : 1;
+			scanCodePoint += 1;
+		}
+		found.push({ start: scanCodePoint, end: scanCodePoint + exactLength });
+		from = at + 1;
 	}
 	return found;
 }
@@ -375,7 +437,7 @@ function contextMatches(
 	prefix: string,
 	suffix: string
 ): boolean {
-	const codePoints = Array.from(block.text);
+	const codePoints = codePointsOf(block);
 	const prefixLength = codePointLength(prefix);
 	const suffixLength = codePointLength(suffix);
 	const before = codePoints.slice(Math.max(0, start - prefixLength), start).join('');
@@ -468,9 +530,15 @@ export function resolveAnchorDraft(
 				codePointLength(block.text) === draft.blockLength
 		)
 		.sort((a, b) => Math.abs(a.ord - draft.ord) - Math.abs(b.ord - draft.ord));
+	// Without client context a window hit is only safe when the quote is unique
+	// across the document: two candidate paragraphs mean the page moved under
+	// the reader, and guessing would store a permanently wrong anchor.
+	const quoteBlocks = blocks.filter((block) => block.text.includes(draft.exact)).length;
 	for (const block of window) {
 		const found = pickOccurrence(block, { exact: draft.exact, prefix: '', suffix: '' }, draft.start);
-		if (found) return accept(block, found.start, found.end);
+		if (!found) continue;
+		if (quoteBlocks > 1 && block.ord !== draft.ord) return { kind: 'stale' };
+		return accept(block, found.start, found.end);
 	}
 	return { kind: 'stale' };
 }

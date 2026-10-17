@@ -76,6 +76,15 @@ describe('tree-mode rendering (spec §7: same compiler, no second pipeline)', ()
 		expect(stripTags(marked)).toBe(stripTags(doc.html));
 	});
 
+	it('keeps footnote markers and the footnote area out of the block text', async () => {
+		const tree = await renderMarkdownTree('Body with a footnote[^1].\n\n[^1]: note text');
+		const blocks = collectAnchorBlocks(tree);
+		// The reference superscript and the footnote section are skipped by
+		// attribute (data-footnote-ref / data-footnotes); a camelCase drift in
+		// the hast attribute adapter would leak "1" and the note text here.
+		expect(blocks.map((block) => block.text)).toEqual(['Body with a footnote.']);
+	});
+
 	it('keeps heading anchor links out of the block text', async () => {
 		const tree = await renderMarkdownTree('## Section {#custom}\n\nbody');
 		const blocks = collectAnchorBlocks(tree);

@@ -151,7 +151,7 @@
 										{entry.anchorQuote}
 									</p>
 									{#if entry.anchorContext}
-										<p class="truncate text-muted-foreground/70">{entry.anchorContext}</p>
+										<p class="truncate text-muted-foreground">{entry.anchorContext}</p>
 									{/if}
 								</div>
 							{/if}

@@ -32,21 +32,38 @@ export interface RenderedDiscussion {
 
 export async function renderDiscussion(input: RenderDiscussionInput): Promise<RenderedDiscussion> {
 	const tree = await renderMarkdownTree(input.markdown);
-	const blocks = collectAnchorBlocks(tree);
-	const { threads, marks } = await loadDiscussion({
-		targetType: input.targetType,
-		targetId: input.targetId,
-		viewerId: input.viewerId,
-		blocks
-	});
-
-	if (marks.length > 0) {
-		// Identical ranges share one span, so several comments can point at the
-		// same cluster representative; unplaced resolved anchors become orphans.
-		finalizeAnchorTargets(threads, applyAnchorMarks(blocks, marks), {
+	let threads: ThreadsPage;
+	try {
+		const blocks = collectAnchorBlocks(tree);
+		const loaded = await loadDiscussion({
 			targetType: input.targetType,
-			targetId: input.targetId
+			targetId: input.targetId,
+			viewerId: input.viewerId,
+			blocks
 		});
+		threads = loaded.threads;
+		if (loaded.marks.length > 0) {
+			// Identical ranges share one span, so several comments can point at
+			// the same cluster representative; unplaced resolved anchors become
+			// orphans.
+			finalizeAnchorTargets(threads, applyAnchorMarks(blocks, loaded.marks), {
+				targetType: input.targetType,
+				targetId: input.targetId
+			});
+		}
+	} catch (caught) {
+		// A resolver invariant must never 500 the whole article: render the body
+		// without marks and let anchored roots land in the orphan fold, which is
+		// visible and recoverable (B1 review, angle 4).
+		console.error('[comments] segment pipeline failed; rendering without marks', caught);
+		threads = (
+			await loadDiscussion({
+				targetType: input.targetType,
+				targetId: input.targetId,
+				viewerId: input.viewerId,
+				blocks: []
+			})
+		).threads;
 	}
 
 	return { html: await stringifyMarkdownTree(tree), discussion: threads };
