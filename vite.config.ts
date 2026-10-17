@@ -105,6 +105,11 @@ export default defineConfig({
 						testerHtmlPath: './vitest-tester.html',
 						api: { host: '127.0.0.1', port: browserApiPort() },
 						viewport: { width: 1280, height: 720 },
+						// Vitest's default API port 63315 sits inside a Windows
+						// excluded-port range on some hosts (Hyper-V reserves
+						// 63269-63368 here), which fails every run with EACCES.
+						// A pinned port outside the reserved bands is portable.
+						api: { port: 43017 },
 						instances: [
 							{
 								browser: 'chromium',
