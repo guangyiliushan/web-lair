@@ -18,6 +18,7 @@ import {
 	ANCHOR_SKIP_WRAPPERS,
 	codePointSlice,
 	foldSegments,
+	isGraphemeBoundary,
 	isAnchorBlock,
 	isAnchorSkipped,
 	type FoldSegment
@@ -212,6 +213,11 @@ export function selectionToAnchor(
 	const start = boundaryIndex(startBlock, range.startContainer, range.startOffset);
 	const end = boundaryIndex(startBlock, range.endContainer, range.endOffset);
 	if (start === null || end === null) return null;
+	// Endpoints must not cut a grapheme cluster (spec §3 / W3C §4.2.4). The
+	// writer would reject it later; refusing here keeps the action honest.
+	if (!isGraphemeBoundary(startBlock.text, start) || !isGraphemeBoundary(startBlock.text, end)) {
+		return null;
+	}
 	const length = end - start;
 	if (length < ANCHOR_MIN_LENGTH || length > ANCHOR_MAX_LENGTH) return null;
 

@@ -32,7 +32,7 @@ import {
 	foldSegments,
 	isAnchorBlock,
 	isAnchorSkipped,
-	splitsSurrogatePair,
+	isGraphemeBoundary,
 	utf16ToCodePoint,
 	type AnchorBlockRef,
 	type AnchorElementShape,
@@ -464,37 +464,6 @@ function hasDescendantTag(element: Element, tag: string): boolean {
 		if (hasDescendantTag(child, tag)) return true;
 	}
 	return false;
-}
-
-interface GraphemeSegmenter {
-	segment(input: string): Iterable<{ index: number }>;
-}
-
-/**
- * True when `offset` (in code points) sits on a grapheme-cluster boundary.
- * Splitting a surrogate pair is always rejected; when Intl.Segmenter is not
- * available the check degrades to that surrogate guard (registered deviation).
- */
-function isGraphemeBoundary(text: string, offset: number): boolean {
-	const total = codePointLength(text);
-	if (offset <= 0 || offset >= total) return true;
-	const utf16 = codePointToUtf16(text, offset);
-	if (splitsSurrogatePair(text, utf16)) return false;
-	const SegmenterCtor = (
-		Intl as unknown as {
-			Segmenter?: new (
-				locales?: string,
-				options?: { granularity: 'grapheme' }
-			) => GraphemeSegmenter;
-		}
-	).Segmenter;
-	if (!SegmenterCtor) return true;
-	const segmenter = new SegmenterCtor(undefined, { granularity: 'grapheme' });
-	for (const part of segmenter.segment(text)) {
-		if (part.index === utf16) return true;
-		if (part.index > utf16) return false;
-	}
-	return true;
 }
 
 /** Derive the stored anchor (prefix/suffix come from the server's own text). */

@@ -138,4 +138,50 @@ describe('selection to anchor', () => {
 		const selection = select(node, 0, node, 4);
 		expect(selectionToAnchor(host, selection)).toBeNull();
 	});
+
+	it('rejects a selection that cuts a grapheme cluster', () => {
+		const host = mountMarkdown('a👨‍👩‍👧‍👦b tail');
+		const node = host.querySelector('p')?.firstChild as Text;
+		// 3 is inside the ZWJ family (after the first member), not a cluster edge.
+		const selection = select(node, 3, node, 18);
+		expect(selectionToAnchor(host, selection)).toBeNull();
+	});
+
+	it('rejects selections longer than the 500 code point bound', () => {
+		const host = mountMarkdown('x'.repeat(600));
+		const node = host.querySelector('p')?.firstChild as Text;
+		const selection = select(node, 0, node, 501);
+		expect(selectionToAnchor(host, selection)).toBeNull();
+	});
+
+	it('rejects an endpoint inside a void subtree', () => {
+		const host = mount('<p>before<span class="katex">x</span>after</p>');
+		const katex = host.querySelector('.katex')?.firstChild as Text;
+		expect(katex).toBeInstanceOf(Text);
+		const selection = select(katex, 0, katex, 1);
+		expect(selectionToAnchor(host, selection)).toBeNull();
+	});
+
+	it('maps plain selections to the same code-point offsets the server stores', () => {
+		const cases: Array<{ markdown: string; needle: string; start: number; end: number }> = [
+			{ markdown: 'Hello world.', needle: 'world', start: 6, end: 11 },
+			// Folded text is "one two": the DOM node still holds the raw runs.
+			{ markdown: 'one   two', needle: 'two', start: 4, end: 7 },
+			{ markdown: 'one\ntwo', needle: 'two', start: 4, end: 7 },
+			{ markdown: 'a👨‍👩‍👧‍👦b tail', needle: 'b tail', start: 8, end: 14 }
+		];
+		for (const testCase of cases) {
+			const host = mountMarkdown(testCase.markdown);
+			const node = host.querySelector('p')?.firstChild as Text;
+			const at = node.data.indexOf(testCase.needle);
+			const selection = select(node, at, node, at + testCase.needle.length);
+			const found = selectionToAnchor(host, selection);
+			expect(found, testCase.markdown).toMatchObject({
+				start: testCase.start,
+				end: testCase.end,
+				exact: testCase.needle
+			});
+		}
+	});
 });
+
