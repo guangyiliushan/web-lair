@@ -34,6 +34,8 @@ export const PAGE_RESERVED_SLUGS: ReadonlySet<string> = new Set([
 	'robots.txt', // defensive: SLUG_RE already rejects dots
 	'rss.xml', // defensive: SLUG_RE already rejects dots
 	'sitemap.xml', // defensive: SLUG_RE already rejects dots
+	'subscribe',
+	'unsubscribe',
 	'verify-email',
 	'zh-cn'
 ]);
