@@ -72,15 +72,27 @@ function objectHeaders(access: Access, contentType: string | null): Headers {
  * (dev without ADDRESS_HEADER); that collapses to one shared bucket, which is
  * exactly the fail-open shape we want.
  */
+let warnedMissingAddress = false;
+
+/** A global bucket would 429 the whole site on a proxy misconfiguration. */
+function warnMissingAddressOnce(): void {
+	if (warnedMissingAddress) return;
+	warnedMissingAddress = true;
+	console.warn('[i] client address unresolved; media rate limit disabled');
+}
+
 async function throttled(getClientAddress: () => string): Promise<boolean> {
 	const address = (() => {
 		try {
-			return getClientAddress() || 'unknown';
+			return getClientAddress() || '';
 		} catch {
-			// dev without ADDRESS_HEADER: one shared bucket
-			return 'unknown';
+			return '';
 		}
 	})();
+	if (!address) {
+		warnMissingAddressOnce();
+		return false;
+	}
 	const result = await rateLimit(
 		getCache(),
 		`limits:i:${address}`,

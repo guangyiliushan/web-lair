@@ -235,4 +235,22 @@ describe('/i/<key> proxy (T9)', () => {
 		expect(res.status).toBe(429);
 		expect(storageMock.head).not.toHaveBeenCalled();
 	});
+
+	it('fails open when the client address cannot be resolved (no global bucket)', async () => {
+		storageMock.get.mockResolvedValueOnce({
+			body: bodyOf('x'),
+			byteSize: 1,
+			contentType: 'image/webp',
+			etag: null
+		});
+		const res = await GET({
+			params: { key: VARIANT_KEY },
+			locals: {},
+			getClientAddress: () => {
+				throw new Error('no address');
+			}
+		} as unknown as Parameters<typeof GET>[0]);
+		expect(res.status).toBe(200);
+		expect(rateLimitMock).not.toHaveBeenCalled();
+	});
 });
