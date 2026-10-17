@@ -239,6 +239,12 @@
 		scrollbar-color: var(--scrollbar-thumb) transparent;
 		scrollbar-gutter: stable;
 	}
+	@media (prefers-reduced-motion: reduce) {
+		/* Jump links and comment scrollIntoView must not animate (WCAG 2.3.3). */
+		html {
+			scroll-behavior: auto;
+		}
+	}
 
 	::-webkit-scrollbar {
 		width: 5px;
@@ -334,6 +340,13 @@
 		pointer-events: none;
 	}
 	@media print {
+		/* Fixed comment surfaces must never print over the article. */
+		[data-slot='comment-selection-action'],
+		[data-slot='comment-selection-panel'],
+		[data-slot='comment-thread-popover'],
+		[data-slot='comment-mark-hover'] {
+			display: none !important;
+		}
 		/* mask reveals in print: the blocks must not print as solid bars (spec 7) */
 		.spoiler {
 			background-color: transparent;
@@ -683,7 +696,13 @@
 		text-decoration-style: dashed;
 	}
 	.wl-cm:target {
-		background: color-mix(in oklch, var(--primary) 14%, transparent);
+		background: color-mix(in oklch, var(--primary) 22%, transparent);
+		border-radius: 2px;
+	}
+	/* A focused mark is the keyboard entry point: same cue as :target. */
+	.wl-cm:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
 		border-radius: 2px;
 	}
 

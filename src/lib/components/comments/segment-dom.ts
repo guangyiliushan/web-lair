@@ -16,6 +16,7 @@ import {
 	ANCHOR_MAX_LENGTH,
 	ANCHOR_MIN_LENGTH,
 	ANCHOR_SKIP_WRAPPERS,
+	codePointLength,
 	codePointSlice,
 	foldSegments,
 	isGraphemeBoundary,
@@ -47,6 +48,8 @@ export interface SegmentSelection {
 	end: number;
 	/** The selected text after normalization (code points [start, end)). */
 	exact: string;
+	/** Code points in the whole block (stale-ord fingerprint sent to the server). */
+	length: number;
 	/** Viewport rect of the selection, for the floating action. */
 	rect: DOMRect;
 }
@@ -170,16 +173,22 @@ function boundaryIndex(block: DomBlock, node: Node, offset: number): number | nu
 	} catch {
 		return null;
 	}
-	let index = 0;
-	for (const point of block.points) {
+	// `comparePoint` is monotonic over document order, so the boundary count can
+	// be bisected: ~13 comparisons on a 5,000-code-point block instead of 5,000
+	// DOM calls per endpoint (B2 review, angle 1).
+	let low = 0;
+	let high = block.points.length;
+	while (low < high) {
+		const mid = (low + high) >> 1;
+		const point = block.points[mid];
 		const end = point.offset + point.length;
-		// A range that ends inside a surrogate pair cannot be compared reliably.
+		// The map can outlive its node when characterData changes (unobserved in
+		// older builds): bail rather than compare stale offsets.
 		if (end > point.node.data.length) return null;
-		const relation = probe.comparePoint(point.node, end);
-		if (relation === 1) break;
-		index += 1;
+		if (probe.comparePoint(point.node, end) === 1) high = mid;
+		else low = mid + 1;
 	}
-	return index;
+	return low;
 }
 
 /**
@@ -227,5 +236,5 @@ export function selectionToAnchor(
 	const rect = range.getBoundingClientRect();
 	if (rect.width === 0 && rect.height === 0) return null;
 
-	return { ord: startBlock.ord, start, end, exact, rect };
+	return { ord: startBlock.ord, start, end, exact, length: codePointLength(startBlock.text), rect };
 }

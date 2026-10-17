@@ -183,5 +183,49 @@ describe('selection to anchor', () => {
 			});
 		}
 	});
+
+	it('maps a selection in the second block to ord 1', () => {
+		const host = mountMarkdown('## Title\n\nBody text here.');
+		const node = host.querySelector('p')?.firstChild as Text;
+		const at = node.data.indexOf('text');
+		const selection = select(node, at, node, at + 4);
+		expect(selectionToAnchor(host, selection)).toMatchObject({
+			ord: 1,
+			start: 5,
+			end: 9,
+			exact: 'text',
+			length: 15
+		});
+	});
+
+	it('accepts the exact 2 and 500 code point bounds', () => {
+		const two = mountMarkdown('ab');
+		const twoNode = two.querySelector('p')?.firstChild as Text;
+		expect(selectionToAnchor(two, select(twoNode, 0, twoNode, 2))).toMatchObject({
+			start: 0,
+			end: 2,
+			exact: 'ab'
+		});
+		const fiveHundred = mountMarkdown('x'.repeat(500));
+		const longNode = fiveHundred.querySelector('p')?.firstChild as Text;
+		const found = selectionToAnchor(fiveHundred, select(longNode, 0, longNode, 500));
+		expect(found?.start).toBe(0);
+		expect(found?.end).toBe(500);
+	});
+
+	it('keeps offsets aligned after an inline skipped span', () => {
+		const host = mount('<p>before<span class="katex">x</span>after</p>');
+		const paragraph = host.querySelector('p') as HTMLElement;
+		const after = [...paragraph.childNodes].find(
+			(node) => node.nodeType === Node.TEXT_NODE && (node as Text).data === 'after'
+		) as Text;
+		expect(after).toBeInstanceOf(Text);
+		expect(selectionToAnchor(host, select(after, 0, after, 5))).toMatchObject({
+			start: 6,
+			end: 11,
+			exact: 'after'
+		});
+	});
 });
+
 

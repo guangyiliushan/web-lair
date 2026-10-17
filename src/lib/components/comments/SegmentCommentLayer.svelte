@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { m } from '$lib/paraglide/messages';
 	import CommentComposer from './CommentComposer.svelte';
 	import CommentItem from './CommentItem.svelte';
@@ -30,12 +31,20 @@
 	}
 	let { container, threads, canComment, loginUrl, form = null }: Props = $props();
 
-	let blocks = $state<DomBlock[]>([]);
+	// Raw: the block directory is a plain tree snapshot, not UI state. Wrapping
+	// thousands of points in deep proxies cost 13x on the hot boundary loop
+	// (B2 review, angle 1).
+	let blocks = $state.raw<DomBlock[] | null>(null);
+	let blocksDirty = true;
 	let selected = $state<SegmentSelection | null>(null);
 	let composerOpen = $state(false);
-	let activeThread = $state<ThreadRoot | null>(null);
+	let activeThreadId = $state<string | null>(null);
 	let threadRect = $state<{ left: number; top: number } | null>(null);
 	let panelEl = $state<HTMLElement | null>(null);
+	let threadEl = $state<HTMLElement | null>(null);
+	let closeThreadEl = $state<HTMLButtonElement | null>(null);
+	/** Element that had focus before an overlay opened (focus return, 2.4.3). */
+	let returnFocusTo: HTMLElement | null = null;
 	/** Narrow viewport: composer and thread become bottom sheets (spec §5). */
 	let narrow = $state(false);
 	/** Desktop hover summary card (spec §7); decorative, never interactive. */
@@ -46,8 +55,30 @@
 	let scheduleTimer = 0;
 	let hoverTimer = 0;
 
-	function refreshBlocks(host: HTMLElement) {
-		blocks = collectDomBlocks(host);
+	/** The article finished hydrating: e2e readiness + first-use build gate. */
+	let ready = $state(false);
+
+	const activeThread = $derived(
+		activeThreadId === null
+			? null
+			: (threads.roots.find((root) => root.id === activeThreadId) ?? null)
+	);
+
+	// A refresh can drop the open thread (deleted root, moderation change): the
+	// snapshot must never outlive the prop it came from.
+	$effect(() => {
+		if (activeThreadId !== null && activeThread === null) {
+			activeThreadId = null;
+			threadRect = null;
+		}
+	});
+
+	function ensureBlocks(host: HTMLElement): DomBlock[] {
+		if (blocks === null || blocksDirty) {
+			blocks = collectDomBlocks(host);
+			blocksDirty = false;
+		}
+		return blocks;
 	}
 
 	function clearHover() {
@@ -68,7 +99,7 @@
 			selected = null;
 			return;
 		}
-		selected = selectionToAnchor(host, selection, blocks);
+		selected = selectionToAnchor(host, selection, ensureBlocks(host));
 	}
 
 	function scheduleSelection(host: HTMLElement) {
@@ -88,27 +119,44 @@
 		window.getSelection()?.removeAllRanges();
 	}
 
-	function openThread(mark: Element) {
-		const commentId = mark.getAttribute('data-cid');
-		if (!commentId) return;
+	async function openThread(mark: Element) {
+		// A cluster carries every id; the representative (`data-cid`) can be a
+		// deleted root or another reader's comment, so pick the first id the
+		// reader can actually open.
+		const ids = (mark.getAttribute('data-cids') ?? mark.getAttribute('data-cid') ?? '')
+			.split(/\s+/)
+			.filter(Boolean);
+		if (ids.length === 0) return;
+		const commentId = ids.find((id) => threads.roots.some((root) => root.id === id));
+		if (!commentId) {
+			// Nothing in this cluster is renderable: park the reader on the list.
+			document
+				.querySelector<HTMLElement>(`[data-comment-id="${ids[0]}"]`)
+				?.scrollIntoView({ block: 'center' });
+			return;
+		}
 		clearHover();
+		// One surface at a time: the composer and the thread used to stack.
+		if (composerOpen) closeComposer();
+		returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		const rect = mark.getBoundingClientRect();
 		threadRect = {
 			left: Math.min(Math.max(rect.left, 8), Math.max(8, window.innerWidth - 360)),
-			top: Math.min(rect.bottom + 8, Math.max(8, window.innerHeight - 240))
+			top: Math.min(rect.bottom + 8, Math.max(8, window.innerHeight - 380))
 		};
-		activeThread = threads.roots.find((root) => root.id === commentId) ?? null;
-		if (!activeThread) {
-			// Cluster representative mismatch: park the reader on the list entry.
-			document
-				.querySelector<HTMLElement>(`[data-comment-id="${commentId}"]`)
-				?.scrollIntoView({ block: 'center' });
-		}
+		activeThreadId = commentId;
+		await tick();
+		closeThreadEl?.focus();
 	}
 
 	function closeThread() {
-		activeThread = null;
+		activeThreadId = null;
 		threadRect = null;
+		// Focus return: a dialog that closes into <body> loses the reader's place
+		// (WCAG 2.4.3). The mark itself is focusable now, so this usually lands
+		// back where the thread was opened.
+		if (returnFocusTo?.isConnected) returnFocusTo.focus();
+		returnFocusTo = null;
 	}
 
 	function showHover(mark: Element, commentId: string) {
@@ -128,14 +176,24 @@
 	$effect(() => {
 		const host = container;
 		if (!host) return;
-		refreshBlocks(host);
+		// No eager walk: a page nobody selects in never pays for the directory.
+		ready = true;
+		blocksDirty = true;
 		const hoverCapable = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 		const onSelectionEvent = () => scheduleSelection(host);
 		const onPointerUp = () => scheduleSelection(host);
 		const onScroll = () => hideFloating();
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key !== 'Escape') return;
+			const target = event.target as Element | null;
+			const mark = target?.closest?.('.wl-cm');
+			if (mark && host.contains(mark) && (event.key === 'Enter' || event.key === ' ')) {
+				// Marks are buttons for keyboard users too (WCAG 2.1.1).
+				event.preventDefault();
+				void openThread(mark);
+				return;
+			}
+			if (event.key !== 'Escape' || event.defaultPrevented) return;
 			clearHover();
 			if (composerOpen) closeComposer();
 			else if (activeThread) closeThread();
@@ -144,7 +202,7 @@
 			const target = event.target as Element | null;
 			const mark = target?.closest?.('.wl-cm');
 			if (!mark || !host.contains(mark)) return;
-			openThread(mark);
+			void openThread(mark);
 		};
 		const onPointerOver = (event: PointerEvent) => {
 			if (!hoverCapable || event.pointerType !== 'mouse') return;
@@ -167,6 +225,9 @@
 			const target = event.target as Node | null;
 			if (!target) return;
 			if (panelEl?.contains(target)) return;
+			// The thread popover owns its own clicks: without this guard every
+			// pointerdown inside it (reply, edit, close) closed it before click.
+			if (threadEl?.contains(target)) return;
 			if ((target as Element).closest?.('.wl-cm')) return;
 			closeThread();
 		};
@@ -174,8 +235,10 @@
 		// The `{@html}` swap replaces the article's children after every
 		// submission: the block map must be re-derived, or the next selection
 		// would be resolved against dead nodes.
-		const observer = new MutationObserver(() => refreshBlocks(host));
-		observer.observe(host, { childList: true, subtree: true });
+		const observer = new MutationObserver(() => {
+			blocksDirty = true;
+		});
+		observer.observe(host, { childList: true, subtree: true, characterData: true });
 
 		document.addEventListener('selectionchange', onSelectionEvent);
 		host.addEventListener('pointerup', onPointerUp);
@@ -187,7 +250,10 @@
 		host.addEventListener('pointerout', onPointerOut);
 
 		return () => {
+			ready = false;
 			window.clearTimeout(scheduleTimer);
+			window.clearTimeout(hoverTimer);
+			hovered = null;
 			observer.disconnect();
 			document.removeEventListener('selectionchange', onSelectionEvent);
 			host.removeEventListener('pointerup', onPointerUp);
@@ -228,7 +294,12 @@
 </script>
 
 <!-- Client-only mount marker: e2e readiness (hydration) and block count for diagnostics. -->
-<span data-slot="segment-layer" data-blocks={blocks.length} hidden></span>
+<span
+	data-slot="segment-layer"
+	data-ready={ready ? 'true' : 'false'}
+	data-blocks={blocks?.length ?? 0}
+	hidden
+></span>
 
 {#if hovered && !selected && !composerOpen && !activeThread}
 	<!-- Desktop preview only: aria-hidden because the popover is the surface. -->
@@ -248,7 +319,7 @@
 {#if selected && !composerOpen && !activeThread}
 	<button
 		type="button"
-		class="fixed z-40 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-lg transition-opacity hover:opacity-90"
+		class="fixed z-40 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-lg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 		style={floatingStyle}
 		data-slot="comment-selection-action"
 		onclick={openComposer}
@@ -261,7 +332,7 @@
 	<div
 		bind:this={panelEl}
 		class={narrow
-			? 'fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-auto rounded-t-xl border-t border-border bg-card p-4 shadow-xl'
+			? 'fixed inset-x-0 bottom-0 z-50 max-h-[70dvh] overflow-auto rounded-t-xl border-t border-border bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl'
 			: 'fixed z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card p-3 shadow-xl'}
 		style={narrow ? '' : floatingStyle}
 		role="dialog"
@@ -286,7 +357,8 @@
 					anchorOrd: String(selected.ord),
 					anchorStart: String(selected.start),
 					anchorEnd: String(selected.end),
-					anchorExact: selected.exact
+					anchorExact: selected.exact,
+					anchorLength: String(selected.length)
 				}}
 			/>
 		{:else if loginUrl}
@@ -298,14 +370,14 @@
 			</p>
 			<button
 				type="button"
-				class="mt-2 text-xs text-muted-foreground underline underline-offset-2"
+				class="mt-2 inline-flex min-h-6 items-center px-1.5 text-xs text-muted-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 				onclick={closeComposer}>{m.comment_segment_close()}</button
 			>
 		{:else}
 			<p class="text-sm text-muted-foreground">{m.comment_verify_hint()}</p>
 			<button
 				type="button"
-				class="mt-2 text-xs text-muted-foreground underline underline-offset-2"
+				class="mt-2 inline-flex min-h-6 items-center px-1.5 text-xs text-muted-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 				onclick={closeComposer}>{m.comment_segment_close()}</button
 			>
 		{/if}
@@ -314,8 +386,9 @@
 
 {#if activeThread && threadRect}
 	<div
+		bind:this={threadEl}
 		class={narrow
-			? 'fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-auto rounded-t-xl border-t border-border bg-card shadow-xl'
+			? 'fixed inset-x-0 bottom-0 z-50 max-h-[70dvh] overflow-auto rounded-t-xl border-t border-border bg-card pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-xl'
 			: 'fixed z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card shadow-xl'}
 		style={narrow ? '' : `left:${threadRect.left}px;top:${threadRect.top}px`}
 		role="dialog"
@@ -327,7 +400,8 @@
 			<span class="text-xs font-medium text-muted-foreground">{m.comment_segment_thread()}</span>
 			<button
 				type="button"
-				class="rounded-sm text-xs text-muted-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+				bind:this={closeThreadEl}
+				class="inline-flex min-h-6 items-center rounded-sm px-1.5 text-xs text-muted-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 				onclick={closeThread}>{m.comment_segment_close()}</button
 			>
 		</div>

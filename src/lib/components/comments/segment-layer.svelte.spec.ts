@@ -111,7 +111,8 @@ describe('segment comment layer', () => {
 			anchorOrd: '0',
 			anchorStart: '4',
 			anchorEnd: '10',
-			anchorExact: '选择这段文字'
+			anchorExact: '选择这段文字',
+			anchorLength: '14'
 		});
 	});
 
@@ -234,4 +235,51 @@ describe('segment comment layer', () => {
 			restore();
 		}
 	});
+
+	it('keeps the thread popover alive for a pointerdown inside it', async () => {
+		const container = host('<p>前文<span class="wl-cm" data-cid="root-1">选中</span>后文</p>');
+		render(SegmentCommentLayer, {
+			container,
+			threads: layerThreads,
+			canComment: true,
+			loginUrl: null
+		});
+		const mark = container.querySelector('.wl-cm') as HTMLElement;
+		mark.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const popover = document.querySelector<HTMLElement>('[data-slot="comment-thread-popover"]');
+		expect(popover).not.toBeNull();
+		const control = popover?.querySelector('button') as HTMLElement;
+		control.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+		// Regression: every pointerdown inside the popover used to close it
+		// before the click could run, so all controls were dead for mice.
+		expect(document.querySelector('[data-slot="comment-thread-popover"]')).not.toBeNull();
+		control.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(document.querySelector('[data-slot="comment-thread-popover"]')).toBeNull();
+	});
+
+	it('opens the thread from the keyboard and returns focus to the mark', async () => {
+		const container = host('<p>前文<span class="wl-cm" data-cid="root-1">选中</span>后文</p>');
+		render(SegmentCommentLayer, {
+			container,
+			threads: layerThreads,
+			canComment: true,
+			loginUrl: null
+		});
+		const mark = container.querySelector('.wl-cm') as HTMLElement;
+		mark.tabIndex = 0;
+		mark.focus();
+		mark.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const popover = document.querySelector<HTMLElement>('[data-slot="comment-thread-popover"]');
+		expect(popover).not.toBeNull();
+		// Focus lands inside the dialog (2.4.3), not on <body>.
+		expect(popover?.contains(document.activeElement)).toBe(true);
+		document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(document.querySelector('[data-slot="comment-thread-popover"]')).toBeNull();
+		expect(document.activeElement).toBe(mark);
+	});
 });
+

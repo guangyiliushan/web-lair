@@ -84,14 +84,13 @@ async function ownerPage(browser: Browser): Promise<{ context: BrowserContext; p
  * nudge the layer the way a pointer release would (selectionchange + pointerup).
  */
 async function selectInParagraph(page: Page, paragraphContains: string, needle: string) {
-	// The marker ships in the SSR HTML as well, so only a non-empty block count
-	// proves the layer's client effect ran; dispatching selection events before
-	// that loses them.
+	// The marker exists only after the client effect ran (SSR renders null
+	// container), so data-ready is the hydration signal for every case here.
 	await page.waitForFunction(
-		() => {
-			const marker = document.querySelector('[data-slot="segment-layer"]');
-			return marker !== null && Number(marker.getAttribute('data-blocks')) > 0;
-		},
+		() =>
+			document
+				.querySelector('[data-slot="segment-layer"]')
+				?.getAttribute('data-ready') === 'true',
 		undefined,
 		{ timeout: 30_000 }
 	);
@@ -204,10 +203,10 @@ test('clicking a mark opens the in-place thread', async ({ page }) => {
 	// Same readiness contract as selectInParagraph: click only after the
 	// layer's listeners exist.
 	await page.waitForFunction(
-		() => {
-			const marker = document.querySelector('[data-slot="segment-layer"]');
-			return marker !== null && Number(marker.getAttribute('data-blocks')) > 0;
-		},
+		() =>
+			document
+				.querySelector('[data-slot="segment-layer"]')
+				?.getAttribute('data-ready') === 'true',
 		undefined,
 		{ timeout: 30_000 }
 	);
