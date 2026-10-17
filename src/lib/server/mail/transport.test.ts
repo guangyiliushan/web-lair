@@ -71,7 +71,8 @@ describe('mail transport (D-2)', () => {
 			host: 'smtp.example.com',
 			port: 587,
 			secure: false,
-			requireTLS: true
+			requireTLS: true,
+			auth: { user: 'user', pass: 'pass' }
 		});
 		expect(sendMailMock).toHaveBeenCalledWith({
 			from: 'noreply@mail.example.com',
@@ -87,6 +88,45 @@ describe('mail transport (D-2)', () => {
 		const options = createTransportMock.mock.calls[0]![0] as Record<string, unknown>;
 		expect(options.requireTLS).toBe(false);
 		expect(options.auth).toBeUndefined();
+	});
+
+	it('reads the port from env and treats 2525 as a STARTTLS submission port', async () => {
+		configure({ MAIL_SMTP_PORT: '2525' });
+		await sendMail({ to: 'a@b.c', subject: 's', text: 't' });
+		const options = createTransportMock.mock.calls[0]![0] as Record<string, unknown>;
+		expect(options.port).toBe(2525);
+		expect(options.requireTLS).toBe(true);
+	});
+
+	it('uses implicit TLS on 465 (secure true, no STARTTLS requirement)', async () => {
+		configure({ MAIL_SMTP_PORT: '465' });
+		await sendMail({ to: 'a@b.c', subject: 's', text: 't' });
+		const options = createTransportMock.mock.calls[0]![0] as Record<string, unknown>;
+		expect(options.secure).toBe(true);
+		expect(options.requireTLS).toBe(false);
+	});
+
+	it('honours MAIL_SMTP_REQUIRE_TLS=false for a relay without STARTTLS', async () => {
+		configure({ MAIL_SMTP_REQUIRE_TLS: 'false' });
+		await sendMail({ to: 'a@b.c', subject: 's', text: 't' });
+		const options = createTransportMock.mock.calls[0]![0] as Record<string, unknown>;
+		expect(options.requireTLS).toBe(false);
+	});
+
+	it('delegates to the real transport when configured, even in dev', async () => {
+		configure();
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		await sendMailOrDevLog({ to: 'a@b.c', subject: 's', text: 't' });
+		expect(createTransportMock).toHaveBeenCalledTimes(1);
+		expect(info).not.toHaveBeenCalled();
+		info.mockRestore();
+	});
+
+	it('refuses MAIL_DEV_LOG in production (tokens must not reach stdout)', async () => {
+		configure({ NODE_ENV: 'production', MAIL_DEV_LOG: 'true' });
+		await expect(sendMailOrDevLog({ to: 'a@b.c', subject: 's', text: 't' })).rejects.toThrow(
+			/MAIL_DEV_LOG/
+		);
 	});
 
 	it('signs DKIM in-process and unescapes the PEM newlines', async () => {

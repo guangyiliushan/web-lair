@@ -32,6 +32,15 @@ export function isMailConfigured(): boolean {
 	return env.MAIL_ENABLED === 'true' && Boolean(env.MAIL_SMTP_HOST);
 }
 
+/**
+ * True when the call sites can hand mail off without throwing: configured, or
+ * an explicit dev-log environment. The register page and its action share this
+ * predicate so the banner and the submit button agree.
+ */
+export function isMailDeliveryAvailable(): boolean {
+	return isMailConfigured() || import.meta.env.DEV || env.MAIL_DEV_LOG === 'true';
+}
+
 function dkimOptions():
 	{ domainName: string; keySelector: string; privateKey: string } | undefined {
 	const domainName = env.MAIL_DKIM_DOMAIN;
@@ -43,6 +52,7 @@ function dkimOptions():
 }
 
 let cached: Transporter | null = null;
+let warnedUnsigned = false;
 
 function transporter(): Transporter {
 	if (cached) return cached;
@@ -54,6 +64,10 @@ function transporter(): Transporter {
 	const requireTls = env.MAIL_SMTP_REQUIRE_TLS
 		? env.MAIL_SMTP_REQUIRE_TLS === 'true'
 		: port !== 465 && !loopback;
+	if (!dkimOptions() && !warnedUnsigned) {
+		warnedUnsigned = true;
+		console.warn('[mail] DKIM is not configured; outbound mail will be unsigned');
+	}
 	cached = nodemailer.createTransport({
 		host,
 		port,
@@ -96,6 +110,13 @@ export async function sendMail(mail: OutgoingMail): Promise<void> {
  * requiring an SMTP server; production delegates to `sendMail` (fail-loud).
  */
 export async function sendMailOrDevLog(mail: OutgoingMail): Promise<void> {
+	if (env.NODE_ENV === 'production' && env.MAIL_DEV_LOG === 'true' && env.MAIL_SMTP_HOST) {
+		// Configured transport + dev logging = tokens in the log instead of mail.
+		// (An unconfigured preview may dev-log; e2e relies on that.)
+		throw new Error(
+			'[mail] MAIL_DEV_LOG cannot be enabled alongside a configured SMTP host in production'
+		);
+	}
 	const devLog = import.meta.env.DEV || env.MAIL_DEV_LOG === 'true';
 	if (!isMailConfigured() && devLog) {
 		console.info(`[mail:dev] to=${mail.to} subject=${mail.subject}\n${mail.text}`);

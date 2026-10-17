@@ -2,17 +2,21 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
-import { isMailConfigured } from '$lib/server/mail/transport';
+import { isMailDeliveryAvailable } from '$lib/server/mail/transport';
+import { m } from '$lib/paraglide/messages';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
 		redirect(302, '/admin');
 	}
-	return { mailConfigured: isMailConfigured() };
+	return { mailConfigured: isMailDeliveryAvailable() };
 };
 
 export const actions: Actions = {
 	signUp: async (event) => {
+		if (!isMailDeliveryAvailable()) {
+			return fail(503, { message: m.auth_register_mail_unconfigured() });
+		}
 		const formData = await event.request.formData();
 		const email = formData.get('email')?.toString() ?? '';
 		const password = formData.get('password')?.toString() ?? '';

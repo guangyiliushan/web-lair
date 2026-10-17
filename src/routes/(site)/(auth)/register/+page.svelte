@@ -85,7 +85,7 @@
 							required
 						/>
 					</Field.Field>
-					<Button type="submit" class="w-full">
+					<Button type="submit" class="w-full" disabled={!data.mailConfigured}>
 						<IconMail data-icon="inline-start" />
 						{m.auth_create_account()}
 					</Button>
