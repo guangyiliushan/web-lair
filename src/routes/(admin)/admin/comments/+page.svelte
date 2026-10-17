@@ -135,7 +135,11 @@
 								>
 							</div>
 							<p class="mt-1.5 text-sm whitespace-pre-wrap text-muted-foreground">{entry.text}</p>
-							{#if entry.anchorQuote}
+							{#if entry.anchorGated}
+								<p class="mt-1.5 text-xs text-muted-foreground/70" data-slot="comment-anchor-gated">
+									{m.admin_comments_anchor_gated()}
+								</p>
+							{:else if entry.anchorQuote}
 								<!-- Segment anchor (P3b): the quote the reader selected plus
 								     its context window, straight from the stored anchor. -->
 								<div class="mt-1.5 space-y-0.5 text-xs" data-slot="comment-anchor-context">

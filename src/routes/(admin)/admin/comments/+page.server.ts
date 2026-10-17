@@ -6,7 +6,7 @@ import { comments } from '$lib/server/db/content/comment.schema';
 import { notes } from '$lib/server/db/content/note.schema';
 import { pages } from '$lib/server/db/content/page.schema';
 import { posts } from '$lib/server/db/content/post.schema';
-import { can, requireCommentReviewer } from '$lib/server/authz';
+import { can, getUserRole, requireCommentReviewer } from '$lib/server/authz';
 import { parseCommentAnchor } from '$lib/server/comment-anchor';
 import { isUuid } from '$lib/utils/uuid';
 import type { Actions, PageServerLoad } from './$types';
@@ -19,7 +19,11 @@ function parseState(value: string | null): ReviewState {
 }
 
 export const load: PageServerLoad = async (event) => {
-	await requireCommentReviewer();
+	const reviewer = await requireCommentReviewer();
+	// A reviewer may lack access to password-gated notes; the queue must not
+	// become a side channel into their body text (B2 review, angle 2).
+	const role = getUserRole(reviewer);
+	const canReadGatedNotes = role === 'owner' || role === 'admin';
 	const state = parseState(event.url.searchParams.get('state'));
 
 	// Comment P3a queue enhancement (spec §9): resolve the exclusive-arc
@@ -43,6 +47,7 @@ export const load: PageServerLoad = async (event) => {
 			noteTitle: notes.title,
 			noteSlug: notes.slug,
 			noteLang: notes.lang,
+			notePasswordHash: notes.passwordHash,
 			pageId: comments.pageId,
 			pageTitle: pages.title,
 			pageSlug: pages.slug,
@@ -65,16 +70,22 @@ export const load: PageServerLoad = async (event) => {
 	const entries = rows.map((row) => {
 		// Never ship the stored payload (hash/occ/ord/range/exact/prefix/suffix)
 		// to the browser: the queue renders only the excerpt and its context.
-		const { anchor: rawAnchor, ...rest } = row;
+		const { anchor: rawAnchor, notePasswordHash, ...rest } = row;
 		const anchor = parseCommentAnchor(rawAnchor);
+		const gated = notePasswordHash !== null && !canReadGatedNotes;
 		return {
 			...rest,
-			anchorQuote: anchor?.quote.exact ?? null,
+			anchorGated: gated,
+			anchorQuote: gated ? null : (anchor?.quote.exact ?? null),
 			// The quote already has its own line; context contributes what sits
 			// around it (prefix + suffix), without repeating the exact text.
-			anchorContext: anchor
-				? [anchor.quote.prefix, anchor.quote.suffix].filter((part) => part.length > 0).join(' ')
-				: null
+			anchorContext: gated
+				? null
+				: anchor
+					? [anchor.quote.prefix, anchor.quote.suffix]
+							.filter((part) => part.length > 0)
+							.join(' ')
+					: null
 		};
 	});
 
