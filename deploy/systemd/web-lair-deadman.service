@@ -1,0 +1,10 @@
+[Unit]
+Description=web-lair box-external dead-man ping
+Documentation=deploy/RUNBOOK.md
+
+[Service]
+Type=oneshot
+EnvironmentFile=/srv/web-lair/app/.env
+# healthchecks.io style URL. The point is that a missing ping (box dead,
+# network down, timer broken) raises the alarm — silence is the signal.
+ExecStart=/usr/bin/curl -fsS --max-time 10 "${DEADMAN_PING_URL}"

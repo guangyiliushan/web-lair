@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the web-lair jobs drain every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=5s
+Unit=web-lair-drain.service
+
+[Install]
+WantedBy=timers.target

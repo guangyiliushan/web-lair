@@ -1,0 +1,14 @@
+[Unit]
+Description=web-lair jobs drain (one tick per minute)
+Documentation=deploy/RUNBOOK.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/web-lair/app
+# `run --rm` (not exec): every tick is its own container, so a dead app
+# container cannot masquerade as a running timer. Exit 1 = infrastructure
+# failure (alert), 2 = configuration missing.
+ExecStart=/usr/bin/docker compose run --rm --no-deps app node jobs/drain.ts
+TimeoutStartSec=120

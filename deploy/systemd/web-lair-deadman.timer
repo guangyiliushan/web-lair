@@ -1,0 +1,11 @@
+[Unit]
+Description=Ping the box-external dead-man check every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=web-lair-deadman.service
+
+[Install]
+WantedBy=timers.target
