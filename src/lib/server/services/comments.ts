@@ -66,6 +66,21 @@ export const COMMENT_RATE_LIMIT = { limit: 2, windowSeconds: 60 } as const;
  */
 export const ANCHOR_RATE_LIMIT = { limit: 10, windowSeconds: 60 } as const;
 
+/**
+ * Rejections are the only visible signal that the client and server block
+ * directories drifted. One line per target+reason per minute: enough to spot a
+ * systemic break, never one line per stale tab.
+ */
+const anchorRejectAt = new Map<string, number>();
+function warnAnchorRejected(targetType: string, targetId: string, reason: string): void {
+	const key = `${targetType}:${targetId}:${reason}`;
+	const now = Date.now();
+	if (now - (anchorRejectAt.get(key) ?? 0) < 60_000) return;
+	if (anchorRejectAt.size > 200) anchorRejectAt.clear();
+	anchorRejectAt.set(key, now);
+	console.warn('[comments] anchor draft rejected', { targetType, targetId, reason });
+}
+
 /** Text bounds (spec §1): normalise first, then count code points. */
 export const COMMENT_MIN_LENGTH = 1;
 
@@ -602,7 +617,10 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	// define them. Pages stay deferred (their single row carries all locales).
 	let anchorValue: CommentAnchor | null = null;
 	if (input.anchor) {
-		if (input.targetType === 'page') return { kind: 'stale-anchor' };
+		if (input.targetType === 'page') {
+			warnAnchorRejected(input.targetType, input.targetId, 'pages-deferred');
+			return { kind: 'stale-anchor' };
+		}
 		// Charge the anchor-validation budget BEFORE the renderer runs: the official
 		// rate-limiter patterns check before the protected work, and this path is
 		// the only one that pays a full document render before the main window.
@@ -623,16 +641,25 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		const body = await loadTargetBody(input, now);
 		if (body === null) return { kind: 'target-unavailable' };
 		const draft = parseCommentAnchorDraft(input.anchor);
-		if (!draft) return { kind: 'stale-anchor' };
+		if (!draft) {
+			warnAnchorRejected(input.targetType, input.targetId, 'draft-invalid');
+			return { kind: 'stale-anchor' };
+		}
 		// Loaded lazily: the renderer drags in Shiki/KaTeX, and this module is also
 		// imported by scripts and by every comment test that never touches anchors.
 		const { renderMarkdownTree } = await import('$lib/server/markdown');
 		const tree = await renderMarkdownTree(body);
 		const resolved = resolveAnchorDraft(collectAnchorBlocks(tree), draft, input.lang);
-		if (resolved.kind !== 'ok') return { kind: 'stale-anchor' };
+		if (resolved.kind !== 'ok') {
+			warnAnchorRejected(input.targetType, input.targetId, 'quote-not-found');
+			return { kind: 'stale-anchor' };
+		}
 		// Belt: the value that reaches jsonb must be readable by the same schema
 		// the read path uses (a 1-code-point range once slipped through here).
-		if (!commentAnchorSchema.safeParse(resolved.anchor).success) return { kind: 'stale-anchor' };
+		if (!commentAnchorSchema.safeParse(resolved.anchor).success) {
+			warnAnchorRejected(input.targetType, input.targetId, 'schema-reject');
+			return { kind: 'stale-anchor' };
+		}
 		anchorValue = resolved.anchor;
 	}
 

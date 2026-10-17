@@ -44,6 +44,7 @@
 		hiddenValues = {}
 	}: Props = $props();
 	let submitting = $state(false);
+	let errorMessage = $state<string | null>(null);
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
 
 	onMount(() => {
@@ -59,15 +60,23 @@
 	data-slot="comment-composer"
 	use:enhance={() => {
 		submitting = true;
+		errorMessage = null;
 		return async ({ result, update }) => {
-			if (result.type === 'failure') {
-				// Keep the typed text visible so the author can fix it.
-				await update({ reset: false });
-			} else {
-				await update();
-				if (result.type === 'success') onCancel?.();
+			try {
+				if (result.type === 'failure') {
+					// Keep the typed text visible so the author can fix it.
+					await update({ reset: false });
+				} else if (result.type === 'error') {
+					// update() would route the whole page to the error boundary and
+					// take the draft with it; keep the text and report inline.
+					errorMessage = m.comment_error_network();
+				} else {
+					await update();
+					if (result.type === 'success') onCancel?.();
+				}
+			} finally {
+				submitting = false;
 			}
-			submitting = false;
 		};
 	}}
 >
@@ -92,6 +101,9 @@
 	/>
 	{#if hint}
 		<p class="text-xs text-muted-foreground">{hint}</p>
+	{/if}
+	{#if errorMessage}
+		<p class="text-xs text-destructive" role="alert">{errorMessage}</p>
 	{/if}
 	<div class="flex items-center justify-end gap-2">
 		{#if onCancel}

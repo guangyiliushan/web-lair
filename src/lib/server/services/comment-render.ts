@@ -43,7 +43,10 @@ export async function renderDiscussion(input: RenderDiscussionInput): Promise<Re
 	if (marks.length > 0) {
 		// Identical ranges share one span, so several comments can point at the
 		// same cluster representative; unplaced resolved anchors become orphans.
-		finalizeAnchorTargets(threads, applyAnchorMarks(blocks, marks));
+		finalizeAnchorTargets(threads, applyAnchorMarks(blocks, marks), {
+			targetType: input.targetType,
+			targetId: input.targetId
+		});
 	}
 
 	return { html: await stringifyMarkdownTree(tree), discussion: threads };
