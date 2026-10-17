@@ -1,0 +1,39 @@
+{
+	# ACME account email (Let's Encrypt expiry notices). Env: ACME_EMAIL.
+	email {$ACME_EMAIL}
+}
+
+# Production site (deploy note D-3). Grey-cloud DNS only: Caddy issues and
+# renews over HTTP-01, which needs port 80 to reach this origin.
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# JSON access log for Sentinel (L2 analytics) — ledger §25 / plan §C.3.
+	log {
+		output file /data/access.log {
+			roll_size 100mb
+			roll_keep 10
+		}
+		format json
+	}
+
+	# `flush_interval -1` disables response buffering so the presence SSE
+	# stream is not held back by the proxy (plan §B.3).
+	reverse_proxy app:3000 {
+		flush_interval -1
+	}
+}
+
+# Cloudflare orange cloud (deferred, deploy note Q6): when enabled, Caddy must
+# trust the CF edge or every visitor collapses onto CF's IPs —
+#   trusted_proxies 172.64.0.0/13 104.16.0.0/13 ...   # CF ranges
+#   client_ip_headers CF-Connecting-IP
+# and the app's ADDRESS_HEADER plumbing stays unchanged (Caddy still forwards
+# a single X-Forwarded-For hop).

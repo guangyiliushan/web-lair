@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
 services:
   db:
     # pinned: uuidv7() defaults require PostgreSQL 18 (ledger §9.6)
@@ -16,6 +22,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [internal]
+    logging: *default-logging
 
   rustfs:
     # pinned: RustFS 1.0.0 (GA 2026-09-16, ledger §21) — S3-compatible object storage.
@@ -43,6 +56,8 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15s
+    networks: [internal]
+    logging: *default-logging
 
   valkey:
     # pinned: Valkey 9.1.2 (2026-09-01, ledger §21) — fail-open cache layer
@@ -57,7 +72,105 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    networks: [internal]
+    logging: *default-logging
+
+  app:
+    # D-1 (platform plan §C / deploy opening note): the Node process behind
+    # Caddy. `--profile prod` keeps `pnpm db:start` (plain `docker compose up`)
+    # on the dev data services only.
+    profiles: [prod]
+    build:
+      context: .
+    image: ${APP_IMAGE:-web-lair-app:local}
+    restart: always
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      HOST: 0.0.0.0
+      ORIGIN: ${ORIGIN}
+      ADDRESS_HEADER: ${ADDRESS_HEADER:-X-Forwarded-For}
+      XFF_DEPTH: ${XFF_DEPTH:-1}
+      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-26M}
+      # Service DNS overrides the loopback URLs from .env (dev values).
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      RUSTFS_ENDPOINT: http://rustfs:9000
+      VALKEY_URL: redis://valkey:6379
+      DATA_DIR: /data
+    volumes:
+      # Host absolute path in production (backup set ②); relative default for a
+      # throwaway local run.
+      - ${DATA_DIR:-./data}:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    networks: [internal, edge]
+    logging: *default-logging
+
+  caddy:
+    # pinned: Caddy 2.11.7 (official image). Grey-cloud DNS only (deploy note
+    # Q6): HTTP-01 issuance; DNS-01 would need an xcaddy build.
+    profiles: [prod]
+    image: caddy:2.11.7
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [edge]
+    logging: *default-logging
+
+  kuma:
+    # §C.5 monitoring. Kept on the internal network for TCP checks and on the
+    # edge network for outbound notifications.
+    profiles: [prod]
+    image: louislam/uptime-kuma:2.5.6
+    restart: always
+    ports:
+      - '127.0.0.1:3001:3001'
+    volumes:
+      - kuma_data:/app/data
+    networks: [internal, edge]
+    logging: *default-logging
+
+networks:
+  # Data services have no egress; only `app` bridges inward and outward.
+  internal:
+    internal: true
+  edge:
+    driver: bridge
 
 volumes:
   pgdata:
   rustfsdata:
+  caddy_data:
+  caddy_config:
+  kuma_data:
