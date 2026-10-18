@@ -45,6 +45,7 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/scripts/migrate.ts ./scripts/migrate.ts
+COPY --from=build /app/scripts/ensure-job-schedules.ts ./scripts/ensure-job-schedules.ts
 # Drain executes `node jobs/drain.ts`; that graph uses only relative .ts imports,
 # so ship the jobs tree and the server modules it pulls in.
 COPY --from=build /app/jobs ./jobs

@@ -116,6 +116,8 @@ dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump
 docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
 mv "$dump.tmp" "$dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
+# Default maintenance schedules (idempotent; adjust in admin afterwards).
+docker compose --profile prod run --rm app node scripts/ensure-job-schedules.ts
 docker compose --profile prod up -d
 docker compose --profile prod ps          # all healthy
 ```
@@ -153,6 +155,8 @@ dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump
 docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
 mv "$dump.tmp" "$dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
+# Default maintenance schedules (idempotent; adjust in admin afterwards).
+docker compose --profile prod run --rm app node scripts/ensure-job-schedules.ts
 docker compose --profile prod up -d
 ```
 
@@ -208,12 +212,12 @@ age, so deploy count does not grow the backup repo.
 
 ## 5. Monitoring
 
-| What                                       | Where                                   |
-| ------------------------------------------ | --------------------------------------- |
-| HTTPS homepage / admin login / cert expiry | Uptime Kuma (`127.0.0.1:3001`, tailnet) |
-| Postgres TCP, RustFS health, drain push    | Uptime Kuma (internal network)          |
-| Box-external HTTP + dead-man               | healthchecks.io + UptimeRobot           |
-| Disk / memory thresholds                   | `system.resources` job → notification   |
+| What                                       | Where                                                        |
+| ------------------------------------------ | ------------------------------------------------------------ |
+| HTTPS homepage / admin login / cert expiry | Uptime Kuma (`127.0.0.1:3001`, tailnet)                      |
+| Postgres TCP, RustFS health, drain push    | Uptime Kuma (internal network)                               |
+| Box-external HTTP + dead-man               | healthchecks.io + UptimeRobot                                |
+| Disk / memory readings                     | `system.resources` job (record-only; threshold alerts = F-7) |
 
 Kuma setup: create monitors, then paste the push URL into `JOBS_HEARTBEAT_URL`
 (Kuma expects `.../api/push/<key>?status=up&msg=OK`).
@@ -238,13 +242,17 @@ systemctl list-timers --all | grep web-lair      # verification
 container cannot masquerade as a running timer. Exit codes: 0 tick done,
 1 infrastructure failure (alert on it), 2 config missing.
 
+The timer only provides process liveness; actual work comes from rows in
+`job_schedules`. `scripts/ensure-job-schedules.ts` seeds the two maintenance
+jobs (§1.4); add or edit others in the admin surface.
+
 ## 7. Troubleshooting
 
-| Symptom                                  | Likely cause                                                                          |
-| ---------------------------------------- | ------------------------------------------------------------------------------------- |
-| `app` unhealthy                          | `docker compose logs app`; `/api/health` must answer 200                              |
-| 413 on upload                            | `BODY_SIZE_LIMIT` too low (default 26M; one file per request)                         |
-| Registration 500                         | mail unconfigured (`MAIL_ENABLED`/`MAIL_SMTP_HOST`) — the send is fail-loud by design |
-| All visitors share one rate-limit bucket | Caddy not setting `X-Forwarded-For`, or `ADDRESS_HEADER`/`XFF_DEPTH` wrong            |
-| SSE stalls                               | Caddy buffering — `flush_interval -1` must be present                                 |
-| Certs fail under orange cloud            | HTTP-01 blocked at the edge — switch to DNS-01 (xcaddy + CF plugin) or grey-cloud DNS |
+| Symptom                                  | Likely cause                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `app` unhealthy                          | `docker compose logs app`; `/api/health` must answer 200                                         |
+| 413 on upload                            | `BODY_SIZE_LIMIT` too low (default 26M; one file per request)                                    |
+| Registration 503                         | mail unconfigured (`MAIL_ENABLED`/`MAIL_SMTP_HOST`) — the form and the API both refuse by design |
+| All visitors share one rate-limit bucket | Caddy not setting `X-Forwarded-For`, or `ADDRESS_HEADER`/`XFF_DEPTH` wrong                       |
+| SSE stalls                               | Caddy buffering — `flush_interval -1` must be present                                            |
+| Certs fail under orange cloud            | HTTP-01 blocked at the edge — switch to DNS-01 (xcaddy + CF plugin) or grey-cloud DNS            |
