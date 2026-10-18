@@ -75,7 +75,8 @@ export async function requestSubscription(input: {
 		// pending (resend) or unsubscribed (re-subscribe): a fresh token is the
 		// only valid confirmation link; verified_at returns to null per the
 		// monotonic-timestamp CHECK.
-		// Conditional write: a concurrent confirm must win over this resubmit.
+		// Compare-and-swap on the token we read: a concurrent confirm wins, and a
+		// parallel resubmit loses instead of voiding the link it just mailed.
 		const updated = await db
 			.update(subscriptions)
 			.set({
@@ -85,10 +86,26 @@ export async function requestSubscription(input: {
 				source: input.source,
 				verifiedAt: null
 			})
-			.where(and(eq(subscriptions.id, existing.id), ne(subscriptions.status, 'subscribed')))
+			.where(
+				and(
+					eq(subscriptions.id, existing.id),
+					ne(subscriptions.status, 'subscribed'),
+					eq(subscriptions.token, existing.token)
+				)
+			)
 			.returning({ id: subscriptions.id });
-		if (updated.length === 0) return { kind: 'already-subscribed' };
-		return { kind: 'pending', token, send: true };
+		if (updated.length === 0) {
+			const [again] = await db
+				.select()
+				.from(subscriptions)
+				.where(eq(subscriptions.id, existing.id))
+				.limit(1);
+			if (again?.status === 'subscribed') return { kind: 'already-subscribed' };
+			// Someone else is holding (and mailed) the current token.
+			if (again) return { kind: 'pending', token: again.token, send: false };
+			// The row vanished (pending unsubscribe): fall through and insert.
+		}
+		if (updated.length > 0) return { kind: 'pending', token, send: true };
 	}
 
 	try {

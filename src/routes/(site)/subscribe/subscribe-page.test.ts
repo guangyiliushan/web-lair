@@ -118,6 +118,8 @@ describe('subscribe action', () => {
 		expect(sendMailMock.mock.calls[0]![0].text).toContain(
 			'https://lair.example/zh-cn/unsubscribe?token=tok_1'
 		);
+
+		expect(discardMock).not.toHaveBeenCalled();
 	});
 
 	it('falls back to English for a locale outside the supported set', async () => {

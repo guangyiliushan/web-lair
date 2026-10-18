@@ -63,10 +63,16 @@ export const actions: Actions = {
 				await sendMailOrDevLog({ to: email, ...subscriptionConfirmMail(lang, url, optOut) });
 			} catch (error) {
 				// Roll the never-mailed pending row back, otherwise the resend
-				// cooldown turns the retry into a success with no mail.
-				await discardPendingToken(outcome.token).catch((rollbackError) =>
-					console.error('[subscribe] pending rollback failed', rollbackError)
-				);
+				// cooldown turns the retry into a success with no mail. A 2xx
+				// responseCode means the server accepted the message, so the row
+				// must survive even though nodemailer then threw.
+				const accepted = (error as { responseCode?: number }).responseCode;
+				const delivered = typeof accepted === 'number' && accepted >= 200 && accepted < 300;
+				if (!delivered) {
+					await discardPendingToken(outcome.token).catch((rollbackError) =>
+						console.error('[subscribe] pending rollback failed', rollbackError)
+					);
+				}
 				console.error('[subscribe] confirmation mail failed', error);
 				return fail(503, { message: m.subscribe_err_mail() });
 			}
