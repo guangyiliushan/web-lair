@@ -3,7 +3,10 @@ import type { Actions } from './$types';
 import type { PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
-import { isMailDeliveryAvailable } from '$lib/server/mail/transport';
+import { isMailDeliveryAvailableLive } from '$lib/server/mail/transport';
+import { getCache } from '$lib/server/cache';
+import { rateLimit } from '$lib/server/cache/store';
+import { requestAddress } from '$lib/server/security/request-address';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -38,7 +41,10 @@ export const actions: Actions = {
 	signUpEmail: async (event) => {
 		// The API gate only covers /api/auth/sign-up/email; this demo action calls
 		// better-auth directly and would otherwise create an unverifiable account.
-		if (!isMailDeliveryAvailable()) {
+		const address = requestAddress(event.getClientAddress);
+		const rate = await rateLimit(getCache(), `limits:signup:${address}`, 5, 60 * 60);
+		if (!rate.allowed) return fail(429, { message: 'Too many attempts. Try again later.' });
+		if (!(await isMailDeliveryAvailableLive())) {
 			return fail(503, { message: 'Registration is unavailable until mail is configured' });
 		}
 		const formData = await event.request.formData();

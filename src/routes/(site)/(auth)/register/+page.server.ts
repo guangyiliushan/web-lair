@@ -2,8 +2,11 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
-import { isMailDeliveryAvailable } from '$lib/server/mail/transport';
+import { isMailDeliveryAvailable, isMailDeliveryAvailableLive } from '$lib/server/mail/transport';
 import { m } from '$lib/paraglide/messages';
+import { getCache } from '$lib/server/cache';
+import { rateLimit } from '$lib/server/cache/store';
+import { requestAddress } from '$lib/server/security/request-address';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -14,7 +17,10 @@ export const load: PageServerLoad = (event) => {
 
 export const actions: Actions = {
 	signUp: async (event) => {
-		if (!isMailDeliveryAvailable()) {
+		const address = requestAddress(event.getClientAddress);
+		const rate = await rateLimit(getCache(), `limits:signup:${address}`, 5, 60 * 60);
+		if (!rate.allowed) return fail(429, { message: m.auth_register_err_rate() });
+		if (!(await isMailDeliveryAvailableLive())) {
 			return fail(503, { message: m.auth_register_mail_unconfigured() });
 		}
 		const formData = await event.request.formData();

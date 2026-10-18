@@ -72,6 +72,33 @@ export function isMailDeliveryAvailable(): boolean {
 	return isMailConfigured() || devLogAllowed();
 }
 
+/** Better-auth swallows this error in its background runner; log it here. */
+export function sendVerificationFailure(email: string, error: unknown): void {
+	// Keep the address out of the log; the domain is enough to spot a bad sender.
+	console.error('[mail] verification send failed', { domain: email.split('@')[1] ?? '?', error });
+}
+
+let verifyCache: { at: number; ok: boolean } | null = null;
+const VERIFY_TTL_MS = 60_000;
+
+/**
+ * Sign-up is the one path where a silently swallowed transport error creates an
+ * account that can never be verified. Verify the SMTP handshake first (cached
+ * for a minute); dev-log mode needs no verification.
+ */
+export async function isMailDeliveryAvailableLive(): Promise<boolean> {
+	if (!isMailConfigured()) return devLogAllowed();
+	if (verifyCache && Date.now() - verifyCache.at < VERIFY_TTL_MS) return verifyCache.ok;
+	try {
+		await transporter().verify();
+		verifyCache = { at: Date.now(), ok: true };
+	} catch (error) {
+		console.warn('[mail] SMTP verification failed; refusing sign-up', error);
+		verifyCache = { at: Date.now(), ok: false };
+	}
+	return verifyCache.ok;
+}
+
 function dkimOptions():
 	{ domainName: string; keySelector: string; privateKey: string } | undefined {
 	const domainName = env.MAIL_DKIM_DOMAIN;
@@ -118,6 +145,7 @@ function transporter(): Transporter {
 /** Test hook: drop the memoised transport after env changes. */
 export function resetMailTransport(): void {
 	cached = null;
+	verifyCache = null;
 }
 
 export async function sendMail(mail: OutgoingMail): Promise<void> {

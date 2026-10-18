@@ -10,10 +10,6 @@
  */
 export const SIGN_UP_PATH = '/api/auth/sign-up/email';
 
-export function isSignUpBlocked(input: {
-	method: string;
-	pathname: string;
-	mailAvailable: boolean;
-}): boolean {
-	return input.method === 'POST' && input.pathname === SIGN_UP_PATH && !input.mailAvailable;
+export function isSignUpRequest(input: { method: string; pathname: string }): boolean {
+	return input.method === 'POST' && input.pathname === SIGN_UP_PATH;
 }

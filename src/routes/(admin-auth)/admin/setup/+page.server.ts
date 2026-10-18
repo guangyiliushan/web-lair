@@ -10,7 +10,9 @@ import { getAdminConfig } from '$lib/server/config/admin';
 import { claimOwnerRole, hasAnyAdminAccount } from '$lib/server/auth/owner';
 import { ensureSiteOrganization } from '$lib/server/auth/site-organization-bootstrap';
 import { APIError } from 'better-auth/api';
-import { isMailDeliveryAvailable } from '$lib/server/mail/transport';
+import { getCache } from '$lib/server/cache';
+import { rateLimit } from '$lib/server/cache/store';
+import { requestAddress } from '$lib/server/security/request-address';
 
 function verifySetupToken(formToken: string): string | null {
 	const config = getAdminConfig();
@@ -49,6 +51,10 @@ export const actions: Actions = {
 			return fail(403, { message: m.admin_setup_err_admin_exists() });
 		}
 
+		const address = requestAddress(event.getClientAddress);
+		const rate = await rateLimit(getCache(), `limits:setup:${address}`, 5, 15 * 60);
+		if (!rate.allowed) return fail(429, { message: 'Too many attempts. Try again later.' });
+
 		const formData = await event.request.formData();
 		const email = formData.get('email')?.toString().trim().toLowerCase() ?? '';
 		const password = formData.get('password')?.toString() ?? '';
@@ -63,12 +69,6 @@ export const actions: Actions = {
 		const tokenError = verifySetupToken(formSetupToken);
 		if (tokenError) {
 			return fail(403, { message: tokenError });
-		}
-
-		// The first owner still needs the verification mail; without a transport
-		// the account would be created unverifiable and the auto-login would fail.
-		if (!isMailDeliveryAvailable()) {
-			return fail(503, { message: m.admin_setup_err_mail_unconfigured() });
 		}
 
 		// Create user via Better Auth API (APIError -> form error, no 500 page)

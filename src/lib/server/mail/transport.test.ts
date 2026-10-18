@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { envMock, sendMailMock, createTransportMock } = vi.hoisted(() => {
+const { envMock, sendMailMock, verifyMock, createTransportMock } = vi.hoisted(() => {
 	const envMock: Record<string, string | undefined> = {};
 	const sendMailMock = vi.fn(async () => ({ messageId: 'test' }));
-	const createTransportMock = vi.fn((options: unknown) => ({ sendMail: sendMailMock, options }));
-	return { envMock, sendMailMock, createTransportMock };
+	const verifyMock = vi.fn(async () => true);
+	const createTransportMock = vi.fn((options: unknown) => ({
+		sendMail: sendMailMock,
+		verify: verifyMock,
+		options
+	}));
+	return { envMock, sendMailMock, verifyMock, createTransportMock };
 });
 
 vi.mock('$env/dynamic/private', () => ({ env: envMock }));
@@ -15,6 +20,7 @@ import {
 	devLogPermitted,
 	isMailConfigured,
 	isMailDeliveryAvailable,
+	isMailDeliveryAvailableLive,
 	resetMailTransport,
 	sendMail,
 	sendMailOrDevLog
@@ -36,6 +42,7 @@ function configure(overrides: Record<string, string> = {}) {
 beforeEach(() => {
 	for (const key of Object.keys(envMock)) delete envMock[key];
 	sendMailMock.mockClear();
+	verifyMock.mockClear();
 	createTransportMock.mockClear();
 	resetMailTransport();
 });
@@ -145,6 +152,28 @@ describe('mail transport (D-2)', () => {
 		);
 		expect(info).not.toHaveBeenCalled();
 		info.mockRestore();
+	});
+
+	it('verifies the SMTP handshake once and caches the result', async () => {
+		configure();
+		expect(await isMailDeliveryAvailableLive()).toBe(true);
+		expect(await isMailDeliveryAvailableLive()).toBe(true);
+		expect(verifyMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('reports unavailable when the SMTP verification fails', async () => {
+		configure();
+		verifyMock.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		expect(await isMailDeliveryAvailableLive()).toBe(false);
+		expect(warn).toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
+	it('skips SMTP verification in dev-log mode', async () => {
+		Object.assign(envMock, { MAIL_DEV_LOG: 'true' });
+		expect(await isMailDeliveryAvailableLive()).toBe(true);
+		expect(verifyMock).not.toHaveBeenCalled();
 	});
 
 	it('treats a missing MAIL_FROM as unconfigured', () => {

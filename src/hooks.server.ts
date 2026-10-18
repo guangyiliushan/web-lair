@@ -12,8 +12,8 @@ import { eq } from 'drizzle-orm';
 import { adminContextFor } from '$lib/server/authz';
 import { ADMIN_BASE_PATH, getAdminConfig, isAdminPath } from '$lib/server/config/admin';
 import { shouldAttemptTailscaleSignIn } from '$lib/server/security/tailscale-auth';
-import { isSignUpBlocked } from '$lib/server/auth-gate';
-import { isMailDeliveryAvailable } from '$lib/server/mail/transport';
+import { isSignUpRequest } from '$lib/server/auth-gate';
+import { isMailDeliveryAvailableLive } from '$lib/server/mail/transport';
 
 const handleParaglide: Handle = async ({ event, resolve }) =>
 	paraglideMiddleware(event.request, async ({ request, locale }) => {
@@ -54,17 +54,15 @@ function clientAddress(event: Parameters<Handle>[0]['event']): string {
 }
 
 const handleBetterAuth: Handle = async ({ event, resolve }) => {
-	if (
-		isSignUpBlocked({
-			method: event.request.method,
-			pathname: event.url.pathname,
-			mailAvailable: isMailDeliveryAvailable()
-		})
-	) {
-		return new Response(JSON.stringify({ code: 'mail_unavailable' }), {
-			status: 503,
-			headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
-		});
+	if (isSignUpRequest({ method: event.request.method, pathname: event.url.pathname })) {
+		// Verify the SMTP handshake on the one path where a swallowed send error
+		// would create an account that can never be verified.
+		if (!(await isMailDeliveryAvailableLive())) {
+			return new Response(JSON.stringify({ code: 'mail_unavailable' }), {
+				status: 503,
+				headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+			});
+		}
 	}
 
 	const session = await auth.api.getSession({ headers: event.request.headers });
