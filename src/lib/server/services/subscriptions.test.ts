@@ -5,13 +5,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * exercised end-to-end by `e2e/subscribe.e2e.ts` against the real schema; here
  * we pin the input contract so a loosened regex cannot slip through.
  */
-const { dbStub, envStub } = vi.hoisted(() => ({
-	dbStub: { select: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn() },
-	envStub: {} as Record<string, string | undefined>
+const { dbStub, envStub, suppressionMocks } = vi.hoisted(() => ({
+	dbStub: {
+		select: vi.fn(),
+		insert: vi.fn(),
+		update: vi.fn(),
+		delete: vi.fn(),
+		transaction: vi.fn()
+	},
+	envStub: {} as Record<string, string | undefined>,
+	suppressionMocks: {
+		suppressionReason: vi.fn(),
+		suppress: vi.fn(),
+		liftUnsubscribedSuppression: vi.fn()
+	}
 }));
 vi.mock('$lib/server/db', () => ({ db: dbStub }));
-vi.mock('$lib/server/db/system', () => ({ subscriptions: {} }));
+vi.mock('$lib/server/db/system', () => ({ subscriptions: {}, emailSuppressions: {} }));
 vi.mock('$env/dynamic/private', () => ({ env: envStub }));
+vi.mock('./suppressions', () => suppressionMocks);
 // The service builds predicates only; the chain stubs ignore their arguments.
 vi.mock('drizzle-orm', () => ({
 	eq: (column: unknown, value: unknown) => ({ op: 'eq', column, value }),
@@ -84,19 +96,24 @@ function deleteRows(rows: unknown[]) {
 
 beforeEach(() => {
 	for (const fn of Object.values(dbStub)) fn.mockReset();
+	dbStub.transaction.mockImplementation(async (fn: (tx: typeof dbStub) => unknown) => fn(dbStub));
+	suppressionMocks.suppressionReason.mockReset();
+	suppressionMocks.suppressionReason.mockResolvedValue(null);
+	suppressionMocks.suppress.mockReset();
+	suppressionMocks.suppress.mockResolvedValue(undefined);
+	suppressionMocks.liftUnsubscribedSuppression.mockReset();
+	suppressionMocks.liftUnsubscribedSuppression.mockResolvedValue(undefined);
 	delete envStub.SUBSCRIBE_HMAC_KEY;
 });
 
 describe('subscription transitions (stubbed db)', () => {
 	const TOKEN = 'a'.repeat(43);
 
-	beforeEach(() => {
-		for (const fn of Object.values(dbStub)) fn.mockReset();
-	});
-
 	it('confirm reports the state a zero-row update actually left behind', async () => {
 		dbStub.update.mockReturnValueOnce(updateRows([]));
-		dbStub.select.mockReturnValueOnce(selectRows([{ status: 'unsubscribed', email: 'a@b.c' }]));
+		dbStub.select.mockReturnValueOnce(
+			selectRows([{ id: 's1', status: 'unsubscribed', email: 'a@b.c' }])
+		);
 		expect(await confirmSubscription(TOKEN)).toBe('unsubscribed');
 
 		dbStub.update.mockReturnValueOnce(updateRows([]));
@@ -109,17 +126,70 @@ describe('subscription transitions (stubbed db)', () => {
 		expect(await confirmSubscription(TOKEN)).toBe('subscribed');
 	});
 
-	it('unsubscribe tries the pending delete before the subscribed update', async () => {
-		dbStub.delete.mockReturnValueOnce(deleteRows([]));
-		dbStub.update.mockReturnValueOnce(updateRows([{ id: 1 }]));
-		expect(await unsubscribe(TOKEN)).toBe('unsubscribed');
+	it('confirm lifts a soft suppression when the write returns the address', async () => {
+		dbStub.update.mockReturnValueOnce(updateRows([{ id: 1, email: 'reader@example.com' }]));
+		expect(await confirmSubscription(TOKEN)).toBe('subscribed');
+		expect(suppressionMocks.liftUnsubscribedSuppression).toHaveBeenCalledWith('reader@example.com');
 	});
 
-	it('unsubscribe reports already-unsubscribed when both guarded writes miss', async () => {
+	it('unsubscribe deletes a pending row and records the suppression in one transaction', async () => {
+		dbStub.select.mockReturnValueOnce(
+			selectRows([
+				{ id: 's1', status: 'pending', email: 'a@b.c', token: TOKEN, updatedAt: new Date() }
+			])
+		);
+		dbStub.delete.mockReturnValueOnce(deleteRows([{ id: 's1' }]));
+		expect(await unsubscribe(TOKEN)).toBe('unsubscribed');
+		expect(dbStub.transaction).toHaveBeenCalledTimes(1);
+		expect(suppressionMocks.suppress).toHaveBeenCalledWith(
+			'a@b.c',
+			'unsubscribed',
+			'unsubscribe-page',
+			dbStub
+		);
+	});
+
+	it('unsubscribe updates a confirmed row and records the suppression', async () => {
+		dbStub.select.mockReturnValueOnce(
+			selectRows([
+				{ id: 's1', status: 'subscribed', email: 'a@b.c', token: TOKEN, updatedAt: new Date() }
+			])
+		);
+		dbStub.delete.mockReturnValueOnce(deleteRows([]));
+		dbStub.update.mockReturnValueOnce(updateRows([{ id: 's1' }]));
+		expect(await unsubscribe(TOKEN)).toBe('unsubscribed');
+		expect(suppressionMocks.suppress).toHaveBeenCalledWith(
+			'a@b.c',
+			'unsubscribed',
+			'unsubscribe-page',
+			dbStub
+		);
+	});
+
+	it('unsubscribe reports already-unsubscribed and repairs the suppression row', async () => {
+		dbStub.select
+			.mockReturnValueOnce(
+				selectRows([
+					{
+						id: 's1',
+						status: 'unsubscribed',
+						email: 'a@b.c',
+						token: TOKEN,
+						updatedAt: new Date()
+					}
+				])
+			)
+			.mockReturnValueOnce(selectRows([{ status: 'unsubscribed' }]));
 		dbStub.delete.mockReturnValueOnce(deleteRows([]));
 		dbStub.update.mockReturnValueOnce(updateRows([]));
-		dbStub.select.mockReturnValueOnce(selectRows([{ status: 'unsubscribed', email: 'a@b.c' }]));
 		expect(await unsubscribe(TOKEN)).toBe('already-unsubscribed');
+		expect(suppressionMocks.suppress).toHaveBeenCalled();
+	});
+
+	it('unsubscribe reports invalid when the token resolves to no row', async () => {
+		dbStub.select.mockReturnValueOnce(selectRows([]));
+		expect(await unsubscribe(TOKEN)).toBe('invalid');
+		expect(dbStub.transaction).not.toHaveBeenCalled();
 	});
 
 	it('a lost resubmit CAS returns the winner token without sending', async () => {
@@ -133,6 +203,23 @@ describe('subscription transitions (stubbed db)', () => {
 		await expect(
 			requestSubscription({ email: 'a@b.c', lang: 'en', source: 'footer' })
 		).resolves.toEqual({ kind: 'pending', token: 'old', send: false });
+	});
+
+	it('refuses a hard-bounced address without touching the subscription row', async () => {
+		suppressionMocks.suppressionReason.mockResolvedValueOnce('bounced');
+		await expect(
+			requestSubscription({ email: 'a@b.c', lang: 'en', source: 'footer' })
+		).resolves.toEqual({ kind: 'suppressed' });
+		expect(dbStub.select).not.toHaveBeenCalled();
+	});
+
+	it('allows a self-submitted form after a soft unsubscribe (D-1)', async () => {
+		suppressionMocks.suppressionReason.mockResolvedValueOnce('unsubscribed');
+		dbStub.select.mockReturnValueOnce(selectRows([]));
+		dbStub.insert.mockReturnValueOnce({ values: async () => undefined });
+		await expect(
+			requestSubscription({ email: 'a@b.c', lang: 'en', source: 'footer' })
+		).resolves.toMatchObject({ kind: 'pending', send: true });
 	});
 
 	it('discard deletes only through a guarded where clause', async () => {
@@ -167,9 +254,12 @@ describe('confirmation token TTL', () => {
 	it('marks a stale pending row expired but leaves a fresh one alone', async () => {
 		const stale = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
 		dbStub.select.mockReturnValueOnce(
-			selectRows([{ status: 'pending', email: 'a@b.c', token: TTL_TOKEN, updatedAt: stale }])
+			selectRows([
+				{ id: 's1', status: 'pending', email: 'a@b.c', token: TTL_TOKEN, updatedAt: stale }
+			])
 		);
 		expect(await subscriptionByToken(TTL_TOKEN)).toEqual({
+			id: 's1',
 			status: 'pending',
 			email: 'a@b.c',
 			expired: true
@@ -178,6 +268,7 @@ describe('confirmation token TTL', () => {
 		dbStub.select.mockReturnValueOnce(
 			selectRows([
 				{
+					id: 's1',
 					status: 'pending',
 					email: 'a@b.c',
 					token: TTL_TOKEN,
@@ -186,6 +277,7 @@ describe('confirmation token TTL', () => {
 			])
 		);
 		expect(await subscriptionByToken(TTL_TOKEN)).toEqual({
+			id: 's1',
 			status: 'pending',
 			email: 'a@b.c',
 			expired: false

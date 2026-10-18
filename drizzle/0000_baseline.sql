@@ -518,6 +518,14 @@ CREATE TABLE "activities" (
 	CONSTRAINT "activities_ref_pair_check" CHECK (("activities"."ref_type" is null) = ("activities"."ref_id" is null))
 );
 --> statement-breakpoint
+CREATE TABLE "email_suppressions" (
+	"email_hash" text PRIMARY KEY NOT NULL,
+	"reason" text NOT NULL,
+	"source" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "email_suppressions_reason_check" CHECK ("email_suppressions"."reason" in ('unsubscribed', 'bounced', 'complained'))
+);
+--> statement-breakpoint
 CREATE TABLE "enrichment_captures" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"provider" text NOT NULL,

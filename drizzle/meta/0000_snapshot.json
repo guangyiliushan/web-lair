@@ -1,5 +1,5 @@
 {
-  "id": "16013467-0cc3-4ed3-bc18-112429e343e8",
+  "id": "465afbe4-a584-441c-bf38-8bd9f7dbb307",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -5241,6 +5241,50 @@
         "activities_ref_pair_check": {
           "name": "activities_ref_pair_check",
           "value": "(\"activities\".\"ref_type\" is null) = (\"activities\".\"ref_id\" is null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.email_suppressions": {
+      "name": "email_suppressions",
+      "schema": "",
+      "columns": {
+        "email_hash": {
+          "name": "email_hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "email_suppressions_reason_check": {
+          "name": "email_suppressions_reason_check",
+          "value": "\"email_suppressions\".\"reason\" in ('unsubscribed', 'bounced', 'complained')"
         }
       },
       "isRLSEnabled": false

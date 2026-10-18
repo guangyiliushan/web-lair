@@ -36,7 +36,7 @@ const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', impo
 const JOURNAL_PATH = fileURLToPath(new URL('../drizzle/meta/_journal.json', import.meta.url));
 const VISUALIZER_PATH = fileURLToPath(new URL('../.drizzle/visualizer.json', import.meta.url));
 
-const EXPECTED = { tables: 48, indexes: 115, checks: 70, fks: 46, uuidv7: 36 };
+const EXPECTED = { tables: 49, indexes: 115, checks: 71, fks: 46, uuidv7: 36 };
 
 const EXPECTED_TABLE_NAMES: string[] = [
 	'account',
@@ -50,6 +50,7 @@ const EXPECTED_TABLE_NAMES: string[] = [
 	'comment_moderation_events',
 	'comments',
 	'drafts',
+	'email_suppressions',
 	'enrichment_captures',
 	'file_references',
 	'files',
@@ -162,6 +163,7 @@ const REQUIRED_CONSTRAINT_NAMES: string[] = [
 	'activities_ref_pair_check',
 	'activities_ref_type_check',
 	'files_status_check',
+	'email_suppressions_reason_check',
 	'job_runs_status_check',
 	'job_runs_trigger_check',
 	'links_backlink_required_check',

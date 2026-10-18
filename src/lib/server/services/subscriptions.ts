@@ -5,6 +5,7 @@ import { subscriptions } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { keyedHasher } from './email-hash';
 import { isSubscriptionToken, newSubscriptionToken } from './subscription-token';
+import { liftUnsubscribedSuppression, suppress, suppressionReason } from './suppressions';
 
 export { isSubscriptionToken, newSubscriptionToken } from './subscription-token';
 
@@ -94,13 +95,22 @@ export interface PreviousSubscription {
 
 export type RequestSubscriptionResult =
 	| { kind: 'pending'; token: string; send: boolean; previous?: PreviousSubscription }
-	| { kind: 'already-subscribed' };
+	| { kind: 'already-subscribed' }
+	| { kind: 'suppressed' };
 
 export async function requestSubscription(input: {
 	email: string;
 	lang: SubscriptionLang;
 	source: string;
 }): Promise<RequestSubscriptionResult> {
+	// Hard bounces and complaints block every send, including a fresh form
+	// submission: the address is not deliverable or the recipient reported it.
+	// A soft `unsubscribed` record does NOT block a self-submitted form (D-1);
+	// the confirmation step is the new consent, and a successful confirm lifts
+	// the soft suppression (bulk senders must still filter the table).
+	const suppression = await suppressionReason(input.email);
+	if (suppression === 'bounced' || suppression === 'complained') return { kind: 'suppressed' };
+
 	const [existing] = await db
 		.select()
 		.from(subscriptions)
@@ -190,6 +200,7 @@ export async function requestSubscription(input: {
 }
 
 export interface SubscriptionLookup {
+	id: string;
 	status: SubscriptionStatus;
 	email: string;
 	/** Pending row whose confirmation window has passed. Unsubscribe ignores it. */
@@ -213,7 +224,7 @@ export async function subscriptionByToken(token: string): Promise<SubscriptionLo
 	}
 	const cutoff = new Date(Date.now() - subscriptionTokenTtlMs(env.SUBSCRIBE_TOKEN_TTL_DAYS));
 	const expired = row.status === 'pending' && row.updatedAt < cutoff;
-	return { status: row.status as SubscriptionStatus, email: row.email, expired };
+	return { id: row.id, status: row.status as SubscriptionStatus, email: row.email, expired };
 }
 
 export type ConfirmResult =
@@ -243,8 +254,19 @@ export async function confirmSubscription(token: string): Promise<ConfirmResult>
 				gte(subscriptions.updatedAt, cutoff)
 			)
 		)
-		.returning({ id: subscriptions.id });
+		.returning({ id: subscriptions.id, email: subscriptions.email });
 	if (updated.length === 0) return statusOfToken(token);
+	// A re-subscribed reader is no longer suppressing bulk mail. Failures here
+	// must not undo the confirmation; the row stays suppressed (safe default)
+	// and the error is visible in the log.
+	const email = updated[0]?.email;
+	if (email) {
+		try {
+			await liftUnsubscribedSuppression(email);
+		} catch (error) {
+			console.error('[subscribe] lifting soft suppression failed', error);
+		}
+	}
 	return 'subscribed';
 }
 
@@ -253,25 +275,47 @@ export type UnsubscribeResult = 'unsubscribed' | 'already-unsubscribed' | 'inval
 export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
 	// Pending rows cannot be marked unsubscribed (the CHECK requires
 	// verified_at on non-pending rows), so an opt-out from a never-confirmed
-	// address deletes the row. Both writes are predicate-guarded: a concurrent
-	// confirm must never be erased or overwritten.
-	const deleted = await db
-		.delete(subscriptions)
-		.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'pending')))
-		.returning({ id: subscriptions.id });
-	if (deleted.length > 0) return 'unsubscribed';
-
-	const updated = await db
-		.update(subscriptions)
-		.set({ status: 'unsubscribed', unsubscribedAt: new Date() })
-		.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'subscribed')))
-		.returning({ id: subscriptions.id });
-	if (updated.length > 0) return 'unsubscribed';
-
+	// address deletes the row. The delete/update and the suppression write are
+	// one transaction: an opt-out that is not remembered is a compliance bug.
+	// Both writes stay predicate-guarded so a concurrent confirm wins.
 	const row = await subscriptionByToken(token);
 	if (!row) return 'invalid';
-	if (row.status === 'unsubscribed') return 'already-unsubscribed';
-	return 'invalid';
+
+	const outcome = await db.transaction(async (tx) => {
+		const deleted = await tx
+			.delete(subscriptions)
+			.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'pending')))
+			.returning({ id: subscriptions.id });
+		if (deleted.length > 0) {
+			await suppress(row.email, 'unsubscribed', 'unsubscribe-page', tx);
+			return 'unsubscribed' as const;
+		}
+
+		const updated = await tx
+			.update(subscriptions)
+			.set({ status: 'unsubscribed', unsubscribedAt: new Date() })
+			.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'subscribed')))
+			.returning({ id: subscriptions.id });
+		if (updated.length > 0) {
+			await suppress(row.email, 'unsubscribed', 'unsubscribe-page', tx);
+			return 'unsubscribed' as const;
+		}
+
+		const [again] = await tx
+			.select({ status: subscriptions.status })
+			.from(subscriptions)
+			.where(eq(subscriptions.token, token))
+			.limit(1);
+		if (again?.status === 'unsubscribed') {
+			// Repair legacy rows: the terminal state exists but the suppression
+			// record may predate this batch (idempotent insert).
+			await suppress(row.email, 'unsubscribed', 'unsubscribe-page', tx);
+			return 'already-unsubscribed' as const;
+		}
+		return null;
+	});
+
+	return outcome ?? 'invalid';
 }
 
 /** Drops a pending row whose confirmation mail could not be delivered. */

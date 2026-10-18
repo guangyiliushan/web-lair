@@ -1,4 +1,5 @@
 export * from './activity.schema';
+export * from './email-suppression.schema';
 export * from './enrichment-capture.schema';
 export * from './file-reference.schema';
 export * from './job-run.schema';
