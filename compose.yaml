@@ -102,6 +102,7 @@ services:
       XFF_DEPTH: ${XFF_DEPTH:-1}
       BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-26M}
       # Service DNS overrides the loopback URLs from .env (dev values).
+      # Password must be URL-safe (special characters break the URL); see RUNBOOK §1.1.
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       RUSTFS_ENDPOINT: http://rustfs:9000
       VALKEY_URL: redis://valkey:6379
