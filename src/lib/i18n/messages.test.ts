@@ -149,7 +149,8 @@ function providedInputKeys(args: string | undefined): string[] | undefined {
 		}
 	}
 	if (end === -1) return undefined;
-	return [...trimmed.slice(1, end).matchAll(/(\w+)\s*(?::|,|\})/g)].map((match) => match[1]);
+	// `$` catches a trailing shorthand ({ name }); the closing brace is sliced off.
+	return [...trimmed.slice(1, end).matchAll(/(\w+)\s*(?::|,|\}|$)/g)].map((match) => match[1]);
 }
 
 // The walker-family tests scan every source file (and every compiled locale
