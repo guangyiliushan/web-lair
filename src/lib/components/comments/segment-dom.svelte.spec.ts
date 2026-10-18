@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { renderMarkdownToHtmlSync } from '$lib/components/markdown/editor/markdown-config';
-import { codePointSlice } from '$lib/utils/comment-anchor';
+import { blockFingerprint, codePointSlice } from '$lib/utils/comment-anchor';
 import { collectDomBlocks, selectionToAnchor } from './segment-dom';
 import { SEGMENT_FIXTURES } from './segment-fixtures';
 
@@ -76,7 +76,7 @@ describe('selection to anchor', () => {
 		expect(found).not.toBeNull();
 		expect(found?.ord).toBe(0);
 		expect(found?.exact).toBe('bold');
-		expect(found?.blockFingerprint).toMatch(/^[0-9a-f]{8}$/);
+		expect(found?.blockFingerprint).toBe(blockFingerprint(host.textContent ?? ''));
 		const block = collectDomBlocks(host)[0];
 		expect(codePointSlice(block.text, found!.start, found!.end)).toBe('bold');
 	});
@@ -145,6 +145,14 @@ describe('selection to anchor', () => {
 		const node = host.querySelector('p')?.firstChild as Text;
 		// 2 is the middle of the first emoji's UTF-16 pair.
 		const selection = select(node, 2, node, 18);
+		expect(selectionToAnchor(host, selection)).toBeNull();
+	});
+
+	it('rejects an end endpoint inside a surrogate pair', () => {
+		const host = mountMarkdown('a👨‍👩‍👧‍👦b tail');
+		const node = host.querySelector('p')?.firstChild as Text;
+		// End at 2, the middle of the first emoji's UTF-16 pair.
+		const selection = select(node, 0, node, 2);
 		expect(selectionToAnchor(host, selection)).toBeNull();
 	});
 

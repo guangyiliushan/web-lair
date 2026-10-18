@@ -474,6 +474,11 @@
 				onclick={() => void closeThread()}>{m.comment_segment_close()}</button
 			>
 		</div>
+		{#if form?.message}
+			<!-- #comments is inert while the popover is open, so its alert would
+			     never be announced; surface reply/edit failures here instead. -->
+			<p class="px-3 pt-2 text-xs text-destructive" role="alert">{form.message}</p>
+		{/if}
 		<ul class="max-h-80 overflow-auto px-3">
 			<CommentItem root={activeThread} {canComment} />
 		</ul>

@@ -409,6 +409,9 @@ describe('applyAnchorMarks (spec §7/§12.6)', () => {
 		expect(spanEl?.properties?.className).toEqual(['wl-cm']);
 		expect(spanEl?.properties?.dataCid).toBe('c1');
 		expect(spanEl?.properties?.id).toBe('c-c1');
+		// Positive control: a normal mark is the keyboard entry point.
+		expect(spanEl?.properties?.role).toBe('button');
+		expect(spanEl?.properties?.tabIndex).toBe(0);
 		expect(plain(blocks[0].element)).toBe('hello world');
 		expect(plain(tree)).toBe(before);
 		expect(placed.get('c1')).toBe('c-c1');
@@ -445,10 +448,25 @@ describe('applyAnchorMarks (spec §7/§12.6)', () => {
 	it('keeps link-hosted marks presentational (no role, no tab stop)', () => {
 		const tree = root(p(el('a', [text('link text')], { href: '#x' })));
 		const blocks = collectAnchorBlocks(tree);
-		applyAnchorMarks(blocks, [{ commentId: 'c1', blockOrd: 0, start: 0, end: 4, pending: false }]);
+		const placed = applyAnchorMarks(blocks, [
+			{ commentId: 'c1', blockOrd: 0, start: 0, end: 4, pending: false }
+		]);
 		const span = findMark(blocks[0].element);
 		expect(span?.properties?.className).toEqual(['wl-cm']);
 		expect(span?.properties?.id).toBe('c-c1');
+		expect(span?.properties?.dataCid).toBe('c1');
+		expect(span?.properties?.role).toBeUndefined();
+		expect(span?.properties?.tabIndex).toBeUndefined();
+		expect(placed.get('c1')).toBe('c-c1');
+	});
+
+	it('detects a link above the text node (nested inline markup)', () => {
+		// Real markdown `[**bold**](url)` puts the text inside <strong> inside <a>;
+		// checking only the immediate parent would restore role=button there.
+		const tree = root(p(el('a', [el('strong', [text('link text')])], { href: '#x' })));
+		const blocks = collectAnchorBlocks(tree);
+		applyAnchorMarks(blocks, [{ commentId: 'c1', blockOrd: 0, start: 0, end: 4, pending: false }]);
+		const span = findMark(blocks[0].element);
 		expect(span?.properties?.role).toBeUndefined();
 		expect(span?.properties?.tabIndex).toBeUndefined();
 	});

@@ -51,6 +51,7 @@
 			return;
 		}
 		confirmingDeleteId = id;
+		deleteError = false;
 		editingId = null;
 		openReplyId = null;
 		// Announce the confirmation: focus its question text (tabindex -1)
@@ -74,6 +75,7 @@
 
 	async function cancelDelete(id: string) {
 		confirmingDeleteId = null;
+		deleteError = false;
 		await tick();
 		document.querySelector<HTMLElement>(`[data-delete-target="${id}"]`)?.focus();
 	}

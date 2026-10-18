@@ -176,6 +176,47 @@ describe('post comment actions', () => {
 		);
 		expect(oversized).toMatchObject({ status: 400, data: { message: 'comment_error_generic' } });
 		expect(state.submitCalls).toHaveLength(0);
+
+		// Both stale-ord hints are required: dropping one would silently disable
+		// the guard, so the route must reject the payload outright.
+		state.submitCalls = [];
+		const noFingerprint = await commentAction(
+			makeEvent(
+				fd({
+					text: 'anchored',
+					anchorOrd: '1',
+					anchorStart: '0',
+					anchorEnd: '4',
+					anchorExact: 'text',
+					anchorLength: '14'
+				})
+			)
+		);
+		expect(noFingerprint).toMatchObject({
+			status: 400,
+			data: { message: 'comment_error_generic' }
+		});
+		expect(state.submitCalls).toHaveLength(0);
+
+		state.submitCalls = [];
+		const badFingerprint = await commentAction(
+			makeEvent(
+				fd({
+					text: 'anchored',
+					anchorOrd: '1',
+					anchorStart: '0',
+					anchorEnd: '4',
+					anchorExact: 'text',
+					anchorLength: '14',
+					anchorFingerprint: 'zzzzzzzz'
+				})
+			)
+		);
+		expect(badFingerprint).toMatchObject({
+			status: 400,
+			data: { message: 'comment_error_generic' }
+		});
+		expect(state.submitCalls).toHaveLength(0);
 	});
 
 	it('never forwards an anchor on a reply (anchors live on roots)', async () => {

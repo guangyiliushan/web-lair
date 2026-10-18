@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
+import { blockFingerprint } from '$lib/utils/comment-anchor';
 import SegmentCommentLayer from './SegmentCommentLayer.svelte';
 import type { ThreadsPage } from './types';
 
@@ -113,7 +114,7 @@ describe('segment comment layer', () => {
 			anchorEnd: '10',
 			anchorExact: '选择这段文字',
 			anchorLength: '14',
-			anchorFingerprint: expect.stringMatching(/^[0-9a-f]{8}$/)
+			anchorFingerprint: blockFingerprint('第一段：选择这段文字来评论。')
 		});
 	});
 
