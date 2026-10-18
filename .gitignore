@@ -46,3 +46,4 @@ project.inlang/cache/
 
 # Jobs data dir (dev default; J-2)
 /data/
+deploy/backup.env

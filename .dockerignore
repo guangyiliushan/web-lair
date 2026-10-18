@@ -4,6 +4,7 @@ build
 data
 coverage
 .env
+deploy/backup.env
 .env.*
 !.env.example
 .git

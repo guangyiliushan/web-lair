@@ -38,6 +38,9 @@ $EDITOR .env      # see §1.1 for the required keys
 | `DATA_DIR`                                            | absolute host path, e.g. `/srv/web-lair/data`                                                                     |
 | `MAIL_*`                                              | see §1.2                                                                                                          |
 | `OWNER_EMAIL` / `OWNER_PASSWORD`                      | first owner seed (`pnpm db:seed-owner` from the host, dev only)                                                   |
+| `DEADMAN_PING_URL`                                    | healthchecks.io **liveness** check (5 min); unset ⇒ the dead-man timer skips (no alarm)                           |
+| `JOBS_HEARTBEAT_URL`                                  | per-tick drain ping (Kuma push or a second healthchecks check)                                                    |
+| `MAIL_DEV_LOG` / `MAIL_DEV_LOG_OK`                    | dev/e2e only; production ignores dev logging unless BOTH are set                                                  |
 
 Create the data directory with the image's uid **before** the first start —
 Docker would otherwise create it as root and the `node` user (uid 1000) could
@@ -53,7 +56,8 @@ never sees the credential that can delete the offsite repository:
 ```bash
 cp deploy/backup.env.example deploy/backup.env
 chmod 600 deploy/backup.env
-$EDITOR deploy/backup.env      # RESTIC_* + AWS_* + BACKUP_PING_URL
+$EDITOR deploy/backup.env      # + POSTGRES_USER / POSTGRES_DB / DATA_DIR (same values as .env),
+                               #   RESTIC_* + AWS_* + BACKUP_PING_URL + CHECK_PING_URL
 ```
 
 ### 1.2 Mail route probes (deploy note Q7)
@@ -96,9 +100,11 @@ export HTTP_PROXY= HTTPS_PROXY=        # the box has no local proxy
 ### 1.4 Migrate, then start
 
 ```bash
-mkdir -p /srv/web-lair/backup
-docker compose exec -T db pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB" \
-  > "/srv/web-lair/backup/pre-migrate-$(date +%F_%H%M).dump"
+set -euo pipefail
+mkdir -p /srv/web-lair/pre-migrate
+# The container already has POSTGRES_USER/POSTGRES_DB; the host shell does not.
+docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+  > "/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
 docker compose --profile prod up -d
 docker compose --profile prod ps          # all healthy
@@ -120,12 +126,15 @@ address (confirmation link must land on `/subscribe/confirm`), upload one photo
 ## 2. Update
 
 ```bash
+set -euo pipefail
 cd /srv/web-lair/app
 git fetch && git checkout <new-sha>
 docker compose --profile prod build app
-mkdir -p /srv/web-lair/backup
-docker compose exec -T db pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB" \
-  > "/srv/web-lair/backup/pre-migrate-$(date +%F_%H%M).dump"
+set -euo pipefail
+mkdir -p /srv/web-lair/pre-migrate
+# The container already has POSTGRES_USER/POSTGRES_DB; the host shell does not.
+docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+  > "/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
 docker compose --profile prod up -d
 ```
@@ -164,10 +173,13 @@ unit — never from `.env`, so the app container cannot read them).
 The script dumps PG to a temp file, validates it with `pg_restore -l`, swaps it
 over `pg.dump` (a failed night never truncates yesterday's good copy), resolves
 the RustFS volume from the running container, then runs restic with
-`--retry-lock 30m` and the retention policy.
+`--retry-lock 30m` and the retention policy. Pre-migration dumps live in
+`/srv/web-lair/pre-migrate` — **outside** the restic source paths, pruned by
+age, so deploy count does not grow the backup repo.
 
-- Weekly: `web-lair-backup-check.timer` runs `restic check --read-data-subset=5%`
-  (the nightly job only backs up).
+- Weekly: `web-lair-backup-check.timer` runs
+  `restic --retry-lock 30m check --read-data-subset=5%` (the nightly job only
+  backs up) and pings `CHECK_PING_URL` only on success.
 - Monthly drill: restore to a **separate** directory and, for PG, into a
   **scratch** database on a different port; compare row counts and sample media
   hashes. The drill never touches the production database.
