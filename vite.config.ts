@@ -26,14 +26,14 @@ const COOKIE_CHAIN = ['cookie', 'preferredLanguage', 'baseLocale'] as const;
  */
 function browserApiPort(): number {
 	const raw = process.env.VITEST_BROWSER_API_PORT;
-	const port = Number(raw ?? 5199);
+	const port = Number(raw ?? 43017);
 	if (!Number.isInteger(port) || port < 1 || port > 65535) {
 		// dev/build/check load this file too: fail loudly only for test runs,
 		// where a typo would otherwise silently pick another port.
 		const message = `VITEST_BROWSER_API_PORT must be a TCP port (1-65535), got "${raw}"`;
 		if (process.env.VITEST) throw new Error(message);
-		console.warn(`[vite.config] ${message}; using 5199`);
-		return 5199;
+		console.warn(`[vite.config] ${message}; using 43017`);
+		return 43017;
 	}
 	return port;
 }
@@ -103,13 +103,10 @@ export default defineConfig({
 						enabled: true,
 						provider: playwright(),
 						testerHtmlPath: './vitest-tester.html',
+						// Default 43017 sits outside the Windows excluded bands; override
+						// with VITEST_BROWSER_API_PORT when a checkout needs another port.
 						api: { host: '127.0.0.1', port: browserApiPort() },
 						viewport: { width: 1280, height: 720 },
-						// Vitest's default API port 63315 sits inside a Windows
-						// excluded-port range on some hosts (Hyper-V reserves
-						// 63269-63368 here), which fails every run with EACCES.
-						// A pinned port outside the reserved bands is portable.
-						api: { port: 43017 },
 						instances: [
 							{
 								browser: 'chromium',
