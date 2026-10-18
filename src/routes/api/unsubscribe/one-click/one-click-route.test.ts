@@ -58,20 +58,23 @@ describe('RFC 8058 one-click unsubscribe endpoint', () => {
 		expect(unsubscribeMock).toHaveBeenCalledWith(TOKEN);
 	});
 
-	it('still answers 200 when the rate limit trips, without unsubscribing', async () => {
+	it('answers 429 when the per-IP seatbelt trips, without unsubscribing', async () => {
 		rateLimitMock.mockResolvedValueOnce({ allowed: false, count: 31 });
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		expect((await POST(event(TOKEN))).status).toBe(200);
+		const response = await POST(event(TOKEN));
+		expect(response.status).toBe(429);
+		expect(response.headers.get('retry-after')).toBe('60');
 		expect(unsubscribeMock).not.toHaveBeenCalled();
 		expect(warn).toHaveBeenCalled();
 		warn.mockRestore();
 	});
 
-	it('swallows a database failure after logging it (receivers must not retry)', async () => {
+	it('answers 503 on a database failure so the receiver retries', async () => {
 		unsubscribeMock.mockRejectedValueOnce(new Error('db down'));
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const response = await POST(event(TOKEN));
-		expect(response.status).toBe(200);
+		expect(response.status).toBe(503);
+		expect(response.headers.get('retry-after')).toBe('60');
 		expect(error).toHaveBeenCalled();
 		error.mockRestore();
 	});

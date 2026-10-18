@@ -12,11 +12,15 @@ import type { RequestHandler } from './$types';
  * prior context** (§3.1). The token in the query string is the credential.
  *
  * Contract:
- * - always `200` with an empty body, including unknown/malformed tokens
- *   (a status code must not become a token oracle);
- * - idempotent: `unsubscribe` tolerates pending/subscribed/already states;
- * - no redirect (RFC 8058 §3.1 forbids it);
- * - per-IP seatbelt only (30/min); a miss still answers 200.
+ * - `200` empty for a valid token (processed or already terminal) and for an
+ *   unknown but well-formed token (no token oracle);
+ * - `429 + Retry-After` when the per-IP seatbelt trips (a silent 200 would make
+ *   the receiver drop a valid opt-out);
+ * - `503` when the database write fails (retryable; 200 would lose the opt-out);
+ * - no redirect (RFC 8058 §3.1 forbids it).
+ *
+ * A malformed token never reaches this handler in production: the CSRF hook
+ * rejects it before routing (403).
  */
 const ONE_CLICK_RATE_LIMIT = { limit: 30, windowSeconds: 60 } as const;
 
@@ -29,6 +33,13 @@ function clientAddress(getClientAddress: () => string): string {
 	}
 }
 
+function empty(status: number, headers: Record<string, string> = {}): Response {
+	return new Response(null, {
+		status,
+		headers: { 'cache-control': 'no-store', ...headers }
+	});
+}
+
 export const POST: RequestHandler = async ({ url, getClientAddress }) => {
 	const address = clientAddress(getClientAddress);
 	const rate = await rateLimit(
@@ -37,22 +48,21 @@ export const POST: RequestHandler = async ({ url, getClientAddress }) => {
 		ONE_CLICK_RATE_LIMIT.limit,
 		ONE_CLICK_RATE_LIMIT.windowSeconds
 	);
-
-	const token = url.searchParams.get('token') ?? '';
-	if (rate.allowed && isSubscriptionToken(token)) {
-		try {
-			await unsubscribe(token);
-		} catch (error) {
-			// Still 200: the receiver only needs to know the request was accepted,
-			// and a 5xx would make it retry a request the DB already rejected.
-			console.error('[unsubscribe] one-click failed', error);
-		}
-	} else if (!rate.allowed) {
+	if (!rate.allowed) {
 		console.warn('[unsubscribe] one-click rate limit hit');
+		return empty(429, { 'retry-after': '60' });
 	}
 
-	return new Response(null, {
-		status: 200,
-		headers: { 'cache-control': 'no-store' }
-	});
+	const token = url.searchParams.get('token') ?? '';
+	if (!isSubscriptionToken(token)) return empty(200);
+
+	try {
+		await unsubscribe(token);
+	} catch (error) {
+		// A 5xx is the only way to make the receiver retry; a 200 here would
+		// silently drop a valid opt-out during a DB blip.
+		console.error('[unsubscribe] one-click failed', error);
+		return empty(503, { 'retry-after': '60' });
+	}
+	return empty(200);
 };
