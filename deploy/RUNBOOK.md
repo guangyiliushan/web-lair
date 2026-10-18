@@ -95,6 +95,9 @@ export HTTP_PROXY= HTTPS_PROXY=        # the box has no local proxy
 /usr/bin/time -v docker compose --profile prod build app 2>&1 | tail -30
 # record "Elapsed" and "Maximum resident set size"; over the gate → build on a
 # workstation instead: docker save | ssh box docker load (image tag = SHA).
+# Prove the image's drain entry loads (it ships source + relies on Node's type
+# stripping; a syntax feature Vite accepts can fail only here):
+deploy/verify-image.sh "${APP_IMAGE:-web-lair-app:local}"
 ```
 
 ### 1.4 Migrate, then start
@@ -137,6 +140,7 @@ set -euo pipefail
 cd /srv/web-lair/app
 git fetch && git checkout <new-sha>
 docker compose --profile prod build app
+deploy/verify-image.sh "${APP_IMAGE:-web-lair-app:local}"
 mkdir -p /srv/web-lair/pre-migrate
 # tmpfiles prunes dumps older than 30 days (install once; see §4).
 printf 'd /srv/web-lair/pre-migrate 0750 1000 1000 30d\n' > /etc/tmpfiles.d/web-lair.conf
