@@ -19,6 +19,7 @@
 # Failures are loud: set -e aborts before the backup ping, so a missing ping
 # raises the alarm.
 set -euo pipefail
+umask 077
 
 APP_DIR=${APP_DIR:-/srv/web-lair/app}
 BACKUP_DIR=${BACKUP_DIR:-/srv/web-lair/backup}
@@ -51,20 +52,22 @@ fi
 # 2 + 3 + 4) One restic run mounts the dump dir, the data dir, the media
 # volume and the config file read-only. --retry-lock survives an interrupted
 # previous run instead of failing every night until manual unlock.
-docker run --rm \
-	-e RESTIC_REPOSITORY -e RESTIC_PASSWORD \
-	-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+# `--host` pins the snapshot host: without it every nightly container gets a
+# fresh hostname and `forget --keep-daily` groups each run separately.
+docker run --rm --env-file "$APP_DIR/deploy/backup.env" \
 	-v "$BACKUP_DIR":/backup:ro \
 	-v "$DATA_DIR":/data:ro \
 	-v "$RUSTFS_VOLUME":/rustfs:ro \
 	-v "$APP_DIR/.env":/config/.env:ro \
-	"$RESTIC_IMAGE" --retry-lock 30m backup /backup /data /rustfs /config
+	"$RESTIC_IMAGE" --retry-lock 30m backup --host web-lair /backup /data /rustfs /config
 
-# Retention: keep-daily 7 / weekly 4 / monthly 6 (prune runs with the backup).
-docker run --rm \
-	-e RESTIC_REPOSITORY -e RESTIC_PASSWORD \
-	-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
-	"$RESTIC_IMAGE" --retry-lock 30m forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+# Retention: keep-daily 7 / weekly 4 / monthly 6. Group by paths (host is
+# pinned above); prune only on Sunday so the nightly run does not hold the repo
+# lock for a full data rewrite.
+forget_args=(--keep-daily 7 --keep-weekly 4 --keep-monthly 6 --group-by paths)
+if [ "$(date +%u)" = "7" ]; then forget_args+=(--prune); fi
+docker run --rm --env-file "$APP_DIR/deploy/backup.env" \
+	"$RESTIC_IMAGE" --retry-lock 30m forget "${forget_args[@]}"
 
 # Dedicated backup check (never the 5-minute liveness URL: sharing it would
 # make a failed backup invisible on the next liveness tick).
