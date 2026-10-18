@@ -251,7 +251,7 @@ describe('/i/<key> proxy (T9)', () => {
 			}
 		} as unknown as Parameters<typeof GET>[0]);
 		expect(res.status).toBe(200);
-		expect(rateLimitMock).toHaveBeenCalledWith(expect.anything(), 'limits:i:unresolved', 900, 60);
+		expect(rateLimitMock).toHaveBeenCalledWith(expect.anything(), 'limits:i:unresolved', 6000, 60);
 	});
 
 	it('still 429s the coarse bucket when it is exhausted', async () => {

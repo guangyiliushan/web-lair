@@ -197,7 +197,7 @@
 			<input
 				type="file"
 				name="files"
-				aria-label={m.admin_media_upload()}
+				aria-label={m.admin_media_pick_files()}
 				multiple
 				accept={ACCEPT}
 				class="text-sm file:mr-3 file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm"

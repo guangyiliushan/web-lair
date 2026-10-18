@@ -49,7 +49,7 @@ export async function uploadEachFile(options: {
 	for (const file of options.files) {
 		if (file.size > options.maxBytes) {
 			// Skip the doomed request: adapter-node rejects an oversized body
-			// with a plain-text 400 before the action runs.
+			// with a 413 (SvelteKitError) before the action runs.
 			results.push({
 				fileName: file.name,
 				ok: false,
@@ -67,7 +67,8 @@ export async function uploadEachFile(options: {
 				body,
 				headers: { accept: 'application/json', 'x-sveltekit-action': 'true' },
 				// A request that never settles must not wedge the disabled button.
-				signal: AbortSignal.timeout(60_000)
+				// The floor is ~50 KB/s so a 25 MB file on a slow uplink still fits.
+				signal: AbortSignal.timeout(Math.max(120_000, Math.ceil(file.size / 50_000) * 1000))
 			});
 			const result = deserialize(await response.text());
 
@@ -78,6 +79,8 @@ export async function uploadEachFile(options: {
 					await applyAction(result);
 				} catch (error) {
 					console.warn('[upload] redirect navigation failed', error);
+					// The batch is over and the page is still here: say why.
+					message = options.fallbackMessage;
 				}
 				return { results, message, redirected: true };
 			}

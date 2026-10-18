@@ -55,6 +55,8 @@ describe('uploadEachFile', () => {
 		// The action reads getAll('files'); a renamed field would 400 every file.
 		const body = init.body as FormData;
 		expect(body.getAll('files')).toHaveLength(1);
+		// Without a signal a hung request keeps `uploading` true forever.
+		expect(init.signal).toBeInstanceOf(AbortSignal);
 		expect((body.get('files') as File).name).toBe('a.jpg');
 	});
 

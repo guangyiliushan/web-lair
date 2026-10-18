@@ -77,7 +77,7 @@ let warnedMissingAddress = false;
 
 /** A per-IP bucket would 429 the whole site on a proxy misconfiguration; a
  * coarse shared bucket still bounds abuse without that blast radius. */
-const UNRESOLVED_BUCKET = { limit: 900, windowSeconds: 60 } as const;
+const UNRESOLVED_BUCKET = { limit: 6000, windowSeconds: 60 } as const;
 const UNRESOLVED_KEY = 'limits:i:unresolved';
 
 function warnMissingAddressOnce(): void {
