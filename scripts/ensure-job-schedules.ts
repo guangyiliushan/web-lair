@@ -34,22 +34,26 @@ async function main(): Promise<void> {
 		for (const schedule of SCHEDULES) {
 			if (DRY_RUN) {
 				const [row] = await sql`
-					select 1 from job_schedules
-					where job = ${schedule.job} and cron_expr = ${schedule.cron}
+					select cron_expr from job_schedules
+					where job = ${schedule.job}
 					limit 1
 				`;
-				console.log(`→ dry-run: ${schedule.job} (${schedule.cron}) ${row ? 'present' : 'missing'}`);
+				console.log(`→ dry-run: ${schedule.job} ${row ? `present (${row.cron_expr})` : 'missing'}`);
 				continue;
 			}
 
+			// One row per job, not per (job, cron): an operator may change the cron
+			// in admin, and the seed must not add a second schedule next deploy.
 			const inserted = await sql`
 				insert into job_schedules (job, cron_expr)
-				values (${schedule.job}, ${schedule.cron})
-				on conflict (job, cron_expr) do nothing
+				select ${schedule.job}, ${schedule.cron}
+				where not exists (
+					select 1 from job_schedules where job = ${schedule.job}
+				)
 				returning id
 			`;
 			console.log(
-				`→ ${inserted.length > 0 ? 'inserted' : 'present'} ${schedule.job} (${schedule.cron})`
+				`→ ${inserted.length > 0 ? 'inserted' : 'present (left as configured)'} ${schedule.job}`
 			);
 		}
 	} finally {

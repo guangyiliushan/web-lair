@@ -91,13 +91,17 @@ record (`p=none` first, tighten after a week of reports). Send from a
 ### 1.3 Build (gate: ≤ 8 min, ≤ 4 GB peak)
 
 ```bash
+set -euo pipefail
+cd /srv/web-lair/app
 export HTTP_PROXY= HTTPS_PROXY=        # the box has no local proxy
 /usr/bin/time -v docker compose --profile prod build app 2>&1 | tail -30
 # record "Elapsed" and "Maximum resident set size"; over the gate → build on a
 # workstation instead: docker save | ssh box docker load (image tag = SHA).
-# Prove the image's drain entry loads (it ships source + relies on Node's type
-# stripping; a syntax feature Vite accepts can fail only here):
-deploy/verify-image.sh "${APP_IMAGE:-web-lair-app:local}"
+# The compose `image:` tag comes from .env; a bare ${APP_IMAGE:-...} would check
+# the wrong image. Source it, then prove the drain/builtin graph loads.
+set -a; . ./.env; set +a
+APP_IMAGE="${APP_IMAGE:-web-lair-app:local}"
+deploy/verify-image.sh "$APP_IMAGE"
 ```
 
 ### 1.4 Migrate, then start
@@ -106,17 +110,26 @@ deploy/verify-image.sh "${APP_IMAGE:-web-lair-app:local}"
 set -euo pipefail
 mkdir -p /srv/web-lair/pre-migrate
 # tmpfiles prunes dumps older than 30 days (install once; see §4).
-printf 'd /srv/web-lair/pre-migrate 0750 1000 1000 30d\n' > /etc/tmpfiles.d/web-lair.conf
-systemd-tmpfiles --create
+sudo tee /etc/tmpfiles.d/web-lair.conf >/dev/null <<'EOF'
+d /srv/web-lair/pre-migrate 0750 1000 1000 30d
+EOF
+sudo systemd-tmpfiles --create
 # The first deploy reaches this block before `up -d`; the db must be up first.
 docker compose --profile prod up -d db
-until docker compose exec -T db pg_isready -q; do sleep 2; done
+# The entrypoint's temporary server only listens on the unix socket; probe TCP.
+for i in $(seq 1 30); do
+  docker compose exec -T db pg_isready -h 127.0.0.1 -q && break
+  [ "$i" = 30 ] && { echo "db did not become ready" >&2; exit 1; }
+  sleep 2
+done
 dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump
 # The container has POSTGRES_USER/POSTGRES_DB; the host shell does not.
 docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
 mv "$dump.tmp" "$dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
+# Seed rows are one-per-job and use the DB default tz (UTC); times are not
+# critical for maintenance, and admin-created schedules use site.timezone.
 docker compose --profile prod run --rm app node scripts/ensure-job-schedules.ts
 docker compose --profile prod up -d
 docker compose --profile prod ps          # all healthy
@@ -142,20 +155,31 @@ set -euo pipefail
 cd /srv/web-lair/app
 git fetch && git checkout <new-sha>
 docker compose --profile prod build app
-deploy/verify-image.sh "${APP_IMAGE:-web-lair-app:local}"
+set -a; . ./.env; set +a
+APP_IMAGE="${APP_IMAGE:-web-lair-app:local}"
+deploy/verify-image.sh "$APP_IMAGE"
 mkdir -p /srv/web-lair/pre-migrate
 # tmpfiles prunes dumps older than 30 days (install once; see §4).
-printf 'd /srv/web-lair/pre-migrate 0750 1000 1000 30d\n' > /etc/tmpfiles.d/web-lair.conf
-systemd-tmpfiles --create
+sudo tee /etc/tmpfiles.d/web-lair.conf >/dev/null <<'EOF'
+d /srv/web-lair/pre-migrate 0750 1000 1000 30d
+EOF
+sudo systemd-tmpfiles --create
 # The first deploy reaches this block before `up -d`; the db must be up first.
 docker compose --profile prod up -d db
-until docker compose exec -T db pg_isready -q; do sleep 2; done
+# The entrypoint's temporary server only listens on the unix socket; probe TCP.
+for i in $(seq 1 30); do
+  docker compose exec -T db pg_isready -h 127.0.0.1 -q && break
+  [ "$i" = 30 ] && { echo "db did not become ready" >&2; exit 1; }
+  sleep 2
+done
 dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump
 # The container has POSTGRES_USER/POSTGRES_DB; the host shell does not.
 docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
 mv "$dump.tmp" "$dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
+# Seed rows are one-per-job and use the DB default tz (UTC); times are not
+# critical for maintenance, and admin-created schedules use site.timezone.
 docker compose --profile prod run --rm app node scripts/ensure-job-schedules.ts
 docker compose --profile prod up -d
 ```
