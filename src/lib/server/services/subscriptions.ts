@@ -46,8 +46,18 @@ export function isSubscriptionToken(value: string): boolean {
 	return TOKEN_RE.test(value);
 }
 
+export interface PreviousSubscription {
+	status: SubscriptionStatus;
+	token: string;
+	lang: SubscriptionLang;
+	source: string | null;
+	verifiedAt: Date | null;
+	unsubscribedAt: Date | null;
+}
+
 export type RequestSubscriptionResult =
-	{ kind: 'pending'; token: string; send: boolean } | { kind: 'already-subscribed' };
+	| { kind: 'pending'; token: string; send: boolean; previous?: PreviousSubscription }
+	| { kind: 'already-subscribed' };
 
 export async function requestSubscription(input: {
 	email: string;
@@ -72,9 +82,16 @@ export async function requestSubscription(input: {
 
 	const token = newSubscriptionToken();
 	if (existing) {
-		// pending (resend) or unsubscribed (re-subscribe): a fresh token is the
-		// only valid confirmation link; verified_at returns to null per the
-		// monotonic-timestamp CHECK.
+		// Keep enough state to undo a resubscribe whose mail never left: deleting
+		// a row that used to be `unsubscribed` would erase the opt-out record.
+		const previous: PreviousSubscription = {
+			status: existing.status as SubscriptionStatus,
+			token: existing.token,
+			lang: existing.lang as SubscriptionLang,
+			source: existing.source,
+			verifiedAt: existing.verifiedAt,
+			unsubscribedAt: existing.unsubscribedAt
+		};
 		// Compare-and-swap on the token we read: a concurrent confirm wins, and a
 		// parallel resubmit loses instead of voiding the link it just mailed.
 		const updated = await db
@@ -105,7 +122,7 @@ export async function requestSubscription(input: {
 			if (again) return { kind: 'pending', token: again.token, send: false };
 			// The row vanished (pending unsubscribe): fall through and insert.
 		}
-		if (updated.length > 0) return { kind: 'pending', token, send: true };
+		if (updated.length > 0) return { kind: 'pending', token, send: true, previous };
 	}
 
 	try {
@@ -210,5 +227,23 @@ export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
 export async function discardPendingToken(token: string): Promise<void> {
 	await db
 		.delete(subscriptions)
+		.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'pending')));
+}
+
+/** Restores the row a failed send had rotated to pending (token-guarded). */
+export async function restoreSubscription(
+	token: string,
+	previous: PreviousSubscription
+): Promise<void> {
+	await db
+		.update(subscriptions)
+		.set({
+			status: previous.status,
+			token: previous.token,
+			lang: previous.lang,
+			source: previous.source,
+			verifiedAt: previous.verifiedAt,
+			unsubscribedAt: previous.unsubscribedAt
+		})
 		.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'pending')));
 }

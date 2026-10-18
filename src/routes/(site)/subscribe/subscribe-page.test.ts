@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * pending/already-subscribed, and a visible 503 when the confirmation mail
  * cannot be sent.
  */
-const { state, requestSubscriptionMock, sendMailMock, rateLimitMock, discardMock } = vi.hoisted(
-	() => {
+const { state, requestSubscriptionMock, sendMailMock, rateLimitMock, discardMock, restoreMock } =
+	vi.hoisted(() => {
 		const state = {
 			env: { ORIGIN: 'https://lair.example' } as Record<string, string>,
 			locale: 'zh-cn'
@@ -16,9 +16,16 @@ const { state, requestSubscriptionMock, sendMailMock, rateLimitMock, discardMock
 		const sendMailMock = vi.fn();
 		const rateLimitMock = vi.fn(async () => ({ allowed: true, count: 1 }));
 		const discardMock = vi.fn(async () => {});
-		return { state, requestSubscriptionMock, sendMailMock, rateLimitMock, discardMock };
-	}
-);
+		const restoreMock = vi.fn(async () => {});
+		return {
+			state,
+			requestSubscriptionMock,
+			sendMailMock,
+			rateLimitMock,
+			discardMock,
+			restoreMock
+		};
+	});
 
 vi.mock('$env/dynamic/private', () => ({ env: state.env }));
 vi.mock('$lib/paraglide/runtime', () => ({ getLocale: () => state.locale }));
@@ -38,7 +45,8 @@ vi.mock('$lib/server/services/subscriptions', async (importOriginal) => {
 	return {
 		...actual,
 		requestSubscription: requestSubscriptionMock,
-		discardPendingToken: discardMock
+		discardPendingToken: discardMock,
+		restoreSubscription: restoreMock
 	};
 });
 vi.mock('$lib/server/mail/transport', () => ({ sendMailOrDevLog: sendMailMock }));
@@ -50,13 +58,15 @@ function event(fields: Record<string, string>, ip = '203.0.113.7') {
 	for (const [key, value] of Object.entries(fields)) body.set(key, value);
 	return {
 		request: new Request('http://localhost/zh-cn/subscribe', { method: 'POST', body }),
-		getClientAddress: () => ip
+		getClientAddress: () => ip,
+		url: new URL('http://localhost/zh-cn/subscribe')
 	} as unknown as Parameters<typeof actions.default>[0];
 }
 
 beforeEach(() => {
 	requestSubscriptionMock.mockReset();
 	discardMock.mockReset();
+	restoreMock.mockReset();
 	sendMailMock.mockReset();
 	sendMailMock.mockResolvedValue(undefined);
 	rateLimitMock.mockReset();
@@ -146,6 +156,32 @@ describe('subscribe action', () => {
 		const result = await actions.default(event({ email: 'a@b.co' }));
 		expect(result).toEqual({ success: true });
 		expect(sendMailMock).not.toHaveBeenCalled();
+	});
+
+	it('restores a previously unsubscribed row when the mail fails', async () => {
+		requestSubscriptionMock.mockResolvedValue({
+			kind: 'pending',
+			token: 'tok_new',
+			send: true,
+			previous: {
+				status: 'unsubscribed',
+				token: 'tok_old',
+				lang: 'zh-cn',
+				source: 'subscribe-page',
+				verifiedAt: new Date('2026-01-01T00:00:00Z'),
+				unsubscribedAt: new Date('2026-02-01T00:00:00Z')
+			}
+		});
+		sendMailMock.mockRejectedValue(new Error('SMTP down'));
+
+		const result = await actions.default(event({ email: 'reader@example.com' }));
+		if (!result || !('status' in result)) throw new Error('expected a failure result');
+		expect(result.status).toBe(503);
+		expect(restoreMock).toHaveBeenCalledWith(
+			'tok_new',
+			expect.objectContaining({ status: 'unsubscribed' })
+		);
+		expect(discardMock).not.toHaveBeenCalled();
 	});
 
 	it('surfaces a 503 when the confirmation mail cannot be sent', async () => {

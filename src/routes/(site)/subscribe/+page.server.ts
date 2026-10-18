@@ -9,6 +9,7 @@ import { sendMailOrDevLog } from '$lib/server/mail/transport';
 import {
 	discardPendingToken,
 	isSubscriptionLang,
+	restoreSubscription,
 	normalizeEmail,
 	requestSubscription
 } from '$lib/server/services/subscriptions';
@@ -27,7 +28,7 @@ import type { Actions } from './$types';
 const SUBSCRIBE_RATE_LIMIT = { limit: 10, windowSeconds: 60 * 60 } as const;
 
 export const actions: Actions = {
-	default: async ({ request, getClientAddress }) => {
+	default: async ({ request, getClientAddress, url: requestUrl }) => {
 		const form = await request.formData();
 		// Bots fill every input; humans never see this one.
 		if (String(form.get('website') ?? '').trim() !== '') return { success: true };
@@ -56,11 +57,16 @@ export const actions: Actions = {
 		const outcome = await requestSubscription({ email, lang, source: 'subscribe-page' });
 
 		if (outcome.kind === 'pending' && outcome.send !== false) {
-			const origin = (env.ORIGIN ?? '').replace(/\/$/, '');
-			const url = `${origin}/${lang}/subscribe/confirm?token=${outcome.token}`;
-			const optOut = `${origin}/${lang}/unsubscribe?token=${outcome.token}`;
+			// ORIGIN empty (the .env.example default) would mail a relative link.
+			const configuredOrigin = (env.ORIGIN ?? '').trim().replace(/\/$/, '');
+			const origin = configuredOrigin || requestUrl.origin;
+			const confirmUrl = `${origin}/${lang}/subscribe/confirm?token=${outcome.token}`;
+			const optOutUrl = `${origin}/${lang}/unsubscribe?token=${outcome.token}`;
 			try {
-				await sendMailOrDevLog({ to: email, ...subscriptionConfirmMail(lang, url, optOut) });
+				await sendMailOrDevLog({
+					to: email,
+					...subscriptionConfirmMail(lang, confirmUrl, optOutUrl)
+				});
 			} catch (error) {
 				// Roll the never-mailed pending row back, otherwise the resend
 				// cooldown turns the retry into a success with no mail. A 2xx
@@ -69,9 +75,15 @@ export const actions: Actions = {
 				const accepted = (error as { responseCode?: number }).responseCode;
 				const delivered = typeof accepted === 'number' && accepted >= 200 && accepted < 300;
 				if (!delivered) {
-					await discardPendingToken(outcome.token).catch((rollbackError) =>
-						console.error('[subscribe] pending rollback failed', rollbackError)
-					);
+					try {
+						if (outcome.previous) {
+							await restoreSubscription(outcome.token, outcome.previous);
+						} else {
+							await discardPendingToken(outcome.token);
+						}
+					} catch (rollbackError) {
+						console.error('[subscribe] pending rollback failed', rollbackError);
+					}
 				}
 				console.error('[subscribe] confirmation mail failed', error);
 				return fail(503, { message: m.subscribe_err_mail() });
