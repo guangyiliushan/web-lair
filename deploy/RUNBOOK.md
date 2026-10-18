@@ -38,6 +38,7 @@ $EDITOR .env      # see §1.1 for the required keys
 | `DATA_DIR`                                            | absolute host path, e.g. `/srv/web-lair/data`                                                                     |
 | `MAIL_*`                                              | see §1.2                                                                                                          |
 | `SUBSCRIBE_TOKEN_TTL_DAYS` / `SUBSCRIBE_HMAC_KEY`     | see §1.2 (confirmation-link lifetime + per-address cap key)                                                       |
+| `SUPPRESSION_HMAC_KEY` / `MAIL_EVENTS_HMAC_KEY`       | see §8 (suppression list hash key + bounce/complaint webhook key)                                                 |
 | `OWNER_EMAIL` / `OWNER_PASSWORD`                      | first owner seed (`pnpm db:seed-owner` from the host, dev only)                                                   |
 | `DEADMAN_PING_URL`                                    | healthchecks.io **liveness** check (5 min); unset ⇒ the dead-man timer skips (no alarm)                           |
 | `JOBS_HEARTBEAT_URL`                                  | per-tick drain ping (Kuma push or a second healthchecks check)                                                    |
@@ -335,3 +336,65 @@ Origin-less POSTs with `403` — see `src/lib/server/security/csrf.ts`.
 | All visitors share one rate-limit bucket | Caddy not setting `X-Forwarded-For`, or `ADDRESS_HEADER`/`XFF_DEPTH` wrong                                            |
 | SSE stalls                               | Caddy buffering — `flush_interval -1` must be present                                                                 |
 | Certs fail under orange cloud            | HTTP-01 blocked at the edge — switch to DNS-01 (xcaddy + CF plugin) or grey-cloud DNS                                 |
+
+## 8. Email retention and suppression (E2)
+
+**Suppression list.** `email_suppressions` stores only `HMAC-SHA256(email)` with
+the independent `SUPPRESSION_HMAC_KEY` (`openssl rand -base64 32`), a reason
+(`unsubscribed` / `bounced` / `complained`) and a source. Writes are idempotent
+and the first reason wins.
+
+- A pending or confirmed opt-out records the row in the same transaction as
+  the subscription change.
+- A confirmed re-subscription lifts only `unsubscribed`; `bounced` and
+  `complained` are never lifted by the user flow (a deliverability problem or
+  an abuse report must survive).
+- Keep the key in backups. Rotating it orphans every existing hash; the table
+  cannot be recomputed because no plaintext addresses are stored.
+- Retention: keep suppressions for **at least 2 years** (ICO / CAN-SPAM audit
+  evidence); do not prune them with the subscription sweep.
+
+**Subscription retention.** `subscriptions.sweep` deletes `pending` rows after
+30 days (no consent was ever proven). `subscribed` and `unsubscribed` rows stay
+as consent/opt-out evidence; `consent_version` records which text the reader
+agreed to (`2026-10-v1` from this release, `legacy` for rows restored from
+before the column existed).
+
+**Consent backfill (once, after restoring pre-E2 data):**
+
+```bash
+pnpm db:backfill-consent              # dry-run
+pnpm db:backfill-consent --apply
+```
+
+**Token hashes (E2-3).** New writes store both `token` (dual-read window) and
+`token_hash = sha256(token)`. Reads try the hash first, fall back to the
+plaintext column for legacy rows and backfill the hash on first hit. Backfill
+everything once after restore:
+
+```bash
+pnpm db:backfill-token-hashes         # dry-run
+pnpm db:backfill-token-hashes --apply
+```
+
+The plaintext `token` column is scheduled for removal in a later window after
+one release of dual-read.
+
+**Bounce / complaint webhook (E2-4).** `POST /api/mail/events` expects JSON
+`{ "email": "...", "reason": "bounced" | "complained" }` signed over
+`<timestamp>.<raw-body>`:
+
+```bash
+TS=$(date +%s)
+BODY='{"email":"reader@example.com","reason":"bounced"}'
+SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$MAIL_EVENTS_HMAC_KEY" -hex | sed 's/^.* //')
+curl -sS -X POST https://<domain>/api/mail/events \
+  -H 'Content-Type: application/json' \
+  -H "x-mail-events-timestamp: $TS" \
+  -H "x-mail-events-signature: sha256=$SIG" \
+  --data "$BODY"          # expect {"ok":true}
+```
+
+Missing `MAIL_EVENTS_HMAC_KEY` makes the endpoint answer `503` (fail-closed);
+signatures older/newer than five minutes are rejected. Relay webhooks are the
+supported intake; self-hosted DSN parsing remains a later second entry point.
