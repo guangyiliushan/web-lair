@@ -499,6 +499,7 @@
 	"admin_maintenance_water_level": "Watermark: ",
 	"admin_master_detail_count": "{count}",
 	"admin_media_err_rate": "Too many uploads — try again later",
+	"admin_media_err_session": "Your session expired — refresh the page and sign in again.",
 	"admin_media_err_too_big": "{name} exceeds the per-file limit",
 	"admin_media_err_too_many": [
 		{

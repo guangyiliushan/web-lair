@@ -391,6 +391,7 @@
 	"admin_maintenance_water_level": "ウォーターマーク：",
 	"admin_master_detail_count": "{count} 件",
 	"admin_media_err_rate": "アップロードが頻繁すぎます。後でもう一度お試しください",
+	"admin_media_err_session": "セッションの有効期限が切れました。ページを再読み込みして再度ログインしてください。",
 	"admin_media_err_too_big": "{name} が 1 ファイルの上限を超えています",
 	"admin_media_err_too_many": "1 回に最大 {count} ファイルまで",
 	"admin_media_err_upload_failed": "アップロードに失敗しました",

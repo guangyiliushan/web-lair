@@ -46,7 +46,15 @@
 				files,
 				maxBytes: data.limits.maxBytes,
 				fallbackMessage: m.admin_media_err_upload_failed(),
-				tooLargeMessage: (name) => m.admin_media_err_too_big({ name })
+				tooLargeMessage: (name) => m.admin_media_err_too_big({ name }),
+				mapError: (status, name) =>
+					status === 413
+						? m.admin_media_err_too_big({ name })
+						: status === 429
+							? m.admin_media_err_rate()
+							: status === 403
+								? m.admin_media_err_session()
+								: undefined
 			});
 			if (outcome.redirected) return;
 			await applyUploadResults(outcome);

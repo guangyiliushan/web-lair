@@ -42,6 +42,8 @@ export async function uploadEachFile(options: {
 	fallbackMessage: string;
 	/** Optional size-specific message (the page has the translated limit copy). */
 	tooLargeMessage?: (name: string) => string;
+	/** Maps a framework/proxy HTTP status to a translated message. */
+	mapError?: (status: number, fileName: string) => string | undefined;
 }): Promise<{ results: UploadOutcome[]; message?: string; redirected?: boolean }> {
 	const results: UploadOutcome[] = [];
 	let message: string | undefined;
@@ -61,6 +63,7 @@ export async function uploadEachFile(options: {
 
 		const body = new FormData();
 		body.append('files', file);
+		let status = 0;
 		try {
 			const response = await fetch(options.action, {
 				method: 'POST',
@@ -70,6 +73,7 @@ export async function uploadEachFile(options: {
 				// The floor is ~50 KB/s so a 25 MB file on a slow uplink still fits.
 				signal: AbortSignal.timeout(Math.max(120_000, Math.ceil(file.size / 50_000) * 1000))
 			});
+			status = response.status;
 			const result = deserialize(await response.text());
 
 			if (result.type === 'redirect') {
@@ -98,25 +102,33 @@ export async function uploadEachFile(options: {
 				}
 				if (data.message) message = data.message;
 			} else if (result.type === 'error') {
+				// Framework errors are English and rarely actionable; map the status
+				// to the page's copy instead of showing the raw message.
 				results.push({
 					fileName: file.name,
 					ok: false,
-					message: result.error?.message ?? options.fallbackMessage
+					message:
+						options.mapError?.(status, file.name) ??
+						result.error?.message ??
+						options.fallbackMessage
 				});
 			} else {
 				// A JSON body without an ActionResult type (CSRF 403 JSON, proxy error):
 				// never drop the file from the report.
-				const body = result as unknown as { message?: string };
 				results.push({
 					fileName: file.name,
 					ok: false,
-					message: body.message ?? options.fallbackMessage
+					message: options.mapError?.(status, file.name) ?? options.fallbackMessage
 				});
 			}
 		} catch (error) {
 			// Non-JSON body (413/500), a redirect to HTML, or a network failure.
 			message = options.fallbackMessage;
-			results.push({ fileName: file.name, ok: false, message: options.fallbackMessage });
+			results.push({
+				fileName: file.name,
+				ok: false,
+				message: options.mapError?.(status, file.name) ?? options.fallbackMessage
+			});
 			console.warn('[upload] request failed', file.name, error);
 		}
 	}

@@ -60,6 +60,58 @@ describe('uploadEachFile', () => {
 		expect((body.get('files') as File).name).toBe('a.jpg');
 	});
 
+	it('maps a framework error status instead of showing its English text', async () => {
+		fetchMock.mockResolvedValueOnce({ status: 413, text: async () => 'Payload Too Large' });
+		deserializeMock.mockReturnValue({ type: 'error', error: { message: 'Payload Too Large' } });
+
+		const outcome = await uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback',
+			mapError: (status, name) => (status === 413 ? `too big: ${name}` : undefined)
+		});
+
+		expect(outcome.results[0]).toMatchObject({ ok: false, message: 'too big: a.jpg' });
+		expect(outcome.results[0]?.message).not.toContain('Payload');
+	});
+
+	it('maps a status on a JSON body that is not an ActionResult', async () => {
+		fetchMock.mockResolvedValueOnce({ status: 403, text: async () => '{}' });
+		deserializeMock.mockReturnValue({ message: 'Cross-site POST form submissions are forbidden' });
+
+		const outcome = await uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback',
+			mapError: (status) => (status === 403 ? 'session expired' : undefined)
+		});
+
+		expect(outcome.results[0]).toMatchObject({ ok: false, message: 'session expired' });
+	});
+
+	it('maps a status when the body is not JSON at all', async () => {
+		fetchMock.mockResolvedValueOnce({ status: 413, text: async () => 'Payload Too Large' });
+		deserializeMock.mockImplementation(() => {
+			throw new Error('not JSON');
+		});
+
+		const outcome = await uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback',
+			mapError: (status, name) => (status === 413 ? `too big: ${name}` : undefined)
+		});
+
+		expect(outcome.results[0]).toMatchObject({
+			fileName: 'a.jpg',
+			ok: false,
+			message: 'too big: a.jpg'
+		});
+	});
+
 	it('stops at a redirect (session expired) and applies it', async () => {
 		deserializeMock.mockReturnValue({ type: 'redirect', status: 303, location: '/login' });
 
@@ -129,8 +181,10 @@ describe('uploadEachFile', () => {
 			maxBytes: 100,
 			fallbackMessage: 'fallback'
 		});
+		// The body's English text is ignored: without a status map the page's
+		// translated fallback is the only copy that may reach the UI.
 		expect(outcome.results).toEqual([
-			expect.objectContaining({ fileName: 'a.jpg', ok: false, message: 'cross-site post rejected' })
+			expect.objectContaining({ fileName: 'a.jpg', ok: false, message: 'fallback' })
 		]);
 	});
 

@@ -391,6 +391,7 @@
 	"admin_maintenance_water_level": "水位：",
 	"admin_master_detail_count": "{count} 个",
 	"admin_media_err_rate": "上传过于频繁，请稍后再试",
+	"admin_media_err_session": "会话已过期，请刷新页面后重新登录。",
 	"admin_media_err_too_big": "{name} 超过单文件上限",
 	"admin_media_err_too_many": "一次最多上传 {count} 个文件",
 	"admin_media_err_upload_failed": "上传失败",
