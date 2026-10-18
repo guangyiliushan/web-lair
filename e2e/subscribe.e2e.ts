@@ -47,6 +47,9 @@ test.describe('subscription double opt-in', () => {
 		const token = psql(`select token from subscriptions where email = '${MARKER}'`);
 		expect(token).toHaveLength(43);
 		expect(psql(`select status from subscriptions where email = '${MARKER}'`)).toBe('pending');
+		expect(psql(`select consent_version from subscriptions where email = '${MARKER}'`)).toBe(
+			'2026-10-v1'
+		);
 
 		// Prefetch-safety: opening the link must not confirm the address.
 		const confirmResponse = await page.goto(`/zh-cn/subscribe/confirm?token=${token}`);

@@ -25,6 +25,13 @@ export { isSubscriptionToken, newSubscriptionToken } from './subscription-token'
 export type SubscriptionLang = 'en' | 'zh-cn' | 'ja';
 export type SubscriptionStatus = 'pending' | 'subscribed' | 'unsubscribed';
 
+/**
+ * Version of the consent text shown on the public form (E2-2). Bump when the
+ * wording or the purposes change; rows keep the version they were collected
+ * under so an export can answer "which text did this reader agree to".
+ */
+export const CONSENT_VERSION = '2026-10-v1';
+
 const EMAIL_MAX = 254;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** A still-pending address is not re-mailed (nor its live link voided) inside this window. */
@@ -89,6 +96,7 @@ export interface PreviousSubscription {
 	token: string;
 	lang: SubscriptionLang;
 	source: string | null;
+	consentVersion: string | null;
 	verifiedAt: Date | null;
 	unsubscribedAt: Date | null;
 }
@@ -136,6 +144,7 @@ export async function requestSubscription(input: {
 			token: existing.token,
 			lang: existing.lang as SubscriptionLang,
 			source: existing.source,
+			consentVersion: existing.consentVersion,
 			verifiedAt: existing.verifiedAt,
 			unsubscribedAt: existing.unsubscribedAt
 		};
@@ -148,6 +157,7 @@ export async function requestSubscription(input: {
 				token,
 				lang: input.lang,
 				source: input.source,
+				consentVersion: CONSENT_VERSION,
 				verifiedAt: null
 			})
 			.where(
@@ -177,6 +187,7 @@ export async function requestSubscription(input: {
 			email: input.email,
 			lang: input.lang,
 			source: input.source,
+			consentVersion: CONSENT_VERSION,
 			token
 		});
 	} catch (error) {
@@ -337,6 +348,7 @@ export async function restoreSubscription(
 			token: previous.token,
 			lang: previous.lang,
 			source: previous.source,
+			consentVersion: previous.consentVersion,
 			verifiedAt: previous.verifiedAt,
 			unsubscribedAt: previous.unsubscribedAt
 		})

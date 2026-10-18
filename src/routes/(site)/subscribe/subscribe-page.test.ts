@@ -209,6 +209,7 @@ describe('subscribe action', () => {
 				token: 'tok_old',
 				lang: 'zh-cn',
 				source: 'subscribe-page',
+				consentVersion: '2026-10-v1',
 				verifiedAt: new Date('2026-01-01T00:00:00Z'),
 				unsubscribedAt: new Date('2026-02-01T00:00:00Z')
 			}

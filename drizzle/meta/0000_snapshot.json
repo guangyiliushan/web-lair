@@ -1,5 +1,5 @@
 {
-  "id": "465afbe4-a584-441c-bf38-8bd9f7dbb307",
+  "id": "3e408a94-ca36-4940-9d7c-4ae96570318f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -5881,6 +5881,12 @@
         },
         "source": {
           "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "consent_version": {
+          "name": "consent_version",
           "type": "text",
           "primaryKey": false,
           "notNull": false

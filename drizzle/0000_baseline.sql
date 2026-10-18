@@ -593,6 +593,7 @@ CREATE TABLE "subscriptions" (
 	"status" text DEFAULT 'pending' NOT NULL,
 	"lang" text DEFAULT 'en' NOT NULL,
 	"source" text,
+	"consent_version" text,
 	"token" text NOT NULL,
 	"verified_at" timestamp with time zone,
 	"unsubscribed_at" timestamp with time zone,

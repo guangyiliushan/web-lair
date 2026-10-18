@@ -18,6 +18,11 @@ export const subscriptions = pgTable(
 		status: text('status').notNull().default('pending'),
 		lang: text('lang').notNull().default('en'),
 		source: text('source'),
+		/**
+		 * Consent text version (E2-2). Written from a code constant; nullable so
+		 * rows created before the column existed can be marked `legacy`.
+		 */
+		consentVersion: text('consent_version'),
 		token: text('token').notNull(),
 		verifiedAt: timestamp('verified_at', { withTimezone: true }),
 		unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true })

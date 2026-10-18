@@ -7,6 +7,7 @@ import { rateLimit } from '$lib/server/cache/store';
 import { subscriptionConfirmMail } from '$lib/server/mail/templates';
 import { sendMailOrDevLog } from '$lib/server/mail/transport';
 import {
+	CONSENT_VERSION,
 	discardPendingToken,
 	isSubscriptionLang,
 	restoreSubscription,
@@ -85,7 +86,7 @@ export const actions: Actions = {
 			try {
 				await sendMailOrDevLog({
 					to: email,
-					...subscriptionConfirmMail(lang, confirmUrl, optOutUrl)
+					...subscriptionConfirmMail(lang, confirmUrl, optOutUrl, CONSENT_VERSION)
 				});
 			} catch (error) {
 				// Roll the never-mailed pending row back, otherwise the resend
