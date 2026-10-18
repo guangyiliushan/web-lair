@@ -210,6 +210,24 @@ describe('resolveAnchor (read side, L0→L1→L2)', () => {
 		expect(hit?.start).toBe(8);
 	});
 
+	it('does not guess when the occurrence cap truncates the scan', () => {
+		// 300 non-overlapping "ab" runs; the cap enumerates the first 200.
+		const blocks = collectAnchorBlocks(root(p(text('ab'.repeat(300)))));
+		const base = { v: 1 as const, lang: 'en', block: { hash: blocks[0].hash, occ: 0, ord: 0 } };
+		const beyond = {
+			...base,
+			range: { start: 560, end: 562 },
+			quote: { exact: 'ab', prefix: '', suffix: '' }
+		};
+		expect(resolveAnchor(blocks, beyond)).toBeNull();
+		const inside = {
+			...base,
+			range: { start: 100, end: 102 },
+			quote: { exact: 'ab', prefix: '', suffix: '' }
+		};
+		expect(resolveAnchor(blocks, inside)?.start).toBe(100);
+	});
+
 	it('misses when the quoted text is gone', () => {
 		const { blocks } = fixture();
 		const anchor = anchorFor(blocks, 1, 'quick brown');
@@ -366,6 +384,18 @@ function firstSpan(box: Element): Element | undefined {
 	return markId(box)[0];
 }
 
+/** Depth-first lookup: marks inside inline elements are not direct children. */
+function findMark(box: Element): Element | undefined {
+	for (const child of box.children) {
+		if (child.type !== 'element') continue;
+		const classes = Array.isArray(child.properties?.className) ? child.properties.className : [];
+		if (child.tagName === 'span' && classes.includes('wl-cm')) return child;
+		const nested = findMark(child);
+		if (nested) return nested;
+	}
+	return undefined;
+}
+
 describe('applyAnchorMarks (spec §7/§12.6)', () => {
 	it('wraps a plain range and preserves the text exactly', () => {
 		const tree = root(p(text('hello world')));
@@ -410,6 +440,17 @@ describe('applyAnchorMarks (spec §7/§12.6)', () => {
 		expect(spans[0].properties?.id).toBe('c-c1');
 		expect(plain(blocks[0].element)).toBe('hello bold tail');
 		expect(placed.get('c1')).toBe('c-c1');
+	});
+
+	it('keeps link-hosted marks presentational (no role, no tab stop)', () => {
+		const tree = root(p(el('a', [text('link text')], { href: '#x' })));
+		const blocks = collectAnchorBlocks(tree);
+		applyAnchorMarks(blocks, [{ commentId: 'c1', blockOrd: 0, start: 0, end: 4, pending: false }]);
+		const span = findMark(blocks[0].element);
+		expect(span?.properties?.className).toEqual(['wl-cm']);
+		expect(span?.properties?.id).toBe('c-c1');
+		expect(span?.properties?.role).toBeUndefined();
+		expect(span?.properties?.tabIndex).toBeUndefined();
 	});
 
 	it('clusters identical ranges into one span carrying every id', () => {

@@ -140,6 +140,14 @@ describe('selection to anchor', () => {
 		expect(selectionToAnchor(host, selection)).toBeNull();
 	});
 
+	it('rejects an endpoint inside a surrogate pair', () => {
+		const host = mountMarkdown('a👨‍👩‍👧‍👦b tail');
+		const node = host.querySelector('p')?.firstChild as Text;
+		// 2 is the middle of the first emoji's UTF-16 pair.
+		const selection = select(node, 2, node, 18);
+		expect(selectionToAnchor(host, selection)).toBeNull();
+	});
+
 	it('rejects a selection that cuts a grapheme cluster', () => {
 		const host = mountMarkdown('a👨‍👩‍👧‍👦b tail');
 		const node = host.querySelector('p')?.firstChild as Text;
