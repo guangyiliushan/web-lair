@@ -29,7 +29,9 @@ export interface OutgoingMail {
 }
 
 export function isMailConfigured(): boolean {
-	return env.MAIL_ENABLED === 'true' && Boolean(env.MAIL_SMTP_HOST);
+	// MAIL_FROM is not optional: sendMail throws without it, and a gate that
+	// ignored it would let sign-up succeed while the verification mail fails.
+	return env.MAIL_ENABLED === 'true' && Boolean(env.MAIL_SMTP_HOST) && Boolean(env.MAIL_FROM);
 }
 
 /**

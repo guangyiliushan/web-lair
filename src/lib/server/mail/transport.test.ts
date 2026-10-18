@@ -41,11 +41,13 @@ beforeEach(() => {
 });
 
 describe('mail transport (D-2)', () => {
-	it('is not configured until both the switch and a host are set', () => {
+	it('is not configured until the switch, host and sender are set', () => {
 		expect(isMailConfigured()).toBe(false);
 		envMock.MAIL_ENABLED = 'true';
 		expect(isMailConfigured()).toBe(false);
 		envMock.MAIL_SMTP_HOST = 'smtp.example.com';
+		expect(isMailConfigured()).toBe(false);
+		envMock.MAIL_FROM = 'noreply@mail.example.com';
 		expect(isMailConfigured()).toBe(true);
 	});
 
@@ -143,6 +145,11 @@ describe('mail transport (D-2)', () => {
 		);
 		expect(info).not.toHaveBeenCalled();
 		info.mockRestore();
+	});
+
+	it('treats a missing MAIL_FROM as unconfigured', () => {
+		configure({ MAIL_FROM: '' });
+		expect(isMailConfigured()).toBe(false);
 	});
 
 	it('dev-log policy: production requires the explicit second switch', () => {
