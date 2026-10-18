@@ -11,7 +11,8 @@ import {
 	isSubscriptionLang,
 	restoreSubscription,
 	normalizeEmail,
-	requestSubscription
+	requestSubscription,
+	subscribeAddressKey
 } from '$lib/server/services/subscriptions';
 import type { Actions } from './$types';
 
@@ -26,6 +27,7 @@ import type { Actions } from './$types';
  * form cannot be used to enumerate subscribers.
  */
 const SUBSCRIBE_RATE_LIMIT = { limit: 10, windowSeconds: 60 * 60 } as const;
+const SUBSCRIBE_ADDRESS_LIMIT = { limit: 5, windowSeconds: 24 * 60 * 60 } as const;
 
 export const actions: Actions = {
 	default: async ({ request, getClientAddress, url: requestUrl }) => {
@@ -51,6 +53,24 @@ export const actions: Actions = {
 			SUBSCRIBE_RATE_LIMIT.windowSeconds
 		);
 		if (!rate.allowed) return fail(429, { message: m.subscribe_err_rate() });
+
+		// Per-address daily cap, keyed by HMAC so the cache never holds a
+		// plaintext address. A hit must look exactly like success (no mail, no
+		// row) — otherwise the form becomes an enumeration oracle. A missing
+		// key degrades to IP-only limiting with one explicit log.
+		const addressKey = subscribeAddressKey(email);
+		if (addressKey) {
+			const addressRate = await rateLimit(
+				getCache(),
+				`limits:subscribe:addr:${addressKey}`,
+				SUBSCRIBE_ADDRESS_LIMIT.limit,
+				SUBSCRIBE_ADDRESS_LIMIT.windowSeconds
+			);
+			if (!addressRate.allowed) {
+				console.warn('[subscribe] address cap hit; confirmation mail not sent');
+				return { success: true };
+			}
+		}
 
 		const locale = getLocale();
 		const lang = isSubscriptionLang(locale) ? locale : 'en';

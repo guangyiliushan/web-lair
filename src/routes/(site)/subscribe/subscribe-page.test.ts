@@ -9,7 +9,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { state, requestSubscriptionMock, sendMailMock, rateLimitMock, discardMock, restoreMock } =
 	vi.hoisted(() => {
 		const state = {
-			env: { ORIGIN: 'https://lair.example' } as Record<string, string>,
+			env: {
+				ORIGIN: 'https://lair.example',
+				SUBSCRIBE_HMAC_KEY: 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc='
+			} as Record<string, string>,
 			locale: 'zh-cn'
 		};
 		const requestSubscriptionMock = vi.fn();
@@ -106,6 +109,44 @@ describe('subscribe action', () => {
 			3600
 		);
 		expect(requestSubscriptionMock).not.toHaveBeenCalled();
+	});
+
+	it('caps one address at 5 / 24 h without mailing, writing or changing the answer', async () => {
+		rateLimitMock.mockResolvedValueOnce({ allowed: true, count: 1 });
+		rateLimitMock.mockResolvedValueOnce({ allowed: false, count: 6 });
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		const result = await actions.default(event({ email: 'reader@example.com' }));
+
+		expect(result).toEqual({ success: true });
+		expect(rateLimitMock).toHaveBeenLastCalledWith(
+			expect.anything(),
+			expect.stringMatching(/^limits:subscribe:addr:[0-9a-f]{64}$/),
+			5,
+			86_400
+		);
+		expect(requestSubscriptionMock).not.toHaveBeenCalled();
+		expect(sendMailMock).not.toHaveBeenCalled();
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('address cap'));
+		warn.mockRestore();
+	});
+
+	it('degrades to the IP bucket when SUBSCRIBE_HMAC_KEY is missing', async () => {
+		const key = state.env.SUBSCRIBE_HMAC_KEY;
+		delete state.env.SUBSCRIBE_HMAC_KEY;
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		requestSubscriptionMock.mockResolvedValueOnce({
+			kind: 'pending',
+			token: 'tok_1',
+			send: false
+		});
+
+		await actions.default(event({ email: 'reader@example.com' }));
+
+		expect(rateLimitMock).toHaveBeenCalledTimes(1);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('SUBSCRIBE_HMAC_KEY'));
+		state.env.SUBSCRIBE_HMAC_KEY = key;
+		warn.mockRestore();
 	});
 
 	it('sends the confirmation link with the reader locale and reports success', async () => {
