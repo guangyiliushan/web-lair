@@ -44,6 +44,8 @@ export const actions: Actions = {
 				}
 			});
 		} catch (error) {
+			// fail() bypasses handleError, so log here or the SMTP failure is invisible.
+			if (!(error instanceof APIError)) console.error('[register] sign-up failed', error);
 			if (error instanceof APIError) {
 				return fail(400, { message: error.message || 'Registration failed' });
 			}

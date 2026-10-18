@@ -27,7 +27,9 @@ export default defineConfig({
 			ORIGIN: 'http://localhost:4173',
 			// Mail is unconfigured in tests: the transport logs the message
 			// instead of failing (production keeps the fail-loud contract).
-			MAIL_DEV_LOG: 'true'
+			MAIL_DEV_LOG: 'true',
+			// Second explicit switch: production builds only dev-log with it.
+			MAIL_DEV_LOG_OK: 'true'
 		}
 	},
 	testDir: 'e2e',

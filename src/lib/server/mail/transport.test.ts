@@ -12,7 +12,9 @@ vi.mock('nodemailer', () => ({ default: { createTransport: createTransportMock }
 
 import {
 	MailNotConfiguredError,
+	devLogPermitted,
 	isMailConfigured,
+	isMailDeliveryAvailable,
 	resetMailTransport,
 	sendMail,
 	sendMailOrDevLog
@@ -122,11 +124,29 @@ describe('mail transport (D-2)', () => {
 		info.mockRestore();
 	});
 
-	it('refuses MAIL_DEV_LOG in production (tokens must not reach stdout)', async () => {
+	it('sends for real in production when a transport is configured, ignoring MAIL_DEV_LOG', async () => {
 		configure({ NODE_ENV: 'production', MAIL_DEV_LOG: 'true' });
-		await expect(sendMailOrDevLog({ to: 'a@b.c', subject: 's', text: 't' })).rejects.toThrow(
-			/MAIL_DEV_LOG/
-		);
+		await sendMailOrDevLog({ to: 'a@b.c', subject: 's', text: 't' });
+		expect(createTransportMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('dev-log policy: production requires the explicit second switch', () => {
+		expect(devLogPermitted({ dev: true })).toBe(true);
+		expect(devLogPermitted({ dev: false, nodeEnv: 'production', mailDevLog: 'true' })).toBe(false);
+		expect(
+			devLogPermitted({
+				dev: false,
+				nodeEnv: 'production',
+				mailDevLog: 'true',
+				mailDevLogOk: 'true'
+			})
+		).toBe(true);
+		expect(devLogPermitted({ dev: false, nodeEnv: 'production' })).toBe(false);
+	});
+
+	it('reports delivery availability through the configured transport', () => {
+		configure();
+		expect(isMailDeliveryAvailable()).toBe(true);
 	});
 
 	it('signs DKIM in-process and unescapes the PEM newlines', async () => {

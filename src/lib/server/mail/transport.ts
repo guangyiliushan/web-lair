@@ -33,12 +33,38 @@ export function isMailConfigured(): boolean {
 }
 
 /**
- * True when the call sites can hand mail off without throwing: configured, or
- * an explicit dev-log environment. The register page and its action share this
- * predicate so the banner and the submit button agree.
+ * Dev-logging is allowed in development, or outside production with
+ * MAIL_DEV_LOG=true, or in production only with the second explicit switch
+ * MAIL_DEV_LOG_OK=true (the e2e preview). A stray MAIL_DEV_LOG in production
+ * therefore falls through to sendMail and fails loudly instead of printing
+ * verification/reset tokens to the container log.
+ */
+export function devLogPermitted(input: {
+	dev: boolean;
+	nodeEnv?: string;
+	mailDevLog?: string;
+	mailDevLogOk?: string;
+}): boolean {
+	if (input.dev) return true;
+	if (input.mailDevLog !== 'true') return false;
+	return input.nodeEnv !== 'production' || input.mailDevLogOk === 'true';
+}
+
+function devLogAllowed(): boolean {
+	return devLogPermitted({
+		dev: import.meta.env.DEV,
+		nodeEnv: env.NODE_ENV,
+		mailDevLog: env.MAIL_DEV_LOG,
+		mailDevLogOk: env.MAIL_DEV_LOG_OK
+	});
+}
+
+/**
+ * True when the call sites can hand mail off without throwing. The register
+ * page and its action share this predicate so the banner and the button agree.
  */
 export function isMailDeliveryAvailable(): boolean {
-	return isMailConfigured() || import.meta.env.DEV || env.MAIL_DEV_LOG === 'true';
+	return isMailConfigured() || devLogAllowed();
 }
 
 function dkimOptions():
@@ -110,15 +136,7 @@ export async function sendMail(mail: OutgoingMail): Promise<void> {
  * requiring an SMTP server; production delegates to `sendMail` (fail-loud).
  */
 export async function sendMailOrDevLog(mail: OutgoingMail): Promise<void> {
-	if (env.NODE_ENV === 'production' && env.MAIL_DEV_LOG === 'true' && env.MAIL_SMTP_HOST) {
-		// Configured transport + dev logging = tokens in the log instead of mail.
-		// (An unconfigured preview may dev-log; e2e relies on that.)
-		throw new Error(
-			'[mail] MAIL_DEV_LOG cannot be enabled alongside a configured SMTP host in production'
-		);
-	}
-	const devLog = import.meta.env.DEV || env.MAIL_DEV_LOG === 'true';
-	if (!isMailConfigured() && devLog) {
+	if (!isMailConfigured() && devLogAllowed()) {
 		console.info(`[mail:dev] to=${mail.to} subject=${mail.subject}\n${mail.text}`);
 		return;
 	}
