@@ -1972,6 +1972,7 @@
 	"subscribe_confirm_body": "Confirm the subscription for {email}.",
 	"subscribe_confirm_button": "Confirm",
 	"subscribe_confirm_done": "Subscription confirmed.",
+	"subscribe_confirm_expired": "This confirmation link has expired. Submit the subscription form again to get a new one.",
 	"subscribe_confirm_invalid": "This link is invalid or has expired.",
 	"subscribe_confirm_title": "Confirm subscription",
 	"subscribe_confirm_unsubscribed": "This address was unsubscribed. Submit the form again to re-subscribe.",

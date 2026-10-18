@@ -27,6 +27,11 @@
 				<a class="text-sm underline underline-offset-2" href={localizeHref('/subscribe')}>
 					{m.subscribe_title()}
 				</a>
+			{:else if state === 'expired'}
+				<p class="text-sm text-destructive" role="alert">{m.subscribe_confirm_expired()}</p>
+				<a class="text-sm underline underline-offset-2" href={localizeHref('/subscribe')}>
+					{m.subscribe_title()}
+				</a>
 			{:else if state === 'invalid'}
 				<p class="text-sm text-destructive" role="alert">{m.subscribe_confirm_invalid()}</p>
 			{:else}

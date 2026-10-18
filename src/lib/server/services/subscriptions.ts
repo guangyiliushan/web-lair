@@ -1,8 +1,12 @@
-import { randomBytes } from 'node:crypto';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, gte, ne } from 'drizzle-orm';
+import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { subscriptions } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
+import { keyedHasher } from './email-hash';
+import { isSubscriptionToken, newSubscriptionToken } from './subscription-token';
+
+export { isSubscriptionToken, newSubscriptionToken } from './subscription-token';
 
 /**
  * Double opt-in subscriptions (deploy batch D-2; schema from ledger §26).
@@ -13,8 +17,8 @@ import { pgErrorCode } from '$lib/server/db/pg-error';
  * is the only credential and stays valid after confirmation so the
  * unsubscribe link keeps working (it is not a single-use nonce).
  *
- * No IP/UA is stored (schema and privacy line); the pending 30-day sweep is a
- * registered follow-up.
+ * No IP/UA is stored (schema and privacy line). Pending rows whose link has
+ * been dead for 30 days are removed by the `subscriptions.sweep` job (E1-2).
  */
 
 export type SubscriptionLang = 'en' | 'zh-cn' | 'ja';
@@ -22,10 +26,51 @@ export type SubscriptionStatus = 'pending' | 'subscribed' | 'unsubscribed';
 
 const EMAIL_MAX = 254;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-/** 32 random bytes, base64url → 43 chars. */
-const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 /** A still-pending address is not re-mailed (nor its live link voided) inside this window. */
 const RESEND_COOLDOWN_MS = 15 * 60 * 1000;
+/**
+ * Confirmation-link lifetime (OWASP: single-purpose tokens must expire; NIST
+ * SP 800-63B-4 §4.2: emailed recovery codes SHALL expire within 24 hours).
+ * Default 24h; `SUBSCRIBE_TOKEN_TTL_DAYS` may raise it to at most 72h and any
+ * larger value is clamped with a warning. `updated_at` is the current token's
+ * issue time because every rotation writes the row; a resend therefore starts
+ * a fresh window. Unsubscribe links never expire (opt-out must always work).
+ */
+const DEFAULT_TOKEN_TTL_DAYS = 1;
+const MAX_TOKEN_TTL_DAYS = 3;
+const warnedTtlClamps = new Set<string>();
+
+export function subscriptionTokenTtlMs(rawDays: string | undefined): number {
+	const raw = rawDays?.trim() ?? '';
+	const parsed = Number(raw);
+	const days = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TOKEN_TTL_DAYS;
+	if (days > MAX_TOKEN_TTL_DAYS) {
+		if (!warnedTtlClamps.has(raw)) {
+			warnedTtlClamps.add(raw);
+			console.warn(
+				`[subscribe] SUBSCRIBE_TOKEN_TTL_DAYS=${raw} exceeds the ${MAX_TOKEN_TTL_DAYS}-day (72h) ceiling; clamped`
+			);
+		}
+		return MAX_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000;
+	}
+	return days * 24 * 60 * 60 * 1000;
+}
+
+let addressHasher: { raw: string | undefined; hash: ((email: string) => string) | null } | null =
+	null;
+
+/**
+ * Keyed bucket for the per-address daily cap. Missing/invalid key degrades to
+ * IP-only limiting with one loud log (the site must stay usable), never to a
+ * shared or plaintext bucket.
+ */
+export function subscribeAddressKey(email: string): string | null {
+	const raw = env.SUBSCRIBE_HMAC_KEY;
+	if (!addressHasher || addressHasher.raw !== raw) {
+		addressHasher = { raw, hash: keyedHasher('SUBSCRIBE_HMAC_KEY', raw) };
+	}
+	return addressHasher.hash?.(email) ?? null;
+}
 
 export function normalizeEmail(raw: string): string | null {
 	const email = raw.trim().toLowerCase();
@@ -36,14 +81,6 @@ export function normalizeEmail(raw: string): string | null {
 
 export function isSubscriptionLang(value: string): value is SubscriptionLang {
 	return value === 'en' || value === 'zh-cn' || value === 'ja';
-}
-
-export function newSubscriptionToken(): string {
-	return randomBytes(32).toString('base64url');
-}
-
-export function isSubscriptionToken(value: string): boolean {
-	return TOKEN_RE.test(value);
 }
 
 export interface PreviousSubscription {
@@ -155,6 +192,8 @@ export async function requestSubscription(input: {
 export interface SubscriptionLookup {
 	status: SubscriptionStatus;
 	email: string;
+	/** Pending row whose confirmation window has passed. Unsubscribe ignores it. */
+	expired: boolean;
 }
 
 export async function subscriptionByToken(token: string): Promise<SubscriptionLookup | null> {
@@ -172,26 +211,38 @@ export async function subscriptionByToken(token: string): Promise<SubscriptionLo
 		console.warn('[subscribe] token rejected: unknown');
 		return null;
 	}
-	return { status: row.status as SubscriptionStatus, email: row.email };
+	const cutoff = new Date(Date.now() - subscriptionTokenTtlMs(env.SUBSCRIBE_TOKEN_TTL_DAYS));
+	const expired = row.status === 'pending' && row.updatedAt < cutoff;
+	return { status: row.status as SubscriptionStatus, email: row.email, expired };
 }
 
-export type ConfirmResult = 'subscribed' | 'already-subscribed' | 'unsubscribed' | 'invalid';
+export type ConfirmResult =
+	'subscribed' | 'already-subscribed' | 'unsubscribed' | 'expired' | 'invalid';
 
 async function statusOfToken(token: string): Promise<ConfirmResult> {
 	const again = await subscriptionByToken(token);
 	if (!again) return 'invalid';
 	if (again.status === 'subscribed') return 'already-subscribed';
 	if (again.status === 'unsubscribed') return 'unsubscribed';
+	if (again.status === 'pending' && again.expired) return 'expired';
 	return 'invalid';
 }
 
 export async function confirmSubscription(token: string): Promise<ConfirmResult> {
 	// Conditional write: a concurrent unsubscribe (delete or status change) must
-	// win over this confirm instead of being overwritten by a blind UPDATE.
+	// win over this confirm instead of being overwritten by a blind UPDATE. The
+	// timestamp predicate implements the TTL atomically (no read-then-write gap).
+	const cutoff = new Date(Date.now() - subscriptionTokenTtlMs(env.SUBSCRIBE_TOKEN_TTL_DAYS));
 	const updated = await db
 		.update(subscriptions)
 		.set({ status: 'subscribed', verifiedAt: new Date() })
-		.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'pending')))
+		.where(
+			and(
+				eq(subscriptions.token, token),
+				eq(subscriptions.status, 'pending'),
+				gte(subscriptions.updatedAt, cutoff)
+			)
+		)
 		.returning({ id: subscriptions.id });
 	if (updated.length === 0) return statusOfToken(token);
 	return 'subscribed';

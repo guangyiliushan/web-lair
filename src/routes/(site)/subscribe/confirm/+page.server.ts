@@ -15,7 +15,7 @@ export const load: PageServerLoad = async ({ url, setHeaders }) => {
 	const row = await subscriptionByToken(token);
 	return {
 		token,
-		status: row?.status ?? ('invalid' as const),
+		status: row ? (row.expired ? ('expired' as const) : row.status) : ('invalid' as const),
 		email: row?.email ?? null
 	};
 };

@@ -1702,6 +1702,7 @@
 	"subscribe_confirm_body": "确认订阅：{email}。",
 	"subscribe_confirm_button": "确认",
 	"subscribe_confirm_done": "订阅已确认。",
+	"subscribe_confirm_expired": "确认链接已过期。请重新提交订阅表单以获取新链接。",
 	"subscribe_confirm_invalid": "链接无效或已失效。",
 	"subscribe_confirm_title": "确认订阅",
 	"subscribe_confirm_unsubscribed": "该邮箱已退订。如需重新订阅，请再次提交订阅表单。",
