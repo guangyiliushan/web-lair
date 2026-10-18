@@ -43,14 +43,17 @@ export const load: PageServerLoad = async (event) => {
 			postTitle: posts.title,
 			postSlug: posts.slug,
 			postLang: posts.lang,
+			postStatus: posts.status,
 			noteId: comments.noteId,
 			noteTitle: notes.title,
 			noteSlug: notes.slug,
 			noteLang: notes.lang,
 			notePasswordHash: notes.passwordHash,
+			noteStatus: notes.status,
 			pageId: comments.pageId,
 			pageTitle: pages.title,
 			pageSlug: pages.slug,
+			pageStatus: pages.status,
 			anchor: comments.anchor
 		})
 		.from(comments)
@@ -70,9 +73,22 @@ export const load: PageServerLoad = async (event) => {
 	const entries = rows.map((row) => {
 		// Never ship the stored payload (hash/occ/ord/range/exact/prefix/suffix)
 		// to the browser: the queue renders only the excerpt and its context.
-		const { anchor: rawAnchor, notePasswordHash, ...rest } = row;
+		const {
+			anchor: rawAnchor,
+			notePasswordHash,
+			postStatus,
+			noteStatus,
+			pageStatus,
+			...rest
+		} = row;
 		const anchor = parseCommentAnchor(rawAnchor);
-		const gated = notePasswordHash !== null && !canReadGatedNotes;
+		// Reviewers may lack access to password-gated notes *and* to unpublished
+		// targets; the queue must not become a reader for either (round-4 review).
+		const targetPublic =
+			(row.postId !== null && postStatus === 'published') ||
+			(row.noteId !== null && noteStatus === 'published') ||
+			(row.pageId !== null && pageStatus === 'visible');
+		const gated = !canReadGatedNotes && (notePasswordHash !== null || !targetPublic);
 		return {
 			...rest,
 			anchorGated: gated,

@@ -112,7 +112,8 @@ describe('segment comment layer', () => {
 			anchorStart: '4',
 			anchorEnd: '10',
 			anchorExact: '选择这段文字',
-			anchorLength: '14'
+			anchorLength: '14',
+			anchorFingerprint: expect.stringMatching(/^[0-9a-f]{8}$/)
 		});
 	});
 
@@ -320,13 +321,18 @@ describe('segment comment layer', () => {
 		const panel = document.querySelector<HTMLElement>('[data-slot="comment-selection-panel"]');
 		expect(panel?.getAttribute('aria-modal')).toBe('true');
 		const submit = panel?.querySelector<HTMLButtonElement>('button[type="submit"]');
+		const textarea = panel?.querySelector<HTMLTextAreaElement>('textarea');
 		submit?.focus();
-		document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+		const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+		document.dispatchEvent(tab);
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(panel?.contains(document.activeElement)).toBe(true);
+		// The first focusable in the panel, not merely "still inside": the old
+		// assertion passed even with the trap deleted.
+		expect(tab.defaultPrevented).toBe(true);
+		expect(document.activeElement).toBe(textarea);
 	});
 
-	it('does not navigate when a mark wraps link text', async () => {
+	it('leaves a link-hosted mark to the link (no thread, no cancel)', async () => {
 		const container = host(
 			'<p>前文<a href="#elsewhere"><span class="wl-cm" data-cid="root-1">选中</span></a>后文</p>'
 		);
@@ -340,6 +346,7 @@ describe('segment comment layer', () => {
 		const click = new MouseEvent('click', { bubbles: true, cancelable: true });
 		mark.dispatchEvent(click);
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(click.defaultPrevented).toBe(true);
+		expect(click.defaultPrevented).toBe(false);
+		expect(document.querySelector('[data-slot="comment-thread-popover"]')).toBeNull();
 	});
 });

@@ -43,8 +43,9 @@
 	let panelEl = $state<HTMLElement | null>(null);
 	let threadEl = $state<HTMLElement | null>(null);
 	let closeThreadEl = $state<HTMLButtonElement | null>(null);
-	/** Element that had focus before an overlay opened (focus return, 2.4.3). */
-	let returnFocusTo: HTMLElement | null = null;
+	/** Focus targets for the two overlays; one slot was clobbered by the other. */
+	let composerReturnFocus: HTMLElement | null = null;
+	let threadReturnFocus: HTMLElement | null = null;
 	/** Narrow viewport: composer and thread become bottom sheets (spec §5). */
 	let narrow = $state(false);
 	/** Desktop hover summary card (spec §7); decorative, never interactive. */
@@ -112,16 +113,20 @@
 		clearHover();
 		// Return target for 2.4.3: the action button unmounts with the panel, and
 		// the selection block itself is not focusable.
-		returnFocusTo = document.getElementById('comments-title');
+		composerReturnFocus = document.getElementById('comments-title');
 		composerOpen = true;
 	}
 
-	function closeComposer() {
+	async function closeComposer(restoreFocus = true) {
+		const target = composerReturnFocus;
 		composerOpen = false;
 		selected = null;
+		composerReturnFocus = null;
 		window.getSelection()?.removeAllRanges();
-		if (returnFocusTo?.isConnected) returnFocusTo.focus();
-		returnFocusTo = null;
+		// The page is inert while the overlay is open; wait for the effect to
+		// lift it before moving focus, or the focus call is silently ignored.
+		await tick();
+		if (restoreFocus && target?.isConnected) target.focus();
 	}
 
 	async function openThread(mark: Element) {
@@ -142,29 +147,36 @@
 		}
 		clearHover();
 		// One surface at a time: the composer and the thread used to stack.
-		if (composerOpen) closeComposer();
-		returnFocusTo = mark instanceof HTMLElement ? mark : null;
+		// Suppress the focus return here; it would scroll before the rect is read.
+		if (composerOpen) void closeComposer(false);
+		// Only the cluster's first span is focusable; other spans would make the
+		// focus return a silent no-op.
+		const focusTarget = document.getElementById(`c-${commentId}`);
+		threadReturnFocus =
+			focusTarget instanceof HTMLElement ? focusTarget : mark instanceof HTMLElement ? mark : null;
 		const rect = mark.getBoundingClientRect();
 		threadRect = {
 			left: Math.min(Math.max(rect.left, 8), Math.max(8, window.innerWidth - 360)),
-			top: Math.min(rect.bottom + 8, Math.max(8, window.innerHeight - 380))
+			top: Math.min(Math.max(rect.bottom + 8, 8), Math.max(8, window.innerHeight - 380))
 		};
 		activeThreadId = commentId;
 		await tick();
 		closeThreadEl?.focus();
 	}
 
-	function closeThread(restoreFocus = true) {
+	async function closeThread(restoreFocus = true) {
+		const target = threadReturnFocus;
 		activeThreadId = null;
 		threadRect = null;
+		threadReturnFocus = null;
 		// Focus return on Escape/Close (2.4.3); an outside pointerdown must not
 		// yank focus back to the mark the reader just clicked away from.
-		if (restoreFocus && returnFocusTo?.isConnected) returnFocusTo.focus();
-		returnFocusTo = null;
+		await tick();
+		if (restoreFocus && target?.isConnected) target.focus();
 	}
 
 	function showHover(mark: Element, commentId: string) {
-		if (composerOpen || activeThread) return;
+		if (composerOpen || activeThread || selected) return;
 		const root = threads.roots.find((item) => item.id === commentId);
 		if (!root) return;
 		const rect = mark.getBoundingClientRect();
@@ -198,8 +210,10 @@
 				return;
 			}
 			if (event.key === 'Tab') {
-				// The sheet/popover is modal in practice: keep Tab inside it
-				// (WCAG 2.4.11 — focus must not move behind the surface).
+				// The sheet/popover is modal (the page behind is inert): keep Tab
+				// inside it per the APG modal-dialog pattern; Escape is the exit,
+				// so 2.1.2 (no keyboard trap) still holds, and 2.4.3 covers the
+				// focus return. (2.4.11 is Focus Not Obscured, a different rule.)
 				const surface = composerOpen ? panelEl : activeThread ? threadEl : null;
 				if (surface) {
 					const focusables = [
@@ -209,7 +223,10 @@
 					];
 					const first = focusables[0];
 					const last = focusables[focusables.length - 1];
-					if (first && last) {
+					if (first && last && !surface.contains(document.activeElement)) {
+						event.preventDefault();
+						first.focus();
+					} else if (first && last) {
 						if (!event.shiftKey && document.activeElement === last) {
 							event.preventDefault();
 							first.focus();
@@ -223,16 +240,16 @@
 			}
 			if (event.key !== 'Escape' || event.defaultPrevented) return;
 			clearHover();
-			if (composerOpen) closeComposer();
-			else if (activeThread) closeThread();
+			if (composerOpen) void closeComposer();
+			else if (activeThread) void closeThread();
 		};
 		const onClick = (event: MouseEvent) => {
 			const target = event.target as Element | null;
 			const mark = target?.closest?.('.wl-cm');
 			if (!mark || !host.contains(mark)) return;
-			// A mark can wrap link text; without this the click navigates away
-			// instead of opening the thread (B2 review, angle 9).
-			if (mark.closest('a')) event.preventDefault();
+			// Link-hosted marks are presentation-only: the link owns the click,
+			// and its thread stays reachable from the list (B2 review round 4).
+			if (mark.closest('a')) return;
 			void openThread(mark);
 		};
 		const onPointerOver = (event: PointerEvent) => {
@@ -253,6 +270,9 @@
 			clearHover();
 		};
 		const onDocPointerDown = (event: PointerEvent) => {
+			// Only a thread can be closed here; running this while the composer is
+			// open used to clear its focus slot as a side effect.
+			if (activeThreadId === null) return;
 			const target = event.target as Node | null;
 			if (!target) return;
 			if (panelEl?.contains(target)) return;
@@ -260,7 +280,7 @@
 			// pointerdown inside it (reply, edit, close) closed it before click.
 			if (threadEl?.contains(target)) return;
 			if ((target as Element).closest?.('.wl-cm')) return;
-			closeThread(false);
+			void closeThread(false);
 		};
 
 		// The `{@html}` swap replaces the article's children after every
@@ -309,6 +329,21 @@
 		return () => query.removeEventListener('change', update);
 	});
 
+	// Modal surfaces: the page behind must not stay interactive (APG modal
+	// dialog; aria-modal would otherwise over-promise).
+	$effect(() => {
+		const host = container;
+		if (!host) return;
+		const blocking = composerOpen || activeThreadId !== null;
+		const section = document.getElementById('comments');
+		host.inert = blocking;
+		if (section) section.inert = blocking;
+		return () => {
+			host.inert = false;
+			if (section) section.inert = false;
+		};
+	});
+
 	// Keep the composer panel focused when it opens (popover etiquette).
 	$effect(() => {
 		if (composerOpen) panelEl?.querySelector<HTMLTextAreaElement>('textarea')?.focus();
@@ -350,7 +385,7 @@
 {#if selected && !composerOpen && !activeThread}
 	<button
 		type="button"
-		class="fixed z-40 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-foreground shadow-lg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+		class="fixed z-40 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-foreground shadow-lg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
 		style={floatingStyle}
 		data-slot="comment-selection-action"
 		onclick={openComposer}
@@ -384,13 +419,14 @@
 		{#if canComment}
 			<CommentComposer
 				action="?/comment"
-				onCancel={closeComposer}
+				onCancel={() => void closeComposer()}
 				hiddenValues={{
 					anchorOrd: String(selected.ord),
 					anchorStart: String(selected.start),
 					anchorEnd: String(selected.end),
 					anchorExact: selected.exact,
-					anchorLength: String(selected.length)
+					anchorLength: String(selected.blockLength),
+					anchorFingerprint: selected.blockFingerprint
 				}}
 			/>
 		{:else if loginUrl}
@@ -402,15 +438,15 @@
 			</p>
 			<button
 				type="button"
-				class="mt-2 inline-flex min-h-6 items-center px-1.5 text-xs text-muted-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-				onclick={closeComposer}>{m.comment_segment_close()}</button
+				class="mt-2 inline-flex min-h-6 items-center px-1.5 text-xs text-muted-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+				onclick={() => void closeComposer()}>{m.comment_segment_close()}</button
 			>
 		{:else}
 			<p class="text-sm text-muted-foreground">{m.comment_verify_hint()}</p>
 			<button
 				type="button"
-				class="mt-2 inline-flex min-h-6 items-center px-1.5 text-xs text-muted-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-				onclick={closeComposer}>{m.comment_segment_close()}</button
+				class="mt-2 inline-flex min-h-6 items-center px-1.5 text-xs text-muted-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+				onclick={() => void closeComposer()}>{m.comment_segment_close()}</button
 			>
 		{/if}
 	</div>
@@ -434,8 +470,8 @@
 			<button
 				type="button"
 				bind:this={closeThreadEl}
-				class="inline-flex min-h-6 items-center rounded-sm px-1.5 text-xs text-muted-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-				onclick={() => closeThread()}>{m.comment_segment_close()}</button
+				class="inline-flex min-h-6 items-center rounded-sm px-1.5 text-xs text-muted-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+				onclick={() => void closeThread()}>{m.comment_segment_close()}</button
 			>
 		</div>
 		<ul class="max-h-80 overflow-auto px-3">

@@ -32,6 +32,7 @@ export interface RenderedDiscussion {
 
 export async function renderDiscussion(input: RenderDiscussionInput): Promise<RenderedDiscussion> {
 	const tree = await renderMarkdownTree(input.markdown);
+	let renderedTree = tree;
 	let threads: ThreadsPage;
 	try {
 		const blocks = collectAnchorBlocks(tree);
@@ -61,6 +62,9 @@ export async function renderDiscussion(input: RenderDiscussionInput): Promise<Re
 			targetId: input.targetId,
 			name: caught instanceof Error ? caught.name : 'unknown'
 		});
+		// applyAnchorMarks mutates the tree in place: a throw mid-pass leaves
+		// partial spans behind, so re-render before serializing.
+		renderedTree = await renderMarkdownTree(input.markdown);
 		threads = (
 			await loadDiscussion({
 				targetType: input.targetType,
@@ -71,5 +75,5 @@ export async function renderDiscussion(input: RenderDiscussionInput): Promise<Re
 		).threads;
 	}
 
-	return { html: await stringifyMarkdownTree(tree), discussion: threads };
+	return { html: await stringifyMarkdownTree(renderedTree), discussion: threads };
 }

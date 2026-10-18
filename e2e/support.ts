@@ -169,27 +169,17 @@ export async function approveQueueRow(
  */
 export async function bootstrapReader(context: BrowserContext, email: string, password: string) {
 	const page = await context.newPage();
-	/**
-	 * better-auth path buckets are shared by every spec file and by any parallel
-	 * worktree hitting the same DB ("single shared per-path bucket" warning), so
-	 * the fixture round retries 429s instead of failing the spec. A previous
-	 * aborted run can also leave the account behind: sign-in then proves it.
-	 */
-	const post = async (path: string, payload: Record<string, string>) => {
-		let response = await apiPost(page, path, payload);
-		for (
-			let attempt = 0;
-			!response.ok() && response.status() === 429 && attempt < 5;
-			attempt += 1
-		) {
-			await new Promise((resolve) => setTimeout(resolve, 5000));
-			response = await apiPost(page, path, payload);
-		}
-		return response;
-	};
-	await post('/api/auth/sign-up/email', { email, name: email, password });
+	// One preview server per run means one in-memory better-auth bucket shared by
+	// every spec file; apiPost already retries 429s twice. A previous aborted run
+	// can leave the account behind, so sign-in proves the fixture instead.
+	const signUp = await apiPost(page, '/api/auth/sign-up/email', {
+		email,
+		name: email,
+		password
+	});
+	expect([200, 422].includes(signUp.status())).toBe(true);
 	psql(`update "user" set email_verified = true where email = '${email}'`);
-	const signIn = await post('/api/auth/sign-in/email', { email, password });
+	const signIn = await apiPost(page, '/api/auth/sign-in/email', { email, password });
 	if (!signIn.ok()) {
 		console.error('[e2e] sign-in failed', signIn.status(), (await signIn.text()).slice(0, 300));
 	}

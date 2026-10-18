@@ -131,7 +131,8 @@ describe('post comment actions', () => {
 					anchorStart: '0',
 					anchorEnd: '4',
 					anchorExact: 'text',
-					anchorLength: '14'
+					anchorLength: '14',
+					anchorFingerprint: 'deadbeef'
 				})
 			)
 		);
@@ -141,7 +142,8 @@ describe('post comment actions', () => {
 			start: 0,
 			end: 4,
 			exact: 'text',
-			blockLength: 14
+			blockLength: 14,
+			blockFingerprint: 'deadbeef'
 		});
 
 		state.submitCalls = [];

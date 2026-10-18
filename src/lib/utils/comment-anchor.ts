@@ -75,6 +75,21 @@ export interface CommentAnchor {
  * the range and quote. Hash/occurrence are recomputed server-side, so a stale
  * or forged client payload can never define them.
  */
+/**
+ * Cheap synchronous fingerprint of a block's normalized text (FNV-1a 32-bit).
+ * The client sends it with the draft so a shifted ordinal cannot bind to a
+ * same-length neighbour with the same quote; the server recomputes it from its
+ * own tree. It is a hint like `blockLength`: it can only reject candidates.
+ */
+export function blockFingerprint(text: string): string {
+	let hash = 0x811c9dc5;
+	for (let index = 0; index < text.length; index += 1) {
+		hash ^= text.charCodeAt(index);
+		hash = Math.imul(hash, 0x01000193) >>> 0;
+	}
+	return hash.toString(16).padStart(8, '0');
+}
+
 export interface CommentAnchorDraft {
 	ord: number;
 	start: number;
@@ -86,6 +101,8 @@ export interface CommentAnchorDraft {
 	 * block of a different length (stale-ord fingerprint, spec §5 M11).
 	 */
 	blockLength?: number;
+	/** Fingerprint of the block text the reader saw (see `blockFingerprint`). */
+	blockFingerprint?: string;
 }
 
 /* ── Block model (single source for both walkers) ───────────────────────── */

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { blockFingerprint, codePointLength } from '$lib/utils/comment-anchor';
 import type { Element, ElementContent, Root as HastRoot, Text } from 'hast';
 import {
 	applyAnchorMarks,
@@ -291,6 +292,38 @@ describe('resolveAnchorDraft (write side, spec §6)', () => {
 		const length = [...blocks[1].text].length;
 		const draft = { ord: 1, start: 4, end: 15, exact: 'quick brown', blockLength: length };
 		expect(resolveAnchorDraft(blocks, draft, 'en').kind).toBe('ok');
+	});
+
+	it('uses the block fingerprint to pick the right equal-length sibling after an insert', () => {
+		const tree = root(p(text('Item 001: shared token.')), p(text('Item 002: shared token.')));
+		const blocks = collectAnchorBlocks(tree);
+		const intended = blocks[1];
+		const at = intended.text.indexOf('shared');
+		const draft = {
+			ord: 0,
+			start: at,
+			end: at + 'shared'.length,
+			exact: 'shared',
+			blockLength: codePointLength(intended.text),
+			blockFingerprint: blockFingerprint(intended.text)
+		};
+		const result = resolveAnchorDraft(blocks, draft, 'en');
+		expect(result.kind).toBe('ok');
+		if (result.kind === 'ok') expect(result.anchor.block.ord).toBe(1);
+	});
+
+	it('rejects a fingerprint that matches no block', () => {
+		const tree = root(p(text('Item 001: shared token.')), p(text('Item 002: shared token.')));
+		const blocks = collectAnchorBlocks(tree);
+		const draft = {
+			ord: 1,
+			start: 10,
+			end: 16,
+			exact: 'shared',
+			blockLength: codePointLength(blocks[1].text),
+			blockFingerprint: 'deadbeef'
+		};
+		expect(resolveAnchorDraft(blocks, draft, 'en').kind).toBe('stale');
 	});
 
 	it('tolerates an ord shift within the ±2 window', () => {

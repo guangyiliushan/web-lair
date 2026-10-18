@@ -76,6 +76,7 @@ describe('selection to anchor', () => {
 		expect(found).not.toBeNull();
 		expect(found?.ord).toBe(0);
 		expect(found?.exact).toBe('bold');
+		expect(found?.blockFingerprint).toMatch(/^[0-9a-f]{8}$/);
 		const block = collectDomBlocks(host)[0];
 		expect(codePointSlice(block.text, found!.start, found!.end)).toBe('bold');
 	});
@@ -194,7 +195,7 @@ describe('selection to anchor', () => {
 			start: 5,
 			end: 9,
 			exact: 'text',
-			length: 15
+			blockLength: 15
 		});
 	});
 

@@ -16,7 +16,9 @@ import {
 	ANCHOR_MAX_LENGTH,
 	ANCHOR_MIN_LENGTH,
 	ANCHOR_SKIP_WRAPPERS,
+	blockFingerprint,
 	codePointLength,
+	splitsSurrogatePair,
 	codePointSlice,
 	foldSegments,
 	isGraphemeBoundary,
@@ -49,7 +51,9 @@ export interface SegmentSelection {
 	/** The selected text after normalization (code points [start, end)). */
 	exact: string;
 	/** Code points in the whole block (stale-ord fingerprint sent to the server). */
-	length: number;
+	blockLength: number;
+	/** FNV-1a fingerprint of the block text (same purpose, lookalike-proof). */
+	blockFingerprint: string;
 	/** Viewport rect of the selection, for the floating action. */
 	rect: DOMRect;
 }
@@ -167,6 +171,11 @@ function blockOf(blocks: DomBlock[], node: Node): DomBlock | null {
  */
 function boundaryIndex(block: DomBlock, node: Node, offset: number): number | null {
 	if (!block.element.contains(node)) return null;
+	// DOM offsets are UTF-16: a position inside a surrogate pair is not a
+	// boundary at all, and comparePoint would round it to the preceding one.
+	if (node.nodeType === Node.TEXT_NODE && splitsSurrogatePair((node as Text).data, offset)) {
+		return null;
+	}
 	const probe = document.createRange();
 	try {
 		probe.setStart(node, offset);
@@ -236,5 +245,13 @@ export function selectionToAnchor(
 	const rect = range.getBoundingClientRect();
 	if (rect.width === 0 && rect.height === 0) return null;
 
-	return { ord: startBlock.ord, start, end, exact, length: codePointLength(startBlock.text), rect };
+	return {
+		ord: startBlock.ord,
+		start,
+		end,
+		exact,
+		blockLength: codePointLength(startBlock.text),
+		blockFingerprint: blockFingerprint(startBlock.text),
+		rect
+	};
 }

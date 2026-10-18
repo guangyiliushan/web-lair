@@ -114,7 +114,7 @@
 		     never part of the main list numbering. -->
 		<details class="mt-6 rounded-md border border-border/50 px-3 py-2" data-slot="comment-orphans">
 			<summary
-				class="cursor-pointer rounded-sm text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+				class="cursor-pointer rounded-sm text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
 			>
 				{m.comment_orphan_title()} ({orphanCount})
 			</summary>

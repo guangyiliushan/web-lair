@@ -26,6 +26,7 @@ import {
 	ANCHOR_SKIP_WRAPPERS,
 	ANCHOR_SUFFIX_MAX,
 	ANCHOR_VERSION,
+	blockFingerprint,
 	codePointLength,
 	codePointSlice,
 	foldSegments,
@@ -107,7 +108,12 @@ export const commentAnchorDraftSchema = z
 			{ message: `exact must be at least ${ANCHOR_MIN_LENGTH} code points` }
 		),
 		/** Code points of the block the reader selected (stale-ord fingerprint). */
-		blockLength: z.number().int().min(0).optional()
+		blockLength: z.number().int().min(0).optional(),
+		/** FNV-1a of the block text; rejects same-length lookalikes at a shifted ord. */
+		blockFingerprint: z
+			.string()
+			.regex(/^[0-9a-f]{8}$/)
+			.optional()
 	})
 	// Same [2, 500] window as the stored anchor: a draft the read schema would
 	// reject must never reach the database (it would silently degrade to "no
@@ -153,6 +159,8 @@ export interface AnchorBlock {
 	/** One entry per normalized code point, in document order. */
 	points: AnchorTextPoint[];
 	element: Element;
+	/** Child -> parent within the walked tree (link detection for marks). */
+	parents?: WeakMap<Element, Element>;
 }
 
 export function hashBlockText(text: string): string {
@@ -195,6 +203,7 @@ interface RawSegment {
  */
 export function collectAnchorBlocks(tree: HastRoot): AnchorBlock[] {
 	const blocks: AnchorBlock[] = [];
+	const parents = new WeakMap<Element, Element>();
 	let current: RawSegment[] | null = null;
 	let currentElement: Element | null = null;
 	// Nested blocks close before their parent, so a plain push would emit
@@ -243,7 +252,10 @@ export function collectAnchorBlocks(tree: HastRoot): AnchorBlock[] {
 				if (current) current.push({ node: child, parent: element, value: child.value });
 				continue;
 			}
-			if (child.type === 'element') walk(child);
+			if (child.type === 'element') {
+				parents.set(child, element);
+				walk(child);
+			}
 		}
 		if (isBlock) closeBlock();
 	};
@@ -259,6 +271,7 @@ export function collectAnchorBlocks(tree: HastRoot): AnchorBlock[] {
 	const seen = new Map<string, number>();
 	let ord = 0;
 	for (const block of blocks) {
+		block.parents = parents;
 		block.ord = ord;
 		const occ = seen.get(block.hash) ?? 0;
 		seen.set(block.hash, occ + 1);
@@ -397,8 +410,11 @@ function codePointsOf(block: AnchorBlock): string[] {
  * the wrong span or orphan. The scan advances one code point at a time and
  * keeps a running code-point counter, so the whole enumeration is linear.
  */
-function occurrencesOf(block: AnchorBlock, exact: string): Occurrence[] {
-	if (exact.length === 0) return [];
+function occurrencesOf(
+	block: AnchorBlock,
+	exact: string
+): { found: Occurrence[]; truncated: boolean } {
+	if (exact.length === 0) return { found: [], truncated: false };
 	const text = block.text;
 	const exactLength = codePointLength(exact);
 	const found: Occurrence[] = [];
@@ -420,7 +436,10 @@ function occurrencesOf(block: AnchorBlock, exact: string): Occurrence[] {
 		found.push({ start: scanCodePoint, end: scanCodePoint + exactLength });
 		from = at + 1;
 	}
-	return found;
+	// Whether a further occurrence exists decides between "ambiguous" and
+	// "complete": a truncated scan must never pick a neighbour silently.
+	const truncated = found.length >= MAX_OCCURRENCES && text.indexOf(exact, from) >= 0;
+	return { found, truncated };
 }
 
 /** Prefix/suffix around a candidate range, compared in code points. */
@@ -450,8 +469,14 @@ function pickOccurrence(
 	quote: CommentAnchor['quote'],
 	hint: number
 ): Occurrence | null {
-	const occurrences = occurrencesOf(block, quote.exact);
+	const { found: occurrences, truncated } = occurrencesOf(block, quote.exact);
 	if (occurrences.length === 0) return null;
+	// Past the cap the text alone is ambiguous: only the stored offset can
+	// decide, and if it is not among the enumerated runs the block misses
+	// instead of resolving to a lookalike.
+	if (truncated) {
+		return occurrences.find((occurrence) => occurrence.start === hint) ?? null;
+	}
 	if (occurrences.length === 1) return occurrences[0];
 
 	const contextual = occurrences.filter((occurrence) =>
@@ -477,9 +502,9 @@ function nearest(occurrences: Occurrence[], hint: number): Occurrence {
 
 /**
  * Write-side resolution (spec §6): the client sends ord + range + exact.
- * Order: exact block at ord -> quote search inside that block -> the ±2
- * neighbour window. Anything else is stale (400). No merging: the same range
- * simply becomes another root.
+ * defined. Order: exact block at ord (gated by the block-length/fingerprint
+ * hint) -> quote search inside that block -> the ±2 neighbour window. Anything
+ * else is stale (400). No merging: the same range becomes another root.
  */
 export function resolveAnchorDraft(
 	blocks: AnchorBlock[],
@@ -502,10 +527,14 @@ export function resolveAnchorDraft(
 	// saw: an insertion above shifts ordinals, and a repeated quote in the
 	// shifted block would otherwise bind to the wrong passage. Length is a
 	// cheap fingerprint, not a hash (spec §5 M11).
+	const fingerprintMatches = (block: AnchorBlock) =>
+		draft.blockFingerprint === undefined || blockFingerprint(block.text) === draft.blockFingerprint;
+	// Length alone cannot separate uniform list rows (same length, same quote);
+	// the content fingerprint is what makes a shifted ordinal detectable.
 	const ordBlockIsStale =
 		!!ordBlock &&
-		draft.blockLength !== undefined &&
-		codePointLength(ordBlock.text) !== draft.blockLength;
+		((draft.blockLength !== undefined && codePointLength(ordBlock.text) !== draft.blockLength) ||
+			!fingerprintMatches(ordBlock));
 	if (ordBlock && !ordBlockIsStale) {
 		if (
 			inRange(ordBlock, draft.start, draft.end) &&
@@ -528,7 +557,9 @@ export function resolveAnchorDraft(
 		.filter((block) => Math.abs(block.ord - draft.ord) <= 2)
 		.filter(
 			(block) =>
-				draft.blockLength === undefined || codePointLength(block.text) === draft.blockLength
+				(draft.blockLength === undefined || codePointLength(block.text) === draft.blockLength) &&
+				(draft.blockFingerprint === undefined ||
+					blockFingerprint(block.text) === draft.blockFingerprint)
 		)
 		.sort((a, b) => Math.abs(a.ord - draft.ord) - Math.abs(b.ord - draft.ord));
 	// Without client context a window hit is only safe when the quote is unique
@@ -542,7 +573,11 @@ export function resolveAnchorDraft(
 			draft.start
 		);
 		if (!found) continue;
-		if (quoteBlocks > 1 && block.ord !== draft.ord) return { kind: 'stale' };
+		// A verified fingerprint resolves the ambiguity; without one, guessing a
+		// neighbouring block would store a permanently wrong anchor.
+		if (quoteBlocks > 1 && block.ord !== draft.ord && draft.blockFingerprint === undefined) {
+			return { kind: 'stale' };
+		}
 		return accept(block, found.start, found.end);
 	}
 	return { kind: 'stale' };
@@ -593,6 +628,15 @@ export interface AnchorMark {
  * ranges collapse into a single span carrying every id (`data-cids`), so
  * repeated comments on one sentence cannot build 200 nested spans.
  */
+function insideLink(start: Element, block: AnchorBlock): boolean {
+	let current: Element | undefined = start;
+	while (current && current !== block.element) {
+		if (current.tagName.toLowerCase() === 'a') return true;
+		current = block.parents?.get(current);
+	}
+	return false;
+}
+
 export function applyAnchorMarks(
 	blocks: AnchorBlock[],
 	marks: AnchorMark[]
@@ -681,6 +725,10 @@ export function applyAnchorMarks(
 					.filter((hit) => hit.from <= from && hit.to >= to)
 					.sort((a, b) => a.cluster.start - b.cluster.start || b.cluster.end - a.cluster.end);
 				let content: ElementContent = { type: 'text', value: node.value.slice(from, to) };
+				// Marks inside a link must stay presentation-only: an interactive
+				// span nested in <a> is invalid content, and the click belongs to
+				// the link (the thread stays reachable from the list).
+				const linkHosted = insideLink(parent, block);
 				for (let depth = active.length - 1; depth >= 0; depth -= 1) {
 					const { cluster } = active[depth];
 					const properties: Element['properties'] = {
@@ -691,10 +739,13 @@ export function applyAnchorMarks(
 					if (!idPlaced.has(cluster)) {
 						properties.id = `c-${cluster.ids[0]}`;
 						// The first span of a cluster is the keyboard entry point:
-						// marks were mouse-only before (WCAG 2.1.1).
-						properties.tabIndex = 0;
-						properties.role = 'button';
-						properties.ariaHaspopup = 'dialog';
+						// marks were mouse-only before (WCAG 2.1.1). Link-hosted
+						// marks stay out of the tab order (see above).
+						if (!linkHosted) {
+							properties.tabIndex = 0;
+							properties.role = 'button';
+							properties.ariaHaspopup = 'dialog';
+						}
 						idPlaced.add(cluster);
 						for (const id of cluster.ids) placed.set(id, `c-${cluster.ids[0]}`);
 					}

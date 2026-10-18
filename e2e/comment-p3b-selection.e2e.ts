@@ -17,8 +17,10 @@ import { bootstrapReader, psql, valkeyDel } from './support';
  *
  * Fixture namespace `e2e-cmts`; requires `web-lair-db-1` and port 4173 free.
  */
-const CATEGORY = '00000000-0000-7000-8000-0000000000e1';
-const POST = '00000000-0000-7000-8000-0000000000e2';
+// Unique per spec: presence.e2e.ts owns ...e1/...e2, and a shared id made the
+// category delete here fail on presence's FK.
+const CATEGORY = '00000000-0000-7000-8000-0000000000fa';
+const POST = '00000000-0000-7000-8000-0000000000fb';
 const POST_PATH = '/zh-cn/posts/e2e-cmts-post';
 const READER_EMAIL = 'e2e-cmts-reader@example.com';
 const READER_PASSWORD = 'e2e-cmts-password-1';
@@ -33,7 +35,7 @@ test.describe.configure({ mode: 'serial', timeout: 120_000 });
 test.beforeAll(() => {
 	psql(`delete from comments where text like 'e2e-cmts%'`);
 	psql(`delete from comments where post_id = '${POST}'`);
-	psql(`delete from posts where slug = 'e2e-cmts-post'`);
+	psql(`delete from posts where slug = 'e2e-cmts-post' or id = '${POST}'`);
 	psql(`delete from categories where slug = 'e2e-cmts-cat' or id = '${CATEGORY}'`);
 	psql(
 		`insert into categories (id, name, slug) values ('${CATEGORY}', 'E2E 选区段评', 'e2e-cmts-cat') on conflict (slug) do nothing`
@@ -84,8 +86,9 @@ async function ownerPage(browser: Browser): Promise<{ context: BrowserContext; p
  * nudge the layer the way a pointer release would (selectionchange + pointerup).
  */
 async function selectInParagraph(page: Page, paragraphContains: string, needle: string) {
-	// The marker exists only after the client effect ran (SSR renders null
-	// container), so data-ready is the hydration signal for every case here.
+	// The layer mounts client-only (SSR has no container), and data-ready is set
+	// inside the effect that also registers the listeners: same flush, so this is
+	// a same-tick proxy for "listeners exist", not a separate contract.
 	await page.waitForFunction(
 		() =>
 			document.querySelector('[data-slot="segment-layer"]')?.getAttribute('data-ready') === 'true',

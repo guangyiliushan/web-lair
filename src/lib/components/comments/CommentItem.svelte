@@ -24,6 +24,7 @@
 	let openReplyId = $state<string | null>(null);
 	let editingId = $state<string | null>(null);
 	let confirmingDeleteId = $state<string | null>(null);
+	let deleteError = $state(false);
 	let deleteBusy = $state(false);
 
 	function toggleReply(id: string) {
@@ -217,8 +218,13 @@
 				return async ({ result, update }) => {
 					try {
 						// An error result would route the page to the error boundary
-						// and take the inline confirm with it.
-						if (result.type === 'error') return;
+						// and take the inline confirm with it; keep the surface and
+						// say what happened (4.1.3).
+						if (result.type === 'error') {
+							deleteError = true;
+							return;
+						}
+						deleteError = false;
 						await update();
 					} finally {
 						deleteBusy = false;
@@ -236,6 +242,11 @@
 			}}
 		>
 			<input type="hidden" name="id" value={id} />
+			{#if deleteError}
+				<p class="mt-1 text-xs text-destructive" role="alert">
+					{m.comment_error_network()}
+				</p>
+			{/if}
 			<p
 				id={`comment-delete-question-${id}`}
 				class="text-sm"
@@ -311,7 +322,7 @@
 							<Badge variant="secondary">{m.comment_orphan_title()}</Badge>
 						{:else if root.anchor.targetId}
 							<a
-								class="wl-accent-link rounded-sm underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+								class="wl-accent-link rounded-sm underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
 								href={`#${root.anchor.targetId}`}>{m.comment_jump_to_source()}</a
 							>
 						{/if}
