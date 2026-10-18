@@ -23,7 +23,7 @@ export type SuppressionExecutor = typeof db | Parameters<Parameters<typeof db.tr
 export class SuppressionKeyMissingError extends Error {
 	constructor() {
 		super(
-			'SUPPRESSION_HMAC_KEY is missing or not 32 base64-encoded bytes; suppression writes are disabled'
+			'SUPPRESSION_HMAC_KEY is missing or not 32 base64-encoded bytes; suppression operations are disabled'
 		);
 		this.name = 'SuppressionKeyMissingError';
 	}
@@ -76,7 +76,8 @@ export async function suppress(
 			set: {
 				reason: REASON_RANK_SQL,
 				source: sql`case
-					when ${emailSuppressions.reason} <> excluded.reason then excluded.source
+					when excluded.reason = 'complained' and ${emailSuppressions.reason} <> 'complained' then excluded.source
+					when excluded.reason = 'bounced' and ${emailSuppressions.reason} = 'unsubscribed' then excluded.source
 					else ${emailSuppressions.source}
 				end`
 			}
