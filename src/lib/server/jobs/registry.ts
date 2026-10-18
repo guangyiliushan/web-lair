@@ -57,6 +57,14 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 		scheduleHint: '*/15 * * * *',
 		timeoutMs: 30_000
 	},
+	'subscriptions.sweep': {
+		name: 'subscriptions.sweep',
+		description:
+			'Delete pending subscription rows older than 30 days (data minimisation; subscribed and unsubscribed rows are never touched).',
+		manual: true,
+		scheduleHint: '30 4 * * *',
+		timeoutMs: 60_000
+	},
 	'links.check': {
 		name: 'links.check',
 		description:

@@ -4,12 +4,13 @@
  * `drain` runs every minute, but it only has work when `job_schedules` has a
  * due row. A fresh install had zero rows, so `jobs.prune` and
  * `system.resources` never ran while the timer looked healthy. This script
- * inserts the two safe defaults idempotently; everything else stays opt-in
+ * inserts the three safe defaults idempotently; everything else stays opt-in
  * through the admin surface.
  *
- * The pair `(job, cron_expr)` is unique (`job_schedules_job_cron_expr_uniq`),
- * so re-running is a no-op. `tz` keeps its DB default (UTC); the app resolves
- * the site timezone for display/editing.
+ * `subscriptions.sweep` (email hardening E1-2) deletes pending rows after 30
+ * days. The pair `(job, cron_expr)` is unique
+ * (`job_schedules_job_cron_expr_uniq`), so re-running is a no-op. `tz` keeps
+ * its DB default (UTC); the app resolves the site timezone for display/editing.
  *
  * Usage: node scripts/ensure-job-schedules.ts [--dry-run]
  */
@@ -25,7 +26,8 @@ const DRY_RUN = process.argv.includes('--dry-run');
 
 const SCHEDULES = [
 	{ job: 'jobs.prune', cron: '0 3 * * *' },
-	{ job: 'system.resources', cron: '*/15 * * * *' }
+	{ job: 'system.resources', cron: '*/15 * * * *' },
+	{ job: 'subscriptions.sweep', cron: '30 4 * * *' }
 ] as const;
 
 async function main(): Promise<void> {

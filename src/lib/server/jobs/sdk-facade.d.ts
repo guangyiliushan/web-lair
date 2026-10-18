@@ -91,6 +91,8 @@ export declare function asc(column: any): any;
 export declare const jobRuns: any;
 export declare const activities: any;
 export declare const webhookDeliveries: any;
+/** Subscription rows (double opt-in state machine; `subscriptions.sweep`). */
+export declare const subscriptions: any;
 
 /** Friend-link checker services (links line). */
 export declare function runLinkCheck(input: any): Promise<any>;

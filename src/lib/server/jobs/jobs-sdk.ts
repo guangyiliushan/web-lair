@@ -82,6 +82,7 @@ export {
 } from 'drizzle-orm';
 export { activities } from '../db/system/activity.schema.ts';
 export { jobRuns } from '../db/system/job-run.schema.ts';
+export { subscriptions } from '../db/system/subscription.schema.ts';
 export { webhookDeliveries } from '../db/system/webhook-delivery.schema.ts';
 export { deriveAcceptedHosts, publicOrigin, runLinkCheck } from '../links/job.ts';
 export { runSync } from '../projects/sync.ts';
