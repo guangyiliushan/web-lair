@@ -14,8 +14,14 @@ import job from './builtin/subscriptions-sweep';
 
 function context(removed: { id: string }[]) {
 	const returning = vi.fn(async () => removed);
-	const where = vi.fn((_predicate: unknown) => ({ returning }));
-	const del = vi.fn((_table: unknown) => ({ where }));
+	const where = vi.fn((predicate: unknown) => {
+		void predicate;
+		return { returning };
+	});
+	const del = vi.fn((table: unknown) => {
+		void table;
+		return { where };
+	});
 	const summary = vi.fn();
 	const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 	return {
