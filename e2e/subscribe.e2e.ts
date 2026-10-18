@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
 import { psql, valkeyDel } from './support';
@@ -49,6 +50,9 @@ test.describe('subscription double opt-in', () => {
 		expect(psql(`select status from subscriptions where email = '${MARKER}'`)).toBe('pending');
 		expect(psql(`select consent_version from subscriptions where email = '${MARKER}'`)).toBe(
 			'2026-10-v1'
+		);
+		expect(psql(`select token_hash from subscriptions where email = '${MARKER}'`)).toBe(
+			createHash('sha256').update(token).digest('hex')
 		);
 
 		// Prefetch-safety: opening the link must not confirm the address.

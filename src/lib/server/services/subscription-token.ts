@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 /**
  * Subscription token shape (shared by the confirm/unsubscribe pages, the
@@ -16,4 +16,13 @@ export function newSubscriptionToken(): string {
 
 export function isSubscriptionToken(value: string): boolean {
 	return TOKEN_RE.test(value);
+}
+
+/**
+ * DB lookup hash (E2-3). A plain SHA-256 is enough here: the input is 256 bits
+ * of CSPRNG output, so there is no dictionary to attack; the point is to stop
+ * storing a reusable credential in plaintext.
+ */
+export function hashSubscriptionToken(token: string): string {
+	return createHash('sha256').update(token).digest('hex');
 }

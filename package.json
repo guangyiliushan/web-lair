@@ -44,6 +44,7 @@
 		"db:verify-baseline": "tsx --env-file-if-exists=.env scripts/verify-baseline.ts",
 		"db:backfill-refs": "tsx --env-file=.env scripts/backfill-file-references.ts",
 		"db:backfill-consent": "tsx --env-file=.env scripts/backfill-email-consent.ts",
+		"db:backfill-token-hashes": "tsx --env-file=.env scripts/backfill-subscription-token-hashes.ts",
 		"db:verify-jobs": "tsx --env-file=.env scripts/verify-jobs-drain.ts",
 		"jobs:drain": "node --env-file=.env jobs/drain.ts",
 		"jobs:enqueue": "node --env-file=.env scripts/jobs-enqueue.ts",

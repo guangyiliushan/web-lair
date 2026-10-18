@@ -595,6 +595,7 @@ CREATE TABLE "subscriptions" (
 	"source" text,
 	"consent_version" text,
 	"token" text NOT NULL,
+	"token_hash" text,
 	"verified_at" timestamp with time zone,
 	"unsubscribed_at" timestamp with time zone,
 	CONSTRAINT "subscriptions_status_check" CHECK ("subscriptions"."status" in ('pending', 'subscribed', 'unsubscribed')),
@@ -884,6 +885,7 @@ CREATE INDEX "slug_trackers_type_lang_slug_idx" ON "slug_trackers" USING btree (
 CREATE INDEX "slug_trackers_type_target_idx" ON "slug_trackers" USING btree ("type","target_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "subscriptions_email_uniq" ON "subscriptions" USING btree ("email");--> statement-breakpoint
 CREATE UNIQUE INDEX "subscriptions_token_uniq" ON "subscriptions" USING btree ("token");--> statement-breakpoint
+CREATE UNIQUE INDEX "subscriptions_token_hash_uniq" ON "subscriptions" USING btree ("token_hash");--> statement-breakpoint
 CREATE INDEX "webhook_deliveries_status_created_at_idx" ON "webhook_deliveries" USING btree ("status","created_at");--> statement-breakpoint
 CREATE INDEX "webhook_deliveries_webhook_id_created_at_idx" ON "webhook_deliveries" USING btree ("webhook_id","created_at");--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint

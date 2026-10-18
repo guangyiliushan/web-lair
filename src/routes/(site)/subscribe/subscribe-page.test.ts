@@ -207,6 +207,7 @@ describe('subscribe action', () => {
 			previous: {
 				status: 'unsubscribed',
 				token: 'tok_old',
+				tokenHash: null,
 				lang: 'zh-cn',
 				source: 'subscribe-page',
 				consentVersion: '2026-10-v1',

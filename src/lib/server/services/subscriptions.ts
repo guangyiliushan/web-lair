@@ -1,10 +1,14 @@
-import { and, eq, gte, ne } from 'drizzle-orm';
+import { and, eq, gte, isNull, ne, or } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { subscriptions } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { keyedHasher } from './email-hash';
-import { isSubscriptionToken, newSubscriptionToken } from './subscription-token';
+import {
+	hashSubscriptionToken,
+	isSubscriptionToken,
+	newSubscriptionToken
+} from './subscription-token';
 import { liftUnsubscribedSuppression, suppress, suppressionReason } from './suppressions';
 
 export { isSubscriptionToken, newSubscriptionToken } from './subscription-token';
@@ -94,6 +98,7 @@ export function isSubscriptionLang(value: string): value is SubscriptionLang {
 export interface PreviousSubscription {
 	status: SubscriptionStatus;
 	token: string;
+	tokenHash: string | null;
 	lang: SubscriptionLang;
 	source: string | null;
 	consentVersion: string | null;
@@ -142,6 +147,7 @@ export async function requestSubscription(input: {
 		const previous: PreviousSubscription = {
 			status: existing.status as SubscriptionStatus,
 			token: existing.token,
+			tokenHash: existing.tokenHash,
 			lang: existing.lang as SubscriptionLang,
 			source: existing.source,
 			consentVersion: existing.consentVersion,
@@ -155,6 +161,7 @@ export async function requestSubscription(input: {
 			.set({
 				status: 'pending',
 				token,
+				tokenHash: hashSubscriptionToken(token),
 				lang: input.lang,
 				source: input.source,
 				consentVersion: CONSENT_VERSION,
@@ -188,7 +195,8 @@ export async function requestSubscription(input: {
 			lang: input.lang,
 			source: input.source,
 			consentVersion: CONSENT_VERSION,
-			token
+			token,
+			tokenHash: hashSubscriptionToken(token)
 		});
 	} catch (error) {
 		// Concurrent first submission: the unique index wins, re-read and treat
@@ -224,11 +232,28 @@ export async function subscriptionByToken(token: string): Promise<SubscriptionLo
 		if (token !== '') console.warn('[subscribe] token rejected: malformed');
 		return null;
 	}
-	const [row] = await db
+	const tokenHash = hashSubscriptionToken(token);
+	// Hash-first (E2-3). Legacy rows created before the column existed are still
+	// reachable through the plaintext column; the first successful lookup
+	// backfills the hash so the next read never touches plaintext.
+	let [row] = await db
 		.select()
 		.from(subscriptions)
-		.where(eq(subscriptions.token, token))
+		.where(eq(subscriptions.tokenHash, tokenHash))
 		.limit(1);
+	if (!row) {
+		[row] = await db.select().from(subscriptions).where(eq(subscriptions.token, token)).limit(1);
+		if (row && row.tokenHash === null) {
+			try {
+				await db
+					.update(subscriptions)
+					.set({ tokenHash })
+					.where(and(eq(subscriptions.id, row.id), isNull(subscriptions.tokenHash)));
+			} catch (error) {
+				console.warn('[subscribe] token hash backfill failed', error);
+			}
+		}
+	}
 	if (!row) {
 		console.warn('[subscribe] token rejected: unknown');
 		return null;
@@ -255,12 +280,13 @@ export async function confirmSubscription(token: string): Promise<ConfirmResult>
 	// win over this confirm instead of being overwritten by a blind UPDATE. The
 	// timestamp predicate implements the TTL atomically (no read-then-write gap).
 	const cutoff = new Date(Date.now() - subscriptionTokenTtlMs(env.SUBSCRIBE_TOKEN_TTL_DAYS));
+	const tokenHash = hashSubscriptionToken(token);
 	const updated = await db
 		.update(subscriptions)
 		.set({ status: 'subscribed', verifiedAt: new Date() })
 		.where(
 			and(
-				eq(subscriptions.token, token),
+				or(eq(subscriptions.tokenHash, tokenHash), eq(subscriptions.token, token)),
 				eq(subscriptions.status, 'pending'),
 				gte(subscriptions.updatedAt, cutoff)
 			)
@@ -288,39 +314,41 @@ export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
 	// verified_at on non-pending rows), so an opt-out from a never-confirmed
 	// address deletes the row. The delete/update and the suppression write are
 	// one transaction: an opt-out that is not remembered is a compliance bug.
-	// Both writes stay predicate-guarded so a concurrent confirm wins.
-	const row = await subscriptionByToken(token);
-	if (!row) return 'invalid';
+	// The credential predicate accepts either the hash or the retained plaintext
+	// column (dual-read window), and stays status-guarded so a concurrent
+	// confirm wins.
+	const tokenHash = hashSubscriptionToken(token);
+	const credential = or(eq(subscriptions.tokenHash, tokenHash), eq(subscriptions.token, token));
 
 	const outcome = await db.transaction(async (tx) => {
 		const deleted = await tx
 			.delete(subscriptions)
-			.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'pending')))
-			.returning({ id: subscriptions.id });
+			.where(and(credential, eq(subscriptions.status, 'pending')))
+			.returning({ email: subscriptions.email });
 		if (deleted.length > 0) {
-			await suppress(row.email, 'unsubscribed', 'unsubscribe-page', tx);
+			await suppress(deleted[0].email, 'unsubscribed', 'unsubscribe-page', tx);
 			return 'unsubscribed' as const;
 		}
 
 		const updated = await tx
 			.update(subscriptions)
 			.set({ status: 'unsubscribed', unsubscribedAt: new Date() })
-			.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'subscribed')))
-			.returning({ id: subscriptions.id });
+			.where(and(credential, eq(subscriptions.status, 'subscribed')))
+			.returning({ email: subscriptions.email });
 		if (updated.length > 0) {
-			await suppress(row.email, 'unsubscribed', 'unsubscribe-page', tx);
+			await suppress(updated[0].email, 'unsubscribed', 'unsubscribe-page', tx);
 			return 'unsubscribed' as const;
 		}
 
 		const [again] = await tx
-			.select({ status: subscriptions.status })
+			.select({ status: subscriptions.status, email: subscriptions.email })
 			.from(subscriptions)
-			.where(eq(subscriptions.token, token))
+			.where(credential)
 			.limit(1);
 		if (again?.status === 'unsubscribed') {
 			// Repair legacy rows: the terminal state exists but the suppression
 			// record may predate this batch (idempotent insert).
-			await suppress(row.email, 'unsubscribed', 'unsubscribe-page', tx);
+			await suppress(again.email, 'unsubscribed', 'unsubscribe-page', tx);
 			return 'already-unsubscribed' as const;
 		}
 		return null;
@@ -333,7 +361,12 @@ export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
 export async function discardPendingToken(token: string): Promise<void> {
 	await db
 		.delete(subscriptions)
-		.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'pending')));
+		.where(
+			and(
+				eq(subscriptions.tokenHash, hashSubscriptionToken(token)),
+				eq(subscriptions.status, 'pending')
+			)
+		);
 }
 
 /** Restores the row a failed send had rotated to pending (token-guarded). */
@@ -346,11 +379,17 @@ export async function restoreSubscription(
 		.set({
 			status: previous.status,
 			token: previous.token,
+			tokenHash: previous.tokenHash ?? hashSubscriptionToken(previous.token),
 			lang: previous.lang,
 			source: previous.source,
 			consentVersion: previous.consentVersion,
 			verifiedAt: previous.verifiedAt,
 			unsubscribedAt: previous.unsubscribedAt
 		})
-		.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'pending')));
+		.where(
+			and(
+				eq(subscriptions.tokenHash, hashSubscriptionToken(token)),
+				eq(subscriptions.status, 'pending')
+			)
+		);
 }

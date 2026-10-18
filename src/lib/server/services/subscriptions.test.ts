@@ -28,8 +28,10 @@ vi.mock('./suppressions', () => suppressionMocks);
 vi.mock('drizzle-orm', () => ({
 	eq: (column: unknown, value: unknown) => ({ op: 'eq', column, value }),
 	and: (...parts: unknown[]) => ({ op: 'and', parts }),
+	or: (...parts: unknown[]) => ({ op: 'or', parts }),
 	ne: (column: unknown, value: unknown) => ({ op: 'ne', column, value }),
-	gte: (column: unknown, value: unknown) => ({ op: 'gte', column, value })
+	gte: (column: unknown, value: unknown) => ({ op: 'gte', column, value }),
+	isNull: (column: unknown) => ({ op: 'isNull', column })
 }));
 
 import {
@@ -93,6 +95,9 @@ function selectRows(rows: unknown[]) {
 function deleteRows(rows: unknown[]) {
 	return { where: () => ({ returning: async () => rows }) };
 }
+function updateWhere() {
+	return { set: () => ({ where: async () => undefined }) };
+}
 
 beforeEach(() => {
 	for (const fn of Object.values(dbStub)) fn.mockReset();
@@ -118,6 +123,7 @@ describe('subscription transitions (stubbed db)', () => {
 
 		dbStub.update.mockReturnValueOnce(updateRows([]));
 		dbStub.select.mockReturnValueOnce(selectRows([]));
+		dbStub.select.mockReturnValueOnce(selectRows([]));
 		expect(await confirmSubscription(TOKEN)).toBe('invalid');
 	});
 
@@ -133,12 +139,7 @@ describe('subscription transitions (stubbed db)', () => {
 	});
 
 	it('unsubscribe deletes a pending row and records the suppression in one transaction', async () => {
-		dbStub.select.mockReturnValueOnce(
-			selectRows([
-				{ id: 's1', status: 'pending', email: 'a@b.c', token: TOKEN, updatedAt: new Date() }
-			])
-		);
-		dbStub.delete.mockReturnValueOnce(deleteRows([{ id: 's1' }]));
+		dbStub.delete.mockReturnValueOnce(deleteRows([{ email: 'a@b.c' }]));
 		expect(await unsubscribe(TOKEN)).toBe('unsubscribed');
 		expect(dbStub.transaction).toHaveBeenCalledTimes(1);
 		expect(suppressionMocks.suppress).toHaveBeenCalledWith(
@@ -150,13 +151,8 @@ describe('subscription transitions (stubbed db)', () => {
 	});
 
 	it('unsubscribe updates a confirmed row and records the suppression', async () => {
-		dbStub.select.mockReturnValueOnce(
-			selectRows([
-				{ id: 's1', status: 'subscribed', email: 'a@b.c', token: TOKEN, updatedAt: new Date() }
-			])
-		);
 		dbStub.delete.mockReturnValueOnce(deleteRows([]));
-		dbStub.update.mockReturnValueOnce(updateRows([{ id: 's1' }]));
+		dbStub.update.mockReturnValueOnce(updateRows([{ email: 'a@b.c' }]));
 		expect(await unsubscribe(TOKEN)).toBe('unsubscribed');
 		expect(suppressionMocks.suppress).toHaveBeenCalledWith(
 			'a@b.c',
@@ -167,29 +163,24 @@ describe('subscription transitions (stubbed db)', () => {
 	});
 
 	it('unsubscribe reports already-unsubscribed and repairs the suppression row', async () => {
-		dbStub.select
-			.mockReturnValueOnce(
-				selectRows([
-					{
-						id: 's1',
-						status: 'unsubscribed',
-						email: 'a@b.c',
-						token: TOKEN,
-						updatedAt: new Date()
-					}
-				])
-			)
-			.mockReturnValueOnce(selectRows([{ status: 'unsubscribed' }]));
 		dbStub.delete.mockReturnValueOnce(deleteRows([]));
 		dbStub.update.mockReturnValueOnce(updateRows([]));
+		dbStub.select.mockReturnValueOnce(selectRows([{ status: 'unsubscribed', email: 'a@b.c' }]));
 		expect(await unsubscribe(TOKEN)).toBe('already-unsubscribed');
-		expect(suppressionMocks.suppress).toHaveBeenCalled();
+		expect(suppressionMocks.suppress).toHaveBeenCalledWith(
+			'a@b.c',
+			'unsubscribed',
+			'unsubscribe-page',
+			dbStub
+		);
 	});
 
-	it('unsubscribe reports invalid when the token resolves to no row', async () => {
+	it('unsubscribe reports invalid when both guarded writes and the read miss', async () => {
+		dbStub.delete.mockReturnValueOnce(deleteRows([]));
+		dbStub.update.mockReturnValueOnce(updateRows([]));
 		dbStub.select.mockReturnValueOnce(selectRows([]));
 		expect(await unsubscribe(TOKEN)).toBe('invalid');
-		expect(dbStub.transaction).not.toHaveBeenCalled();
+		expect(suppressionMocks.suppress).not.toHaveBeenCalled();
 	});
 
 	it('a lost resubmit CAS returns the winner token without sending', async () => {
@@ -226,6 +217,53 @@ describe('subscription transitions (stubbed db)', () => {
 		dbStub.delete.mockReturnValueOnce({ where: vi.fn(async () => undefined) });
 		await discardPendingToken(TOKEN);
 		expect(dbStub.delete).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('token hashes (E2-3)', () => {
+	const HASH_TOKEN = 'a'.repeat(43);
+
+	it('hashes deterministically to 64 hex characters', async () => {
+		const { hashSubscriptionToken } = await import('./subscription-token');
+		const one = hashSubscriptionToken(HASH_TOKEN);
+		expect(one).toMatch(/^[0-9a-f]{64}$/);
+		expect(hashSubscriptionToken(HASH_TOKEN)).toBe(one);
+		expect(hashSubscriptionToken('b'.repeat(43))).not.toBe(one);
+	});
+
+	it('reads by hash first', async () => {
+		dbStub.select.mockReturnValueOnce(
+			selectRows([
+				{
+					id: 's1',
+					status: 'pending',
+					email: 'a@b.c',
+					token: HASH_TOKEN,
+					tokenHash: 'f'.repeat(64),
+					updatedAt: new Date()
+				}
+			])
+		);
+		expect(await subscriptionByToken(HASH_TOKEN)).toMatchObject({ id: 's1', status: 'pending' });
+		expect(dbStub.select).toHaveBeenCalledTimes(1);
+	});
+
+	it('falls back to the plaintext column and backfills the hash for legacy rows', async () => {
+		dbStub.select.mockReturnValueOnce(selectRows([])).mockReturnValueOnce(
+			selectRows([
+				{
+					id: 's1',
+					status: 'pending',
+					email: 'a@b.c',
+					token: HASH_TOKEN,
+					tokenHash: null,
+					updatedAt: new Date()
+				}
+			])
+		);
+		dbStub.update.mockReturnValueOnce(updateWhere());
+		expect(await subscriptionByToken(HASH_TOKEN)).toMatchObject({ id: 's1', status: 'pending' });
+		expect(dbStub.update).toHaveBeenCalledTimes(1);
 	});
 });
 

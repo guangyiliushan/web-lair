@@ -36,7 +36,7 @@ const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', impo
 const JOURNAL_PATH = fileURLToPath(new URL('../drizzle/meta/_journal.json', import.meta.url));
 const VISUALIZER_PATH = fileURLToPath(new URL('../.drizzle/visualizer.json', import.meta.url));
 
-const EXPECTED = { tables: 49, indexes: 115, checks: 71, fks: 46, uuidv7: 36 };
+const EXPECTED = { tables: 49, indexes: 116, checks: 71, fks: 46, uuidv7: 36 };
 
 const EXPECTED_TABLE_NAMES: string[] = [
 	'account',

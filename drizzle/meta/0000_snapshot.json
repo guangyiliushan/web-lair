@@ -1,5 +1,5 @@
 {
-  "id": "3e408a94-ca36-4940-9d7c-4ae96570318f",
+  "id": "a4749fba-337d-4b36-bd6d-98cfe2d12e84",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -5897,6 +5897,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "verified_at": {
           "name": "verified_at",
           "type": "timestamp with time zone",
@@ -5931,6 +5937,21 @@
           "columns": [
             {
               "expression": "token",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "subscriptions_token_hash_uniq": {
+          "name": "subscriptions_token_hash_uniq",
+          "columns": [
+            {
+              "expression": "token_hash",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
