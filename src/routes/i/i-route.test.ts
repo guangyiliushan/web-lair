@@ -236,7 +236,7 @@ describe('/i/<key> proxy (T9)', () => {
 		expect(storageMock.head).not.toHaveBeenCalled();
 	});
 
-	it('fails open when the client address cannot be resolved (no global bucket)', async () => {
+	it('falls back to the coarse shared bucket when the client address is unresolved', async () => {
 		storageMock.get.mockResolvedValueOnce({
 			body: bodyOf('x'),
 			byteSize: 1,
@@ -251,6 +251,17 @@ describe('/i/<key> proxy (T9)', () => {
 			}
 		} as unknown as Parameters<typeof GET>[0]);
 		expect(res.status).toBe(200);
-		expect(rateLimitMock).not.toHaveBeenCalled();
+		expect(rateLimitMock).toHaveBeenCalledWith(expect.anything(), 'limits:i:unresolved', 900, 60);
+	});
+
+	it('still 429s the coarse bucket when it is exhausted', async () => {
+		rateLimitMock.mockResolvedValueOnce({ allowed: false, count: 901 });
+		const res = await GET({
+			params: { key: VARIANT_KEY },
+			locals: {},
+			getClientAddress: () => ''
+		} as unknown as Parameters<typeof GET>[0]);
+		expect(res.status).toBe(429);
+		expect(storageMock.get).not.toHaveBeenCalled();
 	});
 });

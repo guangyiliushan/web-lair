@@ -69,16 +69,21 @@ function objectHeaders(access: Access, contentType: string | null): Headers {
 
 /**
  * `getClientAddress()` throws when adapter-node cannot resolve an address
- * (dev without ADDRESS_HEADER); that collapses to one shared bucket, which is
- * exactly the fail-open shape we want.
+ * (dev without ADDRESS_HEADER). A per-IP bucket is impossible then, and a
+ * global one would 429 every image on a proxy mistake — so the fallback is a
+ * coarse shared bucket, not an unbounded pass.
  */
 let warnedMissingAddress = false;
 
-/** A global bucket would 429 the whole site on a proxy misconfiguration. */
+/** A per-IP bucket would 429 the whole site on a proxy misconfiguration; a
+ * coarse shared bucket still bounds abuse without that blast radius. */
+const UNRESOLVED_BUCKET = { limit: 900, windowSeconds: 60 } as const;
+const UNRESOLVED_KEY = 'limits:i:unresolved';
+
 function warnMissingAddressOnce(): void {
 	if (warnedMissingAddress) return;
 	warnedMissingAddress = true;
-	console.warn('[i] client address unresolved; media rate limit disabled');
+	console.warn('[i] client address unresolved; using the coarse media bucket');
 }
 
 async function throttled(getClientAddress: () => string): Promise<boolean> {
@@ -91,7 +96,13 @@ async function throttled(getClientAddress: () => string): Promise<boolean> {
 	})();
 	if (!address) {
 		warnMissingAddressOnce();
-		return false;
+		const shared = await rateLimit(
+			getCache(),
+			UNRESOLVED_KEY,
+			UNRESOLVED_BUCKET.limit,
+			UNRESOLVED_BUCKET.windowSeconds
+		);
+		return !shared.allowed;
 	}
 	const result = await rateLimit(
 		getCache(),
