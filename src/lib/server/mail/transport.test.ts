@@ -212,11 +212,51 @@ describe('mail transport (D-2)', () => {
 		const options = createTransportMock.mock.calls[0]![0] as {
 			dkim: { domainName: string; keySelector: string; privateKey: string };
 		};
-		expect(options.dkim).toEqual({
+		expect(options.dkim).toMatchObject({
 			domainName: 'mail.example.com',
 			keySelector: 'wl',
 			privateKey: 'line-1\nline-2'
 		});
+	});
+
+	it('signs both RFC 8058 headers (List-Unsubscribe + -Post)', async () => {
+		configure({
+			MAIL_DKIM_DOMAIN: 'mail.example.com',
+			MAIL_DKIM_SELECTOR: 'wl',
+			MAIL_DKIM_PRIVATE_KEY: 'line-1\\nline-2'
+		});
+		await sendMail({ to: 'a@b.c', subject: 's', text: 't' });
+		const options = createTransportMock.mock.calls[0]![0] as {
+			dkim: { headerFieldNames: string };
+		};
+		const fields = options.dkim.headerFieldNames.split(':');
+		expect(fields).toContain('List-Unsubscribe');
+		expect(fields).toContain('List-Unsubscribe-Post');
+		// Setting headerFieldNames replaces nodemailer's defaults wholesale.
+		expect(fields).toContain('From');
+		expect(fields).toContain('To');
+		expect(fields).toContain('Subject');
+	});
+
+	it('passes bulk headers through to nodemailer, never inventing its own', async () => {
+		configure();
+		await sendMail({
+			to: 'reader@example.com',
+			subject: 'Newsletter',
+			text: 'Body',
+			headers: {
+				'List-Unsubscribe': '<https://lair.example/api/unsubscribe/one-click?token=x>',
+				'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+			}
+		});
+		expect(sendMailMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				headers: {
+					'List-Unsubscribe': '<https://lair.example/api/unsubscribe/one-click?token=x>',
+					'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+				}
+			})
+		);
 	});
 
 	it('reuses the transport across sends', async () => {

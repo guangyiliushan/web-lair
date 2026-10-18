@@ -26,7 +26,27 @@ export interface OutgoingMail {
 	to: string;
 	subject: string;
 	text: string;
+	/**
+	 * Extra headers. Bulk senders add RFC 8058 `List-Unsubscribe` and
+	 * `List-Unsubscribe-Post`; transactional mail (confirmation, reset) must
+	 * not carry them (Gmail classifies it separately).
+	 */
+	headers?: Record<string, string>;
 }
+
+/**
+ * RFC 4871 defaults (nodemailer 10's `defaultFieldNames`) plus
+ * `List-Unsubscribe-Post`. RFC 8058 §4 requires DKIM to cover **both**
+ * List-Unsubscribe headers; nodemailer's default list already includes
+ * `List-Unsubscribe` but not the `-Post` variant, and setting
+ * `headerFieldNames` replaces the default list wholesale.
+ */
+export const DKIM_HEADER_FIELDS =
+	'From:Sender:Reply-To:Subject:Date:Message-ID:To:Cc:MIME-Version:Content-Type:' +
+	'Content-Transfer-Encoding:Content-ID:Content-Description:Resent-Date:Resent-From:' +
+	'Resent-Sender:Resent-To:Resent-Cc:Resent-Message-ID:In-Reply-To:References:' +
+	'List-Id:List-Help:List-Unsubscribe:List-Unsubscribe-Post:List-Subscribe:List-Post:' +
+	'List-Owner:List-Archive';
 
 export function isMailConfigured(): boolean {
 	// MAIL_FROM is not optional: sendMail throws without it, and a gate that
@@ -100,13 +120,24 @@ export async function isMailDeliveryAvailableLive(): Promise<boolean> {
 }
 
 function dkimOptions():
-	{ domainName: string; keySelector: string; privateKey: string } | undefined {
+	| {
+			domainName: string;
+			keySelector: string;
+			privateKey: string;
+			headerFieldNames: string;
+	  }
+	| undefined {
 	const domainName = env.MAIL_DKIM_DOMAIN;
 	const keySelector = env.MAIL_DKIM_SELECTOR;
 	const key = env.MAIL_DKIM_PRIVATE_KEY;
 	if (!domainName || !keySelector || !key) return undefined;
 	// `.env` cannot carry literal newlines portably; accept \n escapes.
-	return { domainName, keySelector, privateKey: key.replace(/\\n/g, '\n') };
+	return {
+		domainName,
+		keySelector,
+		privateKey: key.replace(/\\n/g, '\n'),
+		headerFieldNames: DKIM_HEADER_FIELDS
+	};
 }
 
 let cached: Transporter | null = null;
@@ -160,7 +191,8 @@ export async function sendMail(mail: OutgoingMail): Promise<void> {
 		from,
 		to: mail.to,
 		subject: mail.subject,
-		text: mail.text
+		text: mail.text,
+		headers: mail.headers
 	});
 }
 

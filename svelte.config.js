@@ -13,6 +13,14 @@ const config = {
 		// what the Dockerfile runs; see deploy/RUNBOOK.md.
 		adapter: adapter(),
 
+		// The framework CSRF check runs before hooks, so it cannot exempt the
+		// RFC 8058 one-click unsubscribe POST (no Origin, no cookies). The first
+		// hook (`handleCsrf`) reproduces the exact framework predicate and owns
+		// the single exemption; see src/lib/server/security/csrf.ts.
+		csrf: {
+			trustedOrigins: ['*']
+		},
+
 		typescript: {
 			config: (config) => ({
 				...config,

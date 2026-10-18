@@ -1,5 +1,5 @@
 import { sequence } from '@sveltejs/kit/hooks';
-import { building } from '$app/environment';
+import { building, dev } from '$app/environment';
 import { redirect } from '@sveltejs/kit';
 import { auth } from '$lib/server/auth';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
@@ -14,6 +14,44 @@ import { ADMIN_BASE_PATH, getAdminConfig, isAdminPath } from '$lib/server/config
 import { shouldAttemptTailscaleSignIn } from '$lib/server/security/tailscale-auth';
 import { isSignUpRequest } from '$lib/server/auth-gate';
 import { isMailDeliveryAvailableLive } from '$lib/server/mail/transport';
+import { isCsrfForbidden } from '$lib/server/security/csrf';
+import { isSubscriptionToken } from '$lib/server/services/subscription-token';
+
+/**
+ * CSRF (RFC 8058 exception design, 2026-10-18).
+ *
+ * SvelteKit's built-in check runs in `respond.js` before every hook, so a hook
+ * cannot exempt the one-click unsubscribe endpoint. `svelte.config.js`
+ * therefore disables the framework check (`csrf.trustedOrigins: ['*']`) and
+ * this hook reproduces it exactly for every other form request. Keep the
+ * predicate in `$lib/server/security/csrf` aligned with upstream on upgrade.
+ *
+ * The only exemption is the one-click endpoint, which RFC 8058 requires to
+ * accept a cookie-less, Origin-less POST. Its token is the credential; the
+ * request carries no ambient authority for CSRF to abuse.
+ */
+const ONE_CLICK_PATH = '/api/unsubscribe/one-click';
+
+const handleCsrf: Handle = async ({ event, resolve }) => {
+	if (
+		!dev &&
+		isCsrfForbidden({ request: event.request, selfOrigin: event.url.origin }) &&
+		!(
+			event.request.method === 'POST' &&
+			event.url.pathname === ONE_CLICK_PATH &&
+			isSubscriptionToken(event.url.searchParams.get('token') ?? '')
+		)
+	) {
+		const message = `Cross-site ${event.request.method} form submissions are forbidden`;
+		return event.request.headers.get('accept') === 'application/json'
+			? new Response(JSON.stringify({ message }), {
+					status: 403,
+					headers: { 'content-type': 'application/json' }
+				})
+			: new Response(message, { status: 403 });
+	}
+	return resolve(event);
+};
 
 const handleParaglide: Handle = async ({ event, resolve }) =>
 	paraglideMiddleware(event.request, async ({ request, locale }) => {
@@ -121,7 +159,7 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 	return svelteKitHandler({ event, resolve, auth, building });
 };
 
-export const handle: Handle = sequence(handleParaglide, handleBetterAuth);
+export const handle: Handle = sequence(handleCsrf, handleParaglide, handleBetterAuth);
 
 /**
  * P2 review finding: Kit's default error hook logs the raw error, and every

@@ -26,6 +26,9 @@ test.beforeAll(() => {
 	// runs of this spec would otherwise 429 their own second submission.
 	valkeyDel('wl:limits:subscribe:127.0.0.1');
 	valkeyDel('wl:limits:subscribe:::1');
+	// One-click is capped at 30/min per IP; clear it so reruns start clean.
+	valkeyDel('wl:limits:unsubscribe-oneclick:127.0.0.1');
+	valkeyDel('wl:limits:unsubscribe-oneclick:::1');
 });
 
 test.afterAll(() => {
@@ -129,5 +132,100 @@ test.describe('subscription double opt-in', () => {
 		await page.getByRole('button', { name: '订阅', exact: true }).click();
 		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
 		expect(psql(`select count(*)::int from subscriptions where email = '${bot}'`)).toBe('0');
+	});
+
+	test('a confirmation link older than the TTL is refused and a resubmit refreshes it', async ({
+		page
+	}) => {
+		const email = `e2e-sub-expired-${Date.now()}@example.com`;
+		await page.goto('/zh-cn/subscribe');
+		await page.getByLabel('邮箱').fill(email);
+		await page.getByRole('button', { name: '订阅', exact: true }).click();
+		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
+
+		const token = psql(`select token from subscriptions where email = '${email}'`);
+		expect(token).toHaveLength(43);
+		psql(
+			`update subscriptions set updated_at = now() - interval '8 days' where email = '${email}'`
+		);
+
+		await page.goto(`/zh-cn/subscribe/confirm?token=${token}`);
+		await expect(page.getByText('确认链接已过期')).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByRole('button', { name: '确认', exact: true })).toHaveCount(0);
+
+		// A direct POST cannot bypass the TTL either, and must not write.
+		const refused = await page.request.post('/zh-cn/subscribe/confirm', {
+			form: { token },
+			headers: { origin: 'http://localhost:4173' }
+		});
+		expect(refused.status()).toBe(200);
+		expect(psql(`select status from subscriptions where email = '${email}'`)).toBe('pending');
+
+		// Resubmitting rotates the token and starts a fresh window.
+		await page.goto('/zh-cn/subscribe');
+		await page.getByLabel('邮箱').fill(email);
+		await page.getByRole('button', { name: '订阅', exact: true }).click();
+		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
+		const fresh = psql(`select token from subscriptions where email = '${email}'`);
+		expect(fresh).toHaveLength(43);
+		expect(fresh).not.toBe(token);
+		expect(
+			psql(
+				`select updated_at > now() - interval '1 minute' from subscriptions where email = '${email}'`
+			)
+		).toBe('t');
+
+		await page.goto(`/zh-cn/subscribe/confirm?token=${fresh}`);
+		await page.getByRole('button', { name: '确认', exact: true }).click();
+		await expect(page.getByText('订阅已确认')).toBeVisible({ timeout: 15_000 });
+	});
+
+	test('RFC 8058 one-click POST works without Origin and is idempotent', async ({ page }) => {
+		const email = `e2e-sub-oneclick-${Date.now()}@example.com`;
+		await page.goto('/zh-cn/subscribe');
+		await page.getByLabel('邮箱').fill(email);
+		await page.getByRole('button', { name: '订阅', exact: true }).click();
+		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
+
+		const token = psql(`select token from subscriptions where email = '${email}'`);
+		await page.goto(`/zh-cn/subscribe/confirm?token=${token}`);
+		await page.getByRole('button', { name: '确认', exact: true }).click();
+		await expect(page.getByText('订阅已确认')).toBeVisible({ timeout: 15_000 });
+
+		// No Origin header and no cookies are sent by a mail receiver.
+		const response = await page.request.post(`/api/unsubscribe/one-click?token=${token}`, {
+			form: { 'List-Unsubscribe': 'One-Click' }
+		});
+		expect(response.status()).toBe(200);
+		expect(await response.text()).toBe('');
+		expect(psql(`select status from subscriptions where email = '${email}'`)).toBe('unsubscribed');
+
+		const again = await page.request.post(`/api/unsubscribe/one-click?token=${token}`, {
+			form: { 'List-Unsubscribe': 'One-Click' }
+		});
+		expect(again.status()).toBe(200);
+		expect(psql(`select status from subscriptions where email = '${email}'`)).toBe('unsubscribed');
+	});
+
+	test('CSRF: origin-less and cross-origin form posts are refused', async ({ page }) => {
+		const email = `e2e-sub-csrf-${Date.now()}@example.com`;
+
+		const noOrigin = await page.request.post('/zh-cn/subscribe', { form: { email } });
+		expect(noOrigin.status()).toBe(403);
+
+		const crossOrigin = await page.request.post('/zh-cn/subscribe', {
+			form: { email },
+			headers: { origin: 'https://evil.example' }
+		});
+		expect(crossOrigin.status()).toBe(403);
+		expect(psql(`select count(*)::int from subscriptions where email = '${email}'`)).toBe('0');
+
+		// The same-origin header path still reaches the action.
+		const sameOrigin = await page.request.post('/zh-cn/subscribe', {
+			form: { email },
+			headers: { origin: 'http://localhost:4173' }
+		});
+		expect(sameOrigin.status()).toBe(200);
+		expect(psql(`select count(*)::int from subscriptions where email = '${email}'`)).toBe('1');
 	});
 });
