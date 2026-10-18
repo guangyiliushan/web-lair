@@ -37,6 +37,7 @@ $EDITOR .env      # see §1.1 for the required keys
 | `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`             | object-store credentials                                                                                          |
 | `DATA_DIR`                                            | absolute host path, e.g. `/srv/web-lair/data`                                                                     |
 | `MAIL_*`                                              | see §1.2                                                                                                          |
+| `SUBSCRIBE_TOKEN_TTL_DAYS` / `SUBSCRIBE_HMAC_KEY`     | see §1.2 (confirmation-link lifetime + per-address cap key)                                                       |
 | `OWNER_EMAIL` / `OWNER_PASSWORD`                      | first owner seed (`pnpm db:seed-owner` from the host, dev only)                                                   |
 | `DEADMAN_PING_URL`                                    | healthchecks.io **liveness** check (5 min); unset ⇒ the dead-man timer skips (no alarm)                           |
 | `JOBS_HEARTBEAT_URL`                                  | per-tick drain ping (Kuma push or a second healthchecks check)                                                    |
@@ -84,10 +85,36 @@ curl -s https://api.ipify.org; dig +short -x "$(curl -s https://api.ipify.org)"
   unchanged (one env switch).
 
 DKIM is signed by the app: set `MAIL_DKIM_DOMAIN=mail.<domain>`,
-`MAIL_DKIM_SELECTOR` and the PEM key (`\n` escapes accepted). Publish SPF
-(`v=spf1 ip4:<ip> -all` or the relay's include), the DKIM TXT and a DMARC
-record (`p=none` first, tighten after a week of reports). Send from a
-**subdomain** so a reputation problem never touches the apex.
+`MAIL_DKIM_SELECTOR` and the PEM key (`\n` escapes accepted). The signature
+covers the RFC 4871 default header set **plus `List-Unsubscribe-Post`**
+(RFC 8058 §4); `List-Unsubscribe` was already in nodemailer's default set.
+
+**DNS records (D-3 checklist):**
+
+| Record | Name                                      | Value                                                                                           |
+| ------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| SPF    | `mail.<domain>` TXT                       | `v=spf1 ip4:<public-ip> -all` (or the relay's `include:`)                                       |
+| DKIM   | `<selector>._domainkey.mail.<domain>` TXT | public key from `MAIL_DKIM_PRIVATE_KEY`                                                         |
+| DMARC  | `_dmarc.mail.<domain>` TXT                | `v=DMARC1; p=none; rua=mailto:<mailbox>` first, tighten to `quarantine` after a week of reports |
+| PTR    | sending IP                                | matches `mail.<domain>` (direct MTA only)                                                       |
+
+Send from the **subdomain** so a reputation problem never touches the apex.
+
+Subscription tokens (email hardening E1):
+
+- `SUBSCRIBE_TOKEN_TTL_DAYS` (default `1` = 24h; ceiling `3` = 72h, larger
+  values are clamped and logged) bounds the confirmation link. NIST SP
+  800-63B-4 §4.2 requires emailed recovery codes to expire within 24 hours;
+  expired links render "link expired" and never confirm. Unsubscribe links
+  never expire — opt-out must always work.
+- `SUBSCRIBE_HMAC_KEY` (`openssl rand -base64 32`) keys the per-address
+  **5 / 24 h** cap. Empty/invalid degrades to IP-only limiting (`10 / h`) and
+  logs `[email-hash] SUBSCRIBE_HMAC_KEY is missing...`; set it in production.
+- The confirmation mail is transactional: it carries **no**
+  `List-Unsubscribe` headers. Bulk mail (not implemented yet) must send both
+  headers, and the one-click URI is
+  `POST /api/unsubscribe/one-click?token=<token>` (`List-Unsubscribe-Post:
+List-Unsubscribe=One-Click`, no cookies, no redirect).
 
 ### 1.3 Build (gate: ≤ 8 min, ≤ 4 GB peak)
 
@@ -272,8 +299,31 @@ container cannot masquerade as a running timer. Exit codes: 0 tick done,
 1 infrastructure failure (alert on it), 2 config missing.
 
 The timer only provides process liveness; actual work comes from rows in
-`job_schedules`. `scripts/ensure-job-schedules.ts` seeds the two maintenance
-jobs (§1.4); add or edit others in the admin surface.
+`job_schedules`. `scripts/ensure-job-schedules.ts` seeds the three maintenance
+jobs (§1.4): `jobs.prune` (03:00), `system.resources` (every 15 min) and
+`subscriptions.sweep` (04:30, deletes pending subscriptions after 30 days);
+add or edit others in the admin surface.
+
+### 6.1 One-click unsubscribe acceptance
+
+RFC 8058 requires the endpoint to work **without** an `Origin` header and
+without cookies. Run this from the box (compose binds the app on the internal
+network; use `docker compose exec app` or an equivalent local URL):
+
+```bash
+# Replace with a real token from a subscription row (it is a bearer token).
+TOKEN=$(docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
+  "select token from subscriptions where status = 'pending' limit 1")
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'List-Unsubscribe=One-Click' \
+  "https://<domain>/api/unsubscribe/one-click?token=$TOKEN"   # expect 200
+```
+
+A malformed token (wrong shape) is rejected by the CSRF hook with `403`; a
+well-formed but unknown token reaches the endpoint and still answers `200`
+(no token oracle). The ordinary form endpoints must keep rejecting
+Origin-less POSTs with `403` — see `src/lib/server/security/csrf.ts`.
 
 ## 7. Troubleshooting
 
