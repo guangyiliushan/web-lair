@@ -45,6 +45,11 @@ $EDITOR .env      # see §1.1 for the required keys
 | `ALERT_WEBHOOK_URL`                                   | systemd `OnFailure` target; leave empty to disable the alert unit                                                 |
 | `MAIL_DEV_LOG` / `MAIL_DEV_LOG_OK`                    | dev/e2e only; production ignores dev logging unless BOTH are set                                                  |
 
+`SUPPRESSION_HMAC_KEY` is mandatory before the first start (production boot
+refuses to start without it; dev needs it for subscribe/unsubscribe). Generate
+with `openssl rand -base64 32` and back it up. `MAIL_EVENTS_HMAC_KEY` is only
+needed when a bounce/complaint relay is configured.
+
 Create the data directory with the image's uid **before** the first start —
 Docker would otherwise create it as root and the `node` user (uid 1000) could
 not write the job scaffold:
@@ -158,8 +163,8 @@ docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"'
 mv "$dump.tmp" "$dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
-# Seed rows are one-per-job and use the DB default tz (UTC); times are not
-# critical for maintenance, and admin-created schedules use site.timezone.
+# Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
+# are not critical for maintenance, and admin-created schedules use the same tz.
 docker compose --profile prod run --rm app node scripts/ensure-job-schedules.ts
 docker compose --profile prod up -d
 docker compose --profile prod ps          # all healthy
@@ -211,8 +216,8 @@ docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"'
 mv "$dump.tmp" "$dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
-# Seed rows are one-per-job and use the DB default tz (UTC); times are not
-# critical for maintenance, and admin-created schedules use site.timezone.
+# Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
+# are not critical for maintenance, and admin-created schedules use the same tz.
 docker compose --profile prod run --rm app node scripts/ensure-job-schedules.ts
 docker compose --profile prod up -d
 ```
@@ -225,40 +230,64 @@ change. Never roll back a migration without restoring the pre-migration dump.
 E2 regenerated the single `0000_baseline.sql` in place (49 tables) instead of
 appending a migration. `scripts/migrate.ts` therefore **refuses to start** on a
 pre-E2 database (`[migrate] this database predates the E2 baseline`). Upgrade
-such a box by rebuilding the schema and restoring data:
+such a box by rebuilding the schema and restoring data. Run this from the app
+directory with the target image already pinned in `.env` (`APP_IMAGE=web-lair-app:<sha>`):
 
 ```bash
 set -euo pipefail
 cd /srv/web-lair/app
+grep -q '^APP_IMAGE=web-lair-app:' .env || { echo 'pin APP_IMAGE first' >&2; exit 1; }
+STAMP=$(date +%F_%H%M%S)
+BK=/srv/web-lair/pre-migrate
+mkdir -p "$BK"
+sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer
 docker compose --profile prod stop app
-mkdir -p /srv/web-lair/pre-migrate
-STAMP=$(date +%F_%H%M)
-# Full backup (no -t: a TTY merges pg_dump warnings into stdout).
+docker compose --profile prod up -d db
+for i in $(seq 1 30); do docker compose exec -T db pg_isready -h 127.0.0.1 -q && break; sleep 2; done
+
+# Full backup first; no -t (a TTY merges pg_dump warnings into stdout).
 docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
-  > "/srv/web-lair/pre-migrate/pre-e2-$STAMP.dump"
-# Data-only restore file; -n public keeps the drizzle ledger out.
-{ echo 'BEGIN;'; docker compose exec -T db sh -c \
-  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --data-only --inserts --no-owner --no-privileges -n public'; \
-  echo 'COMMIT;'; } > "/srv/web-lair/pre-migrate/pre-e2-data-$STAMP.sql"
+  > "$BK/pre-e2-$STAMP.dump"
+docker compose exec -T db pg_restore -l < "$BK/pre-e2-$STAMP.dump" > /dev/null
 
-docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  -v ON_ERROR_STOP=1 -c 'drop schema drizzle, public cascade;' -c 'create schema public;'
+# Data-only file: column lists + FK triggers disabled inside the transaction.
+{ echo 'BEGIN;'; echo 'SET LOCAL session_replication_role = replica;'; \
+  docker compose exec -T db sh -c \
+  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --data-only --column-inserts --no-owner --no-privileges -n public'; \
+  echo 'COMMIT;'; } > "$BK/pre-e2-data-$STAMP.sql"
+
+# Empty schema, fresh baseline, restore data. All psql runs inside the container
+# so $POSTGRES_USER/$POSTGRES_DB are expanded there, never on the host.
+docker compose exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema drizzle, public cascade;" -c "create schema public;"'
 docker compose --profile prod run --rm app node scripts/migrate.ts
-docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
-  < "/srv/web-lair/pre-migrate/pre-e2-data-$STAMP.sql"
+docker compose exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
+  < "$BK/pre-e2-data-$STAMP.sql"
 
-# Backfills run inside the image (host has no pnpm/tsx).
+# Backfills + verification run inside the image (host has no pnpm/tsx).
 docker compose --profile prod run --rm app node scripts/backfill-email-consent.ts --apply
 docker compose --profile prod run --rm app node scripts/backfill-suppressions.ts --apply
 docker compose --profile prod run --rm app node scripts/backfill-subscription-token-hashes.ts --apply
 docker compose --profile prod run --rm app node scripts/ensure-job-schedules.ts
+docker compose --profile prod run --rm app node scripts/verify-baseline.ts
 docker compose --profile prod up -d
+sudo systemctl start web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer
 ```
 
-Verify with `db:verify-baseline` (49/116/71) plus the owner/pages/review/media
-checks before declaring the rebuild done. The data-only restore never touches
-`drizzle.__drizzle_migrations`: the fresh ledger written by `migrate.ts` must
-remain the only row.
+Requirements/notes:
+
+- `SUPPRESSION_HMAC_KEY` must be present in `.env` before the backfills (the
+  suppression script refuses to write unkeyed hashes; production boot also
+  checks it). Generate it with `openssl rand -base64 32` once, back it up.
+- `SET LOCAL session_replication_role = replica` requires the compose Postgres
+  superuser (the default `POSTGRES_USER` here). It disables FK triggers for the
+  restore only; `--column-inserts` makes the dump immune to the two E2 columns.
+- The data-only restore never touches `drizzle.__drizzle_migrations`: the fresh
+  ledger written by `migrate.ts` must remain the only row.
+- Verify output must show **49 tables / 116 indexes / 71 checks**. If anything
+  fails after the drop, **do not re-run §2.1**; restore the full
+  `pre-e2-<stamp>.dump` per §3 and ask for review.
 
 ## 3. Rollback
 
@@ -271,6 +300,26 @@ If a migration ran (or the rebuild above was performed): stop `app`, restore the
 matching full dump, then start the previous image. Migration-before-backup is
 forbidden (see §4). A dump taken **before** the E2 rebuild cannot run the new
 image; a dump taken after it cannot run the old image.
+
+```bash
+set -euo pipefail
+cd /srv/web-lair/app
+# IMAGE must point at the tag that matches the dump.
+docker compose --profile prod stop app
+docker compose exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema drizzle, public cascade;"'
+# The full custom dump recreates public + drizzle, all tables, data and ledger.
+docker compose exec -T db sh -c \
+  'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges' \
+  < /srv/web-lair/pre-migrate/<matching-dump>.dump
+docker compose --profile prod up -d
+```
+
+If §2.1 failed after the schema drop, **do not re-run it**; restore the
+`pre-e2-<stamp>.dump` exactly as above and ask for review. Never restore a
+pre-E2 dump into a schema that already has E2 tables without dropping it first:
+`pg_restore` without `--clean` fails on existing objects, and `--clean` leaves
+`email_suppressions` behind because it is absent from the old dump.
 
 ## 4. Backups (D-4)
 
@@ -363,11 +412,12 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
   "https://<domain>/api/unsubscribe/one-click?token=$TOKEN"   # expect 200
 ```
 
-A malformed token (wrong shape) is rejected by the CSRF hook with `403`; a
-well-formed but unknown token reaches the endpoint and answers `200` (no token
-oracle). A tripped per-IP limit answers `429 + Retry-After`, and a database
-write failure answers `503 + Retry-After` — both are retryable, because a
-silent `200` would let the receiver drop a valid opt-out. The ordinary form
+A malformed token (wrong shape) from an Origin-less or foreign-origin POST is
+rejected by the CSRF hook with `403`; a same-origin malformed token reaches the
+route and returns `200` (no token oracle). A well-formed but unknown token
+answers `200`. A tripped per-IP limit answers `429 + Retry-After`, and a
+database write failure answers `503 + Retry-After` — both are retryable, because
+a silent `200` would let the receiver drop a valid opt-out. The ordinary form
 endpoints must keep rejecting Origin-less POSTs with `403` — see
 `src/lib/server/security/csrf.ts`.
 
@@ -387,19 +437,22 @@ endpoints must keep rejecting Origin-less POSTs with `403` — see
 **Suppression list.** `email_suppressions` stores only `HMAC-SHA256(email)` with
 the independent `SUPPRESSION_HMAC_KEY` (`openssl rand -base64 32`), a reason
 (`unsubscribed` / `bounced` / `complained`) and a source. Writes are idempotent
-and **monotonic**: a complaint upgrades a bounce, a bounce upgrades an
-unsubscribe; a weaker signal never overwrites a stronger one. The key is
-required: a missing/invalid key fails the production boot (and any suppression
-write) instead of storing unkeyed hashes.
+and **monotonic** on the reason: a complaint upgrades a bounce, a bounce
+upgrades an unsubscribe; a weaker signal never overwrites a stronger one.
+`source` follows the event whose reason won. The key is required: a
+missing/invalid key fails the production boot (and any suppression operation,
+reads included) instead of storing unkeyed hashes. Development also needs it —
+set it in `.env` before using `/subscribe` or `/unsubscribe`.
 
 - A pending or confirmed opt-out records the row in the same transaction as
   the subscription change.
 - A confirmed re-subscription lifts only `unsubscribed`; `bounced` and
   `complained` are never lifted by the user flow (a deliverability problem or
   an abuse report must survive).
-- Keep the key in backups. Rotating it orphans every existing hash; the table
-  cannot be recomputed because no plaintext addresses are stored. Do not rotate
-  without a key-version migration (registered follow-up).
+- Keep the key in backups. Rotating it orphans every existing hash. Addresses
+  that still exist in `subscriptions.email` can be rehashed by a migration;
+  addresses that exist **only** in `email_suppressions` cannot be recomputed.
+  Do not rotate without a key-version migration (registered follow-up).
 - Retention: keep suppression rows **for as long as the address could ever be
   contacted**; never prune them with the subscription sweep. (Two years is a
   common audit floor, not a CAN-SPAM/ICO limit.)

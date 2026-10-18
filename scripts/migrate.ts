@@ -32,7 +32,7 @@ try {
 	await migrate(drizzle(client), { migrationsFolder: './drizzle' });
 	console.log('[migrate] migrations applied');
 	const [schema] = await client<
-		{ suppressions: boolean; consent: boolean; tokenHash: boolean }[]
+		{ suppressions: boolean; consent: boolean; tokenHash: boolean; tokenHashIndex: boolean }[]
 	>`select
 		to_regclass('public.email_suppressions') is not null as suppressions,
 		exists (
@@ -44,10 +44,11 @@ try {
 			select 1 from information_schema.columns
 			where table_schema = 'public' and table_name = 'subscriptions'
 				and column_name = 'token_hash'
-		) as "tokenHash"`;
-	if (!schema?.suppressions || !schema.consent || !schema.tokenHash) {
+		) as "tokenHash",
+		to_regclass('public.subscriptions_token_hash_uniq') is not null as "tokenHashIndex"`;
+	if (!schema?.suppressions || !schema.consent || !schema.tokenHash || !schema.tokenHashIndex) {
 		console.error(
-			'[migrate] this database predates the E2 baseline (missing email_suppressions / consent_version / token_hash).'
+			'[migrate] this database predates the E2 baseline (missing email_suppressions / consent_version / token_hash / token_hash index).'
 		);
 		console.error(
 			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md §2.1 (backup -> empty schema -> migrate -> data-only restore -> backfills).'
