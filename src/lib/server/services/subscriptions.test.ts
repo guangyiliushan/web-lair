@@ -95,8 +95,17 @@ function selectRows(rows: unknown[]) {
 function deleteRows(rows: unknown[]) {
 	return { where: () => ({ returning: async () => rows }) };
 }
-function updateWhere() {
-	return { set: () => ({ where: async () => undefined }) };
+function updateWhereCapture() {
+	const sets: unknown[] = [];
+	return {
+		sets,
+		chain: {
+			set: (values: unknown) => {
+				sets.push(values);
+				return { where: async () => undefined };
+			}
+		}
+	};
 }
 
 beforeEach(() => {
@@ -135,7 +144,10 @@ describe('subscription transitions (stubbed db)', () => {
 	it('confirm lifts a soft suppression when the write returns the address', async () => {
 		dbStub.update.mockReturnValueOnce(updateRows([{ id: 1, email: 'reader@example.com' }]));
 		expect(await confirmSubscription(TOKEN)).toBe('subscribed');
-		expect(suppressionMocks.liftUnsubscribedSuppression).toHaveBeenCalledWith('reader@example.com');
+		expect(suppressionMocks.liftUnsubscribedSuppression).toHaveBeenCalledWith(
+			'reader@example.com',
+			dbStub
+		);
 	});
 
 	it('unsubscribe deletes a pending row and records the suppression in one transaction', async () => {
@@ -249,6 +261,7 @@ describe('token hashes (E2-3)', () => {
 	});
 
 	it('falls back to the plaintext column and backfills the hash for legacy rows', async () => {
+		const issuedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
 		dbStub.select.mockReturnValueOnce(selectRows([])).mockReturnValueOnce(
 			selectRows([
 				{
@@ -257,13 +270,15 @@ describe('token hashes (E2-3)', () => {
 					email: 'a@b.c',
 					token: HASH_TOKEN,
 					tokenHash: null,
-					updatedAt: new Date()
+					updatedAt: issuedAt
 				}
 			])
 		);
-		dbStub.update.mockReturnValueOnce(updateWhere());
+		const capture = updateWhereCapture();
+		dbStub.update.mockReturnValueOnce(capture.chain);
 		expect(await subscriptionByToken(HASH_TOKEN)).toMatchObject({ id: 's1', status: 'pending' });
 		expect(dbStub.update).toHaveBeenCalledTimes(1);
+		expect(capture.sets[0]).toMatchObject({ updatedAt: issuedAt });
 	});
 });
 

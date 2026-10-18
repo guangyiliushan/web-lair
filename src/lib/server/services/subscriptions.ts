@@ -104,6 +104,7 @@ export interface PreviousSubscription {
 	consentVersion: string | null;
 	verifiedAt: Date | null;
 	unsubscribedAt: Date | null;
+	updatedAt: Date;
 }
 
 export type RequestSubscriptionResult =
@@ -152,7 +153,8 @@ export async function requestSubscription(input: {
 			source: existing.source,
 			consentVersion: existing.consentVersion,
 			verifiedAt: existing.verifiedAt,
-			unsubscribedAt: existing.unsubscribedAt
+			unsubscribedAt: existing.unsubscribedAt,
+			updatedAt: existing.updatedAt
 		};
 		// Compare-and-swap on the token we read: a concurrent confirm wins, and a
 		// parallel resubmit loses instead of voiding the link it just mailed.
@@ -247,8 +249,14 @@ export async function subscriptionByToken(token: string): Promise<SubscriptionLo
 			try {
 				await db
 					.update(subscriptions)
-					.set({ tokenHash })
-					.where(and(eq(subscriptions.id, row.id), isNull(subscriptions.tokenHash)));
+					.set({ tokenHash, updatedAt: row.updatedAt })
+					.where(
+						and(
+							eq(subscriptions.id, row.id),
+							isNull(subscriptions.tokenHash),
+							eq(subscriptions.token, token)
+						)
+					);
 			} catch (error) {
 				console.warn('[subscribe] token hash backfill failed', error);
 			}
@@ -279,32 +287,32 @@ export async function confirmSubscription(token: string): Promise<ConfirmResult>
 	// Conditional write: a concurrent unsubscribe (delete or status change) must
 	// win over this confirm instead of being overwritten by a blind UPDATE. The
 	// timestamp predicate implements the TTL atomically (no read-then-write gap).
+	// The lift runs in the same transaction: an unsubscribe that commits after
+	// this block re-adds the suppression, and one that committed first makes the
+	// status predicate miss (so we never delete a fresh opt-out).
 	const cutoff = new Date(Date.now() - subscriptionTokenTtlMs(env.SUBSCRIBE_TOKEN_TTL_DAYS));
 	const tokenHash = hashSubscriptionToken(token);
-	const updated = await db
-		.update(subscriptions)
-		.set({ status: 'subscribed', verifiedAt: new Date() })
-		.where(
-			and(
-				or(eq(subscriptions.tokenHash, tokenHash), eq(subscriptions.token, token)),
-				eq(subscriptions.status, 'pending'),
-				gte(subscriptions.updatedAt, cutoff)
+	const confirmed = await db.transaction(async (tx) => {
+		const updated = await tx
+			.update(subscriptions)
+			.set({ status: 'subscribed', verifiedAt: new Date() })
+			.where(
+				and(
+					or(eq(subscriptions.tokenHash, tokenHash), eq(subscriptions.token, token)),
+					eq(subscriptions.status, 'pending'),
+					gte(subscriptions.updatedAt, cutoff)
+				)
 			)
-		)
-		.returning({ id: subscriptions.id, email: subscriptions.email });
-	if (updated.length === 0) return statusOfToken(token);
-	// A re-subscribed reader is no longer suppressing bulk mail. Failures here
-	// must not undo the confirmation; the row stays suppressed (safe default)
-	// and the error is visible in the log.
-	const email = updated[0]?.email;
-	if (email) {
-		try {
-			await liftUnsubscribedSuppression(email);
-		} catch (error) {
-			console.error('[subscribe] lifting soft suppression failed', error);
-		}
-	}
-	return 'subscribed';
+			.returning({ id: subscriptions.id, email: subscriptions.email });
+		const email = updated[0]?.email;
+		if (updated.length === 0) return null;
+		// A re-subscribed reader is no longer suppressing bulk mail. Only the soft
+		// record is lifted; a hard bounce/complaint must survive.
+		if (email) await liftUnsubscribedSuppression(email, tx);
+		return 'subscribed' as const;
+	});
+	if (confirmed) return confirmed;
+	return statusOfToken(token);
 }
 
 export type UnsubscribeResult = 'unsubscribed' | 'already-unsubscribed' | 'invalid';
@@ -384,7 +392,8 @@ export async function restoreSubscription(
 			source: previous.source,
 			consentVersion: previous.consentVersion,
 			verifiedAt: previous.verifiedAt,
-			unsubscribedAt: previous.unsubscribedAt
+			unsubscribedAt: previous.unsubscribedAt,
+			updatedAt: previous.updatedAt
 		})
 		.where(
 			and(

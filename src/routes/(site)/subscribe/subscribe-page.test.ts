@@ -42,7 +42,7 @@ vi.mock('$lib/paraglide/messages', () => ({
 vi.mock('$lib/server/cache', () => ({ getCache: () => ({}) }));
 vi.mock('$lib/server/cache/store', () => ({ rateLimit: rateLimitMock }));
 vi.mock('$lib/server/db', () => ({ db: {} }));
-vi.mock('$lib/server/db/system', () => ({ subscriptions: {} }));
+vi.mock('$lib/server/db/system', () => ({ subscriptions: {}, emailSuppressions: {} }));
 vi.mock('$lib/server/services/subscriptions', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/server/services/subscriptions')>();
 	return {
@@ -212,7 +212,8 @@ describe('subscribe action', () => {
 				source: 'subscribe-page',
 				consentVersion: '2026-10-v1',
 				verifiedAt: new Date('2026-01-01T00:00:00Z'),
-				unsubscribedAt: new Date('2026-02-01T00:00:00Z')
+				unsubscribedAt: new Date('2026-02-01T00:00:00Z'),
+				updatedAt: new Date('2026-02-01T00:00:00Z')
 			}
 		});
 		sendMailMock.mockRejectedValue(new Error('SMTP down'));
