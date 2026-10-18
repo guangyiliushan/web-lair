@@ -470,7 +470,10 @@ describe('submitComment', () => {
 	});
 
 	it('rejects a mismatched block length fingerprint and stores nothing', async () => {
-		state.selectQueue = [[{ id: TARGET, allowComment: true }], [{ content: 'Hello anchored world.' }]];
+		state.selectQueue = [
+			[{ id: TARGET, allowComment: true }],
+			[{ content: 'Hello anchored world.' }]
+		];
 		const result = await submitComment(
 			input({ anchor: { ord: 0, start: 6, end: 14, exact: 'anchored', blockLength: 999 } })
 		);
