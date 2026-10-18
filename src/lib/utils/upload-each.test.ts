@@ -76,6 +76,22 @@ describe('uploadEachFile', () => {
 		expect(outcome.results[0]?.message).not.toContain('Payload');
 	});
 
+	it('falls back to translated copy for an unmapped 500', async () => {
+		fetchMock.mockResolvedValueOnce({ status: 500, text: async () => '{}' });
+		deserializeMock.mockReturnValue({ type: 'error', error: { message: 'Internal server error' } });
+
+		const outcome = await uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback',
+			mapError: () => undefined
+		});
+
+		expect(outcome.results[0]).toMatchObject({ ok: false, message: 'fallback' });
+		expect(outcome.results[0]?.message).not.toContain('Internal');
+	});
+
 	it('maps a status on a JSON body that is not an ActionResult', async () => {
 		fetchMock.mockResolvedValueOnce({ status: 403, text: async () => '{}' });
 		deserializeMock.mockReturnValue({ message: 'Cross-site POST form submissions are forbidden' });

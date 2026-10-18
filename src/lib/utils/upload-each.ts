@@ -107,10 +107,9 @@ export async function uploadEachFile(options: {
 				results.push({
 					fileName: file.name,
 					ok: false,
-					message:
-						options.mapError?.(status, file.name) ??
-						result.error?.message ??
-						options.fallbackMessage
+					// Never surface a framework message (English) to the localized UI;
+					// unmapped statuses fall back to the page's translated copy.
+					message: options.mapError?.(status, file.name) ?? options.fallbackMessage
 				});
 			} else {
 				// A JSON body without an ActionResult type (CSRF 403 JSON, proxy error):
