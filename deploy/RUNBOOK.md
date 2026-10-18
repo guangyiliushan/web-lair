@@ -220,15 +220,57 @@ docker compose --profile prod up -d
 Pin the image: `APP_IMAGE=web-lair-app:<sha>` in `.env` so a rollback is a tag
 change. Never roll back a migration without restoring the pre-migration dump.
 
+### 2.1 E2 baseline rebuild (one-off, 2026-10-18)
+
+E2 regenerated the single `0000_baseline.sql` in place (49 tables) instead of
+appending a migration. `scripts/migrate.ts` therefore **refuses to start** on a
+pre-E2 database (`[migrate] this database predates the E2 baseline`). Upgrade
+such a box by rebuilding the schema and restoring data:
+
+```bash
+set -euo pipefail
+cd /srv/web-lair/app
+docker compose --profile prod stop app
+mkdir -p /srv/web-lair/pre-migrate
+STAMP=$(date +%F_%H%M)
+# Full backup (no -t: a TTY merges pg_dump warnings into stdout).
+docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > "/srv/web-lair/pre-migrate/pre-e2-$STAMP.dump"
+# Data-only restore file; -n public keeps the drizzle ledger out.
+{ echo 'BEGIN;'; docker compose exec -T db sh -c \
+  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --data-only --inserts --no-owner --no-privileges -n public'; \
+  echo 'COMMIT;'; } > "/srv/web-lair/pre-migrate/pre-e2-data-$STAMP.sql"
+
+docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -v ON_ERROR_STOP=1 -c 'drop schema drizzle, public cascade;' -c 'create schema public;'
+docker compose --profile prod run --rm app node scripts/migrate.ts
+docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
+  < "/srv/web-lair/pre-migrate/pre-e2-data-$STAMP.sql"
+
+# Backfills run inside the image (host has no pnpm/tsx).
+docker compose --profile prod run --rm app node scripts/backfill-email-consent.ts --apply
+docker compose --profile prod run --rm app node scripts/backfill-suppressions.ts --apply
+docker compose --profile prod run --rm app node scripts/backfill-subscription-token-hashes.ts --apply
+docker compose --profile prod run --rm app node scripts/ensure-job-schedules.ts
+docker compose --profile prod up -d
+```
+
+Verify with `db:verify-baseline` (49/116/71) plus the owner/pages/review/media
+checks before declaring the rebuild done. The data-only restore never touches
+`drizzle.__drizzle_migrations`: the fresh ledger written by `migrate.ts` must
+remain the only row.
+
 ## 3. Rollback
 
 ```bash
-# code/image only (this batch is zero-schema)
+# code/image only (no schema change since the last rebuild)
 docker compose --profile prod up -d --no-build   # after APP_IMAGE points at the previous tag
 ```
 
-If a migration ran: stop `app`, restore the pre-migration `pg_dump`, then start
-the previous image. Migration-before-backup is forbidden (see §4).
+If a migration ran (or the rebuild above was performed): stop `app`, restore the
+matching full dump, then start the previous image. Migration-before-backup is
+forbidden (see §4). A dump taken **before** the E2 rebuild cannot run the new
+image; a dump taken after it cannot run the old image.
 
 ## 4. Backups (D-4)
 
@@ -322,9 +364,12 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
 ```
 
 A malformed token (wrong shape) is rejected by the CSRF hook with `403`; a
-well-formed but unknown token reaches the endpoint and still answers `200`
-(no token oracle). The ordinary form endpoints must keep rejecting
-Origin-less POSTs with `403` — see `src/lib/server/security/csrf.ts`.
+well-formed but unknown token reaches the endpoint and answers `200` (no token
+oracle). A tripped per-IP limit answers `429 + Retry-After`, and a database
+write failure answers `503 + Retry-After` — both are retryable, because a
+silent `200` would let the receiver drop a valid opt-out. The ordinary form
+endpoints must keep rejecting Origin-less POSTs with `403` — see
+`src/lib/server/security/csrf.ts`.
 
 ## 7. Troubleshooting
 
@@ -342,7 +387,10 @@ Origin-less POSTs with `403` — see `src/lib/server/security/csrf.ts`.
 **Suppression list.** `email_suppressions` stores only `HMAC-SHA256(email)` with
 the independent `SUPPRESSION_HMAC_KEY` (`openssl rand -base64 32`), a reason
 (`unsubscribed` / `bounced` / `complained`) and a source. Writes are idempotent
-and the first reason wins.
+and **monotonic**: a complaint upgrades a bounce, a bounce upgrades an
+unsubscribe; a weaker signal never overwrites a stronger one. The key is
+required: a missing/invalid key fails the production boot (and any suppression
+write) instead of storing unkeyed hashes.
 
 - A pending or confirmed opt-out records the row in the same transaction as
   the subscription change.
@@ -350,9 +398,11 @@ and the first reason wins.
   `complained` are never lifted by the user flow (a deliverability problem or
   an abuse report must survive).
 - Keep the key in backups. Rotating it orphans every existing hash; the table
-  cannot be recomputed because no plaintext addresses are stored.
-- Retention: keep suppressions for **at least 2 years** (ICO / CAN-SPAM audit
-  evidence); do not prune them with the subscription sweep.
+  cannot be recomputed because no plaintext addresses are stored. Do not rotate
+  without a key-version migration (registered follow-up).
+- Retention: keep suppression rows **for as long as the address could ever be
+  contacted**; never prune them with the subscription sweep. (Two years is a
+  common audit floor, not a CAN-SPAM/ICO limit.)
 
 **Subscription retention.** `subscriptions.sweep` deletes `pending` rows after
 30 days (no consent was ever proven). `subscribed` and `unsubscribed` rows stay
@@ -363,18 +413,25 @@ before the column existed).
 **Consent backfill (once, after restoring pre-E2 data):**
 
 ```bash
-pnpm db:backfill-consent              # dry-run
-pnpm db:backfill-consent --apply
+docker compose --profile prod run --rm app node scripts/backfill-email-consent.ts            # dry-run
+docker compose --profile prod run --rm app node scripts/backfill-email-consent.ts --apply
+```
+
+**Suppression backfill (once, after restoring pre-E2 opt-outs):**
+
+```bash
+docker compose --profile prod run --rm app node scripts/backfill-suppressions.ts             # dry-run
+docker compose --profile prod run --rm app node scripts/backfill-suppressions.ts --apply
 ```
 
 **Token hashes (E2-3).** New writes store both `token` (dual-read window) and
 `token_hash = sha256(token)`. Reads try the hash first, fall back to the
-plaintext column for legacy rows and backfill the hash on first hit. Backfill
-everything once after restore:
+plaintext column for legacy rows and backfill the hash on first hit without
+touching `updated_at` (the TTL anchor). Backfill everything once after restore:
 
 ```bash
-pnpm db:backfill-token-hashes         # dry-run
-pnpm db:backfill-token-hashes --apply
+docker compose --profile prod run --rm app node scripts/backfill-subscription-token-hashes.ts   # dry-run
+docker compose --profile prod run --rm app node scripts/backfill-subscription-token-hashes.ts --apply
 ```
 
 The plaintext `token` column is scheduled for removal in a later window after
@@ -387,7 +444,11 @@ one release of dual-read.
 ```bash
 TS=$(date +%s)
 BODY='{"email":"reader@example.com","reason":"bounced"}'
-SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$MAIL_EVENTS_HMAC_KEY" -hex | sed 's/^.* //')
+# The app base64-decodes the key and HMACs its 32 raw bytes.
+KEY_HEX=$(grep '^MAIL_EVENTS_HMAC_KEY=' .env | cut -d= -f2- | tr -d '"' \
+  | base64 -d | od -An -tx1 | tr -d ' \n')
+SIG=$(printf '%s.%s' "$TS" "$BODY" \
+  | openssl dgst -sha256 -mac HMAC -macopt hexkey:"$KEY_HEX" | sed 's/^.* //')
 curl -sS -X POST https://<domain>/api/mail/events \
   -H 'Content-Type: application/json' \
   -H "x-mail-events-timestamp: $TS" \
