@@ -33,6 +33,7 @@
 
 			{#if !data.mailConfigured}
 				<div
+					id="register-mail-notice"
 					class="mb-6 rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground"
 					role="status"
 				>
@@ -87,7 +88,12 @@
 							required
 						/>
 					</Field.Field>
-					<Button type="submit" class="w-full" disabled={!data.mailConfigured}>
+					<Button
+						type="submit"
+						class="w-full"
+						disabled={!data.mailConfigured}
+						aria-describedby={!data.mailConfigured ? 'register-mail-notice' : undefined}
+					>
 						<IconMail data-icon="inline-start" />
 						{m.auth_create_account()}
 					</Button>
