@@ -10,5 +10,5 @@ Type=oneshot
 EnvironmentFile=/srv/web-lair/app/deploy/backup.env
 # --retry-lock: the nightly backup may still hold the repo lock when this
 # starts. The ping runs only when the check itself exits 0.
-ExecStart=/bin/sh -c '/usr/bin/docker run --rm -e RESTIC_REPOSITORY -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY restic/restic:0.19.1 --retry-lock 30m check --read-data-subset=5% && { [ -z "${CHECK_PING_URL:-}" ] || /usr/bin/curl -fsS --max-time 10 "$CHECK_PING_URL"; }'
+ExecStart=/bin/sh -c '/usr/bin/docker run --rm -e RESTIC_REPOSITORY -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY restic/restic:0.19.1 --retry-lock 30m check --read-data-subset=5% && { [ -z "$CHECK_PING_URL" ] || /usr/bin/curl -fsS --max-time 10 "$CHECK_PING_URL"; }'
 TimeoutStartSec=2h

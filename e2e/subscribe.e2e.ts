@@ -73,7 +73,8 @@ test.describe('subscription double opt-in', () => {
 			verifiedAt
 		);
 
-		await page.goto(`/zh-cn/unsubscribe?token=${token}`);
+		const unsubscribeResponse = await page.goto(`/zh-cn/unsubscribe?token=${token}`);
+		expect(unsubscribeResponse?.headers()['referrer-policy']).toBe('strict-origin');
 		await page.getByRole('button', { name: '退订', exact: true }).click();
 		await expect(page.getByText('已退订')).toBeVisible({ timeout: 15_000 });
 		expect(psql(`select status from subscriptions where email = '${MARKER}'`)).toBe('unsubscribed');

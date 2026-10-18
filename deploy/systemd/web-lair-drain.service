@@ -17,3 +17,5 @@ ExecStart=/usr/bin/docker compose --profile prod run --rm --no-deps app node job
 # one while the unit is still activating. (`docker compose run` has no
 # --stop-timeout flag; the unit timeout is the bound.)
 TimeoutStartSec=50
+# The default stop timeout is 90s; a killed docker CLI can leave the container.
+TimeoutStopSec=15

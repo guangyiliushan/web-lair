@@ -102,9 +102,16 @@ export HTTP_PROXY= HTTPS_PROXY=        # the box has no local proxy
 ```bash
 set -euo pipefail
 mkdir -p /srv/web-lair/pre-migrate
-# The container already has POSTGRES_USER/POSTGRES_DB; the host shell does not.
-docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' \
-  > "/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump"
+# tmpfiles prunes dumps older than 30 days (install once; see §4).
+printf 'd /srv/web-lair/pre-migrate 0750 1000 1000 30d\n' > /etc/tmpfiles.d/web-lair.conf
+systemd-tmpfiles --create
+# The first deploy reaches this block before `up -d`; the db must be up first.
+docker compose --profile prod up -d db
+until docker compose exec -T db pg_isready -q; do sleep 2; done
+dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump
+# The container has POSTGRES_USER/POSTGRES_DB; the host shell does not.
+docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
+mv "$dump.tmp" "$dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
 docker compose --profile prod up -d
 docker compose --profile prod ps          # all healthy
@@ -130,11 +137,17 @@ set -euo pipefail
 cd /srv/web-lair/app
 git fetch && git checkout <new-sha>
 docker compose --profile prod build app
-set -euo pipefail
 mkdir -p /srv/web-lair/pre-migrate
-# The container already has POSTGRES_USER/POSTGRES_DB; the host shell does not.
-docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' \
-  > "/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump"
+# tmpfiles prunes dumps older than 30 days (install once; see §4).
+printf 'd /srv/web-lair/pre-migrate 0750 1000 1000 30d\n' > /etc/tmpfiles.d/web-lair.conf
+systemd-tmpfiles --create
+# The first deploy reaches this block before `up -d`; the db must be up first.
+docker compose --profile prod up -d db
+until docker compose exec -T db pg_isready -q; do sleep 2; done
+dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump
+# The container has POSTGRES_USER/POSTGRES_DB; the host shell does not.
+docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
+mv "$dump.tmp" "$dump"
 docker compose --profile prod run --rm app node scripts/migrate.ts
 docker compose --profile prod up -d
 ```
@@ -160,7 +173,8 @@ Backup set:
    running data directory).
 2. `$DATA_DIR` (user job scripts + sidecars).
 3. RustFS volume (media), mounted read-only into the backup container.
-4. `.env` + compose/Caddyfile + **restic password** (offline copy).
+4. `.env` only. compose/Caddyfile come from git; the **restic password** is
+   kept offline (password manager — losing it makes the repo unreadable).
 
 ```bash
 # what the nightly unit runs (deploy/systemd/web-lair-backup.timer)

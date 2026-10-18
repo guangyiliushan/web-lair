@@ -11,7 +11,10 @@
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options nosniff
-		Referrer-Policy strict-origin-when-cross-origin
+		# `?` = set only when the app did not. The token pages answer with
+		# strict-origin; a plain value here would overwrite it (the whole block is
+		# deferred to response-write time because of `-Server`).
+		?Referrer-Policy strict-origin-when-cross-origin
 		-Server
 	}
 

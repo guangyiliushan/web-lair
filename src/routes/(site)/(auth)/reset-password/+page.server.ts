@@ -4,6 +4,8 @@ import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
 
 export const load: PageServerLoad = (event) => {
+	// The token is in this URL; strict-origin keeps the path out of Referer.
+	event.setHeaders({ 'referrer-policy': 'strict-origin' });
 	const token = event.url.searchParams.get('token');
 	if (!token) {
 		redirect(302, '/forgot-password');
