@@ -49,10 +49,36 @@ console.log('builtins ok: ' + Object.keys(JOBS).length);
 " 2>&1)"
 status=$?
 set -e
-if [ "$status" -ne 0 ] || ! printf '%s' "$out" | grep -q "builtins ok"; then
+if [ "$status" -ne 0 ] || ! printf '%s' "$out" | grep -qE "builtins ok: [1-9][0-9]*"; then
 	echo "FAIL: builtin job graph did not load" >&2
 	printf '%s\n' "$out" >&2
 	exit 1
 fi
 
 echo "OK: all builtin job modules load"
+
+# Release gate for the app itself: the image must start with production deps
+# (a build-server import missing from dependencies only fails here).
+echo "-> server startup"
+app="web-lair-verify-$$"
+cleanup() { docker rm -f "$app" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+cleanup
+docker run -d --name "$app" \
+	-e ORIGIN=http://localhost -e PORT=3000 -e HOST=0.0.0.0 \
+	-e DATABASE_URL='postgres://x:x@127.0.0.1:1/x' \
+	-e BETTER_AUTH_SECRET='0123456789abcdef0123456789abcdef' \
+	-p 127.0.0.1::3000 "$IMAGE" >/dev/null
+port="$(docker port "$app" 3000/tcp | head -n1 | sed 's/.*://')"
+code=""
+for _ in $(seq 1 30); do
+	code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/api/health" || true)"
+	[ "$code" = 200 ] && break
+	sleep 1
+done
+if [ "$code" != 200 ]; then
+	echo "FAIL: server did not answer /api/health (last: $code)" >&2
+	docker logs "$app" >&2 || true
+	exit 1
+fi
+echo "OK: server starts and /api/health answers"

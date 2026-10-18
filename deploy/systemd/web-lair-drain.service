@@ -4,6 +4,7 @@ Documentation=deploy/RUNBOOK.md
 After=docker.service network-online.target
 Wants=network-online.target
 Requires=docker.service
+OnFailure=web-lair-alert@%n.service
 
 [Service]
 Type=oneshot
@@ -15,9 +16,9 @@ WorkingDirectory=/srv/web-lair/app
 ExecStart=/usr/bin/docker compose --profile prod run --rm --no-deps --name web-lair-drain app node jobs/drain.ts
 # `--rm` dies with the docker CLI; remove a container left by a timeout/kill.
 ExecStopPost=-/usr/bin/docker rm -f web-lair-drain
-# Must stay below the 1-minute timer: an overrunning tick would skip the next
-# one while the unit is still activating. (`docker compose run` has no
-# --stop-timeout flag; the unit timeout is the bound.)
-TimeoutStartSec=50
+# Longest builtin timeoutMs is 900s (links.check/projects.sync); a shorter
+# unit timeout would SIGKILL the tick and skip the due waterline. The 1-minute
+# timer simply waits while a tick is still active.
+TimeoutStartSec=960
 # The default stop timeout is 90s; a killed docker CLI can leave the container.
 TimeoutStopSec=15

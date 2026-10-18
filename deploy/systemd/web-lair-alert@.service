@@ -1,0 +1,8 @@
+[Unit]
+Description=web-lair failure alert for %i
+
+[Service]
+Type=oneshot
+# Optional: leave ALERT_WEBHOOK_URL empty to disable (the unit is a no-op).
+EnvironmentFile=-/srv/web-lair/app/.env
+ExecStart=/bin/sh -c 'test -n "${ALERT_WEBHOOK_URL:-}" || exit 0; /usr/bin/curl -fsS --max-time 10 -X POST -d "unit=%i" "$ALERT_WEBHOOK_URL" >/dev/null'

@@ -31,25 +31,37 @@ const SCHEDULES = [
 async function main(): Promise<void> {
 	const sql = postgres(DB_URL!, { max: 1 });
 	try {
+		// Match the admin UI: new rows default to the site timezone, not UTC.
+		const [tzRow] = await sql`
+			select value from options where name = 'site.timezone' limit 1
+		`;
+		const siteTz = typeof tzRow?.value === 'string' && tzRow.value ? tzRow.value : 'UTC';
 		for (const schedule of SCHEDULES) {
 			if (DRY_RUN) {
 				const [row] = await sql`
-					select cron_expr from job_schedules
+					select cron_expr, tz, is_enabled from job_schedules
 					where job = ${schedule.job}
 					limit 1
 				`;
-				console.log(`→ dry-run: ${schedule.job} ${row ? `present (${row.cron_expr})` : 'missing'}`);
+				console.log(
+					`→ dry-run: ${schedule.job} ${
+						row
+							? `present (${row.cron_expr}, ${row.tz}, ${row.is_enabled ? 'enabled' : 'disabled'})`
+							: 'missing'
+					}`
+				);
 				continue;
 			}
 
 			// One row per job, not per (job, cron): an operator may change the cron
 			// in admin, and the seed must not add a second schedule next deploy.
 			const inserted = await sql`
-				insert into job_schedules (job, cron_expr)
-				select ${schedule.job}, ${schedule.cron}
+				insert into job_schedules (job, cron_expr, tz)
+				select ${schedule.job}, ${schedule.cron}, ${siteTz}
 				where not exists (
 					select 1 from job_schedules where job = ${schedule.job}
 				)
+				on conflict (job, cron_expr) do nothing
 				returning id
 			`;
 			console.log(

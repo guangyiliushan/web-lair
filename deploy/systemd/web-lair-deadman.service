@@ -5,6 +5,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+OnFailure=web-lair-alert@%n.service
 Type=oneshot
 EnvironmentFile=/srv/web-lair/app/.env
 # An unset URL is a configuration gap, not a failed check (exit 2 would page).

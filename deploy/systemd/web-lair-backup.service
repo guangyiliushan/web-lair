@@ -4,6 +4,7 @@ Documentation=deploy/RUNBOOK.md
 After=docker.service network-online.target
 Wants=network-online.target
 Requires=docker.service
+OnFailure=web-lair-alert@%n.service
 
 [Service]
 Type=oneshot

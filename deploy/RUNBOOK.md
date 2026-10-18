@@ -40,6 +40,7 @@ $EDITOR .env      # see §1.1 for the required keys
 | `OWNER_EMAIL` / `OWNER_PASSWORD`                      | first owner seed (`pnpm db:seed-owner` from the host, dev only)                                                   |
 | `DEADMAN_PING_URL`                                    | healthchecks.io **liveness** check (5 min); unset ⇒ the dead-man timer skips (no alarm)                           |
 | `JOBS_HEARTBEAT_URL`                                  | per-tick drain ping (Kuma push or a second healthchecks check)                                                    |
+| `ALERT_WEBHOOK_URL`                                   | systemd `OnFailure` target; leave empty to disable the alert unit                                                 |
 | `MAIL_DEV_LOG` / `MAIL_DEV_LOG_OK`                    | dev/e2e only; production ignores dev logging unless BOTH are set                                                  |
 
 Create the data directory with the image's uid **before** the first start —
@@ -76,7 +77,7 @@ curl -s https://api.ipify.org; dig +short -x "$(curl -s https://api.ipify.org)"
 ```
 
 - 25 open **and** PTR matches the sending subdomain **and** not PBL-listed → set
-  `MAIL_ENABLED=true`, `MAIL_SMTP_HOST=host.docker.internal` (a host MTA) and skip
+  `MAIL_ENABLED=true`, `MAIL_SMTP_HOST=host.docker.internal`, `MAIL_FROM=...` (a host MTA) and skip
   the relay. The app runs in its own network namespace: `127.0.0.1` there is the
   container, not the box — compose maps the host gateway for this reason.
 - Any red → point `MAIL_SMTP_HOST/PORT/USER/PASS` at the relay; the app code is
@@ -94,13 +95,14 @@ record (`p=none` first, tighten after a week of reports). Send from a
 set -euo pipefail
 cd /srv/web-lair/app
 export HTTP_PROXY= HTTPS_PROXY=        # the box has no local proxy
+# Tag this build with its commit; the default `:local` is overwritten on every
+# deploy and makes the rollback-by-tag in §3 impossible. Compose still reads
+# .env for the other values; do not `source` it (unquoted spaces break bash).
+export APP_IMAGE="web-lair-app:$(git rev-parse --short HEAD)"
 /usr/bin/time -v docker compose --profile prod build app 2>&1 | tail -30
 # record "Elapsed" and "Maximum resident set size"; over the gate → build on a
 # workstation instead: docker save | ssh box docker load (image tag = SHA).
-# The compose `image:` tag comes from .env; a bare ${APP_IMAGE:-...} would check
-# the wrong image. Source it, then prove the drain/builtin graph loads.
-set -a; . ./.env; set +a
-APP_IMAGE="${APP_IMAGE:-web-lair-app:local}"
+# Prove the drain/builtin graph loads in the image that was just tagged.
 deploy/verify-image.sh "$APP_IMAGE"
 ```
 
@@ -148,8 +150,9 @@ Then: register a test account (verification mail must arrive), subscribe a test
 address (confirmation link must land on `/subscribe/confirm`), upload one photo
 (EXIF must parse — this proves `perl` + exiftool in the image).
 
-Open `/admin/setup` only after `MAIL_*` works: the first owner needs the
-verification link, and this page refuses to create an owner without a transport.
+Setup does not require mail: the owner claim marks the first account verified,
+so `/admin/setup` still works before `MAIL_*` exists. Configure mail before
+relying on verification or password-reset emails.
 
 ## 2. Update
 
@@ -157,9 +160,8 @@ verification link, and this page refuses to create an owner without a transport.
 set -euo pipefail
 cd /srv/web-lair/app
 git fetch && git checkout <new-sha>
+export APP_IMAGE="web-lair-app:$(git rev-parse --short HEAD)"
 docker compose --profile prod build app
-set -a; . ./.env; set +a
-APP_IMAGE="${APP_IMAGE:-web-lair-app:local}"
 deploy/verify-image.sh "$APP_IMAGE"
 mkdir -p /srv/web-lair/pre-migrate
 # tmpfiles prunes dumps older than 30 days (install once; see §4).
@@ -258,12 +260,12 @@ sudo systemctl enable --now web-lair-drain.timer web-lair-deadman.timer web-lair
 systemctl list-timers --all | grep web-lair      # verification
 ```
 
-| Unit                          | Cadence                         | Job                                                                       |
-| ----------------------------- | ------------------------------- | ------------------------------------------------------------------------- |
-| `web-lair-drain.timer`        | 1 min                           | `docker compose --profile prod run --rm --no-deps app node jobs/drain.ts` |
-| `web-lair-deadman.timer`      | 5 min                           | liveness ping (`DEADMAN_PING_URL`), skipped when unset                    |
-| `web-lair-backup.timer`       | 03:30 daily (`Persistent=true`) | `deploy/backup/backup.sh`                                                 |
-| `web-lair-backup-check.timer` | Sundays 04:30                   | `restic check --read-data-subset=5%`                                      |
+| Unit                          | Cadence                         | Job                                                                                             |
+| ----------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `web-lair-drain.timer`        | 1 min                           | `docker compose --profile prod run --rm --no-deps --name web-lair-drain app node jobs/drain.ts` |
+| `web-lair-deadman.timer`      | 5 min                           | liveness ping (`DEADMAN_PING_URL`), skipped when unset                                          |
+| `web-lair-backup.timer`       | 03:30 daily (`Persistent=true`) | `deploy/backup/backup.sh`                                                                       |
+| `web-lair-backup-check.timer` | Sundays 04:30                   | `restic check --read-data-subset=5%`                                                            |
 
 `run --rm` (not `exec`) so each tick is an independent container and a dead app
 container cannot masquerade as a running timer. Exit codes: 0 tick done,
@@ -275,11 +277,11 @@ jobs (§1.4); add or edit others in the admin surface.
 
 ## 7. Troubleshooting
 
-| Symptom                                  | Likely cause                                                                                     |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `app` unhealthy                          | `docker compose logs app`; `/api/health` must answer 200                                         |
-| 413 on upload                            | `BODY_SIZE_LIMIT` too low (default 26M; one file per request)                                    |
-| Registration 503                         | mail unconfigured (`MAIL_ENABLED`/`MAIL_SMTP_HOST`) — the form and the API both refuse by design |
-| All visitors share one rate-limit bucket | Caddy not setting `X-Forwarded-For`, or `ADDRESS_HEADER`/`XFF_DEPTH` wrong                       |
-| SSE stalls                               | Caddy buffering — `flush_interval -1` must be present                                            |
-| Certs fail under orange cloud            | HTTP-01 blocked at the edge — switch to DNS-01 (xcaddy + CF plugin) or grey-cloud DNS            |
+| Symptom                                  | Likely cause                                                                                                          |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `app` unhealthy                          | `docker compose logs app`; `/api/health` must answer 200                                                              |
+| 413 on upload                            | `BODY_SIZE_LIMIT` too low (default 26M; one file per request)                                                         |
+| Registration 503                         | mail unconfigured or SMTP verify failed (`MAIL_ENABLED`/`MAIL_SMTP_HOST`/`MAIL_FROM`) — form and API refuse by design |
+| All visitors share one rate-limit bucket | Caddy not setting `X-Forwarded-For`, or `ADDRESS_HEADER`/`XFF_DEPTH` wrong                                            |
+| SSE stalls                               | Caddy buffering — `flush_interval -1` must be present                                                                 |
+| Certs fail under orange cloud            | HTTP-01 blocked at the edge — switch to DNS-01 (xcaddy + CF plugin) or grey-cloud DNS                                 |
