@@ -40,6 +40,8 @@ export async function uploadEachFile(options: {
 	/** Per-file cap from the page's `limits` (25MB today). */
 	maxBytes: number;
 	fallbackMessage: string;
+	/** Optional size-specific message (the page has the translated limit copy). */
+	tooLargeMessage?: (name: string) => string;
 }): Promise<{ results: UploadOutcome[]; message?: string; redirected?: boolean }> {
 	const results: UploadOutcome[] = [];
 	let message: string | undefined;
@@ -52,7 +54,7 @@ export async function uploadEachFile(options: {
 				fileName: file.name,
 				ok: false,
 				code: 'too-large',
-				message: options.fallbackMessage
+				message: options.tooLargeMessage?.(file.name) ?? options.fallbackMessage
 			});
 			continue;
 		}
@@ -63,14 +65,20 @@ export async function uploadEachFile(options: {
 			const response = await fetch(options.action, {
 				method: 'POST',
 				body,
-				headers: { accept: 'application/json', 'x-sveltekit-action': 'true' }
+				headers: { accept: 'application/json', 'x-sveltekit-action': 'true' },
+				// A request that never settles must not wedge the disabled button.
+				signal: AbortSignal.timeout(60_000)
 			});
 			const result = deserialize(await response.text());
 
 			if (result.type === 'redirect') {
-				// Session expired mid-batch: let applyAction navigate to login and
-				// stop sending the remaining files unauthenticated.
-				await applyAction(result);
+				// Session expired mid-batch: navigate and stop sending the remaining
+				// files unauthenticated. A failing navigation must still be terminal.
+				try {
+					await applyAction(result);
+				} catch (error) {
+					console.warn('[upload] redirect navigation failed', error);
+				}
 				return { results, message, redirected: true };
 			}
 
@@ -91,6 +99,15 @@ export async function uploadEachFile(options: {
 					fileName: file.name,
 					ok: false,
 					message: result.error?.message ?? options.fallbackMessage
+				});
+			} else {
+				// A JSON body without an ActionResult type (CSRF 403 JSON, proxy error):
+				// never drop the file from the report.
+				const body = result as unknown as { message?: string };
+				results.push({
+					fileName: file.name,
+					ok: false,
+					message: body.message ?? options.fallbackMessage
 				});
 			}
 		} catch (error) {

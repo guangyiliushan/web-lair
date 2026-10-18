@@ -52,6 +52,10 @@ describe('uploadEachFile', () => {
 			accept: 'application/json',
 			'x-sveltekit-action': 'true'
 		});
+		// The action reads getAll('files'); a renamed field would 400 every file.
+		const body = init.body as FormData;
+		expect(body.getAll('files')).toHaveLength(1);
+		expect((body.get('files') as File).name).toBe('a.jpg');
 	});
 
 	it('stops at a redirect (session expired) and applies it', async () => {
@@ -91,16 +95,56 @@ describe('uploadEachFile', () => {
 		warn.mockRestore();
 	});
 
-	it('skips an oversized file without sending it', async () => {
+	it('skips an oversized file and reports the size limit, not a generic failure', async () => {
+		deserializeMock.mockReturnValue({
+			type: 'success',
+			status: 200,
+			data: { uploadResults: [{ fileName: 'ok.jpg', ok: true }] }
+		});
 		const outcome = await uploadEachFile({
 			action: '?/upload',
-			files: [file('big.jpg', 50)],
+			files: [file('big.jpg', 50), file('ok.jpg', 4)],
 			maxBytes: 10,
-			fallbackMessage: 'fallback'
+			fallbackMessage: 'fallback',
+			tooLargeMessage: (name) => `too big: ${name}`
 		});
 
-		expect(fetchMock).not.toHaveBeenCalled();
-		expect(outcome.results[0]).toMatchObject({ fileName: 'big.jpg', ok: false, code: 'too-large' });
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(outcome.results[0]).toMatchObject({
+			fileName: 'big.jpg',
+			ok: false,
+			code: 'too-large',
+			message: 'too big: big.jpg'
+		});
+		expect(outcome.results[1]).toMatchObject({ fileName: 'ok.jpg', ok: true });
+	});
+
+	it('keeps a row for a JSON body that is not an ActionResult', async () => {
+		deserializeMock.mockReturnValue({ message: 'cross-site post rejected' });
+		const outcome = await uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback'
+		});
+		expect(outcome.results).toEqual([
+			expect.objectContaining({ fileName: 'a.jpg', ok: false, message: 'cross-site post rejected' })
+		]);
+	});
+
+	it('stops after a redirect even when the navigation itself fails', async () => {
+		deserializeMock.mockReturnValue({ type: 'redirect', status: 303, location: '/login' });
+		applyActionMock.mockRejectedValueOnce(new Error('navigation failed'));
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const outcome = await uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg'), file('b.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback'
+		});
+		expect(outcome.redirected).toBe(true);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		warn.mockRestore();
 	});
 });
 

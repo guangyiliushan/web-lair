@@ -76,7 +76,8 @@
 				action: '?/upload',
 				files,
 				maxBytes: data.limits.maxBytes,
-				fallbackMessage: m.admin_media_err_upload_failed()
+				fallbackMessage: m.admin_media_err_upload_failed(),
+				tooLargeMessage: (name) => m.admin_media_err_too_big({ name })
 			});
 			if (outcome.redirected) return;
 			await applyUploadResults(outcome);
@@ -196,6 +197,7 @@
 			<input
 				type="file"
 				name="files"
+				aria-label={m.admin_media_upload()}
 				multiple
 				accept={ACCEPT}
 				class="text-sm file:mr-3 file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm"
@@ -522,7 +524,9 @@
 			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 			<form method="POST" action="?/delete">
 				<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
-				<AlertDialog.Action type="submit">{m.admin_common_delete()}</AlertDialog.Action>
+				<AlertDialog.Action type="submit" variant="destructive"
+					>{m.admin_common_delete()}</AlertDialog.Action
+				>
 			</form>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

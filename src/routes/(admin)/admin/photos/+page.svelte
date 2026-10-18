@@ -45,7 +45,8 @@
 				action: '?/upload',
 				files,
 				maxBytes: data.limits.maxBytes,
-				fallbackMessage: m.admin_media_err_upload_failed()
+				fallbackMessage: m.admin_media_err_upload_failed(),
+				tooLargeMessage: (name) => m.admin_media_err_too_big({ name })
 			});
 			if (outcome.redirected) return;
 			await applyUploadResults(outcome);
@@ -531,7 +532,9 @@
 			</label>
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
-				<AlertDialog.Action type="submit">{m.admin_photos_remove_action()}</AlertDialog.Action>
+				<AlertDialog.Action type="submit" variant="destructive"
+					>{m.admin_photos_remove_action()}</AlertDialog.Action
+				>
 			</AlertDialog.Footer>
 		</form>
 	</AlertDialog.Content>
@@ -554,7 +557,9 @@
 			<input type="hidden" name="op" value="delete" />
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
-				<AlertDialog.Action type="submit">{m.admin_common_delete()}</AlertDialog.Action>
+				<AlertDialog.Action type="submit" variant="destructive"
+					>{m.admin_common_delete()}</AlertDialog.Action
+				>
 			</AlertDialog.Footer>
 		</form>
 	</AlertDialog.Content>
