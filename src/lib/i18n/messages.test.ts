@@ -149,8 +149,18 @@ function providedInputKeys(args: string | undefined): string[] | undefined {
 		}
 	}
 	if (end === -1) return undefined;
-	// `$` catches a trailing shorthand ({ name }); the closing brace is sliced off.
-	return [...trimmed.slice(1, end).matchAll(/(\w+)\s*(?::|,|\}|$)/g)].map((match) => match[1]);
+	// Comma-split is safe for the flat placeholder objects used at call sites.
+	// For `{ label: name }` only `label` is a provided key; a bare `name` on the
+	// right of a colon is a value, not a key.
+	return trimmed
+		.slice(1, end)
+		.split(',')
+		.map((entry) => {
+			const colon = entry.indexOf(':');
+			const key = (colon >= 0 ? entry.slice(0, colon) : entry).trim();
+			return /^\w+$/.test(key) ? key : '';
+		})
+		.filter((key) => key.length > 0);
 }
 
 // The walker-family tests scan every source file (and every compiled locale
@@ -264,6 +274,12 @@ describe('paraglide message contract', () => {
 			}
 		}
 		expect(empty).toEqual([]);
+	});
+
+	it('reads call keys, not values, from the argument object', () => {
+		expect(providedInputKeys('{ name }')).toEqual(['name']);
+		expect(providedInputKeys('{ label: name }')).toEqual(['label']);
+		expect(providedInputKeys('{ count: rows.length }')).toEqual(['count']);
 	});
 
 	it(
