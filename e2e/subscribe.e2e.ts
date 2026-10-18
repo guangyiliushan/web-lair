@@ -13,9 +13,25 @@ import { psql, valkeyDel } from './support';
  * (suppression list) and is cleaned by the same LIKE delete.
  */
 const MARKER = `e2e-sub-${Date.now()}@example.com`;
+const SUPPRESSION_HASHES: string[] = [];
+
+function emailHash(email: string): string {
+	return createHash('sha256').update(email).digest('hex');
+}
+
+function trackSuppression(email: string): string {
+	const hash = emailHash(email);
+	if (!SUPPRESSION_HASHES.includes(hash)) SUPPRESSION_HASHES.push(hash);
+	return hash;
+}
 
 function cleanupDb(): void {
 	psql(`delete from subscriptions where email like 'e2e-sub-%'`);
+	if (SUPPRESSION_HASHES.length > 0) {
+		psql(
+			`delete from email_suppressions where email_hash in (${SUPPRESSION_HASHES.map((hash) => `'${hash}'`).join(',')})`
+		);
+	}
 }
 
 test.describe.configure({ mode: 'serial', timeout: 240_000 });
@@ -88,6 +104,9 @@ test.describe('subscription double opt-in', () => {
 		await page.getByRole('button', { name: '退订', exact: true }).click();
 		await expect(page.getByText('已退订')).toBeVisible({ timeout: 15_000 });
 		expect(psql(`select status from subscriptions where email = '${MARKER}'`)).toBe('unsubscribed');
+		expect(
+			psql(`select reason from email_suppressions where email_hash = '${trackSuppression(MARKER)}'`)
+		).toBe('unsubscribed');
 		const unsubscribedAt = psql(
 			`select unsubscribed_at from subscriptions where email = '${MARKER}'`
 		);
@@ -125,6 +144,11 @@ test.describe('subscription double opt-in', () => {
 		await page.getByRole('button', { name: '退订', exact: true }).click();
 		await expect(page.getByText('已退订')).toBeVisible({ timeout: 15_000 });
 		expect(psql(`select count(*)::int from subscriptions where email = '${pending}'`)).toBe('0');
+		expect(
+			psql(
+				`select reason from email_suppressions where email_hash = '${trackSuppression(pending)}'`
+			)
+		).toBe('unsubscribed');
 	});
 
 	test('honeypot submissions succeed without creating a row', async ({ page }) => {
@@ -214,7 +238,72 @@ test.describe('subscription double opt-in', () => {
 		expect(psql(`select status from subscriptions where email = '${email}'`)).toBe('unsubscribed');
 	});
 
+	test('a soft unsubscribe allows a fresh confirmation and lifts the suppression', async ({
+		page
+	}) => {
+		valkeyDel('wl:limits:subscribe:127.0.0.1');
+		valkeyDel('wl:limits:subscribe:::1');
+		const email = `e2e-sub-soft-${Date.now()}@example.com`;
+		const hash = trackSuppression(email);
+		await page.goto('/zh-cn/subscribe');
+		await page.getByLabel('邮箱').fill(email);
+		await page.getByRole('button', { name: '订阅', exact: true }).click();
+		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
+		const firstToken = psql(`select token from subscriptions where email = '${email}'`);
+
+		await page.goto(`/zh-cn/unsubscribe?token=${firstToken}`);
+		await page.getByRole('button', { name: '退订', exact: true }).click();
+		await expect(page.getByText('已退订')).toBeVisible({ timeout: 15_000 });
+		expect(psql(`select reason from email_suppressions where email_hash = '${hash}'`)).toBe(
+			'unsubscribed'
+		);
+
+		// D-1: the reader may submit the form again; the soft suppression does
+		// not block the confirmation mail. Confirming then lifts the record.
+		await page.goto('/zh-cn/subscribe');
+		await page.getByLabel('邮箱').fill(email);
+		await page.getByRole('button', { name: '订阅', exact: true }).click();
+		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
+		const fresh = psql(`select token from subscriptions where email = '${email}'`);
+		expect(fresh).toHaveLength(43);
+		await page.goto(`/zh-cn/subscribe/confirm?token=${fresh}`);
+		await page.getByRole('button', { name: '确认', exact: true }).click();
+		await expect(page.getByText('订阅已确认')).toBeVisible({ timeout: 15_000 });
+		expect(psql(`select count(*)::int from email_suppressions where email_hash = '${hash}'`)).toBe(
+			'0'
+		);
+	});
+
+	test('a hard-bounce suppression blocks the form without creating a row', async ({ page }) => {
+		valkeyDel('wl:limits:subscribe:127.0.0.1');
+		valkeyDel('wl:limits:subscribe:::1');
+		const email = `e2e-sub-bounce-${Date.now()}@example.com`;
+		const hash = trackSuppression(email);
+		psql(
+			`insert into email_suppressions (email_hash, reason, source) values ('${hash}', 'bounced', 'e2e')`
+		);
+
+		await page.goto('/zh-cn/subscribe');
+		await page.getByLabel('邮箱').fill(email);
+		await page.getByRole('button', { name: '订阅', exact: true }).click();
+		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
+		expect(psql(`select count(*)::int from subscriptions where email = '${email}'`)).toBe('0');
+		expect(psql(`select reason from email_suppressions where email_hash = '${hash}'`)).toBe(
+			'bounced'
+		);
+	});
+
+	test('the mail-events endpoint is fail-closed without a key', async ({ page }) => {
+		const response = await page.request.post('/api/mail/events', {
+			data: { email: 'bounce@example.com', reason: 'bounced' }
+		});
+		expect(response.status()).toBe(503);
+		expect(await response.text()).toContain('mail_events_not_configured');
+	});
+
 	test('CSRF: origin-less and cross-origin form posts are refused', async ({ page }) => {
+		valkeyDel('wl:limits:subscribe:127.0.0.1');
+		valkeyDel('wl:limits:subscribe:::1');
 		const email = `e2e-sub-csrf-${Date.now()}@example.com`;
 
 		const noOrigin = await page.request.post('/zh-cn/subscribe', { form: { email } });
