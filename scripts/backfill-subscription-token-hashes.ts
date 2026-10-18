@@ -38,7 +38,7 @@ async function main(): Promise<void> {
 			const hash = createHash('sha256').update(row.token).digest('hex');
 			const result = await sql`
 				update subscriptions set token_hash = ${hash}
-				where id = ${row.id} and token_hash is null
+				where id = ${row.id} and token_hash is null and token = ${row.token}
 			`;
 			updated += result.count;
 		}
