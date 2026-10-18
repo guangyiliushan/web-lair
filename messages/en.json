@@ -1509,6 +1509,7 @@
 	"admin_settings_user_username": "Username",
 	"admin_setup_err_admin_exists": "Admin already exists.",
 	"admin_setup_err_autologin_failed": "Account created but auto-login failed. Please sign in manually.",
+	"admin_setup_err_mail_unconfigured": "Mail is not configured yet. Set MAIL_* and restart the app before creating the owner account.",
 	"admin_setup_name_placeholder": "Admin",
 	"admin_setup_token_placeholder": "Enter the setup token from server config",
 	"admin_setup_token_warning": "{env} is not set. Set it to a long random string in your environment variables to secure this page.",

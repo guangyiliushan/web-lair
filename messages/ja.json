@@ -1275,6 +1275,7 @@
 	"admin_settings_user_username": "ユーザー名",
 	"admin_setup_err_admin_exists": "管理者アカウントは既に存在します。",
 	"admin_setup_err_autologin_failed": "アカウントは作成されましたが、自動ログインに失敗しました。手動でログインしてください。",
+	"admin_setup_err_mail_unconfigured": "メール送信が未設定です。MAIL_* を設定してアプリを再起動してから、管理者アカウントを作成してください。",
 	"admin_setup_name_placeholder": "管理者",
 	"admin_setup_token_placeholder": "サーバー設定のセットアップトークンを入力",
 	"admin_setup_token_warning": "{env} が設定されていません。このページを保護するため、環境変数に十分な長さのランダム文字列を設定してください。",

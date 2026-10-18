@@ -148,6 +148,9 @@ Then: register a test account (verification mail must arrive), subscribe a test
 address (confirmation link must land on `/subscribe/confirm`), upload one photo
 (EXIF must parse — this proves `perl` + exiftool in the image).
 
+Open `/admin/setup` only after `MAIL_*` works: the first owner needs the
+verification link, and this page refuses to create an owner without a transport.
+
 ## 2. Update
 
 ```bash

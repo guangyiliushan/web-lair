@@ -10,6 +10,7 @@ import { getAdminConfig } from '$lib/server/config/admin';
 import { claimOwnerRole, hasAnyAdminAccount } from '$lib/server/auth/owner';
 import { ensureSiteOrganization } from '$lib/server/auth/site-organization-bootstrap';
 import { APIError } from 'better-auth/api';
+import { isMailDeliveryAvailable } from '$lib/server/mail/transport';
 
 function verifySetupToken(formToken: string): string | null {
 	const config = getAdminConfig();
@@ -62,6 +63,12 @@ export const actions: Actions = {
 		const tokenError = verifySetupToken(formSetupToken);
 		if (tokenError) {
 			return fail(403, { message: tokenError });
+		}
+
+		// The first owner still needs the verification mail; without a transport
+		// the account would be created unverifiable and the auto-login would fail.
+		if (!isMailDeliveryAvailable()) {
+			return fail(503, { message: m.admin_setup_err_mail_unconfigured() });
 		}
 
 		// Create user via Better Auth API (APIError -> form error, no 500 page)
