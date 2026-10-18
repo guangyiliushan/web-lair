@@ -1341,7 +1341,7 @@
 	"auth_password_hint": "至少 8 个字符",
 	"auth_password_placeholder": "请输入密码",
 	"auth_register_description": "加入社区，开始阅读",
-	"auth_register_mail_unconfigured": "邮件通道尚未配置，在配置 MAIL_* 之前注册会失败。",
+	"auth_register_mail_unconfigured": "注册暂不可用，请稍后再试。",
 	"auth_register_title": "创建账户",
 	"auth_reset_description": "在下方输入新密码。",
 	"auth_reset_title": "设置新密码",

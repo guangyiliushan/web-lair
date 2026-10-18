@@ -12,7 +12,9 @@
 <div class="flex w-full flex-col items-center py-12">
 	<Card.Root class="w-full max-w-md">
 		<Card.Header>
-			<Card.Title>{m.subscribe_title()}</Card.Title>
+			<h1 data-slot="card-title" class="text-base leading-snug font-medium">
+				{m.subscribe_title()}
+			</h1>
 			<Card.Description>{m.subscribe_description()}</Card.Description>
 		</Card.Header>
 		<Card.Content>

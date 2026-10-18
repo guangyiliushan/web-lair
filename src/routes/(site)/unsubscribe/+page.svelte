@@ -12,7 +12,9 @@
 <div class="flex w-full flex-col items-center py-12">
 	<Card.Root class="w-full max-w-md">
 		<Card.Header>
-			<Card.Title>{m.unsubscribe_title()}</Card.Title>
+			<h1 data-slot="card-title" class="text-base leading-snug font-medium">
+				{m.unsubscribe_title()}
+			</h1>
 		</Card.Header>
 		<Card.Content class="grid gap-4">
 			{#if state === 'unsubscribed'}

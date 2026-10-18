@@ -1575,7 +1575,7 @@
 	"auth_password_hint": "Must be at least 8 characters",
 	"auth_password_placeholder": "Your password",
 	"auth_register_description": "Join the community and start reading",
-	"auth_register_mail_unconfigured": "Email delivery is not configured yet — sign-up fails until MAIL_* settings exist.",
+	"auth_register_mail_unconfigured": "Sign-up is temporarily unavailable. Please try again later.",
 	"auth_register_title": "Create your account",
 	"auth_reset_description": "Enter your new password below.",
 	"auth_reset_title": "Set new password",

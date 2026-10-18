@@ -15,7 +15,9 @@
 <div class="flex w-full flex-col items-center justify-center">
 	<Card.Root class="w-full max-w-md">
 		<Card.Header class="text-center">
-			<Card.Title class="text-2xl">{m.auth_register_title()}</Card.Title>
+			<h1 data-slot="card-title" class="text-2xl leading-snug font-medium">
+				{m.auth_register_title()}
+			</h1>
 			<Card.Description>{m.auth_register_description()}</Card.Description>
 		</Card.Header>
 		<Card.Content>

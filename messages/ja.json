@@ -1341,7 +1341,7 @@
 	"auth_password_hint": "8文字以上である必要があります",
 	"auth_password_placeholder": "パスワードを入力",
 	"auth_register_description": "コミュニティに参加して読書を始めましょう",
-	"auth_register_mail_unconfigured": "メール送信が未設定のため、MAIL_* を設定するまで新規登録は失敗します。",
+	"auth_register_mail_unconfigured": "新規登録は一時的に利用できません。しばらくしてからお試しください。",
 	"auth_register_title": "アカウントを作成",
 	"auth_reset_description": "以下に新しいパスワードを入力してください。",
 	"auth_reset_title": "新しいパスワードを設定",
