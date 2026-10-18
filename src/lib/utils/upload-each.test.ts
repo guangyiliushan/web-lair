@@ -15,7 +15,7 @@ const { applyActionMock, deserializeMock, invalidateAllMock, fetchMock } = vi.ho
 vi.mock('$app/forms', () => ({ applyAction: applyActionMock, deserialize: deserializeMock }));
 vi.mock('$app/navigation', () => ({ invalidateAll: invalidateAllMock }));
 
-import { applyUploadResults, uploadEachFile } from './upload-each';
+import { applyUploadResults, mapUploadError, uploadEachFile } from './upload-each';
 
 function file(name: string, size = 4): File {
 	return new File([new Uint8Array(size)], name, { type: 'image/jpeg' });
@@ -231,5 +231,24 @@ describe('applyUploadResults', () => {
 			})
 		);
 		expect(invalidateAllMock).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('mapUploadError', () => {
+	const copy = {
+		tooBig: (name: string) => `too big: ${name}`,
+		rate: () => 'rate',
+		session: () => 'session'
+	};
+
+	it('maps the three framework statuses', () => {
+		expect(mapUploadError(413, 'a.jpg', copy)).toBe('too big: a.jpg');
+		expect(mapUploadError(429, 'a.jpg', copy)).toBe('rate');
+		expect(mapUploadError(403, 'a.jpg', copy)).toBe('session');
+	});
+
+	it('leaves every other status to the page fallback', () => {
+		expect(mapUploadError(400, 'a.jpg', copy)).toBeUndefined();
+		expect(mapUploadError(500, 'a.jpg', copy)).toBeUndefined();
 	});
 });

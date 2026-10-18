@@ -136,6 +136,27 @@ export async function uploadEachFile(options: {
 	return { results, message };
 }
 
+/**
+ * Shared status mapping for the two admin uploaders (keeps the copy and the
+ * branch set in one place so a page cannot silently drop a status).
+ */
+export function mapUploadError(
+	status: number,
+	fileName: string,
+	copy: { tooBig: (name: string) => string; rate: () => string; session: () => string }
+): string | undefined {
+	switch (status) {
+		case 413:
+			return copy.tooBig(fileName);
+		case 429:
+			return copy.rate();
+		case 403:
+			return copy.session();
+		default:
+			return undefined;
+	}
+}
+
 /** Applies the merged result so the page's `form` prop updates in place. */
 export async function applyUploadResults(outcome: {
 	results: UploadOutcome[];

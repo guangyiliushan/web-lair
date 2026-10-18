@@ -8,7 +8,7 @@
 	import { photoTileSrc } from '$lib/components/photos/photo-tile';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
-	import { applyUploadResults, uploadEachFile } from '$lib/utils/upload-each';
+	import { applyUploadResults, mapUploadError, uploadEachFile } from '$lib/utils/upload-each';
 	import { locales } from '$lib/paraglide/runtime';
 	import { localeLabels } from '$lib/stores/locale.svelte';
 	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
@@ -30,7 +30,10 @@
 		const form = event.currentTarget as HTMLFormElement;
 		const input = form.querySelector<HTMLInputElement>('input[name="files"]');
 		const files = Array.from(input?.files ?? []);
-		if (files.length === 0) return;
+		if (files.length === 0) {
+			await applyUploadResults({ results: [], message: m.admin_files_err_no_files() });
+			return;
+		}
 		if (uploading) return;
 		if (files.length > data.limits.maxBatch) {
 			await applyUploadResults({
@@ -48,15 +51,18 @@
 				fallbackMessage: m.admin_media_err_upload_failed(),
 				tooLargeMessage: (name) => m.admin_media_err_too_big({ name }),
 				mapError: (status, name) =>
-					status === 413
-						? m.admin_media_err_too_big({ name })
-						: status === 429
-							? m.admin_media_err_rate()
-							: status === 403
-								? m.admin_media_err_session()
-								: undefined
+					mapUploadError(status, name, {
+						tooBig: (n) => m.admin_media_err_too_big({ name: n }),
+						rate: m.admin_media_err_rate,
+						session: m.admin_media_err_session
+					})
 			});
-			if (outcome.redirected) return;
+			if (outcome.redirected) {
+				if (outcome.message) {
+					await applyUploadResults({ results: outcome.results, message: outcome.message });
+				}
+				return;
+			}
 			await applyUploadResults(outcome);
 		} finally {
 			uploading = false;
@@ -155,7 +161,7 @@
 		</div>
 	{/if}
 	{#if actionData.bulkResult}
-		<div class="rounded-md border bg-background px-3 py-2 text-sm">
+		<div role="status" class="rounded-md border bg-background px-3 py-2 text-sm">
 			{m.admin_photos_bulk_summary({
 				op: BULK_LABELS[actionData.bulkResult.op] ?? actionData.bulkResult.op,
 				done: actionData.bulkResult.done,
