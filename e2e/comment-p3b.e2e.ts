@@ -53,7 +53,7 @@ test.beforeAll(() => {
 	psql(`delete from comments where text like 'e2e-cmtb%'`);
 	psql(`delete from comments where post_id = '${POST}'`);
 	psql(`delete from posts where slug like 'e2e-cmtb-%'`);
-	psql(`delete from categories where slug = 'e2e-cmtb-cat'`);
+	psql(`delete from categories where slug = 'e2e-cmtb-cat' or id = '${CATEGORY}'`);
 	psql(
 		`insert into categories (id, name, slug) values ('${CATEGORY}', 'E2E 段评', 'e2e-cmtb-cat') on conflict (slug) do nothing`
 	);
