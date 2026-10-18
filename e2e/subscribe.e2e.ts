@@ -1,7 +1,8 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
 import { psql, valkeyDel } from './support';
+import { TEST_MAIL_EVENTS_HMAC_KEY, TEST_SUPPRESSION_HMAC_KEY } from './test-keys';
 
 /**
  * Deploy batch D-2 acceptance: the double opt-in subscription chain on the
@@ -16,7 +17,9 @@ const MARKER = `e2e-sub-${Date.now()}@example.com`;
 const SUPPRESSION_HASHES: string[] = [];
 
 function emailHash(email: string): string {
-	return createHash('sha256').update(email).digest('hex');
+	return createHmac('sha256', Buffer.from(TEST_SUPPRESSION_HMAC_KEY, 'base64'))
+		.update(email)
+		.digest('hex');
 }
 
 function trackSuppression(email: string): string {
@@ -293,12 +296,38 @@ test.describe('subscription double opt-in', () => {
 		);
 	});
 
-	test('the mail-events endpoint is fail-closed without a key', async ({ page }) => {
+	test('a signed complaint reaches the suppression row and upgrades a soft opt-out', async ({
+		page
+	}) => {
+		const email = `e2e-sub-complaint-${Date.now()}@example.com`;
+		const hash = trackSuppression(email);
+		psql(
+			`insert into email_suppressions (email_hash, reason, source) values ('${hash}', 'unsubscribed', 'e2e')`
+		);
+
+		const body = JSON.stringify({ email, reason: 'complained' });
+		const timestamp = String(Math.floor(Date.now() / 1000));
+		const signature = createHmac('sha256', Buffer.from(TEST_MAIL_EVENTS_HMAC_KEY, 'base64'))
+			.update(`${timestamp}.${body}`)
+			.digest('hex');
 		const response = await page.request.post('/api/mail/events', {
-			data: { email: 'bounce@example.com', reason: 'bounced' }
+			data: body,
+			headers: {
+				'content-type': 'application/json',
+				'x-mail-events-timestamp': timestamp,
+				'x-mail-events-signature': `sha256=${signature}`
+			}
 		});
-		expect(response.status()).toBe(503);
-		expect(await response.text()).toContain('mail_events_not_configured');
+		expect(response.status()).toBe(200);
+		expect(psql(`select reason from email_suppressions where email_hash = '${hash}'`)).toBe(
+			'complained'
+		);
+
+		// Unsigned requests are rejected once the key is configured.
+		const unsigned = await page.request.post('/api/mail/events', {
+			data: { email, reason: 'bounced' }
+		});
+		expect(unsigned.status()).toBe(401);
 	});
 
 	test('CSRF: origin-less and cross-origin form posts are refused', async ({ page }) => {

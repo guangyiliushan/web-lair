@@ -3,7 +3,7 @@ import { building, dev } from '$app/environment';
 import { redirect } from '@sveltejs/kit';
 import { auth } from '$lib/server/auth';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
-import type { Handle, HandleServerError } from '@sveltejs/kit';
+import type { Handle, HandleServerError, ServerInit } from '@sveltejs/kit';
 import { getTextDirection } from '$lib/paraglide/runtime';
 import { paraglideMiddleware } from '$lib/paraglide/server';
 import { db } from '$lib/server/db';
@@ -16,6 +16,16 @@ import { isSignUpRequest } from '$lib/server/auth-gate';
 import { isMailDeliveryAvailableLive } from '$lib/server/mail/transport';
 import { isCsrfForbidden } from '$lib/server/security/csrf';
 import { isSubscriptionToken } from '$lib/server/services/subscription-token';
+import { assertSuppressionKey } from '$lib/server/services/suppressions';
+
+/**
+ * Fail fast on boot when the suppression key is missing. Unkeyed fallback was
+ * removed after review: a later key would orphan every existing opt-out.
+ * Development stays usable without the key until a suppression write happens.
+ */
+export const init: ServerInit = () => {
+	if (!dev) assertSuppressionKey();
+};
 
 /**
  * CSRF (RFC 8058 exception design, 2026-10-18).

@@ -5,7 +5,9 @@ const { dbStub, envStub } = vi.hoisted(() => ({
 	envStub: {} as Record<string, string | undefined>
 }));
 vi.mock('$lib/server/db', () => ({ db: dbStub }));
-vi.mock('$lib/server/db/system', () => ({ emailSuppressions: {} }));
+vi.mock('$lib/server/db/system', () => ({
+	emailSuppressions: { emailHash: 'email_hash', reason: 'reason', source: 'source' }
+}));
 vi.mock('$env/dynamic/private', () => ({ env: envStub }));
 
 import {
@@ -19,23 +21,20 @@ const KEY = Buffer.alloc(32, 7).toString('base64');
 
 beforeEach(() => {
 	for (const fn of Object.values(dbStub)) fn.mockReset();
-	delete envStub.SUPPRESSION_HMAC_KEY;
+	envStub.SUPPRESSION_HMAC_KEY = KEY;
 });
 
 describe('suppression hashing', () => {
 	it('uses the keyed hash when a key is configured', () => {
-		envStub.SUPPRESSION_HMAC_KEY = KEY;
 		const keyed = suppressionHash('reader@example.com');
 		expect(keyed).toMatch(/^[0-9a-f]{64}$/);
 		expect(suppressionHash('reader@example.com')).toBe(keyed);
 		expect(suppressionHash('other@example.com')).not.toBe(keyed);
 	});
 
-	it('falls back to SHA-256 with a loud log when the key is missing', () => {
-		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-		expect(suppressionHash('reader@example.com')).toMatch(/^[0-9a-f]{64}$/);
-		expect(error).toHaveBeenCalledWith(expect.stringContaining('SUPPRESSION_HMAC_KEY'));
-		error.mockRestore();
+	it('fails closed when the key is missing', () => {
+		delete envStub.SUPPRESSION_HMAC_KEY;
+		expect(() => suppressionHash('reader@example.com')).toThrow(/SUPPRESSION_HMAC_KEY is missing/);
 	});
 });
 
@@ -47,15 +46,23 @@ describe('suppression records', () => {
 		expect(await suppressionReason('reader@example.com')).toBe('bounced');
 	});
 
-	it('inserts idempotently and never rewrites the first reason', async () => {
-		const onConflictDoNothing = vi.fn(async () => undefined);
-		const values = vi.fn(() => ({ onConflictDoNothing }));
+	it('upserts monotonically and never downgrades a stronger reason', async () => {
+		const onConflictDoUpdate = vi.fn(async (config: unknown) => {
+			void config;
+		});
+		const values = vi.fn(() => ({ onConflictDoUpdate }));
 		dbStub.insert.mockReturnValueOnce({ values });
 		await suppress('reader@example.com', 'complained', 'mail-events');
 		expect(values).toHaveBeenCalledWith(
 			expect.objectContaining({ reason: 'complained', source: 'mail-events' })
 		);
-		expect(onConflictDoNothing).toHaveBeenCalledTimes(1);
+		const conflict = onConflictDoUpdate.mock.calls[0]![0] as {
+			target: unknown;
+			set: { reason: unknown; source: unknown };
+		};
+		expect(conflict.target).toBeDefined();
+		expect(conflict.set.reason).toBeDefined();
+		expect(conflict.set.source).toBeDefined();
 	});
 
 	it('lifts only the soft unsubscribe record', async () => {

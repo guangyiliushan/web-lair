@@ -1,4 +1,9 @@
 import { defineConfig } from '@playwright/test';
+import {
+	TEST_MAIL_EVENTS_HMAC_KEY,
+	TEST_SUBSCRIBE_HMAC_KEY,
+	TEST_SUPPRESSION_HMAC_KEY
+} from './e2e/test-keys';
 
 export default defineConfig({
 	use: {
@@ -29,7 +34,12 @@ export default defineConfig({
 			// instead of failing (production keeps the fail-loud contract).
 			MAIL_DEV_LOG: 'true',
 			// Second explicit switch: production builds only dev-log with it.
-			MAIL_DEV_LOG_OK: 'true'
+			MAIL_DEV_LOG_OK: 'true',
+			// E1/E2 HMAC keys: the preview is a production build, so the
+			// suppression boot guard and the mail-events endpoint need real keys.
+			SUBSCRIBE_HMAC_KEY: TEST_SUBSCRIBE_HMAC_KEY,
+			SUPPRESSION_HMAC_KEY: TEST_SUPPRESSION_HMAC_KEY,
+			MAIL_EVENTS_HMAC_KEY: TEST_MAIL_EVENTS_HMAC_KEY
 		}
 	},
 	testDir: 'e2e',

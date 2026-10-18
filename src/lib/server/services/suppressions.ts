@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { emailSuppressions } from '$lib/server/db/system';
@@ -13,27 +12,31 @@ import { decodeHmacKey, hashEmail } from './email-hash';
  * independent of the auth secret and must be set before the first write and
  * kept in backups: rotating it orphans every existing hash.
  *
- * If the key is missing we fall back to an unkeyed SHA-256 and log loudly:
- * opt-out must keep working, and losing the suppression row is worse than the
- * weaker (still 64-hex) hash. Set the key in production.
+ * If the key is missing or invalid we fail closed. Writing an unkeyed SHA-256
+ * would create a second hash domain: once the key is added, those opt-outs
+ * become invisible and a hard-bounced address becomes mailable again.
  */
 export type SuppressionReason = 'unsubscribed' | 'bounced' | 'complained';
 
 export type SuppressionExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-let warnedMissingKey = false;
+export class SuppressionKeyMissingError extends Error {
+	constructor() {
+		super(
+			'SUPPRESSION_HMAC_KEY is missing or not 32 base64-encoded bytes; suppression writes are disabled'
+		);
+		this.name = 'SuppressionKeyMissingError';
+	}
+}
+
+/** Fail fast on boot (production) instead of on the first opt-out. */
+export function assertSuppressionKey(): void {
+	if (!decodeHmacKey(env.SUPPRESSION_HMAC_KEY)) throw new SuppressionKeyMissingError();
+}
 
 export function suppressionHash(email: string): string {
 	const key = decodeHmacKey(env.SUPPRESSION_HMAC_KEY);
-	if (!key) {
-		if (!warnedMissingKey) {
-			warnedMissingKey = true;
-			console.error(
-				'[suppressions] SUPPRESSION_HMAC_KEY is missing or invalid; falling back to an unkeyed SHA-256 (set the key in production)'
-			);
-		}
-		return createHash('sha256').update(email).digest('hex');
-	}
+	if (!key) throw new SuppressionKeyMissingError();
 	return hashEmail(email, key);
 }
 
@@ -46,10 +49,18 @@ export async function suppressionReason(email: string): Promise<SuppressionReaso
 	return row ? (row.reason as SuppressionReason) : null;
 }
 
+const REASON_RANK_SQL = sql`case
+	when ${emailSuppressions.reason} = 'complained' then 'complained'
+	when excluded.reason = 'complained' then 'complained'
+	when ${emailSuppressions.reason} = 'bounced' then 'bounced'
+	else excluded.reason
+end`;
+
 /**
- * Idempotent: the first reason wins (`on conflict do nothing`). A bounce that
- * arrives after an unsubscribe must not rewrite the audit record; both block
- * bulk delivery, and the earlier signal is the more meaningful one.
+ * Idempotent and monotonic: a hard bounce or a complaint must upgrade a soft
+ * `unsubscribed` row, never the other way round. Dropping a complaint because
+ * an unsubscribe happened first would make the address mailable again after a
+ * re-subscription, and the provider will not report it twice.
  */
 export async function suppress(
 	email: string,
@@ -60,7 +71,16 @@ export async function suppress(
 	await executor
 		.insert(emailSuppressions)
 		.values({ emailHash: suppressionHash(email), reason, source })
-		.onConflictDoNothing();
+		.onConflictDoUpdate({
+			target: emailSuppressions.emailHash,
+			set: {
+				reason: REASON_RANK_SQL,
+				source: sql`case
+					when ${emailSuppressions.reason} <> excluded.reason then excluded.source
+					else ${emailSuppressions.source}
+				end`
+			}
+		});
 }
 
 /**
