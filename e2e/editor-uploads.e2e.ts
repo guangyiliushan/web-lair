@@ -123,13 +123,23 @@ async function openEditor(page: Page): Promise<string> {
 	const id = psql(`select ref_id from drafts where slug = '${SLUG}'`);
 	await page.goto(`/admin/posts/edit?id=${id}`);
 	await expect(page.locator('input[name="title"]')).toHaveValue(TITLE, { timeout: 15000 });
+	// The title lives outside the editor: images from earlier tests in this file
+	// are only in the DOM once Lexical has hydrated, so wait before counting.
+	await expect(page.locator('[data-lexical-editor="true"]')).toBeVisible({ timeout: 15000 });
+	await page.waitForLoadState('networkidle');
 	return id;
 }
 
 async function openPicker(page: Page) {
-	await page.locator('button[aria-label="插入图片"]').click();
 	const dialog = page.getByRole('dialog', { name: '插入图片' });
-	await expect(dialog).toBeVisible({ timeout: 10000 });
+	// A click that lands before the editor island hydrates is a no-op; retry
+	// until the dialog appears, but never click again once it is open (the
+	// second click would hit the overlay).
+	await expect(async () => {
+		if (await dialog.isVisible()) return;
+		await page.locator('button[aria-label="插入图片"]').click({ timeout: 5_000 });
+		await expect(dialog).toBeVisible({ timeout: 2_000 });
+	}).toPass({ timeout: 30_000 });
 	return dialog;
 }
 
