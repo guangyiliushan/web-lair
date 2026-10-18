@@ -22,9 +22,9 @@ import { rateLimit } from '$lib/server/cache/store';
  *
  * A JSON endpoint rather than a form action: kit's docs route non-form
  * interactions to `+server` (form-actions "Alternatives"); multipart bodies
- * are still covered by the built-in CSRF origin check (respond.js), and the
- * client must send `Accept: application/json` to receive the JSON wrapper on
- * a CSRF rejection.
+ * are covered by the app's `handleCsrf` hook (the framework check is disabled
+ * for the one-click exemption), and the client must send
+ * `Accept: application/json` to receive the JSON wrapper on a CSRF rejection.
  *
  * Auth is a boolean surface (never redirect()): a fetch client needs a
  * decidable 401/403 JSON answer, not a 303 it would follow into HTML (Q2

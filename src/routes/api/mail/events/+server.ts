@@ -45,8 +45,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'stale_timestamp' }, 401);
 	}
 
+	const declared = Number(request.headers.get('content-length') ?? '0');
+	if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+		return json({ error: 'body_too_large' }, 413);
+	}
+
 	const raw = await request.text();
-	if (raw.length > MAX_BODY_BYTES) return json({ error: 'body_too_large' }, 413);
+	if (Buffer.byteLength(raw) > MAX_BODY_BYTES) return json({ error: 'body_too_large' }, 413);
 
 	const provided = parseSignature(request.headers.get('x-mail-events-signature'));
 	const expected = createHmac('sha256', key).update(`${timestamp}.${raw}`).digest();

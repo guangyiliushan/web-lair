@@ -21,10 +21,12 @@ import { assertSuppressionKey } from '$lib/server/services/suppressions';
 /**
  * Fail fast on boot when the suppression key is missing. Unkeyed fallback was
  * removed after review: a later key would orphan every existing opt-out.
- * Development stays usable without the key until a suppression write happens.
+ * `building` is excluded because SvelteKit may call init during prerender.
+ * Development starts without the key, but any subscribe/confirm/unsubscribe
+ * (reads included) fails until it is set.
  */
 export const init: ServerInit = () => {
-	if (!dev) assertSuppressionKey();
+	if (!dev && !building) assertSuppressionKey();
 };
 
 /**

@@ -100,6 +100,14 @@ describe('mail events endpoint (E2-4)', () => {
 		expect(response.status).toBe(401);
 	});
 
+	it('rejects an over-long declared body before reading it', async () => {
+		const request = signed(JSON.stringify({ email: 'a@b.co', reason: 'bounced' }));
+		request.headers.set('content-length', String(9000));
+		const response = await call(request);
+		expect(response.status).toBe(413);
+		expect(suppressMock).not.toHaveBeenCalled();
+	});
+
 	it('rejects an unknown reason and an invalid address', async () => {
 		expect(
 			(await call(signed(JSON.stringify({ email: 'a@b.co', reason: 'unsubscribed' })))).status

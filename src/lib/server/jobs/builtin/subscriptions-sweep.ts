@@ -6,9 +6,10 @@ import { and, eq, lt, sql, subscriptions, type JobContext } from '#jobs-sdk';
  *
  * Data minimisation only (GDPR Art. 5(1)(e)): a never-confirmed address has no
  * consent record worth keeping. `subscribed` and `unsubscribed` rows are
- * evidence and are never touched here; the schema CHECK also makes a pending
- * row impossible to mark as unsubscribed, so deleting is the correct terminal
- * state for an abandoned signup.
+ * evidence and are never touched here. A pending row is deleted rather than
+ * marked unsubscribed: the CHECK requires `verified_at` on non-pending rows,
+ * and fabricating a verification time for a never-confirmed address would lie
+ * in the audit record.
  */
 const PENDING_CUTOFF = sql`now() - interval '30 days'`;
 
