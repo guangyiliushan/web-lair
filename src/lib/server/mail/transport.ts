@@ -45,9 +45,12 @@ export function devLogPermitted(input: {
 	mailDevLog?: string;
 	mailDevLogOk?: string;
 }): boolean {
-	if (input.dev) return true;
-	if (input.mailDevLog !== 'true') return false;
-	return input.nodeEnv !== 'production' || input.mailDevLogOk === 'true';
+	// Production wins over the build flag: a production deployment must never
+	// print tokens just because the bundle was built with DEV semantics.
+	if (input.nodeEnv === 'production') {
+		return input.mailDevLog === 'true' && input.mailDevLogOk === 'true';
+	}
+	return input.dev || input.mailDevLog === 'true';
 }
 
 function devLogAllowed(): boolean {

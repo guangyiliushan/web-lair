@@ -126,12 +126,29 @@ describe('mail transport (D-2)', () => {
 
 	it('sends for real in production when a transport is configured, ignoring MAIL_DEV_LOG', async () => {
 		configure({ NODE_ENV: 'production', MAIL_DEV_LOG: 'true' });
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
 		await sendMailOrDevLog({ to: 'a@b.c', subject: 's', text: 't' });
 		expect(createTransportMock).toHaveBeenCalledTimes(1);
+		expect(sendMailMock).toHaveBeenCalledTimes(1);
+		expect(info).not.toHaveBeenCalled();
+		info.mockRestore();
+	});
+
+	it('fails loudly in production without the second switch (tokens never reach stdout)', async () => {
+		Object.assign(envMock, { NODE_ENV: 'production', MAIL_DEV_LOG: 'true' });
+		delete envMock.MAIL_DEV_LOG_OK;
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		await expect(sendMailOrDevLog({ to: 'a@b.c', subject: 's', text: 't' })).rejects.toBeInstanceOf(
+			MailNotConfiguredError
+		);
+		expect(info).not.toHaveBeenCalled();
+		info.mockRestore();
 	});
 
 	it('dev-log policy: production requires the explicit second switch', () => {
 		expect(devLogPermitted({ dev: true })).toBe(true);
+		// A production deployment outranks the build flag.
+		expect(devLogPermitted({ dev: true, nodeEnv: 'production' })).toBe(false);
 		expect(devLogPermitted({ dev: false, nodeEnv: 'production', mailDevLog: 'true' })).toBe(false);
 		expect(
 			devLogPermitted({
