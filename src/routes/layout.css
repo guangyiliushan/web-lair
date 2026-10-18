@@ -681,6 +681,11 @@
 	   for other readers, dashed for the viewer's own pending row, and a target
 	   pulse after a "jump to source". Contrast is the primary token at 70% over
 	   the page background (WCAG 1.4.11 wants ≥3:1 for the non-text cue). */
+	/* Text-safe accent: full-strength primary on white is 2.90:1 (WCAG 1.4.3
+	   needs 4.5:1 for body text); the foreground mix clears it in both themes. */
+	.wl-accent-link {
+		color: color-mix(in oklch, var(--primary) 60%, var(--foreground));
+	}
 	.wl-cm {
 		text-decoration: underline wavy;
 		text-decoration-thickness: 1px;

@@ -447,7 +447,9 @@ describe('submitComment', () => {
 		];
 		state.insertResults = [[{ id: 'new-anchored', state: 'pending' }]];
 		const result = await submitComment(
-			input({ anchor: { ord: 0, start: 6, end: 14, exact: 'anchored' } })
+			input({
+				anchor: { ord: 0, start: 6, end: 14, exact: 'anchored', blockLength: 21 }
+			})
 		);
 		expect(result).toEqual({ kind: 'created', id: 'new-anchored', state: 'pending' });
 		const value = state.inserts[0].values.anchor as {
@@ -465,6 +467,15 @@ describe('submitComment', () => {
 			quote: { exact: 'anchored', prefix: 'Hello ', suffix: ' world.' }
 		});
 		expect(value.block.hash).toMatch(/^[0-9a-f]{10}$/);
+	});
+
+	it('rejects a mismatched block length fingerprint and stores nothing', async () => {
+		state.selectQueue = [[{ id: TARGET, allowComment: true }], [{ content: 'Hello anchored world.' }]];
+		const result = await submitComment(
+			input({ anchor: { ord: 0, start: 6, end: 14, exact: 'anchored', blockLength: 999 } })
+		);
+		expect(result).toEqual({ kind: 'stale-anchor' });
+		expect(state.inserts).toHaveLength(0);
 	});
 
 	it('rejects a stale anchor and stores nothing', async () => {

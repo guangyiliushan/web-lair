@@ -111,7 +111,7 @@
 				{m.comment_cancel()}
 			</Button>
 		{/if}
-		<Button type="submit" size="sm" disabled={submitting}
+		<Button type="submit" size="sm" disabled={submitting} class="text-foreground"
 			>{submitLabel ?? m.comment_submit()}</Button
 		>
 	</div>

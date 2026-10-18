@@ -110,6 +110,9 @@
 	function openComposer() {
 		if (!selected) return;
 		clearHover();
+		// Return target for 2.4.3: the action button unmounts with the panel, and
+		// the selection block itself is not focusable.
+		returnFocusTo = document.getElementById('comments-title');
 		composerOpen = true;
 	}
 
@@ -117,6 +120,8 @@
 		composerOpen = false;
 		selected = null;
 		window.getSelection()?.removeAllRanges();
+		if (returnFocusTo?.isConnected) returnFocusTo.focus();
+		returnFocusTo = null;
 	}
 
 	async function openThread(mark: Element) {
@@ -138,7 +143,7 @@
 		clearHover();
 		// One surface at a time: the composer and the thread used to stack.
 		if (composerOpen) closeComposer();
-		returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		returnFocusTo = mark instanceof HTMLElement ? mark : null;
 		const rect = mark.getBoundingClientRect();
 		threadRect = {
 			left: Math.min(Math.max(rect.left, 8), Math.max(8, window.innerWidth - 360)),
@@ -149,13 +154,12 @@
 		closeThreadEl?.focus();
 	}
 
-	function closeThread() {
+	function closeThread(restoreFocus = true) {
 		activeThreadId = null;
 		threadRect = null;
-		// Focus return: a dialog that closes into <body> loses the reader's place
-		// (WCAG 2.4.3). The mark itself is focusable now, so this usually lands
-		// back where the thread was opened.
-		if (returnFocusTo?.isConnected) returnFocusTo.focus();
+		// Focus return on Escape/Close (2.4.3); an outside pointerdown must not
+		// yank focus back to the mark the reader just clicked away from.
+		if (restoreFocus && returnFocusTo?.isConnected) returnFocusTo.focus();
 		returnFocusTo = null;
 	}
 
@@ -193,6 +197,30 @@
 				void openThread(mark);
 				return;
 			}
+			if (event.key === 'Tab') {
+				// The sheet/popover is modal in practice: keep Tab inside it
+				// (WCAG 2.4.11 — focus must not move behind the surface).
+				const surface = composerOpen ? panelEl : activeThread ? threadEl : null;
+				if (surface) {
+					const focusables = [
+						...surface.querySelectorAll<HTMLElement>(
+							'button:not([disabled]), [href], textarea, input:not([type="hidden"]), [tabindex]:not([tabindex="-1"])'
+						)
+					];
+					const first = focusables[0];
+					const last = focusables[focusables.length - 1];
+					if (first && last) {
+						if (!event.shiftKey && document.activeElement === last) {
+							event.preventDefault();
+							first.focus();
+						} else if (event.shiftKey && document.activeElement === first) {
+							event.preventDefault();
+							last.focus();
+						}
+					}
+				}
+				return;
+			}
 			if (event.key !== 'Escape' || event.defaultPrevented) return;
 			clearHover();
 			if (composerOpen) closeComposer();
@@ -202,6 +230,9 @@
 			const target = event.target as Element | null;
 			const mark = target?.closest?.('.wl-cm');
 			if (!mark || !host.contains(mark)) return;
+			// A mark can wrap link text; without this the click navigates away
+			// instead of opening the thread (B2 review, angle 9).
+			if (mark.closest('a')) event.preventDefault();
 			void openThread(mark);
 		};
 		const onPointerOver = (event: PointerEvent) => {
@@ -229,7 +260,7 @@
 			// pointerdown inside it (reply, edit, close) closed it before click.
 			if (threadEl?.contains(target)) return;
 			if ((target as Element).closest?.('.wl-cm')) return;
-			closeThread();
+			closeThread(false);
 		};
 
 		// The `{@html}` swap replaces the article's children after every
@@ -319,7 +350,7 @@
 {#if selected && !composerOpen && !activeThread}
 	<button
 		type="button"
-		class="fixed z-40 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-lg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+		class="fixed z-40 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-foreground shadow-lg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 		style={floatingStyle}
 		data-slot="comment-selection-action"
 		onclick={openComposer}
@@ -336,6 +367,7 @@
 			: 'fixed z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card p-3 shadow-xl'}
 		style={narrow ? '' : floatingStyle}
 		role="dialog"
+		aria-modal="true"
 		aria-label={m.comment_segment_action()}
 		data-slot="comment-selection-panel"
 		data-shape={narrow ? 'sheet' : 'popover'}
@@ -364,7 +396,7 @@
 		{:else if loginUrl}
 			<p class="text-sm text-muted-foreground">
 				{m.comment_login_prompt()}
-				<a class="text-primary underline underline-offset-2" href={loginUrl}>
+				<a class="wl-accent-link underline underline-offset-2" href={loginUrl}>
 					{m.comment_login_action()}
 				</a>
 			</p>
@@ -392,6 +424,7 @@
 			: 'fixed z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card shadow-xl'}
 		style={narrow ? '' : `left:${threadRect.left}px;top:${threadRect.top}px`}
 		role="dialog"
+		aria-modal="true"
 		aria-label={m.comment_segment_thread()}
 		data-slot="comment-thread-popover"
 		data-shape={narrow ? 'sheet' : 'popover'}
@@ -402,7 +435,7 @@
 				type="button"
 				bind:this={closeThreadEl}
 				class="inline-flex min-h-6 items-center rounded-sm px-1.5 text-xs text-muted-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-				onclick={closeThread}>{m.comment_segment_close()}</button
+				onclick={() => closeThread()}>{m.comment_segment_close()}</button
 			>
 		</div>
 		<ul class="max-h-80 overflow-auto px-3">

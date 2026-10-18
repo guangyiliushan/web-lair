@@ -136,7 +136,7 @@
 							</div>
 							<p class="mt-1.5 text-sm whitespace-pre-wrap text-muted-foreground">{entry.text}</p>
 							{#if entry.anchorGated}
-								<p class="mt-1.5 text-xs text-muted-foreground/70" data-slot="comment-anchor-gated">
+								<p class="mt-1.5 text-xs text-muted-foreground" data-slot="comment-anchor-gated">
 									{m.admin_comments_anchor_gated()}
 								</p>
 							{:else if entry.anchorQuote}

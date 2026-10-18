@@ -28,7 +28,12 @@ function browserApiPort(): number {
 	const raw = process.env.VITEST_BROWSER_API_PORT;
 	const port = Number(raw ?? 5199);
 	if (!Number.isInteger(port) || port < 1 || port > 65535) {
-		throw new Error(`VITEST_BROWSER_API_PORT must be a TCP port (1-65535), got "${raw}"`);
+		// dev/build/check load this file too: fail loudly only for test runs,
+		// where a typo would otherwise silently pick another port.
+		const message = `VITEST_BROWSER_API_PORT must be a TCP port (1-65535), got "${raw}"`;
+		if (process.env.VITEST) throw new Error(message);
+		console.warn(`[vite.config] ${message}; using 5199`);
+		return 5199;
 	}
 	return port;
 }

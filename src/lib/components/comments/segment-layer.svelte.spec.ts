@@ -281,4 +281,65 @@ describe('segment comment layer', () => {
 		expect(document.querySelector('[data-slot="comment-thread-popover"]')).toBeNull();
 		expect(document.activeElement).toBe(mark);
 	});
+
+	it('returns focus to the comments heading when the composer closes', async () => {
+		const title = document.createElement('h2');
+		title.id = 'comments-title';
+		title.tabIndex = -1;
+		document.body.appendChild(title);
+		hosts.push(title);
+		const container = host('<p>第一段：选择这段文字来评论。</p>');
+		const paragraph = container.querySelector('p') as HTMLElement;
+		render(SegmentCommentLayer, {
+			container,
+			threads,
+			canComment: true,
+			loginUrl: null
+		});
+		await select(paragraph, '选择这段文字');
+		document.querySelector<HTMLButtonElement>('[data-slot="comment-selection-action"]')?.click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(document.querySelector('[data-slot="comment-selection-panel"]')).toBeNull();
+		expect(document.activeElement).toBe(title);
+	});
+
+	it('keeps Tab inside the open composer (modal contract)', async () => {
+		const container = host('<p>第一段：选择这段文字来评论。</p>');
+		const paragraph = container.querySelector('p') as HTMLElement;
+		render(SegmentCommentLayer, {
+			container,
+			threads,
+			canComment: true,
+			loginUrl: null
+		});
+		await select(paragraph, '选择这段文字');
+		document.querySelector<HTMLButtonElement>('[data-slot="comment-selection-action"]')?.click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const panel = document.querySelector<HTMLElement>('[data-slot="comment-selection-panel"]');
+		expect(panel?.getAttribute('aria-modal')).toBe('true');
+		const submit = panel?.querySelector<HTMLButtonElement>('button[type="submit"]');
+		submit?.focus();
+		document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(panel?.contains(document.activeElement)).toBe(true);
+	});
+
+	it('does not navigate when a mark wraps link text', async () => {
+		const container = host(
+			'<p>前文<a href="#elsewhere"><span class="wl-cm" data-cid="root-1">选中</span></a>后文</p>'
+		);
+		render(SegmentCommentLayer, {
+			container,
+			threads: layerThreads,
+			canComment: true,
+			loginUrl: null
+		});
+		const mark = container.querySelector('.wl-cm') as HTMLElement;
+		const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+		mark.dispatchEvent(click);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(click.defaultPrevented).toBe(true);
+	});
 });

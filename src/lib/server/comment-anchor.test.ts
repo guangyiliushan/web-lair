@@ -506,6 +506,14 @@ describe('anchor schemas', () => {
 		expect(parseCommentAnchorDraft({ ord: 0, start: 4, end: 4, exact: 'text' })).toBeNull();
 	});
 
+	it('preserves the blockLength fingerprint through the parser', () => {
+		// Regression: hand-projecting {ord,start,end,exact} dropped this field,
+		// which made the write-path stale-ord guard unreachable over HTTP.
+		expect(
+			parseCommentAnchorDraft({ ord: 1, start: 0, end: 4, exact: 'text', blockLength: 14 })
+		).toEqual({ ord: 1, start: 0, end: 4, exact: 'text', blockLength: 14 });
+	});
+
 	it('applies the stored [2, 500] window to drafts as well', () => {
 		// A 1-code-point range used to pass the draft schema, get stored, and then
 		// be rejected by the read schema - the comment silently lost its anchor.

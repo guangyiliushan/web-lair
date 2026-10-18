@@ -130,12 +130,19 @@ describe('post comment actions', () => {
 					anchorOrd: '1',
 					anchorStart: '0',
 					anchorEnd: '4',
-					anchorExact: 'text'
+					anchorExact: 'text',
+					anchorLength: '14'
 				})
 			)
 		);
 		expect(ok).toEqual({ submitted: 'pending' });
-		expect(state.submitCalls[0]?.anchor).toEqual({ ord: 1, start: 0, end: 4, exact: 'text' });
+		expect(state.submitCalls[0]?.anchor).toEqual({
+			ord: 1,
+			start: 0,
+			end: 4,
+			exact: 'text',
+			blockLength: 14
+		});
 
 		state.submitCalls = [];
 		const bad = await commentAction(

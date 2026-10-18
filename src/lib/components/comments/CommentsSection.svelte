@@ -30,7 +30,11 @@
 	// to it so a reader deep in the thread is not left guessing (review P2-3).
 	let messageEl = $state<HTMLElement | null>(null);
 	$effect(() => {
-		if (form?.message) messageEl?.focus();
+		// The segment panel renders the same message and owns focus while open;
+		// stealing it here would scroll the reader away from their composer.
+		if (form?.message && !document.querySelector('[data-slot="comment-selection-panel"]')) {
+			messageEl?.focus();
+		}
 	});
 </script>
 
@@ -82,7 +86,7 @@
 		{:else if loginUrl}
 			<p class="text-sm text-muted-foreground">
 				{m.comment_login_prompt()}
-				<a class="text-primary underline underline-offset-2" href={loginUrl}>
+				<a class="wl-accent-link underline underline-offset-2" href={loginUrl}>
 					{m.comment_login_action()}
 				</a>
 			</p>

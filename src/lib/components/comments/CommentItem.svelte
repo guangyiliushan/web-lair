@@ -126,7 +126,7 @@
 {#snippet commentBody(text: string)}
 	<span class="whitespace-pre-wrap" data-comment-body
 		>{#each parseCommentText(text) as segment, i (i)}{#if segment.type === 'link'}<a
-					class="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+					class="wl-accent-link underline underline-offset-2 hover:decoration-primary"
 					href={segment.href}
 					target="_blank"
 					rel="nofollow ugc noopener noreferrer">{segment.text}</a
@@ -215,8 +215,14 @@
 			use:enhance={() => {
 				deleteBusy = true;
 				return async ({ result, update }) => {
-					await update();
-					deleteBusy = false;
+					try {
+						// An error result would route the page to the error boundary
+						// and take the inline confirm with it.
+						if (result.type === 'error') return;
+						await update();
+					} finally {
+						deleteBusy = false;
+					}
 					if (result.type === 'success' && confirmingDeleteId === id) {
 						// Park focus on the section title so keyboard users keep
 						// their place. Guarded to THIS surface: a user who moved
@@ -305,7 +311,7 @@
 							<Badge variant="secondary">{m.comment_orphan_title()}</Badge>
 						{:else if root.anchor.targetId}
 							<a
-								class="rounded-sm text-primary underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+								class="wl-accent-link rounded-sm underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 								href={`#${root.anchor.targetId}`}>{m.comment_jump_to_source()}</a
 							>
 						{/if}

@@ -125,10 +125,10 @@ export function parseCommentAnchor(value: unknown): CommentAnchor | null {
 
 export function parseCommentAnchorDraft(value: unknown): CommentAnchorDraft | null {
 	const parsed = commentAnchorDraftSchema.safeParse(value);
-	if (!parsed.success) return null;
-	const { ord, start, end, exact } = parsed.data;
-	// The draft carries no context; the server derives prefix/suffix.
-	return { ord, start, end, exact };
+	// Return the parsed data as-is: hand-projecting the four original keys once
+	// dropped `blockLength`, which made the stale-ord fingerprint dead code over
+	// HTTP while its unit tests (calling the resolver directly) stayed green.
+	return parsed.success ? parsed.data : null;
 }
 
 /* ── Block directory ────────────────────────────────────────────────────── */
@@ -458,7 +458,11 @@ function pickOccurrence(
 		contextMatches(block, occurrence.start, occurrence.end, quote.prefix, quote.suffix)
 	);
 	if (contextual.length === 1) return contextual[0];
-	if (contextual.length > 1) return nearest(contextual, hint);
+	if (contextual.length > 1) {
+		// The stored offset is the only thing that distinguishes identical runs;
+		// prefer it over pure distance when it survived.
+		return contextual.find((occurrence) => occurrence.start === hint) ?? nearest(contextual, hint);
+	}
 
 	// No context survived (the surrounding text was edited): trust the stored
 	// range only if it is itself an occurrence; otherwise this is ambiguous.

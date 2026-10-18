@@ -154,8 +154,8 @@ export async function renderMarkdownToHtml(markdown: string): Promise<string> {
  * Why not a plugin: a frozen unified processor rejects `.use()` ("Cannot call
  * `use` on a frozen processor", measured 2026-10-17), and rebuilding the whole
  * chain per request would re-initialise Shiki. `run()` + `stringify()` on THIS
- * instance stay on the same compiler, so `renderMarkdownDocument(md).html` is
- * byte-identical to `renderMarkdownToHtml(md)` when no mark is applied — the
+ * instance stay on the same compiler, so `stringifyMarkdownTree(renderMarkdownTree(md))`
+ * is byte-identical to `renderMarkdownToHtml(md)` when no mark is applied — the
  * equivalence test pins that.
  */
 export async function renderMarkdownTree(markdown: string): Promise<HastRoot> {
