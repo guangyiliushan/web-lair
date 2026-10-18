@@ -41,6 +41,11 @@ function empty(status: number, headers: Record<string, string> = {}): Response {
 }
 
 export const POST: RequestHandler = async ({ url, getClientAddress }) => {
+	const token = url.searchParams.get('token') ?? '';
+	// Validate before consuming the shared per-IP bucket: junk POSTs to a
+	// provider egress IP must not lock out a legitimate opt-out.
+	if (!isSubscriptionToken(token)) return empty(200);
+
 	const address = clientAddress(getClientAddress);
 	const rate = await rateLimit(
 		getCache(),
@@ -52,9 +57,6 @@ export const POST: RequestHandler = async ({ url, getClientAddress }) => {
 		console.warn('[unsubscribe] one-click rate limit hit');
 		return empty(429, { 'retry-after': '60' });
 	}
-
-	const token = url.searchParams.get('token') ?? '';
-	if (!isSubscriptionToken(token)) return empty(200);
 
 	try {
 		await unsubscribe(token);

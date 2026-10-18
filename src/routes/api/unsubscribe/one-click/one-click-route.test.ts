@@ -46,10 +46,11 @@ describe('RFC 8058 one-click unsubscribe endpoint', () => {
 		);
 	});
 
-	it('answers 200 for a malformed or missing token without touching the service', async () => {
+	it('answers 200 for a malformed or missing token without consuming the rate bucket', async () => {
 		expect((await POST(event('short'))).status).toBe(200);
 		expect((await POST(event(null))).status).toBe(200);
 		expect(unsubscribeMock).not.toHaveBeenCalled();
+		expect(rateLimitMock).not.toHaveBeenCalled();
 	});
 
 	it('answers 200 for an unknown but well-formed token (no oracle)', async () => {
