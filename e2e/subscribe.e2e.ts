@@ -46,7 +46,10 @@ test.describe('subscription double opt-in', () => {
 		expect(psql(`select status from subscriptions where email = '${MARKER}'`)).toBe('pending');
 
 		// Prefetch-safety: opening the link must not confirm the address.
-		await page.goto(`/zh-cn/subscribe/confirm?token=${token}`);
+		const confirmResponse = await page.goto(`/zh-cn/subscribe/confirm?token=${token}`);
+		// strict-origin keeps the token out of Referer without nulling Origin
+		// (no-referrer makes Chromium send Origin: null and the POST 403s).
+		expect(confirmResponse?.headers()['referrer-policy']).toBe('strict-origin');
 		await expect(page.getByRole('button', { name: '确认', exact: true })).toBeVisible({
 			timeout: 20_000
 		});

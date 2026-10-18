@@ -125,7 +125,8 @@ export interface SubscriptionLookup {
 
 export async function subscriptionByToken(token: string): Promise<SubscriptionLookup | null> {
 	if (!isSubscriptionToken(token)) {
-		console.warn('[subscribe] token rejected: malformed');
+		// A bare page hit (no token) is crawler traffic, not an incident.
+		if (token !== '') console.warn('[subscribe] token rejected: malformed');
 		return null;
 	}
 	const [row] = await db
@@ -142,34 +143,55 @@ export async function subscriptionByToken(token: string): Promise<SubscriptionLo
 
 export type ConfirmResult = 'subscribed' | 'already-subscribed' | 'unsubscribed' | 'invalid';
 
+async function statusOfToken(token: string): Promise<ConfirmResult> {
+	const again = await subscriptionByToken(token);
+	if (!again) return 'invalid';
+	if (again.status === 'subscribed') return 'already-subscribed';
+	if (again.status === 'unsubscribed') return 'unsubscribed';
+	return 'invalid';
+}
+
 export async function confirmSubscription(token: string): Promise<ConfirmResult> {
-	const row = await subscriptionByToken(token);
-	if (!row) return 'invalid';
-	if (row.status === 'subscribed') return 'already-subscribed';
-	if (row.status === 'unsubscribed') return 'unsubscribed';
-	await db
+	// Conditional write: a concurrent unsubscribe (delete or status change) must
+	// win over this confirm instead of being overwritten by a blind UPDATE.
+	const updated = await db
 		.update(subscriptions)
 		.set({ status: 'subscribed', verifiedAt: new Date() })
-		.where(eq(subscriptions.token, token));
+		.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'pending')))
+		.returning({ id: subscriptions.id });
+	if (updated.length === 0) return statusOfToken(token);
 	return 'subscribed';
 }
 
 export type UnsubscribeResult = 'unsubscribed' | 'already-unsubscribed' | 'invalid';
 
 export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
+	// Pending rows cannot be marked unsubscribed (the CHECK requires
+	// verified_at on non-pending rows), so an opt-out from a never-confirmed
+	// address deletes the row. Both writes are predicate-guarded: a concurrent
+	// confirm must never be erased or overwritten.
+	const deleted = await db
+		.delete(subscriptions)
+		.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'pending')))
+		.returning({ id: subscriptions.id });
+	if (deleted.length > 0) return 'unsubscribed';
+
+	const updated = await db
+		.update(subscriptions)
+		.set({ status: 'unsubscribed', unsubscribedAt: new Date() })
+		.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'subscribed')))
+		.returning({ id: subscriptions.id });
+	if (updated.length > 0) return 'unsubscribed';
+
 	const row = await subscriptionByToken(token);
 	if (!row) return 'invalid';
 	if (row.status === 'unsubscribed') return 'already-unsubscribed';
-	if (row.status === 'pending') {
-		// Never confirmed: there is nothing to suppress, and the CHECK requires
-		// verified_at on any non-pending row. Drop the row so no confirmation
-		// mail can reach an address that asked to opt out.
-		await db.delete(subscriptions).where(eq(subscriptions.token, token));
-		return 'unsubscribed';
-	}
+	return 'invalid';
+}
+
+/** Drops a pending row whose confirmation mail could not be delivered. */
+export async function discardPendingToken(token: string): Promise<void> {
 	await db
-		.update(subscriptions)
-		.set({ status: 'unsubscribed', unsubscribedAt: new Date() })
-		.where(eq(subscriptions.token, token));
-	return 'unsubscribed';
+		.delete(subscriptions)
+		.where(and(eq(subscriptions.token, token), eq(subscriptions.status, 'pending')));
 }

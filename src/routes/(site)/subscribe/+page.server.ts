@@ -7,6 +7,7 @@ import { rateLimit } from '$lib/server/cache/store';
 import { subscriptionConfirmMail } from '$lib/server/mail/templates';
 import { sendMailOrDevLog } from '$lib/server/mail/transport';
 import {
+	discardPendingToken,
 	isSubscriptionLang,
 	normalizeEmail,
 	requestSubscription
@@ -61,6 +62,11 @@ export const actions: Actions = {
 			try {
 				await sendMailOrDevLog({ to: email, ...subscriptionConfirmMail(lang, url, optOut) });
 			} catch (error) {
+				// Roll the never-mailed pending row back, otherwise the resend
+				// cooldown turns the retry into a success with no mail.
+				await discardPendingToken(outcome.token).catch((rollbackError) =>
+					console.error('[subscribe] pending rollback failed', rollbackError)
+				);
 				console.error('[subscribe] confirmation mail failed', error);
 				return fail(503, { message: m.subscribe_err_mail() });
 			}

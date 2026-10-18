@@ -2,7 +2,11 @@ import { subscriptionByToken, unsubscribe } from '$lib/server/services/subscript
 import type { Actions, PageServerLoad } from './$types';
 
 /** Unsubscribe landing page (same GET-render / POST-mutate split as confirm). */
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async ({ url, setHeaders }) => {
+	// The token is in this URL; strict-origin keeps the path out of Referer
+	// while still sending a real Origin header (no-referrer sends Origin: null,
+	// which SvelteKit's form CSRF check rejects).
+	setHeaders({ 'referrer-policy': 'strict-origin' });
 	const token = url.searchParams.get('token') ?? '';
 	const row = await subscriptionByToken(token);
 	return {

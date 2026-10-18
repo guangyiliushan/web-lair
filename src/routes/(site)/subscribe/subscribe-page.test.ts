@@ -6,16 +6,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * pending/already-subscribed, and a visible 503 when the confirmation mail
  * cannot be sent.
  */
-const { state, requestSubscriptionMock, sendMailMock, rateLimitMock } = vi.hoisted(() => {
-	const state = {
-		env: { ORIGIN: 'https://lair.example' } as Record<string, string>,
-		locale: 'zh-cn'
-	};
-	const requestSubscriptionMock = vi.fn();
-	const sendMailMock = vi.fn();
-	const rateLimitMock = vi.fn(async () => ({ allowed: true, count: 1 }));
-	return { state, requestSubscriptionMock, sendMailMock, rateLimitMock };
-});
+const { state, requestSubscriptionMock, sendMailMock, rateLimitMock, discardMock } = vi.hoisted(
+	() => {
+		const state = {
+			env: { ORIGIN: 'https://lair.example' } as Record<string, string>,
+			locale: 'zh-cn'
+		};
+		const requestSubscriptionMock = vi.fn();
+		const sendMailMock = vi.fn();
+		const rateLimitMock = vi.fn(async () => ({ allowed: true, count: 1 }));
+		const discardMock = vi.fn(async () => {});
+		return { state, requestSubscriptionMock, sendMailMock, rateLimitMock, discardMock };
+	}
+);
 
 vi.mock('$env/dynamic/private', () => ({ env: state.env }));
 vi.mock('$lib/paraglide/runtime', () => ({ getLocale: () => state.locale }));
@@ -32,7 +35,11 @@ vi.mock('$lib/server/db', () => ({ db: {} }));
 vi.mock('$lib/server/db/system', () => ({ subscriptions: {} }));
 vi.mock('$lib/server/services/subscriptions', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/server/services/subscriptions')>();
-	return { ...actual, requestSubscription: requestSubscriptionMock };
+	return {
+		...actual,
+		requestSubscription: requestSubscriptionMock,
+		discardPendingToken: discardMock
+	};
 });
 vi.mock('$lib/server/mail/transport', () => ({ sendMailOrDevLog: sendMailMock }));
 
@@ -49,6 +56,7 @@ function event(fields: Record<string, string>, ip = '203.0.113.7') {
 
 beforeEach(() => {
 	requestSubscriptionMock.mockReset();
+	discardMock.mockReset();
 	sendMailMock.mockReset();
 	sendMailMock.mockResolvedValue(undefined);
 	rateLimitMock.mockReset();
@@ -148,6 +156,7 @@ describe('subscribe action', () => {
 		};
 		expect(result.status).toBe(503);
 		expect(result.data.message).toBe('err-mail');
+		expect(discardMock).toHaveBeenCalledWith('tok_1');
 		spy.mockRestore();
 	});
 });

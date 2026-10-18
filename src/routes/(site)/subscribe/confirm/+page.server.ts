@@ -6,7 +6,11 @@ import type { Actions, PageServerLoad } from './$types';
  * button; the state change happens in the POST action below, so mail scanners
  * that prefetch links cannot confirm on the reader's behalf.
  */
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async ({ url, setHeaders }) => {
+	// The token is in this URL; strict-origin keeps the path out of Referer
+	// while still sending a real Origin header (no-referrer sends Origin: null,
+	// which SvelteKit's form CSRF check rejects).
+	setHeaders({ 'referrer-policy': 'strict-origin' });
 	const token = url.searchParams.get('token') ?? '';
 	const row = await subscriptionByToken(token);
 	return {
