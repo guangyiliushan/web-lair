@@ -21,10 +21,10 @@ import type { RequestHandler } from './$types';
 const MAX_BODY_BYTES = 8 * 1024;
 const MAX_SKEW_SECONDS = 300;
 
-function json(body: unknown, status: number): Response {
+function json(body: unknown, status: number, headers: Record<string, string> = {}): Response {
 	return new Response(JSON.stringify(body), {
 		status,
-		headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+		headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers }
 	});
 }
 
@@ -32,6 +32,26 @@ function parseSignature(value: string | null): Buffer | null {
 	if (!value) return null;
 	const match = /^sha256=([0-9a-f]{64})$/i.exec(value.trim());
 	return match ? Buffer.from(match[1], 'hex') : null;
+}
+
+async function readCappedBody(request: Request, max: number): Promise<string | null> {
+	const declared = Number(request.headers.get('content-length') ?? '0');
+	if (Number.isFinite(declared) && declared > max) return null;
+	if (!request.body) return '';
+	const reader = request.body.getReader();
+	const chunks: Buffer[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > max) {
+			await reader.cancel();
+			return null;
+		}
+		chunks.push(Buffer.from(value));
+	}
+	return Buffer.concat(chunks).toString('utf8');
 }
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -45,17 +65,17 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'stale_timestamp' }, 401);
 	}
 
-	const declared = Number(request.headers.get('content-length') ?? '0');
-	if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
-		return json({ error: 'body_too_large' }, 413);
-	}
-
-	const raw = await request.text();
-	if (Buffer.byteLength(raw) > MAX_BODY_BYTES) return json({ error: 'body_too_large' }, 413);
+	const raw = await readCappedBody(request, MAX_BODY_BYTES);
+	if (raw === null) return json({ error: 'body_too_large' }, 413);
 
 	const provided = parseSignature(request.headers.get('x-mail-events-signature'));
+	if (!provided) {
+		console.warn('[mail-events] rejected signature');
+		return json({ error: 'invalid_signature' }, 401);
+	}
 	const expected = createHmac('sha256', key).update(`${timestamp}.${raw}`).digest();
-	if (!provided || provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+	if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+		console.warn('[mail-events] rejected signature');
 		return json({ error: 'invalid_signature' }, 401);
 	}
 
@@ -75,6 +95,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'invalid_reason' }, 400);
 	}
 
-	await suppress(email, reason, 'mail-events');
+	try {
+		await suppress(email, reason, 'mail-events');
+	} catch (error) {
+		// 5xx lets the provider retry; a 200 would drop a complaint.
+		console.error('[mail-events] suppression write failed', error);
+		return json({ error: 'temporarily_unavailable' }, 503, { 'retry-after': '60' });
+	}
+	console.info(`[mail-events] suppressed reason=${reason}`);
 	return json({ ok: true }, 200);
 };

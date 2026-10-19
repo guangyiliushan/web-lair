@@ -4,6 +4,7 @@ import { getLocale } from '$lib/paraglide/runtime';
 import { m } from '$lib/paraglide/messages';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
+import { requestAddress } from '$lib/server/security/request-address';
 import { subscriptionConfirmMail } from '$lib/server/mail/templates';
 import { sendMailOrDevLog } from '$lib/server/mail/transport';
 import {
@@ -39,14 +40,7 @@ export const actions: Actions = {
 		const email = normalizeEmail(String(form.get('email') ?? ''));
 		if (!email) return fail(400, { message: m.subscribe_err_email() });
 
-		const address = (() => {
-			try {
-				return getClientAddress() || 'unknown';
-			} catch {
-				// dev without ADDRESS_HEADER: one shared bucket
-				return 'unknown';
-			}
-		})();
+		const address = requestAddress(getClientAddress);
 		const rate = await rateLimit(
 			getCache(),
 			`limits:subscribe:${address}`,

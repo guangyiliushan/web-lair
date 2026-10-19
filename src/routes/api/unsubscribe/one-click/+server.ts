@@ -1,5 +1,6 @@
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
+import { requestAddress } from '$lib/server/security/request-address';
 import { isSubscriptionToken } from '$lib/server/services/subscription-token';
 import { unsubscribe } from '$lib/server/services/subscriptions';
 import type { RequestHandler } from './$types';
@@ -23,15 +24,7 @@ import type { RequestHandler } from './$types';
  * rejects it before routing (403).
  */
 const ONE_CLICK_RATE_LIMIT = { limit: 30, windowSeconds: 60 } as const;
-
-function clientAddress(getClientAddress: () => string): string {
-	try {
-		return getClientAddress() || 'unknown';
-	} catch {
-		// dev without ADDRESS_HEADER: one shared bucket
-		return 'unknown';
-	}
-}
+let warnedUnknownAddress = false;
 
 function empty(status: number, headers: Record<string, string> = {}): Response {
 	return new Response(null, {
@@ -46,20 +39,30 @@ export const POST: RequestHandler = async ({ url, getClientAddress }) => {
 	// provider egress IP must not lock out a legitimate opt-out.
 	if (!isSubscriptionToken(token)) return empty(200);
 
-	const address = clientAddress(getClientAddress);
-	const rate = await rateLimit(
-		getCache(),
-		`limits:unsubscribe-oneclick:${address}`,
-		ONE_CLICK_RATE_LIMIT.limit,
-		ONE_CLICK_RATE_LIMIT.windowSeconds
-	);
-	if (!rate.allowed) {
-		console.warn('[unsubscribe] one-click rate limit hit');
-		return empty(429, { 'retry-after': '60' });
+	const address = requestAddress(getClientAddress);
+	if (address === 'unknown') {
+		// A misconfigured ADDRESS_HEADER collapses every receiver into one
+		// bucket; the token is still the credential, so skip the seatbelt
+		// rather than 429 the whole internet.
+		if (!warnedUnknownAddress) {
+			warnedUnknownAddress = true;
+			console.warn('[unsubscribe] one-click has no client address; per-IP limit disabled');
+		}
+	} else {
+		const rate = await rateLimit(
+			getCache(),
+			`limits:unsubscribe-oneclick:${address}`,
+			ONE_CLICK_RATE_LIMIT.limit,
+			ONE_CLICK_RATE_LIMIT.windowSeconds
+		);
+		if (!rate.allowed) {
+			console.warn('[unsubscribe] one-click rate limit hit');
+			return empty(429, { 'retry-after': String(ONE_CLICK_RATE_LIMIT.windowSeconds) });
+		}
 	}
 
 	try {
-		await unsubscribe(token);
+		await unsubscribe(token, 'one-click');
 	} catch (error) {
 		// A 5xx is the only way to make the receiver retry; a 200 here would
 		// silently drop a valid opt-out during a DB blip.

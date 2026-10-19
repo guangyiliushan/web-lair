@@ -3,6 +3,7 @@ import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { emailSuppressions } from '$lib/server/db/system';
 import { decodeHmacKey, hashEmail } from './email-hash';
+import { normalizeEmail } from './email-normalize';
 
 /**
  * Email suppression (E2-1, CAN-SPAM / RFC 8058 / ICO): a "do not contact"
@@ -37,14 +38,17 @@ export function assertSuppressionKey(): void {
 export function suppressionHash(email: string): string {
 	const key = decodeHmacKey(env.SUPPRESSION_HMAC_KEY);
 	if (!key) throw new SuppressionKeyMissingError();
-	return hashEmail(email, key);
+	const canonical = normalizeEmail(email);
+	if (!canonical) throw new Error('suppressionHash requires a valid email address');
+	return hashEmail(canonical, key);
 }
 
 export async function suppressionReason(email: string): Promise<SuppressionReason | null> {
+	const hash = suppressionHash(email);
 	const [row] = await db
 		.select({ reason: emailSuppressions.reason })
 		.from(emailSuppressions)
-		.where(eq(emailSuppressions.emailHash, suppressionHash(email)))
+		.where(eq(emailSuppressions.emailHash, hash))
 		.limit(1);
 	return row ? (row.reason as SuppressionReason) : null;
 }

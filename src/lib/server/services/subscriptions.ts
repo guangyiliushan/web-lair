@@ -12,6 +12,7 @@ import {
 import { liftUnsubscribedSuppression, suppress, suppressionReason } from './suppressions';
 
 export { isSubscriptionToken, newSubscriptionToken } from './subscription-token';
+export { normalizeEmail } from './email-normalize';
 
 /**
  * Double opt-in subscriptions (deploy batch D-2; schema from ledger §26).
@@ -36,8 +37,6 @@ export type SubscriptionStatus = 'pending' | 'subscribed' | 'unsubscribed';
  */
 export const CONSENT_VERSION = '2026-10-v1';
 
-const EMAIL_MAX = 254;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** A still-pending address is not re-mailed (nor its live link voided) inside this window. */
 const RESEND_COOLDOWN_MS = 15 * 60 * 1000;
 /**
@@ -55,7 +54,7 @@ const warnedTtlClamps = new Set<string>();
 export function subscriptionTokenTtlMs(rawDays: string | undefined): number {
 	const raw = rawDays?.trim() ?? '';
 	const parsed = Number(raw);
-	const days = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TOKEN_TTL_DAYS;
+	const days = Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_TOKEN_TTL_DAYS;
 	if (days > MAX_TOKEN_TTL_DAYS) {
 		if (!warnedTtlClamps.has(raw)) {
 			warnedTtlClamps.add(raw);
@@ -82,13 +81,6 @@ export function subscribeAddressKey(email: string): string | null {
 		addressHasher = { raw, hash: keyedHasher('SUBSCRIBE_HMAC_KEY', raw) };
 	}
 	return addressHasher.hash?.(email) ?? null;
-}
-
-export function normalizeEmail(raw: string): string | null {
-	const email = raw.trim().toLowerCase();
-	if (email.length === 0 || email.length > EMAIL_MAX) return null;
-	if (!EMAIL_RE.test(email)) return null;
-	return email;
 }
 
 export function isSubscriptionLang(value: string): value is SubscriptionLang {
@@ -173,7 +165,10 @@ export async function requestSubscription(input: {
 				and(
 					eq(subscriptions.id, existing.id),
 					ne(subscriptions.status, 'subscribed'),
-					eq(subscriptions.token, existing.token)
+					or(
+						eq(subscriptions.tokenHash, hashSubscriptionToken(existing.token)),
+						eq(subscriptions.token, existing.token)
+					)
 				)
 			)
 			.returning({ id: subscriptions.id });
@@ -290,6 +285,9 @@ export async function confirmSubscription(token: string): Promise<ConfirmResult>
 	// The lift runs in the same transaction: an unsubscribe that commits after
 	// this block re-adds the suppression, and one that committed first makes the
 	// status predicate miss (so we never delete a fresh opt-out).
+	// Deliberately no suppression check here: the form already blocks hard
+	// bounces/complaints, and a late pending link may still confirm. Bulk senders
+	// must filter email_suppressions; see F-17 in deploy-followups.
 	const cutoff = new Date(Date.now() - subscriptionTokenTtlMs(env.SUBSCRIBE_TOKEN_TTL_DAYS));
 	const tokenHash = hashSubscriptionToken(token);
 	const confirmed = await db.transaction(async (tx) => {
@@ -317,7 +315,12 @@ export async function confirmSubscription(token: string): Promise<ConfirmResult>
 
 export type UnsubscribeResult = 'unsubscribed' | 'already-unsubscribed' | 'invalid';
 
-export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
+export type UnsubscribeSource = 'unsubscribe-page' | 'one-click';
+
+export async function unsubscribe(
+	token: string,
+	source: UnsubscribeSource = 'unsubscribe-page'
+): Promise<UnsubscribeResult> {
 	// Pending rows cannot be marked unsubscribed (the CHECK requires
 	// verified_at on non-pending rows), so an opt-out from a never-confirmed
 	// address deletes the row. The delete/update and the suppression write are
@@ -334,7 +337,7 @@ export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
 			.where(and(credential, eq(subscriptions.status, 'pending')))
 			.returning({ email: subscriptions.email });
 		if (deleted.length > 0) {
-			await suppress(deleted[0].email, 'unsubscribed', 'unsubscribe-page', tx);
+			await suppress(deleted[0].email, 'unsubscribed', source, tx);
 			return 'unsubscribed' as const;
 		}
 
@@ -344,7 +347,7 @@ export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
 			.where(and(credential, eq(subscriptions.status, 'subscribed')))
 			.returning({ email: subscriptions.email });
 		if (updated.length > 0) {
-			await suppress(updated[0].email, 'unsubscribed', 'unsubscribe-page', tx);
+			await suppress(updated[0].email, 'unsubscribed', source, tx);
 			return 'unsubscribed' as const;
 		}
 
@@ -356,7 +359,7 @@ export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
 		if (again?.status === 'unsubscribed') {
 			// Repair legacy rows: the terminal state exists but the suppression
 			// record may predate this batch (idempotent insert).
-			await suppress(again.email, 'unsubscribed', 'unsubscribe-page', tx);
+			await suppress(again.email, 'unsubscribed', source, tx);
 			return 'already-unsubscribed' as const;
 		}
 		return null;

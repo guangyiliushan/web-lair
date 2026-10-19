@@ -9,7 +9,11 @@
 	const state = $derived(form?.result ?? data.status);
 </script>
 
-<div class="flex w-full flex-col items-center py-12">
+<svelte:head>
+	<title>{m.unsubscribe_title()}</title>
+</svelte:head>
+
+<div class="flex w-full flex-col items-center px-4 py-12 sm:px-6">
 	<Card.Root class="w-full max-w-md">
 		<Card.Header>
 			<h1 data-slot="card-title" class="text-base leading-snug font-medium">
