@@ -9,10 +9,9 @@
  *
  * `subscriptions.sweep` (email hardening E1-2) deletes pending rows after 30
  * days. The pair `(job, cron_expr)` is unique
- * (`job_schedules_job_cron_expr_uniq`), so re-running is a no-op. `tz` keeps
- * its DB default (UTC); the app resolves the site timezone for display/editing.
- * Actually: the script reads options.site.timezone and inserts it (fallback UTC),
- * matching the admin UI.
+ * (`job_schedules_job_cron_expr_uniq`), so re-running is a no-op. The script
+ * reads `options.site.timezone` and inserts it (fallback UTC), matching the
+ * admin UI.
  *
  * Usage: node scripts/ensure-job-schedules.ts [--dry-run]
  */

@@ -18,23 +18,20 @@ if (!DB_URL) {
 	process.exit(1);
 }
 
-const RAW_KEY = process.env.SUPPRESSION_HMAC_KEY ?? '';
+const APPLY = process.argv.includes('--apply');
+
 const KEY = (() => {
-	try {
-		const key = Buffer.from(RAW_KEY.trim(), 'base64');
-		return key.length === 32 ? key : null;
-	} catch {
-		return null;
-	}
+	if (!APPLY) return null;
+	const raw = (process.env.SUPPRESSION_HMAC_KEY ?? '').trim();
+	const key = Buffer.from(raw, 'base64');
+	return key.length === 32 ? key : null;
 })();
-if (!KEY) {
+if (APPLY && !KEY) {
 	console.error(
 		'[backfill-suppressions] SUPPRESSION_HMAC_KEY must be 32 base64-encoded bytes; refusing to write unkeyed hashes'
 	);
 	process.exit(1);
 }
-
-const APPLY = process.argv.includes('--apply');
 
 async function main(): Promise<void> {
 	const sql = postgres(DB_URL!, { max: 1 });
@@ -50,8 +47,16 @@ async function main(): Promise<void> {
 			return;
 		}
 		let inserted = 0;
+		let skipped = 0;
 		for (const row of rows) {
-			const hash = createHmac('sha256', KEY!).update(row.email).digest('hex');
+			// The runtime hashes the normalized address; a mixed-case legacy
+			// row must not produce a hash that can never match.
+			const email = row.email.trim().toLowerCase();
+			if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+				skipped += 1;
+				continue;
+			}
+			const hash = createHmac('sha256', KEY!).update(email).digest('hex');
 			const result = await sql`
 				insert into email_suppressions (email_hash, reason, source)
 				values (${hash}, 'unsubscribed', 'backfill')
@@ -60,7 +65,7 @@ async function main(): Promise<void> {
 			inserted += result.count;
 		}
 		console.log(
-			`inserted ${inserted} suppression rows (${rows.length - inserted} already present)`
+			`inserted ${inserted} suppression rows (${rows.length - inserted} already present, ${skipped} invalid skipped)`
 		);
 	} finally {
 		await sql.end({ timeout: 5 });

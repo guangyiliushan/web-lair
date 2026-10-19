@@ -5,14 +5,15 @@
  * runtime image ships production dependencies only. `drizzle-orm`'s migrator
  * reads the same `drizzle/meta/_journal.json` and writes the same
  * `drizzle.__drizzle_migrations` rows — verified 2026-10-17 against a scratch
- * database (id/hash/created_at byte-identical, 48 public tables, re-run
+ * database (id/hash/created_at byte-identical, 49 public tables, re-run
  * idempotent at the time).
  *
  * E2 regenerated the single baseline in place (49 tables). The journal keeps
  * the ORIGINAL `when`, so an existing DB is not re-run; but the CREATE-only
  * baseline cannot upgrade it either. After migrating, the schema preflight
- * below refuses to start the app on a pre-E2 database and points at the
- * rebuild procedure in deploy/RUNBOOK.md §2.1.
+ * below makes `migrate` exit 1 on a pre-E2 database and points at the rebuild
+ * procedure in deploy/RUNBOOK.md §2.1. It does not guard the app process:
+ * deploy scripts must run `migrate` before `up -d`.
  *
  * Usage (host):  node --env-file-if-exists=.env scripts/migrate.ts
  * Usage (container): node scripts/migrate.ts     # env from compose
@@ -57,7 +58,10 @@ try {
 	}
 } catch (error) {
 	console.error('[migrate] failed:', error);
-	console.error('[migrate] ABORT — do not start the app; restore the pre-migration dump first');
+	console.error('[migrate] ABORT — do not start the app.');
+	console.error(
+		'[migrate] a failure here may mean the database predates the E2 baseline; rebuild per deploy/RUNBOOK.md §2.1 (a dump restore cannot add the missing ledger row).'
+	);
 	process.exitCode = 1;
 } finally {
 	await client.end();
