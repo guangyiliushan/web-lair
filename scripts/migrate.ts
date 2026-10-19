@@ -6,7 +6,7 @@
  * reads the same `drizzle/meta/_journal.json` and writes the same
  * `drizzle.__drizzle_migrations` rows — verified 2026-10-17 against a scratch
  * database (id/hash/created_at byte-identical, 49 public tables, re-run
- * idempotent at the time).
+ * idempotent at the time; the 49-table count was re-verified 2026-10-19).
  *
  * E2 regenerated the single baseline in place (49 tables). The journal keeps
  * the ORIGINAL `when`, so an existing DB is not re-run; but the CREATE-only

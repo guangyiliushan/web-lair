@@ -12,8 +12,9 @@ import { createHmac } from 'node:crypto';
 export function decodeHmacKey(raw: string | undefined): Buffer | null {
 	const value = (raw ?? '').trim();
 	if (!value) return null;
-	// base64 decoding skips non-alphabet characters and never throws; the
-	// length check is the only validation that matters.
+	// Reject non-standard alphabets explicitly: Buffer.from silently skips
+	// them, so a typo could otherwise decode to 32 bytes and be accepted.
+	if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value) || value.length % 4 !== 0) return null;
 	const key = Buffer.from(value, 'base64');
 	return key.length === 32 ? key : null;
 }

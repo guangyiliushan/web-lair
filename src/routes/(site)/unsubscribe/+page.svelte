@@ -2,6 +2,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { m } from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -27,6 +28,9 @@
 				<p class="text-sm" role="status">{m.unsubscribe_already()}</p>
 			{:else if state === 'invalid'}
 				<p class="text-sm text-destructive" role="alert">{m.unsubscribe_invalid()}</p>
+				<a class="text-sm underline underline-offset-2" href={localizeHref('/subscribe')}>
+					{m.subscribe_title()}
+				</a>
 			{:else}
 				<p class="text-sm">{m.unsubscribe_body({ email: data.email ?? '' })}</p>
 				<form method="POST">

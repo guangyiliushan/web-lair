@@ -40,8 +40,9 @@ export const CONSENT_VERSION = '2026-10-v1';
 /** A still-pending address is not re-mailed (nor its live link voided) inside this window. */
 const RESEND_COOLDOWN_MS = 15 * 60 * 1000;
 /**
- * Confirmation-link lifetime (OWASP: single-purpose tokens must expire; NIST
- * SP 800-63B-4 §4.2: emailed recovery codes SHALL expire within 24 hours).
+ * Confirmation-link lifetime (OWASP: single-purpose tokens must expire). The
+ * 24h default borrows NIST SP 800-63B-4 §4.2.1.2's bound for emailed recovery
+ * codes (that section governs account recovery, not list subscriptions).
  * Default 24h; `SUBSCRIBE_TOKEN_TTL_DAYS` may raise it to at most 72h and any
  * larger value is clamped with a warning. `updated_at` is the current token's
  * issue time because every rotation writes the row; a resend therefore starts

@@ -20,6 +20,14 @@ import type { RequestHandler } from './$types';
  */
 const MAX_BODY_BYTES = 8 * 1024;
 const MAX_SKEW_SECONDS = 300;
+let lastSignatureWarn = 0;
+
+function warnBadSignature(): void {
+	const now = Date.now();
+	if (now - lastSignatureWarn < 60_000) return;
+	lastSignatureWarn = now;
+	console.warn('[mail-events] rejected signature');
+}
 
 function json(body: unknown, status: number, headers: Record<string, string> = {}): Response {
 	return new Response(JSON.stringify(body), {
@@ -70,12 +78,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const provided = parseSignature(request.headers.get('x-mail-events-signature'));
 	if (!provided) {
-		console.warn('[mail-events] rejected signature');
+		warnBadSignature();
 		return json({ error: 'invalid_signature' }, 401);
 	}
 	const expected = createHmac('sha256', key).update(`${timestamp}.${raw}`).digest();
 	if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
-		console.warn('[mail-events] rejected signature');
+		warnBadSignature();
 		return json({ error: 'invalid_signature' }, 401);
 	}
 

@@ -7,7 +7,8 @@
  * must never be downgraded).
  *
  * Usage: node scripts/backfill-suppressions.ts [--apply]
- * Requires SUPPRESSION_HMAC_KEY (32B base64); fails closed without it.
+ * Dry-run needs only DATABASE_URL. `--apply` additionally requires
+ * SUPPRESSION_HMAC_KEY (32B base64) and fails closed without it.
  */
 import { createHmac } from 'node:crypto';
 import postgres from 'postgres';
@@ -36,8 +37,8 @@ if (APPLY && !KEY) {
 async function main(): Promise<void> {
 	const sql = postgres(DB_URL!, { max: 1 });
 	try {
-		const rows = await sql<{ email: string }[]>`
-			select email from subscriptions where status = 'unsubscribed'
+		const rows = await sql<{ email: string; unsubscribed_at: Date }[]>`
+			select email, unsubscribed_at from subscriptions where status = 'unsubscribed'
 		`;
 		console.log(
 			`${APPLY ? 'APPLY' : 'dry-run'} backfill-suppressions: unsubscribed rows=${rows.length}`
@@ -58,14 +59,14 @@ async function main(): Promise<void> {
 			}
 			const hash = createHmac('sha256', KEY!).update(email).digest('hex');
 			const result = await sql`
-				insert into email_suppressions (email_hash, reason, source)
-				values (${hash}, 'unsubscribed', 'backfill')
+				insert into email_suppressions (email_hash, reason, source, created_at)
+				values (${hash}, 'unsubscribed', 'backfill', ${row.unsubscribed_at})
 				on conflict (email_hash) do nothing
 			`;
 			inserted += result.count;
 		}
 		console.log(
-			`inserted ${inserted} suppression rows (${rows.length - inserted} already present, ${skipped} invalid skipped)`
+			`inserted ${inserted} suppression rows (${rows.length - inserted - skipped} already present, ${skipped} invalid skipped)`
 		);
 	} finally {
 		await sql.end({ timeout: 5 });

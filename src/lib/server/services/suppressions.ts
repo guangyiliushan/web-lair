@@ -35,12 +35,21 @@ export function assertSuppressionKey(): void {
 	if (!decodeHmacKey(env.SUPPRESSION_HMAC_KEY)) throw new SuppressionKeyMissingError();
 }
 
+/**
+ * Suppression hashing must never fail a compliance write. Form and webhook
+ * intake validate strictly before calling this; legacy rows can still hold an
+ * address the practical regex rejects (RFC 5321 permits `user@localhost`,
+ * quoted local parts, etc.). Fall back to trim+lowercase so an opt-out for
+ * such a row still produces a stable hash instead of a 500/503 loop.
+ */
+function canonicalSuppressionAddress(email: string): string {
+	return normalizeEmail(email) ?? email.trim().toLowerCase();
+}
+
 export function suppressionHash(email: string): string {
 	const key = decodeHmacKey(env.SUPPRESSION_HMAC_KEY);
 	if (!key) throw new SuppressionKeyMissingError();
-	const canonical = normalizeEmail(email);
-	if (!canonical) throw new Error('suppressionHash requires a valid email address');
-	return hashEmail(canonical, key);
+	return hashEmail(canonicalSuppressionAddress(email), key);
 }
 
 export async function suppressionReason(email: string): Promise<SuppressionReason | null> {
