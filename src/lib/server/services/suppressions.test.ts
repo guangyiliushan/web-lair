@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHmac } from 'node:crypto';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 const { dbStub, envStub } = vi.hoisted(() => ({
@@ -43,6 +44,11 @@ describe('suppression hashing', () => {
 	it('hashes legacy addresses the strict form regex rejects without throwing', () => {
 		expect(() => suppressionHash('reader@localhost')).not.toThrow();
 		expect(suppressionHash(' Reader@Localhost ')).toBe(suppressionHash('reader@localhost'));
+		// Pin the value to an independently computed HMAC, not just stability.
+		const expected = createHmac('sha256', Buffer.from(KEY, 'base64'))
+			.update('reader@localhost')
+			.digest('hex');
+		expect(suppressionHash(' Reader@Localhost ')).toBe(expected);
 	});
 
 	it('fails closed when the key is missing', () => {

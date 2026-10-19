@@ -44,6 +44,13 @@ function call(request: Request) {
 	return POST({ request } as unknown as Parameters<typeof POST>[0]);
 }
 
+function bodyOfSize(bytes: number): string {
+	const prefix = '{"email":"a@b.co","reason":"bounced","pad":"';
+	const suffix = '"}';
+	const pad = 'x'.repeat(bytes - Buffer.byteLength(prefix) - Buffer.byteLength(suffix));
+	return `${prefix}${pad}${suffix}`;
+}
+
 beforeEach(() => {
 	envStub.MAIL_EVENTS_HMAC_KEY = KEY_B64;
 	suppressMock.mockReset();
@@ -126,6 +133,27 @@ describe('mail events endpoint (E2-4)', () => {
 		const response = await call(signed(JSON.stringify({ email: 'a@b.co', reason: 'bounced' })));
 		expect(response.status).toBe(503);
 		expect(response.headers.get('retry-after')).toBe('60');
+	});
+
+	it('accepts exactly 8192 bytes and rejects 8193 on both cap paths', async () => {
+		const atCap = bodyOfSize(8192);
+		const overCap = bodyOfSize(8193);
+
+		const declaredAt = signed(atCap);
+		declaredAt.headers.set('content-length', '8192');
+		expect((await call(declaredAt)).status).toBe(200);
+
+		const declaredOver = signed(overCap);
+		declaredOver.headers.set('content-length', '8193');
+		expect((await call(declaredOver)).status).toBe(413);
+
+		const streamedAt = signed(atCap);
+		streamedAt.headers.delete('content-length');
+		expect((await call(streamedAt)).status).toBe(200);
+
+		const streamedOver = signed(overCap);
+		streamedOver.headers.delete('content-length');
+		expect((await call(streamedOver)).status).toBe(413);
 	});
 
 	it('rejects an unknown reason and an invalid address', async () => {

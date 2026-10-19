@@ -115,6 +115,9 @@ test.describe('subscription double opt-in', () => {
 		expect(
 			psql(`select reason from email_suppressions where email_hash = '${trackSuppression(MARKER)}'`)
 		).toBe('unsubscribed');
+		expect(
+			psql(`select source from email_suppressions where email_hash = '${trackSuppression(MARKER)}'`)
+		).toBe('unsubscribe-page');
 		const unsubscribedAt = psql(
 			`select unsubscribed_at from subscriptions where email = '${MARKER}'`
 		);
@@ -390,6 +393,16 @@ test.describe('subscription double opt-in', () => {
 		});
 		expect(malformed.status()).toBe(403);
 
+		// A well-formed token must not exempt a different path.
+		const wrongPath = await page.request.post(`/zh-cn/subscribe?token=${token}`, {
+			headers: {
+				origin: 'https://evil.example',
+				'content-type': 'application/x-www-form-urlencoded'
+			},
+			data: 'email=evil%40example.com'
+		});
+		expect(wrongPath.status()).toBe(403);
+
 		const wrongMethod = await page.request.put(`/api/unsubscribe/one-click?token=${token}`, {
 			headers: {
 				origin: 'https://evil.example',
@@ -413,6 +426,9 @@ test.describe('subscription double opt-in', () => {
 		expect(
 			psql(`select reason from email_suppressions where email_hash = '${trackSuppression(email)}'`)
 		).toBe('unsubscribed');
+		expect(
+			psql(`select source from email_suppressions where email_hash = '${trackSuppression(email)}'`)
+		).toBe('one-click');
 	});
 
 	test('CSRF: origin-less and cross-origin form posts are refused', async ({ page }) => {

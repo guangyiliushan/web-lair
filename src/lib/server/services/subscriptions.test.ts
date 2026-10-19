@@ -47,6 +47,7 @@ import {
 	subscriptionTokenTtlMs,
 	unsubscribe
 } from './subscriptions';
+import { hashSubscriptionToken } from './subscription-token';
 
 /** A distinct object so a suppression write outside the transaction fails. */
 const txStub = {
@@ -250,7 +251,7 @@ describe('subscription transitions (stubbed db)', () => {
 		expect(credential!.parts).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ op: 'eq', value: 'old' }),
-				expect.objectContaining({ op: 'eq', value: expect.stringMatching(/^[0-9a-f]{64}$/) })
+				expect.objectContaining({ op: 'eq', value: hashSubscriptionToken('old') })
 			])
 		);
 	});

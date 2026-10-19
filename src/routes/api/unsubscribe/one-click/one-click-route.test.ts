@@ -70,6 +70,16 @@ describe('RFC 8058 one-click unsubscribe endpoint', () => {
 		warn.mockRestore();
 	});
 
+	it('skips the per-IP bucket when the client address is unknown', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const response = await POST(event(TOKEN, 'unknown'));
+		expect(response.status).toBe(200);
+		expect(rateLimitMock).not.toHaveBeenCalled();
+		expect(unsubscribeMock).toHaveBeenCalledWith(TOKEN, 'one-click');
+		expect(warn).toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
 	it('answers 503 on a database failure so the receiver retries', async () => {
 		unsubscribeMock.mockRejectedValueOnce(new Error('db down'));
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});

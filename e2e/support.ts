@@ -11,11 +11,26 @@ import { expect, type APIResponse, type BrowserContext, type Page } from '@playw
 export const ORIGIN = 'http://localhost:4173';
 
 export function psql(sql: string): string {
-	return execFileSync(
-		'docker',
-		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', 'local', '-tAc', sql],
-		{ encoding: 'utf8' }
-	).trim();
+	let last: unknown;
+	for (let attempt = 0; attempt < 3; attempt += 1) {
+		try {
+			return execFileSync(
+				'docker',
+				['exec', 'web-lair-db-1', 'psql', '-U', 'root', '-d', 'local', '-tAc', sql],
+				{ encoding: 'utf8' }
+			).trim();
+		} catch (error) {
+			last = error;
+			// Docker Desktop occasionally refuses one exec while another
+			// client is reconnecting; a short synchronous backoff is enough.
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+		}
+	}
+	const e = last as { stderr?: Buffer | string; status?: number; signal?: string; code?: string };
+	const stderr = e.stderr ? e.stderr.toString() : '';
+	throw new Error(
+		`psql failed (status=${e.status} signal=${e.signal} code=${e.code}): ${stderr || (last as Error).message} [${sql}]`
+	);
 }
 
 /**
