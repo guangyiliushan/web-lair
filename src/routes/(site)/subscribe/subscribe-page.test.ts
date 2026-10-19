@@ -241,4 +241,19 @@ describe('subscribe action', () => {
 		expect(discardMock).toHaveBeenCalledWith('tok_1');
 		spy.mockRestore();
 	});
+
+	it('keeps the pending row when the server accepted the mail before throwing', async () => {
+		requestSubscriptionMock.mockResolvedValueOnce({ kind: 'pending', token: 'tok_2' });
+		sendMailMock.mockRejectedValueOnce(
+			Object.assign(new Error('connection reset after DATA'), { responseCode: 250 })
+		);
+		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const result = (await actions.default(event({ email: 'a@b.co' }))) as { status: number };
+		expect(result.status).toBe(503);
+		// A 2xx responseCode means the MTA accepted the message; rolling the row
+		// back would kill the link the reader is about to receive.
+		expect(discardMock).not.toHaveBeenCalled();
+		expect(restoreMock).not.toHaveBeenCalled();
+		spy.mockRestore();
+	});
 });
