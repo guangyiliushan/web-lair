@@ -353,7 +353,7 @@ docker compose exec -T db sh -c \
 # The dump may be pre-E2 (48 tables): verify-baseline only knows the 49-table
 # baseline, and the pre-E2 image does not ship it. Probe instead of guessing.
 TABLES=$(docker compose exec -T db sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from information_schema.tables where table_schema = $$public$$"')
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from information_schema.tables where table_schema = current_schema()"')
 if [ "$TABLES" = "49" ]; then
   docker compose --profile prod run --rm app node scripts/verify-baseline.ts
 else
