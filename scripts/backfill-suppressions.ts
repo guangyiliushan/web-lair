@@ -50,10 +50,11 @@ async function main(): Promise<void> {
 		let inserted = 0;
 		let skipped = 0;
 		for (const row of rows) {
-			// The runtime hashes the normalized address; a mixed-case legacy
-			// row must not produce a hash that can never match.
+			// Match the runtime's canonicalizer exactly: valid addresses are
+			// trim+lowered by normalizeEmail; legacy addresses rejected by the
+			// form regex fall back to trim+lower so their opt-out is not lost.
 			const email = row.email.trim().toLowerCase();
-			if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			if (!email) {
 				skipped += 1;
 				continue;
 			}
