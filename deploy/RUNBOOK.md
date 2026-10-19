@@ -109,10 +109,13 @@ Send from the **subdomain** so a reputation problem never touches the apex.
 Subscription tokens (email hardening E1):
 
 - `SUBSCRIBE_TOKEN_TTL_DAYS` (default `1` = 24h; ceiling `3` = 72h, larger
-  values are clamped and logged) bounds the confirmation link. NIST SP
-  800-63B-4 §4.2 requires emailed recovery codes to expire within 24 hours;
-  expired links render "link expired" and never confirm. Unsubscribe links
-  never expire — opt-out must always work.
+  values are clamped and logged) bounds the confirmation link. The 24h default
+  borrows the NIST SP 800-63B-4 §4.2.1.2 bound for emailed recovery codes
+  (that section governs account recovery, not list subscriptions); expired
+  links render "link expired" and never confirm. Unsubscribe links are not
+  TTL-bound, but a resubmit rotates the token, so older mails' links stop
+  working — the newest mail always carries a valid opt-out. A stable,
+  never-rotating unsubscribe token is registered as a follow-up (F-15).
 - `SUBSCRIBE_HMAC_KEY` (`openssl rand -base64 32`) keys the per-address
   **5 / 24 h** cap. Empty/invalid degrades to IP-only limiting (`10 / h`) and
   logs `[email-hash] SUBSCRIBE_HMAC_KEY is missing...`; set it in production.
@@ -143,6 +146,7 @@ deploy/verify-image.sh "$APP_IMAGE"
 
 ```bash
 set -euo pipefail
+export APP_IMAGE="web-lair-app:$(git rev-parse --short HEAD)"
 mkdir -p /srv/web-lair/pre-migrate
 # tmpfiles prunes dumps older than 30 days (install once; see §4).
 sudo tee /etc/tmpfiles.d/web-lair.conf >/dev/null <<'EOF'
@@ -157,10 +161,11 @@ for i in $(seq 1 30); do
   [ "$i" = 30 ] && { echo "db did not become ready" >&2; exit 1; }
   sleep 2
 done
-dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump
+dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M%S).dump
 # The container has POSTGRES_USER/POSTGRES_DB; the host shell does not.
 docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
 mv "$dump.tmp" "$dump"
+docker compose exec -T db pg_restore -l < "$dump" > /dev/null
 docker compose --profile prod run --rm app node scripts/migrate.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
 # Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
@@ -173,6 +178,7 @@ docker compose --profile prod ps          # all healthy
 ### 1.5 Smoke
 
 ```bash
+export DOMAIN=$(grep -E '^DOMAIN=' .env | cut -d= -f2- | tr -d '"')
 curl -fsS https://$DOMAIN/api/health
 curl -sI https://$DOMAIN | head -1                    # 200
 curl -sI http://$DOMAIN | head -1                     # 308 → https
@@ -210,10 +216,11 @@ for i in $(seq 1 30); do
   [ "$i" = 30 ] && { echo "db did not become ready" >&2; exit 1; }
   sleep 2
 done
-dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M).dump
+dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M%S).dump
 # The container has POSTGRES_USER/POSTGRES_DB; the host shell does not.
 docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
 mv "$dump.tmp" "$dump"
+docker compose exec -T db pg_restore -l < "$dump" > /dev/null
 docker compose --profile prod run --rm app node scripts/migrate.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
 # Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
@@ -236,14 +243,22 @@ directory with the target image already pinned in `.env` (`APP_IMAGE=web-lair-ap
 ```bash
 set -euo pipefail
 cd /srv/web-lair/app
-grep -q '^APP_IMAGE=web-lair-app:' .env || { echo 'pin APP_IMAGE first' >&2; exit 1; }
+grep -Eq '^APP_IMAGE="?web-lair-app:' .env || { echo 'pin APP_IMAGE first' >&2; exit 1; }
 STAMP=$(date +%F_%H%M%S)
 BK=/srv/web-lair/pre-migrate
 mkdir -p "$BK"
-sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer
+sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
+sudo systemctl stop web-lair-drain.service web-lair-backup.service || true
+docker rm -f web-lair-drain >/dev/null 2>&1 || true
 docker compose --profile prod stop app
 docker compose --profile prod up -d db
-for i in $(seq 1 30); do docker compose exec -T db pg_isready -h 127.0.0.1 -q && break; sleep 2; done
+for i in $(seq 1 30); do docker compose exec -T db pg_isready -h 127.0.0.1 -q && break; [ "$i" = 30 ] && { echo 'db not ready' >&2; exit 1; }; sleep 2; done
+
+# Refuse to rebuild an empty/unknown database: record the critical row count.
+USERS=$(docker compose exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"user\""')
+[ "${USERS:-0}" -gt 0 ] || { echo 'no user rows before rebuild; aborting' >&2; exit 1; }
+echo "pre-rebuild user rows=$USERS" | tee "$BK/pre-counts-$STAMP.txt"
 
 # Full backup first; no -t (a TTY merges pg_dump warnings into stdout).
 docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
@@ -255,6 +270,8 @@ docker compose exec -T db pg_restore -l < "$BK/pre-e2-$STAMP.dump" > /dev/null
   docker compose exec -T db sh -c \
   'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --data-only --column-inserts --no-owner --no-privileges -n public'; \
   echo 'COMMIT;'; } > "$BK/pre-e2-data-$STAMP.sql"
+test -s "$BK/pre-e2-data-$STAMP.sql"
+grep -q '^INSERT INTO' "$BK/pre-e2-data-$STAMP.sql" || { echo 'data dump has no rows; aborting' >&2; exit 1; }
 
 # Empty schema, fresh baseline, restore data. All psql runs inside the container
 # so $POSTGRES_USER/$POSTGRES_DB are expanded there, never on the host.
@@ -264,6 +281,9 @@ docker compose --profile prod run --rm app node scripts/migrate.ts
 docker compose exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
   < "$BK/pre-e2-data-$STAMP.sql"
+RESTORED=$(docker compose exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"user\""')
+[ "$RESTORED" = "$USERS" ] || { echo "restored user rows=$RESTORED, expected $USERS; aborting" >&2; exit 1; }
 
 # Backfills + verification run inside the image (host has no pnpm/tsx).
 docker compose --profile prod run --rm app node scripts/backfill-email-consent.ts --apply
@@ -298,21 +318,29 @@ docker compose --profile prod up -d --no-build   # after APP_IMAGE points at the
 
 If a migration ran (or the rebuild above was performed): stop `app`, restore the
 matching full dump, then start the previous image. Migration-before-backup is
-forbidden (see §4). A dump taken **before** the E2 rebuild cannot run the new
-image; a dump taken after it cannot run the old image.
+forbidden (see §4). Treat a dump and the image generation that wrote it as a
+pair: a post-E2 dump is schema-compatible with the old image (the new table and
+columns are additive), but the old code neither writes `email_suppressions`
+nor `consent_version`, so running it over E2 data silently violates the E2
+invariants. Do not mix generations.
 
 ```bash
 set -euo pipefail
 cd /srv/web-lair/app
 # IMAGE must point at the tag that matches the dump.
+sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
+sudo systemctl stop web-lair-drain.service web-lair-backup.service || true
+docker rm -f web-lair-drain >/dev/null 2>&1 || true
 docker compose --profile prod stop app
 docker compose exec -T db sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema drizzle, public cascade;"'
-# The full custom dump recreates public + drizzle, all tables, data and ledger.
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema drizzle, public cascade;" -c "create schema public;"'
+# -1/--single-transaction implies --exit-on-error: never leave a partial restore.
 docker compose exec -T db sh -c \
-  'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges' \
+  'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges -1 -e' \
   < /srv/web-lair/pre-migrate/<matching-dump>.dump
+docker compose --profile prod run --rm app node scripts/verify-baseline.ts
 docker compose --profile prod up -d
+sudo systemctl start web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
 ```
 
 If §2.1 failed after the schema drop, **do not re-run it**; restore the
@@ -320,6 +348,12 @@ If §2.1 failed after the schema drop, **do not re-run it**; restore the
 pre-E2 dump into a schema that already has E2 tables without dropping it first:
 `pg_restore` without `--clean` fails on existing objects, and `--clean` leaves
 `email_suppressions` behind because it is absent from the old dump.
+
+**Code-only rollback across E2 is not symmetric.** The pre-E2 image writes
+subscriptions without `consent_version` and opt-outs without
+`email_suppressions`; after rolling back and later re-deploying E2, run the
+three idempotent backfills again (§8) before enabling mail. Otherwise historical
+opt-outs can become mailable and new rows keep a NULL consent version.
 
 ## 4. Backups (D-4)
 
@@ -404,8 +438,8 @@ network; use `docker compose exec app` or an equivalent local URL):
 
 ```bash
 # Replace with a real token from a subscription row (it is a bearer token).
-TOKEN=$(docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
-  "select token from subscriptions where status = 'pending' limit 1")
+TOKEN=$(docker compose exec -T db sh -c \
+  "psql -U \$POSTGRES_USER -d \$POSTGRES_DB -tAc \"select token from subscriptions where status = 'pending' limit 1\"")
 curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   --data 'List-Unsubscribe=One-Click' \
@@ -452,16 +486,21 @@ set it in `.env` before using `/subscribe` or `/unsubscribe`.
 - Keep the key in backups. Rotating it orphans every existing hash. Addresses
   that still exist in `subscriptions.email` can be rehashed by a migration;
   addresses that exist **only** in `email_suppressions` cannot be recomputed.
-  Do not rotate without a key-version migration (registered follow-up).
+  Do not rotate without a key-version migration (F-14).
 - Retention: keep suppression rows **for as long as the address could ever be
   contacted**; never prune them with the subscription sweep. (Two years is a
   common audit floor, not a CAN-SPAM/ICO limit.)
 
-**Subscription retention.** `subscriptions.sweep` deletes `pending` rows after
-30 days (no consent was ever proven). `subscribed` and `unsubscribed` rows stay
-as consent/opt-out evidence; `consent_version` records which text the reader
+**Subscription retention.** `subscriptions.sweep` deletes `pending` rows whose
+`updated_at` is older than 30 days (i.e. 30 days after the last resend, not
+after the first request). `subscribed` and `unsubscribed` rows stay as
+consent/opt-out evidence; `consent_version` records which text the reader
 agreed to (`2026-10-v1` from this release, `legacy` for rows restored from
-before the column existed).
+before the column existed). A previously subscribed address that re-submits
+re-enters `pending` with `verified_at` cleared; its earlier consent is not
+retained in this table (registered follow-up F-16: append-only consent
+history). Pre-E2 pending opt-outs were deleted without a suppression row and
+are **not recoverable** by the backfill; suppression coverage starts at E2.
 
 **Consent backfill (once, after restoring pre-E2 data):**
 
