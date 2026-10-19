@@ -79,6 +79,8 @@ test.describe('subscription double opt-in', () => {
 		// strict-origin keeps the token out of Referer without nulling Origin
 		// (no-referrer makes Chromium send Origin: null and the POST 403s).
 		expect(confirmResponse?.headers()['referrer-policy']).toBe('strict-origin');
+		expect(confirmResponse?.headers()['cache-control']).toBe('no-store');
+		await expect(page).toHaveTitle('确认订阅');
 		await expect(page.getByRole('button', { name: '确认', exact: true })).toBeVisible({
 			timeout: 20_000
 		});
@@ -93,6 +95,7 @@ test.describe('subscription double opt-in', () => {
 		// Re-submitting a confirmed address must be a no-op (no token rotation,
 		// no downgrade to pending) — the public form cannot un-confirm a reader.
 		await page.goto('/zh-cn/subscribe');
+		await expect(page).toHaveTitle('订阅');
 		await page.getByLabel('邮箱').fill(MARKER);
 		await page.getByRole('button', { name: '订阅', exact: true }).click();
 		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
@@ -104,6 +107,8 @@ test.describe('subscription double opt-in', () => {
 
 		const unsubscribeResponse = await page.goto(`/zh-cn/unsubscribe?token=${token}`);
 		expect(unsubscribeResponse?.headers()['referrer-policy']).toBe('strict-origin');
+		expect(unsubscribeResponse?.headers()['cache-control']).toBe('no-store');
+		await expect(page).toHaveTitle('退订');
 		await page.getByRole('button', { name: '退订', exact: true }).click();
 		await expect(page.getByText('已退订')).toBeVisible({ timeout: 15_000 });
 		expect(psql(`select status from subscriptions where email = '${MARKER}'`)).toBe('unsubscribed');
@@ -370,6 +375,44 @@ test.describe('subscription double opt-in', () => {
 		expect(psql(`select reason from email_suppressions where email_hash = '${hash}'`)).toBe(
 			'complained'
 		);
+	});
+
+	test('one-click CSRF exemption is limited to POST with a well-formed token', async ({ page }) => {
+		const email = `e2e-sub-oneclick-csrf-${Date.now()}@example.com`;
+		const token = 'y'.repeat(43);
+		psql(
+			`insert into subscriptions (email, status, token, lang, source) values ('${email}', 'pending', '${token}', 'zh-cn', 'e2e')`
+		);
+
+		const malformed = await page.request.post('/api/unsubscribe/one-click?token=short', {
+			headers: { 'content-type': 'application/x-www-form-urlencoded' },
+			data: 'List-Unsubscribe=One-Click'
+		});
+		expect(malformed.status()).toBe(403);
+
+		const wrongMethod = await page.request.put(`/api/unsubscribe/one-click?token=${token}`, {
+			headers: {
+				origin: 'https://evil.example',
+				'content-type': 'application/x-www-form-urlencoded'
+			},
+			data: 'List-Unsubscribe=One-Click'
+		});
+		expect(wrongMethod.status()).toBe(403);
+
+		const crossOrigin = await page.request.post(`/api/unsubscribe/one-click?token=${token}`, {
+			headers: {
+				origin: 'https://evil.example',
+				'content-type': 'application/x-www-form-urlencoded'
+			},
+			data: 'List-Unsubscribe=One-Click'
+		});
+		expect(crossOrigin.status()).toBe(200);
+		// Pending opt-outs delete the row (the CHECK forbids pending+unsubscribed);
+		// the permanent suppression record is the observable outcome.
+		expect(psql(`select count(*)::int from subscriptions where email = '${email}'`)).toBe('0');
+		expect(
+			psql(`select reason from email_suppressions where email_hash = '${trackSuppression(email)}'`)
+		).toBe('unsubscribed');
 	});
 
 	test('CSRF: origin-less and cross-origin form posts are refused', async ({ page }) => {

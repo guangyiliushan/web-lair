@@ -40,6 +40,11 @@ describe('suppression hashing', () => {
 		expect(suppressionHash('other@example.com')).not.toBe(keyed);
 	});
 
+	it('hashes legacy addresses the strict form regex rejects without throwing', () => {
+		expect(() => suppressionHash('reader@localhost')).not.toThrow();
+		expect(suppressionHash(' Reader@Localhost ')).toBe(suppressionHash('reader@localhost'));
+	});
+
 	it('fails closed when the key is missing', () => {
 		delete envStub.SUPPRESSION_HMAC_KEY;
 		expect(() => suppressionHash('reader@example.com')).toThrow(/SUPPRESSION_HMAC_KEY is missing/);
@@ -98,5 +103,9 @@ describe('suppression records', () => {
 		const predicate = render(where.mock.calls[0]![0]);
 		expect(predicate.sql).toMatch(/reason/i);
 		expect(predicate.params).toContain('unsubscribed');
+		// The hash half must survive: dropping it would delete every soft
+		// opt-out, not just this address.
+		expect(predicate.sql).toContain('email_hash');
+		expect(predicate.params).toHaveLength(2);
 	});
 });

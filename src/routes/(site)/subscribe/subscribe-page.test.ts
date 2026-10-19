@@ -256,4 +256,16 @@ describe('subscribe action', () => {
 		expect(restoreMock).not.toHaveBeenCalled();
 		spy.mockRestore();
 	});
+
+	it('rolls the row back when the MTA rejects with a non-2xx responseCode', async () => {
+		requestSubscriptionMock.mockResolvedValueOnce({ kind: 'pending', token: 'tok_3' });
+		sendMailMock.mockRejectedValueOnce(
+			Object.assign(new Error('550 mailbox unavailable'), { responseCode: 550 })
+		);
+		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const result = (await actions.default(event({ email: 'a@b.co' }))) as { status: number };
+		expect(result.status).toBe(503);
+		expect(discardMock).toHaveBeenCalledWith('tok_3');
+		spy.mockRestore();
+	});
 });

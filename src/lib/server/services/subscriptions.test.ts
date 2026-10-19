@@ -128,8 +128,9 @@ function updateWhereCapture() {
 			set: (values: unknown) => {
 				sets.push(values);
 				return {
-					where: async (predicate: unknown) => {
+					where: (predicate: unknown) => {
 						wheres.push(predicate);
+						return { returning: async () => [] };
 					}
 				};
 			}
@@ -231,10 +232,27 @@ describe('subscription transitions (stubbed db)', () => {
 				selectRows([{ id: 1, status: 'pending', token: 'old', updatedAt: stale }])
 			)
 			.mockReturnValueOnce(selectRows([{ id: 1, status: 'pending', token: 'old' }]));
-		dbStub.update.mockReturnValueOnce(updateRows([]));
+		const capture = updateWhereCapture();
+		dbStub.update.mockReturnValueOnce(capture.chain);
 		await expect(
 			requestSubscription({ email: 'a@b.c', lang: 'en', source: 'footer' })
 		).resolves.toEqual({ kind: 'pending', token: 'old', send: false });
+
+		// The rotation must be hash-first with a plaintext fallback; a CAS that
+		// only compares `token` would break once that column is dropped.
+		const guard = capture.wheres[0] as { op: string; parts: unknown[] };
+		expect(guard.op).toBe('and');
+		const credential = guard.parts.find(
+			(part): part is { op: string; parts: unknown[] } =>
+				typeof part === 'object' && part !== null && (part as { op?: string }).op === 'or'
+		);
+		expect(credential).toBeDefined();
+		expect(credential!.parts).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ op: 'eq', value: 'old' }),
+				expect.objectContaining({ op: 'eq', value: expect.stringMatching(/^[0-9a-f]{64}$/) })
+			])
+		);
 	});
 
 	it('refuses a hard-bounced address without touching the subscription row', async () => {
