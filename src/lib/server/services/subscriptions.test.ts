@@ -48,6 +48,15 @@ import {
 	unsubscribe
 } from './subscriptions';
 
+/** A distinct object so a suppression write outside the transaction fails. */
+const txStub = {
+	select: dbStub.select,
+	insert: dbStub.insert,
+	update: dbStub.update,
+	delete: dbStub.delete,
+	transaction: dbStub.transaction
+};
+
 describe('subscription input contract', () => {
 	it('normalizes case and surrounding whitespace', () => {
 		expect(normalizeEmail('  Reader@Example.COM ')).toBe('reader@example.com');
@@ -92,17 +101,37 @@ function updateRows(rows: unknown[]) {
 function selectRows(rows: unknown[]) {
 	return { from: () => ({ where: () => ({ limit: async () => rows }) }) };
 }
+function selectCapture(rows: unknown[]) {
+	const wheres: unknown[] = [];
+	return {
+		wheres,
+		chain: {
+			from: () => ({
+				where: (predicate: unknown) => {
+					wheres.push(predicate);
+					return { limit: async () => rows };
+				}
+			})
+		}
+	};
+}
 function deleteRows(rows: unknown[]) {
 	return { where: () => ({ returning: async () => rows }) };
 }
 function updateWhereCapture() {
 	const sets: unknown[] = [];
+	const wheres: unknown[] = [];
 	return {
 		sets,
+		wheres,
 		chain: {
 			set: (values: unknown) => {
 				sets.push(values);
-				return { where: async () => undefined };
+				return {
+					where: async (predicate: unknown) => {
+						wheres.push(predicate);
+					}
+				};
 			}
 		}
 	};
@@ -110,7 +139,7 @@ function updateWhereCapture() {
 
 beforeEach(() => {
 	for (const fn of Object.values(dbStub)) fn.mockReset();
-	dbStub.transaction.mockImplementation(async (fn: (tx: typeof dbStub) => unknown) => fn(dbStub));
+	dbStub.transaction.mockImplementation(async (fn: (tx: typeof dbStub) => unknown) => fn(txStub));
 	suppressionMocks.suppressionReason.mockReset();
 	suppressionMocks.suppressionReason.mockResolvedValue(null);
 	suppressionMocks.suppress.mockReset();
@@ -146,7 +175,7 @@ describe('subscription transitions (stubbed db)', () => {
 		expect(await confirmSubscription(TOKEN)).toBe('subscribed');
 		expect(suppressionMocks.liftUnsubscribedSuppression).toHaveBeenCalledWith(
 			'reader@example.com',
-			dbStub
+			txStub
 		);
 	});
 
@@ -158,7 +187,7 @@ describe('subscription transitions (stubbed db)', () => {
 			'a@b.c',
 			'unsubscribed',
 			'unsubscribe-page',
-			dbStub
+			txStub
 		);
 	});
 
@@ -170,7 +199,7 @@ describe('subscription transitions (stubbed db)', () => {
 			'a@b.c',
 			'unsubscribed',
 			'unsubscribe-page',
-			dbStub
+			txStub
 		);
 	});
 
@@ -183,7 +212,7 @@ describe('subscription transitions (stubbed db)', () => {
 			'a@b.c',
 			'unsubscribed',
 			'unsubscribe-page',
-			dbStub
+			txStub
 		);
 	});
 
@@ -244,41 +273,66 @@ describe('token hashes (E2-3)', () => {
 	});
 
 	it('reads by hash first', async () => {
-		dbStub.select.mockReturnValueOnce(
-			selectRows([
-				{
-					id: 's1',
-					status: 'pending',
-					email: 'a@b.c',
-					token: HASH_TOKEN,
-					tokenHash: 'f'.repeat(64),
-					updatedAt: new Date()
-				}
-			])
-		);
+		const capture = selectCapture([
+			{
+				id: 's1',
+				status: 'pending',
+				email: 'a@b.c',
+				token: HASH_TOKEN,
+				tokenHash: 'f'.repeat(64),
+				updatedAt: new Date()
+			}
+		]);
+		dbStub.select.mockReturnValueOnce(capture.chain);
 		expect(await subscriptionByToken(HASH_TOKEN)).toMatchObject({ id: 's1', status: 'pending' });
 		expect(dbStub.select).toHaveBeenCalledTimes(1);
+		// The first read must target token_hash, not the plaintext column.
+		expect(capture.wheres[0]).toMatchObject({
+			op: 'eq',
+			value: expect.stringMatching(/^[0-9a-f]{64}$/)
+		});
 	});
 
 	it('falls back to the plaintext column and backfills the hash for legacy rows', async () => {
 		const issuedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
-		dbStub.select.mockReturnValueOnce(selectRows([])).mockReturnValueOnce(
-			selectRows([
-				{
-					id: 's1',
-					status: 'pending',
-					email: 'a@b.c',
-					token: HASH_TOKEN,
-					tokenHash: null,
-					updatedAt: issuedAt
-				}
-			])
-		);
+		const hashMiss = selectCapture([]);
+		const legacyHit = selectCapture([
+			{
+				id: 's1',
+				status: 'pending',
+				email: 'a@b.c',
+				token: HASH_TOKEN,
+				tokenHash: null,
+				updatedAt: issuedAt
+			}
+		]);
+		dbStub.select.mockReturnValueOnce(hashMiss.chain).mockReturnValueOnce(legacyHit.chain);
 		const capture = updateWhereCapture();
 		dbStub.update.mockReturnValueOnce(capture.chain);
 		expect(await subscriptionByToken(HASH_TOKEN)).toMatchObject({ id: 's1', status: 'pending' });
 		expect(dbStub.update).toHaveBeenCalledTimes(1);
-		expect(capture.sets[0]).toMatchObject({ updatedAt: issuedAt });
+
+		// First read by hash, second by plaintext (only for legacy rows).
+		expect(hashMiss.wheres[0]).toMatchObject({
+			op: 'eq',
+			value: expect.stringMatching(/^[0-9a-f]{64}$/)
+		});
+		expect(legacyHit.wheres[0]).toMatchObject({ op: 'eq', value: HASH_TOKEN });
+
+		// The backfill writes the hash and keeps the TTL anchor; its WHERE
+		// guards on id + token_hash IS NULL + plaintext token.
+		expect(capture.sets[0]).toMatchObject({
+			tokenHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+			updatedAt: issuedAt
+		});
+		const guard = capture.wheres[0] as { op: string; parts: unknown[] };
+		expect(guard.op).toBe('and');
+		expect(guard.parts).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ op: 'isNull' }),
+				expect.objectContaining({ op: 'eq', value: HASH_TOKEN })
+			])
+		);
 	});
 });
 
@@ -292,6 +346,8 @@ describe('confirmation token TTL', () => {
 		expect(subscriptionTokenTtlMs('0')).toBe(oneDay);
 		expect(subscriptionTokenTtlMs('-1')).toBe(oneDay);
 		expect(subscriptionTokenTtlMs('nope')).toBe(oneDay);
+		expect(subscriptionTokenTtlMs('0.5')).toBe(oneDay);
+		expect(subscriptionTokenTtlMs('1e-3')).toBe(oneDay);
 		expect(subscriptionTokenTtlMs('2')).toBe(2 * oneDay);
 	});
 

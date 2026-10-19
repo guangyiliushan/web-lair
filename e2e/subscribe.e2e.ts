@@ -323,11 +323,53 @@ test.describe('subscription double opt-in', () => {
 			'complained'
 		);
 
+		// A later, weaker event must not downgrade the complaint.
+		const downgradeBody = JSON.stringify({ email, reason: 'bounced' });
+		const downgradeTs = String(Math.floor(Date.now() / 1000));
+		const downgradeSig = createHmac('sha256', Buffer.from(TEST_MAIL_EVENTS_HMAC_KEY, 'base64'))
+			.update(`${downgradeTs}.${downgradeBody}`)
+			.digest('hex');
+		const downgrade = await page.request.post('/api/mail/events', {
+			data: downgradeBody,
+			headers: {
+				'content-type': 'application/json',
+				'x-mail-events-timestamp': downgradeTs,
+				'x-mail-events-signature': `sha256=${downgradeSig}`
+			}
+		});
+		expect(downgrade.status()).toBe(200);
+		expect(psql(`select reason from email_suppressions where email_hash = '${hash}'`)).toBe(
+			'complained'
+		);
+		expect(psql(`select source from email_suppressions where email_hash = '${hash}'`)).toBe(
+			'mail-events'
+		);
+
 		// Unsigned requests are rejected once the key is configured.
 		const unsigned = await page.request.post('/api/mail/events', {
 			data: { email, reason: 'bounced' }
 		});
 		expect(unsigned.status()).toBe(401);
+	});
+
+	test('confirming a pending token never lifts a hard suppression', async ({ page }) => {
+		const email = `e2e-sub-hard-lift-${Date.now()}@example.com`;
+		const hash = trackSuppression(email);
+		const token = 'z'.repeat(43);
+		psql(
+			`insert into email_suppressions (email_hash, reason, source) values ('${hash}', 'complained', 'e2e')`
+		);
+		psql(
+			`insert into subscriptions (email, status, token, lang, source) values ('${email}', 'pending', '${token}', 'zh-cn', 'e2e')`
+		);
+
+		await page.goto(`/zh-cn/subscribe/confirm?token=${token}`);
+		await page.getByRole('button', { name: '确认', exact: true }).click();
+		await expect(page.getByText('订阅已确认')).toBeVisible({ timeout: 15_000 });
+		expect(psql(`select status from subscriptions where email = '${email}'`)).toBe('subscribed');
+		expect(psql(`select reason from email_suppressions where email_hash = '${hash}'`)).toBe(
+			'complained'
+		);
 	});
 
 	test('CSRF: origin-less and cross-origin form posts are refused', async ({ page }) => {

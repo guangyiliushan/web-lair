@@ -34,7 +34,7 @@ beforeEach(() => {
 describe('RFC 8058 one-click unsubscribe endpoint', () => {
 	it('unsubscribes a well-formed token and answers 200 with an empty body', async () => {
 		const response = await POST(event(TOKEN));
-		expect(unsubscribeMock).toHaveBeenCalledWith(TOKEN);
+		expect(unsubscribeMock).toHaveBeenCalledWith(TOKEN, 'one-click');
 		expect(response.status).toBe(200);
 		expect(await response.text()).toBe('');
 		expect(response.headers.get('cache-control')).toBe('no-store');
@@ -56,7 +56,7 @@ describe('RFC 8058 one-click unsubscribe endpoint', () => {
 	it('answers 200 for an unknown but well-formed token (no oracle)', async () => {
 		unsubscribeMock.mockResolvedValueOnce('invalid');
 		expect((await POST(event(TOKEN))).status).toBe(200);
-		expect(unsubscribeMock).toHaveBeenCalledWith(TOKEN);
+		expect(unsubscribeMock).toHaveBeenCalledWith(TOKEN, 'one-click');
 	});
 
 	it('answers 429 when the per-IP seatbelt trips, without unsubscribing', async () => {

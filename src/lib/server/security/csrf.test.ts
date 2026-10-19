@@ -58,8 +58,27 @@ describe('CSRF predicate (framework parity)', () => {
 		expect(verdict({ origin: 'https://evil.example', 'content-type': 'text/plain' })).toBe(true);
 	});
 
-	it('ignores GET and JSON requests (framework parity; JSON APIs own their auth)', () => {
-		expect(verdict({ origin: 'https://evil.example' }, 'GET')).toBe(false);
+	it('ignores GET even with a form content type', () => {
+		expect(
+			verdict(
+				{ origin: 'https://evil.example', 'content-type': 'application/x-www-form-urlencoded' },
+				'GET'
+			)
+		).toBe(false);
+	});
+
+	it('blocks every mutating method with a cross-origin form type', () => {
+		for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+			expect(
+				verdict(
+					{ origin: 'https://evil.example', 'content-type': 'application/x-www-form-urlencoded' },
+					method
+				)
+			).toBe(true);
+		}
+	});
+
+	it('ignores JSON requests (framework parity; JSON APIs own their auth)', () => {
 		expect(verdict({ origin: 'https://evil.example', 'content-type': 'application/json' })).toBe(
 			false
 		);

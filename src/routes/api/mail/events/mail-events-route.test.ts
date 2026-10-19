@@ -108,6 +108,26 @@ describe('mail events endpoint (E2-4)', () => {
 		expect(suppressMock).not.toHaveBeenCalled();
 	});
 
+	it('rejects an over-long streamed body without a content-length header', async () => {
+		const body = JSON.stringify({
+			email: 'a@b.co',
+			reason: 'bounced',
+			pad: 'x'.repeat(9000)
+		});
+		const request = signed(body);
+		request.headers.delete('content-length');
+		const response = await call(request);
+		expect(response.status).toBe(413);
+		expect(suppressMock).not.toHaveBeenCalled();
+	});
+
+	it('returns 503 when the suppression write fails (provider retries)', async () => {
+		suppressMock.mockRejectedValueOnce(new Error('db down'));
+		const response = await call(signed(JSON.stringify({ email: 'a@b.co', reason: 'bounced' })));
+		expect(response.status).toBe(503);
+		expect(response.headers.get('retry-after')).toBe('60');
+	});
+
 	it('rejects an unknown reason and an invalid address', async () => {
 		expect(
 			(await call(signed(JSON.stringify({ email: 'a@b.co', reason: 'unsubscribed' })))).status

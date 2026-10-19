@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 const { dbStub, envStub } = vi.hoisted(() => ({
 	dbStub: { select: vi.fn(), insert: vi.fn(), delete: vi.fn() },
 	envStub: {} as Record<string, string | undefined>
 }));
 vi.mock('$lib/server/db', () => ({ db: dbStub }));
-vi.mock('$lib/server/db/system', () => ({
-	emailSuppressions: { emailHash: 'email_hash', reason: 'reason', source: 'source' }
+vi.mock('$lib/server/db/system', async () => ({
+	...(await import('../db/system/email-suppression.schema'))
 }));
 vi.mock('$env/dynamic/private', () => ({ env: envStub }));
 
@@ -18,6 +19,12 @@ import {
 } from './suppressions';
 
 const KEY = Buffer.alloc(32, 7).toString('base64');
+const dialect = new PgDialect();
+
+function render(query: unknown): { sql: string; params: unknown[] } {
+	const rendered = dialect.sqlToQuery(query as Parameters<typeof dialect.sqlToQuery>[0]);
+	return { sql: rendered.sql, params: rendered.params };
+}
 
 beforeEach(() => {
 	for (const fn of Object.values(dbStub)) fn.mockReset();
@@ -29,6 +36,7 @@ describe('suppression hashing', () => {
 		const keyed = suppressionHash('reader@example.com');
 		expect(keyed).toMatch(/^[0-9a-f]{64}$/);
 		expect(suppressionHash('reader@example.com')).toBe(keyed);
+		expect(suppressionHash(' Reader@Example.COM ')).toBe(keyed);
 		expect(suppressionHash('other@example.com')).not.toBe(keyed);
 	});
 
@@ -61,14 +69,34 @@ describe('suppression records', () => {
 			set: { reason: unknown; source: unknown };
 		};
 		expect(conflict.target).toBeDefined();
-		expect(conflict.set.reason).toBeDefined();
-		expect(conflict.set.source).toBeDefined();
+
+		// The rank CASE is the guarantee: a later, weaker event must not
+		// overwrite a complaint. Rendering the expression (instead of only
+		// checking it exists) fails if the CASE is replaced by excluded.reason.
+		const reason = render(conflict.set.reason);
+		expect(reason.sql).toMatch(/case/i);
+		expect(reason.sql).toMatch(/complained[\s\S]*bounced/i);
+		expect(reason.sql).toContain("'complained'");
+		expect(reason.sql).toContain("'bounced'");
+
+		const source = render(conflict.set.source);
+		expect(source.sql).toMatch(/case/i);
+		expect(source.sql).toMatch(/excluded\.source/i);
+		expect(source.sql).toContain("'unsubscribed'");
 	});
 
 	it('lifts only the soft unsubscribe record', async () => {
-		const where = vi.fn(async () => undefined);
+		const where = vi.fn(async (predicate: unknown) => {
+			void predicate;
+		});
 		dbStub.delete.mockReturnValueOnce({ where });
 		await liftUnsubscribedSuppression('reader@example.com');
 		expect(where).toHaveBeenCalledTimes(1);
+
+		// Dropping the reason predicate would let a confirm delete a
+		// complaint/hard bounce; pin the rendered WHERE clause.
+		const predicate = render(where.mock.calls[0]![0]);
+		expect(predicate.sql).toMatch(/reason/i);
+		expect(predicate.params).toContain('unsubscribed');
 	});
 });
