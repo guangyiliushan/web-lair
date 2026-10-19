@@ -12,7 +12,7 @@ export const ORIGIN = 'http://localhost:4173';
 
 export function psql(sql: string): string {
 	let last: unknown;
-	for (let attempt = 0; attempt < 3; attempt += 1) {
+	for (let attempt = 0; attempt < 8; attempt += 1) {
 		try {
 			return execFileSync(
 				'docker',
@@ -21,9 +21,9 @@ export function psql(sql: string): string {
 			).trim();
 		} catch (error) {
 			last = error;
-			// Docker Desktop occasionally refuses one exec while another
-			// client is reconnecting; a short synchronous backoff is enough.
-			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+			// Docker Desktop / Windows occasionally returns STATUS_DLL_INIT_FAILED
+			// (0xC0000142) under load; a short synchronous backoff rides it out.
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
 		}
 	}
 	const e = last as { stderr?: Buffer | string; status?: number; signal?: string; code?: string };

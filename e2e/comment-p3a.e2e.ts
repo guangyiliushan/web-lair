@@ -96,6 +96,14 @@ test.beforeAll(() => {
 	);
 });
 
+async function closeContext(ctx: BrowserContext | null) {
+	if (!ctx) return;
+	await Promise.race([
+		ctx.close().catch(() => undefined),
+		new Promise((resolve) => setTimeout(resolve, 5_000))
+	]);
+}
+
 test.afterAll(async () => {
 	for (const email of [THROTTLE_EMAIL, READER_EMAIL]) {
 		const uid = psql(`select id from "user" where email = '${email}'`);
@@ -107,8 +115,8 @@ test.afterAll(async () => {
 	psql(`delete from notes where slug like 'e2e-cmt-%'`);
 	psql(`delete from categories where slug = 'e2e-cmt-cat'`);
 	psql(`delete from "user" where email in ('${READER_EMAIL}', '${THROTTLE_EMAIL}')`);
-	await readerContext?.close();
-	await throttleContext?.close();
+	await closeContext(readerContext);
+	await closeContext(throttleContext);
 });
 
 /* ── auth fixtures ──────────────────────────────────────────────────────── */
