@@ -96,15 +96,10 @@ test.beforeAll(() => {
 	);
 });
 
-async function closeContext(ctx: BrowserContext | null) {
-	if (!ctx) return;
-	await Promise.race([
-		ctx.close().catch(() => undefined),
-		new Promise((resolve) => setTimeout(resolve, 5_000))
-	]);
-}
-
-test.afterAll(async () => {
+test.afterAll(async ({}, testInfo) => {
+	// Docker CLI startup on this box can be slow after a full browser run;
+	// cleanup is not part of the assertion budget.
+	testInfo.setTimeout(120_000);
 	for (const email of [THROTTLE_EMAIL, READER_EMAIL]) {
 		const uid = psql(`select id from "user" where email = '${email}'`);
 		if (uid) valkeyDel(`wl:limits:comment:${uid}`);
@@ -115,8 +110,8 @@ test.afterAll(async () => {
 	psql(`delete from notes where slug like 'e2e-cmt-%'`);
 	psql(`delete from categories where slug = 'e2e-cmt-cat'`);
 	psql(`delete from "user" where email in ('${READER_EMAIL}', '${THROTTLE_EMAIL}')`);
-	await closeContext(readerContext);
-	await closeContext(throttleContext);
+	await readerContext?.close();
+	await throttleContext?.close();
 });
 
 /* ── auth fixtures ──────────────────────────────────────────────────────── */
