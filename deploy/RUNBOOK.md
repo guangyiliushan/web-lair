@@ -247,6 +247,11 @@ directory with the target image already pinned in `.env` (`APP_IMAGE=web-lair-ap
 set -euo pipefail
 cd /srv/web-lair/app
 grep -Eq '^APP_IMAGE="?web-lair-app:' .env || { echo 'pin APP_IMAGE first' >&2; exit 1; }
+export APP_IMAGE=$(grep -E '^APP_IMAGE=' .env | cut -d= -f2- | tr -d '"')
+case "$APP_IMAGE" in *:local) echo 'APP_IMAGE=:local is overwritten per build; pin a SHA tag' >&2; exit 1;; esac
+docker image inspect "$APP_IMAGE" > /dev/null
+docker run --rm --entrypoint node "$APP_IMAGE" -e \
+  "const fs=require('node:fs'); if(!fs.readFileSync('drizzle/0000_baseline.sql','utf8').includes('CREATE TABLE \"email_suppressions\"')){console.error('image predates the E2 baseline');process.exit(1)}"
 STAMP=$(date +%F_%H%M%S)
 BK=/srv/web-lair/pre-migrate
 mkdir -p "$BK"
@@ -267,6 +272,11 @@ echo "pre-rebuild user rows=$USERS" | tee "$BK/pre-counts-$STAMP.txt"
 docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
   > "$BK/pre-e2-$STAMP.dump"
 docker compose exec -T db pg_restore -l < "$BK/pre-e2-$STAMP.dump" > /dev/null
+# TOC presence is not data: an empty dump still lists every table. Count the
+# user rows inside the archive before dropping anything.
+DUMP_USERS=$(docker exec -i db pg_restore -a -f - < "$BK/pre-e2-$STAMP.dump" 2>/dev/null | \
+  awk '/^COPY public\."user" /{f=1;next} f&&$0=="\\\\."{exit} f{n++} END{print n+0}')
+[ "$DUMP_USERS" = "$USERS" ] || { echo "dump has $DUMP_USERS user rows, expected $USERS; aborting" >&2; exit 1; }
 
 # Data-only file: column lists + FK triggers disabled inside the transaction.
 { echo 'BEGIN;'; echo 'SET LOCAL session_replication_role = replica;'; \
@@ -279,7 +289,7 @@ grep -q '^INSERT INTO' "$BK/pre-e2-data-$STAMP.sql" || { echo 'data dump has no 
 # The suppression backfill runs after the drop; a bad key here would leave the
 # app stopped with an empty schema. Check it while the old database is intact.
 docker compose --profile prod run --rm app node -e \
-  "const k=Buffer.from(process.env.SUPPRESSION_HMAC_KEY??'','base64'); if(k.length!==32){console.error('SUPPRESSION_HMAC_KEY invalid');process.exit(1)}"
+  "const s=(process.env.SUPPRESSION_HMAC_KEY??'').trim(); if(!/^[A-Za-z0-9+/_-]+={0,2}$/.test(s)||![43,44].includes(s.length)||Buffer.from(s,'base64').length!==32){console.error('SUPPRESSION_HMAC_KEY invalid');process.exit(1)}"
 
 # Empty schema, fresh baseline, restore data. All psql runs inside the container
 # so $POSTGRES_USER/$POSTGRES_DB are expanded there, never on the host.
@@ -338,7 +348,15 @@ cd /srv/web-lair/app
 # Compose reads APP_IMAGE from .env; pin it to the tag that matches the dump.
 grep -Eq '^APP_IMAGE="?web-lair-app:' .env || { echo 'pin APP_IMAGE first' >&2; exit 1; }
 export APP_IMAGE=$(grep -E '^APP_IMAGE=' .env | cut -d= -f2- | tr -d '"')
+case "$APP_IMAGE" in *:local) echo 'APP_IMAGE=:local cannot identify a generation; pin the dump-matching SHA' >&2; exit 1;; esac
+docker image inspect "$APP_IMAGE" > /dev/null
 echo "restoring with APP_IMAGE=$APP_IMAGE"
+DUMP=/srv/web-lair/pre-migrate/<matching-dump>.dump
+USERS=$(docker compose exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"user\""')
+DUMP_USERS=$(docker compose exec -T db pg_restore -a -f - < "$DUMP" 2>/dev/null | \
+  awk '/^COPY public\."user" /{f=1;next} f&&$0=="\\\\."{exit} f{n++} END{print n+0}')
+[ "$DUMP_USERS" = "$USERS" ] || { echo "dump has $DUMP_USERS user rows, expected $USERS; aborting" >&2; exit 1; }
 # IMAGE must point at the tag that matches the dump.
 sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
 sudo systemctl stop web-lair-drain.service web-lair-backup.service || true
@@ -349,15 +367,21 @@ docker compose exec -T db sh -c \
 # -1/--single-transaction implies --exit-on-error: never leave a partial restore.
 docker compose exec -T db sh -c \
   'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges -1 -e' \
-  < /srv/web-lair/pre-migrate/<matching-dump>.dump
+  < "$DUMP"
 # The dump may be pre-E2 (48 tables): verify-baseline only knows the 49-table
-# baseline, and the pre-E2 image does not ship it. Probe instead of guessing.
+# baseline, and the pre-E2 image does not ship it. Probe both generation and
+# shape; anything else must stop, not silently skip verification.
 TABLES=$(docker compose exec -T db sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from information_schema.tables where table_schema = current_schema()"')
-if [ "$TABLES" = "49" ]; then
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from information_schema.tables where table_schema = '\''public'\'' and table_type = '\''BASE TABLE'\''"')
+HAS_E2=$(docker compose exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('\''public.email_suppressions'\'') is not null"')
+if [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ]; then
   docker compose --profile prod run --rm app node scripts/verify-baseline.ts
+elif [ "$TABLES" = "48" ] && [ "$HAS_E2" = "f" ]; then
+  echo "restored pre-E2 schema (48 public tables); verify-baseline skipped"
 else
-  echo "restored pre-E2 schema ($TABLES public tables); verify-baseline skipped"
+  echo "unexpected restore shape (tables=$TABLES e2=$HAS_E2); refusing to start" >&2
+  exit 1
 fi
 docker compose --profile prod up -d
 sudo systemctl start web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
