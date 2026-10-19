@@ -113,9 +113,10 @@ Subscription tokens (email hardening E1):
   borrows the NIST SP 800-63B-4 §4.2.1.2 bound for emailed recovery codes
   (that section governs account recovery, not list subscriptions); expired
   links render "link expired" and never confirm. Unsubscribe links are not
-  TTL-bound, but a resubmit rotates the token, so older mails' links stop
-  working — the newest mail always carries a valid opt-out. A stable,
-  never-rotating unsubscribe token is registered as a follow-up (F-15).
+  TTL-bound, but a pending/unsubscribed resubmit outside the 15-minute resend
+  cooldown rotates the token, so older mails' links stop working — the newest
+  mail always carries a valid opt-out. A stable, never-rotating unsubscribe
+  token is registered as a follow-up (F-15).
 - `SUBSCRIBE_HMAC_KEY` (`openssl rand -base64 32`) keys the per-address
   **5 / 24 h** cap. Empty/invalid degrades to IP-only limiting (`10 / h`) and
   logs `[email-hash] SUBSCRIBE_HMAC_KEY is missing...`; set it in production.
@@ -167,6 +168,7 @@ docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"'
 mv "$dump.tmp" "$dump"
 docker compose exec -T db pg_restore -l < "$dump" > /dev/null
 docker compose --profile prod run --rm app node scripts/migrate.ts
+docker compose --profile prod run --rm app node scripts/verify-baseline.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
 # Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
 # are not critical for maintenance, and admin-created schedules use the same tz.
@@ -222,6 +224,7 @@ docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"'
 mv "$dump.tmp" "$dump"
 docker compose exec -T db pg_restore -l < "$dump" > /dev/null
 docker compose --profile prod run --rm app node scripts/migrate.ts
+docker compose --profile prod run --rm app node scripts/verify-baseline.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
 # Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
 # are not critical for maintenance, and admin-created schedules use the same tz.
@@ -273,10 +276,15 @@ docker compose exec -T db pg_restore -l < "$BK/pre-e2-$STAMP.dump" > /dev/null
 test -s "$BK/pre-e2-data-$STAMP.sql"
 grep -q '^INSERT INTO' "$BK/pre-e2-data-$STAMP.sql" || { echo 'data dump has no rows; aborting' >&2; exit 1; }
 
+# The suppression backfill runs after the drop; a bad key here would leave the
+# app stopped with an empty schema. Check it while the old database is intact.
+docker compose --profile prod run --rm app node -e \
+  "const k=Buffer.from(process.env.SUPPRESSION_HMAC_KEY??'','base64'); if(k.length!==32){console.error('SUPPRESSION_HMAC_KEY invalid');process.exit(1)}"
+
 # Empty schema, fresh baseline, restore data. All psql runs inside the container
 # so $POSTGRES_USER/$POSTGRES_DB are expanded there, never on the host.
 docker compose exec -T db sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema drizzle, public cascade;" -c "create schema public;"'
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema if exists drizzle cascade;" -c "drop schema if exists public cascade;" -c "create schema public;"'
 docker compose --profile prod run --rm app node scripts/migrate.ts
 docker compose exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
@@ -327,18 +335,30 @@ invariants. Do not mix generations.
 ```bash
 set -euo pipefail
 cd /srv/web-lair/app
+# Compose reads APP_IMAGE from .env; pin it to the tag that matches the dump.
+grep -Eq '^APP_IMAGE="?web-lair-app:' .env || { echo 'pin APP_IMAGE first' >&2; exit 1; }
+export APP_IMAGE=$(grep -E '^APP_IMAGE=' .env | cut -d= -f2- | tr -d '"')
+echo "restoring with APP_IMAGE=$APP_IMAGE"
 # IMAGE must point at the tag that matches the dump.
 sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
 sudo systemctl stop web-lair-drain.service web-lair-backup.service || true
 docker rm -f web-lair-drain >/dev/null 2>&1 || true
 docker compose --profile prod stop app
 docker compose exec -T db sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema drizzle, public cascade;" -c "create schema public;"'
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema if exists drizzle cascade;" -c "drop schema if exists public cascade;" -c "create schema public;"'
 # -1/--single-transaction implies --exit-on-error: never leave a partial restore.
 docker compose exec -T db sh -c \
   'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges -1 -e' \
   < /srv/web-lair/pre-migrate/<matching-dump>.dump
-docker compose --profile prod run --rm app node scripts/verify-baseline.ts
+# The dump may be pre-E2 (48 tables): verify-baseline only knows the 49-table
+# baseline, and the pre-E2 image does not ship it. Probe instead of guessing.
+TABLES=$(docker compose exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from information_schema.tables where table_schema = $$public$$"')
+if [ "$TABLES" = "49" ]; then
+  docker compose --profile prod run --rm app node scripts/verify-baseline.ts
+else
+  echo "restored pre-E2 schema ($TABLES public tables); verify-baseline skipped"
+fi
 docker compose --profile prod up -d
 sudo systemctl start web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
 ```
