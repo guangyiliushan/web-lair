@@ -23,6 +23,7 @@ umask 077
 
 APP_DIR=${APP_DIR:-/srv/web-lair/app}
 BACKUP_DIR=${BACKUP_DIR:-/srv/web-lair/backup}
+DC="${APP_DIR}/deploy/compose-prod.sh"
 RESTIC_IMAGE=${RESTIC_IMAGE:-restic/restic:0.19.1}
 
 : "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is not set}"
@@ -34,13 +35,13 @@ cd "$APP_DIR"
 
 # 1) Logical dump to a temp file, validate, then swap: a failed dump must not
 #    truncate yesterday's good staging copy.
-docker compose exec -T db pg_dump -Fc -U "${POSTGRES_USER:?}" "${POSTGRES_DB:?}" \
+"${DC}" exec -T db pg_dump -Fc -U "${POSTGRES_USER:?}" "${POSTGRES_DB:?}" \
 	> "$BACKUP_DIR/pg.dump.tmp"
-docker compose exec -T db pg_restore -l < "$BACKUP_DIR/pg.dump.tmp" > /dev/null
+"${DC}" exec -T db pg_restore -l < "$BACKUP_DIR/pg.dump.tmp" > /dev/null
 # TOC presence is not data. Compare the user-row count in the archive with the
 # live table so an empty/partial dump never replaces yesterday's good copy.
-EXPECTED_USERS=$(docker compose exec -T db psql -U "${POSTGRES_USER:?}" -d "${POSTGRES_DB:?}" -tAc 'select count(*) from "user"')
-DUMP_USERS=$(docker compose exec -T db pg_restore -a -f - < "$BACKUP_DIR/pg.dump.tmp" 2>/dev/null | \
+EXPECTED_USERS=$("${DC}" exec -T db psql -U "${POSTGRES_USER:?}" -d "${POSTGRES_DB:?}" -tAc 'select count(*) from "user"')
+DUMP_USERS=$("${DC}" exec -T db pg_restore -a -f - < "$BACKUP_DIR/pg.dump.tmp" 2>/dev/null | \
 	awk '/^COPY public\."user" /{f=1;next} f&&$0=="\\\\."{exit} f{n++} END{print n+0}')
 [ "$DUMP_USERS" = "$EXPECTED_USERS" ] || {
 	echo "[backup] dump has $DUMP_USERS user rows, expected $EXPECTED_USERS; refusing to replace pg.dump" >&2
@@ -49,7 +50,7 @@ DUMP_USERS=$(docker compose exec -T db pg_restore -a -f - < "$BACKUP_DIR/pg.dump
 mv "$BACKUP_DIR/pg.dump.tmp" "$BACKUP_DIR/pg.dump"
 
 # 3) Resolve the media volume from the running service (project-scoped).
-RUSTFS_CONTAINER=$(docker compose ps -q rustfs)
+RUSTFS_CONTAINER=$("${DC}" ps -q rustfs)
 RUSTFS_VOLUME=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' "$RUSTFS_CONTAINER")
 : "${RUSTFS_VOLUME:?could not resolve the rustfs volume from the rustfs container}"
 

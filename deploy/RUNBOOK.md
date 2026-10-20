@@ -4,6 +4,15 @@
 > Branches are deployed by commit; the image is built on the box and tagged
 > with the commit SHA. Every step below is idempotent unless marked otherwise.
 
+> [!IMPORTANT]
+> **Production commands go through `deploy/compose-prod.sh`.**
+> A bare `docker compose` auto-loads `compose.override.yaml`, which publishes the
+> dev loopback ports and attaches the `devhost` network. The wrapper loads
+> `compose.yaml` + `compose.prod.yaml` only and never the dev overlay.
+> `deploy/compose-prod.sh <args>` is equivalent to
+> `docker compose -f compose.yaml -f compose.prod.yaml <args>`.
+> Run every block from `/srv/web-lair/app` unless the block changes directory.
+
 ## 0. Host prerequisites
 
 | Item                                                     | Check                                                                                 |
@@ -136,7 +145,7 @@ export HTTP_PROXY= HTTPS_PROXY=        # the box has no local proxy
 # deploy and makes the rollback-by-tag in §3 impossible. Compose still reads
 # .env for the other values; do not `source` it (unquoted spaces break bash).
 export APP_IMAGE="web-lair-app:$(git rev-parse --short HEAD)"
-/usr/bin/time -v docker compose --profile prod build app 2>&1 | tail -30
+/usr/bin/time -v deploy/compose-prod.sh build app 2>&1 | tail -30
 # record "Elapsed" and "Maximum resident set size"; over the gate → build on a
 # workstation instead: docker save | ssh box docker load (image tag = SHA).
 # Prove the drain/builtin graph loads in the image that was just tagged.
@@ -155,26 +164,26 @@ d /srv/web-lair/pre-migrate 0750 1000 1000 30d
 EOF
 sudo systemd-tmpfiles --create
 # The first deploy reaches this block before `up -d`; the db must be up first.
-docker compose --profile prod up -d db
+deploy/compose-prod.sh up -d db
 # The entrypoint's temporary server only listens on the unix socket; probe TCP.
 for i in $(seq 1 30); do
-  docker compose exec -T db pg_isready -h 127.0.0.1 -q && break
+  deploy/compose-prod.sh exec -T db pg_isready -h 127.0.0.1 -q && break
   [ "$i" = 30 ] && { echo "db did not become ready" >&2; exit 1; }
   sleep 2
 done
 dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M%S).dump
 # The container has POSTGRES_USER/POSTGRES_DB; the host shell does not.
-docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
+deploy/compose-prod.sh exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
 mv "$dump.tmp" "$dump"
-docker compose exec -T db pg_restore -l < "$dump" > /dev/null
-docker compose --profile prod run --rm app node scripts/migrate.ts
-docker compose --profile prod run --rm app node scripts/verify-baseline.ts
+deploy/compose-prod.sh exec -T db pg_restore -l < "$dump" > /dev/null
+deploy/compose-prod.sh run --rm app node scripts/migrate.ts
+deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
 # Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
 # are not critical for maintenance, and admin-created schedules use the same tz.
-docker compose --profile prod run --rm app node scripts/ensure-job-schedules.ts
-docker compose --profile prod up -d
-docker compose --profile prod ps          # all healthy
+deploy/compose-prod.sh run --rm app node scripts/ensure-job-schedules.ts
+deploy/compose-prod.sh up -d
+deploy/compose-prod.sh ps          # all healthy
 ```
 
 ### 1.5 Smoke
@@ -184,7 +193,7 @@ export DOMAIN=$(grep -E '^DOMAIN=' .env | cut -d= -f2- | tr -d '"')
 curl -fsS https://$DOMAIN/api/health
 curl -sI https://$DOMAIN | head -1                    # 200
 curl -sI http://$DOMAIN | head -1                     # 308 → https
-docker compose exec app node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>console.log(r.status))"
+deploy/compose-prod.sh exec app node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>console.log(r.status))"
 ```
 
 Then: register a test account (verification mail must arrive), subscribe a test
@@ -202,7 +211,7 @@ set -euo pipefail
 cd /srv/web-lair/app
 git fetch && git checkout <new-sha>
 export APP_IMAGE="web-lair-app:$(git rev-parse --short HEAD)"
-docker compose --profile prod build app
+deploy/compose-prod.sh build app
 deploy/verify-image.sh "$APP_IMAGE"
 mkdir -p /srv/web-lair/pre-migrate
 # tmpfiles prunes dumps older than 30 days (install once; see §4).
@@ -211,25 +220,25 @@ d /srv/web-lair/pre-migrate 0750 1000 1000 30d
 EOF
 sudo systemd-tmpfiles --create
 # The first deploy reaches this block before `up -d`; the db must be up first.
-docker compose --profile prod up -d db
+deploy/compose-prod.sh up -d db
 # The entrypoint's temporary server only listens on the unix socket; probe TCP.
 for i in $(seq 1 30); do
-  docker compose exec -T db pg_isready -h 127.0.0.1 -q && break
+  deploy/compose-prod.sh exec -T db pg_isready -h 127.0.0.1 -q && break
   [ "$i" = 30 ] && { echo "db did not become ready" >&2; exit 1; }
   sleep 2
 done
 dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M%S).dump
 # The container has POSTGRES_USER/POSTGRES_DB; the host shell does not.
-docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
+deploy/compose-prod.sh exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
 mv "$dump.tmp" "$dump"
-docker compose exec -T db pg_restore -l < "$dump" > /dev/null
-docker compose --profile prod run --rm app node scripts/migrate.ts
-docker compose --profile prod run --rm app node scripts/verify-baseline.ts
+deploy/compose-prod.sh exec -T db pg_restore -l < "$dump" > /dev/null
+deploy/compose-prod.sh run --rm app node scripts/migrate.ts
+deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
 # Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
 # are not critical for maintenance, and admin-created schedules use the same tz.
-docker compose --profile prod run --rm app node scripts/ensure-job-schedules.ts
-docker compose --profile prod up -d
+deploy/compose-prod.sh run --rm app node scripts/ensure-job-schedules.ts
+deploy/compose-prod.sh up -d
 ```
 
 Pin the image: `APP_IMAGE=web-lair-app:<sha>` in `.env` so a rollback is a tag
@@ -258,20 +267,20 @@ mkdir -p "$BK"
 sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
 sudo systemctl stop web-lair-drain.service web-lair-backup.service || true
 docker rm -f web-lair-drain >/dev/null 2>&1 || true
-docker compose --profile prod stop app
-docker compose --profile prod up -d db
-for i in $(seq 1 30); do docker compose exec -T db pg_isready -h 127.0.0.1 -q && break; [ "$i" = 30 ] && { echo 'db not ready' >&2; exit 1; }; sleep 2; done
+deploy/compose-prod.sh stop app
+deploy/compose-prod.sh up -d db
+for i in $(seq 1 30); do deploy/compose-prod.sh exec -T db pg_isready -h 127.0.0.1 -q && break; [ "$i" = 30 ] && { echo 'db not ready' >&2; exit 1; }; sleep 2; done
 
 # Refuse to rebuild an empty/unknown database: record the critical row count.
-USERS=$(docker compose exec -T db sh -c \
+USERS=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"user\""')
 [ "${USERS:-0}" -gt 0 ] || { echo 'no user rows before rebuild; aborting' >&2; exit 1; }
 echo "pre-rebuild user rows=$USERS" | tee "$BK/pre-counts-$STAMP.txt"
 
 # Full backup first; no -t (a TTY merges pg_dump warnings into stdout).
-docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+deploy/compose-prod.sh exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
   > "$BK/pre-e2-$STAMP.dump"
-docker compose exec -T db pg_restore -l < "$BK/pre-e2-$STAMP.dump" > /dev/null
+deploy/compose-prod.sh exec -T db pg_restore -l < "$BK/pre-e2-$STAMP.dump" > /dev/null
 # TOC presence is not data: an empty dump still lists every table. Count the
 # user rows inside the archive before dropping anything.
 DUMP_USERS=$(docker exec -i db pg_restore -a -f - < "$BK/pre-e2-$STAMP.dump" 2>/dev/null | \
@@ -280,7 +289,7 @@ DUMP_USERS=$(docker exec -i db pg_restore -a -f - < "$BK/pre-e2-$STAMP.dump" 2>/
 
 # Data-only file: column lists + FK triggers disabled inside the transaction.
 { echo 'BEGIN;'; echo 'SET LOCAL session_replication_role = replica;'; \
-  docker compose exec -T db sh -c \
+  deploy/compose-prod.sh exec -T db sh -c \
   'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --data-only --column-inserts --no-owner --no-privileges -n public'; \
   echo 'COMMIT;'; } > "$BK/pre-e2-data-$STAMP.sql"
 test -s "$BK/pre-e2-data-$STAMP.sql"
@@ -288,28 +297,28 @@ grep -q '^INSERT INTO' "$BK/pre-e2-data-$STAMP.sql" || { echo 'data dump has no 
 
 # The suppression backfill runs after the drop; a bad key here would leave the
 # app stopped with an empty schema. Check it while the old database is intact.
-docker compose --profile prod run --rm app node -e \
+deploy/compose-prod.sh run --rm app node -e \
   "const s=(process.env.SUPPRESSION_HMAC_KEY??'').trim(); if(!/^[A-Za-z0-9+/_-]+={0,2}$/.test(s)||![43,44].includes(s.length)||Buffer.from(s,'base64').length!==32){console.error('SUPPRESSION_HMAC_KEY invalid');process.exit(1)}"
 
 # Empty schema, fresh baseline, restore data. All psql runs inside the container
 # so $POSTGRES_USER/$POSTGRES_DB are expanded there, never on the host.
-docker compose exec -T db sh -c \
+deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema if exists drizzle cascade;" -c "drop schema if exists public cascade;" -c "create schema public;"'
-docker compose --profile prod run --rm app node scripts/migrate.ts
-docker compose exec -T db sh -c \
+deploy/compose-prod.sh run --rm app node scripts/migrate.ts
+deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
   < "$BK/pre-e2-data-$STAMP.sql"
-RESTORED=$(docker compose exec -T db sh -c \
+RESTORED=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"user\""')
 [ "$RESTORED" = "$USERS" ] || { echo "restored user rows=$RESTORED, expected $USERS; aborting" >&2; exit 1; }
 
 # Backfills + verification run inside the image (host has no pnpm/tsx).
-docker compose --profile prod run --rm app node scripts/backfill-email-consent.ts --apply
-docker compose --profile prod run --rm app node scripts/backfill-suppressions.ts --apply
-docker compose --profile prod run --rm app node scripts/backfill-subscription-token-hashes.ts --apply
-docker compose --profile prod run --rm app node scripts/ensure-job-schedules.ts
-docker compose --profile prod run --rm app node scripts/verify-baseline.ts
-docker compose --profile prod up -d
+deploy/compose-prod.sh run --rm app node scripts/backfill-email-consent.ts --apply
+deploy/compose-prod.sh run --rm app node scripts/backfill-suppressions.ts --apply
+deploy/compose-prod.sh run --rm app node scripts/backfill-subscription-token-hashes.ts --apply
+deploy/compose-prod.sh run --rm app node scripts/ensure-job-schedules.ts
+deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
+deploy/compose-prod.sh up -d
 sudo systemctl start web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer
 ```
 
@@ -331,7 +340,7 @@ Requirements/notes:
 
 ```bash
 # code/image only (no schema change since the last rebuild)
-docker compose --profile prod up -d --no-build   # after APP_IMAGE points at the previous tag
+deploy/compose-prod.sh up -d --no-build   # after APP_IMAGE points at the previous tag
 ```
 
 If a migration ran (or the rebuild above was performed): stop `app`, restore the
@@ -352,38 +361,38 @@ case "$APP_IMAGE" in *:local) echo 'APP_IMAGE=:local cannot identify a generatio
 docker image inspect "$APP_IMAGE" > /dev/null
 echo "restoring with APP_IMAGE=$APP_IMAGE"
 DUMP=/srv/web-lair/pre-migrate/<matching-dump>.dump
-USERS=$(docker compose exec -T db sh -c \
+USERS=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"user\""')
-DUMP_USERS=$(docker compose exec -T db pg_restore -a -f - < "$DUMP" 2>/dev/null | \
+DUMP_USERS=$(deploy/compose-prod.sh exec -T db pg_restore -a -f - < "$DUMP" 2>/dev/null | \
   awk '/^COPY public\."user" /{f=1;next} f&&$0=="\\\\."{exit} f{n++} END{print n+0}')
 [ "$DUMP_USERS" = "$USERS" ] || { echo "dump has $DUMP_USERS user rows, expected $USERS; aborting" >&2; exit 1; }
 # IMAGE must point at the tag that matches the dump.
 sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
 sudo systemctl stop web-lair-drain.service web-lair-backup.service || true
 docker rm -f web-lair-drain >/dev/null 2>&1 || true
-docker compose --profile prod stop app
-docker compose exec -T db sh -c \
+deploy/compose-prod.sh stop app
+deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema if exists drizzle cascade;" -c "drop schema if exists public cascade;" -c "create schema public;"'
 # -1/--single-transaction implies --exit-on-error: never leave a partial restore.
-docker compose exec -T db sh -c \
+deploy/compose-prod.sh exec -T db sh -c \
   'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges -1 -e' \
   < "$DUMP"
 # The dump may be pre-E2 (48 tables): verify-baseline only knows the 49-table
 # baseline, and the pre-E2 image does not ship it. Probe both generation and
 # shape; anything else must stop, not silently skip verification.
-TABLES=$(docker compose exec -T db sh -c \
+TABLES=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from information_schema.tables where table_schema = '\''public'\'' and table_type = '\''BASE TABLE'\''"')
-HAS_E2=$(docker compose exec -T db sh -c \
+HAS_E2=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('\''public.email_suppressions'\'') is not null"')
 if [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ]; then
-  docker compose --profile prod run --rm app node scripts/verify-baseline.ts
+  deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
 elif [ "$TABLES" = "48" ] && [ "$HAS_E2" = "f" ]; then
   echo "restored pre-E2 schema (48 public tables); verify-baseline skipped"
 else
   echo "unexpected restore shape (tables=$TABLES e2=$HAS_E2); refusing to start" >&2
   exit 1
 fi
-docker compose --profile prod up -d
+deploy/compose-prod.sh up -d
 sudo systemctl start web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
 ```
 
@@ -457,12 +466,12 @@ sudo systemctl enable --now web-lair-drain.timer web-lair-deadman.timer web-lair
 systemctl list-timers --all | grep web-lair      # verification
 ```
 
-| Unit                          | Cadence                         | Job                                                                                             |
-| ----------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `web-lair-drain.timer`        | 1 min                           | `docker compose --profile prod run --rm --no-deps --name web-lair-drain app node jobs/drain.ts` |
-| `web-lair-deadman.timer`      | 5 min                           | liveness ping (`DEADMAN_PING_URL`), skipped when unset                                          |
-| `web-lair-backup.timer`       | 03:30 daily (`Persistent=true`) | `deploy/backup/backup.sh`                                                                       |
-| `web-lair-backup-check.timer` | Sundays 04:30                   | `restic check --read-data-subset=5%`                                                            |
+| Unit                          | Cadence                         | Job                                                                                      |
+| ----------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------- |
+| `web-lair-drain.timer`        | 1 min                           | `deploy/compose-prod.sh run --rm --no-deps --name web-lair-drain app node jobs/drain.ts` |
+| `web-lair-deadman.timer`      | 5 min                           | liveness ping (`DEADMAN_PING_URL`), skipped when unset                                   |
+| `web-lair-backup.timer`       | 03:30 daily (`Persistent=true`) | `deploy/backup/backup.sh`                                                                |
+| `web-lair-backup-check.timer` | Sundays 04:30                   | `restic check --read-data-subset=5%`                                                     |
 
 `run --rm` (not `exec`) so each tick is an independent container and a dead app
 container cannot masquerade as a running timer. Exit codes: 0 tick done,
@@ -478,11 +487,11 @@ add or edit others in the admin surface.
 
 RFC 8058 requires the endpoint to work **without** an `Origin` header and
 without cookies. Run this from the box (compose binds the app on the internal
-network; use `docker compose exec app` or an equivalent local URL):
+network; use `deploy/compose-prod.sh exec app` or an equivalent local URL):
 
 ```bash
 # Replace with a real token from a subscription row (it is a bearer token).
-TOKEN=$(docker compose exec -T db sh -c \
+TOKEN=$(deploy/compose-prod.sh exec -T db sh -c \
   "psql -U \$POSTGRES_USER -d \$POSTGRES_DB -tAc \"select token from subscriptions where status = 'pending' limit 1\"")
 curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
   -H 'Content-Type: application/x-www-form-urlencoded' \
@@ -503,7 +512,7 @@ endpoints must keep rejecting Origin-less POSTs with `403` — see
 
 | Symptom                                  | Likely cause                                                                                                          |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `app` unhealthy                          | `docker compose logs app`; `/api/health` must answer 200                                                              |
+| `app` unhealthy                          | `deploy/compose-prod.sh logs app`; `/api/health` must answer 200                                                      |
 | 413 on upload                            | `BODY_SIZE_LIMIT` too low (default 26M; one file per request)                                                         |
 | Registration 503                         | mail unconfigured or SMTP verify failed (`MAIL_ENABLED`/`MAIL_SMTP_HOST`/`MAIL_FROM`) — form and API refuse by design |
 | All visitors share one rate-limit bucket | Caddy not setting `X-Forwarded-For`, or `ADDRESS_HEADER`/`XFF_DEPTH` wrong                                            |
@@ -549,15 +558,15 @@ are **not recoverable** by the backfill; suppression coverage starts at E2.
 **Consent backfill (once, after restoring pre-E2 data):**
 
 ```bash
-docker compose --profile prod run --rm app node scripts/backfill-email-consent.ts            # dry-run
-docker compose --profile prod run --rm app node scripts/backfill-email-consent.ts --apply
+deploy/compose-prod.sh run --rm app node scripts/backfill-email-consent.ts            # dry-run
+deploy/compose-prod.sh run --rm app node scripts/backfill-email-consent.ts --apply
 ```
 
 **Suppression backfill (once, after restoring pre-E2 opt-outs):**
 
 ```bash
-docker compose --profile prod run --rm app node scripts/backfill-suppressions.ts             # dry-run
-docker compose --profile prod run --rm app node scripts/backfill-suppressions.ts --apply
+deploy/compose-prod.sh run --rm app node scripts/backfill-suppressions.ts             # dry-run
+deploy/compose-prod.sh run --rm app node scripts/backfill-suppressions.ts --apply
 ```
 
 **Token hashes (E2-3).** New writes store both `token` (dual-read window) and
@@ -566,8 +575,8 @@ plaintext column for legacy rows and backfill the hash on first hit without
 touching `updated_at` (the TTL anchor). Backfill everything once after restore:
 
 ```bash
-docker compose --profile prod run --rm app node scripts/backfill-subscription-token-hashes.ts   # dry-run
-docker compose --profile prod run --rm app node scripts/backfill-subscription-token-hashes.ts --apply
+deploy/compose-prod.sh run --rm app node scripts/backfill-subscription-token-hashes.ts   # dry-run
+deploy/compose-prod.sh run --rm app node scripts/backfill-subscription-token-hashes.ts --apply
 ```
 
 The plaintext `token` column is scheduled for removal in a later window after

@@ -10,10 +10,10 @@ OnFailure=web-lair-alert@%n.service
 Type=oneshot
 WorkingDirectory=/srv/web-lair/app
 # `run --rm` (not exec): every tick is its own container, so a dead app
-# container cannot masquerade as a running timer. `--profile prod` is required
-# because the app service is profile-gated. Exit 1 = infrastructure failure
-# (alert), 2 = configuration missing.
-ExecStart=/usr/bin/docker compose --profile prod run --rm --no-deps --name web-lair-drain app node jobs/drain.ts
+# container cannot masquerade as a running timer. The wrapper loads
+# compose.yaml + compose.prod.yaml (never compose.override.yaml).
+# Exit 1 = infrastructure failure (alert), 2 = configuration missing.
+ExecStart=/srv/web-lair/app/deploy/compose-prod.sh run --rm --no-deps --name web-lair-drain app node jobs/drain.ts
 # `--rm` dies with the docker CLI; remove a container left by a timeout/kill.
 ExecStopPost=-/usr/bin/docker rm -f web-lair-drain
 # Longest builtin timeoutMs is 900s (links.check/projects.sync); a shorter

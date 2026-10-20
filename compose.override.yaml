@@ -1,0 +1,29 @@
+# Dev-only overlay. Plain `docker compose up` loads this file automatically.
+#
+# The base keeps the data services on the internal network. Docker does not
+# publish ports for a container attached only to an internal network
+# (moby/moby#36174, moby/moby#44986), so `devhost` — an ordinary bridge — makes
+# the loopback bindings take effect for the host-run `pnpm dev`.
+#
+# Production never loads this file: use deploy/compose-prod.sh.
+
+services:
+  db:
+    ports:
+      - '127.0.0.1:5432:5432'
+    networks: [internal, devhost]
+
+  rustfs:
+    ports:
+      - '127.0.0.1:9000:9000'
+      - '127.0.0.1:9001:9001'
+    networks: [internal, devhost]
+
+  valkey:
+    ports:
+      - '127.0.0.1:6379:6379'
+    networks: [internal, devhost]
+
+networks:
+  devhost:
+    driver: bridge

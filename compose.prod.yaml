@@ -1,0 +1,115 @@
+# Production overlay: loaded only by deploy/compose-prod.sh, never automatically.
+#
+# YAML anchors do not cross files, so x-logging is repeated here; keep it in
+# sync with compose.yaml. Paths (build context, Caddyfile, DATA_DIR default)
+# resolve relative to the base file's directory — the repository root.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
+services:
+  app:
+    # D-1 (platform plan §C / deploy opening note): the Node process behind Caddy.
+    build:
+      context: .
+    image: ${APP_IMAGE:-web-lair-app:local}
+    restart: always
+    security_opt:
+      - 'no-new-privileges:true'
+    init: true
+    mem_limit: 2g
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      HOST: 0.0.0.0
+      ORIGIN: ${ORIGIN}
+      ADDRESS_HEADER: ${ADDRESS_HEADER:-X-Forwarded-For}
+      XFF_DEPTH: ${XFF_DEPTH:-1}
+      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-26M}
+      # Service DNS overrides the loopback URLs from .env (dev values).
+      # Password must be URL-safe (special characters break the URL); see RUNBOOK §1.1.
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      RUSTFS_ENDPOINT: http://rustfs:9000
+      VALKEY_URL: redis://valkey:6379
+      DATA_DIR: /data
+    volumes:
+      # Host absolute path in production (backup set ②); relative default for a
+      # throwaway local run.
+      - ${DATA_DIR:-./data}:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    networks: [internal, edge]
+    logging: *default-logging
+
+  caddy:
+    # pinned: Caddy 2.11.7 (official image). Grey-cloud DNS only (deploy note
+    # Q6): HTTP-01 issuance; DNS-01 would need an xcaddy build.
+    image: caddy:2.11.7
+    restart: always
+    security_opt:
+      - 'no-new-privileges:true'
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [edge]
+    logging: *default-logging
+
+  kuma:
+    # §C.5 monitoring. Kept on the internal network for TCP checks and on the
+    # edge network for outbound notifications.
+    image: louislam/uptime-kuma:2.5.6
+    restart: always
+    security_opt:
+      - 'no-new-privileges:true'
+    ports:
+      - '127.0.0.1:3001:3001'
+    volumes:
+      - kuma_data:/app/data
+    networks: [internal, edge]
+    logging: *default-logging
+
+networks:
+  edge:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+  caddy_logs:
+  kuma_data:
