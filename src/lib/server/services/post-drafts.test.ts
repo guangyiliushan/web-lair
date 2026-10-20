@@ -642,6 +642,40 @@ describe('publishDraft', () => {
 		expect(syncMock.mock.invocationCallOrder[0]).toBeLessThan(syncMock.mock.invocationCallOrder[1]);
 	});
 
+	it('writes staged provenance only on publish and stamps the author', async () => {
+		const draft = {
+			...BASE_DRAFT,
+			slug: 'new-slug',
+			baseVersion: 2,
+			payload: {
+				provenance: {
+					writingOrigin: 'mostly_ai',
+					visualOrigin: 'some',
+					aiHelp: ['outline']
+				}
+			}
+		};
+		state.selectQueue = [
+			[draft],
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }],
+			[{ id: 'cat-1' }],
+			[{ id: 'post-1', version: 2, slug: 'old-slug', lang: 'en' }],
+			[{ ...draft, content: 'Locked newest' }]
+		];
+		state.insertResults = [[{ id: 't1' }], []];
+
+		await publishDraft('draft-1', 'user-1');
+
+		const postUpdate = state.updates.find((u) => u.table === posts);
+		expect(postUpdate?.values).toMatchObject({
+			writingOrigin: 'mostly_ai',
+			visualOrigin: 'some',
+			aiHelp: ['outline'],
+			provenanceSource: 'author',
+			provenanceUpdatedBy: 'user-1'
+		});
+	});
+
 	it('writes the published body reference set in the publish transaction (Q15)', async () => {
 		const KEY = `ab/${'a'.repeat(64)}.png`;
 		const draft = { ...BASE_DRAFT, slug: 'new-slug', baseVersion: 2 };

@@ -13,6 +13,7 @@ import {
 	uuid
 } from 'drizzle-orm/pg-core';
 import { categories } from './category.schema';
+import { user } from '../auth.schema';
 
 /** AI-line meta contract (AI-1, ledger §14.3): per-post translation / AI settings. */
 export interface PostsMeta {
@@ -54,6 +55,16 @@ export const posts = pgTable(
 			onDelete: 'set null'
 		}),
 		translationOrigin: text('translation_origin'),
+		// AI provenance (three orthogonal axes). Nullable = the author chose
+		// not to disclose; null is never treated as "none".
+		writingOrigin: text('writing_origin'),
+		visualOrigin: text('visual_origin'),
+		aiHelp: text('ai_help').array(),
+		provenanceSource: text('provenance_source'),
+		provenanceUpdatedAt: timestamp('provenance_updated_at', { withTimezone: true }),
+		provenanceUpdatedBy: text('provenance_updated_by').references(() => user.id, {
+			onDelete: 'set null'
+		}),
 		categoryId: uuid('category_id')
 			.notNull()
 			.references(() => categories.id, { onDelete: 'restrict' }),
@@ -73,6 +84,19 @@ export const posts = pgTable(
 		check(
 			'posts_translation_origin_check',
 			sql`${table.translationOrigin} in ('human', 'ai', 'machine')`
+		),
+		check(
+			'posts_writing_origin_check',
+			sql`${table.writingOrigin} in ('none', 'assist', 'mostly_ai', 'ai_full')`
+		),
+		check('posts_visual_origin_check', sql`${table.visualOrigin} in ('none', 'some', 'all')`),
+		check(
+			'posts_provenance_source_check',
+			sql`${table.provenanceSource} in ('author', 'c2pa', 'import')`
+		),
+		check(
+			'posts_provenance_source_by_check',
+			sql`${table.provenanceUpdatedBy} is null or ${table.provenanceSource} is not null`
 		),
 		uniqueIndex('posts_lang_slug_uniq').on(table.lang, table.slug),
 		uniqueIndex('posts_translation_group_lang_uniq').on(table.translationGroup, table.lang),
@@ -97,6 +121,9 @@ export const posts = pgTable(
 		index('posts_translated_from_idx')
 			.on(table.translatedFromPostId)
 			.where(sql`${table.translatedFromPostId} is not null`),
+		index('posts_provenance_updated_by_idx')
+			.on(table.provenanceUpdatedBy)
+			.where(sql`${table.provenanceUpdatedBy} is not null`),
 		// AI-1 §14.4 R7: exactly one source row per translation group
 		// (fail-closed DB backstop); "at least one source" and "no chained
 		// translations" stay application-level checks + test nails.

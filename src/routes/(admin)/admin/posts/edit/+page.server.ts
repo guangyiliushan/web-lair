@@ -2,6 +2,10 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { and, eq, ne } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { categories, postTags, posts, tags } from '$lib/server/db/content';
+import {
+	normalizeProvenance,
+	postProvenanceFromPayload
+} from '$lib/server/db/content/post-provenance';
 import { requireAdminRole } from '$lib/server/authz';
 import { getOption, OPTION_LANGS } from '$lib/server/config/options-registry';
 import {
@@ -76,7 +80,12 @@ export const load: PageServerLoad = async ({ url }) => {
 			updatedAt: row.updatedAt,
 			tags: tagNames.join(','),
 			placeholder: isPlaceholderSlug(row.slug),
-			translatedFromPostId: row.translatedFromPostId
+			translatedFromPostId: row.translatedFromPostId,
+			provenance: {
+				writingOrigin: row.writingOrigin,
+				visualOrigin: row.visualOrigin,
+				aiHelp: row.aiHelp ?? []
+			}
 		};
 
 		const draftRow = await loadDraftByPostId(row.id);
@@ -90,17 +99,37 @@ export const load: PageServerLoad = async ({ url }) => {
 				summary: draftRow.summary,
 				content: draftRow.content,
 				tags: (draftRow.tags ?? []).join(','),
-				updatedAt: draftRow.updatedAt
+				updatedAt: draftRow.updatedAt,
+				provenance: postProvenanceFromPayload(draftRow.payload)
 			};
 		}
 
 		if (row.translatedFromPostId) {
 			const [sourceRow] = await db
-				.select({ id: posts.id, title: posts.title, slug: posts.slug, lang: posts.lang })
+				.select({
+					id: posts.id,
+					title: posts.title,
+					slug: posts.slug,
+					lang: posts.lang,
+					writingOrigin: posts.writingOrigin,
+					visualOrigin: posts.visualOrigin,
+					aiHelp: posts.aiHelp
+				})
 				.from(posts)
 				.where(eq(posts.id, row.translatedFromPostId))
 				.limit(1);
 			source = sourceRow ?? null;
+			if (sourceRow && post) {
+				// The disabled controls should show what the public page will
+				// inherit, not the translation row's empty columns.
+				post.provenance = {
+					writingOrigin: post.provenance.writingOrigin ?? sourceRow.writingOrigin,
+					visualOrigin: post.provenance.visualOrigin ?? sourceRow.visualOrigin,
+					aiHelp: post.provenance.aiHelp.length
+						? post.provenance.aiHelp
+						: (sourceRow.aiHelp ?? [])
+				};
+			}
 		}
 
 		siblings = await db
@@ -168,7 +197,12 @@ export const actions: Actions = {
 				categoryId: categoryIdRaw,
 				summary: str(form, 'summary'),
 				tags: str(form, 'tags'),
-				content: str(form, 'content')
+				content: str(form, 'content'),
+				provenance: normalizeProvenance({
+					writingOrigin: str(form, 'writingOrigin') || null,
+					visualOrigin: str(form, 'visualOrigin') || null,
+					aiHelp: str(form, 'aiHelp')
+				})
 			},
 			author: locals.admin?.userId ?? locals.user?.id ?? null,
 			autosave

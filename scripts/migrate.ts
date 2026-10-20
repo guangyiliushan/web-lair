@@ -12,8 +12,10 @@
  * the ORIGINAL `when`, so an existing DB is not re-run; but the CREATE-only
  * baseline cannot upgrade it either. After migrating, the schema preflight
  * below makes `migrate` exit 1 on a pre-E2 database and points at the rebuild
- * procedure in deploy/RUNBOOK.md §2.1. It does not guard the app process:
- * deploy scripts must run `migrate` before `up -d`.
+ * procedure in deploy/RUNBOOK.md §2.1. The provenance window regenerated the
+ * same single baseline again; the second check below rejects a pre-provenance
+ * database and points at §2.2. It does not guard the app process: deploy
+ * scripts must run `migrate` before `up -d`.
  *
  * Usage (host):  node --env-file-if-exists=.env scripts/migrate.ts
  * Usage (container): node scripts/migrate.ts     # env from compose
@@ -33,7 +35,13 @@ try {
 	await migrate(drizzle(client), { migrationsFolder: './drizzle' });
 	console.log('[migrate] migrations applied');
 	const [schema] = await client<
-		{ suppressions: boolean; consent: boolean; tokenHash: boolean; tokenHashIndex: boolean }[]
+		{
+			suppressions: boolean;
+			consent: boolean;
+			tokenHash: boolean;
+			tokenHashIndex: boolean;
+			provenance: boolean;
+		}[]
 	>`select
 		to_regclass('public.email_suppressions') is not null as suppressions,
 		exists (
@@ -46,7 +54,15 @@ try {
 			where table_schema = 'public' and table_name = 'subscriptions'
 				and column_name = 'token_hash'
 		) as "tokenHash",
-		to_regclass('public.subscriptions_token_hash_uniq') is not null as "tokenHashIndex"`;
+		to_regclass('public.subscriptions_token_hash_uniq') is not null as "tokenHashIndex",
+		(
+			select count(*) = 6 from information_schema.columns
+			where table_schema = 'public' and table_name = 'posts'
+				and column_name in (
+					'writing_origin', 'visual_origin', 'ai_help',
+					'provenance_source', 'provenance_updated_at', 'provenance_updated_by'
+				)
+		) as provenance`;
 	if (!schema?.suppressions || !schema.consent || !schema.tokenHash || !schema.tokenHashIndex) {
 		console.error(
 			'[migrate] this database predates the E2 baseline (missing email_suppressions / consent_version / token_hash / token_hash index).'
@@ -56,11 +72,20 @@ try {
 		);
 		process.exitCode = 1;
 	}
+	if (!schema?.provenance) {
+		console.error(
+			'[migrate] this database predates the provenance baseline (posts is missing one of writing_origin / visual_origin / ai_help / provenance_source / provenance_updated_at / provenance_updated_by).'
+		);
+		console.error(
+			'[migrate] the journal timestamp is unchanged, so the migrator skips the regenerated baseline; rebuild per deploy/RUNBOOK.md §2.2 (backup -> empty schema -> migrate -> data restore -> provenance backfill).'
+		);
+		process.exitCode = 1;
+	}
 } catch (error) {
 	console.error('[migrate] failed:', error);
 	console.error('[migrate] ABORT — do not start the app.');
 	console.error(
-		'[migrate] a failure here may mean the database predates the E2 baseline; rebuild per deploy/RUNBOOK.md §2.1 (a dump restore cannot add the missing ledger row).'
+		'[migrate] a failure here may mean the database predates the E2 or provenance baseline; rebuild per deploy/RUNBOOK.md §2.1/§2.2 (a dump restore cannot add the missing ledger row).'
 	);
 	process.exitCode = 1;
 } finally {

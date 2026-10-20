@@ -39,9 +39,15 @@
 	interface Props {
 		contentId: string;
 		config: PresenceConfig;
+		/**
+		 * The density strip is a decorative overlay anchored under the host
+		 * container. Callers that place the badge in a compact meta row opt
+		 * out; the badge (the actual reader information) is unaffected.
+		 */
+		strip?: boolean;
 	}
 
-	let { contentId, config }: Props = $props();
+	let { contentId, config, strip = true }: Props = $props();
 
 	let count = $state<number | null>(null);
 	let histogram = $state<number[]>([]);
@@ -130,7 +136,7 @@
 <span class="contents" bind:this={root}>
 	{#if config.enabled && (config.readerView || config.readerDots) && count !== null && count >= 1}
 		{#if config.readerView}
-			<span class="ml-auto inline-flex items-center gap-1.5" data-slot="presence-badge">
+			<span class="inline-flex items-center gap-1.5" data-slot="presence-badge">
 				<span class="relative flex size-1.5" aria-hidden="true">
 					<span
 						class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/60 motion-reduce:animate-none"
@@ -140,7 +146,7 @@
 				<span data-slot="presence-count">{m.presence_readers_now({ count: count })}</span>
 			</span>
 		{/if}
-		{#if (config.readerView && histogram.length > 0) || (config.readerDots && dots.length > 0)}
+		{#if strip && ((config.readerView && histogram.length > 0) || (config.readerDots && dots.length > 0))}
 			<span
 				class="absolute inset-x-0 top-full mt-2 block"
 				aria-hidden="true"

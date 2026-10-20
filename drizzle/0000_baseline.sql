@@ -385,6 +385,12 @@ CREATE TABLE "posts" (
 	"translation_group" uuid DEFAULT uuidv7() NOT NULL,
 	"translated_from_post_id" uuid,
 	"translation_origin" text,
+	"writing_origin" text,
+	"visual_origin" text,
+	"ai_help" text[],
+	"provenance_source" text,
+	"provenance_updated_at" timestamp with time zone,
+	"provenance_updated_by" text,
 	"category_id" uuid NOT NULL,
 	"copyright" boolean DEFAULT true NOT NULL,
 	"read_count" integer DEFAULT 0 NOT NULL,
@@ -394,7 +400,11 @@ CREATE TABLE "posts" (
 	CONSTRAINT "posts_status_check" CHECK ("posts"."status" in ('draft', 'scheduled', 'published', 'trash')),
 	CONSTRAINT "posts_content_format_check" CHECK ("posts"."content_format" in ('markdown')),
 	CONSTRAINT "posts_lang_check" CHECK ("posts"."lang" in ('en', 'zh-cn', 'ja')),
-	CONSTRAINT "posts_translation_origin_check" CHECK ("posts"."translation_origin" in ('human', 'ai', 'machine'))
+	CONSTRAINT "posts_translation_origin_check" CHECK ("posts"."translation_origin" in ('human', 'ai', 'machine')),
+	CONSTRAINT "posts_writing_origin_check" CHECK ("posts"."writing_origin" in ('none', 'assist', 'mostly_ai', 'ai_full')),
+	CONSTRAINT "posts_visual_origin_check" CHECK ("posts"."visual_origin" in ('none', 'some', 'all')),
+	CONSTRAINT "posts_provenance_source_check" CHECK ("posts"."provenance_source" in ('author', 'c2pa', 'import')),
+	CONSTRAINT "posts_provenance_source_by_check" CHECK ("posts"."provenance_updated_by" is null or "posts"."provenance_source" is not null)
 );
 --> statement-breakpoint
 CREATE TABLE "projects" (
@@ -763,6 +773,7 @@ ALTER TABLE "post_related_posts" ADD CONSTRAINT "post_related_posts_related_post
 ALTER TABLE "post_revisions" ADD CONSTRAINT "post_revisions_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_revisions" ADD CONSTRAINT "post_revisions_author_user_id_fk" FOREIGN KEY ("author") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_translated_from_post_id_posts_id_fk" FOREIGN KEY ("translated_from_post_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_provenance_updated_by_user_id_fk" FOREIGN KEY ("provenance_updated_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_category_id_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."categories"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "summaries" ADD CONSTRAINT "summaries_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_tags" ADD CONSTRAINT "post_tags_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -850,6 +861,7 @@ CREATE INDEX "posts_category_id_idx" ON "posts" USING btree ("category_id");--> 
 CREATE INDEX "posts_status_pin_published_idx" ON "posts" USING btree ("lang","status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "posts_category_status_published_idx" ON "posts" USING btree ("category_id","lang","status","pin_at" DESC NULLS LAST,"published_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "posts_translated_from_idx" ON "posts" USING btree ("translated_from_post_id") WHERE "posts"."translated_from_post_id" is not null;--> statement-breakpoint
+CREATE INDEX "posts_provenance_updated_by_idx" ON "posts" USING btree ("provenance_updated_by") WHERE "posts"."provenance_updated_by" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "posts_group_source_uniq" ON "posts" USING btree ("translation_group") WHERE "posts"."translated_from_post_id" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX "projects_extid_uniq" ON "projects" USING btree ("provider","external_id") WHERE "projects"."external_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "projects_url_uniq" ON "projects" USING btree ("provider","project_url") WHERE "projects"."external_id" is null;--> statement-breakpoint

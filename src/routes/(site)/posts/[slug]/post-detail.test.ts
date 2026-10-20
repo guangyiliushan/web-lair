@@ -74,12 +74,26 @@ function makeEvent(slug = 'old-slug', search = '') {
 const postRow = {
 	id: 'post-1',
 	slug: 'current-slug',
+	lang: 'en',
 	title: 'Title',
 	content: '',
 	publishedAt: new Date('2026-09-30T00:00:00Z'),
 	categoryName: 'Cat',
 	allowComment: false,
-	translationGroup: 'group-1'
+	translationGroup: 'group-1',
+	translationOrigin: 'ai',
+	writingOrigin: 'none',
+	visualOrigin: 'some',
+	aiHelp: ['ideas'],
+	translatedFromPostId: null
+};
+
+type ProvenanceView = {
+	writingOrigin: string | null;
+	visualOrigin: string | null;
+	aiHelp: string[] | null;
+	translationOrigin: string | null;
+	isTranslation: boolean;
 };
 
 describe('posts/[slug] load — slug fallback chain', () => {
@@ -102,17 +116,187 @@ describe('posts/[slug] load — slug fallback chain', () => {
 
 		const data = (await load(makeEvent('current-slug'))) as {
 			post: { slug: string };
+			provenance: ProvenanceView;
 			seo: { path: string; alternates: { lang: string; path: string }[] };
 		};
 
 		expect(data.post.slug).toBe('current-slug');
-		expect(selectMock).toHaveBeenCalledTimes(2);
+		expect(data.provenance).toEqual({
+			writingOrigin: 'none',
+			visualOrigin: 'some',
+			aiHelp: null,
+			translationOrigin: null,
+			isTranslation: false
+		});
+		expect(selectMock).toHaveBeenCalledTimes(3);
 		// hreflang set: the translation group's visible languages in locale order.
 		expect(data.seo.path).toBe('/posts/current-slug');
 		expect(data.seo.alternates).toEqual([
 			{ lang: 'en', path: '/posts/current-slug' },
 			{ lang: 'zh-cn', path: '/posts/current-slug-zh' }
 		]);
+	});
+
+	it('marks the group source language for the translation switcher', async () => {
+		state.selectResults = [
+			[postRow],
+			[
+				{ id: 'post-1', lang: 'en', slug: 'current-slug', translatedFromPostId: null },
+				{
+					id: 'post-2',
+					lang: 'zh-cn',
+					slug: 'current-slug-zh',
+					translatedFromPostId: 'post-1'
+				}
+			]
+		];
+
+		const data = (await load(makeEvent('current-slug'))) as {
+			post: { lang: string; translations: { lang: string; path: string; isSource: boolean }[] };
+		};
+
+		expect(data.post.lang).toBe('en');
+		expect(data.post.translations).toEqual([
+			{ lang: 'en', path: '/posts/current-slug', isSource: true },
+			{ lang: 'zh-cn', path: '/posts/current-slug-zh', isSource: false }
+		]);
+	});
+
+	it('returns null provenance for an undisclosed source post', async () => {
+		const undisclosed = {
+			...postRow,
+			writingOrigin: null,
+			visualOrigin: null,
+			aiHelp: null,
+			translationOrigin: null
+		};
+		state.selectResults = [[undisclosed], [{ lang: 'en', slug: 'current-slug' }]];
+
+		const data = (await load(makeEvent('current-slug'))) as { provenance: ProvenanceView };
+
+		expect(data.provenance).toEqual({
+			writingOrigin: null,
+			visualOrigin: null,
+			aiHelp: null,
+			translationOrigin: null,
+			isTranslation: false
+		});
+	});
+
+	it('inherits writing/visual disclosure from the source row for a translation', async () => {
+		const translated = {
+			...postRow,
+			id: 'post-translated',
+			slug: 'translated',
+			translationOrigin: 'ai',
+			writingOrigin: null,
+			visualOrigin: null,
+			aiHelp: null,
+			translatedFromPostId: 'post-source'
+		};
+		state.selectResults = [
+			[translated],
+			[{ writingOrigin: 'mostly_ai', visualOrigin: 'none', aiHelp: null }],
+			[{ lang: 'en', slug: 'translated' }]
+		];
+
+		const data = (await load(makeEvent('translated'))) as {
+			provenance: ProvenanceView;
+		};
+
+		expect(data.provenance).toEqual({
+			writingOrigin: 'mostly_ai',
+			visualOrigin: 'none',
+			aiHelp: null,
+			translationOrigin: 'ai',
+			isTranslation: true
+		});
+		expect(selectMock).toHaveBeenCalledTimes(4);
+		// The source read is pinned to the FK id, the same translation group and
+		// public visibility — not a sibling row or a hidden draft.
+		const sourceSql = dialect.sqlToQuery(state.whereArgs[1] as never);
+		expect(sourceSql.sql).toContain('"posts"."id"');
+		expect(sourceSql.sql).toContain('"posts"."translation_group"');
+		expect(sourceSql.sql).toContain('"posts"."status"');
+		expect(sourceSql.params).toContain('post-source');
+	});
+
+	it('inherits aiHelp when writing/visual are already set but the detail is null', async () => {
+		const translated = {
+			...postRow,
+			id: 'post-translated',
+			slug: 'translated',
+			translationOrigin: 'ai',
+			writingOrigin: 'assist',
+			visualOrigin: 'none',
+			aiHelp: null,
+			translatedFromPostId: 'post-source'
+		};
+		state.selectResults = [
+			[translated],
+			[{ writingOrigin: 'assist', visualOrigin: 'none', aiHelp: ['outlining'] }],
+			[{ lang: 'en', slug: 'translated' }]
+		];
+
+		const data = (await load(makeEvent('translated'))) as { provenance: ProvenanceView };
+
+		expect(data.provenance).toEqual({
+			writingOrigin: 'assist',
+			visualOrigin: 'none',
+			aiHelp: ['outlining'],
+			translationOrigin: 'ai',
+			isTranslation: true
+		});
+		expect(selectMock).toHaveBeenCalledTimes(4);
+	});
+
+	it('keeps explicit translation values and skips the source read', async () => {
+		const translated = {
+			...postRow,
+			id: 'post-translated',
+			slug: 'translated',
+			translationOrigin: 'ai',
+			writingOrigin: 'assist',
+			visualOrigin: 'all',
+			aiHelp: ['edits'],
+			translatedFromPostId: 'post-source'
+		};
+		state.selectResults = [[translated], [{ lang: 'en', slug: 'translated' }]];
+
+		const data = (await load(makeEvent('translated'))) as { provenance: ProvenanceView };
+
+		expect(data.provenance).toEqual({
+			writingOrigin: 'assist',
+			visualOrigin: 'all',
+			aiHelp: ['edits'],
+			translationOrigin: 'ai',
+			isTranslation: true
+		});
+		expect(selectMock).toHaveBeenCalledTimes(3);
+	});
+
+	it('falls back to undisclosed when the source row is missing or invisible', async () => {
+		const translated = {
+			...postRow,
+			id: 'post-translated',
+			slug: 'translated',
+			translationOrigin: 'ai',
+			writingOrigin: null,
+			visualOrigin: null,
+			aiHelp: null,
+			translatedFromPostId: 'post-source'
+		};
+		state.selectResults = [[translated], [], [{ lang: 'en', slug: 'translated' }]];
+
+		const data = (await load(makeEvent('translated'))) as { provenance: ProvenanceView };
+
+		expect(data.provenance).toEqual({
+			writingOrigin: null,
+			visualOrigin: null,
+			aiHelp: null,
+			translationOrigin: 'ai',
+			isTranslation: true
+		});
 	});
 
 	it('redirects a retired slug to the current one with a single 301 hop', async () => {

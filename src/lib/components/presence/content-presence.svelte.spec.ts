@@ -114,6 +114,19 @@ describe('content presence widget', () => {
 		await vi.waitFor(() => expect(countText()).toBe('1 person is reading'));
 	});
 
+	it('renders the badge without the decorative strip when the caller opts out', async () => {
+		await render(ContentPresence, {
+			contentId: CONTENT,
+			config: { enabled: true, readerView: true, readerDots: true },
+			strip: false
+		});
+		const source = FakeEventSource.instances[0];
+		source.emit('snapshot', { content: { count: 2, hist: histogram([3, 1]) }, dots: [4] });
+		await vi.waitFor(() => expect(badge()).not.toBeNull());
+		expect(document.querySelector('[data-slot="presence-strip"]')).toBeNull();
+		expect(document.querySelector('[data-presence-dot]')).toBeNull();
+	});
+
 	it('hides at zero, recovers, then hides again on a degraded snapshot', async () => {
 		await render(ContentPresence, {
 			contentId: CONTENT,

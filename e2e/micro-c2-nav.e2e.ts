@@ -85,6 +85,15 @@ test.describe('micro C2 navigation', () => {
 		);
 	});
 
+	test('public friends page renders its link cards and status sections', async ({ page }) => {
+		await page.goto('/en/friends');
+
+		await expect(page.getByRole('heading', { name: 'Friends' }).first()).toBeVisible();
+		await expect(page.getByRole('link', { name: /Web Lair/ })).toBeVisible();
+		await expect(page.getByText('Unreachable sites')).toBeVisible();
+		await expect(page.getByText('Non-compliant sites')).toBeVisible();
+	});
+
 	test('dashboard quick actions carry the five micro cards', async ({ page }) => {
 		await page.goto('/admin');
 		const quick = page.locator('section', { hasText: '快速操作' }).first();

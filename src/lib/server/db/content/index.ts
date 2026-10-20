@@ -10,6 +10,7 @@ export * from './note.schema';
 export * from './page.schema';
 export * from './photo.schema';
 export * from './post-related-post.schema';
+export * from './post-provenance';
 export * from './post-revision.schema';
 export * from './post.schema';
 export * from './project.schema';

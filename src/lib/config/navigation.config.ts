@@ -306,6 +306,12 @@ export const navigationConfig: NavItem[] = [
 		children: [{ labelKey: 'nav_notes_view_all', href: '/notes' }]
 	},
 	{
+		key: 'nav_moments',
+		labelKey: 'nav_moments',
+		href: '/moments',
+		icon: IconWriting
+	},
+	{
 		key: 'nav_timeline',
 		labelKey: 'nav_timeline',
 		href: '/timeline',
@@ -328,12 +334,6 @@ export const navigationConfig: NavItem[] = [
 			}
 		},
 		children: [{ labelKey: 'nav_timeline_view_all', href: '/timeline' }]
-	},
-	{
-		key: 'nav_moments',
-		labelKey: 'nav_moments',
-		href: '/moments',
-		icon: IconWriting
 	},
 	{
 		key: 'nav_more',

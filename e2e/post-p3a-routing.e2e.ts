@@ -54,8 +54,8 @@ test.beforeAll(() => {
 	);
 	psql(
 		[
-			`insert into posts (id, slug, title, content, lang, status, published_at, category_id, translation_group) values`,
-			`('${EN_ID}', '${SLUG_MAIN}', '${TITLE_EN}', 'Hello **world** from P3-a.', 'en', 'published', now() - interval '2 days', '${CATEGORY_ID}', '${GROUP_MAIN}')`,
+			`insert into posts (id, slug, title, content, lang, status, published_at, category_id, translation_group, translated_from_post_id, translation_origin, writing_origin, visual_origin, ai_help) values`,
+			`('${EN_ID}', '${SLUG_MAIN}', '${TITLE_EN}', 'Hello **world** from P3-a.', 'en', 'published', now() - interval '2 days', '${CATEGORY_ID}', '${GROUP_MAIN}', null, null, 'mostly_ai', 'some', ARRAY['ideas', 'wording'])`,
 			`;`,
 			`insert into posts (id, slug, title, content, lang, status, published_at, category_id, translation_group, translated_from_post_id, translation_origin) values`,
 			`('${ZH_ID}', '${SLUG_MAIN}', '${TITLE_ZH}', '中文正文段落。', 'zh-cn', 'published', now() - interval '1 day', '${CATEGORY_ID}', '${GROUP_MAIN}', '${EN_ID}', 'human')`,
@@ -117,6 +117,147 @@ test.describe('P3-a routing nails', () => {
 		await expect(page.locator('article').first()).toContainText(BODY_TEXT);
 	});
 
+	test('post details use a compact metadata row instead of the provenance panel', async ({
+		page
+	}) => {
+		await page.goto(`/en/posts/${SLUG_MAIN}`);
+
+		await expect(page.locator('article h1')).toHaveClass(/text-center/);
+		await expect(page.locator('[data-testid="post-detail-meta"]')).toBeVisible();
+		await expect(
+			page.locator('[data-testid="post-detail-meta"] [data-testid="post-views"]')
+		).toBeVisible();
+		await expect(
+			page.locator('[data-testid="post-detail-meta"] [data-testid="post-likes"]')
+		).toBeVisible();
+		await expect(page.locator('[data-testid="post-detail-meta"] .bg-primary')).toHaveCount(0);
+		await expect(page.locator('[data-testid="post-provenance"]')).toHaveCount(0);
+	});
+
+	test('undisclosed provenance stays out of the metadata row', async ({ page }) => {
+		await page.goto(`/en/posts/${SLUG_ONLY_EN}`);
+		const meta = page.locator('[data-testid="post-detail-meta"]');
+		await expect(meta).toBeVisible();
+		await expect(meta).not.toContainText('Visuals not disclosed');
+		await expect(meta.locator('[data-testid="post-visuals"]')).toHaveCount(0);
+	});
+
+	test('the metadata row stays on one line on desktop', async ({ page }) => {
+		await page.goto(`/en/posts/${SLUG_MAIN}`);
+		const meta = page.locator('[data-testid="post-detail-meta"]');
+		await expect(meta).toBeVisible();
+
+		// Items differ in height (icon buttons vs text), so "same line" means
+		// vertical overlap, not identical tops.
+		const rows = await meta.evaluate((row) => {
+			const rects = Array.from(row.children)
+				.filter((child) => child.getBoundingClientRect().width > 0)
+				.map((child) => child.getBoundingClientRect())
+				.sort((a, b) => a.top - b.top);
+			const lines: { top: number; bottom: number }[] = [];
+			for (const rect of rects) {
+				const last = lines[lines.length - 1];
+				if (last && rect.top < last.bottom - 1 && rect.bottom > last.top + 1) {
+					last.top = Math.min(last.top, rect.top);
+					last.bottom = Math.max(last.bottom, rect.bottom);
+				} else {
+					lines.push({ top: rect.top, bottom: rect.bottom });
+				}
+			}
+			return lines.length;
+		});
+
+		expect(rows).toBe(1);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+			await page.evaluate(() => document.documentElement.clientWidth)
+		);
+	});
+
+	test('mobile stacks the metadata into three rows with the taxonomy last', async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 800 });
+		await page.goto(`/en/posts/${SLUG_MAIN}`);
+		const meta = page.locator('[data-testid="post-detail-meta"]');
+		await expect(meta).toBeVisible();
+
+		const layout = await meta.evaluate((row) => {
+			const rowRect = row.getBoundingClientRect();
+			const groupRect = row
+				.querySelector('[data-testid="post-detail-tags"]')!
+				.getBoundingClientRect();
+			const rects = Array.from(row.children)
+				.filter((child) => child.getBoundingClientRect().width > 0)
+				.map((child) => child.getBoundingClientRect())
+				.sort((a, b) => a.top - b.top);
+			const lines: { top: number; bottom: number }[] = [];
+			for (const rect of rects) {
+				const last = lines[lines.length - 1];
+				if (last && rect.top < last.bottom - 1 && rect.bottom > last.top + 1) {
+					last.top = Math.min(last.top, rect.top);
+					last.bottom = Math.max(last.bottom, rect.bottom);
+				} else {
+					lines.push({ top: rect.top, bottom: rect.bottom });
+				}
+			}
+			return {
+				rows: lines.length,
+				taxonomyOwnsLastRow:
+					Math.round(groupRect.top) === Math.round(lines[lines.length - 1].top) &&
+					groupRect.width >= rowRect.width - 1
+			};
+		});
+
+		expect(layout.rows).toBe(3);
+		expect(layout.taxonomyOwnsLastRow).toBe(true);
+	});
+
+	test('the meta row offers the translation group languages and marks its source', async ({
+		page
+	}) => {
+		await page.goto(`/en/posts/${SLUG_MAIN}`);
+		const trigger = page.getByTestId('post-translation-trigger');
+		await expect(trigger).toContainText('English');
+
+		await trigger.click();
+		await expect(page.getByTestId('post-translation-option')).toHaveCount(2);
+
+		const source = page.locator('[data-testid="post-translation-option"][data-lang="en"]');
+		await expect(source.locator('[data-testid="post-translation-source"]')).toHaveText('Original');
+		await expect(source).toHaveAttribute('data-current', 'true');
+
+		const translated = page.locator('[data-testid="post-translation-option"][data-lang="zh-cn"]');
+		await expect(translated).toContainText('简体中文');
+		await expect(translated.locator('[data-testid="post-translation-source"]')).toHaveCount(0);
+		await expect(translated.locator('a')).toHaveAttribute('href', `/zh-cn/posts/${SLUG_MAIN}`);
+	});
+
+	test('the source badge is localised on a translated page', async ({ page }) => {
+		await page.goto(`/zh-cn/posts/${SLUG_MAIN}`);
+		await page.getByTestId('post-translation-trigger').click();
+
+		const source = page.locator('[data-testid="post-translation-option"][data-lang="en"]');
+		await expect(source.locator('[data-testid="post-translation-source"]')).toHaveText('原文');
+		await expect(
+			page.locator('[data-testid="post-translation-option"][data-lang="zh-cn"]')
+		).toHaveAttribute('data-current', 'true');
+	});
+
+	test('a single-language post renders no translation switcher', async ({ page }) => {
+		await page.goto(`/en/posts/${SLUG_ONLY_EN}`);
+		await expect(page.locator('[data-testid="post-detail-meta"]')).toBeVisible();
+		await expect(page.getByTestId('post-translation-trigger')).toHaveCount(0);
+	});
+
+	test('AI metadata opens a shadcn tooltip card on hover', async ({ page }) => {
+		await page.goto(`/en/posts/${SLUG_MAIN}`);
+
+		const trigger = page.getByTestId('post-ai-trigger');
+		await expect(trigger).toBeVisible();
+		await trigger.hover();
+		await expect(page.getByTestId('post-ai-card')).toContainText('Mostly AI');
+		await expect(page.getByTestId('post-ai-card')).toContainText('AI-assisted visuals');
+		await expect(page.getByTestId('post-ai-card')).toContainText('ideas, wording');
+	});
+
 	test('an unprefixed content URL redirects to the canonical one (307)', async ({ page }) => {
 		const seen: Array<{ status: number; location: string | undefined }> = [];
 		page.on('response', (response) => {
@@ -174,6 +315,23 @@ test.describe('P3-a read side', () => {
 		await page.goto('/zh-cn/posts');
 		await expect(page.getByRole('link', { name: TITLE_ZH })).toBeVisible();
 		await expect(page.getByText(TITLE_EN)).toHaveCount(0);
+	});
+
+	test('post metadata keeps engagement stats in the same compact row', async ({ page }) => {
+		await page.goto('/en/posts');
+
+		const postLink = page.locator(`a[href="/en/posts/${SLUG_MAIN}"]`).last();
+		const metadata = postLink.locator('[data-testid="post-meta"]');
+
+		await expect(metadata.locator('[data-testid="post-meta-info"]')).toContainText('E2E P3A');
+		await expect(metadata.locator('[data-testid="post-engagement"]')).toBeVisible();
+		await expect(
+			metadata.locator('[data-testid="post-engagement"] [data-testid="post-views"]')
+		).toBeVisible();
+		await expect(
+			metadata.locator('[data-testid="post-engagement"] [data-testid="post-likes"]')
+		).toBeVisible();
+		await expect(postLink.locator('[data-testid="post-stats"]')).toHaveCount(0);
 	});
 
 	test('a scheduled-in-future post is not readable yet', async ({ page }) => {

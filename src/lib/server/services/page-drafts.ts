@@ -6,7 +6,8 @@ import type {
 	LocalizedMarkdown,
 	LocalizedText,
 	PageDraftPayload,
-	PageLocale
+	PageLocale,
+	PostDraftPayload
 } from '$lib/server/db/content';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { keysFromLocalizedContent, syncFileReferences } from './file-references';
@@ -111,6 +112,13 @@ function normalizePageDraft(
 	};
 }
 
+/** Post drafts stage provenance in the same JSONB column; page readers ignore it. */
+function asPagePayload(
+	payload: PageDraftPayload | PostDraftPayload | null | undefined
+): PageDraftPayload | null {
+	return payload && 'title' in payload ? payload : null;
+}
+
 /**
  * The exact write set (single source of truth): any change that
  * `pageDraftUpdateSet` persists is part of the hash by construction, so a
@@ -148,7 +156,7 @@ function hashNormalized(value: NormalizedPageDraft): string {
 type PageDraftRow = typeof drafts.$inferSelect;
 
 function hashRow(row: PageDraftRow): string {
-	return hashNormalized(normalizePageDraft(row.slug, row.payload));
+	return hashNormalized(normalizePageDraft(row.slug, asPagePayload(row.payload)));
 }
 
 async function loadPageDraftById(draftId: string): Promise<PageDraftRow | null> {
@@ -484,7 +492,7 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 	if (!isPageEditorRow(page)) return { kind: 'not-found' };
 
 	const errors: Record<string, string> = {};
-	const normalized = normalizePageDraft(draft.slug, draft.payload);
+	const normalized = normalizePageDraft(draft.slug, asPagePayload(draft.payload));
 	if (!hasNonBlankLocale(normalized.title)) errors.title = m.admin_pages_err_title_required();
 	const slugError = slugErrorFor(normalized.slug, page);
 	if (slugError) errors.slug = slugError;
@@ -517,7 +525,7 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 				.for('update');
 			if (!lockedDraft) return { kind: 'not-found' as const };
 
-			const final = normalizePageDraft(lockedDraft.slug, lockedDraft.payload);
+			const final = normalizePageDraft(lockedDraft.slug, asPagePayload(lockedDraft.payload));
 			const finalSlug = final.slug;
 			if (!hasNonBlankLocale(final.title) || !finalSlug || !hasNonBlankLocale(final.content)) {
 				return {

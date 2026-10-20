@@ -2,6 +2,12 @@ import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { categories, drafts, postRevisions, postTags, posts, tags } from '$lib/server/db/content';
+import {
+	normalizeProvenance,
+	postProvenanceFromPayload,
+	provenanceEquals,
+	type PostProvenanceDraft
+} from '$lib/server/db/content/post-provenance';
 import { slugTrackers } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { keysFromContent, syncFileReferences } from './file-references';
@@ -39,6 +45,7 @@ export interface DraftPayload {
 	summary: string;
 	tags: string;
 	content: string;
+	provenance?: PostProvenanceDraft | null;
 }
 
 interface NormalizedDraft {
@@ -48,6 +55,7 @@ interface NormalizedDraft {
 	summary: string;
 	tags: string[];
 	content: string;
+	provenance: PostProvenanceDraft | null;
 }
 
 /** CRLF (and lone CR) to LF - the one canonicalization point for drafts. */
@@ -66,7 +74,8 @@ function normalizePayload(payload: DraftPayload): NormalizedDraft {
 		// submits CRLF-normalized text and the hash basis below hashes this
 		// exact value - normalizing here keeps hash and stored row in sync
 		// and makes the stored content the canonical shape for imports.
-		content: canonicalLf(payload.content ?? '')
+		content: canonicalLf(payload.content ?? ''),
+		provenance: payload.provenance ? normalizeProvenance(payload.provenance) : null
 	};
 }
 
@@ -95,7 +104,8 @@ function hashRow(row: DraftRow): string {
 		categoryId: row.categoryId ?? '',
 		summary: row.summary ?? '',
 		tags: row.tags ?? [],
-		content: row.content ?? ''
+		content: row.content ?? '',
+		provenance: postProvenanceFromPayload(row.payload)
 	});
 }
 
@@ -167,7 +177,8 @@ function draftUpdateSet(payload: NormalizedDraft) {
 		tags: payload.tags,
 		content: payload.content,
 		contentFormat: 'markdown',
-		summary: payload.summary === '' ? null : payload.summary
+		summary: payload.summary === '' ? null : payload.summary,
+		payload: payload.provenance ? { provenance: payload.provenance } : null
 	};
 }
 
@@ -458,6 +469,22 @@ export async function publishDraft(
 			const finalTitle = lockedDraft.title.trim();
 			const finalSlug = (lockedDraft.slug ?? '').trim();
 			const finalCategoryId = lockedDraft.categoryId ?? '';
+			// Provenance is staged in the draft payload; an absent payload means
+			// "this draft predates provenance", so preserve the published values.
+			// A value-identical payload must not bump the audit timestamp.
+			// Translations never carry their own writing/visual claim: the source
+			// is authoritative. Ignore any staged provenance on a translation
+			// (the disabled UI is not an authorization boundary).
+			const provenance = locked.translatedFromPostId
+				? null
+				: postProvenanceFromPayload(lockedDraft.payload);
+			const publishedProvenance = normalizeProvenance({
+				writingOrigin: locked.writingOrigin,
+				visualOrigin: locked.visualOrigin,
+				aiHelp: locked.aiHelp ?? []
+			});
+			const provenanceChanged =
+				provenance !== null && !provenanceEquals(provenance, publishedProvenance);
 			if (!finalTitle || !finalSlug || !finalCategoryId || !(lockedDraft.content ?? '').trim()) {
 				return {
 					kind: 'invalid' as const,
@@ -494,7 +521,17 @@ export async function publishDraft(
 					status: 'published',
 					publishedAt: sql`coalesce(${posts.publishedAt}, now())`,
 					version: nextVersion,
-					updatedAt: new Date()
+					updatedAt: new Date(),
+					...(provenanceChanged && provenance
+						? {
+								writingOrigin: provenance.writingOrigin,
+								visualOrigin: provenance.visualOrigin,
+								aiHelp: provenance.aiHelp,
+								provenanceSource: 'author' as const,
+								provenanceUpdatedAt: sql`now()`,
+								provenanceUpdatedBy: author ?? null
+							}
+						: {})
 				})
 				.where(eq(posts.id, locked.id));
 

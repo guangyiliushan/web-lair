@@ -23,6 +23,10 @@
 
 	--primary: oklch(0.666 0.096 169.696);
 
+	/* Text-safe accent: --primary is a fill colour (2.9:1 on white); this
+	   darker variant clears WCAG 1.4.3 (4.5:1) for 12px metadata. */
+	--primary-text: oklch(0.3 0.096 169.696);
+
 	--primary-foreground: oklch(0.979 0.021 166.113);
 
 	--secondary: oklch(0.967 0.001 286.375);
@@ -90,6 +94,8 @@
 	--popover-foreground: oklch(0.987 0.002 197.1);
 
 	--primary: oklch(0.432 0.095 166.913);
+
+	--primary-text: oklch(0.74 0.08 169.696);
 
 	--primary-foreground: oklch(0.979 0.021 166.113);
 
@@ -195,6 +201,8 @@
 	--color-primary-foreground: var(--primary-foreground);
 
 	--color-primary: var(--primary);
+
+	--color-primary-text: var(--primary-text);
 
 	--color-popover-foreground: var(--popover-foreground);
 

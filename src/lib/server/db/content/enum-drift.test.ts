@@ -7,6 +7,7 @@ import {
 	PROJECT_SYNC_PROVIDERS
 } from '$lib/utils/project-meta';
 import { NOTE_MOODS, NOTES_STATUSES } from './note.schema';
+import { VISUAL_ORIGINS, WRITING_ORIGINS } from './post-provenance';
 import { PROJECT_PROVIDERS, PROJECT_STATUSES } from './project.schema';
 import { DRAFT_REF_TYPES } from './draft.schema';
 import { SLUG_TRACKER_TYPES } from '../system/slug-tracker.schema';
@@ -73,6 +74,18 @@ describe('enum drift guard', () => {
 
 	it('slug_trackers_type_check literals match SLUG_TRACKER_TYPES', () => {
 		expect(new Set(checkLiterals('slug_trackers_type_check'))).toEqual(new Set(SLUG_TRACKER_TYPES));
+	});
+
+	it('posts_writing_origin_check literals match WRITING_ORIGINS', () => {
+		expect(new Set(checkLiterals('posts_writing_origin_check'))).toEqual(
+			new Set(WRITING_ORIGINS)
+		);
+	});
+
+	it('posts_visual_origin_check literals match VISUAL_ORIGINS', () => {
+		expect(new Set(checkLiterals('posts_visual_origin_check'))).toEqual(
+			new Set(VISUAL_ORIGINS)
+		);
 	});
 
 	it('moments_type_check literals match MOMENT_KINDS', () => {

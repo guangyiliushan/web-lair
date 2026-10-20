@@ -19,9 +19,6 @@
 
 <div class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0 2xl:max-w-4xl">
 	<header>
-		<div class="mb-4 text-[10px] font-medium tracking-[4px] text-muted-foreground uppercase">
-			{m.timeline_stream()}
-		</div>
 		<h1 class="text-[28px] leading-tight font-medium">{m.nav_timeline()}</h1>
 		<div class="mt-6 mb-6 h-px w-8 bg-primary/70"></div>
 

@@ -1,7 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { pages, type LocalizedText } from '$lib/server/db/content';
+import { pages, type LocalizedText, type PageDraftPayload } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
 import { getOption } from '$lib/server/config/options-registry';
 import { pgErrorCode } from '$lib/server/db/pg-error';
@@ -119,9 +119,9 @@ export const load: PageServerLoad = async ({ url }) => {
 					id: draftRow.id,
 					version: draftRow.version,
 					slug: draftRow.slug,
-					title: draftRow.payload?.title ?? {},
-					description: draftRow.payload?.description ?? {},
-					content: draftRow.payload?.content ?? {},
+					title: (draftRow.payload as PageDraftPayload | null)?.title ?? {},
+					description: (draftRow.payload as PageDraftPayload | null)?.description ?? {},
+					content: (draftRow.payload as PageDraftPayload | null)?.content ?? {},
 					updatedAt: draftRow.updatedAt
 				}
 			: null

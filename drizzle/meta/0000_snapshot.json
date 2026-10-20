@@ -1,5 +1,5 @@
 {
-  "id": "a4749fba-337d-4b36-bd6d-98cfe2d12e84",
+  "id": "005ee0f9-0bf5-484c-86cc-38c007fa0c06",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -3712,6 +3712,42 @@
           "primaryKey": false,
           "notNull": false
         },
+        "writing_origin": {
+          "name": "writing_origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "visual_origin": {
+          "name": "visual_origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ai_help": {
+          "name": "ai_help",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provenance_source": {
+          "name": "provenance_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provenance_updated_at": {
+          "name": "provenance_updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provenance_updated_by": {
+          "name": "provenance_updated_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "category_id": {
           "name": "category_id",
           "type": "uuid",
@@ -3929,6 +3965,22 @@
           "method": "btree",
           "with": {}
         },
+        "posts_provenance_updated_by_idx": {
+          "name": "posts_provenance_updated_by_idx",
+          "columns": [
+            {
+              "expression": "provenance_updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"posts\".\"provenance_updated_by\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "posts_group_source_uniq": {
           "name": "posts_group_source_uniq",
           "columns": [
@@ -3953,6 +4005,19 @@
           "tableTo": "posts",
           "columnsFrom": [
             "translated_from_post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "posts_provenance_updated_by_user_id_fk": {
+          "name": "posts_provenance_updated_by_user_id_fk",
+          "tableFrom": "posts",
+          "tableTo": "user",
+          "columnsFrom": [
+            "provenance_updated_by"
           ],
           "columnsTo": [
             "id"
@@ -3993,6 +4058,22 @@
         "posts_translation_origin_check": {
           "name": "posts_translation_origin_check",
           "value": "\"posts\".\"translation_origin\" in ('human', 'ai', 'machine')"
+        },
+        "posts_writing_origin_check": {
+          "name": "posts_writing_origin_check",
+          "value": "\"posts\".\"writing_origin\" in ('none', 'assist', 'mostly_ai', 'ai_full')"
+        },
+        "posts_visual_origin_check": {
+          "name": "posts_visual_origin_check",
+          "value": "\"posts\".\"visual_origin\" in ('none', 'some', 'all')"
+        },
+        "posts_provenance_source_check": {
+          "name": "posts_provenance_source_check",
+          "value": "\"posts\".\"provenance_source\" in ('author', 'c2pa', 'import')"
+        },
+        "posts_provenance_source_by_check": {
+          "name": "posts_provenance_source_by_check",
+          "value": "\"posts\".\"provenance_updated_by\" is null or \"posts\".\"provenance_source\" is not null"
         }
       },
       "isRLSEnabled": false

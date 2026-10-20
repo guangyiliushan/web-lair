@@ -806,7 +806,11 @@ async function scanMentions(database: FilesDb): Promise<MentionScan> {
 	collect(
 		'draft',
 		draftRows.flatMap((row) =>
-			Object.values(row.payload?.content ?? {})
+			Object.values(
+				row.payload && typeof row.payload === 'object' && 'content' in row.payload
+					? (row.payload.content ?? {})
+					: {}
+			)
 				.filter((body): body is string => typeof body === 'string')
 				.map((body) => ({ id: row.id, content: body }))
 		)

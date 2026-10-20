@@ -21,6 +21,40 @@ test('admin chrome defaults to the en message set', async ({ page }) => {
 	await expect(page.getByRole('link', { name: '仪表盘' })).toHaveCount(0);
 });
 
+test('admin sidebar follows the configured navigation order', async ({ page }) => {
+	await page.goto('/admin');
+
+	await expect
+		.poll(() =>
+			page.locator('[data-sidebar="menu"] a').evaluateAll((links) =>
+				links.map((link) => {
+					const href = link.getAttribute('href');
+					return href ? new URL(href, location.origin).pathname : '';
+				})
+			)
+		)
+		.toEqual([
+			'/admin',
+			'/admin/posts',
+			'/admin/notes',
+			'/admin/moments',
+			'/admin/comments',
+			'/admin/pages',
+			'/admin/projects',
+			'/admin/drafts',
+			'/admin/files',
+			'/admin/photos',
+			'/admin/readers',
+			'/admin/friends',
+			'/admin/quotes',
+			'/admin/thoughts',
+			'/admin/analytics',
+			'/admin/ai',
+			'/admin/settings',
+			'/admin/maintenance'
+		]);
+});
+
 test('sidebar user menu switches to zh-cn and renders Chinese chrome', async ({ page }) => {
 	await page.goto('/admin');
 	await openAdminSidebarMenu(page);

@@ -1,9 +1,9 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import { getLocale, localizeHref, locales } from '$lib/paraglide/runtime';
 import { m } from '$lib/paraglide/messages';
 import { db } from '$lib/server/db';
-import { categories, posts } from '$lib/server/db/content';
+import { categories, postTags, posts, tags } from '$lib/server/db/content';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { requireUser } from '$lib/server/authz';
 import { resolveCommentPostTarget, submitComment } from '$lib/server/services/comments';
@@ -37,12 +37,21 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		.select({
 			id: posts.id,
 			slug: posts.slug,
+			lang: posts.lang,
 			title: posts.title,
 			content: posts.content,
 			publishedAt: posts.publishedAt,
+			updatedAt: posts.updatedAt,
+			readCount: posts.readCount,
+			likeCount: posts.likeCount,
 			categoryName: categories.name,
 			allowComment: posts.allowComment,
-			translationGroup: posts.translationGroup
+			translationGroup: posts.translationGroup,
+			translationOrigin: posts.translationOrigin,
+			writingOrigin: posts.writingOrigin,
+			visualOrigin: posts.visualOrigin,
+			aiHelp: posts.aiHelp,
+			translatedFromPostId: posts.translatedFromPostId
 		})
 		.from(posts)
 		.innerJoin(categories, eq(posts.categoryId, categories.id))
@@ -98,14 +107,98 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	// hreflang set (P3-b): every visible language of the same translation
 	// group, in locale order — self included; x-default stays deferred.
 	const localeOrder = locales as readonly string[];
-	const siblings = await db
-		.select({ lang: posts.lang, slug: posts.slug })
-		.from(posts)
-		.where(and(eq(posts.translationGroup, row.translationGroup), visiblePostCondition(now)));
-	const alternates = siblings
+	const sourceId = row.translatedFromPostId;
+	const needsSource =
+		Boolean(sourceId) &&
+		(row.writingOrigin == null || row.visualOrigin == null || row.aiHelp == null);
+	// The source lookup depends only on `row`, so run it alongside the hreflang
+	// query instead of adding a second sequential round trip on translated
+	// pages. Visibility is part of the lookup: provenance is public disclosure,
+	// so a hidden source must not leak its claims into a live translation.
+	const sourcePromise =
+		needsSource && sourceId
+			? db
+					.select({
+						writingOrigin: posts.writingOrigin,
+						visualOrigin: posts.visualOrigin,
+						aiHelp: posts.aiHelp
+					})
+					.from(posts)
+					.where(
+						and(
+							eq(posts.id, sourceId),
+							eq(posts.translationGroup, row.translationGroup),
+							visiblePostCondition(now)
+						)
+					)
+					.limit(1)
+			: Promise.resolve([]);
+	const [siblings, sourceRows] = await Promise.all([
+		db
+			.select({
+				id: posts.id,
+				lang: posts.lang,
+				slug: posts.slug,
+				translatedFromPostId: posts.translatedFromPostId
+			})
+			.from(posts)
+			.where(and(eq(posts.translationGroup, row.translationGroup), visiblePostCondition(now))),
+		sourcePromise
+	]);
+	const tagRows = await db
+		.select({ name: tags.name })
+		.from(postTags)
+		.innerJoin(tags, eq(postTags.tagId, tags.id))
+		.where(inArray(postTags.postId, [row.id]))
+		.orderBy(tags.name);
+	const ordered = siblings
 		.filter((sibling) => localeOrder.includes(sibling.lang))
-		.sort((a, b) => localeOrder.indexOf(a.lang) - localeOrder.indexOf(b.lang))
-		.map((sibling) => ({ lang: sibling.lang, path: `/posts/${sibling.slug}` }));
+		.sort((a, b) => localeOrder.indexOf(a.lang) - localeOrder.indexOf(b.lang));
+	const alternates = ordered.map((sibling) => ({
+		lang: sibling.lang,
+		path: `/posts/${sibling.slug}`
+	}));
+	// The group's source is the member nothing else was translated from. A
+	// malformed group without one simply carries no "original" marker.
+	const sourceRowId = ordered.find((sibling) => sibling.translatedFromPostId === null)?.id ?? null;
+	const translations = ordered.map((sibling) => ({
+		lang: sibling.lang,
+		path: `/posts/${sibling.slug}`,
+		isSource: sibling.id === sourceRowId
+	}));
+
+	// Translations inherit the source row's writing/visual disclosure: the
+	// translated text is not a new claim about who wrote the original. The
+	// translation origin stays on this row (it describes this rendition); it
+	// is meaningless on a source row, so the public payload omits it there.
+	const provenance = {
+		writingOrigin: row.writingOrigin,
+		visualOrigin: row.visualOrigin,
+		aiHelp: row.aiHelp?.length ? row.aiHelp : null,
+		translationOrigin: sourceId ? row.translationOrigin : null,
+		isTranslation: Boolean(sourceId)
+	};
+	if (needsSource) {
+		const source = sourceRows[0] as
+			| { writingOrigin: string | null; visualOrigin: string | null; aiHelp: string[] | null }
+			| undefined;
+		const writingInherited = provenance.writingOrigin == null;
+		provenance.writingOrigin ??= source?.writingOrigin ?? null;
+		provenance.visualOrigin ??= source?.visualOrigin ?? null;
+		// Only inherit the detail when the effective writing claim is AI-assisted;
+		// an explicit "none" must not receive the source's "where AI helped".
+		if (provenance.aiHelp == null && (writingInherited || provenance.writingOrigin === 'assist')) {
+			provenance.aiHelp = source?.aiHelp?.length ? source.aiHelp : null;
+		}
+	}
+	// The detail is only part of the public payload when the page can attribute
+	// it to an AI-assisted claim; never ship a contradictory array with "No AI".
+	if (
+		!['assist', 'mostly_ai', 'ai_full'].includes(provenance.writingOrigin ?? '') ||
+		!provenance.aiHelp?.length
+	) {
+		provenance.aiHelp = null;
+	}
 
 	// Viewer state for the comment section (spec §1 "已验证读者"): guests get
 	// the login link with a return path to this localized URL; signed-in
@@ -142,10 +235,21 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		post: {
 			id: row.id,
 			slug: row.slug,
+			lang: row.lang,
 			title: row.title,
 			date: row.publishedAt ? formatDate(row.publishedAt) : '',
-			category: row.categoryName
+			category: row.categoryName,
+			tags: [...new Set(tagRows.map((tag) => tag.name))],
+			views: row.readCount,
+			likes: row.likeCount,
+			updatedAt: row.updatedAt,
+			translations,
+			edited:
+				row.updatedAt != null &&
+				row.publishedAt != null &&
+				row.updatedAt.getTime() - row.publishedAt.getTime() > 60_000
 		},
+		provenance,
 		html,
 		viewer: { emailVerified, canComment, loginUrl },
 		discussion: rendered?.discussion ?? null

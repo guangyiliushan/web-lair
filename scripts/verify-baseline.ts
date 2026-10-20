@@ -36,7 +36,7 @@ const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', impo
 const JOURNAL_PATH = fileURLToPath(new URL('../drizzle/meta/_journal.json', import.meta.url));
 const VISUALIZER_PATH = fileURLToPath(new URL('../.drizzle/visualizer.json', import.meta.url));
 
-const EXPECTED = { tables: 49, indexes: 116, checks: 71, fks: 46, uuidv7: 36 };
+const EXPECTED = { tables: 49, indexes: 117, checks: 75, fks: 47, uuidv7: 36 };
 
 const EXPECTED_TABLE_NAMES: string[] = [
 	'account',
@@ -176,6 +176,11 @@ const REQUIRED_CONSTRAINT_NAMES: string[] = [
 	'moments_type_check',
 	'notes_lang_check',
 	'notes_translation_origin_check',
+	'posts_translation_origin_check',
+	'posts_writing_origin_check',
+	'posts_visual_origin_check',
+	'posts_provenance_source_check',
+	'posts_provenance_source_by_check',
 	'pages_content_format_check',
 	'pages_content_object_check',
 	'pages_description_object_check',
@@ -261,6 +266,10 @@ const PREDICATE_PINS: Array<[string, RegExp]> = [
 		'translations_reviewed_by_idx',
 		/CREATE INDEX "translations_reviewed_by_idx" .*WHERE "translations"\."reviewed_by" is not null/
 	],
+	[
+		'posts_provenance_updated_by_idx',
+		/CREATE INDEX "posts_provenance_updated_by_idx" .*WHERE "posts"\."provenance_updated_by" is not null/
+	],
 	['links_review_idx', /CREATE INDEX "links_review_idx" .*WHERE "links"\."status" = 'pending'/],
 	[
 		'links_due_idx',
@@ -312,7 +321,11 @@ const COLUMN_TYPE_PINS: Array<[string, string, string]> = [
 	['drafts', 'weather_code', 'smallint'],
 	['drafts', 'temperature_c', 'numeric'],
 	['drafts', 'payload', 'jsonb'],
-	['posts', 'allow_comment', 'boolean']
+	['posts', 'allow_comment', 'boolean'],
+	['posts', 'writing_origin', 'text'],
+	['posts', 'visual_origin', 'text'],
+	['posts', 'provenance_source', 'text'],
+	['posts', 'ai_help', 'ARRAY']
 ];
 
 /** Official generated-table exception for the FK leading-index rule. */

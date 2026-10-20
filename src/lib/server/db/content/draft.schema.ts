@@ -15,6 +15,7 @@ import {
 import { user } from '../auth.schema';
 import { categories } from './category.schema';
 import type { LocalizedMarkdown, LocalizedText } from './localized';
+import type { PostDraftPayload } from './post-provenance';
 import { topics } from './topic.schema';
 
 /**
@@ -73,7 +74,7 @@ export const drafts = pgTable(
 		location: text('location'),
 		// Pages line P5 (2026-10-14): page drafts stage their three-locale
 		// editing surface here; publish copies it onto the pages row.
-		payload: jsonb('payload').$type<PageDraftPayload>()
+		payload: jsonb('payload').$type<PageDraftPayload | PostDraftPayload>()
 	},
 	(table) => [
 		uniqueIndex('drafts_ref_uniq')

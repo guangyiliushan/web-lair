@@ -332,9 +332,42 @@ Requirements/notes:
   restore only; `--column-inserts` makes the dump immune to the two E2 columns.
 - The data-only restore never touches `drizzle.__drizzle_migrations`: the fresh
   ledger written by `migrate.ts` must remain the only row.
-- Verify output must show **49 tables / 116 indexes / 71 checks**. If anything
+- Verify output must show **49 tables / 117 indexes / 75 checks / 47 FKs**. If anything
   fails after the drop, **do not re-run §2.1**; restore the full
   `pre-e2-<stamp>.dump` per §3 and ask for review.
+
+### 2.2 Provenance baseline rebuild (one-off, 2026-10-20)
+
+The provenance window regenerated the single `0000_baseline.sql` again (six AI
+provenance columns, three CHECKs, one FK, one partial FK index). The journal
+timestamp is intentionally unchanged, so `scripts/migrate.ts` now exits 1 on a
+pre-provenance database with the `[migrate] this database predates the provenance
+baseline` message. Rebuild; do **not** hand-apply the baseline over a live schema.
+
+Use the §2.1 sequence unchanged — stop timers/drain, pre-count users, full dump,
+validate the dump, data-only dump, drop `public`/`drizzle`, `migrate.ts`, restore,
+then verify — with these differences:
+
+```bash
+# 1. The image must already contain the provenance baseline.
+docker run --rm --entrypoint node "$APP_IMAGE" -e \
+  "const fs=require('node:fs'); if(!fs.readFileSync('drizzle/0000_baseline.sql','utf8').includes('\\\"writing_origin\\\"')){console.error('image predates provenance');process.exit(1)}"
+
+# 2. After the data restore, re-apply the two test disclosures (idempotent).
+#    Replace with an authoritative backfill list before the next restore.
+psql ... -v ON_ERROR_STOP=1 -c "
+  update posts set writing_origin='none', provenance_source='author', provenance_updated_at=now()
+    where slug='welcome-to-lair' and writing_origin is distinct from 'none';
+  update posts set writing_origin='mostly_ai', provenance_source='author', provenance_updated_at=now()
+    where slug='real-data-ui' and writing_origin is distinct from 'mostly_ai';"
+
+# 3. The post-provenance gate.
+node scripts/verify-baseline.ts   # 49 / 117 / 75 / 47
+```
+
+A pre-provenance full dump is a **different generation**: §3 detects it by the
+absence of `posts.writing_origin` and skips `verify-baseline`; restore it with
+the image tag that matches that dump.
 
 ## 3. Rollback
 
@@ -377,19 +410,23 @@ deploy/compose-prod.sh exec -T db sh -c \
 deploy/compose-prod.sh exec -T db sh -c \
   'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges -1 -e' \
   < "$DUMP"
-# The dump may be pre-E2 (48 tables): verify-baseline only knows the 49-table
-# baseline, and the pre-E2 image does not ship it. Probe both generation and
-# shape; anything else must stop, not silently skip verification.
+# The dump may be pre-E2 (48 tables), pre-provenance (49 tables, E2, no
+# writing_origin) or current. Verify-baseline only knows the current baseline,
+# so probe both generation and provenance shape; anything else must stop.
 TABLES=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from information_schema.tables where table_schema = '\''public'\'' and table_type = '\''BASE TABLE'\''"')
 HAS_E2=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('\''public.email_suppressions'\'') is not null"')
-if [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ]; then
+HAS_PROV=$(deploy/compose-prod.sh exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select exists (select 1 from information_schema.columns where table_schema='\''public'\'' and table_name='\''posts'\'' and column_name='\''writing_origin'\'')"')
+if [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
   deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
+elif [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "f" ]; then
+  echo "restored pre-provenance schema (49 tables, E2, no writing_origin); verify-baseline skipped — use the matching pre-provenance image"
 elif [ "$TABLES" = "48" ] && [ "$HAS_E2" = "f" ]; then
   echo "restored pre-E2 schema (48 public tables); verify-baseline skipped"
 else
-  echo "unexpected restore shape (tables=$TABLES e2=$HAS_E2); refusing to start" >&2
+  echo "unexpected restore shape (tables=$TABLES e2=$HAS_E2 provenance=$HAS_PROV); refusing to start" >&2
   exit 1
 fi
 deploy/compose-prod.sh up -d

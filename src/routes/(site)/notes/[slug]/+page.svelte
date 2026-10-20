@@ -95,7 +95,9 @@
 					</a>
 				{/if}
 				{#key data.note.id}
-					<ContentPresence contentId={data.note.id} config={data.presence} />
+					<span class="ml-auto">
+						<ContentPresence contentId={data.note.id} config={data.presence} />
+					</span>
 				{/key}
 			</div>
 		{/if}

@@ -28,7 +28,6 @@
 <div class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0">
 	<div class="min-w-0">
 		<h1 id="moments-heading" class="text-[28px] leading-tight font-medium">{m.moments_title()}</h1>
-		<p class="mt-2 text-sm text-muted-foreground">{m.moments_subtitle()}</p>
 		<div class="mt-6 mb-6 h-px w-8 bg-primary/70"></div>
 
 		<nav class="flex flex-wrap gap-1.5" aria-label={m.moments_kind_heading()}>
