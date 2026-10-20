@@ -84,6 +84,8 @@ describe('options registry (AI-1.1)', () => {
 				'site.default_lang',
 				'site.info',
 				'site.languages',
+				'site.owner',
+				'site.ownerStatus',
 				'site.timezone'
 			].sort()
 		);
@@ -285,6 +287,30 @@ describe('options registry (AI-1.1)', () => {
 			description: '',
 			avatar: ''
 		});
+	});
+
+	it('ships the header owner badge and activity ticket defaults', async () => {
+		await expect(getOption('site.owner')).resolves.toEqual({ name: 'Lair', avatar: '' });
+		await expect(getOption('site.ownerStatus')).resolves.toEqual({
+			enabled: true,
+			kind: 'coding',
+			detail: 'VS Code',
+			iconUrl: '',
+			href: ''
+		});
+	});
+
+	it('rejects an unknown activity kind before touching the database', async () => {
+		await expect(
+			setOption('site.ownerStatus', {
+				enabled: true,
+				kind: 'dancing',
+				detail: 'VS Code',
+				iconUrl: '',
+				href: ''
+			} as never)
+		).rejects.toThrow();
+		expect(state.insertCalls).toHaveLength(0);
 	});
 
 	it('rejects zero or too-small friends.checks knobs before touching the database', async () => {

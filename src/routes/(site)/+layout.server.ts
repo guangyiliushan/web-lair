@@ -2,6 +2,12 @@ import { getOption } from '$lib/server/config/options-registry';
 import { getPublicOrigin } from '$lib/server/origin';
 import { effectiveReaderDots } from '$lib/server/services/presence';
 import {
+	OWNER_STATUS_DEFAULT,
+	SITE_OWNER_DEFAULT,
+	type OwnerStatus,
+	type SiteOwner
+} from '$lib/config/owner-status';
+import {
 	loadNotesMegaData,
 	loadPagesMegaData,
 	loadPostsMegaData,
@@ -19,13 +25,16 @@ export const load: LayoutServerLoad = async ({ parent, locals }) => {
 	// and the dots layer on this flag). The reads join the page's single
 	// batch (no extra serial phase) and a settings blip fails OPEN to the
 	// registry defaults — a config read must never 500 every public page.
-	const [postsData, notesData, timelineData, pagesData, presenceOptions] = await Promise.all([
-		loadPostsMegaData(),
-		loadNotesMegaData(),
-		loadTimelineMegaData(),
-		loadPagesMegaData(),
-		loadPresenceOptions()
-	]);
+	const [postsData, notesData, timelineData, pagesData, presenceOptions, owner, ownerStatus] =
+		await Promise.all([
+			loadPostsMegaData(),
+			loadNotesMegaData(),
+			loadTimelineMegaData(),
+			loadPagesMegaData(),
+			loadPresenceOptions(),
+			loadSiteOwner(),
+			loadOwnerStatus()
+		]);
 
 	return {
 		auth,
@@ -37,6 +46,10 @@ export const load: LayoutServerLoad = async ({ parent, locals }) => {
 		notesData,
 		timelineData,
 		pagesData,
+		// Header owner badge: one public identity, read for every visitor
+		// (never the session) so the markup is the same for everyone.
+		siteOwner: owner,
+		ownerStatus,
 		presence: {
 			enabled: presenceOptions.enabled,
 			readerView: presenceOptions.readerView,
@@ -60,5 +73,23 @@ async function loadPresenceOptions(): Promise<{
 		return { enabled, readerView, readerDots };
 	} catch {
 		return { enabled: true, readerView: true, readerDots: false };
+	}
+}
+
+/** Header owner badge; a settings blip fails open to the registry default. */
+async function loadSiteOwner(): Promise<SiteOwner> {
+	try {
+		return await getOption('site.owner');
+	} catch {
+		return SITE_OWNER_DEFAULT;
+	}
+}
+
+/** Header activity ticket; a settings blip falls back to the registry default (fail-open). */
+async function loadOwnerStatus(): Promise<OwnerStatus> {
+	try {
+		return await getOption('site.ownerStatus');
+	} catch {
+		return OWNER_STATUS_DEFAULT;
 	}
 }

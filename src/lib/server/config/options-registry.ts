@@ -6,6 +6,11 @@ import { PROJECT_SYNC_PROVIDERS } from '../../utils/project-meta.ts';
 import { isValidIanaTimeZone } from '../../utils/timezone.ts';
 import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '../pg-timezone.ts';
 import { m } from '../../paraglide/messages.js';
+import {
+	OWNER_STATUS_DEFAULT,
+	OWNER_STATUS_KINDS,
+	SITE_OWNER_DEFAULT
+} from '../../config/owner-status.ts';
 
 /** Site languages (same set as the posts `lang` CHECK, ledger §9.16). */
 export const OPTION_LANGS = ['en', 'zh-cn', 'ja'] as const;
@@ -261,6 +266,27 @@ export const optionRegistry = {
 		schema: z.object({ name: z.string(), description: z.string(), avatar: z.string() }),
 		// Public "our link info" block on /friends (plan §2.6).
 		default: { name: 'Web Lair', description: '', avatar: '' }
+	},
+	'site.owner': {
+		// Public owner identity for the header badge (replaces the placeholder
+		// logo block): every visitor sees the same name/avatar, so this never
+		// reads the session — the account control on the right owns that.
+		schema: z.object({ name: z.string().min(1), avatar: z.string() }),
+		default: SITE_OWNER_DEFAULT
+	},
+	'site.ownerStatus': {
+		// Owner activity ticket next to the badge (static stage): one datum —
+		// the app/site name (capped at 10 chars in the UI) plus its icon.
+		// `kind` only picks the indicator and the spoken verb; `enabled: false`
+		// hides the ticket, not the badge.
+		schema: z.object({
+			enabled: z.boolean(),
+			kind: z.enum(OWNER_STATUS_KINDS),
+			detail: z.string(),
+			iconUrl: z.string(),
+			href: z.string()
+		}),
+		default: OWNER_STATUS_DEFAULT
 	},
 	'presence.enabled': {
 		// Realtime batch (ledger §23): master switch for the presence feature

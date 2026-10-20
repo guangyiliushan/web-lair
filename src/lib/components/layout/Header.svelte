@@ -4,11 +4,14 @@
 	import { deLocalizeHref } from '$lib/paraglide/runtime';
 	import { isActivePath, siteHref } from '$lib/utils/href';
 	import { page } from '$app/state';
-	import { IconCodeCircle2, IconMenu2, IconX, IconChevronDown } from '@tabler/icons-svelte-runes';
+	import { IconMenu2, IconX, IconChevronDown } from '@tabler/icons-svelte-runes';
 	import { slide } from 'svelte/transition';
 	import { cubicInOut, quartInOut } from 'svelte/easing';
 	import ThemeToggle from '$lib/components/layout/ThemeToggle.svelte';
 	import LangSwitcher from '$lib/components/layout/LangSwitcher.svelte';
+	import StatusTicket from '$lib/components/layout/StatusTicket.svelte';
+	import * as Avatar from '$lib/components/ui/avatar';
+	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
 	import UserNav from '$lib/components/account/UserNav.svelte';
 	import { Separator } from '$lib/components/ui/separator';
 	import NavMegaMenu from '$lib/components/layout/NavMegaMenu.svelte';
@@ -35,12 +38,17 @@
 	// ── Props ──
 	let {
 		auth,
+		owner,
+		ownerStatus,
 		postsData,
 		notesData,
 		timelineData,
 		pagesData
 	}: {
 		auth?: AuthData;
+		/** Public owner identity — identical for every visitor, never the session. */
+		owner: SiteOwner;
+		ownerStatus: OwnerStatus;
 		postsData?: MegaMenuDynamicData | null;
 		notesData?: MegaMenuDynamicData | null;
 		timelineData?: MegaMenuDynamicData | null;
@@ -104,11 +112,21 @@
 	>
 		<!-- ══Top bar (always visible) ══-->
 		<div class="flex items-center justify-between px-4 py-2">
-			<!-- Logo -->
-			<a href={siteHref('/')} class="flex shrink-0 items-center gap-2 font-bold">
-				<IconCodeCircle2 class="size-6 text-primary" />
-				<span class="hidden sm:inline">Lair</span>
-			</a>
+			<!-- Owner badge: one public identity for every visitor (replaces the old placeholder logo) -->
+			<div class="flex min-w-0 shrink items-center gap-2.5">
+				<a href={siteHref('/')} class="flex min-w-0 items-center gap-2" aria-label={owner.name}>
+					<Avatar.Root class="size-7 shrink-0 ring-2 ring-border">
+						<Avatar.Image src={owner.avatar} alt="" />
+						<Avatar.Fallback>{owner.name.slice(0, 1)}</Avatar.Fallback>
+					</Avatar.Root>
+					<span
+						class="hidden max-w-[9rem] truncate text-[17px] font-bold tracking-tight sm:inline-block"
+					>
+						{owner.name}
+					</span>
+				</a>
+				<StatusTicket status={ownerStatus} />
+			</div>
 
 			<!-- Desktop nav: mega menu hover (lg+) -->
 			<nav class="hidden items-center gap-1 lg:flex" aria-label="Main navigation">

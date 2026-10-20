@@ -12,6 +12,14 @@ const { envState, optionState } = vi.hoisted(() => ({
 		enabled: true,
 		readerView: true,
 		readerDots: false,
+		owner: { name: 'Owner', avatar: '/owner.png' },
+		ownerStatus: {
+			enabled: true,
+			kind: 'coding' as const,
+			detail: 'VS Code',
+			iconUrl: '',
+			href: ''
+		},
 		throwOn: null as string | null
 	}
 }));
@@ -29,6 +37,8 @@ vi.mock('$lib/server/config/options-registry', () => ({
 		if (key === 'presence.enabled') return optionState.enabled;
 		if (key === 'presence.readerView') return optionState.readerView;
 		if (key === 'presence.readerDots') return optionState.readerDots;
+		if (key === 'site.owner') return optionState.owner;
+		if (key === 'site.ownerStatus') return optionState.ownerStatus;
 		throw new Error(`unexpected option key: ${key}`);
 	})
 }));
@@ -93,5 +103,30 @@ describe('(site) layout server', () => {
 			locals: {}
 		} as never)) as { presence: { enabled: boolean; readerView: boolean; readerDots: boolean } };
 		expect(data.presence).toEqual({ enabled: true, readerView: true, readerDots: false });
+	});
+
+	it('exposes the public owner badge and ticket independently of the session', async () => {
+		const data = (await load({
+			parent: async () => ({ auth: null }),
+			locals: {}
+		} as never)) as {
+			siteOwner: { name: string; avatar: string };
+			ownerStatus: { enabled: boolean; kind: string };
+		};
+		expect(data.siteOwner).toEqual({ name: 'Owner', avatar: '/owner.png' });
+		expect(data.ownerStatus).toEqual(optionState.ownerStatus);
+	});
+
+	it('falls back to the owner defaults when their settings rows cannot be read', async () => {
+		optionState.throwOn = 'site.owner';
+		const data = (await load({
+			parent: async () => ({ auth: null }),
+			locals: {}
+		} as never)) as {
+			siteOwner: { name: string; avatar: string };
+			ownerStatus: { enabled: boolean; kind: string };
+		};
+		expect(data.siteOwner).toEqual({ name: 'Lair', avatar: '' });
+		expect(data.ownerStatus.kind).toBe('coding');
 	});
 });

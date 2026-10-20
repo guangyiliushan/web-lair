@@ -15,6 +15,8 @@
 <div class="flex min-h-screen flex-col selection:bg-primary/30">
 	<Header
 		auth={data.auth}
+		owner={data.siteOwner}
+		ownerStatus={data.ownerStatus}
 		postsData={data.postsData}
 		notesData={data.notesData}
 		timelineData={data.timelineData}
