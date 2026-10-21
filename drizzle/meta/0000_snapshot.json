@@ -1,5 +1,5 @@
 {
-  "id": "005ee0f9-0bf5-484c-86cc-38c007fa0c06",
+  "id": "ddc47e39-aef1-41f6-8d8d-265845ec4807",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -3718,12 +3718,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "visual_origin": {
-          "name": "visual_origin",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "ai_help": {
           "name": "ai_help",
           "type": "text[]",
@@ -4062,10 +4056,6 @@
         "posts_writing_origin_check": {
           "name": "posts_writing_origin_check",
           "value": "\"posts\".\"writing_origin\" in ('none', 'assist', 'mostly_ai', 'ai_full')"
-        },
-        "posts_visual_origin_check": {
-          "name": "posts_visual_origin_check",
-          "value": "\"posts\".\"visual_origin\" in ('none', 'some', 'all')"
         },
         "posts_provenance_source_check": {
           "name": "posts_provenance_source_check",
@@ -5349,6 +5339,13 @@
           "notNull": true,
           "default": "''"
         },
+        "key_version": {
+          "name": "key_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -5366,6 +5363,10 @@
         "email_suppressions_reason_check": {
           "name": "email_suppressions_reason_check",
           "value": "\"email_suppressions\".\"reason\" in ('unsubscribed', 'bounced', 'complained')"
+        },
+        "email_suppressions_key_version_check": {
+          "name": "email_suppressions_key_version_check",
+          "value": "\"email_suppressions\".\"key_version\" >= 1"
         }
       },
       "isRLSEnabled": false
@@ -5972,8 +5973,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "token": {
-          "name": "token",
+        "token_nonce": {
+          "name": "token_nonce",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -5982,7 +5983,7 @@
           "name": "token_hash",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "verified_at": {
           "name": "verified_at",
@@ -6013,11 +6014,11 @@
           "method": "btree",
           "with": {}
         },
-        "subscriptions_token_uniq": {
-          "name": "subscriptions_token_uniq",
+        "subscriptions_token_nonce_uniq": {
+          "name": "subscriptions_token_nonce_uniq",
           "columns": [
             {
-              "expression": "token",
+              "expression": "token_nonce",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -6049,6 +6050,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "subscriptions_token_nonce_len_check": {
+          "name": "subscriptions_token_nonce_len_check",
+          "value": "char_length(\"subscriptions\".\"token_nonce\") = 43"
+        },
         "subscriptions_status_check": {
           "name": "subscriptions_status_check",
           "value": "\"subscriptions\".\"status\" in ('pending', 'subscribed', 'unsubscribed')"

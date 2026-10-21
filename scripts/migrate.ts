@@ -14,8 +14,11 @@
  * below makes `migrate` exit 1 on a pre-E2 database and points at the rebuild
  * procedure in deploy/RUNBOOK.md §2.1. The provenance window regenerated the
  * same single baseline again; the second check below rejects a pre-provenance
- * database and points at §2.2. It does not guard the app process: deploy
- * scripts must run `migrate` before `up -d`.
+ * database and points at §2.2. S1 (F-13/F-14) regenerated it a third time and
+ * stamped a new journal `when`, so the migrator now attempts the new hash on an
+ * old database and fails loudly; the third check rejects a pre-S1 database
+ * (no `token_nonce` / `key_version`) and points at §2. None of these guard the
+ * app process: deploy scripts must run `migrate` before `up -d`.
  *
  * Usage (host):  node --env-file-if-exists=.env scripts/migrate.ts
  * Usage (container): node scripts/migrate.ts     # env from compose
@@ -41,6 +44,8 @@ try {
 			tokenHash: boolean;
 			tokenHashIndex: boolean;
 			provenance: boolean;
+			tokenNonce: boolean;
+			keyVersion: boolean;
 		}[]
 	>`select
 		to_regclass('public.email_suppressions') is not null as suppressions,
@@ -56,13 +61,23 @@ try {
 		) as "tokenHash",
 		to_regclass('public.subscriptions_token_hash_uniq') is not null as "tokenHashIndex",
 		(
-			select count(*) = 6 from information_schema.columns
+			select count(*) = 5 from information_schema.columns
 			where table_schema = 'public' and table_name = 'posts'
 				and column_name in (
-					'writing_origin', 'visual_origin', 'ai_help',
+					'writing_origin', 'ai_help',
 					'provenance_source', 'provenance_updated_at', 'provenance_updated_by'
 				)
-		) as provenance`;
+		) as provenance,
+		exists (
+			select 1 from information_schema.columns
+			where table_schema = 'public' and table_name = 'subscriptions'
+				and column_name = 'token_nonce'
+		) as "tokenNonce",
+		exists (
+			select 1 from information_schema.columns
+			where table_schema = 'public' and table_name = 'email_suppressions'
+				and column_name = 'key_version'
+		) as "keyVersion"`;
 	if (!schema?.suppressions || !schema.consent || !schema.tokenHash || !schema.tokenHashIndex) {
 		console.error(
 			'[migrate] this database predates the E2 baseline (missing email_suppressions / consent_version / token_hash / token_hash index).'
@@ -74,10 +89,19 @@ try {
 	}
 	if (!schema?.provenance) {
 		console.error(
-			'[migrate] this database predates the provenance baseline (posts is missing one of writing_origin / visual_origin / ai_help / provenance_source / provenance_updated_at / provenance_updated_by).'
+			'[migrate] this database predates the provenance baseline (posts is missing one of writing_origin / ai_help / provenance_source / provenance_updated_at / provenance_updated_by).'
 		);
 		console.error(
 			'[migrate] the journal timestamp is unchanged, so the migrator skips the regenerated baseline; rebuild per deploy/RUNBOOK.md §2.2 (backup -> empty schema -> migrate -> data restore -> provenance backfill).'
+		);
+		process.exitCode = 1;
+	}
+	if (!schema?.tokenNonce || !schema?.keyVersion) {
+		console.error(
+			'[migrate] this database predates the S1 baseline (missing subscriptions.token_nonce / email_suppressions.key_version).'
+		);
+		console.error(
+			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> verify).'
 		);
 		process.exitCode = 1;
 	}

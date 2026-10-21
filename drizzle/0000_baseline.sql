@@ -386,7 +386,6 @@ CREATE TABLE "posts" (
 	"translated_from_post_id" uuid,
 	"translation_origin" text,
 	"writing_origin" text,
-	"visual_origin" text,
 	"ai_help" text[],
 	"provenance_source" text,
 	"provenance_updated_at" timestamp with time zone,
@@ -402,7 +401,6 @@ CREATE TABLE "posts" (
 	CONSTRAINT "posts_lang_check" CHECK ("posts"."lang" in ('en', 'zh-cn', 'ja')),
 	CONSTRAINT "posts_translation_origin_check" CHECK ("posts"."translation_origin" in ('human', 'ai', 'machine')),
 	CONSTRAINT "posts_writing_origin_check" CHECK ("posts"."writing_origin" in ('none', 'assist', 'mostly_ai', 'ai_full')),
-	CONSTRAINT "posts_visual_origin_check" CHECK ("posts"."visual_origin" in ('none', 'some', 'all')),
 	CONSTRAINT "posts_provenance_source_check" CHECK ("posts"."provenance_source" in ('author', 'c2pa', 'import')),
 	CONSTRAINT "posts_provenance_source_by_check" CHECK ("posts"."provenance_updated_by" is null or "posts"."provenance_source" is not null)
 );
@@ -532,8 +530,10 @@ CREATE TABLE "email_suppressions" (
 	"email_hash" text PRIMARY KEY NOT NULL,
 	"reason" text NOT NULL,
 	"source" text DEFAULT '' NOT NULL,
+	"key_version" smallint DEFAULT 1 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "email_suppressions_reason_check" CHECK ("email_suppressions"."reason" in ('unsubscribed', 'bounced', 'complained'))
+	CONSTRAINT "email_suppressions_reason_check" CHECK ("email_suppressions"."reason" in ('unsubscribed', 'bounced', 'complained')),
+	CONSTRAINT "email_suppressions_key_version_check" CHECK ("email_suppressions"."key_version" >= 1)
 );
 --> statement-breakpoint
 CREATE TABLE "enrichment_captures" (
@@ -604,10 +604,11 @@ CREATE TABLE "subscriptions" (
 	"lang" text DEFAULT 'en' NOT NULL,
 	"source" text,
 	"consent_version" text,
-	"token" text NOT NULL,
-	"token_hash" text,
+	"token_nonce" text NOT NULL,
+	"token_hash" text NOT NULL,
 	"verified_at" timestamp with time zone,
 	"unsubscribed_at" timestamp with time zone,
+	CONSTRAINT "subscriptions_token_nonce_len_check" CHECK (char_length("subscriptions"."token_nonce") = 43),
 	CONSTRAINT "subscriptions_status_check" CHECK ("subscriptions"."status" in ('pending', 'subscribed', 'unsubscribed')),
 	CONSTRAINT "subscriptions_lang_check" CHECK ("subscriptions"."lang" in ('en', 'zh-cn', 'ja')),
 	CONSTRAINT "subscriptions_verified_at_check" CHECK (("subscriptions"."status" = 'pending') = ("subscriptions"."verified_at" is null)),
@@ -896,7 +897,7 @@ CREATE UNIQUE INDEX "job_schedules_job_cron_expr_uniq" ON "job_schedules" USING 
 CREATE INDEX "slug_trackers_type_lang_slug_idx" ON "slug_trackers" USING btree ("type","lang","slug");--> statement-breakpoint
 CREATE INDEX "slug_trackers_type_target_idx" ON "slug_trackers" USING btree ("type","target_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "subscriptions_email_uniq" ON "subscriptions" USING btree ("email");--> statement-breakpoint
-CREATE UNIQUE INDEX "subscriptions_token_uniq" ON "subscriptions" USING btree ("token");--> statement-breakpoint
+CREATE UNIQUE INDEX "subscriptions_token_nonce_uniq" ON "subscriptions" USING btree ("token_nonce");--> statement-breakpoint
 CREATE UNIQUE INDEX "subscriptions_token_hash_uniq" ON "subscriptions" USING btree ("token_hash");--> statement-breakpoint
 CREATE INDEX "webhook_deliveries_status_created_at_idx" ON "webhook_deliveries" USING btree ("status","created_at");--> statement-breakpoint
 CREATE INDEX "webhook_deliveries_webhook_id_created_at_idx" ON "webhook_deliveries" USING btree ("webhook_id","created_at");--> statement-breakpoint

@@ -36,7 +36,7 @@ const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', impo
 const JOURNAL_PATH = fileURLToPath(new URL('../drizzle/meta/_journal.json', import.meta.url));
 const VISUALIZER_PATH = fileURLToPath(new URL('../.drizzle/visualizer.json', import.meta.url));
 
-const EXPECTED = { tables: 49, indexes: 117, checks: 75, fks: 47, uuidv7: 36 };
+const EXPECTED = { tables: 49, indexes: 117, checks: 76, fks: 47, uuidv7: 36 };
 
 const EXPECTED_TABLE_NAMES: string[] = [
 	'account',
@@ -138,7 +138,9 @@ const RETIRED_INDEX_NAMES = [
 	'notes_nid_desc_idx',
 	'notes_published_public_created_idx',
 	'notes_topic_id_idx',
-	'projects_name_uniq'
+	'projects_name_uniq',
+	// F-13: the plaintext token column and its index were dropped.
+	'subscriptions_token_uniq'
 ];
 
 /** Composite-PK constraint names for junction tables. */
@@ -178,7 +180,6 @@ const REQUIRED_CONSTRAINT_NAMES: string[] = [
 	'notes_translation_origin_check',
 	'posts_translation_origin_check',
 	'posts_writing_origin_check',
-	'posts_visual_origin_check',
 	'posts_provenance_source_check',
 	'posts_provenance_source_by_check',
 	'pages_content_format_check',
@@ -195,6 +196,7 @@ const REQUIRED_CONSTRAINT_NAMES: string[] = [
 	'projects_status_check',
 	'subscriptions_lang_check',
 	'subscriptions_status_check',
+	'subscriptions_token_nonce_len_check',
 	'subscriptions_unsubscribed_at_check',
 	'subscriptions_verified_at_check',
 	'translations_origin_check',
@@ -321,9 +323,9 @@ const COLUMN_TYPE_PINS: Array<[string, string, string]> = [
 	['drafts', 'weather_code', 'smallint'],
 	['drafts', 'temperature_c', 'numeric'],
 	['drafts', 'payload', 'jsonb'],
+	['email_suppressions', 'key_version', 'smallint'],
 	['posts', 'allow_comment', 'boolean'],
 	['posts', 'writing_origin', 'text'],
-	['posts', 'visual_origin', 'text'],
 	['posts', 'provenance_source', 'text'],
 	['posts', 'ai_help', 'ARRAY']
 ];
@@ -925,7 +927,7 @@ begin
 	-- Subscriptions state machine (P1 repair): pending must not carry verified_at;
 	-- unsubscribed must carry unsubscribed_at; verified history is retained.
 	begin
-		insert into subscriptions (email, token, status, verified_at) values ('c1v-1@example.com', 'c1v-tok-1', 'pending', now());
+		insert into subscriptions (email, token_nonce, token_hash, status, verified_at) values ('c1v-1@example.com', repeat('a', 43), repeat('f', 64), 'pending', now());
 		raise exception 'FAIL subscriptions_verified_at_check accepted pending with verified_at';
 	exception when check_violation then
 		get stacked diagnostics c = constraint_name;
@@ -933,15 +935,43 @@ begin
 	end;
 
 	begin
-		insert into subscriptions (email, token, status, verified_at) values ('c1v-2@example.com', 'c1v-tok-2', 'unsubscribed', now());
+		insert into subscriptions (email, token_nonce, token_hash, status, verified_at) values ('c1v-2@example.com', repeat('b', 43), repeat('e', 64), 'unsubscribed', now());
 		raise exception 'FAIL subscriptions_unsubscribed_at_check accepted unsubscribed without unsubscribed_at';
 	exception when check_violation then
 		get stacked diagnostics c = constraint_name;
 		if c <> 'subscriptions_unsubscribed_at_check' then raise exception 'FAIL subscriptions unsub: wrong constraint %', c; end if;
 	end;
 
-	insert into subscriptions (email, token, status, verified_at, unsubscribed_at)
-		values ('c1v-3@example.com', 'c1v-tok-3', 'unsubscribed', now(), now());
+	insert into subscriptions (email, token_nonce, token_hash, status, verified_at, unsubscribed_at)
+		values ('c1v-3@example.com', repeat('c', 43), repeat('d', 64), 'unsubscribed', now(), now());
+
+	-- F-13 teeth: the nonce is unique (a replayed nonce would let two rows
+	-- derive the same link) and the shape CHECK rejects a short nonce.
+	begin
+		insert into subscriptions (email, token_nonce, token_hash, status)
+			values ('c1v-4@example.com', repeat('c', 43), repeat('9', 64), 'pending');
+		raise exception 'FAIL subscriptions_token_nonce_uniq accepted a duplicate nonce';
+	exception when unique_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'subscriptions_token_nonce_uniq' then raise exception 'FAIL nonce: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into subscriptions (email, token_nonce, token_hash, status) values ('c1v-5@example.com', 'short', repeat('8', 64), 'pending');
+		raise exception 'FAIL subscriptions_token_nonce_len_check accepted a short nonce';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'subscriptions_token_nonce_len_check' then raise exception 'FAIL nonce length: wrong constraint %', c; end if;
+	end;
+
+	-- F-14 tooth: key_version is a positive integer.
+	begin
+		insert into email_suppressions (email_hash, reason, source, key_version) values (repeat('7', 64), 'unsubscribed', 'c1v', 0);
+		raise exception 'FAIL email_suppressions_key_version_check accepted 0';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'email_suppressions_key_version_check' then raise exception 'FAIL key_version: wrong constraint %', c; end if;
+	end;
 
 	-- Enrichment captures: (provider, source_url) key is unique.
 	begin
