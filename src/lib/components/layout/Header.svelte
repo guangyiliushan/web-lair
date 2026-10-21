@@ -371,7 +371,7 @@
 							</div>
 							<div class="mt-3 flex flex-col gap-0.5">
 								<a
-									href={siteHref('/admin')}
+									href={siteHref('/admin/dashboard')}
 									onclick={closeMenu}
 									class="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
 								>

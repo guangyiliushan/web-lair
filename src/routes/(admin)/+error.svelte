@@ -47,7 +47,7 @@
 		</div>
 
 		<div class="flex flex-col items-center justify-center gap-3 sm:flex-row">
-			<Button href="/admin" size="lg">
+			<Button href="/admin/dashboard" size="lg">
 				<IconArrowLeft data-icon="inline-start" />
 				{m.admin_error_back_dashboard()}
 			</Button>

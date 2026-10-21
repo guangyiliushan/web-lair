@@ -7,7 +7,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Empty } from '$lib/components/ui/empty';
 	import * as MasterDetail from '$lib/components/admin/master-detail';
-	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
+	import { useAdminHeaderActionRegistry } from '$lib/components/admin/admin-header-actions';
 	import IconFolder from '@tabler/icons-svelte-runes/icons/folder';
 	import IconHash from '@tabler/icons-svelte-runes/icons/hash';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
@@ -62,6 +62,10 @@
 				.replace(/^-|-$/g, '');
 		}
 	}
+
+	// The "新建" header button is declared in +page.server.ts; bind it to the dialog.
+	const headerActions = useAdminHeaderActionRegistry();
+	$effect(() => headerActions?.register('categories:create', openCreate));
 </script>
 
 <svelte:head>
@@ -132,18 +136,6 @@
 			</section>
 		</div>
 	{:else}
-		<div class="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-4">
-			<div class="flex min-w-0 items-center gap-2">
-				<IconFolder class="size-4 shrink-0 text-muted-foreground" />
-				<h2 class="truncate text-sm font-semibold">{m.admin_categories_tags_heading()}</h2>
-				<span class="text-xs text-muted-foreground tabular-nums"
-					>{m.admin_categories_tags_count({ count: data.categories.length })}</span
-				>
-			</div>
-			<Button variant="outline" size="sm" onclick={openCreate}>
-				<IconPlus data-icon="inline-start" />{m.admin_common_new()}
-			</Button>
-		</div>
 		<div class="border-b px-4 py-2">
 			<h3 class="text-xs font-medium text-muted-foreground uppercase">
 				{m.nav_posts_categories()}
@@ -180,6 +172,9 @@
 				{/each}
 			{/if}
 		</div>
+		<div class="shrink-0 border-t px-4 py-2 text-xs text-muted-foreground tabular-nums">
+			{m.admin_master_detail_count({ count: data.categories.length })}
+		</div>
 	{/if}
 </div>
 
@@ -188,16 +183,6 @@
 	<MasterDetail.Root class="h-[calc(100vh-10rem)]">
 		<!-- Sidebar: category list -->
 		<MasterDetail.Pane side="master" class="w-80 shrink-0">
-			<MasterDetail.Header
-				icon={IconFolder}
-				title={m.admin_categories_tags_heading()}
-				count={data.categories.length}
-			>
-				<Button variant="outline" size="sm" onclick={openCreate}>
-					<IconPlus data-icon="inline-start" />
-					{m.admin_common_new()}
-				</Button>
-			</MasterDetail.Header>
 			<MasterDetail.List>
 				<div class="border-b px-4 py-2">
 					<h3 class="text-xs font-medium text-muted-foreground uppercase">
@@ -231,6 +216,9 @@
 					{/each}
 				{/if}
 			</MasterDetail.List>
+			<div class="shrink-0 border-t px-4 py-2 text-xs text-muted-foreground tabular-nums">
+				{m.admin_master_detail_count({ count: data.categories.length })}
+			</div>
 		</MasterDetail.Pane>
 
 		<!-- Main panel: category details -->

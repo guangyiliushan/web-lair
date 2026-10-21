@@ -22,7 +22,7 @@ vi.mock('$lib/server/authz', () => ({ requireAdminRole: vi.fn(async () => {}) })
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
 import { requireAdminRole } from '$lib/server/authz';
-import { actions } from './+page.server';
+import { actions, load } from './+page.server';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 
 // Action copy comes from the message catalog; pin the locale so assertions
@@ -64,6 +64,27 @@ async function callAction(name: string, fields: Record<string, string>) {
 		return { result: undefined, thrown: thrown as { status?: number; location?: string } };
 	}
 }
+
+describe('categories load', () => {
+	it('guards the load and exposes back + new header actions', async () => {
+		dbMock.select = vi
+			.fn()
+			.mockReturnValueOnce(makeChain([{ id: CAT_ID, name: 'Tech', slug: 'tech' }]))
+			.mockReturnValueOnce(makeChain([{ categoryId: CAT_ID, count: 2 }]));
+
+		const result = (await load({} as never)) as unknown as {
+			headerActions: { iconName: string; href?: string; actionId?: string }[];
+			postCounts: Record<string, number>;
+		};
+
+		expect(guardMock).toHaveBeenCalledTimes(1);
+		expect(result.headerActions).toEqual([
+			expect.objectContaining({ iconName: 'plus', actionId: 'categories:create' }),
+			expect.objectContaining({ iconName: 'arrow-left', href: '/admin/posts' })
+		]);
+		expect(result.postCounts).toEqual({ [CAT_ID]: 2 });
+	});
+});
 
 describe('categories actions', () => {
 	beforeEach(() => {

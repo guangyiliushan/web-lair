@@ -6,6 +6,7 @@
 	import { cn } from '$lib/utils';
 	import type { Component } from 'svelte';
 	import { m } from '$lib/paraglide/messages';
+	import { useAdminHeaderActionRegistry } from './admin-header-actions';
 	// Icon lookup table — all icons used by admin header actions
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
 	import IconCategory from '@tabler/icons-svelte-runes/icons/category';
@@ -57,6 +58,8 @@
 		variant: 'default' | 'outline' | 'ghost';
 		size: 'default' | 'sm' | 'lg' | 'icon';
 		href?: string;
+		/** Page-registered handler id (bound by the page via the action registry). */
+		actionId?: string;
 		onclick?: () => void;
 	}
 
@@ -74,6 +77,13 @@
 	const pageTitle = $derived(title ?? page.data.headerTitle ?? m.admin_header_title());
 
 	const pageActions = $derived(actions ?? resolveFromPageData(page.data.headerActions));
+
+	const actionRegistry = useAdminHeaderActionRegistry();
+
+	function activate(action: ResolvedAction) {
+		action.onclick?.();
+		if (action.actionId) actionRegistry?.run(action.actionId);
+	}
 
 	function resolveFromPageData(raw: typeof page.data.headerActions): ResolvedAction[] {
 		// `undefined` = page didn't specify → use default "访问站点"
@@ -94,7 +104,8 @@
 			icon: ICON_MAP[a.iconName] ?? IconExternalLink,
 			variant: a.variant ?? 'ghost',
 			size: a.size ?? 'sm',
-			href: a.href
+			href: a.href,
+			actionId: a.actionId
 		}));
 	}
 </script>
@@ -121,7 +132,7 @@
 						{action.label}
 					</Button>
 				{:else}
-					<Button {variant} {size} onclick={action.onclick}>
+					<Button {variant} {size} onclick={() => activate(action)}>
 						<action.icon data-icon="inline-start" />
 						{action.label}
 					</Button>

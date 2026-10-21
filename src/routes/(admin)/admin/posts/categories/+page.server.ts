@@ -33,7 +33,26 @@ export const load: PageServerLoad = async () => {
 		postCounts[r.categoryId] = r.count;
 	}
 
-	return { headerTitle: m.nav_posts_categories(), categories: allCategories, postCounts };
+	return {
+		headerTitle: m.nav_posts_categories(),
+		headerActions: [
+			{
+				label: m.admin_common_new(),
+				iconName: 'plus',
+				variant: 'default',
+				// opens the create dialog registered by +page.svelte
+				actionId: 'categories:create'
+			},
+			{
+				label: m.admin_common_back(),
+				iconName: 'arrow-left',
+				variant: 'outline',
+				href: '/admin/posts'
+			}
+		],
+		categories: allCategories,
+		postCounts
+	};
 };
 
 export const actions: Actions = {

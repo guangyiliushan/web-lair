@@ -14,5 +14,16 @@ export const load: PageServerLoad = async () => {
 		.from(tags)
 		.orderBy(tags.name);
 
-	return { headerTitle: m.admin_tags_nav(), tags: rows };
+	return {
+		headerTitle: m.admin_tags_nav(),
+		headerActions: [
+			{
+				label: m.admin_common_back(),
+				iconName: 'arrow-left',
+				variant: 'outline',
+				href: '/admin/posts'
+			}
+		],
+		tags: rows
+	};
 };

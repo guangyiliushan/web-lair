@@ -71,13 +71,6 @@
 			</section>
 		</div>
 	{:else}
-		<div class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-			<IconTag class="size-4 shrink-0 text-muted-foreground" />
-			<h2 class="truncate text-sm font-semibold">{m.admin_categories_tags_heading()}</h2>
-			<span class="ml-auto text-xs text-muted-foreground tabular-nums"
-				>{m.admin_categories_tags_count({ count: data.tags.length })}</span
-			>
-		</div>
 		<div class="border-b px-4 py-2">
 			<h3 class="text-xs font-medium text-muted-foreground uppercase">{m.admin_tags_nav()}</h3>
 		</div>
@@ -111,6 +104,9 @@
 				{/each}
 			{/if}
 		</div>
+		<div class="shrink-0 border-t px-4 py-2 text-xs text-muted-foreground tabular-nums">
+			{m.admin_master_detail_count({ count: data.tags.length })}
+		</div>
 	{/if}
 </div>
 
@@ -119,11 +115,6 @@
 	<MasterDetail.Root class="h-[calc(100vh-10rem)]">
 		<!-- Sidebar: tag list -->
 		<MasterDetail.Pane side="master" class="w-80 shrink-0">
-			<MasterDetail.Header
-				icon={IconTag}
-				title={m.admin_categories_tags_heading()}
-				count={data.tags.length}
-			/>
 			<MasterDetail.List>
 				<div class="border-b px-4 py-2">
 					<h3 class="text-xs font-medium text-muted-foreground uppercase">{m.admin_tags_nav()}</h3>
@@ -151,6 +142,9 @@
 					{/each}
 				{/if}
 			</MasterDetail.List>
+			<div class="shrink-0 border-t px-4 py-2 text-xs text-muted-foreground tabular-nums">
+				{m.admin_master_detail_count({ count: data.tags.length })}
+			</div>
 		</MasterDetail.Pane>
 
 		<!-- Main panel: tag details (read-only) -->

@@ -34,7 +34,7 @@ test('admin sidebar follows the configured navigation order', async ({ page }) =
 			)
 		)
 		.toEqual([
-			'/admin',
+			'/admin/dashboard',
 			'/admin/posts',
 			'/admin/notes',
 			'/admin/moments',
@@ -90,4 +90,15 @@ test('ja spot check renders Japanese chrome', async ({ page }) => {
 		.toBe('ja');
 	await expect(page.getByRole('link', { name: 'ダッシュボード' })).toBeVisible({ timeout: 10000 });
 	await expect(page.getByRole('heading', { name: 'おかえりなさい' })).toBeVisible();
+});
+
+test('/admin redirects to the dashboard and only the current nav item is active', async ({
+	page
+}) => {
+	await page.goto('/admin');
+	await expect(page).toHaveURL(/\/admin\/dashboard$/);
+	await expect(page.locator('a[data-active="true"]')).toHaveAttribute('href', '/admin/dashboard');
+
+	await page.goto('/admin/posts');
+	await expect(page.locator('a[data-active="true"]')).toHaveAttribute('href', '/admin/posts');
 });

@@ -6,7 +6,7 @@ import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/auth.schema';
 import { eq } from 'drizzle-orm';
-import { getAdminConfig } from '$lib/server/config/admin';
+import { ADMIN_HOME_PATH, getAdminConfig } from '$lib/server/config/admin';
 import { claimOwnerRole, hasAnyAdminAccount } from '$lib/server/auth/owner';
 import { ensureSiteOrganization } from '$lib/server/auth/site-organization-bootstrap';
 import { APIError } from 'better-auth/api';
@@ -35,7 +35,7 @@ function verifySetupToken(formToken: string): string | null {
 
 export const load: PageServerLoad = async () => {
 	if (await hasAnyAdminAccount()) {
-		redirect(303, '/admin');
+		redirect(303, ADMIN_HOME_PATH);
 	}
 
 	const config = getAdminConfig();
@@ -115,7 +115,7 @@ export const actions: Actions = {
 				body: {
 					email,
 					password,
-					callbackURL: '/admin'
+					callbackURL: ADMIN_HOME_PATH
 				}
 			});
 		} catch (caught) {
@@ -127,6 +127,6 @@ export const actions: Actions = {
 			throw caught;
 		}
 
-		redirect(303, '/admin');
+		redirect(303, ADMIN_HOME_PATH);
 	}
 };

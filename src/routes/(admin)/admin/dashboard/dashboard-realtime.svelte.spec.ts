@@ -37,18 +37,31 @@ class FakeEventSource {
 	}
 }
 
-function mount(presence: {
-	enabled: boolean;
-	site: number | null;
-	day: number | null;
-	peak: number | null;
-}) {
+function mount(
+	presence: { enabled: boolean; site: number | null; day: number | null; peak: number | null },
+	extra: Record<string, unknown> = {}
+) {
 	return render(AdminDashboard, {
 		data: {
 			headerTitle: 'Dashboard',
 			counts: { posts: 1, notes: 2, quotes: 3, thoughts: 4, moments: 5 },
+			stats: {
+				pages: 2,
+				categories: 1,
+				comments: 0,
+				commentsUnread: 0,
+				friends: 0,
+				friendRequests: 0,
+				characters: 1234,
+				reads: 0,
+				likes: 0
+			},
+			charts: { publish: [], categories: [], comments: [] },
+			lastAdminLogin: null,
+			siteTimezone: 'UTC',
 			auth: null,
-			presence
+			presence,
+			...extra
 		} as never
 	});
 }
@@ -100,5 +113,42 @@ describe('admin dashboard realtime cards', () => {
 		await vi.waitFor(() => expect(metric('site')).toBe('—'));
 		expect(metric('day')).toBe('—');
 		expect(metric('peak')).toBe('—');
+	});
+
+	it('renders the real statistics and none of the retired fake rows', async () => {
+		await mount({ enabled: true, site: 1, day: 2, peak: 3 });
+		expect(document.body.textContent).toContain('1,234');
+		expect(document.body.textContent).not.toContain('API calls');
+		expect(document.body.textContent).not.toContain('15,696,939');
+	});
+
+	it('renders the previous admin login trace', async () => {
+		await mount(
+			{ enabled: true, site: 1, day: 2, peak: 3 },
+			{
+				lastAdminLogin: {
+					at: '2026-10-20T12:00:00.000Z',
+					ip: '203.0.113.5',
+					first: false
+				}
+			}
+		);
+		expect(document.body.textContent).toContain('Last admin login:');
+		expect(document.body.textContent).toContain('203.0.113.5');
+	});
+
+	it('labels the current session as the first admin login', async () => {
+		await mount(
+			{ enabled: true, site: 1, day: 2, peak: 3 },
+			{
+				lastAdminLogin: {
+					at: '2026-10-21T00:00:00.000Z',
+					ip: null,
+					first: true
+				}
+			}
+		);
+		expect(document.body.textContent).toContain('First admin login:');
+		expect(document.body.textContent).toContain('—');
 	});
 });

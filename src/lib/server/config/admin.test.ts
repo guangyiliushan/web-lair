@@ -9,7 +9,14 @@ const { envMock } = vi.hoisted(() => ({
 
 vi.mock('$env/dynamic/private', () => ({ env: envMock }));
 
-import { ADMIN_BASE_PATH, assertAdminSlug, getAdminConfig, isAdminPath } from './admin';
+import {
+	ADMIN_BASE_PATH,
+	ADMIN_HOME_PATH,
+	assertAdminSlug,
+	getAdminConfig,
+	isAdminPath,
+	safeAdminRedirectTarget
+} from './admin';
 
 describe('admin config', () => {
 	beforeEach(() => {
@@ -49,5 +56,16 @@ describe('admin config', () => {
 			thrown = caught;
 		}
 		expect((thrown as { status?: number } | undefined)?.status).toBe(404);
+	});
+
+	it('normalizes the admin home and rejects non-admin redirect targets', () => {
+		expect(ADMIN_HOME_PATH).toBe('/admin/dashboard');
+		expect(safeAdminRedirectTarget(null)).toBe(ADMIN_HOME_PATH);
+		expect(safeAdminRedirectTarget('  /admin  ')).toBe(ADMIN_HOME_PATH);
+		expect(safeAdminRedirectTarget('/admin/posts?status=published')).toBe(
+			'/admin/posts?status=published'
+		);
+		expect(safeAdminRedirectTarget('/administrator')).toBe(ADMIN_HOME_PATH);
+		expect(safeAdminRedirectTarget('https://example.com')).toBe(ADMIN_HOME_PATH);
 	});
 });

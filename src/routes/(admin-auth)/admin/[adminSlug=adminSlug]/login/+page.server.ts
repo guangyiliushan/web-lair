@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { m } from '$lib/paraglide/messages';
 import { APIError } from 'better-auth/api';
 import { auth } from '$lib/server/auth';
-import { ADMIN_BASE_PATH, assertAdminSlug } from '$lib/server/config/admin';
+import { ADMIN_BASE_PATH, ADMIN_HOME_PATH, assertAdminSlug } from '$lib/server/config/admin';
 import { getUserRole, hasAnyAdminCapability } from '$lib/server/authz';
 import { isSiteOrganizationMember } from '$lib/server/auth/site-organization';
 import { pruneOtherSessions } from '$lib/server/auth/sessions';
@@ -12,7 +12,7 @@ import { safeRedirect } from '$lib/server/safe-redirect';
 export const load: PageServerLoad = async (event) => {
 	assertAdminSlug(event.params.adminSlug);
 
-	const redirectTo = safeRedirect(event.url.searchParams.get('redirectTo'), ADMIN_BASE_PATH, {
+	const redirectTo = safeRedirect(event.url.searchParams.get('redirectTo'), ADMIN_HOME_PATH, {
 		allowedPrefix: ADMIN_BASE_PATH
 	});
 
@@ -32,7 +32,7 @@ export const actions: Actions = {
 		const formData = await event.request.formData();
 		const email = formData.get('email')?.toString().trim().toLowerCase() ?? '';
 		const password = formData.get('password')?.toString() ?? '';
-		const redirectTo = safeRedirect(formData.get('redirectTo')?.toString(), ADMIN_BASE_PATH, {
+		const redirectTo = safeRedirect(formData.get('redirectTo')?.toString(), ADMIN_HOME_PATH, {
 			allowedPrefix: ADMIN_BASE_PATH
 		});
 

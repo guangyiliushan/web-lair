@@ -2,6 +2,8 @@ import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 
 export const ADMIN_BASE_PATH = '/admin';
+/** Landing page after admin sign-in; `/admin` redirects here. */
+export const ADMIN_HOME_PATH = '/admin/dashboard';
 const DEFAULT_ADMIN_LOGIN_SLUG = 'secure-9x7k2q';
 
 function normalizeSlug(value: string | undefined, fallback: string): string {
@@ -58,12 +60,15 @@ export function assertAdminSlug(slug: string): AdminConfig {
 
 export function safeAdminRedirectTarget(target: string | null | undefined): string {
 	if (!target) {
-		return ADMIN_BASE_PATH;
+		return ADMIN_HOME_PATH;
 	}
 
 	const trimmed = target.trim();
-	if (!trimmed.startsWith(ADMIN_BASE_PATH)) {
-		return ADMIN_BASE_PATH;
+	if (!isAdminPath(trimmed)) {
+		return ADMIN_HOME_PATH;
+	}
+	if (trimmed === ADMIN_BASE_PATH) {
+		return ADMIN_HOME_PATH;
 	}
 
 	return trimmed;

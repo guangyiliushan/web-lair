@@ -41,6 +41,8 @@ declare global {
 				variant?: 'default' | 'outline' | 'ghost';
 				size?: 'default' | 'sm' | 'lg' | 'icon';
 				href?: string;
+				/** 页面内注册的点击处理器 id（见 admin-header-actions.ts），用于打开对话框等页面内操作 */
+				actionId?: string;
 			}>;
 			/** Public origin for absolute head URLs ((site) layout; null → request origin). */
 			siteOrigin?: string | null;

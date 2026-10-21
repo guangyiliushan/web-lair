@@ -29,6 +29,7 @@ vi.mock('$lib/server/auth/site-organization', () => ({
 }));
 vi.mock('$lib/server/config/admin', () => ({
 	ADMIN_BASE_PATH: '/admin',
+	ADMIN_HOME_PATH: '/admin/dashboard',
 	assertAdminSlug: () => ({
 		loginPath: '/admin/test-slug/login',
 		loginSlug: 'test-slug',

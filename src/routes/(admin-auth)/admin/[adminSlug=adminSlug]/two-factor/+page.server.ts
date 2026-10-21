@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { m } from '$lib/paraglide/messages';
 import { APIError } from 'better-auth/api';
 import { auth } from '$lib/server/auth';
-import { ADMIN_BASE_PATH, assertAdminSlug } from '$lib/server/config/admin';
+import { ADMIN_BASE_PATH, ADMIN_HOME_PATH, assertAdminSlug } from '$lib/server/config/admin';
 import { getUserRole } from '$lib/server/authz';
 import { isSiteOrganizationMember } from '$lib/server/auth/site-organization';
 import { pruneOtherSessions, revokeSessionByToken } from '$lib/server/auth/sessions';
@@ -43,7 +43,7 @@ function hasTwoFactorChallengeCookie(cookies: { getAll(): { name: string }[] }):
 export const load: PageServerLoad = async (event) => {
 	const config = assertAdminSlug(event.params.adminSlug);
 
-	const redirectTo = safeRedirect(event.url.searchParams.get('redirectTo'), ADMIN_BASE_PATH, {
+	const redirectTo = safeRedirect(event.url.searchParams.get('redirectTo'), ADMIN_HOME_PATH, {
 		allowedPrefix: ADMIN_BASE_PATH
 	});
 
@@ -65,7 +65,7 @@ export const actions: Actions = {
 		const formData = await event.request.formData();
 		const code = formData.get('code')?.toString().trim() ?? '';
 		const useBackupCode = formData.get('method')?.toString() === 'backup';
-		const redirectTo = safeRedirect(formData.get('redirectTo')?.toString(), ADMIN_BASE_PATH, {
+		const redirectTo = safeRedirect(formData.get('redirectTo')?.toString(), ADMIN_HOME_PATH, {
 			allowedPrefix: ADMIN_BASE_PATH
 		});
 

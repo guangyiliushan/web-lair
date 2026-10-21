@@ -63,7 +63,7 @@
 
 			<DropdownMenu.Group>
 				<DropdownMenu.Item>
-					<a href={siteHref('/admin')} class="flex items-center gap-1.5">
+					<a href={siteHref('/admin/dashboard')} class="flex items-center gap-1.5">
 						<IconLayoutDashboard />
 						{m.nav_dashboard()}
 					</a>

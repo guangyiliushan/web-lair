@@ -26,7 +26,7 @@
 	import IconUser from '@tabler/icons-svelte-runes/icons/user';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 	import { page } from '$app/state';
-	import { AdminHeader } from '$lib/components/admin';
+	import { AdminHeader, createAdminHeaderActionRegistry } from '$lib/components/admin';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime';
 	import { localeStore, localeLabels } from '$lib/stores/locale.svelte';
@@ -34,7 +34,7 @@
 	let { children, data }: LayoutProps = $props();
 
 	const navItems = [
-		{ title: m.admin_nav_dashboard(), href: '/admin', icon: IconDashboard },
+		{ title: m.admin_nav_dashboard(), href: '/admin/dashboard', icon: IconDashboard },
 		{ title: m.admin_nav_posts(), href: '/admin/posts', icon: IconArticle },
 		{ title: m.admin_nav_notes(), href: '/admin/notes', icon: IconNotebook },
 		{ title: m.admin_nav_moments(), href: '/admin/moments', icon: IconWriting },
@@ -54,6 +54,16 @@
 		{ title: m.admin_nav_maintenance(), href: '/admin/maintenance', icon: IconTool }
 	];
 
+	/**
+	 * Segment-boundary active check. `/admin` itself is exact-only: as a
+	 * prefix it would match every admin route (the bug that moved the
+	 * dashboard to `/admin/dashboard`).
+	 */
+	function isNavItemActive(pathname: string, href: string): boolean {
+		if (href === '/admin') return pathname === '/admin';
+		return pathname === href || pathname.startsWith(`${href}/`);
+	}
+
 	const user = $derived(data.auth?.user);
 	const profile = $derived(data.auth?.profile);
 	const displayName = $derived(profile?.displayName ?? user?.name ?? 'Admin');
@@ -64,6 +74,9 @@
 		value: tag,
 		label: localeLabels[tag] ?? tag
 	}));
+
+	// Lets the active page bind dialog-opening header actions (see admin-header-actions.ts).
+	createAdminHeaderActionRegistry();
 </script>
 
 <Sidebar.Provider>
@@ -139,8 +152,7 @@
 		<Sidebar.Content class="px-2">
 			<Sidebar.Menu class="gap-1">
 				{#each navItems as item (item.href)}
-					{@const isActive =
-						page.url.pathname === item.href || page.url.pathname.startsWith(`${item.href}/`)}
+					{@const isActive = isNavItemActive(page.url.pathname, item.href)}
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton {isActive} tooltipContent={item.title}>
 							{#snippet child({ props })}
