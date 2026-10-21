@@ -83,14 +83,12 @@ const postRow = {
 	translationGroup: 'group-1',
 	translationOrigin: 'ai',
 	writingOrigin: 'none',
-	visualOrigin: 'some',
 	aiHelp: ['ideas'],
 	translatedFromPostId: null
 };
 
 type ProvenanceView = {
 	writingOrigin: string | null;
-	visualOrigin: string | null;
 	aiHelp: string[] | null;
 	translationOrigin: string | null;
 	isTranslation: boolean;
@@ -123,7 +121,6 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		expect(data.post.slug).toBe('current-slug');
 		expect(data.provenance).toEqual({
 			writingOrigin: 'none',
-			visualOrigin: 'some',
 			aiHelp: null,
 			translationOrigin: null,
 			isTranslation: false
@@ -166,7 +163,6 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		const undisclosed = {
 			...postRow,
 			writingOrigin: null,
-			visualOrigin: null,
 			aiHelp: null,
 			translationOrigin: null
 		};
@@ -176,7 +172,6 @@ describe('posts/[slug] load — slug fallback chain', () => {
 
 		expect(data.provenance).toEqual({
 			writingOrigin: null,
-			visualOrigin: null,
 			aiHelp: null,
 			translationOrigin: null,
 			isTranslation: false
@@ -190,13 +185,12 @@ describe('posts/[slug] load — slug fallback chain', () => {
 			slug: 'translated',
 			translationOrigin: 'ai',
 			writingOrigin: null,
-			visualOrigin: null,
 			aiHelp: null,
 			translatedFromPostId: 'post-source'
 		};
 		state.selectResults = [
 			[translated],
-			[{ writingOrigin: 'mostly_ai', visualOrigin: 'none', aiHelp: null }],
+			[{ writingOrigin: 'mostly_ai', aiHelp: null }],
 			[{ lang: 'en', slug: 'translated' }]
 		];
 
@@ -206,7 +200,6 @@ describe('posts/[slug] load — slug fallback chain', () => {
 
 		expect(data.provenance).toEqual({
 			writingOrigin: 'mostly_ai',
-			visualOrigin: 'none',
 			aiHelp: null,
 			translationOrigin: 'ai',
 			isTranslation: true
@@ -228,13 +221,12 @@ describe('posts/[slug] load — slug fallback chain', () => {
 			slug: 'translated',
 			translationOrigin: 'ai',
 			writingOrigin: 'assist',
-			visualOrigin: 'none',
 			aiHelp: null,
 			translatedFromPostId: 'post-source'
 		};
 		state.selectResults = [
 			[translated],
-			[{ writingOrigin: 'assist', visualOrigin: 'none', aiHelp: ['outlining'] }],
+			[{ writingOrigin: 'assist', aiHelp: ['outlining'] }],
 			[{ lang: 'en', slug: 'translated' }]
 		];
 
@@ -242,7 +234,6 @@ describe('posts/[slug] load — slug fallback chain', () => {
 
 		expect(data.provenance).toEqual({
 			writingOrigin: 'assist',
-			visualOrigin: 'none',
 			aiHelp: ['outlining'],
 			translationOrigin: 'ai',
 			isTranslation: true
@@ -257,7 +248,6 @@ describe('posts/[slug] load — slug fallback chain', () => {
 			slug: 'translated',
 			translationOrigin: 'ai',
 			writingOrigin: 'assist',
-			visualOrigin: 'all',
 			aiHelp: ['edits'],
 			translatedFromPostId: 'post-source'
 		};
@@ -267,7 +257,6 @@ describe('posts/[slug] load — slug fallback chain', () => {
 
 		expect(data.provenance).toEqual({
 			writingOrigin: 'assist',
-			visualOrigin: 'all',
 			aiHelp: ['edits'],
 			translationOrigin: 'ai',
 			isTranslation: true
@@ -282,7 +271,6 @@ describe('posts/[slug] load — slug fallback chain', () => {
 			slug: 'translated',
 			translationOrigin: 'ai',
 			writingOrigin: null,
-			visualOrigin: null,
 			aiHelp: null,
 			translatedFromPostId: 'post-source'
 		};
@@ -292,7 +280,6 @@ describe('posts/[slug] load — slug fallback chain', () => {
 
 		expect(data.provenance).toEqual({
 			writingOrigin: null,
-			visualOrigin: null,
 			aiHelp: null,
 			translationOrigin: 'ai',
 			isTranslation: true

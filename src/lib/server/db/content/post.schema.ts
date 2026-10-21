@@ -55,10 +55,11 @@ export const posts = pgTable(
 			onDelete: 'set null'
 		}),
 		translationOrigin: text('translation_origin'),
-		// AI provenance (three orthogonal axes). Nullable = the author chose
-		// not to disclose; null is never treated as "none".
+		// AI provenance (two axes: how much of the *writing* was AI, and which
+		// parts it helped with). Image-level AI claims live on the asset in the
+		// media pipeline, not on the article. Nullable = the author chose not to
+		// disclose; null is never treated as "none".
 		writingOrigin: text('writing_origin'),
-		visualOrigin: text('visual_origin'),
 		aiHelp: text('ai_help').array(),
 		provenanceSource: text('provenance_source'),
 		provenanceUpdatedAt: timestamp('provenance_updated_at', { withTimezone: true }),
@@ -89,7 +90,6 @@ export const posts = pgTable(
 			'posts_writing_origin_check',
 			sql`${table.writingOrigin} in ('none', 'assist', 'mostly_ai', 'ai_full')`
 		),
-		check('posts_visual_origin_check', sql`${table.visualOrigin} in ('none', 'some', 'all')`),
 		check(
 			'posts_provenance_source_check',
 			sql`${table.provenanceSource} in ('author', 'c2pa', 'import')`

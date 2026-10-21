@@ -54,8 +54,8 @@ test.beforeAll(() => {
 	);
 	psql(
 		[
-			`insert into posts (id, slug, title, content, lang, status, published_at, category_id, translation_group, translated_from_post_id, translation_origin, writing_origin, visual_origin, ai_help) values`,
-			`('${EN_ID}', '${SLUG_MAIN}', '${TITLE_EN}', 'Hello **world** from P3-a.', 'en', 'published', now() - interval '2 days', '${CATEGORY_ID}', '${GROUP_MAIN}', null, null, 'mostly_ai', 'some', ARRAY['ideas', 'wording'])`,
+			`insert into posts (id, slug, title, content, lang, status, published_at, category_id, translation_group, translated_from_post_id, translation_origin, writing_origin, ai_help) values`,
+			`('${EN_ID}', '${SLUG_MAIN}', '${TITLE_EN}', 'Hello **world** from P3-a.', 'en', 'published', now() - interval '2 days', '${CATEGORY_ID}', '${GROUP_MAIN}', null, null, 'mostly_ai', ARRAY['ideas', 'wording'])`,
 			`;`,
 			`insert into posts (id, slug, title, content, lang, status, published_at, category_id, translation_group, translated_from_post_id, translation_origin) values`,
 			`('${ZH_ID}', '${SLUG_MAIN}', '${TITLE_ZH}', '中文正文段落。', 'zh-cn', 'published', now() - interval '1 day', '${CATEGORY_ID}', '${GROUP_MAIN}', '${EN_ID}', 'human')`,
@@ -254,7 +254,10 @@ test.describe('P3-a routing nails', () => {
 		await expect(trigger).toBeVisible();
 		await trigger.hover();
 		await expect(page.getByTestId('post-ai-card')).toContainText('Mostly AI');
-		await expect(page.getByTestId('post-ai-card')).toContainText('AI-assisted visuals');
+		// The visual axis was removed (ledger §30): the card shows the writing
+		// claim and the help detail only — asserting a visuals row would pin a
+		// retired field.
+		await expect(page.getByTestId('post-ai-card')).not.toContainText('visuals');
 		await expect(page.getByTestId('post-ai-card')).toContainText('ideas, wording');
 	});
 

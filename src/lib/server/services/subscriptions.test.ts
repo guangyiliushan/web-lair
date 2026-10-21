@@ -39,7 +39,6 @@ import {
 	discardPendingToken,
 	isSubscriptionLang,
 	isSubscriptionToken,
-	newSubscriptionToken,
 	normalizeEmail,
 	requestSubscription,
 	subscribeAddressKey,
@@ -47,7 +46,14 @@ import {
 	subscriptionTokenTtlMs,
 	unsubscribe
 } from './subscriptions';
-import { hashSubscriptionToken } from './subscription-token';
+import {
+	deriveSubscriptionToken,
+	hashSubscriptionToken,
+	newSubscriptionNonce
+} from './subscription-token';
+
+/** F-13: derivation secret used by the service under test. */
+const TOKEN_SECRET = Buffer.alloc(32, 5).toString('base64');
 
 /** A distinct object so a suppression write outside the transaction fails. */
 const txStub = {
@@ -74,11 +80,18 @@ describe('subscription input contract', () => {
 		expect(normalizeEmail(`${local}@example.com`)).toBeNull();
 	});
 
-	it('mints 32-byte base64url tokens that satisfy the token guard', () => {
-		const token = newSubscriptionToken();
+	it('derives 43-character tokens from a random nonce', () => {
+		const nonce = newSubscriptionNonce();
+		const key = Buffer.from(TOKEN_SECRET, 'base64');
+		const token = deriveSubscriptionToken(nonce, key);
+		expect(nonce).toHaveLength(43);
 		expect(token).toHaveLength(43);
 		expect(isSubscriptionToken(token)).toBe(true);
-		expect(newSubscriptionToken()).not.toBe(token);
+		expect(deriveSubscriptionToken(newSubscriptionNonce(), key)).not.toBe(token);
+		// Deterministic for a given (nonce, key): that is what lets the service
+		// re-derive the mailed link instead of storing it.
+		expect(deriveSubscriptionToken(nonce, key)).toBe(token);
+		expect(deriveSubscriptionToken(nonce, Buffer.alloc(32, 6))).not.toBe(token);
 	});
 
 	it('rejects tokens that are not 43 base64url characters', () => {
@@ -149,6 +162,7 @@ beforeEach(() => {
 	suppressionMocks.liftUnsubscribedSuppression.mockReset();
 	suppressionMocks.liftUnsubscribedSuppression.mockResolvedValue(undefined);
 	delete envStub.SUBSCRIBE_HMAC_KEY;
+	envStub.SUBSCRIBE_TOKEN_SECRET = TOKEN_SECRET;
 });
 
 describe('subscription transitions (stubbed db)', () => {
@@ -228,31 +242,45 @@ describe('subscription transitions (stubbed db)', () => {
 
 	it('a lost resubmit CAS returns the winner token without sending', async () => {
 		const stale = new Date(Date.now() - 60 * 60 * 1000);
+		const winnerNonce = 'w'.repeat(43);
 		dbStub.select
 			.mockReturnValueOnce(
-				selectRows([{ id: 1, status: 'pending', token: 'old', updatedAt: stale }])
+				selectRows([
+					{
+						id: 1,
+						status: 'pending',
+						tokenNonce: 'o'.repeat(43),
+						tokenHash: 'a'.repeat(64),
+						updatedAt: stale
+					}
+				])
 			)
-			.mockReturnValueOnce(selectRows([{ id: 1, status: 'pending', token: 'old' }]));
+			.mockReturnValueOnce(
+				selectRows([
+					{
+						id: 1,
+						status: 'pending',
+						tokenNonce: winnerNonce,
+						tokenHash: 'b'.repeat(64)
+					}
+				])
+			);
 		const capture = updateWhereCapture();
 		dbStub.update.mockReturnValueOnce(capture.chain);
 		await expect(
 			requestSubscription({ email: 'a@b.c', lang: 'en', source: 'footer' })
-		).resolves.toEqual({ kind: 'pending', token: 'old', send: false });
+		).resolves.toEqual({
+			kind: 'pending',
+			token: deriveSubscriptionToken(winnerNonce, Buffer.from(TOKEN_SECRET, 'base64')),
+			send: false
+		});
 
-		// The rotation must be hash-first with a plaintext fallback; a CAS that
-		// only compares `token` would break once that column is dropped.
+		// The CAS compares the token hash — the only credential column left;
+		// F-13 removed the plaintext column this used to also match.
 		const guard = capture.wheres[0] as { op: string; parts: unknown[] };
 		expect(guard.op).toBe('and');
-		const credential = guard.parts.find(
-			(part): part is { op: string; parts: unknown[] } =>
-				typeof part === 'object' && part !== null && (part as { op?: string }).op === 'or'
-		);
-		expect(credential).toBeDefined();
-		expect(credential!.parts).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({ op: 'eq', value: 'old' }),
-				expect.objectContaining({ op: 'eq', value: hashSubscriptionToken('old') })
-			])
+		expect(guard.parts).toEqual(
+			expect.arrayContaining([expect.objectContaining({ op: 'eq', value: 'a'.repeat(64) })])
 		);
 	});
 
@@ -280,7 +308,7 @@ describe('subscription transitions (stubbed db)', () => {
 	});
 });
 
-describe('token hashes (E2-3)', () => {
+describe('token lookups (F-13)', () => {
 	const HASH_TOKEN = 'a'.repeat(43);
 
 	it('hashes deterministically to 64 hex characters', async () => {
@@ -291,67 +319,33 @@ describe('token hashes (E2-3)', () => {
 		expect(hashSubscriptionToken('b'.repeat(43))).not.toBe(one);
 	});
 
-	it('reads by hash first', async () => {
+	it('reads by hash only and never falls back to a plaintext column', async () => {
 		const capture = selectCapture([
 			{
 				id: 's1',
 				status: 'pending',
 				email: 'a@b.c',
-				token: HASH_TOKEN,
-				tokenHash: 'f'.repeat(64),
+				tokenNonce: 'n'.repeat(43),
+				tokenHash: hashSubscriptionToken(HASH_TOKEN),
 				updatedAt: new Date()
 			}
 		]);
 		dbStub.select.mockReturnValueOnce(capture.chain);
 		expect(await subscriptionByToken(HASH_TOKEN)).toMatchObject({ id: 's1', status: 'pending' });
 		expect(dbStub.select).toHaveBeenCalledTimes(1);
-		// The first read must target token_hash, not the plaintext column.
 		expect(capture.wheres[0]).toMatchObject({
 			op: 'eq',
-			value: expect.stringMatching(/^[0-9a-f]{64}$/)
+			value: hashSubscriptionToken(HASH_TOKEN)
 		});
 	});
 
-	it('falls back to the plaintext column and backfills the hash for legacy rows', async () => {
-		const issuedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
-		const hashMiss = selectCapture([]);
-		const legacyHit = selectCapture([
-			{
-				id: 's1',
-				status: 'pending',
-				email: 'a@b.c',
-				token: HASH_TOKEN,
-				tokenHash: null,
-				updatedAt: issuedAt
-			}
-		]);
-		dbStub.select.mockReturnValueOnce(hashMiss.chain).mockReturnValueOnce(legacyHit.chain);
-		const capture = updateWhereCapture();
-		dbStub.update.mockReturnValueOnce(capture.chain);
-		expect(await subscriptionByToken(HASH_TOKEN)).toMatchObject({ id: 's1', status: 'pending' });
-		expect(dbStub.update).toHaveBeenCalledTimes(1);
-
-		// First read by hash, second by plaintext (only for legacy rows).
-		expect(hashMiss.wheres[0]).toMatchObject({
-			op: 'eq',
-			value: expect.stringMatching(/^[0-9a-f]{64}$/)
-		});
-		expect(legacyHit.wheres[0]).toMatchObject({ op: 'eq', value: HASH_TOKEN });
-
-		// The backfill writes the hash and keeps the TTL anchor; its WHERE
-		// guards on id + token_hash IS NULL + plaintext token.
-		expect(capture.sets[0]).toMatchObject({
-			tokenHash: expect.stringMatching(/^[0-9a-f]{64}$/),
-			updatedAt: issuedAt
-		});
-		const guard = capture.wheres[0] as { op: string; parts: unknown[] };
-		expect(guard.op).toBe('and');
-		expect(guard.parts).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({ op: 'isNull' }),
-				expect.objectContaining({ op: 'eq', value: HASH_TOKEN })
-			])
-		);
+	it('rejects an unknown token with a single failing lookup', async () => {
+		dbStub.select.mockReturnValueOnce(selectRows([]));
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		expect(await subscriptionByToken(HASH_TOKEN)).toBeNull();
+		expect(dbStub.select).toHaveBeenCalledTimes(1);
+		expect(dbStub.update).not.toHaveBeenCalled();
+		warn.mockRestore();
 	});
 });
 
@@ -433,7 +427,8 @@ describe('confirmation token TTL', () => {
 				{
 					id: 1,
 					status: 'pending',
-					token: 'old',
+					tokenNonce: 'p'.repeat(43),
+					tokenHash: 'c'.repeat(64),
 					lang: 'en',
 					source: 'footer',
 					verifiedAt: null,

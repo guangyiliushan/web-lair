@@ -49,7 +49,6 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			translationGroup: posts.translationGroup,
 			translationOrigin: posts.translationOrigin,
 			writingOrigin: posts.writingOrigin,
-			visualOrigin: posts.visualOrigin,
 			aiHelp: posts.aiHelp,
 			translatedFromPostId: posts.translatedFromPostId
 		})
@@ -109,8 +108,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const localeOrder = locales as readonly string[];
 	const sourceId = row.translatedFromPostId;
 	const needsSource =
-		Boolean(sourceId) &&
-		(row.writingOrigin == null || row.visualOrigin == null || row.aiHelp == null);
+		Boolean(sourceId) && (row.writingOrigin == null || row.aiHelp == null);
 	// The source lookup depends only on `row`, so run it alongside the hreflang
 	// query instead of adding a second sequential round trip on translated
 	// pages. Visibility is part of the lookup: provenance is public disclosure,
@@ -120,7 +118,6 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			? db
 					.select({
 						writingOrigin: posts.writingOrigin,
-						visualOrigin: posts.visualOrigin,
 						aiHelp: posts.aiHelp
 					})
 					.from(posts)
@@ -167,24 +164,22 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		isSource: sibling.id === sourceRowId
 	}));
 
-	// Translations inherit the source row's writing/visual disclosure: the
-	// translated text is not a new claim about who wrote the original. The
-	// translation origin stays on this row (it describes this rendition); it
-	// is meaningless on a source row, so the public payload omits it there.
+	// Translations inherit the source row's writing disclosure: the translated
+	// text is not a new claim about who wrote the original. The translation
+	// origin stays on this row (it describes this rendition); it is meaningless
+	// on a source row, so the public payload omits it there.
 	const provenance = {
 		writingOrigin: row.writingOrigin,
-		visualOrigin: row.visualOrigin,
 		aiHelp: row.aiHelp?.length ? row.aiHelp : null,
 		translationOrigin: sourceId ? row.translationOrigin : null,
 		isTranslation: Boolean(sourceId)
 	};
 	if (needsSource) {
 		const source = sourceRows[0] as
-			| { writingOrigin: string | null; visualOrigin: string | null; aiHelp: string[] | null }
+			| { writingOrigin: string | null; aiHelp: string[] | null }
 			| undefined;
 		const writingInherited = provenance.writingOrigin == null;
 		provenance.writingOrigin ??= source?.writingOrigin ?? null;
-		provenance.visualOrigin ??= source?.visualOrigin ?? null;
 		// Only inherit the detail when the effective writing claim is AI-assisted;
 		// an explicit "none" must not receive the source's "where AI helped".
 		if (provenance.aiHelp == null && (writingInherited || provenance.writingOrigin === 'assist')) {

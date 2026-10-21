@@ -47,7 +47,9 @@ $EDITOR .env      # see §1.1 for the required keys
 | `DATA_DIR`                                            | absolute host path, e.g. `/srv/web-lair/data`                                                                     |
 | `MAIL_*`                                              | see §1.2                                                                                                          |
 | `SUBSCRIBE_TOKEN_TTL_DAYS` / `SUBSCRIBE_HMAC_KEY`     | see §1.2 (confirmation-link lifetime + per-address cap key)                                                       |
-| `SUPPRESSION_HMAC_KEY` / `MAIL_EVENTS_HMAC_KEY`       | see §8 (suppression list hash key + bounce/complaint webhook key)                                                 |
+| `SUBSCRIBE_TOKEN_SECRET`                              | see §1.2 (derives the mailed confirmation token; required before the first start)                                 |
+| `SUPPRESSION_HMAC_KEY` / `MAIL_EVENTS_HMAC_KEY`       | see §8 (suppression list hash master key + bounce/complaint webhook key)                                          |
+| `SUPPRESSION_HMAC_KEY_VERSION`                        | see §8 (active suppression key version; default 1, gated by `db:verify-suppression-version`)                       |
 | `OWNER_EMAIL` / `OWNER_PASSWORD`                      | first owner seed (`pnpm db:seed-owner` from the host, dev only)                                                   |
 | `DEADMAN_PING_URL`                                    | healthchecks.io **liveness** check (5 min); unset ⇒ the dead-man timer skips (no alarm)                           |
 | `JOBS_HEARTBEAT_URL`                                  | per-tick drain ping (Kuma push or a second healthchecks check)                                                    |
@@ -56,8 +58,10 @@ $EDITOR .env      # see §1.1 for the required keys
 
 `SUPPRESSION_HMAC_KEY` is mandatory before the first start (production boot
 refuses to start without it; dev needs it for subscribe/unsubscribe). Generate
-with `openssl rand -base64 32` and back it up. `MAIL_EVENTS_HMAC_KEY` is only
-needed when a bounce/complaint relay is configured.
+with `openssl rand -base64 32` and back it up. `SUBSCRIBE_TOKEN_SECRET` is
+mandatory too (F-13): the mailed token is derived from the stored nonce, so a
+missing secret would leave the app unable to mint a link. `MAIL_EVENTS_HMAC_KEY`
+is only needed when a bounce/complaint relay is configured.
 
 Create the data directory with the image's uid **before** the first start —
 Docker would otherwise create it as root and the `node` user (uid 1000) could
@@ -315,7 +319,7 @@ RESTORED=$(deploy/compose-prod.sh exec -T db sh -c \
 # Backfills + verification run inside the image (host has no pnpm/tsx).
 deploy/compose-prod.sh run --rm app node scripts/backfill-email-consent.ts --apply
 deploy/compose-prod.sh run --rm app node scripts/backfill-suppressions.ts --apply
-deploy/compose-prod.sh run --rm app node scripts/backfill-subscription-token-hashes.ts --apply
+deploy/compose-prod.sh run --rm app node scripts/verify-suppression-version.ts
 deploy/compose-prod.sh run --rm app node scripts/ensure-job-schedules.ts
 deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
 deploy/compose-prod.sh up -d
@@ -527,9 +531,9 @@ without cookies. Run this from the box (compose binds the app on the internal
 network; use `deploy/compose-prod.sh exec app` or an equivalent local URL):
 
 ```bash
-# Replace with a real token from a subscription row (it is a bearer token).
-TOKEN=$(deploy/compose-prod.sh exec -T db sh -c \
-  "psql -U \$POSTGRES_USER -d \$POSTGRES_DB -tAc \"select token from subscriptions where status = 'pending' limit 1\"")
+# F-13: the token is derived from the stored nonce, so print it instead of
+# reading a (no longer existing) plaintext column.
+TOKEN=$(deploy/compose-prod.sh run --rm app node scripts/print-subscribe-token.ts reader@example.com)
 curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   --data 'List-Unsubscribe=One-Click' \
@@ -606,18 +610,48 @@ deploy/compose-prod.sh run --rm app node scripts/backfill-suppressions.ts       
 deploy/compose-prod.sh run --rm app node scripts/backfill-suppressions.ts --apply
 ```
 
-**Token hashes (E2-3).** New writes store both `token` (dual-read window) and
-`token_hash = sha256(token)`. Reads try the hash first, fall back to the
-plaintext column for legacy rows and backfill the hash on first hit without
-touching `updated_at` (the TTL anchor). Backfill everything once after restore:
+**Subscription tokens (F-13).** Rows store `token_nonce` (random 32B, 43 chars)
+and `token_hash = sha256(token)`. The mailed token is
+`HMAC-SHA256(SUBSCRIBE_TOKEN_SECRET, 'wl:subscribe:token:v1:' || nonce)`, so the
+database holds no usable link and the service can still re-derive the exact URL
+it mailed (resend cooldown, failed-send rollback). There is nothing to backfill:
+every row created since this baseline carries both columns, and the verification
+path is a hash lookup.
+
+To exercise a confirmation/unsubscribe link on a box:
 
 ```bash
-deploy/compose-prod.sh run --rm app node scripts/backfill-subscription-token-hashes.ts   # dry-run
-deploy/compose-prod.sh run --rm app node scripts/backfill-subscription-token-hashes.ts --apply
+deploy/compose-prod.sh run --rm app node scripts/print-subscribe-token.ts <email>
 ```
 
-The plaintext `token` column is scheduled for removal in a later window after
-one release of dual-read.
+Rotating `SUBSCRIBE_TOKEN_SECRET` invalidates every outstanding confirmation
+link (the nonce stays, but the derivation changes); with the 24-72h TTL that is
+a bounded loss — pending readers just request a new mail. Rotate it together
+with a mail-template check, never mid-broadcast.
+
+**Suppression key versions (F-14).** `email_suppressions.key_version` records
+which derivation produced a row's hash. Version 1 is the master key itself
+(`HMAC(SUPPRESSION_HMAC_KEY, email)`); v≥2 derive their key from the same master
+(`HMAC(master, 'wl:suppression:key:vN')`), so the box keeps one secret and every
+older row stays verifiable. Reads cover versions `1..SUPPRESSION_HMAC_KEY_VERSION`.
+
+Rotate (no downtime, no rehash — a hash cannot be rewritten without the address):
+
+```bash
+# 1. confirm the database is not already ahead of the env
+deploy/compose-prod.sh run --rm app node scripts/verify-suppression-version.ts
+# 2. bump the version (e.g. 1 -> 2) and restart
+sed -i 's/^SUPPRESSION_HMAC_KEY_VERSION=.*/SUPPRESSION_HMAC_KEY_VERSION="2"/' .env
+deploy/compose-prod.sh up -d app
+# 3. rows converge to v2 as each address is touched again
+```
+
+**Never set the version below `max(key_version)`**: rows on a newer version
+would fall outside the read range and an opted-out address would turn mailable.
+`scripts/verify-suppression-version.ts` (run in §2 before `up -d`) exits 1 on
+that mismatch. Replacing the *master* key is not a rotation — it makes v1 rows
+unreadable by construction; treat it as a data-loss event and keep the old key
+in the backup set if it must be retired.
 
 **Bounce / complaint webhook (E2-4).** `POST /api/mail/events` expects JSON
 `{ "email": "...", "reason": "bounced" | "complained" }` signed over

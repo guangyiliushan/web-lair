@@ -93,12 +93,20 @@ export async function validateScheduleInput(
 }
 
 export type CreateScheduleResult =
-	| { kind: 'created'; id: string }
+	| { kind: 'created'; id: string; enabledForJob: number }
 	| { kind: 'invalid'; message: string }
 	| { kind: 'unknown-job'; message: string }
 	| { kind: 'duplicate' };
 
-/** Create one schedule row. The job must resolve (registry or user file). */
+/**
+ * Create one schedule row. The job must resolve (registry or user file).
+ *
+ * Multiple schedules per job are a **supported** shape (the admin page groups
+ * rows by job and the duplicate copy only rejects an identical cron), but a
+ * second *enabled* row means the job runs on two cadences. `enabledForJob`
+ * reports how many siblings were already enabled so the UI can say so instead
+ * of letting the operator discover it in the run ledger.
+ */
 export async function createSchedule(input: {
 	db: ScheduleDb;
 	dataDir: string;
@@ -115,6 +123,11 @@ export async function createSchedule(input: {
 	// does not name - same cast the options registry uses (ledger §13.9).
 	const validation = await validateScheduleInput(input, input.db as unknown as PgTimeZoneExecutor);
 	if (!validation.ok) return { kind: 'invalid', message: validation.message };
+	// Advisory read, not a constraint: the multi-cadence case stays legal.
+	const enabledSiblings = await input.db
+		.select({ id: jobSchedules.id })
+		.from(jobSchedules)
+		.where(and(eq(jobSchedules.job, job), eq(jobSchedules.isEnabled, true)));
 	try {
 		return await input.db.transaction(async (tx) => {
 			const [row] = await tx
@@ -132,7 +145,7 @@ export async function createSchedule(input: {
 				actorId: input.actorId,
 				payload: { id: row.id, job, cron_expr: validation.cronExpr, tz: validation.tz }
 			});
-			return { kind: 'created' as const, id: row.id };
+			return { kind: 'created' as const, id: row.id, enabledForJob: enabledSiblings.length };
 		});
 	} catch (error) {
 		if (pgErrorCode(error) === '23505') return { kind: 'duplicate' };

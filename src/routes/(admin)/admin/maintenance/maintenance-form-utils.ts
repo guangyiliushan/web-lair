@@ -63,6 +63,7 @@ export interface MaintenanceFlashForm {
 	scheduleAction?: string;
 	enabled?: boolean;
 	watermarkReset?: boolean;
+	scheduleSameJob?: number;
 }
 
 /** Flash copy for the maintenance list page. Pure, so the wording and the
@@ -83,7 +84,11 @@ export function maintenanceFlash(
 		const action = form.scheduleAction;
 		const text =
 			action === 'create'
-				? m.admin_maintenance_flash_added()
+				? `${m.admin_maintenance_flash_added()}${
+						form.scheduleSameJob && form.scheduleSameJob > 0
+							? ` ${m.admin_maintenance_warn_same_job({ count: String(form.scheduleSameJob) })}`
+							: ''
+					}`
 				: action === 'delete'
 					? m.admin_maintenance_flash_deleted()
 					: action === 'toggle'

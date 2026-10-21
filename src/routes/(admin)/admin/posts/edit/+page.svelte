@@ -44,7 +44,6 @@
 	let summary = $state('');
 	let tags = $state('');
 	let writingOrigin = $state('');
-	let visualOrigin = $state('');
 	let aiHelp = $state('');
 	let contentMarkdown = $state('');
 	let lang = $state<string>(untrack(() => data.defaultLang));
@@ -116,7 +115,6 @@
 			summary,
 			tags,
 			writingOrigin,
-			visualOrigin,
 			aiHelp,
 			contentMarkdown
 		]);
@@ -143,7 +141,6 @@
 		tags = draft?.tags ?? post?.tags ?? '';
 		const provenance = draft?.provenance ?? post?.provenance;
 		writingOrigin = provenance?.writingOrigin ?? '';
-		visualOrigin = provenance?.visualOrigin ?? '';
 		aiHelp = (provenance?.aiHelp ?? []).join(', ');
 		contentMarkdown = draft?.content ?? post?.content ?? '';
 		lang = post?.lang ?? data.defaultLang;
@@ -221,7 +218,6 @@
 			fd.set('summary', summary);
 			fd.set('tags', tags);
 			fd.set('writingOrigin', writingOrigin);
-			fd.set('visualOrigin', visualOrigin);
 			fd.set('aiHelp', aiHelp);
 			fd.set('content', contentMarkdown);
 			if (postId) fd.set('id', postId);
@@ -809,21 +805,6 @@
 						<option value="assist">{m.admin_posts_edit_ai_assist()}</option>
 						<option value="mostly_ai">{m.admin_posts_edit_ai_mostly()}</option>
 						<option value="ai_full">{m.admin_posts_edit_ai_full()}</option>
-					</select>
-
-					<label for="settings-visual-origin" class="text-sm font-medium">
-						{m.admin_posts_edit_ai_visual()}
-					</label>
-					<select
-						id="settings-visual-origin"
-						bind:value={visualOrigin}
-						disabled={isTranslation}
-						class="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						<option value="">{m.admin_posts_edit_ai_undisclosed()}</option>
-						<option value="none">{m.admin_posts_edit_ai_visual_none()}</option>
-						<option value="some">{m.admin_posts_edit_ai_visual_some()}</option>
-						<option value="all">{m.admin_posts_edit_ai_visual_all()}</option>
 					</select>
 
 					<label for="settings-ai-help" class="text-sm font-medium">

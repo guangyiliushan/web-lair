@@ -2,7 +2,12 @@ import { createHash, createHmac } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
 import { psql, valkeyDel } from './support';
-import { TEST_MAIL_EVENTS_HMAC_KEY, TEST_SUPPRESSION_HMAC_KEY } from './test-keys';
+import {
+	TEST_MAIL_EVENTS_HMAC_KEY,
+	TEST_SUBSCRIBE_TOKEN_SECRET,
+	TEST_SUPPRESSION_HMAC_KEY
+} from './test-keys';
+import { deriveSubscriptionToken } from '../src/lib/server/services/subscription-token';
 
 /**
  * Deploy batch D-2 acceptance: the double opt-in subscription chain on the
@@ -26,6 +31,16 @@ function trackSuppression(email: string): string {
 	const hash = emailHash(email);
 	if (!SUPPRESSION_HASHES.includes(hash)) SUPPRESSION_HASHES.push(hash);
 	return hash;
+}
+
+/**
+ * Re-derive the mailed token from the stored nonce (F-13). The plaintext
+ * column is gone; this is the same derivation the service uses, so the spec
+ * exercises the real link instead of a test-only side channel.
+ */
+function tokenFor(email: string): string {
+	const nonce = psql(`select token_nonce from subscriptions where email = '${email}'`);
+	return deriveSubscriptionToken(nonce, Buffer.from(TEST_SUBSCRIBE_TOKEN_SECRET, 'base64'));
 }
 
 function cleanupDb(): void {
@@ -64,7 +79,7 @@ test.describe('subscription double opt-in', () => {
 		await page.getByRole('button', { name: '订阅', exact: true }).click();
 		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
 
-		const token = psql(`select token from subscriptions where email = '${MARKER}'`);
+		const token = tokenFor(MARKER);
 		expect(token).toHaveLength(43);
 		expect(psql(`select status from subscriptions where email = '${MARKER}'`)).toBe('pending');
 		expect(psql(`select consent_version from subscriptions where email = '${MARKER}'`)).toBe(
@@ -100,7 +115,7 @@ test.describe('subscription double opt-in', () => {
 		await page.getByRole('button', { name: '订阅', exact: true }).click();
 		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
 		expect(psql(`select status from subscriptions where email = '${MARKER}'`)).toBe('subscribed');
-		expect(psql(`select token from subscriptions where email = '${MARKER}'`)).toBe(token);
+		expect(tokenFor(MARKER)).toBe(token);
 		expect(psql(`select verified_at from subscriptions where email = '${MARKER}'`)).toBe(
 			verifiedAt
 		);
@@ -148,7 +163,7 @@ test.describe('subscription double opt-in', () => {
 		await page.getByRole('button', { name: '订阅', exact: true }).click();
 		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
 
-		const token = psql(`select token from subscriptions where email = '${pending}'`);
+		const token = tokenFor(pending);
 		expect(token).toHaveLength(43);
 
 		await page.goto(`/zh-cn/unsubscribe?token=${token}`);
@@ -185,7 +200,7 @@ test.describe('subscription double opt-in', () => {
 		await page.getByRole('button', { name: '订阅', exact: true }).click();
 		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
 
-		const token = psql(`select token from subscriptions where email = '${email}'`);
+		const token = tokenFor(email);
 		expect(token).toHaveLength(43);
 		psql(
 			`update subscriptions set updated_at = now() - interval '8 days' where email = '${email}'`
@@ -208,7 +223,7 @@ test.describe('subscription double opt-in', () => {
 		await page.getByLabel('邮箱').fill(email);
 		await page.getByRole('button', { name: '订阅', exact: true }).click();
 		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
-		const fresh = psql(`select token from subscriptions where email = '${email}'`);
+		const fresh = tokenFor(email);
 		expect(fresh).toHaveLength(43);
 		expect(fresh).not.toBe(token);
 		expect(
@@ -229,7 +244,7 @@ test.describe('subscription double opt-in', () => {
 		await page.getByRole('button', { name: '订阅', exact: true }).click();
 		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
 
-		const token = psql(`select token from subscriptions where email = '${email}'`);
+		const token = tokenFor(email);
 		await page.goto(`/zh-cn/subscribe/confirm?token=${token}`);
 		await page.getByRole('button', { name: '确认', exact: true }).click();
 		await expect(page.getByText('订阅已确认')).toBeVisible({ timeout: 15_000 });
@@ -260,7 +275,7 @@ test.describe('subscription double opt-in', () => {
 		await page.getByLabel('邮箱').fill(email);
 		await page.getByRole('button', { name: '订阅', exact: true }).click();
 		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
-		const firstToken = psql(`select token from subscriptions where email = '${email}'`);
+		const firstToken = tokenFor(email);
 
 		await page.goto(`/zh-cn/unsubscribe?token=${firstToken}`);
 		await page.getByRole('button', { name: '退订', exact: true }).click();
@@ -275,7 +290,7 @@ test.describe('subscription double opt-in', () => {
 		await page.getByLabel('邮箱').fill(email);
 		await page.getByRole('button', { name: '订阅', exact: true }).click();
 		await expect(page.getByText('请查收邮件')).toBeVisible({ timeout: 15_000 });
-		const fresh = psql(`select token from subscriptions where email = '${email}'`);
+		const fresh = tokenFor(email);
 		expect(fresh).toHaveLength(43);
 		await page.goto(`/zh-cn/subscribe/confirm?token=${fresh}`);
 		await page.getByRole('button', { name: '确认', exact: true }).click();
@@ -364,11 +379,13 @@ test.describe('subscription double opt-in', () => {
 		const email = `e2e-sub-hard-lift-${Date.now()}@example.com`;
 		const hash = trackSuppression(email);
 		const token = 'z'.repeat(43);
+		const nonce = createHash('sha256').update(email).digest('base64url');
+		const tokenHash = createHash('sha256').update(token).digest('hex');
 		psql(
 			`insert into email_suppressions (email_hash, reason, source) values ('${hash}', 'complained', 'e2e')`
 		);
 		psql(
-			`insert into subscriptions (email, status, token, lang, source) values ('${email}', 'pending', '${token}', 'zh-cn', 'e2e')`
+			`insert into subscriptions (email, status, token_nonce, token_hash, lang, source) values ('${email}', 'pending', '${nonce}', '${tokenHash}', 'zh-cn', 'e2e')`
 		);
 
 		await page.goto(`/zh-cn/subscribe/confirm?token=${token}`);
@@ -383,8 +400,10 @@ test.describe('subscription double opt-in', () => {
 	test('one-click CSRF exemption is limited to POST with a well-formed token', async ({ page }) => {
 		const email = `e2e-sub-oneclick-csrf-${Date.now()}@example.com`;
 		const token = 'y'.repeat(43);
+		const nonce = createHash('sha256').update(email).digest('base64url');
+		const tokenHash = createHash('sha256').update(token).digest('hex');
 		psql(
-			`insert into subscriptions (email, status, token, lang, source) values ('${email}', 'pending', '${token}', 'zh-cn', 'e2e')`
+			`insert into subscriptions (email, status, token_nonce, token_hash, lang, source) values ('${email}', 'pending', '${nonce}', '${tokenHash}', 'zh-cn', 'e2e')`
 		);
 
 		const malformed = await page.request.post('/api/unsubscribe/one-click?token=short', {

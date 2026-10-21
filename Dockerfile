@@ -49,8 +49,9 @@ COPY --from=build /app/scripts/migrate.ts ./scripts/migrate.ts
 COPY --from=build /app/scripts/verify-baseline.ts ./scripts/verify-baseline.ts
 COPY --from=build /app/scripts/ensure-job-schedules.ts ./scripts/ensure-job-schedules.ts
 COPY --from=build /app/scripts/backfill-email-consent.ts ./scripts/backfill-email-consent.ts
-COPY --from=build /app/scripts/backfill-subscription-token-hashes.ts ./scripts/backfill-subscription-token-hashes.ts
 COPY --from=build /app/scripts/backfill-suppressions.ts ./scripts/backfill-suppressions.ts
+COPY --from=build /app/scripts/verify-suppression-version.ts ./scripts/verify-suppression-version.ts
+COPY --from=build /app/scripts/print-subscribe-token.ts ./scripts/print-subscribe-token.ts
 # Drain executes `node jobs/drain.ts`; that graph uses only relative .ts imports,
 # so ship the jobs tree and the server modules it pulls in.
 COPY --from=build /app/jobs ./jobs

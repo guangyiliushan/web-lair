@@ -83,7 +83,6 @@ export const load: PageServerLoad = async ({ url }) => {
 			translatedFromPostId: row.translatedFromPostId,
 			provenance: {
 				writingOrigin: row.writingOrigin,
-				visualOrigin: row.visualOrigin,
 				aiHelp: row.aiHelp ?? []
 			}
 		};
@@ -112,7 +111,6 @@ export const load: PageServerLoad = async ({ url }) => {
 					slug: posts.slug,
 					lang: posts.lang,
 					writingOrigin: posts.writingOrigin,
-					visualOrigin: posts.visualOrigin,
 					aiHelp: posts.aiHelp
 				})
 				.from(posts)
@@ -124,7 +122,6 @@ export const load: PageServerLoad = async ({ url }) => {
 				// inherit, not the translation row's empty columns.
 				post.provenance = {
 					writingOrigin: post.provenance.writingOrigin ?? sourceRow.writingOrigin,
-					visualOrigin: post.provenance.visualOrigin ?? sourceRow.visualOrigin,
 					aiHelp: post.provenance.aiHelp.length ? post.provenance.aiHelp : (sourceRow.aiHelp ?? [])
 				};
 			}
@@ -198,7 +195,6 @@ export const actions: Actions = {
 				content: str(form, 'content'),
 				provenance: normalizeProvenance({
 					writingOrigin: str(form, 'writingOrigin') || null,
-					visualOrigin: str(form, 'visualOrigin') || null,
 					aiHelp: str(form, 'aiHelp')
 				})
 			},

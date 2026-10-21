@@ -23,21 +23,28 @@ export const subscriptions = pgTable(
 		 * rows created before the column existed can be marked `legacy`.
 		 */
 		consentVersion: text('consent_version'),
-		token: text('token').notNull(),
 		/**
-		 * SHA-256 of the current token (E2-3). The URL still carries the plaintext
-		 * token; the column exists so reads can stop touching `token` and the
-		 * plaintext column can be dropped in a later window. Nullable for rows
-		 * created before this column (backfilled by script / dual-read).
+		 * Random 32-byte nonce (base64url, 43 chars) for the current token (F-13).
+		 * The mailed token is `HMAC-SHA256(SUBSCRIBE_TOKEN_SECRET, nonce)`, so the
+		 * service can re-derive the link without storing a usable credential:
+		 * a database dump holds only the nonce (useless without the env secret)
+		 * and the SHA-256 lookup hash.
 		 */
-		tokenHash: text('token_hash'),
+		tokenNonce: text('token_nonce').notNull(),
+		/**
+		 * SHA-256 of the current derived token (E2-3, F-13). This is the only
+		 * lookup column for confirm/unsubscribe links; the plaintext `token`
+		 * column was dropped once the derived-token path landed.
+		 */
+		tokenHash: text('token_hash').notNull(),
 		verifiedAt: timestamp('verified_at', { withTimezone: true }),
 		unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true })
 	},
 	(table) => [
 		uniqueIndex('subscriptions_email_uniq').on(table.email),
-		uniqueIndex('subscriptions_token_uniq').on(table.token),
+		uniqueIndex('subscriptions_token_nonce_uniq').on(table.tokenNonce),
 		uniqueIndex('subscriptions_token_hash_uniq').on(table.tokenHash),
+		check('subscriptions_token_nonce_len_check', sql`char_length(${table.tokenNonce}) = 43`),
 		check(
 			'subscriptions_status_check',
 			sql`${table.status} in ('pending', 'subscribed', 'unsubscribed')`

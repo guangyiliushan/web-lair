@@ -56,7 +56,11 @@ function makeDb(state: FakeState) {
 		from: () => {
 			const terminal = {
 				orderBy: async () => state.selectQueue.shift() ?? [],
-				limit: async () => state.selectQueue.shift() ?? []
+				limit: async () => state.selectQueue.shift() ?? [],
+				// `await db.select(...).from(...).where(...)` is a valid terminal
+				// in drizzle (the builder is thenable); the fake must be too, or
+				// services that only need a count silently see `{}`.
+				then: (resolve: (rows: unknown[]) => void) => resolve(state.selectQueue.shift() ?? [])
 			};
 			return {
 				...terminal,
@@ -191,7 +195,7 @@ describe('createSchedule', () => {
 			tz: 'Etc/UTC',
 			actorId: 'admin-1'
 		});
-		expect(result).toEqual({ kind: 'created', id: 'sched-new' });
+		expect(result).toEqual({ kind: 'created', id: 'sched-new', enabledForJob: 0 });
 		expect(state.insertValues[0]).toMatchObject({
 			job: 'known',
 			cronExpr: '0 4 * * *',
@@ -204,6 +208,21 @@ describe('createSchedule', () => {
 			actorId: 'admin-1',
 			payload: { id: 'sched-new', job: 'known', cron_expr: '0 4 * * *', tz: 'Etc/UTC' }
 		});
+	});
+
+	it('reports how many schedules the job already had enabled (F-9)', async () => {
+		// Second cadence is legal; the service only surfaces the count so the
+		// admin flash can warn instead of the run ledger being the first clue.
+		state.selectQueue.push([{ id: 'sched-existing' }, { id: 'sched-existing-2' }]);
+		const result = await createSchedule({
+			db,
+			dataDir: '/data',
+			job: 'known',
+			cronExpr: '30 5 * * *',
+			tz: 'Etc/UTC',
+			actorId: 'admin-1'
+		});
+		expect(result).toEqual({ kind: 'created', id: 'sched-new', enabledForJob: 2 });
 	});
 
 	it('rejects unknown jobs before any validation or write', async () => {

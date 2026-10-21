@@ -85,6 +85,17 @@ describe('maintenanceFlash', () => {
 			maintenanceFlash({ scheduleChanged: true, scheduleAction: 'update', watermarkReset: false })
 		).toEqual({ kind: 'ok', text: '调度已更新' });
 	});
+
+	it('warns when the job already has an enabled schedule (F-9)', () => {
+		// Multiple schedules per job are legal; the flash must say the job now
+		// has two cadences instead of letting the operator find out later.
+		expect(
+			maintenanceFlash({ scheduleChanged: true, scheduleAction: 'create', scheduleSameJob: 1 })
+		).toEqual({ kind: 'ok', text: '已添加调度 该任务另有 1 条启用调度，将按各自节奏分别执行。' });
+		expect(
+			maintenanceFlash({ scheduleChanged: true, scheduleAction: 'create', scheduleSameJob: 0 })
+		).toEqual({ kind: 'ok', text: '已添加调度' });
+	});
 });
 
 describe('typecheck badge mapping (review P2-1)', () => {

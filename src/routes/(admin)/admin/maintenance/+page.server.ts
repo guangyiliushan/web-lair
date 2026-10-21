@@ -213,7 +213,11 @@ export const actions: Actions = {
 		if (result.kind === 'unknown-job') return fail(404, { error: result.message });
 		if (result.kind === 'duplicate')
 			return fail(409, { error: m.admin_maintenance_err_dup_schedule() });
-		return { scheduleChanged: true, scheduleAction: 'create' as const };
+		return {
+			scheduleChanged: true,
+			scheduleAction: 'create' as const,
+			scheduleSameJob: result.enabledForJob
+		};
 	},
 
 	scheduleUpdate: async ({ request, locals }) => {

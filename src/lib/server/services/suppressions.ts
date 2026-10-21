@@ -1,4 +1,5 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { createHmac } from 'node:crypto';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { emailSuppressions } from '$lib/server/db/system';
@@ -11,7 +12,22 @@ import { normalizeEmail } from './email-normalize';
  *
  * The table stores only a keyed hash. `SUPPRESSION_HMAC_KEY` (32B base64) is
  * independent of the auth secret and must be set before the first write and
- * kept in backups: rotating it orphans every existing hash.
+ * kept in backups.
+ *
+ * Key versioning (F-14): `key_version` names the derivation that produced a
+ * row's hash. Version 1 is the original scheme (`HMAC(master, email)`), so
+ * hashes written before this column existed stay valid. Every later version
+ * derives its key from the same master
+ * (`HMAC(master, 'wl:suppression:key:v<N>')`): the environment keeps one
+ * secret, and older rows remain verifiable forever — unlike storing a separate
+ * long-lived secret per version in `.env` and in every backup.
+ *
+ * Rotation (`SUPPRESSION_HMAC_KEY_VERSION`) starts a new version for new
+ * writes; a row is folded into the active version when that address is touched
+ * again (a one-way hash cannot be batch-rewritten without the plaintext).
+ * Reads cover versions 1..active, so a rotation never makes an existing opt-out
+ * invisible. Rolling the version *back* below a stored `key_version` would,
+ * which is why `scripts/verify-suppression-version.ts` gates deployment.
  *
  * If the key is missing or invalid we fail closed. Writing an unkeyed SHA-256
  * would create a second hash domain: once the key is added, those opt-outs
@@ -20,6 +36,12 @@ import { normalizeEmail } from './email-normalize';
 export type SuppressionReason = 'unsubscribed' | 'bounced' | 'complained';
 
 export type SuppressionExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+const REASON_RANK: Record<SuppressionReason, number> = {
+	unsubscribed: 1,
+	bounced: 2,
+	complained: 3
+};
 
 export class SuppressionKeyMissingError extends Error {
 	constructor() {
@@ -30,9 +52,28 @@ export class SuppressionKeyMissingError extends Error {
 	}
 }
 
+export class SuppressionKeyVersionError extends Error {
+	constructor(raw: string) {
+		super(
+			`SUPPRESSION_HMAC_KEY_VERSION="${raw}" is not a positive integer; suppression operations are disabled`
+		);
+		this.name = 'SuppressionKeyVersionError';
+	}
+}
+
+/** Active key version; 1 when unset, never a silent fallback for garbage. */
+export function activeSuppressionKeyVersion(): number {
+	const raw = (env.SUPPRESSION_HMAC_KEY_VERSION ?? '').trim();
+	if (!raw) return 1;
+	const parsed = Number(raw);
+	if (!Number.isInteger(parsed) || parsed < 1) throw new SuppressionKeyVersionError(raw);
+	return parsed;
+}
+
 /** Fail fast on boot (production) instead of on the first opt-out. */
 export function assertSuppressionKey(): void {
 	if (!decodeHmacKey(env.SUPPRESSION_HMAC_KEY)) throw new SuppressionKeyMissingError();
+	activeSuppressionKeyVersion();
 }
 
 /**
@@ -46,20 +87,59 @@ function canonicalSuppressionAddress(email: string): string {
 	return normalizeEmail(email) ?? email.trim().toLowerCase();
 }
 
-export function suppressionHash(email: string): string {
+function masterKey(): Buffer {
 	const key = decodeHmacKey(env.SUPPRESSION_HMAC_KEY);
 	if (!key) throw new SuppressionKeyMissingError();
-	return hashEmail(canonicalSuppressionAddress(email), key);
+	return key;
+}
+
+/** Per-version key. Version 1 is the master itself (pre-F-14 hashes). */
+function suppressionKey(version: number, master: Buffer): Buffer {
+	if (version === 1) return master;
+	return createHmac('sha256', master).update(`wl:suppression:key:v${version}`).digest();
+}
+
+function hashAt(email: string, version: number, master: Buffer): string {
+	return hashEmail(canonicalSuppressionAddress(email), suppressionKey(version, master));
+}
+
+/** Every hash the address can carry under the configured versions. */
+export function suppressionHashes(email: string): { version: number; hash: string }[] {
+	const master = masterKey();
+	const active = activeSuppressionKeyVersion();
+	const out: { version: number; hash: string }[] = [];
+	for (let version = 1; version <= active; version += 1) {
+		out.push({ version, hash: hashAt(email, version, master) });
+	}
+	return out;
+}
+
+/** Hash under the active version (what new rows are written with). */
+export function suppressionHash(email: string): string {
+	return hashAt(email, activeSuppressionKeyVersion(), masterKey());
+}
+
+function strongestReason(reasons: string[]): SuppressionReason | null {
+	let best: SuppressionReason | null = null;
+	for (const reason of reasons) {
+		if (!Object.hasOwn(REASON_RANK, reason)) continue;
+		const candidate = reason as SuppressionReason;
+		if (best === null || REASON_RANK[candidate] > REASON_RANK[best]) best = candidate;
+	}
+	return best;
 }
 
 export async function suppressionReason(email: string): Promise<SuppressionReason | null> {
-	const hash = suppressionHash(email);
-	const [row] = await db
+	const rows = await db
 		.select({ reason: emailSuppressions.reason })
 		.from(emailSuppressions)
-		.where(eq(emailSuppressions.emailHash, hash))
-		.limit(1);
-	return row ? (row.reason as SuppressionReason) : null;
+		.where(
+			inArray(
+				emailSuppressions.emailHash,
+				suppressionHashes(email).map((entry) => entry.hash)
+			)
+		);
+	return strongestReason(rows.map((row) => row.reason));
 }
 
 const REASON_RANK_SQL = sql`case
@@ -74,6 +154,10 @@ end`;
  * `unsubscribed` row, never the other way round. Dropping a complaint because
  * an unsubscribe happened first would make the address mailable again after a
  * re-subscription, and the provider will not report it twice.
+ *
+ * A row still on an older key version is folded into the active version in the
+ * same call (the plaintext is only available here), so the table converges
+ * without a batch rehash.
  */
 export async function suppress(
 	email: string,
@@ -81,9 +165,34 @@ export async function suppress(
 	source: string,
 	executor: SuppressionExecutor = db
 ): Promise<void> {
+	const active = activeSuppressionKeyVersion();
+	const hashes = suppressionHashes(email);
+	const activeHash = hashes[hashes.length - 1].hash;
+	const staleHashes = hashes.slice(0, -1).map((entry) => entry.hash);
+
+	let mergedReason: SuppressionReason = reason;
+	let mergedSource = source;
+	if (staleHashes.length > 0) {
+		const staleRows = await executor
+			.select({ reason: emailSuppressions.reason, source: emailSuppressions.source })
+			.from(emailSuppressions)
+			.where(inArray(emailSuppressions.emailHash, staleHashes));
+		const strongest = strongestReason([...staleRows.map((row) => row.reason), reason]);
+		if (strongest !== null && REASON_RANK[strongest] > REASON_RANK[reason]) {
+			mergedReason = strongest;
+			const winner = staleRows.find((row) => row.reason === strongest);
+			if (winner) mergedSource = winner.source;
+		}
+	}
+
 	await executor
 		.insert(emailSuppressions)
-		.values({ emailHash: suppressionHash(email), reason, source })
+		.values({
+			emailHash: activeHash,
+			reason: mergedReason,
+			source: mergedSource,
+			keyVersion: active
+		})
 		.onConflictDoUpdate({
 			target: emailSuppressions.emailHash,
 			set: {
@@ -95,6 +204,12 @@ export async function suppress(
 				end`
 			}
 		});
+
+	if (staleHashes.length > 0) {
+		await executor
+			.delete(emailSuppressions)
+			.where(inArray(emailSuppressions.emailHash, staleHashes));
+	}
 }
 
 /**
@@ -105,12 +220,13 @@ export async function liftUnsubscribedSuppression(
 	email: string,
 	executor: SuppressionExecutor = db
 ): Promise<void> {
-	await executor
-		.delete(emailSuppressions)
-		.where(
-			and(
-				eq(emailSuppressions.emailHash, suppressionHash(email)),
-				eq(emailSuppressions.reason, 'unsubscribed')
-			)
-		);
+	await executor.delete(emailSuppressions).where(
+		and(
+			inArray(
+				emailSuppressions.emailHash,
+				suppressionHashes(email).map((entry) => entry.hash)
+			),
+			eq(emailSuppressions.reason, 'unsubscribed')
+		)
+	);
 }

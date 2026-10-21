@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test';
 import {
 	TEST_MAIL_EVENTS_HMAC_KEY,
 	TEST_SUBSCRIBE_HMAC_KEY,
+	TEST_SUBSCRIBE_TOKEN_SECRET,
 	TEST_SUPPRESSION_HMAC_KEY
 } from './e2e/test-keys';
 
@@ -38,6 +39,7 @@ export default defineConfig({
 			// E1/E2 HMAC keys: the preview is a production build, so the
 			// suppression boot guard and the mail-events endpoint need real keys.
 			SUBSCRIBE_HMAC_KEY: TEST_SUBSCRIBE_HMAC_KEY,
+			SUBSCRIBE_TOKEN_SECRET: TEST_SUBSCRIBE_TOKEN_SECRET,
 			SUPPRESSION_HMAC_KEY: TEST_SUPPRESSION_HMAC_KEY,
 			MAIL_EVENTS_HMAC_KEY: TEST_MAIL_EVENTS_HMAC_KEY
 		}

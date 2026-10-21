@@ -7,5 +7,11 @@
  * material and never used by a deployment.
  */
 export const TEST_SUBSCRIBE_HMAC_KEY = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=';
+/**
+ * F-13 token derivation secret. The preview is a production build, so the boot
+ * guard requires it; specs re-derive the mailed token from `token_nonce`
+ * instead of reading a plaintext column (which no longer exists).
+ */
+export const TEST_SUBSCRIBE_TOKEN_SECRET = 'DQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0=';
 export const TEST_SUPPRESSION_HMAC_KEY = 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=';
 export const TEST_MAIL_EVENTS_HMAC_KEY = 'CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws=';

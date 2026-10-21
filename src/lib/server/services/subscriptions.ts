@@ -1,17 +1,18 @@
-import { and, eq, gte, isNull, ne, or } from 'drizzle-orm';
+import { and, eq, gte, ne } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { subscriptions } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
-import { keyedHasher } from './email-hash';
+import { decodeHmacKey, keyedHasher } from './email-hash';
 import {
+	deriveSubscriptionToken,
 	hashSubscriptionToken,
 	isSubscriptionToken,
-	newSubscriptionToken
+	newSubscriptionNonce
 } from './subscription-token';
 import { liftUnsubscribedSuppression, suppress, suppressionReason } from './suppressions';
 
-export { isSubscriptionToken, newSubscriptionToken } from './subscription-token';
+export { isSubscriptionToken } from './subscription-token';
 export { normalizeEmail } from './email-normalize';
 
 /**
@@ -84,14 +85,50 @@ export function subscribeAddressKey(email: string): string | null {
 	return addressHasher.hash?.(email) ?? null;
 }
 
+/**
+ * Token derivation secret (F-13). Required in every non-dev boot: without it no
+ * confirmation link can be minted, and silently falling back to a random token
+ * that the service cannot re-derive would resurrect the plaintext column's job.
+ * Mirrors `assertSuppressionKey` (see `hooks.server.ts`).
+ */
+export class SubscriptionTokenSecretMissingError extends Error {
+	constructor() {
+		super(
+			'SUBSCRIBE_TOKEN_SECRET is missing or not 32 base64-encoded bytes; subscription tokens cannot be derived'
+		);
+		this.name = 'SubscriptionTokenSecretMissingError';
+	}
+}
+
+let tokenSecret: { raw: string | undefined; key: Buffer } | null = null;
+
+export function subscriptionTokenSecret(): Buffer {
+	const raw = env.SUBSCRIBE_TOKEN_SECRET;
+	if (tokenSecret && tokenSecret.raw === raw) return tokenSecret.key;
+	const key = decodeHmacKey(raw);
+	if (!key) throw new SubscriptionTokenSecretMissingError();
+	tokenSecret = { raw, key };
+	return key;
+}
+
+/** Fail fast on boot (production) instead of on the first subscribe. */
+export function assertSubscriptionTokenSecret(): void {
+	subscriptionTokenSecret();
+}
+
+/** The token currently mailed for `nonce` — re-derived, never stored. */
+export function subscriptionTokenFor(nonce: string): string {
+	return deriveSubscriptionToken(nonce, subscriptionTokenSecret());
+}
+
 export function isSubscriptionLang(value: string): value is SubscriptionLang {
 	return value === 'en' || value === 'zh-cn' || value === 'ja';
 }
 
 export interface PreviousSubscription {
 	status: SubscriptionStatus;
-	token: string;
-	tokenHash: string | null;
+	tokenNonce: string;
+	tokenHash: string;
 	lang: SubscriptionLang;
 	source: string | null;
 	consentVersion: string | null;
@@ -131,16 +168,19 @@ export async function requestSubscription(input: {
 	// the recipient already holds.
 	const updatedAt = existing?.updatedAt instanceof Date ? existing.updatedAt.getTime() : 0;
 	if (existing?.status === 'pending' && Date.now() - updatedAt < RESEND_COOLDOWN_MS) {
-		return { kind: 'pending', token: existing.token, send: false };
+		return { kind: 'pending', token: subscriptionTokenFor(existing.tokenNonce), send: false };
 	}
 
-	const token = newSubscriptionToken();
+	const nonce = newSubscriptionNonce();
+	const token = deriveSubscriptionToken(nonce, subscriptionTokenSecret());
 	if (existing) {
 		// Keep enough state to undo a resubscribe whose mail never left: deleting
 		// a row that used to be `unsubscribed` would erase the opt-out record.
+		// The previous link is re-derivable from `tokenNonce`, so the rollback
+		// restores it without a plaintext credential.
 		const previous: PreviousSubscription = {
 			status: existing.status as SubscriptionStatus,
-			token: existing.token,
+			tokenNonce: existing.tokenNonce,
 			tokenHash: existing.tokenHash,
 			lang: existing.lang as SubscriptionLang,
 			source: existing.source,
@@ -149,13 +189,13 @@ export async function requestSubscription(input: {
 			unsubscribedAt: existing.unsubscribedAt,
 			updatedAt: existing.updatedAt
 		};
-		// Compare-and-swap on the token we read: a concurrent confirm wins, and a
-		// parallel resubmit loses instead of voiding the link it just mailed.
+		// Compare-and-swap on the token hash we read: a concurrent confirm wins,
+		// and a parallel resubmit loses instead of voiding the link it mailed.
 		const updated = await db
 			.update(subscriptions)
 			.set({
 				status: 'pending',
-				token,
+				tokenNonce: nonce,
 				tokenHash: hashSubscriptionToken(token),
 				lang: input.lang,
 				source: input.source,
@@ -166,10 +206,7 @@ export async function requestSubscription(input: {
 				and(
 					eq(subscriptions.id, existing.id),
 					ne(subscriptions.status, 'subscribed'),
-					or(
-						eq(subscriptions.tokenHash, hashSubscriptionToken(existing.token)),
-						eq(subscriptions.token, existing.token)
-					)
+					eq(subscriptions.tokenHash, existing.tokenHash)
 				)
 			)
 			.returning({ id: subscriptions.id });
@@ -181,7 +218,8 @@ export async function requestSubscription(input: {
 				.limit(1);
 			if (again?.status === 'subscribed') return { kind: 'already-subscribed' };
 			// Someone else is holding (and mailed) the current token.
-			if (again) return { kind: 'pending', token: again.token, send: false };
+			if (again)
+				return { kind: 'pending', token: subscriptionTokenFor(again.tokenNonce), send: false };
 			// The row vanished (pending unsubscribe): fall through and insert.
 		}
 		if (updated.length > 0) return { kind: 'pending', token, send: true, previous };
@@ -193,7 +231,7 @@ export async function requestSubscription(input: {
 			lang: input.lang,
 			source: input.source,
 			consentVersion: CONSENT_VERSION,
-			token,
+			tokenNonce: nonce,
 			tokenHash: hashSubscriptionToken(token)
 		});
 	} catch (error) {
@@ -208,7 +246,7 @@ export async function requestSubscription(input: {
 			if (!again) throw error;
 			if (again.status === 'subscribed') return { kind: 'already-subscribed' };
 			// The concurrent winner owns the mail for this address.
-			return { kind: 'pending', token: again.token, send: false };
+			return { kind: 'pending', token: subscriptionTokenFor(again.tokenNonce), send: false };
 		}
 		throw error;
 	}
@@ -231,33 +269,13 @@ export async function subscriptionByToken(token: string): Promise<SubscriptionLo
 		return null;
 	}
 	const tokenHash = hashSubscriptionToken(token);
-	// Hash-first (E2-3). Legacy rows created before the column existed are still
-	// reachable through the plaintext column; the first successful lookup
-	// backfills the hash so the next read never touches plaintext.
-	let [row] = await db
+	// Hash-only lookup (F-13): the plaintext column is gone, and the derived
+	// token means every live link has a hash row. No legacy fallback remains.
+	const [row] = await db
 		.select()
 		.from(subscriptions)
 		.where(eq(subscriptions.tokenHash, tokenHash))
 		.limit(1);
-	if (!row) {
-		[row] = await db.select().from(subscriptions).where(eq(subscriptions.token, token)).limit(1);
-		if (row && row.tokenHash === null) {
-			try {
-				await db
-					.update(subscriptions)
-					.set({ tokenHash, updatedAt: row.updatedAt })
-					.where(
-						and(
-							eq(subscriptions.id, row.id),
-							isNull(subscriptions.tokenHash),
-							eq(subscriptions.token, token)
-						)
-					);
-			} catch (error) {
-				console.warn('[subscribe] token hash backfill failed', error);
-			}
-		}
-	}
 	if (!row) {
 		console.warn('[subscribe] token rejected: unknown');
 		return null;
@@ -297,7 +315,7 @@ export async function confirmSubscription(token: string): Promise<ConfirmResult>
 			.set({ status: 'subscribed', verifiedAt: new Date() })
 			.where(
 				and(
-					or(eq(subscriptions.tokenHash, tokenHash), eq(subscriptions.token, token)),
+					eq(subscriptions.tokenHash, tokenHash),
 					eq(subscriptions.status, 'pending'),
 					gte(subscriptions.updatedAt, cutoff)
 				)
@@ -326,11 +344,11 @@ export async function unsubscribe(
 	// verified_at on non-pending rows), so an opt-out from a never-confirmed
 	// address deletes the row. The delete/update and the suppression write are
 	// one transaction: an opt-out that is not remembered is a compliance bug.
-	// The credential predicate accepts either the hash or the retained plaintext
-	// column (dual-read window), and stays status-guarded so a concurrent
+	// The credential predicate is the token hash alone (F-13: the retained
+	// plaintext column is gone), and stays status-guarded so a concurrent
 	// confirm wins.
 	const tokenHash = hashSubscriptionToken(token);
-	const credential = or(eq(subscriptions.tokenHash, tokenHash), eq(subscriptions.token, token));
+	const credential = eq(subscriptions.tokenHash, tokenHash);
 
 	const outcome = await db.transaction(async (tx) => {
 		const deleted = await tx
@@ -390,8 +408,8 @@ export async function restoreSubscription(
 		.update(subscriptions)
 		.set({
 			status: previous.status,
-			token: previous.token,
-			tokenHash: previous.tokenHash ?? hashSubscriptionToken(previous.token),
+			tokenNonce: previous.tokenNonce,
+			tokenHash: previous.tokenHash,
 			lang: previous.lang,
 			source: previous.source,
 			consentVersion: previous.consentVersion,

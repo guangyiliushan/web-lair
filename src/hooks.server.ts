@@ -17,16 +17,23 @@ import { isMailDeliveryAvailableLive } from '$lib/server/mail/transport';
 import { isCsrfForbidden } from '$lib/server/security/csrf';
 import { isSubscriptionToken } from '$lib/server/services/subscription-token';
 import { assertSuppressionKey } from '$lib/server/services/suppressions';
+import { assertSubscriptionTokenSecret } from '$lib/server/services/subscriptions';
 
 /**
- * Fail fast on boot when the suppression key is missing. Unkeyed fallback was
+ * Fail fast on boot when a required key is missing. Unkeyed fallback was
  * removed after review: a later key would orphan every existing opt-out.
+ * `SUBSCRIBE_TOKEN_SECRET` (F-13) joined the guard: without it no confirmation
+ * link can be derived, and a random-token fallback would silently reintroduce
+ * the plaintext column's job.
  * `building` is excluded because SvelteKit may call init during prerender.
- * Development starts without the key, but any subscribe/confirm/unsubscribe
- * (reads included) fails until it is set.
+ * Development starts without the keys, but any subscribe/confirm/unsubscribe
+ * (reads included) fails until they are set.
  */
 export const init: ServerInit = () => {
-	if (!dev && !building) assertSuppressionKey();
+	if (!dev && !building) {
+		assertSuppressionKey();
+		assertSubscriptionTokenSecret();
+	}
 };
 
 /**

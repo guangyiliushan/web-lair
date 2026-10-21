@@ -30,22 +30,6 @@
 		}
 	}
 
-	function visualText(origin: string | null | undefined): string {
-		switch (origin) {
-			case 'none':
-				return m.post_provenance_visual_none();
-			case 'some':
-				return m.post_provenance_visual_some();
-			case 'all':
-				return m.post_provenance_visual_all();
-			case null:
-			case undefined:
-				return m.post_provenance_visual_undisclosed();
-			default:
-				return m.post_provenance_visual_undisclosed();
-		}
-	}
-
 	function translationText(
 		origin: string | null | undefined,
 		isTranslation: boolean
@@ -161,10 +145,6 @@
 									{m.post_provenance_ai_helped({ items: data.provenance.aiHelp.join(', ') })}
 								{/if}
 							</span>
-						</div>
-						<div class="flex flex-col gap-1">
-							<strong class="font-medium">{m.post_provenance_tooltip_visuals()}</strong>
-							<span class="text-muted-foreground">{visualText(data.provenance.visualOrigin)}</span>
 						</div>
 					</Tooltip.Content>
 				</Tooltip.Root>

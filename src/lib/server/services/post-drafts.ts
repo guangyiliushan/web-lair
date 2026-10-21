@@ -472,15 +472,14 @@ export async function publishDraft(
 			// Provenance is staged in the draft payload; an absent payload means
 			// "this draft predates provenance", so preserve the published values.
 			// A value-identical payload must not bump the audit timestamp.
-			// Translations never carry their own writing/visual claim: the source
-			// is authoritative. Ignore any staged provenance on a translation
+			// Translations never carry their own writing claim: the source is
+			// authoritative. Ignore any staged provenance on a translation
 			// (the disabled UI is not an authorization boundary).
 			const provenance = locked.translatedFromPostId
 				? null
 				: postProvenanceFromPayload(lockedDraft.payload);
 			const publishedProvenance = normalizeProvenance({
 				writingOrigin: locked.writingOrigin,
-				visualOrigin: locked.visualOrigin,
 				aiHelp: locked.aiHelp ?? []
 			});
 			const provenanceChanged =
@@ -525,7 +524,6 @@ export async function publishDraft(
 					...(provenanceChanged && provenance
 						? {
 								writingOrigin: provenance.writingOrigin,
-								visualOrigin: provenance.visualOrigin,
 								aiHelp: provenance.aiHelp,
 								provenanceSource: 'author' as const,
 								provenanceUpdatedAt: sql`now()`,

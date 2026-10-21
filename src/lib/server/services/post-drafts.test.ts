@@ -650,7 +650,6 @@ describe('publishDraft', () => {
 			payload: {
 				provenance: {
 					writingOrigin: 'mostly_ai',
-					visualOrigin: 'some',
 					aiHelp: ['outline']
 				}
 			}
@@ -669,7 +668,6 @@ describe('publishDraft', () => {
 		const postUpdate = state.updates.find((u) => u.table === posts);
 		expect(postUpdate?.values).toMatchObject({
 			writingOrigin: 'mostly_ai',
-			visualOrigin: 'some',
 			aiHelp: ['outline'],
 			provenanceSource: 'author',
 			provenanceUpdatedBy: 'user-1'
