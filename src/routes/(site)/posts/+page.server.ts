@@ -52,10 +52,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	const filterCondition = ai
 		? or(
 				inArray(posts.writingOrigin, ['none', 'assist']),
-				and(
-					isNull(posts.writingOrigin),
-					inArray(posts.translatedFromPostId, nonGeneratedSourceIds)
-				)
+				and(isNull(posts.writingOrigin), inArray(posts.translatedFromPostId, nonGeneratedSourceIds))
 			)
 		: undefined;
 	const visible = and(eq(posts.lang, lang), visiblePostCondition(), filterCondition);

@@ -125,9 +125,7 @@ export const load: PageServerLoad = async ({ url }) => {
 				post.provenance = {
 					writingOrigin: post.provenance.writingOrigin ?? sourceRow.writingOrigin,
 					visualOrigin: post.provenance.visualOrigin ?? sourceRow.visualOrigin,
-					aiHelp: post.provenance.aiHelp.length
-						? post.provenance.aiHelp
-						: (sourceRow.aiHelp ?? [])
+					aiHelp: post.provenance.aiHelp.length ? post.provenance.aiHelp : (sourceRow.aiHelp ?? [])
 				};
 			}
 		}

@@ -96,6 +96,7 @@ test.beforeAll(() => {
 	);
 });
 
+// eslint-disable-next-line no-empty-pattern -- Playwright passes a fixtures object we do not use
 test.afterAll(async ({}, testInfo) => {
 	// Docker CLI startup on this box can be slow after a full browser run;
 	// cleanup is not part of the assertion budget.

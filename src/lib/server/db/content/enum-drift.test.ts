@@ -77,15 +77,11 @@ describe('enum drift guard', () => {
 	});
 
 	it('posts_writing_origin_check literals match WRITING_ORIGINS', () => {
-		expect(new Set(checkLiterals('posts_writing_origin_check'))).toEqual(
-			new Set(WRITING_ORIGINS)
-		);
+		expect(new Set(checkLiterals('posts_writing_origin_check'))).toEqual(new Set(WRITING_ORIGINS));
 	});
 
 	it('posts_visual_origin_check literals match VISUAL_ORIGINS', () => {
-		expect(new Set(checkLiterals('posts_visual_origin_check'))).toEqual(
-			new Set(VISUAL_ORIGINS)
-		);
+		expect(new Set(checkLiterals('posts_visual_origin_check'))).toEqual(new Set(VISUAL_ORIGINS));
 	});
 
 	it('moments_type_check literals match MOMENT_KINDS', () => {
