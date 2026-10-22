@@ -505,6 +505,9 @@
 	"admin_maintenance_warn_same_job": "This task already has {count} other enabled schedule(s); each runs on its own cadence.",
 	"admin_maintenance_water_level": "Watermark: ",
 	"admin_master_detail_count": "{count}",
+	"admin_media_drop_hint": "or click to browse — pasting images works too",
+	"admin_media_drop_overlay": "Release to add to the upload queue",
+	"admin_media_drop_prompt": "Drop files here",
 	"admin_media_err_rate": "Too many uploads — try again later",
 	"admin_media_err_session": "Your session expired — refresh the page and sign in again.",
 	"admin_media_err_too_big": "{name} exceeds the per-file limit",
@@ -518,6 +521,7 @@
 			"selectors": ["countPlural"]
 		}
 	],
+	"admin_media_err_unsupported": "Unsupported file type",
 	"admin_media_err_upload_failed": "Upload failed",
 	"admin_media_filter": "Filter",
 	"admin_media_filter_all": "All",
@@ -525,6 +529,10 @@
 	"admin_media_last_7d": "Last 7 days",
 	"admin_media_last_90d": "Last 90 days",
 	"admin_media_pick_files": "Choose files",
+	"admin_media_queue_clear": "Clear all",
+	"admin_media_queue_count": "{count} selected · {size}",
+	"admin_media_queue_remove": "Remove {name}",
+	"admin_media_state_uploading": "Uploading…",
 	"admin_media_time": "Time",
 	"admin_media_upload": "Upload",
 	"admin_moments_content": "Content",

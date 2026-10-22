@@ -6,12 +6,13 @@
 	import { formatDateTime } from '$lib/utils/i18n';
 	import { formatBytes } from '$lib/utils/format';
 	import { photoTileSrc } from '$lib/components/photos/photo-tile';
+	import { MediaUploadDialog } from '$lib/components/admin/media-upload';
+	import { useAdminHeaderActionRegistry } from '$lib/components/admin/admin-header-actions';
+	import type { UploadOutcome } from '$lib/utils/upload-each';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
-	import { applyUploadResults, mapUploadError, uploadEachFile } from '$lib/utils/upload-each';
 	import { locales } from '$lib/paraglide/runtime';
 	import { localeLabels } from '$lib/stores/locale.svelte';
-	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 	import IconEyeOff from '@tabler/icons-svelte-runes/icons/eye-off';
@@ -22,67 +23,26 @@
 
 	type PhotoRow = (typeof data.photos)[number];
 
-	let uploading = $state(false);
+	// The "上传" header button is declared in +page.server.ts; bind it to the dialog.
+	const headerActions = useAdminHeaderActionRegistry();
+	let uploadOpen = $state(false);
+	$effect(() => headerActions?.register('photos:upload', () => (uploadOpen = true)));
 
-	/** Q4 (deploy note): one request per file keeps every body under BODY_SIZE_LIMIT. */
-	async function uploadAll(event: SubmitEvent) {
-		event.preventDefault();
-		const form = event.currentTarget as HTMLFormElement;
-		const input = form.querySelector<HTMLInputElement>('input[name="files"]');
-		const files = Array.from(input?.files ?? []);
-		if (files.length === 0) {
-			await applyUploadResults({ results: [], message: m.admin_files_err_no_files() });
-			return;
-		}
-		if (uploading) return;
-		if (files.length > data.limits.maxBatch) {
-			await applyUploadResults({
-				results: [],
-				message: m.admin_media_err_too_many({ count: data.limits.maxBatch })
-			});
-			return;
-		}
-		uploading = true;
-		try {
-			const outcome = await uploadEachFile({
-				action: '?/upload',
-				files,
-				maxBytes: data.limits.maxBytes,
-				fallbackMessage: m.admin_media_err_upload_failed(),
-				tooLargeMessage: (name) => m.admin_media_err_too_big({ name }),
-				mapError: (status, name) =>
-					mapUploadError(status, name, {
-						tooBig: (n) => m.admin_media_err_too_big({ name: n }),
-						rate: m.admin_media_err_rate,
-						session: m.admin_media_err_session
-					})
-			});
-			if (outcome.redirected) {
-				if (outcome.message) {
-					await applyUploadResults({ results: outcome.results, message: outcome.message });
-				}
-				return;
-			}
-			await applyUploadResults(outcome);
-		} finally {
-			uploading = false;
-			if (input) input.value = '';
-		}
+	/** Per-row success extras the server reports (gallery join / gallery insert). */
+	function uploadNote(result: UploadOutcome): string | undefined {
+		const row = result as UploadOutcome & {
+			added?: boolean;
+			galleryError?: string | null;
+		};
+		const notes: string[] = [];
+		if (row.added) notes.push(m.admin_photos_added());
+		if (row.galleryError) notes.push(m.admin_photos_gallery_error({ error: row.galleryError }));
+		return notes.length > 0 ? notes.join(' ') : undefined;
 	}
-	type UploadResult = {
-		fileName: string;
-		ok: boolean;
-		file?: { id: string; fileName: string };
-		message?: string;
-		code?: string;
-		added?: boolean;
-		galleryError?: string | null;
-	};
 
 	const actionData = $derived(
 		(form ?? {}) as {
 			message?: string;
-			uploadResults?: UploadResult[];
 			bulkResult?: { op: string; done: number; failed: number };
 			deleted?: {
 				removeFile: boolean;
@@ -176,54 +136,6 @@
 			{actionData.message}
 		</div>
 	{/if}
-	{#if actionData.uploadResults}
-		<div class="rounded-md border bg-background px-3 py-2 text-sm">
-			{#each actionData.uploadResults as result, index (result.fileName + ':' + index)}
-				<p class:opacity-60={!result.ok}>
-					{result.ok ? '✓' : '✗'}
-					{result.fileName}
-					{#if result.ok && result.added}{m.admin_photos_added()}{/if}
-					{#if result.ok && result.galleryError}{m.admin_photos_gallery_error({
-							error: result.galleryError
-						})}{/if}
-					{#if !result.ok}— {result.message ?? result.code}{/if}
-				</p>
-			{/each}
-		</div>
-	{/if}
-
-	<section class="rounded-xl border bg-background p-4">
-		<h2 class="mb-1 text-sm font-medium">
-			{m.admin_photos_upload_hint({
-				batch: data.limits.maxBatch,
-				size: data.limits.maxBytes / 1024 / 1024
-			})}
-		</h2>
-		<p class="mb-3 text-xs text-muted-foreground">
-			{m.admin_photos_upload_cli_hint()}<code>pnpm media:import &lt;dir&gt;</code>
-		</p>
-		<form
-			method="POST"
-			action="?/upload"
-			enctype="multipart/form-data"
-			class="flex flex-wrap items-center gap-3"
-			onsubmit={uploadAll}
-		>
-			<input
-				aria-label={m.admin_photos_pick_files()}
-				type="file"
-				name="files"
-				multiple
-				accept={ACCEPT}
-				class="text-sm file:mr-3 file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm"
-			/>
-			<Button type="submit" size="sm" disabled={uploading}>
-				<IconUpload data-icon="inline-start" />
-				{m.admin_media_upload()}
-			</Button>
-		</form>
-	</section>
-
 	<section class="flex flex-col gap-4">
 		<form method="GET" class="flex flex-wrap items-end gap-3">
 			<label class="grid gap-1 text-xs text-muted-foreground">
@@ -525,6 +437,25 @@
 		</aside>
 	{/if}
 </div>
+
+{#snippet cliHint()}
+	{m.admin_photos_upload_cli_hint()}<code>pnpm media:import &lt;dir&gt;</code>
+{/snippet}
+
+<MediaUploadDialog
+	bind:open={uploadOpen}
+	action="?/upload"
+	accept={ACCEPT}
+	maxBatch={data.limits.maxBatch}
+	maxBytes={data.limits.maxBytes}
+	pickLabel={m.admin_photos_pick_files()}
+	description={m.admin_photos_upload_hint({
+		batch: data.limits.maxBatch,
+		size: data.limits.maxBytes / 1024 / 1024
+	})}
+	hint={cliHint}
+	resultNote={uploadNote}
+/>
 
 <AlertDialog.Root
 	open={deleteTarget !== null}

@@ -5,16 +5,12 @@
 	import * as Table from '$lib/components/ui/table';
 	import { Empty } from '$lib/components/ui/empty';
 	import { DeleteConfirm } from '$lib/components/admin';
-	import {
-		ListRowActions,
-		ListTable,
-		listColumnClass,
-		type ListColumn
-	} from '$lib/components/admin/list-table';
+	import { ListRowActions, ListTable, listColumnClass } from '$lib/components/admin/list-table';
 	import { cn } from '$lib/utils';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { cols, columns } from './columns';
 	import IconArticle from '@tabler/icons-svelte-runes/icons/article';
 
 	let { data, form }: PageProps = $props();
@@ -38,32 +34,6 @@
 	};
 
 	/** Same column descriptor as every other admin list: head and cells share it. */
-	const cols: Record<'title' | 'kind' | 'lang' | 'postStatus' | 'updated' | 'actions', ListColumn> =
-		{
-			title: { id: 'title', label: m.admin_list_col_title() },
-			kind: { id: 'kind', label: m.admin_common_type(), width: 'w-20' },
-			lang: { id: 'lang', label: m.admin_posts_edit_lang_label(), width: 'w-16' },
-			postStatus: {
-				id: 'postStatus',
-				label: m.admin_drafts_col_post_status(),
-				width: 'w-24',
-				hideBelow: 'sm'
-			},
-			updated: {
-				id: 'updated',
-				label: m.admin_drafts_col_updated(),
-				width: 'w-32',
-				hideBelow: 'sm'
-			},
-			actions: {
-				id: 'actions',
-				label: m.admin_common_actions(),
-				width: 'w-20',
-				align: 'right'
-			}
-		};
-	const columns = Object.values(cols);
-
 	const discardedFlash = $derived(page.url.searchParams.get('discarded') === '1');
 
 	// Discarding is irreversible, so it goes through a confirm; there is no

@@ -18,8 +18,7 @@
 		ListRowActions,
 		ListSearch,
 		ListTable,
-		listColumnClass,
-		type ListColumn
+		listColumnClass
 	} from '$lib/components/admin/list-table';
 	import { cn } from '$lib/utils';
 	import { formatDateTime } from '$lib/utils/i18n';
@@ -27,6 +26,7 @@
 	import { getLocale } from '$lib/paraglide/runtime';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { cols, columns } from './columns';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
@@ -86,52 +86,6 @@
 	 * list while claiming a filter was active (round-7 review finding).
 	 */
 	const FILTERABLE_STATUSES = ['published', 'draft', 'private', 'trash'] as const;
-
-	const cols: Record<
-		'title' | 'id' | 'topic' | 'status' | 'meta' | 'views' | 'likes' | 'updated' | 'actions',
-		ListColumn
-	> = {
-		title: { id: 'title', label: m.admin_list_col_title(), control: true },
-		id: { id: 'id', label: m.admin_list_col_id(), width: 'w-12', hideBelow: 'xl' },
-		topic: {
-			id: 'topic',
-			label: m.admin_list_col_topic(),
-			width: 'w-24',
-			hideBelow: 'lg',
-			control: true
-		},
-		status: {
-			id: 'status',
-			label: m.admin_common_status(),
-			width: 'w-24',
-			hideBelow: 'md',
-			control: true
-		},
-		meta: { id: 'meta', label: m.admin_list_col_meta(), width: 'w-28', hideBelow: 'xl' },
-		views: {
-			id: 'views',
-			label: m.admin_list_col_views(),
-			width: 'w-14',
-			hideBelow: 'xl',
-			align: 'right'
-		},
-		likes: {
-			id: 'likes',
-			label: m.admin_list_col_likes(),
-			width: 'w-14',
-			hideBelow: 'xl',
-			align: 'right'
-		},
-		updated: { id: 'updated', label: m.admin_list_col_updated(), width: 'w-32', hideBelow: 'lg' },
-		actions: {
-			id: 'actions',
-			label: m.admin_common_actions(),
-			width: 'w-28',
-			align: 'right',
-			control: true
-		}
-	};
-	const columns = Object.values(cols);
 
 	const currentTopic = $derived(
 		data.topics.find((t) => t.id === data.filters.topic)?.name ?? m.admin_notes_all_topics()

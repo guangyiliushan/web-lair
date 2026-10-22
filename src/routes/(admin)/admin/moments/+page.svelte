@@ -16,8 +16,7 @@
 		ListRowActions,
 		ListSearch,
 		ListTable,
-		listColumnClass,
-		type ListColumn
+		listColumnClass
 	} from '$lib/components/admin/list-table';
 	import { cn } from '$lib/utils';
 	import { formatDateTime } from '$lib/utils/i18n';
@@ -29,6 +28,7 @@
 	import IconThumbDown from '@tabler/icons-svelte-runes/icons/thumb-down';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { cols, columns } from './columns';
 
 	let { data, form }: PageProps = $props();
 
@@ -42,33 +42,6 @@
 	};
 
 	/** Mirrors the posts / notes admin lists: one descriptor per column. */
-	const cols: Record<'content' | 'kind' | 'votes' | 'created' | 'actions', ListColumn> = {
-		content: { id: 'content', label: m.admin_moments_content(), control: true },
-		kind: {
-			id: 'kind',
-			label: m.admin_moments_kind(),
-			width: 'w-28',
-			hideBelow: 'md',
-			control: true
-		},
-		votes: {
-			id: 'votes',
-			label: m.admin_list_col_votes(),
-			width: 'w-24',
-			hideBelow: 'lg',
-			align: 'right'
-		},
-		created: { id: 'created', label: m.admin_list_col_created(), width: 'w-32', hideBelow: 'sm' },
-		actions: {
-			id: 'actions',
-			label: m.admin_common_actions(),
-			width: 'w-28',
-			align: 'right',
-			control: true
-		}
-	};
-	const columns = Object.values(cols);
-
 	const currentKind = $derived(
 		data.filters.type && isKindLabel(data.filters.type)
 			? KIND_LABELS[data.filters.type as MomentKind]

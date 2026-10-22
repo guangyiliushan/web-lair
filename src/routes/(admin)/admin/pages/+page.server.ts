@@ -64,8 +64,11 @@ export const load: PageServerLoad = async () => {
 				label: m.admin_common_new(),
 				iconName: 'plus',
 				variant: 'default',
-				// opens the md/external picker rendered by +page.svelte
-				actionId: 'pages:create'
+				// the md target navigates; the external dialog is opened by +page.svelte
+				menu: [
+					{ label: m.admin_pages_md_page(), href: '/admin/pages/edit' },
+					{ label: m.admin_pages_external(), actionId: 'pages:create:external' }
+				]
 			}
 		],
 		pages: rows.map((row) => ({

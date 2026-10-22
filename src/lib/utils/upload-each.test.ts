@@ -218,6 +218,71 @@ describe('uploadEachFile', () => {
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		warn.mockRestore();
 	});
+
+	it('reports every file through onProgress, including the ones it never sends', async () => {
+		deserializeMock.mockReturnValue({
+			type: 'success',
+			status: 200,
+			data: { uploadResults: [{ fileName: 'ok.jpg', ok: true }] }
+		});
+		const seen: Array<[number, string]> = [];
+
+		await uploadEachFile({
+			action: '?/upload',
+			// big.jpg is rejected before the request; a.jpg fails at the server.
+			files: [file('big.jpg', 50), file('ok.jpg', 4)],
+			maxBytes: 10,
+			fallbackMessage: 'fallback',
+			onProgress: (index, state) => seen.push([index, state])
+		});
+
+		expect(seen).toEqual([
+			[0, 'error'],
+			[1, 'uploading'],
+			[1, 'done']
+		]);
+	});
+
+	it('marks the queue chip as failed when a request reports a partial result', async () => {
+		// One request, two rows (photos: file row + gallery row) — one row failing
+		// must not leave the chip in the `done` state.
+		deserializeMock.mockReturnValue({
+			type: 'success',
+			status: 200,
+			data: {
+				uploadResults: [
+					{ fileName: 'a.jpg', ok: true, added: true },
+					{ fileName: 'a.jpg', ok: false, message: 'gallery insert failed' }
+				]
+			}
+		});
+		const seen: string[] = [];
+
+		await uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback',
+			onProgress: (_index, state) => seen.push(state)
+		});
+
+		expect(seen).toEqual(['uploading', 'error']);
+	});
+
+	it('reports an error state when the session redirect ends the batch', async () => {
+		deserializeMock.mockReturnValue({ type: 'redirect', status: 303, location: '/login' });
+		const seen: string[] = [];
+
+		await uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback',
+			onProgress: (_index, state) => seen.push(state)
+		});
+
+		expect(seen).toEqual(['uploading', 'error']);
+	});
 });
 
 describe('applyUploadResults', () => {

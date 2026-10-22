@@ -4,24 +4,22 @@
 	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import { applyUploadResults, mapUploadError, uploadEachFile } from '$lib/utils/upload-each';
+	import type { UploadOutcome } from '$lib/utils/upload-each';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Table from '$lib/components/ui/table';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import * as Dialog from '$lib/components/ui/dialog';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Empty } from '$lib/components/ui/empty';
-	import { Input } from '$lib/components/ui/input';
 	import { useAdminHeaderActionRegistry } from '$lib/components/admin/admin-header-actions';
+	import { MediaUploadDialog } from '$lib/components/admin/media-upload';
 	import { RefreshButton } from '$lib/components/admin/refresh-button';
 	import {
 		ListFilter,
 		ListRowActions,
 		ListSearch,
 		ListTable,
-		listColumnClass,
-		type ListColumn
+		listColumnClass
 	} from '$lib/components/admin/list-table';
 	import { cn } from '$lib/utils';
 	import { formatDateTime } from '$lib/utils/i18n';
@@ -29,7 +27,7 @@
 	import { formatBytes } from '$lib/utils/format';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
-	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
+	import { cols, columns } from './columns';
 	import IconCopy from '@tabler/icons-svelte-runes/icons/copy';
 	import IconDownload from '@tabler/icons-svelte-runes/icons/download';
 	import IconCheck from '@tabler/icons-svelte-runes/icons/check';
@@ -41,13 +39,6 @@
 	let { data, form }: PageProps = $props();
 
 	type FileRow = (typeof data.files)[number];
-	type UploadResult = {
-		fileName: string;
-		ok: boolean;
-		file?: { id: string; fileName: string; deduplicated: boolean };
-		code?: string;
-		message?: string;
-	};
 	type AuditReport = {
 		generatedAt: string;
 		orphans: Array<{ objectKey: string; fileName: string; status: string; ageDays: number }>;
@@ -60,7 +51,6 @@
 	const actionData = $derived(
 		(form ?? {}) as {
 			message?: string;
-			uploadResults?: UploadResult[];
 			galleryAdded?: { kind: string; slug: string | null };
 			audit?: AuditReport;
 			purge?: PurgeList;
@@ -77,54 +67,6 @@
 	 * the head is two rows here because five bare controls in one line is too
 	 * tight to read.
 	 */
-	const cols: Record<
-		'preview' | 'file' | 'dimensions' | 'size' | 'status' | 'refs' | 'uploaded' | 'actions',
-		ListColumn
-	> = {
-		preview: {
-			id: 'preview',
-			label: m.admin_files_col_preview(),
-			width: 'w-24',
-			control: true
-		},
-		file: { id: 'file', label: m.admin_files_kind_file(), control: true },
-		dimensions: {
-			id: 'dimensions',
-			label: m.admin_files_col_dimensions(),
-			width: 'w-24',
-			hideBelow: 'md'
-		},
-		size: { id: 'size', label: m.admin_files_col_size(), width: 'w-24' },
-		status: {
-			id: 'status',
-			label: m.admin_common_status(),
-			width: 'w-24',
-			control: true
-		},
-		refs: {
-			id: 'refs',
-			label: m.admin_files_col_refs(),
-			width: 'w-24',
-			hideBelow: 'sm',
-			control: true
-		},
-		uploaded: {
-			id: 'uploaded',
-			label: m.admin_files_col_uploaded(),
-			width: 'w-40',
-			hideBelow: 'lg',
-			control: true
-		},
-		actions: {
-			id: 'actions',
-			label: m.admin_common_actions(),
-			width: 'w-28',
-			align: 'right',
-			control: true
-		}
-	};
-	const columns = Object.values(cols);
-
 	/** Query string for a filter change; `''` when it clears every filter. */
 	function querySearch(patch: Record<string, string | undefined>): string {
 		const params = new SvelteURLSearchParams();
@@ -218,60 +160,15 @@
 	}
 	let copiedId = $state<string | null>(null);
 
-	let uploading = $state(false);
-
 	// The "上传" header button is declared in +page.server.ts; bind it to the dialog.
 	const headerActions = useAdminHeaderActionRegistry();
 	let uploadOpen = $state(false);
 	$effect(() => headerActions?.register('files:upload', () => (uploadOpen = true)));
 
-	/** Q4 (deploy note): one request per file keeps every body under BODY_SIZE_LIMIT. */
-	async function uploadAll(event: SubmitEvent) {
-		event.preventDefault();
-		const form = event.currentTarget as HTMLFormElement;
-		const input = form.querySelector<HTMLInputElement>('input[name="files"]');
-		const files = Array.from(input?.files ?? []);
-		if (files.length === 0) {
-			await applyUploadResults({ results: [], message: m.admin_files_err_no_files() });
-			uploadOpen = false;
-			return;
-		}
-		if (uploading) return;
-		if (files.length > data.limits.maxBatch) {
-			await applyUploadResults({
-				results: [],
-				message: m.admin_media_err_too_many({ count: data.limits.maxBatch })
-			});
-			uploadOpen = false;
-			return;
-		}
-		uploading = true;
-		try {
-			const outcome = await uploadEachFile({
-				action: '?/upload',
-				files,
-				maxBytes: data.limits.maxBytes,
-				fallbackMessage: m.admin_media_err_upload_failed(),
-				tooLargeMessage: (name) => m.admin_media_err_too_big({ name }),
-				mapError: (status, name) =>
-					mapUploadError(status, name, {
-						tooBig: (n) => m.admin_media_err_too_big({ name: n }),
-						rate: m.admin_media_err_rate,
-						session: m.admin_media_err_session
-					})
-			});
-			if (outcome.redirected) {
-				if (outcome.message) {
-					await applyUploadResults({ results: outcome.results, message: outcome.message });
-				}
-				return;
-			}
-			await applyUploadResults(outcome);
-		} finally {
-			uploading = false;
-			if (input) input.value = '';
-			uploadOpen = false;
-		}
+	/** Content-addressed registry: flag a byte-identical pick so the row is not a mystery. */
+	function uploadNote(result: UploadOutcome): string | undefined {
+		const deduplicated = (result.file as { deduplicated?: boolean } | undefined)?.deduplicated;
+		return deduplicated ? m.admin_files_dedup() : undefined;
 	}
 
 	/**
@@ -349,50 +246,18 @@
 				: m.admin_files_gallery_exists()}
 		</div>
 	{/if}
-	{#if actionData.uploadResults}
-		<div class="rounded-md border bg-background px-3 py-2 text-sm" role="status">
-			{#each actionData.uploadResults as result, index (result.fileName + ':' + index)}
-				<p class:opacity-60={!result.ok}>
-					{result.ok ? '✓' : '✗'}
-					{result.fileName}
-					{#if result.ok && result.file?.deduplicated}{m.admin_files_dedup()}{/if}
-					{#if !result.ok}— {result.message ?? result.code}{/if}
-				</p>
-			{/each}
-		</div>
-	{/if}
-
-	<Dialog.Root bind:open={uploadOpen}>
-		<Dialog.Content class="sm:max-w-md">
-			<Dialog.Header>
-				<Dialog.Title>{m.admin_media_upload()}</Dialog.Title>
-				<Dialog.Description>
-					{m.admin_files_upload_hint({
-						batch: data.limits.maxBatch,
-						size: data.limits.maxBytes / 1024 / 1024
-					})}
-				</Dialog.Description>
-			</Dialog.Header>
-			<form method="POST" action="?/upload" enctype="multipart/form-data" onsubmit={uploadAll}>
-				<Input
-					type="file"
-					name="files"
-					aria-label={m.admin_media_pick_files()}
-					multiple
-					accept={ACCEPT}
-				/>
-				<Dialog.Footer>
-					<Button type="button" variant="outline" onclick={() => (uploadOpen = false)}
-						>{m.admin_common_cancel()}</Button
-					>
-					<Button type="submit" disabled={uploading}>
-						<IconUpload data-icon="inline-start" />
-						{m.admin_media_upload()}
-					</Button>
-				</Dialog.Footer>
-			</form>
-		</Dialog.Content>
-	</Dialog.Root>
+	<MediaUploadDialog
+		bind:open={uploadOpen}
+		action="?/upload"
+		accept={ACCEPT}
+		maxBatch={data.limits.maxBatch}
+		maxBytes={data.limits.maxBytes}
+		description={m.admin_files_upload_hint({
+			batch: data.limits.maxBatch,
+			size: data.limits.maxBytes / 1024 / 1024
+		})}
+		resultNote={uploadNote}
+	/>
 
 	{#if data.listTruncated}
 		<p role="status" class="text-xs text-muted-foreground">

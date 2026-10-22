@@ -13,23 +13,18 @@
 	import { Empty } from '$lib/components/ui/empty';
 	import { RefreshButton } from '$lib/components/admin/refresh-button';
 	import { DeleteConfirm, useAdminHeaderActionRegistry } from '$lib/components/admin';
-	import {
-		ListRowActions,
-		ListTable,
-		listColumnClass,
-		type ListColumn
-	} from '$lib/components/admin/list-table';
+	import { ListRowActions, ListTable, listColumnClass } from '$lib/components/admin/list-table';
 	import { cn } from '$lib/utils';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import { locales } from '$lib/paraglide/runtime';
 	import { localeLabels } from '$lib/stores/locale.svelte';
 	import type { PageData } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { cols, columns } from './columns';
 	import IconEye from '@tabler/icons-svelte-runes/icons/eye';
 	import IconEyeOff from '@tabler/icons-svelte-runes/icons/eye-off';
 	import IconArrowUp from '@tabler/icons-svelte-runes/icons/arrow-up';
 	import IconArrowDown from '@tabler/icons-svelte-runes/icons/arrow-down';
-	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 
 	let { data, form }: { data: PageData; form: { success?: boolean; error?: string } | null } =
 		$props();
@@ -41,43 +36,17 @@
 	 * external entry inserts directly from the dialog below (no draft). */
 	let createExternalOpen = $state(false);
 	let creating = $state(false);
-	// Menu open state is driven by the header's「新建」action (the trigger in
-	// the toolbar only provides the anchor position).
-	let createMenuOpen = $state(false);
 
-	// The "新建" header button is declared in +page.server.ts; bind it to the picker.
+	// The header's「新建」menu is declared in +page.server.ts; bind its
+	// external-entry item to this page's dialog.
 	const headerActions = useAdminHeaderActionRegistry();
-	$effect(() => headerActions?.register('pages:create', () => (createMenuOpen = true)));
+	$effect(() =>
+		headerActions?.register('pages:create:external', () => (createExternalOpen = true))
+	);
 
 	type PageRow = (typeof data.pages)[number];
 
 	/** Same column descriptor as every other admin list: head and cells share it. */
-	const cols: Record<'title' | 'slug' | 'status' | 'sort' | 'updated' | 'actions', ListColumn> = {
-		title: { id: 'title', label: m.admin_pages_col_title() },
-		slug: { id: 'slug', label: 'Slug', width: 'w-44', hideBelow: 'sm' },
-		status: {
-			id: 'status',
-			label: m.admin_common_status(),
-			width: 'w-20',
-			hideBelow: 'md'
-		},
-		sort: { id: 'sort', label: m.admin_pages_col_sort(), width: 'w-28' },
-		updated: {
-			id: 'updated',
-			label: m.admin_pages_col_updated(),
-			width: 'w-36',
-			hideBelow: 'lg'
-		},
-		actions: {
-			id: 'actions',
-			label: m.admin_common_actions(),
-			width: 'w-28',
-			align: 'right',
-			control: true
-		}
-	};
-	const columns = Object.values(cols);
-
 	// Status changes the row button does not cover (the isDefault case needs a
 	// confirm) go through one shared submit, the same way the content lists do.
 	let statusId = $state('');
@@ -160,32 +129,6 @@
 			{errorText}
 		</div>
 	{/if}
-
-	<DropdownMenu.Root bind:open={createMenuOpen}>
-		<DropdownMenu.Trigger>
-			{#snippet child({ props })}
-				<Button
-					{...props}
-					size="sm"
-					variant="outline"
-					class="invisible absolute top-0 right-0 h-7 gap-1 px-2.5 text-xs"
-				>
-					<IconPlus class="size-3" />
-					{m.admin_common_new()}
-				</Button>
-			{/snippet}
-		</DropdownMenu.Trigger>
-		<DropdownMenu.Content align="end">
-			<DropdownMenu.Group>
-				<DropdownMenu.Item onSelect={() => goto('/admin/pages/edit')}>
-					{m.admin_pages_md_page()}
-				</DropdownMenu.Item>
-				<DropdownMenu.Item onSelect={() => (createExternalOpen = true)}>
-					{m.admin_pages_external()}
-				</DropdownMenu.Item>
-			</DropdownMenu.Group>
-		</DropdownMenu.Content>
-	</DropdownMenu.Root>
 
 	<ListTable
 		{columns}

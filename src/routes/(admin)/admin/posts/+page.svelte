@@ -16,13 +16,13 @@
 		ListRowActions,
 		ListSearch,
 		ListTable,
-		listColumnClass,
-		type ListColumn
+		listColumnClass
 	} from '$lib/components/admin/list-table';
 	import { cn } from '$lib/utils';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { cols, columns } from './columns';
 	import { tick } from 'svelte';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
@@ -53,49 +53,20 @@
 	 * derives both the `<th>` and the `<td>` classes from the same entry, so a
 	 * column can never be half-visible (the old list's overlap bug).
 	 */
-	const cols: Record<
-		'title' | 'category' | 'status' | 'views' | 'likes' | 'updated' | 'actions',
-		ListColumn
-	> = {
-		title: { id: 'title', label: m.admin_list_col_title(), control: true },
-		category: {
-			id: 'category',
-			label: m.admin_list_col_category(),
-			width: 'w-28',
-			hideBelow: 'lg',
-			control: true
-		},
-		status: {
-			id: 'status',
-			label: m.admin_common_status(),
-			width: 'w-24',
-			hideBelow: 'md',
-			control: true
-		},
-		views: {
-			id: 'views',
-			label: m.admin_list_col_views(),
-			width: 'w-16',
-			hideBelow: 'xl',
-			align: 'right'
-		},
-		likes: {
-			id: 'likes',
-			label: m.admin_list_col_likes(),
-			width: 'w-16',
-			hideBelow: 'xl',
-			align: 'right'
-		},
-		updated: { id: 'updated', label: m.admin_list_col_updated(), width: 'w-32', hideBelow: 'lg' },
-		actions: {
-			id: 'actions',
-			label: m.admin_common_actions(),
-			width: 'w-28',
-			align: 'right',
-			control: true
-		}
-	};
-	const columns = Object.values(cols);
+	/**
+	 * Row layout. The title owns line 1 and wraps in full - it is the record's
+	 * identity, and truncating it costs more than the width it saves. Everything
+	 * else is deferred under it, one related group per line:
+	 *
+	 *   line 2 归属        category / status - only once their column has dropped
+	 *   line 3 计量 / 时间  views / likes / updated - never columns at all
+	 *
+	 * Narrowing costs columns, never information: a dropped column value shows on
+	 * line 2 at exactly the widths where its `<th>` is hidden, and its filter moves
+	 * in beside the search box so it stays usable. Dropping order when narrowing is
+	 * 状态 -> 分类 - among filters the more used one survives longer, and the title
+	 * search never moves.
+	 */
 
 	const currentCategory = $derived(
 		data.categories.find((c) => c.id === data.filters.category)?.name ??

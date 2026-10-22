@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Button } from '$lib/components/ui/button';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import { cn } from '$lib/utils';
 	import type { Component } from 'svelte';
@@ -64,6 +66,8 @@
 		href?: string;
 		/** Page-registered handler id (bound by the page via the action registry). */
 		actionId?: string;
+		/** When present the button opens this menu instead of acting directly. */
+		menu?: Array<{ label: string; href?: string; actionId?: string }>;
 		onclick?: () => void;
 	}
 
@@ -109,7 +113,8 @@
 			variant: a.variant ?? 'ghost',
 			size: a.size ?? 'sm',
 			href: a.href,
-			actionId: a.actionId
+			actionId: a.actionId,
+			menu: a.menu
 		}));
 	}
 </script>
@@ -135,6 +140,31 @@
 						<action.icon data-icon="inline-start" />
 						{action.label}
 					</Button>
+				{:else if action.menu}
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							{#snippet child({ props })}
+								<Button {variant} {size} {...props}>
+									<action.icon data-icon="inline-start" />
+									{action.label}
+								</Button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content align="end">
+							<DropdownMenu.Group>
+								{#each action.menu as item (item.label)}
+									<DropdownMenu.Item
+										onSelect={() => {
+											if (item.href) goto(item.href);
+											else if (item.actionId) actionRegistry?.run(item.actionId);
+										}}
+									>
+										{item.label}
+									</DropdownMenu.Item>
+								{/each}
+							</DropdownMenu.Group>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
 				{:else}
 					<Button {variant} {size} onclick={() => activate(action)}>
 						<action.icon data-icon="inline-start" />

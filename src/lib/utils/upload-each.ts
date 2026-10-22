@@ -28,6 +28,9 @@ export interface UploadOutcome {
 	[key: string]: unknown;
 }
 
+/** Per-file lifecycle reported to the caller's queue UI. Index is into `files`. */
+export type UploadProgressState = 'uploading' | 'done' | 'error';
+
 interface UploadActionData {
 	uploadResults?: UploadOutcome[];
 	message?: string;
@@ -44,11 +47,15 @@ export async function uploadEachFile(options: {
 	tooLargeMessage?: (name: string) => string;
 	/** Maps a framework/proxy HTTP status to a translated message. */
 	mapError?: (status: number, fileName: string) => string | undefined;
+	/** Drives the caller's per-file queue chip; optional so queue-less callers stay simple. */
+	onProgress?: (index: number, state: UploadProgressState) => void;
 }): Promise<{ results: UploadOutcome[]; message?: string; redirected?: boolean }> {
 	const results: UploadOutcome[] = [];
 	let message: string | undefined;
+	const progress = options.onProgress ?? (() => {});
 
-	for (const file of options.files) {
+	for (let index = 0; index < options.files.length; index++) {
+		const file = options.files[index]!;
 		if (file.size > options.maxBytes) {
 			// Skip the doomed request: adapter-node rejects an oversized body
 			// with a 413 (SvelteKitError) before the action runs.
@@ -58,12 +65,14 @@ export async function uploadEachFile(options: {
 				code: 'too-large',
 				message: options.tooLargeMessage?.(file.name) ?? options.fallbackMessage
 			});
+			progress(index, 'error');
 			continue;
 		}
 
 		const body = new FormData();
 		body.append('files', file);
 		let status = 0;
+		progress(index, 'uploading');
 		try {
 			const response = await fetch(options.action, {
 				method: 'POST',
@@ -86,6 +95,7 @@ export async function uploadEachFile(options: {
 					// The batch is over and the page is still here: say why.
 					message = options.fallbackMessage;
 				}
+				progress(index, 'error');
 				return { results, message, redirected: true };
 			}
 
@@ -93,12 +103,16 @@ export async function uploadEachFile(options: {
 				const data = (result.data ?? {}) as UploadActionData;
 				if (data.uploadResults) {
 					results.push(...data.uploadResults);
+					// The action can report several rows per request (photos: file row
+					// plus gallery row); only all-rows-ok leaves the chip in `done`.
+					progress(index, data.uploadResults.every((row) => row.ok) ? 'done' : 'error');
 				} else {
 					results.push({
 						fileName: file.name,
 						ok: false,
 						message: data.message ?? options.fallbackMessage
 					});
+					progress(index, 'error');
 				}
 				if (data.message) message = data.message;
 			} else if (result.type === 'error') {
@@ -111,6 +125,7 @@ export async function uploadEachFile(options: {
 					// unmapped statuses fall back to the page's translated copy.
 					message: options.mapError?.(status, file.name) ?? options.fallbackMessage
 				});
+				progress(index, 'error');
 			} else {
 				// A JSON body without an ActionResult type (CSRF 403 JSON, proxy error):
 				// never drop the file from the report.
@@ -119,6 +134,7 @@ export async function uploadEachFile(options: {
 					ok: false,
 					message: options.mapError?.(status, file.name) ?? options.fallbackMessage
 				});
+				progress(index, 'error');
 			}
 		} catch (error) {
 			// Non-JSON body (413/500), a redirect to HTML, or a network failure.
@@ -128,6 +144,7 @@ export async function uploadEachFile(options: {
 				ok: false,
 				message: options.mapError?.(status, file.name) ?? options.fallbackMessage
 			});
+			progress(index, 'error');
 			console.warn('[upload] request failed', file.name, error);
 		}
 	}

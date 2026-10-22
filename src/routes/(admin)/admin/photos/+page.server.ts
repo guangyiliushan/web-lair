@@ -58,6 +58,15 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	return {
 		headerTitle: m.admin_nav_photos(),
+		headerActions: [
+			{
+				label: m.admin_media_upload(),
+				iconName: 'upload',
+				variant: 'default',
+				// opens the upload dialog registered by +page.svelte
+				actionId: 'photos:upload'
+			}
+		],
 		photos: rows.map((row) => ({
 			...row,
 			// The drawer's datetime-local value, rendered in the site timezone.
