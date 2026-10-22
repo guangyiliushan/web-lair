@@ -10,3 +10,4 @@ export {
 } from './admin-header-actions';
 
 export * as MasterDetail from './master-detail';
+export * as ListTable from './list-table';

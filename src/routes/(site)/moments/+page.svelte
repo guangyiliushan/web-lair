@@ -71,7 +71,7 @@
 								<IconWriting class="mt-0.5 size-4 shrink-0 text-muted-foreground/60" />
 								<div class="min-w-0 flex-1">
 									<p class="text-base leading-7 wrap-break-word whitespace-pre-wrap">
-										{row.content}
+										{row.excerpt}
 									</p>
 									<div
 										class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground"

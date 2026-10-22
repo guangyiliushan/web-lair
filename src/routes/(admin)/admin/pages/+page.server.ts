@@ -59,6 +59,15 @@ export const load: PageServerLoad = async () => {
 
 	return {
 		headerTitle: m.admin_nav_pages(),
+		headerActions: [
+			{
+				label: m.admin_common_new(),
+				iconName: 'plus',
+				variant: 'default',
+				// opens the md/external picker rendered by +page.svelte
+				actionId: 'pages:create'
+			}
+		],
 		pages: rows.map((row) => ({
 			...row,
 			// Placeholder rows get their own delete-dialog copy (R2-8): the

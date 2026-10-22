@@ -96,7 +96,7 @@ test.describe('projects admin', () => {
 		await expect(page.getByRole('heading', { name: '项目' })).toBeVisible({ timeout: 20_000 });
 
 		await expect(async () => {
-			await page.getByRole('button', { name: '新建项目' }).click({ timeout: 5000 });
+			await page.getByRole('button', { name: '新建', exact: true }).click({ timeout: 5000 });
 			await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
 		}).toPass({ timeout: 20_000 });
 		const dialog = page.getByRole('dialog');
@@ -114,7 +114,7 @@ test.describe('projects admin', () => {
 
 		// The normalized duplicate is refused through the unique index.
 		await expect(async () => {
-			await page.getByRole('button', { name: '新建项目' }).click({ timeout: 5000 });
+			await page.getByRole('button', { name: '新建', exact: true }).click({ timeout: 5000 });
 			await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
 		}).toPass({ timeout: 20_000 });
 		await dialog.getByLabel('名称').fill(`${ROW_C}-dup`);
@@ -363,7 +363,7 @@ test.describe('projects admin', () => {
 	test('import dialog surfaces error paths without leaving the page', async ({ page }) => {
 		await page.goto('/admin/projects');
 		await expect(async () => {
-			await page.getByRole('button', { name: '从链接导入' }).click({ timeout: 5000 });
+			await page.getByRole('button', { name: '导入', exact: true }).click({ timeout: 5000 });
 			await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
 		}).toPass({ timeout: 20_000 });
 		const dialog = page.getByRole('dialog');

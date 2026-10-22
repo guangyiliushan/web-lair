@@ -1,22 +1,30 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Table from '$lib/components/ui/table';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Empty } from '$lib/components/ui/empty';
+	import { DeleteConfirm } from '$lib/components/admin';
+	import {
+		ListRowActions,
+		ListTable,
+		listColumnClass,
+		type ListColumn
+	} from '$lib/components/admin/list-table';
+	import { cn } from '$lib/utils';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
-	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
-	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconArticle from '@tabler/icons-svelte-runes/icons/article';
 
-	let { data }: PageProps = $props();
+	let { data, form }: PageProps = $props();
 
-	let discardTarget = $state<{ draftId: string; title: string } | null>(null);
-	let discarding = $state(false);
+	type DraftRow = (typeof data.drafts)[number];
+
+	/** Failure from `?/discard` - shown inside the confirm dialog. */
+	const actionError = $derived(
+		form && 'error' in form && typeof form.error === 'string' ? form.error : null
+	);
 
 	const KIND_LABELS: Record<string, string> = {
 		new: m.admin_drafts_kind_new(),
@@ -29,144 +37,125 @@
 		edit: 'default'
 	};
 
+	/** Same column descriptor as every other admin list: head and cells share it. */
+	const cols: Record<'title' | 'kind' | 'lang' | 'postStatus' | 'updated' | 'actions', ListColumn> =
+		{
+			title: { id: 'title', label: m.admin_list_col_title() },
+			kind: { id: 'kind', label: m.admin_common_type(), width: 'w-20' },
+			lang: { id: 'lang', label: m.admin_posts_edit_lang_label(), width: 'w-16' },
+			postStatus: {
+				id: 'postStatus',
+				label: m.admin_drafts_col_post_status(),
+				width: 'w-24',
+				hideBelow: 'sm'
+			},
+			updated: {
+				id: 'updated',
+				label: m.admin_drafts_col_updated(),
+				width: 'w-32',
+				hideBelow: 'sm'
+			},
+			actions: {
+				id: 'actions',
+				label: m.admin_common_actions(),
+				width: 'w-20',
+				align: 'right'
+			}
+		};
+	const columns = Object.values(cols);
+
 	const discardedFlash = $derived(page.url.searchParams.get('discarded') === '1');
 
-	const discardHandler =
-		() =>
-		async ({ result, update }: { result: { type: string }; update: () => Promise<void> }) => {
-			discarding = false;
-			if (result.type === 'failure') {
-				discardTarget = null;
-				return;
-			}
-			await update();
-		};
+	// Discarding is irreversible, so it goes through a confirm; there is no
+	// milder action to put in the middle slot.
+	let discardTarget = $state<DraftRow | null>(null);
 </script>
 
 <svelte:head>
 	<title>{m.admin_nav_drafts()} - Lair Admin</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-4">
 	{#if discardedFlash}
 		<div
-			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
+			role="status"
+			class="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400"
 		>
 			{m.admin_drafts_discarded_flash()}
 		</div>
 	{/if}
 
-	{#if data.drafts.length === 0}
-		<Empty class="py-12">
-			<div class="flex flex-col items-center gap-1">
-				<h3 class="text-lg font-semibold tracking-tight">{m.admin_drafts_empty()}</h3>
-				<p class="text-sm text-muted-foreground">
-					{m.admin_drafts_empty_desc()}
-				</p>
-			</div>
-			<div class="mt-4">
-				<Button href="/admin/posts">
-					<IconArticle data-icon="inline-start" />
-					{m.admin_drafts_go_posts()}
-				</Button>
-			</div>
-		</Empty>
-	{:else}
-		<div class="overflow-x-auto">
-			<Table.Root>
-				<Table.Header>
-					<Table.Row>
-						<Table.Head>{m.admin_drafts_col_title()}</Table.Head>
-						<Table.Head class="w-20">{m.admin_common_type()}</Table.Head>
-						<Table.Head class="w-16">{m.admin_posts_edit_lang_label()}</Table.Head>
-						<Table.Head class="w-24">{m.admin_drafts_col_post_status()}</Table.Head>
-						<Table.Head class="hidden w-40 sm:table-cell">{m.admin_drafts_col_updated()}</Table.Head
-						>
-						<Table.Head class="w-24 text-right">{m.admin_common_actions()}</Table.Head>
-					</Table.Row>
-				</Table.Header>
-				<Table.Body>
-					{#each data.drafts as draft (draft.draftId)}
-						<Table.Row>
-							<Table.Cell class="max-w-0 truncate font-medium">
-								{#if draft.postId}
-									<a href="/admin/posts/edit?id={draft.postId}" class="hover:text-primary">
-										{draft.title}
-									</a>
-								{:else}
-									{draft.title}
-								{/if}
-							</Table.Cell>
-							<Table.Cell>
-								<Badge variant={KIND_VARIANTS[draft.kind]} class="text-xs">
-									{KIND_LABELS[draft.kind]}
-								</Badge>
-							</Table.Cell>
-							<Table.Cell class="text-xs text-muted-foreground">{draft.lang}</Table.Cell>
-							<Table.Cell class="text-xs text-muted-foreground"
-								>{draft.postStatus ?? '—'}</Table.Cell
-							>
-							<Table.Cell class="hidden text-xs text-muted-foreground sm:table-cell">
-								{draft.updatedAt
-									? formatDateTime(new Date(draft.updatedAt), {
-											dateStyle: 'short',
-											timeStyle: 'short'
-										})
-									: '—'}
-							</Table.Cell>
-							<Table.Cell class="text-right">
-								<div class="flex items-center justify-end gap-1">
-									{#if draft.postId}
-										<Button
-											variant="ghost"
-											size="icon"
-											class="size-8"
-											href="/admin/posts/edit?id={draft.postId}"
-										>
-											<IconPencil class="size-4" />
-										</Button>
-									{/if}
-									<Button
-										variant="ghost"
-										size="icon"
-										class="size-8 text-destructive"
-										onclick={() => (discardTarget = { draftId: draft.draftId, title: draft.title })}
-										aria-label={m.admin_posts_edit_discard_draft()}
-									>
-										<IconTrash class="size-4" />
-									</Button>
-								</div>
-							</Table.Cell>
-						</Table.Row>
-					{/each}
-				</Table.Body>
-			</Table.Root>
-		</div>
-	{/if}
+	<ListTable
+		{columns}
+		rows={data.drafts}
+		rowKey={(draft) => draft.draftId}
+		label={m.admin_nav_drafts()}
+		class="min-h-96"
+	>
+		{#snippet row(draft)}
+			<Table.Cell class={cn(listColumnClass(cols.title), 'max-w-0 truncate')}>
+				{#if draft.postId}
+					<a href="/admin/posts/edit?id={draft.postId}" class="hover:text-primary">
+						{draft.title}
+					</a>
+				{:else}
+					{draft.title}
+				{/if}
+			</Table.Cell>
+			<Table.Cell class={listColumnClass(cols.kind)}>
+				<Badge variant={KIND_VARIANTS[draft.kind]} class="text-xs">
+					{KIND_LABELS[draft.kind]}
+				</Badge>
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.lang), 'text-xs text-muted-foreground')}>
+				{draft.lang}
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.postStatus), 'text-xs text-muted-foreground')}>
+				{draft.postStatus ?? '—'}
+			</Table.Cell>
+			<Table.Cell
+				class={cn(listColumnClass(cols.updated), 'text-xs whitespace-nowrap text-muted-foreground')}
+			>
+				{draft.updatedAt
+					? formatDateTime(new Date(draft.updatedAt), { dateStyle: 'short', timeStyle: 'short' })
+					: '—'}
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.actions), 'text-right')}>
+				<ListRowActions
+					editPath={draft.postId ? '/admin/posts/edit' : undefined}
+					editId={draft.postId ?? undefined}
+					editLabel={m.admin_common_edit()}
+					onDelete={() => (discardTarget = draft)}
+					deleteLabel={m.admin_posts_edit_discard_draft()}
+				/>
+			</Table.Cell>
+		{/snippet}
+
+		{#snippet empty()}
+			<Empty class="mx-auto py-14">
+				<div class="flex flex-col items-center gap-1">
+					<h3 class="text-lg font-semibold tracking-tight">{m.admin_drafts_empty()}</h3>
+					<p class="text-sm text-muted-foreground">{m.admin_drafts_empty_desc()}</p>
+				</div>
+				<div class="mt-2">
+					<Button href="/admin/posts">
+						<IconArticle data-icon="inline-start" />
+						{m.admin_drafts_go_posts()}
+					</Button>
+				</div>
+			</Empty>
+		{/snippet}
+	</ListTable>
 </div>
 
-<!-- Discard confirmation (one shared dialog; the form's draftId follows the target) -->
-<AlertDialog.Root
+<DeleteConfirm
 	open={discardTarget !== null}
-	onOpenChange={(open) => {
-		if (!open) discardTarget = null;
-	}}
->
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>{m.admin_drafts_discard_title()}</AlertDialog.Title>
-			<AlertDialog.Description>
-				{m.admin_drafts_discard_desc({ title: discardTarget?.title ?? '' })}
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
-			<form method="POST" action="?/discard" use:enhance={discardHandler}>
-				<input type="hidden" name="draftId" value={discardTarget?.draftId ?? ''} />
-				<Button type="submit" variant="destructive" disabled={discarding}>
-					{discarding ? m.admin_drafts_discarding() : m.admin_posts_edit_discard_confirm()}
-				</Button>
-			</form>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
+	title={m.admin_drafts_discard_title()}
+	description={m.admin_drafts_discard_desc({ title: discardTarget?.title ?? '' })}
+	id={discardTarget?.draftId ?? ''}
+	idName="draftId"
+	action="?/discard"
+	confirmLabel={m.admin_posts_edit_discard_confirm()}
+	error={actionError}
+	onclose={() => (discardTarget = null)}
+/>

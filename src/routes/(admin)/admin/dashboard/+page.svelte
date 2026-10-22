@@ -232,8 +232,10 @@
 	<!-- Quick actions. Below md this is the same single-line list the phone
 	     layout wants; above it the rows flow into a grid so a wide screen stops
 	     paying five row-heights for five items. The button pair is free to wrap
-	     under the title once a cell gets narrow, which is what lets xl pack five
-	     across without crushing them. Column rules use the border trick (the
+	     under the title once a cell gets narrow, which is what lets five-across
+	     pack in without crushing them. That step is gated at 1440px rather than
+	     Tailwind's xl (1280): at 1280 the cells land around 192px and the
+	     button pair still feels pinched. Column rules use the border trick (the
 	     ul pulls the last rule under the card edge) so a short final row leaves
 	     no stray marks. -->
 	<section class="flex flex-col gap-2">
@@ -241,7 +243,9 @@
 			{m.admin_dashboard_section_quick()}
 		</h2>
 		<Card.Root class="py-0">
-			<ul class="-mr-px -mb-px grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+			<ul
+				class="-mr-px -mb-px grid grid-cols-1 min-[1440px]:grid-cols-5 md:grid-cols-2 lg:grid-cols-3"
+			>
 				{#each quickActions as action (action.title)}
 					<li
 						class="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-2.5 md:border-r"

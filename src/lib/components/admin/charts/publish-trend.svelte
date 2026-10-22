@@ -5,6 +5,7 @@
 	import IconTrendingUp from '@tabler/icons-svelte-runes/icons/trending-up';
 	import { formatNumber } from '$lib/utils/i18n';
 	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 
 	interface Point {
 		bucket: string;
@@ -45,6 +46,22 @@
 
 	// Direct-label the endpoint only; a number on every point is noise.
 	const latest = $derived(data.at(-1));
+
+	/**
+	 * A2 - the axis is too narrow for `2026-01` twelve times over (that is
+	 * ~600px of label in a ~315px plot). Short month names drop each label to
+	 * roughly a fifth of that. The year rides along only on January, where it
+	 * changes the reading - the window is a rolling 12 months, so it can cross
+	 * a year boundary and the first tick alone would not carry it.
+	 */
+	function monthLabel(bucket: string): string {
+		const [year, month] = bucket.split('-').map(Number);
+		if (!year || !month) return bucket;
+		return new Date(year, month - 1, 1).toLocaleDateString(getLocale(), {
+			month: 'short',
+			...(month === 1 ? { year: '2-digit' } : {})
+		});
+	}
 </script>
 
 <ChartCard
@@ -67,8 +84,34 @@
 		</li>
 	</ul>
 
+	<!-- Labels stay horizontal. Tilting them was tried and read as noise: once
+	     the names are short (A2) they do not need the angle, and a 45-degree
+	     axis costs a tall band under the plot for no gain. A comfortable
+	     tickSpacing sets how many survive; tickOcclusion is the safety net for
+	     a locale whose month names are longer than the spacing allows. -->
 	<ChartContainer {config} class="aspect-auto h-[180px] w-full">
-		<LineChart {data} {series} x="bucket" />
+		<LineChart
+			{data}
+			{series}
+			x="bucket"
+			padding={{ top: 8, right: 12, bottom: 22, left: 8 }}
+			props={{
+				xAxis: {
+					rule: false,
+					tickMarks: false,
+					// A1 - measure the labels as they actually render and drop the
+					// ones that would collide, anchoring both ends of the window.
+					tickSpacing: 52,
+					tickOcclusion: { priority: 'start-end', padding: 4 },
+					format: monthLabel
+				},
+				yAxis: {
+					rule: false,
+					tickMarks: false,
+					format: (value: number) => formatNumber(value)
+				}
+			}}
+		/>
 	</ChartContainer>
 
 	{#snippet table()}

@@ -55,6 +55,27 @@ export const load: PageServerLoad = async ({ url }) => {
 	const focusRow = focusId && isUuid(focusId) ? await getProject(focusId) : null;
 	return {
 		headerTitle: m.admin_nav_projects(),
+		headerActions: [
+			{
+				label: m.admin_projects_targets(),
+				iconName: 'target',
+				variant: 'outline',
+				// opens the targets dialog registered by +page.svelte
+				actionId: 'projects:targets'
+			},
+			{
+				label: m.admin_projects_import(),
+				iconName: 'file-import',
+				variant: 'outline',
+				actionId: 'projects:import'
+			},
+			{
+				label: m.admin_projects_new(),
+				iconName: 'plus',
+				variant: 'default',
+				actionId: 'projects:create'
+			}
+		],
 		filter,
 		counts,
 		targets,

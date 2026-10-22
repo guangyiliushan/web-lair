@@ -97,17 +97,28 @@ test.describe('micro C3 admin', () => {
 		expect(psql(`select count(*) from thoughts where content = '${CRUD_THOUGHT}'`)).toBe('1');
 	});
 
-	test('moments: create with a kind chip and the badge renders', async ({ page }) => {
+	test('moments: the editor route creates a row with a kind chip', async ({ page }) => {
+		// The dashboard write deep link now forwards to the editor route (the
+		// dialog was retired with the Markdown editor, B2a UI P0 / P7).
 		await page.goto('/admin/moments?add=1');
-		const dialog = page.getByRole('dialog');
-		await expect(dialog).toBeVisible({ timeout: 20_000 });
-		await dialog.getByLabel('内容').fill(CRUD_MOMENT);
-		await dialog.getByText('技术', { exact: true }).click();
-		await dialog.getByRole('button', { name: '发布' }).click({ timeout: 5000 });
-		await expect(dialog).toBeHidden({ timeout: 20_000 });
-		const row = page.locator('article', { hasText: CRUD_MOMENT });
-		await expect(row).toBeVisible({ timeout: 20_000 });
-		await expect(row.getByText('技术')).toBeVisible();
+		await expect(page).toHaveURL(/\/admin\/moments\/edit/, { timeout: 20_000 });
+
+		// Lexical textbox: the accessible name is the placeholder.
+		const textbox = page.getByRole('textbox', { name: '此刻的碎片...' });
+		await expect(async () => {
+			await textbox.click();
+			await page.keyboard.type(CRUD_MOMENT);
+			await expect(textbox).toContainText(CRUD_MOMENT, { timeout: 2_000 });
+		}).toPass({ timeout: 30_000 });
+
+		await page.getByRole('button', { name: '技术', exact: true }).click();
+		await page.getByRole('button', { name: '保存', exact: true }).click({ timeout: 5_000 });
+		await expect(page).toHaveURL(/\/admin\/moments(\?.*)?$/, { timeout: 20_000 });
+
+		// The admin moments list is a table now (same surface as posts/notes).
+		const row = page.getByRole('row').filter({ hasText: CRUD_MOMENT });
+		await expect(row.first()).toBeVisible({ timeout: 20_000 });
+		await expect(row.first().getByText('技术')).toBeVisible();
 		expect(psql(`select type from moments where content = '${CRUD_MOMENT}'`)).toBe('tech');
 	});
 
@@ -200,5 +211,18 @@ test.describe('micro C3 public', () => {
 		expect(malformed?.status()).toBe(404);
 		const missing = await page.goto('/zh-cn/moments/00000000-0000-7000-8000-000000000000');
 		expect(missing?.status()).toBe(404);
+	});
+
+	test('moments: markdown bodies render on the detail page', async ({ page }) => {
+		// Bodies are authored in the shared Markdown editor; the detail page
+		// renders the HTML (the stream keeps the plain-text excerpt).
+		const md = '## e2e-c3-md 标题 **加粗**';
+		psql(`insert into moments (content, type) values ('${md}', 'tech')`);
+		const id = psql(`select id from moments where content = '${md}'`);
+		await page.goto(`/zh-cn/moments/${id}`);
+		await expect(page.getByRole('heading', { level: 2, name: /e2e-c3-md 标题/ })).toBeVisible({
+			timeout: 20_000
+		});
+		await expect(page.locator('article strong').first()).toHaveText('加粗');
 	});
 });

@@ -12,6 +12,7 @@
 	import IconCategory from '@tabler/icons-svelte-runes/icons/category';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 	import IconEye from '@tabler/icons-svelte-runes/icons/eye';
+	import IconFileImport from '@tabler/icons-svelte-runes/icons/file-import';
 	import IconFileText from '@tabler/icons-svelte-runes/icons/file-text';
 	import IconFolders from '@tabler/icons-svelte-runes/icons/folders';
 	import IconMessage from '@tabler/icons-svelte-runes/icons/message';
@@ -22,6 +23,7 @@
 	import IconSettings from '@tabler/icons-svelte-runes/icons/settings';
 	import IconSparkles from '@tabler/icons-svelte-runes/icons/sparkles';
 	import IconTag from '@tabler/icons-svelte-runes/icons/tag';
+	import IconTarget from '@tabler/icons-svelte-runes/icons/target';
 	import IconTool from '@tabler/icons-svelte-runes/icons/tool';
 	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
 	import IconUserPlus from '@tabler/icons-svelte-runes/icons/user-plus';
@@ -34,6 +36,7 @@
 		category: IconCategory,
 		'external-link': IconExternalLink,
 		eye: IconEye,
+		'file-import': IconFileImport,
 		'file-text': IconFileText,
 		folders: IconFolders,
 		message: IconMessage,
@@ -44,6 +47,7 @@
 		settings: IconSettings,
 		sparkles: IconSparkles,
 		tag: IconTag,
+		target: IconTarget,
 		tool: IconTool,
 		upload: IconUpload,
 		'user-plus': IconUserPlus,

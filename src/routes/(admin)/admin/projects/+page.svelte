@@ -10,6 +10,7 @@
 	import * as Empty from '$lib/components/ui/empty';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { DeleteConfirm } from '$lib/components/admin';
+	import { useAdminHeaderActionRegistry } from '$lib/components/admin/admin-header-actions';
 	import { m } from '$lib/paraglide/messages';
 	import {
 		PROJECT_PROVIDER_LABEL_KEYS,
@@ -23,7 +24,6 @@
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconRefresh from '@tabler/icons-svelte-runes/icons/refresh';
-	import IconFileImport from '@tabler/icons-svelte-runes/icons/file-import';
 	import IconArrowUp from '@tabler/icons-svelte-runes/icons/arrow-up';
 	import IconArrowDown from '@tabler/icons-svelte-runes/icons/arrow-down';
 	import IconArrowBarToUp from '@tabler/icons-svelte-runes/icons/arrow-bar-to-up';
@@ -257,6 +257,19 @@
 		targetsOpen = true;
 	}
 
+	// The three action buttons are declared in +page.server.ts; bind them to
+	// the page-local dialogs (the header lives in the admin layout).
+	const headerActions = useAdminHeaderActionRegistry();
+	$effect(() => {
+		if (!headerActions) return;
+		const cleanups = [
+			headerActions.register('projects:targets', openTargets),
+			headerActions.register('projects:import', openImport),
+			headerActions.register('projects:create', openCreate)
+		];
+		return () => cleanups.forEach((cleanup) => cleanup());
+	});
+
 	// ── Single delete ──
 	let deleteTarget = $state<BaseRow | null>(null);
 
@@ -375,17 +388,6 @@
 					{m.admin_projects_sync()}
 				</Button>
 			</form>
-			<Button size="sm" variant="outline" onclick={openTargets}>
-				{m.admin_projects_targets()}
-			</Button>
-			<Button size="sm" variant="outline" onclick={openImport}>
-				<IconFileImport class="size-3.5" />
-				{m.admin_projects_import()}
-			</Button>
-			<Button size="sm" variant="outline" onclick={openCreate}>
-				<IconPlus class="size-3.5" />
-				{m.admin_projects_new()}
-			</Button>
 		</div>
 	</header>
 

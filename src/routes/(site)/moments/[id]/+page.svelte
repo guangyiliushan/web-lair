@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { SeoHead } from '$lib/components/seo';
+	import { MarkdownRenderer } from '$lib/components/markdown';
 	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
 	import { type MomentKind } from '$lib/utils/moment-meta';
@@ -36,7 +37,9 @@
 	<h1 class="sr-only">{m.moments_title()}</h1>
 
 	<div class="mt-10">
-		<p class="text-xl leading-relaxed wrap-break-word whitespace-pre-wrap">{data.row.content}</p>
+		<div class="text-xl leading-relaxed wrap-break-word">
+			<MarkdownRenderer html={data.html} prose />
+		</div>
 		<div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
 			<span class="rounded border px-1.5 py-0.5 text-xs">
 				{kindLabels[data.row.type as MomentKind]?.() ?? data.row.type}

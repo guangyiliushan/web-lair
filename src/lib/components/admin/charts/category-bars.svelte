@@ -33,8 +33,27 @@
 		}
 	];
 
-	const hasData = $derived(data.some((d) => d.count > 0));
-	const total = $derived(data.reduce((sum, d) => sum + d.count, 0));
+	// B4 - the SQL already caps at TOP_CATEGORIES; slice again here so a caller
+	// that passes more cannot undo it.
+	const TOP_CATEGORIES = 5;
+	const rows = $derived(data.slice(0, TOP_CATEGORIES));
+
+	const hasData = $derived(rows.some((d) => d.count > 0));
+	// Totals describe the bars on screen, not the full dataset: past the cap
+	// those are different numbers and only one of them is drawn.
+	const total = $derived(rows.reduce((sum, d) => sum + d.count, 0));
+
+	/**
+	 * B1 - an SVG tick label has no `text-overflow`, so a long category name
+	 * spills left out of the card. Cut it here at a width the reserved label
+	 * band can always hold; the full name stays in the tooltip and in the
+	 * table twin below, so nothing is gated behind the truncation.
+	 */
+	const MAX_LABEL_CHARS = 6;
+
+	function truncateLabel(name: string): string {
+		return name.length > MAX_LABEL_CHARS ? `${name.slice(0, MAX_LABEL_CHARS)}…` : name;
+	}
 </script>
 
 <ChartCard
@@ -50,12 +69,40 @@
 		</p>
 	{/if}
 
+	<!-- B2 - reserve the name band on the left and room for the end labels on
+	     the right up front, so a label can never be drawn outside the card.
+	     B3 - the y axis sheds its rule and tick marks so the names read as
+	     direct labels beside each bar, and the count rides at the bar end
+	     rather than on an axis. -->
 	<ChartContainer
 		{config}
 		class="aspect-auto w-full"
-		style="height: {Math.max(data.length, 1) * 32 + 12}px"
+		style="height: {Math.max(rows.length, 1) * 36 + 20}px"
 	>
-		<BarChart {data} {series} orientation="horizontal" x="count" y="name" />
+		<BarChart
+			data={rows}
+			{series}
+			orientation="horizontal"
+			x="count"
+			y="name"
+			padding={{ left: 80, right: 52, top: 6, bottom: 24 }}
+			props={{
+				xAxis: {
+					rule: false,
+					tickMarks: false,
+					format: (value: number) => formatNumber(value)
+				},
+				yAxis: {
+					rule: false,
+					tickMarks: false,
+					format: (value: string) => truncateLabel(value)
+				}
+			}}
+			labels={{
+				placement: 'outside',
+				format: (value: number) => formatNumber(value)
+			}}
+		/>
 	</ChartContainer>
 
 	{#snippet table()}
@@ -68,9 +115,9 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each data as row (row.name)}
+				{#each rows as row (row.name)}
 					<tr class="border-b border-border/50 last:border-0">
-						<td class="py-1 pr-3">{row.name}</td>
+						<td class="py-1 pr-3" title={row.name}>{row.name}</td>
 						<td class="py-1 text-right tabular-nums">{formatNumber(row.count)}</td>
 					</tr>
 				{/each}

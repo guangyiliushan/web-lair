@@ -4,6 +4,7 @@ import { moments } from '$lib/server/db/content';
 import { getOption } from '$lib/server/config/options-registry';
 import { formatDate } from '$lib/utils/i18n';
 import { parseMomentKind } from '$lib/utils/moment-meta';
+import { plainTextExcerpt } from '$lib/utils/excerpt';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -31,6 +32,10 @@ export const load: PageServerLoad = async ({ url }) => {
 		.then((items) =>
 			items.map((item) => ({
 				...item,
+				// Markdown bodies are authored in the admin editor; the stream
+				// stays a plain-text preview (full rendering lives on the
+				// detail page - no per-row unified pass over the whole table).
+				excerpt: plainTextExcerpt(item.content),
 				dateLabel: formatDate(item.createdAt, { timeZone: siteTz })
 			}))
 		);

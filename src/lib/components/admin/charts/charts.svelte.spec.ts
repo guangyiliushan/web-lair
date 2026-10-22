@@ -74,6 +74,29 @@ describe('category ranking', () => {
 		expect(document.body.textContent).toContain('22');
 	});
 
+	it('caps the ranking at five categories', async () => {
+		const seven = Array.from({ length: 7 }, (_, i) => ({ name: `Cat ${i + 1}`, count: 20 - i }));
+		await render(CategoryBars, { data: seven });
+		expect(document.querySelectorAll('table tbody tr')).toHaveLength(5);
+	});
+
+	it('truncates a long name on the axis but keeps the full one in the table', async () => {
+		const long = '项目复盘与技术选型';
+		await render(CategoryBars, {
+			data: [
+				{ name: long, count: 4 },
+				{ name: 'Log', count: 1 }
+			]
+		});
+		// The full name is always reachable - truncation may never gate it.
+		expect(document.querySelector('table')?.textContent).toContain(long);
+		// And the axis label is cut to the reserved band, not drawn past it.
+		const tickLabels = [...(document.querySelectorAll('svg text') ?? [])].map(
+			(t) => t.textContent ?? ''
+		);
+		expect(tickLabels.some((t) => t.includes('…'))).toBe(true);
+	});
+
 	it('lists every category in the table twin', async () => {
 		await render(CategoryBars, { data: categories });
 		const table = document.querySelector('table');

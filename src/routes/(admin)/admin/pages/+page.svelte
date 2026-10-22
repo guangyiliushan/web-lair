@@ -2,6 +2,7 @@
 	import { goto, invalidateAll, afterNavigate } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
+	import { tick } from 'svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -11,16 +12,21 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Empty } from '$lib/components/ui/empty';
 	import { RefreshButton } from '$lib/components/admin/refresh-button';
-	import { Separator } from '$lib/components/ui/separator';
+	import { DeleteConfirm, useAdminHeaderActionRegistry } from '$lib/components/admin';
+	import {
+		ListRowActions,
+		ListTable,
+		listColumnClass,
+		type ListColumn
+	} from '$lib/components/admin/list-table';
+	import { cn } from '$lib/utils';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import { locales } from '$lib/paraglide/runtime';
 	import { localeLabels } from '$lib/stores/locale.svelte';
 	import type { PageData } from './$types';
 	import { m } from '$lib/paraglide/messages';
-	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconEye from '@tabler/icons-svelte-runes/icons/eye';
 	import IconEyeOff from '@tabler/icons-svelte-runes/icons/eye-off';
-	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconArrowUp from '@tabler/icons-svelte-runes/icons/arrow-up';
 	import IconArrowDown from '@tabler/icons-svelte-runes/icons/arrow-down';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
@@ -35,13 +41,83 @@
 	 * external entry inserts directly from the dialog below (no draft). */
 	let createExternalOpen = $state(false);
 	let creating = $state(false);
+	// Menu open state is driven by the header's「新建」action (the trigger in
+	// the toolbar only provides the anchor position).
+	let createMenuOpen = $state(false);
+
+	// The "新建" header button is declared in +page.server.ts; bind it to the picker.
+	const headerActions = useAdminHeaderActionRegistry();
+	$effect(() => headerActions?.register('pages:create', () => (createMenuOpen = true)));
 
 	type PageRow = (typeof data.pages)[number];
+
+	/** Same column descriptor as every other admin list: head and cells share it. */
+	const cols: Record<'title' | 'slug' | 'status' | 'sort' | 'updated' | 'actions', ListColumn> = {
+		title: { id: 'title', label: m.admin_pages_col_title() },
+		slug: { id: 'slug', label: 'Slug', width: 'w-44', hideBelow: 'sm' },
+		status: {
+			id: 'status',
+			label: m.admin_common_status(),
+			width: 'w-20',
+			hideBelow: 'md'
+		},
+		sort: { id: 'sort', label: m.admin_pages_col_sort(), width: 'w-28' },
+		updated: {
+			id: 'updated',
+			label: m.admin_pages_col_updated(),
+			width: 'w-36',
+			hideBelow: 'lg'
+		},
+		actions: {
+			id: 'actions',
+			label: m.admin_common_actions(),
+			width: 'w-28',
+			align: 'right',
+			control: true
+		}
+	};
+	const columns = Object.values(cols);
+
+	// Status changes the row button does not cover (the isDefault case needs a
+	// confirm) go through one shared submit, the same way the content lists do.
+	let statusId = $state('');
+	let statusAction = $state<'visible' | 'hidden'>('visible');
+	let statusForm = $state<HTMLFormElement | null>(null);
+
+	async function setStatus(row: PageRow, next: 'visible' | 'hidden') {
+		// Default pages disappear from three menu surfaces when hidden, so that
+		// path keeps its own confirmation (the server refuses the delete too).
+		if (next === 'hidden' && row.isDefault) {
+			hideTarget = row;
+			return;
+		}
+		statusId = row.id;
+		statusAction = next;
+		await tick();
+		statusForm?.requestSubmit();
+	}
 
 	// Default rows hide through a confirmation (three menu surfaces disappear,
 	// direct access stays); deleting them is refused by the server as well.
 	let hideTarget = $state<PageRow | null>(null);
 	let deleteTarget = $state<PageRow | null>(null);
+
+	/** Delete copy branches on what the row actually holds (R2-8). */
+	const deleteDescription = $derived(
+		deleteTarget
+			? `${m.admin_pages_delete_desc({ title: deleteTarget.title })}${
+					deleteTarget.placeholder
+						? m.admin_pages_delete_desc_placeholder()
+						: deleteTarget.hasContent
+							? m.admin_pages_delete_desc_data()
+							: m.admin_pages_delete_desc_code()
+				}${
+					!deleteTarget.placeholder && deleteTarget.hasDraft
+						? ` ${m.admin_pages_delete_desc_draft()}`
+						: ''
+				}`
+			: ''
+	);
 
 	// Writable derived (Svelte 5.25+): the refresh button clears the banner by
 	// assignment; the next submission resyncs it from `form`.
@@ -75,7 +151,7 @@
 	<title>{m.admin_pages_title()} - Lair Admin</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6">
+<div class="relative flex flex-col gap-6">
 	{#if errorText}
 		<div
 			role="alert"
@@ -85,214 +161,164 @@
 		</div>
 	{/if}
 
-	<div class="relative flex h-10 shrink-0 items-center border-b">
-		<div class="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground">
-			<span class="truncate">{m.admin_pages_hint({ count: data.pages.length })}</span>
-			{#if flash}
-				<span
-					class="shrink-0 rounded-sm bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400"
+	<DropdownMenu.Root bind:open={createMenuOpen}>
+		<DropdownMenu.Trigger>
+			{#snippet child({ props })}
+				<Button
+					{...props}
+					size="sm"
+					variant="outline"
+					class="invisible absolute top-0 right-0 h-7 gap-1 px-2.5 text-xs"
 				>
-					{flash}
-				</span>
-			{/if}
-		</div>
-		<div class="absolute top-0 right-0 flex h-full items-center gap-1.5 pr-2">
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger>
-					{#snippet child({ props })}
-						<Button {...props} size="sm" variant="outline" class="h-7 gap-1 px-2.5 text-xs">
-							<IconPlus class="size-3" />
-							{m.admin_common_new()}
-						</Button>
-					{/snippet}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end">
-					<DropdownMenu.Group>
-						<DropdownMenu.Item onSelect={() => goto('/admin/pages/edit')}>
-							{m.admin_pages_md_page()}
-						</DropdownMenu.Item>
-						<DropdownMenu.Item onSelect={() => (createExternalOpen = true)}>
-							{m.admin_pages_external()}
-						</DropdownMenu.Item>
-					</DropdownMenu.Group>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-			<Separator orientation="vertical" class="h-3.5" />
-			<RefreshButton
-				onclick={() => {
-					errorText = null;
-					invalidateAll();
-				}}
-			/>
-		</div>
-	</div>
+					<IconPlus class="size-3" />
+					{m.admin_common_new()}
+				</Button>
+			{/snippet}
+		</DropdownMenu.Trigger>
+		<DropdownMenu.Content align="end">
+			<DropdownMenu.Group>
+				<DropdownMenu.Item onSelect={() => goto('/admin/pages/edit')}>
+					{m.admin_pages_md_page()}
+				</DropdownMenu.Item>
+				<DropdownMenu.Item onSelect={() => (createExternalOpen = true)}>
+					{m.admin_pages_external()}
+				</DropdownMenu.Item>
+			</DropdownMenu.Group>
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
 
-	{#if data.pages.length === 0}
-		<Empty class="py-12">
-			<div class="flex flex-col items-center gap-1">
-				<h3 class="text-lg font-semibold tracking-tight">{m.admin_pages_empty()}</h3>
-				<p class="text-sm text-muted-foreground">{m.admin_pages_seed_missing()}</p>
+	<ListTable
+		{columns}
+		rows={data.pages}
+		rowKey={(row) => row.id}
+		label={m.admin_nav_pages()}
+		class="min-h-96"
+	>
+		{#snippet header(col)}
+			{#if col.id === 'actions'}
+				<RefreshButton
+					onclick={() => {
+						errorText = null;
+						invalidateAll();
+					}}
+				/>
+			{/if}
+		{/snippet}
+
+		{#snippet row(page, index)}
+			<Table.Cell class={cn(listColumnClass(cols.title), 'whitespace-normal')}>
+				<div class="flex min-w-0 items-center gap-2">
+					<a href="/admin/pages/edit?id={page.id}" class="truncate font-medium hover:text-primary">
+						{page.title}
+					</a>
+					{#if page.isDefault}
+						<Badge variant="secondary" class="shrink-0 text-xs">{m.admin_pages_default()}</Badge>
+					{/if}
+					<Badge variant="outline" class="shrink-0 text-xs">
+						{page.externalUrl ? m.admin_pages_external() : m.admin_pages_internal()}
+					</Badge>
+					{#if page.hasDraft}
+						<Badge variant="secondary" class="shrink-0 text-xs"
+							>{m.admin_posts_unpublished_changes()}</Badge
+						>
+					{/if}
+				</div>
+			</Table.Cell>
+			<Table.Cell class={listColumnClass(cols.slug)}>
+				<span class="font-mono text-xs text-muted-foreground">{page.slug}</span>
+			</Table.Cell>
+			<Table.Cell class={listColumnClass(cols.status)}>
+				<Badge variant={page.status === 'visible' ? 'default' : 'secondary'} class="text-xs">
+					{page.status === 'visible' ? m.admin_pages_visible() : m.admin_pages_hidden()}
+				</Badge>
+			</Table.Cell>
+			<Table.Cell class={listColumnClass(cols.sort)}>
+				<div class="flex items-center gap-1">
+					<form method="POST" action="?/move" use:enhance class="flex items-center">
+						<input type="hidden" name="id" value={page.id} />
+						<Button
+							type="submit"
+							name="direction"
+							value="up"
+							variant="ghost"
+							size="icon"
+							class="size-6"
+							aria-label={m.admin_projects_move_up()}
+							disabled={index === 0 || index === firstExtraIndex}
+						>
+							<IconArrowUp class="size-3.5" />
+						</Button>
+						<Button
+							type="submit"
+							name="direction"
+							value="down"
+							variant="ghost"
+							size="icon"
+							class="size-6"
+							aria-label={m.admin_projects_move_down()}
+							disabled={index === data.pages.length - 1 || index === lastDefaultIndex}
+						>
+							<IconArrowDown class="size-3.5" />
+						</Button>
+					</form>
+					<span class="font-mono text-xs text-muted-foreground">{page.sortOrder}</span>
+				</div>
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.updated), 'text-xs text-muted-foreground')}>
+				{formatDateTime(new Date(page.updatedAt), {
+					dateStyle: 'short',
+					timeStyle: 'short'
+				})}
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.actions), 'text-right')}>
+				<ListRowActions
+					editPath="/admin/pages/edit"
+					editId={page.id}
+					editLabel={m.admin_common_edit()}
+					onDelete={page.isDefault ? undefined : () => (deleteTarget = page)}
+					deleteLabel={page.isDefault ? undefined : m.admin_common_delete()}
+				>
+					{#snippet more()}
+						<DropdownMenu.Item
+							onclick={() => setStatus(page, page.status === 'visible' ? 'hidden' : 'visible')}
+						>
+							{#if page.status === 'visible'}
+								<IconEyeOff data-icon="inline-start" />
+								{m.admin_pages_hide()}
+							{:else}
+								<IconEye data-icon="inline-start" />
+								{m.admin_pages_show()}
+							{/if}
+						</DropdownMenu.Item>
+					{/snippet}
+				</ListRowActions>
+			</Table.Cell>
+		{/snippet}
+
+		{#snippet empty()}
+			<Empty class="mx-auto py-14">
+				<div class="flex flex-col items-center gap-1">
+					<h3 class="text-lg font-semibold tracking-tight">{m.admin_pages_empty()}</h3>
+					<p class="text-sm text-muted-foreground">{m.admin_pages_seed_missing()}</p>
+				</div>
+			</Empty>
+		{/snippet}
+
+		{#snippet footer()}
+			<div
+				class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t px-3 py-2.5 text-xs text-muted-foreground"
+			>
+				<span class="min-w-0 truncate">{m.admin_pages_hint({ count: data.pages.length })}</span>
+				{#if flash}
+					<span
+						class="shrink-0 rounded-sm bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400"
+					>
+						{flash}
+					</span>
+				{/if}
 			</div>
-		</Empty>
-	{:else}
-		<div class="overflow-x-auto">
-			<Table.Root class="table-fixed">
-				<Table.Header>
-					<Table.Row class="border-border">
-						<Table.Head>{m.admin_pages_col_title()}</Table.Head>
-						<Table.Head class="hidden w-44 sm:table-cell">Slug</Table.Head>
-						<Table.Head class="hidden w-20 md:table-cell">{m.admin_common_status()}</Table.Head>
-						<Table.Head class="w-28">{m.admin_pages_col_sort()}</Table.Head>
-						<Table.Head class="hidden w-36 lg:table-cell">{m.admin_pages_col_updated()}</Table.Head>
-						<Table.Head class="w-28 text-right">{m.admin_common_actions()}</Table.Head>
-					</Table.Row>
-				</Table.Header>
-				<Table.Body>
-					{#each data.pages as page, index (page.id)}
-						<Table.Row class="group border-border">
-							<Table.Cell class="max-w-0 whitespace-normal">
-								<div class="flex min-w-0 items-center gap-2">
-									<a
-										href="/admin/pages/edit?id={page.id}"
-										class="truncate font-medium hover:text-primary"
-									>
-										{page.title}
-									</a>
-									{#if page.isDefault}
-										<Badge variant="secondary" class="shrink-0 text-xs"
-											>{m.admin_pages_default()}</Badge
-										>
-									{/if}
-									<Badge variant="outline" class="shrink-0 text-xs">
-										{page.externalUrl ? m.admin_pages_external() : m.admin_pages_internal()}
-									</Badge>
-									{#if page.hasDraft}
-										<Badge variant="secondary" class="shrink-0 text-xs"
-											>{m.admin_posts_unpublished_changes()}</Badge
-										>
-									{/if}
-								</div>
-							</Table.Cell>
-							<Table.Cell class="hidden w-44 sm:table-cell">
-								<span class="font-mono text-xs text-muted-foreground">{page.slug}</span>
-							</Table.Cell>
-							<Table.Cell class="hidden w-20 md:table-cell">
-								<Badge
-									variant={page.status === 'visible' ? 'default' : 'secondary'}
-									class="text-xs"
-								>
-									{page.status === 'visible' ? m.admin_pages_visible() : m.admin_pages_hidden()}
-								</Badge>
-							</Table.Cell>
-							<Table.Cell class="w-28">
-								<div class="flex items-center gap-1">
-									<form method="POST" action="?/move" use:enhance class="flex items-center">
-										<input type="hidden" name="id" value={page.id} />
-										<Button
-											type="submit"
-											name="direction"
-											value="up"
-											variant="ghost"
-											size="icon"
-											class="size-6"
-											aria-label={m.admin_projects_move_up()}
-											disabled={index === 0 || index === firstExtraIndex}
-										>
-											<IconArrowUp class="size-3.5" />
-										</Button>
-										<Button
-											type="submit"
-											name="direction"
-											value="down"
-											variant="ghost"
-											size="icon"
-											class="size-6"
-											aria-label={m.admin_projects_move_down()}
-											disabled={index === data.pages.length - 1 || index === lastDefaultIndex}
-										>
-											<IconArrowDown class="size-3.5" />
-										</Button>
-									</form>
-									<span class="font-mono text-xs text-muted-foreground">{page.sortOrder}</span>
-								</div>
-							</Table.Cell>
-							<Table.Cell class="hidden w-36 text-xs text-muted-foreground lg:table-cell">
-								{formatDateTime(new Date(page.updatedAt), {
-									dateStyle: 'short',
-									timeStyle: 'short'
-								})}
-							</Table.Cell>
-							<Table.Cell class="w-28 text-right">
-								<div class="flex items-center justify-end gap-1">
-									<Button
-										variant="ghost"
-										size="icon"
-										class="size-8"
-										href="/admin/pages/edit?id={page.id}"
-										aria-label={m.admin_common_edit()}
-									>
-										<IconPencil class="size-4" />
-									</Button>
-									{#if page.status === 'visible'}
-										{#if page.isDefault}
-											<Button
-												variant="ghost"
-												size="icon"
-												class="size-8"
-												aria-label={m.admin_pages_hide()}
-												onclick={() => (hideTarget = page)}
-											>
-												<IconEyeOff class="size-4" />
-											</Button>
-										{:else}
-											<form method="POST" action="?/setStatus" use:enhance>
-												<input type="hidden" name="id" value={page.id} />
-												<input type="hidden" name="status" value="hidden" />
-												<Button
-													type="submit"
-													variant="ghost"
-													size="icon"
-													class="size-8"
-													aria-label={m.admin_pages_hide()}
-												>
-													<IconEyeOff class="size-4" />
-												</Button>
-											</form>
-										{/if}
-									{:else}
-										<form method="POST" action="?/setStatus" use:enhance>
-											<input type="hidden" name="id" value={page.id} />
-											<input type="hidden" name="status" value="visible" />
-											<Button
-												type="submit"
-												variant="ghost"
-												size="icon"
-												class="size-8"
-												aria-label={m.admin_pages_show()}
-											>
-												<IconEye class="size-4" />
-											</Button>
-										</form>
-									{/if}
-									{#if !page.isDefault}
-										<Button
-											variant="ghost"
-											size="icon"
-											class="size-8 text-destructive hover:text-destructive"
-											aria-label={m.admin_common_delete()}
-											onclick={() => (deleteTarget = page)}
-										>
-											<IconTrash class="size-4" />
-										</Button>
-									{/if}
-								</div>
-							</Table.Cell>
-						</Table.Row>
-					{/each}
-				</Table.Body>
-			</Table.Root>
-		</div>
-	{/if}
+		{/snippet}
+	</ListTable>
 </div>
 
 <AlertDialog.Root open={hideTarget !== null} onOpenChange={(open) => !open && (hideTarget = null)}>
@@ -330,46 +356,23 @@
 	</AlertDialog.Content>
 </AlertDialog.Root>
 
-<AlertDialog.Root
+<DeleteConfirm
 	open={deleteTarget !== null}
-	onOpenChange={(open) => !open && (deleteTarget = null)}
->
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>{m.admin_pages_delete_title()}</AlertDialog.Title>
-			<AlertDialog.Description>
-				{m.admin_pages_delete_desc({ title: deleteTarget?.title ?? '' })}{deleteTarget?.placeholder
-					? m.admin_pages_delete_desc_placeholder()
-					: deleteTarget?.hasContent
-						? m.admin_pages_delete_desc_data()
-						: m.admin_pages_delete_desc_code()}{#if !deleteTarget?.placeholder && deleteTarget?.hasDraft}{` ${m.admin_pages_delete_desc_draft()}`}{/if}
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		{#if form?.error}
-			<p class="text-sm text-destructive">{form.error}</p>
-		{/if}
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
-			<form
-				method="POST"
-				action="?/delete"
-				use:enhance={() => {
-					submitting = true;
-					return async ({ result, update }) => {
-						await update();
-						submitting = false;
-						if (result.type === 'success') deleteTarget = null;
-					};
-				}}
-			>
-				<input type="hidden" name="id" value={deleteTarget?.id ?? ''} />
-				<AlertDialog.Action type="submit" disabled={submitting}
-					>{m.admin_common_delete()}</AlertDialog.Action
-				>
-			</form>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
+	title={m.admin_pages_delete_title()}
+	description={deleteDescription}
+	id={deleteTarget?.id ?? ''}
+	action="?/delete"
+	confirmLabel={m.admin_common_delete()}
+	error={form?.error ?? null}
+	onclose={() => (deleteTarget = null)}
+/>
+
+<!-- Status flips the row's More item does not cover (the default page keeps a
+	confirm) submit through one shared form. -->
+<form method="POST" action="?/setStatus" use:enhance bind:this={statusForm} class="hidden">
+	<input type="hidden" name="id" value={statusId} />
+	<input type="hidden" name="status" value={statusAction} />
+</form>
 
 <!-- External-entry dialog (P5-3): direct insert, no draft -->
 <Dialog.Root

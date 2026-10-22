@@ -11,8 +11,12 @@
 		description: string;
 		/** Row id submitted to the action below. */
 		id: string;
+		/** Name of the id field (default `id`; drafts submit `draftId`). */
+		idName?: string;
 		/** Form action to submit to (default `?/delete`). */
 		action?: string;
+		/** Extra hidden fields (e.g. the verb when one action serves several rows). */
+		extraFields?: Record<string, string>;
 		/** Confirm button label (default: Delete). */
 		confirmLabel?: string;
 		/** Action failure text rendered inside the dialog (a page banner hides behind the overlay). */
@@ -26,7 +30,9 @@
 		title,
 		description,
 		id,
+		idName = 'id',
 		action = '?/delete',
+		extraFields = {},
 		confirmLabel = m.admin_common_delete(),
 		error,
 		onclose
@@ -64,12 +70,19 @@
 					const submittedId = id;
 					return async ({ result, update }) => {
 						submitting = false;
-						if (result.type === 'success' && id === submittedId) onclose();
+						// A redirect is a success too (the drafts list answers that way);
+						// leaving the dialog open would strand it across the navigation.
+						if ((result.type === 'success' || result.type === 'redirect') && id === submittedId) {
+							onclose();
+						}
 						await update();
 					};
 				}}
 			>
-				<input type="hidden" name="id" value={id} />
+				<input type="hidden" name={idName} value={id} />
+				{#each Object.entries(extraFields) as [name, field] (name)}
+					<input type="hidden" {name} value={field} />
+				{/each}
 				<Button type="submit" variant="destructive" disabled={submitting}>{confirmLabel}</Button>
 			</form>
 		</AlertDialog.Footer>

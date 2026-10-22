@@ -1,8 +1,10 @@
 import { and, desc, eq, ilike, sql } from 'drizzle-orm';
+import { fail, type Actions } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
-import { categories, posts } from '$lib/server/db/content';
+import { categories, drafts, posts } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
 import { draftsForPosts } from '$lib/server/services/post-drafts';
+import { syncFileReferences } from '$lib/server/services/file-references';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad } from './$types';
 import { m } from '$lib/paraglide/messages';
@@ -85,4 +87,87 @@ export const load: PageServerLoad = async ({ url }) => {
 		filters: { status: statusRaw, category: categoryRaw, keyword },
 		categories: allCategories
 	};
+};
+
+export const actions: Actions = {
+	/**
+	 * Row-level status: move to trash / restore from trash. Restoring returns
+	 * the post to `published` when it had been public before (`publishedAt` is
+	 * the only durable trace of "was public"), otherwise to `draft` — the same
+	 * rule `setNoteStatus` applies to notes.
+	 *
+	 * No redirect: the list keeps the caller's filters and the page invalidates.
+	 */
+	status: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const id = (form.get('id') ?? '').toString();
+		const action = (form.get('action') ?? '').toString();
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_posts_edit_err_bad_post_id() });
+		if (action !== 'trash' && action !== 'restore') {
+			return fail(400, { error: m.admin_list_err_bad_action() });
+		}
+
+		const [current] = await db
+			.select({ id: posts.id, status: posts.status, publishedAt: posts.publishedAt })
+			.from(posts)
+			.where(eq(posts.id, id))
+			.limit(1);
+		if (!current) return fail(404, { error: m.admin_posts_edit_err_not_found() });
+
+		const target = action === 'trash' ? 'trash' : current.publishedAt ? 'published' : 'draft';
+		if (current.status === target) return { success: true };
+
+		// CAS on the status we read: a concurrent publish/restore must not be
+		// overwritten blind (mirrors setNoteStatus).
+		const rows = await db
+			.update(posts)
+			.set({ status: target, updatedAt: new Date() })
+			.where(and(eq(posts.id, id), eq(posts.status, current.status)))
+			.returning({ id: posts.id });
+		if (rows.length === 0) return fail(409, { error: m.admin_posts_edit_err_busy() });
+		return { success: true };
+	},
+
+	/**
+	 * Permanent delete. Only offered from the overflow menu of a row that is
+	 * already in the trash, so the destructive path is two deliberate steps
+	 * (trash → purge) and a mis-click on the row button can never lose data.
+	 *
+	 * Mirrors the pages hard-delete (M1 / R2-3): drafts first, because
+	 * `drafts.ref_id` is polymorphic and no FK can cascade for it; then the
+	 * row (comments / revisions / related posts / tags cascade); then the
+	 * file-reference cleanup, in the same lock order publish and discard use.
+	 */
+	purge: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const id = (form.get('id') ?? '').toString();
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_posts_edit_err_bad_post_id() });
+
+		const result = await db.transaction(async (tx) => {
+			const [row] = await tx
+				.select({ id: posts.id })
+				.from(posts)
+				.where(eq(posts.id, id))
+				.limit(1)
+				.for('update');
+			if (!row) return { kind: 'not-found' as const };
+
+			const draftRows = await tx
+				.delete(drafts)
+				.where(and(eq(drafts.refType, 'post'), eq(drafts.refId, id)))
+				.returning({ id: drafts.id });
+			await tx.delete(posts).where(eq(posts.id, id));
+			for (const draft of draftRows) {
+				await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
+			}
+			await syncFileReferences(tx, { type: 'post', id }, []);
+			return { kind: 'deleted' as const };
+		});
+
+		if (result.kind === 'not-found')
+			return fail(404, { error: m.admin_posts_edit_err_not_found() });
+		return { success: true };
+	}
 };

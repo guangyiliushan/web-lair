@@ -1,21 +1,38 @@
 <script lang="ts">
-	import { replaceState } from '$app/navigation';
+	import { invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
+	import { tick } from 'svelte';
+	import { enhance } from '$app/forms';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { applyUploadResults, mapUploadError, uploadEachFile } from '$lib/utils/upload-each';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Table from '$lib/components/ui/table';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Empty } from '$lib/components/ui/empty';
+	import { Input } from '$lib/components/ui/input';
+	import { useAdminHeaderActionRegistry } from '$lib/components/admin/admin-header-actions';
+	import { RefreshButton } from '$lib/components/admin/refresh-button';
+	import {
+		ListFilter,
+		ListRowActions,
+		ListSearch,
+		ListTable,
+		listColumnClass,
+		type ListColumn
+	} from '$lib/components/admin/list-table';
+	import { cn } from '$lib/utils';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import { variantKeyFor } from '$lib/media/keys';
 	import { formatBytes } from '$lib/utils/format';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import IconUpload from '@tabler/icons-svelte-runes/icons/upload';
-	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconCopy from '@tabler/icons-svelte-runes/icons/copy';
 	import IconDownload from '@tabler/icons-svelte-runes/icons/download';
+	import IconCheck from '@tabler/icons-svelte-runes/icons/check';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 	import IconPhoto from '@tabler/icons-svelte-runes/icons/photo';
 	import IconFile from '@tabler/icons-svelte-runes/icons/file';
@@ -51,9 +68,162 @@
 	);
 
 	let deleteTarget = $state<{ id: string; name: string } | null>(null);
+
+	const LIST_PATH = '/admin/files';
+
+	/**
+	 * Same column descriptor as every other admin list: head and cells share it.
+	 * Each of the five filters sits in the head cell of the column it drives —
+	 * the head is two rows here because five bare controls in one line is too
+	 * tight to read.
+	 */
+	const cols: Record<
+		'preview' | 'file' | 'dimensions' | 'size' | 'status' | 'refs' | 'uploaded' | 'actions',
+		ListColumn
+	> = {
+		preview: {
+			id: 'preview',
+			label: m.admin_files_col_preview(),
+			width: 'w-24',
+			control: true
+		},
+		file: { id: 'file', label: m.admin_files_kind_file(), control: true },
+		dimensions: {
+			id: 'dimensions',
+			label: m.admin_files_col_dimensions(),
+			width: 'w-24',
+			hideBelow: 'md'
+		},
+		size: { id: 'size', label: m.admin_files_col_size(), width: 'w-24' },
+		status: {
+			id: 'status',
+			label: m.admin_common_status(),
+			width: 'w-24',
+			control: true
+		},
+		refs: {
+			id: 'refs',
+			label: m.admin_files_col_refs(),
+			width: 'w-24',
+			hideBelow: 'sm',
+			control: true
+		},
+		uploaded: {
+			id: 'uploaded',
+			label: m.admin_files_col_uploaded(),
+			width: 'w-40',
+			hideBelow: 'lg',
+			control: true
+		},
+		actions: {
+			id: 'actions',
+			label: m.admin_common_actions(),
+			width: 'w-28',
+			align: 'right',
+			control: true
+		}
+	};
+	const columns = Object.values(cols);
+
+	/** Query string for a filter change; `''` when it clears every filter. */
+	function querySearch(patch: Record<string, string | undefined>): string {
+		const params = new SvelteURLSearchParams();
+		const next = {
+			kind: data.filters.kind || undefined,
+			status: data.filters.status || undefined,
+			keyword: data.filters.keyword || undefined,
+			since: data.filters.since || undefined,
+			orphan: data.filters.orphan ? '1' : undefined,
+			...patch
+		};
+		for (const [key, value] of Object.entries(next)) {
+			if (value) params.set(key, value);
+		}
+		const qs = params.toString();
+		return qs ? `?${qs}` : '';
+	}
+
+	const searchHidden = $derived(
+		Object.fromEntries(
+			(
+				[
+					['kind', data.filters.kind],
+					['status', data.filters.status],
+					['since', data.filters.since],
+					['orphan', data.filters.orphan ? '1' : '']
+				] as const
+			).filter(([, value]) => Boolean(value))
+		)
+	);
+
+	const currentKind = $derived(
+		data.filters.kind === 'image'
+			? m.admin_files_kind_image()
+			: data.filters.kind === 'file'
+				? m.admin_files_kind_file()
+				: m.admin_media_filter_all()
+	);
+	const kindOptions = $derived([
+		{ value: '', label: m.admin_media_filter_all(), search: querySearch({ kind: undefined }) },
+		{ value: 'image', label: m.admin_files_kind_image(), search: querySearch({ kind: 'image' }) },
+		{ value: 'file', label: m.admin_files_kind_file(), search: querySearch({ kind: 'file' }) }
+	]);
+
+	const STATUS_LABELS: Record<string, string> = {
+		pending: m.admin_files_status_pending(),
+		attached: m.admin_files_status_attached(),
+		detached: m.admin_files_status_detached()
+	};
+	const currentStatus = $derived(STATUS_LABELS[data.filters.status] ?? m.admin_media_filter_all());
+	const statusOptions = $derived([
+		{ value: '', label: m.admin_media_filter_all(), search: querySearch({ status: undefined }) },
+		...(['pending', 'attached', 'detached'] as const).map((value) => ({
+			value,
+			label: STATUS_LABELS[value],
+			search: querySearch({ status: value })
+		}))
+	]);
+
+	const SINCE_LABELS: Record<string, string> = {
+		'7d': m.admin_media_last_7d(),
+		'30d': m.admin_media_last_30d(),
+		'90d': m.admin_media_last_90d()
+	};
+	const currentSince = $derived(SINCE_LABELS[data.filters.since] ?? m.admin_media_filter_all());
+	const sinceOptions = $derived([
+		{ value: '', label: m.admin_media_filter_all(), search: querySearch({ since: undefined }) },
+		...(['7d', '30d', '90d'] as const).map((value) => ({
+			value,
+			label: SINCE_LABELS[value],
+			search: querySearch({ since: value })
+		}))
+	]);
+
+	const currentOrphan = $derived(
+		data.filters.orphan ? m.admin_files_orphan_only() : m.admin_media_filter_all()
+	);
+	const orphanOptions = $derived([
+		{ value: '', label: m.admin_media_filter_all(), search: querySearch({ orphan: undefined }) },
+		{ value: '1', label: m.admin_files_orphan_only(), search: querySearch({ orphan: '1' }) }
+	]);
+
+	// "Add to gallery" is a form action; the overflow item submits one shared form.
+	let galleryId = $state('');
+	let galleryForm = $state<HTMLFormElement | null>(null);
+
+	async function addGallery(id: string) {
+		galleryId = id;
+		await tick();
+		galleryForm?.requestSubmit();
+	}
 	let copiedId = $state<string | null>(null);
 
 	let uploading = $state(false);
+
+	// The "上传" header button is declared in +page.server.ts; bind it to the dialog.
+	const headerActions = useAdminHeaderActionRegistry();
+	let uploadOpen = $state(false);
+	$effect(() => headerActions?.register('files:upload', () => (uploadOpen = true)));
 
 	/** Q4 (deploy note): one request per file keeps every body under BODY_SIZE_LIMIT. */
 	async function uploadAll(event: SubmitEvent) {
@@ -63,6 +233,7 @@
 		const files = Array.from(input?.files ?? []);
 		if (files.length === 0) {
 			await applyUploadResults({ results: [], message: m.admin_files_err_no_files() });
+			uploadOpen = false;
 			return;
 		}
 		if (uploading) return;
@@ -71,6 +242,7 @@
 				results: [],
 				message: m.admin_media_err_too_many({ count: data.limits.maxBatch })
 			});
+			uploadOpen = false;
 			return;
 		}
 		uploading = true;
@@ -98,6 +270,7 @@
 		} finally {
 			uploading = false;
 			if (input) input.value = '';
+			uploadOpen = false;
 		}
 	}
 
@@ -118,11 +291,6 @@
 		}
 	});
 
-	const STATUS_LABELS: Record<string, string> = {
-		pending: m.admin_files_status_pending(),
-		attached: m.admin_files_status_attached(),
-		detached: m.admin_files_status_detached()
-	};
 	const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'outline'> = {
 		pending: 'outline',
 		attached: 'default',
@@ -194,261 +362,199 @@
 		</div>
 	{/if}
 
-	<section class="rounded-xl border bg-background p-4">
-		<h2 class="mb-3 text-sm font-medium">
-			{m.admin_files_upload_hint({
-				batch: data.limits.maxBatch,
-				size: data.limits.maxBytes / 1024 / 1024
-			})}
-		</h2>
-		<form
-			method="POST"
-			action="?/upload"
-			enctype="multipart/form-data"
-			class="flex flex-wrap items-center gap-3"
-			onsubmit={uploadAll}
-		>
-			<input
-				type="file"
-				name="files"
-				aria-label={m.admin_media_pick_files()}
-				multiple
-				accept={ACCEPT}
-				class="text-sm file:mr-3 file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm"
-			/>
-			<Button type="submit" size="sm" disabled={uploading}>
-				<IconUpload data-icon="inline-start" />
-				{m.admin_media_upload()}
-			</Button>
-		</form>
-	</section>
+	<Dialog.Root bind:open={uploadOpen}>
+		<Dialog.Content class="sm:max-w-md">
+			<Dialog.Header>
+				<Dialog.Title>{m.admin_media_upload()}</Dialog.Title>
+				<Dialog.Description>
+					{m.admin_files_upload_hint({
+						batch: data.limits.maxBatch,
+						size: data.limits.maxBytes / 1024 / 1024
+					})}
+				</Dialog.Description>
+			</Dialog.Header>
+			<form method="POST" action="?/upload" enctype="multipart/form-data" onsubmit={uploadAll}>
+				<Input
+					type="file"
+					name="files"
+					aria-label={m.admin_media_pick_files()}
+					multiple
+					accept={ACCEPT}
+				/>
+				<Dialog.Footer>
+					<Button type="button" variant="outline" onclick={() => (uploadOpen = false)}
+						>{m.admin_common_cancel()}</Button
+					>
+					<Button type="submit" disabled={uploading}>
+						<IconUpload data-icon="inline-start" />
+						{m.admin_media_upload()}
+					</Button>
+				</Dialog.Footer>
+			</form>
+		</Dialog.Content>
+	</Dialog.Root>
 
-	<section class="flex flex-col gap-4">
-		<form method="GET" class="flex flex-wrap items-end gap-3">
-			<label class="grid gap-1 text-xs text-muted-foreground">
-				{m.admin_common_type()}
-				<select
-					name="kind"
-					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
-				>
-					<option value="" selected={data.filters.kind === ''}>{m.admin_media_filter_all()}</option>
-					<option value="image" selected={data.filters.kind === 'image'}
-						>{m.admin_files_kind_image()}</option
-					>
-					<option value="file" selected={data.filters.kind === 'file'}
-						>{m.admin_files_kind_file()}</option
-					>
-				</select>
-			</label>
-			<label class="grid gap-1 text-xs text-muted-foreground">
-				{m.admin_common_status()}
-				<select
-					name="status"
-					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
-				>
-					<option value="" selected={data.filters.status === ''}
-						>{m.admin_media_filter_all()}</option
-					>
-					<option value="pending" selected={data.filters.status === 'pending'}
-						>{m.admin_files_status_pending()}</option
-					>
-					<option value="attached" selected={data.filters.status === 'attached'}
-						>{m.admin_files_status_attached()}</option
-					>
-					<option value="detached" selected={data.filters.status === 'detached'}
-						>{m.admin_files_status_detached()}</option
-					>
-				</select>
-			</label>
-			<label class="grid gap-1 text-xs text-muted-foreground">
-				{m.admin_files_keyword()}
-				<input
-					name="keyword"
-					value={data.filters.keyword}
+	{#if data.listTruncated}
+		<p role="status" class="text-xs text-muted-foreground">
+			{m.admin_files_cap_notice({ count: data.files.length })}
+		</p>
+	{/if}
+
+	<ListTable
+		{columns}
+		rows={data.files}
+		rowKey={(file) => file.id}
+		label={m.admin_nav_files()}
+		class="min-h-96"
+	>
+		{#snippet header(col)}
+			{#if col.id === 'preview'}
+				<ListFilter
+					path={LIST_PATH}
+					label={m.admin_common_type()}
+					current={currentKind}
+					selected={data.filters.kind}
+					options={kindOptions}
+				/>
+			{:else if col.id === 'file'}
+				<ListSearch
+					path={LIST_PATH}
+					label={m.admin_files_keyword()}
 					placeholder={m.admin_files_filename_ph()}
-					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+					value={data.filters.keyword}
+					hidden={searchHidden}
+					clearSearch={querySearch({ keyword: undefined })}
 				/>
-			</label>
-			<label class="grid gap-1 text-xs text-muted-foreground">
-				{m.admin_media_time()}
-				<select
-					name="since"
-					class="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+			{:else if col.id === 'status'}
+				<ListFilter
+					path={LIST_PATH}
+					label={col.label}
+					current={currentStatus}
+					selected={data.filters.status}
+					options={statusOptions}
+				/>
+			{:else if col.id === 'refs'}
+				<ListFilter
+					path={LIST_PATH}
+					label={col.label}
+					current={currentOrphan}
+					selected={data.filters.orphan ? '1' : ''}
+					options={orphanOptions}
+				/>
+			{:else if col.id === 'uploaded'}
+				<ListFilter
+					path={LIST_PATH}
+					label={col.label}
+					current={currentSince}
+					selected={data.filters.since}
+					options={sinceOptions}
+				/>
+			{:else if col.id === 'actions'}
+				<RefreshButton onclick={() => invalidateAll()} />
+			{/if}
+		{/snippet}
+
+		{#snippet row(file)}
+			<Table.Cell class={cn(listColumnClass(cols.preview), 'py-1.5')}>
+				{#if file.mimeType.startsWith('image/')}
+					<img
+						src={file.mimeType === 'image/gif'
+							? `/i/${file.objectKey}`
+							: `/i/${variantKeyFor(file.objectKey, 'thumb')}`}
+						alt={file.fileName}
+						loading="lazy"
+						class="size-10 rounded-md border object-cover"
+					/>
+				{:else}
+					<div
+						class="flex size-10 items-center justify-center rounded-md border bg-muted text-muted-foreground"
+					>
+						<IconFile class="size-4" />
+					</div>
+				{/if}
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.file), 'max-w-0')}>
+				<p class="truncate font-medium">{file.fileName}</p>
+				<p class="truncate text-xs text-muted-foreground">{file.mimeType}</p>
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.dimensions), 'text-xs text-muted-foreground')}>
+				{file.width && file.height ? `${file.width}×${file.height}` : '—'}
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.size), 'text-xs text-muted-foreground')}>
+				{formatBytes(file.byteSize)}
+			</Table.Cell>
+			<Table.Cell class={listColumnClass(cols.status)}>
+				<Badge variant={STATUS_VARIANTS[file.status] ?? 'outline'} class="text-xs">
+					{STATUS_LABELS[file.status] ?? file.status}
+				</Badge>
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.refs), 'text-xs text-muted-foreground')}>
+				{file.refCount}
+				{#if file.isInGallery}<IconPhoto class="ml-1 inline size-3.5" />{/if}
+			</Table.Cell>
+			<Table.Cell
+				class={cn(
+					listColumnClass(cols.uploaded),
+					'text-xs whitespace-nowrap text-muted-foreground'
+				)}
+			>
+				{formatDateTime(new Date(file.createdAt), { dateStyle: 'short', timeStyle: 'short' })}
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.actions), 'text-right')}>
+				<ListRowActions
+					deleteLabel={m.admin_common_delete()}
+					onDelete={() => (deleteTarget = { id: file.id, name: file.fileName })}
 				>
-					<option value="" selected={data.filters.since === ''}>{m.admin_media_filter_all()}</option
-					>
-					<option value="7d" selected={data.filters.since === '7d'}
-						>{m.admin_media_last_7d()}</option
-					>
-					<option value="30d" selected={data.filters.since === '30d'}
-						>{m.admin_media_last_30d()}</option
-					>
-					<option value="90d" selected={data.filters.since === '90d'}
-						>{m.admin_media_last_90d()}</option
-					>
-				</select>
-			</label>
-			<label class="flex items-center gap-2 pb-2 text-xs text-muted-foreground">
-				<input
-					type="checkbox"
-					name="orphan"
-					value="1"
-					checked={data.filters.orphan}
-					class="size-4 rounded border"
-				/>
-				{m.admin_files_orphan_only()}
-			</label>
-			<Button type="submit" variant="secondary" size="sm">{m.admin_media_filter()}</Button>
-		</form>
+					{#snippet primary()}
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							href="/i/{file.objectKey}"
+							download={file.fileName}
+							aria-label={m.admin_files_download()}
+							title={m.admin_files_download()}
+						>
+							<IconDownload />
+						</Button>
+					{/snippet}
+					{#snippet more()}
+						<DropdownMenu.Item onclick={() => window.open(publicUrl(file), '_blank', 'noopener')}>
+							<IconExternalLink data-icon="inline-start" />
+							{m.admin_files_col_preview()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => copyUrl(file)}>
+							{#if copiedId === file.id}
+								<IconCheck data-icon="inline-start" />
+							{:else}
+								<IconCopy data-icon="inline-start" />
+							{/if}
+							{copiedId === file.id ? m.admin_settings_account_copied() : m.admin_files_copy_url()}
+						</DropdownMenu.Item>
+						{#if file.mimeType.startsWith('image/') && !file.isInGallery}
+							<DropdownMenu.Item onclick={() => addGallery(file.id)}>
+								<IconPhoto data-icon="inline-start" />
+								{m.admin_files_add_to_gallery()}
+							</DropdownMenu.Item>
+						{/if}
+					{/snippet}
+				</ListRowActions>
+			</Table.Cell>
+		{/snippet}
 
-		{#if data.listTruncated}
-			<p class="text-xs text-muted-foreground">
-				{m.admin_files_cap_notice({ count: data.files.length })}
-			</p>
-		{/if}
-
-		{#if data.files.length === 0}
-			<Empty class="py-12">
+		{#snippet empty()}
+			<Empty class="mx-auto py-14">
 				<div class="flex flex-col items-center gap-1">
 					<h3 class="text-lg font-semibold tracking-tight">{m.admin_files_empty()}</h3>
-					<p class="text-sm text-muted-foreground">
-						{m.admin_files_empty_desc()}
-					</p>
+					<p class="text-sm text-muted-foreground">{m.admin_files_empty_desc()}</p>
 				</div>
 			</Empty>
-		{:else}
-			<div class="overflow-x-auto">
-				<Table.Root>
-					<Table.Header>
-						<Table.Row>
-							<Table.Head class="w-14">{m.admin_files_col_preview()}</Table.Head>
-							<Table.Head>{m.admin_files_kind_file()}</Table.Head>
-							<Table.Head class="hidden w-28 md:table-cell"
-								>{m.admin_files_col_dimensions()}</Table.Head
-							>
-							<Table.Head class="w-24">{m.admin_files_col_size()}</Table.Head>
-							<Table.Head class="w-24">{m.admin_common_status()}</Table.Head>
-							<Table.Head class="hidden w-24 sm:table-cell">{m.admin_files_col_refs()}</Table.Head>
-							<Table.Head class="hidden w-40 lg:table-cell"
-								>{m.admin_files_col_uploaded()}</Table.Head
-							>
-							<Table.Head class="w-44 text-right">{m.admin_common_actions()}</Table.Head>
-						</Table.Row>
-					</Table.Header>
-					<Table.Body>
-						{#each data.files as row (row.id)}
-							<Table.Row>
-								<Table.Cell>
-									{#if row.mimeType.startsWith('image/')}
-										<img
-											src={row.mimeType === 'image/gif'
-												? `/i/${row.objectKey}`
-												: `/i/${variantKeyFor(row.objectKey, 'thumb')}`}
-											alt={row.fileName}
-											loading="lazy"
-											class="size-10 rounded-md border object-cover"
-										/>
-									{:else}
-										<div
-											class="flex size-10 items-center justify-center rounded-md border bg-muted text-muted-foreground"
-										>
-											<IconFile class="size-4" />
-										</div>
-									{/if}
-								</Table.Cell>
-								<Table.Cell class="max-w-0">
-									<p class="truncate font-medium">{row.fileName}</p>
-									<p class="truncate text-xs text-muted-foreground">{row.mimeType}</p>
-								</Table.Cell>
-								<Table.Cell class="hidden text-xs text-muted-foreground md:table-cell">
-									{row.width && row.height ? `${row.width}×${row.height}` : '—'}
-								</Table.Cell>
-								<Table.Cell class="text-xs text-muted-foreground"
-									>{formatBytes(row.byteSize)}</Table.Cell
-								>
-								<Table.Cell>
-									<Badge variant={STATUS_VARIANTS[row.status] ?? 'outline'} class="text-xs">
-										{STATUS_LABELS[row.status] ?? row.status}
-									</Badge>
-								</Table.Cell>
-								<Table.Cell class="hidden text-xs text-muted-foreground sm:table-cell">
-									{row.refCount}
-									{#if row.isInGallery}<IconPhoto class="ml-1 inline size-3.5" />{/if}
-								</Table.Cell>
-								<Table.Cell class="hidden text-xs text-muted-foreground lg:table-cell">
-									{formatDateTime(new Date(row.createdAt), {
-										dateStyle: 'short',
-										timeStyle: 'short'
-									})}
-								</Table.Cell>
-								<Table.Cell class="text-right">
-									<div class="flex items-center justify-end gap-1">
-										<Button
-											variant="ghost"
-											size="icon"
-											class="size-8"
-											href={publicUrl(row)}
-											target="_blank"
-											aria-label={m.admin_files_col_preview()}
-										>
-											<IconExternalLink class="size-4" />
-										</Button>
-										<Button
-											variant="ghost"
-											size="icon"
-											class="size-8"
-											onclick={() => copyUrl(row)}
-											aria-label={m.admin_files_copy_url()}
-										>
-											<IconCopy class="size-4" />
-										</Button>
-										{#if copiedId === row.id}
-											<span class="text-xs text-emerald-600 dark:text-emerald-400"
-												>{m.admin_settings_account_copied()}</span
-											>
-										{/if}
-										{#if row.mimeType.startsWith('image/') && !row.isInGallery}
-											<form method="POST" action="?/addToGallery">
-												<input type="hidden" name="id" value={row.id} />
-												<Button
-													type="submit"
-													variant="ghost"
-													size="icon"
-													class="size-8"
-													aria-label={m.admin_files_add_to_gallery()}
-												>
-													<IconPhoto class="size-4" />
-												</Button>
-											</form>
-										{/if}
-										<Button
-											variant="ghost"
-											size="icon"
-											class="size-8"
-											href="/i/{row.objectKey}"
-											download={row.fileName}
-											aria-label={m.admin_files_download()}
-										>
-											<IconDownload class="size-4" />
-										</Button>
-										<Button
-											variant="ghost"
-											size="icon"
-											class="size-8 text-destructive"
-											onclick={() => (deleteTarget = { id: row.id, name: row.fileName })}
-											aria-label={m.admin_common_delete()}
-										>
-											<IconTrash class="size-4" />
-										</Button>
-									</div>
-								</Table.Cell>
-							</Table.Row>
-						{/each}
-					</Table.Body>
-				</Table.Root>
-			</div>
-		{/if}
-	</section>
+		{/snippet}
+	</ListTable>
+
+	<!-- "Add to gallery" is a form action; the menu item submits this one. -->
+	<form method="POST" action="?/addToGallery" use:enhance bind:this={galleryForm} class="hidden">
+		<input type="hidden" name="id" value={galleryId} />
+	</form>
 
 	<section class="rounded-xl border bg-background p-4">
 		<h2 class="mb-1 text-sm font-medium">{m.admin_files_audit_title()}</h2>

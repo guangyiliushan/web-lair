@@ -1,32 +1,53 @@
 <script lang="ts">
-	import { invalidateAll } from '$app/navigation';
+	import { enhance } from '$app/forms';
+	import { invalidateAll, afterNavigate, replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
+	import { page } from '$app/state';
+	import { tick } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Table from '$lib/components/ui/table';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Empty } from '$lib/components/ui/empty';
 	import { RefreshButton } from '$lib/components/admin/refresh-button';
-	import { Separator } from '$lib/components/ui/separator';
+	import { DeleteConfirm } from '$lib/components/admin';
+	import {
+		ListFilter,
+		ListPagination,
+		ListRowActions,
+		ListSearch,
+		ListTable,
+		listColumnClass,
+		type ListColumn
+	} from '$lib/components/admin/list-table';
+	import { cn } from '$lib/utils';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import { noteMoodLabel, NOTE_WEATHER } from '$lib/utils/note-meta';
 	import { getLocale } from '$lib/paraglide/runtime';
-	import { afterNavigate, replaceState } from '$app/navigation';
-	import { page } from '$app/state';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
-	import IconSearch from '@tabler/icons-svelte-runes/icons/search';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
-	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
+	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
+	import IconLink from '@tabler/icons-svelte-runes/icons/link';
+	import IconCheck from '@tabler/icons-svelte-runes/icons/check';
 	import IconEye from '@tabler/icons-svelte-runes/icons/eye';
 	import IconThumbUp from '@tabler/icons-svelte-runes/icons/thumb-up';
 	import IconLock from '@tabler/icons-svelte-runes/icons/lock';
 	import IconPin from '@tabler/icons-svelte-runes/icons/pin';
-	import IconDots from '@tabler/icons-svelte-runes/icons/dots';
-	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
 
-	let { data }: PageProps = $props();
+	let { data, form }: PageProps = $props();
+
+	type NoteRow = (typeof data.notes)[number];
+
+	/** Failure from `?/status` - shown in the confirm dialog and in the banner. */
+	const actionError = $derived(
+		form && 'error' in form && typeof form.error === 'string' ? form.error : null
+	);
+
+	const LIST_PATH = '/admin/notes';
+	const EDIT_PATH = '/admin/notes/edit';
 
 	// Transient banner for ?trashed=1 / ?discarded=1 (the edit page consumes
 	// its own variants; without this the redirects landed silently -
@@ -34,7 +55,8 @@
 	let flash = $state<string | null>(null);
 	let flashTimer: ReturnType<typeof setTimeout> | null = null;
 	afterNavigate(() => {
-		const params = page.url.searchParams;
+		// A copy: `page.url` is reactive and must not be mutated in place.
+		const params = new SvelteURLSearchParams(page.url.searchParams);
 		const message =
 			params.get('trashed') === '1'
 				? m.admin_notes_flash_trashed()
@@ -45,10 +67,9 @@
 		flash = message;
 		if (flashTimer) clearTimeout(flashTimer);
 		flashTimer = setTimeout(() => (flash = null), 3500);
-		const url = new URL(page.url);
-		url.searchParams.delete('trashed');
-		url.searchParams.delete('discarded');
-		replaceState(url.pathname + url.search, {});
+		params.delete('trashed');
+		params.delete('discarded');
+		replaceState(resolve(`${LIST_PATH}?${params.toString()}`), {});
 	});
 
 	const STATUS_LABELS: Record<string, string> = {
@@ -66,8 +87,59 @@
 	 */
 	const FILTERABLE_STATUSES = ['published', 'draft', 'private', 'trash'] as const;
 
+	const cols: Record<
+		'title' | 'id' | 'topic' | 'status' | 'meta' | 'views' | 'likes' | 'updated' | 'actions',
+		ListColumn
+	> = {
+		title: { id: 'title', label: m.admin_list_col_title(), control: true },
+		id: { id: 'id', label: m.admin_list_col_id(), width: 'w-12', hideBelow: 'xl' },
+		topic: {
+			id: 'topic',
+			label: m.admin_list_col_topic(),
+			width: 'w-24',
+			hideBelow: 'lg',
+			control: true
+		},
+		status: {
+			id: 'status',
+			label: m.admin_common_status(),
+			width: 'w-24',
+			hideBelow: 'md',
+			control: true
+		},
+		meta: { id: 'meta', label: m.admin_list_col_meta(), width: 'w-28', hideBelow: 'xl' },
+		views: {
+			id: 'views',
+			label: m.admin_list_col_views(),
+			width: 'w-14',
+			hideBelow: 'xl',
+			align: 'right'
+		},
+		likes: {
+			id: 'likes',
+			label: m.admin_list_col_likes(),
+			width: 'w-14',
+			hideBelow: 'xl',
+			align: 'right'
+		},
+		updated: { id: 'updated', label: m.admin_list_col_updated(), width: 'w-32', hideBelow: 'lg' },
+		actions: {
+			id: 'actions',
+			label: m.admin_common_actions(),
+			width: 'w-28',
+			align: 'right',
+			control: true
+		}
+	};
+	const columns = Object.values(cols);
+
 	const currentTopic = $derived(
 		data.topics.find((t) => t.id === data.filters.topic)?.name ?? m.admin_notes_all_topics()
+	);
+	const currentStatus = $derived(
+		(FILTERABLE_STATUSES as readonly string[]).includes(data.filters.status)
+			? STATUS_LABELS[data.filters.status]
+			: m.admin_posts_filter_all_status()
 	);
 
 	function weatherLabel(code: number | null): string | null {
@@ -75,7 +147,8 @@
 		return NOTE_WEATHER[code]?.labels[getLocale()] ?? String(code);
 	}
 
-	function queryHref(patch: Record<string, string | undefined>): string {
+	/** Query string for a filter change; `''` when it clears every filter. */
+	function querySearch(patch: Record<string, string | undefined>): string {
 		const params = new SvelteURLSearchParams();
 		const next = {
 			status: data.filters.status || undefined,
@@ -86,9 +159,8 @@
 		for (const [key, value] of Object.entries(next)) {
 			if (value) params.set(key, value);
 		}
-		params.delete('page');
 		const qs = params.toString();
-		return `/admin/notes${qs ? `?${qs}` : ''}`;
+		return qs ? `?${qs}` : '';
 	}
 
 	function pageHref(target: number): string {
@@ -98,331 +170,373 @@
 		if (data.filters.keyword) params.set('keyword', data.filters.keyword);
 		if (target > 1) params.set('page', String(target));
 		const qs = params.toString();
-		return `/admin/notes${qs ? `?${qs}` : ''}`;
+		return `${resolve(LIST_PATH)}${qs ? `?${qs}` : ''}`;
 	}
 
-	const totalPages = $derived(Math.max(1, Math.ceil(data.totalCount / data.pageSize)));
-	const showFrom = $derived(data.totalCount === 0 ? 0 : (data.page - 1) * data.pageSize + 1);
-	const showTo = $derived(Math.min(data.totalCount, data.page * data.pageSize));
+	const searchHidden = $derived(
+		Object.fromEntries(
+			(
+				[
+					['status', data.filters.status],
+					['topic', data.filters.topic]
+				] as const
+			).filter(([, value]) => Boolean(value))
+		)
+	);
+
+	const topicOptions = $derived([
+		{ value: '', label: m.admin_notes_all_topics(), search: querySearch({ topic: undefined }) },
+		...data.topics.map((topic) => ({
+			value: topic.id,
+			label: topic.name,
+			search: querySearch({ topic: topic.id })
+		}))
+	]);
+
+	const statusOptions = $derived([
+		{
+			value: '',
+			label: m.admin_posts_filter_all_status(),
+			search: querySearch({ status: undefined })
+		},
+		...FILTERABLE_STATUSES.map((value) => ({
+			value,
+			label: STATUS_LABELS[value],
+			search: querySearch({ status: value })
+		}))
+	]);
+
+	function publicHref(note: NoteRow): string {
+		return `/${note.lang}/notes/${note.slug}`;
+	}
+
+	// Row actions: edit and trash sit on the row itself (the common ones); the
+	// utilities are folded into the overflow menu.
+	let copiedId = $state<string | null>(null);
+	let copyTimer: ReturnType<typeof setTimeout> | null = null;
+
+	async function copyLink(note: NoteRow) {
+		try {
+			await navigator.clipboard.writeText(new URL(publicHref(note), location.origin).toString());
+			copiedId = note.id;
+			if (copyTimer) clearTimeout(copyTimer);
+			copyTimer = setTimeout(() => (copiedId = null), 1800);
+		} catch {
+			// Clipboard unavailable (insecure context / denied) - the link is
+			// still reachable through the open-in-new-tab item in the same menu.
+		}
+	}
+
+	// Both confirmable row actions share one dialog. Permanent delete only shows
+	// up in the overflow menu of a row that is already in the trash, so losing
+	// data takes two deliberate steps and a mis-click cannot do it.
+	type Pending = { id: string; kind: 'trash' | 'purge' };
+
+	let pending = $state<Pending | null>(null);
+	let restoreId = $state('');
+	let statusForm = $state<HTMLFormElement | null>(null);
+
+	const pendingCopy = $derived(
+		pending?.kind === 'purge'
+			? {
+					title: m.admin_list_purge_title(),
+					description: m.admin_list_purge_desc(),
+					confirmLabel: m.admin_list_purge(),
+					action: '?/purge',
+					extraFields: {} as Record<string, string>
+				}
+			: {
+					title: m.admin_list_trash_title(),
+					description: m.admin_list_trash_desc(),
+					confirmLabel: m.admin_list_trash(),
+					action: '?/status',
+					extraFields: { action: 'trash' } as Record<string, string>
+				}
+	);
+
+	function openTrash(note: NoteRow) {
+		pending = { id: note.id, kind: 'trash' };
+	}
+
+	function openPurge(note: NoteRow) {
+		pending = { id: note.id, kind: 'purge' };
+	}
+
+	async function restore(note: NoteRow) {
+		restoreId = note.id;
+		await tick();
+		statusForm?.requestSubmit();
+	}
 </script>
 
 <svelte:head>
 	<title>{m.admin_notes_title()} - Lair Admin</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-4">
 	{#if flash}
 		<div
 			role="status"
-			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400"
+			class="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400"
 		>
 			{flash}
 		</div>
 	{/if}
-	<!-- Search and filter toolbar -->
-	<div class="relative flex h-10 shrink-0 items-center border-b">
-		<form
-			class="relative flex h-full min-w-0 flex-1 items-center self-stretch"
-			method="GET"
-			action="/admin/notes"
+	{#if actionError}
+		<div
+			role="alert"
+			class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
 		>
-			{#if data.filters.status}
-				<input type="hidden" name="status" value={data.filters.status} />
-			{/if}
-			{#if data.filters.topic}
-				<input type="hidden" name="topic" value={data.filters.topic} />
-			{/if}
-			<IconSearch
-				class="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
-			/>
-			<input
-				type="text"
-				name="keyword"
-				aria-label={m.admin_notes_search_label()}
-				placeholder={m.admin_posts_search_placeholder()}
-				class="h-7 w-full border-0 bg-transparent pr-0 pl-8 text-xs outline-none placeholder:text-muted-foreground focus:ring-0"
-				value={data.filters.keyword}
-			/>
-		</form>
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger>
-				{#snippet child({ props })}
-					<Button
-						{...props}
-						variant="ghost"
-						size="sm"
-						class="hidden w-28 justify-between text-xs font-normal text-muted-foreground hover:text-foreground sm:inline-flex"
-					>
-						<span class="truncate">{currentTopic}</span>
-						<IconChevronDown class="size-3.5 shrink-0 text-muted-foreground" />
-					</Button>
-				{/snippet}
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Content align="end">
-				<DropdownMenu.Group>
-					<DropdownMenu.Item>
-						{#snippet child({ props })}
-							<a href={queryHref({ topic: undefined })} {...props}>{m.admin_notes_all_topics()}</a>
-						{/snippet}
-					</DropdownMenu.Item>
-					{#each data.topics as topic (topic.id)}
-						<DropdownMenu.Item>
-							{#snippet child({ props })}
-								<a href={queryHref({ topic: topic.id })} {...props}>{topic.name}</a>
-							{/snippet}
-						</DropdownMenu.Item>
-					{/each}
-				</DropdownMenu.Group>
-			</DropdownMenu.Content>
-		</DropdownMenu.Root>
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger>
-				{#snippet child({ props })}
-					<Button
-						{...props}
-						variant="ghost"
-						size="sm"
-						class="hidden w-24 justify-center text-xs font-normal text-muted-foreground hover:text-foreground sm:inline-flex"
-					>
-						<span class="truncate">
-							{(FILTERABLE_STATUSES as readonly string[]).includes(data.filters.status)
-								? STATUS_LABELS[data.filters.status]
-								: m.admin_posts_filter_all_status()}
-						</span>
-						<IconChevronDown class="size-3.5 shrink-0 text-muted-foreground" />
-					</Button>
-				{/snippet}
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Content align="end">
-				<DropdownMenu.Group>
-					<DropdownMenu.Item>
-						{#snippet child({ props })}
-							<a href={queryHref({ status: undefined })} {...props}
-								>{m.admin_posts_filter_all_status()}</a
-							>
-						{/snippet}
-					</DropdownMenu.Item>
-					{#each FILTERABLE_STATUSES as value (value)}
-						<DropdownMenu.Item>
-							{#snippet child({ props })}
-								<a href={queryHref({ status: value })} {...props}>{STATUS_LABELS[value]}</a>
-							{/snippet}
-						</DropdownMenu.Item>
-					{/each}
-				</DropdownMenu.Group>
-			</DropdownMenu.Content>
-		</DropdownMenu.Root>
-		<!-- Actions column placeholder — aligns with the table's w-20 -->
-		<div class="w-20"></div>
-		<!-- Separator and refresh button: absolutely positioned, outside the flex layout -->
-		<div class="absolute top-0 right-0 flex h-full items-center pr-2">
-			<Separator orientation="vertical" class="h-3.5" />
-			<RefreshButton onclick={() => invalidateAll()} />
-		</div>
-	</div>
-
-	<!-- Notes list -->
-	{#if data.notes.length === 0}
-		<Empty class="py-12">
-			<div class="flex flex-col items-center gap-1">
-				<h3 class="text-lg font-semibold tracking-tight">{m.admin_notes_empty()}</h3>
-				<p class="text-sm text-muted-foreground">
-					{data.filters.keyword || data.filters.status || data.filters.topic
-						? m.admin_notes_empty_filtered()
-						: m.admin_notes_empty_all()}
-				</p>
-			</div>
-			<div class="mt-4">
-				<Button href="/admin/notes/edit">
-					<IconPlus data-icon="inline-start" />
-					{m.admin_notes_new()}
-				</Button>
-			</div>
-		</Empty>
-	{:else}
-		<div class="overflow-x-auto">
-			<Table.Root class="table-fixed">
-				<Table.Body>
-					{#each data.notes as note (note.id)}
-						<Table.Row class="group border-border">
-							<Table.Cell class="max-w-0 whitespace-normal">
-								<div class="flex min-w-0 flex-col gap-1">
-									<div class="flex min-w-0 items-center gap-2">
-										<a
-											href="/admin/notes/edit?id={note.id}"
-											class="line-clamp-2 block max-w-lg font-medium hover:text-primary lg:line-clamp-none lg:truncate"
-										>
-											{note.title || m.admin_posts_untitled()}
-										</a>
-										<Badge variant="outline" class="shrink-0 text-xs">{note.lang}</Badge>
-										{#if note.hasDraft}
-											<Badge variant="secondary" class="shrink-0 text-xs"
-												>{m.admin_posts_unpublished_changes()}</Badge
-											>
-										{/if}
-										{#if note.locked}
-											<IconLock
-												class="size-3.5 shrink-0 text-muted-foreground"
-												role="img"
-												aria-label={m.notes_locked()}
-											/>
-										{/if}
-										{#if note.pinned}
-											<IconPin
-												class="size-3.5 shrink-0 text-primary/70"
-												role="img"
-												aria-label={m.admin_notes_pinned()}
-											/>
-										{/if}
-									</div>
-									<!-- Compact-mode meta row: shown below lg -->
-									<div
-										class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground sm:gap-x-3 xl:hidden"
-									>
-										<span class="font-mono">#{note.nid}</span>
-										<span class="font-mono">{note.topicName ?? '—'}</span>
-										<span class="inline-flex items-center gap-1"
-											><IconEye class="size-3" />{note.readCount}</span
-										>
-										<span class="inline-flex items-center gap-1"
-											><IconThumbUp class="size-3" />{note.likeCount}</span
-										>
-										{#if note.mood}
-											<span>{noteMoodLabel(note.mood as never, getLocale())}</span>
-										{/if}
-										{#if weatherLabel(note.weatherCode)}
-											<span>{weatherLabel(note.weatherCode)}</span>
-										{/if}
-										<span
-											>{formatDateTime(new Date(note.updatedAt ?? note.createdAt), {
-												dateStyle: 'short'
-											})}</span
-										>
-									</div>
-								</div>
-							</Table.Cell>
-							<Table.Cell class="hidden w-16 text-muted-foreground xl:table-cell">
-								<span class="font-mono text-xs">#{note.nid}</span>
-							</Table.Cell>
-							<Table.Cell class="hidden w-36 xl:table-cell">
-								<div class="flex items-center gap-3 overflow-hidden text-sm text-muted-foreground">
-									<span class="inline-flex items-center gap-1">
-										<IconEye class="size-3.5" />
-										{note.readCount}
-									</span>
-									<span class="inline-flex items-center gap-1">
-										<IconThumbUp class="size-3.5" />
-										{note.likeCount}
-									</span>
-								</div>
-							</Table.Cell>
-							<Table.Cell class="hidden w-40 xl:table-cell">
-								<div class="flex flex-col gap-0.5 text-xs text-muted-foreground">
-									<span>{note.mood ? noteMoodLabel(note.mood as never, getLocale()) : '—'}</span>
-									<span>
-										{weatherLabel(note.weatherCode) ?? '—'}{note.temperatureC
-											? ` · ${note.temperatureC}°C`
-											: ''}
-									</span>
-								</div>
-							</Table.Cell>
-							<Table.Cell class="hidden w-24 xl:table-cell">
-								{#if note.topicName}
-									<Badge variant="outline" class="text-xs">{note.topicName}</Badge>
-								{:else}
-									<span class="text-xs text-muted-foreground">—</span>
-								{/if}
-							</Table.Cell>
-							<Table.Cell class="hidden w-20 xl:table-cell">
-								<Badge
-									variant={note.status === 'published'
-										? 'default'
-										: note.status === 'trash'
-											? 'destructive'
-											: 'secondary'}
-									class="text-xs"
-								>
-									{STATUS_LABELS[note.status] ?? note.status}
-								</Badge>
-							</Table.Cell>
-							<Table.Cell class="hidden w-28 text-muted-foreground sm:table-cell">
-								{formatDateTime(new Date(note.updatedAt ?? note.createdAt), {
-									dateStyle: 'short',
-									timeStyle: 'short'
-								})}
-							</Table.Cell>
-							<Table.Cell class="w-20 text-right">
-								<div class="flex items-center justify-end gap-1">
-									<Button
-										variant="ghost"
-										size="icon"
-										class="size-8"
-										href="/admin/notes/edit?id={note.id}"
-										aria-label={m.admin_common_edit()}
-									>
-										<IconPencil class="size-4" />
-									</Button>
-									<!-- Desktop/tablet: three-dot menu -->
-									<span class="hidden sm:contents">
-										<DropdownMenu.Root>
-											<DropdownMenu.Trigger>
-												{#snippet child({ props })}
-													<Button variant="ghost" size="icon" class="size-8" {...props}>
-														<IconDots class="size-4" />
-													</Button>
-												{/snippet}
-											</DropdownMenu.Trigger>
-											<DropdownMenu.Content align="end">
-												<DropdownMenu.Group>
-													<DropdownMenu.Item>
-														{#snippet child({ props })}
-															<a href="/admin/notes/edit?id={note.id}" {...props}>
-																<IconPencil data-icon="inline-start" />
-																{m.admin_common_edit()}
-															</a>
-														{/snippet}
-													</DropdownMenu.Item>
-													<DropdownMenu.Item
-														onclick={() =>
-															window.open(`/${note.lang}/notes/${note.slug}`, '_blank')}
-													>
-														<IconExternalLink data-icon="inline-start" />
-														{m.admin_posts_open_new_tab()}
-													</DropdownMenu.Item>
-												</DropdownMenu.Group>
-											</DropdownMenu.Content>
-										</DropdownMenu.Root>
-									</span>
-								</div>
-							</Table.Cell>
-						</Table.Row>
-					{/each}
-				</Table.Body>
-			</Table.Root>
-		</div>
-
-		<!-- Pagination -->
-		<div class="flex items-center justify-between text-xs text-muted-foreground">
-			<span>
-				{m.admin_notes_total({ count: data.totalCount })}{data.totalCount > 0
-					? m.admin_posts_showing_range({ from: showFrom, to: showTo })
-					: ''}
-			</span>
-			{#if totalPages > 1}
-				<div class="flex items-center gap-2">
-					{#if data.page > 1}
-						<Button variant="outline" size="sm" href={pageHref(data.page - 1)}
-							>{m.admin_common_prev()}</Button
-						>
-					{/if}
-					<span>{data.page} / {totalPages}</span>
-					{#if data.page < totalPages}
-						<Button variant="outline" size="sm" href={pageHref(data.page + 1)}
-							>{m.admin_common_next()}</Button
-						>
-					{/if}
-				</div>
-			{/if}
+			{actionError}
 		</div>
 	{/if}
+
+	<ListTable
+		{columns}
+		rows={data.notes}
+		rowKey={(note) => note.id}
+		label={m.admin_notes_title()}
+		class="min-h-96"
+	>
+		{#snippet header(col)}
+			{#if col.id === 'title'}
+				<ListSearch
+					path={LIST_PATH}
+					label={m.admin_list_search_label()}
+					placeholder={m.admin_posts_search_placeholder()}
+					value={data.filters.keyword}
+					hidden={searchHidden}
+					clearSearch={querySearch({ keyword: undefined })}
+				/>
+			{:else if col.id === 'topic'}
+				<ListFilter
+					path={LIST_PATH}
+					label={col.label}
+					current={currentTopic}
+					selected={data.filters.topic}
+					options={topicOptions}
+				/>
+			{:else if col.id === 'status'}
+				<ListFilter
+					path={LIST_PATH}
+					label={col.label}
+					current={currentStatus}
+					selected={data.filters.status}
+					options={statusOptions}
+				/>
+			{:else if col.id === 'actions'}
+				<RefreshButton onclick={() => invalidateAll()} />
+			{/if}
+		{/snippet}
+
+		{#snippet row(note)}
+			{@const moodText = note.mood ? noteMoodLabel(note.mood as never, getLocale()) : null}
+			{@const weatherText = weatherLabel(note.weatherCode)}
+			{@const temperatureText = note.temperatureC ? `${note.temperatureC}°C` : null}
+			<Table.Cell class={cn(listColumnClass(cols.title), 'whitespace-normal')}>
+				<div class="flex min-w-0 flex-col gap-1">
+					<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+						<a
+							href="{resolve(EDIT_PATH)}?id={note.id}"
+							class="min-w-0 truncate font-medium hover:text-primary"
+						>
+							{note.title || m.admin_posts_untitled()}
+						</a>
+						<Badge variant="outline" class="shrink-0 text-xs">{note.lang}</Badge>
+						{#if note.hasDraft}
+							<Badge variant="secondary" class="shrink-0 text-xs"
+								>{m.admin_posts_unpublished_changes()}</Badge
+							>
+						{/if}
+						{#if note.locked}
+							<IconLock
+								class="size-3.5 shrink-0 text-muted-foreground"
+								role="img"
+								aria-label={m.notes_locked()}
+							/>
+						{/if}
+						{#if note.pinned}
+							<IconPin
+								class="size-3.5 shrink-0 text-primary/70"
+								role="img"
+								aria-label={m.admin_notes_pinned()}
+							/>
+						{/if}
+					</div>
+					<!-- Below xl the columns this meta covers are hidden. -->
+					<div
+						class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground xl:hidden"
+					>
+						<span class="font-mono">#{note.nid}</span>
+						<span class="truncate">{note.topicName ?? '—'}</span>
+						<Badge
+							variant={note.status === 'published'
+								? 'default'
+								: note.status === 'trash'
+									? 'destructive'
+									: 'secondary'}
+							class="text-xs"
+						>
+							{STATUS_LABELS[note.status] ?? note.status}
+						</Badge>
+						<span class="inline-flex items-center gap-1"
+							><IconEye class="size-3" />{note.readCount}</span
+						>
+						<span class="inline-flex items-center gap-1"
+							><IconThumbUp class="size-3" />{note.likeCount}</span
+						>
+						<span
+							>{formatDateTime(new Date(note.updatedAt ?? note.createdAt), {
+								dateStyle: 'short'
+							})}</span
+						>
+					</div>
+				</div>
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.id), 'font-mono text-xs text-muted-foreground')}>
+				#{note.nid}
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.topic), 'text-xs text-muted-foreground')}>
+				{#if note.topicName}
+					<Badge variant="outline" class="text-xs">{note.topicName}</Badge>
+				{:else}
+					—
+				{/if}
+			</Table.Cell>
+			<Table.Cell class={listColumnClass(cols.status)}>
+				<Badge
+					variant={note.status === 'published'
+						? 'default'
+						: note.status === 'trash'
+							? 'destructive'
+							: 'secondary'}
+					class="text-xs"
+				>
+					{STATUS_LABELS[note.status] ?? note.status}
+				</Badge>
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.meta), 'text-xs text-muted-foreground')}>
+				<div class="flex min-w-0 items-center gap-1.5">
+					{#if !moodText && !weatherText && !temperatureText}
+						<span class="truncate">—</span>
+					{:else}
+						{#if moodText}
+							<span class="truncate">{moodText}</span>
+						{/if}
+						{#if weatherText || temperatureText}
+							<span class="truncate">
+								{weatherText ?? ''}{weatherText && temperatureText ? ' · ' : ''}{temperatureText ??
+									''}
+							</span>
+						{/if}
+					{/if}
+				</div>
+			</Table.Cell>
+			<Table.Cell
+				class={cn(listColumnClass(cols.views), 'text-right text-xs text-muted-foreground')}
+			>
+				{note.readCount}
+			</Table.Cell>
+			<Table.Cell
+				class={cn(listColumnClass(cols.likes), 'text-right text-xs text-muted-foreground')}
+			>
+				{note.likeCount}
+			</Table.Cell>
+			<Table.Cell
+				class={cn(listColumnClass(cols.updated), 'text-xs whitespace-nowrap text-muted-foreground')}
+			>
+				{formatDateTime(new Date(note.updatedAt ?? note.createdAt), {
+					dateStyle: 'short',
+					timeStyle: 'short'
+				})}
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.actions), 'text-right')}>
+				<ListRowActions
+					editPath={EDIT_PATH}
+					editId={note.id}
+					editLabel={m.admin_common_edit()}
+					deleteIcon={note.status === 'trash' ? 'restore' : 'trash'}
+					deleteLabel={note.status === 'trash' ? m.admin_list_restore() : m.admin_list_trash()}
+					onDelete={() => {
+						if (note.status === 'trash') restore(note);
+						else openTrash(note);
+					}}
+				>
+					{#snippet more()}
+						<DropdownMenu.Item onclick={() => window.open(publicHref(note), '_blank', 'noopener')}>
+							<IconExternalLink data-icon="inline-start" />
+							{m.admin_posts_open_new_tab()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => copyLink(note)}>
+							{#if copiedId === note.id}
+								<IconCheck data-icon="inline-start" />
+							{:else}
+								<IconLink data-icon="inline-start" />
+							{/if}
+							{copiedId === note.id ? m.admin_list_copied() : m.admin_posts_copy_link()}
+						</DropdownMenu.Item>
+						{#if note.status === 'trash'}
+							<DropdownMenu.Separator />
+							<DropdownMenu.Item
+								onclick={() => openPurge(note)}
+								class="text-destructive focus:text-destructive"
+							>
+								<IconTrash data-icon="inline-start" />
+								{m.admin_list_purge()}
+							</DropdownMenu.Item>
+						{/if}
+					{/snippet}
+				</ListRowActions>
+				<span class="sr-only" aria-live="polite">
+					{copiedId === note.id ? m.admin_list_copied() : ''}
+				</span>
+			</Table.Cell>
+		{/snippet}
+
+		{#snippet empty()}
+			<Empty class="mx-auto py-14">
+				<div class="flex flex-col items-center gap-1">
+					<h3 class="text-lg font-semibold tracking-tight">{m.admin_notes_empty()}</h3>
+					<p class="text-sm text-muted-foreground">
+						{data.filters.keyword || data.filters.status || data.filters.topic
+							? m.admin_notes_empty_filtered()
+							: m.admin_notes_empty_all()}
+					</p>
+				</div>
+				<div class="mt-2">
+					<Button href={resolve(EDIT_PATH)}>
+						<IconPlus data-icon="inline-start" />
+						{m.admin_notes_new()}
+					</Button>
+				</div>
+			</Empty>
+		{/snippet}
+
+		{#snippet footer()}
+			<ListPagination
+				total={data.totalCount}
+				page={data.page}
+				pageSize={data.pageSize}
+				{pageHref}
+			/>
+		{/snippet}
+	</ListTable>
 </div>
+
+<DeleteConfirm
+	open={pending !== null}
+	title={pendingCopy.title}
+	description={pendingCopy.description}
+	id={pending?.id ?? ''}
+	action={pendingCopy.action}
+	extraFields={pendingCopy.extraFields}
+	confirmLabel={pendingCopy.confirmLabel}
+	error={actionError}
+	onclose={() => (pending = null)}
+/>
+
+<!-- Restore is reversible, so it needs no confirm - just the submit. -->
+<form method="POST" action="?/status" use:enhance bind:this={statusForm} class="hidden">
+	<input type="hidden" name="id" value={restoreId} />
+	<input type="hidden" name="action" value="restore" />
+</form>

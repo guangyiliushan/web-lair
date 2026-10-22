@@ -1,27 +1,38 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { invalidateAll, replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { page } from '$app/state';
-	import type { ActionResult } from '@sveltejs/kit';
-	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
-	import { Textarea } from '$lib/components/ui/textarea';
+	import { Badge } from '$lib/components/ui/badge';
+	import * as Table from '$lib/components/ui/table';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Empty } from '$lib/components/ui/empty';
-	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { RefreshButton } from '$lib/components/admin/refresh-button';
 	import { DeleteConfirm } from '$lib/components/admin';
+	import {
+		ListFilter,
+		ListPagination,
+		ListRowActions,
+		ListSearch,
+		ListTable,
+		listColumnClass,
+		type ListColumn
+	} from '$lib/components/admin/list-table';
+	import { cn } from '$lib/utils';
+	import { formatDateTime } from '$lib/utils/i18n';
 	import { MOMENT_KINDS, type MomentKind } from '$lib/utils/moment-meta';
-	import IconWriting from '@tabler/icons-svelte-runes/icons/writing';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
-	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
-	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
+	import IconCopy from '@tabler/icons-svelte-runes/icons/copy';
+	import IconCheck from '@tabler/icons-svelte-runes/icons/check';
 	import IconThumbUp from '@tabler/icons-svelte-runes/icons/thumb-up';
 	import IconThumbDown from '@tabler/icons-svelte-runes/icons/thumb-down';
-	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
 
 	let { data, form }: PageProps = $props();
 
-	type MomentRow = Awaited<PageProps['data']['rows']>[number];
+	type MomentRow = (typeof data.moments)[number];
 
 	const KIND_LABELS: Record<MomentKind, string> = {
 		life: m.admin_moments_kind_life(),
@@ -30,53 +41,101 @@
 		other: m.admin_moments_kind_other()
 	};
 
-	// ── Add / edit dialog ──
-	let dialogOpen = $state(false);
-	let editing = $state<MomentRow | null>(null);
-	let fieldContent = $state('');
-	let fieldType = $state<MomentKind>('life');
-	// Double-submit guard (C3 review): kit does not merge submissions.
-	let submitting = $state(false);
+	/** Mirrors the posts / notes admin lists: one descriptor per column. */
+	const cols: Record<'content' | 'kind' | 'votes' | 'created' | 'actions', ListColumn> = {
+		content: { id: 'content', label: m.admin_moments_content(), control: true },
+		kind: {
+			id: 'kind',
+			label: m.admin_moments_kind(),
+			width: 'w-28',
+			hideBelow: 'md',
+			control: true
+		},
+		votes: {
+			id: 'votes',
+			label: m.admin_list_col_votes(),
+			width: 'w-24',
+			hideBelow: 'lg',
+			align: 'right'
+		},
+		created: { id: 'created', label: m.admin_list_col_created(), width: 'w-32', hideBelow: 'sm' },
+		actions: {
+			id: 'actions',
+			label: m.admin_common_actions(),
+			width: 'w-28',
+			align: 'right',
+			control: true
+		}
+	};
+	const columns = Object.values(cols);
 
-	// Dashboard Write deep link: /admin/moments?add=1 opens the dialog once.
-	let addConsumed = false;
+	const currentKind = $derived(
+		data.filters.type && isKindLabel(data.filters.type)
+			? KIND_LABELS[data.filters.type as MomentKind]
+			: m.admin_list_filter_all_kinds()
+	);
+
+	function isKindLabel(value: string): boolean {
+		return (MOMENT_KINDS as readonly string[]).includes(value);
+	}
+
+	const LIST_PATH = '/admin/moments';
+
+	/** Query string for a filter change; `''` when it clears every filter. */
+	function querySearch(patch: Record<string, string | undefined>): string {
+		const params = new SvelteURLSearchParams();
+		const next = {
+			type: data.filters.type || undefined,
+			keyword: data.filters.keyword || undefined,
+			...patch
+		};
+		for (const [key, value] of Object.entries(next)) {
+			if (value) params.set(key, value);
+		}
+		const qs = params.toString();
+		return qs ? `?${qs}` : '';
+	}
+
+	function pageHref(target: number): string {
+		const params = new SvelteURLSearchParams();
+		if (data.filters.type) params.set('type', data.filters.type);
+		if (data.filters.keyword) params.set('keyword', data.filters.keyword);
+		if (target > 1) params.set('page', String(target));
+		const qs = params.toString();
+		return `${resolve(LIST_PATH)}${qs ? `?${qs}` : ''}`;
+	}
+
+	const searchHidden = $derived(
+		Object.fromEntries(
+			([['type', data.filters.type]] as const).filter(([, value]) => Boolean(value))
+		)
+	);
+
+	const kindOptions = $derived([
+		{
+			value: '',
+			label: m.admin_list_filter_all_kinds(),
+			search: querySearch({ type: undefined })
+		},
+		...MOMENT_KINDS.map((kind) => ({
+			value: kind,
+			label: KIND_LABELS[kind],
+			search: querySearch({ type: kind })
+		}))
+	]);
+
+	// ── One-shot "saved" flash ──
+	// The editor redirects back with `?saved=1`; consume the param so a
+	// refresh / back-nav cannot replay the banner (same shape as files-list).
+	let flashSaved = $state(false);
 	$effect(() => {
-		if (!addConsumed && page.url.searchParams.get('add') === '1') {
-			addConsumed = true;
-			openCreate();
+		if (page.url.searchParams.get('saved') === '1') {
+			flashSaved = true;
+			const url = new URL(page.url);
+			url.searchParams.delete('saved');
+			replaceState(url, {});
 		}
 	});
-
-	function openCreate() {
-		dismissError();
-		editing = null;
-		fieldContent = '';
-		fieldType = 'life';
-		dialogOpen = true;
-	}
-
-	function openEdit(row: MomentRow) {
-		dismissError();
-		editing = row;
-		fieldContent = row.content;
-		fieldType = row.type as MomentKind;
-		dialogOpen = true;
-	}
-
-	/** Close the dialog once an action succeeds; failures keep it open with the error shown. */
-	function closeOnSuccess() {
-		return async ({
-			result,
-			update
-		}: {
-			result: ActionResult;
-			update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
-		}) => {
-			submitting = false;
-			if (result.type !== 'failure') dialogOpen = false;
-			await update();
-		};
-	}
 
 	// ── Delete confirm ──
 	let deleteTarget = $state<MomentRow | null>(null);
@@ -84,6 +143,21 @@
 	function openDelete(row: MomentRow) {
 		dismissError();
 		deleteTarget = row;
+	}
+
+	// Secondary row action folded into the overflow menu.
+	let copiedId = $state<string | null>(null);
+	let copyTimer: ReturnType<typeof setTimeout> | null = null;
+
+	async function copyContent(row: MomentRow) {
+		try {
+			await navigator.clipboard.writeText(row.content);
+			copiedId = row.id;
+			if (copyTimer) clearTimeout(copyTimer);
+			copyTimer = setTimeout(() => (copiedId = null), 1800);
+		} catch {
+			// Clipboard unavailable (insecure context / denied).
+		}
 	}
 
 	// Round-4 review: a page-form error belongs to the action that produced
@@ -106,196 +180,127 @@
 	<title>{m.admin_moments_title()} - Lair Admin</title>
 </svelte:head>
 
-<div class="flex h-full min-h-0 flex-col">
-	<header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
-		<div class="flex min-w-0 items-center gap-2.5">
-			<span
-				class="inline-flex size-6 shrink-0 items-center justify-center border bg-muted text-muted-foreground"
-			>
-				<IconWriting class="size-4" />
-			</span>
-			<div class="flex min-w-0 items-baseline gap-2">
-				<h1 class="truncate text-base font-semibold">{m.admin_nav_moments()}</h1>
-				<span class="shrink-0 text-xs text-muted-foreground tabular-nums"
-					>{m.admin_common_count_entries({ count: data.total })}</span
-				>
-			</div>
-		</div>
-		<div class="flex shrink-0 items-center gap-2">
-			<Button size="sm" variant="outline" onclick={openCreate}>
-				<IconPlus class="size-3.5" />
-				{m.admin_moments_new()}
-			</Button>
-		</div>
-	</header>
-
-	<!-- Write / edit moment dialog -->
-	<Dialog.Root bind:open={dialogOpen}>
-		<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>
-			<form
-				method="post"
-				action={editing ? '?/update' : '?/create'}
-				class="flex flex-col"
-				use:enhance={() => {
-					submitting = true;
-					return closeOnSuccess();
-				}}
-			>
-				{#if editing}
-					<input type="hidden" name="id" value={editing.id} />
-				{/if}
-				<div class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
-					<Dialog.Title>{editing ? m.admin_moments_edit() : m.admin_moments_new()}</Dialog.Title>
-					<Dialog.Close>
-						{#snippet child({ props })}
-							<Button
-								variant="ghost"
-								size="icon"
-								class="size-7"
-								{...props}
-								aria-label={m.admin_common_close()}
-							>
-								<IconX class="size-4" />
-							</Button>
-						{/snippet}
-					</Dialog.Close>
-				</div>
-				{#if errorMessage}
-					<p role="alert" class="px-5 pt-3 text-sm text-destructive">{errorMessage}</p>
-				{/if}
-				<div class="grid gap-4 px-5 py-4">
-					<label class="grid gap-1.5">
-						<span class="text-sm font-medium">
-							{m.admin_moments_content()} <span class="text-destructive">*</span>
-						</span>
-						<Textarea
-							name="content"
-							class="min-h-28"
-							placeholder={m.admin_moments_content_ph()}
-							required
-							bind:value={fieldContent}
-						/>
-					</label>
-					<div class="grid gap-1.5">
-						<span class="text-sm font-medium">{m.admin_common_type()}</span>
-						<div class="flex flex-wrap gap-2" role="radiogroup" aria-label={m.admin_moments_kind()}>
-							{#each MOMENT_KINDS as kind (kind)}
-								<label
-									class="rounded-full border px-3 py-1 text-xs transition-colors focus-within:ring-2 focus-within:ring-ring/50 {fieldType ===
-									kind
-										? 'border-primary/40 bg-primary/10 text-primary'
-										: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-								>
-									<input
-										type="radio"
-										name="type"
-										value={kind}
-										bind:group={fieldType}
-										class="sr-only"
-									/>
-									{KIND_LABELS[kind]}
-								</label>
-							{/each}
-						</div>
-					</div>
-				</div>
-				<div class="flex shrink-0 items-center justify-end gap-2 border-t px-4 py-2">
-					<Dialog.Close>
-						{#snippet child({ props })}
-							<Button variant="outline" size="sm" {...props}>{m.admin_common_cancel()}</Button>
-						{/snippet}
-					</Dialog.Close>
-					<Button type="submit" size="sm" disabled={submitting || !fieldContent.trim()}>
-						{editing ? m.admin_common_save() : m.admin_posts_edit_publish()}
-					</Button>
-				</div>
-			</form>
-		</Dialog.Content>
-	</Dialog.Root>
-
-	<DeleteConfirm
-		open={deleteTarget !== null}
-		title={m.admin_moments_delete_title()}
-		description={m.admin_moments_delete_desc()}
-		id={deleteTarget?.id ?? ''}
-		error={errorMessage}
-		onclose={() => (deleteTarget = null)}
-	/>
-
-	<!-- Moments list (streamed: skeleton first, then content; ui-ux C1) -->
-	<div class="min-h-0 flex-1 overflow-auto">
-		{#await data.rows}
-			<div class="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-6" aria-hidden="true">
-				{#each [0, 1, 2, 3, 4] as i (i)}
-					<Skeleton class="h-16 w-full" />
-				{/each}
-			</div>
-		{:then rows}
-			{#if rows.length === 0}
-				<Empty class="py-12">
-					<div class="flex flex-col items-center gap-1">
-						<h3 class="text-lg font-semibold tracking-tight">{m.admin_moments_empty()}</h3>
-						<p class="text-sm text-muted-foreground">{m.admin_moments_empty_desc()}</p>
-					</div>
-				</Empty>
-			{:else}
-				<div
-					class="mx-auto max-w-4xl divide-y"
-					role="list"
-					aria-label={m.admin_moments_list_aria()}
-				>
-					{#each rows as row (row.id)}
-						<article role="listitem" class="group px-4 py-5 transition-colors hover:bg-muted/50">
-							<p class="text-base leading-7 wrap-break-word whitespace-pre-wrap">{row.content}</p>
-							<footer class="mt-4 flex flex-wrap items-center justify-between gap-3">
-								<div
-									class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground"
-								>
-									<span class="rounded border px-1.5 py-0.5 text-xs text-muted-foreground">
-										{KIND_LABELS[row.type as MomentKind] ?? row.type}
-									</span>
-									<span>{row.dateLabel}</span>
-									<span class="inline-flex items-center gap-2">
-										<span class="inline-flex items-center gap-1">
-											<IconThumbUp class="size-3.5" aria-hidden="true" />
-											<span class="sr-only">{m.admin_moments_upvote()}</span>{row.up}
-										</span>
-										<span class="h-3 w-px bg-border"></span>
-										<span class="inline-flex items-center gap-1">
-											<IconThumbDown class="size-3.5" aria-hidden="true" />
-											<span class="sr-only">{m.admin_moments_downvote()}</span>{row.down}
-										</span>
-									</span>
-								</div>
-								<div
-									class="flex items-center gap-1 opacity-100 transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100 sm:pointer-fine:opacity-0"
-								>
-									<Button
-										variant="outline"
-										size="sm"
-										class="h-8 gap-1 px-2 text-xs"
-										aria-label={m.admin_moments_edit()}
-										onclick={() => openEdit(row)}
-									>
-										<IconPencil class="size-3.5" />
-										<span class="hidden sm:inline">{m.admin_common_edit()}</span>
-									</Button>
-									<Button
-										variant="outline"
-										size="sm"
-										class="h-8 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-										aria-label={m.admin_moments_delete_title()}
-										onclick={() => openDelete(row)}
-									>
-										<IconTrash class="size-3.5" />
-										<span class="hidden sm:inline">{m.admin_common_delete()}</span>
-									</Button>
-								</div>
-							</footer>
-						</article>
-					{/each}
-				</div>
-			{/if}
-		{/await}
+<!-- One-shot save confirmation from the editor redirect. -->
+{#if flashSaved}
+	<div
+		class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
+	>
+		{m.admin_moments_edit_saved()}
 	</div>
-</div>
+{/if}
+
+<DeleteConfirm
+	open={deleteTarget !== null}
+	title={m.admin_moments_delete_title()}
+	description={m.admin_moments_delete_desc()}
+	id={deleteTarget?.id ?? ''}
+	error={errorMessage}
+	onclose={() => (deleteTarget = null)}
+/>
+
+<ListTable
+	{columns}
+	rows={data.moments}
+	rowKey={(row) => row.id}
+	label={m.admin_moments_list_aria()}
+	class="min-h-96"
+>
+	{#snippet header(col)}
+		{#if col.id === 'content'}
+			<ListSearch
+				path={LIST_PATH}
+				label={m.admin_moments_search_label()}
+				placeholder={m.admin_moments_search_ph()}
+				value={data.filters.keyword}
+				hidden={searchHidden}
+				clearSearch={querySearch({ keyword: undefined })}
+			/>
+		{:else if col.id === 'kind'}
+			<ListFilter
+				path={LIST_PATH}
+				label={col.label}
+				current={currentKind}
+				selected={data.filters.type}
+				options={kindOptions}
+			/>
+		{:else if col.id === 'actions'}
+			<RefreshButton onclick={() => invalidateAll()} />
+		{/if}
+	{/snippet}
+
+	{#snippet row(moment)}
+		<Table.Cell class={cn(listColumnClass(cols.content), 'whitespace-normal')}>
+			<p class="line-clamp-3 text-sm wrap-break-word whitespace-pre-wrap">{moment.excerpt}</p>
+		</Table.Cell>
+		<Table.Cell class={listColumnClass(cols.kind)}>
+			<Badge variant="secondary" class="text-xs">
+				{KIND_LABELS[moment.type as MomentKind] ?? moment.type}
+			</Badge>
+		</Table.Cell>
+		<Table.Cell class={cn(listColumnClass(cols.votes), 'text-right')}>
+			<div class="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+				<span class="inline-flex items-center gap-1">
+					<IconThumbUp class="size-3.5" aria-hidden="true" />
+					<span class="sr-only">{m.admin_moments_upvote()}</span>{moment.up}
+				</span>
+				<span class="inline-flex items-center gap-1">
+					<IconThumbDown class="size-3.5" aria-hidden="true" />
+					<span class="sr-only">{m.admin_moments_downvote()}</span>{moment.down}
+				</span>
+			</div>
+		</Table.Cell>
+		<Table.Cell
+			class={cn(listColumnClass(cols.created), 'text-xs whitespace-nowrap text-muted-foreground')}
+		>
+			{formatDateTime(new Date(moment.createdAt), { dateStyle: 'short', timeStyle: 'short' })}
+		</Table.Cell>
+		<Table.Cell class={cn(listColumnClass(cols.actions), 'text-right')}>
+			<ListRowActions
+				editPath="/admin/moments/edit"
+				editId={moment.id}
+				editLabel={m.admin_moments_edit()}
+				deleteLabel={m.admin_moments_delete_title()}
+				onDelete={() => openDelete(moment)}
+			>
+				{#snippet more()}
+					<DropdownMenu.Item onclick={() => copyContent(moment)}>
+						{#if copiedId === moment.id}
+							<IconCheck data-icon="inline-start" />
+						{:else}
+							<IconCopy data-icon="inline-start" />
+						{/if}
+						{copiedId === moment.id ? m.admin_list_copied() : m.admin_list_copy_content()}
+					</DropdownMenu.Item>
+				{/snippet}
+			</ListRowActions>
+			<span class="sr-only" aria-live="polite">
+				{copiedId === moment.id ? m.admin_list_copied() : ''}
+			</span>
+		</Table.Cell>
+	{/snippet}
+
+	{#snippet empty()}
+		<Empty class="mx-auto py-14">
+			<div class="flex flex-col items-center gap-1">
+				<h3 class="text-lg font-semibold tracking-tight">
+					{data.filters.keyword || data.filters.type
+						? m.admin_moments_empty_filtered()
+						: m.admin_moments_empty()}
+				</h3>
+				{#if !data.filters.keyword && !data.filters.type}
+					<p class="text-sm text-muted-foreground">{m.admin_moments_empty_desc()}</p>
+				{/if}
+			</div>
+			<div class="mt-2">
+				<Button href="/admin/moments/edit">
+					<IconPlus data-icon="inline-start" />
+					{m.admin_common_new()}
+				</Button>
+			</div>
+		</Empty>
+	{/snippet}
+
+	{#snippet footer()}
+		<ListPagination total={data.totalCount} page={data.page} pageSize={data.pageSize} {pageHref} />
+	{/snippet}
+</ListTable>

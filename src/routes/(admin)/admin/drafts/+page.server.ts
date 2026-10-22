@@ -59,12 +59,12 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const draftId = (form.get('draftId') ?? '').toString();
 		if (!draftId || !isUuid(draftId))
-			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
+			return fail(400, { error: m.admin_posts_edit_err_bad_draft_id() });
 
 		const result = await discardDraft(draftId);
 		if (result.kind === 'not-found')
-			return fail(404, { message: m.admin_posts_edit_err_draft_not_found() });
-		if (result.kind === 'busy') return fail(409, { message: m.admin_posts_edit_err_busy() });
+			return fail(404, { error: m.admin_posts_edit_err_draft_not_found() });
+		if (result.kind === 'busy') return fail(409, { error: m.admin_posts_edit_err_busy() });
 		throw redirect(303, '/admin/drafts?discarded=1');
 	}
 } satisfies Actions;

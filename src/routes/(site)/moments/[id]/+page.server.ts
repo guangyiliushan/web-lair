@@ -5,6 +5,7 @@ import { moments } from '$lib/server/db/content';
 import { getOption } from '$lib/server/config/options-registry';
 import { isUuid } from '$lib/utils/uuid';
 import { plainTextExcerpt } from '$lib/utils/excerpt';
+import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad } from './$types';
 
@@ -30,5 +31,12 @@ export const load: PageServerLoad = async ({ params }) => {
 	if (!row) throw error(404, 'Not found');
 	const siteTz = await getOption('site.timezone');
 	const title = plainTextExcerpt(row.content, 48);
-	return { row: { ...row, dateLabel: formatDate(row.createdAt, { timeZone: siteTz }) }, title };
+	// Bodies are authored as Markdown in the admin editor (B2a UI P0, P7);
+	// rendering here keeps the plain-text rows working unchanged.
+	const html = await renderMarkdownToHtml(row.content);
+	return {
+		row: { ...row, dateLabel: formatDate(row.createdAt, { timeZone: siteTz }) },
+		html,
+		title
+	};
 };

@@ -17,7 +17,7 @@ export interface PublishPoint {
 	notes: number;
 }
 
-/** One slice of the category ranking (`count` desc, at most 8 rows). */
+/** One slice of the category ranking (`count` desc, at most 5 rows). */
 export interface CategoryPoint {
 	name: string;
 	count: number;
@@ -117,7 +117,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 					      where p.status <> 'trash'
 					      group by c.id, c.name
 					      order by 2 desc, 1 asc
-					      limit 8
+					      limit 5
 					   ) s) as category_series,
 
 					(select coalesce(json_agg(json_build_object(

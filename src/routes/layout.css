@@ -9,6 +9,15 @@
 @plugin '@tailwindcss/typography';
 
 :root {
+	color-scheme: light;
+
+	/* layerchart tooltips colour themselves from --color-surface-*; without
+	   these they fall back to light-dark(white, black) and end up a white box
+	   with white text under the dark theme. Read with raw var(), so they live
+	   in :root rather than @theme inline. */
+	--color-surface-100: var(--card);
+	--color-surface-300: var(--popover);
+	--color-surface-content: var(--card-foreground);
 	--background: oklch(1 0 0);
 
 	--foreground: oklch(0.148 0.004 228.8);
@@ -89,6 +98,8 @@
 }
 
 .dark {
+	color-scheme: dark;
+
 	--background: oklch(0.148 0.004 228.8);
 
 	--foreground: oklch(0.987 0.002 197.1);

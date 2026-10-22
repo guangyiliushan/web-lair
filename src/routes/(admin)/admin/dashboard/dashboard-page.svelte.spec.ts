@@ -115,11 +115,19 @@ describe('admin dashboard page shape', () => {
 
 	it('packs quick actions into columns above md and keeps one row per item below it', async () => {
 		await mount();
-		const grid = [...document.querySelectorAll('ul')].find((u) => u.querySelectorAll('li').length === 5);
+		const grid = [...document.querySelectorAll('ul')].find(
+			(u) => u.querySelectorAll('li').length === 5
+		);
 		expect(grid).not.toBeNull();
 		// The single markup serves both layouts: one column on the phone (which
-		// the design keeps as-is), then 2 / 3 / 5 columns as the canvas widens.
-		for (const step of ['grid-cols-1', 'md:grid-cols-2', 'lg:grid-cols-3', 'xl:grid-cols-5']) {
+		// the design keeps as-is), then 2 / 3 / 5 columns as the canvas widens. Five across is gated at
+		// 1440px - Tailwind's xl (1280) is too tight for the button pair.
+		for (const step of [
+			'grid-cols-1',
+			'md:grid-cols-2',
+			'lg:grid-cols-3',
+			'min-[1440px]:grid-cols-5'
+		]) {
 			expect(grid?.className).toContain(step);
 		}
 		// Cells must be free to drop the button pair onto a second line, or a

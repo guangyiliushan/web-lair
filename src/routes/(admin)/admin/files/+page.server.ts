@@ -48,6 +48,15 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	return {
 		headerTitle: m.admin_nav_files(),
+		headerActions: [
+			{
+				label: m.admin_media_upload(),
+				iconName: 'upload',
+				variant: 'default',
+				// opens the upload dialog registered by +page.svelte
+				actionId: 'files:upload'
+			}
+		],
 		files,
 		// The list is capped at FILE_LIST_LIMIT rows — surface it (round-2).
 		listTruncated: files.length >= FILE_LIST_LIMIT,

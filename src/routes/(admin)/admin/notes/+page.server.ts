@@ -1,8 +1,10 @@
 import { and, desc, eq, ilike, sql } from 'drizzle-orm';
+import { fail, type Actions } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
-import { notes, topics } from '$lib/server/db/content';
+import { drafts, notes, topics } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
-import { draftsForNotes } from '$lib/server/services/note-drafts';
+import { draftsForNotes, setNoteStatus } from '$lib/server/services/note-drafts';
+import { syncFileReferences } from '$lib/server/services/file-references';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad } from './$types';
 import { m } from '$lib/paraglide/messages';
@@ -90,4 +92,73 @@ export const load: PageServerLoad = async ({ url }) => {
 		filters: { status: statusRaw, topic: topicRaw, keyword },
 		topics: allTopics
 	};
+};
+
+export const actions: Actions = {
+	/**
+	 * Row-level status: move to trash / restore from trash (reuses the edit
+	 * route's `setNoteStatus`, so the CAS + restore-target rules cannot drift).
+	 *
+	 * No redirect: the list keeps the caller's filters and the page invalidates.
+	 */
+	status: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const id = (form.get('id') ?? '').toString();
+		const action = (form.get('action') ?? '').toString();
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_notes_edit_err_bad_id() });
+		if (action !== 'trash' && action !== 'restore') {
+			return fail(400, { error: m.admin_list_err_bad_action() });
+		}
+
+		const result = await setNoteStatus(id, action);
+		if (result.kind === 'not-found') {
+			return fail(404, { error: m.admin_notes_edit_err_not_found() });
+		}
+		if (result.kind === 'invalid') return fail(400, { error: result.message });
+		return { success: true };
+	},
+
+	/**
+	 * Permanent delete. Only offered from the overflow menu of a row that is
+	 * already in the trash, so the destructive path is two deliberate steps
+	 * (trash → purge) and a mis-click on the row button can never lose data.
+	 *
+	 * Mirrors the pages hard-delete (M1 / R2-3): drafts first, because
+	 * `drafts.ref_id` is polymorphic and no FK can cascade for it; then the
+	 * row (comments cascade, the translation pointer is set null); then the
+	 * file-reference cleanup, in the same lock order publish and discard use.
+	 */
+	purge: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const id = (form.get('id') ?? '').toString();
+		if (!id || !isUuid(id)) return fail(400, { error: m.admin_notes_edit_err_bad_id() });
+
+		const result = await db.transaction(async (tx) => {
+			const [row] = await tx
+				.select({ id: notes.id })
+				.from(notes)
+				.where(eq(notes.id, id))
+				.limit(1)
+				.for('update');
+			if (!row) return { kind: 'not-found' as const };
+
+			const draftRows = await tx
+				.delete(drafts)
+				.where(and(eq(drafts.refType, 'note'), eq(drafts.refId, id)))
+				.returning({ id: drafts.id });
+			await tx.delete(notes).where(eq(notes.id, id));
+			for (const draft of draftRows) {
+				await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
+			}
+			await syncFileReferences(tx, { type: 'note', id }, []);
+			return { kind: 'deleted' as const };
+		});
+
+		if (result.kind === 'not-found') {
+			return fail(404, { error: m.admin_notes_edit_err_not_found() });
+		}
+		return { success: true };
+	}
 };
