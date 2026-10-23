@@ -16,13 +16,39 @@ export function normalizeSlug(value: string): string {
 }
 
 /**
- * Tag slug rule, single-sourced (P1.1 review): lowercase + collapse whitespace
- * to hyphens. Deliberately NOT `normalizeSlug` - that one strips CJK, while
- * tag names are allowed to be non-ASCII (§9.4). Keep this exact behaviour when
- * calling it anywhere; the derived value is the tag's storage slug.
+ * Tag slug rule (2026-10-23: tags are ASCII-only — ledger §9.18.4 amendment).
+ * URL-safe punctuation (`. _ + ~`) survives; every other run becomes one
+ * hyphen. The `/` case was the bug: `UI/UX` used to yield `ui/ux`, which
+ * splits the `/posts/tags/[slug]` route into two segments.
  */
 export function tagSlug(name: string): string {
-	return name.toLowerCase().replace(/\s+/g, '-');
+	return name
+		.toLowerCase()
+		.replace(/[^a-z0-9._+~-]+/g, '-')
+		.replace(/-{2,}/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 60);
+}
+
+/**
+ * Printable-ASCII whitelist for tag names. Must stay in sync with the
+ * `tags_name_ascii_check` / `tags_name_shape_check` constraints: three write
+ * paths (post publish, media library, seed) all land on that CHECK.
+ */
+export const TAG_NAME_RE = /^[A-Za-z0-9 .,+#&'()/_-]+$/;
+
+/** URL shape the derived slug must satisfy (mirrors `tags_slug_shape_check`). */
+export const TAG_SLUG_RE = /^[a-z0-9][a-z0-9._+~-]*$/;
+
+export function isValidTagName(name: string): boolean {
+	if (!TAG_NAME_RE.test(name) || name.trim() !== name || name.length < 1 || name.length > 40) {
+		return false;
+	}
+	// The predicate must close over the DERIVED slug: names like `.NET` or `_x`
+	// satisfy the character whitelist but produce a slug the DB CHECK rejects
+	// (23514 -> 500 on publish). Validating both keeps the seam honest.
+	const slug = tagSlug(name);
+	return slug.length > 0 && slug.length <= 60 && TAG_SLUG_RE.test(slug);
 }
 
 /**

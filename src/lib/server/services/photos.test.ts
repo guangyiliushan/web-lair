@@ -324,7 +324,7 @@ describe('createPhotoFromFile', () => {
 		dbMock.insert.mockReturnValueOnce(insertChain(undefined)); // junction row
 
 		await expect(
-			createPhotoFromFile('f1', { tags: ['旅行'] }, { storage: storageMock })
+			createPhotoFromFile('f1', { tags: ['Travel'] }, { storage: storageMock })
 		).resolves.toEqual({ kind: 'already-in-gallery', photoId: 'p9' });
 		expect(dbMock.insert.mock.calls[0][0]).toBe(photoTagsTable);
 		expect(dbMock.insert.mock.results[0].value.values.mock.calls[0][0]).toEqual([
@@ -385,13 +385,31 @@ describe('createPhotoFromFile', () => {
 		dbMock.insert.mockReturnValueOnce(insertChain(undefined));
 		dbMock.insert.mockReturnValueOnce(insertChain(undefined));
 
-		await createPhotoFromFile('f1', { tags: ['旅行'] }, { storage: storageMock });
+		await createPhotoFromFile('f1', { tags: ['Travel'] }, { storage: storageMock });
 
 		expect(dbMock.insert.mock.calls[1][0]).toBe(tagsTable);
 		expect(dbMock.insert.mock.calls[2][0]).toBe(photoTagsTable);
 		expect(dbMock.insert.mock.results[2].value.values.mock.calls[0][0]).toEqual([
 			{ photoId: 'p1', tagId: 't1' }
 		]);
+	});
+
+	it('drops non-English tag names instead of failing the import', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		dbMock.select.mockReturnValueOnce(selectChain([FILE_ROW]));
+		dbMock.select.mockReturnValueOnce(selectChain([]));
+		dbMock.select.mockReturnValueOnce(selectChain([])); // slug check
+		dbMock.select.mockReturnValueOnce(selectChain([{ id: 't1' }])); // Travel lookup hit
+		dbMock.insert.mockReturnValueOnce(insertChain([{ id: 'p1', slug: 'x' }]));
+		dbMock.insert.mockReturnValueOnce(insertChain(undefined)); // junction only
+
+		await createPhotoFromFile('f1', { tags: ['Travel', '旅行'] }, { storage: storageMock });
+
+		// Exactly one junction insert: the CJK name never reached the tag writer.
+		expect(dbMock.insert.mock.calls.filter((call) => call[0] === tagsTable)).toHaveLength(0);
+		expect(dbMock.insert.mock.calls.filter((call) => call[0] === photoTagsTable)).toHaveLength(1);
+		expect(warn).toHaveBeenCalledWith('[media] skipped non-English tags: 旅行');
+		warn.mockRestore();
 	});
 });
 
@@ -437,7 +455,7 @@ describe('updatePhoto', () => {
 		dbMock.select.mockReturnValueOnce(selectChain([{ id: 't1' }])); // tag lookup hit
 		dbMock.insert.mockReturnValueOnce(insertChain(undefined)); // junction
 
-		expect(await updatePhoto('p1', { tags: ['旅行'] })).toEqual({ kind: 'ok' });
+		expect(await updatePhoto('p1', { tags: ['Travel'] })).toEqual({ kind: 'ok' });
 		expect(dbMock.delete.mock.calls[0][0]).toBe(photoTagsTable);
 		expect(dbMock.insert.mock.calls[0][0]).toBe(photoTagsTable);
 	});

@@ -165,7 +165,10 @@ describe('topics · create', () => {
 			slug: 'travel',
 			description: '笔记',
 			icon: null,
-			sortOrder: 0
+			sortOrder: 0,
+			sourceLang: 'zh-cn',
+			nameI18n: {},
+			descriptionI18n: {}
 		});
 	});
 
@@ -192,6 +195,7 @@ describe('topics · update / delete', () => {
 		).toBe(400);
 
 		state.updateResults = [[{ id: TOPIC_ID }]];
+		state.selectQueue.push([{ sourceLang: 'zh-cn' }]);
 		const result = await run('update', {
 			id: TOPIC_ID,
 			name: '旅行',
@@ -206,7 +210,9 @@ describe('topics · update / delete', () => {
 			slug: 'travel',
 			description: '',
 			icon: 'plane',
-			sortOrder: 3
+			sortOrder: 3,
+			nameI18n: {},
+			descriptionI18n: {}
 		});
 
 		// 0 rows affected: not-found must not answer success.

@@ -3,6 +3,7 @@ import { getLocale } from '$lib/paraglide/runtime';
 import { db } from '$lib/server/db';
 import { categories, postTags, posts, tags } from '$lib/server/db/content';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
+import { resolveTaxonomyName } from '$lib/server/services/taxonomy';
 import { plainTextExcerpt } from '$lib/utils/excerpt';
 import { formatDate } from '$lib/utils/i18n';
 import {
@@ -75,7 +76,9 @@ export const load: PageServerLoad = async ({ url }) => {
 			pinAt: posts.pinAt,
 			readCount: posts.readCount,
 			likeCount: posts.likeCount,
-			categoryName: categories.name
+			categoryName: categories.name,
+			categorySourceLang: categories.sourceLang,
+			categoryNameI18n: categories.nameI18n
 		})
 		.from(posts)
 		.innerJoin(categories, eq(posts.categoryId, categories.id))
@@ -108,7 +111,14 @@ export const load: PageServerLoad = async ({ url }) => {
 		excerpt: row.summary?.trim() || plainTextExcerpt(row.content ?? ''),
 		date: row.publishedAt ? formatDate(row.publishedAt) : '',
 		updatedDate: row.updatedAt ? formatDate(row.updatedAt) : '',
-		category: row.categoryName,
+		category: resolveTaxonomyName(
+			{
+				name: row.categoryName,
+				nameI18n: row.categoryNameI18n,
+				sourceLang: row.categorySourceLang
+			},
+			lang
+		),
 		tags: [...new Set(tagsByPost.get(row.id) ?? [])],
 		views: row.readCount,
 		likes: row.likeCount,

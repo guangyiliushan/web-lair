@@ -1,11 +1,12 @@
 import { and, count, desc, eq, ne, sql, type SQL } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { notes, topics } from '$lib/server/db/content';
+import { notes, topics, type LocalizedText } from '$lib/server/db/content';
 import { getOption } from '$lib/server/config/options-registry';
 import { firstImageFromMarkdown, plainTextExcerpt } from '$lib/utils/excerpt';
 import { noteDateLabel } from '$lib/utils/note-date';
 import { NOTE_PAGE_SIZE } from '$lib/utils/note-meta';
 import { visibleNoteCondition } from './note-visibility';
+import { resolveTaxonomyDescription, resolveTaxonomyName } from './taxonomy';
 
 /**
  * Public notes read side (N1). Notes are diary entries: list cards derive
@@ -227,6 +228,8 @@ export async function listTopicOptions(lang: string, now: Date): Promise<NoteTop
 		.select({
 			id: topics.id,
 			name: topics.name,
+			nameI18n: topics.nameI18n,
+			sourceLang: topics.sourceLang,
 			slug: topics.slug,
 			icon: topics.icon,
 			total: count(notes.id)
@@ -238,7 +241,15 @@ export async function listTopicOptions(lang: string, now: Date): Promise<NoteTop
 		)
 		.groupBy(topics.id)
 		.orderBy(topics.sortOrder, topics.name);
-	return rows.filter((row) => row.total > 0);
+	return rows
+		.filter((row) => row.total > 0)
+		.map((row) => ({
+			id: row.id,
+			name: resolveTaxonomyName(row, lang),
+			slug: row.slug,
+			icon: row.icon,
+			total: row.total
+		}));
 }
 
 /** Count of visible notes in one language (mega-menu footer). */
@@ -257,6 +268,9 @@ export interface NoteTopic {
 	icon: string | null;
 	description: string;
 	sortOrder: number;
+	sourceLang: string;
+	nameI18n: LocalizedText;
+	descriptionI18n: LocalizedText;
 }
 
 /** Topic lookup for the `/{lang}/notes/topics/[slug]` page (404 when absent). */
@@ -268,7 +282,10 @@ export async function findTopicBySlug(slug: string): Promise<NoteTopic | null> {
 			slug: topics.slug,
 			icon: topics.icon,
 			description: topics.description,
-			sortOrder: topics.sortOrder
+			sortOrder: topics.sortOrder,
+			sourceLang: topics.sourceLang,
+			nameI18n: topics.nameI18n,
+			descriptionI18n: topics.descriptionI18n
 		})
 		.from(topics)
 		.where(eq(topics.slug, slug))
@@ -334,6 +351,8 @@ export async function findVisibleNote(
 			meta: notes.meta,
 			translationGroup: notes.translationGroup,
 			topicName: topics.name,
+			topicSourceLang: topics.sourceLang,
+			topicNameI18n: topics.nameI18n,
 			topicSlug: topics.slug,
 			topicIcon: topics.icon
 		})
@@ -368,7 +387,18 @@ export async function findVisibleNote(
 		locked,
 		translationGroup: row.translationGroup,
 		topic: row.topicSlug
-			? { name: row.topicName ?? '', slug: row.topicSlug, icon: row.topicIcon }
+			? {
+					name: resolveTaxonomyName(
+						{
+							name: row.topicName ?? '',
+							nameI18n: row.topicNameI18n,
+							sourceLang: row.topicSourceLang ?? 'zh-cn'
+						},
+						lang
+					),
+					slug: row.topicSlug,
+					icon: row.topicIcon
+				}
 			: null
 	};
 }

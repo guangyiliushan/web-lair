@@ -2,6 +2,7 @@ import { db } from '$lib/server/db';
 import { requireAdminRole } from '$lib/server/authz';
 import { categories, posts } from '$lib/server/db/content';
 import { sql } from 'drizzle-orm';
+import { taxonomyCompleteness } from '$lib/server/services/taxonomy';
 import type { LayoutServerLoad } from './$types';
 import { m } from '$lib/paraglide/messages';
 
@@ -15,7 +16,13 @@ export const load: LayoutServerLoad = async () => {
 	await requireAdminRole();
 
 	const allCategories = await db
-		.select({ id: categories.id, name: categories.name, slug: categories.slug })
+		.select({
+			id: categories.id,
+			name: categories.name,
+			slug: categories.slug,
+			nameI18n: categories.nameI18n,
+			sourceLang: categories.sourceLang
+		})
 		.from(categories)
 		.orderBy(categories.name);
 
@@ -32,7 +39,12 @@ export const load: LayoutServerLoad = async () => {
 
 	return {
 		headerTitle: m.nav_posts_categories(),
-		categories: allCategories,
+		categories: allCategories.map((category) => ({
+			id: category.id,
+			name: category.name,
+			slug: category.slug,
+			completeness: taxonomyCompleteness(category)
+		})),
 		postCounts
 	};
 };

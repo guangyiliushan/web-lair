@@ -88,7 +88,16 @@ CREATE TABLE "categories" (
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
-	"description" text
+	"description" text,
+	"source_lang" text DEFAULT 'zh-cn' NOT NULL,
+	"name_i18n" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	CONSTRAINT "categories_source_lang_check" CHECK ("categories"."source_lang" in ('en', 'zh-cn', 'ja')),
+	CONSTRAINT "categories_name_i18n_shape_check" CHECK (jsonb_typeof("categories"."name_i18n") = 'object'),
+	CONSTRAINT "categories_name_i18n_keys_check" CHECK ("categories"."name_i18n" - array['en', 'zh-cn', 'ja'] = '{}'::jsonb),
+	CONSTRAINT "categories_name_i18n_no_source_check" CHECK (not jsonb_exists("categories"."name_i18n", "categories"."source_lang")),
+	CONSTRAINT "categories_name_i18n_nonblank_check" CHECK (("categories"."name_i18n"->>'en' is null or length(btrim("categories"."name_i18n"->>'en')) > 0)
+				and ("categories"."name_i18n"->>'zh-cn' is null or length(btrim("categories"."name_i18n"->>'zh-cn')) > 0)
+				and ("categories"."name_i18n"->>'ja' is null or length(btrim("categories"."name_i18n"->>'ja')) > 0))
 );
 --> statement-breakpoint
 CREATE TABLE "comment_moderation_events" (
@@ -465,7 +474,10 @@ CREATE TABLE "tags" (
 	"updated_at" timestamp with time zone,
 	"slug" text NOT NULL,
 	"name" text NOT NULL,
-	"description" text
+	"description" text,
+	CONSTRAINT "tags_name_ascii_check" CHECK ("tags"."name" ~ '^[A-Za-z0-9 .,+#&''()/_-]+$'),
+	CONSTRAINT "tags_name_shape_check" CHECK (btrim("tags"."name") = "tags"."name" and length("tags"."name") between 1 and 40),
+	CONSTRAINT "tags_slug_shape_check" CHECK ("tags"."slug" ~ '^[a-z0-9][a-z0-9._+~-]*$')
 );
 --> statement-breakpoint
 CREATE TABLE "thoughts" (
@@ -482,7 +494,23 @@ CREATE TABLE "topics" (
 	"slug" text NOT NULL,
 	"description" text DEFAULT '' NOT NULL,
 	"icon" text,
-	"sort_order" integer DEFAULT 0 NOT NULL
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"source_lang" text DEFAULT 'zh-cn' NOT NULL,
+	"name_i18n" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"description_i18n" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	CONSTRAINT "topics_source_lang_check" CHECK ("topics"."source_lang" in ('en', 'zh-cn', 'ja')),
+	CONSTRAINT "topics_name_i18n_shape_check" CHECK (jsonb_typeof("topics"."name_i18n") = 'object'),
+	CONSTRAINT "topics_name_i18n_keys_check" CHECK ("topics"."name_i18n" - array['en', 'zh-cn', 'ja'] = '{}'::jsonb),
+	CONSTRAINT "topics_name_i18n_no_source_check" CHECK (not jsonb_exists("topics"."name_i18n", "topics"."source_lang")),
+	CONSTRAINT "topics_name_i18n_nonblank_check" CHECK (("topics"."name_i18n"->>'en' is null or length(btrim("topics"."name_i18n"->>'en')) > 0)
+				and ("topics"."name_i18n"->>'zh-cn' is null or length(btrim("topics"."name_i18n"->>'zh-cn')) > 0)
+				and ("topics"."name_i18n"->>'ja' is null or length(btrim("topics"."name_i18n"->>'ja')) > 0)),
+	CONSTRAINT "topics_description_i18n_shape_check" CHECK (jsonb_typeof("topics"."description_i18n") = 'object'),
+	CONSTRAINT "topics_description_i18n_keys_check" CHECK ("topics"."description_i18n" - array['en', 'zh-cn', 'ja'] = '{}'::jsonb),
+	CONSTRAINT "topics_description_i18n_no_source_check" CHECK (not jsonb_exists("topics"."description_i18n", "topics"."source_lang")),
+	CONSTRAINT "topics_description_i18n_nonblank_check" CHECK (("topics"."description_i18n"->>'en' is null or length(btrim("topics"."description_i18n"->>'en')) > 0)
+				and ("topics"."description_i18n"->>'zh-cn' is null or length(btrim("topics"."description_i18n"->>'zh-cn')) > 0)
+				and ("topics"."description_i18n"->>'ja' is null or length(btrim("topics"."description_i18n"->>'ja')) > 0))
 );
 --> statement-breakpoint
 CREATE TABLE "translations" (

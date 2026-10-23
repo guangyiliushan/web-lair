@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import { getLocale } from '$lib/paraglide/runtime';
 import { getOption } from '$lib/server/config/options-registry';
 import { findTopicBySlug, listNotes, toNoteRow } from '$lib/server/services/notes';
+import { resolveTaxonomyDescription, resolveTaxonomyName } from '$lib/server/services/taxonomy';
 import type { PageServerLoad } from './$types';
 
 /** Topic page (N1): one curated topic's visible notes for this locale. */
@@ -28,10 +29,16 @@ export const load: PageServerLoad = async ({ params, url }) => {
 
 	return {
 		topic: {
-			name: topic.name,
+			name: resolveTaxonomyName(topic, lang),
 			slug: topic.slug,
 			icon: topic.icon,
-			description: topic.description
+			description:
+				resolveTaxonomyDescription(
+					topic.description,
+					topic.descriptionI18n,
+					topic.sourceLang,
+					lang
+				) ?? ''
 		},
 		notes,
 		total: result.total,

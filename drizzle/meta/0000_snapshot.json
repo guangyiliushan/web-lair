@@ -1,5 +1,5 @@
 {
-  "id": "ddc47e39-aef1-41f6-8d8d-265845ec4807",
+  "id": "35b170ab-84ee-4265-bc08-dc5dece24590",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -675,6 +675,20 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "source_lang": {
+          "name": "source_lang",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'zh-cn'"
+        },
+        "name_i18n": {
+          "name": "name_i18n",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
         }
       },
       "indexes": {
@@ -713,7 +727,28 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "categories_source_lang_check": {
+          "name": "categories_source_lang_check",
+          "value": "\"categories\".\"source_lang\" in ('en', 'zh-cn', 'ja')"
+        },
+        "categories_name_i18n_shape_check": {
+          "name": "categories_name_i18n_shape_check",
+          "value": "jsonb_typeof(\"categories\".\"name_i18n\") = 'object'"
+        },
+        "categories_name_i18n_keys_check": {
+          "name": "categories_name_i18n_keys_check",
+          "value": "\"categories\".\"name_i18n\" - array['en', 'zh-cn', 'ja'] = '{}'::jsonb"
+        },
+        "categories_name_i18n_no_source_check": {
+          "name": "categories_name_i18n_no_source_check",
+          "value": "not jsonb_exists(\"categories\".\"name_i18n\", \"categories\".\"source_lang\")"
+        },
+        "categories_name_i18n_nonblank_check": {
+          "name": "categories_name_i18n_nonblank_check",
+          "value": "(\"categories\".\"name_i18n\"->>'en' is null or length(btrim(\"categories\".\"name_i18n\"->>'en')) > 0)\n\t\t\t\tand (\"categories\".\"name_i18n\"->>'zh-cn' is null or length(btrim(\"categories\".\"name_i18n\"->>'zh-cn')) > 0)\n\t\t\t\tand (\"categories\".\"name_i18n\"->>'ja' is null or length(btrim(\"categories\".\"name_i18n\"->>'ja')) > 0)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.comment_moderation_events": {
@@ -4654,7 +4689,20 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "tags_name_ascii_check": {
+          "name": "tags_name_ascii_check",
+          "value": "\"tags\".\"name\" ~ '^[A-Za-z0-9 .,+#&''()/_-]+$'"
+        },
+        "tags_name_shape_check": {
+          "name": "tags_name_shape_check",
+          "value": "btrim(\"tags\".\"name\") = \"tags\".\"name\" and length(\"tags\".\"name\") between 1 and 40"
+        },
+        "tags_slug_shape_check": {
+          "name": "tags_slug_shape_check",
+          "value": "\"tags\".\"slug\" ~ '^[a-z0-9][a-z0-9._+~-]*$'"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.thoughts": {
@@ -4761,6 +4809,27 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "source_lang": {
+          "name": "source_lang",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'zh-cn'"
+        },
+        "name_i18n": {
+          "name": "name_i18n",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "description_i18n": {
+          "name": "description_i18n",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
         }
       },
       "indexes": {
@@ -4799,7 +4868,44 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "topics_source_lang_check": {
+          "name": "topics_source_lang_check",
+          "value": "\"topics\".\"source_lang\" in ('en', 'zh-cn', 'ja')"
+        },
+        "topics_name_i18n_shape_check": {
+          "name": "topics_name_i18n_shape_check",
+          "value": "jsonb_typeof(\"topics\".\"name_i18n\") = 'object'"
+        },
+        "topics_name_i18n_keys_check": {
+          "name": "topics_name_i18n_keys_check",
+          "value": "\"topics\".\"name_i18n\" - array['en', 'zh-cn', 'ja'] = '{}'::jsonb"
+        },
+        "topics_name_i18n_no_source_check": {
+          "name": "topics_name_i18n_no_source_check",
+          "value": "not jsonb_exists(\"topics\".\"name_i18n\", \"topics\".\"source_lang\")"
+        },
+        "topics_name_i18n_nonblank_check": {
+          "name": "topics_name_i18n_nonblank_check",
+          "value": "(\"topics\".\"name_i18n\"->>'en' is null or length(btrim(\"topics\".\"name_i18n\"->>'en')) > 0)\n\t\t\t\tand (\"topics\".\"name_i18n\"->>'zh-cn' is null or length(btrim(\"topics\".\"name_i18n\"->>'zh-cn')) > 0)\n\t\t\t\tand (\"topics\".\"name_i18n\"->>'ja' is null or length(btrim(\"topics\".\"name_i18n\"->>'ja')) > 0)"
+        },
+        "topics_description_i18n_shape_check": {
+          "name": "topics_description_i18n_shape_check",
+          "value": "jsonb_typeof(\"topics\".\"description_i18n\") = 'object'"
+        },
+        "topics_description_i18n_keys_check": {
+          "name": "topics_description_i18n_keys_check",
+          "value": "\"topics\".\"description_i18n\" - array['en', 'zh-cn', 'ja'] = '{}'::jsonb"
+        },
+        "topics_description_i18n_no_source_check": {
+          "name": "topics_description_i18n_no_source_check",
+          "value": "not jsonb_exists(\"topics\".\"description_i18n\", \"topics\".\"source_lang\")"
+        },
+        "topics_description_i18n_nonblank_check": {
+          "name": "topics_description_i18n_nonblank_check",
+          "value": "(\"topics\".\"description_i18n\"->>'en' is null or length(btrim(\"topics\".\"description_i18n\"->>'en')) > 0)\n\t\t\t\tand (\"topics\".\"description_i18n\"->>'zh-cn' is null or length(btrim(\"topics\".\"description_i18n\"->>'zh-cn')) > 0)\n\t\t\t\tand (\"topics\".\"description_i18n\"->>'ja' is null or length(btrim(\"topics\".\"description_i18n\"->>'ja')) > 0)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.translations": {

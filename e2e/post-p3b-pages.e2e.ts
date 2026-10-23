@@ -38,7 +38,7 @@ function cleanup(): void {
 test.beforeAll(() => {
 	cleanup();
 	psql(
-		`insert into categories (id, name, slug) values ('${CAT_ID}', '${CAT_NAME}', 'e2e-p3b-cat')`
+		`insert into categories (id, name, slug, source_lang, name_i18n) values ('${CAT_ID}', '${CAT_NAME}', 'e2e-p3b-cat', 'zh-cn', '{"en":"E2E P3B category EN"}')`
 	);
 	psql(`insert into tags (id, name, slug) values ('${TAG_ID}', '${TAG_NAME}', 'e2e-p3b-tag')`);
 	psql(
@@ -76,18 +76,31 @@ test.describe('P3-b pages', () => {
 		const response = await page.goto('/en/posts/categories');
 		expect(response?.status()).toBe(200);
 
-		const link = page.getByRole('link', { name: /E2E P3B cat/ });
+		const link = page.getByRole('link', { name: /E2E P3B category EN/ });
 		await expect(link).toBeVisible();
 		await expect(link).toHaveAttribute('href', '/en/posts/categories/e2e-p3b-cat');
 		// Two visible en posts in the category (the zh translation is another row).
 		await expect(link).toContainText('2');
 	});
 
+	test('the category page renders the English label (source label stays zh-cn)', async ({
+		page
+	}) => {
+		const response = await page.goto('/en/posts/categories/e2e-p3b-cat');
+		expect(response?.status()).toBe(200);
+
+		await expect(page.getByRole('heading', { name: 'E2E P3B category EN' })).toBeVisible();
+
+		// The source locale keeps the source label (no translation row).
+		await page.goto('/zh-cn/posts/categories/e2e-p3b-cat');
+		await expect(page.getByRole('heading', { name: CAT_NAME })).toBeVisible();
+	});
+
 	test('the category page filters by locale and links posts + tags localized', async ({ page }) => {
 		const response = await page.goto('/en/posts/categories/e2e-p3b-cat');
 		expect(response?.status()).toBe(200);
 
-		await expect(page.getByRole('heading', { name: CAT_NAME })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'E2E P3B category EN' })).toBeVisible();
 		await expect(page.getByRole('link', { name: TITLE1 })).toHaveAttribute(
 			'href',
 			`/en/posts/${SLUG1}`

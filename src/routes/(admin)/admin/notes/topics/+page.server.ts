@@ -6,6 +6,11 @@ import { notes, topics } from '$lib/server/db/content';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { NAV_ICON_NAMES } from '$lib/config/nav-icons';
 import { isUuid } from '$lib/utils/uuid';
+import {
+	isValidTaxonomySlug,
+	parseTaxonomyI18n,
+	TAXONOMY_LOCALES
+} from '$lib/server/services/taxonomy';
 import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
@@ -25,7 +30,10 @@ export const load: PageServerLoad = async () => {
 				slug: topics.slug,
 				description: topics.description,
 				icon: topics.icon,
-				sortOrder: topics.sortOrder
+				sortOrder: topics.sortOrder,
+				sourceLang: topics.sourceLang,
+				nameI18n: topics.nameI18n,
+				descriptionI18n: topics.descriptionI18n
 			})
 			.from(topics)
 			.orderBy(topics.sortOrder, topics.name),
@@ -59,9 +67,14 @@ export const actions: Actions = {
 		const description = str(form, 'description').trim();
 		const icon = str(form, 'icon').trim();
 		const sortRaw = str(form, 'sortOrder').trim();
+		const sourceRaw = str(form, 'sourceLang').trim();
+		const sourceLang = (TAXONOMY_LOCALES as readonly string[]).includes(sourceRaw)
+			? sourceRaw
+			: 'zh-cn';
 
 		if (!name) return fail(400, { error: m.admin_notes_topics_err_name_required() });
 		if (!slug) return fail(400, { error: m.admin_notes_topics_err_slug_required() });
+		if (!isValidTaxonomySlug(slug)) return fail(400, { error: m.admin_taxonomy_err_slug_shape() });
 		if (icon !== '' && !(NAV_ICON_NAMES as readonly string[]).includes(icon)) {
 			return fail(400, { error: m.admin_notes_topics_err_icon_whitelist() });
 		}
@@ -73,7 +86,10 @@ export const actions: Actions = {
 				slug,
 				description,
 				icon: icon === '' ? null : icon,
-				sortOrder
+				sortOrder,
+				sourceLang,
+				nameI18n: parseTaxonomyI18n(form, 'name', sourceLang),
+				descriptionI18n: parseTaxonomyI18n(form, 'description', sourceLang)
 			});
 		} catch (error) {
 			// Only a unique violation is a user-visible conflict; anything else
@@ -97,16 +113,33 @@ export const actions: Actions = {
 		if (!id || !isUuid(id)) return fail(400, { error: m.admin_notes_topics_err_missing_id() });
 		if (!name) return fail(400, { error: m.admin_notes_topics_err_name_required() });
 		if (!slug) return fail(400, { error: m.admin_notes_topics_err_slug_required() });
+		if (!isValidTaxonomySlug(slug)) return fail(400, { error: m.admin_taxonomy_err_slug_shape() });
 		if (icon !== '' && !(NAV_ICON_NAMES as readonly string[]).includes(icon)) {
 			return fail(400, { error: m.admin_notes_topics_err_icon_whitelist() });
 		}
 		const sortOrder = /^-?\d+$/.test(sortRaw) ? Number(sortRaw) : 0;
 
+		// Source language is locked after creation (ledger §9.18.4 amendment).
+		const [current] = await db
+			.select({ sourceLang: topics.sourceLang })
+			.from(topics)
+			.where(eq(topics.id, id))
+			.limit(1);
+		if (!current) return fail(404, { error: m.admin_notes_topics_err_not_found() });
+
 		let updated: { id: string }[];
 		try {
 			updated = await db
 				.update(topics)
-				.set({ name, slug, description, icon: icon === '' ? null : icon, sortOrder })
+				.set({
+					name,
+					slug,
+					description,
+					icon: icon === '' ? null : icon,
+					sortOrder,
+					nameI18n: parseTaxonomyI18n(form, 'name', current.sourceLang),
+					descriptionI18n: parseTaxonomyI18n(form, 'description', current.sourceLang)
+				})
 				.where(eq(topics.id, id))
 				.returning({ id: topics.id });
 		} catch (error) {

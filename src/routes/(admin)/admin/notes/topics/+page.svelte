@@ -46,6 +46,26 @@
 	let editIcon = $state('');
 	let editSortOrder = $state('0');
 
+	type TaxonomyLocale = 'en' | 'zh-cn' | 'ja';
+	let editSourceLang = $state<TaxonomyLocale>('zh-cn');
+	let editNameI18n = $state<Record<TaxonomyLocale, string>>({ en: '', 'zh-cn': '', ja: '' });
+	let editDescI18n = $state<Record<TaxonomyLocale, string>>({ en: '', 'zh-cn': '', ja: '' });
+	const translationLocales = $derived(
+		(['en', 'zh-cn', 'ja'] as const).filter((locale) => locale !== editSourceLang)
+	);
+
+	function nameLabel(locale: TaxonomyLocale): string {
+		if (locale === 'en') return m.admin_taxonomy_name_en();
+		if (locale === 'ja') return m.admin_taxonomy_name_ja();
+		return m.admin_taxonomy_name_zh();
+	}
+
+	function descriptionLabel(locale: TaxonomyLocale): string {
+		if (locale === 'en') return m.admin_taxonomy_description_en();
+		if (locale === 'ja') return m.admin_taxonomy_description_ja();
+		return m.admin_taxonomy_description_zh();
+	}
+
 	const selectedTopic = $derived(data.topics.find((t) => t.id === selectedId) ?? null);
 
 	function openCreate() {
@@ -55,6 +75,9 @@
 		editDescription = '';
 		editIcon = '';
 		editSortOrder = String(data.topics.length);
+		editSourceLang = 'zh-cn';
+		editNameI18n = { en: '', 'zh-cn': '', ja: '' };
+		editDescI18n = { en: '', 'zh-cn': '', ja: '' };
 		dialogOpen = true;
 	}
 
@@ -66,6 +89,17 @@
 		editDescription = selectedTopic.description;
 		editIcon = selectedTopic.icon ?? '';
 		editSortOrder = String(selectedTopic.sortOrder);
+		editSourceLang = selectedTopic.sourceLang as TaxonomyLocale;
+		editNameI18n = {
+			en: selectedTopic.nameI18n.en ?? '',
+			'zh-cn': selectedTopic.nameI18n['zh-cn'] ?? '',
+			ja: selectedTopic.nameI18n.ja ?? ''
+		};
+		editDescI18n = {
+			en: selectedTopic.descriptionI18n.en ?? '',
+			'zh-cn': selectedTopic.descriptionI18n['zh-cn'] ?? '',
+			ja: selectedTopic.descriptionI18n.ja ?? ''
+		};
 		dialogOpen = true;
 	}
 
@@ -283,7 +317,7 @@
 		</MasterDetail.Pane>
 
 		<!-- ===== Right: topic details ===== -->
-		<MasterDetail.Pane side="detail" class="bg-surface-card hidden lg:flex">
+		<MasterDetail.Pane side="detail" class="hidden bg-surface-card lg:flex">
 			{#if selectedTopic}
 				{@const topic = selectedTopic}
 				<MasterDetail.Header title={m.admin_notes_topics_detail()}>
@@ -409,6 +443,22 @@
 			{/if}
 			<div class="flex flex-col gap-4 px-6 pb-4">
 				<div class="flex flex-col gap-1.5">
+					<label for="topic-source-lang" class="text-sm font-medium"
+						>{m.admin_taxonomy_source_lang()}</label
+					>
+					<select
+						id="topic-source-lang"
+						name="sourceLang"
+						disabled={dialogMode === 'edit'}
+						bind:value={editSourceLang}
+						class="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm disabled:opacity-60"
+					>
+						<option value="zh-cn">中文 (zh-cn)</option>
+						<option value="en">English (en)</option>
+						<option value="ja">日本語 (ja)</option>
+					</select>
+				</div>
+				<div class="flex flex-col gap-1.5">
 					<label for="topic-name" class="text-sm font-medium">{m.admin_notes_topics_name()}</label>
 					<Input
 						id="topic-name"
@@ -429,6 +479,18 @@
 						required
 					/>
 				</div>
+				{#each translationLocales as locale (locale)}
+					<div class="flex flex-col gap-1.5">
+						<label for={`topic-name-${locale}`} class="text-sm font-medium"
+							>{nameLabel(locale)}</label
+						>
+						<Input
+							id={`topic-name-${locale}`}
+							name={`name_${locale}`}
+							bind:value={editNameI18n[locale]}
+						/>
+					</div>
+				{/each}
 				<div class="flex flex-col gap-1.5">
 					<label for="topic-description" class="text-sm font-medium"
 						>{m.admin_notes_topics_description()}</label
@@ -441,6 +503,19 @@
 						rows={3}
 					/>
 				</div>
+				{#each translationLocales as locale (locale)}
+					<div class="flex flex-col gap-1.5">
+						<label for={`topic-description-${locale}`} class="text-sm font-medium"
+							>{descriptionLabel(locale)}</label
+						>
+						<Textarea
+							id={`topic-description-${locale}`}
+							name={`description_${locale}`}
+							bind:value={editDescI18n[locale]}
+							rows={2}
+						/>
+					</div>
+				{/each}
 				<div class="flex flex-col gap-1.5">
 					<label for="topic-icon" class="text-sm font-medium">{m.admin_notes_topics_icon()}</label>
 					<Input

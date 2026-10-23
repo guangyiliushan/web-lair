@@ -36,7 +36,7 @@ const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', impo
 const JOURNAL_PATH = fileURLToPath(new URL('../drizzle/meta/_journal.json', import.meta.url));
 const VISUALIZER_PATH = fileURLToPath(new URL('../.drizzle/visualizer.json', import.meta.url));
 
-const EXPECTED = { tables: 49, indexes: 117, checks: 76, fks: 47, uuidv7: 36 };
+const EXPECTED = { tables: 49, indexes: 117, checks: 93, fks: 47, uuidv7: 36 };
 
 const EXPECTED_TABLE_NAMES: string[] = [
 	'account',
@@ -206,7 +206,24 @@ const REQUIRED_CONSTRAINT_NAMES: string[] = [
 	'translations_target_lang_check',
 	'webhook_deliveries_status_check',
 	'webhooks_payload_url_check',
-	'drafts_payload_object_check'
+	'drafts_payload_object_check',
+	'categories_source_lang_check',
+	'categories_name_i18n_shape_check',
+	'categories_name_i18n_keys_check',
+	'categories_name_i18n_no_source_check',
+	'categories_name_i18n_nonblank_check',
+	'topics_source_lang_check',
+	'topics_name_i18n_shape_check',
+	'topics_name_i18n_keys_check',
+	'topics_name_i18n_no_source_check',
+	'topics_name_i18n_nonblank_check',
+	'topics_description_i18n_shape_check',
+	'topics_description_i18n_keys_check',
+	'topics_description_i18n_no_source_check',
+	'topics_description_i18n_nonblank_check',
+	'tags_name_ascii_check',
+	'tags_name_shape_check',
+	'tags_slug_shape_check'
 ];
 
 /** Index predicate pins (checked against the baseline text; each must match). */
@@ -1185,6 +1202,39 @@ begin
 	exception when unique_violation then
 		get stacked diagnostics c = constraint_name;
 		if c <> 'notes_group_source_uniq' then raise exception 'FAIL delete-source: wrong constraint %', c; end if;
+	end;
+	-- Taxonomy i18n teeth (2026-10-23): the source locale must never appear in
+	-- name_i18n, and tag names/slugs are ASCII/URL-safe only.
+	begin
+		insert into categories (name, slug, source_lang, name_i18n) values ('c1v-tax', 'c1v-tax', 'zh-cn', '{"zh-cn":"c1v"}');
+		raise exception 'FAIL categories_name_i18n_no_source_check accepted the source key';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'categories_name_i18n_no_source_check' then raise exception 'FAIL taxonomy source key: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into tags (name, slug) values ('c1v 标签', 'c1v-tag');
+		raise exception 'FAIL tags_name_ascii_check accepted a CJK name';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'tags_name_ascii_check' then raise exception 'FAIL tag ascii: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into tags (name, slug) values ('c1v tag', '.c1v');
+		raise exception 'FAIL tags_slug_shape_check accepted a leading dot';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'tags_slug_shape_check' then raise exception 'FAIL tag slug: wrong constraint %', c; end if;
+	end;
+
+	begin
+		insert into topics (name, slug, description_i18n) values ('c1v topic', 'c1v-topic', '{"en":"   "}');
+		raise exception 'FAIL topics_description_i18n_nonblank_check accepted blanks';
+	exception when check_violation then
+		get stacked diagnostics c = constraint_name;
+		if c <> 'topics_description_i18n_nonblank_check' then raise exception 'FAIL topic description blank: wrong constraint %', c; end if;
 	end;
 end $$;`);
 

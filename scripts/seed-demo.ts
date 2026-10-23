@@ -24,7 +24,7 @@ const CATEGORY_NAME = '示例';
 const POST_SLUG = 'markdown-syntax-demo';
 const POST_TITLE = 'Markdown 语法演示';
 const POST_SUMMARY = '站点支持的全部 Markdown 语法;删除本文章不影响站点,种子脚本不会把它找回。';
-const POST_TAGS = ['演示', 'markdown'];
+const POST_TAGS = ['demo', 'markdown'];
 
 const force = process.argv.includes('--force');
 

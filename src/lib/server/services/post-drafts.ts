@@ -11,7 +11,7 @@ import {
 import { slugTrackers } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { keysFromContent, syncFileReferences } from './file-references';
-import { tagSlug } from '$lib/utils/slug';
+import { tagSlug, isValidTagName } from '$lib/utils/slug';
 import { parseTags, SLUG_RE } from './posts';
 import { m } from '$lib/paraglide/messages';
 
@@ -426,6 +426,9 @@ export async function publishDraft(
 		errors.slug = m.admin_editor_err_slug_reserved_prefix();
 	if (!categoryId) errors.categoryId = m.admin_posts_edit_err_category_required();
 	if (!(draft.content ?? '').trim()) errors.content = m.admin_editor_err_content_required();
+	const badTags = (draft.tags ?? []).filter((tag) => !isValidTagName(tag));
+	if (badTags.length > 0)
+		errors.tags = m.admin_posts_edit_err_tags_english({ names: badTags.join(', ') });
 	if (Object.keys(errors).length > 0) return { kind: 'invalid', errors };
 
 	if (categoryId) {
@@ -494,6 +497,18 @@ export async function publishDraft(
 				return {
 					kind: 'invalid' as const,
 					errors: { slug: m.admin_editor_err_slug_invalid() } as Record<string, string>
+				};
+			}
+			// Re-check on the LOCKED row: a concurrent autosave can land between
+			// the pre-flight validation and this transaction (same reason title /
+			// slug / category are re-read above).
+			const lockedBadTags = (lockedDraft.tags ?? []).filter((tag) => !isValidTagName(tag));
+			if (lockedBadTags.length > 0) {
+				return {
+					kind: 'invalid' as const,
+					errors: {
+						tags: m.admin_posts_edit_err_tags_english({ names: lockedBadTags.join(', ') })
+					} as Record<string, string>
 				};
 			}
 
@@ -566,6 +581,11 @@ export async function publishDraft(
 			return { kind: 'invalid', errors: { categoryId: m.admin_posts_edit_err_category_missing() } };
 		// Deadlock/serialization failures are retryable admin-action conflicts.
 		if (code === '40P01' || code === '40001') return { kind: 'busy' };
+		// Backstop for a tag row that raced past the app-level validation: the
+		// DB CHECK is the arbiter, and a 23514 must surface as a field error
+		// instead of a 500.
+		if (code === '23514')
+			return { kind: 'invalid', errors: { tags: m.admin_posts_edit_err_tags_invalid() } };
 		throw caught;
 	}
 }

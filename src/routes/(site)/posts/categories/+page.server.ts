@@ -3,6 +3,7 @@ import { getLocale } from '$lib/paraglide/runtime';
 import { db } from '$lib/server/db';
 import { categories, posts } from '$lib/server/db/content';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
+import { resolveTaxonomyName } from '$lib/server/services/taxonomy';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -19,6 +20,8 @@ export const load: PageServerLoad = async () => {
 		.select({
 			id: categories.id,
 			name: categories.name,
+			nameI18n: categories.nameI18n,
+			sourceLang: categories.sourceLang,
 			slug: categories.slug,
 			description: categories.description,
 			total: count(posts.id)
@@ -33,7 +36,7 @@ export const load: PageServerLoad = async () => {
 
 	return {
 		categories: rows.map((row) => ({
-			name: row.name,
+			name: resolveTaxonomyName(row, lang),
 			slug: row.slug,
 			description: row.description,
 			total: row.total

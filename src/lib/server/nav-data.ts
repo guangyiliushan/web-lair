@@ -7,6 +7,7 @@ import { getOption } from '$lib/server/config/options-registry';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import { countVisibleNotes, listNoteSummaries, listTopicOptions } from '$lib/server/services/notes';
 import { listVisiblePages, pageHref, resolveLocalized } from '$lib/server/services/pages';
+import { resolveTaxonomyName } from '$lib/server/services/taxonomy';
 import { formatDate } from '$lib/utils/i18n';
 import { noteDateLabel } from '$lib/utils/note-date';
 import type {
@@ -35,7 +36,13 @@ export async function loadPostsMegaData(): Promise<MegaMenuDynamicData> {
 	// COUNT query was redundant.
 	const [categoryRows, recentRows] = await Promise.all([
 		db
-			.select({ name: categories.name, slug: categories.slug, total: count(posts.id) })
+			.select({
+				name: categories.name,
+				nameI18n: categories.nameI18n,
+				sourceLang: categories.sourceLang,
+				slug: categories.slug,
+				total: count(posts.id)
+			})
 			.from(categories)
 			.innerJoin(
 				posts,
@@ -52,7 +59,7 @@ export async function loadPostsMegaData(): Promise<MegaMenuDynamicData> {
 	]);
 
 	const leftItems: NavChild[] = categoryRows.slice(0, MEGA_CATEGORY_LIMIT).map((row) => ({
-		label: row.name,
+		label: resolveTaxonomyName(row, lang),
 		href: `/posts/categories/${row.slug}`,
 		badge: row.total
 	}));

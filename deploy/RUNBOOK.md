@@ -336,7 +336,12 @@ Requirements/notes:
   restore only; `--column-inserts` makes the dump immune to the two E2 columns.
 - The data-only restore never touches `drizzle.__drizzle_migrations`: the fresh
   ledger written by `migrate.ts` must remain the only row.
-- Verify output must show **49 tables / 117 indexes / 75 checks / 47 FKs**. If anything
+- **tags are ASCII-only since 2026-10-23.** Before restoring a pre-taxonomy dump, audit
+  the old rows (`select name, slug from tags where name !~ '^[A-Za-z0-9 .,+#&''()/_-]+$' or slug !~ '^[a-z0-9][a-z0-9._+~-]*$'`);
+  a legacy CJK tag name aborts the data restore *after* the schema drop (CHECKs are not
+  disabled by `session_replication_role = replica`). Rename/drop those rows in the source
+  dump first, or the restore will fail with `23514`.
+- Verify output must show **49 tables / 117 indexes / 93 checks / 47 FKs**. If anything
   fails after the drop, **do not re-run §2.1**; restore the full
   `pre-e2-<stamp>.dump` per §3 and ask for review.
 
@@ -366,7 +371,7 @@ psql ... -v ON_ERROR_STOP=1 -c "
     where slug='real-data-ui' and writing_origin is distinct from 'mostly_ai';"
 
 # 3. The post-provenance gate.
-node scripts/verify-baseline.ts   # 49 / 117 / 75 / 47
+node scripts/verify-baseline.ts   # 49 / 117 / 93 / 47
 ```
 
 A pre-provenance full dump is a **different generation**: §3 detects it by the

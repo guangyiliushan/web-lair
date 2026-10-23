@@ -15,6 +15,7 @@ import {
 } from '$lib/server/services/comments-actions';
 import { renderDiscussion } from '$lib/server/services/comment-render';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
+import { resolveTaxonomyName } from '$lib/server/services/taxonomy';
 import { findSlugTargetId } from '$lib/server/services/slug-resolver';
 import { formatDate } from '$lib/utils/i18n';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
@@ -45,6 +46,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			readCount: posts.readCount,
 			likeCount: posts.likeCount,
 			categoryName: categories.name,
+			categorySourceLang: categories.sourceLang,
+			categoryNameI18n: categories.nameI18n,
 			allowComment: posts.allowComment,
 			translationGroup: posts.translationGroup,
 			translationOrigin: posts.translationOrigin,
@@ -107,8 +110,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	// group, in locale order — self included; x-default stays deferred.
 	const localeOrder = locales as readonly string[];
 	const sourceId = row.translatedFromPostId;
-	const needsSource =
-		Boolean(sourceId) && (row.writingOrigin == null || row.aiHelp == null);
+	const needsSource = Boolean(sourceId) && (row.writingOrigin == null || row.aiHelp == null);
 	// The source lookup depends only on `row`, so run it alongside the hreflang
 	// query instead of adding a second sequential round trip on translated
 	// pages. Visibility is part of the lookup: provenance is public disclosure,
@@ -176,8 +178,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	};
 	if (needsSource) {
 		const source = sourceRows[0] as
-			| { writingOrigin: string | null; aiHelp: string[] | null }
-			| undefined;
+			{ writingOrigin: string | null; aiHelp: string[] | null } | undefined;
 		const writingInherited = provenance.writingOrigin == null;
 		provenance.writingOrigin ??= source?.writingOrigin ?? null;
 		// Only inherit the detail when the effective writing claim is AI-assisted;
@@ -233,7 +234,14 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			lang: row.lang,
 			title: row.title,
 			date: row.publishedAt ? formatDate(row.publishedAt) : '',
-			category: row.categoryName,
+			category: resolveTaxonomyName(
+				{
+					name: row.categoryName,
+					nameI18n: row.categoryNameI18n,
+					sourceLang: row.categorySourceLang
+				},
+				lang
+			),
 			tags: [...new Set(tagRows.map((tag) => tag.name))],
 			views: row.readCount,
 			likes: row.likeCount,

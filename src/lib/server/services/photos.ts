@@ -9,7 +9,7 @@ import {
 	mergeMakerNotes,
 	tempExtForMime
 } from '$lib/server/media/exif-makernotes';
-import { tagSlug, titleSlug } from '$lib/utils/slug';
+import { tagSlug, titleSlug, isValidTagName } from '$lib/utils/slug';
 import { deleteFile } from './files';
 import type { PhotoViewerSource } from '$lib/components/photos/photo-tile';
 import type { ObjectStoragePort } from '$lib/server/storage/port';
@@ -110,9 +110,16 @@ async function attachTags(database: PhotosDb, photoId: string, names: string[]):
 	const cleaned = [
 		...new Set(names.map((name) => name.trim()).filter((name) => name !== ''))
 	].slice(0, 30);
-	if (cleaned.length === 0) return;
+	// Tags are ASCII-only since 2026-10-23 (ledger §9.18.4 amendment); the DB
+	// CHECK is the final gate, this keeps a photo import from failing whole.
+	const accepted = cleaned.filter((name) => isValidTagName(name));
+	const rejected = cleaned.filter((name) => !isValidTagName(name));
+	if (rejected.length > 0) {
+		console.warn(`[media] skipped non-English tags: ${rejected.join(', ')}`);
+	}
+	if (accepted.length === 0) return;
 	const tagIds: string[] = [];
-	for (const name of cleaned) {
+	for (const name of accepted) {
 		const slug = tagSlug(name);
 		if (!slug) continue;
 		const [existing] = await database

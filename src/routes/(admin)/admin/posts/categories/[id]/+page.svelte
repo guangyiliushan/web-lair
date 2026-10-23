@@ -52,6 +52,20 @@
 	const headerActions = useAdminHeaderActionRegistry();
 	$effect(() => headerActions?.register('categories:delete', () => (confirmOpen = true)));
 
+	// The source locale is locked after creation, so it is rendered as a static
+	// marker (no fake select) and its field is the plain `name` input.
+	const translationFields = $derived(
+		[
+			{ key: 'en', label: m.admin_taxonomy_name_en() },
+			{ key: 'zh-cn', label: m.admin_taxonomy_name_zh() },
+			{ key: 'ja', label: m.admin_taxonomy_name_ja() }
+		].filter((field) => field.key !== data.category.sourceLang)
+	);
+
+	function translationValue(key: string): string {
+		return data.category.nameI18n[key as 'en' | 'zh-cn' | 'ja'] ?? '';
+	}
+
 	const afterDelete: SubmitFunction = () => {
 		return async ({ result, update }) => {
 			await update({ reset: false, invalidateAll: false });
@@ -99,6 +113,28 @@
 					/>
 					<Field.FieldDescription>{m.admin_categories_slug_hint()}</Field.FieldDescription>
 				</Field.Field>
+			</Field.FieldGroup>
+
+			<Field.FieldGroup>
+				<div class="flex items-baseline justify-between gap-3">
+					<h2 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+						{m.admin_taxonomy_section()}
+					</h2>
+					<span class="shrink-0 text-xs text-muted-foreground">
+						{m.admin_taxonomy_source_lang()}: {data.category.sourceLang}
+					</span>
+				</div>
+				{#each translationFields as field (field.key)}
+					<Field.Field>
+						<Field.FieldLabel for={`cat-name-${field.key}`}>{field.label}</Field.FieldLabel>
+						<Input
+							id={`cat-name-${field.key}`}
+							name={`name_${field.key}`}
+							value={translationValue(field.key)}
+							oninput={scheduleSave}
+						/>
+					</Field.Field>
+				{/each}
 			</Field.FieldGroup>
 
 			{#if form?.error}

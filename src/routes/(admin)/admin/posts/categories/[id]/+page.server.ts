@@ -7,13 +7,20 @@ import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
+import { isValidTaxonomySlug, parseTaxonomyI18n } from '$lib/server/services/taxonomy';
 
 export const load: PageServerLoad = async ({ params }) => {
 	await requireAdminRole();
 	if (!isUuid(params.id)) error(404, m.admin_categories_select());
 
 	const [category] = await db
-		.select({ id: categories.id, name: categories.name, slug: categories.slug })
+		.select({
+			id: categories.id,
+			name: categories.name,
+			slug: categories.slug,
+			sourceLang: categories.sourceLang,
+			nameI18n: categories.nameI18n
+		})
 		.from(categories)
 		.where(eq(categories.id, params.id));
 	if (!category) error(404, m.admin_categories_select());
@@ -56,8 +63,26 @@ export const actions: Actions = {
 
 		if (!isUuid(params.id)) return fail(400, { error: m.admin_categories_err_missing_id() });
 		if (!name) return fail(400, { error: m.admin_categories_err_name_required() });
+		if (!slug) return fail(400, { error: m.admin_categories_err_slug_required() });
+		if (!isValidTaxonomySlug(slug)) return fail(400, { error: m.admin_taxonomy_err_slug_shape() });
 
-		await db.update(categories).set({ name, slug }).where(eq(categories.id, params.id));
+		// `source_lang` is locked after creation: read it from the row instead of
+		// trusting the form, and build the translation map around it.
+		const [current] = await db
+			.select({ sourceLang: categories.sourceLang })
+			.from(categories)
+			.where(eq(categories.id, params.id))
+			.limit(1);
+		if (!current) return fail(404, { error: m.admin_categories_select() });
+
+		const nameI18n = parseTaxonomyI18n(formData, 'name', current.sourceLang);
+
+		const updatedRows = await db
+			.update(categories)
+			.set({ name, slug, nameI18n })
+			.where(eq(categories.id, params.id))
+			.returning({ id: categories.id });
+		if (updatedRows.length === 0) return fail(404, { error: m.admin_categories_select() });
 		return { success: true };
 	},
 

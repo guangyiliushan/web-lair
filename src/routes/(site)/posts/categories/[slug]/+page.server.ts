@@ -5,6 +5,7 @@ import { eq, and, desc, inArray } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
 import { getLocale } from '$lib/paraglide/runtime';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
+import { resolveTaxonomyName } from '$lib/server/services/taxonomy';
 import { formatDate } from '$lib/utils/i18n';
 
 export interface CategoryPostItem {
@@ -126,7 +127,7 @@ export const load: PageServerLoad = async ({ params }) => {
 			: new Date().getFullYear();
 
 	return {
-		category: { name: cat.name, slug: cat.slug },
+		category: { name: resolveTaxonomyName(cat, lang), slug: cat.slug },
 		totalCount: postRows.length,
 		earliestYear,
 		years: sortedYears,
