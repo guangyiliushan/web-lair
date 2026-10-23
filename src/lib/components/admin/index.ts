@@ -10,5 +10,8 @@ export {
 	type AdminHeaderActionRegistry
 } from './admin-header-actions';
 
-export * as MasterDetail from './master-detail';
+export * as ListDetail from './list-detail';
 export * as ListTable from './list-table';
+// Legacy shell: topics / readers / ai / settings still use it. Remove once
+// they migrate to `list-detail` (see docs/specs/2026-10-22-admin-list-detail-design.md).
+export * as MasterDetail from './master-detail';

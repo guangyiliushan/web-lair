@@ -74,6 +74,8 @@
 	"admin_categories_dialog_create_desc": "Create a new post category",
 	"admin_categories_dialog_edit": "Edit category",
 	"admin_categories_dialog_edit_desc": "Update the category info",
+	"admin_categories_delete_desc": "This cannot be undone. “{name}” will be removed permanently.",
+	"admin_categories_delete_title": "Delete this category?",
 	"admin_categories_empty": "No categories yet",
 	"admin_categories_err_has_posts": "This category still has posts and cannot be deleted",
 	"admin_categories_err_has_posts_count": [
@@ -115,6 +117,7 @@
 	"admin_categories_posts_heading": "Posts in this category",
 	"admin_categories_select": "Select a category",
 	"admin_categories_select_hint": "Pick a category on the left to view details",
+	"admin_categories_slug_hint": "Used in the URL. Lowercase letters, numbers and hyphens.",
 	"admin_categories_title": "Categories",
 	"admin_comments_all_done": "All caught up",
 	"admin_comments_anchor_gated": "Quote hidden (password-protected note)",
