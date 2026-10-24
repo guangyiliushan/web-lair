@@ -177,7 +177,11 @@
 	<Sidebar.Inset class="flex min-h-screen min-w-0 flex-col overflow-x-clip">
 		<AdminHeader />
 
-		<main class="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+		<!-- flex-col + min-h-0 so route content can fill the shell and scroll
+		     inside it. Without it `flex-1` on a child is a no-op and the whole
+		     admin surface collapses to its content height, leaving dead space
+		     and a page-level scrollbar beside the inner one. -->
+		<main class="flex min-h-0 min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8">
 			{@render children()}
 		</main>
 	</Sidebar.Inset>

@@ -78,7 +78,7 @@
 
 			<h2 class="mb-6 text-2xl font-semibold sm:text-3xl lg:text-4xl">
 				{m.hero_subtitle_prefix()}
-				<span class="font-mono text-primary">{m.hero_subtitle_highlight()}</span>
+				<span class="font-mono text-primary-text">{m.hero_subtitle_highlight()}</span>
 			</h2>
 
 			<p class="mb-10 max-w-lg text-lg text-muted-foreground">

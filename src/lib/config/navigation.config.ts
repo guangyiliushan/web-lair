@@ -60,10 +60,19 @@ const t = {
 	nav_timeline_posts: m.nav_timeline_posts,
 	nav_timeline_memories: m.nav_timeline_memories,
 	nav_timeline_recent: m.nav_timeline_recent,
-	nav_timeline_view_all: m.nav_timeline_view_all
+	nav_timeline_view_all: m.nav_timeline_view_all,
+	nav_home_here: m.nav_home_here,
+	nav_home_owner_online: m.nav_home_owner_online,
+	nav_home_stat_posts: m.nav_home_stat_posts,
+	nav_home_stat_notes: m.nav_home_stat_notes,
+	nav_home_stat_topics: m.nav_home_stat_topics,
+	nav_notes_all_series: m.nav_notes_all_series,
+	nav_menu_empty: m.nav_menu_empty
 } as const;
 
 type I18nKey = keyof typeof t;
+
+export type { I18nKey };
 
 /** Resolve i18n key → translated string */
 export function tLabel(key: I18nKey): string {
@@ -105,12 +114,14 @@ export interface NavColumn {
 export interface NavFooter {
 	labelKey: I18nKey;
 	href: string;
+	/** Trailing link on the opposite side of the footer (e.g. "All topics"). */
+	secondary?: { labelKey: I18nKey; href: string };
 }
 
-export type MegaMenuType = 'home' | 'two-column' | 'simple' | 'timeline';
+export type NavMenuKind = 'home' | 'two-column' | 'simple';
 
-export interface MegaMenu {
-	type?: MegaMenuType; // defaults to 'simple'
+export interface NavMenuConfig {
+	type?: NavMenuKind; // defaults to 'simple'
 	width?: string;
 	columns: NavColumn[];
 	rightColumn?: NavColumn; // For two-column layout (e.g., Recent Notes)
@@ -122,79 +133,41 @@ export interface NavItem {
 	labelKey: I18nKey;
 	href: string;
 	icon?: Component;
-	megaMenu?: MegaMenu;
+	megaMenu?: NavMenuConfig;
 	children?: NavChild[];
 }
 
-// ── Dynamic server data for mega menus ──
+// ── Dynamic server data for the nav panels ──
 
-/** Runtime data passed to NavMegaMenu to fill two-column/timeline layouts */
-export interface MegaMenuDynamicData {
+/**
+ * Live counts for the home panel's stat strip. Deliberately a fixed triple —
+ * the layout is a three-row list, so an open-ended record would only invite
+ * rows nobody renders.
+ */
+export interface NavMenuStats {
+	posts: number;
+	notes: number;
+	topics: number;
+}
+
+/** Runtime data passed to NavMenu to fill two-column/timeline layouts */
+export interface NavMenuData {
 	leftItems: NavChild[];
 	rightItems: NavChild[];
 	footerSecondaryText?: string;
-	/** Timeline activity items (for type='timeline') */
-	timelineItems?: TimelineActivityItem[];
-}
-
-export interface TimelineActivityItem {
-	title: string;
-	href: string;
-	type: 'posts' | 'notes' | 'memories';
-	date: string;
-	/** Password-gated note marker (N1). */
-	locked?: boolean;
+	/**
+	 * Counts this loader happens to know. Loaders run in parallel and each owns
+	 * a different aggregate, so the shape is partial on purpose — the home panel
+	 * zero-fills whatever is missing rather than forcing a second pass over the
+	 * same tables.
+	 */
+	stats?: Partial<NavMenuStats>;
 }
 
 /** Chrome payload for the pages surface (P1b): menu items + footer defaults. */
-export interface PagesMegaData extends MegaMenuDynamicData {
+export interface PagesMegaData extends NavMenuData {
 	/** `is_default` rows (footer About group); same single query as the items. */
 	footerDefaults: { label: string; href: string; key?: string }[];
-}
-
-/**
- * Home menu order (F1, P1b): dynamic page entries (defaults → extras) first,
- * the static quick links stay as a trailing group.
- */
-export function mergeHomeMenuItems(
-	dynamic: NavChild[] | null | undefined,
-	fixed: NavChild[]
-): NavChild[] {
-	return [...(dynamic ?? []), ...fixed];
-}
-
-export interface MegaMenuCategory {
-	labelKey: I18nKey;
-	href: string;
-	count: number;
-}
-
-export interface MegaMenuRecentPost {
-	title: string;
-	href: string;
-	date: string;
-}
-
-export interface PostsMegaData {
-	categories: MegaMenuCategory[];
-	recentPosts: MegaMenuRecentPost[];
-	totalCount: number;
-}
-
-export interface MegaMenuSeriesItem {
-	label: string;
-	href: string;
-	imageUrl?: string;
-}
-
-export interface NotesMegaData {
-	series: MegaMenuSeriesItem[];
-	recentNotes: MegaMenuRecentPost[];
-	totalCount: number;
-}
-
-export interface TimelineMegaData {
-	activities: TimelineActivityItem[];
 }
 
 // ── Single data source ──
@@ -207,7 +180,7 @@ export const navigationConfig: NavItem[] = [
 		icon: IconHome,
 		megaMenu: {
 			type: 'home',
-			width: 'w-[480px]',
+			width: 'w-[520px]',
 			columns: [
 				{
 					titleKey: 'nav_home_quick_links',
@@ -262,7 +235,7 @@ export const navigationConfig: NavItem[] = [
 		icon: IconHome,
 		megaMenu: {
 			type: 'two-column',
-			width: 'w-[480px]',
+			width: 'w-[520px]',
 			columns: [
 				{
 					titleKey: 'nav_posts_categories',
@@ -287,7 +260,7 @@ export const navigationConfig: NavItem[] = [
 		icon: IconHome,
 		megaMenu: {
 			type: 'two-column',
-			width: 'w-[380px]',
+			width: 'w-[520px]',
 			columns: [
 				{
 					titleKey: 'nav_notes_series',
@@ -300,7 +273,8 @@ export const navigationConfig: NavItem[] = [
 			},
 			footer: {
 				labelKey: 'nav_notes_view_all',
-				href: '/notes'
+				href: '/notes',
+				secondary: { labelKey: 'nav_notes_all_series', href: '/notes/topics' }
 			}
 		},
 		children: [{ labelKey: 'nav_notes_view_all', href: '/notes' }]
@@ -317,8 +291,8 @@ export const navigationConfig: NavItem[] = [
 		href: '/timeline',
 		icon: IconHome,
 		megaMenu: {
-			type: 'timeline',
-			width: 'w-[320px]',
+			type: 'two-column',
+			width: 'w-[520px]',
 			columns: [
 				{
 					items: [
@@ -328,6 +302,7 @@ export const navigationConfig: NavItem[] = [
 					]
 				}
 			],
+			rightColumn: { titleKey: 'nav_timeline_recent', items: [] },
 			footer: {
 				labelKey: 'nav_timeline_view_all',
 				href: '/timeline'
@@ -342,7 +317,7 @@ export const navigationConfig: NavItem[] = [
 		icon: IconCategory,
 		megaMenu: {
 			type: 'simple',
-			width: 'w-[280px]',
+			width: 'w-[320px]',
 			columns: [
 				{
 					items: [

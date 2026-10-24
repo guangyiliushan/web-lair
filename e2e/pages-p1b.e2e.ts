@@ -101,11 +101,15 @@ test.describe('pages P1b', () => {
 		await expect(footer.getByRole('link', { name: EXTRA_TITLE_EN })).toHaveCount(0);
 	});
 
-	test('the home hover card orders defaults → extras → the four quick links', async ({ page }) => {
+	test('the home hover card orders defaults first, extras after them', async ({ page }) => {
 		test.setTimeout(90_000);
 		await page.goto('/');
 		const nav = page.getByRole('navigation', { name: 'Main navigation' });
-		const home = nav.getByRole('link', { name: 'Home' }).first();
+		// `.and()` keeps the trigger (which advertises the popup) apart
+		// from panel rows that resolve to the same accessible name.
+		const home = nav
+			.getByRole('link', { name: 'Home' })
+			.and(page.locator('[aria-haspopup="true"]'));
 
 		// Full-suite runs (10 workers) can delay hydration past the first
 		// hover; the retry must LEAVE the trigger between attempts - a hover
@@ -114,27 +118,32 @@ test.describe('pages P1b', () => {
 		await expect(async () => {
 			await page.mouse.move(0, 0);
 			await home.hover();
-			await expect(page.locator('[role="menu"]').first()).toBeVisible({ timeout: 3000 });
+			await expect(page.locator('[data-slot="navigation-menu-content"]')).toBeVisible({
+				timeout: 3000
+			});
 		}).toPass({ timeout: 45_000 });
 
 		// The trigger advertises the open state (closeout finding: the props
 		// object used to be a frozen snapshot, pinning this to false).
 		await expect(home).toHaveAttribute('aria-expanded', 'true');
 
-		const panel = page.locator('[role="menu"]').first();
-		const items = panel.getByRole('menuitem');
+		const panel = page.locator('[data-slot="navigation-menu-content"]');
+		// The page grid only: the quick links moved to the social rail and
+		// must not be counted as page rows.
+		const items = panel.locator('[data-slot="nav-menu-pages"] a');
 		// The card reads the live registry: other suites' fixtures (or real extra
 		// pages) extend the middle, so assert the relative order instead of fixed
-		// indices — defaults first, extras after them, quick links trailing.
+		// indices — defaults first, extras after them.
 		const hrefs = await items.evaluateAll((els) => els.map((el) => el.getAttribute('href')));
-		expect(hrefs.length).toBeGreaterThanOrEqual(6);
+		expect(hrefs.length).toBeGreaterThanOrEqual(3);
 		expect(hrefs.slice(0, 2)).toEqual(['/en/about', '/en/about-site']);
 		const extraIndex = hrefs.indexOf(`/en/${EXTRA_SLUG}`);
 		expect(extraIndex).toBeGreaterThanOrEqual(2);
 		await expect(items.nth(extraIndex)).toHaveText(EXTRA_TITLE_EN);
-		const quickStart = hrefs.length - 4;
-		expect(hrefs[quickStart]).toBe('/en/rss.xml');
-		expect(extraIndex).toBeLessThan(quickStart);
+		// Quick links live in the social rail now (P1b split) — listing them in
+		// the page grid as well would put every one of them on the page twice.
+		expect(hrefs).not.toContain('/en/rss.xml');
+		await expect(panel.locator('[data-slot="nav-menu-social"]')).toBeVisible();
 		// Hidden rows never enter the card.
 		await expect(panel.getByText(HIDDEN_TITLE)).toHaveCount(0);
 	});

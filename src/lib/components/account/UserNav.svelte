@@ -95,7 +95,7 @@
 {:else}
 	<a
 		href={siteHref(loginHref)}
-		class="inline-flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+		class="inline-flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
 		aria-label={m.nav_sign_in()}
 	>
 		<IconUser />

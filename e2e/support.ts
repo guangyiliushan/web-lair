@@ -198,8 +198,15 @@ export async function expectNoCriticalAxe(page: Page, label: string): Promise<vo
 	// axe-core's parse cost stays off their workers (review 3d round 2, 01 P3-1).
 	const { default: AxeBuilder } = await import('@axe-core/playwright');
 	const results = await new AxeBuilder({ page }).analyze();
+	// Include the offending selectors: an impact-only summary says something is
+	// wrong but not where, so every report turns into a second run to find out.
 	const summary = results.violations.map(
-		(violation) => `${violation.impact}: ${violation.id} (${violation.nodes.length})`
+		(violation) =>
+			`${violation.impact}: ${violation.id} (${violation.nodes.length}) -> ` +
+			violation.nodes
+				.slice(0, 5)
+				.map((node) => node.target.join(' '))
+				.join(', ')
 	);
 	if (summary.length > 0) console.log(`[axe:${label}]`, summary.join(' | '));
 	expect(

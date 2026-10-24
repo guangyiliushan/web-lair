@@ -48,6 +48,30 @@ describe('i18n formatting', () => {
 		});
 	});
 
+	describe('formatNavDate', () => {
+		it('renders month and day through our own separator in en', async () => {
+			const { formatNavDate } = await import('./i18n');
+			expect(formatNavDate(new Date(2026, 0, 15, 12))).toBe('1·15');
+		});
+
+		it('stays a two-part label in every shipped locale', async () => {
+			const { formatNavDate } = await import('./i18n');
+			for (const locale of ['en', 'zh-cn', 'ja'] as const) {
+				mockGetLocale.mockReturnValue(locale);
+				// Localised long/short forms blow past the panel's 44px date
+				// column, so the shape is part of the contract.
+				expect(formatNavDate(new Date(2026, 0, 15, 12))).toMatch(/^\d+·\d+$/);
+			}
+		});
+
+		it('resolves the day in the caller-supplied time zone', async () => {
+			const { formatNavDate } = await import('./i18n');
+			const instant = new Date('2026-01-15T23:30:00Z');
+			expect(formatNavDate(instant, { timeZone: 'UTC' })).toBe('1·15');
+			expect(formatNavDate(instant, { timeZone: 'Asia/Tokyo' })).toBe('1·16');
+		});
+	});
+
 	describe('formatDateTime', () => {
 		it('includes both date and time parts', async () => {
 			const { formatDateTime } = await import('./i18n');

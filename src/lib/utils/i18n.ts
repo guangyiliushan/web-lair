@@ -48,6 +48,26 @@ export function formatDate(date: Date | number, options?: Intl.DateTimeFormatOpt
 	return getDTF(locale, resolved).format(date);
 }
 
+/**
+ * Compact `month·day` label for the nav panels' 44px date column.
+ *
+ * Built from `formatToParts` rather than a locale pattern on purpose: the
+ * localised forms (`10月19日`, `October 19`) all blow past the column, while a
+ * single separator keeps the grid honest in all three shipped locales.
+ */
+export function formatNavDate(
+	date: Date | number,
+	options?: Pick<Intl.DateTimeFormatOptions, 'timeZone'>
+): string {
+	const locale = getLocale();
+	const parts = getDTF(locale, { month: 'numeric', day: 'numeric', ...options }).formatToParts(
+		date
+	);
+	const month = parts.find((part) => part.type === 'month')?.value ?? '';
+	const day = parts.find((part) => part.type === 'day')?.value ?? '';
+	return `${month}·${day}`;
+}
+
 export function formatDateTime(date: Date | number, options?: Intl.DateTimeFormatOptions): string {
 	const locale = getLocale();
 	// Same contract as formatDate: caller-picked components define the

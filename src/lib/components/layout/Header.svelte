@@ -9,17 +9,18 @@
 	import { cubicInOut, quartInOut } from 'svelte/easing';
 	import ThemeToggle from '$lib/components/layout/ThemeToggle.svelte';
 	import LangSwitcher from '$lib/components/layout/LangSwitcher.svelte';
-	import StatusTicket from '$lib/components/layout/StatusTicket.svelte';
+	import OwnerStatusHoverCard from '$lib/components/layout/OwnerStatusHoverCard.svelte';
 	import * as Avatar from '$lib/components/ui/avatar';
 	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
+	import { ownerPresenceFromStatus, type OwnerPresence } from '$lib/config/owner-presence';
 	import UserNav from '$lib/components/account/UserNav.svelte';
 	import { Separator } from '$lib/components/ui/separator';
-	import NavMegaMenu from '$lib/components/layout/NavMegaMenu.svelte';
+	import NavMenu from '$lib/components/layout/NavMenu.svelte';
 	import {
 		navigationConfig,
 		tLabel,
-		type MegaMenuDynamicData,
 		type NavChild,
+		type NavMenuData,
 		type PagesMegaData
 	} from '$lib/config/navigation.config';
 
@@ -40,6 +41,7 @@
 		auth,
 		owner,
 		ownerStatus,
+		ownerPresence,
 		postsData,
 		notesData,
 		timelineData,
@@ -49,13 +51,19 @@
 		/** Public owner identity — identical for every visitor, never the session. */
 		owner: SiteOwner;
 		ownerStatus: OwnerStatus;
-		postsData?: MegaMenuDynamicData | null;
-		notesData?: MegaMenuDynamicData | null;
-		timelineData?: MegaMenuDynamicData | null;
+		/**
+		 * Live pipeline view. Until the ActivityWatch bridge lands, the header
+		 * falls back to the static ownerStatus setting for visual preview only.
+		 */
+		ownerPresence?: OwnerPresence | null;
+		postsData?: NavMenuData | null;
+		notesData?: NavMenuData | null;
+		timelineData?: NavMenuData | null;
 		pagesData?: PagesMegaData | null;
 	} = $props();
 
 	// ── Derived ──
+	const presence = $derived(ownerPresence ?? ownerPresenceFromStatus(ownerStatus));
 	const currentPath = $derived(page.url.pathname);
 	// Locale-prefixed URLs must still highlight their neutral nav item.
 	const neutralPath = $derived(deLocalizeHref(currentPath));
@@ -106,9 +114,13 @@
 </script>
 
 <header class="pointer-events-none fixed top-6 right-0 left-0 z-50 flex justify-center px-4">
-	<!-- Single cohesive card: fixed rounded-3xl to prevent morphing artifacts during height transition -->
+	<!-- Single cohesive card: fixed rounded-3xl to prevent morphing artifacts
+	     during height transition. Deliberately NOT `overflow-hidden` — the nav
+	     panels hang below the bar and would be clipped by it. The clip that the
+	     mobile accordion actually needs sits on that accordion instead. -->
 	<div
-		class="pointer-events-auto w-full max-w-5xl overflow-hidden rounded-3xl border bg-background/70 shadow-sm backdrop-blur-md"
+		data-slot="site-header-bar"
+		class="pointer-events-auto w-full max-w-5xl rounded-3xl border bg-background/70 shadow-sm backdrop-blur-md"
 	>
 		<!-- ══Top bar (always visible) ══-->
 		<div class="flex items-center justify-between px-4 py-2">
@@ -125,17 +137,21 @@
 						{owner.name}
 					</span>
 				</a>
-				<StatusTicket status={ownerStatus} />
+				<OwnerStatusHoverCard ownerName={owner.name} {presence} enabled={ownerStatus.enabled} />
 			</div>
 
 			<!-- Desktop nav: mega menu hover (lg+) -->
+			<!-- Nav chrome uses `--primary-text`, never `--primary`: the latter is a
+			     fill colour at 2.90:1 on white (see layout.css) and reads 2.64:1 even
+			     on its own `bg-primary/10` pill. Same reason for `hover:text-primary-text`. -->
 			<nav class="hidden items-center gap-1 lg:flex" aria-label="Main navigation">
 				{#each navigationConfig as item (item.key)}
 					{#if item.megaMenu}
-						<NavMegaMenu
+						<NavMenu
 							menu={item.megaMenu}
-							delay={150}
 							triggerAsButton={item.href === '#'}
+							{owner}
+							{ownerStatus}
 							serverData={item.key === 'nav_posts'
 								? (postsData ?? null)
 								: item.key === 'nav_notes'
@@ -151,7 +167,7 @@
 									<button
 										{...state.props}
 										class={cn(
-											'cursor-pointer rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:text-primary',
+											'cursor-pointer rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:text-primary-text',
 											'text-muted-foreground'
 										)}
 									>
@@ -162,21 +178,23 @@
 										{...state.props}
 										href={siteHref(item.href)}
 										class={cn(
-											'rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:text-primary',
-											isActive(item.href) ? 'bg-primary/10 text-primary' : 'text-muted-foreground'
+											'rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:text-primary-text',
+											isActive(item.href)
+												? 'bg-primary/10 text-primary-text'
+												: 'text-muted-foreground'
 										)}
 									>
 										{tLabel(item.labelKey)}
 									</a>
 								{/if}
 							{/snippet}
-						</NavMegaMenu>
+						</NavMenu>
 					{:else}
 						<a
 							href={siteHref(item.href)}
 							class={cn(
-								'rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:text-primary',
-								isActive(item.href) ? 'bg-primary/10 text-primary' : 'text-muted-foreground'
+								'rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:text-primary-text',
+								isActive(item.href) ? 'bg-primary/10 text-primary-text' : 'text-muted-foreground'
 							)}
 						>
 							{tLabel(item.labelKey)}
@@ -202,7 +220,7 @@
 						onclick={toggleMenu}
 						aria-expanded={menuOpen}
 						aria-label={menuOpen ? m.ui_close_menu() : m.ui_open_menu()}
-						class="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+						class="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
 					>
 						{#if menuOpen}
 							<IconX class="size-5" data-icon="inline-start" />
@@ -216,7 +234,9 @@
 
 		<!-- ══Expandable menu (mobile only) ══-->
 		{#if menuOpen}
-			<div transition:slide={{ duration: 400, easing: quartInOut }}>
+			<!-- Clip for the slide transition and the card's bottom corners; kept
+			     here so the desktop nav panels above are free to overflow. -->
+			<div class="overflow-hidden" transition:slide={{ duration: 400, easing: quartInOut }}>
 				<Separator class="mx-4" />
 
 				<div class="px-5 pt-6 pb-5">
@@ -235,7 +255,7 @@
 												onclick={closeMenu}
 												class={cn(
 													'flex-1 px-3 py-2.5 text-sm font-medium transition-colors hover:text-foreground',
-													isActive(item.href) ? 'text-primary' : 'text-muted-foreground'
+													isActive(item.href) ? 'text-primary-text' : 'text-muted-foreground'
 												)}
 											>
 												{tLabel(item.labelKey)}
@@ -280,7 +300,9 @@
 											onclick={closeMenu}
 											class={cn(
 												'flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 hover:text-foreground',
-												isActive(item.href) ? 'bg-primary/10 text-primary' : 'text-muted-foreground'
+												isActive(item.href)
+													? 'bg-primary/10 text-primary-text'
+													: 'text-muted-foreground'
 											)}
 										>
 											{tLabel(item.labelKey)}

@@ -45,7 +45,16 @@ export const load: LayoutServerLoad = async ({ parent, locals }) => {
 		postsData,
 		notesData,
 		timelineData,
-		pagesData,
+		// Home panel stat strip: each loader reports the aggregate it already
+		// computed, merged here so nothing is counted twice per request.
+		pagesData: {
+			...pagesData,
+			stats: {
+				posts: postsData.stats?.posts ?? 0,
+				notes: notesData.stats?.notes ?? 0,
+				topics: notesData.stats?.topics ?? 0
+			}
+		},
 		// Header owner badge: one public identity, read for every visitor
 		// (never the session) so the markup is the same for everyone.
 		siteOwner: owner,

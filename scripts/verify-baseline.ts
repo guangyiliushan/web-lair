@@ -36,7 +36,7 @@ const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', impo
 const JOURNAL_PATH = fileURLToPath(new URL('../drizzle/meta/_journal.json', import.meta.url));
 const VISUALIZER_PATH = fileURLToPath(new URL('../.drizzle/visualizer.json', import.meta.url));
 
-const EXPECTED = { tables: 49, indexes: 117, checks: 93, fks: 47, uuidv7: 36 };
+const EXPECTED = { tables: 49, indexes: 119, checks: 93, fks: 47, uuidv7: 36 };
 
 const EXPECTED_TABLE_NAMES: string[] = [
 	'account',
@@ -228,6 +228,10 @@ const REQUIRED_CONSTRAINT_NAMES: string[] = [
 
 /** Index predicate pins (checked against the baseline text; each must match). */
 const PREDICATE_PINS: Array<[string, RegExp]> = [
+	[
+		'categories_default_uniq',
+		/CREATE UNIQUE INDEX "categories_default_uniq" .*WHERE "categories"\."is_default"/
+	],
 	[
 		'projects_extid_uniq',
 		/CREATE UNIQUE INDEX "projects_extid_uniq" .*WHERE "projects"\."external_id" is not null/

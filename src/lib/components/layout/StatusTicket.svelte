@@ -1,50 +1,30 @@
 <script lang="ts">
-	import { siteHref } from '$lib/utils/href';
-	import type { OwnerStatus } from '$lib/config/owner-status';
+	import OwnerAppIcon from './OwnerAppIcon.svelte';
+	import type { OwnerPresence } from '$lib/config/owner-presence';
 
 	/**
-	 * Owner activity ticket (static stage): one datum only — the app/site name
-	 * capped at ten characters, optionally preceded by its icon. No localised
-	 * copy here on purpose: the text is owner-authored, so the badge reads the
-	 * same in every locale.
+	 * Pure inline owner-status visual. The header HoverCard owns the trigger,
+	 * card, and fit measurement; this component only paints the dot, app icon,
+	 * and the optional hover-revealed app name.
 	 */
-	let { status }: { status: OwnerStatus } = $props();
-
-	const MAX_CHARS = 10;
-
-	const full = $derived(status.detail.trim());
-	// Code points, not UTF-16 units: an emoji in the name must not be split.
-	const visible = $derived(
-		status.kind === 'idle' ? '' : Array.from(full).slice(0, MAX_CHARS).join('')
-	);
-	const truncated = $derived(visible !== '' && visible !== full);
+	let {
+		presence,
+		showAppIcon,
+		showInlineName
+	}: {
+		presence: OwnerPresence;
+		showAppIcon: boolean;
+		showInlineName: boolean;
+	} = $props();
 </script>
 
-{#if status.enabled && visible}
-	<svelte:element
-		this={status.href ? 'a' : 'div'}
-		href={status.href ? siteHref(status.href) : undefined}
-		class="flex h-8 max-w-[11rem] min-w-0 items-center gap-1.5 rounded-md px-1.5"
-		title={full}
-		data-slot="owner-status"
-	>
-		{#if status.iconUrl}
-			<img
-				src={status.iconUrl}
-				alt=""
-				loading="lazy"
-				class="size-5 shrink-0 rounded-[3px] object-cover"
-			/>
-		{/if}
-
-		{#if truncated}
-			<span class="truncate text-sm font-medium" aria-hidden="true">{visible}</span>
-			<span class="sr-only">{full}</span>
-		{:else}
-			<span class="truncate text-sm font-medium">{visible}</span>
-		{/if}
-
-		{#if status.kind === 'listening'}
+<span
+	class="flex min-w-0 items-center gap-1.5"
+	data-slot="owner-status"
+	data-state={presence.state}
+>
+	{#if presence.state === 'online'}
+		{#if presence.activity === 'listening'}
 			<span class="flex h-3 shrink-0 items-end gap-[2px]" aria-hidden="true">
 				<span
 					class="w-[2px] animate-pulse rounded-full bg-primary motion-reduce:animate-none"
@@ -60,12 +40,26 @@
 				></span>
 			</span>
 		{:else}
-			<span class="relative flex size-1.5 shrink-0" aria-hidden="true">
+			<span class="relative flex size-1.5 shrink-0" aria-hidden="true" data-slot="owner-status-dot">
 				<span
 					class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/60 motion-reduce:animate-none"
 				></span>
 				<span class="relative inline-flex size-1.5 rounded-full bg-emerald-500"></span>
 			</span>
 		{/if}
-	</svelte:element>
-{/if}
+	{/if}
+
+	{#if showAppIcon && presence.app}
+		<OwnerAppIcon app={presence.app} size={20} muted={presence.state === 'offline'} />
+	{/if}
+
+	{#if showInlineName && presence.app}
+		<span
+			class="pointer-events-none absolute top-1/2 left-full ml-1.5 -translate-y-1/2 text-[11px] leading-none font-medium whitespace-nowrap text-muted-foreground opacity-0 transition-opacity duration-150 group-hover/status:pointer-events-auto group-hover/status:opacity-100 group-focus-visible/status:pointer-events-auto group-focus-visible/status:opacity-100"
+			data-slot="owner-status-app-name"
+			aria-hidden="true"
+		>
+			{presence.app.name}
+		</span>
+	{/if}
+</span>

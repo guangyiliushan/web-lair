@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import {
+	boolean,
 	check,
+	index,
 	integer,
 	jsonb,
 	pgTable,
@@ -21,6 +23,13 @@ import type { LocalizedText } from './localized';
  * closed key set, no blank values, and the source locale never duplicated
  * inside `name_i18n` (function form: `?` would collide with the driver's
  * placeholder syntax).
+ *
+ * `is_default` marks the fallback bucket (ledger §9.18.5). `posts.category_id`
+ * is NOT NULL with `on delete restrict`, so every post is filed somewhere and
+ * a category with posts can never be dropped out from under them — the default
+ * is where "clear out this category" moves them. Like `pages.is_default` it is
+ * an ordinary, renameable row that is simply not deletable; the partial unique
+ * index keeps it to one.
  */
 export const categories = pgTable(
 	'categories',
@@ -38,11 +47,18 @@ export const categories = pgTable(
 		nameI18n: jsonb('name_i18n')
 			.$type<LocalizedText>()
 			.notNull()
-			.default(sql`'{}'::jsonb`)
+			.default(sql`'{}'::jsonb`),
+		isDefault: boolean('is_default').notNull().default(false)
 	},
 	(table) => [
 		uniqueIndex('categories_name_uniq').on(table.name),
 		uniqueIndex('categories_slug_uniq').on(table.slug),
+		// At most one fallback bucket. A partial index over a constant is the
+		// usual way to pin "exactly this many" without a trigger.
+		uniqueIndex('categories_default_uniq')
+			.on(table.isDefault)
+			.where(sql`${table.isDefault}`),
+		index('categories_sort_order_idx').on(table.sortOrder),
 		check('categories_source_lang_check', sql`${table.sourceLang} in ('en', 'zh-cn', 'ja')`),
 		check('categories_name_i18n_shape_check', sql`jsonb_typeof(${table.nameI18n}) = 'object'`),
 		check(

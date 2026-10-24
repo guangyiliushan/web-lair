@@ -91,6 +91,7 @@ CREATE TABLE "categories" (
 	"description" text,
 	"source_lang" text DEFAULT 'zh-cn' NOT NULL,
 	"name_i18n" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"is_default" boolean DEFAULT false NOT NULL,
 	CONSTRAINT "categories_source_lang_check" CHECK ("categories"."source_lang" in ('en', 'zh-cn', 'ja')),
 	CONSTRAINT "categories_name_i18n_shape_check" CHECK (jsonb_typeof("categories"."name_i18n") = 'object'),
 	CONSTRAINT "categories_name_i18n_keys_check" CHECK ("categories"."name_i18n" - array['en', 'zh-cn', 'ja'] = '{}'::jsonb),
@@ -831,6 +832,8 @@ CREATE INDEX "ai_usage_task_idx" ON "ai_usage" USING btree ("task","created_at")
 CREATE UNIQUE INDEX "options_name_uniq" ON "options" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "categories_name_uniq" ON "categories" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "categories_slug_uniq" ON "categories" USING btree ("slug");--> statement-breakpoint
+CREATE UNIQUE INDEX "categories_default_uniq" ON "categories" USING btree ("is_default") WHERE "categories"."is_default";--> statement-breakpoint
+CREATE INDEX "categories_sort_order_idx" ON "categories" USING btree ("sort_order");--> statement-breakpoint
 CREATE INDEX "comment_moderation_events_comment_idx" ON "comment_moderation_events" USING btree ("comment_id");--> statement-breakpoint
 CREATE INDEX "comments_post_thread_idx" ON "comments" USING btree ("post_id","parent_comment_id","pin","created_at") WHERE "comments"."post_id" is not null;--> statement-breakpoint
 CREATE INDEX "comments_root_idx" ON "comments" USING btree ("root_comment_id","created_at");--> statement-breakpoint

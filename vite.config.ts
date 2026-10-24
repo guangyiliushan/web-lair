@@ -132,7 +132,9 @@ export default defineConfig({
 						'@codemirror/view',
 						'@codemirror/commands',
 						'@codemirror/language',
-						'@codemirror/lang-javascript'
+						'@codemirror/lang-javascript',
+						'@tabler/icons-svelte-runes/icons/app-window',
+						'@tabler/icons-svelte-runes/icons/brand-vscode'
 					]
 				}
 			},

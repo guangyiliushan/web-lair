@@ -92,9 +92,7 @@ describe('nav-data loaders', () => {
 			{ label: 'Tech', href: '/posts/categories/tech', badge: 3 },
 			{ label: 'Life', href: '/posts/categories/life', badge: 1 }
 		]);
-		expect(data.rightItems).toEqual([
-			{ label: 'Post A', href: '/posts/a', desc: 'January 15, 2026' }
-		]);
+		expect(data.rightItems).toEqual([{ label: 'Post A', href: '/posts/a', desc: '1·15' }]);
 		expect(data.footerSecondaryText).toBe('4 posts');
 	});
 
@@ -115,15 +113,11 @@ describe('nav-data loaders', () => {
 
 		const data = await loadTimelineMegaData();
 
-		expect(data.timelineItems).toEqual([
-			{
-				title: 'Trip',
-				href: '/notes/trip',
-				type: 'notes',
-				locked: false,
-				date: 'February 1, 2026'
-			},
-			{ title: 'Post A', href: '/posts/a', type: 'posts', locked: false, date: 'January 15, 2026' }
+		// Rows are plain `NavChild`s now: `desc` is the compact date, `badge`
+		// the entry kind. No separate activity shape (timeline panel = two-column).
+		expect(data.rightItems).toEqual([
+			{ label: 'Trip', href: '/notes/trip', desc: '2·1', locked: false, badge: 'Notes' },
+			{ label: 'Post A', href: '/posts/a', desc: '1·15', locked: false, badge: 'Posts' }
 		]);
 	});
 
@@ -149,7 +143,7 @@ describe('nav-data loaders', () => {
 			{ label: 'Travel', href: '/notes/topics/travel', iconName: 'plane', badge: 3 }
 		]);
 		expect(data.rightItems).toEqual([
-			{ label: 'Trip', href: '/notes/trip', desc: 'January 15, 2026', locked: true }
+			{ label: 'Trip', href: '/notes/trip', desc: '1·15', locked: true }
 		]);
 		expect(data.footerSecondaryText).toBe('7 notes');
 		// Recent notes are capped by the query limit (no post-slice).
@@ -171,7 +165,9 @@ describe('nav-data loaders', () => {
 
 		const data = await loadNotesMegaData();
 
-		expect(data.leftItems).toHaveLength(5);
+		// Cap is 4 per column so both sides of the panel end at the same height
+		// (H3); six seeded rows must come back truncated to four.
+		expect(data.leftItems).toHaveLength(4);
 		expect(data.leftItems?.[0]).toEqual({
 			label: 'Topic 0',
 			href: '/notes/topics/topic-0',
@@ -190,7 +186,7 @@ describe('nav-data loaders', () => {
 		const data = await loadTimelineMegaData();
 
 		// Tie-break chain: time desc, then type ('notes' < 'posts'), then href.
-		expect(data.timelineItems?.map((item) => item.title)).toEqual(['Note A', 'Post B']);
+		expect(data.rightItems.map((item) => item.label)).toEqual(['Note A', 'Post B']);
 	});
 
 	it('pins the locale + visibility predicates on every mega query (review finding)', async () => {

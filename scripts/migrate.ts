@@ -47,6 +47,7 @@ try {
 			tokenNonce: boolean;
 			keyVersion: boolean;
 			taxonomy: boolean;
+			defaultCategory: boolean;
 		}[]
 	>`select
 		to_regclass('public.email_suppressions') is not null as suppressions,
@@ -85,7 +86,12 @@ try {
 				(table_name = 'categories' and column_name in ('source_lang', 'name_i18n'))
 				or (table_name = 'topics' and column_name in ('source_lang', 'name_i18n', 'description_i18n'))
 			)
-		) as taxonomy`;
+		) as taxonomy,
+		exists (
+			select 1 from information_schema.columns
+			where table_schema = 'public' and table_name = 'categories'
+				and column_name = 'is_default'
+		) as "defaultCategory"`;
 	if (!schema?.suppressions || !schema.consent || !schema.tokenHash || !schema.tokenHashIndex) {
 		console.error(
 			'[migrate] this database predates the E2 baseline (missing email_suppressions / consent_version / token_hash / token_hash index).'
@@ -119,6 +125,15 @@ try {
 		);
 		console.error(
 			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> verify).'
+		);
+		process.exitCode = 1;
+	}
+	if (schema?.defaultCategory === false) {
+		console.error(
+			'[migrate] this database predates the default-category baseline (missing categories.is_default).'
+		);
+		console.error(
+			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> db:ensure-categories -> verify).'
 		);
 		process.exitCode = 1;
 	}

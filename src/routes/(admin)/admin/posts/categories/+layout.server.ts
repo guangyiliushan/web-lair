@@ -21,7 +21,8 @@ export const load: LayoutServerLoad = async () => {
 			name: categories.name,
 			slug: categories.slug,
 			nameI18n: categories.nameI18n,
-			sourceLang: categories.sourceLang
+			sourceLang: categories.sourceLang,
+			isDefault: categories.isDefault
 		})
 		.from(categories)
 		.orderBy(categories.name);
@@ -43,6 +44,7 @@ export const load: LayoutServerLoad = async () => {
 			id: category.id,
 			name: category.name,
 			slug: category.slug,
+			isDefault: category.isDefault,
 			completeness: taxonomyCompleteness(category)
 		})),
 		postCounts

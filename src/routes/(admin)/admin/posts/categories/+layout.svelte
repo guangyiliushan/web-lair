@@ -7,6 +7,7 @@
 	import * as ListDetail from '$lib/components/admin/list-detail';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Field from '$lib/components/ui/field';
+	import * as Select from '$lib/components/ui/select';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import IconFolder from '@tabler/icons-svelte-runes/icons/folder';
@@ -17,6 +18,13 @@
 
 	let createOpen = $state(false);
 	let createError = $state<string | null>(null);
+	let sourceLang = $state('zh-cn');
+
+	const localeLabels: Record<string, string> = {
+		'zh-cn': '中文 (zh-cn)',
+		en: 'English (en)',
+		ja: '日本語 (ja)'
+	};
 
 	/** Selection lives in the route, so back/forward and deep links just work. */
 	const selectedId = $derived(page.params.id ?? null);
@@ -103,15 +111,20 @@
 			<div class="flex flex-col gap-4 px-6 pb-4">
 				<Field.Field>
 					<Field.FieldLabel for="new-cat-lang">{m.admin_taxonomy_source_lang()}</Field.FieldLabel>
-					<select
-						id="new-cat-lang"
-						name="sourceLang"
-						class="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-					>
-						<option value="zh-cn">中文 (zh-cn)</option>
-						<option value="en">English (en)</option>
-						<option value="ja">日本語 (ja)</option>
-					</select>
+					<!-- bits-ui Select does not submit with the form; carry the value. -->
+					<input type="hidden" name="sourceLang" value={sourceLang} />
+					<Select.Root type="single" bind:value={sourceLang}>
+						<Select.Trigger class="h-8 w-full" id="new-cat-lang">
+							{localeLabels[sourceLang]}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								{#each Object.entries(localeLabels) as [value, label] (value)}
+									<Select.Item {value}>{label}</Select.Item>
+								{/each}
+							</Select.Group>
+						</Select.Content>
+					</Select.Root>
 				</Field.Field>
 				<Field.Field>
 					<Field.FieldLabel for="new-cat-name">{m.admin_categories_name()}</Field.FieldLabel>

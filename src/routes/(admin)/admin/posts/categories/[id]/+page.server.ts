@@ -1,5 +1,5 @@
 import { error, fail } from '@sveltejs/kit';
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { requireAdminRole } from '$lib/server/authz';
 import { categories, posts } from '$lib/server/db/content';
@@ -8,6 +8,20 @@ import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 import { isValidTaxonomySlug, parseTaxonomyI18n } from '$lib/server/services/taxonomy';
+
+/**
+ * The fallback bucket every post is filed under. `posts.category_id` is NOT
+ * NULL with `on delete restrict`, so "no category" is not a state a post can
+ * be in — clearing a category means moving its posts here.
+ */
+async function defaultCategoryId(): Promise<string | null> {
+	const [row] = await db
+		.select({ id: categories.id })
+		.from(categories)
+		.where(eq(categories.isDefault, true))
+		.limit(1);
+	return row?.id ?? null;
+}
 
 export const load: PageServerLoad = async ({ params }) => {
 	await requireAdminRole();
@@ -18,22 +32,52 @@ export const load: PageServerLoad = async ({ params }) => {
 			id: categories.id,
 			name: categories.name,
 			slug: categories.slug,
+			description: categories.description,
+			sortOrder: categories.sortOrder,
 			sourceLang: categories.sourceLang,
-			nameI18n: categories.nameI18n
+			nameI18n: categories.nameI18n,
+			isDefault: categories.isDefault
 		})
 		.from(categories)
 		.where(eq(categories.id, params.id));
 	if (!category) error(404, m.admin_categories_select());
 
+	// The workspace list needs enough per row to decide without opening the
+	// post: language, state, and when it last moved.
 	const related = await db
-		.select({ id: posts.id, title: posts.title, status: posts.status })
+		.select({
+			id: posts.id,
+			title: posts.title,
+			slug: posts.slug,
+			status: posts.status,
+			lang: posts.lang,
+			updatedAt: posts.updatedAt
+		})
 		.from(posts)
 		.where(eq(posts.categoryId, params.id))
-		.orderBy(posts.createdAt)
-		.limit(20);
+		.orderBy(sql`${posts.updatedAt} desc nulls last`, sql`${posts.createdAt} desc`)
+		.limit(200);
+
+	// Candidates for "pull in": everything filed elsewhere, with the category
+	// it currently sits in so the owner can see what they are about to move.
+	// Capped — a personal blog's archive is small enough to filter client-side.
+	const pickable = await db
+		.select({
+			id: posts.id,
+			title: posts.title,
+			status: posts.status,
+			lang: posts.lang,
+			categoryName: categories.name
+		})
+		.from(posts)
+		.innerJoin(categories, eq(posts.categoryId, categories.id))
+		.where(ne(posts.categoryId, params.id))
+		.orderBy(sql`${posts.updatedAt} desc nulls last`)
+		.limit(200);
 
 	// Header actions for a selected record. Destructive work is never primary
-	// (Apple HIG, Buttons), and nothing here is "Save": edits autosave.
+	// (Apple HIG, Buttons), and nothing here is "Save": edits autosave. The
+	// fallback category is not deletable, so it gets no delete action at all.
 	return {
 		headerActions: [
 			{
@@ -42,15 +86,20 @@ export const load: PageServerLoad = async ({ params }) => {
 				variant: 'ghost',
 				href: '/admin/posts/categories'
 			},
-			{
-				label: m.admin_common_delete(),
-				iconName: 'trash',
-				variant: 'outline',
-				actionId: 'categories:delete'
-			}
+			...(category.isDefault
+				? []
+				: [
+						{
+							label: m.admin_common_delete(),
+							iconName: 'trash',
+							variant: 'outline',
+							actionId: 'categories:delete'
+						}
+					])
 		],
 		category,
-		related
+		related,
+		pickable
 	};
 };
 
@@ -79,16 +128,65 @@ export const actions: Actions = {
 
 		const updatedRows = await db
 			.update(categories)
-			.set({ name, slug, nameI18n })
+			.set({
+				name,
+				slug,
+				nameI18n,
+				description: formData.get('description')?.toString().trim() || null
+			})
 			.where(eq(categories.id, params.id))
 			.returning({ id: categories.id });
 		if (updatedRows.length === 0) return fail(404, { error: m.admin_categories_select() });
 		return { success: true };
 	},
 
+	/**
+	 * Re-file posts. One action covers all three verbs the workspace offers:
+	 *   · "clear out"   -> `to` blank, lands in the fallback category
+	 *   · "move to…"    -> `to` names the destination
+	 *   · "pull in"     -> `to` is this route's category
+	 */
+	move: async ({ request }) => {
+		await requireAdminRole();
+		const formData = await request.formData();
+		const postIds = formData.getAll('postId').map(String).filter(isUuid);
+		if (postIds.length === 0) return fail(400, { error: m.admin_categories_err_no_selection() });
+
+		const toRaw = formData.get('to')?.toString().trim() ?? '';
+		let target: string;
+		if (toRaw === '') {
+			const fallback = await defaultCategoryId();
+			if (!fallback) return fail(409, { error: m.admin_categories_err_no_default() });
+			target = fallback;
+		} else {
+			if (!isUuid(toRaw)) return fail(400, { error: m.admin_categories_err_target_missing() });
+			const [exists] = await db
+				.select({ id: categories.id })
+				.from(categories)
+				.where(eq(categories.id, toRaw))
+				.limit(1);
+			if (!exists) return fail(404, { error: m.admin_categories_err_target_missing() });
+			target = toRaw;
+		}
+
+		await db.update(posts).set({ categoryId: target }).where(inArray(posts.id, postIds));
+		return { success: true, moved: postIds.length, to: target };
+	},
+
 	delete: async ({ params }) => {
 		await requireAdminRole();
 		if (!isUuid(params.id)) return fail(400, { error: m.admin_categories_err_missing_id() });
+
+		// The fallback category is the safety net for every other delete; it
+		// cannot itself be removed. This is an application-layer guard — the DB
+		// keeps at most one default row but does not stop the DELETE.
+		const [target] = await db
+			.select({ isDefault: categories.isDefault })
+			.from(categories)
+			.where(eq(categories.id, params.id))
+			.limit(1);
+		if (!target) return fail(404, { error: m.admin_categories_select() });
+		if (target.isDefault) return fail(409, { error: m.admin_categories_err_default_undeletable() });
 
 		// P2 (§9.8): deleting a category that still owns posts answers 409 with
 		// a readable message instead of hitting the RESTRICT FK as a 500. The
