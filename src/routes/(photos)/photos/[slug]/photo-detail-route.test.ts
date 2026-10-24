@@ -2,15 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Route-level tests for the public photo viewer (v1): visible rows render
- * with their neighbours; a retired slug resolves through slug_trackers with
- * exactly one 301 (query string preserved) and never redirects into a
+ * with their filmstrip window; a retired slug resolves through slug_trackers
+ * with exactly one 301 (query string preserved) and never redirects into a
  * hidden or missing target.
  */
 const { service } = vi.hoisted(() => ({
 	service: {
 		getVisiblePhotoBySlug: vi.fn(),
 		getVisiblePhotoById: vi.fn(),
-		listPhotoNeighbors: vi.fn(),
+		listPhotoStrip: vi.fn(),
 		findSlugTargetId: vi.fn()
 	}
 }));
@@ -18,7 +18,7 @@ const { service } = vi.hoisted(() => ({
 vi.mock('$lib/server/services/photos', () => ({
 	getVisiblePhotoBySlug: service.getVisiblePhotoBySlug,
 	getVisiblePhotoById: service.getVisiblePhotoById,
-	listPhotoNeighbors: service.listPhotoNeighbors
+	listPhotoStrip: service.listPhotoStrip
 }));
 vi.mock('$lib/server/services/slug-resolver', () => ({
 	findSlugTargetId: service.findSlugTargetId
@@ -48,7 +48,6 @@ const PHOTO = {
 	latitude: null,
 	longitude: null,
 	altitudeM: null,
-	exif: null,
 	objectKey: 'aa/x.jpg',
 	fileName: 'x.jpg',
 	mimeType: 'image/jpeg',
@@ -56,7 +55,8 @@ const PHOTO = {
 	width: 100,
 	height: 100,
 	thumbhash: null,
-	palette: null
+	palette: null,
+	tags: []
 };
 
 function makeEvent(slug = 'sunset', search = '') {
@@ -69,37 +69,37 @@ function makeEvent(slug = 'sunset', search = '') {
 beforeEach(() => {
 	vi.clearAllMocks();
 	service.findSlugTargetId.mockResolvedValue(null);
-	service.listPhotoNeighbors.mockResolvedValue({
-		newer: null,
-		older: null,
+	service.listPhotoStrip.mockResolvedValue({
+		strip: [PHOTO],
 		position: { index: 1, total: 1 }
 	});
 });
 
-describe('(site)/photos/[slug] load — viewer', () => {
-	it('serves a visible photo with neighbours, ordered by the feed tuple', async () => {
+describe('(photos)/photos/[slug] load — viewer', () => {
+	it('serves a visible photo with its filmstrip window and position', async () => {
 		service.getVisiblePhotoBySlug.mockResolvedValue(PHOTO);
-		service.listPhotoNeighbors.mockResolvedValue({
-			newer: { slug: 'newer', title: null },
-			older: { slug: 'older', title: null },
+		const newer = { slug: 'newer', title: null };
+		const older = { slug: 'older', title: null };
+		service.listPhotoStrip.mockResolvedValue({
+			strip: [newer, PHOTO, older],
 			position: { index: 2, total: 5 }
 		});
 
 		const data = (await load(makeEvent())) as {
 			seo: { path: string };
 			photo: { slug: string };
-			neighbors: { newer: { slug: string } | null; older: { slug: string } | null };
+			strip: { slug: string }[];
 			position: { index: number; total: number };
 		};
 
 		expect(data.seo).toEqual({ path: '/photos/sunset' });
 		expect(data.photo.slug).toBe('sunset');
-		expect(data.neighbors.newer?.slug).toBe('newer');
-		expect(data.neighbors.older?.slug).toBe('older');
-		expect(service.listPhotoNeighbors).toHaveBeenCalledWith({
-			sortAt: PHOTO.takenAt,
-			id: PHOTO.id
-		});
+		expect(data.strip.map((photo) => photo.slug)).toEqual(['newer', 'sunset', 'older']);
+		expect(service.listPhotoStrip).toHaveBeenCalledWith(
+			{ sortAt: PHOTO.takenAt, id: PHOTO.id },
+			PHOTO,
+			12
+		);
 		expect(data.position).toEqual({ index: 2, total: 5 });
 	});
 

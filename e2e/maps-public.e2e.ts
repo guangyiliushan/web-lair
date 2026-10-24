@@ -83,7 +83,7 @@ test.describe('photos public map', () => {
 		await expect(marker).toHaveCount(1);
 		await marker.click();
 		await expect(page).toHaveURL(new RegExp(`${FIX}-alpha$`));
-		await expect(page.locator('div.sticky')).toContainText('E2E 地图照片', { timeout: 20_000 });
+		await expect(page.locator('header')).toContainText('E2E 地图照片', { timeout: 20_000 });
 	});
 
 	test('a photo without coordinates never reaches the map', async ({ page }) => {

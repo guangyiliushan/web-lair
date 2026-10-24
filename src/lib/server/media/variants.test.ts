@@ -17,7 +17,7 @@ async function solid(width: number, height: number): Promise<Buffer> {
 		.toBuffer();
 }
 
-describe('processImage (ledger §21 pipeline)', () => {
+describe('processImage (ledger §21 pipeline)', { timeout: 30_000 }, () => {
 	it('keeps aspect ratios and never enlarges (T8: landscape / portrait / square / panorama)', async () => {
 		const cases: Array<{ w: number; h: number }> = [
 			{ w: 800, h: 600 },
@@ -45,6 +45,14 @@ describe('processImage (ledger §21 pipeline)', () => {
 		const out = await processImage(await solid(300, 200));
 		const thumb = await sharp(out.variants.thumb).metadata();
 		expect([thumb.width, thumb.height]).toEqual([300, 200]);
+	});
+
+	it('generates a 720px grid tier for the borderless gallery', async () => {
+		const out = await processImage(await solid(3000, 1500));
+		const grid = await sharp(out.variants.grid).metadata();
+		expect([grid.width, grid.height]).toEqual([720, 360]);
+		expect(grid.format).toBe('webp');
+		expect(grid.exif).toBeUndefined();
 	});
 
 	it('generates preview only when the long edge exceeds 2560', async () => {

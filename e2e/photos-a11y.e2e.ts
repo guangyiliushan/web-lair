@@ -69,9 +69,11 @@ test.describe('photos a11y baseline', () => {
 	test('2.5.8: viewer controls meet 24×24', async ({ page }) => {
 		await page.goto(`/zh-cn/photos/${FIX}-alpha`);
 		await expect(page.locator('.photos-viewer-image')).toBeVisible({ timeout: 20_000 });
-		const controls = [page.locator('div.sticky a').first(), page.locator('div.sticky a').last()];
-		for (const control of controls) {
-			const box = await control.boundingBox();
+		const controls = page.locator('header a, header button');
+		const count = await controls.count();
+		expect(count).toBeGreaterThan(0);
+		for (let index = 0; index < count; index += 1) {
+			const box = await controls.nth(index).boundingBox();
 			expect(box, 'control missing').not.toBeNull();
 			expect(box!.width).toBeGreaterThanOrEqual(24);
 			expect(box!.height).toBeGreaterThanOrEqual(24);
@@ -106,7 +108,9 @@ test.describe('photos a11y baseline', () => {
 			await page.keyboard.press('Tab');
 			reached = await page.evaluate(() => {
 				const active = document.activeElement;
-				return active instanceof HTMLAnchorElement && active.textContent?.includes('返回相册');
+				return (
+					active instanceof HTMLAnchorElement && active.getAttribute('aria-label') === '返回相册'
+				);
 			});
 			if (reached) break;
 		}

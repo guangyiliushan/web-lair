@@ -17,6 +17,7 @@ import { GET, HEAD } from './[...key]/+server';
 /** sha256-shaped key whose directory equals the first two hex chars. */
 const SHA = 'ab' + 'c'.repeat(62);
 const VARIANT_KEY = `${SHA.slice(0, 2)}/${SHA}.jpg@thumb`;
+const GRID_KEY = `${SHA.slice(0, 2)}/${SHA}.jpg@grid`;
 const PREVIEW_KEY = `${SHA.slice(0, 2)}/${SHA}.jpg@preview`;
 const FULL_VARIANT_KEY = `${SHA.slice(0, 2)}/${SHA}.jpg@full`;
 const ORIGINAL_KEY = `${SHA.slice(0, 2)}/${SHA}.jpg`;
@@ -66,8 +67,8 @@ describe('/i/<key> proxy (T9)', () => {
 		expect(isRegisteredKeyMock).not.toHaveBeenCalled();
 	});
 
-	it('serves every variant kind (@thumb/@preview/@full) under the same policy', async () => {
-		for (const key of [VARIANT_KEY, PREVIEW_KEY, FULL_VARIANT_KEY]) {
+	it('serves every variant kind (@thumb/@grid/@preview/@full) under the same policy', async () => {
+		for (const key of [VARIANT_KEY, GRID_KEY, PREVIEW_KEY, FULL_VARIANT_KEY]) {
 			storageMock.get.mockResolvedValueOnce({
 				body: bodyOf('x'),
 				byteSize: 1,
@@ -78,6 +79,24 @@ describe('/i/<key> proxy (T9)', () => {
 			expect(res.status).toBe(200);
 			expect(res.headers.get('cache-control')).toContain('immutable');
 		}
+	});
+
+	it('falls back to @thumb for pre-backfill @grid requests with a short cache', async () => {
+		storageMock.get
+			.mockResolvedValueOnce(null)
+			.mockResolvedValueOnce({
+				body: bodyOf('thumb'),
+				byteSize: 5,
+				contentType: 'image/webp',
+				etag: null
+			});
+
+		const res = await GET(event(GRID_KEY));
+
+		expect(res.status).toBe(200);
+		expect(res.headers.get('cache-control')).toBe('public, max-age=3600');
+		expect(await res.text()).toBe('thumb');
+		expect(storageMock.get.mock.calls.map((call) => call[0])).toEqual([GRID_KEY, VARIANT_KEY]);
 	});
 
 	it('rejects malformed keys with 404 without touching storage or the registry', async () => {

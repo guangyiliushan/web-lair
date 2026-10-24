@@ -58,6 +58,7 @@ import {
 	getVisiblePhotoBySlug,
 	listAdminPhotos,
 	listPhotoNeighbors,
+	listPhotoStrip,
 	photoSlugBase,
 	removePhoto,
 	updatePhoto
@@ -557,11 +558,13 @@ describe('getVisiblePhotoBySlug (public detail hygiene)', () => {
 			])
 		);
 
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 		const row = await getVisiblePhotoBySlug('sunset');
 
 		expect(row?.latitude).toBe('25.03');
 		expect(row?.longitude).toBe('121.57');
 		expect(row?.altitudeM).toBe('13');
+		expect(row?.tags).toEqual([]);
 	});
 
 	it('keeps absent coordinates null (no 0.00 fallback)', async () => {
@@ -596,11 +599,13 @@ describe('getVisiblePhotoBySlug (public detail hygiene)', () => {
 			])
 		);
 
+		dbMock.select.mockReturnValueOnce(selectChain([]));
 		const row = await getVisiblePhotoBySlug('sunset');
 
 		expect(row?.latitude).toBeNull();
 		expect(row?.longitude).toBeNull();
 		expect(row?.altitudeM).toBeNull();
+		expect(row?.tags).toEqual([]);
 	});
 });
 
@@ -721,5 +726,33 @@ describe('listPhotoNeighbors', () => {
 				id: '11111111-1111-1111-1111-111111111111'
 			})
 		).resolves.toEqual({ newer: null, older: null, position: { index: 1, total: 0 } });
+	});
+
+	it('builds the filmstrip window newest → current → oldest', async () => {
+		const current = { ...NEWER_ROW, id: '11111111-1111-1111-1111-111111111111', slug: 'current' };
+		// Newer rows arrive ascending (closest first); the strip must reverse
+		// them so the DOM order stays feed order (newest first).
+		dbMock.select.mockReturnValueOnce(
+			selectChain([
+				NEWER_ROW,
+				{ ...NEWER_ROW, id: 'cccccccc-cccc-cccc-cccc-cccccccccccc', slug: 'newest' }
+			])
+		);
+		dbMock.select.mockReturnValueOnce(selectChain([OLDER_ROW]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ count: 2 }]));
+		dbMock.select.mockReturnValueOnce(selectChain([{ count: 4 }]));
+
+		const result = await listPhotoStrip(
+			{ sortAt: new Date('2026-01-01T00:00:00Z'), id: current.id },
+			current
+		);
+
+		expect(result.strip.map((photo) => photo.slug)).toEqual([
+			'newest',
+			'newer',
+			'current',
+			'older'
+		]);
+		expect(result.position).toEqual({ index: 3, total: 4 });
 	});
 });

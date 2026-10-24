@@ -4,7 +4,7 @@ import { findSlugTargetId } from '$lib/server/services/slug-resolver';
 import {
 	getVisiblePhotoById,
 	getVisiblePhotoBySlug,
-	listPhotoNeighbors,
+	listPhotoStrip,
 	type PublicPhotoDetail
 } from '$lib/server/services/photos';
 import type { PageServerLoad } from './$types';
@@ -31,18 +31,16 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		error(404, 'Not found');
 	}
 
-	// Neighbours now carry the viewer field set + the feed position (3c):
-	// the overlay opens straight from the SSR payload and only fetches when
-	// it walks past the ±1 window.
-	const { newer, older, position } = await listPhotoNeighbors({
-		sortAt: row.takenAt ?? row.createdAt,
-		id: row.id
-	});
+	const { strip, position } = await listPhotoStrip(
+		{ sortAt: row.takenAt ?? row.createdAt, id: row.id },
+		row,
+		12
+	);
 
 	return {
 		seo: { path: `/photos/${row.slug}` },
 		photo: row,
-		neighbors: { newer, older },
+		strip,
 		position
 	};
 };

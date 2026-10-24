@@ -46,5 +46,6 @@ describe('photoEmbedSrc - the body-image tier (Q11, review round 1)', () => {
 		expect(photoTileSrc({ mimeType: 'image/png', objectKey: KEY }, 'thumb')).toBe(
 			`/i/${KEY}@thumb`
 		);
+		expect(photoTileSrc({ mimeType: 'image/png', objectKey: KEY }, 'grid')).toBe(`/i/${KEY}@grid`);
 	});
 });

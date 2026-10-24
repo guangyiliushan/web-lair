@@ -125,7 +125,12 @@ function deleteChain() {
 const PROCESSED = {
 	width: 64,
 	height: 32,
-	variants: { thumb: Buffer.from('thumb'), preview: null, full: Buffer.from('full') },
+	variants: {
+		thumb: Buffer.from('thumb'),
+		grid: Buffer.from('grid'),
+		preview: null,
+		full: Buffer.from('full')
+	},
 	thumbhash: 'TH',
 	palette: { dominant: [1, 2, 3] }
 };
@@ -237,6 +242,7 @@ describe('uploadFile', () => {
 		expect(storageMock.put.mock.calls.map((call) => call[0])).toEqual([
 			BASE_KEY,
 			`${BASE_KEY}@thumb`,
+			`${BASE_KEY}@grid`,
 			`${BASE_KEY}@full`
 		]);
 		const values = dbMock.insert.mock.results[0].value.values.mock.calls[0][0] as Record<
@@ -270,6 +276,7 @@ describe('uploadFile', () => {
 		expect(storageMock.put.mock.calls.map((call) => call[0])).toEqual([
 			BASE_KEY,
 			`${BASE_KEY}@thumb`,
+			`${BASE_KEY}@grid`,
 			`${BASE_KEY}@preview`,
 			`${BASE_KEY}@full`
 		]);
@@ -325,6 +332,7 @@ describe('uploadFile', () => {
 		expect(storageMock.delete.mock.calls.map((call) => call[0])).toEqual([
 			BASE_KEY,
 			`${BASE_KEY}@thumb`,
+			`${BASE_KEY}@grid`,
 			`${BASE_KEY}@full`
 		]);
 	});
@@ -369,6 +377,7 @@ describe('uploadFile', () => {
 		expect(storageMock.delete.mock.calls.map((call) => call[0])).toEqual([
 			BASE_KEY,
 			`${BASE_KEY}@thumb`,
+			`${BASE_KEY}@grid`,
 			`${BASE_KEY}@full`
 		]);
 	});
@@ -496,6 +505,7 @@ describe('deleteFile', () => {
 		expect(storageMock.delete.mock.calls.map((call) => call[0])).toEqual([
 			BASE_KEY,
 			`${BASE_KEY}@thumb`,
+			`${BASE_KEY}@grid`,
 			`${BASE_KEY}@preview`,
 			`${BASE_KEY}@full`
 		]);
@@ -702,6 +712,7 @@ describe('purgeMedia', () => {
 		expect(storageMock.delete.mock.calls.map((call) => call[0])).toEqual([
 			'aa/a.jpg',
 			'aa/a.jpg@thumb',
+			'aa/a.jpg@grid',
 			'aa/a.jpg@preview',
 			'aa/a.jpg@full'
 		]);

@@ -116,7 +116,7 @@ test.describe('photos public gallery', () => {
 		await page.goto('/zh-cn/photos');
 		await expect(page.getByRole('heading', { name: '相册' })).toBeVisible({ timeout: 20_000 });
 
-		const grid = page.locator('.photos-masonry');
+		const grid = page.locator('.photos-wall');
 		await expect(grid).toBeVisible();
 
 		// Page one holds min(24, total): assert the formula (collision-proof
@@ -152,35 +152,33 @@ test.describe('photos public gallery', () => {
 		await expect(alpha.locator('img')).toHaveAttribute('loading', 'lazy');
 	});
 
-	test('filters by camera and resets with the All chip', async ({ page }) => {
+	test('filters by camera and resets with the clear-filters action', async ({ page }) => {
 		await page.goto(`/zh-cn/photos?camera=${encodeURIComponent(CAMERA)}`);
 		await expect(page.getByRole('heading', { name: '相册' })).toBeVisible({ timeout: 20_000 });
 
-		const grid = page.locator('.photos-masonry');
+		const grid = page.locator('.photos-wall');
 		await expect(grid.locator(`a[href*="${FIX}-alpha"]`)).toBeVisible();
 		await expect(grid.locator(`a[href*="${FIX}-beta"]`)).toHaveCount(0);
 
-		await page
-			.locator('xpath=//span[text()="相机"]/parent::div')
-			.getByRole('link', { name: '全部' })
-			.click();
+		await page.getByRole('button', { name: '清除筛选' }).click();
 		await expect(grid.locator(`a[href*="${FIX}-beta"]`)).toBeVisible();
 	});
 
 	test('viewer shows the EXIF floater and navigates by link and keyboard', async ({ page }) => {
 		await page.goto(`/zh-cn/photos/${FIX}-alpha`);
 
-		const floater = page.locator('div.sticky');
-		await expect(floater).toContainText('E2E 甲', { timeout: 20_000 });
-		await expect(floater).toContainText('E2E Camera');
-		await expect(floater).toContainText('f/2.8');
-		await expect(floater).toContainText('35mm');
-		await expect(floater).toContainText('ISO 400');
-		await expect(floater.getByRole('link', { name: '返回相册' })).toBeVisible();
+		const info = page.locator('aside[aria-label="照片信息"]');
+		await expect(page.locator('header')).toContainText('E2E 甲', { timeout: 20_000 });
+		await expect(info).toContainText('E2E Camera');
+		await expect(info).toContainText('f/2.8');
+		await expect(info).toContainText('35 mm');
+		await expect(info).toContainText('ISO');
+		await expect(info).toContainText('400');
+		await expect(page.locator('header').getByRole('link', { name: '返回相册' })).toBeVisible();
 
 		// Alpha is the newest fixture: no newer neighbour, beta older.
-		await expect(floater.getByRole('link', { name: '上一张' })).toHaveCount(0);
-		await floater.getByRole('link', { name: '下一张' }).click();
+		await expect(page.locator('header').getByRole('link', { name: '上一张' })).toHaveCount(0);
+		await page.locator('header').getByRole('link', { name: '下一张' }).click();
 		await expect(page).toHaveURL(new RegExp(`${FIX}-beta$`));
 
 		// Keyboard walks back to the newer neighbour.
@@ -198,7 +196,7 @@ test.describe('photos public gallery', () => {
 
 		await page.goto(`/zh-cn/photos/${FIX}-alpha`);
 		await expect(page).toHaveURL(new RegExp(`${FIX}-alpha-v2$`));
-		await expect(page.locator('div.sticky')).toContainText('E2E 甲', { timeout: 20_000 });
+		await expect(page.locator('header')).toContainText('E2E 甲', { timeout: 20_000 });
 
 		const hidden = await page.goto(`/zh-cn/photos/${FIX}-gamma`);
 		expect(hidden?.status()).toBe(404);
@@ -212,7 +210,7 @@ test.describe('photos public gallery', () => {
 		await page.goto('/zh-cn/photos');
 		await expect(page.getByRole('heading', { name: '相册' })).toBeVisible({ timeout: 20_000 });
 
-		const grid = page.locator('.photos-masonry');
+		const grid = page.locator('.photos-wall');
 		await expect(grid.locator('a')).toHaveCount(24);
 		const more = page.getByRole('link', { name: '加载更多' });
 		await expect(more).toBeVisible();

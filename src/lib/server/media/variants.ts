@@ -12,15 +12,20 @@ const MAX_DECODE_PIXELS = 100_000_000;
 
 /** Long-edge boxes for the derived variants (ledger §21 / plan §4.3). */
 const THUMB_BOX = 480;
+/** Gallery tile box: sharp on 2× screens without paying the preview price. */
+export const GRID_BOX = 720;
 /** Exported for the embed-tier drift guard (photo-tile.test.ts). */
 export const PREVIEW_BOX = 2560;
 const THUMB_QUALITY = 80;
+const GRID_QUALITY = 82;
 const PREVIEW_QUALITY = 85;
 const FULL_QUALITY = 92;
 
 export interface ImageVariants {
 	/** 480 box, always generated (lists / thumbnails). */
 	thumb: Buffer;
+	/** 720 box, always generated (borderless gallery srcset). */
+	grid: Buffer;
 	/** 2560 box; only when the source long edge exceeds 2560. */
 	preview: Buffer | null;
 	/** Source resolution webp; metadata stripped. */
@@ -96,6 +101,11 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
 		.resize({ width: THUMB_BOX, height: THUMB_BOX, fit: 'inside', withoutEnlargement: true })
 		.webp({ quality: THUMB_QUALITY })
 		.toBuffer();
+	const grid = await base
+		.clone()
+		.resize({ width: GRID_BOX, height: GRID_BOX, fit: 'inside', withoutEnlargement: true })
+		.webp({ quality: GRID_QUALITY })
+		.toBuffer();
 	const preview =
 		Math.max(width, height) > PREVIEW_BOX
 			? await base
@@ -127,7 +137,7 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
 	return {
 		width,
 		height,
-		variants: { thumb, preview, full },
+		variants: { thumb, grid, preview, full },
 		thumbhash,
 		palette: { dominant: [Math.round(dominant.r), Math.round(dominant.g), Math.round(dominant.b)] }
 	};

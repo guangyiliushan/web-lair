@@ -8,7 +8,7 @@
  */
 
 /** Derived variant suffixes (plan §4.3). */
-export const VARIANT_NAMES = ['thumb', 'preview', 'full'] as const;
+export const VARIANT_NAMES = ['thumb', 'grid', 'preview', 'full'] as const;
 export type VariantName = (typeof VARIANT_NAMES)[number];
 
 /** Canonical key: `<sha[0:2]>/<sha256>.<ext>` (plan §3.1). */
@@ -28,7 +28,7 @@ export function variantKeyFor(objectKey: string, variant: VariantName): string {
  * 2 = extension, 3 = variant name.
  */
 export const KEY_PATTERN =
-	/^([0-9a-f]{2})\/\1[0-9a-f]{62}(\.[a-z0-9]{1,10})?(?:@(thumb|preview|full))?$/;
+	/^([0-9a-f]{2})\/\1[0-9a-f]{62}(\.[a-z0-9]{1,10})?(?:@(thumb|grid|preview|full))?$/;
 
 /**
  * In-content mention pattern (`/i/<key>` inside markdown; used by the media
@@ -40,4 +40,4 @@ export const KEY_PATTERN =
  * this is the mention-scan side and must be a superset of it.
  */
 export const I_KEY_PATTERN =
-	/\/i\/([0-9a-f]{2}\/[0-9a-f]{64}(?:\.[a-z0-9]{1,10})?)(?:@(?:thumb|preview|full))?/g;
+	/\/i\/([0-9a-f]{2}\/[0-9a-f]{64}(?:\.[a-z0-9]{1,10})?)(?:@(?:thumb|grid|preview|full))?/g;

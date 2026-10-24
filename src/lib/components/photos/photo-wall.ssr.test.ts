@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render } from 'svelte/server';
-import PhotosMasonry from './photos-masonry.svelte';
+import PhotoWall from './PhotoWall.svelte';
 import type { PhotoTile } from './photo-tile';
 
 /** SSR first paint (§5.1 POC item): every tile link is in the server HTML. */
@@ -24,7 +24,7 @@ const tile = (index: number): PhotoTile => ({
 describe('photos masonry SSR', () => {
 	it('renders every tile link server-side (no JS required)', () => {
 		const items = [tile(1), tile(2), tile(3)];
-		const { body } = render(PhotosMasonry, { props: { items } });
+		const { body } = render(PhotoWall, { props: { items } });
 		for (const item of items) {
 			expect(body).toContain(`/photos/${item.slug}`);
 		}

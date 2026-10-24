@@ -185,6 +185,7 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 		await putObject(objectKey, input.bytes, sniffed.mimeType);
 		if (processed) {
 			await putObject(variantKeyFor(objectKey, 'thumb'), processed.variants.thumb, 'image/webp');
+			await putObject(variantKeyFor(objectKey, 'grid'), processed.variants.grid, 'image/webp');
 			if (processed.variants.preview) {
 				await putObject(
 					variantKeyFor(objectKey, 'preview'),

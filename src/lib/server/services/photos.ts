@@ -464,6 +464,8 @@ export interface TagChip {
 	id: string;
 	name: string;
 	slug: string;
+	/** Public facet count; omitted on admin tag-option reads. */
+	count?: number;
 }
 
 export interface AdminPhotoRow {
@@ -604,6 +606,7 @@ export interface PublicPhotoDetail {
 	height: number | null;
 	thumbhash: string | null;
 	palette: unknown;
+	tags: TagChip[];
 }
 
 const DETAIL_FIELDS = {
@@ -663,6 +666,12 @@ async function loadVisibleDetail(
 		.where(and(eq(photos.isVisible, true), where))
 		.limit(1);
 	if (!row) return null;
+	const tagRows = await database
+		.select({ id: tags.id, name: tags.name, slug: tags.slug })
+		.from(photoTags)
+		.innerJoin(tags, eq(photoTags.tagId, tags.id))
+		.where(eq(photoTags.photoId, row.id))
+		.orderBy(tags.name);
 	// Public payload hygiene (round-2 review, plan §5.1): full-precision
 	// coordinates and the whole `exif` blob (which carries GPS keys) used to
 	// ride the SSR/hydration payload of the detail page. Coordinates fuzz to
@@ -672,7 +681,8 @@ async function loadVisibleDetail(
 		...row,
 		latitude: fuzzCoordinate(row.latitude),
 		longitude: fuzzCoordinate(row.longitude),
-		altitudeM: roundPublicAltitude(row.altitudeM)
+		altitudeM: roundPublicAltitude(row.altitudeM),
+		tags: tagRows
 	};
 }
 
@@ -786,11 +796,77 @@ export async function listPhotoNeighbors(
 	};
 }
 
+/**
+ * Filmstrip window around the current viewer photo (newest → oldest). The
+ * current detail row is passed in (it is a structural superset of the viewer
+ * payload), so the strip costs four bounded queries and no extra detail read.
+ */
+export async function listPhotoStrip(
+	current: { sortAt: Date; id: string },
+	currentPhoto: PublicViewerPhoto,
+	radius = 12,
+	deps: PhotosDeps = {}
+): Promise<{ strip: PublicViewerPhoto[]; position: PhotoFeedPosition }> {
+	const { database } = await resolveDeps(deps);
+	const sortAt = current.sortAt.toISOString();
+	const cursor = sql`(${SORT_KEY}, ${photos.id})`;
+	const window = Math.min(Math.max(1, Math.trunc(radius)), 24);
+	const [newerRows, olderRows, newerCountRows, totalCountRows] = await Promise.all([
+		database
+			.select(PUBLIC_VIEWER_FIELDS)
+			.from(photos)
+			.innerJoin(files, eq(photos.fileId, files.id))
+			.where(
+				and(
+					eq(photos.isVisible, true),
+					sql`${cursor} > (${sortAt}::timestamptz, ${current.id}::uuid)`
+				)
+			)
+			.orderBy(sql`${SORT_KEY} asc, ${photos.id} asc`)
+			.limit(window),
+		database
+			.select(PUBLIC_VIEWER_FIELDS)
+			.from(photos)
+			.innerJoin(files, eq(photos.fileId, files.id))
+			.where(
+				and(
+					eq(photos.isVisible, true),
+					sql`${cursor} < (${sortAt}::timestamptz, ${current.id}::uuid)`
+				)
+			)
+			.orderBy(sql`${SORT_KEY} desc, ${photos.id} desc`)
+			.limit(window),
+		database
+			.select({ count: sql<number>`count(*)::int` })
+			.from(photos)
+			.where(
+				and(
+					eq(photos.isVisible, true),
+					sql`${cursor} > (${sortAt}::timestamptz, ${current.id}::uuid)`
+				)
+			),
+		database
+			.select({ count: sql<number>`count(*)::int` })
+			.from(photos)
+			.where(eq(photos.isVisible, true))
+	]);
+	return {
+		strip: [...newerRows.reverse(), currentPhoto, ...olderRows],
+		position: {
+			index: (newerCountRows[0]?.count ?? 0) + 1,
+			total: totalCountRows[0]?.count ?? 0
+		}
+	};
+}
+
 export interface PublicPhotoFilters {
-	year?: number;
-	cameraModel?: string;
-	lensModel?: string;
-	tagId?: string;
+	years?: number[];
+	cameraModels?: string[];
+	lensModels?: string[];
+	tagIds?: string[];
+	tagMode?: 'any' | 'all';
+	/** Free-text search over localized title/description and file/camera names. */
+	query?: string;
 	/** Map view (ST-2d): only rows carrying both coordinates. */
 	hasLocation?: boolean;
 }
@@ -811,11 +887,16 @@ const PUBLIC_LIST_FIELDS = {
 	cameraMake: photos.cameraMake,
 	cameraModel: photos.cameraModel,
 	lensModel: photos.lensModel,
+	fNumber: photos.fNumber,
+	focalLengthMm: photos.focalLengthMm,
+	exposureTimeS: photos.exposureTimeS,
+	iso: photos.iso,
 	latitude: photos.latitude,
 	longitude: photos.longitude,
 	objectKey: files.objectKey,
 	fileName: files.fileName,
 	mimeType: files.mimeType,
+	byteSize: files.byteSize,
 	width: files.width,
 	height: files.height,
 	thumbhash: files.thumbhash,
@@ -826,22 +907,72 @@ export type PublicPhotoItem = {
 	[K in keyof typeof PUBLIC_LIST_FIELDS]: K extends
 		'id' | 'slug' | 'objectKey' | 'fileName' | 'mimeType'
 		? string
-		: K extends 'width' | 'height'
+		: K extends 'width' | 'height' | 'iso'
 			? number | null
-			: K extends 'thumbhash'
-				? string | null
-				: K extends 'title' | 'description'
-					? LocalizedText | null
-					: K extends 'takenAt'
-						? Date | null
-						: K extends 'createdAt'
-							? Date
-							: K extends 'latitude' | 'longitude'
-								? string | null
-								: K extends 'cameraMake' | 'cameraModel' | 'lensModel'
+			: K extends 'byteSize'
+				? number
+				: K extends 'thumbhash'
+					? string | null
+					: K extends 'title' | 'description'
+						? LocalizedText | null
+						: K extends 'takenAt'
+							? Date | null
+							: K extends 'createdAt'
+								? Date
+								: K extends 'latitude' | 'longitude'
 									? string | null
-									: unknown;
+									: K extends
+												| 'cameraMake'
+												| 'cameraModel'
+												| 'lensModel'
+												| 'fNumber'
+												| 'focalLengthMm'
+												| 'exposureTimeS'
+										? string | null
+										: unknown;
 };
+
+function publicPhotoConditions(filters: PublicPhotoFilters) {
+	const conditions = [eq(photos.isVisible, true)];
+	if (filters.years?.length) {
+		const years = sql.join(
+			filters.years.map((year) => sql`${year}`),
+			sql`, `
+		);
+		conditions.push(sql`extract(year from ${SORT_EXPR}) in (${years})`);
+	}
+	if (filters.cameraModels?.length) {
+		conditions.push(inArray(photos.cameraModel, filters.cameraModels));
+	}
+	if (filters.lensModels?.length) {
+		conditions.push(inArray(photos.lensModel, filters.lensModels));
+	}
+	if (filters.hasLocation) {
+		// `and()` of two defined predicates cannot be undefined; this array is
+		// typed SQL<> because it was seeded with the visibility equality.
+		conditions.push(and(isNotNull(photos.latitude), isNotNull(photos.longitude))!);
+	}
+	if (filters.tagIds?.length) {
+		const tagIds = filters.tagIds;
+		if (filters.tagMode === 'all') {
+			conditions.push(
+				sql`(select count(distinct ${photoTags.tagId}) from ${photoTags} where ${photoTags.photoId} = ${photos.id} and ${inArray(photoTags.tagId, tagIds)}) = ${tagIds.length}`
+			);
+		} else {
+			conditions.push(
+				sql`exists (select 1 from ${photoTags} where ${photoTags.photoId} = ${photos.id} and ${inArray(photoTags.tagId, tagIds)})`
+			);
+		}
+	}
+	const query = filters.query?.trim();
+	if (query) {
+		const pattern = `%${query}%`;
+		conditions.push(
+			sql`(${photos.title}::text ilike ${pattern} or ${photos.description}::text ilike ${pattern} or ${files.fileName} ilike ${pattern} or coalesce(${photos.cameraModel}, '') ilike ${pattern} or coalesce(${photos.lensModel}, '') ilike ${pattern})`
+		);
+	}
+	return conditions;
+}
 
 export async function listPublicPhotos(
 	filters: PublicPhotoFilters = {},
@@ -850,22 +981,7 @@ export async function listPublicPhotos(
 	deps: PhotosDeps = {}
 ): Promise<PublicPhotoItem[]> {
 	const { database } = await resolveDeps(deps);
-	const conditions = [eq(photos.isVisible, true)];
-	if (filters.year) {
-		conditions.push(sql`extract(year from ${SORT_EXPR}) = ${filters.year}`);
-	}
-	if (filters.cameraModel) conditions.push(eq(photos.cameraModel, filters.cameraModel));
-	if (filters.lensModel) conditions.push(eq(photos.lensModel, filters.lensModel));
-	if (filters.hasLocation) {
-		// `and()` of two defined predicates cannot be undefined; this array is
-		// typed SQL<> because it was seeded with the visibility equality.
-		conditions.push(and(isNotNull(photos.latitude), isNotNull(photos.longitude))!);
-	}
-	if (filters.tagId) {
-		conditions.push(
-			sql`exists (select 1 from ${photoTags} where ${photoTags.photoId} = ${photos.id} and ${photoTags.tagId} = ${filters.tagId})`
-		);
-	}
+	const conditions = publicPhotoConditions(filters);
 	if (cursor) {
 		conditions.push(
 			sql`(${SORT_KEY}, ${photos.id}) < (${cursor.sortAt}::timestamptz, ${cursor.id}::uuid)`
@@ -882,11 +998,34 @@ export async function listPublicPhotos(
 	return rows as PublicPhotoItem[];
 }
 
+/** Feed total for the header count (same predicates as listPublicPhotos). */
+export async function countPublicPhotos(
+	filters: PublicPhotoFilters = {},
+	deps: PhotosDeps = {}
+): Promise<number> {
+	const { database } = await resolveDeps(deps);
+	const conditions = publicPhotoConditions(filters);
+	const [row] = await database
+		.select({ count: sql<number>`count(*)::int` })
+		.from(photos)
+		.innerJoin(files, eq(photos.fileId, files.id))
+		.where(and(...conditions));
+	return row?.count ?? 0;
+}
+
+export interface PhotoFacetCounts {
+	years: Record<string, number>;
+	cameras: Record<string, number>;
+	lenses: Record<string, number>;
+	tags: Record<string, number>;
+}
+
 export interface PhotoFacets {
 	years: number[];
 	cameras: string[];
 	lenses: string[];
 	tags: TagChip[];
+	counts: PhotoFacetCounts;
 }
 
 /** Filter axes for the public grid (§5.1: time / camera / lens / tags). */
@@ -894,26 +1033,31 @@ export async function listPhotoFacets(deps: PhotosDeps = {}): Promise<PhotoFacet
 	const { database } = await resolveDeps(deps);
 	const [yearRows, cameraRows, lensRows, tagRows] = await Promise.all([
 		database
-			.select({ year: sql<number>`extract(year from ${SORT_EXPR})::int` })
+			.select({
+				year: sql<number>`extract(year from ${SORT_EXPR})::int`,
+				count: sql<number>`count(*)::int`
+			})
 			.from(photos)
 			.where(eq(photos.isVisible, true))
 			.groupBy(sql`extract(year from ${SORT_EXPR})`)
 			.orderBy(sql`extract(year from ${SORT_EXPR}) desc`)
 			.limit(30),
 		database
-			.selectDistinct({ value: photos.cameraModel })
+			.select({ value: photos.cameraModel, count: sql<number>`count(*)::int` })
 			.from(photos)
 			.where(and(eq(photos.isVisible, true), isNotNull(photos.cameraModel)))
+			.groupBy(photos.cameraModel)
 			.orderBy(photos.cameraModel)
 			.limit(50),
 		database
-			.selectDistinct({ value: photos.lensModel })
+			.select({ value: photos.lensModel, count: sql<number>`count(*)::int` })
 			.from(photos)
 			.where(and(eq(photos.isVisible, true), isNotNull(photos.lensModel)))
+			.groupBy(photos.lensModel)
 			.orderBy(photos.lensModel)
 			.limit(50),
 		database
-			.select({ id: tags.id, name: tags.name, slug: tags.slug })
+			.select({ id: tags.id, name: tags.name, slug: tags.slug, count: sql<number>`count(*)::int` })
 			.from(tags)
 			.innerJoin(photoTags, eq(photoTags.tagId, tags.id))
 			.innerJoin(photos, eq(photoTags.photoId, photos.id))
@@ -922,10 +1066,18 @@ export async function listPhotoFacets(deps: PhotosDeps = {}): Promise<PhotoFacet
 			.orderBy(tags.name)
 			.limit(60)
 	]);
+
+	const counts: PhotoFacetCounts = { years: {}, cameras: {}, lenses: {}, tags: {} };
+	for (const row of yearRows) counts.years[String(row.year)] = row.count;
+	for (const row of cameraRows) if (row.value) counts.cameras[row.value] = row.count;
+	for (const row of lensRows) if (row.value) counts.lenses[row.value] = row.count;
+	for (const row of tagRows) counts.tags[row.id] = row.count;
+
 	return {
 		years: yearRows.map((row) => row.year),
 		cameras: cameraRows.map((row) => row.value!).filter(Boolean),
 		lenses: lensRows.map((row) => row.value!).filter(Boolean),
-		tags: tagRows
+		tags: tagRows,
+		counts
 	};
 }

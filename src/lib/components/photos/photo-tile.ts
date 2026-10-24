@@ -18,12 +18,33 @@ export interface PhotoTile {
 	cameraMake: string | null;
 	cameraModel: string | null;
 	lensModel: string | null;
+	/** Optional on fixtures; the public list always supplies these. */
+	fNumber?: string | null;
+	focalLengthMm?: string | null;
+	exposureTimeS?: string | null;
+	iso?: number | null;
+	byteSize?: number | null;
 	objectKey: string;
 	fileName: string;
 	mimeType: string;
 	width: number | null;
 	height: number | null;
 	thumbhash: string | null;
+}
+
+/** Detail payload shared by the inspector and the full-screen viewer. */
+export interface PhotoDetail extends PhotoTile {
+	createdAt: Date | string;
+	fNumber: string | null;
+	focalLengthMm: string | null;
+	exposureTimeS: string | null;
+	iso: number | null;
+	byteSize: number;
+	latitude: string | null;
+	longitude: string | null;
+	altitudeM: string | null;
+	palette: unknown;
+	tags: { id: string; name: string; slug: string }[];
 }
 
 /** First non-blank string: current locale → en → any other language. */
@@ -80,10 +101,54 @@ export interface PhotoViewerSource {
  */
 export function photoTileSrc(
 	tile: Pick<PhotoTile, 'mimeType' | 'objectKey'>,
-	variant: 'thumb' | 'preview' | 'full'
+	variant: 'thumb' | 'grid' | 'preview' | 'full'
 ): string {
 	if (tile.mimeType === 'image/gif') return `/i/${tile.objectKey}`;
 	return `/i/${variantKeyFor(tile.objectKey, variant)}`;
+}
+
+/** Exposure in the compact camera notation used by the hover pills. */
+export function photoExposure(value: string | null | undefined): string | null {
+	if (value === null || value === undefined || value === '') return null;
+	const seconds = Number(value);
+	if (!Number.isFinite(seconds) || seconds <= 0) return null;
+	if (seconds < 1) return `1/${Math.round(1 / seconds)}s`;
+	return `${Number(seconds.toFixed(2))}s`;
+}
+
+/** Human EXIF pills shared by the tile overlay and the detail inspector. */
+export function photoExifParts(
+	tile: Pick<
+		PhotoTile,
+		| 'cameraMake'
+		| 'cameraModel'
+		| 'lensModel'
+		| 'fNumber'
+		| 'focalLengthMm'
+		| 'exposureTimeS'
+		| 'iso'
+	>
+): string[] {
+	const parts: string[] = [];
+	const camera = [tile.cameraMake, tile.cameraModel].filter(Boolean).join(' ');
+	if (camera) parts.push(camera);
+	if (tile.lensModel) parts.push(tile.lensModel);
+	if (tile.fNumber !== null && tile.fNumber !== undefined) {
+		const fNumber = Number(tile.fNumber);
+		if (Number.isFinite(fNumber)) parts.push(`f/${fNumber}`);
+	}
+	if (tile.focalLengthMm !== null && tile.focalLengthMm !== undefined) {
+		const focal = Number(tile.focalLengthMm);
+		if (Number.isFinite(focal)) parts.push(`${focal}mm`);
+	}
+	const exposure = photoExposure(tile.exposureTimeS);
+	if (exposure) parts.push(exposure);
+	if (tile.iso !== null && tile.iso !== undefined) parts.push(`ISO ${tile.iso}`);
+	return parts;
+}
+
+export function photoDimensions(tile: Pick<PhotoTile, 'width' | 'height'>): string | null {
+	return tile.width && tile.height ? `${tile.width} × ${tile.height}` : null;
 }
 
 /**

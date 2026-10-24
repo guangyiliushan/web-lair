@@ -1,30 +1,19 @@
 <script lang="ts">
-	import { cn } from '$lib/utils';
 	import { m } from '$lib/paraglide/messages';
-	import { deLocalizeHref } from '$lib/paraglide/runtime';
-	import { isActivePath, siteHref } from '$lib/utils/href';
-	import { page } from '$app/state';
-	import { IconMenu2, IconX, IconChevronDown } from '@tabler/icons-svelte-runes';
+	import { IconMenu2, IconX } from '@tabler/icons-svelte-runes';
 	import { slide } from 'svelte/transition';
-	import { cubicInOut, quartInOut } from 'svelte/easing';
+	import { quartInOut } from 'svelte/easing';
 	import ThemeToggle from '$lib/components/layout/ThemeToggle.svelte';
 	import LangSwitcher from '$lib/components/layout/LangSwitcher.svelte';
-	import OwnerStatusHoverCard from '$lib/components/layout/OwnerStatusHoverCard.svelte';
-	import * as Avatar from '$lib/components/ui/avatar';
+	import HeaderShell from '$lib/components/layout/HeaderShell.svelte';
+	import SiteBrand from '$lib/components/layout/SiteBrand.svelte';
+	import SiteDesktopNav from '$lib/components/layout/SiteDesktopNav.svelte';
+	import SiteMobileMenu from '$lib/components/layout/SiteMobileMenu.svelte';
+	import UserNav from '$lib/components/account/UserNav.svelte';
 	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
 	import { ownerPresenceFromStatus, type OwnerPresence } from '$lib/config/owner-presence';
-	import UserNav from '$lib/components/account/UserNav.svelte';
-	import { Separator } from '$lib/components/ui/separator';
-	import NavMenu from '$lib/components/layout/NavMenu.svelte';
-	import {
-		navigationConfig,
-		tLabel,
-		type NavChild,
-		type NavMenuData,
-		type PagesMegaData
-	} from '$lib/config/navigation.config';
+	import type { NavMenuData, PagesMegaData } from '$lib/config/navigation.config';
 
-	// ── Types ──
 	type AuthData = {
 		user: {
 			id: string;
@@ -36,7 +25,6 @@
 		profile: { displayName: string; avatarUrl: string | null } | null;
 	} | null;
 
-	// ── Props ──
 	let {
 		auth,
 		owner,
@@ -62,365 +50,53 @@
 		pagesData?: PagesMegaData | null;
 	} = $props();
 
-	// ── Derived ──
 	const presence = $derived(ownerPresence ?? ownerPresenceFromStatus(ownerStatus));
-	const currentPath = $derived(page.url.pathname);
-	// Locale-prefixed URLs must still highlight their neutral nav item.
-	const neutralPath = $derived(deLocalizeHref(currentPath));
 
-	function isActive(path: string): boolean {
-		return isActivePath(neutralPath, path);
-	}
-
-	function getMobileChildren(item: (typeof navigationConfig)[number]): NavChild[] {
-		if (item.key === 'nav_posts') {
-			const cats = postsData?.leftItems || [];
-			return [...cats, { labelKey: 'nav_posts_view_all' as const, href: '/posts' }];
-		}
-		if (item.key === 'nav_timeline') {
-			// Only filters the timeline page actually implements — the legacy
-			// `?type=thinking` entry silently fell back to the full stream
-			// (second review round).
-			return [
-				{ label: m.nav_timeline_posts(), href: '/timeline?type=post' },
-				{ label: m.nav_timeline_notes(), href: '/timeline?type=note' }
-			];
-		}
-		if (item.key === 'nav_notes') {
-			return [];
-		}
-		return item.children || [];
-	}
-
-	/** Safely resolve display label from NavChild */
-	function childLabel(child: NavChild): string {
-		return child.label ?? (child.labelKey ? tLabel(child.labelKey) : '');
-	}
-
-	// ── Mobile menu state ──
 	let menuOpen = $state(false);
-	let expandedKey = $state<string | null>(null);
 
 	function toggleMenu() {
 		menuOpen = !menuOpen;
 	}
 	function closeMenu() {
 		menuOpen = false;
-		expandedKey = null;
-	}
-	function toggleExpanded(key: string) {
-		expandedKey = expandedKey === key ? null : key;
 	}
 </script>
 
-<header class="pointer-events-none fixed top-6 right-0 left-0 z-50 flex justify-center px-4">
-	<!-- Single cohesive card: fixed rounded-3xl to prevent morphing artifacts
-	     during height transition. Deliberately NOT `overflow-hidden` — the nav
-	     panels hang below the bar and would be clipped by it. The clip that the
-	     mobile accordion actually needs sits on that accordion instead. -->
-	<div
-		data-slot="site-header-bar"
-		class="pointer-events-auto w-full max-w-5xl rounded-3xl border bg-background/70 shadow-sm backdrop-blur-md"
-	>
-		<!-- ══Top bar (always visible) ══-->
-		<div class="flex items-center justify-between px-4 py-2">
-			<!-- Owner badge: one public identity for every visitor (replaces the old placeholder logo) -->
-			<div class="flex min-w-0 shrink items-center gap-2.5">
-				<a href={siteHref('/')} class="flex min-w-0 items-center gap-2" aria-label={owner.name}>
-					<Avatar.Root class="size-7 shrink-0 ring-2 ring-border">
-						<Avatar.Image src={owner.avatar} alt="" />
-						<Avatar.Fallback>{owner.name.slice(0, 1)}</Avatar.Fallback>
-					</Avatar.Root>
-					<span
-						class="hidden max-w-[9rem] truncate text-[17px] font-bold tracking-tight sm:inline-block"
-					>
-						{owner.name}
-					</span>
-				</a>
-				<OwnerStatusHoverCard ownerName={owner.name} {presence} enabled={ownerStatus.enabled} />
+<HeaderShell>
+	<div class="flex items-center justify-between px-4 py-2">
+		<SiteBrand {owner} {presence} enabled={ownerStatus.enabled} />
+
+		<SiteDesktopNav {owner} {ownerStatus} {postsData} {notesData} {timelineData} {pagesData} />
+
+		<div class="flex items-center gap-1">
+			<div class="hidden items-center gap-2 lg:flex">
+				<LangSwitcher />
+				<ThemeToggle />
+				<UserNav {auth} />
 			</div>
 
-			<!-- Desktop nav: mega menu hover (lg+) -->
-			<!-- Nav chrome uses `--primary-text`, never `--primary`: the latter is a
-			     fill colour at 2.90:1 on white (see layout.css) and reads 2.64:1 even
-			     on its own `bg-primary/10` pill. Same reason for `hover:text-primary-text`. -->
-			<nav class="hidden items-center gap-1 lg:flex" aria-label="Main navigation">
-				{#each navigationConfig as item (item.key)}
-					{#if item.megaMenu}
-						<NavMenu
-							menu={item.megaMenu}
-							triggerAsButton={item.href === '#'}
-							{owner}
-							{ownerStatus}
-							serverData={item.key === 'nav_posts'
-								? (postsData ?? null)
-								: item.key === 'nav_notes'
-									? (notesData ?? null)
-									: item.key === 'nav_timeline'
-										? (timelineData ?? null)
-										: item.key === 'nav_home'
-											? (pagesData ?? null)
-											: null}
-						>
-							{#snippet trigger(state)}
-								{#if item.href === '#'}
-									<button
-										{...state.props}
-										class={cn(
-											'cursor-pointer rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:text-primary-text',
-											'text-muted-foreground'
-										)}
-									>
-										{tLabel(item.labelKey)}
-									</button>
-								{:else}
-									<a
-										{...state.props}
-										href={siteHref(item.href)}
-										class={cn(
-											'rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:text-primary-text',
-											isActive(item.href)
-												? 'bg-primary/10 text-primary-text'
-												: 'text-muted-foreground'
-										)}
-									>
-										{tLabel(item.labelKey)}
-									</a>
-								{/if}
-							{/snippet}
-						</NavMenu>
+			<div class="flex items-center gap-1 lg:hidden">
+				<LangSwitcher />
+				<ThemeToggle />
+				<button
+					onclick={toggleMenu}
+					aria-expanded={menuOpen}
+					aria-label={menuOpen ? m.ui_close_menu() : m.ui_open_menu()}
+					class="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+				>
+					{#if menuOpen}
+						<IconX class="size-5" data-icon="inline-start" />
 					{:else}
-						<a
-							href={siteHref(item.href)}
-							class={cn(
-								'rounded-full px-4 py-1.5 text-sm font-medium transition-colors hover:text-primary-text',
-								isActive(item.href) ? 'bg-primary/10 text-primary-text' : 'text-muted-foreground'
-							)}
-						>
-							{tLabel(item.labelKey)}
-						</a>
+						<IconMenu2 class="size-5" data-icon="inline-start" />
 					{/if}
-				{/each}
-			</nav>
-
-			<!-- Right controls -->
-			<div class="flex items-center gap-1">
-				<!-- Desktop: all inline -->
-				<div class="hidden items-center gap-2 lg:flex">
-					<LangSwitcher />
-					<ThemeToggle />
-					<UserNav {auth} />
-				</div>
-
-				<!-- Mobile: lang + theme + menu toggle -->
-				<div class="flex items-center gap-1 lg:hidden">
-					<LangSwitcher />
-					<ThemeToggle />
-					<button
-						onclick={toggleMenu}
-						aria-expanded={menuOpen}
-						aria-label={menuOpen ? m.ui_close_menu() : m.ui_open_menu()}
-						class="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
-					>
-						{#if menuOpen}
-							<IconX class="size-5" data-icon="inline-start" />
-						{:else}
-							<IconMenu2 class="size-5" data-icon="inline-start" />
-						{/if}
-					</button>
-				</div>
+				</button>
 			</div>
 		</div>
-
-		<!-- ══Expandable menu (mobile only) ══-->
-		{#if menuOpen}
-			<!-- Clip for the slide transition and the card's bottom corners; kept
-			     here so the desktop nav panels above are free to overflow. -->
-			<div class="overflow-hidden" transition:slide={{ duration: 400, easing: quartInOut }}>
-				<Separator class="mx-4" />
-
-				<div class="px-5 pt-6 pb-5">
-					<nav class="max-h-[70svh] overflow-y-auto" aria-label="Mobile navigation">
-						<div class="flex flex-col">
-							{#each navigationConfig.filter((i) => i.key !== 'nav_more') as item (item.key)}
-								{@const mobileChildren = getMobileChildren(item)}
-								<div>
-									<!-- Top-level: click to expand accordion (if has children), else direct link -->
-									{#if mobileChildren.length > 0}
-										<div
-											class="flex items-center justify-between rounded-lg transition-colors hover:bg-muted/50"
-										>
-											<a
-												href={siteHref(item.href)}
-												onclick={closeMenu}
-												class={cn(
-													'flex-1 px-3 py-2.5 text-sm font-medium transition-colors hover:text-foreground',
-													isActive(item.href) ? 'text-primary-text' : 'text-muted-foreground'
-												)}
-											>
-												{tLabel(item.labelKey)}
-											</a>
-											<button
-												onclick={() => toggleExpanded(item.key)}
-												class="flex items-center justify-center px-4 py-2.5 text-muted-foreground transition-colors hover:text-foreground"
-												aria-label={expandedKey === item.key ? 'Collapse' : 'Expand'}
-											>
-												<span
-													class={cn(
-														'transition-transform duration-300',
-														expandedKey === item.key ? 'rotate-180' : ''
-													)}
-												>
-													<IconChevronDown class="size-4" />
-												</span>
-											</button>
-										</div>
-										{#if expandedKey === item.key}
-											<div
-												transition:slide={{ duration: 300, easing: cubicInOut }}
-												class="ml-3 flex flex-col border-l pt-0.5 pb-1 pl-3"
-											>
-												{#each mobileChildren as child (child.href)}
-													<a
-														href={siteHref(child.href)}
-														onclick={closeMenu}
-														class="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-													>
-														<span>{childLabel(child)}</span>
-														{#if child.badge}
-															<span class="text-xs text-muted-foreground">{child.badge}</span>
-														{/if}
-													</a>
-												{/each}
-											</div>
-										{/if}
-									{:else}
-										<a
-											href={siteHref(item.href)}
-											onclick={closeMenu}
-											class={cn(
-												'flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 hover:text-foreground',
-												isActive(item.href)
-													? 'bg-primary/10 text-primary-text'
-													: 'text-muted-foreground'
-											)}
-										>
-											{tLabel(item.labelKey)}
-										</a>
-									{/if}
-								</div>
-							{/each}
-						</div>
-
-						<!-- Pages group (P1b): defaults → extras, same chrome query -->
-						{#if pagesData && pagesData.leftItems.length > 0}
-							<div>
-								<div
-									class="flex items-center justify-between rounded-lg transition-colors hover:bg-muted/50"
-								>
-									<span class="flex-1 px-3 py-2.5 text-sm font-medium text-muted-foreground"
-										>{m.nav_pages()}</span
-									>
-									<button
-										onclick={() => toggleExpanded('nav_pages')}
-										class="flex items-center justify-center px-4 py-2.5 text-muted-foreground transition-colors hover:text-foreground"
-										aria-label={expandedKey === 'nav_pages' ? 'Collapse' : 'Expand'}
-									>
-										<span
-											class={cn(
-												'transition-transform duration-300',
-												expandedKey === 'nav_pages' ? 'rotate-180' : ''
-											)}
-										>
-											<IconChevronDown class="size-4" />
-										</span>
-									</button>
-								</div>
-								{#if expandedKey === 'nav_pages'}
-									<div
-										transition:slide={{ duration: 300, easing: cubicInOut }}
-										class="ml-3 flex flex-col border-l pt-0.5 pb-1 pl-3"
-									>
-										{#each pagesData.leftItems as child (child.key ?? child.href)}
-											<a
-												href={siteHref(child.href)}
-												onclick={closeMenu}
-												class="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-											>
-												<span>{childLabel(child)}</span>
-											</a>
-										{/each}
-									</div>
-								{/if}
-							</div>
-						{/if}
-
-						<!-- Unrolled More Items -->
-						{#if navigationConfig.find((i) => i.key === 'nav_more')?.children}
-							<Separator class="my-2" />
-							<div class="flex flex-wrap justify-between gap-1 px-1">
-								{#each navigationConfig.find((i) => i.key === 'nav_more')!.children! as child (child.href)}
-									<a
-										href={siteHref(child.href)}
-										onclick={closeMenu}
-										class="rounded-lg px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-									>
-										{tLabel(child.labelKey!)}
-									</a>
-								{/each}
-							</div>
-						{/if}
-					</nav>
-
-					<!-- Bottom: user section -->
-					<Separator class="mt-4" />
-					<div class="pt-4">
-						{#if auth?.user}
-							<div class="flex items-center gap-3">
-								<div
-									class="flex size-9 items-center justify-center rounded-full bg-muted text-sm font-medium"
-								>
-									{auth.profile?.displayName?.charAt(0) ?? auth.user.name?.charAt(0) ?? '?'}
-								</div>
-								<div class="min-w-0 flex-1">
-									<p class="truncate text-sm font-medium">
-										{auth.profile?.displayName ?? auth.user.name}
-									</p>
-									<p class="truncate text-xs text-muted-foreground">
-										{auth.user.email}
-									</p>
-								</div>
-							</div>
-							<div class="mt-3 flex flex-col gap-0.5">
-								<a
-									href={siteHref('/admin/dashboard')}
-									onclick={closeMenu}
-									class="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-								>
-									{m.nav_dashboard()}
-								</a>
-								<a
-									href={siteHref('/account')}
-									onclick={closeMenu}
-									class="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-								>
-									{m.nav_account()}
-								</a>
-							</div>
-						{:else}
-							<a
-								href={siteHref(
-									`/login?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`
-								)}
-								onclick={closeMenu}
-								class="flex items-center justify-center rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50"
-							>
-								{m.nav_sign_in()}
-							</a>
-						{/if}
-					</div>
-				</div>
-			</div>
-		{/if}
 	</div>
-</header>
+
+	{#if menuOpen}
+		<div class="overflow-hidden" transition:slide={{ duration: 400, easing: quartInOut }}>
+			<SiteMobileMenu {auth} {postsData} {pagesData} onclose={closeMenu} />
+		</div>
+	{/if}
+</HeaderShell>

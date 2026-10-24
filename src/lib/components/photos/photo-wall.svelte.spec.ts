@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mount, unmount } from 'svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
-import PhotosMasonry from './photos-masonry.svelte';
+import PhotoWall from './PhotoWall.svelte';
 import type { PhotoTile } from './photo-tile';
 import { masonryStore } from './testing/masonry-store.svelte';
 
@@ -63,7 +63,7 @@ async function mountGrid(
 	const host = document.createElement('div');
 	host.style.width = '1000px';
 	document.body.appendChild(host);
-	const instance = mount(PhotosMasonry, {
+	const instance = mount(PhotoWall, {
 		target: host,
 		props: { items: store.items, ...extra } as never
 	});
@@ -82,14 +82,14 @@ function anchors(host: HTMLElement): HTMLAnchorElement[] {
 }
 
 function tops(host: HTMLElement): number[] {
-	const grid = host.querySelector('.photos-masonry')!;
+	const grid = host.querySelector('.photos-wall')!;
 	const base = grid.getBoundingClientRect().top;
 	return anchors(host).map((anchor) => anchor.getBoundingClientRect().top - base);
 }
 
 /** Column lane of each tile (left offset from the container). */
 function lanes(host: HTMLElement): number[] {
-	const grid = host.querySelector('.photos-masonry')!;
+	const grid = host.querySelector('.photos-wall')!;
 	const base = grid.getBoundingClientRect().left;
 	return anchors(host).map((anchor) =>
 		Number((anchor.getBoundingClientRect().left - base).toFixed(1))
@@ -137,7 +137,7 @@ describe('photos masonry (POC gate)', () => {
 	it('resize re-lays out (fewer columns when narrower)', async () => {
 		const { host } = await mountGrid(Array.from({ length: 8 }, () => tile()));
 		const columnCount = () => {
-			const grid = host.querySelector('.photos-masonry > *')!;
+			const grid = host.querySelector('.photos-wall > div > *')!;
 			const style = getComputedStyle(grid).gridTemplateColumns;
 			return style === 'none' || style === '' ? 0 : style.split(' ').length;
 		};

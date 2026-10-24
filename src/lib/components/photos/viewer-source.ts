@@ -42,7 +42,7 @@ export function fullSrcFromDisplay(
 		}
 	}
 	if (!path.startsWith('/i/')) return src;
-	const rewritten = path.replace(/@(?:thumb|preview)(?=$|[?#])/, '@full');
+	const rewritten = path.replace(/@(?:thumb|grid|preview)(?=$|[?#])/, '@full');
 	return rewritten === path ? src : rewritten;
 }
 
@@ -53,7 +53,7 @@ export function fullSrcFromDisplay(
  * derived - and a legacy `@preview` GIF key never pumps a doomed fetch).
  */
 export function mimeFromSrc(src: string): string | null {
-	const path = (src.split(/[?#]/)[0] ?? '').replace(/@(?:thumb|preview|full)$/, '');
+	const path = (src.split(/[?#]/)[0] ?? '').replace(/@(?:thumb|grid|preview|full)$/, '');
 	return /\.gif$/i.test(path) ? 'image/gif' : null;
 }
 

@@ -41,13 +41,26 @@ interface Access {
 	publicRead: boolean;
 	/** Force a download for attachments (never for files browsers render). */
 	attachment: boolean;
+	/** Older rows predate `@grid`; serve a smaller tier until backfilled. */
+	fallbackKeys?: string[];
 }
 
 async function resolveAccess(params: { key?: string }, locals: App.Locals): Promise<Access> {
 	const match = KEY_PATTERN.exec(params.key ?? '');
 	if (!match) throw error(404, 'Not found');
 	// Groups: 1 = digest dir, 2 = extension, 3 = variant name.
-	if (match[3] !== undefined) return { key: match[0], publicRead: true, attachment: false };
+	if (match[3] !== undefined) {
+		const key = match[0];
+		return {
+			key,
+			publicRead: true,
+			attachment: false,
+			fallbackKeys:
+				match[3] === 'grid'
+					? [key.replace(/@grid$/, '@thumb'), key.replace(/@grid$/, '@preview')]
+					: undefined
+		};
+	}
 	const ext = match[2]?.slice(1) ?? '';
 	if (ext === 'gif') return { key: match[0], publicRead: true, attachment: false };
 	const isAttachment = ATTACHMENT_EXTS.has(ext);
@@ -58,9 +71,13 @@ async function resolveAccess(params: { key?: string }, locals: App.Locals): Prom
 	throw error(404, 'Not found');
 }
 
-function objectHeaders(access: Access, contentType: string | null): Headers {
+function objectHeaders(
+	access: Access,
+	contentType: string | null,
+	cacheControl = access.publicRead ? IMMUTABLE : PRIVATE
+): Headers {
 	const headers = new Headers();
-	headers.set('cache-control', access.publicRead ? IMMUTABLE : PRIVATE);
+	headers.set('cache-control', cacheControl);
 	headers.set('x-content-type-options', 'nosniff');
 	if (access.attachment) headers.set('content-disposition', 'attachment');
 	if (contentType) headers.set('content-type', contentType);
@@ -127,10 +144,21 @@ export const GET: RequestHandler = async ({ params, locals, getClientAddress }) 
 	if (await throttled(getClientAddress)) return tooManyRequests();
 	const access = await resolveAccess(params, locals);
 
-	const object = await getStorage().get(access.key);
+	let object = await getStorage().get(access.key);
+	let cacheControl: string | undefined;
+	if (!object && access.fallbackKeys) {
+		for (const fallbackKey of access.fallbackKeys) {
+			object = await getStorage().get(fallbackKey);
+			if (object) {
+				// Short cache: the real @grid object will replace this tier.
+				cacheControl = 'public, max-age=3600';
+				break;
+			}
+		}
+	}
 	if (!object) throw error(404, 'Not found');
 
-	const headers = objectHeaders(access, object.contentType);
+	const headers = objectHeaders(access, object.contentType, cacheControl);
 	if (object.byteSize !== null) headers.set('content-length', String(object.byteSize));
 	if (object.etag) headers.set('etag', object.etag);
 	return new Response(object.body, { headers });
@@ -140,10 +168,20 @@ export const HEAD: RequestHandler = async ({ params, locals, getClientAddress })
 	if (await throttled(getClientAddress)) return tooManyRequests();
 	const access = await resolveAccess(params, locals);
 
-	const object = await getStorage().head(access.key);
+	let object = await getStorage().head(access.key);
+	let cacheControl: string | undefined;
+	if (!object && access.fallbackKeys) {
+		for (const fallbackKey of access.fallbackKeys) {
+			object = await getStorage().head(fallbackKey);
+			if (object) {
+				cacheControl = 'public, max-age=3600';
+				break;
+			}
+		}
+	}
 	if (!object) throw error(404, 'Not found');
 
-	const headers = objectHeaders(access, object.contentType);
+	const headers = objectHeaders(access, object.contentType, cacheControl);
 	if (object.byteSize !== null) headers.set('content-length', String(object.byteSize));
 	if (object.etag) headers.set('etag', object.etag);
 	return new Response(null, { headers });

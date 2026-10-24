@@ -27,7 +27,11 @@
 	 * - `prefers-reduced-motion` drops the fade; a failed load keeps the card
 	 *   visible with a Retry.
 	 */
-	let { photo, alt }: { photo: ViewerImageSource; alt: string } = $props();
+	let {
+		photo,
+		alt,
+		fullBleed = false
+	}: { photo: ViewerImageSource; alt: string; fullBleed?: boolean } = $props();
 
 	// $derived, not consts: the detail route reuses this component between
 	// photos (next/prev); the page wraps it in `{#key photo.id}` so a photo
@@ -152,11 +156,14 @@
 
 	const RING_RADIUS = 15.5;
 	const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+	const floaterBottom = $derived(fullBleed ? 'bottom-20' : 'bottom-4');
 </script>
 
 {#if objectUrl || interimSrc}
 	<img
-		class="photos-viewer-image max-h-[76vh] w-auto max-w-full rounded-lg object-contain"
+		class={fullBleed
+			? 'photos-viewer-image max-h-full w-auto max-w-full object-contain'
+			: 'photos-viewer-image max-h-[76vh] w-auto max-w-full rounded-lg object-contain'}
 		src={objectUrl ?? interimSrc}
 		{alt}
 		width={photo.width ?? undefined}
@@ -171,7 +178,9 @@
 	<!-- On-demand GIF: no tier exists to show before the click; hold the
 	     layout box so the floater and controls do not jump. -->
 	<div
-		class="photos-viewer-image max-h-[76vh] w-full max-w-full rounded-lg bg-muted/40"
+		class={fullBleed
+			? 'photos-viewer-image max-h-full w-full max-w-full bg-muted/40'
+			: 'photos-viewer-image max-h-[76vh] w-full max-w-full rounded-lg bg-muted/40'}
 		style={photo.width && photo.height
 			? `aspect-ratio:${photo.width}/${photo.height};`
 			: 'min-height:40vh;'}
@@ -181,7 +190,7 @@
 {/if}
 
 {#if phase === 'waiting'}
-	<div class="fixed right-4 bottom-4 z-30">
+	<div class="fixed right-4 {floaterBottom} z-30">
 		<button
 			type="button"
 			class="photos-viewer-load rounded-xl border bg-background/90 px-4 py-2.5 text-sm shadow-sm backdrop-blur transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-transparent"
@@ -194,7 +203,7 @@
 	</div>
 {:else if cardVisible}
 	<div
-		class="photos-viewer-progress fixed right-4 bottom-4 z-30 flex items-center gap-3 rounded-xl border bg-background/90 px-3 py-2.5 text-sm shadow-sm backdrop-blur transition-opacity duration-300 motion-reduce:transition-none"
+		class="photos-viewer-progress fixed right-4 {floaterBottom} z-30 flex items-center gap-3 rounded-xl border bg-background/90 px-3 py-2.5 text-sm shadow-sm backdrop-blur transition-opacity duration-300 motion-reduce:transition-none"
 		class:opacity-0={cardHiding}
 	>
 		{#if phase === 'loading'}
