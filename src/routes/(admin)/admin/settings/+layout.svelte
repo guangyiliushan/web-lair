@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
-	import { Button } from '$lib/components/ui/button';
-	import * as MasterDetail from '$lib/components/admin/master-detail';
+	import { m } from '$lib/paraglide/messages';
+	import * as ListDetail from '$lib/components/admin/list-detail';
 	import IconSettings from '@tabler/icons-svelte-runes/icons/settings';
 	import IconUser from '@tabler/icons-svelte-runes/icons/user';
 	import IconMail from '@tabler/icons-svelte-runes/icons/mail';
@@ -11,10 +10,7 @@
 	import IconSparkles from '@tabler/icons-svelte-runes/icons/sparkles';
 	import IconPuzzle from '@tabler/icons-svelte-runes/icons/puzzle';
 	import IconShield from '@tabler/icons-svelte-runes/icons/shield';
-	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
-	import { cn } from '$lib/utils';
 	import type { Component, Snippet } from 'svelte';
-	import { m } from '$lib/paraglide/messages';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -93,126 +89,60 @@
 		}
 	];
 
-	const isRoot = $derived(page.url.pathname === '/admin/settings');
-
-	function sectionHref(id: SectionId): string {
-		return `/admin/settings/${id}`;
-	}
-
-	function isActive(id: SectionId): boolean {
-		return page.url.pathname === sectionHref(id);
-	}
-
-	function activeSection() {
-		return sections.find((s) => isActive(s.id));
-	}
+	/**
+	 * Sections are already real routes (`/admin/settings/site`), so the browser
+	 * back button closes one on narrow screens with no help from us. This is the
+	 * same contract the list-detail shell provides elsewhere — which is why the
+	 * shell is reused here rather than shipping a second responsive nav.
+	 */
+	const active = $derived(sections.find((s) => page.url.pathname.endsWith(`/${s.id}`)) ?? null);
 </script>
 
 <svelte:head>
 	<title>{m.admin_settings_title()} - Lair Admin</title>
 </svelte:head>
 
-<!-- Mobile: flat layout -->
-<div class="flex min-h-0 flex-1 flex-col sm:hidden">
-	{#if isRoot}
-		<div class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-			<IconSettings class="size-4 shrink-0 text-muted-foreground" />
+<ListDetail.Root detailOpen={active !== null}>
+	<ListDetail.List>
+		<ListDetail.Toolbar>
 			<h2 class="truncate text-sm font-semibold">{m.admin_settings_title()}</h2>
-			<span class="ml-auto text-xs text-muted-foreground tabular-nums"
-				>{m.admin_settings_count({ count: sections.length })}</span
-			>
-		</div>
+			<span class="ml-auto text-xs text-muted-foreground tabular-nums">
+				{m.admin_master_detail_count({ count: sections.length })}
+			</span>
+		</ListDetail.Toolbar>
+
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			{#each sections as section (section.id)}
-				<button
-					type="button"
-					class={cn(
-						'flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/50',
-						isActive(section.id) && 'bg-muted/50'
-					)}
-					onclick={() => goto(sectionHref(section.id))}
-				>
-					<span
-						class="flex size-9 shrink-0 items-center justify-center rounded {isActive(section.id)
-							? 'bg-muted-foreground/15'
-							: 'bg-muted'}"
-					>
+				<ListDetail.Row href="/admin/settings/{section.id}" selected={active?.id === section.id}>
+					<span class="flex size-8 shrink-0 items-center justify-center rounded bg-muted">
 						<section.icon class="size-4" />
 					</span>
 					<span class="min-w-0 flex-1">
 						<span class="block truncate text-sm font-medium">{section.label}</span>
-						<span class="mt-0.5 block truncate text-xs text-muted-foreground">{section.desc}</span>
+						<span class="mt-0.5 block truncate text-xs text-muted-foreground">
+							{section.desc}
+						</span>
 					</span>
-				</button>
+				</ListDetail.Row>
 			{/each}
 		</div>
-	{:else}
-		<div class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-			<Button
-				variant="ghost"
-				size="icon"
-				class="size-8"
-				onclick={() => goto('/admin/settings')}
-				aria-label={m.admin_settings_back()}
-			>
-				<IconArrowLeft data-icon="inline-start" />
-			</Button>
-			<span class="text-sm font-medium">{activeSection()?.label ?? ''}</span>
-		</div>
-		<div class="min-h-0 flex-1 overflow-y-auto">
-			<div class="min-h-full p-4">
-				{@render children()}
-			</div>
-		</div>
-	{/if}
-</div>
+	</ListDetail.List>
 
-<!-- Desktop: MasterDetail -->
-<div class="hidden min-h-0 flex-1 sm:flex">
-	<MasterDetail.Root>
-		<!-- 侧边栏导航 -->
-		<MasterDetail.Pane side="master" class="w-80 shrink-0">
-			<MasterDetail.Header
-				icon={IconSettings}
-				title={m.admin_settings_title()}
-				count={sections.length}
-			/>
-			<MasterDetail.List>
-				{#each sections as section (section.id)}
-					<MasterDetail.Item
-						selected={isActive(section.id)}
-						onclick={() => goto(sectionHref(section.id))}
-					>
-						<span
-							class="flex size-9 shrink-0 items-center justify-center rounded {isActive(section.id)
-								? 'bg-muted-foreground/15'
-								: 'bg-muted'}"
-						>
-							<section.icon class="size-4" />
-						</span>
-						<span class="min-w-0 flex-1">
-							<span class="block truncate text-sm font-medium">{section.label}</span>
-							<span class="mt-0.5 block truncate text-xs text-muted-foreground">{section.desc}</span
-							>
-						</span>
-					</MasterDetail.Item>
-				{/each}
-			</MasterDetail.List>
-		</MasterDetail.Pane>
-
-		<!-- 内容区 -->
-		<MasterDetail.Pane side="detail">
-			{#if !isRoot}
-				<div class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-					<h1 class="truncate text-sm font-medium">{activeSection()?.label ?? ''}</h1>
-					<span class="text-xs text-muted-foreground">{activeSection()?.desc ?? ''}</span>
-				</div>
-			{/if}
-			<div class="min-h-0 flex-1 overflow-auto">
-				<div class="min-h-full p-4">
-					{@render children()}
-				</div>
+	<ListDetail.Detail id={active?.id ?? null}>
+		{#if active}
+			<div class="flex h-11 shrink-0 items-center gap-2 border-b px-4">
+				<h1 class="min-w-0 flex-1 truncate text-sm font-semibold" tabindex="-1">
+					{active.label}
+				</h1>
+				<span class="hidden shrink-0 text-xs text-muted-foreground @min-[32rem]/detail:inline">
+					{active.desc}
+				</span>
 			</div>
-		</MasterDetail.Pane>
-	</MasterDetail.Root>
-</div>
+			<div class="min-h-0 flex-1 overflow-y-auto">
+				<div class="min-h-full p-4">{@render children()}</div>
+			</div>
+		{:else}
+			{@render children()}
+		{/if}
+	</ListDetail.Detail>
+</ListDetail.Root>

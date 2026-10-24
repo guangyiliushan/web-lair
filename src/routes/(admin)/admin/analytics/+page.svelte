@@ -9,7 +9,7 @@
 	<title>{m.admin_analytics_title()} - Lair Admin</title>
 </svelte:head>
 
-<div class="space-y-6">
+<div class="space-y-6 p-4 sm:p-6 lg:p-8">
 	<div class="flex items-center justify-between gap-4">
 		<div>
 			<h2 class="text-2xl font-semibold tracking-tight">{m.admin_analytics_title()}</h2>

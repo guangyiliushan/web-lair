@@ -180,8 +180,12 @@
 		<!-- flex-col + min-h-0 so route content can fill the shell and scroll
 		     inside it. Without it `flex-1` on a child is a no-op and the whole
 		     admin surface collapses to its content height, leaving dead space
-		     and a page-level scrollbar beside the inner one. -->
-		<main class="flex min-h-0 min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8">
+		     and a page-level scrollbar beside the inner one.
+
+		     No padding here: list/detail surfaces (tables, panes, editors) are
+		     built to run edge-to-edge under the header, so each page owns its
+		     own inset instead of inheriting one it cannot opt out of. -->
+		<main class="flex min-h-0 min-w-0 flex-1 flex-col">
 			{@render children()}
 		</main>
 	</Sidebar.Inset>

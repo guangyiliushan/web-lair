@@ -148,7 +148,7 @@
 	}
 </script>
 
-<div class="flex flex-col gap-4">
+<div class="flex flex-col gap-4 p-4 sm:p-6 lg:p-8">
 	<!-- Welcome + refresh: one compact bar, not a hero block -->
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<div class="min-w-0">

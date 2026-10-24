@@ -6,7 +6,7 @@
 	<title>{m.admin_enrichment_title()} - Lair Admin</title>
 </svelte:head>
 
-<div class="space-y-4">
+<div class="space-y-4 p-4 sm:p-6 lg:p-8">
 	<div>
 		<h2 class="text-2xl font-semibold tracking-tight">{m.admin_enrichment_title()}</h2>
 		<p class="text-sm text-muted-foreground">{m.admin_enrichment_desc()}</p>

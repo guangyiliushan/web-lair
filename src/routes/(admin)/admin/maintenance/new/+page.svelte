@@ -90,7 +90,7 @@
 	<title>{m.admin_nav_maintenance()} · {m.admin_maintenance_new_script()} - Lair Admin</title>
 </svelte:head>
 
-<div class="space-y-4">
+<div class="space-y-4 p-4 sm:p-6 lg:p-8">
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<div class="flex min-w-0 items-center gap-2">
 			<Button variant="ghost" size="sm" href="/admin/maintenance">

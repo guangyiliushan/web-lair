@@ -28,7 +28,17 @@ vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: vi.fn() }));
 vi.mock('$lib/server/db/pg-error', () => ({ pgErrorCode: pg.pgErrorCode }));
 
-import { actions } from './+page.server';
+import { actions as createActions } from './+page.server';
+import { actions as recordActions } from './[id]/+page.server';
+
+// create lives on the list route; the rest moved to `[id]` where the id comes
+// from the route params rather than from a hidden form field.
+const NEW_TOPIC_ID = '99999999-9999-4999-8999-999999999999';
+
+const actions = { create: createActions.create, ...recordActions } as Record<
+	string,
+	(event: never) => Promise<unknown>
+>;
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 
 // Action copy comes from the message catalog; pin the locale so assertions
@@ -61,7 +71,12 @@ function makeWriteExecutors() {
 			values: (values: Record<string, unknown>) => {
 				if (state.failWith) throw Object.assign(new Error('db'), state.failWith);
 				state.inserts.push({ values });
-				return Promise.resolve();
+				// create now reads back the new id to redirect onto it; the
+				// chain has to stay awaitable for callers that do not.
+				return {
+					returning: async () => [{ id: NEW_TOPIC_ID }],
+					then: (res: (v: unknown) => unknown) => Promise.resolve(undefined).then(res)
+				};
 			}
 		}),
 		update: () => ({
@@ -110,28 +125,37 @@ beforeEach(() => {
 
 type ActionEvent = Parameters<typeof actions.create>[0];
 
-function event(fields: Record<string, string>): ActionEvent {
+function event(fields: Record<string, string>, id?: string): ActionEvent {
 	const fd = new FormData();
 	for (const [key, value] of Object.entries(fields)) fd.set(key, value);
 	return {
-		request: new Request('http://localhost/admin/notes/topics', { method: 'POST', body: fd })
+		request: new Request('http://localhost/admin/notes/topics', { method: 'POST', body: fd }),
+		params: { id }
 	} as unknown as ActionEvent;
 }
 
 type Outcome = { status: number; data?: Record<string, unknown>; thrown?: unknown };
 
-async function run(name: keyof typeof actions, fields: Record<string, string>): Promise<Outcome> {
+async function run(name: string, fields: Record<string, string>): Promise<Outcome> {
+	// `id` addresses the record on the route now; lift it out of the fields.
+	const { id, ...rest } = fields;
 	try {
-		const result = (await actions[name]!(event(fields))) as {
+		const result = (await actions[name]!(event(rest, id))) as {
 			status?: number;
 			data?: Record<string, unknown>;
 		};
 		return { status: result?.status ?? 200, data: result?.data };
 	} catch (thrown) {
-		const response = thrown as { status?: number; location?: string };
-		if (response && typeof response === 'object' && 'location' in response) {
-			return { status: response.status ?? 500 };
-		}
+		// `redirect()` throws; its shape differs across Kit versions (flat or
+		// nested under `body`), so read both rather than guessing one.
+		const response = thrown as {
+			status?: number;
+			location?: string;
+			body?: { status?: number; location?: string };
+		};
+		const status = response?.status ?? response?.body?.status;
+		const location = response?.location ?? response?.body?.location;
+		if (location !== undefined) return { status: status ?? 303 };
 		return { status: -1, thrown };
 	}
 }
@@ -158,7 +182,8 @@ describe('topics · create', () => {
 			icon: '',
 			sortOrder: 'abc'
 		});
-		expect(result.status).toBe(200);
+		// create lands on the new record so the workspace opens immediately
+		expect(result.status).toBe(303);
 		expect(state.inserts).toHaveLength(1);
 		expect(state.inserts[0].values).toEqual({
 			name: '旅行',

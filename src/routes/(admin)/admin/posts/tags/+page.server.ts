@@ -1,29 +1,35 @@
+import { fail, redirect } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
-import { tags } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
-import type { PageServerLoad } from './$types';
+import { tags } from '$lib/server/db/content';
+import { pgErrorCode } from '$lib/server/db/pg-error';
+import { isValidTaxonomySlug } from '$lib/server/services/taxonomy';
+import type { Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
-export const load: PageServerLoad = async () => {
-	await requireAdminRole();
-	// Tags are a real entity table since P1; the relation lives in post_tags.
-	// (A per-tag article count was computed here until P1.1 - nothing consumed
-	// it; when a count is actually shown, the §9.4 live-aggregate rule applies.)
-	const rows = await db
-		.select({ id: tags.id, name: tags.name, slug: tags.slug })
-		.from(tags)
-		.orderBy(tags.name);
+/**
+ * Creation lives on the list route; update/delete live on `[id]` because a
+ * form can only post to the route that renders it.
+ */
+export const actions: Actions = {
+	create: async ({ request }) => {
+		await requireAdminRole();
+		const formData = await request.formData();
+		const name = formData.get('name')?.toString().trim();
+		const slug = formData.get('slug')?.toString().trim().toLowerCase();
 
-	return {
-		headerTitle: m.admin_tags_nav(),
-		headerActions: [
-			{
-				label: m.admin_common_back(),
-				iconName: 'arrow-left',
-				variant: 'outline',
-				href: '/admin/posts'
-			}
-		],
-		tags: rows
-	};
+		if (!name) return fail(400, { error: m.admin_tags_err_name_required() });
+		if (!slug) return fail(400, { error: m.admin_tags_err_slug_required() });
+		if (!isValidTaxonomySlug(slug)) return fail(400, { error: m.admin_taxonomy_err_slug_shape() });
+
+		let created: { id: string };
+		try {
+			[created] = await db.insert(tags).values({ name, slug }).returning({ id: tags.id });
+		} catch (error) {
+			if (pgErrorCode(error) !== '23505') throw error;
+			return fail(409, { error: m.admin_tags_err_duplicate() });
+		}
+		// Land on the new record so the workspace opens immediately.
+		redirect(303, `/admin/posts/tags/${created.id}`);
+	}
 };

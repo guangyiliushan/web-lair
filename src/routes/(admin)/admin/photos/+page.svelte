@@ -97,7 +97,7 @@
 
 <svelte:head><title>{m.admin_nav_photos()} - Lair Admin</title></svelte:head>
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-6 p-4 sm:p-6 lg:p-8">
 	{#if actionData.saved}
 		<div
 			class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"

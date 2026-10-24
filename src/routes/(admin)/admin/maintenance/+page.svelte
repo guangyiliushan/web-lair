@@ -74,7 +74,7 @@
 	<title>{m.admin_nav_maintenance()} - Lair Admin</title>
 </svelte:head>
 
-<div class="space-y-8">
+<div class="space-y-8 p-4 sm:p-6 lg:p-8">
 	{#if flash}
 		<div
 			class="rounded-lg border px-4 py-2 text-sm {flash.kind === 'error'
