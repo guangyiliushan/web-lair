@@ -38,6 +38,15 @@ export const load: PageServerLoad = async () => {
 		);
 	return {
 		headerTitle: m.admin_nav_thoughts(),
+		headerActions: [
+			{
+				label: m.admin_common_new(),
+				iconName: 'plus',
+				variant: 'default',
+				// opens the add dialog registered by +page.svelte
+				actionId: 'thoughts:create'
+			}
+		],
 		total,
 		rows
 	};

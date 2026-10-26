@@ -59,3 +59,52 @@ export function urlKey(input: string): string | null {
 		return null;
 	}
 }
+
+/**
+ * Why the stored URL cannot be canonicalised (links plan §2.1). The admin
+ * surface maps every non-`subpath` reason to one "must be an https homepage"
+ * message; `subpath` gets its own because the policy option can lift it.
+ */
+export type LinkUrlFailure =
+	'invalid' | 'insecure' | 'credentials' | 'query' | 'fragment' | 'subpath';
+
+export type NormalizeLinkUrlResult =
+	{ ok: true; url: string; host: string } | { ok: false; reason: LinkUrlFailure };
+
+/**
+ * Canonical write form for `links.url` (plan §2.1): https only, no userinfo,
+ * no query/fragment, trailing slashes dropped, default ports dropped by
+ * `URL`, host lowercased + punycoded + `www.`-stripped for matching. The
+ * stored URL keeps the host as entered (`www.` preserved) - visitors click
+ * it, and some hosts only answer on one variant.
+ *
+ * `allowSubPath` mirrors `friends.apply.allowSubPath`: false requires the
+ * site root. The `backlink_url` column (a specific page, often `/links`)
+ * always passes true.
+ */
+export function normalizeLinkUrl(
+	input: string,
+	options: { allowSubPath?: boolean } = {}
+): NormalizeLinkUrlResult {
+	const raw = input.trim();
+	if (!raw) return { ok: false, reason: 'invalid' };
+	let parsed: URL;
+	try {
+		// A bare host is the common admin paste; prefix https so `example.com`
+		// works while an explicit `http://` still gets rejected below.
+		parsed = new URL(raw.includes('://') ? raw : `https://${raw}`);
+	} catch {
+		return { ok: false, reason: 'invalid' };
+	}
+	if (parsed.protocol !== 'https:') return { ok: false, reason: 'insecure' };
+	if (parsed.username || parsed.password) return { ok: false, reason: 'credentials' };
+	if (parsed.search) return { ok: false, reason: 'query' };
+	if (parsed.hash) return { ok: false, reason: 'fragment' };
+	const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
+	if (!hostname) return { ok: false, reason: 'invalid' };
+	const pathname = parsed.pathname.replace(/\/+$/, '');
+	if (!options.allowSubPath && pathname !== '') return { ok: false, reason: 'subpath' };
+	const host = stripWww(hostname);
+	if (!host) return { ok: false, reason: 'invalid' };
+	return { ok: true, url: `${parsed.origin}${pathname}`, host };
+}

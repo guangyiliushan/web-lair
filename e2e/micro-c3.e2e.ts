@@ -47,7 +47,7 @@ test.describe('micro C3 admin', () => {
 		const dialog = page.getByRole('dialog');
 
 		await expect(async () => {
-			await page.getByRole('button', { name: '添加摘录' }).click({ timeout: 5000 });
+			await page.getByRole('button', { name: '新建', exact: true }).click({ timeout: 5000 });
 			await expect(dialog).toBeVisible({ timeout: 5000 });
 		}).toPass({ timeout: 20_000 });
 		await dialog.getByLabel('内容').fill(CRUD_QUOTE);

@@ -201,6 +201,24 @@ export function deriveRowUpdate(
 	};
 }
 
+/**
+ * CAS predicate shared by the checker and the admin surface: never clobber
+ * state the snapshot did not see (url / backlink_url retargets invalidate a
+ * verdict; last_checked_at pins the snapshot against in-run duplicate
+ * writes). `checkEnabled` is pinned to the snapshot's value - the job only
+ * selects enabled rows (default true), while the admin can check a paused row
+ * explicitly.
+ */
+export function linkWritePredicate(
+	row: Pick<LinkRowSnapshot, 'id' | 'status' | 'url' | 'backlinkUrl' | 'lastCheckedAt'>,
+	checkEnabled = true
+) {
+	return sql`${links.id} = ${row.id} and ${links.status} = ${row.status} and ${links.checkEnabled} = ${checkEnabled}
+		and ${links.url} = ${row.url}
+		and ${links.backlinkUrl} is not distinct from ${row.backlinkUrl}
+		and ${links.lastCheckedAt} is not distinct from ${row.lastCheckedAt}`;
+}
+
 /** ORIGIN from the environment, canonicalized; null when unset/invalid. */
 export function publicOrigin(): string | null {
 	const raw = process.env.ORIGIN?.trim();
@@ -448,14 +466,10 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 			.where(
 				// CAS (review batches 2026-10-06): never clobber state the
 				// snapshot did not see (L3 admin edits run lock-free); a
-				// mismatch skips + warns. url / backlink_url join the
-				// predicate (a mid-run retarget invalidates the verdict)
-				// and last_checked_at pins the snapshot itself against
-				// in-run duplicate writes (review round 4).
-				sql`${links.id} = ${row.id} and ${links.status} = ${row.status} and ${links.checkEnabled} = true
-					and ${links.url} = ${row.url}
-					and ${links.backlinkUrl} is not distinct from ${row.backlinkUrl}
-					and ${links.lastCheckedAt} is not distinct from ${row.lastCheckedAt}`
+				// mismatch skips + warns. Shared with the admin surface via
+				// `linkWritePredicate` (2026-10-26) so both writers pin the
+				// same columns.
+				linkWritePredicate(row)
 			)
 			.returning({ id: links.id });
 		if (updated.length === 0) {

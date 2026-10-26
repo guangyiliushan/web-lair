@@ -9,10 +9,10 @@
 	import { Empty } from '$lib/components/ui/empty';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { DeleteConfirm } from '$lib/components/admin';
+	import { useAdminHeaderActionRegistry } from '$lib/components/admin/admin-header-actions';
 	import IconQuote from '@tabler/icons-svelte-runes/icons/quote';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
-	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
@@ -56,6 +56,11 @@
 		fieldSource = row.source ?? '';
 		dialogOpen = true;
 	}
+
+	// The page header lives in the admin layout; bind its「新建」button to
+	// this page's dialog (label/icon are declared in +page.server.ts).
+	const headerActions = useAdminHeaderActionRegistry();
+	$effect(() => headerActions?.register('quotes:create', openCreate));
 
 	/** Close the dialog once an action succeeds; failures keep it open with the error shown. */
 	function closeOnSuccess() {
@@ -101,28 +106,6 @@
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
-	<header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
-		<div class="flex min-w-0 items-center gap-2.5">
-			<span
-				class="inline-flex size-6 shrink-0 items-center justify-center border bg-muted text-muted-foreground"
-			>
-				<IconQuote class="size-4" />
-			</span>
-			<div class="flex min-w-0 items-baseline gap-2">
-				<h1 class="truncate text-base font-semibold">{m.admin_nav_quotes()}</h1>
-				<span class="shrink-0 text-xs text-muted-foreground tabular-nums"
-					>{m.admin_common_count_entries({ count: data.total })}</span
-				>
-			</div>
-		</div>
-		<div class="flex shrink-0 items-center gap-2">
-			<Button size="sm" variant="outline" onclick={openCreate}>
-				<IconPlus class="size-3.5" />
-				{m.admin_quotes_add()}
-			</Button>
-		</div>
-	</header>
-
 	<!-- Add / edit quote dialog -->
 	<Dialog.Root bind:open={dialogOpen}>
 		<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>

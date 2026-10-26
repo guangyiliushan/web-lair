@@ -19,7 +19,12 @@
 	 * `primary` instead (the files list shows a download button).
 	 */
 	interface Props {
-		/** First-slot control. Takes precedence over the built-in edit button. */
+		/**
+		 * Extra control rendered in front of the standard slots: a row's
+		 * status-specific action (approve / restore), or a list whose main
+		 * action is not an edit (the files download button). The edit button
+		 * still renders whenever `editLabel` is set, so a row can carry both.
+		 */
 		primary?: Snippet;
 		/** Edit target; omit `editId` and pass `onEdit` for dialog editors. */
 		editPath?: Pathname;
@@ -61,7 +66,8 @@
 <div class="flex items-center justify-end gap-0.5">
 	{#if primary}
 		{@render primary()}
-	{:else if editLabel && editHref}
+	{/if}
+	{#if editLabel && editHref}
 		<Button variant="ghost" size="icon-sm" href={editHref} aria-label={editLabel} title={editLabel}>
 			<IconPencil />
 		</Button>

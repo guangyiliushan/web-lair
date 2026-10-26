@@ -10,31 +10,25 @@ import type { ListColumn } from '$lib/components/admin/list-table';
  * table budget - see `list-budget.ts` for why the sidebar makes that tight.
  *
  * Order below is display order and must not follow the tiers: narrowing drops
- * columns, it never reorders them. This list has no column-level filters (the
- * state switch is the ToggleGroup bar above the table), so the tiers follow
- * plain data importance: identity first, then what the friend is (description,
- * url), then metadata.
+ * columns, it never reorders them. Identity first (name + host + description
+ * subtitle), then the two signals a review actually reads (backlink, health),
+ * then contact/time, then actions. `type` is gone: the table never had such a
+ * column (plan §2.1), only the mock did.
  */
 export const cols: Record<
-	'name' | 'description' | 'url' | 'type' | 'email' | 'created' | 'actions',
+	'name' | 'backlink' | 'health' | 'email' | 'time' | 'actions',
 	ListColumn
 > = {
 	name: { id: 'name', label: m.admin_friends_col_name(), width: 'min-w-32' },
-	description: {
-		id: 'description',
-		label: m.admin_friends_col_description(),
-		width: 'w-44',
-		hideBelow: 'lg'
-	},
-	url: { id: 'url', label: m.admin_friends_col_url(), width: 'w-40', hideBelow: 'xl' },
-	type: { id: 'type', label: m.admin_common_type(), width: 'w-24', hideBelow: 'md' },
-	email: { id: 'email', label: m.admin_friends_col_email(), width: 'w-40', hideBelow: '2xl' },
-	created: {
-		id: 'created',
-		label: m.admin_friends_col_created(),
+	backlink: {
+		id: 'backlink',
+		label: m.admin_friends_col_backlink(),
 		width: 'w-28',
-		hideBelow: 'xl'
+		hideBelow: 'md'
 	},
+	health: { id: 'health', label: m.admin_friends_col_health(), width: 'w-28', hideBelow: 'xl' },
+	email: { id: 'email', label: m.admin_friends_col_email(), width: 'w-40', hideBelow: '2xl' },
+	time: { id: 'time', label: m.admin_friends_col_time(), width: 'w-28', hideBelow: 'xl' },
 	actions: {
 		id: 'actions',
 		label: m.admin_common_actions(),
