@@ -5,6 +5,7 @@
 	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Separator } from '$lib/components/ui/separator';
@@ -34,6 +35,7 @@
 	let confirmOpen = $state(false);
 	let pickOpen = $state(false);
 	let pickQuery = $state('');
+	let workspaceQuery = $state('');
 	// The icon is a form field seeded once from the loaded record; later data
 	// refreshes must not clobber what the owner is typing (same reason the AI
 	// settings page seeds its local state with `untrack`).
@@ -98,14 +100,23 @@
 		})
 	);
 
+	/** Workspace list after the toolbar search. The header count stays the total. */
+	const visibleNotes = $derived(
+		data.related.filter((note) => {
+			const q = workspaceQuery.trim().toLowerCase();
+			if (q === '') return true;
+			return note.title.toLowerCase().includes(q) || note.slug.toLowerCase().includes(q);
+		})
+	);
+
 	function toggle(id: string) {
 		if (selected.has(id)) selected.delete(id);
 		else selected.add(id);
 	}
 
 	function toggleAll() {
-		if (selected.size === data.related.length) selected.clear();
-		else for (const note of data.related) selected.add(note.id);
+		if (selected.size === visibleNotes.length) selected.clear();
+		else for (const note of visibleNotes) selected.add(note.id);
 	}
 
 	/** Where the note editor should send us back to. */
@@ -291,10 +302,16 @@
 	<section class="flex min-h-0 flex-1 flex-col">
 		<div class="flex h-11 shrink-0 items-center gap-2 border-b px-4">
 			<h2 class="shrink-0 text-sm font-medium">{m.admin_notes_topics_workspace_title()}</h2>
+			<!-- sr-only Label, not aria-label: real <label for> association, no layout cost. -->
+			<Label class="sr-only" for="topic-notes-search">
+				{m.admin_categories_search_posts()}
+			</Label>
 			<Input
+				id="topic-notes-search"
 				type="search"
 				class="h-8 min-w-0 flex-1 border-transparent bg-transparent"
 				placeholder={m.admin_categories_search_posts()}
+				bind:value={workspaceQuery}
 			/>
 			<Button size="sm" variant="outline" onclick={() => (pickOpen = true)}>
 				<IconPlus data-icon="inline-start" />
@@ -303,25 +320,27 @@
 		</div>
 
 		<div class="min-h-0 flex-1 overflow-y-auto">
-			{#if data.related.length === 0}
+			{#if visibleNotes.length === 0}
 				<p class="px-4 py-8 text-center text-sm text-muted-foreground">
-					{m.admin_notes_topics_no_notes()}
+					{workspaceQuery.trim()
+						? m.admin_common_no_search_results()
+						: m.admin_notes_topics_no_notes()}
 				</p>
 			{:else}
 				<ul class="flex flex-col">
 					<li class="flex h-8 items-center gap-2 border-b px-4 text-[11px] text-muted-foreground">
 						<Checkbox
 							class="size-3.5"
-							checked={selected.size > 0 && selected.size === data.related.length}
+							checked={selected.size > 0 && selected.size === visibleNotes.length}
 							onCheckedChange={toggleAll}
-							aria-label={m.admin_categories_selected({ count: data.related.length })}
+							aria-label={m.admin_categories_selected({ count: visibleNotes.length })}
 						/>
 						<span class="flex-1">{m.admin_notes_topics_workspace_title()}</span>
 						<span class="w-14 shrink-0">lang</span>
 						<span class="w-20 shrink-0">status</span>
 						<span class="w-16 shrink-0"></span>
 					</li>
-					{#each data.related as note (note.id)}
+					{#each visibleNotes as note (note.id)}
 						<li
 							class={cn(
 								'flex h-9 items-center gap-2 border-b px-4',

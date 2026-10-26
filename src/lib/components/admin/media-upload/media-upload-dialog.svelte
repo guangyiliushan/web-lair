@@ -1,7 +1,9 @@
 <script lang="ts">
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Alert from '$lib/components/ui/alert';
 	import * as Attachment from '$lib/components/ui/attachment';
 	import { Button } from '$lib/components/ui/button';
+	import { Progress } from '$lib/components/ui/progress';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import * as FileDropzone from '$lib/components/ui/file-dropzone';
 	import { applyUploadResults, mapUploadError, uploadEachFile } from '$lib/utils/upload-each';
@@ -64,6 +66,24 @@
 	let pageDrag = $state(false);
 	// dragenter/dragleave fire per child crossed; only the net count is real.
 	let dragDepth = 0;
+
+	/** F-1 cancel switch: one batch, one controller. */
+	let aborter: AbortController | null = null;
+	/** Batch-scoped counters: the queue can outlive a batch (files added mid-flight). */
+	let batchTotal = $state(0);
+	let batchSettled = $state(0);
+	let batchDone = $state(0);
+	let batchFailed = $state(0);
+	let batchCancelled = $state(false);
+	let batchFinished = $state(false);
+
+	const progressLabel = $derived.by(() => {
+		if (batchCancelled) return m.admin_media_progress_cancelled();
+		if (uploading) return m.admin_media_progress({ done: batchSettled, total: batchTotal });
+		if (batchFinished) return m.admin_media_progress_done({ ok: batchDone, failed: batchFailed });
+		return '';
+	});
+	const showProgress = $derived(uploading || batchFinished || batchCancelled);
 
 	const pending = $derived(
 		queue.filter((item) => item.status === 'idle' || item.status === 'error')
@@ -134,13 +154,30 @@
 		queue = queue.map((item) => (item.id === id ? { ...item, ...next } : item));
 	}
 
+	/** F-1: stop the batch. Already-finished files stay finished. */
+	function cancelUpload(): void {
+		aborter?.abort();
+	}
+
+	/** Closing the dialog mid-flight must not leave uploads running headless. */
+	function handleOpenChange(next: boolean): void {
+		if (!next && uploading) cancelUpload();
+	}
+
 	/** Q4 (deploy note): one request per file keeps every body under BODY_SIZE_LIMIT. */
 	async function submit(): Promise<void> {
 		if (!canSubmit) return;
 		// Snapshot first: patching the chips to `uploading` empties `pending`.
 		const batch = pending;
 		const ids = batch.map((item) => item.id);
+		batchTotal = batch.length;
+		batchSettled = 0;
+		batchDone = 0;
+		batchFailed = 0;
+		batchCancelled = false;
+		batchFinished = false;
 		uploading = true;
+		aborter = new AbortController();
 		for (const id of ids) patch(id, { status: 'uploading', note: undefined });
 		try {
 			const outcome = await uploadEachFile({
@@ -155,33 +192,50 @@
 						rate: () => m.admin_media_err_rate(),
 						session: () => m.admin_media_err_session()
 					}),
+				signal: aborter.signal,
 				onProgress: (index, phase) => {
 					const id = ids[index];
 					if (id === undefined) return;
+					if (phase === 'done') {
+						batchSettled += 1;
+						batchDone += 1;
+					} else if (phase === 'error') {
+						batchSettled += 1;
+						batchFailed += 1;
+					} else if (phase === 'cancelled') {
+						batchSettled += 1;
+					}
 					patch(id, {
-						status: phase === 'done' ? 'done' : phase === 'uploading' ? 'uploading' : 'error'
+						status: phase === 'done' ? 'done' : phase === 'uploading' ? 'uploading' : 'error',
+						// Cancelled is not a file failure: say so rather than "上传失败".
+						note: phase === 'cancelled' ? m.admin_media_progress_cancelled() : undefined
 					});
 				}
 			});
+			batchCancelled = outcome.cancelled === true;
 			if (outcome.redirected) {
 				// Session gone: the navigation is terminal, nothing left to report.
 				return;
 			}
-			// Match rows on file name rather than assuming a 1:1 zip — one request can
-			// report several rows (photos: file row plus gallery row).
+			// Reconcile on file name rather than assuming a 1:1 zip — one request can
+			// report several rows (photos: file row plus gallery row). Chips with no
+			// server row (never sent, or aborted) keep the note `onProgress` gave
+			// them, so a cancel never overwrites "已取消" with a generic failure —
+			// and a file that DID land keeps its real result note either way.
 			for (const item of batch) {
 				const row = outcome.results.find((result) => result.fileName === item.file.name);
-				const ok = row?.ok ?? false;
+				if (!row) continue;
+				const ok = row.ok;
 				const note = ok
-					? row
-						? resultNote?.(row)
-						: undefined
-					: (row?.message ?? row?.code ?? m.admin_media_err_upload_failed());
+					? resultNote?.(row)
+					: (row.message ?? row.code ?? m.admin_media_err_upload_failed());
 				patch(item.id, { status: ok ? 'done' : 'error', note });
 			}
-			await applyUploadResults(outcome);
+			if (outcome.results.length > 0) await applyUploadResults(outcome);
 		} finally {
 			uploading = false;
+			aborter = null;
+			batchFinished = true;
 		}
 	}
 
@@ -225,6 +279,8 @@
 			window.removeEventListener('dragover', onDragOver);
 			window.removeEventListener('dragleave', onDragLeave);
 			window.removeEventListener('drop', onDrop);
+			// Unmounting the uploader must not leave a batch running headless.
+			aborter?.abort();
 			for (const item of queue) if (item.thumb) URL.revokeObjectURL(item.thumb);
 		};
 	});
@@ -259,7 +315,7 @@
 	</div>
 {/if}
 
-<Dialog.Root bind:open>
+<Dialog.Root bind:open onOpenChange={handleOpenChange}>
 	<Dialog.Content class="gap-4 sm:max-w-lg">
 		<Dialog.Header>
 			<Dialog.Title>{m.admin_media_upload()}</Dialog.Title>
@@ -295,7 +351,26 @@
 					</Button>
 				</div>
 
-				<Attachment.Group class="max-h-64 flex-col overflow-x-hidden overflow-y-auto">
+				{#if showProgress}
+					<!-- The one place the batch is announced: the per-file Spinner is
+					     aria-hidden so ten chips don't read "Loading" ten times. -->
+					<div
+						class="flex flex-col gap-1.5"
+						aria-live="polite"
+						role="status"
+						data-testid="upload-progress"
+					>
+						<p class="text-xs text-muted-foreground">{progressLabel}</p>
+						{#if uploading}
+							<Progress value={batchSettled} max={batchTotal} />
+						{/if}
+					</div>
+				{/if}
+
+				<Attachment.Group
+					class="max-h-64 flex-col overflow-x-hidden overflow-y-auto"
+					aria-busy={uploading}
+				>
 					{#each queue as item (item.id)}
 						<Attachment.Root state={CHIP_STATE[item.status]} class="w-full min-w-0 flex-nowrap">
 							<Attachment.Media variant={item.thumb ? 'image' : 'icon'}>
@@ -315,7 +390,11 @@
 							</Attachment.Content>
 							<Attachment.Actions>
 								{#if item.status === 'uploading'}
-									<Spinner data-icon="inline-start" class="text-muted-foreground" />
+									<Spinner
+										data-icon="inline-start"
+										class="text-muted-foreground"
+										aria-hidden="true"
+									/>
 								{/if}
 								<Attachment.Action
 									aria-label={m.admin_media_queue_remove({ name: item.file.name })}
@@ -331,17 +410,25 @@
 				</Attachment.Group>
 
 				{#if overBatch}
-					<p class="text-xs text-destructive">
-						{m.admin_media_err_too_many({ count: maxBatch })}
-					</p>
+					<Alert.Root variant="destructive">
+						<Alert.Description>
+							{m.admin_media_err_too_many({ count: maxBatch })}
+						</Alert.Description>
+					</Alert.Root>
 				{/if}
 			</div>
 		{/if}
 
 		<Dialog.Footer>
-			<Button type="button" variant="outline" onclick={() => (open = false)}>
-				{m.admin_common_cancel()}
-			</Button>
+			{#if uploading}
+				<Button type="button" variant="outline" onclick={cancelUpload}>
+					{m.admin_media_cancel_upload()}
+				</Button>
+			{:else}
+				<Button type="button" variant="outline" onclick={() => (open = false)}>
+					{m.admin_common_cancel()}
+				</Button>
+			{/if}
 			<Button type="button" disabled={!canSubmit} onclick={submit}>
 				{#if uploading}
 					<Spinner data-icon="inline-start" />

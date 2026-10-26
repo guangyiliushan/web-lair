@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import type { Pathname } from '$app/types';
 	import { m } from '$lib/paraglide/messages';
+	import { Label } from '$lib/components/ui/label';
 	import IconSearch from '@tabler/icons-svelte-runes/icons/search';
 	import IconX from '@tabler/icons-svelte-runes/icons/x';
 
@@ -27,6 +28,9 @@
 		hidden = {},
 		clearSearch = ''
 	}: Props = $props();
+
+	/** Stable per-route id so the sr-only label can point at the field. */
+	const inputId = $derived(`list-search-${path.replace(/[^a-z0-9]+/gi, '-')}`);
 </script>
 
 <form method="GET" action={resolve(path)} role="search" class="w-full min-w-0">
@@ -37,11 +41,14 @@
 		<IconSearch
 			class="pointer-events-none absolute top-1/2 left-1 size-3.5 -translate-y-1/2 text-muted-foreground"
 		/>
+		<!-- sr-only Label, not aria-label: real <label for> association (click focuses
+		     the field, SRs read the name). Zero layout impact. -->
+		<Label class="sr-only" for={inputId}>{label}</Label>
 		<input
+			id={inputId}
 			type="search"
 			name="keyword"
 			{placeholder}
-			aria-label={label}
 			{value}
 			class="h-7 w-full min-w-0 border-0 bg-transparent pr-7 pl-6 text-xs outline-none placeholder:text-muted-foreground focus:ring-0"
 		/>

@@ -13,7 +13,13 @@ const { dbMock, state } = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
-vi.mock('$lib/paraglide/runtime', () => ({ getLocale: () => 'en' }));
+// Spread the real module: the route's module graph reaches `$lib/paraglide/runtime`
+// through `services/pages.ts`, which reads `locales` for its sitemap order. A
+// mock that only defines `getLocale` breaks at import time before any assertion.
+vi.mock('$lib/paraglide/runtime', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/paraglide/runtime')>()),
+	getLocale: () => 'en'
+}));
 
 import { load } from './+page.server';
 

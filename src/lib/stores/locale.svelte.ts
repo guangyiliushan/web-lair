@@ -9,6 +9,18 @@ export const localeLabels: Record<string, string> = {
 };
 
 /**
+ * Same names, tagged for option lists (`简体中文 (zh-cn)`).
+ *
+ * Locale names are endonyms — data, not UI copy — so they deliberately live
+ * here instead of the message catalog: `日本語` must not turn into "Japanese"
+ * just because the admin is rendered in English. Language pickers spell a
+ * language the same way whatever the surrounding chrome says.
+ */
+export const localeOptionLabels: Record<string, string> = Object.fromEntries(
+	Object.entries(localeLabels).map(([code, name]) => [code, `${name} (${code})`])
+);
+
+/**
  * The one place the UI switches locale.
  *
  * The preference lives in paraglide's cookie (`PARAGLIDE_LOCALE`): `setLocale`

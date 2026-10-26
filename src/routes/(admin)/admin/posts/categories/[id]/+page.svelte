@@ -5,6 +5,7 @@
 	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Badge } from '$lib/components/ui/badge';
@@ -35,6 +36,7 @@
 	let pickQuery = $state('');
 	let moveTarget = $state('');
 	let statusFilter = $state('all');
+	let workspaceQuery = $state('');
 	// SvelteSet is the project's reactive collection; mutating it is enough.
 	let selected = new SvelteSet<string>();
 
@@ -93,7 +95,12 @@
 	);
 
 	const visiblePosts = $derived(
-		data.related.filter((p) => statusFilter === 'all' || p.status === statusFilter)
+		data.related.filter((p) => {
+			if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+			const q = workspaceQuery.trim().toLowerCase();
+			if (q === '') return true;
+			return p.title.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q);
+		})
 	);
 
 	/** Posts not already filed here, for the "pull in" picker. */
@@ -239,10 +246,16 @@
 	<section class="flex min-h-0 flex-1 flex-col">
 		<div class="flex h-11 shrink-0 items-center gap-2 border-b px-4">
 			<h2 class="shrink-0 text-sm font-medium">{m.admin_categories_workspace_title()}</h2>
+			<!-- sr-only Label, not aria-label: real <label for> association, no layout cost. -->
+			<Label class="sr-only" for="category-posts-search">
+				{m.admin_categories_search_posts()}
+			</Label>
 			<Input
+				id="category-posts-search"
 				type="search"
 				class="h-8 min-w-0 flex-1 border-transparent bg-transparent"
 				placeholder={m.admin_categories_search_posts()}
+				bind:value={workspaceQuery}
 			/>
 			<Button size="sm" variant="outline" onclick={() => (pickOpen = true)}>
 				<IconPlus data-icon="inline-start" />
@@ -267,7 +280,9 @@
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			{#if visiblePosts.length === 0}
 				<p class="px-4 py-8 text-center text-sm text-muted-foreground">
-					{m.admin_categories_no_posts()}
+					{workspaceQuery.trim()
+						? m.admin_common_no_search_results()
+						: m.admin_categories_no_posts()}
 				</p>
 			{:else}
 				<ul class="flex flex-col">

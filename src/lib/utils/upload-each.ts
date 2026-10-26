@@ -29,7 +29,7 @@ export interface UploadOutcome {
 }
 
 /** Per-file lifecycle reported to the caller's queue UI. Index is into `files`. */
-export type UploadProgressState = 'uploading' | 'done' | 'error';
+export type UploadProgressState = 'uploading' | 'done' | 'error' | 'cancelled';
 
 interface UploadActionData {
 	uploadResults?: UploadOutcome[];
@@ -49,12 +49,35 @@ export async function uploadEachFile(options: {
 	mapError?: (status: number, fileName: string) => string | undefined;
 	/** Drives the caller's per-file queue chip; optional so queue-less callers stay simple. */
 	onProgress?: (index: number, state: UploadProgressState) => void;
-}): Promise<{ results: UploadOutcome[]; message?: string; redirected?: boolean }> {
+	/**
+	 * Caller-owned cancel switch (F-1). Aborting it cancels the in-flight
+	 * request AND stops the batch: the remaining files are reported `cancelled`
+	 * and never sent. Merged with the per-request timeout below, so a hung
+	 * request still settles on its own.
+	 */
+	signal?: AbortSignal;
+}): Promise<{
+	results: UploadOutcome[];
+	message?: string;
+	redirected?: boolean;
+	/** True when `signal` aborted the batch (not a timeout, not a redirect). */
+	cancelled?: boolean;
+}> {
 	const results: UploadOutcome[] = [];
 	let message: string | undefined;
 	const progress = options.onProgress ?? (() => {});
 
+	/** Everything from `from` on never ran: close the queue UI out as cancelled. */
+	const cancelRest = (from: number) => {
+		for (let rest = from; rest < options.files.length; rest++) progress(rest, 'cancelled');
+	};
+
 	for (let index = 0; index < options.files.length; index++) {
+		// Cancelled while the previous file was in flight: don't start this one.
+		if (options.signal?.aborted) {
+			cancelRest(index);
+			return { results, message, cancelled: true };
+		}
 		const file = options.files[index]!;
 		if (file.size > options.maxBytes) {
 			// Skip the doomed request: adapter-node rejects an oversized body
@@ -74,13 +97,14 @@ export async function uploadEachFile(options: {
 		let status = 0;
 		progress(index, 'uploading');
 		try {
+			// A request that never settles must not wedge the disabled button.
+			// The floor is ~50 KB/s so a 25 MB file on a slow uplink still fits.
+			const timeout = AbortSignal.timeout(Math.max(120_000, Math.ceil(file.size / 50_000) * 1000));
 			const response = await fetch(options.action, {
 				method: 'POST',
 				body,
 				headers: { accept: 'application/json', 'x-sveltekit-action': 'true' },
-				// A request that never settles must not wedge the disabled button.
-				// The floor is ~50 KB/s so a 25 MB file on a slow uplink still fits.
-				signal: AbortSignal.timeout(Math.max(120_000, Math.ceil(file.size / 50_000) * 1000))
+				signal: options.signal ? AbortSignal.any([timeout, options.signal]) : timeout
 			});
 			status = response.status;
 			const result = deserialize(await response.text());
@@ -96,6 +120,9 @@ export async function uploadEachFile(options: {
 					message = options.fallbackMessage;
 				}
 				progress(index, 'error');
+				// The rest were never sent: without this they stay `uploading`
+				// forever once the caller's queue re-renders after the jump.
+				cancelRest(index + 1);
 				return { results, message, redirected: true };
 			}
 
@@ -137,7 +164,14 @@ export async function uploadEachFile(options: {
 				progress(index, 'error');
 			}
 		} catch (error) {
-			// Non-JSON body (413/500), a redirect to HTML, or a network failure.
+			// The caller's cancel switch is not a file failure: the chip must say
+			// "cancelled", and the batch is over rather than merely one file short.
+			if (options.signal?.aborted) {
+				progress(index, 'cancelled');
+				cancelRest(index + 1);
+				return { results, message, cancelled: true };
+			}
+			// Non-JSON body (413/500), a redirect to HTML, a timeout, or network loss.
 			message = options.fallbackMessage;
 			results.push({
 				fileName: file.name,

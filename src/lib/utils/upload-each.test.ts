@@ -283,6 +283,110 @@ describe('uploadEachFile', () => {
 
 		expect(seen).toEqual(['uploading', 'error']);
 	});
+
+	// F-1: the queue must never be left on `uploading` when a batch ends early.
+
+	it('reports cancelled (not error) for the rest of the batch on a session redirect', async () => {
+		deserializeMock.mockReturnValue({ type: 'redirect', status: 303, location: '/login' });
+		const seen: [number, string][] = [];
+
+		const outcome = await uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg'), file('b.jpg'), file('c.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback',
+			onProgress: (index, state) => seen.push([index, state])
+		});
+
+		expect(outcome.redirected).toBe(true);
+		// a.jpg failed on the redirect; b/c were never sent and must not sit
+		// on `uploading` once the caller re-renders after the jump.
+		expect(seen).toEqual([
+			[0, 'uploading'],
+			[0, 'error'],
+			[1, 'cancelled'],
+			[2, 'cancelled']
+		]);
+	});
+
+	it('cancels the in-flight request and stops the batch when the signal aborts', async () => {
+		fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+			const signal = init?.signal as AbortSignal;
+			return new Promise((_resolve, reject) => {
+				signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+			});
+		});
+		const seen: [number, string][] = [];
+		const controller = new AbortController();
+
+		const pending = uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg'), file('b.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback',
+			signal: controller.signal,
+			onProgress: (index, state) => seen.push([index, state])
+		});
+		controller.abort();
+
+		const outcome = await pending;
+		expect(outcome.cancelled).toBe(true);
+		// Only the first request was ever made; the second file is not sent.
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(seen).toEqual([
+			[0, 'uploading'],
+			[0, 'cancelled'],
+			[1, 'cancelled']
+		]);
+		// A cancel is not a file failure: nothing is blamed on the user's pick.
+		expect(outcome.results).toEqual([]);
+	});
+
+	it('sends nothing and reports the whole batch cancelled when already aborted', async () => {
+		const controller = new AbortController();
+		controller.abort();
+		const seen: [number, string][] = [];
+
+		const outcome = await uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg'), file('b.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback',
+			signal: controller.signal,
+			onProgress: (index, state) => seen.push([index, state])
+		});
+
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(outcome.cancelled).toBe(true);
+		expect(seen).toEqual([
+			[0, 'cancelled'],
+			[1, 'cancelled']
+		]);
+	});
+
+	it('merges the caller signal with the per-request timeout instead of replacing it', async () => {
+		deserializeMock.mockReturnValue({
+			type: 'success',
+			status: 200,
+			data: { uploadResults: [{ fileName: 'a.jpg', ok: true }] }
+		});
+		const controller = new AbortController();
+
+		await uploadEachFile({
+			action: '?/upload',
+			files: [file('a.jpg')],
+			maxBytes: 100,
+			fallbackMessage: 'fallback',
+			signal: controller.signal
+		});
+
+		const init = fetchMock.mock.calls[0]![1] as RequestInit;
+		const signal = init.signal as AbortSignal;
+		expect(signal.aborted).toBe(false);
+		// The merged signal must still carry the caller's abort.
+		controller.abort();
+		expect(signal.aborted).toBe(true);
+	});
 });
 
 describe('applyUploadResults', () => {

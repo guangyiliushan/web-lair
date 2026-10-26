@@ -134,7 +134,13 @@ export default defineConfig({
 						'@codemirror/language',
 						'@codemirror/lang-javascript',
 						'@tabler/icons-svelte-runes/icons/app-window',
-						'@tabler/icons-svelte-runes/icons/brand-vscode'
+						'@tabler/icons-svelte-runes/icons/brand-vscode',
+						// media-upload-dialog's tree (upload / photo / file / x) — same
+						// mid-test reload hazard as the two above when a spec mounts it.
+						'@tabler/icons-svelte-runes/icons/file',
+						'@tabler/icons-svelte-runes/icons/photo',
+						'@tabler/icons-svelte-runes/icons/upload',
+						'@tabler/icons-svelte-runes/icons/x'
 					]
 				}
 			},

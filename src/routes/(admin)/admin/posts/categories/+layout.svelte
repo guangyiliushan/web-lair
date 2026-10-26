@@ -3,6 +3,9 @@
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
 	import { m } from '$lib/paraglide/messages';
+	// Endonym + tag, e.g. `简体中文 (zh-cn)` — see the store for why locale
+	// names are data, not catalog copy.
+	import { localeOptionLabels as localeLabels } from '$lib/stores/locale.svelte';
 	import { Empty } from '$lib/components/ui/empty';
 	import * as ListDetail from '$lib/components/admin/list-detail';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -19,12 +22,6 @@
 	let createOpen = $state(false);
 	let createError = $state<string | null>(null);
 	let sourceLang = $state('zh-cn');
-
-	const localeLabels: Record<string, string> = {
-		'zh-cn': '中文 (zh-cn)',
-		en: 'English (en)',
-		ja: '日本語 (ja)'
-	};
 
 	/** Selection lives in the route, so back/forward and deep links just work. */
 	const selectedId = $derived(page.params.id ?? null);

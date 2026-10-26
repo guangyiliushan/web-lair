@@ -4,6 +4,7 @@
 	import { m } from '$lib/paraglide/messages';
 	import { Empty } from '$lib/components/ui/empty';
 	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as ListDetail from '$lib/components/admin/list-detail';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
@@ -46,7 +47,11 @@
 	<ListDetail.List>
 		<ListDetail.Toolbar>
 			<h2 class="truncate text-sm font-semibold">{m.admin_readers()}</h2>
+			<!-- sr-only Label, not aria-label: a real <label for> association (click
+			     focuses the field, SRs read the name). Zero layout impact. -->
+			<Label class="sr-only" for="readers-search">{m.admin_readers_search()}</Label>
 			<Input
+				id="readers-search"
 				type="search"
 				class="h-8 min-w-0 flex-1 border-transparent bg-transparent"
 				placeholder={m.admin_readers_search()}
