@@ -1,17 +1,17 @@
 <script lang="ts">
 	import * as Table from '$lib/components/ui/table';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import IconUsers from '@tabler/icons-svelte-runes/icons/users';
-	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
-	import IconSearch from '@tabler/icons-svelte-runes/icons/search';
-	import IconRefresh from '@tabler/icons-svelte-runes/icons/refresh';
-	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
-	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
+	import { useAdminHeaderActionRegistry } from '$lib/components/admin/admin-header-actions';
+	import { Empty } from '$lib/components/ui/empty';
+	import { ListRowActions, ListTable, listColumnClass } from '$lib/components/admin/list-table';
+	import { cols, columns } from './columns';
+	import { cn } from '$lib/utils';
 	import { m } from '$lib/paraglide/messages';
 
 	interface Friend {
@@ -67,19 +67,23 @@
 		addDialogOpen = true;
 	}
 
+	// The header lives in the admin layout; bind its "新建" action to this
+	// page's dialog (the label/icon are declared in +page.server.ts).
+	const headerActions = useAdminHeaderActionRegistry();
+	$effect(() => {
+		return headerActions?.register('friends:create', openAddDialog);
+	});
+
 	function avatarText(name: string): string {
 		return name.slice(0, 1);
 	}
 
-	const columns = [
-		{ id: 'name', label: m.admin_friends_col_name() },
-		{ id: 'description', label: m.admin_friends_col_description() },
-		{ id: 'url', label: m.admin_friends_col_url() },
-		{ id: 'type', label: m.admin_common_type() },
-		{ id: 'email', label: m.admin_friends_col_email() },
-		{ id: 'created', label: m.admin_friends_col_created() },
-		{ id: 'actions', label: m.admin_common_actions() }
-	];
+	// The `links` table exists but nothing reads or writes it yet, so the row
+	// actions stay no-ops - the page is a UI shell over a mock array. Wiring
+	// real CRUD is a separate change and must not be faked here.
+	function editFriend() {}
+
+	function removeFriend() {}
 </script>
 
 <svelte:head>
@@ -87,145 +91,92 @@
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
-	<!-- Page header -->
-	<header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
-		<div class="flex min-w-0 items-center gap-2">
-			<h2 class="inline-flex items-center gap-2 text-lg font-semibold">
-				<IconUsers class="size-4" />
-				{m.admin_nav_friends()}
-			</h2>
-		</div>
-		<div class="flex shrink-0 items-center gap-2">
-			<span class="hidden text-xs text-muted-foreground sm:inline"
-				>{m.admin_common_count_entries({ count: friends.length })}</span
-			>
-			<Button size="sm" variant="outline" onclick={openAddDialog}>
-				<IconPlus class="size-4" />
-				<span class="hidden sm:inline">{m.admin_friends_add()}</span>
-			</Button>
-			<Button size="sm" variant="outline" aria-label={m.admin_friends_check_aria()}>
-				<IconSearch class="size-4" />
-				<span class="hidden lg:inline">{m.admin_friends_check()}</span>
-			</Button>
-			<Button size="sm" variant="outline" aria-label={m.admin_friends_migrate_avatars()}>
-				<IconRefresh class="size-4" />
-				<span class="hidden lg:inline">{m.admin_friends_migrate_avatars()}</span>
-			</Button>
-		</div>
-	</header>
-
 	<!-- State tabs bar -->
-	<div class="shrink-0 border-b px-4 py-2">
-		<div class="inline-flex flex-wrap gap-1 rounded-sm border bg-background p-1">
+	<div class="flex h-10 shrink-0 items-center gap-2 border-b px-4">
+		<ToggleGroup.Root
+			type="single"
+			bind:value={activeState}
+			variant="outline"
+			size="sm"
+			class="gap-1"
+		>
 			{#each states as state (state)}
-				<button
-					type="button"
-					class="inline-flex h-8 items-center gap-2 rounded-xs px-3 text-sm transition-colors {activeState ===
-					state
-						? 'bg-foreground text-background'
-						: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-					onclick={() => (activeState = state)}
-				>
+				<ToggleGroup.Item value={state}>
 					{stateLabels[state]}
-					<span
-						class="rounded-full px-1.5 py-0.5 text-xs {activeState === state
-							? 'bg-background/20'
-							: 'bg-muted'}"
-					>
-						{activeState === state ? friends.length : 0}
-					</span>
-				</button>
+					{#if activeState === state}
+						<span class="ml-0.5 text-xs opacity-60">{friends.length}</span>
+					{/if}
+				</ToggleGroup.Item>
 			{/each}
-		</div>
+		</ToggleGroup.Root>
 	</div>
 
-	<!-- Data table -->
-	<div class="min-h-0 flex-1 overflow-auto">
-		<Table.Root>
-			<Table.Header class="sticky top-0 z-10 bg-muted/50">
-				<Table.Row class="text-xs text-muted-foreground uppercase hover:bg-transparent">
-					{#each columns as col (col.id)}
-						<Table.Head class={col.id === 'actions' ? 'text-right' : ''}>{col.label}</Table.Head>
-					{/each}
-				</Table.Row>
-			</Table.Header>
-			<Table.Body>
-				{#if friends.length === 0}
-					<Table.Row>
-						<Table.Cell colspan={columns.length} class="py-12 text-center">
-							<p class="text-sm text-muted-foreground">{m.admin_friends_empty()}</p>
-						</Table.Cell>
-					</Table.Row>
-				{:else}
-					{#each friends as friend (friend.id)}
-						<Table.Row class="align-top">
-							<!-- Name -->
-							<Table.Cell>
-								<div class="flex items-center gap-3">
-									<div
-										class="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground"
-									>
-										{avatarText(friend.name)}
-									</div>
-									<a
-										class="font-medium hover:underline"
-										href="http://{friend.url}"
-										rel="noreferrer"
-										target="_blank"
-									>
-										{friend.name}
-										<IconExternalLink class="ml-1 inline size-3" />
-									</a>
-								</div>
-							</Table.Cell>
-							<!-- Description -->
-							<Table.Cell class="max-w-[18rem] text-muted-foreground">
-								<span class="line-clamp-2">{friend.description}</span>
-							</Table.Cell>
-							<!-- URL -->
-							<Table.Cell class="max-w-[18rem]">
-								<a
-									class="truncate text-muted-foreground hover:underline"
-									href="http://{friend.url}"
-									rel="noreferrer"
-									target="_blank"
-								>
-									{friend.url}
-								</a>
-							</Table.Cell>
-							<!-- Type -->
-							<Table.Cell class="text-muted-foreground">{friend.type}</Table.Cell>
-							<!-- Email -->
-							<Table.Cell>
-								<span class="text-muted-foreground/70">{friend.email}</span>
-							</Table.Cell>
-							<!-- Created -->
-							<Table.Cell class="whitespace-nowrap text-muted-foreground"
-								>{friend.createdAt}</Table.Cell
-							>
-							<!-- Actions -->
-							<Table.Cell class="text-right">
-								<div class="flex justify-end gap-1">
-									<Button variant="outline" size="sm" class="h-8 gap-1 px-2 text-xs">
-										<IconPencil class="size-3.5" />
-										{m.admin_common_edit()}
-									</Button>
-									<Button
-										variant="outline"
-										size="sm"
-										class="h-8 gap-1 border-destructive/30 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-									>
-										<IconTrash class="size-3.5" />
-										{m.admin_friends_remove()}
-									</Button>
-								</div>
-							</Table.Cell>
-						</Table.Row>
-					{/each}
-				{/if}
-			</Table.Body>
-		</Table.Root>
-	</div>
+	<ListTable
+		{columns}
+		rows={friends}
+		rowKey={(friend) => friend.id}
+		label={m.admin_friends_title()}
+		class="min-h-96"
+	>
+		{#snippet row(friend)}
+			<Table.Cell class={cn(listColumnClass(cols.name), 'whitespace-normal')}>
+				<div class="flex items-center gap-3">
+					<div
+						class="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground"
+					>
+						{avatarText(friend.name)}
+					</div>
+					<a
+						class="min-w-0 truncate font-medium hover:underline"
+						href="http://{friend.url}"
+						rel="noreferrer"
+						target="_blank"
+					>
+						{friend.name}
+						<IconExternalLink class="ml-1 inline size-3" />
+					</a>
+				</div>
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.description), 'whitespace-normal')}>
+				<span class="line-clamp-2 text-muted-foreground">{friend.description}</span>
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.url), 'whitespace-normal')}>
+				<a
+					class="truncate text-muted-foreground hover:underline"
+					href="http://{friend.url}"
+					rel="noreferrer"
+					target="_blank"
+				>
+					{friend.url}
+				</a>
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.type), 'text-muted-foreground')}>
+				{friend.type}
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.email), 'whitespace-normal')}>
+				<span class="text-muted-foreground/70">{friend.email}</span>
+			</Table.Cell>
+			<Table.Cell
+				class={cn(listColumnClass(cols.created), 'whitespace-nowrap text-muted-foreground')}
+			>
+				{friend.createdAt}
+			</Table.Cell>
+			<Table.Cell class={cn(listColumnClass(cols.actions), 'text-right')}>
+				<ListRowActions
+					editLabel={m.admin_common_edit()}
+					onEdit={editFriend}
+					deleteLabel={m.admin_friends_remove()}
+					onDelete={removeFriend}
+				/>
+			</Table.Cell>
+		{/snippet}
+
+		{#snippet empty()}
+			<Empty class="mx-auto py-14">
+				<p class="text-sm text-muted-foreground">{m.admin_friends_empty()}</p>
+			</Empty>
+		{/snippet}
+	</ListTable>
 </div>
 
 <!-- Add friend dialog -->
@@ -284,7 +235,7 @@
 					<button
 						id="friend-type"
 						type="button"
-						class="bg-surface-card flex h-10 w-full items-center justify-between gap-2 rounded-sm border pr-2 pl-3 text-left text-sm hover:bg-muted/50"
+						class="flex h-10 w-full items-center justify-between gap-2 rounded-sm border bg-surface-card pr-2 pl-3 text-left text-sm hover:bg-muted/50"
 					>
 						<span>{formType}</span>
 						<IconChevronDown class="size-4 shrink-0 text-muted-foreground" />

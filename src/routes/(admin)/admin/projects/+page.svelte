@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { untrack } from 'svelte';
 	import type { ActionResult } from '@sveltejs/kit';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -19,11 +21,9 @@
 		PROJECT_SYNC_PROVIDERS,
 		isProjectProvider
 	} from '$lib/utils/project-meta';
-	import IconFolder from '@tabler/icons-svelte-runes/icons/folder';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
-	import IconRefresh from '@tabler/icons-svelte-runes/icons/refresh';
 	import IconArrowUp from '@tabler/icons-svelte-runes/icons/arrow-up';
 	import IconArrowDown from '@tabler/icons-svelte-runes/icons/arrow-down';
 	import IconArrowBarToUp from '@tabler/icons-svelte-runes/icons/arrow-bar-to-up';
@@ -143,6 +143,8 @@
 	let selectedIds = $state<string[]>([]);
 	let bulkDeleteOpen = $state(false);
 	let submitting = $state(false);
+	/** Hidden form submitted by the header's sync action. */
+	let syncForm = $state<HTMLFormElement | null>(null);
 
 	// ── Edit dialog ──
 	let editOpen = $state(false);
@@ -263,6 +265,7 @@
 	$effect(() => {
 		if (!headerActions) return;
 		const cleanups = [
+			headerActions.register('projects:sync', () => syncForm?.requestSubmit()),
 			headerActions.register('projects:targets', openTargets),
 			headerActions.register('projects:import', openImport),
 			headerActions.register('projects:create', openCreate)
@@ -367,29 +370,13 @@
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col">
-	<header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
-		<div class="flex min-w-0 items-center gap-2.5">
-			<span
-				class="inline-flex size-6 shrink-0 items-center justify-center border bg-muted text-muted-foreground"
-			>
-				<IconFolder class="size-4" />
-			</span>
-			<div class="flex min-w-0 items-baseline gap-2">
-				<h1 class="truncate text-base font-semibold">{data.headerTitle}</h1>
-				<span class="shrink-0 text-xs text-muted-foreground tabular-nums">
-					{m.admin_common_count_entries({ count: data.counts.all })}
-				</span>
-			</div>
-		</div>
-		<div class="flex shrink-0 items-center gap-2">
-			<form method="post" action="?/sync" use:enhance={() => closeOnSuccess(() => {})}>
-				<Button type="submit" size="sm" variant="outline" disabled={submitting}>
-					<IconRefresh class="size-3.5" />
-					{m.admin_projects_sync()}
-				</Button>
-			</form>
-		</div>
-	</header>
+	<form
+		bind:this={syncForm}
+		method="post"
+		action="?/sync"
+		use:enhance={() => closeOnSuccess(() => {})}
+		class="hidden"
+	></form>
 
 	{#if errorMessage}
 		<p role="alert" class="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
@@ -439,31 +426,32 @@
 	</div>
 
 	<nav
-		class="flex shrink-0 flex-wrap items-center gap-1.5 border-b px-4 py-2"
+		class="flex h-10 shrink-0 items-center gap-2 border-b px-4"
 		aria-label={m.admin_projects_filter_aria()}
 	>
-		<a
-			href="?status=all"
-			class="rounded-full px-3 py-1 text-xs whitespace-nowrap transition-colors {data.filter ===
-			'all'
-				? 'bg-primary/10 text-primary'
-				: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-			aria-current={data.filter === 'all' ? 'true' : undefined}
+		<ToggleGroup.Root
+			type="single"
+			value={data.filter}
+			onValueChange={(value) => {
+				if (value && value !== data.filter) {
+					goto(`?status=${value}`, { keepFocus: true, noScroll: true });
+				}
+			}}
+			variant="outline"
+			size="sm"
+			class="gap-1"
 		>
-			{m.admin_projects_tab_all()} ({data.counts.all})
-		</a>
-		{#each PROJECT_STATUSES as status (status)}
-			<a
-				href="?status={status}"
-				class="rounded-full px-3 py-1 text-xs whitespace-nowrap transition-colors {data.filter ===
-				status
-					? 'bg-primary/10 text-primary'
-					: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-				aria-current={data.filter === status ? 'true' : undefined}
-			>
-				{statusLabel(status)} ({data.counts[status]})
-			</a>
-		{/each}
+			<ToggleGroup.Item value="all">
+				{m.admin_projects_tab_all()}
+				{data.counts.all}
+			</ToggleGroup.Item>
+			{#each PROJECT_STATUSES as status (status)}
+				<ToggleGroup.Item value={status}>
+					{statusLabel(status)}
+					{data.counts[status]}
+				</ToggleGroup.Item>
+			{/each}
+		</ToggleGroup.Root>
 	</nav>
 
 	{#if selectedIds.length > 0}

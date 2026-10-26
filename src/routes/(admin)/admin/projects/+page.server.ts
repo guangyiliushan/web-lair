@@ -57,6 +57,13 @@ export const load: PageServerLoad = async ({ url }) => {
 		headerTitle: m.admin_nav_projects(),
 		headerActions: [
 			{
+				label: m.admin_projects_sync(),
+				iconName: 'refresh',
+				variant: 'outline',
+				// submits the hidden sync form registered by +page.svelte
+				actionId: 'projects:sync'
+			},
+			{
 				label: m.admin_projects_targets(),
 				iconName: 'target',
 				variant: 'outline',

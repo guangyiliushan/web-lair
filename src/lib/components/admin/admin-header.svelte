@@ -22,6 +22,8 @@
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconPuzzle from '@tabler/icons-svelte-runes/icons/puzzle';
+	import IconRefresh from '@tabler/icons-svelte-runes/icons/refresh';
+	import IconSearch from '@tabler/icons-svelte-runes/icons/search';
 	import IconSettings from '@tabler/icons-svelte-runes/icons/settings';
 	import IconSparkles from '@tabler/icons-svelte-runes/icons/sparkles';
 	import IconTag from '@tabler/icons-svelte-runes/icons/tag';
@@ -46,6 +48,8 @@
 		pencil: IconPencil,
 		plus: IconPlus,
 		puzzle: IconPuzzle,
+		refresh: IconRefresh,
+		search: IconSearch,
 		settings: IconSettings,
 		sparkles: IconSparkles,
 		tag: IconTag,

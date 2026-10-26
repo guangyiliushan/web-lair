@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
+	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 	import IconInbox from '@tabler/icons-svelte-runes/icons/inbox';
 	import IconCheck from '@tabler/icons-svelte-runes/icons/check';
@@ -45,28 +47,29 @@
 		<span class="max-w-64 truncate">{target.title}</span>
 	{/snippet}
 	<!-- Review state tabs -->
-	<div class="bg-surface-card flex h-12 shrink-0 items-stretch gap-2 border-b px-3">
-		{#each tabs as tab (tab.id)}
-			{@const isActive = data.state === tab.id}
-			<a
-				href="?state={tab.id}"
-				class="relative inline-flex h-full shrink-0 items-center gap-1.5 px-3 text-sm transition-colors"
-				class:text-foreground={isActive}
-				class:text-muted-foreground={!isActive}
-				class:hover:text-foreground={!isActive}
-				role="tab"
-				aria-selected={isActive}
-			>
-				{#if isActive}
-					<span aria-hidden="true" class="bg-surface-inset absolute inset-x-0 inset-y-2 rounded-sm"
-					></span>
-				{/if}
-				<span class="relative z-10">{tab.label}</span>
-				{#if data.counts[tab.id] > 0}
-					<span class="relative z-10 ml-0.5 text-xs opacity-60">{data.counts[tab.id]}</span>
-				{/if}
-			</a>
-		{/each}
+	<div class="flex h-12 shrink-0 items-center gap-2 border-b bg-surface-card px-3">
+		<ToggleGroup.Root
+			type="single"
+			role="tablist"
+			value={data.state}
+			onValueChange={(value) => {
+				if (value && value !== data.state) {
+					goto(`?state=${value}`, { keepFocus: true, noScroll: true });
+				}
+			}}
+			variant="outline"
+			size="sm"
+			class="gap-1"
+		>
+			{#each tabs as tab (tab.id)}
+				<ToggleGroup.Item value={tab.id} role="tab" aria-selected={data.state === tab.id}>
+					{tab.label}
+					{#if data.counts[tab.id] > 0}
+						<span class="ml-0.5 text-xs opacity-60">{data.counts[tab.id]}</span>
+					{/if}
+				</ToggleGroup.Item>
+			{/each}
+		</ToggleGroup.Root>
 	</div>
 
 	{#if form && 'message' in form}
@@ -89,7 +92,7 @@
 			<div
 				class="bg-surface-inset flex max-w-sm flex-col items-center justify-center gap-3 rounded-xl p-10 text-center"
 			>
-				<span class="bg-surface-card flex size-11 items-center justify-center rounded-lg shadow-xs">
+				<span class="flex size-11 items-center justify-center rounded-lg bg-surface-card shadow-xs">
 					<IconInbox class="size-5 text-muted-foreground" />
 				</span>
 				<div class="space-y-1">
@@ -201,7 +204,7 @@
 
 			{#if data.state === 'pending'}
 				<div
-					class="bg-surface-card flex shrink-0 items-center justify-end gap-2 border-t px-4 py-3"
+					class="flex shrink-0 items-center justify-end gap-2 border-t bg-surface-card px-4 py-3"
 				>
 					<Button type="submit" name="decision" value="approve" size="sm" class="gap-1">
 						<IconCheck class="size-4" />{m.admin_comments_approve()}

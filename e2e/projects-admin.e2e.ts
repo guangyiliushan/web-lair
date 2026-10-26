@@ -93,7 +93,9 @@ test.describe('projects admin', () => {
 		page
 	}) => {
 		await page.goto('/admin/projects');
-		await expect(page.getByRole('heading', { name: '项目' })).toBeVisible({ timeout: 20_000 });
+		await expect(page.getByRole('button', { name: '同步', exact: true })).toBeVisible({
+			timeout: 20_000
+		});
 
 		await expect(async () => {
 			await page.getByRole('button', { name: '新建', exact: true }).click({ timeout: 5000 });
