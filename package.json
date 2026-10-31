@@ -44,6 +44,7 @@
 		"db:verify-baseline": "tsx --env-file-if-exists=.env scripts/verify-baseline.ts",
 		"db:backfill-grid": "tsx --env-file=.env scripts/backfill-grid-variants.ts",
 		"db:backfill-refs": "tsx --env-file=.env scripts/backfill-file-references.ts",
+		"db:backfill-translation-slug": "tsx --env-file=.env scripts/backfill-translation-slug.ts",
 		"db:backfill-consent": "tsx --env-file=.env scripts/backfill-email-consent.ts",
 		"db:backfill-suppressions": "tsx --env-file=.env scripts/backfill-suppressions.ts",
 		"db:verify-suppression-version": "node --env-file-if-exists=.env scripts/verify-suppression-version.ts",
@@ -120,7 +121,7 @@
 		"vitest": "^4.1.3",
 		"vitest-browser-svelte": "^3.1.0"
 	},
-	"packageManager": "pnpm@11.6.0+sha512.9a36518224080c6fe5165afdcfe79bfa118c29be703f3f462b1e32efe1e98e47e8750b148e08286250aad4113cc7993ca413c4e2cd447752708c2ee5751bc95f",
+	"packageManager": "pnpm@12.16.1",
 	"dependencies": {
 		"@better-auth/drizzle-adapter": "^1.7.5",
 		"@better-auth/passkey": "^1.7.5",

@@ -10,7 +10,7 @@
 	import PhotoInfoPanel from '$lib/components/photos/PhotoInfoPanel.svelte';
 	import PhotoFilmstrip from '$lib/components/photos/PhotoFilmstrip.svelte';
 	import ViewerHeader from '$lib/components/photos/ViewerHeader.svelte';
-	import { IconX } from '@tabler/icons-svelte-runes';
+	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { useSwipe, type SwipeCustomEvent } from 'svelte-gestures';
 	import type { PageData } from './$types';

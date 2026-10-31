@@ -1,35 +1,46 @@
 <script lang="ts">
-	import { tick, untrack } from 'svelte';
-	import { enhance, deserialize } from '$app/forms';
-	import { afterNavigate, invalidateAll, replaceState } from '$app/navigation';
+	import { untrack } from 'svelte';
+	import { deserialize, enhance } from '$app/forms';
+	import {
+		afterNavigate,
+		beforeNavigate,
+		goto,
+		invalidateAll,
+		replaceState
+	} from '$app/navigation';
 	import { page } from '$app/state';
 	import type { ActionResult } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import * as Select from '$lib/components/ui/select';
+	import * as Field from '$lib/components/ui/field';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Button } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
-	import * as Sheet from '$lib/components/ui/sheet';
-	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Collapsible from '$lib/components/ui/collapsible';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import * as Alert from '$lib/components/ui/alert';
+	import { useAdminHeaderActionRegistry } from '$lib/components/admin/admin-header-actions';
 	import { MarkdownEditor } from '$lib/components/markdown';
 	import { formatDateTime } from '$lib/utils/i18n';
 	import { normalizeSlug } from '$lib/utils/slug';
-	import IconDeviceFloppy from '@tabler/icons-svelte-runes/icons/device-floppy';
-	import IconSettings from '@tabler/icons-svelte-runes/icons/settings';
 	import IconCategory from '@tabler/icons-svelte-runes/icons/category';
 	import IconTag from '@tabler/icons-svelte-runes/icons/tag';
 	import IconFileDescription from '@tabler/icons-svelte-runes/icons/file-description';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconX from '@tabler/icons-svelte-runes/icons/x';
-	import IconSend from '@tabler/icons-svelte-runes/icons/send';
-	import IconLanguage from '@tabler/icons-svelte-runes/icons/language';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
-	import IconCloudUpload from '@tabler/icons-svelte-runes/icons/cloud-upload';
 	import IconSparkles from '@tabler/icons-svelte-runes/icons/sparkles';
+	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
+	import IconDots from '@tabler/icons-svelte-runes/icons/dots';
+	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
+	import IconChevronUp from '@tabler/icons-svelte-runes/icons/chevron-up';
+	import IconWorld from '@tabler/icons-svelte-runes/icons/world';
+	import IconInfoCircle from '@tabler/icons-svelte-runes/icons/info-circle';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -47,7 +58,13 @@
 	let aiHelp = $state('');
 	let contentMarkdown = $state('');
 	let lang = $state<string>(untrack(() => data.defaultLang));
+	/**
+	 * A brand-new article must pick its source language explicitly - otherwise
+	 * the first autosave freezes the default language as the source.
+	 */
+	let sourceChosen = $state(false);
 	const isTranslation = $derived(Boolean(data.post?.translatedFromPostId));
+	const needsSourceChoice = $derived(!data.post && !sourceChosen);
 
 	let postId = $state<string | null>(null);
 	let draftId = $state<string | null>(null);
@@ -68,20 +85,46 @@
 	let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 	let slugDialogOpen = $state(false);
-	let settingsOpen = $state(false);
-	let translationOpen = $state(false);
-	let translationLang = $state('');
+	let discardOpen = $state(false);
 	let publishing = $state(false);
 	let publishErrors = $state<Record<string, string>>({});
 	let flash = $state<string | null>(null);
 	/** Set when an action answers with a redirect instead of data (session). */
 	let reauthUrl = $state<string | null>(null);
 	let flashTimer: ReturnType<typeof setTimeout> | null = null;
+	/** Set while we navigate on purpose (publish / discard / language switch). */
+	let leavingIntentionally = false;
+
+	// ── Metadata bar (horizontal, collapsible - never a Sheet) ────────────
+	let metaOpen = $state(true);
+
+	// ── Inline category creation (no dialog, no invalidateAll) ────────────
+	let categoryFormOpen = $state(false);
+	let newCategoryName = $state('');
+	let newCategorySlug = $state('');
+	let newCategoryLang = $state<string>(untrack(() => data.defaultLang));
+	let creatingCategory = $state(false);
+	let categoryError = $state<string | null>(null);
+	let localCategories = $state<{ id: string; name: string; slug: string }[]>([]);
+	const categoryOptions = $derived([...data.categories, ...localCategories]);
+
+	// ── New-translation reservation ──────────────────────────────────────
+	let translationError = $state<string | null>(null);
+	let creatingTranslation = $state(false);
+
+	// ── Source-language switch (translations are never re-linked) ────────
+	let switchLangOpen = $state(false);
+	let switchLangValue = $state('');
+	let switchLangMode = $state('existing');
+	let switchLangError = $state<string | null>(null);
+	const canSwitchSource = $derived(Boolean(postId) && !isTranslation && !needsSourceChoice);
+	const switchLangSibling = $derived(
+		data.siblings?.find((sibling) => sibling.lang === switchLangValue) ?? null
+	);
 
 	/**
-	 * Shared handler for the publish/discard/createTranslation forms: on
-	 * failure the messages surface in the editor banners; on success/redirect
-	 * the default update() runs (so navigations and redirects land).
+	 * Shared handler for the discard form: on failure the messages surface in
+	 * the editor banners; on success/redirect the default update() runs.
 	 */
 	type FormResultInput = {
 		result: ActionResult;
@@ -92,23 +135,29 @@
 		async ({ result, update }: FormResultInput) => {
 			if (result.type === 'failure') {
 				const d = (result.data ?? {}) as { message?: string; errors?: Record<string, string> };
-				publishing = false;
 				publishErrors = { ...(d.errors ?? {}) };
 				if (d.message) publishErrors = { ...publishErrors, form: d.message };
-				// A publish-side base conflict also freezes publishes until reload.
 				if (result.status === 409) conflictMessage = d.message ?? conflictMessage;
 			} else {
-				// A same-route redirect keeps component state: close the dialogs
-				// explicitly or the translation/settings panels stay open over
-				// the freshly created page (review probe finding).
-				translationOpen = false;
-				settingsOpen = false;
+				leavingIntentionally = true;
 				await update();
 			}
 		};
 
+	/** One place that speaks the JSON action protocol. */
+	async function postAction(action: string, fd: FormData): Promise<ActionResult> {
+		const response = await fetch(`?/${action}`, {
+			method: 'POST',
+			body: fd,
+			// The JSON action protocol is selected by Accept negotiation; the
+			// x-sveltekit-action header is only a bypass switch (probe finding).
+			headers: { 'x-sveltekit-action': 'true', accept: 'application/json' }
+		});
+		return deserialize(await response.text());
+	}
+
 	function currentPayload(): string {
-		return JSON.stringify([
+		return JSON.stringify({
 			title,
 			slug,
 			categoryId,
@@ -117,7 +166,7 @@
 			writingOrigin,
 			aiHelp,
 			contentMarkdown
-		]);
+		});
 	}
 
 	function isDirty(): boolean {
@@ -133,7 +182,11 @@
 		const draft = data.draft;
 		const post = data.post;
 		title = draft?.title ?? post?.title ?? '';
-		const loadedSlug = draft ? (draft.slug ?? '') : post && !post.placeholder ? post.slug : '';
+		// 译文与源共用一份 slug：编辑器展示源的地址（存量草稿可能还是空的）。
+		const loadedSlug =
+			(draft ? (draft.slug ?? '') : post && !post.placeholder ? post.slug : '') ||
+			data.source?.slug ||
+			'';
 		slug = loadedSlug;
 		slugTouched = !!loadedSlug;
 		categoryId = draft?.categoryId ?? post?.categoryId ?? '';
@@ -144,6 +197,7 @@
 		aiHelp = (provenance?.aiHelp ?? []).join(', ');
 		contentMarkdown = draft?.content ?? post?.content ?? '';
 		lang = post?.lang ?? data.defaultLang;
+		sourceChosen = Boolean(post);
 		postId = post?.id ?? null;
 		draftId = draft?.id ?? null;
 		draftVersion = draft?.version ?? null;
@@ -183,8 +237,15 @@
 		// Frozen after a conflict until the editor reloads the server state.
 		if (saveState === 'conflict') return;
 		if (publishErrors && Object.keys(publishErrors).length > 0) publishErrors = {};
+		if (needsSourceChoice) {
+			// No row may be created before the source language is explicit.
+			saveState = 'idle';
+			scheduleStash();
+			return;
+		}
 		if (!postId && !draftId && !categoryId) {
 			saveState = 'needs-category';
+			scheduleStash();
 			return;
 		}
 		saveState = 'dirty';
@@ -201,7 +262,109 @@
 		}, delayMs);
 	}
 
+	// ── Local stash (UX-1020-03: a new post with no category cannot autosave) ──
+	const STASH_PREFIX = 'lair:posts:editor-stash';
+	const STASH_MAX_BYTES = 4 * 1024 * 1024;
+	const STASH_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+	let stashTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function stashKey(): string {
+		return `${STASH_PREFIX}:${data.post?.id ?? 'new'}`;
+	}
+
+	function clearStash() {
+		try {
+			sessionStorage.removeItem(stashKey());
+		} catch {
+			/* private mode / quota: the stash is best-effort */
+		}
+	}
+
+	function writeStash() {
+		// Only a brand-new article with nothing server-side to fall back on.
+		if (postId || draftId || categoryId) {
+			clearStash();
+			return;
+		}
+		try {
+			const payload = currentPayload();
+			if (payload.length > STASH_MAX_BYTES) return;
+			sessionStorage.setItem(stashKey(), JSON.stringify({ at: Date.now(), payload }));
+		} catch {
+			/* quota exceeded or storage disabled: never break the editor */
+		}
+	}
+
+	function scheduleStash() {
+		if (stashTimer) clearTimeout(stashTimer);
+		stashTimer = setTimeout(writeStash, 1000);
+	}
+
+	function applyStash(json: string) {
+		try {
+			const d = JSON.parse(json) as Record<string, string>;
+			title = d.title ?? '';
+			slug = d.slug ?? '';
+			slugTouched = !!d.slug;
+			categoryId = d.categoryId ?? '';
+			summary = d.summary ?? '';
+			tags = d.tags ?? '';
+			writingOrigin = d.writingOrigin ?? '';
+			aiHelp = d.aiHelp ?? '';
+			contentMarkdown = d.contentMarkdown ?? '';
+		} catch {
+			/* an unparsable stash is not worth restoring */
+		}
+	}
+
+	function readStash(): string | null {
+		try {
+			const raw = sessionStorage.getItem(stashKey());
+			if (!raw) return null;
+			const parsed = JSON.parse(raw) as { at?: number; payload?: string };
+			if (!parsed?.payload) return null;
+			if (Date.now() - (parsed.at ?? 0) > STASH_MAX_AGE_MS) {
+				clearStash();
+				return null;
+			}
+			return parsed.payload;
+		} catch {
+			return null;
+		}
+	}
+
+	// Restore before anything else can overwrite the working copy. `untrack`:
+	// this reads the load result ONCE on purpose and must not become reactive.
+	{
+		const stashed = untrack(() => (!data.post && !data.draft ? readStash() : null));
+		if (stashed) {
+			applyStash(stashed);
+			flash = m.admin_posts_edit_stash_restored();
+			flashTimer = setTimeout(() => (flash = null), 3500);
+		}
+	}
+
+	/** Working copy as form fields - shared by `save` and the single `publish`. */
+	function draftForm(): FormData {
+		const fd = new FormData();
+		fd.set('title', title);
+		fd.set('slug', slug);
+		fd.set('categoryId', categoryId);
+		fd.set('summary', summary);
+		fd.set('tags', tags);
+		fd.set('writingOrigin', writingOrigin);
+		fd.set('aiHelp', aiHelp);
+		fd.set('content', contentMarkdown);
+		if (postId) fd.set('id', postId);
+		if (draftId) fd.set('draftId', draftId);
+		if (draftVersion != null) fd.set('draftVersion', String(draftVersion));
+		if (!postId) fd.set('lang', lang);
+		return fd;
+	}
+
 	async function runSave(autosave: boolean): Promise<boolean> {
+		// Saving before the source language is chosen would freeze the default.
+		if (needsSourceChoice) return false;
 		if (inFlight) {
 			pendingResave = true;
 			return false;
@@ -210,29 +373,9 @@
 		saveState = 'saving';
 		const snapshotAtSubmit = currentPayload();
 		try {
-			const fd = new FormData();
+			const fd = draftForm();
 			fd.set('autosave', autosave ? '1' : '0');
-			fd.set('title', title);
-			fd.set('slug', slug);
-			fd.set('categoryId', categoryId);
-			fd.set('summary', summary);
-			fd.set('tags', tags);
-			fd.set('writingOrigin', writingOrigin);
-			fd.set('aiHelp', aiHelp);
-			fd.set('content', contentMarkdown);
-			if (postId) fd.set('id', postId);
-			if (draftId) fd.set('draftId', draftId);
-			if (draftVersion != null) fd.set('draftVersion', String(draftVersion));
-			if (!postId) fd.set('lang', lang);
-
-			const response = await fetch('?/save', {
-				method: 'POST',
-				body: fd,
-				// The JSON action protocol is selected by Accept negotiation; the
-				// x-sveltekit-action header is only a bypass switch (probe finding).
-				headers: { 'x-sveltekit-action': 'true', accept: 'application/json' }
-			});
-			const result = deserialize(await response.text());
+			const result = await postAction('save', fd);
 			if (result.type === 'redirect') {
 				// A guard bounced us (session expired): stop the retry loop and
 				// offer a re-login instead of blaming the network forever.
@@ -261,6 +404,7 @@
 					savedSnapshot = snapshotAtSubmit;
 					lastSavedAt = new Date();
 					saveState = currentPayload() === savedSnapshot ? 'saved' : 'dirty';
+					clearStash();
 				} else if (d.reason === 'throttled') {
 					saveState = 'throttled';
 					// Retry when the server window has actually elapsed.
@@ -277,6 +421,7 @@
 					conflictMessage = d.message ?? m.admin_posts_edit_conflict_short();
 				} else if (result.status === 400 && d.needsCategory) {
 					saveState = 'needs-category';
+					scheduleStash();
 				} else {
 					saveState = 'error';
 					saveError = d.message ?? m.admin_posts_edit_err_save_failed();
@@ -303,34 +448,221 @@
 	}
 
 	async function reloadFromServer() {
+		leavingIntentionally = true;
 		await invalidateAll();
+		leavingIntentionally = false;
 		applyAll();
 	}
 
+	/**
+	 * Publish in ONE request (UX-1020-04): the action saves the working copy
+	 * and publishes it together, so a first-time publish (no draft row yet) can
+	 * no longer lose the race between the old two client-side requests.
+	 */
+	async function runPublish(): Promise<void> {
+		if (inFlight) {
+			for (let waited = 0; waited < 100 && inFlight; waited += 1) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			}
+			if (inFlight) return;
+		}
+		inFlight = true;
+		saveState = 'saving';
+		const snapshotAtSubmit = currentPayload();
+		try {
+			const result = await postAction('publish', draftForm());
+			if (result.type === 'redirect') {
+				leavingIntentionally = true;
+				clearStash();
+				savedSnapshot = snapshotAtSubmit;
+				await goto(result.location);
+				return;
+			}
+			if (result.type === 'success') {
+				savedSnapshot = snapshotAtSubmit;
+				clearStash();
+				saveState = 'saved';
+				return;
+			}
+			if (result.type === 'failure') {
+				const d = (result.data ?? {}) as {
+					message?: string;
+					errors?: Record<string, string>;
+					needsCategory?: boolean;
+				};
+				if (result.status === 409) {
+					saveState = 'conflict';
+					conflictMessage = d.message ?? m.admin_posts_edit_conflict_short();
+					return;
+				}
+				if (result.status === 400 && d.needsCategory) {
+					saveState = 'needs-category';
+					scheduleStash();
+					return;
+				}
+				const graded = Object.values(d.errors ?? {}).filter(Boolean);
+				publishErrors = { ...(d.errors ?? {}) };
+				saveState = 'error';
+				saveError =
+					graded.length > 0
+						? graded.join(m.admin_posts_edit_error_join())
+						: (d.message ?? m.admin_posts_edit_err_publish_validation());
+				return;
+			}
+			saveState = 'error';
+			saveError = m.admin_posts_edit_err_network();
+		} catch {
+			saveState = 'error';
+			saveError = m.admin_posts_edit_err_network();
+		} finally {
+			inFlight = false;
+		}
+	}
+
 	async function onPublish() {
-		if (saveState === 'conflict' || publishing) return;
+		if (needsSourceChoice || saveState === 'conflict' || publishing) return;
 		publishing = true;
 		try {
-			if (!draftId || isDirty()) {
-				// Only publish once the working copy is actually persisted: an
-				// error / throttled / in-flight save must abort the publish or we
-				// would ship the server's stale draft and silently drop edits.
-				const ok = await runSave(false);
-				if (!ok) return;
-			}
-			await tick();
-			const publishForm = document.getElementById('publish-form');
-			if (publishForm instanceof HTMLFormElement) publishForm.requestSubmit();
+			await runPublish();
 		} finally {
 			publishing = false;
 		}
 	}
 
+	/**
+	 * Inline category creation (UX-1020-03): the result is appended to the
+	 * LOCAL option list and selected at once - never `invalidateAll()`, which
+	 * would re-run load and replay the server copy over unsaved edits.
+	 */
+	async function onCreateCategory() {
+		const name = newCategoryName.trim();
+		if (!name || creatingCategory) return;
+		creatingCategory = true;
+		categoryError = null;
+		try {
+			const fd = new FormData();
+			fd.set('name', name);
+			fd.set('slug', (newCategorySlug.trim() || name).toLowerCase());
+			fd.set('sourceLang', newCategoryLang);
+			const result = await postAction('createCategory', fd);
+			if (result.type === 'success') {
+				const created = (result.data as { created?: { id: string; name: string; slug: string } })
+					.created;
+				if (created) {
+					localCategories = [
+						...localCategories.filter((c) => c.id !== created.id),
+						{ id: created.id, name: created.name, slug: created.slug }
+					];
+					categoryId = created.id;
+					newCategoryName = '';
+					newCategorySlug = '';
+					categoryFormOpen = false;
+				}
+				return;
+			}
+			// Only a `failure` carries `data`; a redirect/error has none.
+			const d = (result.type === 'failure' ? (result.data ?? {}) : {}) as {
+				message?: string;
+				error?: string;
+			};
+			categoryError = d.error ?? d.message ?? m.admin_posts_edit_create_category_failed();
+		} catch {
+			categoryError = m.admin_posts_edit_create_category_failed();
+		} finally {
+			creatingCategory = false;
+		}
+	}
+
+	/**
+	 * Language-bar click. While a new article has no source language yet the
+	 * chips pick it; afterwards an existing language opens it and a missing one
+	 * reserves its translation in one click.
+	 */
+	function openLanguage(target: { lang: string; id: string | null; kind: string }) {
+		if (creatingTranslation) return;
+		if (needsSourceChoice) {
+			lang = target.lang;
+			sourceChosen = true;
+			translationError = null;
+			// Content typed before the choice is dirty now that saving is allowed.
+			if (isDirty()) onFieldsChanged();
+			return;
+		}
+		if (target.kind === 'current') {
+			if (canSwitchSource) openSwitchLang();
+			return;
+		}
+		if (target.id) {
+			leavingIntentionally = true;
+			void goto(`/admin/posts/edit?id=${target.id}`);
+			return;
+		}
+		void reserveTranslation(target.lang);
+	}
+
+	/** Create (or reserve) the same article in another language, then open it. */
+	async function reserveTranslation(lang: string): Promise<void> {
+		if (!lang || creatingTranslation) return;
+		creatingTranslation = true;
+		translationError = null;
+		try {
+			if (!postId) {
+				// Let an autosave flight finish first: it may be the one creating the row.
+				for (let waited = 0; waited < 50 && inFlight; waited += 1) {
+					await new Promise((resolve) => setTimeout(resolve, 100));
+				}
+				if (!postId) await runSave(false);
+				// Still no row: the save indicator explains what is missing (e.g. the
+				// category), so the reservation simply waits for the next click.
+				if (!postId) return;
+			}
+			const fd = new FormData();
+			fd.set('id', postId);
+			fd.set('lang', lang);
+			leavingIntentionally = true;
+			const result = await postAction('createTranslation', fd);
+			if (result.type === 'redirect') {
+				await goto(result.location);
+				return;
+			}
+			leavingIntentionally = false;
+			const d = (result.type === 'failure' ? (result.data ?? {}) : {}) as { message?: string };
+			translationError = d.message ?? m.admin_posts_edit_err_network();
+		} catch {
+			leavingIntentionally = false;
+			translationError = m.admin_posts_edit_err_network();
+		} finally {
+			creatingTranslation = false;
+		}
+	}
+
+	/** Open the source-language switcher (the source chip is the entry point). */
+	function openSwitchLang() {
+		switchLangValue = lang;
+		switchLangMode = 'existing';
+		switchLangError = null;
+		switchLangOpen = true;
+	}
+
+	const switchLangResult =
+		() =>
+		async ({ result, update }: FormResultInput) => {
+			if (result.type === 'failure') {
+				const d = (result.data ?? {}) as { message?: string };
+				switchLangError = d.message ?? m.admin_posts_edit_switch_lang_failed();
+				return;
+			}
+			switchLangOpen = false;
+			switchLangError = null;
+			await update();
+		};
+
 	// Slugs accept lowercase letters, digits and hyphens only.
 	function onTitleInput(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		title = input.value;
-		if (!slugTouched) slug = normalizeSlug(title.replace(/[^a-z0-9]+/g, '-'));
+		// 译文不自己造 slug：地址由源文章决定。
+		if (!slugTouched && !isTranslation) slug = normalizeSlug(title.replace(/[^a-z0-9]+/g, '-'));
 	}
 
 	function onSlugInput(e: Event) {
@@ -356,6 +688,14 @@
 		const url = new URL(page.url);
 		for (const key of ['published', 'discarded', 'translation']) url.searchParams.delete(key);
 		replaceState(url.pathname + url.search, {});
+	});
+
+	// ── Leave guard (UX-1020-03): `beforeunload` alone never sees in-app nav ──
+	beforeNavigate(({ cancel }) => {
+		if (leavingIntentionally) return;
+		if (saveState === 'conflict') return;
+		if (!isDirty()) return;
+		if (!window.confirm(m.admin_posts_edit_leave_confirm())) cancel();
 	});
 
 	const formErrorMessages = $derived(
@@ -392,6 +732,7 @@
 	});
 
 	const statusText = $derived.by(() => {
+		if (needsSourceChoice) return m.admin_posts_edit_pick_source_lang();
 		if (!data.post) return m.admin_posts_edit_new();
 		if (data.source) {
 			const pending = data.post.status === 'draft' && data.post.version === 0;
@@ -406,9 +747,113 @@
 		return m.admin_posts_status_draft();
 	});
 
-	const occupiedLangs = $derived(
-		new Set([data.post?.lang ?? '', ...(data.siblings ?? []).map((s) => s.lang)])
+	// ── Header actions (declared in +page.server.ts, bound here) ──────────
+	const headerActions = useAdminHeaderActionRegistry();
+	$effect(() => {
+		if (!headerActions) return;
+		const cleanups = [
+			headerActions.register('posts:edit:save', () => {
+				if (saveState === 'conflict') return;
+				void runSave(false);
+			}),
+			headerActions.register('posts:edit:publish', () => void onPublish())
+		];
+		return () => cleanups.forEach((cleanup) => cleanup());
+	});
+
+	/** Language of the group source - the one that owns the shared slug. */
+	const sourceLang = $derived(data.source?.lang ?? data.post?.lang ?? lang);
+
+	type LangCell = {
+		lang: string;
+		kind: 'current' | 'sibling' | 'missing';
+		id: string | null;
+		status: string | null;
+	};
+
+	/**
+	 * One chip per supported language. The family source always leads; the
+	 * remaining languages follow alphabetically so the bar never reorders itself
+	 * as translations are added.
+	 */
+	const langCells = $derived.by<LangCell[]>(() => {
+		const currentLang = data.post?.lang ?? lang;
+		const order = [...data.langs];
+		// A legacy row outside the option list still gets its own chip.
+		if (!order.includes(currentLang)) order.push(currentLang);
+		if (!order.includes(sourceLang)) order.push(sourceLang);
+		order.sort((a, b) => {
+			if (a === sourceLang) return -1;
+			if (b === sourceLang) return 1;
+			return a.localeCompare(b, 'en');
+		});
+		return order.map<LangCell>((l) => {
+			if (l === currentLang) {
+				return {
+					lang: l,
+					kind: 'current',
+					id: data.post?.id ?? null,
+					status: data.post?.status ?? null
+				};
+			}
+			const sibling = (data.siblings ?? []).find((s) => s.lang === l);
+			return sibling
+				? { lang: l, kind: 'sibling', id: sibling.id, status: sibling.status }
+				: { lang: l, kind: 'missing', id: null, status: null };
+		});
+	});
+
+	function langCellLabel(cell: LangCell): string {
+		// Choosing phase: plain language codes, no source/sibling styling yet.
+		if (needsSourceChoice) return cell.lang;
+		if (cell.kind === 'current' && cell.lang === sourceLang) {
+			return `${cell.lang}·${m.admin_posts_edit_lang_source()}`;
+		}
+		if (cell.kind === 'missing') return `${cell.lang}·${m.admin_posts_edit_lang_missing()}`;
+		const status =
+			cell.status === 'published'
+				? m.admin_posts_status_published()
+				: cell.status === 'scheduled'
+					? m.admin_posts_status_scheduled()
+					: cell.status === 'trash'
+						? m.admin_posts_status_trash()
+						: m.admin_posts_status_draft();
+		return `${cell.lang}·${status}`;
+	}
+
+	// Writing-provenance choices - one source for the Select items and the
+	// trigger label (the native `<select>` rendered raw options before).
+	const writingOriginOptions = $derived([
+		{ value: '', label: m.admin_posts_edit_ai_undisclosed() },
+		{ value: 'none', label: m.admin_posts_edit_ai_none() },
+		{ value: 'assist', label: m.admin_posts_edit_ai_assist() },
+		{ value: 'mostly_ai', label: m.admin_posts_edit_ai_mostly() },
+		{ value: 'ai_full', label: m.admin_posts_edit_ai_full() }
+	]);
+	const writingOriginLabel = $derived(
+		writingOriginOptions.find((option) => option.value === writingOrigin)?.label ??
+			m.admin_posts_edit_ai_undisclosed()
 	);
+
+	/** "AI helped with" only exists for the AI-assisted provenance values. */
+	const aiHelpEnabled = $derived(
+		writingOrigin === 'assist' || writingOrigin === 'mostly_ai' || writingOrigin === 'ai_full'
+	);
+	$effect(() => {
+		// Server normalization drops help text for "undisclosed"/"none"; clear the
+		// local copy as soon as the option makes that field unfillable.
+		if (!isTranslation && !aiHelpEnabled && aiHelp !== '') aiHelp = '';
+	});
+
+	/** Collapsed bar: category / tags / AI provenance on one scannable line. */
+	const metaSummary = $derived.by(() => {
+		const parts: string[] = [];
+		const cat = categoryOptions.find((c) => c.id === categoryId)?.name;
+		if (cat) parts.push(cat);
+		if (tags.trim()) parts.push(tags.trim());
+		if (writingOrigin) parts.push(`AI: ${aiHelp.trim() || writingOriginLabel}`);
+		return parts.join(' · ');
+	});
 
 	let beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
 	$effect(() => {
@@ -423,6 +868,7 @@
 			if (beforeUnloadHandler) window.removeEventListener('beforeunload', beforeUnloadHandler);
 			if (autosaveTimer) clearTimeout(autosaveTimer);
 			if (flashTimer) clearTimeout(flashTimer);
+			if (stashTimer) clearTimeout(stashTimer);
 		};
 	});
 </script>
@@ -431,517 +877,631 @@
 	<title>{title ? `${title} - Lair Admin` : `${m.admin_posts_new()} - Lair Admin`}</title>
 </svelte:head>
 
-<div class="flex h-full min-h-0 min-w-0 flex-col">
-	<!-- Publish/discard/translation live in their own forms; the visible
-	     controls trigger them (publish flushes the draft first). -->
-	<form
-		id="publish-form"
-		method="POST"
-		action="?/publish"
-		use:enhance={formResultHandler}
-		class="hidden"
-	>
-		<input type="hidden" name="draftId" value={draftId ?? ''} />
-	</form>
-	<form
-		id="discard-form"
-		method="POST"
-		action="?/discard"
-		use:enhance={formResultHandler}
-		class="hidden"
-	>
-		<input type="hidden" name="draftId" value={draftId ?? ''} />
-	</form>
-	<form
-		id="translation-form"
-		method="POST"
-		action="?/createTranslation"
-		use:enhance={formResultHandler}
-		class="hidden"
-	>
-		<input type="hidden" name="id" value={postId ?? ''} />
-		<input type="hidden" name="lang" value={translationLang} />
-	</form>
-
-	<!-- Main content area -->
-	<main class="flex min-h-full min-w-0 flex-col bg-background">
-		<!-- Header area: title + slug + separator -->
-		<div class="mx-auto w-full max-w-5xl shrink-0 px-3 pt-8">
-			<!-- Status bar -->
-			<div
-				class="group mb-3 flex min-h-7 items-center justify-between gap-3 opacity-60 transition-opacity duration-200 hover:opacity-100"
-			>
-				<div class="flex min-w-0 items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-					<span
-						aria-hidden="true"
-						class="inline-block size-1.5 shrink-0 rounded-full {saveState === 'conflict'
-							? 'bg-destructive'
-							: 'bg-emerald-500'}"
-					></span>
-					<span class="truncate">
-						{statusText}
-						{#if data.post}
-							{m.admin_posts_edit_modified()}
-							{formatDateTime(new Date(data.post.updatedAt ?? data.post.createdAt), {
-								dateStyle: 'short',
-								timeStyle: 'short'
-							})}
-						{/if}
-					</span>
-					{#if data.post && !data.post.placeholder && data.post.status !== 'draft'}
-						{#if data.draft}
-							<Badge variant="secondary" class="shrink-0"
-								>{m.admin_posts_unpublished_changes()}</Badge
-							>
-						{/if}
-					{/if}
-					{#if flash}
-						<span
-							class="shrink-0 rounded-sm bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400"
-						>
-							{flash}
-						</span>
-					{/if}
-				</div>
-				<div class="flex shrink-0 items-center gap-2">
-					{#if saveLabel}
-						<span
-							class="truncate text-xs {saveState === 'conflict'
-								? 'text-destructive'
-								: 'text-neutral-500 dark:text-neutral-400'}"
-						>
-							{saveLabel}
-						</span>
-					{/if}
-					<!-- Settings button -->
-					<button
-						type="button"
-						onclick={() => (settingsOpen = true)}
-						class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-						aria-label={m.admin_posts_edit_settings()}
-						title={m.admin_posts_edit_settings()}
-					>
-						<IconSettings class="size-3.5" />
-					</button>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						class="h-7 gap-1 px-2.5 text-xs"
-						onclick={() => void runSave(false)}
-						disabled={saveState === 'saving' || saveState === 'conflict'}
-					>
-						<IconDeviceFloppy class="size-3" />
-						{m.admin_posts_edit_save_draft()}
-					</Button>
-					<Button
-						type="button"
-						size="sm"
-						class="h-7 gap-1 px-2.5 text-xs"
-						onclick={() => void onPublish()}
-						disabled={publishing || saveState === 'conflict'}
-					>
-						<IconCloudUpload class="size-3" />
-						{m.admin_posts_edit_publish()}
-					</Button>
-				</div>
-			</div>
-
-			<!-- Conflict banner -->
-			{#if saveState === 'conflict'}
-				<Alert.Root variant="destructive" class="mb-3">
-					<Alert.Description>
-						<div class="flex flex-wrap items-center justify-between gap-2">
-							<span
-								>{conflictMessage ??
-									m.admin_posts_edit_conflict_short()}{m.admin_posts_edit_conflict_frozen_suffix()}</span
-							>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onclick={() => void reloadFromServer()}
-							>
-								{m.admin_posts_edit_load_latest()}
-							</Button>
-						</div>
-					</Alert.Description>
-				</Alert.Root>
-			{/if}
-
-			<!-- Expired-session banner: an action answered with a redirect. -->
-			{#if saveState === 'error' && reauthUrl}
-				<Alert.Root variant="destructive" class="mb-3">
-					<Alert.Description>
-						<div class="flex flex-wrap items-center justify-between gap-2">
-							<span>{saveError ?? m.admin_posts_edit_err_session_invalid()}</span>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onclick={() => window.location.assign(reauthUrl ?? '/')}
-							>
-								{m.admin_posts_edit_relogin()}
-							</Button>
-						</div>
-					</Alert.Description>
-				</Alert.Root>
-			{/if}
-
-			<!-- Validation / save error banner -->
-			{#if activeErrors.length > 0}
-				<div
-					role="alert"
-					class="mb-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+{#snippet hintTip(text: string)}
+	<Tooltip.Root>
+		<Tooltip.Trigger>
+			{#snippet child({ props })}
+				<button
+					type="button"
+					class="shrink-0 text-muted-foreground/70 transition-colors hover:text-foreground"
+					{...props}
+					aria-label={text}
 				>
-					<span class="shrink-0 font-medium">{m.admin_posts_edit_validation_failed()}</span>
-					<span class="min-w-0">{activeErrors.join(m.admin_posts_edit_error_join())}</span>
-				</div>
+					<IconInfoCircle class="size-3" />
+				</button>
+			{/snippet}
+		</Tooltip.Trigger>
+		<Tooltip.Content class="max-w-64 text-xs">{text}</Tooltip.Content>
+	</Tooltip.Root>
+{/snippet}
+
+<div class="flex h-full min-h-0 min-w-0 flex-col">
+	<!-- ── A: language family + shared slug ───────────────────────────── -->
+	<div
+		class="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border bg-muted/30 px-3 py-1.5"
+	>
+		{#each langCells as cell (cell.lang)}
+			<Button
+				type="button"
+				variant={needsSourceChoice
+					? 'outline'
+					: cell.kind === 'current'
+						? 'secondary'
+						: cell.kind === 'missing'
+							? 'ghost'
+							: 'outline'}
+				size="sm"
+				class="h-7 gap-1 px-2 text-xs {!needsSourceChoice && cell.kind === 'missing'
+					? 'border border-dashed text-muted-foreground'
+					: ''}"
+				title={needsSourceChoice
+					? m.admin_posts_edit_pick_source_lang()
+					: cell.kind === 'missing'
+						? m.admin_posts_edit_create_translation()
+						: cell.kind === 'current'
+							? canSwitchSource
+								? m.admin_posts_edit_switch_lang()
+								: m.admin_posts_edit_lang_locked()
+							: undefined}
+				onclick={() => openLanguage(cell)}
+				disabled={(!needsSourceChoice && cell.kind === 'current' && !canSwitchSource) ||
+					creatingTranslation}
+				aria-haspopup={canSwitchSource && cell.kind === 'current' ? 'dialog' : undefined}
+				aria-busy={creatingTranslation && cell.kind === 'missing'}
+			>
+				{langCellLabel(cell)}
+			</Button>
+		{/each}
+
+		<Button type="button" variant="ghost" size="sm" class="h-7 gap-1 px-2 text-xs" disabled>
+			<IconWorld class="size-3.5" />
+			{m.admin_posts_edit_ai_translate()}
+			<span class="sr-only">{m.admin_posts_edit_ai_translate_hint()}</span>
+		</Button>
+
+		<div class="ml-auto flex min-w-0 items-center gap-1.5">
+			{#if isTranslation}
+				<span class="truncate text-xs text-muted-foreground">
+					{m.admin_posts_edit_slug_shared()}
+				</span>
 			{/if}
-
-			<!-- Title input -->
-			<div class="group">
-				<input
-					name="title"
-					class="w-full border-0 bg-transparent px-0 py-0 text-3xl font-semibold tracking-tight text-neutral-950 outline-none placeholder:font-medium placeholder:text-neutral-300 dark:text-neutral-50 dark:placeholder:text-neutral-700"
-					placeholder={m.admin_posts_edit_title_placeholder()}
-					bind:value={title}
-					oninput={onTitleInput}
-				/>
-				<!-- Slug button -->
-				<div class="mt-1 flex items-center gap-2">
-					<button
-						type="button"
-						class="-ml-1 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-xs text-muted-foreground transition-opacity duration-150 outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-accent/15"
-						onclick={() => (slugDialogOpen = true)}
-						aria-label={m.admin_posts_edit_add_slug()}
-					>
-						<span class="truncate">{slug ? `/${slug}` : m.admin_posts_edit_add_slug_label()}</span>
-						<IconPencil class="size-3 shrink-0" />
-					</button>
-					{#if title && !slug}
-						<span class="text-xs text-destructive">{m.admin_posts_edit_slug_required_hint()}</span>
-					{/if}
-				</div>
-			</div>
-
-			<hr class="my-4 border-0 border-t border-neutral-100 dark:border-neutral-800" />
+			<button
+				type="button"
+				class="inline-flex max-w-56 items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-xs text-muted-foreground transition-colors outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-accent/15 disabled:pointer-events-none disabled:opacity-50"
+				disabled={needsSourceChoice}
+				onclick={() => (slugDialogOpen = true)}
+				aria-label={m.admin_posts_edit_add_slug()}
+			>
+				<span class="truncate">{slug ? `/${slug}` : m.admin_posts_edit_add_slug_label()}</span>
+				<IconPencil class="size-3 shrink-0" />
+			</button>
 		</div>
 
-		<!-- Editor area -->
-		<div class="flex min-h-0 flex-1 flex-col">
-			<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col px-3">
-				{#key loadedKey}
-					<MarkdownEditor
-						initialMarkdown={contentMarkdown}
-						placeholder={m.admin_posts_edit_body_placeholder()}
-						stickyToolbar={true}
-						borderless={true}
-						class="min-h-0 flex-1"
-						onChange={(detail) => {
-							contentMarkdown = detail.markdown;
-						}}
-					/>
-				{/key}
+		{#if translationError}
+			<p role="alert" class="w-full text-xs text-destructive">{translationError}</p>
+		{/if}
+	</div>
+
+	<!-- ── B: document column ─────────────────────────────────────────── -->
+	<main class="mx-auto w-full max-w-5xl flex-1 shrink-0 px-3 pb-16">
+		<!-- Status line: save state, flash and overflow actions - the old sticky
+		     bar minus the save/publish buttons, which live in the admin header. -->
+		<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-3">
+			<div class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+				<span
+					aria-hidden="true"
+					class="inline-block size-1.5 shrink-0 rounded-full {needsSourceChoice
+						? 'bg-amber-500'
+						: saveState === 'conflict'
+							? 'bg-destructive'
+							: 'bg-emerald-500'}"
+				></span>
+				<span class="truncate">
+					{statusText}
+					{#if data.post}
+						·
+						{formatDateTime(new Date(data.post.updatedAt ?? data.post.createdAt), {
+							dateStyle: 'short',
+							timeStyle: 'short'
+						})}
+					{/if}
+				</span>
+				{#if flash}
+					<span class="shrink-0 rounded-sm bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600">
+						{flash}
+					</span>
+				{/if}
 			</div>
+			<div class="flex shrink-0 items-center gap-2">
+				{#if saveLabel}
+					<span
+						class="max-w-56 truncate text-xs {saveState === 'conflict'
+							? 'text-destructive'
+							: 'text-muted-foreground'}"
+					>
+						{saveLabel}
+					</span>
+				{/if}
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								{...props}
+								aria-label={m.admin_common_actions()}
+							>
+								<IconDots class="size-4" />
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content align="end" class="w-48">
+						<DropdownMenu.Item disabled={needsSourceChoice} onclick={() => (slugDialogOpen = true)}>
+							<IconPencil class="size-4" />
+							{m.admin_posts_edit_add_slug()}
+						</DropdownMenu.Item>
+						{#if draftId}
+							<DropdownMenu.Item onclick={() => (discardOpen = true)} variant="destructive">
+								<IconTrash class="size-4" />
+								{m.admin_posts_edit_discard_draft()}
+							</DropdownMenu.Item>
+						{/if}
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+			</div>
+		</div>
+
+		{#if saveState === 'conflict'}
+			<Alert.Root variant="destructive" class="mt-3">
+				<Alert.Description>
+					<div class="flex flex-wrap items-center justify-between gap-2">
+						<span
+							>{conflictMessage ??
+								m.admin_posts_edit_conflict_short()}{m.admin_posts_edit_conflict_frozen_suffix()}</span
+						>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onclick={() => void reloadFromServer()}
+						>
+							{m.admin_posts_edit_load_latest()}
+						</Button>
+					</div>
+				</Alert.Description>
+			</Alert.Root>
+		{/if}
+
+		{#if saveState === 'error' && reauthUrl}
+			<Alert.Root variant="destructive" class="mt-3">
+				<Alert.Description>
+					<div class="flex flex-wrap items-center justify-between gap-2">
+						<span>{saveError ?? m.admin_posts_edit_err_session_invalid()}</span>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onclick={() => window.location.assign(reauthUrl ?? '/')}
+						>
+							{m.admin_posts_edit_relogin()}
+						</Button>
+					</div>
+				</Alert.Description>
+			</Alert.Root>
+		{/if}
+
+		{#if activeErrors.length > 0}
+			<div
+				role="alert"
+				class="mt-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+			>
+				<span class="shrink-0 font-medium">{m.admin_posts_edit_validation_failed()}</span>
+				<span class="min-w-0">{activeErrors.join(m.admin_posts_edit_error_join())}</span>
+			</div>
+		{/if}
+
+		<!-- Title -->
+		<div class="pt-6">
+			<input
+				name="title"
+				class="w-full border-0 bg-transparent px-0 py-0 text-3xl font-semibold tracking-tight text-neutral-950 outline-none placeholder:font-medium placeholder:text-neutral-300 dark:text-neutral-50 dark:placeholder:text-neutral-700"
+				placeholder={m.admin_posts_edit_title_placeholder()}
+				bind:value={title}
+				oninput={onTitleInput}
+			/>
+			{#if title && !slug}
+				<p class="mt-1 text-xs text-destructive">{m.admin_posts_edit_slug_required_hint()}</p>
+			{/if}
+		</div>
+
+		<!-- Metadata bar: horizontal, collapsible, always in the page -->
+		<div class="mt-4 rounded-lg border border-border/60 bg-muted/20">
+			<Collapsible.Root open={metaOpen} onOpenChange={(v) => (metaOpen = v)}>
+				<Collapsible.Trigger>
+					{#snippet child({ props })}
+						<button
+							type="button"
+							class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+							{...props}
+							aria-label={metaOpen
+								? m.admin_posts_edit_meta_collapse()
+								: m.admin_posts_edit_meta_expand()}
+						>
+							{#if metaOpen}
+								<IconChevronUp class="size-3.5" />
+							{:else}
+								<IconChevronDown class="size-3.5" />
+							{/if}
+							<span class="truncate">
+								{metaOpen
+									? m.admin_posts_edit_settings()
+									: metaSummary || m.admin_posts_edit_settings()}
+							</span>
+						</button>
+					{/snippet}
+				</Collapsible.Trigger>
+
+				<Collapsible.Content>
+					<div class="px-3 pb-3">
+						<!-- Compact field grid: four controls share one row on lg, two on
+						     sm. Labels stay with their control; secondary hints move into
+						     tooltips so the panel stays as shallow as possible. -->
+						<div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+							<!-- Category -->
+							<Field.Field data-invalid={publishErrors.categoryId ? true : undefined}>
+								<Field.Label for="post-category" class="text-xs text-muted-foreground">
+									<IconCategory class="size-3.5" />
+									{m.nav_posts_categories()}
+								</Field.Label>
+								<div class="flex items-center gap-1.5">
+									<Select.Root type="single" bind:value={categoryId as never}>
+										<Select.Trigger
+											id="post-category"
+											class="h-8 w-full"
+											disabled={needsSourceChoice}
+										>
+											<span class="min-w-0 flex-1 truncate">
+												{categoryId
+													? (categoryOptions.find((c) => c.id === categoryId)?.name ??
+														m.admin_categories_select())
+													: m.admin_categories_select()}
+											</span>
+										</Select.Trigger>
+										<Select.Content>
+											{#each categoryOptions as cat (cat.id)}
+												<Select.Item value={cat.id}>{cat.name}</Select.Item>
+											{/each}
+										</Select.Content>
+									</Select.Root>
+									<Tooltip.Root>
+										<Tooltip.Trigger>
+											{#snippet child({ props })}
+												<Button
+													type="button"
+													variant="outline"
+													size="icon"
+													class="shrink-0"
+													{...props}
+													aria-label={categoryFormOpen
+														? m.admin_common_cancel()
+														: m.admin_posts_edit_new_category()}
+													aria-expanded={categoryFormOpen}
+													disabled={needsSourceChoice}
+													onclick={() => (categoryFormOpen = !categoryFormOpen)}
+												>
+													{#if categoryFormOpen}
+														<IconX class="size-3.5" />
+													{:else}
+														<IconPlus class="size-3.5" />
+													{/if}
+												</Button>
+											{/snippet}
+										</Tooltip.Trigger>
+										<Tooltip.Content>
+											{categoryFormOpen
+												? m.admin_common_cancel()
+												: m.admin_posts_edit_new_category()}
+										</Tooltip.Content>
+									</Tooltip.Root>
+								</div>
+								{#if publishErrors.categoryId}
+									<Field.Error class="text-xs">{publishErrors.categoryId}</Field.Error>
+								{/if}
+							</Field.Field>
+
+							<!-- Tags -->
+							<Field.Field>
+								<div class="flex items-center gap-1.5">
+									<Field.Label for="post-tags" class="text-xs text-muted-foreground">
+										<IconTag class="size-3.5" />
+										{m.admin_tags_nav()}
+									</Field.Label>
+									{@render hintTip(m.admin_posts_edit_tags_hint())}
+								</div>
+								<Input
+									id="post-tags"
+									class="h-8"
+									placeholder="svelte, typescript, tutorial"
+									bind:value={tags}
+								/>
+							</Field.Field>
+
+							<!-- AI provenance -->
+							<Field.Field>
+								<div class="flex items-center gap-1.5">
+									<Field.Label for="post-writing-origin" class="text-xs text-muted-foreground">
+										<IconSparkles class="size-3.5" />
+										{m.admin_posts_edit_ai_title()}
+									</Field.Label>
+									{@render hintTip(
+										isTranslation ? m.admin_posts_edit_ai_inherited() : m.admin_posts_edit_ai_desc()
+									)}
+								</div>
+								<Select.Root type="single" bind:value={writingOrigin as never}>
+									<Select.Trigger
+										id="post-writing-origin"
+										class="h-8 w-full"
+										disabled={isTranslation}
+									>
+										{writingOriginLabel}
+									</Select.Trigger>
+									<Select.Content>
+										{#each writingOriginOptions as option (option.value)}
+											<Select.Item value={option.value}>{option.label}</Select.Item>
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							</Field.Field>
+
+							<!-- AI help -->
+							<Field.Field>
+								<div class="flex items-center gap-1.5">
+									<Field.Label for="post-ai-help" class="text-xs text-muted-foreground">
+										<IconSparkles class="size-3.5" />
+										{m.admin_posts_edit_ai_help()}
+									</Field.Label>
+									{@render hintTip(m.admin_posts_edit_ai_help_hint())}
+								</div>
+								<Input
+									id="post-ai-help"
+									class="h-8"
+									placeholder="ideas, wording"
+									bind:value={aiHelp}
+									disabled={isTranslation || !aiHelpEnabled}
+								/>
+							</Field.Field>
+						</div>
+
+						<!-- Summary: language-specific copy, folds away with the settings.
+						     One auto-growing row keeps the panel shallow. -->
+						<Field.Field class="mt-3">
+							<Field.Label for="post-summary" class="text-xs text-muted-foreground">
+								<IconFileDescription class="size-3.5" />
+								{m.admin_posts_edit_summary_label()}
+							</Field.Label>
+							<Textarea
+								id="post-summary"
+								class="min-h-9"
+								placeholder={m.admin_posts_edit_summary_placeholder()}
+								bind:value={summary}
+								rows={1}
+							/>
+						</Field.Field>
+
+						<!-- Inline category creation -->
+						{#if categoryFormOpen}
+							<div class="mt-3 rounded-lg border border-dashed bg-background/40 p-3">
+								<Field.Group class="gap-3">
+									<div class="grid gap-3 sm:grid-cols-3">
+										<Field.Field>
+											<Field.Label for="new-category-name" class="text-xs text-muted-foreground">
+												{m.admin_posts_edit_category_name()}
+											</Field.Label>
+											<Input
+												id="new-category-name"
+												class="h-8"
+												bind:value={newCategoryName}
+												oninput={() => (newCategorySlug = '')}
+											/>
+										</Field.Field>
+										<Field.Field>
+											<Field.Label for="new-category-slug" class="text-xs text-muted-foreground">
+												slug
+											</Field.Label>
+											<Input
+												id="new-category-slug"
+												class="h-8 font-mono"
+												bind:value={newCategorySlug}
+											/>
+										</Field.Field>
+										<Field.Field>
+											<Field.Label for="new-category-lang" class="text-xs text-muted-foreground">
+												{m.admin_posts_edit_lang_label()}
+											</Field.Label>
+											<Select.Root type="single" bind:value={newCategoryLang as never}>
+												<Select.Trigger id="new-category-lang" class="h-8 w-full">
+													{newCategoryLang}
+												</Select.Trigger>
+												<Select.Content>
+													{#each data.langs as l (l)}
+														<Select.Item value={l}>{l}</Select.Item>
+													{/each}
+												</Select.Content>
+											</Select.Root>
+										</Field.Field>
+									</div>
+									{#if categoryError}
+										<Field.Error class="text-xs">{categoryError}</Field.Error>
+									{/if}
+									<div class="flex items-center justify-end gap-2">
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											onclick={() => (categoryFormOpen = false)}
+										>
+											<IconX class="size-3.5" />
+											{m.admin_common_cancel()}
+										</Button>
+										<Button
+											type="button"
+											size="sm"
+											disabled={creatingCategory || !newCategoryName.trim()}
+											onclick={() => void onCreateCategory()}
+										>
+											{m.admin_common_create()}
+										</Button>
+									</div>
+								</Field.Group>
+							</div>
+						{/if}
+					</div>
+				</Collapsible.Content>
+			</Collapsible.Root>
+		</div>
+
+		<!-- Editor -->
+		<div class="mt-4 flex min-h-0 flex-1 flex-col">
+			{#key loadedKey}
+				<MarkdownEditor
+					initialMarkdown={contentMarkdown}
+					placeholder={m.admin_posts_edit_body_placeholder()}
+					stickyToolbar={true}
+					borderless={true}
+					class="min-h-0 flex-1"
+					onChange={(detail) => {
+						contentMarkdown = detail.markdown;
+					}}
+				/>
+			{/key}
 		</div>
 	</main>
 </div>
 
-<!-- Slug Dialog -->
-<Dialog.Root open={slugDialogOpen} onOpenChange={(v) => (slugDialogOpen = v)}>
-	<Dialog.Portal>
-		<Dialog.Overlay />
-		<Dialog.Content class="sm:max-w-md">
-			<Dialog.Header>
-				<Dialog.Title>{m.admin_posts_edit_slug_dialog_title()}</Dialog.Title>
-				<Dialog.Description>{m.admin_posts_edit_slug_dialog_desc()}</Dialog.Description>
-			</Dialog.Header>
-			<div class="px-6 pb-2">
-				<Input
-					name="slug-input"
-					placeholder="my-post-slug"
-					class="font-mono"
-					value={slug}
-					oninput={onSlugInput}
-				/>
-				<p class="mt-1.5 text-xs text-muted-foreground">{m.admin_posts_edit_slug_rule()}</p>
-				{#if slug}
-					<p class="mt-1.5 font-mono text-xs text-muted-foreground">
-						{m.admin_posts_edit_slug_preview()}{slug}
-					</p>
-				{/if}
-			</div>
-			<Dialog.Footer>
-				<Dialog.Close>
-					{#snippet child({ props })}
-						<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
-					{/snippet}
-				</Dialog.Close>
-				<Button onclick={() => (slugDialogOpen = false)}>{m.admin_common_confirm()}</Button>
-			</Dialog.Footer>
-		</Dialog.Content>
-	</Dialog.Portal>
-</Dialog.Root>
+<!-- Slug dialog -->
+<AlertDialog.Root open={slugDialogOpen} onOpenChange={(v) => (slugDialogOpen = v)}>
+	<AlertDialog.Content class="sm:max-w-md">
+		<AlertDialog.Header>
+			<AlertDialog.Title>{m.admin_posts_edit_slug_dialog_title()}</AlertDialog.Title>
+			<AlertDialog.Description>
+				{isTranslation ? m.admin_posts_edit_slug_shared() : m.admin_posts_edit_slug_dialog_desc()}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<div class="px-6 pb-2">
+			<Input
+				name="slug-input"
+				placeholder="my-post-slug"
+				class="font-mono"
+				value={slug}
+				disabled={isTranslation}
+				oninput={onSlugInput}
+			/>
+			<p class="mt-1.5 text-xs text-muted-foreground">{m.admin_posts_edit_slug_rule()}</p>
+			{#if slug}
+				<p class="mt-1.5 font-mono text-xs text-muted-foreground">
+					{m.admin_posts_edit_slug_preview()}{slug}
+				</p>
+			{/if}
+		</div>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
+			<AlertDialog.Action onclick={() => (slugDialogOpen = false)}>
+				{m.admin_common_confirm()}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
 
-<!-- Settings Sheet -->
-<Sheet.Root open={settingsOpen} onOpenChange={(v) => (settingsOpen = v)}>
-	<Sheet.Portal>
-		<Sheet.Overlay />
-		<Sheet.Content side="right" class="w-full sm:max-w-sm">
-			<Sheet.Header>
-				<Sheet.Title>{m.admin_posts_edit_settings()}</Sheet.Title>
-				<Sheet.Description>{m.admin_posts_edit_settings_desc()}</Sheet.Description>
-				<Sheet.Close
-					class="absolute top-4 right-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-				>
-					<IconX class="size-4" />
-					<span class="sr-only">{m.admin_common_close()}</span>
-				</Sheet.Close>
-			</Sheet.Header>
-			<div class="flex flex-col gap-5 overflow-y-auto px-6 py-4">
-				<!-- Language -->
-				<div class="flex flex-col gap-1.5">
-					<label for="settings-lang" class="flex items-center gap-1.5 text-sm font-medium">
-						<IconLanguage class="size-4 text-muted-foreground" />
-						{m.admin_posts_edit_lang_label()}
-					</label>
-					{#if postId}
-						<div class="flex items-center gap-2 text-sm">
-							<Badge variant="outline">{lang}</Badge>
-							<span class="text-xs text-muted-foreground">{m.admin_posts_edit_lang_locked()}</span>
-						</div>
-					{:else}
-						<Select.Root type="single" bind:value={lang as never}>
-							<Select.Trigger id="settings-lang" class="w-full">{lang}</Select.Trigger>
-							<Select.Portal>
-								<Select.Content class="z-[60]">
-									{#each data.langs as l (l)}
-										<Select.Item value={l}>{l}</Select.Item>
-									{/each}
-								</Select.Content>
-							</Select.Portal>
-						</Select.Root>
-					{/if}
-				</div>
-
-				<!-- Category -->
-				<div class="flex flex-col gap-1.5">
-					<label for="settings-category" class="flex items-center gap-1.5 text-sm font-medium">
-						<IconCategory class="size-4 text-muted-foreground" />
-						{m.nav_posts_categories()}
-					</label>
-					<Select.Root type="single" bind:value={categoryId as never}>
-						<Select.Trigger id="settings-category" class="w-full">
-							{categoryId
-								? (data.categories.find((c) => c.id === categoryId)?.name ??
-									m.admin_categories_select())
-								: m.admin_categories_select()}
-						</Select.Trigger>
-						<Select.Portal>
-							<Select.Content class="z-[60]">
-								<Select.Group>
-									<Select.Label>{m.nav_posts_categories()}</Select.Label>
-									{#each data.categories as cat (cat.id)}
-										<Select.Item value={cat.id}>{cat.name}</Select.Item>
-									{/each}
-								</Select.Group>
-							</Select.Content>
-						</Select.Portal>
-					</Select.Root>
-					{#if !postId && !categoryId}
-						<p class="text-xs text-muted-foreground">
-							{m.admin_posts_edit_category_autosave_hint()}
-						</p>
-					{/if}
-					{#if publishErrors.categoryId}
-						<p class="text-sm text-destructive">{publishErrors.categoryId}</p>
-					{/if}
-				</div>
-
-				<!-- Tags -->
-				<div class="flex flex-col gap-1.5">
-					<label for="settings-tags" class="flex items-center gap-1.5 text-sm font-medium">
-						<IconTag class="size-4 text-muted-foreground" />
-						{m.admin_tags_nav()}
-					</label>
-					<Input id="settings-tags" placeholder="svelte, typescript, tutorial" bind:value={tags} />
-					<p class="text-xs text-muted-foreground">{m.admin_posts_edit_tags_hint()}</p>
-				</div>
-
-				<!-- Summary -->
-				<div class="flex flex-col gap-1.5">
-					<label for="settings-summary" class="flex items-center gap-1.5 text-sm font-medium">
-						<IconFileDescription class="size-4 text-muted-foreground" />
-						{m.admin_posts_edit_summary_label()}
-					</label>
-					<Textarea
-						id="settings-summary"
-						placeholder={m.admin_posts_edit_summary_placeholder()}
-						bind:value={summary}
-						rows={4}
-					/>
-				</div>
-
-				<!-- AI provenance -->
-				<div class="flex flex-col gap-2 border-t border-border/50 pt-4">
-					<div class="flex items-center gap-1.5 text-sm font-medium">
-						<IconSparkles class="size-4 text-muted-foreground" />
-						{m.admin_posts_edit_ai_title()}
-					</div>
-					<p class="text-xs text-muted-foreground">{m.admin_posts_edit_ai_desc()}</p>
-
-					<label for="settings-writing-origin" class="text-sm font-medium">
-						{m.admin_posts_edit_ai_writing()}
-					</label>
-					<select
-						id="settings-writing-origin"
-						bind:value={writingOrigin}
-						disabled={isTranslation}
-						class="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						<option value="">{m.admin_posts_edit_ai_undisclosed()}</option>
-						<option value="none">{m.admin_posts_edit_ai_none()}</option>
-						<option value="assist">{m.admin_posts_edit_ai_assist()}</option>
-						<option value="mostly_ai">{m.admin_posts_edit_ai_mostly()}</option>
-						<option value="ai_full">{m.admin_posts_edit_ai_full()}</option>
-					</select>
-
-					<label for="settings-ai-help" class="text-sm font-medium">
-						{m.admin_posts_edit_ai_help()}
-					</label>
-					<Input
-						id="settings-ai-help"
-						placeholder="ideas, wording"
-						bind:value={aiHelp}
-						disabled={isTranslation}
-					/>
-					<p class="text-xs text-muted-foreground">{m.admin_posts_edit_ai_help_hint()}</p>
-					{#if isTranslation}
-						<p class="text-xs text-muted-foreground">{m.admin_posts_edit_ai_inherited()}</p>
-					{/if}
-				</div>
-
-				<!-- Translation family -->
-				<div class="flex flex-col gap-2">
-					<div class="flex items-center gap-1.5 text-sm font-medium">
-						<IconLanguage class="size-4 text-muted-foreground" />
-						{m.admin_posts_edit_translations()}
-					</div>
-					{#if data.siblings.length > 0}
-						<div class="flex flex-wrap gap-1.5">
-							{#each data.siblings as s (s.id)}
-								<Badge variant={s.status === 'published' ? 'default' : 'outline'}>
-									{s.lang}·{s.status === 'published'
-										? m.admin_posts_status_published()
-										: m.admin_posts_status_draft()}
-								</Badge>
-							{/each}
-						</div>
-					{:else}
-						<p class="text-xs text-muted-foreground">{m.admin_posts_edit_no_translations()}</p>
-					{/if}
-					{#if postId}
-						<Button
-							type="button"
-							variant="outline"
-							class="w-full"
-							onclick={() => {
-								translationLang = '';
-								translationOpen = true;
-							}}
-						>
-							<IconLanguage class="size-4" />
-							{m.admin_posts_edit_create_translation()}
-						</Button>
-					{/if}
-				</div>
-
-				<!-- Danger zone -->
-				{#if draftId}
-					<AlertDialog.Root>
-						<AlertDialog.Trigger>
-							{#snippet child({ props })}
-								<Button
-									variant="outline"
-									class="w-full border-destructive/30 text-destructive"
-									{...props}
-								>
-									<IconTrash class="size-4" />
-									{m.admin_posts_edit_discard_draft()}
-								</Button>
-							{/snippet}
-						</AlertDialog.Trigger>
-						<AlertDialog.Content>
-							<AlertDialog.Header>
-								<AlertDialog.Title>{m.admin_posts_edit_discard_title()}</AlertDialog.Title>
-								<AlertDialog.Description>
-									{draftId ? m.admin_posts_edit_discard_desc() : ''}
-								</AlertDialog.Description>
-							</AlertDialog.Header>
-							<AlertDialog.Footer>
-								<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
-								<AlertDialog.Action
-									onclick={() => {
-										const f = document.getElementById('discard-form');
-										if (f instanceof HTMLFormElement) f.requestSubmit();
-									}}
-								>
-									{m.admin_posts_edit_discard_confirm()}
-								</AlertDialog.Action>
-							</AlertDialog.Footer>
-						</AlertDialog.Content>
-					</AlertDialog.Root>
-				{/if}
-			</div>
-		</Sheet.Content>
-	</Sheet.Portal>
-</Sheet.Root>
-
-<!-- Translation dialog -->
-<Dialog.Root open={translationOpen} onOpenChange={(v) => (translationOpen = v)}>
-	<Dialog.Portal>
-		<Dialog.Overlay />
-		<Dialog.Content class="sm:max-w-md">
-			<Dialog.Header>
-				<Dialog.Title>{m.admin_posts_edit_create_translation()}</Dialog.Title>
-				<Dialog.Description>
-					{m.admin_posts_edit_translation_desc()}
-				</Dialog.Description>
-			</Dialog.Header>
-			<div class="flex flex-col gap-3 px-6 pb-2">
-				<Select.Root type="single" bind:value={translationLang as never}>
-					<Select.Trigger class="w-full">
-						{translationLang || m.admin_posts_edit_target_lang()}
+<!-- Source-language switch -->
+<Dialog.Root bind:open={switchLangOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>{m.admin_posts_edit_switch_lang()}</Dialog.Title>
+			<Dialog.Description>{m.admin_posts_edit_switch_lang_desc()}</Dialog.Description>
+		</Dialog.Header>
+		<form
+			method="POST"
+			action="?/switchLang"
+			use:enhance={switchLangResult}
+			class="flex flex-col gap-3 px-6 pb-2"
+		>
+			<input type="hidden" name="id" value={postId ?? ''} />
+			<input type="hidden" name="lang" value={switchLangValue} />
+			<input type="hidden" name="mode" value={switchLangMode} />
+			<Field.Field>
+				<Field.Label for="switch-lang-select" class="text-xs text-muted-foreground">
+					{m.admin_posts_edit_lang_label()}
+				</Field.Label>
+				<Select.Root type="single" bind:value={switchLangValue as never}>
+					<Select.Trigger id="switch-lang-select" class="w-full">
+						{switchLangValue}
 					</Select.Trigger>
-					<Select.Portal>
-						<Select.Content class="z-[60]">
-							{#each data.langs as l (l)}
-								<Select.Item value={l} disabled={occupiedLangs.has(l)}>
-									{l}{occupiedLangs.has(l) ? m.admin_posts_edit_lang_exists() : ''}
-								</Select.Item>
-							{/each}
-						</Select.Content>
-					</Select.Portal>
+					<Select.Content>
+						{#each data.langs as l (l)}
+							<Select.Item value={l}>{l}</Select.Item>
+						{/each}
+					</Select.Content>
 				</Select.Root>
-			</div>
+			</Field.Field>
+
+			{#if switchLangSibling}
+				<RadioGroup.Root bind:value={switchLangMode} class="gap-2">
+					<label
+						class="flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 [@media(hover:hover)]:hover:bg-muted/50"
+					>
+						<RadioGroup.Item value="existing" class="mt-0.5" />
+						<span class="flex min-w-0 flex-col gap-0.5">
+							<span class="text-sm font-medium">
+								{m.admin_posts_edit_switch_use_existing({ lang: switchLangValue })}
+							</span>
+							<span class="text-xs text-muted-foreground">
+								{m.admin_posts_edit_switch_existing_hint()}
+							</span>
+						</span>
+					</label>
+					<label
+						class="flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 [@media(hover:hover)]:hover:bg-muted/50"
+					>
+						<RadioGroup.Item value="current" class="mt-0.5" />
+						<span class="flex min-w-0 flex-col gap-0.5">
+							<span class="text-sm font-medium">
+								{m.admin_posts_edit_switch_keep_current()}
+							</span>
+							<span class="text-xs text-muted-foreground">
+								{m.admin_posts_edit_switch_current_hint({ lang: switchLangValue })}
+							</span>
+						</span>
+					</label>
+				</RadioGroup.Root>
+			{/if}
+
+			{#if switchLangError}
+				<p role="alert" class="text-xs text-destructive">{switchLangError}</p>
+			{/if}
+
 			<Dialog.Footer>
-				<Dialog.Close>
-					{#snippet child({ props })}
-						<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
-					{/snippet}
-				</Dialog.Close>
-				<Button
-					disabled={!translationLang || occupiedLangs.has(translationLang)}
-					onclick={() => {
-						const f = document.getElementById('translation-form');
-						if (f instanceof HTMLFormElement) f.requestSubmit();
-					}}
-				>
-					<IconSend class="size-4" />
-					{m.admin_common_create()}
+				<Button type="button" variant="ghost" onclick={() => (switchLangOpen = false)}>
+					{m.admin_common_cancel()}
+				</Button>
+				<Button type="submit" disabled={!switchLangValue || switchLangValue === lang}>
+					{m.admin_common_confirm()}
 				</Button>
 			</Dialog.Footer>
-		</Dialog.Content>
-	</Dialog.Portal>
+		</form>
+	</Dialog.Content>
 </Dialog.Root>
+
+<!-- Discard confirmation -->
+<AlertDialog.Root open={discardOpen} onOpenChange={(v) => (discardOpen = v)}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{m.admin_posts_edit_discard_title()}</AlertDialog.Title>
+			<AlertDialog.Description>
+				{draftId ? m.admin_posts_edit_discard_desc() : ''}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
+			<AlertDialog.Action
+				onclick={() => {
+					leavingIntentionally = true;
+					clearStash();
+					const f = document.getElementById('discard-form');
+					if (f instanceof HTMLFormElement) f.requestSubmit();
+				}}
+			>
+				{m.admin_posts_edit_discard_confirm()}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
+
+<form
+	id="discard-form"
+	method="POST"
+	action="?/discard"
+	use:enhance={formResultHandler}
+	class="hidden"
+>
+	<input type="hidden" name="draftId" value={draftId ?? ''} />
+</form>

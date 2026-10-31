@@ -8,7 +8,6 @@ import Separator from './select-separator.svelte';
 import ScrollDownButton from './select-scroll-down-button.svelte';
 import ScrollUpButton from './select-scroll-up-button.svelte';
 import GroupHeading from './select-group-heading.svelte';
-import Portal from './select-portal.svelte';
 
 export {
 	Root,
@@ -21,7 +20,6 @@ export {
 	ScrollDownButton,
 	ScrollUpButton,
 	GroupHeading,
-	Portal,
 	//
 	Root as Select,
 	Group as SelectGroup,
@@ -32,6 +30,9 @@ export {
 	Separator as SelectSeparator,
 	ScrollDownButton as SelectScrollDownButton,
 	ScrollUpButton as SelectScrollUpButton,
-	GroupHeading as SelectGroupHeading,
-	Portal as SelectPortal
+	GroupHeading as SelectGroupHeading
 };
+
+// `Portal` is deliberately not exported: `Select.Content` already portals its
+// layer, and a caller-side `<Select.Portal>` nests a second one (UX-1020-02).
+// To move the layer inside a Sheet/Dialog, pass `portalProps` to Content.

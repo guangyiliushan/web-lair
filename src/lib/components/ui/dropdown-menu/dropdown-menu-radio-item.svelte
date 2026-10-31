@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { DropdownMenu as DropdownMenuPrimitive } from 'bits-ui';
-	import { IconCheck } from '@tabler/icons-svelte-runes';
+	import IconCheck from '@tabler/icons-svelte-runes/icons/check';
 	import { cn, type WithoutChild } from '$lib/utils.js';
 
 	let {

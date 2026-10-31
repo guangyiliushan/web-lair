@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { tick, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import { enhance, deserialize } from '$app/forms';
-	import { afterNavigate, invalidateAll, replaceState } from '$app/navigation';
+	import { afterNavigate, goto, invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { ActionResult } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
@@ -81,6 +81,13 @@
 
 	let slugDialogOpen = $state(false);
 	let settingsOpen = $state(false);
+	/**
+	 * Settings sheet element. `Select.Content` already portals its layer; when a
+	 * select lives inside this sheet the layer must land INSIDE the sheet DOM,
+	 * or the dialog's dismiss layer treats it as an outside click (UX-1020-02).
+	 * `to` must not be passed before the element exists (bits-ui throws in DEV).
+	 */
+	let settingsSheetEl = $state<HTMLElement | null>(null);
 	let publishing = $state(false);
 	let publishErrors = $state<Record<string, string>>({});
 	let flash = $state<string | null>(null);
@@ -251,6 +258,91 @@
 		}, delayMs);
 	}
 
+	/** Working copy as form fields - shared by `save` and the single `publish`. */
+	function draftForm(): FormData {
+		const fd = new FormData();
+		fd.set('title', title);
+		fd.set('slug', slug);
+		fd.set('topicId', topicId);
+		fd.set('mood', mood);
+		fd.set('weatherCode', weatherCode);
+		fd.set('temperatureC', temperatureC);
+		fd.set('latitude', latitude);
+		fd.set('longitude', longitude);
+		fd.set('location', location);
+		fd.set('content', contentMarkdown);
+		if (noteId) fd.set('id', noteId);
+		if (draftId) fd.set('draftId', draftId);
+		if (draftVersion != null) fd.set('draftVersion', String(draftVersion));
+		if (!noteId) fd.set('lang', lang);
+		return fd;
+	}
+
+	/**
+	 * Publish in ONE request (UX-1020-04). The action persists the working copy
+	 * and publishes it together, so a first-time publish (no draft row yet) can
+	 * no longer lose the race between the old two client-side requests - which
+	 * is how a placeholder-slug draft ended up in the database.
+	 */
+	async function runPublish(): Promise<void> {
+		if (inFlight) {
+			// Wait out an in-flight autosave instead of dropping the click.
+			for (let waited = 0; waited < 100 && inFlight; waited += 1) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			}
+			if (inFlight) return;
+		}
+		inFlight = true;
+		saveState = 'saving';
+		const snapshotAtSubmit = currentPayload();
+		try {
+			const response = await fetch('?/publish', {
+				method: 'POST',
+				body: draftForm(),
+				headers: { 'x-sveltekit-action': 'true', accept: 'application/json' }
+			});
+			const result = deserialize(await response.text());
+			if (result.type === 'redirect') {
+				// Success (or an auth bounce, which the target page resolves).
+				savedSnapshot = snapshotAtSubmit;
+				await goto(result.location);
+				return;
+			}
+			if (result.type === 'success') {
+				savedSnapshot = snapshotAtSubmit;
+				saveState = 'saved';
+				return;
+			}
+			if (result.type === 'failure') {
+				const d = (result.data ?? {}) as {
+					message?: string;
+					errors?: Record<string, string>;
+				};
+				if (result.status === 409) {
+					saveState = 'conflict';
+					conflictMessage = d.message ?? m.admin_posts_edit_conflict_short();
+					return;
+				}
+				// Graded field errors win over the generic banner (mirror save()).
+				const graded = Object.values(d.errors ?? {}).filter(Boolean);
+				publishErrors = { ...(d.errors ?? {}) };
+				saveState = 'error';
+				saveError =
+					graded.length > 0
+						? graded.join(m.admin_posts_edit_error_join())
+						: (d.message ?? m.admin_posts_edit_err_publish_validation());
+				return;
+			}
+			saveState = 'error';
+			saveError = m.admin_posts_edit_err_network();
+		} catch {
+			saveState = 'error';
+			saveError = m.admin_posts_edit_err_network();
+		} finally {
+			inFlight = false;
+		}
+	}
+
 	async function runSave(autosave: boolean): Promise<boolean> {
 		if (inFlight) {
 			if (autosave) {
@@ -269,22 +361,8 @@
 		saveState = 'saving';
 		const snapshotAtSubmit = currentPayload();
 		try {
-			const fd = new FormData();
+			const fd = draftForm();
 			fd.set('autosave', autosave ? '1' : '0');
-			fd.set('title', title);
-			fd.set('slug', slug);
-			fd.set('topicId', topicId);
-			fd.set('mood', mood);
-			fd.set('weatherCode', weatherCode);
-			fd.set('temperatureC', temperatureC);
-			fd.set('latitude', latitude);
-			fd.set('longitude', longitude);
-			fd.set('location', location);
-			fd.set('content', contentMarkdown);
-			if (noteId) fd.set('id', noteId);
-			if (draftId) fd.set('draftId', draftId);
-			if (draftVersion != null) fd.set('draftVersion', String(draftVersion));
-			if (!noteId) fd.set('lang', lang);
 
 			const response = await fetch('?/save', {
 				method: 'POST',
@@ -382,18 +460,7 @@
 		if (saveState === 'conflict' || publishing) return;
 		publishing = true;
 		try {
-			if (!draftId || isDirty()) {
-				// Flush the working copy first. runSave() itself waits out any
-				// in-flight autosave (a `saveState`-based wait missed the case
-				// where typing mid-flight flips the state to 'dirty' - round-7
-				// review finding); only real end-states (conflict / error /
-				// session loss) abort here.
-				const ok = await runSave(false);
-				if (!ok) return;
-			}
-			await tick();
-			const publishForm = document.getElementById('publish-form');
-			if (publishForm instanceof HTMLFormElement) publishForm.requestSubmit();
+			await runPublish();
 		} finally {
 			publishing = false;
 		}
@@ -506,17 +573,8 @@
 </svelte:head>
 
 <div class="flex h-full min-h-0 min-w-0 flex-col">
-	<!-- Publish/discard/status live in their own forms; the visible controls
-	     trigger them (publish flushes the draft first). -->
-	<form
-		id="publish-form"
-		method="POST"
-		action="?/publish"
-		use:enhance={formResultHandler}
-		class="hidden"
-	>
-		<input type="hidden" name="draftId" value={draftId ?? ''} />
-	</form>
+	<!-- Discard/status live in their own forms; publish is a single fetch
+	     (save→publish in one request, UX-1020-04). -->
 	<form
 		id="discard-form"
 		method="POST"
@@ -760,7 +818,7 @@
 <Sheet.Root open={settingsOpen} onOpenChange={(v) => (settingsOpen = v)}>
 	<Sheet.Portal>
 		<Sheet.Overlay />
-		<Sheet.Content side="right" class="w-full sm:max-w-sm">
+		<Sheet.Content bind:ref={settingsSheetEl} side="right" class="w-full sm:max-w-sm">
 			<Sheet.Header>
 				<Sheet.Title>{m.admin_notes_edit_settings()}</Sheet.Title>
 				<Sheet.Description>{m.admin_notes_edit_settings_desc()}</Sheet.Description>
@@ -790,13 +848,14 @@
 								aria-label={m.admin_posts_edit_lang_label()}
 								class="w-full">{lang}</Select.Trigger
 							>
-							<Select.Portal>
-								<Select.Content class="z-[60]">
-									{#each data.langs as l (l)}
-										<Select.Item value={l}>{l}</Select.Item>
-									{/each}
-								</Select.Content>
-							</Select.Portal>
+							<Select.Content
+								class="z-[60]"
+								portalProps={settingsSheetEl ? { to: settingsSheetEl } : undefined}
+							>
+								{#each data.langs as l (l)}
+									<Select.Item value={l}>{l}</Select.Item>
+								{/each}
+							</Select.Content>
 						</Select.Root>
 					{/if}
 				</div>
@@ -818,14 +877,15 @@
 									m.admin_notes_edit_topic_select())
 								: m.admin_notes_edit_none()}
 						</Select.Trigger>
-						<Select.Portal>
-							<Select.Content class="z-[60]">
-								<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
-								{#each data.topics as topic (topic.id)}
-									<Select.Item value={topic.id}>{topic.name}</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Portal>
+						<Select.Content
+							class="z-[60]"
+							portalProps={settingsSheetEl ? { to: settingsSheetEl } : undefined}
+						>
+							<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
+							{#each data.topics as topic (topic.id)}
+								<Select.Item value={topic.id}>{topic.name}</Select.Item>
+							{/each}
+						</Select.Content>
 					</Select.Root>
 					{#if publishErrors.topicId}
 						<p class="text-sm text-destructive">{publishErrors.topicId}</p>
@@ -848,14 +908,15 @@
 								? (NOTE_MOOD_LABELS[mood as (typeof NOTE_MOODS)[number]]?.[getLocale()] ?? mood)
 								: m.admin_notes_edit_none()}
 						</Select.Trigger>
-						<Select.Portal>
-							<Select.Content class="z-[60]">
-								<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
-								{#each NOTE_MOODS as level (level)}
-									<Select.Item value={level}>{NOTE_MOOD_LABELS[level][getLocale()]}</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Portal>
+						<Select.Content
+							class="z-[60]"
+							portalProps={settingsSheetEl ? { to: settingsSheetEl } : undefined}
+						>
+							<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
+							{#each NOTE_MOODS as level (level)}
+								<Select.Item value={level}>{NOTE_MOOD_LABELS[level][getLocale()]}</Select.Item>
+							{/each}
+						</Select.Content>
 					</Select.Root>
 				</div>
 
@@ -908,14 +969,15 @@
 								? (weatherOptions.find((o) => o.value === weatherCode)?.label ?? weatherCode)
 								: m.admin_notes_edit_none()}
 						</Select.Trigger>
-						<Select.Portal>
-							<Select.Content class="z-[60]">
-								<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
-								{#each weatherOptions as option (option.value)}
-									<Select.Item value={option.value}>{option.label}</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Portal>
+						<Select.Content
+							class="z-[60]"
+							portalProps={settingsSheetEl ? { to: settingsSheetEl } : undefined}
+						>
+							<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
+							{#each weatherOptions as option (option.value)}
+								<Select.Item value={option.value}>{option.label}</Select.Item>
+							{/each}
+						</Select.Content>
 					</Select.Root>
 				</div>
 				<div class="flex items-end gap-3">

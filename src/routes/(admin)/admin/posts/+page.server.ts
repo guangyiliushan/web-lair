@@ -1,8 +1,9 @@
-import { and, desc, eq, ilike, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, sql } from 'drizzle-orm';
 import { fail, type Actions } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { categories, drafts, posts } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
+import { OPTION_LANGS } from '$lib/server/config/options-registry';
 import { draftsForPosts } from '$lib/server/services/post-drafts';
 import { syncFileReferences } from '$lib/server/services/file-references';
 import { isUuid } from '$lib/utils/uuid';
@@ -33,30 +34,19 @@ export const load: PageServerLoad = async ({ url }) => {
 	if (keyword) conditions.push(ilike(posts.title, `%${keyword}%`));
 	const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-	const [rows, totals, allCategories] = await Promise.all([
+	// 译文与原文合并成一行（UX-1020）：按 translation_group 分页，行内给出
+	// 每个语言的状态。先分页到组再取成员，家庭不会被页边界劈开。
+	const [groups, totals, allCategories] = await Promise.all([
 		db
-			.select({
-				id: posts.id,
-				title: posts.title,
-				slug: posts.slug,
-				status: posts.status,
-				lang: posts.lang,
-				readCount: posts.readCount,
-				likeCount: posts.likeCount,
-				categoryId: posts.categoryId,
-				categoryName: categories.name,
-				createdAt: posts.createdAt,
-				updatedAt: posts.updatedAt,
-				publishedAt: posts.publishedAt
-			})
+			.select({ group: posts.translationGroup })
 			.from(posts)
-			.leftJoin(categories, eq(posts.categoryId, categories.id))
 			.where(where)
-			.orderBy(desc(posts.updatedAt))
+			.groupBy(posts.translationGroup)
+			.orderBy(desc(sql`max(${posts.updatedAt})`))
 			.limit(PAGE_SIZE)
 			.offset((page - 1) * PAGE_SIZE),
 		db
-			.select({ count: sql<number>`count(*)`.mapWith(Number) })
+			.select({ count: sql<number>`count(distinct ${posts.translationGroup})`.mapWith(Number) })
 			.from(posts)
 			.where(where),
 		db
@@ -65,7 +55,68 @@ export const load: PageServerLoad = async ({ url }) => {
 			.orderBy(categories.name)
 	]);
 
+	const groupIds = groups.map((g) => g.group);
+	const rows =
+		groupIds.length === 0
+			? []
+			: await db
+					.select({
+						id: posts.id,
+						title: posts.title,
+						slug: posts.slug,
+						status: posts.status,
+						lang: posts.lang,
+						readCount: posts.readCount,
+						likeCount: posts.likeCount,
+						categoryId: posts.categoryId,
+						categoryName: categories.name,
+						translationGroup: posts.translationGroup,
+						translatedFromPostId: posts.translatedFromPostId,
+						createdAt: posts.createdAt,
+						updatedAt: posts.updatedAt,
+						publishedAt: posts.publishedAt
+					})
+					.from(posts)
+					.leftJoin(categories, eq(posts.categoryId, categories.id))
+					.where(inArray(posts.translationGroup, groupIds))
+					.orderBy(desc(posts.updatedAt));
+
 	const withDrafts = await draftsForPosts(rows.map((r) => r.id));
+
+	// Fold the family into one row: the group SOURCE is the identity (title /
+	// slug / actions), and its translations ride along as a language chain.
+	const byGroup = new Map<string, typeof rows>();
+	for (const row of rows) {
+		const bucket = byGroup.get(row.translationGroup);
+		if (bucket) bucket.push(row);
+		else byGroup.set(row.translationGroup, [row]);
+	}
+	const families = groupIds.flatMap((group) => {
+		const members = (byGroup.get(group) ?? []).slice().sort((a, b) => {
+			// Source first, then the language order the editor uses.
+			if (!a.translatedFromPostId !== !b.translatedFromPostId)
+				return a.translatedFromPostId ? 1 : -1;
+			return a.lang.localeCompare(b.lang);
+		});
+		const head = members.find((member) => !member.translatedFromPostId) ?? members[0];
+		if (!head) return [];
+		return [
+			{
+				...head,
+				hasDraft: withDrafts.has(head.id),
+				// NB: never name this parameter "m" - it would shadow the
+				// paraglide message object, and the i18n guard would read these
+				// property accesses as message keys.
+				langs: members.map((member) => ({
+					lang: member.lang,
+					id: member.id,
+					status: member.status,
+					hasDraft: withDrafts.has(member.id),
+					isSource: !member.translatedFromPostId
+				}))
+			}
+		];
+	});
 
 	return {
 		headerTitle: m.admin_nav_posts(),
@@ -80,7 +131,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				href: '/admin/posts/edit'
 			}
 		],
-		posts: rows.map((row) => ({ ...row, hasDraft: withDrafts.has(row.id) })),
+		posts: families,
+		langs: [...OPTION_LANGS],
 		totalCount: totals[0]?.count ?? 0,
 		page,
 		pageSize: PAGE_SIZE,
@@ -136,8 +188,14 @@ export const actions: Actions = {
 	 *
 	 * Mirrors the pages hard-delete (M1 / R2-3): drafts first, because
 	 * `drafts.ref_id` is polymorphic and no FK can cascade for it; then the
-	 * row (comments / revisions / related posts / tags cascade); then the
+	 * rows (comments / revisions / related posts / tags cascade); then the
 	 * file-reference cleanup, in the same lock order publish and discard use.
+	 *
+	 * A source row anchors its translation family, and the DB keeps exactly one
+	 * source per group (`posts_group_source_uniq`). Purging it therefore purges
+	 * the whole family: siblings are deleted FIRST, because letting the
+	 * self-FK's `SET NULL` run while the source is still there makes every
+	 * sibling a second "source" and violates that index (the old 500).
 	 */
 	purge: async ({ request }) => {
 		await requireAdminRole();
@@ -147,22 +205,45 @@ export const actions: Actions = {
 
 		const result = await db.transaction(async (tx) => {
 			const [row] = await tx
-				.select({ id: posts.id })
+				.select({
+					id: posts.id,
+					translationGroup: posts.translationGroup,
+					translatedFromPostId: posts.translatedFromPostId
+				})
 				.from(posts)
 				.where(eq(posts.id, id))
 				.limit(1)
 				.for('update');
 			if (!row) return { kind: 'not-found' as const };
 
+			const siblings =
+				row.translatedFromPostId === null
+					? (
+							await tx
+								.select({ id: posts.id })
+								.from(posts)
+								.where(eq(posts.translationGroup, row.translationGroup))
+								.for('update')
+						)
+							.map((member) => member.id)
+							.filter((memberId) => memberId !== row.id)
+					: [];
+
 			const draftRows = await tx
 				.delete(drafts)
-				.where(and(eq(drafts.refType, 'post'), eq(drafts.refId, id)))
+				.where(and(eq(drafts.refType, 'post'), inArray(drafts.refId, [row.id, ...siblings])))
 				.returning({ id: drafts.id });
-			await tx.delete(posts).where(eq(posts.id, id));
+			for (const memberId of siblings) {
+				await tx.delete(posts).where(eq(posts.id, memberId));
+			}
+			await tx.delete(posts).where(eq(posts.id, row.id));
 			for (const draft of draftRows) {
 				await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
 			}
-			await syncFileReferences(tx, { type: 'post', id }, []);
+			for (const memberId of siblings) {
+				await syncFileReferences(tx, { type: 'post', id: memberId }, []);
+			}
+			await syncFileReferences(tx, { type: 'post', id: row.id }, []);
 			return { kind: 'deleted' as const };
 		});
 

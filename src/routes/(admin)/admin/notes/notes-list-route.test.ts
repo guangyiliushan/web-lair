@@ -44,6 +44,7 @@ function chain(): Record<string, unknown> {
 			return c;
 		},
 		leftJoin: ret,
+		groupBy: ret,
 		orderBy: ret,
 		limit: (...args: unknown[]) => {
 			state.limitArgs.push(args[0]);
@@ -65,6 +66,8 @@ const NOTE_ROW = {
 	title: 'First note',
 	slug: 'first-note',
 	lang: 'en',
+	translationGroup: 'group-1',
+	translatedFromNoteId: null,
 	status: 'published',
 	mood: null,
 	weatherCode: null,
@@ -105,7 +108,7 @@ describe('admin notes list route', () => {
 	});
 
 	it('applies whitelisted filters only and renders them in SQL', async () => {
-		state.selectQueue = [[NOTE_ROW], [{ count: 1 }], []];
+		state.selectQueue = [[{ group: 'group-1' }], [{ count: 1 }], [], [NOTE_ROW]];
 		await load(event(`?status=trash&topic=${TOPIC_ID}&keyword=hello`));
 
 		// First select = the rows query.
@@ -149,14 +152,26 @@ describe('admin notes list route', () => {
 
 	it('merges the pending-draft badge and echoes filters/actions', async () => {
 		state.selectQueue = [
-			[NOTE_ROW, { ...NOTE_ROW, id: '22222222-2222-2222-2222-222222222222' }],
+			[{ group: 'group-1' }, { group: 'group-2' }],
 			[{ count: 2 }],
-			[{ id: TOPIC_ID, name: '旅行', slug: 'travel' }]
+			[{ id: TOPIC_ID, name: '旅行', slug: 'travel' }],
+			[
+				NOTE_ROW,
+				{
+					...NOTE_ROW,
+					id: '22222222-2222-2222-2222-222222222222',
+					translationGroup: 'group-2'
+				}
+			]
 		];
 		service.draftsForNotes.mockResolvedValue(new Set([NOTE_ID]));
 
 		const result = (await load(event('?status=published'))) as unknown as {
-			notes: { id: string; hasDraft: boolean }[];
+			notes: {
+				id: string;
+				hasDraft: boolean;
+				langs: { lang: string; id: string; status: string; hasDraft: boolean; isSource: boolean }[];
+			}[];
 			totalCount: number;
 			page: number;
 			filters: Record<string, string>;
@@ -165,12 +180,51 @@ describe('admin notes list route', () => {
 		};
 		expect(result.notes.find((n) => n.id === NOTE_ID)?.hasDraft).toBe(true);
 		expect(result.notes[1].hasDraft).toBe(false);
+		// Every family row carries its language chain (UX-1020).
+		expect(result.notes[0].langs).toEqual([
+			{ lang: 'en', id: NOTE_ID, status: 'published', hasDraft: true, isSource: true }
+		]);
 		expect(result.totalCount).toBe(2);
 		expect(result.page).toBe(1);
 		expect(result.filters).toMatchObject({ status: 'published' });
 		expect(result.headerActions.map((a) => a.href)).toEqual([
 			'/admin/notes/topics',
 			'/admin/notes/edit'
+		]);
+	});
+
+	it('folds the translation family into one row with a language chain', async () => {
+		const SOURCE_ID = NOTE_ID;
+		const TRANSLATED_ID = '22222222-2222-2222-2222-222222222222';
+		state.selectQueue = [
+			[{ group: 'group-1' }],
+			[{ count: 1 }],
+			[],
+			[
+				// Returned newest-first; the fold must still put the source first.
+				{
+					...NOTE_ROW,
+					id: TRANSLATED_ID,
+					lang: 'zh-cn',
+					status: 'draft',
+					translatedFromNoteId: SOURCE_ID
+				},
+				{ ...NOTE_ROW, id: SOURCE_ID, lang: 'en', status: 'published', translatedFromNoteId: null }
+			]
+		];
+		service.draftsForNotes.mockResolvedValue(new Set([TRANSLATED_ID]));
+
+		const result = (await load(event(''))) as unknown as {
+			notes: {
+				id: string;
+				langs: { lang: string; id: string; isSource: boolean; hasDraft: boolean }[];
+			}[];
+		};
+		expect(result.notes).toHaveLength(1);
+		expect(result.notes[0].id).toBe(SOURCE_ID);
+		expect(result.notes[0].langs).toEqual([
+			{ lang: 'en', id: SOURCE_ID, status: 'published', hasDraft: false, isSource: true },
+			{ lang: 'zh-cn', id: TRANSLATED_ID, status: 'draft', hasDraft: true, isSource: false }
 		]);
 	});
 });

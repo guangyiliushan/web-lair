@@ -3,7 +3,8 @@
 	import * as Pagination from '$lib/components/ui/pagination';
 	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
-	import { IconArrowLeft, IconArrowRight } from '@tabler/icons-svelte-runes';
+	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
+	import IconArrowRight from '@tabler/icons-svelte-runes/icons/arrow-right';
 
 	let {
 		page,

@@ -11,7 +11,6 @@
 	import EditorToolbar from '$lib/components/markdown/toolbar/EditorToolbar.svelte';
 	import FloatingFormatToolbar from '$lib/components/markdown/toolbar/FloatingFormatToolbar.svelte';
 	import BlockHandleToolbar from '$lib/components/markdown/toolbar/BlockHandleToolbar.svelte';
-	import CodeModeToggle from '$lib/components/markdown/toolbar/CodeModeToggle.svelte';
 	import TableCellMenu from '$lib/components/markdown/toolbar/TableCellMenu.svelte';
 	import LinkHoverEditor from '$lib/components/markdown/toolbar/LinkHoverEditor.svelte';
 	import { uploadErrorCopy } from '$lib/components/markdown/editor/upload-feedback';
@@ -30,7 +29,6 @@
 	} from '$lib/components/markdown/math/math-render';
 
 	let {
-		value,
 		initialMarkdown,
 		editable = true,
 		placeholder = m.editor_placeholder_default(),
@@ -38,6 +36,7 @@
 		autofocus = false,
 		showToolbar = true,
 		stickyToolbar = false,
+		stickyOffset = 'top-14',
 		borderless = false,
 		class: className,
 		onChange,
@@ -48,6 +47,12 @@
 		onBlur?: () => void;
 		onFocus?: () => void;
 		stickyToolbar?: boolean;
+		/**
+		 * Sticky `top` class for the toolbar. Pages that stack their own sticky
+		 * bars above the editor pass a larger offset so the toolbar lands under
+		 * them instead of underneath.
+		 */
+		stickyOffset?: string;
 		borderless?: boolean;
 	} = $props();
 
@@ -98,7 +103,10 @@
 		plainText: string;
 		isEmpty: boolean;
 	}) {
-		codeModeText = detail.markdown;
+		// The Lexical instance is unmounted in code mode, so this cannot fire
+		// mid-edit there - but guard anyway: the textarea owns `codeModeText`
+		// while it is on screen and a late update must never clobber it.
+		if (!codeMode) codeModeText = detail.markdown;
 		onChange?.(detail);
 	}
 
@@ -110,8 +118,9 @@
 				codeModeText = convertToMarkdown(EDITOR_TRANSFORMERS);
 			});
 		} else {
-			// exit: the codeMode branch rebuilds the rich editor; the old instance's
-			// update is a no-op. Hand the source to the rebuild path instead.
+			// Exiting: the {#if} swap rebuilds the rich editor, and the action only
+			// reads `initialMarkdown` at mount - so hand the source over through
+			// `pendingMarkdown` (a plain prop update would be ignored).
 			pendingMarkdown = codeModeText;
 		}
 		codeMode = !codeMode;
@@ -164,11 +173,10 @@
 			class={cn(
 				'flex min-w-0 items-center gap-0.5',
 				stickyToolbar &&
-					'sticky top-14 z-10 border-b border-border bg-background/80 backdrop-blur-sm'
+					`sticky ${stickyOffset ?? 'top-14'} z-10 border-b border-border bg-background/80 backdrop-blur-sm`
 			)}
 		>
-			<EditorToolbar {editor} class="min-w-0 flex-1" />
-			<CodeModeToggle {codeMode} onToggle={toggleCodeMode} />
+			<EditorToolbar {editor} class="min-w-0 flex-1" {codeMode} onToggleCodeMode={toggleCodeMode} />
 		</div>
 
 		<!-- Floating format toolbar: appears when text is selected -->
@@ -214,7 +222,7 @@
 			<!-- Rich-text mode: the Lexical editor -->
 			<div
 				use:lexicalEditor={{
-					initialMarkdown: pendingMarkdown ?? value ?? initialMarkdown,
+					initialMarkdown: pendingMarkdown ?? initialMarkdown,
 					editable,
 					placeholder,
 					autofocus,

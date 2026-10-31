@@ -58,9 +58,10 @@ export interface MarkdownRenderOptions {
 
 /** MarkdownEditor.svelte props 类型 */
 export interface MarkdownEditorProps {
-	/** Lexical JSON 字符串（优先于 initialMarkdown） */
-	value?: string | null;
-	/** 初始 markdown（当无 value 时使用） */
+	/**
+	 * 初始 markdown。编辑器只在挂载时读取一次；换内容请换 `key` 或走代码模式
+	 * 的往返（历史上还有个 `value`（Lexical JSON）prop，声明了却从未接线，已删）。
+	 */
 	initialMarkdown?: string;
 	/** 是否可编辑，默认 true */
 	editable?: boolean;

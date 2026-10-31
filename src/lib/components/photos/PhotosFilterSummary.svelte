@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
-	import { IconX } from '@tabler/icons-svelte-runes';
+	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import {
 		photoQueryParams,
 		togglePhotoFilter,

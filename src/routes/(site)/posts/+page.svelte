@@ -6,13 +6,11 @@
 	import { localizeHref } from '$lib/paraglide/runtime';
 	import { m } from '$lib/paraglide/messages';
 	import { POST_SORTS, postListHref, type PostSort } from '$lib/utils/posts-list';
-	import {
-		IconEye,
-		IconHeart,
-		IconArrowLeft,
-		IconArrowRight,
-		IconWriting
-	} from '@tabler/icons-svelte-runes';
+	import IconEye from '@tabler/icons-svelte-runes/icons/eye';
+	import IconHeart from '@tabler/icons-svelte-runes/icons/heart';
+	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
+	import IconArrowRight from '@tabler/icons-svelte-runes/icons/arrow-right';
+	import IconWriting from '@tabler/icons-svelte-runes/icons/writing';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();

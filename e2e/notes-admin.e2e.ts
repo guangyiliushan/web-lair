@@ -179,11 +179,20 @@ test('publishes the draft: notes row, front page and admin list', async ({ page 
 	await page.goto(`/admin/notes/edit?id=${id}`);
 	await expect(page.locator('input[name="title"]')).toHaveValue(TITLE, { timeout: 10000 });
 
-	// Click + outcome as one retryable step: a pre-hydration click is a no-op.
-	await expect(async () => {
-		await page.getByRole('button', { name: '发布' }).click();
-		await expect(byText(page, /已发布/).first()).toBeVisible({ timeout: 2500 });
-	}).toPass({ timeout: 60000 });
+	// Hydration gate: the Lexical body renders its markdown only after the
+	// client mounts, so waiting on the text proves the click handlers are
+	// attached. A click before that is a silent no-op (the state bar still
+	// read 草稿 with no error banner).
+	await expect(page.getByRole('textbox', { name: '输入正文...' })).toContainText(
+		'Hello notes body',
+		{ timeout: 15000 }
+	);
+
+	// UX-1020-04: publish is ONE request (save->publish in the same action).
+	// Click once and assert the outcome - the old `toPass` around the click
+	// is what let a first click that only ever saved slip through.
+	await page.getByRole('button', { name: '发布' }).click();
+	await expect(byText(page, /已发布/).first()).toBeVisible({ timeout: 25000 });
 
 	expect(psql(`select status from notes where slug = '${SLUG}'`)).toBe('published');
 	expect(psql(`select count(*) from drafts where ref_id = '${id}'`)).toBe('0');
@@ -207,61 +216,63 @@ test('topics CRUD: create, edit, reorder, attribution refusal, delete', async ({
 	// Create (retry the click until the dialog actually opens - a
 	// pre-hydration click is a silent no-op under full-suite load).
 	await expect(async () => {
-		if (!(await page.locator('#topic-name').isVisible())) {
+		if (!(await page.locator('#new-topic-name').isVisible())) {
 			await page.getByRole('button', { name: '新建' }).filter({ visible: true }).first().click();
 		}
-		await expect(page.locator('#topic-name')).toBeVisible({ timeout: 2000 });
+		await expect(page.locator('#new-topic-name')).toBeVisible({ timeout: 2000 });
 	}).toPass({ timeout: 30000 });
-	await page.locator('#topic-name').fill(TOPIC2_NAME);
-	await expect(page.locator('#topic-slug')).toHaveValue(TOPIC2_SLUG);
+	await page.locator('#new-topic-name').fill(TOPIC2_NAME);
+	// The create form does not derive the slug from the name (no oninput
+	// handler on `new-topic-slug`), so it is typed here; the psql assertion
+	// below is what pins the stored value.
+	await page.locator('#new-topic-slug').fill(TOPIC2_SLUG);
 	await page.getByRole('button', { name: '创建' }).click();
-	await expect(byText(page, TOPIC2_NAME)).toBeVisible({ timeout: 10000 });
+	// The name shows up in both the list row and the detail header.
+	await expect(byText(page, TOPIC2_NAME).first()).toBeVisible({ timeout: 10000 });
 	expect(psql(`select count(*) from topics where slug = '${TOPIC2_SLUG}'`)).toBe('1');
 
-	// Edit description through the dialog.
+	// Edit the description on the detail pane. That form posts `?/update` and
+	// auto-saves on input (`oninput={scheduleSave}`) - there is no separate
+	// edit/confirm step to click through.
 	await byText(page, TOPIC2_NAME).first().click();
-	await page.getByRole('button', { name: '编辑' }).filter({ visible: true }).first().click();
-	await page.locator('#topic-description').fill('e2e description');
-	await page.getByRole('button', { name: '保存' }).click();
+	await page.locator('#topic-desc').fill('e2e description');
 	await expect
-		.poll(() => psql(`select description from topics where slug = '${TOPIC2_SLUG}'`))
+		.poll(() => psql(`select description from topics where slug = '${TOPIC2_SLUG}'`), {
+			timeout: 20000
+		})
 		.toBe('e2e description');
 
-	// Reorder: one ▲ moves it one slot earlier; ▼ returns it. Clicks retry
-	// until the DB order actually flips (a swallowed click under full-suite
-	// load used to fail here); the DB is re-read before every click so a
-	// slow-but-successful move is never double-applied.
+	// Reorder: one ▲ moves it one slot earlier; ▼ returns it. One click each,
+	// then poll the DB - the old `toPass` loop re-read the order before the
+	// previous click had settled and could double-apply the move.
 	const slugOrder = () =>
 		psql(`select string_agg(slug, ',' order by sort_order, name) from topics`);
 	const indexBefore = slugOrder().split(',').indexOf(TOPIC2_SLUG);
-	await expect(async () => {
-		const current = slugOrder().split(',').indexOf(TOPIC2_SLUG);
-		if (current !== indexBefore - 1) {
-			await page.getByRole('button', { name: '上移' }).click();
-		}
-		await expect
-			.poll(() => slugOrder().split(',').indexOf(TOPIC2_SLUG), { timeout: 2500 })
-			.toBe(indexBefore - 1);
-	}).toPass({ timeout: 30000 });
-	await expect(async () => {
-		const current = slugOrder().split(',').indexOf(TOPIC2_SLUG);
-		if (current !== indexBefore) {
-			await page.getByRole('button', { name: '下移' }).click();
-		}
-		await expect
-			.poll(() => slugOrder().split(',').indexOf(TOPIC2_SLUG), { timeout: 2500 })
-			.toBe(indexBefore);
-	}).toPass({ timeout: 30000 });
+	await page.getByRole('button', { name: '上移' }).click();
+	await expect
+		.poll(() => slugOrder().split(',').indexOf(TOPIC2_SLUG), { timeout: 20000 })
+		.toBe(indexBefore - 1);
+	await page.getByRole('button', { name: '下移' }).click();
+	await expect
+		.poll(() => slugOrder().split(',').indexOf(TOPIC2_SLUG), { timeout: 20000 })
+		.toBe(indexBefore);
 
-	// Delete refusal: the fixture topic still owns the published note.
+	// Delete refusal: the fixture topic still owns the published note. The
+	// header action only OPENS the confirm dialog - the refusal comes back
+	// after that dialog's destructive submit.
 	await page.getByText(TOPIC_NAME, { exact: true }).filter({ visible: true }).first().click();
 	await page.getByRole('button', { name: '删除' }).filter({ visible: true }).first().click();
+	await page.getByRole('alertdialog').getByRole('button', { name: '删除' }).click();
+	// This submit has no auto-close (it is a plain button, not Alert.Action),
+	// so dismiss the dialog before asserting the message in the detail pane.
+	await page.keyboard.press('Escape');
 	await expect(byText(page, /仍有/)).toBeVisible({ timeout: 10000 });
 	expect(psql(`select count(*) from topics where slug = 'e2e-topic'`)).toBe('1');
 
 	// Delete the note-free topic.
 	await page.getByText(TOPIC2_NAME, { exact: true }).filter({ visible: true }).first().click();
 	await page.getByRole('button', { name: '删除' }).filter({ visible: true }).first().click();
+	await page.getByRole('alertdialog').getByRole('button', { name: '删除' }).click();
 	await expect
 		.poll(() => psql(`select count(*) from topics where slug = '${TOPIC2_SLUG}'`))
 		.toBe('0');

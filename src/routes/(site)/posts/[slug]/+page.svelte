@@ -7,7 +7,9 @@
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { localizeHref } from '$lib/paraglide/runtime';
 	import { m } from '$lib/paraglide/messages';
-	import { IconEye, IconHeart, IconSparkles } from '@tabler/icons-svelte-runes';
+	import IconEye from '@tabler/icons-svelte-runes/icons/eye';
+	import IconHeart from '@tabler/icons-svelte-runes/icons/heart';
+	import IconSparkles from '@tabler/icons-svelte-runes/icons/sparkles';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();

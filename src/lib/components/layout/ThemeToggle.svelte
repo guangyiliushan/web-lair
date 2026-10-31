@@ -5,7 +5,9 @@
 	import { mergeProps } from 'bits-ui';
 	import { m } from '$lib/paraglide/messages';
 	import { themeStore } from '$lib/stores/theme.svelte';
-	import { IconSunHigh, IconMoonStars, IconDeviceDesktop } from '@tabler/icons-svelte-runes';
+	import IconSunHigh from '@tabler/icons-svelte-runes/icons/sun-high';
+	import IconMoonStars from '@tabler/icons-svelte-runes/icons/moon-stars';
+	import IconDeviceDesktop from '@tabler/icons-svelte-runes/icons/device-desktop';
 
 	const themes = [
 		{ value: 'light' as const, label: m.ui_theme_light, icon: IconSunHigh },

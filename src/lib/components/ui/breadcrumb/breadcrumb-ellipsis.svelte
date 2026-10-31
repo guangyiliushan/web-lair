@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { HTMLAttributes } from 'svelte/elements';
 	import { cn, type WithElementRef, type WithoutChildren } from '$lib/utils.js';
-	import { IconDots } from '@tabler/icons-svelte-runes';
+	import IconDots from '@tabler/icons-svelte-runes/icons/dots';
 
 	let {
 		ref = $bindable(null),

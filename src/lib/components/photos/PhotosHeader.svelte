@@ -6,14 +6,12 @@
 	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
 	import { cn } from '$lib/utils';
-	import {
-		IconCheck,
-		IconLayoutGrid,
-		IconMap,
-		IconMenu2,
-		IconSearch,
-		IconX
-	} from '@tabler/icons-svelte-runes';
+	import IconCheck from '@tabler/icons-svelte-runes/icons/check';
+	import IconLayoutGrid from '@tabler/icons-svelte-runes/icons/layout-grid';
+	import IconMap from '@tabler/icons-svelte-runes/icons/map';
+	import IconMenu2 from '@tabler/icons-svelte-runes/icons/menu-2';
+	import IconSearch from '@tabler/icons-svelte-runes/icons/search';
+	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import { slide } from 'svelte/transition';
 	import { quartInOut } from 'svelte/easing';
 	import { Button } from '$lib/components/ui/button';

@@ -206,6 +206,17 @@ describe('notes editor · publish / discard / status', () => {
 	it('translates publish outcomes', async () => {
 		expect((await run('publish', { draftId: 'nope' })).status).toBe(400);
 
+		// publish is save→publish in one request (UX-1020-04): the working copy
+		// is persisted first, so a first-time publish can no longer ship a
+		// placeholder-slug draft.
+		service.saveNoteDraftWork.mockResolvedValue({
+			kind: 'saved',
+			draftId: DRAFT_ID,
+			version: 1,
+			noteId: NOTE_ID,
+			updatedAt: null
+		});
+
 		service.publishNoteDraft.mockResolvedValueOnce({
 			kind: 'invalid',
 			errors: { title: '标题不能为空' }
@@ -221,6 +232,25 @@ describe('notes editor · publish / discard / status', () => {
 		const ok = await run('publish', { draftId: DRAFT_ID });
 		expect(ok.status).toBe(303);
 		expect(ok.location).toBe(`/admin/notes/edit?id=${NOTE_ID}&published=1`);
+	});
+
+	it('never publishes when the one-request save fails first', async () => {
+		service.saveNoteDraftWork.mockResolvedValueOnce({
+			kind: 'invalid',
+			errors: { title: '标题不能为空' }
+		});
+		const gate = await run('publish', { draftId: DRAFT_ID });
+		expect(gate.status).toBe(400);
+		expect(gate.data).toMatchObject({ errors: { title: '标题不能为空' } });
+		expect(service.publishNoteDraft).not.toHaveBeenCalled();
+
+		service.saveNoteDraftWork.mockResolvedValueOnce({
+			kind: 'conflict',
+			server: { draftId: null, version: 2, updatedAt: null }
+		});
+		const conflict = await run('publish', { draftId: DRAFT_ID });
+		expect(conflict.status).toBe(409);
+		expect(service.publishNoteDraft).not.toHaveBeenCalled();
 	});
 
 	it('routes discard redirects by placeholder state', async () => {

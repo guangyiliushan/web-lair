@@ -57,28 +57,23 @@ test.afterAll(() => {
 	psql(`delete from categories where slug = 'e2e-editor-cat'`);
 });
 
-/** Pick the category inside the settings sheet (required before the first save). */
+/**
+ * Pick the category in the metadata bar (required before the first save).
+ *
+ * SINGLE CLICK, no retry loop: the old helper clicked until the dropdown
+ * happened to open, which is exactly what hid the nested-portal bug where the
+ * first click never opened it at all (UX-1020-02). The assertions below fail
+ * if the first click does not open the listbox.
+ */
 async function pickCategory(page: Page) {
-	const sheetOpen = async () => await page.locator('#settings-category').isVisible();
-	await expect(async () => {
-		if (!(await sheetOpen())) {
-			await page.getByRole('button', { name: '文章设置' }).click();
-		}
-		await expect(page.locator('#settings-category')).toBeVisible({ timeout: 10000 });
-	}).toPass({ timeout: 20000 });
-	// Retry the whole pick until the trigger shows the selection: under a
-	// loaded machine the first clicks can be swallowed (exactly this step
-	// timed out at 180s in a concurrent full-suite run - review finding).
-	await expect(async () => {
-		await page.locator('#settings-category').click();
-		await page
-			.locator('[data-slot="select-item"]')
-			.filter({ hasText: CATEGORY_NAME })
-			.click({ timeout: 3000 });
-		await expect(page.locator('#settings-category')).toContainText(CATEGORY_NAME, {
-			timeout: 2000
-		});
-	}).toPass({ timeout: 25000 });
+	const trigger = page.locator('#post-category');
+	await expect(trigger).toBeVisible({ timeout: 10000 });
+	await trigger.click();
+	await expect(trigger).toHaveAttribute('aria-expanded', 'true', { timeout: 3000 });
+	const option = page.locator('[data-slot="select-item"]').filter({ hasText: CATEGORY_NAME });
+	await expect(option).toBeVisible({ timeout: 3000 });
+	await option.click();
+	await expect(trigger).toContainText(CATEGORY_NAME, { timeout: 3000 });
 	await page.keyboard.press('Escape');
 }
 
@@ -114,6 +109,17 @@ async function fillTitle(page: Page, value: string) {
 	await expect(titleInput).toHaveValue(value, { timeout: 5000 });
 }
 
+/**
+ * A new article must pick its source language before the metadata unlocks
+ * (the first save would otherwise freeze the default language as the source).
+ */
+async function chooseSourceLang(page: Page, lang = 'en') {
+	const chip = page.getByRole('button', { name: lang, exact: true });
+	await expect(chip).toBeVisible({ timeout: 10000 });
+	await chip.click();
+	await expect(page.locator('#post-category')).toBeEnabled({ timeout: 5000 });
+}
+
 async function waitSaved(page: Page) {
 	// Autosave can be throttled server-side (30s window) and retried, so give
 	// the indicator room to turn green.
@@ -125,6 +131,7 @@ test('autosaves a new article and restores it after a reload', async ({ page }) 
 	await fillTitle(page, TITLE);
 	// Auto slug derives from the latin title.
 	await expect(byText(page, `/${SLUG}`)).toBeVisible({ timeout: 10000 });
+	await chooseSourceLang(page);
 
 	await typeIntoEditor(page, 'Hello e2e body');
 	// Before a category is chosen the server save gate is visible...
@@ -157,11 +164,17 @@ test('publishes the draft: posts gets content, revision and the draft is gone', 
 	const id = psql(`select ref_id from drafts where slug = '${SLUG}'`);
 	await page.goto(`/admin/posts/edit?id=${id}`);
 	await expect(page.locator('input[name="title"]')).toHaveValue(TITLE, { timeout: 10000 });
+	// Hydration gate: the Lexical body renders its markdown only after the
+	// client mounts, so waiting on it proves the click handlers are attached.
+	// `toHaveValue` alone is satisfied by the server-rendered HTML.
+	await expect(page.getByRole('textbox', { name: '输入正文...' })).toContainText('Hello e2e body', {
+		timeout: 15000
+	});
 
-	await expect(async () => {
-		await page.getByRole('button', { name: '发布' }).click();
-		await page.waitForURL(/published=1/, { timeout: 15000 });
-	}).toPass({ timeout: 30000 });
+	// UX-1020-04: one request, one click. A retry loop here would happily
+	// accept a first click that only ever saved and publish on the second.
+	await page.getByRole('button', { name: '发布' }).click();
+	await page.waitForURL(/published=1/, { timeout: 25000 });
 
 	expect(psql(`select status || '/' || version from posts where id = '${id}'`)).toBe('published/1');
 	expect(psql(`select count(*) from drafts where ref_id = '${id}'`)).toBe('0');
@@ -195,10 +208,10 @@ test('edits a published article in isolation, then publishes v2 with a slug trac
 	expect(psql(`select count(*) from drafts where ref_id = '${id}'`)).toBe('1');
 	expect(psql(`select content from drafts where ref_id = '${id}'`)).toContain('v2 change');
 
-	await expect(async () => {
-		await page.getByRole('button', { name: '发布' }).click();
-		await page.waitForURL(/published=1/, { timeout: 15000 });
-	}).toPass({ timeout: 30000 });
+	// UX-1020-04: one request, one click. A retry loop here would happily
+	// accept a first click that only ever saved and publish on the second.
+	await page.getByRole('button', { name: '发布' }).click();
+	await page.waitForURL(/published=1/, { timeout: 25000 });
 
 	expect(psql(`select version from posts where id = '${id}'`)).toBe('2');
 	expect(psql(`select slug from posts where id = '${id}'`)).toBe(`${SLUG}-v2`);
@@ -281,17 +294,11 @@ test('creates a translation draft with the copy prefill (§9.20.4)', async ({ pa
 	const group = psql(`select translation_group from posts where id = '${id}'`);
 	await page.goto(`/admin/posts/edit?id=${id}`);
 
-	await expect(async () => {
-		await page.getByRole('button', { name: '文章设置' }).click();
-		await expect(page.getByRole('button', { name: '创建翻译' })).toBeVisible({ timeout: 10000 });
-	}).toPass({ timeout: 20000 });
-	await page.getByRole('button', { name: '创建翻译' }).click();
-
-	const dialog = page.getByRole('dialog', { name: '创建翻译' });
-	await expect(dialog).toBeVisible();
-	await dialog.locator('[data-slot="select-trigger"]').click();
-	await page.locator('[data-slot="select-item"]').filter({ hasText: 'zh-cn' }).click();
-	await dialog.getByRole('button', { name: '创建' }).click();
+	// The missing-language chip reserves the translation in one click - the
+	// dedicated picker/button pair was removed once the chip did the same job.
+	const chip = page.getByRole('button', { name: 'zh-cn·未译' });
+	await expect(chip).toBeVisible({ timeout: 10000 });
+	await chip.click();
 
 	await page.waitForURL(/translation=1/, { timeout: 15000 });
 	await expect(byText(page, '翻译草稿已创建')).toBeVisible();
@@ -304,11 +311,14 @@ test('creates a translation draft with the copy prefill (§9.20.4)', async ({ pa
 		psql(`select translation_group = '${group}' from posts where id = '${translatedId}'`)
 	).toBe('t');
 	expect(psql(`select status from posts where id = '${translatedId}'`)).toBe('draft');
+	// UX-1020: the translation family shares ONE slug - the source decides it
+	// and the translation inherits it (this used to be `slug is null`, i.e. the
+	// translation forked its own address the moment it was published).
 	expect(
 		psql(
-			`select (slug is null)::text || '/' || (content like '%v2 change%')::text from drafts where ref_id = '${translatedId}'`
+			`select slug || '/' || (content like '%v2 change%')::text from drafts where ref_id = '${translatedId}'`
 		)
-	).toBe('true/true');
+	).toBe(`${SLUG}-v2/true`);
 
 	// The editor shows the pending-translation marker and the prefilled body.
 	await expect(byText(page, /译文（待翻译）/)).toBeVisible();
@@ -320,6 +330,7 @@ test('discards a never-published placeholder together with its empty posts row',
 }) => {
 	await page.goto('/admin/posts/edit');
 	await fillTitle(page, 'e2e writing orphan');
+	await chooseSourceLang(page);
 	await typeIntoEditor(page, 'orphan body');
 	await pickCategory(page);
 	await waitSaved(page);
@@ -327,11 +338,9 @@ test('discards a never-published placeholder together with its empty posts row',
 	const id = psql(`select ref_id from drafts where slug = 'e2e-writing-orphan'`);
 	expect(id).not.toBe('');
 
-	await expect(async () => {
-		await page.getByRole('button', { name: '文章设置' }).click();
-		await expect(page.getByRole('button', { name: '丢弃草稿' })).toBeVisible({ timeout: 10000 });
-	}).toPass({ timeout: 20000 });
-	await page.getByRole('button', { name: '丢弃草稿' }).click();
+	// Discard lives in the status-line overflow menu (one collector, no sheet).
+	await page.getByRole('button', { name: '操作', exact: true }).click();
+	await page.getByRole('menuitem', { name: '丢弃草稿' }).click();
 	await expect(page.getByRole('alertdialog')).toBeVisible();
 	await page.getByRole('button', { name: '丢弃', exact: true }).click();
 

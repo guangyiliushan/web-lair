@@ -1,22 +1,20 @@
 import type { Component } from 'svelte';
-import {
-	IconHome,
-	IconBulb,
-	IconCategory,
-	IconRss,
-	IconMail,
-	IconBrandGithub,
-	IconBrandTwitter,
-	IconUsers,
-	IconFlask,
-	IconQuote,
-	IconWorld,
-	IconPencil,
-	IconBook,
-	IconCamera,
-	IconHeart,
-	IconWriting
-} from '@tabler/icons-svelte-runes';
+import IconHome from '@tabler/icons-svelte-runes/icons/home';
+import IconBulb from '@tabler/icons-svelte-runes/icons/bulb';
+import IconCategory from '@tabler/icons-svelte-runes/icons/category';
+import IconRss from '@tabler/icons-svelte-runes/icons/rss';
+import IconMail from '@tabler/icons-svelte-runes/icons/mail';
+import IconBrandGithub from '@tabler/icons-svelte-runes/icons/brand-github';
+import IconBrandTwitter from '@tabler/icons-svelte-runes/icons/brand-twitter';
+import IconUsers from '@tabler/icons-svelte-runes/icons/users';
+import IconFlask from '@tabler/icons-svelte-runes/icons/flask';
+import IconQuote from '@tabler/icons-svelte-runes/icons/quote';
+import IconWorld from '@tabler/icons-svelte-runes/icons/world';
+import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
+import IconBook from '@tabler/icons-svelte-runes/icons/book';
+import IconCamera from '@tabler/icons-svelte-runes/icons/camera';
+import IconHeart from '@tabler/icons-svelte-runes/icons/heart';
+import IconWriting from '@tabler/icons-svelte-runes/icons/writing';
 import { m } from '$lib/paraglide/messages';
 
 // ── i18n resolver ──

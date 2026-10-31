@@ -1,8 +1,9 @@
-import { and, desc, eq, ilike, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, sql } from 'drizzle-orm';
 import { fail, type Actions } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { drafts, notes, topics } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
+import { OPTION_LANGS } from '$lib/server/config/options-registry';
 import { draftsForNotes, setNoteStatus } from '$lib/server/services/note-drafts';
 import { syncFileReferences } from '$lib/server/services/file-references';
 import { isUuid } from '$lib/utils/uuid';
@@ -33,36 +34,19 @@ export const load: PageServerLoad = async ({ url }) => {
 	if (keyword) conditions.push(ilike(notes.title, `%${keyword}%`));
 	const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-	const [rows, totals, allTopics] = await Promise.all([
+	// 译文与原文合并成一行（UX-1020）：按 translation_group 分页，行内给出
+	// 每个语言的状态。先分页到组再取成员，家庭不会被页边界劈开。
+	const [groups, totals, allTopics] = await Promise.all([
 		db
-			.select({
-				id: notes.id,
-				nid: notes.nid,
-				title: notes.title,
-				slug: notes.slug,
-				lang: notes.lang,
-				status: notes.status,
-				mood: notes.mood,
-				weatherCode: notes.weatherCode,
-				temperatureC: notes.temperatureC,
-				readCount: notes.readCount,
-				likeCount: notes.likeCount,
-				topicId: notes.topicId,
-				topicName: topics.name,
-				pinned: sql<boolean>`${notes.pinAt} is not null`.mapWith(Boolean),
-				locked: sql<boolean>`${notes.passwordHash} is not null`.mapWith(Boolean),
-				createdAt: notes.createdAt,
-				updatedAt: notes.updatedAt,
-				publishedAt: notes.publishedAt
-			})
+			.select({ group: notes.translationGroup })
 			.from(notes)
-			.leftJoin(topics, eq(notes.topicId, topics.id))
 			.where(where)
-			.orderBy(desc(notes.updatedAt))
+			.groupBy(notes.translationGroup)
+			.orderBy(desc(sql`max(${notes.updatedAt})`))
 			.limit(PAGE_SIZE)
 			.offset((page - 1) * PAGE_SIZE),
 		db
-			.select({ count: sql<number>`count(*)`.mapWith(Number) })
+			.select({ count: sql<number>`count(distinct ${notes.translationGroup})`.mapWith(Number) })
 			.from(notes)
 			.where(where),
 		db
@@ -71,8 +55,76 @@ export const load: PageServerLoad = async ({ url }) => {
 			.orderBy(topics.sortOrder, topics.name)
 	]);
 
+	const groupIds = groups.map((g) => g.group);
+	const rows =
+		groupIds.length === 0
+			? []
+			: await db
+					.select({
+						id: notes.id,
+						nid: notes.nid,
+						title: notes.title,
+						slug: notes.slug,
+						lang: notes.lang,
+						status: notes.status,
+						mood: notes.mood,
+						weatherCode: notes.weatherCode,
+						temperatureC: notes.temperatureC,
+						readCount: notes.readCount,
+						likeCount: notes.likeCount,
+						topicId: notes.topicId,
+						topicName: topics.name,
+						translationGroup: notes.translationGroup,
+						translatedFromNoteId: notes.translatedFromNoteId,
+						pinned: sql<boolean>`${notes.pinAt} is not null`.mapWith(Boolean),
+						locked: sql<boolean>`${notes.passwordHash} is not null`.mapWith(Boolean),
+						createdAt: notes.createdAt,
+						updatedAt: notes.updatedAt,
+						publishedAt: notes.publishedAt
+					})
+					.from(notes)
+					.leftJoin(topics, eq(notes.topicId, topics.id))
+					.where(inArray(notes.translationGroup, groupIds))
+					.orderBy(desc(notes.updatedAt));
+
 	// A note with a pending drafts row carries the "Unpublished changes" badge.
 	const withDrafts = await draftsForNotes(rows.map((row) => row.id));
+
+	// Fold the family into one row: the group SOURCE is the identity (title /
+	// actions), and its translations ride along as a language chain.
+	const byGroup = new Map<string, typeof rows>();
+	for (const row of rows) {
+		const bucket = byGroup.get(row.translationGroup);
+		if (bucket) bucket.push(row);
+		else byGroup.set(row.translationGroup, [row]);
+	}
+	const families = groupIds.flatMap((group) => {
+		const members = (byGroup.get(group) ?? []).slice().sort((a, b) => {
+			// Source first, then the language order the editor uses.
+			if (!a.translatedFromNoteId !== !b.translatedFromNoteId) {
+				return a.translatedFromNoteId ? 1 : -1;
+			}
+			return a.lang.localeCompare(b.lang);
+		});
+		const head = members.find((member) => !member.translatedFromNoteId) ?? members[0];
+		if (!head) return [];
+		return [
+			{
+				...head,
+				hasDraft: withDrafts.has(head.id),
+				// NB: never name this parameter "m" - it would shadow the
+				// paraglide message object, and the i18n guard would read these
+				// property accesses as message keys.
+				langs: members.map((member) => ({
+					lang: member.lang,
+					id: member.id,
+					status: member.status,
+					hasDraft: withDrafts.has(member.id),
+					isSource: !member.translatedFromNoteId
+				}))
+			}
+		];
+	});
 
 	return {
 		headerTitle: m.admin_nav_notes(),
@@ -85,7 +137,8 @@ export const load: PageServerLoad = async ({ url }) => {
 				href: '/admin/notes/edit'
 			}
 		],
-		notes: rows.map((row) => ({ ...row, hasDraft: withDrafts.has(row.id) })),
+		notes: families,
+		langs: [...OPTION_LANGS],
 		totalCount: totals[0]?.count ?? 0,
 		page,
 		pageSize: PAGE_SIZE,

@@ -19,6 +19,14 @@
 		insertAlert,
 		insertCheckList,
 		insertMath,
+		insertFootnoteRef,
+		insertFootnoteInline,
+		insertMention,
+		insertDetails,
+		insertEmbed,
+		insertMermaid,
+		insertTabs,
+		insertGrid,
 		applyParagraph,
 		emptyToolbarState,
 		formatTextWithFocus,
@@ -30,6 +38,7 @@
 	import EditorDebugDialog from './EditorDebugDialog.svelte';
 	import ImageInsertDialog from './ImageInsertDialog.svelte';
 	import CodeBlockInsertDialog from './CodeBlockInsertDialog.svelte';
+	import ValuePromptDialog from './ValuePromptDialog.svelte';
 
 	// ── Icons ──
 	import IconH1 from '@tabler/icons-svelte-runes/icons/h-1';
@@ -69,6 +78,15 @@
 	import IconDots from '@tabler/icons-svelte-runes/icons/dots';
 	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
 	import IconArticle from '@tabler/icons-svelte-runes/icons/article';
+	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
+	import IconWriting from '@tabler/icons-svelte-runes/icons/writing';
+	import IconNote from '@tabler/icons-svelte-runes/icons/note';
+	import IconAt from '@tabler/icons-svelte-runes/icons/at';
+	import IconListDetails from '@tabler/icons-svelte-runes/icons/list-details';
+	import IconCards from '@tabler/icons-svelte-runes/icons/cards';
+	import IconChartDots from '@tabler/icons-svelte-runes/icons/chart-dots';
+	import IconLayoutList from '@tabler/icons-svelte-runes/icons/layout-list';
+	import IconLayoutGrid from '@tabler/icons-svelte-runes/icons/layout-grid';
 
 	// ── Types ──
 	type BlockType = 'paragraph' | 'h1' | 'h2' | 'h3' | 'bullet' | 'number' | 'check' | 'quote';
@@ -93,9 +111,12 @@
 	type Props = {
 		editor: LexicalEditor | null;
 		class?: string;
+		/** Code (source) mode is on - the editor shows markdown instead of WYSIWYG. */
+		codeMode?: boolean;
+		onToggleCodeMode?: () => void;
 	};
 
-	let { editor, class: className }: Props = $props();
+	let { editor, class: className, codeMode = false, onToggleCodeMode }: Props = $props();
 
 	// ── Breakpoint thresholds based on the toolbar wrapper's actual width (ensures zero internal overflow) ──
 	const BP_THRESHOLDS = { xl: 950, lg: 900, md: 650, sm: 420 } as const;
@@ -136,6 +157,29 @@
 
 	let imageDialogOpen = $state(false);
 	let codeDialogOpen = $state(false);
+
+	/** Shared one-value prompt (mention / inline footnote / card URL). */
+	let promptOpen = $state(false);
+	let promptTitle = $state('');
+	let promptLabel = $state('');
+	let promptHint = $state<string | undefined>(undefined);
+	let promptPlaceholder = $state<string | undefined>(undefined);
+	let promptSubmit = $state<(value: string) => void>(() => {});
+
+	function openPrompt(config: {
+		title: string;
+		label: string;
+		hint?: string;
+		placeholder?: string;
+		onSubmit: (value: string) => void;
+	}) {
+		promptTitle = config.title;
+		promptLabel = config.label;
+		promptHint = config.hint;
+		promptPlaceholder = config.placeholder;
+		promptSubmit = config.onSubmit;
+		promptOpen = true;
+	}
 
 	$effect(() => {
 		if (!editor) return;
@@ -228,9 +272,48 @@
 
 	function handleInsertMath() {
 		if (!editor) return;
-		const latex = window.prompt(m.editor_prompt_latex(), 'E=mc^2');
-		if (latex === null) return;
-		insertMath(editor, latex.trim() || 'E=mc^2');
+		openPrompt({
+			title: m.editor_insert_math(),
+			label: m.editor_insert_math(),
+			placeholder: 'E=mc^2',
+			onSubmit: (value) => insertMath(editor!, value)
+		});
+	}
+
+	function handleInsertFootnote() {
+		if (!editor) return;
+		insertFootnoteRef(editor);
+	}
+
+	function handleInsertFootnoteInline() {
+		if (!editor) return;
+		openPrompt({
+			title: m.editor_insert_footnote_inline(),
+			label: m.editor_prompt_footnote_label(),
+			onSubmit: (value) => insertFootnoteInline(editor!, value)
+		});
+	}
+
+	function handleInsertMention() {
+		if (!editor) return;
+		openPrompt({
+			title: m.editor_insert_mention(),
+			label: m.editor_prompt_mention_label(),
+			hint: m.editor_prompt_mention_hint(),
+			placeholder: '@gh:octocat',
+			onSubmit: (value) => insertMention(editor!, value)
+		});
+	}
+
+	function handleInsertEmbed() {
+		if (!editor) return;
+		openPrompt({
+			title: m.editor_insert_embed(),
+			label: m.editor_prompt_embed_label(),
+			hint: m.editor_prompt_embed_hint(),
+			placeholder: 'https://github.com/org/repo',
+			onSubmit: (value) => insertEmbed(editor!, value)
+		});
 	}
 
 	// The currently active block option
@@ -243,16 +326,10 @@
 		id: string;
 		label: string;
 		icon: typeof IconArticle;
-		shortcut?: string;
 		action: () => void;
-		/** Lowest breakpoint at which the toolbar shows this item; enters the overflow menu when bp < minBp, 99 = always overflow */
-		minBp: BpLevel | 99;
+		/** Lowest breakpoint at which the toolbar shows this item; enters the overflow collector when bp < minBp */
+		minBp: BpLevel;
 		disabled?: () => boolean;
-	}
-
-	interface OverflowGroupDef {
-		heading: string;
-		items: OverflowItemDef[];
 	}
 
 	const ALERT_ICONS: Record<AlertType, typeof IconArticle> = {
@@ -263,177 +340,205 @@
 		caution: IconAlertOctagon
 	};
 
-	const ALL_OVERFLOW_GROUPS: OverflowGroupDef[] = [
+	/**
+	 * Every flat control in one ordered list: the row renders it while `bp` is
+	 * at or above `minBp`, and the single `⋯` collector takes the rest. One
+	 * collector, no per-group menus - that is what keeps the row usable across
+	 * viewports without an internal scrollbar.
+	 */
+	const OVERFLOW_ITEMS: OverflowItemDef[] = [
 		{
-			heading: m.toolbar_text_formats(),
-			items: [
-				{
-					id: 'underline',
-					label: m.toolbar_underline(),
-					icon: IconUnderline,
-					shortcut: '⌘U',
-					action: () => formatText('underline'),
-					minBp: 2
-				},
-				{
-					id: 'strikethrough',
-					label: m.toolbar_strikethrough(),
-					icon: IconStrikethrough,
-					action: () => formatText('strikethrough'),
-					minBp: 2
-				},
-				{
-					id: 'highlight',
-					label: m.toolbar_highlight(),
-					icon: IconHighlight,
-					action: () => formatText('highlight'),
-					minBp: 3
-				},
-				{
-					id: 'spoiler',
-					label: m.toolbar_spoiler(),
-					icon: IconEyeOff,
-					action: () => toggleSpoiler(editor!),
-					minBp: 3
-				},
-				{
-					id: 'inlineCode',
-					label: m.toolbar_inline_code(),
-					icon: IconCode,
-					action: () => formatText('code'),
-					minBp: 1
-				}
-			]
+			id: 'underline',
+			label: m.toolbar_underline(),
+			icon: IconUnderline,
+			action: () => formatText('underline'),
+			minBp: 2
 		},
 		{
-			heading: m.editor_group_edit(),
-			items: [
-				{
-					id: 'undo',
-					label: m.toolbar_undo(),
-					icon: IconArrowBackUp,
-					shortcut: '⌘Z',
-					action: () => dispatchCmd(UNDO_COMMAND),
-					minBp: 1
-				},
-				{
-					id: 'redo',
-					label: m.toolbar_redo(),
-					icon: IconArrowForwardUp,
-					shortcut: '⌘⇧Z',
-					action: () => dispatchCmd(REDO_COMMAND),
-					minBp: 1
-				}
-			]
+			id: 'strikethrough',
+			label: m.toolbar_strikethrough(),
+			icon: IconStrikethrough,
+			action: () => formatText('strikethrough'),
+			minBp: 2
 		},
 		{
-			heading: m.editor_group_lists(),
-			items: [
-				{
-					id: 'bulletList',
-					label: m.toolbar_ul(),
-					icon: IconList,
-					action: () => toggleBulletList(editor!),
-					minBp: 1
-				},
-				{
-					id: 'orderedList',
-					label: m.toolbar_ol(),
-					icon: IconListNumbers,
-					action: () => toggleOrderedList(editor!),
-					minBp: 1
-				},
-				{
-					id: 'checkList',
-					label: m.toolbar_todo(),
-					icon: IconListCheck,
-					action: () => applyBlockType('check'),
-					minBp: 1
-				},
-				{
-					id: 'quote',
-					label: m.toolbar_quote(),
-					icon: IconBlockquote,
-					action: () => applyBlockType('quote'),
-					minBp: 2
-				},
-				{
-					id: 'horizontalRule',
-					label: m.toolbar_hr(),
-					icon: IconSeparator,
-					action: () => insertHorizontalRule(editor!),
-					disabled: () => toolbarState.inTable,
-					minBp: 2
-				},
-				{
-					id: 'table',
-					label: m.toolbar_table(),
-					icon: IconTable,
-					action: handleInsertTable,
-					minBp: 2
-				}
-			]
+			id: 'highlight',
+			label: m.toolbar_highlight(),
+			icon: IconHighlight,
+			action: () => formatText('highlight'),
+			minBp: 3
 		},
 		{
-			heading: m.editor_group_insert(),
-			items: [
-				{
-					id: 'link',
-					label: m.md_link_toolbar(),
-					icon: IconLink,
-					action: handleInsertLink,
-					minBp: 0
-				},
-				{
-					id: 'image',
-					label: m.editor_insert_image(),
-					icon: IconPhoto,
-					action: handleInsertImage,
-					disabled: () => toolbarState.inTable,
-					minBp: 0
-				},
-				{
-					id: 'codeBlock',
-					label: m.toolbar_code_block(),
-					icon: IconCodeDots,
-					action: handleInsertCodeBlock,
-					disabled: () => toolbarState.inTable,
-					minBp: 3
-				},
-				...ALERT_TYPES.map((type): OverflowItemDef => ({
-					id: `callout-${type}`,
-					label: `Callout · ${ALERT_LABELS[type]?.()}`,
-					icon: ALERT_ICONS[type],
-					action: () => insertAlert(editor!, type),
-					disabled: () => toolbarState.inTable,
-					minBp: 3
-				})),
-				{
-					id: 'tag',
-					label: m.editor_insert_tag(),
-					icon: IconTag,
-					action: () => insertTag(editor!),
-					minBp: 3
-				},
-				{
-					id: 'formula',
-					label: m.editor_insert_math(),
-					icon: IconMath,
-					action: handleInsertMath,
-					minBp: 4
-				}
-			]
+			id: 'spoiler',
+			label: m.toolbar_spoiler(),
+			icon: IconEyeOff,
+			action: () => toggleSpoiler(editor!),
+			minBp: 3
+		},
+		{
+			id: 'inlineCode',
+			label: m.toolbar_inline_code(),
+			icon: IconCode,
+			action: () => formatText('code'),
+			minBp: 1
+		},
+		{
+			id: 'undo',
+			label: m.toolbar_undo(),
+			icon: IconArrowBackUp,
+			action: () => dispatchCmd(UNDO_COMMAND),
+			minBp: 1
+		},
+		{
+			id: 'redo',
+			label: m.toolbar_redo(),
+			icon: IconArrowForwardUp,
+			action: () => dispatchCmd(REDO_COMMAND),
+			minBp: 1
+		},
+		{
+			id: 'bulletList',
+			label: m.toolbar_ul(),
+			icon: IconList,
+			action: () => toggleBulletList(editor!),
+			minBp: 1
+		},
+		{
+			id: 'orderedList',
+			label: m.toolbar_ol(),
+			icon: IconListNumbers,
+			action: () => toggleOrderedList(editor!),
+			minBp: 1
+		},
+		{
+			id: 'checkList',
+			label: m.toolbar_todo(),
+			icon: IconListCheck,
+			action: () => applyBlockType('check'),
+			minBp: 1
+		},
+		{
+			id: 'quote',
+			label: m.toolbar_quote(),
+			icon: IconBlockquote,
+			action: () => applyBlockType('quote'),
+			minBp: 2
+		},
+		{
+			id: 'horizontalRule',
+			label: m.toolbar_hr(),
+			icon: IconSeparator,
+			action: () => insertHorizontalRule(editor!),
+			disabled: () => toolbarState.inTable,
+			minBp: 2
+		},
+		{
+			id: 'table',
+			label: m.toolbar_table(),
+			icon: IconTable,
+			action: handleInsertTable,
+			disabled: () => toolbarState.inTable,
+			minBp: 2
+		},
+		{
+			id: 'codeBlock',
+			label: m.toolbar_code_block(),
+			icon: IconCodeDots,
+			action: handleInsertCodeBlock,
+			disabled: () => toolbarState.inTable,
+			minBp: 3
+		},
+		...ALERT_TYPES.map((type): OverflowItemDef => ({
+			id: `callout-${type}`,
+			label: `Callout · ${ALERT_LABELS[type]?.()}`,
+			icon: ALERT_ICONS[type],
+			action: () => insertAlert(editor!, type),
+			disabled: () => toolbarState.inTable,
+			minBp: 3
+		})),
+		{
+			id: 'tag',
+			label: m.toolbar_tag(),
+			icon: IconTag,
+			action: () => insertTag(editor!),
+			minBp: 3
 		}
 	];
 
-	let overflowGroups = $derived(
-		ALL_OVERFLOW_GROUPS.map((g) => ({
-			heading: g.heading,
-			items: g.items.filter((it) => bp < (it.minBp as number))
-		})).filter((g) => g.items.length > 0)
-	);
+	/** Rare inserts live in the "Insert" menu at every viewport. */
+	const INSERT_ITEMS: OverflowItemDef[] = [
+		{
+			id: 'formula',
+			label: m.editor_insert_math(),
+			icon: IconMath,
+			action: handleInsertMath,
+			minBp: 0
+		},
+		{
+			id: 'footnote',
+			label: m.editor_insert_footnote(),
+			icon: IconNote,
+			action: handleInsertFootnote,
+			minBp: 0
+		},
+		{
+			id: 'footnoteInline',
+			label: m.editor_insert_footnote_inline(),
+			icon: IconNote,
+			action: handleInsertFootnoteInline,
+			minBp: 0
+		},
+		{
+			id: 'mention',
+			label: m.editor_insert_mention(),
+			icon: IconAt,
+			action: handleInsertMention,
+			minBp: 0
+		},
+		{
+			id: 'details',
+			label: m.editor_insert_details(),
+			icon: IconListDetails,
+			action: () => insertDetails(editor!),
+			disabled: () => toolbarState.inTable,
+			minBp: 0
+		},
+		{
+			id: 'embed',
+			label: m.editor_insert_embed(),
+			icon: IconCards,
+			action: handleInsertEmbed,
+			disabled: () => toolbarState.inTable,
+			minBp: 0
+		},
+		{
+			id: 'mermaid',
+			label: m.editor_insert_mermaid(),
+			icon: IconChartDots,
+			action: () => insertMermaid(editor!),
+			disabled: () => toolbarState.inTable,
+			minBp: 0
+		},
+		{
+			id: 'tabs',
+			label: m.editor_insert_tabs(),
+			icon: IconLayoutList,
+			action: () => insertTabs(editor!),
+			disabled: () => toolbarState.inTable,
+			minBp: 0
+		},
+		{
+			id: 'grid',
+			label: m.editor_insert_grid(),
+			icon: IconLayoutGrid,
+			action: () => insertGrid(editor!),
+			disabled: () => toolbarState.inTable,
+			minBp: 0
+		}
+	];
 
-	let overflowNotEmpty = $derived(overflowGroups.length > 0);
+	let overflowItems = $derived(OVERFLOW_ITEMS.filter((it) => bp < (it.minBp as number)));
+	let overflowNotEmpty = $derived(overflowItems.length > 0);
 
 	// Hide separators on mobile
 	let sepClass = $derived(cn(bp < 1 && 'hidden'));
@@ -449,7 +554,7 @@
 	role="toolbar"
 	aria-label={m.toolbar_editor()}
 >
-	<!-- ═══════════ Block type dropdown (Tier 0) ═══════════ -->
+	<!-- ═══════════ Head: block type (level lives in the menu) ═══════════ -->
 	<DropdownMenu.Root>
 		<DropdownMenu.Trigger>
 			{#snippet child({ props })}
@@ -458,6 +563,7 @@
 					size={bp >= 1 ? 'sm' : 'icon-sm'}
 					{...props}
 					class="gap-1 text-xs font-medium"
+					aria-label={bp < 1 ? m.editor_group_block_type() : undefined}
 				>
 					<ActiveBlockIcon data-icon="inline-start" />
 					<span class={cn('truncate', bp < 1 && 'hidden')}>{activeBlock.label}</span>
@@ -479,7 +585,7 @@
 		</DropdownMenu.Content>
 	</DropdownMenu.Root>
 
-	<!-- ═══════════ Undo/redo (Tier 1: sm+) ═══════════ -->
+	<!-- ═══════════ Undo/redo ═══════════ -->
 	{#if bp >= 1}
 		<Separator orientation="vertical" decorative class={sepClass} />
 		<Button
@@ -488,7 +594,6 @@
 			onclick={() => dispatchCmd(UNDO_COMMAND)}
 			onmousedown={preventSelectionLoss}
 			aria-label={m.toolbar_undo()}
-			title={`${m.toolbar_undo()} (⌘Z)`}
 		>
 			<IconArrowBackUp data-icon="inline-start" />
 		</Button>
@@ -498,13 +603,12 @@
 			onclick={() => dispatchCmd(REDO_COMMAND)}
 			onmousedown={preventSelectionLoss}
 			aria-label={m.toolbar_redo()}
-			title={`${m.toolbar_redo()} (⌘⇧Z)`}
 		>
 			<IconArrowForwardUp data-icon="inline-start" />
 		</Button>
 	{/if}
 
-	<!-- ═══════════ Text formats: B / I / U / S / Code (Tier 0/1/2) ═══════════ -->
+	<!-- ═══════════ Text formats: B / I / U / S / Code ═══════════ -->
 	<Separator orientation="vertical" decorative class={sepClass} />
 
 	<Button
@@ -514,7 +618,6 @@
 		onmousedown={preventSelectionLoss}
 		aria-pressed={toolbarState.isBold}
 		aria-label={m.toolbar_bold()}
-		title={`${m.toolbar_bold()} (⌘B)`}
 	>
 		<IconBold data-icon="inline-start" />
 	</Button>
@@ -525,7 +628,6 @@
 		onmousedown={preventSelectionLoss}
 		aria-pressed={toolbarState.isItalic}
 		aria-label={m.toolbar_italic()}
-		title={`${m.toolbar_italic()} (⌘I)`}
 	>
 		<IconItalic data-icon="inline-start" />
 	</Button>
@@ -538,7 +640,6 @@
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.isUnderline}
 			aria-label={m.toolbar_underline()}
-			title={`${m.toolbar_underline()} (⌘U)`}
 		>
 			<IconUnderline data-icon="inline-start" />
 		</Button>
@@ -549,7 +650,6 @@
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.isStrikethrough}
 			aria-label={m.toolbar_strikethrough()}
-			title={m.toolbar_strikethrough()}
 		>
 			<IconStrikethrough data-icon="inline-start" />
 		</Button>
@@ -563,13 +663,12 @@
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.isCode}
 			aria-label={m.toolbar_inline_code()}
-			title={m.toolbar_inline_code()}
 		>
 			<IconCode data-icon="inline-start" />
 		</Button>
 	{/if}
 
-	<!-- ═══════════ Highlight (Tier 3: lg+) ═══════════ -->
+	<!-- ═══════════ Highlight / spoiler ═══════════ -->
 	{#if bp >= 3}
 		<Button
 			variant={toolbarState.isHighlight ? 'secondary' : 'ghost'}
@@ -578,14 +677,9 @@
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.isHighlight}
 			aria-label={m.toolbar_highlight()}
-			title={m.toolbar_highlight()}
 		>
 			<IconHighlight data-icon="inline-start" />
 		</Button>
-	{/if}
-
-	<!-- ═══════════ Spoiler (Tier 3: lg+) ═══════════ -->
-	{#if bp >= 3}
 		<Button
 			variant={toolbarState.isSpoiler ? 'secondary' : 'ghost'}
 			size="icon-sm"
@@ -593,13 +687,12 @@
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.isSpoiler}
 			aria-label={m.toolbar_spoiler()}
-			title={m.toolbar_spoiler()}
 		>
 			<IconEyeOff data-icon="inline-start" />
 		</Button>
 	{/if}
 
-	<!-- ═══════════ Link / image (Tier 0) ═══════════ -->
+	<!-- ═══════════ Link / image ═══════════ -->
 	<Separator orientation="vertical" decorative class={sepClass} />
 
 	<Button
@@ -608,7 +701,6 @@
 		onclick={handleInsertLink}
 		onmousedown={preventSelectionLoss}
 		aria-label={m.toolbar_link()}
-		title={`${m.toolbar_link()} (⌘K)`}
 	>
 		<IconLink data-icon="inline-start" />
 	</Button>
@@ -619,12 +711,11 @@
 		onmousedown={preventSelectionLoss}
 		disabled={toolbarState.inTable}
 		aria-label={m.toolbar_image()}
-		title={toolbarState.inTable ? m.editor_disabled_image() : m.toolbar_image()}
 	>
 		<IconPhoto data-icon="inline-start" />
 	</Button>
 
-	<!-- ═══════════ Lists (mutually exclusive) (Tier 1: sm+) ═══════════ -->
+	<!-- ═══════════ Lists (mutually exclusive) ═══════════ -->
 	{#if bp >= 1}
 		<Separator orientation="vertical" decorative class={sepClass} />
 
@@ -635,7 +726,6 @@
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.blockType === 'bullet'}
 			aria-label={m.toolbar_ul()}
-			title={m.toolbar_ul()}
 		>
 			<IconList data-icon="inline-start" />
 		</Button>
@@ -646,7 +736,6 @@
 			onmousedown={preventSelectionLoss}
 			aria-pressed={toolbarState.blockType === 'number'}
 			aria-label={m.toolbar_ol()}
-			title={m.toolbar_ol()}
 		>
 			<IconListNumbers data-icon="inline-start" />
 		</Button>
@@ -656,13 +745,12 @@
 			onclick={() => applyBlockType('check')}
 			onmousedown={preventSelectionLoss}
 			aria-label={m.toolbar_todo()}
-			title={m.toolbar_todo()}
 		>
 			<IconListCheck data-icon="inline-start" />
 		</Button>
 	{/if}
 
-	<!-- ═══════════ Blockquote / divider / table (Tier 2: md+) ═══════════ -->
+	<!-- ═══════════ Blockquote / divider / table ═══════════ -->
 	{#if bp >= 2}
 		<Separator orientation="vertical" decorative class={sepClass} />
 
@@ -672,7 +760,6 @@
 			onclick={() => applyBlockType('quote')}
 			onmousedown={preventSelectionLoss}
 			aria-label={m.toolbar_quote()}
-			title={m.toolbar_quote()}
 		>
 			<IconBlockquote data-icon="inline-start" />
 		</Button>
@@ -683,7 +770,6 @@
 			onmousedown={preventSelectionLoss}
 			disabled={toolbarState.inTable}
 			aria-label={m.toolbar_hr()}
-			title={toolbarState.inTable ? m.editor_disabled_hr() : m.toolbar_hr()}
 		>
 			<IconSeparator data-icon="inline-start" />
 		</Button>
@@ -693,13 +779,12 @@
 			onclick={handleInsertTable}
 			onmousedown={preventSelectionLoss}
 			aria-label={m.toolbar_table()}
-			title={m.toolbar_table()}
 		>
 			<IconTable data-icon="inline-start" />
 		</Button>
 	{/if}
 
-	<!-- ═══════════ Code block / Callout / Tag (Tier 3: lg+) ═══════════ -->
+	<!-- ═══════════ Code block / Callout / Tag ═══════════ -->
 	{#if bp >= 3}
 		<Button
 			variant="ghost"
@@ -708,7 +793,6 @@
 			onmousedown={preventSelectionLoss}
 			disabled={toolbarState.inTable}
 			aria-label={m.toolbar_code_block()}
-			title={toolbarState.inTable ? m.editor_disabled_code() : m.toolbar_code_block()}
 		>
 			<IconCodeDots data-icon="inline-start" />
 		</Button>
@@ -723,7 +807,6 @@
 						onmousedown={preventSelectionLoss}
 						disabled={toolbarState.inTable}
 						aria-label={m.toolbar_callout()}
-						title={toolbarState.inTable ? m.editor_disabled_callout() : m.toolbar_callout()}
 					>
 						<IconInfoCircle data-icon="inline-start" />
 					</Button>
@@ -745,7 +828,6 @@
 			onclick={() => insertTag(editor!)}
 			onmousedown={preventSelectionLoss}
 			aria-label={m.toolbar_tag()}
-			title={m.toolbar_tag()}
 		>
 			<IconTag data-icon="inline-start" />
 		</Button>
@@ -753,7 +835,39 @@
 
 	<div class="flex-1"></div>
 
-	<!-- ═══════════ Overflow menu (dynamic content) ═══════════ -->
+	<!-- ═══════════ Insert menu: the rare/structural inserts ═══════════ -->
+	<DropdownMenu.Root>
+		<DropdownMenu.Trigger>
+			{#snippet child({ props })}
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					{...props}
+					onmousedown={preventSelectionLoss}
+					aria-label={m.editor_group_insert()}
+					data-testid="toolbar-insert-menu"
+				>
+					<IconPlus data-icon="inline-start" />
+					<IconChevronDown class="size-3 opacity-60" />
+				</Button>
+			{/snippet}
+		</DropdownMenu.Trigger>
+		<DropdownMenu.Content align="end" class="w-44">
+			<DropdownMenu.Group>
+				<DropdownMenu.GroupHeading>{m.editor_group_insert()}</DropdownMenu.GroupHeading>
+				{#each INSERT_ITEMS as item (item.id)}
+					{@const ItemIcon = item.icon}
+					{@const itemDisabled = item.disabled?.() ?? false}
+					<DropdownMenu.Item onclick={item.action} disabled={itemDisabled}>
+						<ItemIcon data-icon="inline-start" />
+						{item.label}
+					</DropdownMenu.Item>
+				{/each}
+			</DropdownMenu.Group>
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
+
+	<!-- ═══════════ The one overflow collector ═══════════ -->
 	{#if overflowNotEmpty}
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
@@ -764,53 +878,62 @@
 						{...props}
 						onmousedown={preventSelectionLoss}
 						aria-label={m.toolbar_more()}
-						title={m.toolbar_more()}
 					>
 						<IconDots data-icon="inline-start" />
 					</Button>
 				{/snippet}
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content align="end" class="w-56">
-				{#each overflowGroups as group, gi (group.heading)}
-					{#if gi > 0}
-						<DropdownMenu.Separator />
-					{/if}
-					<DropdownMenu.Group>
-						<DropdownMenu.GroupHeading>{group.heading}</DropdownMenu.GroupHeading>
-						{#each group.items as item (item.id)}
-							{@const ItemIcon = item.icon}
-							{@const itemDisabled = item.disabled?.() ?? false}
-							<DropdownMenu.Item
-								onclick={item.action}
-								disabled={itemDisabled}
-								title={itemDisabled ? m.editor_disabled_generic() : item.label}
-							>
-								<ItemIcon data-icon="inline-start" />
-								{item.label}
-								{#if item.shortcut}
-									<span class="ml-auto text-xs text-muted-foreground">{item.shortcut}</span>
-								{/if}
-							</DropdownMenu.Item>
-						{/each}
-					</DropdownMenu.Group>
+				{#each overflowItems as item (item.id)}
+					{@const ItemIcon = item.icon}
+					{@const itemDisabled = item.disabled?.() ?? false}
+					<DropdownMenu.Item onclick={item.action} disabled={itemDisabled}>
+						<ItemIcon data-icon="inline-start" />
+						{item.label}
+					</DropdownMenu.Item>
 				{/each}
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 	{/if}
 
-	<!-- ═══════════ Debug (always far right) ═══════════ -->
+	<!-- ═══════════ Code mode + debug (uniform buttons at the tail) ═══════════ -->
 	<Button
-		variant="ghost"
+		variant={codeMode ? 'secondary' : 'ghost'}
 		size="icon-sm"
-		onclick={openDebug}
+		onclick={() => onToggleCodeMode?.()}
 		onmousedown={preventSelectionLoss}
-		aria-label={m.toolbar_debug()}
-		title={m.toolbar_debug()}
+		aria-pressed={codeMode}
+		aria-label={codeMode ? m.editor_switch_rich() : m.editor_switch_code()}
+		data-testid="toolbar-code-mode"
 	>
-		<IconBug data-icon="inline-start" />
+		{#if codeMode}
+			<IconWriting data-icon="inline-start" />
+		{:else}
+			<IconCode data-icon="inline-start" />
+		{/if}
 	</Button>
+	{#if bp >= 1}
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			onclick={openDebug}
+			onmousedown={preventSelectionLoss}
+			aria-label={m.toolbar_debug()}
+			data-testid="toolbar-debug"
+		>
+			<IconBug data-icon="inline-start" />
+		</Button>
+	{/if}
 </div>
 
 <EditorDebugDialog bind:open={debugOpen} editorStateJson={debugJson} />
 <ImageInsertDialog bind:open={imageDialogOpen} onInsert={handleImageInsert} />
 <CodeBlockInsertDialog bind:open={codeDialogOpen} onInsert={handleCodeBlockInsert} />
+<ValuePromptDialog
+	bind:open={promptOpen}
+	title={promptTitle}
+	label={promptLabel}
+	hint={promptHint}
+	placeholder={promptPlaceholder}
+	onSubmit={(value) => promptSubmit(value)}
+/>

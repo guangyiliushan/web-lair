@@ -3,7 +3,9 @@
 	import { m } from '$lib/paraglide/messages';
 	import { localizeHref, locales } from '$lib/paraglide/runtime';
 	import { localeLabels } from '$lib/stores/locale.svelte';
-	import { IconCheck, IconChevronDown, IconLanguage } from '@tabler/icons-svelte-runes';
+	import IconCheck from '@tabler/icons-svelte-runes/icons/check';
+	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
+	import IconLanguage from '@tabler/icons-svelte-runes/icons/language';
 
 	/**
 	 * Per-post language switcher: the header switcher only changes the site

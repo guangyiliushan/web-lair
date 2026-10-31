@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { DropdownMenu as DropdownMenuPrimitive } from 'bits-ui';
-	import { IconMinus } from '@tabler/icons-svelte-runes';
-	import { IconCheck } from '@tabler/icons-svelte-runes';
+	import IconMinus from '@tabler/icons-svelte-runes/icons/minus';
+	import IconCheck from '@tabler/icons-svelte-runes/icons/check';
 	import { cn, type WithoutChildrenOrChild } from '$lib/utils.js';
 	import type { Snippet } from 'svelte';
 

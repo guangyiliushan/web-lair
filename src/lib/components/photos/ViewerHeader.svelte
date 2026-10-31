@@ -1,12 +1,10 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages';
-	import {
-		IconArrowLeft,
-		IconChevronLeft,
-		IconChevronRight,
-		IconInfoCircle,
-		IconX
-	} from '@tabler/icons-svelte-runes';
+	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
+	import IconChevronLeft from '@tabler/icons-svelte-runes/icons/chevron-left';
+	import IconChevronRight from '@tabler/icons-svelte-runes/icons/chevron-right';
+	import IconInfoCircle from '@tabler/icons-svelte-runes/icons/info-circle';
+	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import { siteHref } from '$lib/utils/href';
 
 	let {

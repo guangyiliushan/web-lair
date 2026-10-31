@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import type { PageData } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
@@ -143,7 +143,11 @@
 	function submitOrder(direction: 'up' | 'down') {
 		const fd = new FormData(formEl ?? undefined);
 		fd.set('direction', direction);
-		fetch('?/move', { method: 'POST', body: fd }).then(() => goto('.', { invalidateAll: true }));
+		// invalidateAll() re-runs load so the list re-sorts. This used to be
+		// `goto('.', { invalidateAll: true })`, which resolves to the PARENT
+		// directory (`new URL('.', /topics/<id>)` -> `/topics/`) and closed the
+		// topic pane on every move.
+		fetch('?/move', { method: 'POST', body: fd }).then(() => invalidateAll());
 	}
 </script>
 

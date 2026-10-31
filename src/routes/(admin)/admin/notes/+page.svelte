@@ -169,6 +169,51 @@
 	let copiedId = $state<string | null>(null);
 	let copyTimer: ReturnType<typeof setTimeout> | null = null;
 
+	type LangChainEntry = {
+		lang: string;
+		state: 'source' | 'published' | 'draft' | 'private' | 'scheduled' | 'trash' | 'missing';
+		id: string | null;
+	};
+
+	/**
+	 * The family at a glance: source first, then its translations, then the
+	 * languages that have no row yet - the same chain the posts list and both
+	 * editors show, so all three agree on the shape.
+	 */
+	function langChain(note: NoteRow): LangChainEntry[] {
+		const present = new Set(note.langs.map((l) => l.lang));
+		const stateOf = (l: { status: string; isSource: boolean }): LangChainEntry['state'] => {
+			if (l.isSource) return 'source';
+			if (l.status === 'published') return 'published';
+			if (l.status === 'private') return 'private';
+			if (l.status === 'scheduled') return 'scheduled';
+			if (l.status === 'trash') return 'trash';
+			return 'draft';
+		};
+		const source = note.langs.filter((l) => l.isSource);
+		const others = note.langs
+			.filter((l) => !l.isSource)
+			.sort((a, b) => a.lang.localeCompare(b.lang));
+		const missing = data.langs
+			.filter((l) => !present.has(l))
+			.map((l) => ({ lang: l, status: 'missing', id: null, hasDraft: false, isSource: false }));
+		return [...source, ...others, ...missing].map((l) => ({
+			lang: l.lang,
+			state: l.status === 'missing' ? 'missing' : stateOf(l),
+			id: l.id ?? null
+		}));
+	}
+
+	function langEntryLabel(entry: LangChainEntry): string {
+		if (entry.state === 'source') {
+			return `${entry.lang}·${m.admin_posts_edit_lang_source()}`;
+		}
+		if (entry.state === 'missing') {
+			return `${entry.lang}·${m.admin_posts_edit_lang_missing()}`;
+		}
+		return `${entry.lang}·${STATUS_LABELS[entry.state] ?? entry.state}`;
+	}
+
 	async function copyLink(note: NoteRow) {
 		try {
 			await navigator.clipboard.writeText(new URL(publicHref(note), location.origin).toString());
@@ -284,6 +329,7 @@
 		{/snippet}
 
 		{#snippet row(note)}
+			{@const chain = langChain(note)}
 			{@const moodText = note.mood ? noteMoodLabel(note.mood as never, getLocale()) : null}
 			{@const weatherText = weatherLabel(note.weatherCode)}
 			{@const temperatureText = note.temperatureC ? `${note.temperatureC}°C` : null}
@@ -296,7 +342,6 @@
 						>
 							{note.title || m.admin_posts_untitled()}
 						</a>
-						<Badge variant="outline" class="shrink-0 text-xs">{note.lang}</Badge>
 						{#if note.hasDraft}
 							<Badge variant="secondary" class="shrink-0 text-xs"
 								>{m.admin_posts_unpublished_changes()}</Badge
@@ -316,6 +361,31 @@
 								aria-label={m.admin_notes_pinned()}
 							/>
 						{/if}
+					</div>
+					<!-- Translation family: source -> translations -> missing. -->
+					<div class="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5">
+						{#each chain as entry, i (entry.lang)}
+							{#if i === 1 && chain[0]?.state === 'source'}
+								<span aria-hidden="true" class="text-muted-foreground">→</span>
+							{/if}
+							<a
+								href={entry.id ? `${resolve(EDIT_PATH)}?id=${entry.id}` : resolve(EDIT_PATH)}
+								class="shrink-0"
+							>
+								<Badge
+									variant={entry.state === 'source'
+										? 'default'
+										: entry.state === 'trash'
+											? 'destructive'
+											: entry.state === 'published'
+												? 'outline'
+												: 'secondary'}
+									class="text-xs {entry.state === 'missing' ? 'border-dashed opacity-70' : ''}"
+								>
+									{langEntryLabel(entry)}
+								</Badge>
+							</a>
+						{/each}
 					</div>
 					<!-- Below xl the columns this meta covers are hidden. -->
 					<div

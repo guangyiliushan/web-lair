@@ -150,6 +150,56 @@
 	let copiedId = $state<string | null>(null);
 	let copyTimer: ReturnType<typeof setTimeout> | null = null;
 
+	type LangChainEntry = {
+		lang: string;
+		state: 'source' | 'published' | 'draft' | 'scheduled' | 'trash' | 'missing';
+		id: string | null;
+	};
+
+	/**
+	 * The family at a glance: source first, then its translations, then the
+	 * languages that have no row yet - `zh-cn·源 -> en·草稿  ja·未译`. The editor
+	 * shows the same chain, so the list and the editor agree on the shape.
+	 */
+	function langChain(post: PostRow): LangChainEntry[] {
+		const present = new Set(post.langs.map((l) => l.lang));
+		const stateOf = (l: { status: string; isSource: boolean }): LangChainEntry['state'] => {
+			if (l.isSource) return 'source';
+			if (l.status === 'published') return 'published';
+			if (l.status === 'scheduled') return 'scheduled';
+			if (l.status === 'trash') return 'trash';
+			return 'draft';
+		};
+		const source = post.langs.filter((l) => l.isSource);
+		const others = post.langs
+			.filter((l) => !l.isSource)
+			.sort((a, b) => a.lang.localeCompare(b.lang));
+		const missing = data.langs
+			.filter((l) => !present.has(l))
+			.map((l) => ({ lang: l, status: 'missing', id: null, hasDraft: false, isSource: false }));
+		return [...source, ...others, ...missing].map((l) => ({
+			lang: l.lang,
+			state: l.status === 'missing' ? 'missing' : stateOf(l),
+			id: l.id ?? null
+		}));
+	}
+
+	function langEntryLabel(entry: LangChainEntry): string {
+		const suffix =
+			entry.state === 'source'
+				? m.admin_posts_edit_lang_source()
+				: entry.state === 'missing'
+					? m.admin_posts_edit_lang_missing()
+					: entry.state === 'published'
+						? m.admin_posts_status_published()
+						: entry.state === 'scheduled'
+							? m.admin_posts_status_scheduled()
+							: entry.state === 'trash'
+								? m.admin_posts_status_trash()
+								: m.admin_posts_status_draft();
+		return `${entry.lang}·${suffix}`;
+	}
+
 	async function copyLink(post: PostRow) {
 		try {
 			await navigator.clipboard.writeText(new URL(`/${post.slug}`, location.origin).toString());
@@ -165,7 +215,7 @@
 	// Both confirmable row actions share one dialog. Permanent delete only shows
 	// up in the overflow menu of a row that is already in the trash, so losing
 	// data takes two deliberate steps and a mis-click cannot do it.
-	type Pending = { id: string; kind: 'trash' | 'purge' };
+	type Pending = { id: string; kind: 'trash' | 'purge'; familySize?: number };
 
 	let pending = $state<Pending | null>(null);
 	let restoreId = $state('');
@@ -175,7 +225,10 @@
 		pending?.kind === 'purge'
 			? {
 					title: m.admin_list_purge_title(),
-					description: m.admin_list_purge_desc(),
+					description:
+						(pending.familySize ?? 1) > 1
+							? m.admin_posts_purge_family_desc({ count: pending.familySize ?? 1 })
+							: m.admin_list_purge_desc(),
 					confirmLabel: m.admin_list_purge(),
 					action: '?/purge',
 					extraFields: {} as Record<string, string>
@@ -194,7 +247,7 @@
 	}
 
 	function openPurge(post: PostRow) {
-		pending = { id: post.id, kind: 'purge' };
+		pending = { id: post.id, kind: 'purge', familySize: post.langs.length };
 	}
 
 	async function restore(post: PostRow) {
@@ -256,6 +309,7 @@
 	{/snippet}
 
 	{#snippet row(post)}
+		{@const chain = langChain(post)}
 		<Table.Cell class={cn(listColumnClass(cols.title), 'whitespace-normal')}>
 			<div class="flex min-w-0 flex-col gap-1">
 				<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -265,12 +319,38 @@
 					>
 						{post.title || m.admin_posts_untitled()}
 					</a>
-					<Badge variant="outline" class="shrink-0 text-xs">{post.lang}</Badge>
 					{#if post.hasDraft}
 						<Badge variant="secondary" class="shrink-0 text-xs"
 							>{m.admin_posts_unpublished_changes()}</Badge
 						>
 					{/if}
+				</div>
+				<!-- Translation family: source -> translations -> missing. -->
+				<div class="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5">
+					{#each chain as entry, i (entry.lang)}
+						{#if i === 1 && chain[0]?.state === 'source'}
+							<span aria-hidden="true" class="text-muted-foreground">→</span>
+						{/if}
+						<a
+							href={entry.id ? `${resolve(EDIT_PATH)}?id=${entry.id}` : `${resolve(EDIT_PATH)}`}
+							class="shrink-0"
+						>
+							<Badge
+								variant={entry.state === 'source'
+									? 'default'
+									: entry.state === 'missing'
+										? 'outline'
+										: entry.state === 'trash'
+											? 'destructive'
+											: entry.state === 'published'
+												? 'outline'
+												: 'secondary'}
+								class="text-xs {entry.state === 'missing' ? 'border-dashed opacity-70' : ''}"
+							>
+								{langEntryLabel(entry)}
+							</Badge>
+						</a>
+					{/each}
 				</div>
 				<!-- Below xl the columns this meta covers are hidden. -->
 				<div

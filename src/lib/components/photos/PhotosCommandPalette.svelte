@@ -2,7 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
-	import { IconCheck, IconSearch } from '@tabler/icons-svelte-runes';
+	import IconCheck from '@tabler/icons-svelte-runes/icons/check';
+	import IconSearch from '@tabler/icons-svelte-runes/icons/search';
 	import * as Command from '$lib/components/ui/command';
 	import { getPhotosUi } from '$lib/components/photos/photos-ui.svelte';
 	import {

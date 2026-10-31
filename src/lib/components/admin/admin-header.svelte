@@ -12,6 +12,8 @@
 	// Icon lookup table — all icons used by admin header actions
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
 	import IconCategory from '@tabler/icons-svelte-runes/icons/category';
+	import IconCloudUpload from '@tabler/icons-svelte-runes/icons/cloud-upload';
+	import IconDeviceFloppy from '@tabler/icons-svelte-runes/icons/device-floppy';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 	import IconEye from '@tabler/icons-svelte-runes/icons/eye';
 	import IconFileImport from '@tabler/icons-svelte-runes/icons/file-import';
@@ -38,6 +40,8 @@
 	const ICON_MAP: Record<string, Component> = {
 		'arrow-left': IconArrowLeft,
 		category: IconCategory,
+		'cloud-upload': IconCloudUpload,
+		'device-floppy': IconDeviceFloppy,
 		'external-link': IconExternalLink,
 		eye: IconEye,
 		'file-import': IconFileImport,

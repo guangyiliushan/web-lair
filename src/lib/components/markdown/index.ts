@@ -10,7 +10,6 @@ export {
 	EditorToolbar,
 	FloatingFormatToolbar,
 	BlockHandleToolbar,
-	CodeModeToggle,
 	EditorDebugDialog
 } from '$lib/components/markdown/toolbar';
 

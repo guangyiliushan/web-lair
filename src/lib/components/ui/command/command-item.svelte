@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Command as CommandPrimitive } from 'bits-ui';
 	import { cn } from '$lib/utils.js';
-	import { IconCheck } from '@tabler/icons-svelte-runes';
+	import IconCheck from '@tabler/icons-svelte-runes/icons/check';
 
 	let {
 		ref = $bindable(null),

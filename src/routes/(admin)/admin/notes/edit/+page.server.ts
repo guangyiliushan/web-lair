@@ -14,7 +14,8 @@ import {
 	setNoteEmotions,
 	setNotePassword,
 	setNotePin,
-	setNoteStatus
+	setNoteStatus,
+	type NoteDraftPayload
 } from '$lib/server/services/note-drafts';
 import { NOTE_MOODS } from '$lib/utils/note-meta';
 import { isUuid } from '$lib/utils/uuid';
@@ -31,6 +32,60 @@ import { m } from '$lib/paraglide/messages';
 
 function str(form: FormData, key: string): string {
 	return (form.get(key) ?? '').toString();
+}
+
+type NoteDraftFormRead =
+	| { error: string }
+	| {
+			noteId: string | null;
+			draftId: string | null;
+			expectedVersion: number | null;
+			lang: string | null;
+			payload: NoteDraftPayload;
+	  };
+
+/**
+ * Shared reader for `save` and `publish`. Both carry the same payload because
+ * publish is save→publish inside ONE request (UX-1020-04): the old flow did a
+ * client-side save and then `requestSubmit()` of a hidden form, so a first-time
+ * publish (no draft row yet) raced the two requests and only ever saved -
+ * which is how a placeholder-slug draft ended up in the database.
+ */
+function readNoteDraftForm(form: FormData): NoteDraftFormRead {
+	const rawId = str(form, 'id').trim();
+	const draftId = str(form, 'draftId').trim();
+	const versionRaw = str(form, 'draftVersion').trim();
+	const langRaw = str(form, 'lang').trim();
+	if (rawId && !isUuid(rawId)) return { error: m.admin_notes_edit_err_bad_id() };
+	if (draftId && !isUuid(draftId)) return { error: m.admin_posts_edit_err_bad_draft_id() };
+	// Malformed ids must never reach a uuid column (22P02 -> 500).
+	const topicIdRaw = str(form, 'topicId').trim();
+	if (topicIdRaw && !isUuid(topicIdRaw)) return { error: m.admin_notes_edit_err_bad_topic() };
+	// Closed vocabulary write-side guard (notes plan section 8.1).
+	const moodRaw = str(form, 'mood').trim();
+	if (moodRaw && !(NOTE_MOODS as readonly string[]).includes(moodRaw)) {
+		return { error: m.admin_notes_edit_err_bad_mood() };
+	}
+	return {
+		noteId: rawId || null,
+		draftId: draftId || null,
+		// A non-numeric version is treated as "not provided" (mirrors the
+		// posts editor's permanent-409 review finding).
+		expectedVersion: /^\d+$/.test(versionRaw) ? Number(versionRaw) : null,
+		lang: (OPTION_LANGS as readonly string[]).includes(langRaw) ? langRaw : null,
+		payload: {
+			title: str(form, 'title'),
+			slug: str(form, 'slug').trim().toLowerCase(),
+			topicId: topicIdRaw,
+			mood: moodRaw,
+			weatherCode: str(form, 'weatherCode').trim(),
+			temperatureC: str(form, 'temperatureC'),
+			latitude: str(form, 'latitude'),
+			longitude: str(form, 'longitude'),
+			location: str(form, 'location'),
+			content: str(form, 'content')
+		}
+	};
 }
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -134,46 +189,17 @@ export const actions: Actions = {
 	save: async ({ request, locals }) => {
 		await requireAdminRole();
 		const form = await request.formData();
-		const rawId = str(form, 'id').trim();
-		const draftId = str(form, 'draftId').trim();
-		const versionRaw = str(form, 'draftVersion').trim();
-		const langRaw = str(form, 'lang').trim();
-		const autosave = form.get('autosave') === '1';
-		if (rawId && !isUuid(rawId)) return fail(400, { message: m.admin_notes_edit_err_bad_id() });
-		if (draftId && !isUuid(draftId))
-			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
-		// Malformed ids must never reach a uuid column (22P02 → 500).
-		const topicIdRaw = str(form, 'topicId').trim();
-		if (topicIdRaw && !isUuid(topicIdRaw)) {
-			return fail(400, { message: m.admin_notes_edit_err_bad_topic() });
-		}
-		// Closed vocabulary write-side guard (notes plan §8.1).
-		const moodRaw = str(form, 'mood').trim();
-		if (moodRaw && !(NOTE_MOODS as readonly string[]).includes(moodRaw)) {
-			return fail(400, { message: m.admin_notes_edit_err_bad_mood() });
-		}
+		const read = readNoteDraftForm(form);
+		if ('error' in read) return fail(400, { message: read.error });
 
 		const result = await saveNoteDraftWork({
-			draftId: draftId || null,
-			noteId: rawId || null,
-			// A non-numeric version is treated as "not provided" (mirrors the
-			// posts editor's permanent-409 review finding).
-			expectedVersion: /^\d+$/.test(versionRaw) ? Number(versionRaw) : null,
-			lang: (OPTION_LANGS as readonly string[]).includes(langRaw) ? langRaw : null,
-			payload: {
-				title: str(form, 'title'),
-				slug: str(form, 'slug').trim().toLowerCase(),
-				topicId: topicIdRaw,
-				mood: moodRaw,
-				weatherCode: str(form, 'weatherCode').trim(),
-				temperatureC: str(form, 'temperatureC'),
-				latitude: str(form, 'latitude'),
-				longitude: str(form, 'longitude'),
-				location: str(form, 'location'),
-				content: str(form, 'content')
-			},
+			draftId: read.draftId,
+			noteId: read.noteId,
+			expectedVersion: read.expectedVersion,
+			lang: read.lang,
+			payload: read.payload,
 			author: locals.admin?.userId ?? locals.user?.id ?? null,
-			autosave
+			autosave: form.get('autosave') === '1'
 		});
 
 		switch (result.kind) {
@@ -220,19 +246,60 @@ export const actions: Actions = {
 		}
 	},
 
-	/** Publish transaction: copy the locked draft onto the notes row. */
-	publish: async ({ request }) => {
+	/**
+	 * Publish in ONE request (UX-1020-04): persist the working copy and publish
+	 * it in the same action. The save is manual, so it bypasses the autosave
+	 * throttle and the publish always sees exactly what was posted - the old
+	 * two-request flow needed a draft to already exist and left one behind
+	 * (placeholder slug) whenever it did not.
+	 */
+	publish: async ({ request, locals }) => {
 		await requireAdminRole();
 		const form = await request.formData();
-		const draftId = str(form, 'draftId').trim();
-		if (!draftId || !isUuid(draftId))
-			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
+		const read = readNoteDraftForm(form);
+		if ('error' in read) return fail(400, { message: read.error });
+		const author = locals.admin?.userId ?? locals.user?.id ?? null;
 
-		const result = await publishNoteDraft(draftId);
+		const saved = await saveNoteDraftWork({
+			draftId: read.draftId,
+			noteId: read.noteId,
+			expectedVersion: read.expectedVersion,
+			lang: read.lang,
+			payload: read.payload,
+			author,
+			autosave: false
+		});
+		switch (saved.kind) {
+			case 'not-found':
+				return fail(404, { message: m.admin_notes_edit_err_not_found() });
+			case 'invalid':
+				// The save side already graded the fields; keep the draft and
+				// surface the errors instead of publishing a stale body.
+				return fail(400, {
+					errors: saved.errors,
+					message: m.admin_notes_edit_err_save_validation()
+				});
+			case 'conflict':
+				return fail(409, {
+					conflict: true,
+					server: saved.server,
+					message: m.admin_posts_edit_err_conflict_long()
+				});
+			// A manual save must never be throttled; if the window is still closed
+			// the publish would ship a stale body, so refuse rather than guess.
+			case 'throttled':
+				return fail(409, { message: m.admin_posts_edit_err_busy() });
+			case 'saved':
+			case 'unchanged':
+				break;
+		}
+
+		const result = await publishNoteDraft(saved.draftId);
 		switch (result.kind) {
 			case 'published':
 				throw redirect(303, `/admin/notes/edit?id=${result.noteId}&published=1`);
 			case 'invalid':
+				// Publish-side validation keeps the draft (it is still on disk).
 				return fail(400, {
 					errors: result.errors,
 					message: m.admin_posts_edit_err_publish_validation()

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages';
-	import { IconMenu2, IconX } from '@tabler/icons-svelte-runes';
+	import IconMenu2 from '@tabler/icons-svelte-runes/icons/menu-2';
+	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import { slide } from 'svelte/transition';
 	import { quartInOut } from 'svelte/easing';
 	import ThemeToggle from '$lib/components/layout/ThemeToggle.svelte';

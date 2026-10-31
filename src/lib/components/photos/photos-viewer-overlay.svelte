@@ -7,7 +7,7 @@
 	import { formatBytes } from '$lib/utils/format';
 	import { siteHref } from '$lib/utils/href';
 	import { isPhotoSlug } from '$lib/utils/slug';
-	import { IconX } from '@tabler/icons-svelte-runes';
+	import IconX from '@tabler/icons-svelte-runes/icons/x';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { usePan, usePinch, type PanCustomEvent, type PinchCustomEvent } from 'svelte-gestures';
 	import {

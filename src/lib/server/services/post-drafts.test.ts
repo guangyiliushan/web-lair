@@ -916,6 +916,7 @@ describe('createTranslationDraft', () => {
 				{
 					id: 'post-1',
 					lang: 'en',
+					slug: 'source-slug',
 					title: 'Source title',
 					content: `Source /i/${KEY}@full body`,
 					summary: 'Source summary',
@@ -935,6 +936,9 @@ describe('createTranslationDraft', () => {
 		const created = state.inserts.find((i) => i.table === posts);
 		expect(created?.values).toMatchObject({
 			lang: 'zh-cn',
+			// The translation family shares ONE slug (ledger 9.16.5): the source
+			// decides the address, translations inherit it.
+			slug: 'source-slug',
 			translationGroup: 'group-1',
 			translatedFromPostId: 'post-1',
 			categoryId: 'cat-1',
@@ -946,7 +950,7 @@ describe('createTranslationDraft', () => {
 			title: 'Source title',
 			content: `Source /i/${KEY}@full body`,
 			summary: 'Source summary',
-			slug: null
+			slug: 'source-slug'
 		});
 		// The copied body's keys become the translation draft's own refs
 		// (3b2) inside the same transaction.
@@ -962,6 +966,7 @@ describe('createTranslationDraft', () => {
 				{
 					id: 'post-1',
 					lang: 'en',
+					slug: 'source-slug',
 					title: 'Source title',
 					content: `first\r\nsecond /i/${KEY}\r\n`,
 					summary: null,
@@ -977,5 +982,33 @@ describe('createTranslationDraft', () => {
 		await createTranslationDraft('post-1', 'zh-cn', null);
 		const prefill = state.inserts.find((i) => i.table === drafts);
 		expect(prefill?.values.content).toBe(`first\nsecond /i/${KEY}\n`);
+	});
+
+	it('falls back to a temp slug when the source has not been published yet', async () => {
+		state.selectQueue = [
+			[
+				{
+					id: 'post-1',
+					lang: 'en',
+					slug: 'draft-aaaaaaaaaa',
+					title: 'Source title',
+					content: 'body',
+					summary: null,
+					contentFormat: 'markdown',
+					categoryId: 'cat-1',
+					translationGroup: 'group-1',
+					translatedFromPostId: null
+				}
+			],
+			[]
+		];
+		state.insertResults = [[{ id: 'post-9' }], [{ id: 'draft-9' }]];
+		await createTranslationDraft('post-1', 'zh-cn', null);
+		// A placeholder is not a real address to inherit: the new row gets its
+		// own temp slug rather than an empty one.
+		const created = state.inserts.find((i) => i.table === posts);
+		expect(created?.values.slug).toMatch(/^draft-[0-9a-f]+$/);
+		const prefill = state.inserts.find((i) => i.table === drafts);
+		expect(prefill?.values.slug).toBeNull();
 	});
 });

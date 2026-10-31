@@ -9,7 +9,7 @@
 
 <script lang="ts">
 	import { NavigationMenu as NavigationMenuPrimitive } from 'bits-ui';
-	import { IconChevronDown } from '@tabler/icons-svelte-runes';
+	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
 	let {
 		ref = $bindable(null),
 		class: className,

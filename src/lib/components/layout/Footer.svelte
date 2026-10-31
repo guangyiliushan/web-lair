@@ -5,7 +5,9 @@
 	import { siteHref } from '$lib/utils/href';
 	import LangSwitcher from '$lib/components/layout/LangSwitcher.svelte';
 	import ThemeToggle from '$lib/components/layout/ThemeToggle.svelte';
-	import { IconCodeCircle2, IconRss, IconExternalLink } from '@tabler/icons-svelte-runes';
+	import IconCodeCircle2 from '@tabler/icons-svelte-runes/icons/code-circle-2';
+	import IconRss from '@tabler/icons-svelte-runes/icons/rss';
+	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
 
 	/** Footer link item descriptor */
 	interface FooterLink {

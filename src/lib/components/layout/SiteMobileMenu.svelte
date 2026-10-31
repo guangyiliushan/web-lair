@@ -4,7 +4,7 @@
 	import { isActivePath, siteHref } from '$lib/utils/href';
 	import { cn } from '$lib/utils';
 	import { m } from '$lib/paraglide/messages';
-	import { IconChevronDown } from '@tabler/icons-svelte-runes';
+	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
 	import { slide } from 'svelte/transition';
 	import { cubicInOut } from 'svelte/easing';
 	import { Separator } from '$lib/components/ui/separator';

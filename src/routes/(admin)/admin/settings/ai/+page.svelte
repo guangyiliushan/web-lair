@@ -50,6 +50,12 @@
 
 	// ── Provider dialog state ────────────────────────────────────────────
 	let dialogOpen = $state(false);
+	/**
+	 * Provider dialog element. The kind Select lives inside this dialog and
+	 * must portal its layer INTO the dialog DOM, or the dialog's dismiss layer
+	 * reads the dropdown as an outside click (UX-1020-02).
+	 */
+	let providerDialogEl = $state<HTMLElement | null>(null);
 	let editing = $state<ProviderRow | null>(null);
 	let savingProvider = $state(false);
 	let fieldName = $state('');
@@ -276,14 +282,12 @@
 						<Select.Trigger class="w-full">
 							{assignProviders[fn] || m.admin_settings_ai_no_provider()}
 						</Select.Trigger>
-						<Select.Portal>
-							<Select.Content>
-								<Select.Item value="">{m.admin_settings_ai_no_provider()}</Select.Item>
-								{#each data.providers as p (p.id)}
-									<Select.Item value={p.name}>{p.name}</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Portal>
+						<Select.Content>
+							<Select.Item value="">{m.admin_settings_ai_no_provider()}</Select.Item>
+							{#each data.providers as p (p.id)}
+								<Select.Item value={p.name}>{p.name}</Select.Item>
+							{/each}
+						</Select.Content>
 					</Select.Root>
 					<Input
 						name={`model_${fn}`}
@@ -585,7 +589,7 @@
 
 <!-- ── Provider dialog ──────────────────────────────────────────────── -->
 <Dialog.Root bind:open={dialogOpen}>
-	<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>
+	<Dialog.Content bind:ref={providerDialogEl} class="sm:max-w-lg" showCloseButton={false}>
 		<form
 			method="post"
 			action="?/saveProvider"
@@ -647,15 +651,13 @@
 									getLocale()
 								] ?? fieldKind}
 							</Select.Trigger>
-							<Select.Portal>
-								<Select.Content>
-									{#each AI_PROVIDER_KINDS as kind (kind)}
-										<Select.Item value={kind}
-											>{AI_PROVIDER_KIND_LABELS[kind][getLocale()]}</Select.Item
-										>
-									{/each}
-								</Select.Content>
-							</Select.Portal>
+							<Select.Content portalProps={providerDialogEl ? { to: providerDialogEl } : undefined}>
+								{#each AI_PROVIDER_KINDS as kind (kind)}
+									<Select.Item value={kind}
+										>{AI_PROVIDER_KIND_LABELS[kind][getLocale()]}</Select.Item
+									>
+								{/each}
+							</Select.Content>
 						</Select.Root>
 					</Field.Field>
 					<Field.Field data-invalid={providerErrors?.baseUrl ? true : undefined}>

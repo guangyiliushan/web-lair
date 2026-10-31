@@ -47,6 +47,7 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 const POST_ID = '11111111-1111-1111-1111-111111111111';
+const SIBLING_ID = '22222222-2222-2222-2222-222222222222';
 const PUBLISHED_AT = new Date('2026-01-01T00:00:00Z');
 
 function makeEvent(fields: Record<string, string>) {
@@ -82,10 +83,9 @@ function chain(selectResult: unknown[]): Record<string, unknown> {
 	return c;
 }
 
-function makeTx(selectResult: unknown[]): Record<string, unknown> {
-	const c = chain(selectResult);
-	Object.assign(c, {
-		select: () => c,
+function makeTx(selectResults: unknown[][]): Record<string, unknown> {
+	return {
+		select: () => chain(selectResults.length > 0 ? selectResults.shift()! : []),
 		delete: (table: unknown) => ({
 			where: (cond: unknown) => {
 				state.deletes.push({ cond, ...{ table } });
@@ -93,12 +93,19 @@ function makeTx(selectResult: unknown[]): Record<string, unknown> {
 				return Object.assign(Promise.resolve(rows), { returning: async () => rows });
 			}
 		})
-	});
-	return c;
+	};
 }
 
 function resetState() {
-	state.current = [{ id: POST_ID, status: 'published', publishedAt: PUBLISHED_AT }];
+	state.current = [
+		{
+			id: POST_ID,
+			status: 'published',
+			publishedAt: PUBLISHED_AT,
+			translationGroup: 'group-1',
+			translatedFromPostId: null
+		}
+	];
 	state.updatedRows = [{ id: POST_ID }];
 	state.selectWhere = [];
 	state.updateWhere = [];
@@ -188,9 +195,13 @@ describe('admin posts list purge action', () => {
 
 		Object.assign(dbMock, {
 			select: vi.fn(() => chain(state.current)),
-			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
-				cb(makeTx(state.current.length ? [{ id: POST_ID }] : []))
-			)
+			transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
+				const head = state.current[0];
+				if (!head) return cb(makeTx([[]]));
+				// First select locks the target row, the second (only for a source)
+				// reads the whole family.
+				return cb(makeTx([[head], state.current.map((row) => ({ id: row.id }))]));
+			})
 		});
 	});
 
@@ -227,5 +238,50 @@ describe('admin posts list purge action', () => {
 		expect((await run('purge', { id: POST_ID })).status).toBeUndefined();
 		expect(state.deletes).toHaveLength(2);
 		expect(state.syncCalls).toEqual([{ type: 'post', id: POST_ID }]);
+	});
+
+	it('purges the whole family from its source, siblings first', async () => {
+		state.current = [
+			{
+				id: POST_ID,
+				status: 'trash',
+				translationGroup: 'group-1',
+				translatedFromPostId: null
+			},
+			{
+				id: SIBLING_ID,
+				status: 'draft',
+				translationGroup: 'group-1',
+				translatedFromPostId: POST_ID
+			}
+		];
+		state.deleteResults = [[{ id: 'draft-source' }, { id: 'draft-sibling' }], [], []];
+		expect((await run('purge', { id: POST_ID })).status).toBeUndefined();
+
+		// Drafts (one batch), then the sibling, then the source. Letting the
+		// self-FK's SET NULL run first would give the group two source rows and
+		// violate posts_group_source_uniq (the former 500).
+		expect(state.deletes).toHaveLength(3);
+		expect(state.syncCalls).toEqual([
+			{ type: 'draft', id: 'draft-source' },
+			{ type: 'draft', id: 'draft-sibling' },
+			{ type: 'post', id: SIBLING_ID },
+			{ type: 'post', id: POST_ID }
+		]);
+	});
+
+	it('purges a translation without touching its source', async () => {
+		state.current = [
+			{
+				id: SIBLING_ID,
+				status: 'trash',
+				translationGroup: 'group-1',
+				translatedFromPostId: POST_ID
+			}
+		];
+		state.deleteResults = [[], []];
+		expect((await run('purge', { id: SIBLING_ID })).status).toBeUndefined();
+		expect(state.deletes).toHaveLength(2);
+		expect(state.syncCalls).toEqual([{ type: 'post', id: SIBLING_ID }]);
 	});
 });

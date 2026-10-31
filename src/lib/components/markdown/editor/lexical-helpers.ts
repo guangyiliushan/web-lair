@@ -2,7 +2,10 @@ import {
 	type LexicalEditor,
 	type LexicalNode,
 	type TextFormatType,
+	type TextNode,
 	FORMAT_TEXT_COMMAND,
+	$getRoot,
+	$isTextNode,
 	$getSelection,
 	$isRangeSelection,
 	$createParagraphNode,
@@ -31,7 +34,15 @@ import {
 	createDefaultAlertContent
 } from '$lib/components/markdown/alert/alert-types';
 import type { AlertType } from '$lib/components/markdown/alert/alert-types';
-
+import { $createFootnoteRefNode } from '$lib/components/markdown/footnote/footnote-ref-node';
+import { $createFootnoteInlineNode } from '$lib/components/markdown/footnote/footnote-inline-node';
+import { $createMentionNode } from '$lib/components/markdown/mention/mention-node';
+import { $createDetailsNode } from '$lib/components/markdown/details/details-node';
+import { $createEmbedNode } from '$lib/components/markdown/embed/embed-node';
+import { resolveProviderId } from '$lib/components/markdown/embed/registry';
+import { $createMermaidNode } from '$lib/components/markdown/editor/mermaid-block-node';
+import { $createTabsNode, type SerializedTabEntry } from '$lib/components/markdown/tabs/tabs-node';
+import { $createGridNode } from '$lib/components/markdown/grid/grid-node';
 // ── 选区块定位（工具栏状态与 toggle 的统一依据）──
 
 /**
@@ -266,7 +277,7 @@ export function insertTag(editor: LexicalEditor) {
 
 export { $createAlertNode, $isAlertNode };
 
-import { $getNodeByKey, $getRoot, $isTextNode } from 'lexical';
+import { $getNodeByKey } from 'lexical';
 import { $createSpoilerNode, $isSpoilerNode } from '$lib/components/markdown/spoiler/spoiler-node';
 import { $isMentionNode } from '$lib/components/markdown/mention/mention-node';
 import {
@@ -511,3 +522,158 @@ export function getSelectionRect(): DOMRect | null {
 
 // 来自 alert-node.ts 的 $ 前缀函数也需要别名
 export { $isAlertNode as isAlertNode };
+
+// ── 插入面（脚注 / 提及 / 折叠块 / 卡片链接 / 容器）─────────────────────
+//
+// 这些节点、`$create*` 工厂与往返 transformer 早已存在，缺的只是工具栏入口
+// （UX-1020「恢复被删掉的插入能力」）。工厂一律按导出侧的源码字面量建节点，
+// 保证 插入 → 导出 markdown → 再导入 恒等。
+
+/** Walks every text node under the root (for the next free footnote label). */
+function collectTextNodes(): TextNode[] {
+	const out: TextNode[] = [];
+	const stack: LexicalNode[] = [$getRoot()];
+	while (stack.length > 0) {
+		const node = stack.pop() as LexicalNode;
+		if ($isTextNode(node)) out.push(node);
+		// ElementNode#getChildren covers every container type in EDITOR_NODES
+		const children =
+			'getChildren' in node ? (node as { getChildren(): LexicalNode[] }).getChildren() : [];
+		for (const child of children) stack.push(child);
+	}
+	return out;
+}
+
+/**
+ * Next free footnote label: `[^1]` chips already in the document are counted
+ * so a second insert does not collide with the first.
+ */
+function nextFootnoteLabel(): string {
+	let max = 0;
+	for (const node of collectTextNodes()) {
+		const match = /^\[\^(\d+)\]$/.exec(node.getTextContent());
+		if (match) max = Math.max(max, Number(match[1]));
+	}
+	return String(max + 1);
+}
+
+/** 脚注引用 `[^N]`：原子 chip，标签自动递增，无需输入。 */
+export function insertFootnoteRef(editor: LexicalEditor, label?: string) {
+	editor.update(() => {
+		const selection = $getSelection();
+		if (!$isRangeSelection(selection)) return;
+		const id = label?.trim() || nextFootnoteLabel();
+		selection.insertNodes([$createFootnoteRefNode(`[^${id}]`)]);
+	});
+}
+
+/** 行内脚注 `^[正文]`（pandoc 风格），正文由调用方给定。 */
+export function insertFootnoteInline(editor: LexicalEditor, text: string) {
+	editor.update(() => {
+		const selection = $getSelection();
+		if (!$isRangeSelection(selection)) return;
+		const body = text.trim() || '…';
+		selection.insertNodes([$createFootnoteInlineNode(`^[${body}]`)]);
+	});
+}
+
+/**
+ * 提及 `@gh:user` / `@tw:user` / `@tg:user`。原子 token，光标不能进，
+ * 所以 handle 必须在插入前确定（工具栏走输入框，不走 window.prompt）。
+ */
+export function insertMention(editor: LexicalEditor, handle: string) {
+	editor.update(() => {
+		const selection = $getSelection();
+		if (!$isRangeSelection(selection)) return;
+		const token = handle.trim();
+		if (!token) return;
+		selection.insertNodes([$createMentionNode(token.startsWith('@') ? token : `@${token}`)]);
+	});
+}
+
+/** 折叠块 `:::details{…}` / `:::spoiler{…}`，默认 details + 展开 + 空正文。 */
+export function insertDetails(editor: LexicalEditor, variant: 'details' | 'spoiler' = 'details') {
+	editor.update(() => {
+		const node = $createDetailsNode(variant, '', '', false, true, createDefaultAlertContent());
+		$insertNodeToNearestRoot(node);
+		// decorator nodes have no select(): leave a paragraph for the caret
+		const paragraph = $createParagraphNode();
+		node.insertAfter(paragraph);
+		paragraph.select();
+	});
+}
+
+/** 卡片链接（embed card）：provider 从 URL 解析，解不出就用 generic。 */
+export function insertEmbed(editor: LexicalEditor, url: string, title = '') {
+	editor.update(() => {
+		const trimmed = url.trim();
+		if (!trimmed) return;
+		const node = $createEmbedNode(trimmed, title.trim() || trimmed, resolveProviderId(trimmed));
+		$insertNodeToNearestRoot(node);
+		const paragraph = $createParagraphNode();
+		node.insertAfter(paragraph);
+		paragraph.select();
+	});
+}
+
+/**
+ * Starter diagram for a new Mermaid block. English labels on purpose: the
+ * admin i18n guard (A2) rejects hardcoded CJK outside comments, and this is
+ * only a placeholder the author replaces anyway.
+ */
+export const DEFAULT_MERMAID_SOURCE = 'graph TD\n  A[Start] --> B[End]';
+
+/** Mermaid 图（```mermaid 围栏）。 */
+export function insertMermaid(editor: LexicalEditor, source: string = DEFAULT_MERMAID_SOURCE) {
+	editor.update(() => {
+		const node = $createMermaidNode(source);
+		$insertNodeToNearestRoot(node);
+		const paragraph = $createParagraphNode();
+		node.insertAfter(paragraph);
+		paragraph.select();
+	});
+}
+
+/** 标签页容器 `:::tabs`，默认两页。 */
+export function insertTabs(editor: LexicalEditor, labels: string[] = ['Tab 1', 'Tab 2']) {
+	editor.update(() => {
+		const tabs: SerializedTabEntry[] = labels.map((label) => ({
+			label,
+			labelExplicit: true,
+			jsonContent: createDefaultAlertContent()
+		}));
+		const node = $createTabsNode(
+			tabs.length > 0
+				? tabs
+				: [{ label: 'Tab 1', labelExplicit: true, jsonContent: createDefaultAlertContent() }]
+		);
+		$insertNodeToNearestRoot(node);
+		const paragraph = $createParagraphNode();
+		node.insertAfter(paragraph);
+		paragraph.select();
+	});
+}
+
+/** 分栏容器（grid / masonry / carousel）。 */
+export function insertGrid(
+	editor: LexicalEditor,
+	layout: 'grid' | 'masonry' | 'carousel' = 'grid',
+	cols = 2
+) {
+	editor.update(() => {
+		const node = $createGridNode(
+			'',
+			cols,
+			null,
+			8,
+			layout,
+			'normal',
+			[],
+			createDefaultAlertContent()
+		);
+		$insertNodeToNearestRoot(node);
+		const paragraph = $createParagraphNode();
+		node.insertAfter(paragraph);
+		paragraph.select();
+	});
+}

@@ -2,7 +2,7 @@
 	import { cn } from '$lib/utils';
 	import { siteHref } from '$lib/utils/href';
 	import { Badge } from '$lib/components/ui/badge';
-	import { IconChevronRight } from '@tabler/icons-svelte-runes';
+	import IconChevronRight from '@tabler/icons-svelte-runes/icons/chevron-right';
 
 	/**
 	 * Panel footer, one line: primary link, then an optional count badge and an

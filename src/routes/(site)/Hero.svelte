@@ -6,15 +6,13 @@
 	import { m } from '$lib/paraglide/messages';
 	import { siteHref } from '$lib/utils/href';
 	import { motion } from '@humanspeak/svelte-motion';
-	import {
-		IconBrandGithub,
-		IconBrandTwitter,
-		IconMail,
-		IconRss,
-		IconBrandTelegram,
-		IconBrandX,
-		IconChevronDown
-	} from '@tabler/icons-svelte-runes';
+	import IconBrandGithub from '@tabler/icons-svelte-runes/icons/brand-github';
+	import IconBrandTwitter from '@tabler/icons-svelte-runes/icons/brand-twitter';
+	import IconMail from '@tabler/icons-svelte-runes/icons/mail';
+	import IconRss from '@tabler/icons-svelte-runes/icons/rss';
+	import IconBrandTelegram from '@tabler/icons-svelte-runes/icons/brand-telegram';
+	import IconBrandX from '@tabler/icons-svelte-runes/icons/brand-x';
+	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
 
 	type SocialPlatform = 'github' | 'twitter' | 'email' | 'rss' | 'telegram' | 'x';
 

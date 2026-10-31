@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
 	import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '$lib/components/ui/empty';
-	import { IconInbox } from '@tabler/icons-svelte-runes';
+	import IconInbox from '@tabler/icons-svelte-runes/icons/inbox';
 
 	/**
 	 * Compact empty placeholder for a panel column.

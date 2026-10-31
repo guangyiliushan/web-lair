@@ -36,8 +36,77 @@ function browserApiPort(): number {
 	return port;
 }
 
+/**
+ * Client-side packages that Vite's startup dependency scan does not reach
+ * (dynamic imports, lazily-mounted admin widgets, map/chart islands).
+ *
+ * When the dev server discovers one of these mid-session it re-bundles *every*
+ * optimized dependency, prints "new dependencies optimized" and forces a full
+ * page reload — minutes on Windows with this dependency tree. Listing them here
+ * pays that cost once at startup instead.
+ */
+const lazyClientDeps = [
+	// Markdown editor + preview
+	'lexical',
+	'@lexical/code',
+	'@lexical/extension',
+	'@lexical/history',
+	'@lexical/link',
+	'@lexical/list',
+	'@lexical/markdown',
+	'@lexical/rich-text',
+	'@lexical/selection',
+	'@lexical/table',
+	'@lexical/utils',
+	'katex',
+	'mermaid',
+	// Source editor on /admin/jobs
+	'@codemirror/state',
+	'@codemirror/view',
+	'@codemirror/commands',
+	'@codemirror/language',
+	'@codemirror/lang-javascript',
+	// Photo wall + map islands
+	'svelte-maplibre-gl',
+	'pmtiles',
+	'@protomaps/basemaps',
+	'@masonry-grid/svelte',
+	// Shared UI primitives
+	'bits-ui',
+	'vaul-svelte',
+	'layerchart',
+	'@humanspeak/svelte-motion',
+	'svelte-gestures',
+	'tailwind-merge',
+	'tailwind-variants',
+	'thumbhash'
+];
+
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
+	optimizeDeps: {
+		include: lazyClientDeps
+	},
+	server: {
+		// `build/` (adapter-node output) and `storybook-static/` are generated
+		// artifacts; watching 43 MB of them on Windows stalls the file watcher
+		// and invalidates the module graph for no reason.
+		watch: {
+			ignored: ['**/build/**', '**/storybook-static/**']
+		},
+		// Transform the admin shell and the editor routes while the server boots
+		// so the first client navigation does not pay for it.
+		warmup: {
+			clientFiles: [
+				'./src/routes/+layout.svelte',
+				'./src/routes/(admin)/+layout.svelte',
+				'./src/routes/(admin)/admin/posts/edit/+page.svelte',
+				'./src/routes/(admin)/admin/notes/edit/+page.svelte',
+				'./src/lib/components/layout/Header.svelte',
+				'./src/lib/config/navigation.config.ts'
+			]
+		}
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit(),
@@ -121,18 +190,12 @@ export default defineConfig({
 					// default turns slow-but-correct runs into false negatives.
 					testTimeout: 30000
 				},
-				// Lazy imports (KaTeX, mermaid, the CodeMirror set) otherwise
-				// trigger a dep-optimizer pass mid-test under full-suite load,
-				// blowing the 30 s test timeout.
+				// Same lazy-import hazard as dev (see `lazyClientDeps`), plus the
+				// icon modules that only specs mount: an optimizer pass mid-test
+				// under full-suite load blows the 30 s test timeout.
 				optimizeDeps: {
 					include: [
-						'katex',
-						'mermaid',
-						'@codemirror/state',
-						'@codemirror/view',
-						'@codemirror/commands',
-						'@codemirror/language',
-						'@codemirror/lang-javascript',
+						...lazyClientDeps,
 						'@tabler/icons-svelte-runes/icons/app-window',
 						'@tabler/icons-svelte-runes/icons/brand-vscode',
 						// media-upload-dialog's tree (upload / photo / file / x) — same

@@ -1,12 +1,15 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { categories, postTags, posts, tags } from '$lib/server/db/content';
+import { categories, drafts, postTags, posts, tags } from '$lib/server/db/content';
 import {
 	normalizeProvenance,
 	postProvenanceFromPayload
 } from '$lib/server/db/content/post-provenance';
 import { requireAdminRole } from '$lib/server/authz';
+import { pgErrorCode } from '$lib/server/db/pg-error';
+import { syncFileReferences } from '$lib/server/services/file-references';
+import { isValidTaxonomySlug, TAXONOMY_LOCALES } from '$lib/server/services/taxonomy';
 import { getOption, OPTION_LANGS } from '$lib/server/config/options-registry';
 import {
 	createTranslationDraft,
@@ -14,7 +17,8 @@ import {
 	isPlaceholderSlug,
 	loadDraftByPostId,
 	publishDraft,
-	saveDraftWork
+	saveDraftWork,
+	type DraftPayload
 } from '$lib/server/services/post-drafts';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad, Actions } from './$types';
@@ -26,6 +30,9 @@ import { m } from '$lib/paraglide/messages';
  * `drafts` row per target. Autosave and the manual save share one action -
  * the client only differs in the throttle flag.
  */
+
+type SwitchLangOutcome =
+	{ kind: 'not-found' } | { kind: 'not-source' } | { kind: 'ok'; id: string };
 
 async function loadTagNames(postId: string): Promise<string[]> {
 	const rows = await db
@@ -39,6 +46,56 @@ async function loadTagNames(postId: string): Promise<string[]> {
 
 function str(form: FormData, key: string): string {
 	return (form.get(key) ?? '').toString();
+}
+
+type DraftFormRead =
+	| { error: string }
+	| {
+			postId: string | null;
+			draftId: string | null;
+			expectedVersion: number | null;
+			lang: string | null;
+			payload: DraftPayload;
+	  };
+
+/**
+ * Shared reader for `save` and `publish`. Both carry the same payload because
+ * publish is save→publish inside ONE request (UX-1020-04): the old flow did a
+ * client-side save and then `requestSubmit()` of a hidden form, so a first-time
+ * publish (no draft row yet) raced the two requests and only ever saved.
+ */
+function readDraftForm(form: FormData): DraftFormRead {
+	const rawId = str(form, 'id').trim();
+	const draftId = str(form, 'draftId').trim();
+	const versionRaw = str(form, 'draftVersion').trim();
+	const langRaw = str(form, 'lang').trim();
+	if (rawId && !isUuid(rawId)) return { error: m.admin_posts_edit_err_bad_post_id() };
+	if (draftId && !isUuid(draftId)) return { error: m.admin_posts_edit_err_bad_draft_id() };
+	// Malformed category ids must never reach the uuid column (22P02 -> 500;
+	// the P1.1 guard this rewrite had dropped - review finding).
+	const categoryIdRaw = str(form, 'categoryId').trim();
+	if (categoryIdRaw && !isUuid(categoryIdRaw))
+		return { error: m.admin_posts_edit_err_bad_category_id() };
+	return {
+		postId: rawId || null,
+		draftId: draftId || null,
+		// A non-numeric version is treated as "not provided" (Number('abc') is
+		// NaN, which used to make every save a permanent 409; review finding).
+		expectedVersion: /^\d+$/.test(versionRaw) ? Number(versionRaw) : null,
+		lang: (OPTION_LANGS as readonly string[]).includes(langRaw) ? langRaw : null,
+		payload: {
+			title: str(form, 'title'),
+			slug: str(form, 'slug').trim().toLowerCase(),
+			categoryId: categoryIdRaw,
+			summary: str(form, 'summary'),
+			tags: str(form, 'tags'),
+			content: str(form, 'content'),
+			provenance: normalizeProvenance({
+				writingOrigin: str(form, 'writingOrigin') || null,
+				aiHelp: str(form, 'aiHelp')
+			})
+		}
+	};
 }
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -141,6 +198,18 @@ export const load: PageServerLoad = async ({ url }) => {
 				iconName: 'arrow-left',
 				variant: 'outline',
 				href: '/admin/posts'
+			},
+			{
+				label: m.admin_posts_edit_save_draft(),
+				iconName: 'device-floppy',
+				variant: 'outline',
+				actionId: 'posts:edit:save'
+			},
+			{
+				label: m.admin_posts_edit_publish(),
+				iconName: 'cloud-upload',
+				variant: 'default',
+				actionId: 'posts:edit:publish'
 			}
 		],
 		categories: allCategories,
@@ -163,43 +232,17 @@ export const actions: Actions = {
 	save: async ({ request, locals }) => {
 		await requireAdminRole();
 		const form = await request.formData();
-		const rawId = str(form, 'id').trim();
-		const draftId = str(form, 'draftId').trim();
-		const versionRaw = str(form, 'draftVersion').trim();
-		const langRaw = str(form, 'lang').trim();
-		const autosave = form.get('autosave') === '1';
-		if (rawId && !isUuid(rawId))
-			return fail(400, { message: m.admin_posts_edit_err_bad_post_id() });
-		if (draftId && !isUuid(draftId))
-			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
-		// Malformed category ids must never reach the uuid column (22P02 → 500;
-		// the P1.1 guard this rewrite had dropped - review finding).
-		const categoryIdRaw = str(form, 'categoryId').trim();
-		if (categoryIdRaw && !isUuid(categoryIdRaw)) {
-			return fail(400, { message: m.admin_posts_edit_err_bad_category_id() });
-		}
+		const read = readDraftForm(form);
+		if ('error' in read) return fail(400, { message: read.error });
 
 		const result = await saveDraftWork({
-			draftId: draftId || null,
-			postId: rawId || null,
-			// A non-numeric version is treated as "not provided" (Number('abc') is
-			// NaN, which used to make every save a permanent 409; review finding).
-			expectedVersion: /^\d+$/.test(versionRaw) ? Number(versionRaw) : null,
-			lang: (OPTION_LANGS as readonly string[]).includes(langRaw) ? langRaw : null,
-			payload: {
-				title: str(form, 'title'),
-				slug: str(form, 'slug').trim().toLowerCase(),
-				categoryId: categoryIdRaw,
-				summary: str(form, 'summary'),
-				tags: str(form, 'tags'),
-				content: str(form, 'content'),
-				provenance: normalizeProvenance({
-					writingOrigin: str(form, 'writingOrigin') || null,
-					aiHelp: str(form, 'aiHelp')
-				})
-			},
+			draftId: read.draftId,
+			postId: read.postId,
+			expectedVersion: read.expectedVersion,
+			lang: read.lang,
+			payload: read.payload,
 			author: locals.admin?.userId ?? locals.user?.id ?? null,
-			autosave
+			autosave: form.get('autosave') === '1'
 		});
 
 		switch (result.kind) {
@@ -242,15 +285,48 @@ export const actions: Actions = {
 		}
 	},
 
-	/** Publish transaction: copy draft → posts + revision + tags + trackers. */
+	/**
+	 * Publish in ONE request (UX-1020-04): persist the working copy and publish
+	 * it in the same action. The save is manual, so it bypasses the autosave
+	 * throttle and the publish always sees exactly what was posted.
+	 */
 	publish: async ({ request, locals }) => {
 		await requireAdminRole();
 		const form = await request.formData();
-		const draftId = str(form, 'draftId').trim();
-		if (!draftId || !isUuid(draftId))
-			return fail(400, { message: m.admin_posts_edit_err_bad_draft_id() });
+		const read = readDraftForm(form);
+		if ('error' in read) return fail(400, { message: read.error });
+		const author = locals.admin?.userId ?? locals.user?.id ?? null;
 
-		const result = await publishDraft(draftId, locals.admin?.userId ?? locals.user?.id ?? null);
+		const saved = await saveDraftWork({
+			draftId: read.draftId,
+			postId: read.postId,
+			expectedVersion: read.expectedVersion,
+			lang: read.lang,
+			payload: read.payload,
+			author,
+			autosave: false
+		});
+		switch (saved.kind) {
+			case 'needs-category':
+				return fail(400, { message: m.admin_posts_edit_pick_category_hint(), needsCategory: true });
+			case 'not-found':
+				return fail(404, { message: m.admin_posts_edit_err_not_found() });
+			case 'conflict':
+				return fail(409, {
+					conflict: true,
+					server: saved.server,
+					message: m.admin_posts_edit_err_conflict_long()
+				});
+			// A manual save must never be throttled; if the window is still closed
+			// the publish would ship a stale body, so refuse rather than guess.
+			case 'throttled':
+				return fail(409, { message: m.admin_posts_edit_err_busy() });
+			case 'saved':
+			case 'unchanged':
+				break;
+		}
+
+		const result = await publishDraft(saved.draftId, author);
 		switch (result.kind) {
 			case 'published':
 				throw redirect(303, `/admin/posts/edit?id=${result.postId}&published=1`);
@@ -322,6 +398,159 @@ export const actions: Actions = {
 				return fail(400, { message: m.admin_posts_edit_err_from_source() });
 			case 'not-found':
 				return fail(404, { message: m.admin_posts_edit_err_not_found() });
+		}
+	},
+
+	/**
+	 * Switch the article's source language. Translations are deliberately not
+	 * re-linked (the family stays flat):
+	 *  - `existing`: the version already in the target language becomes the
+	 *    source; the current article and every other language version go away.
+	 *  - `current` (default): the current article keeps its content and takes
+	 *    the new language; the conflicting version in that language is deleted.
+	 * Untouched translations keep pointing at the surviving source row.
+	 */
+	switchLang: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const id = str(form, 'id').trim();
+		const lang = str(form, 'lang').trim();
+		const mode = str(form, 'mode').trim() === 'existing' ? 'existing' : 'current';
+		if (!id || !isUuid(id)) return fail(400, { message: m.admin_posts_edit_err_bad_post_id() });
+		if (!(OPTION_LANGS as readonly string[]).includes(lang)) {
+			return fail(400, { message: m.admin_posts_edit_target_lang() });
+		}
+
+		let outcome: SwitchLangOutcome;
+		try {
+			outcome = await db.transaction(async (tx) => {
+				const [row] = await tx
+					.select({
+						id: posts.id,
+						lang: posts.lang,
+						translationGroup: posts.translationGroup,
+						translatedFromPostId: posts.translatedFromPostId
+					})
+					.from(posts)
+					.where(eq(posts.id, id))
+					.limit(1)
+					.for('update');
+				if (!row) return { kind: 'not-found' as const };
+				// Only the group source owns the source language; a translation is
+				// switched by promoting it through this same dialog instead.
+				if (row.translatedFromPostId) return { kind: 'not-source' as const };
+				if (row.lang === lang) return { kind: 'ok' as const, id: row.id };
+
+				const family = await tx
+					.select({
+						id: posts.id,
+						lang: posts.lang,
+						translatedFromPostId: posts.translatedFromPostId
+					})
+					.from(posts)
+					.where(eq(posts.translationGroup, row.translationGroup))
+					.for('update');
+				const target = family.find((member) => member.lang === lang && member.id !== row.id);
+
+				if (target && mode === 'existing') {
+					// Keep the target version only. Translations go first so the
+					// source's SET NULL never leaves two NULL sources in the group.
+					const doomed = family.filter((member) => member.id !== target.id);
+					const draftRows = await tx
+						.delete(drafts)
+						.where(
+							and(
+								eq(drafts.refType, 'post'),
+								inArray(
+									drafts.refId,
+									doomed.map((member) => member.id)
+								)
+							)
+						)
+						.returning({ id: drafts.id });
+					for (const member of doomed.filter((m) => m.translatedFromPostId)) {
+						await tx.delete(posts).where(eq(posts.id, member.id));
+					}
+					await tx.delete(posts).where(eq(posts.id, row.id));
+					await tx
+						.update(posts)
+						.set({
+							translatedFromPostId: null,
+							translationOrigin: null,
+							updatedAt: new Date()
+						})
+						.where(eq(posts.id, target.id));
+					for (const draft of draftRows) {
+						await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
+					}
+					for (const member of doomed) {
+						await syncFileReferences(tx, { type: 'post', id: member.id }, []);
+					}
+					return { kind: 'ok' as const, id: target.id };
+				}
+
+				if (target) {
+					// Keep the current article: only the conflicting version goes.
+					const draftRows = await tx
+						.delete(drafts)
+						.where(and(eq(drafts.refType, 'post'), eq(drafts.refId, target.id)))
+						.returning({ id: drafts.id });
+					await tx.delete(posts).where(eq(posts.id, target.id));
+					for (const draft of draftRows) {
+						await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
+					}
+					await syncFileReferences(tx, { type: 'post', id: target.id }, []);
+				}
+
+				const [updated] = await tx
+					.update(posts)
+					.set({ lang, updatedAt: new Date() })
+					.where(eq(posts.id, row.id))
+					.returning({ id: posts.id });
+				return updated ? { kind: 'ok' as const, id: updated.id } : { kind: 'not-found' as const };
+			});
+		} catch (caught) {
+			if (pgErrorCode(caught) !== '23505') throw caught;
+			return fail(409, { message: m.admin_posts_edit_switch_lang_conflict() });
+		}
+
+		if (outcome.kind === 'not-found')
+			return fail(404, { message: m.admin_posts_edit_err_not_found() });
+		if (outcome.kind === 'not-source')
+			return fail(400, { message: m.admin_posts_edit_err_from_source() });
+		throw redirect(303, `/admin/posts/edit?id=${outcome.id}`);
+	},
+
+	/**
+	 * Inline category creation for the editor (UX-1020-03). Same validation as
+	 * the categories route's create action, but it ANSWERS with the new row
+	 * instead of redirecting: the client appends it to its local option list and
+	 * selects it at once. Never invalidates from here - that would re-run load
+	 * and replay the server copy over the unsaved working copy.
+	 */
+	createCategory: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const name = str(form, 'name').trim();
+		const slug = str(form, 'slug').trim().toLowerCase();
+		const sourceLangRaw = str(form, 'sourceLang').trim();
+		const sourceLang = (TAXONOMY_LOCALES as readonly string[]).includes(sourceLangRaw)
+			? sourceLangRaw
+			: 'zh-cn';
+
+		if (!name) return fail(400, { error: m.admin_categories_err_name_required() });
+		if (!slug) return fail(400, { error: m.admin_categories_err_slug_required() });
+		if (!isValidTaxonomySlug(slug)) return fail(400, { error: m.admin_taxonomy_err_slug_shape() });
+
+		try {
+			const [created] = await db
+				.insert(categories)
+				.values({ name, slug, sourceLang })
+				.returning({ id: categories.id, name: categories.name, slug: categories.slug });
+			return { created };
+		} catch (error) {
+			if (pgErrorCode(error) !== '23505') throw error;
+			return fail(409, { error: m.admin_categories_err_duplicate() });
 		}
 	}
 } satisfies Actions;

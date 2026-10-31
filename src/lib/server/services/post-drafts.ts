@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { categories, drafts, postRevisions, postTags, posts, tags } from '$lib/server/db/content';
 import {
@@ -419,11 +419,18 @@ export async function publishDraft(
 	const title = draft.title.trim();
 	const slug = (draft.slug ?? '').trim();
 	const categoryId = draft.categoryId ?? '';
+	// 共用 slug:译文的地址由源文章决定并在发布时继承，所以不校验它自己的
+	// slug（存量译文草稿仍可能是 null / placeholder）。
+	// Boolean(), not an `!== null` test: a row that simply has no value must
+	// never read as a translation (that skipped slug validation entirely).
+	const isTranslation = Boolean(post.translatedFromPostId);
 	if (!title) errors.title = m.admin_editor_err_title_required();
-	if (!slug) errors.slug = m.admin_editor_err_slug_required();
-	else if (!SLUG_RE.test(slug)) errors.slug = m.admin_posts_edit_err_slug_charset();
-	else if (slug.startsWith(PLACEHOLDER_SLUG_PREFIX))
-		errors.slug = m.admin_editor_err_slug_reserved_prefix();
+	if (!isTranslation) {
+		if (!slug) errors.slug = m.admin_editor_err_slug_required();
+		else if (!SLUG_RE.test(slug)) errors.slug = m.admin_posts_edit_err_slug_charset();
+		else if (slug.startsWith(PLACEHOLDER_SLUG_PREFIX))
+			errors.slug = m.admin_editor_err_slug_reserved_prefix();
+	}
 	if (!categoryId) errors.categoryId = m.admin_posts_edit_err_category_required();
 	if (!(draft.content ?? '').trim()) errors.content = m.admin_editor_err_content_required();
 	const badTags = (draft.tags ?? []).filter((tag) => !isValidTagName(tag));
@@ -487,17 +494,25 @@ export async function publishDraft(
 			});
 			const provenanceChanged =
 				provenance !== null && !provenanceEquals(provenance, publishedProvenance);
-			if (!finalTitle || !finalSlug || !finalCategoryId || !(lockedDraft.content ?? '').trim()) {
+			if (!finalTitle || !finalCategoryId || !(lockedDraft.content ?? '').trim()) {
 				return {
 					kind: 'invalid' as const,
 					errors: { form: m.admin_editor_err_stale_draft() } as Record<string, string>
 				};
 			}
-			if (!SLUG_RE.test(finalSlug) || finalSlug.startsWith(PLACEHOLDER_SLUG_PREFIX)) {
-				return {
-					kind: 'invalid' as const,
-					errors: { slug: m.admin_editor_err_slug_invalid() } as Record<string, string>
-				};
+			if (!isTranslation) {
+				if (!finalSlug) {
+					return {
+						kind: 'invalid' as const,
+						errors: { slug: m.admin_editor_err_slug_required() } as Record<string, string>
+					};
+				}
+				if (!SLUG_RE.test(finalSlug) || finalSlug.startsWith(PLACEHOLDER_SLUG_PREFIX)) {
+					return {
+						kind: 'invalid' as const,
+						errors: { slug: m.admin_editor_err_slug_invalid() } as Record<string, string>
+					};
+				}
 			}
 			// Re-check on the LOCKED row: a concurrent autosave can land between
 			// the pre-flight validation and this transaction (same reason title /
@@ -512,8 +527,30 @@ export async function publishDraft(
 				};
 			}
 
+			// 共用 slug（源文章定）:整组一个地址，换语言不换 slug。
+			// - 译文发布时直接采用源 slug（源是权威），UI 上 slug 是只读的，
+			//   但存量数据/旧草稿可能仍带着分叉 slug，这里强制收敛。
+			// - 源发布时若 slug 变了，整组跟随，每语言留一条 slug_trackers
+			//   保证旧地址 301 可达。
+			let effectiveSlug = finalSlug;
+			if (isTranslation && locked.translatedFromPostId) {
+				const [sourceRow] = await tx
+					.select({ slug: posts.slug })
+					.from(posts)
+					.where(eq(posts.id, locked.translatedFromPostId))
+					.limit(1)
+					.for('update');
+				if (!sourceRow) {
+					return {
+						kind: 'invalid' as const,
+						errors: { slug: m.admin_posts_edit_err_not_found() } as Record<string, string>
+					};
+				}
+				effectiveSlug = sourceRow.slug;
+			}
+
 			// Slug change inside the same language: keep the old slug resolvable.
-			if (locked.slug !== finalSlug && !isPlaceholderSlug(locked.slug)) {
+			if (locked.slug !== effectiveSlug && !isPlaceholderSlug(locked.slug)) {
 				await tx.insert(slugTrackers).values({
 					slug: locked.slug,
 					type: 'post',
@@ -522,12 +559,34 @@ export async function publishDraft(
 				});
 			}
 
+			if (!isTranslation && locked.slug !== effectiveSlug) {
+				const siblings = await tx
+					.select({ id: posts.id, lang: posts.lang, slug: posts.slug })
+					.from(posts)
+					.where(and(eq(posts.translationGroup, locked.translationGroup), ne(posts.id, locked.id)));
+				for (const sibling of siblings) {
+					if (sibling.slug === effectiveSlug) continue;
+					if (!isPlaceholderSlug(sibling.slug)) {
+						await tx.insert(slugTrackers).values({
+							slug: sibling.slug,
+							type: 'post',
+							lang: sibling.lang,
+							targetId: sibling.id
+						});
+					}
+					await tx
+						.update(posts)
+						.set({ slug: effectiveSlug, updatedAt: new Date() })
+						.where(eq(posts.id, sibling.id));
+				}
+			}
+
 			const nextVersion = locked.version + 1;
 			await tx
 				.update(posts)
 				.set({
 					title: finalTitle,
-					slug: finalSlug,
+					slug: effectiveSlug,
 					categoryId: finalCategoryId,
 					content: lockedDraft.content,
 					contentFormat: lockedDraft.contentFormat,
@@ -697,13 +756,20 @@ export async function createTranslationDraft(
 
 	try {
 		return await db.transaction(async (tx) => {
+			// 共用 slug（源文章定）:译文从诞生起就带源 slug，而不是各自造一个
+			// （历史做法是 draft.slug = null + placeholder tempSlug()，译文因此
+			// 分叉，公共路由的「同 slug 语言提示」也就落空了）。源还没发布时
+			// 它自己就是 placeholder，此时无 slug 可继承，退回 tempSlug()。
+			// Guarded on the value as well as the placeholder marker: an unset
+			// slug must fall back to a temp one, never to an empty string.
+			const inheritedSlug = source.slug && !isPlaceholderSlug(source.slug) ? source.slug : null;
 			const [created] = await tx
 				.insert(posts)
 				.values({
 					// Copy prefill (§9.20.4): title/content/summary ride in the draft
 					// row; the placeholder keeps the identity columns only.
 					title: source.title,
-					slug: tempSlug(),
+					slug: inheritedSlug ?? tempSlug(),
 					lang,
 					translationGroup: source.translationGroup,
 					translatedFromPostId: source.id,
@@ -720,7 +786,7 @@ export async function createTranslationDraft(
 					refType: 'post',
 					refId: created.id,
 					title: source.title,
-					slug: null,
+					slug: inheritedSlug,
 					categoryId: source.categoryId,
 					tags: [],
 					content: source.content == null ? null : canonicalLf(source.content),
