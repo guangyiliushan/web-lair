@@ -11,7 +11,9 @@
 	import { useAdminHeaderActionRegistry } from './admin-header-actions';
 	// Icon lookup table — all icons used by admin header actions
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
+	import IconBrain from '@tabler/icons-svelte-runes/icons/brain';
 	import IconCategory from '@tabler/icons-svelte-runes/icons/category';
+	import IconChartBar from '@tabler/icons-svelte-runes/icons/chart-bar';
 	import IconCloudUpload from '@tabler/icons-svelte-runes/icons/cloud-upload';
 	import IconDeviceFloppy from '@tabler/icons-svelte-runes/icons/device-floppy';
 	import IconExternalLink from '@tabler/icons-svelte-runes/icons/external-link';
@@ -20,6 +22,7 @@
 	import IconFileText from '@tabler/icons-svelte-runes/icons/file-text';
 	import IconFolders from '@tabler/icons-svelte-runes/icons/folders';
 	import IconMessage from '@tabler/icons-svelte-runes/icons/message';
+	import IconMicrophone from '@tabler/icons-svelte-runes/icons/microphone';
 	import IconNotebook from '@tabler/icons-svelte-runes/icons/notebook';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
@@ -39,7 +42,9 @@
 	// ── Icon name → component mapping ──
 	const ICON_MAP: Record<string, Component> = {
 		'arrow-left': IconArrowLeft,
+		brain: IconBrain,
 		category: IconCategory,
+		'chart-bar': IconChartBar,
 		'cloud-upload': IconCloudUpload,
 		'device-floppy': IconDeviceFloppy,
 		'external-link': IconExternalLink,
@@ -48,6 +53,7 @@
 		'file-text': IconFileText,
 		folders: IconFolders,
 		message: IconMessage,
+		microphone: IconMicrophone,
 		notebook: IconNotebook,
 		pencil: IconPencil,
 		plus: IconPlus,

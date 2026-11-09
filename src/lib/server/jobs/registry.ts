@@ -88,5 +88,29 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 		manual: true,
 		scheduleHint: null,
 		timeoutMs: 180_000
+	},
+	'ai.translate': {
+		name: 'ai.translate',
+		description:
+			'Generate pending translation candidates (translations rows with content NULL); never publishes and never overwrites a human edit.',
+		manual: true,
+		scheduleHint: '*/10 * * * *',
+		timeoutMs: 900_000
+	},
+	'ai.summarize': {
+		name: 'ai.summarize',
+		description:
+			'Generate summary candidates for published posts without an author summary (opt-in via ai.summary.auto).',
+		manual: true,
+		scheduleHint: '0 4 * * *',
+		timeoutMs: 600_000
+	},
+	'ai.comment-review': {
+		name: 'ai.comment-review',
+		description:
+			'Record advisory AI triage events for pending comments (applied=false; the human queue remains authoritative).',
+		manual: true,
+		scheduleHint: '*/15 * * * *',
+		timeoutMs: 300_000
 	}
 });

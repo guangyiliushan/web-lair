@@ -9,6 +9,11 @@ export interface RssItem {
 	pubDate: Date;
 	/** Plain-text summary. */
 	description: string;
+	/**
+	 * Optional `<category>` labels. Machine-readable disclosure (e.g.
+	 * `AI-generated`) belongs in metadata, not in the summary a reader sees.
+	 */
+	categories?: string[];
 	/** Full HTML body, wrapped in CDATA (content:encoded). */
 	contentHtml?: string;
 }
@@ -59,7 +64,10 @@ function buildItem(item: RssItem): string {
 		`\t\t\t<link>${escapeXml(item.link)}</link>`,
 		`\t\t\t<guid isPermaLink="false">${escapeXml(item.guid)}</guid>`,
 		`\t\t\t<pubDate>${item.pubDate.toUTCString()}</pubDate>`,
-		`\t\t\t<description>${escapeXml(item.description)}</description>`
+		`\t\t\t<description>${escapeXml(item.description)}</description>`,
+		...(item.categories ?? []).map(
+			(category) => `\t\t\t<category>${escapeXml(category)}</category>`
+		)
 	];
 	if (item.contentHtml !== undefined) {
 		lines.push(`\t\t\t<content:encoded>${cdata(item.contentHtml)}</content:encoded>`);

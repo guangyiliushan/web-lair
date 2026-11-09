@@ -10,7 +10,7 @@ import {
 	timestamp,
 	uuid
 } from 'drizzle-orm/pg-core';
-import { comments } from './comment.schema';
+import { comments } from './comment.schema.ts';
 
 /**
  * Comment moderation trail (AI-1, ledger §14.3): one row per rule/AI verdict

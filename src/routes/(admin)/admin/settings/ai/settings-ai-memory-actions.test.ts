@@ -8,8 +8,10 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 /**
- * Route-level tests for the AI console actions (AI-2): memory-card CRUD
- * (validation, the 50-card cap, 404 paths) and the archive toggle.
+ * Route-level tests for the memory-card actions (AI-2): validation, the
+ * 50-card cap and the 404 paths. The cards live under AI settings "context"
+ * beside the style guide - they moved here from the AI console, which observes
+ * and never mutates.
  */
 const { dbMock, state } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -146,16 +148,6 @@ describe('AI console actions', () => {
 		expect(missing.result).toMatchObject({ status: 404 });
 	});
 
-	it('toggles the archive flag with a validated id', async () => {
-		const archived = await callAction('archiveConversation', { id: MEM_ID, archive: 'true' });
-		expect(archived.result).toMatchObject({ message: '会话已归档' });
-		expect(state.updates[0].values.archivedAt).toBeInstanceOf(Date);
-
-		const restored = await callAction('archiveConversation', { id: MEM_ID, archive: 'false' });
-		expect(restored.result).toMatchObject({ message: '已取消归档' });
-		expect(state.updates[1].values.archivedAt).toBeNull();
-
-		const bad = await callAction('archiveConversation', { id: 'nope', archive: 'true' });
-		expect(bad.result).toMatchObject({ status: 400 });
-	});
+	// The conversation archive toggle is deliberately untested here: /admin/ai
+	// is now strictly read-only, and that action returns with the chat surface.
 });

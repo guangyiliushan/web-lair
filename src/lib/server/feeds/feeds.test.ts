@@ -80,6 +80,38 @@ describe('buildRssFeed', () => {
 		// No reliable change signal in an empty feed: lastBuildDate stays out.
 		expect(feed).not.toContain('<lastBuildDate>');
 	});
+
+	it('emits category elements for machine-readable disclosure', () => {
+		const feed = buildRssFeed({
+			lang: 'en',
+			title: 'Lair',
+			description: 'Latest',
+			link: 'https://example.com/en/posts',
+			selfHref: 'https://example.com/en/rss.xml',
+			items: [
+				{
+					title: 'Disclosed',
+					link: 'https://example.com/en/posts/a',
+					guid: 'urn:uuid:019bfc4e-0000-7000-8000-000000000002',
+					pubDate: new Date('2026-09-30T09:00:00Z'),
+					description: 'Body',
+					categories: ['AI-assisted', 'B & W']
+				},
+				{
+					title: 'Undisclosed',
+					link: 'https://example.com/en/posts/b',
+					guid: 'urn:uuid:019bfc4e-0000-7000-8000-000000000003',
+					pubDate: new Date('2026-09-29T09:00:00Z'),
+					description: 'Body'
+				}
+			]
+		});
+
+		expect(feed).toContain('<category>AI-assisted</category>');
+		expect(feed).toContain('<category>B &amp; W</category>');
+		// A null origin claims nothing, so it contributes no element at all.
+		expect(feed.match(/<category>/g)).toHaveLength(2);
+	});
 });
 
 describe('buildSitemap', () => {

@@ -89,6 +89,18 @@ export function isPrivateAddress(address: string): boolean {
 	return BLOCKED_RANGES.check(clean, lower.includes(':') ? 'ipv6' : 'ipv4');
 }
 
+/**
+ * Blocklist check for a URL host. IP literals (bracketed IPv6 included) are
+ * classified directly; hostnames pass and are covered by
+ * `resolvePublicAddresses`, which validates every DNS answer. Passing a
+ * hostname to `isPrivateAddress` would reject every domain: that function
+ * fails closed on non-IP input.
+ */
+export function isPrivateHost(host: string): boolean {
+	const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+	return isIP(bare) !== 0 && isPrivateAddress(bare);
+}
+
 export interface ResolvedAddress {
 	address: string;
 	family: number;

@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { user } from '../auth.schema';
+import { user } from '../auth.schema.ts';
 
 /**
  * Admin-only assistant conversations (reshaped in AI-1, ledger §14.3):

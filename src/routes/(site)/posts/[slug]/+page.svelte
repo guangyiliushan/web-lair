@@ -57,7 +57,12 @@
 	<title>{data.post.title}</title>
 </svelte:head>
 
-<SeoHead path={data.seo.path} alternates={data.seo.alternates} />
+<SeoHead
+	path={data.seo.path}
+	alternates={data.seo.alternates}
+	ogTitle={data.post.title}
+	ogDescription={data.post.summary}
+/>
 
 <article class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0">
 	<header class="relative border-b border-border/50 pb-6">
@@ -162,6 +167,22 @@
 		</div>
 	</header>
 
+	<!-- AI-adopted summaries only: pre-existing human summaries keep the
+	     pre-M2 page shape, so no legacy article gains new visible UI. -->
+	{#if data.post.summary && data.post.summaryAi}
+		<div class="mt-6 rounded-lg border border-border/60 bg-muted/20 px-4 py-3">
+			<p class="text-sm leading-relaxed text-muted-foreground">{data.post.summary}</p>
+			{#if data.post.summaryAi}
+				<span
+					class="mt-2 inline-flex items-center gap-1 rounded-full border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground"
+				>
+					<IconSparkles class="size-3" />
+					{m.post_summary_ai_badge()}
+				</span>
+			{/if}
+		</div>
+	{/if}
+
 	<div class="mt-8" bind:this={articleHost}>
 		<MarkdownRenderer html={data.html} prose />
 	</div>
@@ -188,11 +209,19 @@
 	{/if}
 
 	<footer class="mt-16 border-t border-border/40 pt-5">
-		<a
-			href={localizeHref('/posts')}
-			class="text-xs font-medium tracking-[2.5px] text-muted-foreground uppercase transition-colors hover:text-primary-text"
-		>
-			← Back to posts
-		</a>
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<a
+				href={localizeHref('/posts')}
+				class="text-xs font-medium tracking-[2.5px] text-muted-foreground uppercase transition-colors hover:text-primary-text"
+			>
+				← Back to posts
+			</a>
+			<a
+				href={localizeHref('/ai-disclosure')}
+				class="text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-primary-text"
+			>
+				{m.ai_disclosure_link()}
+			</a>
+		</div>
 	</footer>
 </article>

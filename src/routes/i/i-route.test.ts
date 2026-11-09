@@ -82,14 +82,12 @@ describe('/i/<key> proxy (T9)', () => {
 	});
 
 	it('falls back to @thumb for pre-backfill @grid requests with a short cache', async () => {
-		storageMock.get
-			.mockResolvedValueOnce(null)
-			.mockResolvedValueOnce({
-				body: bodyOf('thumb'),
-				byteSize: 5,
-				contentType: 'image/webp',
-				etag: null
-			});
+		storageMock.get.mockResolvedValueOnce(null).mockResolvedValueOnce({
+			body: bodyOf('thumb'),
+			byteSize: 5,
+			contentType: 'image/webp',
+			etag: null
+		});
 
 		const res = await GET(event(GRID_KEY));
 

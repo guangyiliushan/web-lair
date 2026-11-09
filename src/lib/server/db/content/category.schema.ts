@@ -11,7 +11,7 @@ import {
 	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
-import type { LocalizedText } from './localized';
+import type { LocalizedText } from './localized.ts';
 
 /**
  * Taxonomy labels are per language (SKOS prefLabel model, ledger §9.18.4 as

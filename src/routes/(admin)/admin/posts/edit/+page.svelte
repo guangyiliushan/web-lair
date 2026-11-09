@@ -12,6 +12,7 @@
 	import type { ActionResult } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { readinessTitle } from '$lib/utils/readiness-copy';
 	import * as Select from '$lib/components/ui/select';
 	import * as Field from '$lib/components/ui/field';
 	import * as Tooltip from '$lib/components/ui/tooltip';
@@ -25,8 +26,13 @@
 	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import * as Alert from '$lib/components/ui/alert';
 	import { useAdminHeaderActionRegistry } from '$lib/components/admin/admin-header-actions';
+	import TranslationDrawer, {
+		type DrawerAction
+	} from '$lib/components/admin/translation-drawer.svelte';
+	import { drawerStateFor } from '$lib/utils/translation-drawer-state';
 	import { MarkdownEditor } from '$lib/components/markdown';
 	import { formatDateTime } from '$lib/utils/i18n';
+	import { editorPayload } from '$lib/utils/editor-payload';
 	import { normalizeSlug } from '$lib/utils/slug';
 	import IconCategory from '@tabler/icons-svelte-runes/icons/category';
 	import IconTag from '@tabler/icons-svelte-runes/icons/tag';
@@ -39,7 +45,6 @@
 	import IconDots from '@tabler/icons-svelte-runes/icons/dots';
 	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
 	import IconChevronUp from '@tabler/icons-svelte-runes/icons/chevron-up';
-	import IconWorld from '@tabler/icons-svelte-runes/icons/world';
 	import IconInfoCircle from '@tabler/icons-svelte-runes/icons/info-circle';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -53,22 +58,38 @@
 	let slugTouched = $state(false);
 	let categoryId = $state('');
 	let summary = $state('');
+	let summaryCandidates = $state<PageData['summaryCandidates']>(
+		untrack(() => data.summaryCandidates ?? [])
+	);
+	let summaryBusy = $state(false);
+	let summaryError = $state<string | null>(null);
 	let tags = $state('');
 	let writingOrigin = $state('');
 	let aiHelp = $state('');
 	let contentMarkdown = $state('');
 	let lang = $state<string>(untrack(() => data.defaultLang));
-	/**
-	 * A brand-new article must pick its source language explicitly - otherwise
-	 * the first autosave freezes the default language as the source.
-	 */
-	let sourceChosen = $state(false);
 	const isTranslation = $derived(Boolean(data.post?.translatedFromPostId));
-	const needsSourceChoice = $derived(!data.post && !sourceChosen);
 
 	let postId = $state<string | null>(null);
 	let draftId = $state<string | null>(null);
 	let draftVersion = $state<number | null>(null);
+
+	// One rule for what an AI control says about itself: readiness first, then
+	// the other reasons it may be blocked, and only once it is usable does the
+	// title describe what it would do. `readinessTitle` owns that rule.
+	const summaryReady = $derived(data.readiness.summary.status === 'ready');
+
+	const summaryTitle = $derived(
+		!summaryReady
+			? readinessTitle(data.readiness.summary, m.admin_posts_edit_summary_generate_hint())
+			: !postId
+				? m.admin_posts_edit_ai_save_first()
+				: summaryBusy
+					? m.admin_posts_edit_ai_busy()
+					: isTranslation
+						? m.admin_posts_edit_ai_not_source()
+						: m.admin_posts_edit_summary_generate_hint()
+	);
 
 	// `savedSnapshot` mirrors the last payload the server acknowledged; the
 	// dirty test and the publish flush both compare against it.
@@ -76,7 +97,15 @@
 	let lastSeen = $state('');
 	let lastSavedAt = $state<Date | null>(null);
 	type SaveState =
-		'idle' | 'saved' | 'saving' | 'dirty' | 'throttled' | 'conflict' | 'error' | 'needs-category';
+		| 'idle'
+		| 'saved'
+		| 'saving'
+		| 'dirty'
+		| 'throttled'
+		| 'conflict'
+		| 'error'
+		| 'needs-category'
+		| 'needs-default-category';
 	let saveState = $state<SaveState>('idle');
 	let saveError = $state<string | null>(null);
 	let conflictMessage = $state<string | null>(null);
@@ -96,7 +125,9 @@
 	let leavingIntentionally = false;
 
 	// ── Metadata bar (horizontal, collapsible - never a Sheet) ────────────
-	let metaOpen = $state(true);
+	// Collapsed by default: the title and the body are the document, and the
+	// bar's own summary line still names category, tags and AI provenance.
+	let metaOpen = $state(false);
 
 	// ── Inline category creation (no dialog, no invalidateAll) ────────────
 	let categoryFormOpen = $state(false);
@@ -108,16 +139,64 @@
 	let localCategories = $state<{ id: string; name: string; slug: string }[]>([]);
 	const categoryOptions = $derived([...data.categories, ...localCategories]);
 
-	// ── New-translation reservation ──────────────────────────────────────
-	let translationError = $state<string | null>(null);
-	let creatingTranslation = $state(false);
+	// ── Translation drawer ───────────────────────────────────────────────
+	let drawerOpen = $state(false);
+	let drawerLang = $state('');
+	let drawerBusy = $state(false);
+	let drawerError = $state<string | null>(null);
+	let drawerNotice = $state<{ text: string; href: string } | null>(null);
+	// Seeded from the load and re-seeded by `applyAll()`: the drawer refreshes
+	// through `?/translationStatus`, never by invalidating the page.
+	let translationCandidates = $state(untrack(() => data.translationCandidates ?? []));
+	let translationPresence = $state(untrack(() => data.translationPresence ?? {}));
+	/** Job-level liveness from `job_runs`; filled by the status action. */
+	let translationJob = $state<{
+		queuedAgeSec: number | null;
+		runningSinceSec: number | null;
+		lastStatus: string | null;
+	} | null>(null);
+	/** Budget pause is a display state: it explains why a queued row is idle. */
+	let translationBudget = $state<{
+		paused: boolean;
+		monthly: number;
+		spent: number;
+		currency: string;
+	} | null>(null);
+	/** The drawn language's row state: `waiting` means parked, not generating. */
+	let translationStage = $state<string | null>(null);
+	let translationWaitingReason = $state<string | null>(null);
+
+	const drawerCandidate = $derived(
+		translationCandidates.find((c) => c.targetLang === drawerLang && c.status === 'draft') ?? null
+	);
+	const drawerState = $derived(
+		drawerStateFor({
+			lang: drawerLang,
+			presence: translationPresence,
+			candidates: translationCandidates
+		})
+	);
+	// The row the drawer can open: presence is the only place that knows it, and
+	// an accept into a new language shows up there on the next refresh.
+	const drawerTargetId = $derived(translationPresence[drawerLang]?.postId ?? null);
+	// Only a real draft can be retranslated: a `private`/`trash` target and a
+	// published one are refused by the service, so the button must not appear.
+	const canRetranslate = $derived(translationPresence[drawerLang]?.status === 'draft');
+	// Translation reads the published body: a post that was never published has
+	// none, so Generate must be explained rather than offered.
+	const publishedBody = $derived(data.source?.content ?? data.post?.content ?? '');
+	const canGenerate = $derived(Boolean(publishedBody.trim()));
+	const drawerSource = $derived({
+		lang: data.source?.lang ?? data.post?.lang ?? lang,
+		content: publishedBody || contentMarkdown || null
+	});
 
 	// ── Source-language switch (translations are never re-linked) ────────
 	let switchLangOpen = $state(false);
 	let switchLangValue = $state('');
 	let switchLangMode = $state('existing');
 	let switchLangError = $state<string | null>(null);
-	const canSwitchSource = $derived(Boolean(postId) && !isTranslation && !needsSourceChoice);
+	const canSwitchSource = $derived(Boolean(postId) && !isTranslation);
 	const switchLangSibling = $derived(
 		data.siblings?.find((sibling) => sibling.lang === switchLangValue) ?? null
 	);
@@ -157,7 +236,7 @@
 	}
 
 	function currentPayload(): string {
-		return JSON.stringify({
+		return editorPayload({
 			title,
 			slug,
 			categoryId,
@@ -165,7 +244,8 @@
 			tags,
 			writingOrigin,
 			aiHelp,
-			contentMarkdown
+			contentMarkdown,
+			lang
 		});
 	}
 
@@ -189,7 +269,7 @@
 			'';
 		slug = loadedSlug;
 		slugTouched = !!loadedSlug;
-		categoryId = draft?.categoryId ?? post?.categoryId ?? '';
+		categoryId = draft?.categoryId ?? post?.categoryId ?? data.defaultCategoryId ?? '';
 		summary = draft?.summary ?? post?.summary ?? '';
 		tags = draft?.tags ?? post?.tags ?? '';
 		const provenance = draft?.provenance ?? post?.provenance;
@@ -197,7 +277,6 @@
 		aiHelp = (provenance?.aiHelp ?? []).join(', ');
 		contentMarkdown = draft?.content ?? post?.content ?? '';
 		lang = post?.lang ?? data.defaultLang;
-		sourceChosen = Boolean(post);
 		postId = post?.id ?? null;
 		draftId = draft?.id ?? null;
 		draftVersion = draft?.version ?? null;
@@ -207,6 +286,8 @@
 		publishErrors = {};
 		reauthUrl = null;
 		lastSavedAt = null;
+		translationCandidates = data.translationCandidates ?? [];
+		translationPresence = data.translationPresence ?? {};
 		const snapshot = currentPayload();
 		savedSnapshot = snapshot;
 		lastSeen = snapshot;
@@ -237,17 +318,6 @@
 		// Frozen after a conflict until the editor reloads the server state.
 		if (saveState === 'conflict') return;
 		if (publishErrors && Object.keys(publishErrors).length > 0) publishErrors = {};
-		if (needsSourceChoice) {
-			// No row may be created before the source language is explicit.
-			saveState = 'idle';
-			scheduleStash();
-			return;
-		}
-		if (!postId && !draftId && !categoryId) {
-			saveState = 'needs-category';
-			scheduleStash();
-			return;
-		}
 		saveState = 'dirty';
 		scheduleSave(AUTOSAVE_DEBOUNCE_MS);
 	}
@@ -262,7 +332,7 @@
 		}, delayMs);
 	}
 
-	// ── Local stash (UX-1020-03: a new post with no category cannot autosave) ──
+	// ── Local stash: the last resort when a new article's save fails ──────
 	const STASH_PREFIX = 'lair:posts:editor-stash';
 	const STASH_MAX_BYTES = 4 * 1024 * 1024;
 	const STASH_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -282,7 +352,7 @@
 
 	function writeStash() {
 		// Only a brand-new article with nothing server-side to fall back on.
-		if (postId || draftId || categoryId) {
+		if (postId || draftId) {
 			clearStash();
 			return;
 		}
@@ -312,6 +382,7 @@
 			writingOrigin = d.writingOrigin ?? '';
 			aiHelp = d.aiHelp ?? '';
 			contentMarkdown = d.contentMarkdown ?? '';
+			if (d.lang) lang = d.lang;
 		} catch {
 			/* an unparsable stash is not worth restoring */
 		}
@@ -363,8 +434,6 @@
 	}
 
 	async function runSave(autosave: boolean): Promise<boolean> {
-		// Saving before the source language is chosen would freeze the default.
-		if (needsSourceChoice) return false;
 		if (inFlight) {
 			pendingResave = true;
 			return false;
@@ -415,25 +484,39 @@
 					scheduleSave(wait);
 				}
 			} else if (result.type === 'failure') {
-				const d = (result.data ?? {}) as { message?: string; needsCategory?: boolean };
+				const d = (result.data ?? {}) as {
+					message?: string;
+					needsCategory?: boolean;
+					defaultCategoryMissing?: boolean;
+				};
 				if (result.status === 409) {
 					saveState = 'conflict';
 					conflictMessage = d.message ?? m.admin_posts_edit_conflict_short();
+				} else if (result.status === 400 && d.defaultCategoryMissing) {
+					// Nothing to retry: the server has no fallback category and the
+					// owner has to create one, so the banner takes over from the
+					// stash/retry loop.
+					saveState = 'needs-default-category';
+					saveError = d.message ?? m.admin_posts_edit_err_no_default_category();
+					scheduleStash();
 				} else if (result.status === 400 && d.needsCategory) {
 					saveState = 'needs-category';
 					scheduleStash();
 				} else {
 					saveState = 'error';
 					saveError = d.message ?? m.admin_posts_edit_err_save_failed();
+					scheduleStash();
 				}
 			} else {
 				saveState = 'error';
 				saveError = m.admin_posts_edit_err_network();
+				scheduleStash();
 				scheduleSave(THROTTLE_RETRY_MS);
 			}
 		} catch {
 			saveState = 'error';
 			saveError = m.admin_posts_edit_err_network();
+			scheduleStash();
 			scheduleSave(THROTTLE_RETRY_MS);
 		} finally {
 			inFlight = false;
@@ -489,10 +572,19 @@
 					message?: string;
 					errors?: Record<string, string>;
 					needsCategory?: boolean;
+					defaultCategoryMissing?: boolean;
 				};
 				if (result.status === 409) {
 					saveState = 'conflict';
 					conflictMessage = d.message ?? m.admin_posts_edit_conflict_short();
+					return;
+				}
+				if (result.status === 400 && d.defaultCategoryMissing) {
+					// Same dead end as `runSave`: no fallback category exists, so the
+					// banner takes over and the working copy still needs the stash.
+					saveState = 'needs-default-category';
+					saveError = d.message ?? m.admin_posts_edit_err_no_default_category();
+					scheduleStash();
 					return;
 				}
 				if (result.status === 400 && d.needsCategory) {
@@ -507,20 +599,23 @@
 					graded.length > 0
 						? graded.join(m.admin_posts_edit_error_join())
 						: (d.message ?? m.admin_posts_edit_err_publish_validation());
+				scheduleStash();
 				return;
 			}
 			saveState = 'error';
 			saveError = m.admin_posts_edit_err_network();
+			scheduleStash();
 		} catch {
 			saveState = 'error';
 			saveError = m.admin_posts_edit_err_network();
+			scheduleStash();
 		} finally {
 			inFlight = false;
 		}
 	}
 
 	async function onPublish() {
-		if (needsSourceChoice || saveState === 'conflict' || publishing) return;
+		if (saveState === 'conflict' || publishing) return;
 		publishing = true;
 		try {
 			await runPublish();
@@ -574,65 +669,243 @@
 	}
 
 	/**
-	 * Language-bar click. While a new article has no source language yet the
-	 * chips pick it; afterwards an existing language opens it and a missing one
-	 * reserves its translation in one click.
+	 * A language chip opens the drawer for that language. The chip is a state
+	 * read-out; the drawer owns every verb.
 	 */
-	function openLanguage(target: { lang: string; id: string | null; kind: string }) {
-		if (creatingTranslation) return;
-		if (needsSourceChoice) {
-			lang = target.lang;
-			sourceChosen = true;
-			translationError = null;
-			// Content typed before the choice is dirty now that saving is allowed.
-			if (isDirty()) onFieldsChanged();
-			return;
-		}
-		if (target.kind === 'current') {
-			if (canSwitchSource) openSwitchLang();
-			return;
-		}
-		if (target.id) {
-			leavingIntentionally = true;
-			void goto(`/admin/posts/edit?id=${target.id}`);
-			return;
-		}
-		void reserveTranslation(target.lang);
+	function openDrawerFor(target: string) {
+		drawerLang = target;
+		// Seed the row state from the copy the load already read so a parked
+		// row explains itself on the first frame, before the first refresh.
+		const seeded = translationCandidates.find(
+			(candidate) => candidate.targetLang === target && candidate.status === 'draft'
+		);
+		translationStage = seeded?.stage ?? null;
+		translationWaitingReason = seeded?.waitingReason ?? null;
+		drawerError = null;
+		drawerNotice = null;
+		drawerOpen = true;
 	}
 
-	/** Create (or reserve) the same article in another language, then open it. */
-	async function reserveTranslation(lang: string): Promise<void> {
-		if (!lang || creatingTranslation) return;
-		creatingTranslation = true;
-		translationError = null;
+	/** Re-read the row's candidates and presence without re-running the load. */
+	async function refreshTranslationState(postId: string, lang: string) {
+		const fd = new FormData();
+		fd.set('postId', postId);
+		fd.set('lang', lang);
+		const result = await postAction('translationStatus', fd);
+		if (result.type === 'success') {
+			const d = result.data as {
+				candidates: typeof translationCandidates;
+				presence: typeof translationPresence;
+				job?: typeof translationJob;
+				stage?: string | null;
+				waitingReason?: string | null;
+				budget?: typeof translationBudget;
+			};
+			translationCandidates = d.candidates;
+			translationPresence = d.presence;
+			translationJob = d.job ?? null;
+			translationStage = d.stage ?? null;
+			translationWaitingReason = d.waitingReason ?? null;
+			translationBudget = d.budget ?? null;
+		}
+	}
+
+	/** The drawer asks for a verb; the editor speaks the action protocol. */
+	async function runDrawerAction(action: DrawerAction) {
+		if (drawerBusy) return;
+		if (!postId) {
+			// A brand-new article has no row to translate yet.
+			drawerError = m.admin_posts_edit_ai_save_first();
+			return;
+		}
+		drawerBusy = true;
+		drawerError = null;
+		drawerNotice = null;
 		try {
-			if (!postId) {
-				// Let an autosave flight finish first: it may be the one creating the row.
-				for (let waited = 0; waited < 50 && inFlight; waited += 1) {
-					await new Promise((resolve) => setTimeout(resolve, 100));
-				}
-				if (!postId) await runSave(false);
-				// Still no row: the save indicator explains what is missing (e.g. the
-				// category), so the reservation simply waits for the next click.
-				if (!postId) return;
-			}
 			const fd = new FormData();
-			fd.set('id', postId);
-			fd.set('lang', lang);
-			leavingIntentionally = true;
-			const result = await postAction('createTranslation', fd);
-			if (result.type === 'redirect') {
-				await goto(result.location);
+			if (action === 'generate') {
+				fd.set('id', data.sourcePostId ?? postId);
+				fd.set('lang', drawerLang);
+				const r = await postAction('requestTranslation', fd);
+				if (r.type === 'failure') drawerError = (r.data as { message?: string })?.message ?? null;
+			} else if (action === 'accept' && drawerCandidate) {
+				fd.set('id', drawerCandidate.id);
+				fd.set('postId', postId);
+				const r = await postAction('acceptTranslation', fd);
+				if (r.type === 'failure') {
+					drawerError = (r.data as { message?: string })?.message ?? null;
+				} else if (r.type === 'success' && (r.data as { isCurrent?: boolean }).isCurrent) {
+					// Accepted into the post being edited: only a full reload can
+					// show it, and it must stay the author's own click.
+					drawerNotice = {
+						text: m.admin_posts_edit_translation_reload(),
+						href: page.url.pathname + page.url.search
+					};
+				}
+			} else if (action === 'retry' || action === 'discard') {
+				if (drawerCandidate) fd.set('id', drawerCandidate.id);
+				const r = await postAction(`${action}Translation`, fd);
+				if (r.type === 'failure') drawerError = (r.data as { message?: string })?.message ?? null;
+			} else if (action === 'retranslate') {
+				fd.set('id', data.sourcePostId ?? postId);
+				fd.set('lang', drawerLang);
+				const r = await postAction('retranslateDraft', fd);
+				if (r.type === 'failure') drawerError = (r.data as { message?: string })?.message ?? null;
+			} else if (action === 'copy-source') {
+				fd.set('id', data.sourcePostId ?? postId);
+				fd.set('lang', drawerLang);
+				leavingIntentionally = true;
+				const r = await postAction('createTranslation', fd);
+				if (r.type === 'redirect' && r.location) {
+					await goto(r.location);
+					return;
+				}
+				leavingIntentionally = false;
+				if (r.type === 'failure') drawerError = (r.data as { message?: string })?.message ?? null;
+			} else if (action === 'open-target' && drawerTargetId) {
+				leavingIntentionally = true;
+				await goto(`/admin/posts/edit?id=${drawerTargetId}`);
 				return;
 			}
-			leavingIntentionally = false;
-			const d = (result.type === 'failure' ? (result.data ?? {}) : {}) as { message?: string };
-			translationError = d.message ?? m.admin_posts_edit_err_network();
+			if (postId) await refreshTranslationState(postId, drawerLang);
 		} catch {
+			// A thrown transport failure must not pass for success: the copy-source
+			// path arms the leave guard, and leaving it armed here would stop the
+			// unsaved-changes prompt from protecting the editor for the session.
+			drawerError = m.admin_translations_err_generic();
 			leavingIntentionally = false;
-			translationError = m.admin_posts_edit_err_network();
 		} finally {
-			creatingTranslation = false;
+			drawerBusy = false;
+		}
+	}
+
+	// A queued candidate is the only state that changes without the drawer.
+	// Poll while it is on screen and keep going: a multi-minute generation is
+	// normal, so the old fixed 60s cap left the drawer claiming "generating"
+	// with no way to ever learn otherwise. 2s while a run is likely streaming,
+	// 5s after the first minute; stops on close, unmount, or the first
+	// non-queued state.
+	//
+	// The effect keys on the BOOLEAN "is the drawer queued", not on
+	// `drawerState` itself: a poll replaces the candidate array (progress,
+	// partial body) while the state stays `queued`, and reacting to that would
+	// cancel and restart the timer on every tick. The boolean flips exactly
+	// twice per generation - and the false -> true flip is what starts the
+	// loop after the operator clicks Generate on an already-open drawer.
+	const drawerQueued = $derived(drawerState === 'queued');
+	let queuedPolls = 0;
+	$effect(() => {
+		if (!drawerOpen || !drawerQueued) {
+			queuedPolls = 0;
+			return;
+		}
+		const id = postId;
+		const lang = drawerLang;
+		if (!id) return;
+		let cancelled = false;
+		let timer: ReturnType<typeof setTimeout> | null = null;
+		const tick = async (): Promise<void> => {
+			queuedPolls += 1;
+			try {
+				await refreshTranslationState(id, lang);
+			} catch {
+				// A transport failure must not end the wait; the next tick retries.
+			}
+			if (cancelled) return;
+			if (untrack(() => drawerState) !== 'queued') return;
+			timer = setTimeout(() => void tick(), queuedPolls < 90 ? 2000 : 5000);
+		};
+		void tick();
+		return () => {
+			cancelled = true;
+			if (timer !== null) clearTimeout(timer);
+		};
+	});
+
+	/** Generate a summary candidate for the current post. */
+	async function runGenerateSummary(): Promise<void> {
+		if (!postId || summaryBusy) return;
+		summaryBusy = true;
+		summaryError = null;
+		try {
+			const fd = new FormData();
+			fd.set('id', postId);
+			const result = await postAction('generateSummary', fd);
+			if (result.type === 'success') {
+				const data = result.data as {
+					message?: string;
+					candidates?: PageData['summaryCandidates'];
+				};
+				summaryCandidates = data.candidates ?? summaryCandidates;
+				flash = data.message ?? m.admin_posts_edit_summary_generated();
+			} else if (result.type === 'failure') {
+				summaryError =
+					(result.data as { message?: string } | undefined)?.message ??
+					m.admin_posts_edit_summary_failed();
+			}
+		} catch {
+			summaryError = m.admin_posts_edit_summary_failed();
+		} finally {
+			summaryBusy = false;
+		}
+	}
+
+	/** Adopt a candidate: writes posts.summary and mirrors the text into the draft. */
+	async function runAdoptSummary(candidate: PageData['summaryCandidates'][number]): Promise<void> {
+		if (!postId || summaryBusy) return;
+		summaryBusy = true;
+		summaryError = null;
+		try {
+			const fd = new FormData();
+			fd.set('id', candidate.id);
+			fd.set('postId', postId);
+			const result = await postAction('adoptSummary', fd);
+			if (result.type === 'success') {
+				const data = result.data as {
+					message?: string;
+					candidates?: PageData['summaryCandidates'];
+				};
+				summaryCandidates = data.candidates ?? summaryCandidates;
+				summary = candidate.summary;
+				onFieldsChanged();
+				flash = data.message ?? m.admin_posts_edit_summary_adopted();
+			} else if (result.type === 'failure') {
+				summaryError =
+					(result.data as { message?: string } | undefined)?.message ??
+					m.admin_posts_edit_summary_failed();
+			}
+		} catch {
+			summaryError = m.admin_posts_edit_summary_failed();
+		} finally {
+			summaryBusy = false;
+		}
+	}
+
+	async function runDiscardSummary(id: string): Promise<void> {
+		if (!postId || summaryBusy) return;
+		summaryBusy = true;
+		summaryError = null;
+		try {
+			const fd = new FormData();
+			fd.set('id', id);
+			fd.set('postId', postId);
+			const result = await postAction('discardSummary', fd);
+			if (result.type === 'success') {
+				const data = result.data as {
+					message?: string;
+					candidates?: PageData['summaryCandidates'];
+				};
+				summaryCandidates = data.candidates ?? summaryCandidates;
+				flash = data.message ?? m.admin_posts_edit_summary_discarded();
+			} else if (result.type === 'failure') {
+				summaryError =
+					(result.data as { message?: string } | undefined)?.message ??
+					m.admin_posts_edit_summary_failed();
+			}
+		} catch {
+			summaryError = m.admin_posts_edit_summary_failed();
+		} finally {
+			summaryBusy = false;
 		}
 	}
 
@@ -706,6 +979,19 @@
 		publishErrorMessages.length > 0 ? publishErrorMessages : formErrorMessages
 	);
 
+	/**
+	 * No flagged fallback category means a first save can only fail, so the
+	 * banner points at the page that creates one. A picked category wins: the
+	 * hint disappears as soon as the owner selects one.
+	 */
+	const formDefaultCategoryMissing = $derived(
+		// `fail(...)` payloads type as a union; only this branch carries the flag.
+		Boolean((form as { defaultCategoryMissing?: boolean } | null)?.defaultCategoryMissing)
+	);
+	const showDefaultCategoryHint = $derived(
+		!categoryId && (formDefaultCategoryMissing || !data.defaultCategoryId)
+	);
+
 	const saveLabel = $derived.by(() => {
 		switch (saveState) {
 			case 'saving':
@@ -722,6 +1008,8 @@
 				return m.admin_posts_edit_autosave_throttled();
 			case 'needs-category':
 				return m.admin_posts_edit_pick_category_hint();
+			case 'needs-default-category':
+				return saveError ?? m.admin_posts_edit_err_no_default_category();
 			case 'conflict':
 				return m.admin_posts_edit_conflict_detected();
 			case 'error':
@@ -732,7 +1020,6 @@
 	});
 
 	const statusText = $derived.by(() => {
-		if (needsSourceChoice) return m.admin_posts_edit_pick_source_lang();
 		if (!data.post) return m.admin_posts_edit_new();
 		if (data.source) {
 			const pending = data.post.status === 'draft' && data.post.version === 0;
@@ -796,19 +1083,14 @@
 					status: data.post?.status ?? null
 				};
 			}
-			const sibling = (data.siblings ?? []).find((s) => s.lang === l);
-			return sibling
-				? { lang: l, kind: 'sibling', id: sibling.id, status: sibling.status }
+			const presence = translationPresence[l];
+			return presence
+				? { lang: l, kind: 'sibling', id: presence.postId, status: presence.status }
 				: { lang: l, kind: 'missing', id: null, status: null };
 		});
 	});
 
 	function langCellLabel(cell: LangCell): string {
-		// Choosing phase: plain language codes, no source/sibling styling yet.
-		if (needsSourceChoice) return cell.lang;
-		if (cell.kind === 'current' && cell.lang === sourceLang) {
-			return `${cell.lang}·${m.admin_posts_edit_lang_source()}`;
-		}
 		if (cell.kind === 'missing') return `${cell.lang}·${m.admin_posts_edit_lang_missing()}`;
 		const status =
 			cell.status === 'published'
@@ -818,7 +1100,24 @@
 					: cell.status === 'trash'
 						? m.admin_posts_status_trash()
 						: m.admin_posts_status_draft();
-		return `${cell.lang}·${status}`;
+		// The source keeps its role marker on every language version's page.
+		// Showing only the status there made the same chip change width the
+		// moment another language was opened, shifting the rest of the bar.
+		const role = cell.lang === sourceLang ? `·${m.admin_posts_edit_lang_source()}` : '';
+		return `${cell.lang}${role}·${status}`;
+	}
+
+	/** The ruler's dot reads the same state the drawer will open on. */
+	function chipDotClass(cell: LangCell): string {
+		const state = drawerStateFor({
+			lang: cell.lang,
+			presence: translationPresence,
+			candidates: translationCandidates
+		});
+		if (state === 'failed') return 'bg-destructive';
+		if (state === 'candidate' || state === 'published') return 'bg-primary-text';
+		if (state === 'queued' || state === 'draft') return 'bg-muted-foreground/50';
+		return '';
 	}
 
 	// Writing-provenance choices - one source for the Select items and the
@@ -901,43 +1200,37 @@
 		class="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border bg-muted/30 px-3 py-1.5"
 	>
 		{#each langCells as cell (cell.lang)}
+			{@const dotClass = chipDotClass(cell)}
 			<Button
 				type="button"
-				variant={needsSourceChoice
-					? 'outline'
-					: cell.kind === 'current'
-						? 'secondary'
-						: cell.kind === 'missing'
-							? 'ghost'
-							: 'outline'}
+				variant={cell.kind === 'current'
+					? 'secondary'
+					: cell.kind === 'missing'
+						? 'ghost'
+						: 'outline'}
 				size="sm"
-				class="h-7 gap-1 px-2 text-xs {!needsSourceChoice && cell.kind === 'missing'
+				class="h-7 gap-1 px-2 text-xs {cell.kind === 'missing'
 					? 'border border-dashed text-muted-foreground'
 					: ''}"
-				title={needsSourceChoice
-					? m.admin_posts_edit_pick_source_lang()
-					: cell.kind === 'missing'
-						? m.admin_posts_edit_create_translation()
-						: cell.kind === 'current'
-							? canSwitchSource
-								? m.admin_posts_edit_switch_lang()
-								: m.admin_posts_edit_lang_locked()
-							: undefined}
-				onclick={() => openLanguage(cell)}
-				disabled={(!needsSourceChoice && cell.kind === 'current' && !canSwitchSource) ||
-					creatingTranslation}
+				title={cell.kind === 'missing'
+					? m.admin_posts_edit_create_translation()
+					: cell.kind === 'current'
+						? canSwitchSource
+							? m.admin_posts_edit_switch_lang()
+							: m.admin_posts_edit_lang_locked()
+						: undefined}
+				onclick={() =>
+					cell.kind === 'current' ? canSwitchSource && openSwitchLang() : openDrawerFor(cell.lang)}
+				disabled={cell.kind === 'current' && !canSwitchSource}
+				aria-current={cell.kind === 'current' ? 'true' : undefined}
 				aria-haspopup={canSwitchSource && cell.kind === 'current' ? 'dialog' : undefined}
-				aria-busy={creatingTranslation && cell.kind === 'missing'}
 			>
+				{#if cell.kind !== 'missing' && dotClass}
+					<span class="size-1.5 shrink-0 rounded-full {dotClass}" aria-hidden="true"></span>
+				{/if}
 				{langCellLabel(cell)}
 			</Button>
 		{/each}
-
-		<Button type="button" variant="ghost" size="sm" class="h-7 gap-1 px-2 text-xs" disabled>
-			<IconWorld class="size-3.5" />
-			{m.admin_posts_edit_ai_translate()}
-			<span class="sr-only">{m.admin_posts_edit_ai_translate_hint()}</span>
-		</Button>
 
 		<div class="ml-auto flex min-w-0 items-center gap-1.5">
 			{#if isTranslation}
@@ -948,7 +1241,6 @@
 			<button
 				type="button"
 				class="inline-flex max-w-56 items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-xs text-muted-foreground transition-colors outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-accent/15 disabled:pointer-events-none disabled:opacity-50"
-				disabled={needsSourceChoice}
 				onclick={() => (slugDialogOpen = true)}
 				aria-label={m.admin_posts_edit_add_slug()}
 			>
@@ -957,24 +1249,30 @@
 			</button>
 		</div>
 
-		{#if translationError}
-			<p role="alert" class="w-full text-xs text-destructive">{translationError}</p>
+		{#if showDefaultCategoryHint}
+			<p role="alert" class="flex w-full flex-wrap items-center gap-1 text-xs text-destructive">
+				<span>{m.admin_posts_edit_err_no_default_category()}</span>
+				<a
+					class="underline underline-offset-2 transition-colors hover:text-foreground"
+					href="/admin/posts/categories"
+				>
+					{m.admin_posts_edit_no_default_category_action()}
+				</a>
+			</p>
 		{/if}
 	</div>
 
 	<!-- ── B: document column ─────────────────────────────────────────── -->
-	<main class="mx-auto w-full max-w-5xl flex-1 shrink-0 px-3 pb-16">
+	<div class="mx-auto w-full max-w-5xl flex-1 shrink-0 px-3 pb-16">
 		<!-- Status line: save state, flash and overflow actions - the old sticky
 		     bar minus the save/publish buttons, which live in the admin header. -->
 		<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-3">
 			<div class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
 				<span
 					aria-hidden="true"
-					class="inline-block size-1.5 shrink-0 rounded-full {needsSourceChoice
-						? 'bg-amber-500'
-						: saveState === 'conflict'
-							? 'bg-destructive'
-							: 'bg-emerald-500'}"
+					class="inline-block size-1.5 shrink-0 rounded-full {saveState === 'conflict'
+						? 'bg-destructive'
+						: 'bg-emerald-500'}"
 				></span>
 				<span class="truncate">
 					{statusText}
@@ -1016,7 +1314,7 @@
 						{/snippet}
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content align="end" class="w-48">
-						<DropdownMenu.Item disabled={needsSourceChoice} onclick={() => (slugDialogOpen = true)}>
+						<DropdownMenu.Item onclick={() => (slugDialogOpen = true)}>
 							<IconPencil class="size-4" />
 							{m.admin_posts_edit_add_slug()}
 						</DropdownMenu.Item>
@@ -1135,11 +1433,7 @@
 								</Field.Label>
 								<div class="flex items-center gap-1.5">
 									<Select.Root type="single" bind:value={categoryId as never}>
-										<Select.Trigger
-											id="post-category"
-											class="h-8 w-full"
-											disabled={needsSourceChoice}
-										>
+										<Select.Trigger id="post-category" class="h-8 w-full">
 											<span class="min-w-0 flex-1 truncate">
 												{categoryId
 													? (categoryOptions.find((c) => c.id === categoryId)?.name ??
@@ -1166,7 +1460,6 @@
 														? m.admin_common_cancel()
 														: m.admin_posts_edit_new_category()}
 													aria-expanded={categoryFormOpen}
-													disabled={needsSourceChoice}
 													onclick={() => (categoryFormOpen = !categoryFormOpen)}
 												>
 													{#if categoryFormOpen}
@@ -1259,13 +1552,72 @@
 								<IconFileDescription class="size-3.5" />
 								{m.admin_posts_edit_summary_label()}
 							</Field.Label>
-							<Textarea
-								id="post-summary"
-								class="min-h-9"
-								placeholder={m.admin_posts_edit_summary_placeholder()}
-								bind:value={summary}
-								rows={1}
-							/>
+							<div class="relative">
+								<Textarea
+									id="post-summary"
+									class="min-h-9 pr-9"
+									placeholder={m.admin_posts_edit_summary_placeholder()}
+									bind:value={summary}
+									rows={1}
+								/>
+								<Button
+									type="button"
+									size="icon-sm"
+									variant="ghost"
+									class="absolute top-1 right-1 text-muted-foreground hover:text-foreground"
+									disabled={!summaryReady || !postId || summaryBusy || isTranslation}
+									onclick={runGenerateSummary}
+									title={summaryTitle}
+									aria-label={m.admin_posts_edit_summary_generate()}
+								>
+									<IconSparkles class="size-3.5" />
+								</Button>
+							</div>
+							{#if summaryError}
+								<span role="alert" class="mt-1.5 text-xs text-destructive">{summaryError}</span>
+							{/if}
+							{#if summaryCandidates.length > 0}
+								<div class="mt-2 flex flex-col gap-1.5">
+									{#each summaryCandidates.slice(0, 5) as candidate (candidate.id)}
+										<div class="rounded-md border border-border/70 bg-background/40 p-2">
+											<p class="line-clamp-2 text-xs text-muted-foreground">{candidate.summary}</p>
+											<div class="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+												<span>{candidate.lang}</span>
+												{#if candidate.model}<span class="truncate">{candidate.model}</span>{/if}
+												{#if candidate.adoptedAt}
+													<span class="text-emerald-600 dark:text-emerald-400">
+														{m.admin_posts_edit_summary_adopted_badge()}
+													</span>
+												{/if}
+												<div class="ml-auto flex items-center gap-1">
+													<Button
+														type="button"
+														size="sm"
+														variant="ghost"
+														class="h-6 px-1.5 text-[11px]"
+														disabled={summaryBusy || Boolean(candidate.adoptedAt)}
+														onclick={() => runAdoptSummary(candidate)}
+													>
+														{m.admin_posts_edit_summary_adopt()}
+													</Button>
+													{#if !candidate.adoptedAt}
+														<Button
+															type="button"
+															size="sm"
+															variant="ghost"
+															class="h-6 px-1.5 text-[11px] text-destructive"
+															disabled={summaryBusy}
+															onclick={() => runDiscardSummary(candidate.id)}
+														>
+															<IconTrash class="size-3" />
+														</Button>
+													{/if}
+												</div>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{/if}
 						</Field.Field>
 
 						<!-- Inline category creation -->
@@ -1355,7 +1707,7 @@
 				/>
 			{/key}
 		</div>
-	</main>
+	</div>
 </div>
 
 <!-- Slug dialog -->
@@ -1505,3 +1857,25 @@
 >
 	<input type="hidden" name="draftId" value={draftId ?? ''} />
 </form>
+
+<!-- Translation drawer: the proof sheet for one target language -->
+<TranslationDrawer
+	bind:open={drawerOpen}
+	lang={drawerLang}
+	state={drawerState}
+	candidate={drawerCandidate}
+	source={drawerSource}
+	targetId={drawerTargetId}
+	{canRetranslate}
+	{canGenerate}
+	busy={drawerBusy}
+	error={drawerCandidate?.error ?? drawerError}
+	notice={drawerNotice}
+	job={translationJob}
+	stage={translationStage}
+	waitingReason={translationWaitingReason}
+	budget={translationBudget}
+	readiness={data.readiness.translation}
+	glossaryMisses={drawerCandidate?.glossaryMisses ?? null}
+	onAction={runDrawerAction}
+/>

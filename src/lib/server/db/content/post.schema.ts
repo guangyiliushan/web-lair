@@ -12,8 +12,8 @@ import {
 	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
-import { categories } from './category.schema';
-import { user } from '../auth.schema';
+import { categories } from './category.schema.ts';
+import { user } from '../auth.schema.ts';
 
 /** AI-line meta contract (AI-1, ledger §14.3): per-post translation / AI settings. */
 export interface PostsMeta {

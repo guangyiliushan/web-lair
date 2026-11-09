@@ -18,6 +18,7 @@
 	import IconFolders from '@tabler/icons-svelte-runes/icons/folders';
 	import IconUsers from '@tabler/icons-svelte-runes/icons/users';
 	import IconSparkles from '@tabler/icons-svelte-runes/icons/sparkles';
+	import IconLanguage from '@tabler/icons-svelte-runes/icons/language';
 	import IconChartBar from '@tabler/icons-svelte-runes/icons/chart-bar';
 	import IconSettings from '@tabler/icons-svelte-runes/icons/settings';
 	import IconTool from '@tabler/icons-svelte-runes/icons/tool';
@@ -37,6 +38,7 @@
 		{ title: m.admin_nav_dashboard(), href: '/admin/dashboard', icon: IconDashboard },
 		{ title: m.admin_nav_posts(), href: '/admin/posts', icon: IconArticle },
 		{ title: m.admin_nav_notes(), href: '/admin/notes', icon: IconNotebook },
+		{ title: m.admin_nav_translations(), href: '/admin/translations', icon: IconLanguage },
 		{ title: m.admin_nav_moments(), href: '/admin/moments', icon: IconWriting },
 		{ title: m.admin_nav_comments(), href: '/admin/comments', icon: IconMessage },
 		{ title: m.admin_nav_pages(), href: '/admin/pages', icon: IconFileText },

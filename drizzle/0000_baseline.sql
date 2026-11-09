@@ -46,6 +46,21 @@ CREATE TABLE "ai_agent_messages" (
 	CONSTRAINT "ai_agent_messages_role_check" CHECK ("ai_agent_messages"."role" in ('system', 'user', 'assistant', 'tool'))
 );
 --> statement-breakpoint
+CREATE TABLE "ai_agent_proposals" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"conversation_id" uuid NOT NULL,
+	"actor_id" text,
+	"setting_key" text NOT NULL,
+	"before" jsonb,
+	"after" jsonb,
+	"args_hash" text NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"resolved_at" timestamp with time zone,
+	CONSTRAINT "ai_agent_proposals_status_check" CHECK ("ai_agent_proposals"."status" in ('pending', 'confirmed', 'rejected', 'expired'))
+);
+--> statement-breakpoint
 CREATE TABLE "ai_providers" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -65,6 +80,8 @@ CREATE TABLE "ai_usage" (
 	"task" text NOT NULL,
 	"provider" text NOT NULL,
 	"model" text NOT NULL,
+	"actor_id" text,
+	"trigger" text,
 	"input_tokens" integer,
 	"output_tokens" integer,
 	"cost_estimate" numeric(12, 6),
@@ -72,8 +89,23 @@ CREATE TABLE "ai_usage" (
 	"related_id" uuid,
 	"status" text NOT NULL,
 	"duration_ms" integer,
-	CONSTRAINT "ai_usage_task_check" CHECK ("ai_usage"."task" in ('summary', 'translation', 'translation_review', 'comment_review', 'chat', 'assistant', 'editor', 'other')),
+	"audio_seconds" integer,
+	CONSTRAINT "ai_usage_task_check" CHECK ("ai_usage"."task" in ('summary', 'translation', 'translation_review', 'comment_review', 'chat', 'assistant', 'editor', 'transcription', 'other')),
 	CONSTRAINT "ai_usage_status_check" CHECK ("ai_usage"."status" in ('success', 'failure'))
+);
+--> statement-breakpoint
+CREATE TABLE "transcripts" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"actor_id" text,
+	"source_name" text NOT NULL,
+	"mime_type" text NOT NULL,
+	"language" text NOT NULL,
+	"text" text NOT NULL,
+	"vtt" text NOT NULL,
+	"duration_seconds" integer,
+	"provider" text NOT NULL,
+	"model" text NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "options" (
@@ -535,6 +567,15 @@ CREATE TABLE "translations" (
 	"target_post_id" uuid,
 	"target_note_id" uuid,
 	"error" text,
+	"overwrite_target" boolean DEFAULT false NOT NULL,
+	"runs" integer DEFAULT 0 NOT NULL,
+	"attempt" integer DEFAULT 0 NOT NULL,
+	"started_at" timestamp with time zone,
+	"heartbeat_at" timestamp with time zone,
+	"stage" text,
+	"waiting_reason" text,
+	"cancel_requested" boolean DEFAULT false NOT NULL,
+	"progress" jsonb,
 	CONSTRAINT "translations_source_arc_check" CHECK (num_nonnulls("translations"."source_post_id", "translations"."source_note_id") = 1),
 	CONSTRAINT "translations_target_arc_check" CHECK (num_nonnulls("translations"."target_post_id", "translations"."target_note_id") <= 1),
 	CONSTRAINT "translations_target_lang_check" CHECK ("translations"."target_lang" in ('en', 'zh-cn', 'ja')),
@@ -765,6 +806,7 @@ CREATE TABLE "user" (
 	"ban_reason" text,
 	"ban_expires" timestamp,
 	"two_factor_enabled" boolean DEFAULT false,
+	"default_lang" text,
 	CONSTRAINT "user_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
@@ -780,6 +822,10 @@ CREATE TABLE "verification" (
 ALTER TABLE "user_profiles" ADD CONSTRAINT "user_profiles_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ai_agent_conversations" ADD CONSTRAINT "ai_agent_conversations_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ai_agent_messages" ADD CONSTRAINT "ai_agent_messages_conversation_id_ai_agent_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."ai_agent_conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_agent_proposals" ADD CONSTRAINT "ai_agent_proposals_conversation_id_ai_agent_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."ai_agent_conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_agent_proposals" ADD CONSTRAINT "ai_agent_proposals_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_usage" ADD CONSTRAINT "ai_usage_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "transcripts" ADD CONSTRAINT "transcripts_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comment_moderation_events" ADD CONSTRAINT "comment_moderation_events_comment_id_comments_id_fk" FOREIGN KEY ("comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_note_id_notes_id_fk" FOREIGN KEY ("note_id") REFERENCES "public"."notes"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -826,9 +872,15 @@ ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("
 ALTER TABLE "two_factor" ADD CONSTRAINT "two_factor_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "ai_agent_conversations_user_idx" ON "ai_agent_conversations" USING btree ("user_id") WHERE "ai_agent_conversations"."user_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "ai_agent_messages_seq_uniq" ON "ai_agent_messages" USING btree ("conversation_id","seq");--> statement-breakpoint
+CREATE INDEX "ai_agent_proposals_conversation_idx" ON "ai_agent_proposals" USING btree ("conversation_id","status");--> statement-breakpoint
+CREATE INDEX "ai_agent_proposals_actor_idx" ON "ai_agent_proposals" USING btree ("actor_id") WHERE "ai_agent_proposals"."actor_id" is not null;--> statement-breakpoint
+CREATE INDEX "ai_agent_proposals_expiry_idx" ON "ai_agent_proposals" USING btree ("expires_at") WHERE "ai_agent_proposals"."status" = 'pending';--> statement-breakpoint
 CREATE UNIQUE INDEX "ai_providers_name_uniq" ON "ai_providers" USING btree ("name");--> statement-breakpoint
 CREATE INDEX "ai_usage_created_idx" ON "ai_usage" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "ai_usage_task_idx" ON "ai_usage" USING btree ("task","created_at");--> statement-breakpoint
+CREATE INDEX "ai_usage_actor_idx" ON "ai_usage" USING btree ("actor_id","created_at") WHERE "ai_usage"."actor_id" is not null;--> statement-breakpoint
+CREATE INDEX "transcripts_created_idx" ON "transcripts" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "transcripts_actor_idx" ON "transcripts" USING btree ("actor_id") WHERE "transcripts"."actor_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "options_name_uniq" ON "options" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "categories_name_uniq" ON "categories" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "categories_slug_uniq" ON "categories" USING btree ("slug");--> statement-breakpoint

@@ -1,0 +1,7 @@
+faster-whisper==1.2.1
+# faster-whisper 1.2.1 passes metadata_errors to av.open(); PyAV 19 removed
+# that kwarg (SYSTRAN/faster-whisper#1589). Keep the known-good major.
+av==18.0.0
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20

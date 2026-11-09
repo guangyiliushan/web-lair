@@ -19,6 +19,7 @@ export const PAGE_RESERVED_SLUGS: ReadonlySet<string> = new Set([
 	'about',
 	'about-site',
 	'admin',
+	'ai-disclosure',
 	'api',
 	'demo',
 	'en',
@@ -27,6 +28,7 @@ export const PAGE_RESERVED_SLUGS: ReadonlySet<string> = new Set([
 	'i',
 	'ja',
 	'login',
+	'llms.txt', // M2: root llms file; SLUG_RE already rejects dots
 	'maps', // platform-reserved (storage line keeps the map surface)
 	'photos', // platform-reserved (storage line public pages)
 	'register',

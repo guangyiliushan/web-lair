@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 const { lookupMock } = vi.hoisted(() => ({ lookupMock: vi.fn() }));
 vi.mock('node:dns', () => ({ promises: { lookup: lookupMock } }));
 
-import { isPrivateAddress, pinnedLookup, resolvePublicAddresses } from './ssrf-guard';
+import {
+	isPrivateAddress,
+	isPrivateHost,
+	pinnedLookup,
+	resolvePublicAddresses
+} from './ssrf-guard';
 
 const PUBLIC = { address: '93.184.216.34', family: 4 };
 const PRIVATE = { address: '127.0.0.1', family: 4 };
@@ -21,6 +26,16 @@ describe('ssrf-guard (§4.2 core - direct teeth, review round 4)', () => {
 
 		lookupMock.mockResolvedValue([PUBLIC]);
 		expect(await resolvePublicAddresses('public.example')).toEqual([PUBLIC]);
+	});
+
+	it('isPrivateHost classifies IP literals only, never hostnames', () => {
+		// isPrivateAddress fails closed on non-IPs, so calling it with a URL
+		// hostname would block every external provider.
+		expect(isPrivateAddress('api.deepseek.com')).toBe(true);
+		expect(isPrivateHost('api.deepseek.com')).toBe(false);
+		expect(isPrivateHost('127.0.0.1')).toBe(true);
+		expect(isPrivateHost('[::1]')).toBe(true);
+		expect(isPrivateHost('93.184.216.34')).toBe(false);
 	});
 
 	it('pinnedLookup answers from the validated set only', () => {

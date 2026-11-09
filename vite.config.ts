@@ -85,7 +85,16 @@ const lazyClientDeps = [
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
 	optimizeDeps: {
-		include: lazyClientDeps
+		include: lazyClientDeps,
+		// Ships `.svelte` sources in dist; the esbuild pre-bundler cannot parse
+		// them, so let the Svelte plugin handle the package instead.
+		exclude: ['@shadcn-svelte/primitives']
+	},
+	ssr: {
+		// Same reason as `exclude` above, for the SSR module graph: the
+		// headless chat primitives (message-scroller, questionnaire) are
+		// `.svelte` files that Node cannot load natively.
+		noExternal: ['@shadcn-svelte/primitives']
 	},
 	server: {
 		// `build/` (adapter-node output) and `storybook-static/` are generated

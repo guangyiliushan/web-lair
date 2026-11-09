@@ -58,7 +58,21 @@ test.afterAll(() => {
 });
 
 /**
- * Pick the category in the metadata bar (required before the first save).
+ * The metadata bar starts collapsed, so a test that touches its fields has to
+ * open it first. Hydration-tolerant: an early click lands on inert SSR markup.
+ */
+async function expandMetaBar(page: Page) {
+	await expect(async () => {
+		if (!(await page.locator('#post-category').isVisible())) {
+			await page.getByRole('button', { name: '展开文章设置' }).click({ timeout: 2000 });
+		}
+		await expect(page.locator('#post-category')).toBeVisible({ timeout: 2000 });
+	}).toPass({ timeout: 30000 });
+}
+
+/**
+ * Pick the category in the metadata bar (the server also preselects the
+ * flagged default, so this only exercises the control itself).
  *
  * SINGLE CLICK, no retry loop: the old helper clicked until the dropdown
  * happened to open, which is exactly what hid the nested-portal bug where the
@@ -66,8 +80,8 @@ test.afterAll(() => {
  * if the first click does not open the listbox.
  */
 async function pickCategory(page: Page) {
+	await expandMetaBar(page);
 	const trigger = page.locator('#post-category');
-	await expect(trigger).toBeVisible({ timeout: 10000 });
 	await trigger.click();
 	await expect(trigger).toHaveAttribute('aria-expanded', 'true', { timeout: 3000 });
 	const option = page.locator('[data-slot="select-item"]').filter({ hasText: CATEGORY_NAME });
@@ -109,17 +123,6 @@ async function fillTitle(page: Page, value: string) {
 	await expect(titleInput).toHaveValue(value, { timeout: 5000 });
 }
 
-/**
- * A new article must pick its source language before the metadata unlocks
- * (the first save would otherwise freeze the default language as the source).
- */
-async function chooseSourceLang(page: Page, lang = 'en') {
-	const chip = page.getByRole('button', { name: lang, exact: true });
-	await expect(chip).toBeVisible({ timeout: 10000 });
-	await chip.click();
-	await expect(page.locator('#post-category')).toBeEnabled({ timeout: 5000 });
-}
-
 async function waitSaved(page: Page) {
 	// Autosave can be throttled server-side (30s window) and retried, so give
 	// the indicator room to turn green.
@@ -131,13 +134,11 @@ test('autosaves a new article and restores it after a reload', async ({ page }) 
 	await fillTitle(page, TITLE);
 	// Auto slug derives from the latin title.
 	await expect(byText(page, `/${SLUG}`)).toBeVisible({ timeout: 10000 });
-	await chooseSourceLang(page);
 
 	await typeIntoEditor(page, 'Hello e2e body');
-	// Before a category is chosen the server save gate is visible...
-	await expect(byText(page, '选定分类后开始自动保存')).toBeVisible({ timeout: 10000 });
+	// Neither gate exists any more: the server resolves the language and the
+	// category, so the autosave lands without picking either first.
 	await pickCategory(page);
-	// ...and afterwards the autosave lands within the debounce window.
 	await waitSaved(page);
 
 	// The placeholder posts row is keyed by a temp slug until publish, so the
@@ -173,7 +174,7 @@ test('publishes the draft: posts gets content, revision and the draft is gone', 
 
 	// UX-1020-04: one request, one click. A retry loop here would happily
 	// accept a first click that only ever saved and publish on the second.
-	await page.getByRole('button', { name: '发布' }).click();
+	await page.getByRole('button', { name: '发布', exact: true }).click();
 	await page.waitForURL(/published=1/, { timeout: 25000 });
 
 	expect(psql(`select status || '/' || version from posts where id = '${id}'`)).toBe('published/1');
@@ -210,7 +211,7 @@ test('edits a published article in isolation, then publishes v2 with a slug trac
 
 	// UX-1020-04: one request, one click. A retry loop here would happily
 	// accept a first click that only ever saved and publish on the second.
-	await page.getByRole('button', { name: '发布' }).click();
+	await page.getByRole('button', { name: '发布', exact: true }).click();
 	await page.waitForURL(/published=1/, { timeout: 25000 });
 
 	expect(psql(`select version from posts where id = '${id}'`)).toBe('2');
@@ -294,11 +295,21 @@ test('creates a translation draft with the copy prefill (§9.20.4)', async ({ pa
 	const group = psql(`select translation_group from posts where id = '${id}'`);
 	await page.goto(`/admin/posts/edit?id=${id}`);
 
-	// The missing-language chip reserves the translation in one click - the
-	// dedicated picker/button pair was removed once the chip did the same job.
+	// The missing-language chip opens the drawer for that language; the
+	// copy-prefill verb lives there now (the chip itself reserves nothing).
 	const chip = page.getByRole('button', { name: 'zh-cn·未译' });
 	await expect(chip).toBeVisible({ timeout: 10000 });
-	await chip.click();
+
+	const drawer = page.getByRole('dialog');
+	// The SSR chip is clickable before SvelteKit hydrates; retry the click-pair.
+	// A landed click leaves the sheet open, so an attempt that finds it open is
+	// already done - clicking again would hit the overlay instead of the chip.
+	await expect(async () => {
+		if (await drawer.isVisible()) return;
+		await chip.click({ timeout: 2000 });
+		await expect(drawer).toBeVisible({ timeout: 2000 });
+	}).toPass({ timeout: 30_000 });
+	await drawer.getByRole('button', { name: '复制源文' }).click();
 
 	await page.waitForURL(/translation=1/, { timeout: 15000 });
 	await expect(byText(page, '翻译草稿已创建')).toBeVisible();
@@ -330,7 +341,6 @@ test('discards a never-published placeholder together with its empty posts row',
 }) => {
 	await page.goto('/admin/posts/edit');
 	await fillTitle(page, 'e2e writing orphan');
-	await chooseSourceLang(page);
 	await typeIntoEditor(page, 'orphan body');
 	await pickCategory(page);
 	await waitSaved(page);
@@ -347,4 +357,34 @@ test('discards a never-published placeholder together with its empty posts row',
 	await page.waitForURL(/\/admin\/posts(\?discarded=1)?$/, { timeout: 15000 });
 	expect(psql(`select count(*) from posts where id = '${id}'`)).toBe('0');
 	expect(psql(`select count(*) from drafts where ref_id = '${id}'`)).toBe('0');
+});
+
+test('a first save needs no language or category click', async ({ page }) => {
+	await page.goto('/admin/posts/edit');
+	await fillTitle(page, 'e2e writing gate free');
+
+	// Both gates are gone (Task A5): the title alone must materialize the row
+	// through the server-resolved language and category defaults. The autosave
+	// debounce is 2.5s and the URL is anchored with replaceState afterwards.
+	await page.waitForURL(/\?id=/, { timeout: 15000 });
+
+	const id = new URL(page.url()).searchParams.get('id');
+	expect(id).not.toBeNull();
+	expect(psql(`select count(*) from drafts where ref_id = '${id}'`)).toBe('1');
+
+	// Spec §6: the created row carries the defaults, not blanks - the same
+	// fallback chain as `resolveWriterLang` (owner → site option → en), plus
+	// the flagged default category.
+	const ownerLang = psql(
+		`select coalesce(default_lang, '') from "user" where role = 'owner' limit 1`
+	);
+	const siteLang = psql(
+		`select coalesce((select value #>> '{}' from options where name = 'site.default_lang'), '')`
+	);
+	const expectedLang = ownerLang || siteLang || 'en';
+	const expectedCategory = psql(`select id from categories where is_default limit 1`);
+	expect(expectedCategory).not.toBe('');
+	expect(psql(`select lang || '/' || category_id from posts where id = '${id}'`)).toBe(
+		`${expectedLang}/${expectedCategory}`
+	);
 });

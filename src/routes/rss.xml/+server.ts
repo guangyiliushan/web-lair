@@ -6,6 +6,7 @@ import { m } from '$lib/paraglide/messages';
 import { getOption } from '$lib/server/config/options-registry';
 import { db } from '$lib/server/db';
 import { notes, posts } from '$lib/server/db/content';
+import type { WritingOrigin } from '$lib/server/db/content/post-provenance';
 import { buildRssFeed, type RssItem } from '$lib/server/feeds';
 import { conditionalResponse } from '$lib/server/feeds/cache';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
@@ -16,6 +17,19 @@ import { plainTextExcerpt } from '$lib/utils/excerpt';
 import type { RequestHandler } from './$types';
 
 const ITEM_LIMIT = 20;
+
+/**
+ * Machine-readable disclosure tokens for `<item><category>`. Deliberately
+ * stable English and NOT localised: feeds are consumed by software, and a
+ * category that changes with the request locale cannot be filtered on.
+ * `null` (undisclosed) emits nothing - an empty claim is not a claim.
+ */
+const WRITING_CATEGORY: Record<WritingOrigin, string> = {
+	none: 'No AI',
+	assist: 'AI-assisted',
+	mostly_ai: 'Mostly AI',
+	ai_full: 'AI-generated'
+};
 
 /**
  * Per-language feeds live inside the language segment (`/{lang}/rss.xml`);
@@ -58,7 +72,8 @@ export const GET: RequestHandler = async ({ url, request }) => {
 				summary: posts.summary,
 				content: posts.content,
 				publishedAt: posts.publishedAt,
-				updatedAt: posts.updatedAt
+				updatedAt: posts.updatedAt,
+				writingOrigin: posts.writingOrigin
 			})
 			.from(posts)
 			.where(and(eq(posts.lang, locale), visiblePostCondition(now)))
@@ -107,10 +122,14 @@ export const GET: RequestHandler = async ({ url, request }) => {
 						contentHtml: row.content ? await renderMarkdownToHtml(row.content) : undefined
 					};
 					if (kind === 'post') {
+						const category = row.writingOrigin
+							? WRITING_CATEGORY[row.writingOrigin as WritingOrigin]
+							: undefined;
 						return {
 							...base,
 							link: `${origin}${localizeHref(`/posts/${row.slug}`, { locale })}`,
-							description: row.summary?.trim() || plainTextExcerpt(row.content ?? '')
+							description: row.summary?.trim() || plainTextExcerpt(row.content ?? ''),
+							categories: category ? [category] : undefined
 						};
 					}
 					return {

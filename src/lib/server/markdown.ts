@@ -30,6 +30,7 @@ import {
 } from '$lib/components/markdown/plugins/rehype-raw-html-whitelist';
 import { rehypeMermaid } from '$lib/components/markdown/plugins/rehype-mermaid';
 import { rehypeCodeLines } from '$lib/components/markdown/plugins/rehype-code-lines';
+import { rehypeTranslateNo } from '$lib/components/markdown/plugins/rehype-translate-no';
 // Import the schema from its module of origin: the barrel re-exports the
 // whole editor graph (Lexical, mermaid, KaTeX components), which turned every
 // server-side test that touches the pipeline into a multi-minute transform.
@@ -104,6 +105,7 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			// line structure + numbering + collapsed previews (spec 3.3) — after
 			// pretty-code, which owns the server line spans
 			.use(rehypeCodeLines)
+			.use(rehypeTranslateNo)
 			.use(rehypeMarkPipelineNodes)
 			.use(rehypeRaw)
 			.use(rehypeRawHtmlWhitelist)

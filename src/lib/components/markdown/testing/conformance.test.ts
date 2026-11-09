@@ -15,11 +15,16 @@ overwriteGetLocale(() => 'zh-cn');
  */
 
 function assertCase(html: string, input: string, contains: string[], notContains?: string[]) {
+	// M2 adds `translate="no"` to every code/pre element as defence in depth;
+	// the conformance corpus predates that attribute and asserts structural
+	// fragments, so normalise it away here. `markdown.test.ts` pins the
+	// attribute itself.
+	const normalized = html.replace(/ translate="no"/g, '');
 	for (const fragment of contains) {
-		expect(html, `${input}\n→ 应包含 ${fragment}\n实际: ${html}`).toContain(fragment);
+		expect(normalized, `${input}\n→ 应包含 ${fragment}\n实际: ${html}`).toContain(fragment);
 	}
 	for (const fragment of notContains ?? []) {
-		expect(html, `${input}\n→ 不应包含 ${fragment}\n实际: ${html}`).not.toContain(fragment);
+		expect(normalized, `${input}\n→ 不应包含 ${fragment}\n实际: ${html}`).not.toContain(fragment);
 	}
 }
 

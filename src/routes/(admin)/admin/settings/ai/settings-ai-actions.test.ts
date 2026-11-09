@@ -25,10 +25,16 @@ const { dbMock, state } = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
-vi.mock('$lib/server/authz', () => ({ requireAdminRole: vi.fn(async () => {}) }));
-vi.mock('$env/dynamic/private', () => ({ env: { AI_E2E_TEST_KEY: 'sk-test' } }));
+vi.mock('$lib/server/authz', () => ({
+	requireAdminRole: vi.fn(async () => {}),
+	requireOwnerRole: vi.fn(async () => {})
+}));
+vi.mock('$env/dynamic/private', () => ({
+	env: { AI_E2E_TEST_KEY: 'sk-test', AI_ALLOW_PRIVATE_HOSTS: '127.0.0.1' }
+}));
 
-import { requireAdminRole } from '$lib/server/authz';
+import { requireAdminRole, requireOwnerRole } from '$lib/server/authz';
+import { POOL_MODE } from '$lib/utils/ai-pool';
 import { actions } from './+page.server';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 
@@ -38,6 +44,7 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 const guardMock = vi.mocked(requireAdminRole);
+const ownerGuardMock = vi.mocked(requireOwnerRole);
 
 function makeChain(result: unknown[]) {
 	const self: unknown = new Proxy(
@@ -140,8 +147,9 @@ describe('AI settings actions', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('runs every action behind the admin guard first', async () => {
+	it('runs every action behind an admin or owner guard first', async () => {
 		guardMock.mockClear();
+		ownerGuardMock.mockClear();
 		state.selects = [[]];
 		for (const name of [
 			'saveProvider',
@@ -155,7 +163,10 @@ describe('AI settings actions', () => {
 		]) {
 			await callAction(name, {});
 		}
-		expect(guardMock).toHaveBeenCalledTimes(8);
+		// Provider endpoints / budget / price table are owner-only; the rest
+		// stay owner-or-admin.
+		expect(ownerGuardMock).toHaveBeenCalledTimes(3);
+		expect(guardMock).toHaveBeenCalledTimes(5);
 	});
 
 	it('rejects an invalid provider form before touching the database', async () => {
@@ -201,8 +212,76 @@ describe('AI settings actions', () => {
 			kind: 'openai-compatible',
 			baseUrl: null,
 			apiKeyEnv: 'AI_OPENAI_KEY',
-			models: ['gpt-a', 'gpt-b'],
+			models: [
+				{ id: 'gpt-a', enabled: true, source: 'manual' },
+				{ id: 'gpt-b', enabled: true, source: 'manual' }
+			],
 			enabled: true
+		});
+	});
+
+	it('discovers models for a provider that is not saved yet', async () => {
+		const fetchMock = vi.fn(
+			async () =>
+				new Response(JSON.stringify({ data: [{ id: 'gpt-b' }, { id: 'gpt-a' }] }), {
+					status: 200
+				})
+		);
+		vi.stubGlobal('fetch', fetchMock);
+		const { result, thrown } = await callAction('refreshModels', {
+			kind: 'openai-compatible',
+			baseUrl: 'http://127.0.0.1:9999/v1',
+			apiKeyEnv: 'AI_E2E_TEST_KEY'
+		});
+		expect(thrown).toBeUndefined();
+		expect(result).toMatchObject({
+			message: '已发现 2 个模型',
+			discovered: [
+				{ id: 'gpt-a', enabled: false, source: 'discovered' },
+				{ id: 'gpt-b', enabled: false, source: 'discovered' }
+			]
+		});
+		// An unsaved provider has no row to persist discovery records into.
+		expect(state.updates).toHaveLength(0);
+		expect(fetchMock).toHaveBeenCalledWith(
+			'http://127.0.0.1:9999/v1/models',
+			expect.objectContaining({ headers: { authorization: 'Bearer sk-test' } })
+		);
+	});
+
+	it('refreshes a saved provider with the values shown in the dialog', async () => {
+		state.selects = [
+			[
+				{
+					id: ROW_ID,
+					name: 'E2E Provider',
+					kind: 'openai-compatible',
+					baseUrl: 'https://old.test/v1',
+					apiKeyEnv: 'AI_OLD_KEY',
+					models: [{ id: 'old', enabled: true, source: 'manual' }]
+				}
+			]
+		];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify({ data: [{ id: 'new' }] }), { status: 200 }))
+		);
+		const { result } = await callAction('refreshModels', {
+			id: ROW_ID,
+			kind: 'openai-compatible',
+			baseUrl: 'http://127.0.0.1:9999/v1',
+			apiKeyEnv: 'AI_E2E_TEST_KEY'
+		});
+		expect(result).toMatchObject({ message: '已发现 1 个模型' });
+		expect(state.updates).toHaveLength(1);
+		const models = state.updates[0].values.models as Array<Record<string, unknown>>;
+		expect(models.find((entry) => entry.id === 'new')).toMatchObject({
+			enabled: false,
+			source: 'discovered'
+		});
+		expect(models.find((entry) => entry.id === 'old')).toMatchObject({
+			enabled: true,
+			source: 'manual'
 		});
 	});
 
@@ -292,13 +371,59 @@ describe('AI settings actions', () => {
 		});
 	});
 
-	it('saves assignments for the provided functions only', async () => {
-		state.selects = [[{ name: 'E2E Provider' }]];
+	it('stores pool mode as an empty assignment', async () => {
+		// `{}` is the stored form of "follow the default pool": no model of its
+		// own, so reordering the pool changes this slot too.
+		state.selects = [[{ name: 'E2E Provider', enabled: true, models: ['gpt-a', 'gpt-b'] }]];
 		const { result } = await callAction('saveAssignments', {
-			assign_summary: 'E2E Provider',
-			model_summary: 'gpt-a',
-			assign_chat: '',
-			model_chat: 'ignored'
+			provider_summary: POOL_MODE,
+			provider_chat: ''
+		});
+		expect(result).toMatchObject({ message: '功能位分配已保存' });
+		const optionsWrite = state.inserts.find((i) => i.table === options);
+		expect(optionsWrite?.values).toEqual({
+			name: 'ai.assignments',
+			value: { summary: {} }
+		});
+	});
+
+	it('stores a pooled model as a per-slot head start in pool mode', async () => {
+		// Pool mode with a model = start from that model, then the rest of the
+		// pool. Stored as `{ model }`, which the runtime already resolves that way.
+		state.selects = [
+			[{ name: 'E2E Provider', enabled: true, models: ['gpt-a'] }],
+			[{ model: 'gpt-a' }]
+		];
+		const { result } = await callAction('saveAssignments', {
+			provider_summary: POOL_MODE,
+			model_summary: 'gpt-a'
+		});
+		expect(result).toMatchObject({ message: '功能位分配已保存' });
+		const optionsWrite = state.inserts.find((i) => i.table === options);
+		expect(optionsWrite?.values).toEqual({
+			name: 'ai.assignments',
+			value: { summary: { model: 'gpt-a' } }
+		});
+	});
+
+	it('rejects a pool-mode model that is not in the pool', async () => {
+		state.selects = [
+			[{ name: 'E2E Provider', enabled: true, models: ['gpt-a'] }],
+			[{ model: 'gpt-a' }]
+		];
+		const { result } = await callAction('saveAssignments', {
+			provider_summary: POOL_MODE,
+			model_summary: 'ghost'
+		});
+		expect(result).toMatchObject({ status: 400 });
+	});
+
+	it('keeps a provider pin alongside the model', async () => {
+		// The pin only decides who is tried first; the pool still backs it up.
+		state.selects = [[{ name: 'E2E Provider', enabled: true, models: ['gpt-a'] }]];
+		const { result } = await callAction('saveAssignments', {
+			provider_summary: 'E2E Provider',
+			model_summary: 'gpt-a'
 		});
 		expect(result).toMatchObject({ message: '功能位分配已保存' });
 		const optionsWrite = state.inserts.find((i) => i.table === options);
@@ -308,9 +433,54 @@ describe('AI settings actions', () => {
 		});
 	});
 
-	it('rejects unknown providers in assignments', async () => {
-		state.selects = [[{ name: 'E2E Provider' }]];
-		const { result } = await callAction('saveAssignments', { assign_summary: 'ghost' });
+	it('accepts a provider on its own and lets the runtime pick its first model', async () => {
+		state.selects = [[{ name: 'E2E Provider', enabled: true, models: ['gpt-a'] }]];
+		const { result } = await callAction('saveAssignments', {
+			provider_summary: 'E2E Provider',
+			model_summary: ''
+		});
+		expect(result).toMatchObject({ message: '功能位分配已保存' });
+		const optionsWrite = state.inserts.find((i) => i.table === options);
+		expect(optionsWrite?.values).toEqual({
+			name: 'ai.assignments',
+			value: { summary: { provider: 'E2E Provider' } }
+		});
+	});
+
+	it('rejects a pin to a model that provider does not offer', async () => {
+		state.selects = [[{ name: 'E2E Provider', enabled: true, models: ['gpt-a'] }]];
+		const { result } = await callAction('saveAssignments', {
+			provider_summary: 'E2E Provider',
+			model_summary: 'ghost'
+		});
+		expect(result).toMatchObject({ status: 400 });
+	});
+
+	it('stores nothing for a slot left off', async () => {
+		state.selects = [[{ name: 'E2E Provider', enabled: true, models: ['gpt-a'] }]];
+		const { result } = await callAction('saveAssignments', { provider_summary: '' });
+		expect(result).toMatchObject({ message: '功能位分配已保存' });
+		const optionsWrite = state.inserts.find((i) => i.table === options);
+		expect(optionsWrite?.values).toEqual({ name: 'ai.assignments', value: {} });
+	});
+
+	it('rejects a mode that names a provider nobody has', async () => {
+		state.selects = [[{ name: 'E2E Provider', enabled: true, models: ['gpt-a'] }]];
+		const { result } = await callAction('saveAssignments', { provider_summary: 'Ghost' });
+		expect(result).toMatchObject({ status: 400 });
+	});
+
+	it('rejects a pin to a provider that does not serve the model', async () => {
+		state.selects = [
+			[
+				{ name: 'E2E Provider', enabled: true, models: ['gpt-a'] },
+				{ name: 'Other', enabled: true, models: ['gpt-b'] }
+			]
+		];
+		const { result } = await callAction('saveAssignments', {
+			provider_summary: 'Other',
+			model_summary: 'gpt-a'
+		});
 		expect(result).toMatchObject({ status: 400 });
 	});
 
@@ -444,14 +614,14 @@ describe('AI settings actions', () => {
 		expect(ok.result).toMatchObject({ message: '翻译设置已保存' });
 		expect(state.inserts[state.inserts.length - 1].values).toEqual({
 			name: 'ai.translation',
-			value: { minChars: 450, notesAuto: true }
+			value: { minChars: 450, notesAuto: true, defaultMode: 'review' }
 		});
 
 		const off = await callAction('saveTranslation', { minChars: '300' });
 		expect(off.result).toMatchObject({ message: '翻译设置已保存' });
 		expect(state.inserts[state.inserts.length - 1].values).toEqual({
 			name: 'ai.translation',
-			value: { minChars: 300, notesAuto: false }
+			value: { minChars: 300, notesAuto: false, defaultMode: 'review' }
 		});
 	});
 });

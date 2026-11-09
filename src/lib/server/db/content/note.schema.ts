@@ -14,7 +14,7 @@ import {
 	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
-import { topics } from './topic.schema';
+import { topics } from './topic.schema.ts';
 
 /** Notes meta contract (micro-content line §17): per-note translation / AI settings. */
 export interface NotesMeta {

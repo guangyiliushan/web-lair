@@ -151,9 +151,15 @@ export function buildSanitizeSchema(): Schema {
 				'className',
 				'dataLanguage',
 				'dataTheme',
-				'style'
+				'style',
+				'translate'
 			],
-			pre: [...(defaultSchema.attributes?.pre ?? []), 'className', 'dataRehypePrettyCodeFigure'],
+			pre: [
+				...(defaultSchema.attributes?.pre ?? []),
+				'className',
+				'dataRehypePrettyCodeFigure',
+				'translate'
+			],
 			figure: [
 				...(defaultSchema.attributes?.figure ?? []),
 				'className',

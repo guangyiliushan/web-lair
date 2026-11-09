@@ -9,6 +9,7 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Spinner } from '$lib/components/ui/spinner';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Select from '$lib/components/ui/select';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -22,14 +23,23 @@
 		AI_FUNCTION_LABELS,
 		AI_PROVIDER_KINDS,
 		AI_PROVIDER_KIND_LABELS,
+		AI_PROVIDER_PRESETS,
+		enabledModelIds,
+		normalizeModelEntries,
+		type AiModelEntry,
 		type AiProviderKind
 	} from '$lib/utils/ai-meta';
+	import MemoryCards from '$lib/components/admin/ai/memory-cards.svelte';
+	import PricingCard from '$lib/components/admin/ai/pricing-card.svelte';
+	import ModelPoolCard from '$lib/components/admin/ai/model-pool-card.svelte';
+	import { POOL_MODE } from '$lib/utils/ai-pool';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconPlugConnected from '@tabler/icons-svelte-runes/icons/plug-connected';
 	import IconInfoCircle from '@tabler/icons-svelte-runes/icons/info-circle';
 	import IconDeviceFloppy from '@tabler/icons-svelte-runes/icons/device-floppy';
+	import IconDownload from '@tabler/icons-svelte-runes/icons/download';
 	import IconKey from '@tabler/icons-svelte-runes/icons/key';
 	import IconSettings from '@tabler/icons-svelte-runes/icons/settings';
 	import IconX from '@tabler/icons-svelte-runes/icons/x';
@@ -44,9 +54,50 @@
 			message?: string;
 			providerErrors?: Record<string, string>;
 			providerTest?: { id: string; name: string; ok: boolean; message: string };
+			/** Row index -> the cell that failed, from `?/savePricing`. */
+			pricingErrors?: Record<string, string>;
+			/** Compact key for the failing control, from the pool actions. */
+			poolErrors?: Record<string, string>;
+			/** Diff from `?/previewPricingSync`, which opens the confirm dialog. */
+			pricingSync?: {
+				added: string[];
+				changed: string[];
+				kept: string[];
+				unresolved: string[];
+			};
 		} | null
 	);
 	const providerErrors = $derived(actionForm?.providerErrors ?? null);
+	const poolErrors = $derived(actionForm?.poolErrors ?? null);
+
+	// ── Pricing card inputs ──────────────────────────────────────────────
+	/**
+	 * Keys the app can actually call: every enabled model of every provider plus
+	 * whatever the feature assignments point at. The card uses this to offer a
+	 * picker instead of free text (a typo in `<provider>/<model>` would silently
+	 * unprice the call) and to mark keys that no longer map to anything.
+	 */
+	const pricingKeys = $derived.by(() => {
+		// A plain array, deduped on insert: the list is a handful of keys, and a
+		// SvelteSet here would only add a reactive wrapper nothing observes.
+		const keys: string[] = [];
+		const add = (key: string) => {
+			if (!keys.includes(key)) keys.push(key);
+		};
+		for (const provider of data.providers) {
+			// DeepL prices characters; its model list is a quality tier, not a
+			// token model, so it is not a token-price candidate.
+			for (const entry of normalizeModelEntries(provider.models)) {
+				if (entry.enabled) add(`${provider.name}/${entry.id}`);
+			}
+		}
+		for (const slot of Object.values(data.assignments ?? {})) {
+			if (slot?.provider && slot.model) add(`${slot.provider}/${slot.model}`);
+		}
+		return keys.sort((a, b) => a.localeCompare(b));
+	});
+	const pricingErrors = $derived(actionForm?.pricingErrors ?? null);
+	const pricingSync = $derived(actionForm?.pricingSync ?? null);
 
 	// ── Provider dialog state ────────────────────────────────────────────
 	let dialogOpen = $state(false);
@@ -58,39 +109,142 @@
 	let providerDialogEl = $state<HTMLElement | null>(null);
 	let editing = $state<ProviderRow | null>(null);
 	let savingProvider = $state(false);
+	let refreshingModels = $state(false);
+	/** Result copy for the dialog; the page-level alert sits behind the modal. */
+	let refreshMessage = $state('');
 	let fieldName = $state('');
+	let fieldPreset = $state('');
 	let fieldKind = $state<string>('openai-compatible');
 	let fieldBaseUrl = $state('');
 	let fieldApiKeyEnv = $state('');
 	let fieldModels = $state('');
+	let fieldDiscovered = $state<AiModelEntry[]>([]);
 	let fieldEnabled = $state(true);
+	/** Search + manual-add state for the model picker in the dialog. */
+	let modelSearch = $state('');
+	let manualModelOpen = $state(false);
+	let manualModelId = $state('');
 	let deleteTarget = $state<ProviderRow | null>(null);
+
+	const enabledInDialog = $derived(
+		new Set(
+			fieldModels
+				.split(/[\n,]/)
+				.map((id) => id.trim())
+				.filter(Boolean)
+		)
+	);
+	// Stored/discovered entries plus any enabled id that has no entry yet
+	// (manual ids), so the picker always shows what the form will save.
+	const modelChoices = $derived.by(() => {
+		const choices = [...fieldDiscovered];
+		for (const id of enabledInDialog) {
+			if (!choices.some((entry) => entry.id === id)) {
+				choices.push({ id, enabled: true, source: 'manual' });
+			}
+		}
+		return choices;
+	});
+	const filteredModels = $derived.by(() => {
+		const query = modelSearch.trim().toLowerCase();
+		return query
+			? modelChoices.filter((entry) => entry.id.toLowerCase().includes(query))
+			: modelChoices;
+	});
+
+	function toggleModel(id: string, checked: boolean) {
+		const ids = [...enabledInDialog].filter((entry) => entry !== id);
+		if (checked) ids.push(id);
+		fieldModels = ids.join('\n');
+	}
+
+	function addManualModel() {
+		const id = manualModelId.trim();
+		if (!id) return;
+		if (!enabledInDialog.has(id)) fieldModels = [...enabledInDialog, id].join('\n');
+		manualModelId = '';
+	}
+
+	function applyPreset(id: string) {
+		const preset = AI_PROVIDER_PRESETS.find((candidate) => candidate.id === id);
+		if (!preset) return;
+		if (!fieldName.trim()) fieldName = preset.label;
+		fieldKind = preset.kind;
+		fieldBaseUrl = preset.baseUrl;
+		if (!fieldApiKeyEnv.trim()) fieldApiKeyEnv = preset.apiKeyEnvHint;
+	}
 
 	function openCreate() {
 		editing = null;
 		fieldName = '';
+		fieldPreset = '';
 		fieldKind = 'openai-compatible';
 		fieldBaseUrl = '';
 		fieldApiKeyEnv = '';
 		fieldModels = '';
+		fieldDiscovered = [];
 		fieldEnabled = true;
+		refreshMessage = '';
+		modelSearch = '';
+		manualModelOpen = false;
+		manualModelId = '';
 		dialogOpen = true;
 	}
 
 	function openEdit(provider: ProviderRow) {
 		editing = provider;
 		fieldName = provider.name;
+		fieldPreset = '';
 		fieldKind = provider.kind;
 		fieldBaseUrl = provider.baseUrl ?? '';
 		fieldApiKeyEnv = provider.apiKeyEnv ?? '';
-		fieldModels = (provider.models ?? []).join('\n');
+		fieldModels = enabledModelIds(provider.models).join('\n');
+		fieldDiscovered = normalizeModelEntries(provider.models);
 		fieldEnabled = provider.enabled;
+		refreshMessage = '';
+		modelSearch = '';
+		manualModelOpen = false;
+		manualModelId = '';
 		dialogOpen = true;
 	}
 
 	// ── Assignments / moderation / budget / style-guide state ───────────
-	let assignProviders = $state<Record<string, string>>({});
-	let assignModels = $state<Record<string, string>>({});
+	/**
+	 * One mode select per slot, plus a model select that only matters when a
+	 * gateway is pinned:
+	 *
+	 *  - 关闭          -> nothing stored, the slot is off;
+	 *  - 使用默认聚合  -> stored as `{}`: the slot runs the pool from the top;
+	 *  - <provider>    -> stored as `{ provider, model }`: that exact pair runs
+	 *                     first, and the pool is still the fallback.
+	 *
+	 * Seeded synchronously (not only through the effect below) because the page
+	 * is server-rendered, and an empty map would reach the template as undefined.
+	 */
+	function assignmentState(source: typeof data.assignments): {
+		providers: Record<string, string>;
+		models: Record<string, string>;
+	} {
+		const providers: Record<string, string> = {};
+		const models: Record<string, string> = {};
+		for (const fn of AI_FUNCTIONS) {
+			const entry = source[fn];
+			// A stored `{ model }` has no gateway to show, so it reads as pool
+			// mode; the runtime keeps honouring the stored pin until it is saved.
+			providers[fn] = !entry ? '' : (entry.provider ?? POOL_MODE);
+			models[fn] = entry?.model ?? '';
+		}
+		return { providers, models };
+	}
+	const assignmentSeed = untrack(() => assignmentState(data.assignments));
+	let assignProviders = $state<Record<string, string>>(assignmentSeed.providers);
+	let assignModels = $state<Record<string, string>>(assignmentSeed.models);
+
+	/** First enabled model of a gateway: what a fresh pin should default to. */
+	function firstModel(providerName: string): string | null {
+		const models = data.providers.find((p) => p.name === providerName)?.models ?? null;
+		return enabledModelIds(models)[0] ?? null;
+	}
 	let mod = $state(untrack(() => ({ ...data.moderation })));
 	let modKeywords = $state('');
 	let modRegexes = $state('');
@@ -99,10 +253,11 @@
 	let alertRatiosText = $state('');
 	let styleGuideText = $state('');
 	let translation = $state(untrack(() => ({ ...data.translation })));
-	// True while one of the five block forms holds unsaved edits. The resync
-	// effect below must not clobber that state when an unrelated enhance (e.g.
-	// another row's "test connection") refreshes the load data (AI-2.1 review).
-	let dirty = $state(false);
+	let summaryOpt = $state(untrack(() => ({ ...data.summary })));
+	let crawl = $state(untrack(() => ({ ...data.crawl })));
+	// The pricing card owns its own row state (and its advanced JSON copy), so
+	// there is nothing to mirror here any more.
+	const dirtyForms = $state<Record<string, boolean>>({});
 
 	// Re-sync the local copies whenever a load hands us new data (a save, a
 	// provider delete cascade, …) so the form never shows stale values - but
@@ -115,15 +270,12 @@
 		const freshBudget = data.budget;
 		const freshStyleGuide = data.styleGuide;
 		const freshTranslation = data.translation;
-		if (dirty) return;
-		const nextProviders: Record<string, string> = {};
-		const nextModels: Record<string, string> = {};
-		for (const fn of AI_FUNCTIONS) {
-			nextProviders[fn] = freshAssignments[fn]?.provider ?? '';
-			nextModels[fn] = freshAssignments[fn]?.model ?? '';
-		}
-		assignProviders = nextProviders;
-		assignModels = nextModels;
+		const freshSummary = data.summary;
+		const freshCrawl = data.crawl;
+		if (Object.values(dirtyForms).some(Boolean)) return;
+		const next = assignmentState(freshAssignments);
+		assignProviders = next.providers;
+		assignModels = next.models;
 		mod = { ...freshModeration };
 		modKeywords = freshModeration.keywords.join('\n');
 		modRegexes = freshModeration.regexes.join('\n');
@@ -132,6 +284,8 @@
 		alertRatiosText = freshBudget.alertRatios.join(', ');
 		styleGuideText = freshStyleGuide.text;
 		translation = { ...freshTranslation };
+		summaryOpt = { ...freshSummary };
+		crawl = { ...freshCrawl };
 	});
 
 	const kindPlaceholder: Record<string, string> = {
@@ -152,8 +306,15 @@
 		</Alert.Root>
 	{/if}
 
+	{#if !data.canManage}
+		<Alert.Root>
+			<IconInfoCircle />
+			<Alert.Title>{m.admin_settings_ai_owner_only()}</Alert.Title>
+		</Alert.Root>
+	{/if}
+
 	<!-- ── Providers ──────────────────────────────────────────────────── -->
-	<section class="flex flex-col gap-4">
+	<section id="providers" class="flex flex-col gap-4">
 		<header class="flex flex-wrap items-start justify-between gap-3">
 			<div class="min-w-0">
 				<h2 class="text-base font-medium">{m.admin_settings_ai_providers()}</h2>
@@ -161,10 +322,12 @@
 					{m.admin_settings_ai_providers_desc()}
 				</p>
 			</div>
-			<Button type="button" variant="outline" size="sm" onclick={openCreate}>
-				<IconPlus data-icon="inline-start" />
-				{m.admin_settings_ai_add_provider()}
-			</Button>
+			{#if data.canManage}
+				<Button type="button" variant="outline" size="sm" onclick={openCreate}>
+					<IconPlus data-icon="inline-start" />
+					{m.admin_settings_ai_add_provider()}
+				</Button>
+			{/if}
 		</header>
 
 		{#if actionForm?.providerTest}
@@ -177,18 +340,27 @@
 			</Alert.Root>
 		{/if}
 
-		{#if data.providers.length === 0}
-			<Empty.Root class="border">
-				<Empty.Header>
-					<Empty.Media variant="icon">
-						<IconSettings />
-					</Empty.Media>
-					<Empty.Title>{m.admin_settings_ai_empty()}</Empty.Title>
-					<Empty.Description>{m.admin_settings_ai_empty_desc()}</Empty.Description>
-				</Empty.Header>
-			</Empty.Root>
-		{:else}
-			<div class="flex flex-col gap-2">
+		<!-- The pool is the first row of this list, not a section of its own: both
+		     cards answer "which model will actually run", and the pool is simply
+		     the answer the providers add up to. -->
+		<div class="flex flex-col gap-2">
+			<ModelPoolCard
+				rows={data.pool}
+				providers={data.providers}
+				canManage={data.canManage}
+				errors={poolErrors}
+			/>
+			{#if data.providers.length === 0}
+				<Empty.Root class="border">
+					<Empty.Header>
+						<Empty.Media variant="icon">
+							<IconSettings />
+						</Empty.Media>
+						<Empty.Title>{m.admin_settings_ai_empty()}</Empty.Title>
+						<Empty.Description>{m.admin_settings_ai_empty_desc()}</Empty.Description>
+					</Empty.Header>
+				</Empty.Root>
+			{:else}
 				{#each data.providers as provider (provider.id)}
 					<div class="flex flex-wrap items-center gap-3 rounded-lg border p-3">
 						<div class="min-w-0 flex-1">
@@ -221,7 +393,11 @@
 									</span>
 								{/if}
 								{#if provider.models?.length}
-									<span>{m.admin_settings_ai_model_count({ count: provider.models.length })}</span>
+									<span
+										>{m.admin_settings_ai_model_count({
+											count: enabledModelIds(provider.models).length
+										})}</span
+									>
 								{/if}
 							</div>
 						</div>
@@ -233,67 +409,124 @@
 									{m.admin_settings_ai_test()}
 								</Button>
 							</form>
-							<Button variant="outline" size="sm" onclick={() => openEdit(provider)}>
-								<IconPencil data-icon="inline-start" />
-								{m.admin_common_edit()}
-							</Button>
-							<Button variant="destructive" size="sm" onclick={() => (deleteTarget = provider)}>
-								<IconTrash data-icon="inline-start" />
-								{m.admin_common_delete()}
-							</Button>
+							{#if data.canManage}
+								<Button variant="outline" size="sm" onclick={() => openEdit(provider)}>
+									<IconPencil data-icon="inline-start" />
+									{m.admin_common_edit()}
+								</Button>
+								<Button variant="destructive" size="sm" onclick={() => (deleteTarget = provider)}>
+									<IconTrash data-icon="inline-start" />
+									{m.admin_common_delete()}
+								</Button>
+							{/if}
 						</div>
 					</div>
 				{/each}
-			</div>
-		{/if}
+			{/if}
+		</div>
 	</section>
 
 	<Separator.Root />
 
 	<!-- ── Feature assignments ────────────────────────────────────────── -->
-	<section class="flex flex-col gap-4">
+	<section id="assignments" class="flex flex-col gap-4">
 		<header>
 			<h2 class="text-base font-medium">{m.admin_settings_ai_assignments()}</h2>
-			<p class="mt-1 text-xs text-muted-foreground">
-				{m.admin_settings_ai_assignments_desc()}
-			</p>
 		</header>
 		<form
 			method="post"
 			action="?/saveAssignments"
 			class="flex flex-col gap-4"
-			oninput={() => (dirty = true)}
-			onchange={() => (dirty = true)}
+			oninput={() => (dirtyForms.assignments = true)}
+			onchange={() => (dirtyForms.assignments = true)}
 			use:enhance={() =>
 				async ({ result, update }) => {
-					if (result.type === 'success') dirty = false;
+					if (result.type === 'success') dirtyForms.assignments = false;
 					await update();
 				}}
 		>
 			{#each AI_FUNCTIONS as fn (fn)}
+				{@const mode = assignProviders[fn] ?? ''}
+				{@const assigned = assignModels[fn] ?? ''}
+				{@const pinned = mode && mode !== POOL_MODE ? mode : null}
+				<!-- Pool mode lists the pool, in pool order: naming one of them is a
+				     per-slot head start, not a different way of resolving. Disabled
+				     rows are left out; a slot still pointing at one keeps it below. -->
+				{@const options = pinned
+					? enabledModelIds(data.providers.find((p) => p.name === pinned)?.models ?? null)
+					: data.pool.filter((row) => row.enabled).map((row) => row.model)}
+				{@const nothingToPick = options.length === 0 && !assigned}
 				<div class="grid items-center gap-3 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)]">
 					<div class="text-sm font-medium">{AI_FUNCTION_LABELS[fn][getLocale()]}</div>
 					<Select.Root
 						type="single"
-						name={`assign_${fn}`}
+						name={`provider_${fn}`}
 						bind:value={assignProviders[fn]}
-						onValueChange={() => (dirty = true)}
+						onValueChange={(value) => {
+							assignProviders[fn] = value;
+							// Switching to a gateway preselects its first model, so the
+							// row is valid without a second click; pool mode starts with
+							// no head start, which is the common case.
+							assignModels[fn] = value && value !== POOL_MODE ? (firstModel(value) ?? '') : '';
+							dirtyForms.assignments = true;
+						}}
 					>
 						<Select.Trigger class="w-full">
-							{assignProviders[fn] || m.admin_settings_ai_no_provider()}
+							{mode === ''
+								? m.admin_settings_ai_provider_off()
+								: mode === POOL_MODE
+									? m.admin_settings_ai_provider_auto()
+									: mode}
 						</Select.Trigger>
 						<Select.Content>
-							<Select.Item value="">{m.admin_settings_ai_no_provider()}</Select.Item>
+							<Select.Item value="">{m.admin_settings_ai_provider_off()}</Select.Item>
+							<Select.Item value={POOL_MODE}>{m.admin_settings_ai_provider_auto()}</Select.Item>
 							{#each data.providers as p (p.id)}
 								<Select.Item value={p.name}>{p.name}</Select.Item>
 							{/each}
 						</Select.Content>
 					</Select.Root>
-					<Input
+					<!-- Always rendered, even when the slot is off: a column that appears
+					     and disappears with the mode makes the form jump, and a missing
+					     cell reads as "unfinished" rather than "not applicable". Off
+					     renders as a disabled box holding an em dash, which says the
+					     same thing without moving anything. -->
+					<Select.Root
+						type="single"
 						name={`model_${fn}`}
 						bind:value={assignModels[fn]}
-						placeholder={m.admin_settings_ai_model_placeholder()}
-					/>
+						disabled={mode === '' || (pinned !== null && nothingToPick)}
+						onValueChange={() => (dirtyForms.assignments = true)}
+					>
+						<Select.Trigger class="w-full">
+							{#if mode === ''}
+								<span aria-hidden="true">—</span>
+								<span class="sr-only">{m.admin_settings_ai_assign_off_hint()}</span>
+							{:else}
+								{assigned ||
+									(options.length
+										? mode === POOL_MODE
+											? m.admin_settings_ai_model_pool_order()
+											: m.admin_settings_ai_model_pick()
+										: m.admin_settings_ai_models_none())}
+							{/if}
+						</Select.Trigger>
+						<Select.Content>
+							{#if mode === POOL_MODE}
+								<!-- No head start: run the pool exactly as ordered. -->
+								<Select.Item value="">{m.admin_settings_ai_model_pool_order()}</Select.Item>
+							{/if}
+							{#each options as model (model)}
+								<Select.Item value={model}>{model}</Select.Item>
+							{/each}
+							<!-- A model that was disabled after being assigned stays
+							     visible, so the row explains itself instead of silently
+							     reading as "unassigned". -->
+							{#if assigned && !options.includes(assigned)}
+								<Select.Item value={assigned}>{assigned}</Select.Item>
+							{/if}
+						</Select.Content>
+					</Select.Root>
 				</div>
 			{/each}
 			<div class="flex items-center justify-end">
@@ -324,14 +557,15 @@
 
 		<!-- Comment triage -->
 		<form
+			id="guards"
 			method="post"
 			action="?/saveModeration"
 			class="flex flex-col gap-4 rounded-lg border p-4"
-			oninput={() => (dirty = true)}
-			onchange={() => (dirty = true)}
+			oninput={() => (dirtyForms.moderation = true)}
+			onchange={() => (dirtyForms.moderation = true)}
 			use:enhance={() =>
 				async ({ result, update }) => {
-					if (result.type === 'success') dirty = false;
+					if (result.type === 'success') dirtyForms.moderation = false;
 					await update();
 				}}
 		>
@@ -345,7 +579,7 @@
 					<Switch
 						name="enabled"
 						bind:checked={mod.enabled}
-						onCheckedChange={() => (dirty = true)}
+						onCheckedChange={() => (dirtyForms.moderation = true)}
 						aria-label={m.admin_settings_ai_triage_enabled()}
 					/>
 				</div>
@@ -357,7 +591,7 @@
 					<Switch
 						name="shadowMode"
 						bind:checked={mod.shadowMode}
-						onCheckedChange={() => (dirty = true)}
+						onCheckedChange={() => (dirtyForms.moderation = true)}
 						aria-label={m.admin_settings_ai_shadow()}
 					/>
 				</div>
@@ -371,7 +605,7 @@
 					<Switch
 						name="firstCommentHold"
 						bind:checked={mod.firstCommentHold}
-						onCheckedChange={() => (dirty = true)}
+						onCheckedChange={() => (dirtyForms.moderation = true)}
 						aria-label={m.admin_settings_ai_first_comment()}
 					/>
 				</div>
@@ -437,14 +671,15 @@
 
 		<!-- Budget -->
 		<form
+			id="cost"
 			method="post"
 			action="?/saveBudget"
 			class="flex flex-col gap-4 rounded-lg border p-4"
-			oninput={() => (dirty = true)}
-			onchange={() => (dirty = true)}
+			oninput={() => (dirtyForms.budget = true)}
+			onchange={() => (dirtyForms.budget = true)}
 			use:enhance={() =>
 				async ({ result, update }) => {
-					if (result.type === 'success') dirty = false;
+					if (result.type === 'success') dirtyForms.budget = false;
 					await update();
 				}}
 		>
@@ -491,28 +726,31 @@
 				<Switch
 					name="pauseAutoOnExceed"
 					bind:checked={budget.pauseAutoOnExceed}
-					onCheckedChange={() => (dirty = true)}
+					onCheckedChange={() => (dirtyForms.budget = true)}
 					aria-label={m.admin_settings_ai_budget_pause()}
 				/>
 			</div>
-			<div class="flex items-center justify-end">
-				<Button type="submit" size="sm">
-					<IconDeviceFloppy data-icon="inline-start" />
-					{m.admin_settings_ai_save_budget()}
-				</Button>
-			</div>
+			{#if data.canManage}
+				<div class="flex items-center justify-end">
+					<Button type="submit" size="sm">
+						<IconDeviceFloppy data-icon="inline-start" />
+						{m.admin_settings_ai_save_budget()}
+					</Button>
+				</div>
+			{/if}
 		</form>
 
 		<!-- Style guide -->
 		<form
+			id="context"
 			method="post"
 			action="?/saveStyleGuide"
 			class="flex flex-col gap-4 rounded-lg border p-4"
-			oninput={() => (dirty = true)}
-			onchange={() => (dirty = true)}
+			oninput={() => (dirtyForms.styleguide = true)}
+			onchange={() => (dirtyForms.styleguide = true)}
 			use:enhance={() =>
 				async ({ result, update }) => {
-					if (result.type === 'success') dirty = false;
+					if (result.type === 'success') dirtyForms.styleguide = false;
 					await update();
 				}}
 		>
@@ -535,16 +773,24 @@
 			</div>
 		</form>
 
+		<!-- Memory cards sit beside the style guide because they are the same
+		     kind of thing: context injected into a model, not a usage record. -->
+		<div class="flex flex-col gap-4 rounded-lg border p-4">
+			<h3 class="text-sm font-semibold">{m.admin_ai_tab_memories()}</h3>
+			<p class="text-xs text-muted-foreground">{m.admin_ai_memory_pending()}</p>
+			<MemoryCards memories={data.memories} memoryLimit={data.memoryLimit} />
+		</div>
+
 		<!-- Translation threshold -->
 		<form
 			method="post"
 			action="?/saveTranslation"
 			class="flex flex-col gap-4 rounded-lg border p-4"
-			oninput={() => (dirty = true)}
-			onchange={() => (dirty = true)}
+			oninput={() => (dirtyForms.translation = true)}
+			onchange={() => (dirtyForms.translation = true)}
 			use:enhance={() =>
 				async ({ result, update }) => {
-					if (result.type === 'success') dirty = false;
+					if (result.type === 'success') dirtyForms.translation = false;
 					await update();
 				}}
 		>
@@ -562,6 +808,26 @@
 					/>
 					<Field.Description>{m.admin_settings_ai_min_chars_desc()}</Field.Description>
 				</Field.Field>
+				<Field.Field>
+					<Field.Label for="translation-default-mode">
+						{m.admin_settings_ai_default_mode()}
+					</Field.Label>
+					<Select.Root
+						type="single"
+						name="defaultMode"
+						bind:value={translation.defaultMode as never}
+					>
+						<Select.Trigger id="translation-default-mode" class="w-full">
+							{translation.defaultMode}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="auto">{m.admin_settings_ai_mode_auto()}</Select.Item>
+							<Select.Item value="review">{m.admin_settings_ai_mode_review()}</Select.Item>
+							<Select.Item value="manual">{m.admin_settings_ai_mode_manual()}</Select.Item>
+						</Select.Content>
+					</Select.Root>
+					<Field.Description>{m.admin_settings_ai_default_mode_desc()}</Field.Description>
+				</Field.Field>
 			</div>
 			<div class="flex items-center justify-between gap-4">
 				<div>
@@ -573,7 +839,7 @@
 				<Switch
 					name="notesAuto"
 					bind:checked={translation.notesAuto}
-					onCheckedChange={() => (dirty = true)}
+					onCheckedChange={() => (dirtyForms.translation = true)}
 					aria-label={m.admin_settings_ai_notes_translate()}
 				/>
 			</div>
@@ -584,12 +850,141 @@
 				</Button>
 			</div>
 		</form>
+
+		<!-- Summary -->
+		<form
+			method="post"
+			action="?/saveSummary"
+			class="flex flex-col gap-4 rounded-lg border p-4"
+			oninput={() => (dirtyForms.summary = true)}
+			onchange={() => (dirtyForms.summary = true)}
+			use:enhance={() =>
+				async ({ result, update }) => {
+					if (result.type === 'success') dirtyForms.summary = false;
+					await update();
+				}}
+		>
+			<h3 class="text-sm font-semibold">{m.admin_settings_ai_summary()}</h3>
+			<div class="flex items-center justify-between gap-4">
+				<div>
+					<div class="text-sm font-medium">{m.admin_settings_ai_summary_auto()}</div>
+					<div class="text-xs text-muted-foreground">{m.admin_settings_ai_summary_auto_hint()}</div>
+				</div>
+				<Switch
+					name="auto"
+					bind:checked={summaryOpt.auto}
+					onCheckedChange={() => (dirtyForms.summary = true)}
+					aria-label={m.admin_settings_ai_summary_auto()}
+				/>
+			</div>
+			<Field.Field class="max-w-xs">
+				<Field.Label for="summary-min-chars">{m.admin_settings_ai_summary_min_chars()}</Field.Label>
+				<Input
+					id="summary-min-chars"
+					name="minChars"
+					type="number"
+					min="1"
+					step="1"
+					bind:value={summaryOpt.minChars}
+				/>
+				<Field.Description>{m.admin_settings_ai_summary_min_chars_desc()}</Field.Description>
+			</Field.Field>
+			<div class="flex justify-end">
+				<Button type="submit" size="sm">
+					<IconDeviceFloppy data-icon="inline-start" />
+					{m.admin_settings_ai_save_summary()}
+				</Button>
+			</div>
+		</form>
+
+		<!-- Pricing: rows, not a JSON document -->
+		<PricingCard
+			pricing={data.pricing}
+			known={pricingKeys}
+			canManage={data.canManage}
+			errors={pricingErrors}
+			sync={pricingSync}
+		/>
+
+		<!-- AI crawler policy -->
+		<form
+			method="post"
+			action="?/saveCrawl"
+			class="flex flex-col gap-3 rounded-lg border p-4"
+			onchange={() => (dirtyForms.crawl = true)}
+			use:enhance={() =>
+				async ({ result, update }) => {
+					if (result.type === 'success') dirtyForms.crawl = false;
+					await update();
+				}}
+		>
+			<h3 class="text-sm font-semibold">{m.admin_settings_ai_crawl()}</h3>
+			<p class="text-xs text-muted-foreground">{m.admin_settings_ai_crawl_hint()}</p>
+			<div class="flex items-center justify-between gap-4">
+				<span class="text-sm">{m.admin_settings_ai_crawl_answer()}</span>
+				<Switch
+					name="answerEngine"
+					bind:checked={crawl.answerEngine}
+					onCheckedChange={() => (dirtyForms.crawl = true)}
+					aria-label={m.admin_settings_ai_crawl_answer()}
+				/>
+			</div>
+			<div class="flex items-center justify-between gap-4">
+				<span class="text-sm">{m.admin_settings_ai_crawl_training()}</span>
+				<Switch
+					name="training"
+					bind:checked={crawl.training}
+					onCheckedChange={() => (dirtyForms.crawl = true)}
+					aria-label={m.admin_settings_ai_crawl_training()}
+				/>
+			</div>
+			<div class="flex justify-end">
+				<Button type="submit" size="sm">
+					<IconDeviceFloppy data-icon="inline-start" />
+					{m.admin_settings_ai_save_crawl()}
+				</Button>
+			</div>
+		</form>
 	</section>
 </div>
 
 <!-- ── Provider dialog ──────────────────────────────────────────────── -->
 <Dialog.Root bind:open={dialogOpen}>
 	<Dialog.Content bind:ref={providerDialogEl} class="sm:max-w-lg" showCloseButton={false}>
+		{#if data.canManage}
+			<!-- Sibling form: the refresh button inside the save form references
+			     this by id, so the two never nest. The hidden fields mirror the
+			     dialog, which lets discovery run on a provider that is not saved
+			     yet and probes edits before they are persisted. -->
+			<form
+				id="provider-refresh-form"
+				method="post"
+				action="?/refreshModels"
+				use:enhance={() => {
+					refreshingModels = true;
+					refreshMessage = '';
+					return async ({ result, update }) => {
+						refreshingModels = false;
+						if (result.type === 'error') {
+							refreshMessage = result.error.message;
+						} else if (result.type === 'failure' || result.type === 'success') {
+							refreshMessage = typeof result.data?.message === 'string' ? result.data.message : '';
+						}
+						if (result.type === 'success' && result.data?.discovered) {
+							fieldDiscovered = result.data.discovered as AiModelEntry[];
+						}
+						await update({ reset: false });
+					};
+				}}
+			>
+				{#if editing}
+					<input type="hidden" name="id" value={editing.id} />
+				{/if}
+				<input type="hidden" name="kind" value={fieldKind} />
+				<input type="hidden" name="baseUrl" value={fieldBaseUrl} />
+				<input type="hidden" name="apiKeyEnv" value={fieldApiKeyEnv} />
+			</form>
+		{/if}
 		<form
 			method="post"
 			action="?/saveProvider"
@@ -627,6 +1022,24 @@
 			</div>
 			<div class="px-4 py-4">
 				<Field.Group>
+					<Field.Field>
+						<Field.Label for="provider-preset">{m.admin_settings_ai_preset()}</Field.Label>
+						<Select.Root type="single" bind:value={fieldPreset} onValueChange={applyPreset}>
+							<Select.Trigger id="provider-preset" class="w-full">
+								{AI_PROVIDER_PRESETS.find((preset) => preset.id === fieldPreset)?.label ??
+									m.admin_settings_ai_preset_placeholder()}
+							</Select.Trigger>
+							<Select.Content portalProps={providerDialogEl ? { to: providerDialogEl } : undefined}>
+								{#each AI_PROVIDER_PRESETS as preset (preset.id)}
+									<Select.Item value={preset.id} disabled={!preset.verified}>
+										{preset.label}{#if !preset.verified}
+											· {m.admin_settings_ai_preset_unverified()}{/if}
+									</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+						<Field.Description>{m.admin_settings_ai_preset_hint()}</Field.Description>
+					</Field.Field>
 					<Field.Field data-invalid={providerErrors?.name ? true : undefined}>
 						<Field.Label for="provider-name">
 							{m.admin_settings_ai_field_name()} <span class="text-destructive">*</span>
@@ -692,14 +1105,95 @@
 						{/if}
 					</Field.Field>
 					<Field.Field>
-						<Field.Label for="provider-models">{m.admin_settings_ai_field_models()}</Field.Label>
-						<Textarea
-							id="provider-models"
-							name="models"
-							rows={3}
-							bind:value={fieldModels}
-							placeholder={m.admin_settings_ai_models_ph()}
-						/>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<Field.Label for="provider-models-search"
+								>{m.admin_settings_ai_field_models()}</Field.Label
+							>
+							{#if data.canManage}
+								<div class="flex items-center gap-2">
+									<Button
+										type="submit"
+										form="provider-refresh-form"
+										variant="outline"
+										size="sm"
+										disabled={savingProvider || refreshingModels}
+									>
+										{#if refreshingModels}
+											<Spinner data-icon="inline-start" />
+										{:else}
+											<IconDownload data-icon="inline-start" />
+										{/if}
+										{m.admin_settings_ai_refresh()}
+									</Button>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onclick={() => (manualModelOpen = !manualModelOpen)}
+									>
+										<IconPlus data-icon="inline-start" />
+										{m.admin_settings_ai_models_manual()}
+									</Button>
+								</div>
+							{/if}
+						</div>
+						<div class="overflow-hidden rounded-lg border">
+							<div class="border-b p-2">
+								<Input
+									id="provider-models-search"
+									bind:value={modelSearch}
+									placeholder={m.admin_settings_ai_models_search()}
+									class="h-8"
+								/>
+							</div>
+							<ul class="max-h-56 overflow-y-auto">
+								{#each filteredModels as entry (entry.id)}
+									<li class="flex items-center gap-2 border-b px-3 py-2 text-sm last:border-b-0">
+										<Checkbox
+											class="size-3.5"
+											checked={enabledInDialog.has(entry.id)}
+											onCheckedChange={(checked) => toggleModel(entry.id, checked === true)}
+											aria-label={entry.id}
+										/>
+										<span class="min-w-0 flex-1 truncate">{entry.id}</span>
+										{#if enabledInDialog.has(entry.id)}
+											<span class="text-xs text-muted-foreground"
+												>{m.admin_settings_ai_models_enabled()}</span
+											>
+										{/if}
+									</li>
+								{/each}
+								{#if !filteredModels.length}
+									<li class="px-3 py-4 text-center text-xs text-muted-foreground">
+										{modelSearch.trim()
+											? m.admin_settings_ai_models_no_match()
+											: m.admin_settings_ai_models_empty()}
+									</li>
+								{/if}
+							</ul>
+						</div>
+						{#if manualModelOpen}
+							<div class="flex items-center gap-2">
+								<Input
+									bind:value={manualModelId}
+									placeholder={m.admin_settings_ai_models_manual_ph()}
+									onkeydown={(event) => {
+										if (event.key === 'Enter') {
+											event.preventDefault();
+											addManualModel();
+										}
+									}}
+								/>
+								<Button type="button" size="sm" onclick={addManualModel}>
+									{m.admin_common_add()}
+								</Button>
+							</div>
+						{/if}
+						<input type="hidden" name="models" value={fieldModels} />
+						<Field.Description>{m.admin_settings_ai_models_hint()}</Field.Description>
+						{#if refreshMessage}
+							<p class="text-xs text-muted-foreground">{refreshMessage}</p>
+						{/if}
 					</Field.Field>
 					<div class="flex items-center justify-between gap-4">
 						<Field.Label for="provider-enabled">{m.admin_common_enable()}</Field.Label>

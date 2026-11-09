@@ -78,8 +78,13 @@ export const optionRegistry = {
 	'ai.assignments': {
 		schema: z.partialRecord(
 			z.enum(AI_FUNCTIONS),
-			z.object({ provider: z.string().optional(), model: z.string().optional() })
+			z.object({
+				provider: z.string().optional(),
+				model: z.string().optional()
+			})
 		),
+		// A missing key is a disabled slot; a present but empty object means
+		// "follow the default pool", which has no provider or model of its own.
 		default: {}
 	},
 	'ai.budget': {
@@ -105,7 +110,12 @@ export const optionRegistry = {
 				.number({ error: () => m.admin_option_err_number() })
 				.int({ error: () => m.admin_option_err_int() })
 				.min(1, { error: () => m.admin_option_err_min1() }),
-			notesAuto: z.boolean()
+			notesAuto: z.boolean(),
+			// Site-wide default mode: auto = generate candidates on publish;
+			// acceptance stays manual in the workbench, review = generate a
+			// candidate only, manual = no automatic enqueue. A post/note can
+			// override this in its `meta.translate.mode`.
+			defaultMode: z.enum(['auto', 'review', 'manual'])
 		}),
 		// Micro-content line (ledger §17.5 / plan §1.6, C2): auto-enqueue
 		// posts + notes - content below `minChars` produces no translation
@@ -113,7 +123,63 @@ export const optionRegistry = {
 		// the notes surface into automatic enqueue (site default stays
 		// review-first); per-note override lives in `notes.meta.translate`
 		// mode. Cost guardrail = the existing ai.budget pause switch.
-		default: { minChars: 300, notesAuto: true }
+		default: { minChars: 300, notesAuto: true, defaultMode: 'review' }
+	},
+	'ai.summary': {
+		schema: z.object({
+			auto: z.boolean(),
+			minChars: z
+				.number({ error: () => m.admin_option_err_number() })
+				.int({ error: () => m.admin_option_err_int() })
+				.min(1, { error: () => m.admin_option_err_min1() })
+		}),
+		// Summaries are opt-in: a publish only enqueues the job when `auto` is
+		// true and the post has no author summary. `minChars` is measured in
+		// code points over the plain-text body (not raw markdown).
+		default: { auto: false, minChars: 100 }
+	},
+	'translations.retention': {
+		schema: z.object({
+			discardDays: z.number().int().min(0).max(3650)
+		}),
+		// Discarded candidates are a paper trail, not content: long enough to
+		// notice a bad batch, short enough that the table does not grow for
+		// ever. 0 keeps them indefinitely (the workbench can still delete one
+		// at a time).
+		default: { discardDays: 180 }
+	},
+	'ai.chat': {
+		schema: z.object({
+			retentionDays: z.number().int().min(0).max(3650)
+		}),
+		// 0 = never auto-prune. The prune job only deletes archived
+		// conversations older than this; active threads stay manual.
+		default: { retentionDays: 90 }
+	},
+	'ai.pricing': {
+		schema: z.record(
+			z.string(),
+			z.object({
+				inputPer1M: z.number().nonnegative().optional(),
+				outputPer1M: z.number().nonnegative().optional(),
+				per1MChars: z.number().nonnegative().optional(),
+				// Where the numbers came from: the models.dev sync or a human.
+				// Display-only (the editor badges it), never used for billing.
+				source: z.enum(['catalog', 'manual']).optional()
+			})
+		),
+		// Operator-maintained price table: `<provider name>/<model>` -> USD
+		// prices. Missing entries produce `ai_usage.cost_estimate = NULL`
+		// rather than a guessed cost. The settings page can fill this from the
+		// public models.dev catalog (pricing-catalog.ts), which only ever adds
+		// entries or, on request, replaces the ones it resolved.
+		default: {}
+	},
+	'ai.crawl': {
+		schema: z.object({ answerEngine: z.boolean(), training: z.boolean() }),
+		// Two policy groups for robots.txt. These are voluntary signals (RFC
+		// 9309 §1), never access control.
+		default: { answerEngine: true, training: true }
 	},
 	'comments.moderation': {
 		schema: z.object({
@@ -372,6 +438,12 @@ export async function getOption<K extends OptionKey>(
 		return structuredClone(entry.default) as OptionValue<K>;
 	}
 	return parsed.data as OptionValue<K>;
+}
+
+/** Validate a value without writing it (used by agent proposals). */
+export function validateOption<K extends OptionKey>(key: K, value: unknown): OptionValue<K> {
+	const entry = entryFor(key);
+	return entry.schema.parse(value) as OptionValue<K>;
 }
 
 /** Validate and upsert a value. Throws on invalid input or unknown keys. */

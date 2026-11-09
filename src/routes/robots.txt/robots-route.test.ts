@@ -1,15 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for /robots.txt (P3-b): ORIGIN drives the Sitemap line
- * when set (normalised via URL), the request origin is the dev fallback,
- * and the body stays minimal (no Disallow/Crawl-delay).
+ * Route-level tests for /robots.txt (P3-b + M2): ORIGIN drives the Sitemap
+ * line when set, the request origin is the dev fallback, and the two AI
+ * policy groups are emitted as voluntary signals.
  */
 const { envState } = vi.hoisted(() => ({
 	envState: { env: {} as Record<string, string | undefined> }
 }));
 
 vi.mock('$env/dynamic/private', () => envState);
+vi.mock('$lib/server/config/options-registry', () => ({
+	getOption: async () => ({ answerEngine: true, training: true })
+}));
 
 import { GET } from './+server';
 
@@ -22,13 +25,15 @@ describe('robots route', () => {
 		envState.env.ORIGIN = 'https://example.com/';
 	});
 
-	it('serves the minimal policy with the Sitemap line from ORIGIN', async () => {
+	it('serves the Sitemap line from ORIGIN and the AI groups', async () => {
 		const response = await GET(event());
 
 		expect(response.status).toBe(200);
 		const body = await response.text();
-		expect(body).toBe('User-agent: *\n\nSitemap: https://example.com/sitemap.xml\n');
-		expect(body).not.toContain('Disallow');
+		expect(body).toContain('User-agent: *');
+		expect(body).toContain('Sitemap: https://example.com/sitemap.xml');
+		expect(body).toContain('User-agent: GPTBot');
+		expect(body).toContain('User-agent: OAI-SearchBot');
 		expect(body).not.toContain('Crawl-delay');
 		expect(response.headers.get('content-type')).toContain('text/plain');
 	});
@@ -37,8 +42,6 @@ describe('robots route', () => {
 		delete envState.env.ORIGIN;
 
 		const response = await GET(event('http://localhost:5173/robots.txt'));
-		expect(await response.text()).toBe(
-			'User-agent: *\n\nSitemap: http://localhost:5173/sitemap.xml\n'
-		);
+		expect(await response.text()).toContain('Sitemap: http://localhost:5173/sitemap.xml');
 	});
 });

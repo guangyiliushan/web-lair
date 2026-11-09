@@ -144,6 +144,34 @@ export async function requireAdminRole(): Promise<void> {
 	redirectToLogin(url.pathname, url.search);
 }
 
+/**
+ * Owner-only guard for actions that can move credentials or money
+ * (AI provider endpoints, budget and price table). Multi-admin: an admin who
+ * can change a provider `baseUrl` can send the bearer key to their own host,
+ * so this is a credential boundary, not a UI preference.
+ */
+export async function requireOwnerRole(): Promise<void> {
+	const { locals, url } = getRequestEvent();
+	if (!locals.session || !locals.user) {
+		redirectToLogin(url.pathname, url.search);
+	}
+	const context = adminContextFor(locals.user);
+	if (!context) {
+		redirectToLogin(url.pathname, url.search);
+	}
+	if (context.role !== 'owner') {
+		error(403, { message: 'Owner permission required.' });
+	}
+}
+
+/**
+ * AI use guard (v3 Q8). Today this is owner/admin; the named seam exists so a
+ * per-user `ai.use` grant can replace the role check without touching callers.
+ */
+export async function requireAiUse(): Promise<void> {
+	await requireAdminRole();
+}
+
 /** Comment queue guard: `comment: ['review']` capability (B2, ledger §4.15). */
 export async function requireCommentReviewer() {
 	const { locals, url } = getRequestEvent();

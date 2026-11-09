@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { AI_PROVIDER_KINDS, type AiProviderKind } from '$lib/utils/ai-meta';
 import { m } from '$lib/paraglide/messages';
+import { defaultBaseUrl } from '../ai/providers.ts';
+import { isPrivateHost, resolvePublicAddresses } from '../security/ssrf-guard.ts';
 
 const envNamePattern = /^AI_[A-Z0-9_]+$/;
 
@@ -152,5 +154,142 @@ export async function testProviderConnection(
 		}
 		const message = caught instanceof Error ? caught.message : String(caught);
 		return { ok: false, message: m.admin_settings_ai_test_failed({ message: message }) };
+	}
+}
+
+export interface ModelDiscoveryResult {
+	ok: boolean;
+	models: string[];
+	message: string;
+}
+
+const MODELS_TIMEOUT_MS = 8000;
+const MODELS_MAX_CHARS = 512 * 1024;
+
+/**
+ * Fetch `/models` for an OpenAI-compatible provider. Same SSRF posture as the
+ * runtime probe: private addresses are refused unless the host is on the
+ * explicit `AI_ALLOW_PRIVATE_HOSTS` allowlist (local Ollama / vLLM / LiteLLM).
+ * Never throws - failures come back as `{ ok: false }` with readable copy.
+ */
+export async function discoverProviderModels(
+	provider: ProviderTarget,
+	getKey: (name: string) => string | undefined,
+	options: { allowPrivateHosts?: string[]; fetchImpl?: FetchLike } = {}
+): Promise<ModelDiscoveryResult> {
+	if (provider.kind === 'deepl') {
+		return { ok: false, models: [], message: m.admin_settings_ai_refresh_unsupported() };
+	}
+	if (provider.kind === 'custom' && !provider.baseUrl?.trim()) {
+		return { ok: false, models: [], message: m.admin_settings_ai_err_custom_base_url() };
+	}
+	const base = (provider.baseUrl?.trim() || defaultBaseUrl(provider.kind)).replace(/\/+$/, '');
+	let url: URL;
+	try {
+		url = new URL(`${base}/models`);
+	} catch {
+		return { ok: false, models: [], message: m.admin_settings_ai_err_base_url_format() };
+	}
+	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+		return { ok: false, models: [], message: m.admin_settings_ai_err_base_url_format() };
+	}
+	const host = url.hostname.toLowerCase();
+	const allow = (options.allowPrivateHosts ?? [])
+		.map((entry) => entry.trim().toLowerCase())
+		.filter(Boolean);
+	const privateAllowed = allow.some((entry) => host === entry || host.endsWith(`.${entry}`));
+	if (isPrivateHost(host) && !privateAllowed) {
+		return {
+			ok: false,
+			models: [],
+			message: m.admin_settings_ai_private_blocked({ host })
+		};
+	}
+	try {
+		if (!privateAllowed) {
+			const addresses = await resolvePublicAddresses(host);
+			if (!addresses) {
+				return {
+					ok: false,
+					models: [],
+					message: m.admin_settings_ai_private_blocked({ host })
+				};
+			}
+		}
+	} catch {
+		return {
+			ok: false,
+			models: [],
+			message: m.admin_settings_ai_dns_failed({ host })
+		};
+	}
+
+	const headers: Record<string, string> = {};
+	const key = provider.apiKeyEnv ? getKey(provider.apiKeyEnv) : undefined;
+	if (key) headers.authorization = `Bearer ${key}`;
+
+	try {
+		const response = await (options.fetchImpl ?? fetch)(url.toString(), {
+			headers,
+			signal: AbortSignal.timeout(MODELS_TIMEOUT_MS)
+		});
+		if (!response.ok) {
+			return {
+				ok: false,
+				models: [],
+				message: m.admin_settings_ai_test_failed({ message: `HTTP ${response.status}` })
+			};
+		}
+		const text = await response.text();
+		if (text.length > MODELS_MAX_CHARS) {
+			return {
+				ok: false,
+				models: [],
+				message: m.admin_settings_ai_test_failed({ message: 'response too large' })
+			};
+		}
+		const parsed = JSON.parse(text) as unknown;
+		const record = parsed as { data?: unknown; models?: unknown };
+		const items = Array.isArray(record.data)
+			? record.data
+			: Array.isArray(record.models)
+				? record.models
+				: [];
+		const ids = [
+			...new Set(
+				items
+					.map((item) => {
+						if (typeof item === 'string') return item;
+						if (item && typeof item === 'object') {
+							const value = item as { id?: unknown; name?: unknown; model?: unknown };
+							const id = value.id ?? value.name ?? value.model;
+							return typeof id === 'string' ? id : '';
+						}
+						return '';
+					})
+					.map((id) => id.trim())
+					.filter(Boolean)
+			)
+		].sort();
+		if (ids.length === 0) {
+			return { ok: true, models: [], message: m.admin_settings_ai_refresh_empty() };
+		}
+		return {
+			ok: true,
+			models: ids,
+			message: m.admin_settings_ai_refresh_ok({ count: ids.length })
+		};
+	} catch (caught) {
+		const name = caught instanceof Error ? caught.name : '';
+		if (name === 'TimeoutError' || name === 'AbortError') {
+			return { ok: false, models: [], message: m.admin_settings_ai_test_timeout() };
+		}
+		return {
+			ok: false,
+			models: [],
+			message: m.admin_settings_ai_test_failed({
+				message: caught instanceof Error ? caught.message : String(caught)
+			})
+		};
 	}
 }

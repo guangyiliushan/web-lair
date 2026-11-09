@@ -1,8 +1,9 @@
 import { fail } from '@sveltejs/kit';
 import { m } from '$lib/paraglide/messages';
-import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { comments } from '$lib/server/db/content/comment.schema';
+import { commentModerationEvents } from '$lib/server/db/content/comment-moderation-event.schema';
 import { notes } from '$lib/server/db/content/note.schema';
 import { pages } from '$lib/server/db/content/page.schema';
 import { posts } from '$lib/server/db/content/post.schema';
@@ -103,6 +104,35 @@ export const load: PageServerLoad = async (event) => {
 		};
 	});
 
+	const ids = entries.map((entry) => entry.id);
+	const moderationRows =
+		ids.length > 0
+			? await db
+					.select({
+						id: commentModerationEvents.id,
+						commentId: commentModerationEvents.commentId,
+						source: commentModerationEvents.source,
+						ruleId: commentModerationEvents.ruleId,
+						outcome: commentModerationEvents.outcome,
+						applied: commentModerationEvents.applied,
+						score: commentModerationEvents.score,
+						detail: commentModerationEvents.detail,
+						createdAt: commentModerationEvents.createdAt
+					})
+					.from(commentModerationEvents)
+					.where(inArray(commentModerationEvents.commentId, ids))
+					.orderBy(desc(commentModerationEvents.createdAt))
+			: [];
+	const moderationByComment = new Map<string, typeof moderationRows>();
+	for (const row of moderationRows) {
+		const list = moderationByComment.get(row.commentId) ?? [];
+		list.push(row);
+		moderationByComment.set(row.commentId, list);
+	}
+	const withModeration = entries.map((entry) => ({
+		...entry,
+		moderation: moderationByComment.get(entry.id) ?? []
+	}));
 	const grouped = await db
 		.select({ state: comments.state, count: sql<number>`count(*)::int` })
 		.from(comments)
@@ -116,7 +146,7 @@ export const load: PageServerLoad = async (event) => {
 		}
 	}
 
-	return { state, entries, counts };
+	return { state, entries: withModeration, counts };
 };
 
 export const actions: Actions = {
@@ -178,7 +208,11 @@ export const actions: Actions = {
 			.where(
 				and(
 					inArray(comments.id, ids),
-					eq(comments.state, 'pending'),
+					// Approve may also restore a rule-rejected row; reject stays
+					// pending-only (a decided row is not re-rejectable).
+					decision === 'approve'
+						? inArray(comments.state, ['pending', 'rejected'])
+						: eq(comments.state, 'pending'),
 					eq(comments.isDeleted, false),
 					or(...conditions)
 				)

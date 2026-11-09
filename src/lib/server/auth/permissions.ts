@@ -22,7 +22,11 @@ import {
 export const statement = {
 	...adminStatements,
 	...orgStatements,
-	comment: ['review', 'approve', 'reject', 'delete']
+	comment: ['review', 'approve', 'reject', 'delete'],
+	// AI v3 Q8: `use` = trigger model calls; `manage` = provider endpoints,
+	// budget and the price table. Site-level roles only; org roles do not grant
+	// AI control.
+	ai: ['use', 'manage']
 } as const;
 
 export const ac = createAccessControl(statement);
@@ -30,18 +34,21 @@ export const ac = createAccessControl(statement);
 /** Site owner: everything an admin can do, plus impersonating admins. */
 export const ownerRole = ac.newRole({
 	...adminAc.statements,
-	user: [...adminAc.statements.user, 'impersonate-admins']
+	user: [...adminAc.statements.user, 'impersonate-admins'],
+	ai: ['use', 'manage']
 });
 
 /** Site admin: full user/session management. */
 export const adminRole = ac.newRole({
-	...adminAc.statements
+	...adminAc.statements,
+	ai: ['use']
 });
 
 /** Regular user: no global control. */
 export const userRole = ac.newRole({
 	user: [],
-	session: []
+	session: [],
+	ai: []
 });
 
 /**

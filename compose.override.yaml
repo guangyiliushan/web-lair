@@ -24,6 +24,12 @@ services:
       - '127.0.0.1:6379:6379'
     networks: [internal, devhost]
 
+  whisper:
+    # Host port 9100: 9000/9001 are already RustFS (S3 + console). The app on
+    # the host reaches Whisper at http://127.0.0.1:9100.
+    ports:
+      - '127.0.0.1:9100:9000'
+
 networks:
   devhost:
     driver: bridge

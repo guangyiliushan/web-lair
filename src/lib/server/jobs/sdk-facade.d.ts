@@ -91,12 +91,15 @@ export declare function asc(column: any): any;
 export declare const jobRuns: any;
 export declare const activities: any;
 export declare const webhookDeliveries: any;
+/** Admin assistant conversations (the `jobs.prune` retention window). */
+export declare const aiAgentConversations: any;
+/** AI call ledger (the `jobs.prune` 24-month window). */
+export declare const aiUsage: any;
 /** Subscription rows (double opt-in state machine; `subscriptions.sweep`). */
 export declare const subscriptions: any;
 
 /** Friend-link checker services (links line). */
-export declare function runLinkCheck(input: any): Promise<any>;
-export declare function deriveAcceptedHosts(origin: string, accepted: string[]): string[];
+export declare function runLinkCheck(input: any): Promise<any>;export declare function deriveAcceptedHosts(origin: string, accepted: string[]): string[];
 export declare function publicOrigin(): string;
 
 /** Four-platform projects sync (projects line). */
@@ -107,3 +110,10 @@ export declare function runJobsTypecheck(options?: {
 	dataDir?: string;
 	maxIssues?: number;
 }): Promise<any>;
+
+/** AI runtime (M2): translation / summary / comment-review scanners. They
+ * load their heavy modules lazily inside the job run. */
+export declare function runTranslationJob(ctx: JobContext): Promise<void>;
+export declare function runSummaryJob(ctx: JobContext): Promise<void>;
+export declare function runCommentReviewJob(ctx: JobContext): Promise<void>;
+export declare function runTranslationsPrune(ctx: JobContext, now?: Date): Promise<number>;

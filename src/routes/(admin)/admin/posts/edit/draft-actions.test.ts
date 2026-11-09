@@ -15,9 +15,8 @@ const { dbMock, switchState, syncCheck } = vi.hoisted(() => ({
 		deleteBatches: [] as unknown[][],
 		updates: [] as Record<string, unknown>[]
 	},
-	syncCheck: vi.fn<
-		(tx: unknown, ref: { type: string; id: string }, next: unknown[]) => Promise<void>
-	>()
+	syncCheck:
+		vi.fn<(tx: unknown, ref: { type: string; id: string }, next: unknown[]) => Promise<void>>()
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
@@ -27,6 +26,7 @@ vi.mock('$lib/server/config/options-registry', () => ({
 	getOption: vi.fn(async () => 'en'),
 	OPTION_LANGS: ['en', 'zh-cn', 'ja']
 }));
+vi.mock('$lib/server/services/writer-lang', () => ({ resolveWriterLang: vi.fn(async () => 'en') }));
 vi.mock('$lib/server/services/post-drafts', () => ({
 	saveDraftWork: vi.fn(),
 	publishDraft: vi.fn(),
@@ -181,7 +181,9 @@ describe('editor actions (P2)', () => {
 				draftId: DRAFT_ID,
 				postId: POST_ID,
 				expectedVersion: 3,
-				lang: null, // bogus language is not forwarded
+				// A bogus language is not forwarded; the action asks the writer
+				// resolver instead of letting the service guess a base locale.
+				lang: 'en',
 				autosave: true,
 				author: 'user-1',
 				payload: expect.objectContaining({ slug: 's', title: 'T' })
@@ -199,7 +201,7 @@ describe('editor actions (P2)', () => {
 		});
 		await callAction('save', { draftId: DRAFT_ID, autosave: '0', draftVersion: 'abc' });
 		expect(saveMock).toHaveBeenCalledWith(
-			expect.objectContaining({ autosave: false, expectedVersion: null })
+			expect.objectContaining({ autosave: false, expectedVersion: null, lang: 'en' })
 		);
 	});
 

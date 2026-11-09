@@ -30,6 +30,26 @@ describe('admin plugin roles (B1)', () => {
 	});
 });
 
+describe('AI roles (v3 Q8)', () => {
+	const aiActions = (role: { statements: Record<string, unknown> }) =>
+		(role.statements.ai as readonly string[] | undefined) ?? [];
+
+	it('exposes use/manage on the shared statement', () => {
+		expect(statement.ai).toEqual(['use', 'manage']);
+	});
+
+	it('owner manages + uses, admin only uses, user neither', () => {
+		expect(aiActions(ownerRole)).toEqual(['use', 'manage']);
+		expect(aiActions(adminRole)).toEqual(['use']);
+		expect(aiActions(userRole)).toEqual([]);
+	});
+
+	it('org roles do not grant AI control', () => {
+		expect(aiActions(orgOwnerRole)).toEqual([]);
+		expect(aiActions(orgAdminRole)).toEqual([]);
+	});
+});
+
 describe('organization plugin roles (B2, B2.1 review fix)', () => {
 	const commentActions = (role: { statements: Record<string, unknown> }) =>
 		(role.statements.comment as readonly string[] | undefined) ?? [];

@@ -122,24 +122,28 @@ async function typeIntoEditor(page: Page, text: string) {
 	}).toPass({ timeout: 25000 });
 }
 
-async function pickCategory(page: Page) {
-	const sheetOpen = async () => await page.locator('#settings-category').isVisible();
+/**
+ * The metadata bar starts collapsed, so a test that touches its fields has to
+ * open it first. Hydration-tolerant: an early click lands on inert SSR markup.
+ */
+async function expandMetaBar(page: Page) {
 	await expect(async () => {
-		if (!(await sheetOpen())) {
-			await page.getByRole('button', { name: '文章设置' }).click();
+		if (!(await page.locator('#post-category').isVisible())) {
+			await page.getByRole('button', { name: '展开文章设置' }).click({ timeout: 2000 });
 		}
-		await expect(page.locator('#settings-category')).toBeVisible({ timeout: 10000 });
-	}).toPass({ timeout: 20000 });
-	await expect(async () => {
-		await page.locator('#settings-category').click();
-		await page
-			.locator('[data-slot="select-item"]')
-			.filter({ hasText: CATEGORY_NAME })
-			.click({ timeout: 3000 });
-		await expect(page.locator('#settings-category')).toContainText(CATEGORY_NAME, {
-			timeout: 2000
-		});
-	}).toPass({ timeout: 25000 });
+		await expect(page.locator('#post-category')).toBeVisible({ timeout: 2000 });
+	}).toPass({ timeout: 30000 });
+}
+
+async function pickCategory(page: Page) {
+	await expandMetaBar(page);
+	const trigger = page.locator('#post-category');
+	await trigger.click();
+	await expect(trigger).toHaveAttribute('aria-expanded', 'true', { timeout: 3000 });
+	const option = page.locator('[data-slot="select-item"]').filter({ hasText: CATEGORY_NAME });
+	await expect(option).toBeVisible({ timeout: 3000 });
+	await option.click();
+	await expect(trigger).toContainText(CATEGORY_NAME, { timeout: 3000 });
 	await page.keyboard.press('Escape');
 }
 

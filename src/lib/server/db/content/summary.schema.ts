@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { check, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { posts } from './post.schema';
+import { posts } from './post.schema.ts';
 
 /**
  * AI summary ledger (AI-1, ledger §14.3): one row per generated candidate =

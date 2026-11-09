@@ -28,7 +28,12 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const SCHEDULES = [
 	{ job: 'jobs.prune', cron: '0 3 * * *' },
 	{ job: 'system.resources', cron: '*/15 * * * *' },
-	{ job: 'subscriptions.sweep', cron: '30 4 * * *' }
+	{ job: 'subscriptions.sweep', cron: '30 4 * * *' },
+	// M2 AI scanners: cheap no-ops when there is no work (pending translation
+	// rows, auto-summary off, or no pending comments).
+	{ job: 'ai.translate', cron: '*/10 * * * *' },
+	{ job: 'ai.summarize', cron: '0 4 * * *' },
+	{ job: 'ai.comment-review', cron: '*/15 * * * *' }
 ] as const;
 
 async function main(): Promise<void> {

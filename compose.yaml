@@ -78,13 +78,51 @@ services:
     networks: [internal]
     logging: *default-logging
 
+  whisper:
+    # CPU faster-whisper service. Custom slim image: the public all-in-one
+    # images are ~2.5 GB; this one installs only ctranslate2 + FastAPI.
+    build:
+      context: ./deploy/whisper
+      args:
+        HTTP_PROXY: ${WHISPER_BUILD_PROXY:-}
+        HTTPS_PROXY: ${WHISPER_BUILD_PROXY:-}
+    image: web-lair-whisper:1
+    restart: always
+    security_opt:
+      - 'no-new-privileges:true'
+    environment:
+      ASR_MODEL: ${WHISPER_MODEL:-base}
+      ASR_DEVICE: cpu
+    volumes:
+      - whispercache:/root/.cache
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health', timeout=3).read()"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    mem_limit: 3g
+    networks: [internal, egress]
+    logging: *default-logging
+
 networks:
   # Data services have no egress; only `app` (compose.prod.yaml) bridges inward
   # and outward. Dev adds `devhost` in compose.override.yaml so host-side
   # `pnpm dev` can reach the loopback port bindings.
   internal:
     internal: true
+  # Egress for services that must fetch their own artifacts (Whisper model
+  # weights). No ports are published here; it is an outbound-only bridge.
+  egress:
+    driver: bridge
 
 volumes:
   pgdata:
   rustfsdata:
+  whispercache:

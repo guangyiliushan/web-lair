@@ -69,7 +69,11 @@ describe('options registry (AI-1.1)', () => {
 			[
 				'ai.assignments',
 				'ai.budget',
+				'ai.chat',
+				'ai.crawl',
+				'ai.pricing',
 				'ai.styleGuide',
+				'ai.summary',
 				'ai.translation',
 				'comments.moderation',
 				'friends.apply',
@@ -86,7 +90,8 @@ describe('options registry (AI-1.1)', () => {
 				'site.languages',
 				'site.owner',
 				'site.ownerStatus',
-				'site.timezone'
+				'site.timezone',
+				'translations.retention'
 			].sort()
 		);
 	});
@@ -125,14 +130,17 @@ describe('options registry (AI-1.1)', () => {
 		state.selectRows = [[]];
 		await expect(getOption('ai.translation')).resolves.toEqual({
 			minChars: 300,
-			notesAuto: true
+			notesAuto: true,
+			defaultMode: 'review'
 		});
 	});
 
 	it('rejects non-positive or fractional ai.translation thresholds', async () => {
-		await expect(setOption('ai.translation', { minChars: 0, notesAuto: true })).rejects.toThrow();
 		await expect(
-			setOption('ai.translation', { minChars: 12.5, notesAuto: true })
+			setOption('ai.translation', { minChars: 0, notesAuto: true, defaultMode: 'review' })
+		).rejects.toThrow();
+		await expect(
+			setOption('ai.translation', { minChars: 12.5, notesAuto: true, defaultMode: 'review' })
 		).rejects.toThrow();
 		// notesAuto is required (omitting it must not fall through as undefined).
 		await expect(setOption('ai.translation', { minChars: 300 } as never)).rejects.toThrow();
@@ -141,11 +149,11 @@ describe('options registry (AI-1.1)', () => {
 
 	it('accepts and persists a valid ai.translation write (positive control)', async () => {
 		state.selectRows = [];
-		await setOption('ai.translation', { minChars: 450, notesAuto: false });
+		await setOption('ai.translation', { minChars: 450, notesAuto: false, defaultMode: 'review' });
 		expect(state.insertCalls).toHaveLength(1);
 		expect(state.insertCalls[0].values).toEqual({
 			name: 'ai.translation',
-			value: { minChars: 450, notesAuto: false }
+			value: { minChars: 450, notesAuto: false, defaultMode: 'review' }
 		});
 	});
 

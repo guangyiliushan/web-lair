@@ -4,6 +4,7 @@ import type { ListColumn } from './list-column';
 import { columns as drafts } from '../../../../routes/(admin)/admin/drafts/columns';
 import { columns as files } from '../../../../routes/(admin)/admin/files/columns';
 import { columns as friends } from '../../../../routes/(admin)/admin/friends/columns';
+import { columns as ai } from '../../../../routes/(admin)/admin/ai/columns';
 import { columns as moments } from '../../../../routes/(admin)/admin/moments/columns';
 import { columns as notes } from '../../../../routes/(admin)/admin/notes/columns';
 import { columns as pages } from '../../../../routes/(admin)/admin/pages/columns';
@@ -38,7 +39,8 @@ const LISTS: Array<[string, ListColumn[]]> = [
 	['drafts', drafts as ListColumn[]],
 	['pages', pages as ListColumn[]],
 	['files', files as ListColumn[]],
-	['friends', friends as ListColumn[]]
+	['friends', friends as ListColumn[]],
+	['ai', ai as ListColumn[]]
 ];
 
 /** The one column that absorbs the leftover width. */

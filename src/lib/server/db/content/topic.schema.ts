@@ -9,7 +9,7 @@ import {
 	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
-import type { LocalizedText } from './localized';
+import type { LocalizedText } from './localized.ts';
 
 /**
  * Same label model as `categories` (ledger §9.18.4 as amended 2026-10-23):

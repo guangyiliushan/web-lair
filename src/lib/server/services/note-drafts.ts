@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { drafts, notes } from '$lib/server/db/content';
+import { drafts, notes, translations } from '$lib/server/db/content';
 import { slugTrackers } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { keysFromContent, syncFileReferences } from './file-references';
@@ -511,6 +511,20 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 				.limit(1)
 				.for('update');
 			if (!lockedDraft) return { kind: 'not-found' as const };
+
+			// Same guard as posts: an AI translation's working copy cannot be
+			// published before the workbench accept step.
+			const [unaccepted] = await tx
+				.select({ id: translations.id })
+				.from(translations)
+				.where(and(eq(translations.targetNoteId, locked.id), ne(translations.status, 'accepted')))
+				.limit(1);
+			if (unaccepted) {
+				return {
+					kind: 'invalid' as const,
+					errors: { form: m.admin_editor_err_translation_not_accepted() } as Record<string, string>
+				};
+			}
 
 			const finalTitle = lockedDraft.title.trim();
 			const finalSlug = (lockedDraft.slug ?? '').trim();

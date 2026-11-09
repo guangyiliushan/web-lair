@@ -92,6 +92,42 @@
 </script>
 
 <div class="space-y-8">
+	<!-- Section: Content language (real feature · A4) -->
+	<section>
+		<div class="mb-4 flex items-center gap-2">
+			<IconGlobe class="size-5 text-muted-foreground" />
+			<h3 class="text-base font-semibold">{m.admin_settings_account_content_lang()}</h3>
+		</div>
+		<p class="mb-3 text-sm text-muted-foreground">
+			{m.admin_settings_account_content_lang_desc()}
+		</p>
+
+		{#if actionForm?.message && actionForm.step === 'contentLang'}
+			<div class="mb-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm" role="status">
+				<IconAlertCircle class="size-4 shrink-0" />
+				<span>{actionForm.message}</span>
+			</div>
+		{/if}
+
+		<form method="post" action="?/contentLang" use:enhance class="flex items-end gap-2">
+			<select
+				name="lang"
+				aria-label={m.admin_settings_account_content_lang()}
+				class="h-8 min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+			>
+				<option value="" selected={(data.defaultLang ?? '') === ''}
+					>{m.admin_settings_account_content_lang_site({ lang: data.siteDefaultLang })}</option
+				>
+				{#each data.langs as lang (lang)}
+					<option value={lang} selected={data.defaultLang === lang}>{lang}</option>
+				{/each}
+			</select>
+			<Button type="submit">{m.admin_common_save()}</Button>
+		</form>
+	</section>
+
+	<Separator.Root />
+
 	<!-- Section: Two-step verification (real feature · B3) -->
 	<section>
 		<div class="mb-4 flex items-center justify-between">
@@ -107,7 +143,7 @@
 		</div>
 		<p class="mb-3 text-sm text-muted-foreground">{m.admin_settings_2fa_desc()}</p>
 
-		{#if actionForm?.message}
+		{#if actionForm?.message && actionForm.step !== 'contentLang'}
 			<div class="mb-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm" role="status">
 				<IconAlertCircle class="size-4 shrink-0" />
 				<span>{actionForm.message}</span>

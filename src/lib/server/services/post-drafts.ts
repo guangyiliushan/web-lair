@@ -1,7 +1,15 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { categories, drafts, postRevisions, postTags, posts, tags } from '$lib/server/db/content';
+import {
+	categories,
+	drafts,
+	postRevisions,
+	postTags,
+	posts,
+	tags,
+	translations
+} from '$lib/server/db/content';
 import {
 	normalizeProvenance,
 	postProvenanceFromPayload,
@@ -141,6 +149,16 @@ export async function loadDraftByPostId(postId: string): Promise<DraftRow | null
 	return row ?? null;
 }
 
+/** The fallback bucket for a first save that carries no category choice. */
+async function defaultCategoryId(): Promise<string | null> {
+	const [row] = await db
+		.select({ id: categories.id })
+		.from(categories)
+		.where(eq(categories.isDefault, true))
+		.limit(1);
+	return row?.id ?? null;
+}
+
 /* ── Save (autosave + manual share one path) ─────────────────────────── */
 
 export type SaveDraftResult =
@@ -152,6 +170,7 @@ export type SaveDraftResult =
 			server: { draftId: string | null; version: number; updatedAt: Date | null };
 	  }
 	| { kind: 'needs-category' }
+	| { kind: 'needs-default-category' }
 	| { kind: 'not-found' };
 
 export interface SaveDraftInput {
@@ -258,9 +277,11 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 	}
 
 	// Brand-new article: the first save materializes the placeholder posts row
-	// (§9.10 - WP auto-draft style). The posts row requires a category, so the
-	// editor holds the session in memory until one is picked.
-	if (!payload.categoryId) return { kind: 'needs-category' };
+	// (§9.10 - WP auto-draft style). The posts row requires a category, so an
+	// absent choice falls back to the server-side default bucket - never to a
+	// client-supplied stand-in.
+	const categoryId = payload.categoryId || (await defaultCategoryId());
+	if (!categoryId) return { kind: 'needs-default-category' };
 	const lang = input.lang ?? 'en';
 
 	for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -272,7 +293,7 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 						title: payload.title,
 						slug: tempSlug(),
 						lang,
-						categoryId: payload.categoryId,
+						categoryId,
 						status: 'draft',
 						version: 0,
 						// posts.updated_at has no DB default either (see §9.7 note above).
@@ -285,6 +306,9 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 						refType: 'post',
 						refId: createdPost.id,
 						...draftUpdateSet(payload),
+						// The resolved fallback must land on the working copy too:
+						// `draftUpdateSet` turns an empty pick into `null`.
+						categoryId,
 						version: 1,
 						baseVersion: 0,
 						author: input.author ?? null,
@@ -323,8 +347,17 @@ async function updateExistingDraft(
 ): Promise<SaveDraftResult> {
 	const postId = draft.refId ?? '';
 
+	// An empty posted category means "keep what is stored", never "clear it":
+	// both the hash and the write set must see the effective value, otherwise
+	// a repeat empty-category save would rewrite `categoryId: null` and
+	// publish would then refuse for a missing category.
+	const effective: NormalizedDraft = {
+		...payload,
+		categoryId: payload.categoryId || (draft.categoryId ?? '')
+	};
+
 	// "hash 不变不写" - identical payloads never bump the version.
-	if (hashRow(draft) === hashNormalized(payload)) {
+	if (hashRow(draft) === hashNormalized(effective)) {
 		return { kind: 'unchanged', draftId: draft.id, version: draft.version, postId };
 	}
 
@@ -358,7 +391,7 @@ async function updateExistingDraft(
 	const updated = await db.transaction(async (tx) => {
 		const rows = await tx
 			.update(drafts)
-			.set({ ...draftUpdateSet(payload), version: draft.version + 1, updatedAt: new Date() })
+			.set({ ...draftUpdateSet(effective), version: draft.version + 1, updatedAt: new Date() })
 			.where(and(eq(drafts.id, draft.id), eq(drafts.version, expected)))
 			.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
 		if (rows.length > 0) {
@@ -469,6 +502,21 @@ export async function publishDraft(
 				.limit(1)
 				.for('update');
 			if (!lockedDraft) return { kind: 'not-found' as const };
+
+			// AI-generated translations must be accepted in the workbench before
+			// their working copy can be published. A manual translation has no
+			// `translations` row, so the historical copy-prefill path stays open.
+			const [unaccepted] = await tx
+				.select({ id: translations.id })
+				.from(translations)
+				.where(and(eq(translations.targetPostId, locked.id), ne(translations.status, 'accepted')))
+				.limit(1);
+			if (unaccepted) {
+				return {
+					kind: 'invalid' as const,
+					errors: { form: m.admin_editor_err_translation_not_accepted() } as Record<string, string>
+				};
+			}
 
 			// Optimistic base check: fail when the article moved on meanwhile
 			// (another tab published), never silently overwrite (§9.10, 情景16).

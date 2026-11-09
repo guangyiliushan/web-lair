@@ -113,7 +113,7 @@
 					<label
 						class="flex cursor-pointer items-start gap-3 border-b px-4 py-3.5 hover:bg-muted/50"
 					>
-						{#if data.state === 'pending'}
+						{#if data.state !== 'approved'}
 							<input type="checkbox" name="ids" value={entry.id} class="mt-1" />
 							<!-- The edited_at this reviewer saw: the review CAS runs on it,
 							     so an edit made after this page loaded voids a stale approve
@@ -138,6 +138,22 @@
 								>
 							</div>
 							<p class="mt-1.5 text-sm whitespace-pre-wrap text-muted-foreground">{entry.text}</p>
+							{#if entry.moderation.length > 0}
+								<div class="mt-1.5 flex flex-wrap gap-1">
+									{#each entry.moderation as signal (signal.id)}
+										<span
+											class="rounded-full border px-1.5 py-0.5 text-[10px] {signal.source === 'ai'
+												? 'border-sky-500/40 text-sky-700 dark:text-sky-300'
+												: 'border-border text-muted-foreground'}"
+											title={signal.detail ? JSON.stringify(signal.detail) : undefined}
+										>
+											{signal.source === 'ai' ? 'AI' : (signal.ruleId ?? 'rule')}
+											· {signal.outcome}{signal.applied ? '' : ' (shadow)'}
+											{#if signal.score}· {Number(signal.score).toFixed(2)}{/if}
+										</span>
+									{/each}
+								</div>
+							{/if}
 							{#if entry.anchorGated}
 								<p class="mt-1.5 text-xs text-muted-foreground" data-slot="comment-anchor-gated">
 									{m.admin_comments_anchor_gated()}
@@ -202,23 +218,25 @@
 				{/each}
 			</div>
 
-			{#if data.state === 'pending'}
+			{#if data.state !== 'approved'}
 				<div
 					class="flex shrink-0 items-center justify-end gap-2 border-t bg-surface-card px-4 py-3"
 				>
 					<Button type="submit" name="decision" value="approve" size="sm" class="gap-1">
 						<IconCheck class="size-4" />{m.admin_comments_approve()}
 					</Button>
-					<Button
-						type="submit"
-						name="decision"
-						value="reject"
-						variant="outline"
-						size="sm"
-						class="gap-1 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-					>
-						<IconTrash class="size-4" />{m.admin_comments_reject()}
-					</Button>
+					{#if data.state === 'pending'}
+						<Button
+							type="submit"
+							name="decision"
+							value="reject"
+							variant="outline"
+							size="sm"
+							class="gap-1 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+						>
+							<IconTrash class="size-4" />{m.admin_comments_reject()}
+						</Button>
+					{/if}
 				</div>
 			{/if}
 		</form>

@@ -19,6 +19,7 @@ import {
 } from '$lib/server/services/note-drafts';
 import { NOTE_MOODS } from '$lib/utils/note-meta';
 import { isUuid } from '$lib/utils/uuid';
+import { enqueueTranslationsAfterPublish } from '$lib/server/services/translations';
 import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
@@ -117,6 +118,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			title: row.title,
 			slug: row.slug,
 			lang: row.lang,
+			translatedFromNoteId: row.translatedFromNoteId,
 			status: row.status,
 			tz: row.tz,
 			publishedAt: row.publishedAt,
@@ -170,7 +172,19 @@ export const load: PageServerLoad = async ({ url }) => {
 				iconName: 'arrow-left',
 				variant: 'outline',
 				href: '/admin/notes'
-			}
+			},
+			// Translation calls record `related_id = sourceId`, so a translation
+			// must link to its source note or the ledger looks empty.
+			...(note
+				? [
+						{
+							label: m.admin_ai_usage_action(),
+							iconName: 'chart-bar' as const,
+							variant: 'outline' as const,
+							href: `/admin/ai?relatedType=note&relatedId=${note.translatedFromNoteId ?? note.id}`
+						}
+					]
+				: [])
 		],
 		topics: allTopics,
 		langs,
@@ -297,6 +311,7 @@ export const actions: Actions = {
 		const result = await publishNoteDraft(saved.draftId);
 		switch (result.kind) {
 			case 'published':
+				await enqueueTranslationsAfterPublish('note', result.noteId);
 				throw redirect(303, `/admin/notes/edit?id=${result.noteId}&published=1`);
 			case 'invalid':
 				// Publish-side validation keeps the draft (it is still on disk).

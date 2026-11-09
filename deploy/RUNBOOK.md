@@ -49,7 +49,7 @@ $EDITOR .env      # see §1.1 for the required keys
 | `SUBSCRIBE_TOKEN_TTL_DAYS` / `SUBSCRIBE_HMAC_KEY`     | see §1.2 (confirmation-link lifetime + per-address cap key)                                                       |
 | `SUBSCRIBE_TOKEN_SECRET`                              | see §1.2 (derives the mailed confirmation token; required before the first start)                                 |
 | `SUPPRESSION_HMAC_KEY` / `MAIL_EVENTS_HMAC_KEY`       | see §8 (suppression list hash master key + bounce/complaint webhook key)                                          |
-| `SUPPRESSION_HMAC_KEY_VERSION`                        | see §8 (active suppression key version; default 1, gated by `db:verify-suppression-version`)                       |
+| `SUPPRESSION_HMAC_KEY_VERSION`                        | see §8 (active suppression key version; default 1, gated by `db:verify-suppression-version`)                      |
 | `OWNER_EMAIL` / `OWNER_PASSWORD`                      | first owner seed (`pnpm db:seed-owner` from the host, dev only)                                                   |
 | `DEADMAN_PING_URL`                                    | healthchecks.io **liveness** check (5 min); unset ⇒ the dead-man timer skips (no alarm)                           |
 | `JOBS_HEARTBEAT_URL`                                  | per-tick drain ping (Kuma push or a second healthchecks check)                                                    |
@@ -181,6 +181,7 @@ deploy/compose-prod.sh exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTG
 mv "$dump.tmp" "$dump"
 deploy/compose-prod.sh exec -T db pg_restore -l < "$dump" > /dev/null
 deploy/compose-prod.sh run --rm app node scripts/migrate.ts
+deploy/compose-prod.sh run --rm app node scripts/ensure-default-category.ts
 deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
 # Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
@@ -237,6 +238,7 @@ deploy/compose-prod.sh exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTG
 mv "$dump.tmp" "$dump"
 deploy/compose-prod.sh exec -T db pg_restore -l < "$dump" > /dev/null
 deploy/compose-prod.sh run --rm app node scripts/migrate.ts
+deploy/compose-prod.sh run --rm app node scripts/ensure-default-category.ts
 deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
 # Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
@@ -316,6 +318,10 @@ RESTORED=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"user\""')
 [ "$RESTORED" = "$USERS" ] || { echo "restored user rows=$RESTORED, expected $USERS; aborting" >&2; exit 1; }
 
+# Seed the fallback category only after the restore: running it before would
+# insert a row the dumped categories data may already carry.
+deploy/compose-prod.sh run --rm app node scripts/ensure-default-category.ts
+
 # Backfills + verification run inside the image (host has no pnpm/tsx).
 deploy/compose-prod.sh run --rm app node scripts/backfill-email-consent.ts --apply
 deploy/compose-prod.sh run --rm app node scripts/backfill-suppressions.ts --apply
@@ -338,7 +344,7 @@ Requirements/notes:
   ledger written by `migrate.ts` must remain the only row.
 - **tags are ASCII-only since 2026-10-23.** Before restoring a pre-taxonomy dump, audit
   the old rows (`select name, slug from tags where name !~ '^[A-Za-z0-9 .,+#&''()/_-]+$' or slug !~ '^[a-z0-9][a-z0-9._+~-]*$'`);
-  a legacy CJK tag name aborts the data restore *after* the schema drop (CHECKs are not
+  a legacy CJK tag name aborts the data restore _after_ the schema drop (CHECKs are not
   disabled by `session_replication_role = replica`). Rename/drop those rows in the source
   dump first, or the restore will fail with `23514`.
 - Verify output must show **49 tables / 119 indexes / 93 checks / 47 FKs**. If anything
@@ -654,7 +660,7 @@ deploy/compose-prod.sh up -d app
 **Never set the version below `max(key_version)`**: rows on a newer version
 would fall outside the read range and an opted-out address would turn mailable.
 `scripts/verify-suppression-version.ts` (run in §2 before `up -d`) exits 1 on
-that mismatch. Replacing the *master* key is not a rotation — it makes v1 rows
+that mismatch. Replacing the _master_ key is not a rotation — it makes v1 rows
 unreadable by construction; treat it as a data-loss event and keep the old key
 in the backup set if it must be retired.
 

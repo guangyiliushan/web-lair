@@ -6,7 +6,7 @@ import { firstImageFromMarkdown, plainTextExcerpt } from '$lib/utils/excerpt';
 import { noteDateLabel } from '$lib/utils/note-date';
 import { NOTE_PAGE_SIZE } from '$lib/utils/note-meta';
 import { visibleNoteCondition } from './note-visibility';
-import { resolveTaxonomyDescription, resolveTaxonomyName } from './taxonomy';
+import { resolveTaxonomyName } from './taxonomy';
 
 /**
  * Public notes read side (N1). Notes are diary entries: list cards derive

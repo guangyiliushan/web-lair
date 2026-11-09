@@ -118,7 +118,7 @@
 </form>
 
 <div class="flex h-full min-h-0 min-w-0 flex-col">
-	<main class="flex min-h-full min-w-0 flex-col bg-background">
+	<div class="flex min-h-full min-w-0 flex-col bg-background">
 		<div class="mx-auto w-full max-w-5xl shrink-0 px-3 pt-8">
 			<div class="mb-3 flex min-h-7 items-center justify-between gap-3">
 				<div class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
@@ -191,7 +191,7 @@
 				/>
 			</div>
 		</div>
-	</main>
+	</div>
 </div>
 
 <AlertDialog.Root open={leaveOpen} onOpenChange={(next) => (leaveOpen = next)}>

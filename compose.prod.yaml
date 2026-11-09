@@ -38,6 +38,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       RUSTFS_ENDPOINT: http://rustfs:9000
       VALKEY_URL: redis://valkey:6379
+      WHISPER_URL: http://whisper:9000
       DATA_DIR: /data
     volumes:
       # Host absolute path in production (backup set ②); relative default for a
@@ -49,6 +50,8 @@ services:
       rustfs:
         condition: service_healthy
       valkey:
+        condition: service_healthy
+      whisper:
         condition: service_healthy
     healthcheck:
       test:

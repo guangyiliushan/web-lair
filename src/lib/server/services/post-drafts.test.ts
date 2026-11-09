@@ -220,7 +220,13 @@ describe('saveDraftWork', () => {
 		resetState();
 	});
 
-	it('refuses a brand-new article without a category', async () => {
+	it('files a new post under the default category when none is sent', async () => {
+		const DEFAULT_CAT = 'cat-default';
+		state.selectQueue = [[{ id: DEFAULT_CAT }]]; // the is_default lookup
+		state.insertResults = [
+			[{ id: 'post-9' }],
+			[{ id: 'draft-9', version: 1, updatedAt: new Date('2026-09-26T10:00:00Z') }]
+		];
 		const result = await saveDraftWork({
 			draftId: null,
 			postId: null,
@@ -230,8 +236,29 @@ describe('saveDraftWork', () => {
 			author: null,
 			autosave: true
 		});
-		expect(result).toEqual({ kind: 'needs-category' });
+		expect(result).toMatchObject({ kind: 'saved', draftId: 'draft-9', postId: 'post-9' });
+		// The server-side default lands on the placeholder row...
+		const postInsert = state.inserts.find((entry) => entry.table === posts);
+		expect(postInsert?.values.categoryId).toBe(DEFAULT_CAT);
+		// ...and the working copy written in the same transaction agrees with it.
+		const draftInsert = state.inserts.find((entry) => entry.table === drafts);
+		expect(draftInsert?.values.categoryId).toBe(DEFAULT_CAT);
+	});
+
+	it('refuses to materialize when no category is flagged default', async () => {
+		state.selectQueue = [[]]; // the is_default lookup finds nothing
+		const result = await saveDraftWork({
+			draftId: null,
+			postId: null,
+			expectedVersion: null,
+			lang: 'en',
+			payload: payload({ categoryId: '' }),
+			author: null,
+			autosave: true
+		});
+		expect(result).toEqual({ kind: 'needs-default-category' });
 		expect(state.inserts).toHaveLength(0);
+		expect(dbMock.transaction).not.toHaveBeenCalled();
 	});
 
 	it('creates a placeholder post plus the first draft for a new article', async () => {
@@ -434,6 +461,26 @@ describe('saveDraftWork', () => {
 		expect(state.updates[0].values).toMatchObject({ version: 4, content: 'Something else' });
 		// Saving must never touch the posts rows - only the working copy does.
 		expect(state.updates.every((u) => u.table === drafts)).toBe(true);
+	});
+
+	it('keeps the stored category when a later save sends none', async () => {
+		const DEFAULT_CAT = 'cat-default';
+		const draft = { ...BASE_DRAFT, categoryId: DEFAULT_CAT };
+		state.selectQueue = [[draft]];
+		state.updateResults = [[{ id: 'draft-1', version: 4, updatedAt: new Date() }]];
+		const result = await saveDraftWork({
+			draftId: 'draft-1',
+			postId: null,
+			expectedVersion: draft.version,
+			payload: payload({ categoryId: '', content: 'Edited body' }),
+			author: null,
+			autosave: false
+		});
+		expect(result).toMatchObject({ kind: 'saved', version: 4 });
+		// An empty posted category means "keep what is stored" - never "clear it".
+		expect(state.updates.filter((u) => u.values.categoryId === null)).toHaveLength(0);
+		const draftUpdate = state.updates.find((u) => u.table === drafts);
+		expect(draftUpdate?.values.categoryId).toBe(DEFAULT_CAT);
 	});
 
 	it('lets the save through once the throttle window elapsed', async () => {

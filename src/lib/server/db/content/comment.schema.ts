@@ -11,10 +11,10 @@ import {
 	timestamp,
 	uuid
 } from 'drizzle-orm/pg-core';
-import { user } from '../auth.schema';
-import { notes } from './note.schema';
-import { pages } from './page.schema';
-import { posts } from './post.schema';
+import { user } from '../auth.schema.ts';
+import { notes } from './note.schema.ts';
+import { pages } from './page.schema.ts';
+import { posts } from './post.schema.ts';
 import type { CommentAnchor } from '$lib/utils/comment-anchor';
 
 /**

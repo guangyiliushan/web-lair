@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, eq, inArray, ne } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { getLocale, localizeHref, locales } from '$lib/paraglide/runtime';
 import { m } from '$lib/paraglide/messages';
 import { db } from '$lib/server/db';
@@ -40,6 +40,12 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			slug: posts.slug,
 			lang: posts.lang,
 			title: posts.title,
+			summary: posts.summary,
+			summaryAi: sql<boolean>`exists (
+				select 1 from summaries s
+				where s.post_id = ${posts.id} and s.lang = ${posts.lang}
+					and s.adopted_at is not null and s.summary = ${posts.summary}
+			)`,
 			content: posts.content,
 			publishedAt: posts.publishedAt,
 			updatedAt: posts.updatedAt,
@@ -233,6 +239,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			slug: row.slug,
 			lang: row.lang,
 			title: row.title,
+			summary: row.summary?.trim() || null,
+			summaryAi: Boolean(row.summaryAi),
 			date: row.publishedAt ? formatDate(row.publishedAt) : '',
 			category: resolveTaxonomyName(
 				{

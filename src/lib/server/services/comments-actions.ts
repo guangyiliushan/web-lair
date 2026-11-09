@@ -89,6 +89,12 @@ export function commentSubmitResponse(
 ): { submitted: 'pending' | 'approved' } | ActionFailure<{ message: string }> {
 	switch (result.kind) {
 		case 'created':
+			// A rule-blocked comment is stored as `rejected` for the audit trail,
+			// but the public form can only render pending/approved. Surface a
+			// neutral failure instead of pretending it was queued.
+			if (result.state === 'rejected') {
+				return fail(400, { message: m.comment_rejected() });
+			}
 			return { submitted: result.state };
 		case 'throttled':
 			return fail(429, { message: m.comment_throttled() });
@@ -120,6 +126,9 @@ export async function commentEditAction(event: RequestEvent) {
 		case 'updated':
 			// Reuses the composer flash: an edited comment re-enters review
 			// (pending) unless the author auto-approves.
+			if (result.state === 'rejected') {
+				return fail(400, { message: m.comment_rejected() });
+			}
 			return { submitted: result.state };
 		case 'throttled':
 			return fail(429, { message: m.comment_throttled() });

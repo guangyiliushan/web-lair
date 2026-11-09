@@ -35,7 +35,9 @@ export function decodeSecret(raw: string | undefined): Buffer | null {
 }
 
 export function deriveTokenFromNonce(nonce: string, secret: Buffer): string {
-	return createHmac('sha256', secret).update(TOKEN_DERIVATION_LABEL + nonce).digest('base64url');
+	return createHmac('sha256', secret)
+		.update(TOKEN_DERIVATION_LABEL + nonce)
+		.digest('base64url');
 }
 
 async function main(): Promise<void> {

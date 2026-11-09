@@ -48,6 +48,7 @@ try {
 			keyVersion: boolean;
 			taxonomy: boolean;
 			defaultCategory: boolean;
+			translationRuntime: boolean;
 		}[]
 	>`select
 		to_regclass('public.email_suppressions') is not null as suppressions,
@@ -91,7 +92,15 @@ try {
 			select 1 from information_schema.columns
 			where table_schema = 'public' and table_name = 'categories'
 				and column_name = 'is_default'
-		) as "defaultCategory"`;
+		) as "defaultCategory",
+		(
+			select count(*) = 9 from information_schema.columns
+			where table_schema = 'public' and table_name = 'translations'
+				and column_name in (
+					'runs', 'attempt', 'started_at', 'heartbeat_at', 'stage',
+					'waiting_reason', 'cancel_requested', 'progress', 'overwrite_target'
+				)
+		) as "translationRuntime"`;
 	if (!schema?.suppressions || !schema.consent || !schema.tokenHash || !schema.tokenHashIndex) {
 		console.error(
 			'[migrate] this database predates the E2 baseline (missing email_suppressions / consent_version / token_hash / token_hash index).'
@@ -134,6 +143,15 @@ try {
 		);
 		console.error(
 			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> db:ensure-categories -> verify).'
+		);
+		process.exitCode = 1;
+	}
+	if (schema?.translationRuntime === false) {
+		console.error(
+			'[migrate] this database predates the translation runtime baseline (translations is missing one of runs / attempt / started_at / heartbeat_at / stage / waiting_reason / cancel_requested / progress / overwrite_target).'
+		);
+		console.error(
+			'[migrate] the journal timestamp is unchanged, so the migrator skips the regenerated baseline; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> verify).'
 		);
 		process.exitCode = 1;
 	}

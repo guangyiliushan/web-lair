@@ -4,6 +4,7 @@ import { db } from '$lib/server/db';
 import { comments, notes, pages, posts } from '$lib/server/db/content';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isAdminRole } from '$lib/server/auth/owner';
+import { evaluateCommentModeration, recordModerationEvents } from './comment-moderation';
 import { getCache } from '$lib/server/cache';
 import { rateLimit, type CacheStore } from '$lib/server/cache/store';
 import { locales } from '$lib/paraglide/runtime';
@@ -498,7 +499,7 @@ export interface SubmitCommentInput {
 }
 
 export type SubmitCommentResult =
-	| { kind: 'created'; id: string; state: 'pending' | 'approved' }
+	| { kind: 'created'; id: string; state: 'pending' | 'approved' | 'rejected' }
 	| { kind: 'throttled'; windowSeconds: number }
 	| { kind: 'unverified' }
 	| { kind: 'empty' }
@@ -697,6 +698,12 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 			: input.targetType === 'note'
 				? { noteId: input.targetId }
 				: { pageId: input.targetId };
+	const moderation = await evaluateCommentModeration({
+		text,
+		readerId: input.user.id,
+		autoApprove
+	});
+	const state = autoApprove ? 'approved' : (moderation?.state ?? 'pending');
 	try {
 		const [created] = await db
 			.insert(comments)
@@ -706,16 +713,23 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 				author: normalizeCommentAuthor(input.author),
 				avatar: normalizeCommentAvatar(input.avatar),
 				text,
-				state: autoApprove ? 'approved' : 'pending',
+				state,
 				isOwnerReply: autoApprove,
 				parentCommentId,
 				rootCommentId,
 				anchor: anchorValue,
 				reviewedBy: autoApprove ? input.user.id : null,
+				// reviewed_at/by are human-decision columns: machine rule outcomes keep
+				// them null so the audit trail cannot read as a human review.
 				reviewedAt: autoApprove ? now : null
 			})
 			.returning({ id: comments.id, state: comments.state });
-		return { kind: 'created', id: created.id, state: created.state as 'pending' | 'approved' };
+		await recordModerationEvents(created.id, moderation);
+		return {
+			kind: 'created',
+			id: created.id,
+			state: created.state as 'pending' | 'approved' | 'rejected'
+		};
 	} catch (caught) {
 		// The target or parent row was hard-deleted between validation and
 		// insert (FK violation): surface the same unavailable outcome instead
@@ -788,7 +802,7 @@ export interface EditCommentInput {
 }
 
 export type EditCommentResult =
-	| { kind: 'updated'; state: 'pending' | 'approved' }
+	| { kind: 'updated'; state: 'pending' | 'approved' | 'rejected' }
 	| { kind: 'throttled'; windowSeconds: number }
 	| { kind: 'unverified' }
 	| { kind: 'empty' }
@@ -866,7 +880,12 @@ export async function editComment(input: EditCommentInput): Promise<EditCommentR
 
 	// Clearing reviewed_by/at keeps the queue honest: the previous decision
 	// no longer covers the new text (the review batch re-stamps an approval).
-	const state = autoApprove ? 'approved' : 'pending';
+	const moderation = await evaluateCommentModeration({
+		text,
+		readerId: input.user.id,
+		autoApprove
+	});
+	const state = autoApprove ? 'approved' : (moderation?.state ?? 'pending');
 	const updated = await db
 		.update(comments)
 		.set({
@@ -874,6 +893,8 @@ export async function editComment(input: EditCommentInput): Promise<EditCommentR
 			editedAt: now,
 			state,
 			reviewedBy: autoApprove ? input.user.id : null,
+			// reviewed_at/by are human-decision columns: machine rule outcomes keep
+			// them null so the audit trail cannot read as a human review.
 			reviewedAt: autoApprove ? now : null
 		})
 		.where(

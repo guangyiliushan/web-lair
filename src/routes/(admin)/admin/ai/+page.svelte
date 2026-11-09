@@ -1,454 +1,595 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
-	import { SvelteURLSearchParams } from 'svelte/reactivity';
+	import type { Pathname } from '$app/types';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
+	import { cn } from '$lib/utils';
 	import { Button } from '$lib/components/ui/button';
-	import { Textarea } from '$lib/components/ui/textarea';
-	import { Spinner } from '$lib/components/ui/spinner';
-	import { Badge } from '$lib/components/ui/badge';
-	import * as Tabs from '$lib/components/ui/tabs';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import * as Alert from '$lib/components/ui/alert';
+	import { Progress } from '$lib/components/ui/progress';
 	import * as Empty from '$lib/components/ui/empty';
-	import * as Field from '$lib/components/ui/field';
+	import * as Sheet from '$lib/components/ui/sheet';
 	import * as Table from '$lib/components/ui/table';
-	import * as MasterDetail from '$lib/components/admin/master-detail';
-	import IconMessages from '@tabler/icons-svelte-runes/icons/messages';
-	import IconBrain from '@tabler/icons-svelte-runes/icons/brain';
-	import IconChartBar from '@tabler/icons-svelte-runes/icons/chart-bar';
-	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
-	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
-	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
-	import IconArchive from '@tabler/icons-svelte-runes/icons/archive';
-	import IconArchiveOff from '@tabler/icons-svelte-runes/icons/archive-off';
-	import IconRobot from '@tabler/icons-svelte-runes/icons/robot';
-	import IconX from '@tabler/icons-svelte-runes/icons/x';
+	import * as ToggleGroup from '$lib/components/ui/toggle-group';
+	import * as Trace from '$lib/components/ui/trace';
+	import { ListFilter, ListTable, listColumnClass } from '$lib/components/admin/list-table';
+	import { DeleteConfirm } from '$lib/components/admin';
+	import { AI_FUNCTIONS, AI_FUNCTION_LABELS, type AiReadinessStatus } from '$lib/utils/ai-meta';
+	import { readinessCopy } from '$lib/utils/readiness-copy';
+	import {
+		LEDGER_RANGES,
+		LEDGER_STATUSES,
+		LEDGER_TASKS,
+		formatCost,
+		formatNumber,
+		formatStamp,
+		ledgerSearch,
+		relatedHref,
+		type LedgerFilters
+	} from '$lib/components/admin/ai/console-view';
+	import { cols, columns } from './columns';
+	import IconAlertTriangle from '@tabler/icons-svelte-runes/icons/alert-triangle';
+	import IconCircleCheck from '@tabler/icons-svelte-runes/icons/circle-check';
+	import IconMinus from '@tabler/icons-svelte-runes/icons/minus';
+	import IconTrashX from '@tabler/icons-svelte-runes/icons/trash-x';
 
 	let { data, form }: PageProps = $props();
 
-	type MemoryRow = PageProps['data']['memories'][number];
+	const locale = getLocale();
+	const LIST_PATH: Pathname = '/admin/ai';
 
-	const actionForm = $derived(
-		form as {
-			message?: string;
-		} | null
+	/** Owner-only ledger wipe; the dialog owns the confirmation copy. */
+	let purgeOpen = $state(false);
+
+	const selected = $derived(data.rows.find((row) => row.id === data.openRow) ?? null);
+
+	/** Share of the monthly cap spent. Uncapped months draw no meter. */
+	const meterPct = $derived(
+		data.budget.monthly > 0
+			? Math.min(100, Math.round((data.budget.spent / data.budget.monthly) * 100))
+			: 0
 	);
 
-	const selected = $derived(data.conversations.find((c) => c.id === data.selectedId) ?? null);
+	const readinessList = $derived(AI_FUNCTIONS.map((fn) => ({ fn, readiness: data.readiness[fn] })));
 
-	function switchTab(value: string | number) {
-		const params = new SvelteURLSearchParams();
-		const tab = String(value);
-		if (tab !== 'conversations') params.set('tab', tab);
-		if (tab === 'conversations' && data.selectedId) params.set('c', data.selectedId);
-		goto(`?${params.toString()}`, { keepFocus: true, noScroll: true });
+	function search(patch: Partial<LedgerFilters>): string {
+		return ledgerSearch({ ...data.filters, ...patch });
 	}
 
-	function formatDate(value: Date | string | null): string {
-		if (!value) return '—';
-		const date = value instanceof Date ? value : new Date(value);
-		return date.toLocaleString('zh-CN', { hour12: false });
+	function taskLabel(task: string): string {
+		if (task === 'transcription') return m.admin_ai_transcribe_action();
+		const labels = AI_FUNCTION_LABELS as Partial<Record<string, Record<string, string>>>;
+		return labels[task]?.[locale] ?? task;
 	}
 
-	function formatNumber(value: number | null): string {
-		if (value === null || value === undefined) return '—';
-		return value.toLocaleString('zh-CN');
+	function statusLabel(status: string): string {
+		return status === 'success' ? m.admin_ai_status_success() : m.admin_ai_status_failure();
 	}
 
-	function formatCost(value: number | null): string {
-		if (value === null || value === undefined) return '—';
-		return value.toFixed(4);
+	/** Trace renders `error` in the destructive tone and `pending` at 60%. */
+	function traceStatus(status: AiReadinessStatus): 'running' | 'error' | 'pending' | undefined {
+		if (status === 'ready') return undefined;
+		return status === 'not_wired' ? 'pending' : 'error';
 	}
 
-	/** Message payloads are jsonb; show the text when present, JSON otherwise. */
-	function messageText(content: unknown): string {
-		if (content && typeof content === 'object' && 'text' in content) {
-			const text = (content as { text?: unknown }).text;
-			if (typeof text === 'string') return text;
-		}
-		return typeof content === 'string' ? content : JSON.stringify(content ?? null);
-	}
+	const taskOptions = $derived([
+		{ value: '', label: m.admin_common_all(), search: search({ task: '' }) },
+		...LEDGER_TASKS.filter((task) => data.taskOptions.includes(task)).map((task) => ({
+			value: task,
+			label: taskLabel(task),
+			search: search({ task })
+		}))
+	]);
 
-	const roleLabels: Record<string, string> = {
-		system: m.admin_ai_role_system(),
-		user: m.admin_ai_role_user(),
-		assistant: m.admin_ai_role_assistant(),
-		tool: m.admin_ai_role_tool()
+	const statusOptions = $derived([
+		{ value: '', label: m.admin_common_all(), search: search({ status: '' }) },
+		...LEDGER_STATUSES.map((status) => ({
+			value: status,
+			label: statusLabel(status),
+			search: search({ status })
+		}))
+	]);
+
+	const providerOptions = $derived([
+		{ value: '', label: m.admin_common_all(), search: search({ provider: '' }) },
+		...data.providerOptions.map((provider) => ({
+			value: provider,
+			label: provider,
+			search: search({ provider })
+		}))
+	]);
+
+	// `ListFilter` replaces the visible column label with this string, so the
+	// unfiltered state has to *be* the label: three identical "all" pills say
+	// nothing about which column each one filters. Once a filter is on, the
+	// value takes over - the same trade-off the other admin lists make.
+	const currentTask = $derived(
+		data.filters.task ? taskLabel(data.filters.task) : m.admin_ai_col_task()
+	);
+	const currentStatus = $derived(
+		data.filters.status ? statusLabel(data.filters.status) : m.admin_common_status()
+	);
+	const currentProvider = $derived(data.filters.provider || m.admin_ai_col_model());
+
+	/** Paraglide exposes static keys only, so ranges are a closed record. */
+	const rangeLabels: Record<(typeof LEDGER_RANGES)[number], () => string> = {
+		'7d': m.admin_ai_range_7d,
+		'30d': m.admin_ai_range_30d,
+		'90d': m.admin_ai_range_90d,
+		all: m.admin_ai_range_all
 	};
 
-	// ── Memory-card dialog state ────────────────────────────────────────
-	let memoryDialogOpen = $state(false);
-	let editingMemory = $state<MemoryRow | null>(null);
-	let savingMemory = $state(false);
-	let memoryContent = $state('');
-	let deleteMemoryTarget = $state<MemoryRow | null>(null);
-
-	function openMemoryCreate() {
-		editingMemory = null;
-		memoryContent = '';
-		memoryDialogOpen = true;
-	}
-
-	function openMemoryEdit(memory: MemoryRow) {
-		editingMemory = memory;
-		memoryContent = memory.content;
-		memoryDialogOpen = true;
-	}
+	/** Detail sheet rows, in the order they are read. */
+	const detailRows = $derived(
+		selected
+			? [
+					[m.admin_ai_col_task(), taskLabel(selected.task)] as [string, string],
+					[m.admin_ai_detail_provider(), `${selected.provider} · ${selected.model}`] as [
+						string,
+						string
+					],
+					[m.admin_common_status(), statusLabel(selected.status)] as [string, string],
+					[
+						m.admin_ai_col_tokens(),
+						`${m.admin_ai_col_tokens_in()} ${formatNumber(selected.inputTokens)} · ${m.admin_ai_col_tokens_out()} ${formatNumber(selected.outputTokens)}`
+					] as [string, string],
+					[
+						m.admin_ai_col_duration(),
+						selected.durationMs === null ? '—' : `${(selected.durationMs / 1000).toFixed(1)}s`
+					] as [string, string],
+					...(selected.task === 'transcription'
+						? ([
+								[
+									m.admin_ai_col_audio_seconds(),
+									selected.audioSeconds === null ? '—' : `${selected.audioSeconds}s`
+								] as [string, string]
+							] as [string, string][])
+						: []),
+					[
+						m.admin_ai_col_cost(),
+						formatCost(selected.costEstimate === null ? null : Number(selected.costEstimate))
+					] as [string, string]
+				]
+			: []
+	);
 </script>
 
 <svelte:head>
-	<title>AI - Lair Admin</title>
+	<title>{m.admin_ai_title()} - Lair Admin</title>
 </svelte:head>
 
-<div class="flex h-full min-h-0 flex-col gap-4 p-4">
-	{#if actionForm?.message}
-		<Alert.Root>
-			<Alert.Title>{actionForm.message}</Alert.Title>
-		</Alert.Root>
+<div class="flex h-full min-h-0 flex-col bg-background">
+	<!-- View + range. One flat row, bare controls - no boxed chrome. -->
+	<div class="flex h-10 shrink-0 items-center gap-2 border-b px-4">
+		<ToggleGroup.Root
+			type="single"
+			role="tablist"
+			aria-label={m.admin_ai_view_label()}
+			value={data.filters.view}
+			onValueChange={(value) => {
+				if (value && value !== data.filters.view) {
+					goto(search({ view: value as LedgerFilters['view'] }), {
+						keepFocus: true,
+						noScroll: true
+					});
+				}
+			}}
+			variant="outline"
+			size="sm"
+			class="gap-1"
+		>
+			<ToggleGroup.Item
+				value="activity"
+				role="tab"
+				aria-selected={data.filters.view === 'activity'}
+			>
+				{m.admin_ai_view_activity()}
+			</ToggleGroup.Item>
+			<ToggleGroup.Item value="summary" role="tab" aria-selected={data.filters.view === 'summary'}>
+				{m.admin_ai_view_summary()}
+			</ToggleGroup.Item>
+		</ToggleGroup.Root>
+
+		<ToggleGroup.Root
+			type="single"
+			aria-label={m.admin_ai_range_label()}
+			value={data.filters.range}
+			onValueChange={(value) => {
+				if (value && value !== data.filters.range) {
+					goto(search({ range: value as LedgerFilters['range'] }), {
+						keepFocus: true,
+						noScroll: true
+					});
+				}
+			}}
+			variant="outline"
+			size="sm"
+			class="gap-1"
+		>
+			{#each LEDGER_RANGES as range (range)}
+				<ToggleGroup.Item value={range}>{rangeLabels[range]()}</ToggleGroup.Item>
+			{/each}
+		</ToggleGroup.Root>
+
+		{#if data.canPurge}
+			<!-- Housekeeping for the whole ledger, not for the current filter: the
+			     dialog says "all", so a narrowed range cannot make it read as scoped. -->
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				class="ml-auto text-muted-foreground hover:text-destructive"
+				onclick={() => (purgeOpen = true)}
+			>
+				<IconTrashX data-icon="inline-start" />
+				{m.admin_ai_purge()}
+			</Button>
+		{/if}
+	</div>
+
+	{#if form?.message}
+		<p
+			role="status"
+			class="mx-4 mb-2 shrink-0 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm"
+		>
+			{form.message}
+		</p>
 	{/if}
 
-	<Tabs.Root value={data.tab} onValueChange={switchTab} class="min-h-0 flex-1">
-		<Tabs.List class="w-fit">
-			<Tabs.Trigger value="conversations">
-				<IconMessages data-icon="inline-start" />
-				{m.admin_ai_tab_conversations()}
-			</Tabs.Trigger>
-			<Tabs.Trigger value="memories">
-				<IconBrain data-icon="inline-start" />
-				{m.admin_ai_tab_memories()}
-			</Tabs.Trigger>
-			<Tabs.Trigger value="usage">
-				<IconChartBar data-icon="inline-start" />
-				{m.admin_ai_tab_usage()}
-			</Tabs.Trigger>
-		</Tabs.List>
+	<!-- Budget. The only accent on this screen: one rule and one figure. -->
+	<div class="flex h-10 shrink-0 items-center gap-3 border-b px-4">
+		<span class="shrink-0 text-xs text-muted-foreground">{m.admin_ai_budget_month()}</span>
+		<span class="shrink-0 text-sm tabular-nums">
+			{formatCost(data.budget.spent)}
+			<span class="text-xs text-muted-foreground">{data.budget.currency}</span>
+			<span class="text-muted-foreground">/</span>
+			{data.budget.monthly > 0 ? formatCost(data.budget.monthly) : m.admin_ai_no_limit()}
+		</span>
+		{#if data.budget.monthly > 0}
+			<Progress value={meterPct} class="min-w-0 flex-1" aria-label={m.admin_ai_budget_month()} />
+			<span class="shrink-0 text-xs text-muted-foreground tabular-nums">{meterPct}%</span>
+		{:else}
+			<span class="min-w-0 flex-1"></span>
+		{/if}
+		{#if data.budget.unpricedCalls > 0}
+			<span class="shrink-0 text-xs text-muted-foreground">
+				{m.admin_ai_budget_unpriced({ count: data.budget.unpricedCalls })}
+			</span>
+			<Button variant="outline" size="sm" href="/admin/settings/ai#cost">
+				{m.admin_ai_fix_pricing()}
+			</Button>
+		{/if}
+		{#if data.budget.paused}
+			<span class="shrink-0 text-xs text-destructive">{m.admin_ai_budget_paused()}</span>
+		{/if}
+		{#if data.filters.relatedType && data.filters.relatedId}
+			<!-- A scoped ledger is the editor's "what did this cost" view. Without a
+			     visible tag the tables look mysteriously empty, and there is no way
+			     back to the full ledger that does not involve editing the URL. -->
+			<span
+				class="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 text-xs"
+				data-testid="ledger-related-scope"
+			>
+				{m.admin_ai_scope_related({
+					kind:
+						data.filters.relatedType === 'post' ? m.admin_ai_scope_post() : m.admin_ai_scope_note()
+				})}
+				<a
+					href={search({ relatedType: '', relatedId: '' })}
+					class="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+				>
+					{m.admin_ai_scope_clear()}
+				</a>
+			</span>
+		{/if}
+	</div>
 
-		<!-- ── Conversations ─────────────────────────────────────────────────── -->
-		<Tabs.Content value="conversations" class="min-h-0 flex-1">
-			{#if data.conversations.length === 0}
-				<Empty.Root class="h-full border">
-					<Empty.Header>
-						<Empty.Media variant="icon">
-							<IconRobot />
-						</Empty.Media>
-						<Empty.Title>{m.admin_ai_no_conversations()}</Empty.Title>
-						<Empty.Description>
-							{m.admin_ai_conversations_desc()}
-						</Empty.Description>
-					</Empty.Header>
-				</Empty.Root>
-			{:else}
-				<MasterDetail.Root>
-					<MasterDetail.Pane side="master" class="w-80 shrink-0">
-						<MasterDetail.Header
-							icon={IconMessages}
-							title={m.admin_ai_sessions_title()}
-							count={data.conversations.length}
-						/>
-						<MasterDetail.List>
-							{#each data.conversations as conversation (conversation.id)}
-								<MasterDetail.Item
-									selected={conversation.id === data.selectedId}
-									onclick={() => goto(`?c=${conversation.id}`, { keepFocus: true, noScroll: true })}
-								>
-									<span class="min-w-0 flex-1">
-										<span class="flex items-center gap-2">
-											<span class="truncate text-sm font-medium">
-												{conversation.title ?? m.admin_ai_untitled_session()}
-											</span>
-											{#if conversation.archivedAt}
-												<Badge variant="secondary">{m.admin_ai_archived()}</Badge>
-											{/if}
-										</span>
-										<span class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-											<span>{m.admin_ai_message_count({ count: conversation.messageCount })}</span>
-											<span>·</span>
-											<span>{formatDate(conversation.updatedAt ?? conversation.createdAt)}</span>
-										</span>
-									</span>
-								</MasterDetail.Item>
-							{/each}
-						</MasterDetail.List>
-					</MasterDetail.Pane>
-					<MasterDetail.Pane side="detail">
-						{#if selected}
-							<div class="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-4">
-								<h2 class="truncate text-sm font-semibold">
-									{selected.title ?? m.admin_ai_untitled_session()}
-								</h2>
-								<form method="post" action="?/archiveConversation" use:enhance>
-									<input type="hidden" name="id" value={selected.id} />
-									<input
-										type="hidden"
-										name="archive"
-										value={selected.archivedAt ? 'false' : 'true'}
-									/>
-									<Button type="submit" variant="outline" size="sm">
-										{#if selected.archivedAt}
-											<IconArchiveOff data-icon="inline-start" />
-											{m.admin_ai_unarchive()}
-										{:else}
-											<IconArchive data-icon="inline-start" />
-											{m.admin_ai_archive()}
-										{/if}
-									</Button>
-								</form>
-							</div>
-							<div class="min-h-0 flex-1 overflow-auto p-4">
-								{#if selected.summary}
-									<Alert.Root class="mb-4">
-										<Alert.Title>{m.admin_ai_summary()}</Alert.Title>
-										<Alert.Description>{selected.summary}</Alert.Description>
-									</Alert.Root>
-								{/if}
-								{#if data.messages.length === 0}
-									<p class="text-sm text-muted-foreground">{m.admin_ai_no_messages()}</p>
-								{:else}
-									<div class="flex flex-col gap-3">
-										{#each data.messages as message (message.id)}
-											<div class="rounded-lg border p-3">
-												<div
-													class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
-												>
-													<Badge variant={message.role === 'user' ? 'default' : 'secondary'}>
-														{roleLabels[message.role] ?? message.role}
-													</Badge>
-													<span>#{message.seq}</span>
-													{#if message.model}<span>{message.model}</span>{/if}
-													<span>{formatDate(message.createdAt)}</span>
-												</div>
-												<p class="mt-2 text-sm whitespace-pre-wrap">
-													{messageText(message.content)}
-												</p>
-											</div>
-										{/each}
-									</div>
-								{/if}
-							</div>
-						{:else}
-							<div class="flex h-full items-center justify-center p-6">
-								<p class="text-sm text-muted-foreground">{m.admin_ai_select_session()}</p>
-							</div>
-						{/if}
-					</MasterDetail.Pane>
-				</MasterDetail.Root>
-			{/if}
-		</Tabs.Content>
-
-		<!-- ── Memory cards ─────────────────────────────────────────────────── -->
-		<Tabs.Content value="memories" class="min-h-0 flex-1 overflow-auto">
-			<div class="flex flex-col gap-4">
-				<header class="flex flex-wrap items-center justify-between gap-3">
-					<div>
-						<h2 class="text-base font-medium">{m.admin_ai_tab_memories()}</h2>
-						<p class="mt-1 text-xs text-muted-foreground">
-							{m.admin_ai_memory_hint({ limit: data.memoryLimit, count: data.memories.length })}
-						</p>
-					</div>
-					<Button type="button" variant="outline" size="sm" onclick={openMemoryCreate}>
-						<IconPlus data-icon="inline-start" />
-						{m.admin_ai_memory_new()}
-					</Button>
-				</header>
-
-				{#if data.memories.length === 0}
-					<Empty.Root class="border">
-						<Empty.Header>
-							<Empty.Media variant="icon">
-								<IconBrain />
-							</Empty.Media>
-							<Empty.Title>{m.admin_ai_memory_empty()}</Empty.Title>
-							<Empty.Description>{m.admin_ai_memory_empty_desc()}</Empty.Description>
-						</Empty.Header>
-					</Empty.Root>
+	<!-- Readiness. One trace line per function slot, shared copy with settings
+	     and the editors, so a green light here is the same green light there. -->
+	<div class="flex min-h-10 shrink-0 items-center gap-3 border-b px-4">
+		<span class="shrink-0 text-xs text-muted-foreground">{m.admin_ai_readiness()}</span>
+		<Trace.Root class="min-w-0 flex-1 flex-row flex-wrap gap-x-5 gap-y-1">
+			{#each readinessList as item (item.fn)}
+				{@const copy = readinessCopy(item.readiness.status, { name: item.readiness.envName ?? '' })}
+				{@const href = item.readiness.fix?.href}
+				{#if href}
+					<a {href} class="min-w-0">
+						<Trace.Line status={traceStatus(item.readiness.status)}>
+							<Trace.Icon><IconAlertTriangle /></Trace.Icon>
+							<Trace.Title>{AI_FUNCTION_LABELS[item.fn][locale]}</Trace.Title>
+							<Trace.Description>{copy.hint}</Trace.Description>
+						</Trace.Line>
+					</a>
 				{:else}
-					<div class="grid gap-3 sm:grid-cols-2">
-						{#each data.memories as memory (memory.id)}
-							<div class="flex flex-col gap-3 rounded-lg border p-3">
-								<p class="text-sm whitespace-pre-wrap">{memory.content}</p>
-								<div class="mt-auto flex items-center justify-between gap-2">
-									<span class="text-xs text-muted-foreground">{formatDate(memory.createdAt)}</span>
-									<div class="flex items-center gap-2">
-										<Button variant="outline" size="sm" onclick={() => openMemoryEdit(memory)}>
-											<IconPencil data-icon="inline-start" />
-											{m.admin_common_edit()}
-										</Button>
-										<Button
-											variant="destructive"
-											size="sm"
-											onclick={() => (deleteMemoryTarget = memory)}
-										>
-											<IconTrash data-icon="inline-start" />
-											{m.admin_common_delete()}
-										</Button>
-									</div>
-								</div>
-							</div>
-						{/each}
-					</div>
+					<Trace.Line status={traceStatus(item.readiness.status)}>
+						<Trace.Icon>
+							{#if item.readiness.status === 'ready'}
+								<IconCircleCheck />
+							{:else}
+								<IconMinus />
+							{/if}
+						</Trace.Icon>
+						<Trace.Title>{AI_FUNCTION_LABELS[item.fn][locale]}</Trace.Title>
+						<Trace.Description>{copy.hint}</Trace.Description>
+					</Trace.Line>
 				{/if}
-			</div>
-		</Tabs.Content>
+			{/each}
+		</Trace.Root>
+	</div>
 
-		<!-- ── Usage ───────────────────────────────────────────────────── -->
-		<Tabs.Content value="usage" class="min-h-0 flex-1 overflow-auto">
-			<div class="flex flex-col gap-4">
-				<header>
-					<h2 class="text-base font-medium">{m.admin_ai_tab_usage()}</h2>
-					<p class="mt-1 text-xs text-muted-foreground">{m.admin_ai_usage_desc()}</p>
-				</header>
-				<Alert.Root>
-					<Alert.Title>{m.admin_ai_usage_basis()}</Alert.Title>
-					<Alert.Description>
-						{m.admin_ai_usage_cost_note()}
-					</Alert.Description>
-				</Alert.Root>
-				{#if data.usage.length === 0}
-					<Empty.Root class="border">
+	{#if data.filters.view === 'summary'}
+		<!-- Roll-up. Deliberately a table, not a second chart: the activity
+		     ledger is the thing this page is about. -->
+		<div class="min-h-0 flex-1 overflow-y-auto">
+			{#if data.summary.length === 0}
+				<div class="flex h-full items-center justify-center p-4">
+					<Empty.Root class="max-w-md">
 						<Empty.Header>
-							<Empty.Media variant="icon">
-								<IconChartBar />
-							</Empty.Media>
-							<Empty.Title>{m.admin_ai_usage_empty()}</Empty.Title>
-							<Empty.Description>{m.admin_ai_usage_empty_desc()}</Empty.Description>
+							<Empty.Title>{m.admin_ai_ledger_empty()}</Empty.Title>
+							<Empty.Description>{m.admin_ai_ledger_empty_desc()}</Empty.Description>
 						</Empty.Header>
 					</Empty.Root>
-				{:else}
+				</div>
+			{:else}
+				<Table.Root>
+					<Table.Header>
+						<Table.Row class="border-b hover:bg-transparent">
+							<Table.Head class="h-10 text-xs font-normal text-muted-foreground"
+								>{m.admin_ai_col_month()}</Table.Head
+							>
+							<Table.Head class="h-10 text-xs font-normal text-muted-foreground"
+								>{m.admin_ai_col_task()}</Table.Head
+							>
+							<Table.Head class="h-10 text-xs font-normal text-muted-foreground"
+								>{m.admin_ai_detail_provider()}</Table.Head
+							>
+							<Table.Head class="h-10 text-right text-xs font-normal text-muted-foreground"
+								>{m.admin_ai_col_calls()}</Table.Head
+							>
+							<Table.Head class="h-10 text-right text-xs font-normal text-muted-foreground"
+								>{m.admin_ai_col_tokens_in()}</Table.Head
+							>
+							<Table.Head class="h-10 text-right text-xs font-normal text-muted-foreground"
+								>{m.admin_ai_col_tokens_out()}</Table.Head
+							>
+							<Table.Head class="h-10 text-right text-xs font-normal text-muted-foreground"
+								>{m.admin_ai_col_cost()}</Table.Head
+							>
+						</Table.Row>
+					</Table.Header>
+					<Table.Body>
+						{#each data.summary as row (`${row.month}-${row.task}-${row.provider}`)}
+							<Table.Row>
+								<Table.Cell class="text-muted-foreground tabular-nums">{row.month}</Table.Cell>
+								<Table.Cell>{taskLabel(row.task)}</Table.Cell>
+								<Table.Cell class="text-muted-foreground">{row.provider}</Table.Cell>
+								<Table.Cell class="text-right tabular-nums">{formatNumber(row.calls)}</Table.Cell>
+								<Table.Cell class="text-right tabular-nums"
+									>{formatNumber(row.inputTokens)}</Table.Cell
+								>
+								<Table.Cell class="text-right tabular-nums"
+									>{formatNumber(row.outputTokens)}</Table.Cell
+								>
+								<Table.Cell class="text-right tabular-nums">{formatCost(row.cost)}</Table.Cell>
+							</Table.Row>
+						{/each}
+					</Table.Body>
+				</Table.Root>
+
+				<!-- Cost attribution: same range, grouped by the actor stored on
+				     each ledger row. Unattended jobs have no actor. -->
+				<div class="px-4 pt-8 pb-6">
+					<h3 class="mb-3 text-sm font-medium">{m.admin_ai_by_actor()}</h3>
 					<Table.Root>
 						<Table.Header>
-							<Table.Row>
-								<Table.Head>{m.admin_ai_col_month()}</Table.Head>
-								<Table.Head>{m.admin_ai_col_task()}</Table.Head>
-								<Table.Head class="text-right">{m.admin_ai_col_calls()}</Table.Head>
-								<Table.Head class="text-right">{m.admin_ai_col_tokens_in()}</Table.Head>
-								<Table.Head class="text-right">{m.admin_ai_col_tokens_out()}</Table.Head>
-								<Table.Head class="text-right">{m.admin_ai_col_cost()}</Table.Head>
+							<Table.Row class="border-b hover:bg-transparent">
+								<Table.Head class="h-10 text-xs font-normal text-muted-foreground"
+									>{m.admin_ai_col_actor()}</Table.Head
+								>
+								<Table.Head class="h-10 text-right text-xs font-normal text-muted-foreground"
+									>{m.admin_ai_col_calls()}</Table.Head
+								>
+								<Table.Head class="h-10 text-right text-xs font-normal text-muted-foreground"
+									>{m.admin_ai_col_cost()}</Table.Head
+								>
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
-							{#each data.usage as row (row.month + row.task)}
+							{#each data.byActor as row (row.actorId ?? 'system')}
 								<Table.Row>
-									<Table.Cell>{row.month}</Table.Cell>
-									<Table.Cell>
-										<Badge variant="secondary">{row.task}</Badge>
-									</Table.Cell>
+									<Table.Cell>{row.name ?? row.email ?? m.admin_ai_by_actor_system()}</Table.Cell>
 									<Table.Cell class="text-right tabular-nums">{formatNumber(row.calls)}</Table.Cell>
-									<Table.Cell class="text-right tabular-nums"
-										>{formatNumber(row.inputTokens)}</Table.Cell
-									>
-									<Table.Cell class="text-right tabular-nums"
-										>{formatNumber(row.outputTokens)}</Table.Cell
-									>
 									<Table.Cell class="text-right tabular-nums">{formatCost(row.cost)}</Table.Cell>
 								</Table.Row>
 							{/each}
 						</Table.Body>
 					</Table.Root>
+				</div>
+			{/if}
+		</div>
+	{:else}
+		<ListTable
+			{columns}
+			rows={data.rows}
+			rowKey={(row) => row.id}
+			label={m.admin_ai_title()}
+			class="min-h-0 flex-1"
+		>
+			{#snippet header(col)}
+				{#if col.id === 'task'}
+					<ListFilter
+						path={LIST_PATH}
+						label={col.label}
+						current={currentTask}
+						selected={data.filters.task}
+						options={taskOptions}
+					/>
+				{:else if col.id === 'model'}
+					<ListFilter
+						path={LIST_PATH}
+						label={col.label}
+						current={currentProvider}
+						selected={data.filters.provider}
+						options={providerOptions}
+					/>
+				{:else if col.id === 'status'}
+					<ListFilter
+						path={LIST_PATH}
+						label={col.label}
+						current={currentStatus}
+						selected={data.filters.status}
+						options={statusOptions}
+					/>
 				{/if}
-			</div>
-		</Tabs.Content>
-	</Tabs.Root>
+			{/snippet}
+
+			{#snippet empty()}
+				<div class="flex min-h-64 items-center justify-center p-4">
+					<Empty.Root class="max-w-md">
+						<Empty.Header>
+							<Empty.Title>{m.admin_ai_ledger_empty()}</Empty.Title>
+							<Empty.Description>{m.admin_ai_ledger_empty_desc()}</Empty.Description>
+						</Empty.Header>
+						<Empty.Content>
+							<div class="flex flex-wrap items-center justify-center gap-2">
+								<Button size="sm" href="/admin/posts/edit">{m.admin_ai_go_write()}</Button>
+								<Button variant="outline" size="sm" href="/admin/translations">
+									{m.admin_ai_open_translations()}
+								</Button>
+							</div>
+						</Empty.Content>
+					</Empty.Root>
+				</div>
+			{/snippet}
+
+			{#snippet row(row)}
+				{@const href = relatedHref(row.relatedType, row.relatedId)}
+				<Table.Cell class={cn(listColumnClass(cols.time), 'tabular-nums')}>
+					<a
+						href={ledgerSearch(data.filters, { row: row.id })}
+						class="hover:text-primary"
+						aria-label={`${m.admin_ai_detail_title()} ${formatStamp(row.createdAt)}`}
+					>
+						{formatStamp(row.createdAt)}
+					</a>
+				</Table.Cell>
+				<Table.Cell class={cn(listColumnClass(cols.task))}>{taskLabel(row.task)}</Table.Cell>
+				<Table.Cell class={cn(listColumnClass(cols.model))}>
+					<span class="block truncate">
+						<span class="text-muted-foreground">{row.provider}</span>
+						<span class="text-muted-foreground"> · </span>
+						{row.model}
+					</span>
+				</Table.Cell>
+				<Table.Cell class={cn(listColumnClass(cols.status))}>
+					<span
+						class={cn(
+							'inline-flex items-center gap-1.5',
+							row.status === 'failure' && 'text-destructive'
+						)}
+					>
+						<span class="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true"></span>
+						{statusLabel(row.status)}
+					</span>
+				</Table.Cell>
+				<Table.Cell class={cn(listColumnClass(cols.related))}>
+					{#if href}
+						<a {href} class="block truncate hover:text-primary">
+							{row.relatedTitle ?? row.relatedType}
+						</a>
+					{:else}
+						<span class="block truncate text-muted-foreground">
+							{row.relatedTitle ?? row.relatedType ?? '—'}
+						</span>
+					{/if}
+				</Table.Cell>
+				<Table.Cell class={cn(listColumnClass(cols.tokens), 'tabular-nums')}>
+					{formatNumber((row.inputTokens ?? 0) + (row.outputTokens ?? 0))}
+				</Table.Cell>
+				<Table.Cell class={cn(listColumnClass(cols.duration), 'tabular-nums')}>
+					{row.durationMs === null ? '—' : `${(row.durationMs / 1000).toFixed(1)}s`}
+				</Table.Cell>
+				<Table.Cell class={cn(listColumnClass(cols.cost), 'tabular-nums')}>
+					{formatCost(row.costEstimate === null ? null : Number(row.costEstimate))}
+				</Table.Cell>
+			{/snippet}
+
+			{#snippet footer()}
+				<div
+					class="flex h-10 items-center justify-between border-t px-4 text-xs text-muted-foreground"
+				>
+					<span class="tabular-nums"
+						>{m.admin_common_count_entries({ count: data.rows.length })}</span
+					>
+					<span class="tabular-nums">
+						{m.admin_ai_budget_month()}
+						{formatCost(data.budget.spent)}
+					</span>
+				</div>
+			{/snippet}
+		</ListTable>
+	{/if}
 </div>
 
-<!-- ── Memory dialog ────────────────────────────────────────────────── -->
-<Dialog.Root bind:open={memoryDialogOpen}>
-	<Dialog.Content class="sm:max-w-lg" showCloseButton={false}>
-		<form
-			method="post"
-			action="?/saveMemory"
-			use:enhance={() => {
-				savingMemory = true;
-				return async ({ result, update }) => {
-					savingMemory = false;
-					if (result.type === 'success') memoryDialogOpen = false;
-					await update({ reset: false });
-				};
-			}}
-		>
-			{#if editingMemory}
-				<input type="hidden" name="id" value={editingMemory.id} />
-			{/if}
-			<div class="flex items-center justify-between gap-3 border-b px-4 pb-3">
-				<Dialog.Title
-					>{editingMemory ? m.admin_ai_memory_edit() : m.admin_ai_memory_new()}</Dialog.Title
-				>
-				<Dialog.Close>
-					{#snippet child({ props })}
-						<Button
-							variant="ghost"
-							size="icon"
-							class="size-7"
-							{...props}
-							aria-label={m.admin_common_close()}
-						>
-							<IconX class="size-4" />
-						</Button>
-					{/snippet}
-				</Dialog.Close>
-			</div>
-			<div class="px-4 py-4">
-				<Field.Group>
-					<Field.Field>
-						<Field.Label for="memory-content">{m.admin_ai_memory_content()}</Field.Label>
-						<Textarea
-							id="memory-content"
-							name="content"
-							rows={5}
-							bind:value={memoryContent}
-							maxlength={2000}
-							placeholder={m.admin_ai_memory_placeholder()}
-						/>
-					</Field.Field>
-				</Field.Group>
-			</div>
-			<div class="flex items-center justify-end gap-2 border-t px-4 pt-3">
-				<Dialog.Close>
-					{#snippet child({ props })}
-						<Button variant="outline" {...props}>{m.admin_common_cancel()}</Button>
-					{/snippet}
-				</Dialog.Close>
-				<Button type="submit" disabled={savingMemory}>
-					{#if savingMemory}<Spinner data-icon="inline-start" />{/if}
-					{m.admin_common_save()}
-				</Button>
-			</div>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
-
-<!-- ── Memory delete confirm ────────────────────────────────────────── -->
-<AlertDialog.Root
-	open={deleteMemoryTarget !== null}
+<!-- Row detail. Kept in the URL so a link to one call survives a reload. -->
+<Sheet.Root
+	open={selected !== null}
 	onOpenChange={(open) => {
-		if (!open) deleteMemoryTarget = null;
+		if (!open) goto(ledgerSearch(data.filters), { keepFocus: true, noScroll: true });
 	}}
 >
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>{m.admin_ai_memory_delete_title()}</AlertDialog.Title>
-			<AlertDialog.Description>
-				{m.admin_ai_memory_delete_desc({
-					preview: (deleteMemoryTarget?.content ?? '').slice(0, 40)
-				})}
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
-			<form
-				method="post"
-				action="?/deleteMemory"
-				use:enhance={() =>
-					async ({ result, update }) => {
-						if (result.type === 'success') deleteMemoryTarget = null;
-						await update({ reset: false });
-					}}
-			>
-				<input type="hidden" name="id" value={deleteMemoryTarget?.id ?? ''} />
-				<Button type="submit" variant="destructive">{m.admin_common_delete()}</Button>
-			</form>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
+	<Sheet.Content side="right" class="w-96">
+		<Sheet.Header>
+			<Sheet.Title>{m.admin_ai_detail_title()}</Sheet.Title>
+			<Sheet.Description class="tabular-nums">{formatStamp(selected?.createdAt)}</Sheet.Description>
+		</Sheet.Header>
+		{#if selected}
+			<div class="flex flex-col gap-4 px-4 pb-4">
+				<dl class="flex flex-col gap-2 text-sm">
+					{#each detailRows as entry (entry[0])}
+						<div class="flex items-start gap-3">
+							<dt class="w-20 shrink-0 text-xs text-muted-foreground">{entry[0]}</dt>
+							<dd class="min-w-0 flex-1 break-words tabular-nums">{entry[1]}</dd>
+						</div>
+					{/each}
+				</dl>
+
+				<div class="flex items-start gap-3 text-sm">
+					<span class="w-20 shrink-0 text-xs text-muted-foreground">{m.admin_ai_col_related()}</span
+					>
+					{#if relatedHref(selected.relatedType, selected.relatedId)}
+						<a
+							href={relatedHref(selected.relatedType, selected.relatedId)}
+							class="min-w-0 flex-1 truncate hover:text-primary"
+						>
+							{selected.relatedTitle ?? selected.relatedType}
+						</a>
+					{:else}
+						<span class="min-w-0 flex-1 truncate text-muted-foreground">
+							{selected.relatedTitle ?? selected.relatedType ?? '—'}
+						</span>
+					{/if}
+				</div>
+
+				<div class="flex flex-wrap items-center gap-2 border-t pt-4">
+					<Button variant="outline" size="sm" href={search({ task: selected.task })}>
+						{m.admin_ai_detail_view_all()}
+					</Button>
+					<Button variant="ghost" size="sm" href="/admin/settings/ai">
+						{m.admin_ai_settings_link()}
+					</Button>
+				</div>
+			</div>
+		{/if}
+	</Sheet.Content>
+</Sheet.Root>
+
+<DeleteConfirm
+	open={purgeOpen}
+	title={m.admin_ai_purge_confirm_title()}
+	description={m.admin_ai_purge_confirm_desc()}
+	id=""
+	action="?/purgeUsage"
+	confirmLabel={m.admin_ai_purge()}
+	onclose={() => (purgeOpen = false)}
+/>

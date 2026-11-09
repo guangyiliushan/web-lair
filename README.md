@@ -29,6 +29,28 @@ npm run dev
 npm run dev -- --open
 ```
 
+## Background jobs in development
+
+Anything that only _enqueues_ work — requesting a translation, "generate summary",
+running a job from `/admin/jobs` — inserts a `job_runs(status='queued')` row. The
+web process never runs it: in production a systemd timer starts
+`node jobs/drain.ts` once a minute (`deploy/systemd/web-lair-drain.timer`).
+
+`vite dev` has no timer, so in development run the worker in a second terminal:
+
+```sh
+pnpm dev        # terminal 1 - the app
+pnpm jobs:dev   # terminal 2 - the worker (3s tick)
+```
+
+`jobs:dev` is the same drain tick on a loop; it never overlaps two ticks,
+prints only the ticks that did something, and stops cleanly on Ctrl+C.
+
+- `pnpm jobs:drain` runs a single tick instead of a loop.
+- `pnpm jobs:dev --interval 1000` polls faster while debugging.
+- Both use `--env-file=.env`, so provider keys (`AI_DEEPSEEK_KEY`, …) reach the
+  job exactly like they do from the production timer.
+
 ## Building
 
 To create a production version of your app:

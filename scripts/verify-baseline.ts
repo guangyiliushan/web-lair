@@ -36,7 +36,7 @@ const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', impo
 const JOURNAL_PATH = fileURLToPath(new URL('../drizzle/meta/_journal.json', import.meta.url));
 const VISUALIZER_PATH = fileURLToPath(new URL('../.drizzle/visualizer.json', import.meta.url));
 
-const EXPECTED = { tables: 49, indexes: 119, checks: 93, fks: 47, uuidv7: 36 };
+const EXPECTED = { tables: 51, indexes: 125, checks: 94, fks: 51, uuidv7: 38 };
 
 const EXPECTED_TABLE_NAMES: string[] = [
 	'account',
@@ -44,6 +44,7 @@ const EXPECTED_TABLE_NAMES: string[] = [
 	'ai_agent_conversations',
 	'ai_agent_memories',
 	'ai_agent_messages',
+	'ai_agent_proposals',
 	'ai_providers',
 	'ai_usage',
 	'categories',
@@ -81,6 +82,7 @@ const EXPECTED_TABLE_NAMES: string[] = [
 	'tags',
 	'thoughts',
 	'topics',
+	'transcripts',
 	'translations',
 	'two_factor',
 	'user',
@@ -228,6 +230,14 @@ const REQUIRED_CONSTRAINT_NAMES: string[] = [
 
 /** Index predicate pins (checked against the baseline text; each must match). */
 const PREDICATE_PINS: Array<[string, RegExp]> = [
+	[
+		'ai_agent_proposals_actor_idx',
+		/CREATE INDEX "ai_agent_proposals_actor_idx" .*WHERE "ai_agent_proposals"\."actor_id" is not null/
+	],
+	[
+		'transcripts_actor_idx',
+		/CREATE INDEX "transcripts_actor_idx" .*WHERE "transcripts"\."actor_id" is not null/
+	],
 	[
 		'categories_default_uniq',
 		/CREATE UNIQUE INDEX "categories_default_uniq" .*WHERE "categories"\."is_default"/

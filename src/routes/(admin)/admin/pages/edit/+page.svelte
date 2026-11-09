@@ -564,7 +564,7 @@
 		</form>
 
 		<!-- Main content area -->
-		<main class="flex min-h-full min-w-0 flex-col bg-background">
+		<div class="flex min-h-full min-w-0 flex-col bg-background">
 			<!-- Header area: status + locale switch + title + slug -->
 			<div class="mx-auto w-full max-w-5xl shrink-0 px-3 pt-8">
 				<!-- Status bar -->
@@ -774,7 +774,7 @@
 					{/key}
 				</div>
 			</div>
-		</main>
+		</div>
 	</div>
 
 	<!-- Slug Dialog -->

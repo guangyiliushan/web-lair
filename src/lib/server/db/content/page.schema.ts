@@ -11,9 +11,9 @@ import {
 	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
-import type { LocalizedMarkdown, LocalizedText } from './localized';
+import type { LocalizedMarkdown, LocalizedText } from './localized.ts';
 
-export type { LocalizedMarkdown, LocalizedText, PageLocale } from './localized';
+export type { LocalizedMarkdown, LocalizedText, PageLocale } from './localized.ts';
 
 /**
  * Page registry (pages line P0): md rows drive `(site)/[slug]`; rows without
