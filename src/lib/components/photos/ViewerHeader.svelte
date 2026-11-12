@@ -28,7 +28,7 @@
 </script>
 
 <header
-	class="fixed inset-x-0 top-0 z-50 flex h-14 items-center gap-2 bg-gradient-to-b from-black/80 via-black/40 to-transparent px-2 text-white sm:px-3"
+	class="fixed inset-x-0 top-0 z-50 flex h-14 items-center gap-2 bg-linear-to-b from-black/80 via-black/40 to-transparent px-2 text-white sm:px-3"
 >
 	<a href={siteHref('/photos')} class={iconButton} aria-label={m.photos_back()}>
 		<IconArrowLeft class="size-5" />

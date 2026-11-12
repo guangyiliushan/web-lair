@@ -734,7 +734,7 @@
 
 		<!-- Bottom bar: prev / caption (= alt, Q13) / next -->
 		<div
-			class="absolute inset-x-0 bottom-0 z-20 flex items-center gap-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pt-10 pb-3"
+			class="absolute inset-x-0 bottom-0 z-20 flex items-center gap-2 bg-linear-to-t from-black/85 via-black/40 to-transparent px-3 pt-10 pb-3"
 		>
 			{#if !plainItem}
 				<button
