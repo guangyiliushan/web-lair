@@ -99,8 +99,18 @@ export declare const aiUsage: any;
 export declare const subscriptions: any;
 
 /** Friend-link checker services (links line). */
-export declare function runLinkCheck(input: any): Promise<any>;export declare function deriveAcceptedHosts(origin: string, accepted: string[]): string[];
+export declare function runLinkCheck(input: any): Promise<any>;
+export declare function deriveAcceptedHosts(origin: string, accepted: string[]): string[];
 export declare function publicOrigin(): string;
+
+/** Friend-link retention (links.prune): outdated rows and stale contact data. */
+export declare const EMAIL_RETENTION_DAYS: number;
+export declare function pruneOutdated(options: any, deps: any): Promise<any>;
+export declare function prunePrecheckRuns(
+	deps: any,
+	options?: any
+): Promise<{ matched: number; deleted: number }>;
+export declare const links: any;
 
 /** Four-platform projects sync (projects line). */
 export declare function runSync(input: any): Promise<any>;

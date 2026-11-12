@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Questionnaire as QuestionnairePrimitive } from "@shadcn-svelte/primitives/questionnaire";
-	import { cn } from "$lib/utils.js";
+	import { Questionnaire as QuestionnairePrimitive } from '@shadcn-svelte/primitives/questionnaire';
+	import { cn } from '$lib/utils.js';
 
 	let {
 		ref = $bindable(null),
@@ -13,7 +13,7 @@
 	bind:ref
 	data-slot="questionnaire-progress"
 	class={cn(
-		"text-xs min-h-[1lh] w-fit min-w-[14ch] font-medium text-muted-foreground tabular-nums",
+		'min-h-[1lh] w-fit min-w-[14ch] text-xs font-medium text-muted-foreground tabular-nums',
 		className
 	)}
 	{...restProps}

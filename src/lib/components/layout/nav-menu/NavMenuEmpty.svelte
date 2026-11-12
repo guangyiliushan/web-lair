@@ -1,14 +1,12 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
-	import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '$lib/components/ui/empty';
-	import IconInbox from '@tabler/icons-svelte-runes/icons/inbox';
 
 	/**
-	 * Compact empty placeholder for a panel column.
+	 * Empty placeholder for a panel column.
 	 *
-	 * shadcn's `Empty` is built for page-sized voids (`p-6`, `gap-4`, a media
-	 * slot at `size-8`), so every dimension is scaled down here — without it a
-	 * bare heading over an empty column is what the panel looked like before.
+	 * The panels are dense indexes of 28px rows, so an empty column gets one
+	 * muted line on the same grid — no card, border or icon. Chrome around
+	 * "nothing" only competes with the rows that do exist.
 	 */
 	let {
 		text,
@@ -19,11 +17,8 @@
 	} = $props();
 </script>
 
-<Empty class={cn('w-fit justify-start gap-1 rounded-md border border-dashed p-2', className)}>
-	<EmptyHeader class="gap-1">
-		<EmptyMedia variant="icon" class="mb-0 size-6 rounded-md">
-			<IconInbox class="size-3.5" />
-		</EmptyMedia>
-		<EmptyTitle class="text-[11px] text-muted-foreground">{text}</EmptyTitle>
-	</EmptyHeader>
-</Empty>
+<p
+	class={cn('flex min-h-7 items-center px-1.5 text-xs leading-5 text-muted-foreground', className)}
+>
+	{text}
+</p>

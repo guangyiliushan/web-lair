@@ -549,7 +549,7 @@
 					{#each detailRows as entry (entry[0])}
 						<div class="flex items-start gap-3">
 							<dt class="w-20 shrink-0 text-xs text-muted-foreground">{entry[0]}</dt>
-							<dd class="min-w-0 flex-1 break-words tabular-nums">{entry[1]}</dd>
+							<dd class="min-w-0 flex-1 wrap-break-word tabular-nums">{entry[1]}</dd>
 						</div>
 					{/each}
 				</dl>

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { cn, type WithElementRef } from "$lib/utils.js";
-	import CodeBlockLine from "./code-block-line.svelte";
-	import type { HTMLAttributes } from "svelte/elements";
+	import { cn, type WithElementRef } from '$lib/utils.js';
+	import CodeBlockLine from './code-block-line.svelte';
+	import type { HTMLAttributes } from 'svelte/elements';
 
 	let {
 		ref = $bindable(null),
@@ -23,13 +23,15 @@
 
 	// A `code` string is split into lines so each one can be numbered.
 	const lines = $derived(
-		code !== undefined && lineNumbers ? code.replace(/\n$/, "").split("\n") : null
+		code !== undefined && lineNumbers ? code.replace(/\n$/, '').split('\n') : null
 	);
 </script>
 
 {#snippet content()}
 	<code
-		data-slot="code-block-code"class=" grid min-h-lh min-w-max content-start in-data-numbered:grid-cols-[auto_1fr] in-data-wrap:min-w-0">
+		data-slot="code-block-code"
+		class=" grid min-h-lh min-w-max content-start in-data-numbered:grid-cols-[auto_1fr] in-data-wrap:min-w-0"
+	>
 		{#if lines}
 			{#each lines as line, index (index)}
 				<CodeBlockLine code={line} />
@@ -46,10 +48,14 @@
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <pre
 	bind:this={ref}
-	data-slot="code-block-content"data-wrap={wrap || undefined}
+	data-slot="code-block-content"
+	data-wrap={wrap || undefined}
 	data-numbered={lineNumbers || undefined}
-	dir="ltr"tabindex={0}
-	style="counter-reset: line {startLine - 1};{style ?? ''}"class={cn("px-3 py-3 leading-relaxed group-has-data-[slot=code-block-header]/code-block:pt-2 group-has-data-[slot=code-block-footer]/code-block:pb-2 group-data-[size=sm]/code-block:px-2.5 group-data-[size=sm]/code-block:py-2.5 group-data-[size=sm]/code-block:group-has-data-[slot=code-block-header]/code-block:pt-1.5 min-h-0 min-w-0 scroll-fade-x scrollbar-thin overflow-auto text-start font-mono outline-none data-wrap:scroll-fade-y data-wrap:wrap-break-word data-wrap:whitespace-pre-wrap",
+	dir="ltr"
+	tabindex={0}
+	style="counter-reset: line {startLine - 1};{style ?? ''}"
+	class={cn(
+		'min-h-0 min-w-0 scroll-fade-x scrollbar-thin overflow-auto px-3 py-3 text-start font-mono leading-relaxed outline-none group-has-data-[slot=code-block-footer]/code-block:pb-2 group-has-data-[slot=code-block-header]/code-block:pt-2 group-data-[size=sm]/code-block:px-2.5 group-data-[size=sm]/code-block:py-2.5 group-data-[size=sm]/code-block:group-has-data-[slot=code-block-header]/code-block:pt-1.5 data-wrap:scroll-fade-y data-wrap:wrap-break-word data-wrap:whitespace-pre-wrap',
 		className
 	)}
 	{...restProps}>{@render content()}</pre>

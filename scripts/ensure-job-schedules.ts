@@ -33,7 +33,11 @@ const SCHEDULES = [
 	// rows, auto-summary off, or no pending comments).
 	{ job: 'ai.translate', cron: '*/10 * * * *' },
 	{ job: 'ai.summarize', cron: '0 4 * * *' },
-	{ job: 'ai.comment-review', cron: '*/15 * * * *' }
+	{ job: 'ai.comment-review', cron: '*/15 * * * *' },
+	// Links L4: the public policy promises scheduled checks and a grace-period
+	// prune, so both rows must exist on a fresh install (prune runs after check).
+	{ job: 'links.check', cron: '0 5 * * *' },
+	{ job: 'links.prune', cron: '30 5 * * *' }
 ] as const;
 
 async function main(): Promise<void> {

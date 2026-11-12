@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Questionnaire as QuestionnairePrimitive } from "@shadcn-svelte/primitives/questionnaire";
-	import { cn } from "$lib/utils.js";
+	import { Questionnaire as QuestionnairePrimitive } from '@shadcn-svelte/primitives/questionnaire';
+	import { cn } from '$lib/utils.js';
 
 	let {
 		ref = $bindable(null),
@@ -12,6 +12,6 @@
 <QuestionnairePrimitive.Description
 	bind:ref
 	data-slot="questionnaire-description"
-	class={cn("text-muted-foreground text-sm text-pretty text-muted-foreground", className)}
+	class={cn('text-sm text-pretty text-muted-foreground text-muted-foreground', className)}
 	{...restProps}
 />

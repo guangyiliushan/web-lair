@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Questionnaire as QuestionnairePrimitive } from "@shadcn-svelte/primitives/questionnaire";
-	import { cn } from "$lib/utils.js";
+	import { Questionnaire as QuestionnairePrimitive } from '@shadcn-svelte/primitives/questionnaire';
+	import { cn } from '$lib/utils.js';
 
 	let {
 		ref = $bindable(null),
@@ -12,6 +12,9 @@
 <QuestionnairePrimitive.Title
 	bind:ref
 	data-slot="questionnaire-title"
-	class={cn("text-base leading-snug font-medium [&:not(:has(~[data-slot=questionnaire-description]))]:mb-4 text-pretty", className)}
+	class={cn(
+		'text-base leading-snug font-medium text-pretty [&:not(:has(~[data-slot=questionnaire-description]))]:mb-4',
+		className
+	)}
 	{...restProps}
 />

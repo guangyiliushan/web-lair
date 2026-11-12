@@ -99,14 +99,20 @@
 					{m.admin_ai_transcribe_vtt()}
 				</a>
 			</div>
-			<textarea readonly rows="8" class="w-full resize-y rounded-md border bg-transparent p-3 text-sm" value={success.text}
-			></textarea>
+			<textarea
+				readonly
+				rows="8"
+				class="w-full resize-y rounded-md border bg-transparent p-3 text-sm"
+				value={success.text}></textarea>
 			<details>
 				<summary class="cursor-pointer text-xs text-muted-foreground">
 					{m.admin_ai_transcribe_vtt()}
 				</summary>
-				<textarea readonly rows="8" class="mt-2 w-full resize-y rounded-md border bg-transparent p-3 font-mono text-xs" value={success.vtt}
-				></textarea>
+				<textarea
+					readonly
+					rows="8"
+					class="mt-2 w-full resize-y rounded-md border bg-transparent p-3 font-mono text-xs"
+					value={success.vtt}></textarea>
 			</details>
 		</section>
 	{/if}

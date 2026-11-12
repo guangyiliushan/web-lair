@@ -10,6 +10,8 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { Button } from '$lib/components/ui/button';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Spinner } from '$lib/components/ui/spinner';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -54,7 +56,12 @@
 		http_gone: m.admin_friends_kind_http_gone,
 		http_error: m.admin_friends_kind_http_error,
 		waf: m.admin_friends_kind_waf,
-		robots: m.admin_friends_kind_robots
+		robots: m.admin_friends_kind_robots,
+		offsite: m.admin_friends_kind_offsite,
+		unsupported: m.admin_friends_kind_unsupported,
+		redirect: m.admin_friends_kind_redirect,
+		page_missing: m.admin_friends_kind_page_missing,
+		link_missing: m.admin_friends_kind_link_missing
 	};
 
 	function errorKindText(kind: string | null | undefined): string {
@@ -130,6 +137,8 @@
 				return m.admin_friends_flash_check_dedup();
 			case 'checked':
 				return m.admin_friends_flash_checked();
+			case 'prechecked':
+				return m.admin_friends_flash_prechecked();
 			default:
 				return null;
 		}
@@ -178,6 +187,36 @@
 	let purgeOpen = $state(false);
 	let detailRow = $state<Row | null>(null);
 	let detailOpen = $state(false);
+	let prechecking = $state(false);
+	let precheckError = $state<string | null>(null);
+
+	/**
+	 * The precheck action returns the fresh run so the drawer can show it
+	 * immediately; the table refresh comes from `invalidateAll` (the row badge
+	 * reads the same child table).
+	 */
+	const precheckSubmit: SubmitFunction = () => {
+		prechecking = true;
+		precheckError = null;
+		return async ({ result, update }) => {
+			prechecking = false;
+			if (result.type === 'failure') {
+				const data = result.data as { error?: string } | undefined;
+				precheckError = data?.error ?? '';
+				return;
+			}
+			if (result.type === 'success') {
+				const data = result.data as { runs?: Row['prechecks'] } | undefined;
+				if (detailRow && data?.runs?.length) {
+					detailRow = {
+						...detailRow,
+						prechecks: [...data.runs, ...(detailRow.prechecks ?? [])]
+					};
+				}
+				await update({ invalidateAll: true });
+			}
+		};
+	};
 
 	let fieldName = $state('');
 	let fieldUrl = $state('');
@@ -371,15 +410,43 @@
 							{avatarText(friend.name)}
 						</div>
 						<div class="min-w-0">
-							<a
-								class="flex min-w-0 items-center gap-1 font-medium hover:underline"
-								href={friend.url}
-								rel="noreferrer"
-								target="_blank"
-							>
-								<span class="truncate">{friend.name}</span>
-								<IconExternalLink class="size-3 shrink-0" aria-hidden="true" />
-							</a>
+							<div class="flex min-w-0 items-center gap-1.5">
+								<a
+									class="flex min-w-0 items-center gap-1 font-medium hover:underline"
+									href={friend.url}
+									rel="noreferrer"
+									target="_blank"
+								>
+									<span class="truncate">{friend.name}</span>
+									<IconExternalLink class="size-3 shrink-0" aria-hidden="true" />
+								</a>
+								{#if friend.badges.precheck}
+									{@const precheck = friend.badges.precheck}
+									<Badge
+										variant={precheck.status === 'running' || precheck.status === 'stale'
+											? 'outline'
+											: precheck.ok
+												? 'secondary'
+												: precheck.errorKind
+													? 'destructive'
+													: 'outline'}
+										class="h-4.5 shrink-0 px-1.5 text-[10px]"
+										title={fmt(precheck.at)}
+									>
+										{#if precheck.status === 'running'}
+											{m.admin_friends_precheck_state_running()}
+										{:else if precheck.status === 'stale'}
+											{m.admin_friends_precheck_incomplete()}
+										{:else if precheck.ok}
+											{m.admin_friends_precheck_ok()}
+										{:else if precheck.errorKind}
+											{m.admin_friends_precheck_failed()} · {errorKindText(precheck.errorKind)}
+										{:else}
+											{m.admin_friends_precheck_incomplete()}
+										{/if}
+									</Badge>
+								{/if}
+							</div>
 							<span class="block truncate text-xs text-muted-foreground">{friend.host}</span>
 							{#if friend.description}
 								<span class="line-clamp-1 text-xs text-muted-foreground">{friend.description}</span>
@@ -1109,6 +1176,79 @@
 						{/if}
 					</dl>
 				</section>
+
+				{#if detailRow.status === 'pending'}
+					<section class="grid gap-2 border-b px-4 py-3">
+						<div class="flex items-start justify-between gap-2">
+							<div class="grid gap-0.5">
+								<h3 class="text-xs font-medium text-muted-foreground">
+									{m.admin_friends_precheck_runs()}
+								</h3>
+								<p class="text-[11px] text-muted-foreground">
+									{m.admin_friends_precheck_hint()}
+								</p>
+							</div>
+							<form method="post" action="?/precheckOne" use:enhance={precheckSubmit}>
+								<input type="hidden" name="id" value={detailRow.id} />
+								<Button
+									type="submit"
+									variant="outline"
+									size="sm"
+									class="h-7 shrink-0 text-xs"
+									disabled={prechecking}
+									aria-busy={prechecking}
+								>
+									{#if prechecking}<Spinner data-icon="inline-start" />{/if}
+									{prechecking
+										? m.admin_friends_precheck_running()
+										: m.admin_friends_precheck_now()}
+								</Button>
+							</form>
+						</div>
+						{#if precheckError}
+							<p role="alert" class="text-xs text-destructive">{precheckError}</p>
+						{/if}
+						{#if (detailRow.prechecks ?? []).length === 0}
+							<p class="text-xs text-muted-foreground">
+								{m.admin_friends_precheck_runs_empty()}
+							</p>
+						{:else}
+							<ul class="grid gap-2">
+								{#each detailRow.prechecks ?? [] as run, index (run.id ?? index)}
+									<li class="grid gap-0.5 rounded-sm border px-2 py-1.5 text-xs">
+										<div class="flex flex-wrap items-center gap-2">
+											<span class="font-mono text-[10px] text-muted-foreground">{run.trigger}</span>
+											{#if run.status === 'running'}
+												<span class="text-muted-foreground">
+													{m.admin_friends_precheck_state_running()}
+												</span>
+											{:else if run.status === 'stale'}
+												<span class="text-destructive">
+													{m.admin_friends_precheck_incomplete()}
+												</span>
+											{:else if run.ok}
+												<span class="text-primary-text">{m.admin_friends_precheck_ok()}</span>
+											{:else}
+												<span class="text-destructive">
+													{m.admin_friends_precheck_failed()}{run.errorKind
+														? ` · ${errorKindText(run.errorKind)}`
+														: ''}
+												</span>
+											{/if}
+											{#if run.durationMs !== null}
+												<span class="text-muted-foreground">{run.durationMs}ms</span>
+											{/if}
+											<span class="ml-auto text-muted-foreground">{fmt(run.startedAt)}</span>
+										</div>
+										{#if run.note}
+											<p class="break-words text-muted-foreground">{run.note}</p>
+										{/if}
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</section>
+				{/if}
 
 				<section class="grid gap-2 px-4 py-3">
 					<h3 class="text-xs font-medium text-muted-foreground">

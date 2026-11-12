@@ -181,10 +181,7 @@ function escapeForRegExp(value: string): string {
  * and a token may legitimately be missing. Unlike `restoreMarkdown` this never
  * throws - a preview must not fail a run that is still going.
  */
-export function restoreMarkdownPartial(
-	text: string,
-	original: ProtectedMarkdown
-): string {
+export function restoreMarkdownPartial(text: string, original: ProtectedMarkdown): string {
 	if (!text.includes(original.prefix)) return text;
 	const marker = new RegExp(`${escapeForRegExp(original.prefix)}(\\d+)\\]\\]`, 'g');
 	return text.replace(marker, (match, index: string) => original.tokens[Number(index)] ?? match);

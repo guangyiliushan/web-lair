@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { cn, type WithElementRef } from "$lib/utils.js";
-	import type { HTMLAttributes } from "svelte/elements";
+	import { cn, type WithElementRef } from '$lib/utils.js';
+	import type { HTMLAttributes } from 'svelte/elements';
 
 	let {
 		ref = $bindable(null),
@@ -13,7 +13,7 @@
 <span
 	bind:this={ref}
 	data-slot="trace-title"
-	class={cn("min-w-0 truncate motion-reduce:shimmer-none", className)}
+	class={cn('min-w-0 truncate motion-reduce:shimmer-none', className)}
 	{...restProps}
 >
 	{@render children?.()}

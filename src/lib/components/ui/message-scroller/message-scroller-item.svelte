@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { MessageScroller as MessageScrollerPrimitive } from "@shadcn-svelte/primitives/message-scroller";
-	import { cn } from "$lib/utils.js";
+	import { MessageScroller as MessageScrollerPrimitive } from '@shadcn-svelte/primitives/message-scroller';
+	import { cn } from '$lib/utils.js';
 
 	let {
 		ref = $bindable(null),
@@ -15,7 +15,7 @@
 	data-slot="message-scroller-item"
 	{scrollAnchor}
 	class={cn(
-		"min-w-0 shrink-0 [contain-intrinsic-size:auto_10rem] [content-visibility:auto]",
+		'min-w-0 shrink-0 [contain-intrinsic-size:auto_10rem] [content-visibility:auto]',
 		className
 	)}
 	{...restProps}

@@ -36,7 +36,7 @@ const BASELINE_PATH = fileURLToPath(new URL('../drizzle/0000_baseline.sql', impo
 const JOURNAL_PATH = fileURLToPath(new URL('../drizzle/meta/_journal.json', import.meta.url));
 const VISUALIZER_PATH = fileURLToPath(new URL('../.drizzle/visualizer.json', import.meta.url));
 
-const EXPECTED = { tables: 51, indexes: 125, checks: 94, fks: 51, uuidv7: 38 };
+const EXPECTED = { tables: 53, indexes: 133, checks: 98, fks: 54, uuidv7: 40 };
 
 const EXPECTED_TABLE_NAMES: string[] = [
 	'account',
@@ -45,6 +45,7 @@ const EXPECTED_TABLE_NAMES: string[] = [
 	'ai_agent_memories',
 	'ai_agent_messages',
 	'ai_agent_proposals',
+	'ai_model_pool',
 	'ai_providers',
 	'ai_usage',
 	'categories',
@@ -59,6 +60,7 @@ const EXPECTED_TABLE_NAMES: string[] = [
 	'invitation',
 	'job_runs',
 	'job_schedules',
+	'link_prechecks',
 	'links',
 	'member',
 	'moments',
@@ -1111,6 +1113,63 @@ begin
 	exception when unique_violation then
 		get stacked diagnostics c = constraint_name;
 		if c <> 'links_url_uniq' then raise exception 'FAIL links url uniq: wrong constraint %', c; end if;
+	end;
+
+	-- link_prechecks (links L4): status/trigger pairing, the single-flight
+	-- index, the finished/ok pairing, and the parent cascade are the contract.
+	begin
+		insert into link_prechecks (link_id, trigger, status) values (
+			(select id from links where name = 'c1v-ok-link'), 'application', 'running');
+
+		begin
+			insert into link_prechecks (link_id, trigger, status) values (
+				(select id from links where name = 'c1v-ok-link'), 'admin', 'running');
+			raise exception 'FAIL link_prechecks_running_uniq accepted a second running row';
+		exception when unique_violation then
+			get stacked diagnostics c = constraint_name;
+			if c <> 'link_prechecks_running_uniq' then raise exception 'FAIL precheck single-flight: wrong constraint %', c; end if;
+		end;
+
+		begin
+			insert into link_prechecks (link_id, trigger, status) values (
+				(select id from links where name = 'c1v-ok-link'), 'cron', 'running');
+			raise exception 'FAIL link_prechecks_trigger_check accepted cron';
+		exception when check_violation then
+			get stacked diagnostics c = constraint_name;
+			if c <> 'link_prechecks_trigger_check' then raise exception 'FAIL precheck trigger: wrong constraint %', c; end if;
+		end;
+
+		begin
+			insert into link_prechecks (link_id, trigger, status, finished_at) values (
+				(select id from links where name = 'c1v-ok-link'), 'application', 'completed', now());
+			raise exception 'FAIL link_prechecks_ok_check accepted completed without ok';
+		exception when check_violation then
+			get stacked diagnostics c = constraint_name;
+			if c <> 'link_prechecks_ok_check' then raise exception 'FAIL precheck ok: wrong constraint %', c; end if;
+		end;
+
+		begin
+			insert into link_prechecks (link_id, trigger, status, finished_at) values (
+				(select id from links where name = 'c1v-ok-link'), 'application', 'running', now());
+			raise exception 'FAIL link_prechecks_finished_check accepted running with finished_at';
+		exception when check_violation then
+			get stacked diagnostics c = constraint_name;
+			if c <> 'link_prechecks_finished_check' then raise exception 'FAIL precheck finished: wrong constraint %', c; end if;
+		end;
+	end;
+
+	-- Cascade: deleting the parent link takes its runs with it.
+	begin
+		insert into links (name, url, host, backlink_url) values ('c1v-precheck-parent', 'https://pp.example/', 'pp.example', 'https://pp.example/');
+		insert into link_prechecks (link_id, trigger, status, ok, finished_at) values (
+			(select id from links where name = 'c1v-precheck-parent'), 'admin', 'completed', true, now());
+		delete from links where name = 'c1v-precheck-parent';
+		if exists (
+			select 1 from link_prechecks
+			where link_id not in (select id from links)
+		) then
+			raise exception 'FAIL link_prechecks cascade left orphan runs';
+		end if;
 	end;
 
 	-- notes v0.3 reshape teeth (plan §7.5)

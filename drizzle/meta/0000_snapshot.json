@@ -1,5 +1,5 @@
 {
-  "id": "ab5e6422-01ca-4cbf-9f31-07591109cf64",
+  "id": "ed11b620-2702-43a7-b641-b97eccd5ca3c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -529,6 +529,97 @@
       },
       "isRLSEnabled": false
     },
+    "public.ai_model_pool": {
+      "name": "ai_model_pool",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "monthly_budget": {
+          "name": "monthly_budget",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        }
+      },
+      "indexes": {
+        "ai_model_pool_model_uniq": {
+          "name": "ai_model_pool_model_uniq",
+          "columns": [
+            {
+              "expression": "model",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ai_model_pool_order_idx": {
+          "name": "ai_model_pool_order_idx",
+          "columns": [
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.ai_providers": {
       "name": "ai_providers",
       "schema": "",
@@ -656,6 +747,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "requested_model": {
+          "name": "requested_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "actor_id": {
           "name": "actor_id",
           "type": "text",
@@ -754,6 +851,27 @@
           "method": "btree",
           "with": {}
         },
+        "ai_usage_provider_idx": {
+          "name": "ai_usage_provider_idx",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "ai_usage_actor_idx": {
           "name": "ai_usage_actor_idx",
           "columns": [
@@ -772,6 +890,34 @@
           ],
           "isUnique": false,
           "where": "\"ai_usage\".\"actor_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ai_usage_related_idx": {
+          "name": "ai_usage_related_idx",
+          "columns": [
+            {
+              "expression": "related_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "related_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"ai_usage\".\"related_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2438,6 +2584,198 @@
         "glossary_terms_origin_check": {
           "name": "glossary_terms_origin_check",
           "value": "\"glossary_terms\".\"origin\" in ('manual', 'captured')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.link_prechecks": {
+      "name": "link_prechecks",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "link_id": {
+          "name": "link_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trigger": {
+          "name": "trigger",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'running'"
+        },
+        "ok": {
+          "name": "ok",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reach": {
+          "name": "reach",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "backlink": {
+          "name": "backlink",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_kind": {
+          "name": "error_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "link_prechecks_latest_idx": {
+          "name": "link_prechecks_latest_idx",
+          "columns": [
+            {
+              "expression": "link_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "link_prechecks_running_uniq": {
+          "name": "link_prechecks_running_uniq",
+          "columns": [
+            {
+              "expression": "link_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"link_prechecks\".\"status\" = 'running'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "link_prechecks_actor_idx": {
+          "name": "link_prechecks_actor_idx",
+          "columns": [
+            {
+              "expression": "actor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"link_prechecks\".\"actor_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "link_prechecks_link_id_links_id_fk": {
+          "name": "link_prechecks_link_id_links_id_fk",
+          "tableFrom": "link_prechecks",
+          "tableTo": "links",
+          "columnsFrom": [
+            "link_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "link_prechecks_actor_id_user_id_fk": {
+          "name": "link_prechecks_actor_id_user_id_fk",
+          "tableFrom": "link_prechecks",
+          "tableTo": "user",
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "link_prechecks_status_check": {
+          "name": "link_prechecks_status_check",
+          "value": "\"link_prechecks\".\"status\" in ('running', 'completed', 'stale')"
+        },
+        "link_prechecks_trigger_check": {
+          "name": "link_prechecks_trigger_check",
+          "value": "\"link_prechecks\".\"trigger\" in ('application', 'admin')"
+        },
+        "link_prechecks_finished_check": {
+          "name": "link_prechecks_finished_check",
+          "value": "(\"link_prechecks\".\"status\" = 'running') = (\"link_prechecks\".\"finished_at\" is null)"
+        },
+        "link_prechecks_ok_check": {
+          "name": "link_prechecks_ok_check",
+          "value": "(\"link_prechecks\".\"status\" = 'completed') = (\"link_prechecks\".\"ok\" is not null)"
         }
       },
       "isRLSEnabled": false
@@ -5405,6 +5743,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "requested_by": {
+          "name": "requested_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "target_post_id": {
           "name": "target_post_id",
           "type": "uuid",
@@ -5606,6 +5950,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "translations_requested_by_idx": {
+          "name": "translations_requested_by_idx",
+          "columns": [
+            {
+              "expression": "requested_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"translations\".\"requested_by\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -5641,6 +6001,19 @@
           "tableTo": "user",
           "columnsFrom": [
             "reviewed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "translations_requested_by_user_id_fk": {
+          "name": "translations_requested_by_user_id_fk",
+          "tableFrom": "translations",
+          "tableTo": "user",
+          "columnsFrom": [
+            "requested_by"
           ],
           "columnsTo": [
             "id"

@@ -12,6 +12,7 @@ import {
 	canManualTransition,
 	clampSortOrder,
 	computeRowBadges,
+	derivePrecheckBadge,
 	planManualTransition,
 	type ManualAction,
 	type ManualTransitionInput
@@ -218,6 +219,87 @@ describe('links admin derived badges (plan §2.5)', () => {
 		const approved = computeRowBadges({ ...base, status: 'approved', lostSince: null }, now, 30);
 		expect(approved.daysToPurge).toBeNull();
 		expect(approved.purgeSoon).toBe(false);
+	});
+});
+
+describe('pending precheck badge', () => {
+	const older = new Date('2026-11-09T00:00:00Z');
+	const newer = new Date('2026-11-10T00:00:00Z');
+	const run = (
+		overrides: Partial<{
+			status: 'running' | 'completed' | 'stale';
+			ok: boolean | null;
+			errorKind: string | null;
+			note: string | null;
+			startedAt: Date;
+		}>
+	) => ({
+		status: 'completed' as const,
+		ok: true,
+		errorKind: null,
+		note: null,
+		startedAt: newer,
+		...overrides
+	});
+
+	it('takes the newest non-stale run', () => {
+		expect(
+			derivePrecheckBadge([
+				run({ ok: false, errorKind: 'timeout', startedAt: older }),
+				run({ ok: true, startedAt: newer })
+			])
+		).toMatchObject({ status: 'completed', ok: true });
+	});
+
+	it('reports a running newest run', () => {
+		expect(
+			derivePrecheckBadge([run({ startedAt: older }), run({ status: 'running', ok: null })])
+		).toMatchObject({ status: 'running' });
+	});
+
+	it('lets a stale newest run mask an older pass', () => {
+		expect(
+			derivePrecheckBadge([
+				run({ ok: true, startedAt: older }),
+				run({ status: 'stale', ok: null, startedAt: newer, note: 'precheck: aborted' })
+			])
+		).toMatchObject({ status: 'stale', ok: false, note: 'precheck: aborted' });
+	});
+
+	it('surfaces a lone stale run instead of pretending there is no evidence', () => {
+		expect(derivePrecheckBadge([run({ status: 'stale', ok: null })])).toMatchObject({
+			status: 'stale',
+			ok: false
+		});
+		expect(derivePrecheckBadge([])).toBeNull();
+	});
+
+	it('surfaces the failed axis', () => {
+		expect(derivePrecheckBadge([run({ ok: false, errorKind: 'link_missing' })])).toMatchObject({
+			ok: false,
+			errorKind: 'link_missing'
+		});
+	});
+
+	it('only badges pending rows', () => {
+		const badge = {
+			status: 'completed' as const,
+			ok: true,
+			errorKind: null,
+			note: null,
+			at: newer
+		};
+		const base = {
+			backlinkMissingStreak: 0,
+			lastErrorKind: null,
+			lastOkAt: null,
+			lostSince: null
+		};
+		expect(computeRowBadges({ ...base, status: 'approved' }, newer, 30, badge).precheck).toBeNull();
+		expect(computeRowBadges({ ...base, status: 'pending' }, newer, 30, badge).precheck).toEqual(
+			badge
+		);
+		expect(computeRowBadges({ ...base, status: 'pending' }, newer, 30, null).precheck).toBeNull();
 	});
 });
 

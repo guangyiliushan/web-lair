@@ -261,7 +261,7 @@ export async function runAgentChat(input: {
 				result = { error: 'unknown_tool' };
 				status = 'error';
 			} else {
-				let args: Record<string, unknown> = {};
+				let args: Record<string, unknown>;
 				try {
 					args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
 				} catch {
@@ -556,7 +556,7 @@ export async function streamAgentChat(input: {
 				result = { error: 'unknown_tool' };
 				status = 'error';
 			} else {
-				let args: Record<string, unknown> = {};
+				let args: Record<string, unknown>;
 				try {
 					args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
 				} catch {

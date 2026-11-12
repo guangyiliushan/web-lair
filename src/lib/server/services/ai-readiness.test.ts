@@ -140,7 +140,10 @@ describe('readinessFor', () => {
 
 		const unassigned = readinessFor('chat', input());
 		expect(unassigned.status).toBe('unassigned');
-		expect(unassigned.fix).toEqual({ href: AI_SETTINGS_ASSIGNMENTS, labelKey: 'admin_readiness_fix_assign' });
+		expect(unassigned.fix).toEqual({
+			href: AI_SETTINGS_ASSIGNMENTS,
+			labelKey: 'admin_readiness_fix_assign'
+		});
 	});
 });
 

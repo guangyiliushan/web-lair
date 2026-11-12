@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Questionnaire as QuestionnairePrimitive } from "@shadcn-svelte/primitives/questionnaire";
-	import { cn } from "$lib/utils.js";
+	import { Questionnaire as QuestionnairePrimitive } from '@shadcn-svelte/primitives/questionnaire';
+	import { cn } from '$lib/utils.js';
 
 	let {
 		ref = $bindable(null),
@@ -12,6 +12,6 @@
 <QuestionnairePrimitive.Error
 	bind:ref
 	data-slot="questionnaire-error"
-	class={cn("mt-2 text-sm text-destructive", className)}
+	class={cn('mt-2 text-sm text-destructive', className)}
 	{...restProps}
 />

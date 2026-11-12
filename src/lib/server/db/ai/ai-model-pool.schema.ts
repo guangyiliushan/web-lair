@@ -1,5 +1,15 @@
 import { sql } from 'drizzle-orm';
-import { boolean, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+	boolean,
+	index,
+	integer,
+	numeric,
+	pgTable,
+	text,
+	timestamp,
+	uniqueIndex,
+	uuid
+} from 'drizzle-orm/pg-core';
 
 /**
  * The default model pool: an ordered list of MODEL ids, not providers.
@@ -33,9 +43,7 @@ export const aiModelPool = pgTable(
 		 * 0 = no cap. A model over its cap is skipped in favour of the next pool
 		 * entry rather than failing the call outright.
 		 */
-		monthlyBudget: numeric('monthly_budget', { precision: 12, scale: 2 })
-			.notNull()
-			.default('0')
+		monthlyBudget: numeric('monthly_budget', { precision: 12, scale: 2 }).notNull().default('0')
 	},
 	(table) => [
 		uniqueIndex('ai_model_pool_model_uniq').on(table.model),

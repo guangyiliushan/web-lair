@@ -100,7 +100,6 @@ function splitLine(line: string, maxChars: number): string[] {
 		}
 		if (current) {
 			parts.push(current);
-			current = '';
 		}
 		let rest = piece;
 		while (lengthOf(rest) > maxChars) {
@@ -250,5 +249,7 @@ export function segmentMarkdown(
 
 /** Reassemble the (normalised) source from chunks; used by tests and callers. */
 export function joinChunks(chunks: readonly TranslationChunk[]): string {
-	return chunks.map((chunk, index) => (index === 0 ? chunk.text : chunk.separator + chunk.text)).join('');
+	return chunks
+		.map((chunk, index) => (index === 0 ? chunk.text : chunk.separator + chunk.text))
+		.join('');
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { MessageScroller as MessageScrollerPrimitive } from "@shadcn-svelte/primitives/message-scroller";
-	import { cn } from "$lib/utils.js";
+	import { MessageScroller as MessageScrollerPrimitive } from '@shadcn-svelte/primitives/message-scroller';
+	import { cn } from '$lib/utils.js';
 
 	let {
 		class: className,
@@ -13,7 +13,7 @@
 	bind:ref
 	data-slot="message-scroller"
 	class={cn(
-		"group/message-scroller relative flex size-full min-h-0 flex-col overflow-hidden",
+		'group/message-scroller relative flex size-full min-h-0 flex-col overflow-hidden',
 		className
 	)}
 	{...restProps}

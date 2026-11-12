@@ -21,7 +21,8 @@ function chunksFor(source: string, maxChars = 3000) {
 
 const identity = async (request: ChunkCallRequest) => ({
 	text: request.chunk.text,
-	provider: 'test-provider', model: 'test-model'
+	provider: 'test-provider',
+	model: 'test-model'
 });
 
 describe('translateChunks', () => {

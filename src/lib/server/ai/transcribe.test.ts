@@ -56,17 +56,17 @@ describe('rejectedUpload', () => {
 
 describe('transcribeAudio', () => {
 	it('maps Whisper JSON to text, VTT and duration', async () => {
-		const fetchMock = vi.fn(
-			async (_input: RequestInfo | URL, _init?: RequestInit) =>
-				new Response(
-					JSON.stringify({
-						text: 'hello world',
-						language: 'en',
-						segments: [{ start: 0, end: 1.2, text: 'hello world' }]
-					}),
-					{ status: 200, headers: { 'content-type': 'application/json' } }
-				)
-		);
+		const fetchMock = vi.fn(async (...args: Parameters<typeof fetch>) => {
+			void args;
+			return new Response(
+				JSON.stringify({
+					text: 'hello world',
+					language: 'en',
+					segments: [{ start: 0, end: 1.2, text: 'hello world' }]
+				}),
+				{ status: 200, headers: { 'content-type': 'application/json' } }
+			);
+		});
 		vi.stubGlobal('fetch', fetchMock);
 
 		const result = await transcribeAudio({

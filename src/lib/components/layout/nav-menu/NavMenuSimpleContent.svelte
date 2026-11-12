@@ -80,7 +80,7 @@
 							{/if}
 							<span class="ms-auto flex min-w-0 shrink items-center gap-1.5">
 								{#if desc}
-									<span class="max-w-28 min-w-0 truncate text-muted-foreground">{desc}</span>
+									<span class="max-w-32 min-w-0 truncate text-muted-foreground">{desc}</span>
 								{/if}
 								{#if child.badge}
 									<Badge

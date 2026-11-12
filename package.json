@@ -53,6 +53,7 @@
 		"jobs:dev": "node --env-file=.env jobs/dev.ts",
 		"jobs:enqueue": "node --env-file=.env scripts/jobs-enqueue.ts",
 		"jobs:check-links": "tsx --env-file=.env scripts/jobs/check-links.ts",
+		"jobs:links-prune": "tsx --env-file=.env scripts/jobs/links-prune.ts",
 		"jobs:sync-projects": "tsx --env-file=.env scripts/jobs/sync-projects.ts",
 		"db:ensure-categories": "tsx --env-file=.env scripts/ensure-default-category.ts",
 		"db:ensure-pages": "tsx --env-file=.env scripts/ensure-pages.ts",

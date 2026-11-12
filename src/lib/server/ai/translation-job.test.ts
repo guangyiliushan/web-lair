@@ -267,28 +267,25 @@ describe('runTranslationJob failures', () => {
 		['rate_limit', true],
 		['network', false],
 		['budget', true]
-	] as const)(
-		'turns %s into stage=waiting with a cleared lease',
-		async (code, resetRuns) => {
-			queueClaims(1);
-			generateMock.mockRejectedValue(new AiError(code, 'not the row`s fault'));
-			const ctx = makeCtx();
+	] as const)('turns %s into stage=waiting with a cleared lease', async (code, resetRuns) => {
+		queueClaims(1);
+		generateMock.mockRejectedValue(new AiError(code, 'not the row`s fault'));
+		const ctx = makeCtx();
 
-			await runTranslationJob(ctx);
+		await runTranslationJob(ctx);
 
-			expect(lease.markTranslationWaiting).toHaveBeenCalledWith(
-				dbMock,
-				ROW.id,
-				'not the row`s fault',
-				// Only a provider/budget pause may reuse the claim budget; a
-				// network failure keeps counting toward the crash-loop guard.
-				{ resetRuns }
-			);
-			expect(lease.failTranslationAttempt).not.toHaveBeenCalled();
-			expect(state.writes).toHaveLength(0);
-			expect(ctx.summary).toHaveBeenCalledWith(expect.objectContaining({ failed: 0, waiting: 1 }));
-		}
-	);
+		expect(lease.markTranslationWaiting).toHaveBeenCalledWith(
+			dbMock,
+			ROW.id,
+			'not the row`s fault',
+			// Only a provider/budget pause may reuse the claim budget; a
+			// network failure keeps counting toward the crash-loop guard.
+			{ resetRuns }
+		);
+		expect(lease.failTranslationAttempt).not.toHaveBeenCalled();
+		expect(state.writes).toHaveLength(0);
+		expect(ctx.summary).toHaveBeenCalledWith(expect.objectContaining({ failed: 0, waiting: 1 }));
+	});
 
 	it('parks two different rows instead of spinning on the first one', async () => {
 		// Before the exclusion, the first parked row still matched the claim

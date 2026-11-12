@@ -10,8 +10,11 @@ import {
 	checkOneLink,
 	computeRowBadges,
 	createLink,
+	derivePrecheckBadge,
 	listLinks,
+	listPrecheckRuns,
 	linkCounts,
+	precheckLink,
 	purgeOutdated,
 	queueCheckAll,
 	rejectLink,
@@ -22,6 +25,7 @@ import {
 } from '$lib/server/links/admin';
 import { isUuid } from '$lib/utils/uuid';
 import type { LinkStatus } from '$lib/utils/link-meta';
+import type { LinkPrecheckRow } from '$lib/server/db/content/link-precheck.schema';
 
 /**
  * Friends console load (links L3): the real queue behind the mock shell.
@@ -49,12 +53,22 @@ export const load: PageServerLoad = async ({ url }) => {
 	]);
 	const counts = await linkCounts(checks.graceDays);
 	const now = new Date();
-	const rows = listLinks(state).then((items) =>
-		items.map((item) => ({
-			...item,
-			badges: computeRowBadges(item, now, checks.graceDays)
-		}))
-	);
+	const rows = listLinks(state).then(async (items) => {
+		// One query for every pending row's runs: the drawer needs the history
+		// and the row badge needs the newest run, so they share a round trip.
+		const runs =
+			state === 'pending'
+				? await listPrecheckRuns(items.map((item) => item.id))
+				: new Map<string, LinkPrecheckRow[]>();
+		return items.map((item) => {
+			const prechecks = runs.get(item.id) ?? [];
+			return {
+				...item,
+				prechecks,
+				badges: computeRowBadges(item, now, checks.graceDays, derivePrecheckBadge(prechecks))
+			};
+		});
+	});
 
 	return {
 		headerTitle: m.admin_nav_friends(),
@@ -277,6 +291,19 @@ export const actions: Actions = {
 		try {
 			const { deduplicated } = await queueCheckAll();
 			return { success: true, flash: deduplicated ? 'check-dedup' : 'check-queued' };
+		} catch (err) {
+			return actionFail(err);
+		}
+	},
+
+	precheckOne: async ({ request }) => {
+		await requireAdminRole();
+		const form = await request.formData();
+		const id = idFrom(form);
+		if (!id) return missingId();
+		try {
+			const run = await precheckLink(id, requireUser().id);
+			return { success: true, flash: 'prechecked', runs: [run] };
 		} catch (err) {
 			return actionFail(err);
 		}

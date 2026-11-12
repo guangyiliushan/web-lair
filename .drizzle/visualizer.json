@@ -1,9 +1,16 @@
 [
 	{
-		"id": "user_profiles",
+		"id": "account",
 		"position": {
-			"x": 930,
-			"y": 14400
+			"x": 50,
+			"y": 15800
+		}
+	},
+	{
+		"id": "activities",
+		"position": {
+			"x": 50,
+			"y": 10240
 		}
 	},
 	{
@@ -14,10 +21,45 @@
 		}
 	},
 	{
-		"id": "options",
+		"id": "ai_agent_memories",
 		"position": {
 			"x": 50,
-			"y": 3800
+			"y": 1170
+		}
+	},
+	{
+		"id": "ai_agent_messages",
+		"position": {
+			"x": 50,
+			"y": 610
+		}
+	},
+	{
+		"id": "ai_agent_proposals",
+		"position": {
+			"x": 2400,
+			"y": 10690
+		}
+	},
+	{
+		"id": "ai_model_pool",
+		"position": {
+			"x": 1450,
+			"y": 50
+		}
+	},
+	{
+		"id": "ai_providers",
+		"position": {
+			"x": 50,
+			"y": 2290
+		}
+	},
+	{
+		"id": "ai_usage",
+		"position": {
+			"x": 50,
+			"y": 1730
 		}
 	},
 	{
@@ -25,6 +67,13 @@
 		"position": {
 			"x": 50,
 			"y": 9800
+		}
+	},
+	{
+		"id": "comment_moderation_events",
+		"position": {
+			"x": 930,
+			"y": 16560
 		}
 	},
 	{
@@ -42,10 +91,87 @@
 		}
 	},
 	{
+		"id": "email_suppressions",
+		"position": {
+			"x": 2400,
+			"y": 10130
+		}
+	},
+	{
+		"id": "enrichment_captures",
+		"position": {
+			"x": 490,
+			"y": 11260
+		}
+	},
+	{
+		"id": "file_references",
+		"position": {
+			"x": 930,
+			"y": 16990
+		}
+	},
+	{
+		"id": "files",
+		"position": {
+			"x": 2400,
+			"y": 6770
+		}
+	},
+	{
+		"id": "glossary_terms",
+		"position": {
+			"x": 2400,
+			"y": 6210
+		}
+	},
+	{
+		"id": "invitation",
+		"position": {
+			"x": 2400,
+			"y": 610
+		}
+	},
+	{
+		"id": "job_runs",
+		"position": {
+			"x": 2400,
+			"y": 8450
+		}
+	},
+	{
+		"id": "job_schedules",
+		"position": {
+			"x": 2400,
+			"y": 9010
+		}
+	},
+	{
+		"id": "link_prechecks",
+		"position": {
+			"x": 1450,
+			"y": 300
+		}
+	},
+	{
 		"id": "links",
 		"position": {
 			"x": 50,
 			"y": 5840
+		}
+	},
+	{
+		"id": "member",
+		"position": {
+			"x": 2400,
+			"y": 1170
+		}
+	},
+	{
+		"id": "moments",
+		"position": {
+			"x": 50,
+			"y": 8160
 		}
 	},
 	{
@@ -56,6 +182,20 @@
 		}
 	},
 	{
+		"id": "options",
+		"position": {
+			"x": 50,
+			"y": 3800
+		}
+	},
+	{
+		"id": "organization",
+		"position": {
+			"x": 2400,
+			"y": 2290
+		}
+	},
+	{
 		"id": "pages",
 		"position": {
 			"x": 50,
@@ -63,10 +203,45 @@
 		}
 	},
 	{
+		"id": "passkey",
+		"position": {
+			"x": 930,
+			"y": 17950
+		}
+	},
+	{
+		"id": "photo_tags",
+		"position": {
+			"x": 2400,
+			"y": 7890
+		}
+	},
+	{
+		"id": "photos",
+		"position": {
+			"x": 2400,
+			"y": 7330
+		}
+	},
+	{
 		"id": "post_related_posts",
 		"position": {
 			"x": 930,
 			"y": 9800
+		}
+	},
+	{
+		"id": "post_revisions",
+		"position": {
+			"x": 2400,
+			"y": 2850
+		}
+	},
+	{
+		"id": "post_tags",
+		"position": {
+			"x": 2400,
+			"y": 3410
 		}
 	},
 	{
@@ -91,38 +266,10 @@
 		}
 	},
 	{
-		"id": "moments",
-		"position": {
-			"x": 50,
-			"y": 8160
-		}
-	},
-	{
-		"id": "topics",
-		"position": {
-			"x": 50,
-			"y": 5320
-		}
-	},
-	{
-		"id": "activities",
-		"position": {
-			"x": 50,
-			"y": 10240
-		}
-	},
-	{
-		"id": "enrichment_captures",
-		"position": {
-			"x": 490,
-			"y": 11260
-		}
-	},
-	{
-		"id": "file_references",
+		"id": "session",
 		"position": {
 			"x": 930,
-			"y": 16990
+			"y": 18710
 		}
 	},
 	{
@@ -140,90 +287,6 @@
 		}
 	},
 	{
-		"id": "webhooks",
-		"position": {
-			"x": 50,
-			"y": 15320
-		}
-	},
-	{
-		"id": "account",
-		"position": {
-			"x": 50,
-			"y": 15800
-		}
-	},
-	{
-		"id": "passkey",
-		"position": {
-			"x": 930,
-			"y": 17950
-		}
-	},
-	{
-		"id": "session",
-		"position": {
-			"x": 930,
-			"y": 18710
-		}
-	},
-	{
-		"id": "user",
-		"position": {
-			"x": 490,
-			"y": 15900
-		}
-	},
-	{
-		"id": "verification",
-		"position": {
-			"x": 50,
-			"y": 16600
-		}
-	},
-	{
-		"id": "invitation",
-		"position": {
-			"x": 2400,
-			"y": 610
-		}
-	},
-	{
-		"id": "member",
-		"position": {
-			"x": 2400,
-			"y": 1170
-		}
-	},
-	{
-		"id": "thoughts",
-		"position": {
-			"x": 2400,
-			"y": 1730
-		}
-	},
-	{
-		"id": "organization",
-		"position": {
-			"x": 2400,
-			"y": 2290
-		}
-	},
-	{
-		"id": "post_revisions",
-		"position": {
-			"x": 2400,
-			"y": 2850
-		}
-	},
-	{
-		"id": "post_tags",
-		"position": {
-			"x": 2400,
-			"y": 3410
-		}
-	},
-	{
 		"id": "summaries",
 		"position": {
 			"x": 2400,
@@ -235,6 +298,27 @@
 		"position": {
 			"x": 2400,
 			"y": 4530
+		}
+	},
+	{
+		"id": "thoughts",
+		"position": {
+			"x": 2400,
+			"y": 1730
+		}
+	},
+	{
+		"id": "topics",
+		"position": {
+			"x": 50,
+			"y": 5320
+		}
+	},
+	{
+		"id": "transcripts",
+		"position": {
+			"x": 2400,
+			"y": 11250
 		}
 	},
 	{
@@ -252,80 +336,24 @@
 		}
 	},
 	{
-		"id": "ai_agent_messages",
+		"id": "user",
 		"position": {
-			"x": 50,
-			"y": 610
+			"x": 490,
+			"y": 15900
 		}
 	},
 	{
-		"id": "ai_agent_memories",
-		"position": {
-			"x": 50,
-			"y": 1170
-		}
-	},
-	{
-		"id": "ai_usage",
-		"position": {
-			"x": 50,
-			"y": 1730
-		}
-	},
-	{
-		"id": "ai_providers",
-		"position": {
-			"x": 50,
-			"y": 2290
-		}
-	},
-	{
-		"id": "glossary_terms",
-		"position": {
-			"x": 2400,
-			"y": 6210
-		}
-	},
-	{
-		"id": "comment_moderation_events",
+		"id": "user_profiles",
 		"position": {
 			"x": 930,
-			"y": 16560
+			"y": 14400
 		}
 	},
 	{
-		"id": "files",
+		"id": "verification",
 		"position": {
-			"x": 2400,
-			"y": 6770
-		}
-	},
-	{
-		"id": "photos",
-		"position": {
-			"x": 2400,
-			"y": 7330
-		}
-	},
-	{
-		"id": "photo_tags",
-		"position": {
-			"x": 2400,
-			"y": 7890
-		}
-	},
-	{
-		"id": "job_runs",
-		"position": {
-			"x": 2400,
-			"y": 8450
-		}
-	},
-	{
-		"id": "job_schedules",
-		"position": {
-			"x": 2400,
-			"y": 9010
+			"x": 50,
+			"y": 16600
 		}
 	},
 	{
@@ -336,24 +364,10 @@
 		}
 	},
 	{
-		"id": "email_suppressions",
+		"id": "webhooks",
 		"position": {
-			"x": 2400,
-			"y": 10130
-		}
-	},
-	{
-		"id": "ai_agent_proposals",
-		"position": {
-			"x": 2400,
-			"y": 10690
-		}
-	},
-	{
-		"id": "transcripts",
-		"position": {
-			"x": 2400,
-			"y": 11250
+			"x": 50,
+			"y": 15320
 		}
 	}
 ]

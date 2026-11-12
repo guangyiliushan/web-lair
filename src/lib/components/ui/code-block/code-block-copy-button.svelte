@@ -1,19 +1,19 @@
 <script lang="ts">
-	import { onDestroy } from "svelte";
+	import { onDestroy } from 'svelte';
 	import IconCheck from '@tabler/icons-svelte/icons/check';
 	import IconCopy from '@tabler/icons-svelte/icons/copy';
-	import { Button, type ButtonProps } from "$lib/components/ui/button/index.js";
-	import { cn } from "$lib/utils.js";
+	import { Button, type ButtonProps } from '$lib/components/ui/button/index.js';
+	import { cn } from '$lib/utils.js';
 
 	let {
 		ref = $bindable(null),
 		class: className,
 		value,
-		variant = "ghost",
-		size = "icon-xs",
+		variant = 'ghost',
+		size = 'icon-xs',
 		onclick,
 		...restProps
-	}: Omit<ButtonProps, "onclick"> & {
+	}: Omit<ButtonProps, 'onclick'> & {
 		value: string;
 		onclick?: (e: MouseEvent) => void;
 	} = $props();
@@ -41,7 +41,7 @@
 	data-copied={copied || undefined}
 	{variant}
 	{size}
-	aria-label={copied ? "Copied" : "Copy"}
+	aria-label={copied ? 'Copied' : 'Copy'}
 	class={cn(className)}
 	onclick={(e) => {
 		onclick?.(e);
@@ -50,9 +50,9 @@
 	{...restProps}
 >
 	{#if copied}
-		<IconCheck  />
+		<IconCheck />
 	{:else}
-		<IconCopy  />
+		<IconCopy />
 	{/if}
 </Button>
-<span aria-live="polite" class="sr-only">{copied ? "Copied" : ""}</span>
+<span aria-live="polite" class="sr-only">{copied ? 'Copied' : ''}</span>

@@ -1,9 +1,5 @@
-import {
-	loadHighlighter,
-	type Highlighter,
-	type HighlightedLine,
-} from "$lib/highlighter.js";
-import type { GrammarState } from "shiki/core";
+import { loadHighlighter, type Highlighter, type HighlightedLine } from '$lib/highlighter.js';
+import type { GrammarState } from 'shiki/core';
 
 /**
  * Highlights `code` in `language`. `current` holds one entry per line: a plain
@@ -50,26 +46,26 @@ export function useHighlightedCode(value: () => string, language: () => string) 
 		text: string;
 		lines: HighlightedLine[];
 		state?: GrammarState;
-	} = { highlighter: null, text: "", lines: [] };
+	} = { highlighter: null, text: '', lines: [] };
 
 	const lines = $derived.by((): HighlightedLine[] => {
 		const raw = value();
 		// A trailing newline would render as an extra empty line.
-		const code = raw.endsWith("\n") ? raw.slice(0, -1) : raw;
+		const code = raw.endsWith('\n') ? raw.slice(0, -1) : raw;
 		const lang = language();
 		const highlighter = loaded?.language === lang ? loaded.highlighter : null;
 
 		if (!highlighter) {
-			return code.split("\n");
+			return code.split('\n');
 		}
 
 		let next = done;
 
 		if (next.highlighter !== highlighter || !code.startsWith(next.text)) {
-			next = { highlighter, text:"", lines: [] };
+			next = { highlighter, text: '', lines: [] };
 		}
 
-		const end = code.lastIndexOf("\n") + 1;
+		const end = code.lastIndexOf('\n') + 1;
 
 		if (end > next.text.length) {
 			const result = highlighter.highlight(code.slice(next.text.length, end - 1), next.state);
@@ -78,7 +74,7 @@ export function useHighlightedCode(value: () => string, language: () => string) 
 				highlighter,
 				text: code.slice(0, end),
 				lines: [...next.lines, ...result.lines],
-				state: result.state,
+				state: result.state
 			};
 		}
 
@@ -93,6 +89,6 @@ export function useHighlightedCode(value: () => string, language: () => string) 
 	return {
 		get current() {
 			return lines;
-		},
+		}
 	};
 }

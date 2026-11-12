@@ -4,6 +4,7 @@ export * from './comment.schema';
 export * from './draft.schema';
 export * from './file.schema';
 export * from './glossary-term.schema';
+export * from './link-precheck.schema';
 export * from './link.schema';
 export * from './moment.schema';
 export * from './note.schema';

@@ -81,9 +81,9 @@ describe('markdown protection', () => {
 		const source = '欢迎'.repeat(50); // 100 code points
 		const translated = 'Welcome '.repeat(50).trim(); // ~4x, legitimate for zh -> en
 		expect(validateTranslation(source, translated).ok).toBe(false);
-		expect(
-			validateTranslation(source, translated, { lengthRatio: { min: 1, max: 5 } }).ok
-		).toBe(true);
+		expect(validateTranslation(source, translated, { lengthRatio: { min: 1, max: 5 } }).ok).toBe(
+			true
+		);
 	});
 
 	it('measures plain text without code fences', () => {

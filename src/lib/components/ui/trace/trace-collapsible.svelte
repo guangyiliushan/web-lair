@@ -1,7 +1,7 @@
 <script lang="ts">
-	import * as Collapsible from "$lib/components/ui/collapsible/index.js";
-	import { cn } from "$lib/utils.js";
-	import type { Collapsible as CollapsiblePrimitive } from "bits-ui";
+	import * as Collapsible from '$lib/components/ui/collapsible/index.js';
+	import { cn } from '$lib/utils.js';
+	import type { Collapsible as CollapsiblePrimitive } from 'bits-ui';
 
 	let {
 		ref = $bindable(null),
@@ -15,6 +15,6 @@
 	bind:ref
 	bind:open
 	data-slot="trace-collapsible"
-	class={cn("flex w-full min-w-0 flex-col", className)}
+	class={cn('flex w-full min-w-0 flex-col', className)}
 	{...restProps}
 />

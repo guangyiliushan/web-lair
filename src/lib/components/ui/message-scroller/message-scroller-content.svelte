@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { MessageScroller as MessageScrollerPrimitive } from "@shadcn-svelte/primitives/message-scroller";
-	import { cn } from "$lib/utils.js";
+	import { MessageScroller as MessageScrollerPrimitive } from '@shadcn-svelte/primitives/message-scroller';
+	import { cn } from '$lib/utils.js';
 
 	let {
 		ref = $bindable(null),
@@ -12,6 +12,6 @@
 <MessageScrollerPrimitive.Content
 	bind:ref
 	data-slot="message-scroller-content"
-	class={cn("gap-6 flex h-max min-h-full flex-col", className)}
+	class={cn('flex h-max min-h-full flex-col gap-6', className)}
 	{...restProps}
 />

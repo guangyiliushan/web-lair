@@ -73,6 +73,14 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 		scheduleHint: '0 5 * * *',
 		timeoutMs: 900_000
 	},
+	'links.prune': {
+		name: 'links.prune',
+		description:
+			'Delete outdated friend links past the grace window and clear rejected/banned contact addresses past the retention window (links L4).',
+		manual: true,
+		scheduleHint: '30 5 * * *',
+		timeoutMs: 300_000
+	},
 	'projects.sync': {
 		name: 'projects.sync',
 		description:

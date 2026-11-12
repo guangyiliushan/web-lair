@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { links } from '$lib/server/db/content/link.schema';
+import { linkPrechecks, type LinkPrecheckRow } from '$lib/server/db/content/link-precheck.schema';
 import { getOption } from '$lib/server/config/options-registry';
 import { enqueueJob } from '$lib/server/jobs/queue';
-import { LINK_STATUSES, type LinkStatus } from '$lib/utils/link-meta';
+import { LINK_STATUSES, type LinkErrorKind, type LinkStatus } from '$lib/utils/link-meta';
 import { checkSite } from './check-site';
 import { buildUserAgent, type FetchUnitDeps } from './fetch';
 import {
@@ -16,6 +17,7 @@ import {
 	type LinkRowSnapshot
 } from './job';
 import { normalizeLinkUrl } from './normalize';
+import { PrecheckError, executePrecheck, type PrecheckDeps } from './precheck';
 
 /**
  * Admin surface for the links line (L3, plan §5.3): the read side that feeds
@@ -175,6 +177,15 @@ export interface LinkBadgeRow {
 	lostSince: Date | null;
 }
 
+/** Newest usable precheck run, reduced to what a row badge needs. */
+export interface PrecheckBadge {
+	status: 'running' | 'completed' | 'stale';
+	ok: boolean;
+	errorKind: LinkErrorKind | null;
+	note: string | null;
+	at: Date;
+}
+
 export interface LinkRowBadges {
 	/** `backlink_missing_streak >= 2` on an approved/outdated row. */
 	backlinkLost: boolean;
@@ -184,9 +195,37 @@ export interface LinkRowBadges {
 	purgeSoon: boolean;
 	/** Whole days until prune (null unless outdated). */
 	daysToPurge: number | null;
+	/** Latest precheck run, pending rows only (`null` renders no badge). */
+	precheck: PrecheckBadge | null;
 }
 
-export function computeRowBadges(row: LinkBadgeRow, now: Date, graceDays: number): LinkRowBadges {
+/**
+ * Newest run wins, including a stale one. A stale run is a crashed attempt:
+ * hiding it would fall back to an older "passed" run and make the row look
+ * healthier than the latest attempt. The UI renders stale as incomplete.
+ */
+export function derivePrecheckBadge(
+	runs: Pick<LinkPrecheckRow, 'status' | 'ok' | 'errorKind' | 'note' | 'startedAt'>[]
+): PrecheckBadge | null {
+	const newest = [...runs].sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
+	if (!newest) return null;
+	const status: PrecheckBadge['status'] =
+		newest.status === 'running' || newest.status === 'stale' ? newest.status : 'completed';
+	return {
+		status,
+		ok: status === 'completed' && newest.ok === true,
+		errorKind: (newest.errorKind as LinkErrorKind | null) ?? null,
+		note: newest.note ?? null,
+		at: newest.startedAt
+	};
+}
+
+export function computeRowBadges(
+	row: LinkBadgeRow,
+	now: Date,
+	graceDays: number,
+	precheck: PrecheckBadge | null = null
+): LinkRowBadges {
 	const live = row.status === 'approved' || row.status === 'outdated';
 	const backlinkLost = live && row.backlinkMissingStreak >= 2;
 	const blocked =
@@ -199,7 +238,13 @@ export function computeRowBadges(row: LinkBadgeRow, now: Date, graceDays: number
 		daysToPurge = Math.max(0, Math.ceil((deadline - now.getTime()) / DAY_MS));
 		purgeSoon = now.getTime() >= deadline - 7 * DAY_MS;
 	}
-	return { backlinkLost, blocked, purgeSoon, daysToPurge };
+	return {
+		backlinkLost,
+		blocked,
+		purgeSoon,
+		daysToPurge,
+		precheck: row.status === 'pending' ? precheck : null
+	};
 }
 
 /** Sort keys are hand-entered: keep them inside the integer the UI can show. */
@@ -661,4 +706,70 @@ export async function queueCheckAll(): Promise<{ id: string; deduplicated: boole
 	const checks = await getOption('friends.checks');
 	if (!checks.enabled) throw new LinkAdminError('checks-disabled');
 	return enqueueJob(db, 'links.check', 'manual');
+}
+
+export interface PrecheckLinkDeps extends PrecheckDeps {
+	/** Test seam: swap the persistence handle. */
+	db?: Parameters<typeof executePrecheck>[0]['db'];
+	/** Test seam: stub the run service. */
+	run?: typeof executePrecheck;
+}
+
+/**
+ * L4 remainder: re-run the application-stage precheck for a pending row.
+ *
+ * Deliberately narrower than `checkOneLink`: it writes a `link_prechecks` run
+ * and nothing else. Status, streaks, `last_checked_at` and `recent_checks`
+ * belong to the checker and to the explicit "check now" action; letting a
+ * precheck touch them would let a reviewer's evidence probe change the
+ * decision it is supposed to inform.
+ */
+export async function precheckLink(
+	id: string,
+	actorId: string,
+	deps: PrecheckLinkDeps = {}
+): Promise<LinkPrecheckRow> {
+	const row = await requireLinkRow(id);
+	if (row.status !== 'pending') throw new LinkAdminError('not-checkable');
+
+	const [checks, policy] = await Promise.all([
+		getOption('friends.checks'),
+		getOption('friends.policy')
+	]);
+
+	try {
+		return await (deps.run ?? executePrecheck)({
+			db: deps.db ?? db,
+			link: { id: row.id, url: row.url, backlinkUrl: row.backlinkUrl ?? '' },
+			trigger: 'admin',
+			actorId,
+			config: { checks, policy },
+			deps
+		});
+	} catch (err) {
+		if (err instanceof PrecheckError) throw new LinkAdminError(err.code);
+		throw err;
+	}
+}
+
+/** Newest runs per link, for the drawer (one query for the whole page). */
+export async function listPrecheckRuns(
+	linkIds: string[],
+	perLink = 5
+): Promise<Map<string, LinkPrecheckRow[]>> {
+	const grouped = new Map<string, LinkPrecheckRow[]>();
+	if (linkIds.length === 0) return grouped;
+
+	const rows = await db
+		.select()
+		.from(linkPrechecks)
+		.where(inArray(linkPrechecks.linkId, linkIds))
+		.orderBy(desc(linkPrechecks.startedAt));
+
+	for (const row of rows) {
+		const list = grouped.get(row.linkId) ?? [];
+		if (list.length < perLink) list.push(row);
+		grouped.set(row.linkId, list);
+	}
+	return grouped;
 }
