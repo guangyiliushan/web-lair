@@ -62,11 +62,19 @@ describe('secret-inventory.json', () => {
 });
 
 describe('bootstrap-secrets.sh contract', () => {
-	it('declares every inventory secret', () => {
+	it('binds every inventory secret to its declared generator and target', () => {
+		const rows = [...script.matchAll(/"([A-Z0-9_]+)\|([a-z0-9-]+)\|(env|backup)"/g)].map(
+			(match) => ({ name: match[1], generate: match[2], target: match[3] })
+		);
 		for (const secret of inventory.secrets) {
-			expect(script.includes(`"${secret.name}|`)).toBe(true);
-			expect(script).toContain(secret.generate);
+			const expectedTarget = secret.write === 'deploy/backup.env' ? 'backup' : 'env';
+			expect(rows).toContainEqual({
+				name: secret.name,
+				generate: secret.generate,
+				target: expectedTarget
+			});
 		}
+		expect(rows).toHaveLength(inventory.secrets.length);
 	});
 
 	it('writes env only and never runs a database command', () => {

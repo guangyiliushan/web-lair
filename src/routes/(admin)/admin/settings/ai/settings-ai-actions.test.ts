@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { aiProviders } from '$lib/server/db/ai';
+import { aiProviderSecrets, aiProviders } from '$lib/server/db/ai';
 import { options } from '$lib/server/db/config';
+import { activities } from '$lib/server/db/system';
 
 /**
  * Route-level tests for the AI settings actions (AI-2, repaired in AI-2.1):
@@ -30,7 +31,12 @@ vi.mock('$lib/server/authz', () => ({
 	requireOwnerRole: vi.fn(async () => {})
 }));
 vi.mock('$env/dynamic/private', () => ({
-	env: { AI_E2E_TEST_KEY: 'sk-test', AI_ALLOW_PRIVATE_HOSTS: '127.0.0.1' }
+	env: {
+		AI_E2E_TEST_KEY: 'sk-test',
+		AI_ALLOW_PRIVATE_HOSTS: '127.0.0.1',
+		SECRETS_KEYS: '1:REREREREREREREREREREREREREREREREREREREREREQ=',
+		SECRETS_KEY_ACTIVE: '1'
+	}
 }));
 
 import { requireAdminRole, requireOwnerRole } from '$lib/server/authz';
@@ -110,7 +116,10 @@ function makeExecutors() {
 function makeEvent(fields: Record<string, string>) {
 	const body = new FormData();
 	for (const [key, value] of Object.entries(fields)) body.set(key, value);
-	return { request: new Request('http://x/admin/settings/ai', { method: 'POST', body }) };
+	return {
+		request: new Request('http://x/admin/settings/ai', { method: 'POST', body }),
+		locals: { user: { id: 'admin-1' } }
+	};
 }
 
 async function callAction(name: string, fields: Record<string, string>) {
@@ -152,6 +161,8 @@ describe('AI settings actions', () => {
 		ownerGuardMock.mockClear();
 		state.selects = [[]];
 		for (const name of [
+			'saveProviderKey',
+			'clearProviderKey',
 			'saveProvider',
 			'deleteProvider',
 			'testProvider',
@@ -163,9 +174,9 @@ describe('AI settings actions', () => {
 		]) {
 			await callAction(name, {});
 		}
-		// Provider endpoints / budget / price table are owner-only; the rest
-		// stay owner-or-admin.
-		expect(ownerGuardMock).toHaveBeenCalledTimes(3);
+		// Provider endpoints / budget / price table / key writes are owner-only;
+		// the rest stay owner-or-admin.
+		expect(ownerGuardMock).toHaveBeenCalledTimes(5);
 		expect(guardMock).toHaveBeenCalledTimes(5);
 	});
 
@@ -623,5 +634,60 @@ describe('AI settings actions', () => {
 			name: 'ai.translation',
 			value: { minChars: 300, notesAuto: false, defaultMode: 'review' }
 		});
+	});
+
+	// ---- W2.5 provider key write path -------------------------------------
+
+	it('encrypts a provider key, audits ai.key_set and never stores or returns the value', async () => {
+		state.selects = [[{ id: ROW_ID, name: 'OpenAI' }], []];
+		const { result } = await callAction('saveProviderKey', {
+			id: ROW_ID,
+			value: 'sk-live-abcdefghijkl'
+		});
+		expect(result).toMatchObject({ message: expect.any(String) });
+		const secretInsert = state.inserts.find((row) => row.table === aiProviderSecrets);
+		expect(secretInsert?.values.ciphertext).toMatch(/^v1:1:/);
+		expect(secretInsert?.values.keyVersion).toBe(1);
+		expect(JSON.stringify(state.inserts.map((row) => row.values))).not.toContain(
+			'sk-live-abcdefghijkl'
+		);
+		const audit = state.inserts.find((row) => row.table === activities);
+		expect(audit?.values).toMatchObject({ event: 'ai.key_set', refType: 'ai', refId: ROW_ID });
+		expect(audit?.values.payload).toMatchObject({
+			provider: 'OpenAI',
+			hint: 'sk-…ijkl',
+			source: 'db'
+		});
+		expect(JSON.stringify(audit?.values)).not.toContain('sk-live-abcdefghijkl');
+	});
+
+	it('audits ai.key_rotate when a row already exists', async () => {
+		state.selects = [[{ id: ROW_ID, name: 'OpenAI' }], [{ providerId: ROW_ID }]];
+		await callAction('saveProviderKey', { id: ROW_ID, value: 'sk-live-abcdefghijkl' });
+		const audit = state.inserts.find((row) => row.table === activities);
+		expect(audit?.values.event).toBe('ai.key_rotate');
+	});
+
+	it('rejects a short key before touching the provider row', async () => {
+		const { result } = await callAction('saveProviderKey', { id: ROW_ID, value: 'short' });
+		expect(result).toMatchObject({ status: 400 });
+		expect(state.inserts).toHaveLength(0);
+	});
+
+	it('clears the encrypted key and audits ai.key_clear', async () => {
+		state.selects = [[{ id: ROW_ID, name: 'OpenAI' }]];
+		state.deletedRows = [{ providerId: ROW_ID }];
+		const { result } = await callAction('clearProviderKey', { id: ROW_ID });
+		expect(result).toMatchObject({ message: expect.any(String) });
+		expect(state.deletes).toHaveLength(1);
+		const audit = state.inserts.find((row) => row.table === activities);
+		expect(audit?.values).toMatchObject({ event: 'ai.key_clear', refType: 'ai', refId: ROW_ID });
+	});
+
+	it('404s a clear when no encrypted key exists', async () => {
+		state.selects = [[{ id: ROW_ID, name: 'OpenAI' }]];
+		state.deletedRows = [];
+		const { result } = await callAction('clearProviderKey', { id: ROW_ID });
+		expect(result).toMatchObject({ status: 404 });
 	});
 });
