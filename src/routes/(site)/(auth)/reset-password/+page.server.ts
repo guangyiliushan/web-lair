@@ -71,12 +71,12 @@ export const actions: Actions = {
 						errorCode: INVALID_TOKEN
 					});
 				}
-				return fail(400, {
-					message: error.message || m.auth_reset_err_unexpected(),
-					errorCode: ''
-				});
+				// Upstream wording (password policy, user lookup) is internal and
+				// English-only; the page owns the localized copy.
+				console.warn('[reset-password] rejected', code || 'unknown');
+				return fail(400, { message: m.auth_reset_err_unexpected(), errorCode: '' });
 			}
-			console.error('[reset-password] unexpected failure', error);
+			console.error('[reset-password] unexpected failure', (error as Error).name);
 			return fail(500, { message: m.auth_reset_err_unexpected(), errorCode: '' });
 		}
 

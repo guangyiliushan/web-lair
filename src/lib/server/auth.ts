@@ -25,7 +25,9 @@ import { getSiteOrganizationId } from '$lib/server/auth/site-organization';
 import { env } from '$env/dynamic/private';
 import { getRequestEvent } from '$app/server';
 import { db } from '$lib/server/db';
+import { verification } from '$lib/server/db/auth.schema';
 import { userProfiles } from '$lib/server/db/account/user-profile.schema';
+import { and, eq, like } from 'drizzle-orm';
 import { sendMailOrDevLog } from '$lib/server/mail/transport';
 import {
 	isMailLang,
@@ -96,8 +98,9 @@ export const auth = betterAuth({
 
 	// W1.6 (settings-truth plan, S3-B): GitHub is a reader-only method. The
 	// official `validateUserInfo` gate runs before the OAuth account/session
-	// write (and before linking a provider to an existing row), so an
-	// admin/owner account can only sign in with email + TOTP or a passkey.
+	// write (and before linking a provider to an existing row), so GitHub can
+	// never mint an admin/owner session. Email + TOTP, passkey and the
+	// registered tailnet owner hand-off are separate paths.
 	user: {
 		validateUserInfo: validateUserProvisioning
 	},
@@ -116,6 +119,21 @@ export const auth = betterAuth({
 		// outlive the password it was minted under. The reset flow has no
 		// session of its own to keep.
 		revokeSessionsOnPasswordReset: true,
+		// better-auth consumes only the presented reset token; an older mailed
+		// link would stay valid for its full hour. Sweep every outstanding token
+		// for the account. Best-effort: the password is already changed, so a
+		// cleanup failure must not turn the reset into an error.
+		onPasswordReset: async ({ user }) => {
+			try {
+				await db
+					.delete(verification)
+					.where(
+						and(eq(verification.value, user.id), like(verification.identifier, 'reset-password:%'))
+					);
+			} catch (error) {
+				console.warn('[auth] reset-token sweep failed', (error as Error).name);
+			}
+		},
 		sendResetPassword: async ({ user, url }) => {
 			await sendMailOrDevLog({ to: user.email, ...resetPasswordMail(await siteMailLang(), url) });
 		}

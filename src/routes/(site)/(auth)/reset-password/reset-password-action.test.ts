@@ -148,6 +148,23 @@ describe('reset-password action', () => {
 		expect(result.data).toEqual({ message: 'err-invalid-token', errorCode: 'invalid_token' });
 	});
 
+	it('never echoes upstream wording for other API failures', async () => {
+		resetMock.mockRejectedValueOnce(
+			APIError.from('BAD_REQUEST', { message: 'Password too short', code: 'PASSWORD_TOO_SHORT' })
+		);
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		const result = (await call({
+			token: 'tok_1',
+			password: 'new-password-1',
+			confirmPassword: 'new-password-1'
+		})) as { status: number; data: { message: string; errorCode: string } };
+
+		expect(result.status).toBe(400);
+		expect(result.data).toEqual({ message: 'err-unexpected', errorCode: '' });
+		expect(warn).toHaveBeenCalledWith('[reset-password] rejected', 'PASSWORD_TOO_SHORT');
+	});
+
 	it('reports an unexpected failure as 500', async () => {
 		resetMock.mockRejectedValueOnce(new Error('db down'));
 

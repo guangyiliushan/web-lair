@@ -87,7 +87,10 @@ describe('forgot-password action', () => {
 
 		expect(result).toEqual({ success: true });
 		expect(error).not.toHaveBeenCalled();
-		expect(warn).toHaveBeenCalledWith('[forgot-password] reset request rejected', 'Invalid email');
+		expect(warn).toHaveBeenCalledWith(
+			'[forgot-password] reset request rejected',
+			expect.any(String)
+		);
 		error.mockRestore();
 		warn.mockRestore();
 	});
@@ -99,7 +102,10 @@ describe('forgot-password action', () => {
 		const result = await call({ email: 'reader@example.com' });
 
 		expect(result).toEqual({ success: true });
-		expect(error).toHaveBeenCalledWith('[forgot-password] reset request failed', expect.any(Error));
+		expect(error).toHaveBeenCalledWith(
+			'[forgot-password] reset request failed',
+			expect.any(String)
+		);
 		error.mockRestore();
 	});
 

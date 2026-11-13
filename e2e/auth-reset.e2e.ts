@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
-import { ORIGIN, bootstrapReader, psql, valkey } from './support';
+import { apiPost, bootstrapReader, psql, valkey } from './support';
 
 /**
  * W1.4 acceptance: forgot password → mailed token → reset → sign in, with
@@ -33,7 +33,8 @@ function cleanup() {
 /** The form action buckets by client address; repeated runs must not exhaust it. */
 function clearResetLimit() {
 	try {
-		const keys = valkey('KEYS', 'limits:password-reset:*').split('\n').filter(Boolean);
+		// ValkeyCacheStore prefixes every key with `wl:`.
+		const keys = valkey('KEYS', 'wl:limits:password-reset:*').split('\n').filter(Boolean);
 		for (const key of keys) valkey('DEL', key);
 	} catch {
 		// fail-open by contract: no Valkey means the limiter was never engaged.
@@ -70,11 +71,14 @@ test.describe('password reset loop', () => {
 		test.setTimeout(120_000);
 
 		// Fixture: a verified reader with a password and two live sessions.
+		// Sign-ins go through apiPost (it paces and retries the preview's
+		// per-path better-auth limiter); a raw request would 429 under load.
 		const setup = await browser.newContext({ storageState: zhCnLocale.storageState });
+		const setupPage = await setup.newPage();
 		await bootstrapReader(setup, EMAIL, OLD_PASSWORD);
-		const extra = await setup.request.post('/api/auth/sign-in/email', {
-			data: { email: EMAIL, password: OLD_PASSWORD },
-			headers: { origin: ORIGIN }
+		const extra = await apiPost(setupPage, '/api/auth/sign-in/email', {
+			email: EMAIL,
+			password: OLD_PASSWORD
 		});
 		expect(extra.ok()).toBeTruthy();
 		expect(sessionCount()).toBeGreaterThan(0);
@@ -83,12 +87,22 @@ test.describe('password reset loop', () => {
 		const context = await browser.newContext({ storageState: zhCnLocale.storageState });
 		const page = await context.newPage();
 
-		// Request: the form reaches better-auth and always answers success.
+		// Request twice: better-auth mints one token per request, so the older
+		// sibling must be swept when the newer one completes the reset.
+		await page.goto('/forgot-password');
+		await page.locator('input[name="email"]').fill(EMAIL);
+		await page.locator('button[type="submit"]').click();
+		await expect(page.getByRole('status')).toContainText('重置链接');
 		await page.goto('/forgot-password');
 		await page.locator('input[name="email"]').fill(EMAIL);
 		await page.locator('button[type="submit"]').click();
 		await expect(page.getByRole('status')).toContainText('重置链接');
 
+		const outstanding = psql(
+			`select count(*) from verification where value = '${userId()}' ` +
+				`and identifier like 'reset-password:%'`
+		);
+		expect(Number(outstanding)).toBe(2);
 		const identifier = psql(
 			`select identifier from verification where value = '${userId()}' ` +
 				`and identifier like 'reset-password:%' order by created_at desc limit 1`
@@ -107,9 +121,26 @@ test.describe('password reset loop', () => {
 		await expect(page.getByRole('status')).toContainText('密码已重置');
 		// revokeSessionsOnPasswordReset: nothing minted before the reset survives.
 		expect(sessionCount()).toBe(0);
+		// onPasswordReset sweep: the unused sibling token is gone too, so an
+		// older mailed link cannot reset the password again inside its hour.
+		expect(
+			psql(
+				`select count(*) from verification where value = '${userId()}' ` +
+					`and identifier like 'reset-password:%'`
+			)
+		).toBe('0');
 
-		// The new password works (and the old one would not). Scope the click to
-		// the email form: the login page also has a GitHub submit button.
+		// The old credential is dead as well - a reset that leaves the previous
+		// password usable is not a reset. (The API answer is 401; no session row.)
+		const stale = await apiPost(page, '/api/auth/sign-in/email', {
+			email: EMAIL,
+			password: OLD_PASSWORD
+		});
+		expect(stale.status()).toBe(401);
+		expect(sessionCount()).toBe(0);
+
+		// The new password works. Scope the click to the email form: the login
+		// page also has a GitHub submit button.
 		await page.locator('input[name="email"]').fill(EMAIL);
 		await page.locator('input[name="password"]').fill(NEW_PASSWORD);
 		await page.locator('form[action="?/signIn"] button[type="submit"]').click();

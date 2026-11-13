@@ -7,6 +7,14 @@ import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
 import { requestAddress } from '$lib/server/security/request-address';
 import { isMailDeliveryAvailable, isMailDeliveryAvailableLive } from '$lib/server/mail/transport';
+import { sanitizeErrorText } from '$lib/server/jobs/error-text';
+
+/** Log detail without the recipient address an SMTP error may embed. */
+const EMAIL_PATTERN = /[^\s@<>()]+@[^\s@<>()]+\.[^\s@<>()]+/g;
+
+function logDetail(error: unknown): string {
+	return sanitizeErrorText(error).replace(EMAIL_PATTERN, '<address>');
+}
 
 /**
  * W1.4 (settings-truth plan, P0-4): a real reset request.
@@ -16,10 +24,10 @@ import { isMailDeliveryAvailable, isMailDeliveryAvailableLive } from '$lib/serve
  * `requestPasswordReset`, which resolves the address and calls the
  * `sendResetPassword` callback configured in `auth.ts`.
  *
- * The answer is identical for known and unknown addresses (better-auth already
- * fakes the lookup to blunt timing), so the form cannot be used as an account
- * oracle. The one distinguishable failure is a transport that cannot deliver
- * mail at all - that is a site-wide condition, not an account fact.
+ * The answer is identical for known and unknown addresses (better-auth fakes
+ * the lookup, so the database path is symmetric). The sent-mail round trip can
+ * still make a known address slower; that residual timing channel is accepted
+ * under the per-address rate limit and registered in the line note.
  */
 export const load: PageServerLoad = () => {
 	return { mailConfigured: isMailDeliveryAvailable() };
@@ -51,12 +59,14 @@ export const actions: Actions = {
 			});
 		} catch (error) {
 			// Anti-enumeration: the transport may fail, the account lookup may be
-			// rejected, but the answer stays "check your inbox". Keep the cause in
-			// the log - a silent 200 with no mail is the worst failure mode.
+			// rejected, but the answer stays "check your inbox". better-auth logs
+			// transport failures inside its own runner, so this catch mostly sees
+			// pre-send rejections; keep the cause traceable without leaking the
+			// address an SMTP error can embed.
 			if (error instanceof APIError) {
-				console.warn('[forgot-password] reset request rejected', error.message);
+				console.warn('[forgot-password] reset request rejected', logDetail(error.message));
 			} else {
-				console.error('[forgot-password] reset request failed', error);
+				console.error('[forgot-password] reset request failed', logDetail(error));
 			}
 		}
 

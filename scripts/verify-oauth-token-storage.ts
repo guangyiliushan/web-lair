@@ -2,13 +2,20 @@
  * Deployment gate for OAuth token encryption (W1.5 / P0-5).
  *
  * `account.encryptOAuthTokens` stores OAuth access/refresh tokens as
- * `$ba$<key-version>$<hex>` envelopes (XChaCha20-Poly1305). Rows written before
- * the switch are plaintext and keep working (better-auth only decrypts values
- * that look encrypted), so a rollout needs no backfill - they are rewritten on
- * the next sign-in/refresh. This script reports the split per provider and
- * never prints or hashes a token.
+ * `$ba$<key-version>$<hex>` envelopes (XChaCha20-Poly1305); with no keyring
+ * configured they are bare hex. Rows written before the switch are plaintext
+ * and keep working (better-auth only decrypts values that look encrypted), so a
+ * rollout needs no backfill - they are rewritten on the next sign-in/refresh.
+ * This script reports the split per provider and never prints or hashes a
+ * token.
  *
- * Exit codes: 0 = every stored OAuth token is an envelope (or none exist),
+ * "Encrypted" mirrors better-auth's own test: a `$ba$<v>$...` envelope, or a
+ * bare even-length hex string. A provider whose plaintext tokens are themselves
+ * hex-shaped would therefore read as encrypted - today only GitHub
+ * (`gho_`/`ghu_` prefixes) is configured, so the check is accurate for the
+ * deployed providers.
+ *
+ * Exit codes: 0 = every stored OAuth token is encrypted (or none exist),
  * 1 = plaintext rows remain (expected right after the switch, green once the
  * affected accounts sign in again) or the config is unusable.
  *
@@ -37,17 +44,17 @@ const sql = postgres(DB_URL, { max: 1 });
 try {
 	const rows = (await sql`
 		select provider_id,
-		       count(*) filter (where access_token is not null)::int as access_tokens,
+		       count(*) filter (where nullif(access_token, '') is not null)::int as access_tokens,
 		       count(*) filter (
-		         where access_token is not null
+		         where nullif(access_token, '') is not null
 		           and (
 		             access_token like '$ba$%'
 		             or (access_token ~ '^[0-9a-f]+$' and length(access_token) % 2 = 0)
 		           )
 		       )::int as encrypted_access,
-		       count(*) filter (where refresh_token is not null)::int as refresh_tokens,
+		       count(*) filter (where nullif(refresh_token, '') is not null)::int as refresh_tokens,
 		       count(*) filter (
-		         where refresh_token is not null
+		         where nullif(refresh_token, '') is not null
 		           and (
 		             refresh_token like '$ba$%'
 		             or (refresh_token ~ '^[0-9a-f]+$' and length(refresh_token) % 2 = 0)
