@@ -14,6 +14,16 @@ describe('auth schema migration scan (H1)', () => {
 		).toHaveLength(1);
 	});
 
+	it('rejects schema-qualified statements on a generated table', () => {
+		expect(scanAuthTableMutations('alter table "public"."user" add column x text;')).toHaveLength(
+			1
+		);
+		expect(scanAuthTableMutations('drop table if exists public.session;')).toHaveLength(1);
+		expect(
+			scanAuthTableMutations('create index idx on "public"."two_factor" ("user_id");')
+		).toHaveLength(1);
+	});
+
 	it('allows our own tables, including foreign keys that point at auth tables', () => {
 		const sql = `
 			alter table "ai_provider_secrets" add constraint fk foreign key ("updated_by") references "user"("id");

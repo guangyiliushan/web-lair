@@ -53,20 +53,30 @@ export function scanAuthTableMutations(sql: string): SqlOffender[] {
 		if (statement === '') continue;
 		const lower = statement.toLowerCase();
 
+		// Optional schema qualifier (`"public"."user"`, `public.session`); the
+		// captured identifier is still the LAST one.
+		const qualifier = '(?:["`]?[a-z0-9_]+["`]?\\s*\\.\\s*)?';
+		const quoted = '["`]?([a-z0-9_]+)["`]?';
 		const alter = lower.match(
-			/^alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?["`]?([a-z0-9_]+)["`]?/
+			new RegExp('^alter\\s+table\\s+(?:if\\s+exists\\s+)?(?:only\\s+)?' + qualifier + quoted)
 		);
 		if (alter && AUTH_TABLE_SET.has(alter[1])) {
 			offenders.push({ table: alter[1], statement, reason: 'ALTER TABLE on a generated table' });
 			continue;
 		}
-		const dropTable = lower.match(/^drop\s+table\s+(?:if\s+exists\s+)?["`]?([a-z0-9_]+)["`]?/);
+		const dropTable = lower.match(
+			new RegExp('^drop\\s+table\\s+(?:if\\s+exists\\s+)?' + qualifier + quoted)
+		);
 		if (dropTable && AUTH_TABLE_SET.has(dropTable[1])) {
 			offenders.push({ table: dropTable[1], statement, reason: 'DROP TABLE on a generated table' });
 			continue;
 		}
 		const index = lower.match(
-			/^create\s+(?:unique\s+)?index\s+(?:concurrently\s+)?(?:if\s+not\s+exists\s+)?[a-z0-9_"`.]+\s+on\s+(?:only\s+)?["`]?([a-z0-9_]+)["`]?/
+			new RegExp(
+				'^create\\s+(?:unique\\s+)?index\\s+(?:concurrently\\s+)?(?:if\\s+not\\s+exists\\s+)?[a-z0-9_"`.]+\\s+on\\s+(?:only\\s+)?' +
+					qualifier +
+					quoted
+			)
 		);
 		if (index && AUTH_TABLE_SET.has(index[1])) {
 			offenders.push({ table: index[1], statement, reason: 'CREATE INDEX on a generated table' });
