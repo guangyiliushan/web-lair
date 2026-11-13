@@ -87,11 +87,16 @@ SECRETS_KEY_ACTIVE="2"                          # must name a version above
 SECRETS_KEY="<base64 32B>"                      # legacy single key -> version 1
 ```
 
-- `SECRETS_KEYS` wins when set; `SECRETS_KEY_ACTIVE` must be present and must
-  name a version in the map, otherwise boot fails (fail-closed, no implicit
-  "first key" guess).
+- `SECRETS_KEYS` is the map. `SECRETS_KEY_ACTIVE` must be present and must
+  name a version in the map, otherwise the first secret read or write fails
+  with a configuration error (fail-closed, no implicit "first key" guess).
+  There is no boot-time probe: a bad keyring surfaces on the first operation,
+  not at `up -d`, so run `node scripts/verify-secret-key-versions.ts` (or the
+  smoke test) as a deploy gate.
 - `SECRETS_KEY` alone is accepted as version 1 for a single-key deployment and
-  for compatibility with W1's documentation.
+  for compatibility with W1's documentation. When both are set, the legacy key
+  is merged as version 1 if the map has no version 1; a conflict (same version,
+  different bytes) is a configuration error rather than a silent preference.
 - Keys are exactly 32 bytes, base64 or hex. Anything else is a configuration
   error, not a fallback.
 - The keyring must **never** be derived from `BETTER_AUTH_SECRET`: rotating the
@@ -104,8 +109,12 @@ SECRETS_KEY="<base64 32B>"                      # legacy single key -> version 1
 2. **Activate**: set `SECRETS_KEY_ACTIVE=<new>`, restart. New writes use the
    new version; old ciphertext stays readable through the keyring.
 3. **Retire**: after the backup retention window + one release cycle, remove the
-   old version and restart. Before removing it, verify no row still carries
-   that `key_version` (`scripts/verify-secret-key-versions.ts`).
+   old version and restart. Before removing it run
+   `node --env-file=.env scripts/verify-secret-key-versions.ts --retire <n>`:
+   it decrypts every live row (both webhook slots, skipping expired grace
+   values) and exits 1 while any row is still encrypted under `<n>`. A plain
+   run without `--retire` only proves that listed versions exist; it cannot
+   fail at this step because the version is still in `SECRETS_KEYS`.
 
 A `current + previous` pair is not enough: a rolling deploy lets a new replica
 write v2 while an old replica cannot read it, and a dump from two rotations ago
