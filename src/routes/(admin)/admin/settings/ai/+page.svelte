@@ -125,6 +125,8 @@
 	let manualModelOpen = $state(false);
 	let manualModelId = $state('');
 	let deleteTarget = $state<ProviderRow | null>(null);
+	/** Write-only key dialog target (W2.5); the value never enters page state. */
+	let keyTarget = $state<ProviderRow | null>(null);
 
 	const enabledInDialog = $derived(
 		new Set(
@@ -392,6 +394,18 @@
 										{/if}
 									</span>
 								{/if}
+								{#if data.providerKeys[provider.id]?.configured}
+									<span class="inline-flex items-center gap-1">
+										<IconKey class="size-3" />
+										{data.providerKeys[provider.id]?.hint}
+										<Badge variant="secondary">{m.admin_settings_ai_key_badge_db()}</Badge>
+									</span>
+								{:else}
+									<span class="inline-flex items-center gap-1">
+										<IconKey class="size-3" />
+										{m.admin_settings_ai_key_not_configured()}
+									</span>
+								{/if}
 								{#if provider.models?.length}
 									<span
 										>{m.admin_settings_ai_model_count({
@@ -410,6 +424,10 @@
 								</Button>
 							</form>
 							{#if data.canManage}
+								<Button variant="outline" size="sm" onclick={() => (keyTarget = provider)}>
+									<IconKey data-icon="inline-start" />
+									{m.admin_settings_ai_key_button()}
+								</Button>
 								<Button variant="outline" size="sm" onclick={() => openEdit(provider)}>
 									<IconPencil data-icon="inline-start" />
 									{m.admin_common_edit()}
@@ -1218,6 +1236,84 @@
 				</Button>
 			</div>
 		</form>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- ── Provider key (write-only, W2.5) ─────────────────────────────── -->
+<Dialog.Root
+	open={keyTarget !== null}
+	onOpenChange={(open) => {
+		if (!open) keyTarget = null;
+	}}
+>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title>{m.admin_settings_ai_key_title({ name: keyTarget?.name ?? '' })}</Dialog.Title>
+			<Dialog.Description>{m.admin_settings_ai_key_desc()}</Dialog.Description>
+		</Dialog.Header>
+		<form
+			method="post"
+			action="?/saveProviderKey"
+			use:enhance={() =>
+				async ({ result, update }) => {
+					if (result.type === 'success') keyTarget = null;
+					await update({ reset: true });
+				}}
+			class="flex flex-col gap-3"
+		>
+			<input type="hidden" name="id" value={keyTarget?.id ?? ''} />
+			<Field.Field>
+				<Field.Label for="provider-key-value">{m.admin_settings_ai_key_new()}</Field.Label>
+				<Input
+					id="provider-key-value"
+					name="value"
+					type="password"
+					autocomplete="new-password"
+					minlength={8}
+					maxlength={4096}
+					required
+					placeholder={m.admin_settings_ai_key_placeholder()}
+				/>
+				<Field.Description>
+					{#if keyTarget && data.providerKeys[keyTarget.id]?.configured}
+						{m.admin_settings_ai_key_current({
+							hint: data.providerKeys[keyTarget.id]?.hint ?? ''
+						})}
+					{:else}
+						{m.admin_settings_ai_key_not_configured()}
+					{/if}
+				</Field.Description>
+			</Field.Field>
+			<Dialog.Footer>
+				<Dialog.Close>
+					<Button variant="outline">{m.admin_common_cancel()}</Button>
+				</Dialog.Close>
+				<Button type="submit">{m.admin_settings_ai_key_save()}</Button>
+			</Dialog.Footer>
+		</form>
+		{#if keyTarget && data.providerKeys[keyTarget.id]?.configured}
+			<form
+				method="post"
+				action="?/clearProviderKey"
+				use:enhance={() =>
+					async ({ result, update }) => {
+						if (result.type === 'success') keyTarget = null;
+						await update({ reset: false });
+					}}
+			>
+				<input type="hidden" name="id" value={keyTarget.id} />
+				<Button
+					type="submit"
+					variant="destructive"
+					size="sm"
+					onclick={(event) => {
+						if (!confirm(m.admin_settings_ai_key_clear_confirm())) event.preventDefault();
+					}}
+				>
+					{m.admin_settings_ai_key_clear()}
+				</Button>
+			</form>
+		{/if}
 	</Dialog.Content>
 </Dialog.Root>
 

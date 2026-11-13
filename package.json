@@ -65,7 +65,12 @@
 		"media:import": "tsx --env-file=.env scripts/media-import.ts",
 		"maps:publish": "tsx --env-file=.env scripts/maps-publish.ts",
 		"media:purge": "tsx --env-file=.env scripts/purge-media.ts",
-		"db:verify-media": "tsx --env-file=.env scripts/verify-media.ts"
+		"db:verify-media": "tsx --env-file=.env scripts/verify-media.ts",
+		"secrets:alerts": "tsx --env-file-if-exists=.env scripts/secret-alerts.ts",
+		"db:migrate-webhook-secrets": "tsx --env-file=.env scripts/migrate-webhook-secrets.ts",
+		"auth:check": "tsx scripts/auth-schema-guard.ts",
+		"auth:check:migrations": "tsx scripts/auth-schema-guard.ts --migrations-only",
+		"secrets:verify-keys": "tsx --env-file-if-exists=.env scripts/verify-secret-key-versions.ts"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "^4.13.0",
