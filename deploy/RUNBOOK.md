@@ -56,6 +56,10 @@ $EDITOR .env      # see §1.1 for the required keys
 | `ALERT_WEBHOOK_URL`                                   | systemd `OnFailure` target; leave empty to disable the alert unit                                                 |
 | `MAIL_DEV_LOG` / `MAIL_DEV_LOG_OK`                    | dev/e2e only; production ignores dev logging unless BOTH are set                                                  |
 
+`POSTGRES_PASSWORD` is required too: `compose.prod.yaml` builds the app's
+`DATABASE_URL` from it at parse time, and `deploy/compose-prod.sh` refuses to
+start when it is missing or not URL-safe.
+
 `SUPPRESSION_HMAC_KEY` is mandatory before the first start (production boot
 refuses to start without it; dev needs it for subscribe/unsubscribe). Generate
 with `openssl rand -base64 32` and back it up. `SUBSCRIBE_TOKEN_SECRET` is
@@ -78,7 +82,8 @@ never sees the credential that can delete the offsite repository:
 cp deploy/backup.env.example deploy/backup.env
 chmod 600 deploy/backup.env
 $EDITOR deploy/backup.env      # + POSTGRES_USER / POSTGRES_DB / DATA_DIR (same values as .env),
-                               #   RESTIC_* + AWS_* + BACKUP_PING_URL + CHECK_PING_URL
+                               #   RESTIC_* + RESTIC_CONFIG_* (second repository, own password)
+                               #   + AWS_* + BACKUP_PING_URL + CHECK_PING_URL; see §4
 ```
 
 ### 1.2 Mail route probes (deploy note Q7)
@@ -290,7 +295,7 @@ deploy/compose-prod.sh exec -T db pg_restore -l < "$BK/pre-e2-$STAMP.dump" > /de
 # TOC presence is not data: an empty dump still lists every table. Count the
 # user rows inside the archive before dropping anything.
 DUMP_USERS=$(docker exec -i db pg_restore -a -f - < "$BK/pre-e2-$STAMP.dump" 2>/dev/null | \
-  awk '/^COPY public\."user" /{f=1;next} f&&$0=="\\\\."{exit} f{n++} END{print n+0}')
+  bash deploy/backup/count-user-rows.sh)
 [ "$DUMP_USERS" = "$USERS" ] || { echo "dump has $DUMP_USERS user rows, expected $USERS; aborting" >&2; exit 1; }
 
 # Data-only file: column lists + FK triggers disabled inside the transaction.
@@ -412,7 +417,7 @@ DUMP=/srv/web-lair/pre-migrate/<matching-dump>.dump
 USERS=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"user\""')
 DUMP_USERS=$(deploy/compose-prod.sh exec -T db pg_restore -a -f - < "$DUMP" 2>/dev/null | \
-  awk '/^COPY public\."user" /{f=1;next} f&&$0=="\\\\."{exit} f{n++} END{print n+0}')
+  bash deploy/backup/count-user-rows.sh)
 [ "$DUMP_USERS" = "$USERS" ] || { echo "dump has $DUMP_USERS user rows, expected $USERS; aborting" >&2; exit 1; }
 # IMAGE must point at the tag that matches the dump.
 sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
@@ -462,19 +467,60 @@ opt-outs can become mailable and new rows keep a NULL consent version.
 
 ## 4. Backups (D-4)
 
-Backup set:
+Two repositories with two passwords (T3-A, secrets register §0.1).
+
+**Data repository** — `RESTIC_REPOSITORY`:
 
 1. `pg_dump -Fc` → staging dir on the host (logical backup; never file-copy a
    running data directory).
 2. `$DATA_DIR` (user job scripts + sidecars).
 3. RustFS volume (media), mounted read-only into the backup container.
-4. `.env` only. compose/Caddyfile come from git; the **restic password** is
-   kept offline (password manager — losing it makes the repo unreadable).
+
+**Config repository** — `RESTIC_CONFIG_REPOSITORY`, **different password**:
+
+4. `.env` only, as a single file. It is never part of the data repository:
+   `.env` holds `BETTER_AUTH_SECRET`, `SUPPRESSION_HMAC_KEY` and the database
+   password, so a leaked data repository (and its password) must not decrypt
+   the application secrets. `deploy/backup.env` is backed up nowhere — it holds
+   both repository passwords; keep those in the password manager with an
+   **offline** copy (losing one makes its repository unreadable).
 
 ```bash
 # what the nightly unit runs (deploy/systemd/web-lair-backup.timer)
 /srv/web-lair/app/deploy/backup/backup.sh
+
+# one-time: create both repositories, each with its own password
+set -a; . deploy/backup.env; set +a
+# `-e VAR` (no value) forwards the loaded value. Never `-e VAR=$VALUE`: that puts
+# the repository password in argv (visible to `ps`) and in ~/.bash_history.
+docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+  restic/restic:0.19.1 --repo "$RESTIC_REPOSITORY" init
+( export RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD"
+  docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+    restic/restic:0.19.1 --repo "$RESTIC_CONFIG_REPOSITORY" init )
 ```
+
+### 4.1 Migrating a pre-split repository (one-off)
+
+A repository created by the old `backup.sh` holds snapshots whose path set includes
+`/config` (`.env` in the data repository). `--group-by paths` gives that path set
+its own forget group, so the new nightly snapshots never age those old ones out —
+the historical `.env` copies would stay readable with the data-repository password.
+
+```bash
+set -a; . deploy/backup.env; set +a
+# list the path set of every snapshot; old ones show "/config"
+docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+  restic/restic:0.19.1 --repo "$RESTIC_REPOSITORY" snapshots --json \
+  | grep -o '"paths":\[[^]]*\]'
+# after checking each id (destructive: prunes the data those snapshots own)
+docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+  restic/restic:0.19.1 --repo "$RESTIC_REPOSITORY" forget <ids> --prune
+```
+
+The drill below asserts "no `.env` in **any** data snapshot", so before this
+migration it fails by design — that failure is the confirmation that old snapshots
+exist, and the list above tells you which ids to forget.
 
 Credentials come from `deploy/backup.env` (mode 600, loaded by the systemd
 unit — never from `.env`, so the app container cannot read them).
@@ -482,16 +528,59 @@ unit — never from `.env`, so the app container cannot read them).
 The script dumps PG to a temp file, validates it with `pg_restore -l`, swaps it
 over `pg.dump` (a failed night never truncates yesterday's good copy), resolves
 the RustFS volume from the running container, then runs restic with
-`--retry-lock 30m` and the retention policy. Pre-migration dumps live in
+`--retry-lock 30m` and the retention policy: data keeps 7 daily / 4 weekly /
+6 monthly, config 30 daily / 12 monthly. Pre-migration dumps live in
 `/srv/web-lair/pre-migrate` — **outside** the restic source paths, pruned by
 age, so deploy count does not grow the backup repo.
 
 - Weekly: `web-lair-backup-check.timer` runs
-  `restic --retry-lock 30m check --read-data-subset=5%` (the nightly job only
-  backs up) and pings `CHECK_PING_URL` only on success.
+  `restic --retry-lock 30m check --read-data-subset=5%` on the data repository
+  (the nightly job only backs up) and pings `CHECK_PING_URL` only on success.
 - Monthly drill: restore to a **separate** directory and, for PG, into a
   **scratch** database on a different port; compare row counts and sample media
-  hashes. The drill never touches the production database.
+  hashes. The drill never touches the production database. It also proves the
+  config split still holds:
+
+  ```bash
+  set -euo pipefail
+  DRILL=$(mktemp -d); trap 'rm -rf "$DRILL"' EXIT
+  set -a; . deploy/backup.env; set +a
+  R=restic/restic:0.19.1
+  # `-e VAR` (no value) forwards the exported value: no password ever enters argv.
+  restic_data() { docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY "$R" --repo "$RESTIC_REPOSITORY" "$@"; }
+  restic_conf() { docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY "$R" --repo "$RESTIC_CONFIG_REPOSITORY" "$@"; }
+
+  # 1. no snapshot in the data repository may contain a .env (collect first:
+  #    a failed listing must not read as "no .env found")
+  ids=$(restic_data snapshots --host web-lair --json | grep -oE '"short_id":"[0-9a-f]+"' | cut -d'"' -f4) \
+    || { echo 'FAIL: cannot list the data repository'; exit 1; }
+  [ -n "$ids" ] || { echo 'FAIL: data repository has no snapshots'; exit 1; }
+  for id in $ids; do
+    if restic_data ls --host web-lair "$id" | grep -qE '(^|/)\.env$'; then
+      echo "FAIL: .env is inside data snapshot $id"; exit 1
+    fi
+  done
+  echo 'OK: no .env in any data snapshot'
+
+  # 2. the config repository restores a byte-identical .env
+  ( export RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD"
+    docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+      -v "$DRILL":/restore "$R" --repo "$RESTIC_CONFIG_REPOSITORY" \
+      restore --host web-lair-config latest --target /restore )
+  cmp "$DRILL/config/.env" .env && echo 'OK: config restored'
+
+  # 3. the data password must NOT open the config repository — and the refusal
+  #    must be a password rejection, not a network error with the same exit code
+  if restic_conf snapshots >/dev/null 2>"$DRILL/err"; then
+    echo 'FAIL: config repository opened with the data password'; exit 1
+  fi
+  grep -qiE 'wrong password|no key found' "$DRILL/err" \
+    || { echo 'FAIL: unexpected error, not a password rejection'; cat "$DRILL/err"; exit 1; }
+  echo 'OK: repository passwords are separate'
+  ```
+
+  Keep the receipt (date, snapshot ids, `cmp` result) with the ops notes.
+
 - A failed backup must fail **its own** check: `BACKUP_PING_URL` is pinged only
   on success and is deliberately separate from the 5-minute liveness URL
   (`DEADMAN_PING_URL`) — sharing one check would make a silent backup failure

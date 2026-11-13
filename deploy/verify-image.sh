@@ -66,7 +66,7 @@ trap cleanup EXIT
 cleanup
 docker run -d --name "$app" \
 	-e ORIGIN=http://localhost -e PORT=3000 -e HOST=0.0.0.0 \
-	-e DATABASE_URL='postgres://x:***@127.0.0.1:1/x' \
+	-e DATABASE_URL='postgres://x:unused@127.0.0.1:1/x' \
 	-e BETTER_AUTH_SECRET='0123456789abcdef0123456789abcdef' \
 	-e SUPPRESSION_HMAC_KEY='BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=' \
 	-p 127.0.0.1::3000 "$IMAGE" >/dev/null
