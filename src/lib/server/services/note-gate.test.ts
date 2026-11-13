@@ -15,6 +15,7 @@ vi.mock('$lib/server/config/options-registry', () => ({
 }));
 
 import {
+	currentAuthSecret,
 	hashNotePassword,
 	noteGateTtlSeconds,
 	noteUnlockCookieName,
@@ -177,5 +178,61 @@ describe('note-gate configuration', () => {
 
 	it('ships the fixed failure-budget constants', () => {
 		expect(NOTE_GATE_RATE_LIMIT).toEqual({ limit: 5, windowSeconds: 60 });
+	});
+});
+
+describe('note-gate auth secret selection (W2.11 / T4-B)', () => {
+	const getEnv = (values: Record<string, string>) => (name: string) => values[name];
+
+	it('falls back to BETTER_AUTH_SECRET when no keyring is set', () => {
+		expect(currentAuthSecret(getEnv({ BETTER_AUTH_SECRET: 'legacy-secret' }))).toBe(
+			'legacy-secret'
+		);
+	});
+
+	it('reads the FIRST keyring entry, which is what better-auth signs with', () => {
+		expect(
+			currentAuthSecret(
+				getEnv({ BETTER_AUTH_SECRETS: '2:newer-secret,1:older-secret', BETTER_AUTH_SECRET: 'x' })
+			)
+		).toBe('newer-secret');
+		// Order is the source of truth, not the numeric order.
+		expect(currentAuthSecret(getEnv({ BETTER_AUTH_SECRETS: '7:seven,2:two' }))).toBe('seven');
+	});
+
+	it('fails closed on a malformed keyring instead of using the legacy secret', () => {
+		expect(() => currentAuthSecret(getEnv({ BETTER_AUTH_SECRETS: 'missing-version' }))).toThrow(
+			/BETTER_AUTH_SECRETS/
+		);
+		expect(() => currentAuthSecret(getEnv({ BETTER_AUTH_SECRETS: '2:' }))).toThrow(
+			/BETTER_AUTH_SECRETS/
+		);
+		expect(() =>
+			currentAuthSecret(getEnv({ BETTER_AUTH_SECRETS: 'x:secret', BETTER_AUTH_SECRET: 'legacy' }))
+		).toThrow(/BETTER_AUTH_SECRETS/);
+	});
+
+	it('invalidates outstanding unlock tokens when the current version rotates', async () => {
+		const phc = await hashNotePassword('rotation-pass');
+		const exp = Math.floor(Date.now() / 1000) + 3600;
+		const envModule = (await import('$env/dynamic/private')) as {
+			env: Record<string, string | undefined>;
+		};
+		const previous = envModule.env.BETTER_AUTH_SECRETS;
+		try {
+			envModule.env.BETTER_AUTH_SECRETS = '2:second-secret';
+			const token = signNoteUnlockToken(NOTE_ID, phc, exp);
+			expect(verifyNoteUnlockToken(NOTE_ID, phc, token, new Date())).toBe(true);
+
+			// Same key still listed, but no longer current: verification uses
+			// the current version only (one current key, no second secret).
+			envModule.env.BETTER_AUTH_SECRETS = '3:third-secret,2:second-secret';
+			expect(verifyNoteUnlockToken(NOTE_ID, phc, token, new Date())).toBe(false);
+			// A token signed under the new current version verifies.
+			const fresh = signNoteUnlockToken(NOTE_ID, phc, exp);
+			expect(verifyNoteUnlockToken(NOTE_ID, phc, fresh, new Date())).toBe(true);
+		} finally {
+			envModule.env.BETTER_AUTH_SECRETS = previous;
+		}
 	});
 });

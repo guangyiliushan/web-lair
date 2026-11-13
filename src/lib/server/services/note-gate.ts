@@ -130,16 +130,46 @@ export async function verifyNotePassword(password: string, phc: string): Promise
 const GATE_KEY_INFO = 'web-lair:notes-gate';
 
 /**
- * HKDF-derived signing key (RFC 5869; domain-separated from every other
- * consumer of BETTER_AUTH_SECRET). Zero new environment variables; rotating
- * the auth secret invalidates all outstanding unlocks, which is acceptable
- * inside the 30-day TTL.
+ * The secret better-auth currently signs with (W2.11 / decision T4-B).
+ *
+ * `BETTER_AUTH_SECRETS` is the official keyring: `"<version>:<secret>,..."`,
+ * newest first, and better-auth's `secretConfig.current` is the FIRST entry
+ * (verified in 1.7.5 `secret-utils.mjs`). Reading the same entry keeps the
+ * note-gate HMAC in step with the auth plane without adding a
+ * `NOTE_GATE_SECRET` bootstrap key. A malformed keyring throws instead of
+ * silently falling back to the legacy secret - a divergence here would sign
+ * unlock tokens with a different key than every other replica.
  */
-function gateSigningKey(): Buffer {
-	const secret = env.BETTER_AUTH_SECRET ?? '';
+export function currentAuthSecret(getEnv: (name: string) => string | undefined): string {
+	const keyring = (getEnv('BETTER_AUTH_SECRETS') ?? '').trim();
+	if (keyring !== '') {
+		const first = (keyring.split(',')[0] ?? '').trim();
+		const colon = first.indexOf(':');
+		if (colon <= 0) {
+			throw new Error('[note-gate] BETTER_AUTH_SECRETS entry must look like "<version>:<secret>"');
+		}
+		const version = Number(first.slice(0, colon).trim());
+		const value = first.slice(colon + 1).trim();
+		if (!Number.isInteger(version) || version < 0 || !value) {
+			throw new Error('[note-gate] BETTER_AUTH_SECRETS is malformed');
+		}
+		return value;
+	}
+	const secret = (getEnv('BETTER_AUTH_SECRET') ?? '').trim();
 	if (!secret) {
 		throw new Error('[note-gate] BETTER_AUTH_SECRET is not set; unlock tokens cannot be signed');
 	}
+	return secret;
+}
+
+/**
+ * HKDF-derived signing key (RFC 5869; domain-separated from every other
+ * consumer of the current auth secret). Rotating the auth keyring invalidates
+ * all outstanding unlocks - acceptable inside the 30-day TTL and required by
+ * W2.11: one current version, no second key to keep in sync.
+ */
+function gateSigningKey(): Buffer {
+	const secret = currentAuthSecret((name) => env[name]);
 	return Buffer.from(hkdfSync('sha256', secret, '', GATE_KEY_INFO, 32));
 }
 
