@@ -2,7 +2,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { webhookSecrets } from '../db/system/webhook-secret.schema.ts';
 import { webhooks } from '../db/system/webhook.schema.ts';
 import { decryptSecret, encryptSecret, secretAad } from './crypto.ts';
-import { SecretError } from './errors.ts';
+import { SecretError, isSecretError } from './errors.ts';
 import { loadKeyring, type SecretDb, type ResolveDeps } from './resolver.ts';
 import { maskWebhookSecret } from '../webhooks/secret.ts';
 
@@ -109,8 +109,18 @@ export async function resolveWebhookSigningSecrets(
 		let previousExpiresAt: Date | null = null;
 		if (row.previousCiphertext && row.previousExpiresAt) {
 			if (row.previousExpiresAt.getTime() > now.getTime()) {
-				previous = decryptValue(row.previousCiphertext, webhookId, 'previous_ciphertext', deps);
-				previousExpiresAt = row.previousExpiresAt;
+				try {
+					previous = decryptValue(row.previousCiphertext, webhookId, 'previous_ciphertext', deps);
+					previousExpiresAt = row.previousExpiresAt;
+				} catch (error) {
+					// The previous value is a compatibility extra, not the
+					// credential the delivery needs. A retired key version or a
+					// damaged grace slot must not take the endpoint down for
+					// 24 hours: sign with the current secret only.
+					if (!isSecretError(error)) throw error;
+					previous = null;
+					previousExpiresAt = null;
+				}
 			}
 		}
 		return { current, previous, source: 'db', previousExpiresAt };

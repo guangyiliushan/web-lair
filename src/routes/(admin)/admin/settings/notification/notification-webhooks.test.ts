@@ -161,6 +161,13 @@ import {
 	webhooks as webhooksMock
 } from '$lib/server/db/system';
 import { maskWebhookSecret } from '$lib/server/webhooks/secret';
+import { decryptSecret, encryptSecret, secretAad } from '$lib/server/secrets/crypto';
+import { parseKeyring } from '$lib/server/secrets/keyring';
+
+const TEST_KEYRING = parseKeyring({
+	keys: `1:${Buffer.alloc(32, 7).toString('base64')}`,
+	active: '1'
+});
 
 const guardMock = vi.mocked(mocks.requireAdminRole);
 const DELIVERY_ID = '33333333-3333-7333-8333-333333333333';
@@ -411,6 +418,17 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(String(secretRow.hint)).toMatch(/^whsec_\u2026/);
 		// The raw value never reaches a stored row.
 		expect(JSON.stringify(state.insertValues)).not.toContain(String(result?.secret));
+		// Audit is local (deliver:false) and carries only the hint.
+		const recordCalls = (mocks.recordActivity as unknown as { mock: { calls: unknown[][] } }).mock
+			.calls;
+		const auditCall = recordCalls.find(
+			(call) => (call[1] as { event?: string }).event === 'webhook.key_set'
+		);
+		expect(auditCall).toBeDefined();
+		const audit = auditCall?.[1] as { deliver?: boolean; payload?: Record<string, unknown> };
+		expect(audit.deliver).toBe(false);
+		expect(audit.payload?.hint).toBe(secretRow.hint);
+		expect(JSON.stringify(audit)).not.toContain(String(result?.secret));
 	});
 
 	it('create stores the normalized href for odd-but-valid urls (review round-1)', async () => {
@@ -531,19 +549,34 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		const badId = await callAction('rotate', { id: '' });
 		expect(badId.result).toMatchObject({ status: 400, data: { op: 'rotate' } });
 
-		// Existing encrypted row: it becomes `previous_*` with a future expiry.
+		// Existing encrypted row: it is decrypted and re-encrypted into the
+		// `previous_ciphertext` AAD slot (copying the envelope would fail every
+		// delivery for the whole grace window).
+		const oldCiphertext = encryptSecret(
+			'whsec_old_value',
+			Buffer.alloc(32, 7),
+			1,
+			secretAad('webhook_secrets', WEBHOOK_ID, 'ciphertext')
+		);
 		state.selectQueue.push([{ id: WEBHOOK_ID, name: 'ops', legacySecret: null }]);
-		state.selectQueue.push([{ ciphertext: 'v1:1:AA:BB:CC', keyVersion: 1 }]);
+		state.selectQueue.push([{ ciphertext: oldCiphertext, keyVersion: 1 }]);
 		const { result } = await callAction('rotate', { id: WEBHOOK_ID });
 		expect(result).toMatchObject({ op: 'rotate', rotated: true });
 		expect(String(result?.secret)).toMatch(/^whsec_[A-Za-z0-9+/]{43}=$/);
 		expect(state.insertTables[0]).toBe(webhookSecretsMock);
 		const row = state.insertValues[0] as Record<string, unknown>;
 		expect(String(row.ciphertext)).toMatch(/^v1:1:/);
-		expect(row.previousCiphertext).toBe('v1:1:AA:BB:CC');
 		expect(row.previousKeyVersion).toBe(1);
 		expect(row.previousExpiresAt).toBeInstanceOf(Date);
 		expect((row.previousExpiresAt as Date).getTime()).toBeGreaterThan(Date.now());
+		// The grace value is readable through the previous-slot AAD.
+		expect(
+			decryptSecret(
+				String(row.previousCiphertext),
+				TEST_KEYRING.resolve,
+				secretAad('webhook_secrets', WEBHOOK_ID, 'previous_ciphertext')
+			).plaintext
+		).toBe('whsec_old_value');
 		expect(state.conflicts).toHaveLength(1);
 		// The plaintext column is not touched when there is nothing to retire.
 		expect(state.updateTables).toHaveLength(0);
@@ -551,6 +584,15 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		state.selectQueue.push([]);
 		const gone = await callAction('rotate', { id: WEBHOOK_ID });
 		expect(gone.result).toMatchObject({ status: 404, data: { op: 'rotate' } });
+
+		// An unreadable current envelope must abort the rotation: writing a
+		// previous slot we cannot re-encrypt would lose the only verifiable
+		// value.
+		state.selectQueue.push([{ id: WEBHOOK_ID, name: 'ops', legacySecret: 'whsec_legacy' }]);
+		state.selectQueue.push([{ ciphertext: 'v1:1:AA:BB:CC', keyVersion: 1 }]);
+		const broken = await callAction('rotate', { id: WEBHOOK_ID });
+		expect(broken.result).toMatchObject({ status: 503, data: { op: 'rotate' } });
+		expect(state.updateTables).toHaveLength(0);
 	});
 
 	it('refuses credentialed payload urls (nine-dimension SY-L2-01)', async () => {

@@ -8,6 +8,7 @@ import { webhookDeliveries, webhookSecrets, webhooks } from '$lib/server/db/syst
 import { requireAdminRole } from '$lib/server/authz';
 import { recordActivity } from '$lib/server/audit';
 import { SecretError } from '$lib/server/secrets/errors';
+import { decryptSecret, secretAad } from '$lib/server/secrets/crypto';
 import { loadKeyring, type SecretDb } from '$lib/server/secrets/resolver';
 import {
 	encryptPreviousWebhookSecret,
@@ -438,13 +439,22 @@ export const actions: Actions = {
 					.where(eq(webhookSecrets.webhookId, id))
 					.limit(1);
 				// Grace window: the value this rotation replaces stays
-				// verifiable for one day, whichever store it came from.
+				// verifiable for one day. The current envelope is bound to the
+				// `ciphertext` AAD, so it must be decrypted and re-encrypted
+				// for the `previous_ciphertext` slot - copying it verbatim
+				// would make every delivery fail for the whole window.
 				let previousCiphertext: string | null = null;
 				let previousKeyVersion: number | null = null;
 				let previousExpiresAt: Date | null = null;
 				if (existing) {
-					previousCiphertext = existing.ciphertext;
-					previousKeyVersion = existing.keyVersion;
+					const plain = decryptSecret(
+						existing.ciphertext,
+						keyring.resolve,
+						secretAad('webhook_secrets', id, 'ciphertext')
+					).plaintext;
+					const previous = encryptPreviousWebhookSecret(id, plain, keyring);
+					previousCiphertext = previous.ciphertext;
+					previousKeyVersion = previous.keyVersion;
 					previousExpiresAt = new Date(Date.now() + WEBHOOK_SECRET_GRACE_MS);
 				} else if (endpoint.legacySecret) {
 					const previous = encryptPreviousWebhookSecret(id, endpoint.legacySecret, keyring);

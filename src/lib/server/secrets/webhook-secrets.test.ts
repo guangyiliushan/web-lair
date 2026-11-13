@@ -132,25 +132,25 @@ describe('resolveWebhookSigningSecrets', () => {
 		}
 	});
 
-	it('binds the previous ciphertext to the row (AAD)', async () => {
+	it('drops a previous ciphertext that cannot be opened instead of failing the delivery', async () => {
 		const foreign = encryptPreviousWebhookSecret(OTHER, 'whsec_previous', RING);
-		try {
-			await resolveWebhookSigningSecrets(
-				dbWith({
-					secretRow: row({
-						previousCiphertext: foreign.ciphertext,
-						previousKeyVersion: foreign.keyVersion,
-						previousExpiresAt: new Date(NOW.getTime() + 1000)
-					})
-				}),
-				ID,
-				deps,
-				NOW
-			);
-			throw new Error('expected a SecretError');
-		} catch (caught) {
-			expect((caught as SecretError).code).toBe('decrypt_failed');
-		}
+		const resolved = await resolveWebhookSigningSecrets(
+			dbWith({
+				secretRow: row({
+					previousCiphertext: foreign.ciphertext,
+					previousKeyVersion: foreign.keyVersion,
+					previousExpiresAt: new Date(NOW.getTime() + 1000)
+				})
+			}),
+			ID,
+			deps,
+			NOW
+		);
+		// The current slot is healthy; a moved/corrupt grace value is dropped
+		// so the endpoint keeps delivering with one signature.
+		expect(resolved.current).toBe('whsec_current');
+		expect(resolved.previous).toBeNull();
+		expect(resolved.previousExpiresAt).toBeNull();
 	});
 
 	it('reports an unavailable store instead of treating it as missing', async () => {
