@@ -40,6 +40,7 @@ $EDITOR .env      # see §1.1 for the required keys
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | strong, unique, **URL-safe** (`openssl rand -hex 32`) — the password is interpolated into `DATABASE_URL` verbatim |
 | `BETTER_AUTH_SECRET`                                  | ≥32 chars, high entropy                                                                                           |
+| `SECRETS_KEYS` / `SECRETS_KEY_ACTIVE`                 | runtime secret keyring (W2); see §4.2 — required once an encrypted key exists                                     |
 | `ORIGIN`                                              | `https://<domain>` (no trailing slash)                                                                            |
 | `DOMAIN`                                              | same host, used by Caddy                                                                                          |
 | `ACME_EMAIL`                                          | Let's Encrypt expiry notices                                                                                      |
@@ -672,6 +673,34 @@ age, so deploy count does not grow the backup repo.
   on success and is deliberately separate from the 5-minute liveness URL
   (`DEADMAN_PING_URL`) — sharing one check would make a silent backup failure
   invisible on the next liveness tick.
+
+### 4.2 Restoring encrypted runtime credentials (W2.10)
+
+`ai_provider_secrets` and `webhook_secrets` are AES-256-GCM ciphertext under
+`SECRETS_KEYS`. The key is in the **config** repository (`.env`); the ciphertext
+is in the **data** repository. Restore order matters:
+
+1. Restore the config repository first: `SECRETS_KEYS` and
+   `SECRETS_KEY_ACTIVE` must be in `/srv/web-lair/app/.env` before the app
+   starts. A missing/mismatched key is reported as `store_unavailable` /
+   `decrypt_failed`; there is no plaintext fallback.
+2. Restore the data repository (database dump, `$DATA_DIR`, media).
+3. Start the app and verify: a provider probe on `/admin/settings/ai` must
+   authenticate, and a webhook delivery must carry a valid signature.
+4. Keep every key version that a retained backup may still reference. Retiring
+   a version makes dumps from before the rotation unreadable by design
+   (`scripts/verify-secret-key-versions.ts`, three-phase rotation).
+
+| Have                                    | Result                                                                                                                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DB dump only                            | Every encrypted column fails with `decrypt_failed`/`unknown_key_version`; provider keys and webhook signing secrets are unrecoverable without the key. |
+| Keyring only                            | No ciphertext to decrypt. The `.env` is still a full infrastructure secret (DB password, auth secret).                                                 |
+| Both, same rotation                     | Credentials work; no re-entry needed.                                                                                                                  |
+| Both, dump older than a retired version | Rows written under the retired version fail closed. Keep the old version in the keyring for the backup retention window.                               |
+
+`SECRETS_KEY` (single key, version 1) is the legacy form; do not use it for new
+installs. `SECRETS_KEYS` is not derived from `BETTER_AUTH_SECRET`: rotating the
+auth keyring must never destroy the credential store.
 
 ## 5. Monitoring
 
