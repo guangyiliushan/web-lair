@@ -19,10 +19,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { format as prettierFormat, resolveConfig as prettierConfig } from 'prettier';
-import {
-	scanAuthTableMutations,
-	schemaDrift
-} from '../src/lib/server/db/auth-schema-guard.ts';
+import { scanAuthTableMutations, schemaDrift } from '../src/lib/server/db/auth-schema-guard.ts';
 import { scanForbiddenAuthCustomizations } from '../src/lib/server/db/auth-customization-guard.ts';
 
 const MIGRATIONS_ONLY = process.argv.includes('--migrations-only');

@@ -1,11 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-	normalizeSchema,
-	scanAuthTableMutations,
-	schemaDrift
-} from './auth-schema-guard.ts';
+import { normalizeSchema, scanAuthTableMutations, schemaDrift } from './auth-schema-guard.ts';
 
 describe('auth schema migration scan (H1)', () => {
 	it('rejects ALTER/DROP/index statements that target a generated table', () => {
