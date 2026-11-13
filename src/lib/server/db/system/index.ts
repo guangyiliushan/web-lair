@@ -8,3 +8,4 @@ export * from './slug-tracker.schema';
 export * from './subscription.schema';
 export * from './webhook-delivery.schema';
 export * from './webhook.schema';
+export * from './webhook-secret.schema';
