@@ -51,12 +51,10 @@ try {
 	`;
 	if (rows.length === 0) {
 		console.log('[webhook-secrets] nothing to migrate');
-	} else {
+	} else if (!APPLY) {
 		for (const row of rows) {
 			try {
 				const encrypted = encryptWebhookSecretValue(row.id, row.secret, keyring);
-				// Fail before the plaintext is NULLed if the envelope does not
-				// round-trip: a keyring bug must not destroy the only copy.
 				const reopened = decryptSecret(
 					encrypted.ciphertext,
 					keyring.resolve,
@@ -65,21 +63,7 @@ try {
 				if (reopened !== row.secret) {
 					throw new Error('round-trip mismatch; refusing to retire the plaintext value');
 				}
-				if (APPLY) {
-					await client.begin(async (tx) => {
-						await tx`
-							insert into webhook_secrets
-								(webhook_id, ciphertext, hint, key_version)
-							values
-								(${row.id}, ${encrypted.ciphertext}, ${encrypted.hint}, ${encrypted.keyVersion})
-							on conflict (webhook_id) do nothing
-						`;
-						await tx`update webhooks set secret = null where id = ${row.id}`;
-					});
-					console.log(`[webhook-secrets] migrated ${row.name} (${row.id}) ${encrypted.hint}`);
-				} else {
-					console.log(`[webhook-secrets] would migrate ${row.name} (${row.id}) ${encrypted.hint}`);
-				}
+				console.log(`[webhook-secrets] would migrate ${row.name} (${row.id}) ${encrypted.hint}`);
 			} catch (error) {
 				failed += 1;
 				console.error(
@@ -89,8 +73,59 @@ try {
 			}
 		}
 		console.log(
-			`[webhook-secrets] ${rows.length} row(s) ${APPLY ? 'processed' : 'pending (dry run; pass --apply)'}, ${failed} failed`
+			`[webhook-secrets] ${rows.length} row(s) pending (dry run; pass --apply), ${failed} failed`
 		);
+	} else {
+		// All-or-nothing: a half-migrated table is a state the rollback
+		// runbook cannot describe, and one bad row must not retire any
+		// plaintext. The table is small, so the transaction is cheap.
+		const migrated: { id: string; name: string; hint: string }[] = [];
+		try {
+			await client.begin(async (tx) => {
+				for (const row of rows) {
+					const encrypted = encryptWebhookSecretValue(row.id, row.secret, keyring);
+					// Fail before the plaintext is NULLed if the envelope does not
+					// round-trip: a keyring bug must not destroy the only copy.
+					const reopened = decryptSecret(
+						encrypted.ciphertext,
+						keyring.resolve,
+						secretAad('webhook_secrets', row.id, 'ciphertext')
+					).plaintext;
+					if (reopened !== row.secret) {
+						throw new Error('round-trip mismatch; refusing to retire the plaintext value');
+					}
+					await tx`
+						insert into webhook_secrets
+							(webhook_id, ciphertext, hint, key_version)
+						values
+							(${row.id}, ${encrypted.ciphertext}, ${encrypted.hint}, ${encrypted.keyVersion})
+						on conflict (webhook_id) do nothing
+					`;
+					// Compare-and-set: a rotation that commits between the read
+					// and this update must abort the backfill, not be erased.
+					const updated = await tx<{ id: string }[]>`
+						update webhooks
+						set secret = null
+						where id = ${row.id} and secret = ${row.secret}
+						returning id
+					`;
+					if (updated.length === 0) {
+						throw new Error(`legacy secret for ${row.id} changed during backfill; aborting`);
+					}
+					migrated.push({ id: row.id, name: row.name, hint: encrypted.hint });
+				}
+			});
+			for (const row of migrated) {
+				console.log(`[webhook-secrets] migrated ${row.name} (${row.id}) ${row.hint}`);
+			}
+			console.log(`[webhook-secrets] ${rows.length} row(s) processed, 0 failed`);
+		} catch (error) {
+			failed = rows.length;
+			console.error(
+				'[webhook-secrets] apply aborted; transaction rolled back, NO plaintext was retired:',
+				error instanceof Error ? error.message : error
+			);
+		}
 	}
 } finally {
 	await client.end({ timeout: 5 });
