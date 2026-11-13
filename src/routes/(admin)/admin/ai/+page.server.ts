@@ -217,22 +217,30 @@ export const actions: Actions = {
 	/**
 	 * Clear the whole ledger. Destructive on purpose: the monthly spend meter is
 	 * derived from these rows, so wiping them also resets the budget guard (a
-	 * paused automatic task starts again). The dialog says so; the activity log
-	 * keeps the "who and when" that the rows themselves carry.
+	 * paused automatic task starts again). The dialog says so; the activities
+	 * row is the durable "who and when" record (§26 consumer surface is
+	 * `/admin/maintenance`, which lists the job/schedule families only).
 	 */
 	purgeUsage: async ({ locals }) => {
 		await requireOwnerRole();
-		const [{ total }] = await db
-			.select({ total: sql<number>`count(*)`.mapWith(Number) })
-			.from(aiUsage);
-		await db.delete(aiUsage);
-		await recordActivity(db, {
-			event: 'ai.usage.purge',
-			actorId: locals.user?.id ?? null,
-			payload: { rows: total }
+		// One transaction: the wipe and its audit row share a fate. The event
+		// name is two-segment (`ai.usage_purge`) because `activities_event_check`
+		// only admits `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`; the old
+		// `ai.usage.purge` raised 23514 with the rows already gone, so the action
+		// 500ed on an emptied ledger. `returning` makes the receipt's count exact:
+		// a separate COUNT takes its own READ COMMITTED snapshot and can disagree
+		// with what the DELETE actually removed.
+		const purged = await db.transaction(async (tx) => {
+			const deleted = await tx.delete(aiUsage).returning({ id: aiUsage.id });
+			await recordActivity(tx, {
+				event: 'ai.usage_purge',
+				actorId: locals.user?.id ?? null,
+				payload: { rows: deleted.length }
+			});
+			return deleted.length;
 		});
-		return total === 0
+		return purged === 0
 			? { message: m.admin_ai_purge_none() }
-			: { message: m.admin_ai_purged({ count: total }) };
+			: { message: m.admin_ai_purged({ count: purged }) };
 	}
 };
