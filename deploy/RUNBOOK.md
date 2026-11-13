@@ -34,6 +34,20 @@ chmod 600 .env
 $EDITOR .env      # see §1.1 for the required keys
 ```
 
+Or generate the secrets instead of editing them by hand (W2.12):
+
+```bash
+./deploy/bootstrap-secrets.sh --dry-run   # names and targets, no values
+./deploy/bootstrap-secrets.sh             # writes .env + deploy/backup.env
+```
+
+The script keeps existing non-empty values, rotates only with
+`--rotate NAME`, writes no database rows and prints no secret. Its receipt
+(`install-receipt.json`) contains names and SHA-256 prefixes only. Copy
+`SECRETS_KEYS`, `RESTIC_PASSWORD` and `RESTIC_CONFIG_PASSWORD` to the offline
+password manager, then remove `ADMIN_SETUP_TOKEN` after `/admin/setup` succeeds;
+the app refuses a second use through its `admin.setup_complete` marker.
+
 ### 1.1 Required `.env` keys
 
 | Key                                                   | Value                                                                                                             |

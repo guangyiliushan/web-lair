@@ -1,11 +1,13 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Actions, PageServerLoad } from './$types';
 import { m } from '$lib/paraglide/messages';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/auth.schema';
+import { activities } from '$lib/server/db/system';
 import { eq } from 'drizzle-orm';
+import { recordActivity } from '$lib/server/audit';
 import { ADMIN_HOME_PATH, getAdminConfig } from '$lib/server/config/admin';
 import { claimOwnerRole, hasAnyAdminAccount } from '$lib/server/auth/owner';
 import { ensureSiteOrganization } from '$lib/server/auth/site-organization-bootstrap';
@@ -13,6 +15,26 @@ import { APIError } from 'better-auth/api';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
 import { requestAddress } from '$lib/server/security/request-address';
+
+/**
+ * One-time bootstrap marker (W2.12 / decision T5-A). The `setup token must be
+ * invalidated after first use` rule cannot be satisfied by an
+ * `if (an admin exists) reject` guard alone: emptying the user table would make
+ * the token valid again. A durable audit row survives that and is the receipt
+ * of which token was consumed.
+ */
+async function setupAlreadyConsumed(): Promise<boolean> {
+	const [row] = await db
+		.select({ id: activities.id })
+		.from(activities)
+		.where(eq(activities.event, 'admin.setup_complete'))
+		.limit(1);
+	return row !== undefined;
+}
+
+function setupTokenFingerprint(token: string): string {
+	return createHash('sha256').update(token, 'utf8').digest('hex').slice(0, 8);
+}
 
 function verifySetupToken(formToken: string): string | null {
 	const config = getAdminConfig();
@@ -41,7 +63,10 @@ export const load: PageServerLoad = async () => {
 	const config = getAdminConfig();
 
 	return {
-		setupTokenConfigured: config.setupToken.length > 0
+		setupTokenConfigured: config.setupToken.length > 0,
+		// The token is one-time (W2.12): a completed bootstrap keeps the form
+		// closed even if the user table was emptied afterwards.
+		setupConsumed: await setupAlreadyConsumed()
 	};
 };
 
@@ -49,6 +74,12 @@ export const actions: Actions = {
 	setup: async (event) => {
 		if (await hasAnyAdminAccount()) {
 			return fail(403, { message: m.admin_setup_err_admin_exists() });
+		}
+		if (await setupAlreadyConsumed()) {
+			return fail(403, {
+				message:
+					'Setup has already been completed with this token. Remove ADMIN_SETUP_TOKEN from the environment and sign in with the existing owner account.'
+			});
 		}
 
 		const address = requestAddress(event.getClientAddress);
@@ -107,6 +138,29 @@ export const actions: Actions = {
 			return fail(500, {
 				message:
 					'Owner created, but the site organization could not be initialized. Check the server logs, then repair with `pnpm db:ensure-org`.'
+			});
+		}
+
+		// Durable one-time marker: written before the session exists, so a
+		// crash cannot leave an unconsumed token behind. It carries the token
+		// fingerprint (first 8 hex chars), never the token itself.
+		try {
+			await recordActivity(db, {
+				event: 'admin.setup_complete',
+				actorId: result.user.id,
+				payload: {
+					userId: result.user.id,
+					tokenFingerprint: setupTokenFingerprint(formSetupToken),
+					ownerEmail: email
+				},
+				// Bootstrap metadata stays local (decision A2).
+				deliver: false
+			});
+		} catch (caught) {
+			console.error('[setup] one-time marker failed:', caught);
+			return fail(500, {
+				message:
+					'Owner created, but the one-time setup marker could not be written. Remove ADMIN_SETUP_TOKEN from the environment, then sign in with the password you just set.'
 			});
 		}
 
