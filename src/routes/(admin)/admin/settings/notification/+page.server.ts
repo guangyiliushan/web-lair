@@ -1,9 +1,20 @@
 import { fail } from '@sveltejs/kit';
+import { randomUUID } from 'node:crypto';
 import { asc, desc, eq, sql } from 'drizzle-orm';
+import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { pgErrorCode } from '$lib/server/db/pg-error';
-import { webhookDeliveries, webhooks } from '$lib/server/db/system';
+import { webhookDeliveries, webhookSecrets, webhooks } from '$lib/server/db/system';
 import { requireAdminRole } from '$lib/server/authz';
+import { recordActivity } from '$lib/server/audit';
+import { SecretError } from '$lib/server/secrets/errors';
+import { loadKeyring, type SecretDb } from '$lib/server/secrets/resolver';
+import {
+	encryptPreviousWebhookSecret,
+	encryptWebhookSecretValue,
+	readWebhookSecretStatuses,
+	WEBHOOK_SECRET_GRACE_MS
+} from '$lib/server/secrets/webhook-secrets';
 import { getOption } from '$lib/server/config/options-registry';
 import { isUuid } from '$lib/utils/uuid';
 import { formatDateTime } from '$lib/utils/i18n';
@@ -110,10 +121,23 @@ function endpointId(form: FormData): string | null {
 	return id.toLowerCase();
 }
 
+/** The keyring, or null when it is not usable (the action answers 503). */
+function webhookKeyring(): ReturnType<typeof loadKeyring> | null {
+	try {
+		return loadKeyring({ getEnv: (name) => env[name] });
+	} catch (error) {
+		if (error instanceof SecretError) {
+			console.warn('[webhooks] secret write refused:', error.code);
+			return null;
+		}
+		throw error;
+	}
+}
+
 export const load: PageServerLoad = async () => {
 	await requireAdminRole();
 	const siteTz = await getOption('site.timezone');
-	const [webhookRows, deliveryRows] = await Promise.all([
+	const [webhookRows, deliveryRows, secretStatuses] = await Promise.all([
 		db
 			.select({
 				id: webhooks.id,
@@ -138,13 +162,25 @@ export const load: PageServerLoad = async () => {
 			})
 			.from(webhookDeliveries)
 			.orderBy(desc(webhookDeliveries.createdAt))
-			.limit(50)
+			.limit(50),
+		readWebhookSecretStatuses(
+			db as unknown as SecretDb,
+			(await db.select({ id: webhooks.id }).from(webhooks)).map((row) => row.id)
+		)
 	]);
 	// The raw secret never leaves the server: page data carries a mask only.
-	const webhookEndpoints = webhookRows.map(({ secret, ...endpoint }) => ({
-		...endpoint,
-		secretPreview: maskWebhookSecret(secret)
-	}));
+	// The encrypted row's hint wins; the legacy plaintext column is the bridge
+	// until `scripts/migrate-webhook-secrets.ts --apply` has run.
+	const webhookEndpoints = webhookRows.map(({ secret, ...endpoint }) => {
+		const status = secretStatuses.get(endpoint.id);
+		return {
+			...endpoint,
+			secretPreview: status?.hint ?? (secret ? maskWebhookSecret(secret) : null),
+			secretSource: status ? ('db' as const) : secret ? ('legacy' as const) : null,
+			secretUpdatedAt: status?.updatedAt ?? null,
+			previousExpiresAt: status?.previousExpiresAt ?? null
+		};
+	});
 	const byId = new Map(webhookEndpoints.map((row) => [row.id, row]));
 	return {
 		webhookEndpoints,
@@ -214,7 +250,7 @@ export const actions: Actions = {
 		}
 	},
 
-	create: async ({ request }) => {
+	create: async ({ request, locals }) => {
 		await requireAdminRole();
 		const form = await request.formData();
 		const parsed = parseEndpointForm(form);
@@ -222,23 +258,54 @@ export const actions: Actions = {
 		if (await endpointNameTaken(parsed.name)) {
 			return fail(400, { op: 'create', message: m.admin_settings_notification_err_name_dup() });
 		}
+		const keyring = webhookKeyring();
+		if (!keyring) {
+			return fail(503, {
+				op: 'create',
+				message: m.admin_settings_notification_err_secret_store()
+			});
+		}
 		const secret = generateWebhookSecret();
+		// The AAD binds the ciphertext to the row id, so the id is minted here
+		// rather than by the column default: encryption must happen before the
+		// insert (W2.6).
+		const id = randomUUID();
+		const encrypted = encryptWebhookSecretValue(id, secret, keyring);
 		try {
-			const [row] = await db
-				.insert(webhooks)
-				.values({
+			await db.transaction(async (tx) => {
+				await tx.insert(webhooks).values({
+					id,
 					name: parsed.name,
 					payloadUrl: parsed.payloadUrl,
-					events: parsed.events,
-					secret
-				})
-				.returning({ id: webhooks.id });
+					events: parsed.events
+				});
+				await tx.insert(webhookSecrets).values({
+					webhookId: id,
+					ciphertext: encrypted.ciphertext,
+					hint: encrypted.hint,
+					keyVersion: encrypted.keyVersion,
+					updatedBy: locals.user?.id ?? null
+				});
+				await recordActivity(tx, {
+					event: 'webhook.key_set',
+					actorId: locals.user?.id ?? null,
+					payload: { webhookId: id, name: parsed.name, hint: encrypted.hint },
+					// Secret metadata never fans out (decision A2).
+					deliver: false
+				});
+			});
 			// The only reveal of the raw secret - exactly once, right here.
-			return { op: 'create', created: true, id: row.id, secret };
+			return { op: 'create', created: true, id, secret };
 		} catch (error) {
 			// Defense in depth behind the normalized-href guard (round-2 N1).
 			if (pgErrorCode(error) === '23514') {
 				return fail(400, { op: 'create', message: m.admin_settings_notification_err_url() });
+			}
+			if (error instanceof SecretError) {
+				return fail(503, {
+					op: 'create',
+					message: m.admin_settings_notification_err_secret_store()
+				});
 			}
 			throw error;
 		}
@@ -336,7 +403,7 @@ export const actions: Actions = {
 		};
 	},
 
-	rotate: async ({ request }) => {
+	rotate: async ({ request, locals }) => {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = endpointId(form);
@@ -345,17 +412,99 @@ export const actions: Actions = {
 				op: 'rotate',
 				message: m.admin_settings_notification_err_endpoint_bad_id()
 			});
-		const secret = generateWebhookSecret();
-		const rotated = await db
-			.update(webhooks)
-			.set({ secret })
-			.where(eq(webhooks.id, id))
-			.returning({ id: webhooks.id });
-		if (rotated.length === 0) {
-			return fail(404, {
+		const keyring = webhookKeyring();
+		if (!keyring) {
+			return fail(503, {
 				op: 'rotate',
-				message: m.admin_settings_notification_err_endpoint_not_found()
+				message: m.admin_settings_notification_err_secret_store()
 			});
+		}
+		const secret = generateWebhookSecret();
+		const encrypted = encryptWebhookSecretValue(id, secret, keyring);
+		try {
+			const rotated = await db.transaction(async (tx) => {
+				const [endpoint] = await tx
+					.select({ id: webhooks.id, name: webhooks.name, legacySecret: webhooks.secret })
+					.from(webhooks)
+					.where(eq(webhooks.id, id))
+					.limit(1);
+				if (!endpoint) return false;
+				const [existing] = await tx
+					.select({
+						ciphertext: webhookSecrets.ciphertext,
+						keyVersion: webhookSecrets.keyVersion
+					})
+					.from(webhookSecrets)
+					.where(eq(webhookSecrets.webhookId, id))
+					.limit(1);
+				// Grace window: the value this rotation replaces stays
+				// verifiable for one day, whichever store it came from.
+				let previousCiphertext: string | null = null;
+				let previousKeyVersion: number | null = null;
+				let previousExpiresAt: Date | null = null;
+				if (existing) {
+					previousCiphertext = existing.ciphertext;
+					previousKeyVersion = existing.keyVersion;
+					previousExpiresAt = new Date(Date.now() + WEBHOOK_SECRET_GRACE_MS);
+				} else if (endpoint.legacySecret) {
+					const previous = encryptPreviousWebhookSecret(id, endpoint.legacySecret, keyring);
+					previousCiphertext = previous.ciphertext;
+					previousKeyVersion = previous.keyVersion;
+					previousExpiresAt = new Date(Date.now() + WEBHOOK_SECRET_GRACE_MS);
+				}
+				const stamp = new Date();
+				await tx
+					.insert(webhookSecrets)
+					.values({
+						webhookId: id,
+						ciphertext: encrypted.ciphertext,
+						hint: encrypted.hint,
+						keyVersion: encrypted.keyVersion,
+						previousCiphertext,
+						previousKeyVersion,
+						previousExpiresAt,
+						updatedBy: locals.user?.id ?? null
+					})
+					.onConflictDoUpdate({
+						target: webhookSecrets.webhookId,
+						set: {
+							ciphertext: encrypted.ciphertext,
+							hint: encrypted.hint,
+							keyVersion: encrypted.keyVersion,
+							previousCiphertext,
+							previousKeyVersion,
+							previousExpiresAt,
+							updatedBy: locals.user?.id ?? null,
+							updatedAt: stamp
+						}
+					});
+				// The plaintext column is retired as soon as the encrypted row
+				// exists; receivers get the previous value from the grace slot.
+				if (endpoint.legacySecret !== null) {
+					await tx.update(webhooks).set({ secret: null }).where(eq(webhooks.id, id));
+				}
+				await recordActivity(tx, {
+					event: 'webhook.key_rotate',
+					actorId: locals.user?.id ?? null,
+					payload: { webhookId: id, name: endpoint.name, hint: encrypted.hint },
+					deliver: false
+				});
+				return true;
+			});
+			if (!rotated) {
+				return fail(404, {
+					op: 'rotate',
+					message: m.admin_settings_notification_err_endpoint_not_found()
+				});
+			}
+		} catch (error) {
+			if (error instanceof SecretError) {
+				return fail(503, {
+					op: 'rotate',
+					message: m.admin_settings_notification_err_secret_store()
+				});
+			}
+			throw error;
 		}
 		// Same reveal rule as create: the new secret is shown exactly once.
 		return { op: 'rotate', rotated: true, secret };

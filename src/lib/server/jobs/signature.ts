@@ -36,11 +36,20 @@ export function webhookHeaders(
 	secret: string,
 	webhookId: string,
 	timestampSeconds: number,
-	body: string
+	body: string,
+	previousSecrets: readonly string[] = []
 ): WebhookSignatureHeaders {
+	// Rotation grace window (W2.6): every still-valid secret contributes one
+	// `v1,<digest>` entry. The spec allows a space-delimited list, so a
+	// receiver holding the old value keeps verifying while the new one is
+	// already in use.
+	const signatures = [secret, ...previousSecrets]
+		.filter((value, index, all) => value.length > 0 && all.indexOf(value) === index)
+		.map((value) => signWebhookPayload(value, webhookId, timestampSeconds, body))
+		.join(' ');
 	return {
 		'webhook-id': webhookId,
 		'webhook-timestamp': String(timestampSeconds),
-		'webhook-signature': signWebhookPayload(secret, webhookId, timestampSeconds, body)
+		'webhook-signature': signatures
 	};
 }

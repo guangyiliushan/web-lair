@@ -15,6 +15,13 @@
       "when": 1794556743777,
       "tag": "0001_secret_store",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794557552959,
+      "tag": "0002_webhook_secret_nullable",
+      "breakpoints": true
     }
   ]
 }

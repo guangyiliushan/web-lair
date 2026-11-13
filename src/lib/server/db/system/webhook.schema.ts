@@ -17,7 +17,13 @@ export const webhooks = pgTable(
 		name: text('name').notNull(),
 		payloadUrl: text('payload_url').notNull(),
 		events: text('events').array().notNull(),
-		secret: text('secret').notNull(),
+		/**
+		 * Legacy plaintext signing secret (W2.6). New rows write NULL and store
+		 * the value encrypted in `webhook_secrets`; this column stays readable
+		 * only until the backfill has run, so an un-migrated endpoint keeps
+		 * verifying and a rollback is symmetric.
+		 */
+		secret: text('secret'),
 		isEnabled: boolean('is_enabled').notNull().default(true)
 	},
 	(table) => [check('webhooks_payload_url_check', sql`${table.payloadUrl} ~ '^https?://'`)]

@@ -10,6 +10,9 @@ import { dueWindow } from './due.ts';
 import { JOBS } from './registry.ts';
 import type { JobDefinition } from './registry.ts';
 import { webhookHeaders } from './signature.ts';
+import { isSecretError } from '../secrets/errors.ts';
+import { resolveWebhookSigningSecrets } from '../secrets/webhook-secrets.ts';
+import type { SecretDb } from '../secrets/resolver.ts';
 import type { JobResult, JobTrigger } from '../db/system/job-run.schema.ts';
 import type { JobContext, JobLogger, JobsDb, LoadedJob } from './types.ts';
 
@@ -622,7 +625,6 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 			.select({
 				id: webhooks.id,
 				payloadUrl: webhooks.payloadUrl,
-				secret: webhooks.secret,
 				isEnabled: webhooks.isEnabled
 			})
 			.from(webhooks)
@@ -663,7 +665,38 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 
 		const body = JSON.stringify(delivery.payload);
 		const timestampSeconds = Math.floor(now.getTime() / 1000);
-		const headers = webhookHeaders(endpoint.secret, delivery.id, timestampSeconds, body);
+		// Signing secrets are encrypted at rest (W2.6). A typed failure here is
+		// a per-delivery outcome, not a segment crash: the row records why it
+		// could not be signed and the next tick follows the normal retry rule.
+		let signing;
+		try {
+			signing = await resolveWebhookSigningSecrets(
+				tx as unknown as SecretDb,
+				endpoint.id,
+				{ getEnv: (name) => process.env[name] },
+				now
+			);
+		} catch (err) {
+			const reason = isSecretError(err) ? err.code : 'store_unavailable';
+			await tx
+				.update(webhookDeliveries)
+				.set({
+					status: 'failed',
+					responseCode: null,
+					error: `signing secret unavailable (${reason})`,
+					deliveredAt: now
+				})
+				.where(eq(webhookDeliveries.id, delivery.id));
+			deps.log(`[drain] webhook ${endpoint.id}: signing secret unavailable (${reason})`);
+			return 'failed';
+		}
+		const headers = webhookHeaders(
+			signing.current,
+			delivery.id,
+			timestampSeconds,
+			body,
+			signing.previous ? [signing.previous] : []
+		);
 		try {
 			const response = await deps.fetch(endpoint.payloadUrl, {
 				method: 'POST',
