@@ -693,7 +693,9 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 			// segment, so a misconfiguration pauses delivery instead of
 			// burning the backlog at QUEUE_BATCH rows per minute.
 			if (reason === 'store_unavailable' || reason === 'unknown_key_version') {
-				throw new Error(`signing secret unavailable for webhook ${endpoint.id} (${reason})`);
+				throw new Error(`signing secret unavailable for webhook ${endpoint.id} (${reason})`, {
+					cause: err
+				});
 			}
 			await tx
 				.update(webhookDeliveries)
