@@ -82,6 +82,17 @@ export const auth = betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg' }),
 
+	// W1.5 (settings-truth plan, P0-5/H2): official option, data format only.
+	// New OAuth access/refresh tokens are written as `$ba$<key-version>$<hex>`
+	// (XChaCha20-Poly1305) and decrypted on read; the account table is not
+	// touched structurally. Legacy plaintext rows keep working - better-auth
+	// only decrypts values that look encrypted - and are rewritten on the next
+	// sign-in/refresh. Key versions come from `BETTER_AUTH_SECRETS`; rollback
+	// and rotation steps live in deploy/RUNBOOK.md §3.1.
+	account: {
+		encryptOAuthTokens: true
+	},
+
 	emailAndPassword: {
 		enabled: true,
 		requireEmailVerification: true,

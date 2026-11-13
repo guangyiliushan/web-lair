@@ -460,6 +460,50 @@ subscriptions without `consent_version` and opt-outs without
 three idempotent backfills again (§8) before enabling mail. Otherwise historical
 opt-outs can become mailable and new rows keep a NULL consent version.
 
+### 3.1 Auth keyring and OAuth token encryption (W1.5)
+
+`src/lib/server/auth.ts` enables better-auth's official
+`account.encryptOAuthTokens`. New OAuth access/refresh tokens are stored as
+`$ba$<key-version>$<hex>` envelopes (XChaCha20-Poly1305 keyed by the auth
+secret); the `account` table layout is unchanged. Legacy plaintext rows keep
+working - better-auth only decrypts values that look encrypted (`$ba$...` or a
+bare even-length hex string) - so no backfill is needed: a token is rewritten
+the next time that account signs in or refreshes. (GitHub tokens are
+`gho_`/`ghu_`-prefixed, so they are never mistaken for ciphertext.)
+
+`BETTER_AUTH_SECRETS` is optional. It is the keyring:
+
+| Value               | Meaning                                                                                                                                                        |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unset               | Every value is keyed by `BETTER_AUTH_SECRET` alone (encrypted tokens are bare hex, no envelope)                                                                |
+| `"2:<new>,1:<old>"` | New writes use version 2; values carrying `$ba$1$...` stay readable; `BETTER_AUTH_SECRET` remains the legacy key for values written before the keyring existed |
+
+Rotation has three phases: prepend the new version and restart -> wait until
+nothing still needs the old version (tokens refreshed, cookies reissued) ->
+drop it. Dropping a version makes values written under it **unreadable**
+(fail-closed: sign-in/decrypt errors, no silent plaintext fallback).
+
+Verification (prints counts only, never a token):
+
+```bash
+deploy/compose-prod.sh run --rm app node scripts/verify-oauth-token-storage.ts
+```
+
+Exit 0 means every stored OAuth token is an envelope (or none exist); exit 1
+lists providers that still hold plaintext rows - expected right after the
+switch, green after the affected accounts sign in again.
+
+Rollback:
+
+- **Preferred: keep the new image and fix forward.** Rotating the keyring back
+  is safe as long as the version that encrypted the rows stays in the list.
+- **Image rollback after tokens were encrypted is not symmetric.** The older
+  image has `encryptOAuthTokens` off, so it hands `$ba$...` strings to the
+  GitHub API and those accounts fail until they sign in again (a fresh OAuth
+  callback writes a new token) - or until the pre-deploy dump is restored.
+  Budget one re-sign-in per affected account, and do not restore a
+  pre-encryption dump unless every row written after it can be lost.
+
 ## 4. Backups (D-4)
 
 Backup set:
