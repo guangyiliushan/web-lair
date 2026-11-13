@@ -13,10 +13,21 @@ import { TEST_SECRETS_KEY } from './test-keys';
  */
 export const ORIGIN = 'http://localhost:4173';
 
+/** Database the specs query directly: DATABASE_URL's name, else the dev default. */
+function databaseName(): string {
+	const url = process.env.DATABASE_URL;
+	if (!url) return 'local';
+	try {
+		return new URL(url).pathname.replace(/^\//, '') || 'local';
+	} catch {
+		return 'local';
+	}
+}
+
 export function psql(sql: string): string {
 	return execFileSync(
 		'docker',
-		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', 'local', '-tAc', sql],
+		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', databaseName(), '-tAc', sql],
 		{ encoding: 'utf8' }
 	).trim();
 }

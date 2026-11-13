@@ -32,6 +32,10 @@ export default defineConfig({
 		env: {
 			TAILSCALE_ALLOW_LOOPBACK: 'true',
 			ORIGIN: 'http://localhost:4173',
+			// Isolation seam: when the caller points DATABASE_URL at a scratch
+			// database (local_e2e), the preview and the psql helper must use it
+			// too. Unset keeps the historical dev database.
+			...(process.env.DATABASE_URL ? { DATABASE_URL: process.env.DATABASE_URL } : {}),
 			// Mail is unconfigured in tests: the transport logs the message
 			// instead of failing (production keeps the fail-loud contract).
 			MAIL_DEV_LOG: 'true',
