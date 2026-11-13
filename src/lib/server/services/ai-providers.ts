@@ -117,14 +117,13 @@ export async function testProviderConnection(
 		if (provider.kind === 'custom' && !provider.baseUrl) {
 			return { ok: false, message: m.admin_settings_ai_err_custom_base_url() };
 		}
-		const key = provider.apiKeyEnv ? getKey(provider.apiKeyEnv) : undefined;
-		if (provider.kind !== 'custom' && !provider.apiKeyEnv) {
-			return { ok: false, message: m.admin_settings_ai_err_env_missing() };
-		}
+		const key = getKey(provider.apiKeyEnv ?? '');
 		if (provider.kind !== 'custom' && !key) {
 			return {
 				ok: false,
-				message: m.admin_settings_ai_err_env_unset({ name: provider.apiKeyEnv ?? '' })
+				message: provider.apiKeyEnv
+					? m.admin_settings_ai_err_env_unset({ name: provider.apiKeyEnv })
+					: m.admin_settings_ai_err_env_missing()
 			};
 		}
 
@@ -225,7 +224,7 @@ export async function discoverProviderModels(
 	}
 
 	const headers: Record<string, string> = {};
-	const key = provider.apiKeyEnv ? getKey(provider.apiKeyEnv) : undefined;
+	const key = getKey(provider.apiKeyEnv ?? '');
 	if (key) headers.authorization = `Bearer ${key}`;
 
 	try {
