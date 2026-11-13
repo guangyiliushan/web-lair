@@ -111,6 +111,20 @@ export function parseKeyring(input: KeyringInput): SecretKeyring {
 			}
 			versions.set(version, decodeKey(entry.slice(separator + 1), `SECRETS_KEYS key ${version}`));
 		}
+		// A deployment migrating from the single-key form keeps reading its
+		// old rows: merge SECRETS_KEY as version 1. A conflicting explicit
+		// version 1 is ambiguous and must be fixed by hand.
+		if (legacyRaw !== '') {
+			const legacyKey = decodeKey(legacyRaw, 'SECRETS_KEY');
+			const explicit = versions.get(1);
+			if (explicit && !explicit.equals(legacyKey)) {
+				throw new KeyringConfigError(
+					'invalid',
+					'SECRETS_KEY conflicts with SECRETS_KEYS version 1; merge them explicitly or remove the legacy variable'
+				);
+			}
+			if (!explicit) versions.set(1, legacyKey);
+		}
 		// `ACTIVE` is mandatory with a map: guessing "first entry" turns a
 		// reordered list into a silent key change.
 		const activeRaw = input.active?.trim() ?? '';

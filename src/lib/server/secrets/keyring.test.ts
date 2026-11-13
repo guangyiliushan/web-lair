@@ -85,6 +85,25 @@ describe('SECRETS keyring', () => {
 		);
 	});
 
+	it('merges the legacy SECRETS_KEY as version 1 when the map omits it', () => {
+		const ring = parseKeyring({ keys: `2:${B64_2}`, active: '2', legacy: B64_1 });
+		expect(ring.activeVersion).toBe(2);
+		expect(ring.resolve(1)?.equals(K1)).toBe(true);
+		expect(ring.resolve(2)?.equals(K2)).toBe(true);
+	});
+
+	it('rejects a legacy SECRETS_KEY that conflicts with explicit version 1', () => {
+		expect(() => parseKeyring({ keys: `1:${B64_2}`, active: '1', legacy: B64_1 })).toThrow(
+			/conflicts with SECRETS_KEYS version 1/
+		);
+		// Identical values are not a conflict.
+		expect(
+			parseKeyring({ keys: `1:${B64_1}`, active: '1', legacy: B64_1 })
+				.resolve(1)
+				?.equals(K1)
+		).toBe(true);
+	});
+
 	it('rejects duplicate versions, short keys and malformed entries', () => {
 		const cases: Array<Record<string, string>> = [
 			{ keys: `1:${B64_1},1:${B64_2}`, active: '1' },

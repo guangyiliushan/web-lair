@@ -222,13 +222,16 @@ export async function envNamesWithDatabaseKeys(
 
 /**
  * Display hint: a recognizable prefix and the last four characters, never the
- * value. `sk-…Abcd` for OpenAI-style keys; a 4-character head otherwise.
- * Short values reveal only the last two characters.
+ * value. Short values reveal less: a 9-character key must not show 8 of its
+ * characters in a badge or an audit payload.
  */
 export function providerKeyHint(value: string): string {
 	const trimmed = value.trim();
-	if (trimmed.length <= 8) {
-		return trimmed.length > 2 ? `…${trimmed.slice(-2)}` : '…';
+	if (trimmed.length <= 12) {
+		return trimmed.length > 2 ? `\u2026${trimmed.slice(-2)}` : '\u2026';
+	}
+	if (trimmed.length <= 16) {
+		return `\u2026${trimmed.slice(-4)}`;
 	}
 	const prefix = trimmed.startsWith('sk-') ? 'sk-' : trimmed.slice(0, 4);
 	return `${prefix}\u2026${trimmed.slice(-4)}`;

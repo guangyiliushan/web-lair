@@ -230,7 +230,9 @@ describe('provider key status helpers', () => {
 
 	it('builds a hint that keeps only a short prefix and the last four characters', () => {
 		expect(providerKeyHint('sk-proj-1234567890abcd')).toBe('sk-…abcd');
-		expect(providerKeyHint('abcdefghijklmnop')).toBe('abcd…mnop');
+		expect(providerKeyHint('abcdefghijklmnop')).toBe('…mnop');
+		expect(providerKeyHint('abcdefghijkl')).toBe('…kl');
+		expect(providerKeyHint('abcd12345')).toBe('…45');
 		expect(providerKeyHint('short')).toBe('…rt');
 		expect(providerKeyHint('abc')).toBe('…bc');
 		expect(providerKeyHint('a')).toBe('…');
