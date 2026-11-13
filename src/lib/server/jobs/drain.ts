@@ -195,7 +195,10 @@ function tickDegraded(stats: DrainSummary): boolean {
 		stats.segmentErrors.length > 0 ||
 		stats.schedules.errors > 0 ||
 		stats.queue.errors > 0 ||
-		stats.deliveries.errors > 0
+		// A failed delivery (missing/undecryptable signing secret) means an
+		// event was dropped: the heartbeat must not stay green.
+		stats.deliveries.errors > 0 ||
+		stats.deliveries.failed > 0
 	);
 }
 
