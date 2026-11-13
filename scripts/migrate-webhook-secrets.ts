@@ -18,6 +18,7 @@
 import postgres from 'postgres';
 import { loadKeyring } from '../src/lib/server/secrets/resolver.ts';
 import { encryptWebhookSecretValue } from '../src/lib/server/secrets/webhook-secrets.ts';
+import { decryptSecret, secretAad } from '../src/lib/server/secrets/crypto.ts';
 import { SecretError } from '../src/lib/server/secrets/errors.ts';
 
 const APPLY = process.argv.includes('--apply');
@@ -54,6 +55,16 @@ try {
 		for (const row of rows) {
 			try {
 				const encrypted = encryptWebhookSecretValue(row.id, row.secret, keyring);
+				// Fail before the plaintext is NULLed if the envelope does not
+				// round-trip: a keyring bug must not destroy the only copy.
+				const reopened = decryptSecret(
+					encrypted.ciphertext,
+					keyring.resolve,
+					secretAad('webhook_secrets', row.id, 'ciphertext')
+				).plaintext;
+				if (reopened !== row.secret) {
+					throw new Error('round-trip mismatch; refusing to retire the plaintext value');
+				}
 				if (APPLY) {
 					await client.begin(async (tx) => {
 						await tx`
