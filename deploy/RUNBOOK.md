@@ -465,6 +465,93 @@ subscriptions without `consent_version` and opt-outs without
 three idempotent backfills again (§8) before enabling mail. Otherwise historical
 opt-outs can become mailable and new rows keep a NULL consent version.
 
+### 3.1 Auth keyring and OAuth token encryption (W1.5)
+
+`src/lib/server/auth.ts` enables better-auth's official
+`account.encryptOAuthTokens`. New OAuth access/refresh tokens are stored as
+`$ba$<key-version>$<hex>` envelopes (XChaCha20-Poly1305 keyed by the auth
+secret) when the keyring is set, and as bare hex otherwise; the `account` table
+layout is unchanged. Legacy plaintext rows keep working - better-auth only
+decrypts values that look encrypted (`$ba$...` or a bare even-length hex
+string) - so no backfill is needed: a token is rewritten the next time that
+account signs in or refreshes. (GitHub tokens are `gho_`/`ghu_`-prefixed, so
+they are never mistaken for ciphertext.)
+
+`BETTER_AUTH_SECRETS` is optional. It is the keyring:
+
+| Value               | Meaning                                                                                                                                                        |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unset               | Every value is keyed by `BETTER_AUTH_SECRET` alone; encrypted tokens are **bare hex**, no envelope                                                             |
+| `"2:<new>,1:<old>"` | New writes use version 2; values carrying `$ba$1$...` stay readable; `BETTER_AUTH_SECRET` remains the legacy key for values written before the keyring existed |
+
+**Before touching the keyring, note what else it keys:**
+
+- The first entry is also the **session cookie / JWT signing secret**
+  (`create-context.mjs`: `secret = secrets[0].value`). Adding or rotating a
+  version signs every current user out on restart - this is not a
+  zero-downtime operation.
+- It wraps **2FA/TOTP secrets** as well as OAuth tokens. TOTP secrets are
+  written once and never rewritten, so a version that wrote one must stay in
+  the list for that account's lifetime (or the owner re-enrolls 2FA first).
+  Dropping it makes decryption fail closed and locks that account out of
+  email + TOTP - the remaining admin path.
+- Keep `BETTER_AUTH_SECRET` **set** while any bare-hex values exist: it is the
+  `legacySecret` that decrypts them when no envelope is present.
+
+Rotation has three phases: prepend the new version and restart (sessions are
+reissued) -> wait until no _OAuth token_ still needs the old version -> drop
+it, **unless a stored TOTP secret still needs it**. Dropping a version makes
+values written under it unreadable (fail-closed: sign-in/decrypt errors, no
+silent plaintext fallback).
+
+Verification (prints counts only, never a token; the script ships in the
+runtime image, `Dockerfile`):
+
+```bash
+deploy/compose-prod.sh run --rm app node scripts/verify-oauth-token-storage.ts
+```
+
+Exit 0 means every stored OAuth token is encrypted (or none exist). Exit 1
+means plaintext rows remain (expected right after the switch, green after the
+affected accounts sign in again) **or the script itself failed** - its
+`query failed` line distinguishes the two; do not read every exit 1 as
+"plaintext remains".
+
+Rollback:
+
+- **Preferred: keep the new image and fix forward.** Rotating the keyring back
+  is safe as long as the version that encrypted the rows stays in the list.
+- **Image rollback after tokens were encrypted is not symmetric.** The older
+  image has `encryptOAuthTokens` off, so it hands `$ba$...` strings to the
+  GitHub API and those accounts fail until they sign in again (a fresh OAuth
+  callback writes a new token) - or until the pre-deploy dump is restored.
+  Budget one re-sign-in per affected account, and do not restore a
+  pre-encryption dump unless every row written after it can be lost.
+
+### 3.2 Admin/GitHub sign-in policy (W1.6)
+
+GitHub can no longer mint an admin/owner session (`user.validateUserInfo`
+rejects it with `admin_github_sign_in_blocked`; the refusal is logged as
+`[auth] admin GitHub sign-in blocked`). Email + TOTP or a passkey remain; the
+passkey sign-in UI lands with W8, so email + TOTP is the available admin path
+today. The tailnet owner hand-off (loopback/tailnet identity) is a separate,
+registered path.
+
+Sessions minted through GitHub **before** this deploy are not distinguishable
+after the fact (the session row stores no login method) and keep their role
+until they expire or are pruned. To enforce the policy immediately, revoke
+every admin/owner session once after the deploy:
+
+```bash
+deploy/compose-prod.sh exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' <<'SQL'
+delete from session where user_id in (select id from "user" where role in ('owner', 'admin'));
+SQL
+```
+
+This logs the admins out once; their next email + TOTP (or passkey) sign-in
+re-establishes the session under the new policy. No schema change is involved.
+
 ## 4. Backups (D-4)
 
 Two repositories with two passwords (T3-A, secrets register §0.1).
