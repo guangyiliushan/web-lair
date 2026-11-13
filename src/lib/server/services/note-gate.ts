@@ -141,19 +141,36 @@ const GATE_KEY_INFO = 'web-lair:notes-gate';
  * unlock tokens with a different key than every other replica.
  */
 export function currentAuthSecret(getEnv: (name: string) => string | undefined): string {
-	const keyring = (getEnv('BETTER_AUTH_SECRETS') ?? '').trim();
-	if (keyring !== '') {
-		const first = (keyring.split(',')[0] ?? '').trim();
-		const colon = first.indexOf(':');
-		if (colon <= 0) {
-			throw new Error('[note-gate] BETTER_AUTH_SECRETS entry must look like "<version>:<secret>"');
+	const raw = getEnv('BETTER_AUTH_SECRETS') ?? '';
+	if (raw !== '') {
+		// Validate EVERY entry with better-auth's rules (parseSecretsEnv): an
+		// empty or malformed later entry makes better-auth throw, so note-gate
+		// must not silently sign with the first value in that case.
+		const entries = raw.split(',');
+		let firstValue: string | null = null;
+		const seen = new Set<number>();
+		for (const [index, entry] of entries.entries()) {
+			const trimmed = entry.trim();
+			const colon = trimmed.indexOf(':');
+			if (colon <= 0 || colon === trimmed.length - 1) {
+				throw new Error(
+					`[note-gate] BETTER_AUTH_SECRETS entry ${index + 1} must look like "<version>:<secret>"`
+				);
+			}
+			const version = Number(trimmed.slice(0, colon).trim());
+			const value = trimmed.slice(colon + 1).trim();
+			if (!Number.isInteger(version) || version < 0 || !value) {
+				throw new Error('[note-gate] BETTER_AUTH_SECRETS is malformed');
+			}
+			if (seen.has(version)) {
+				throw new Error(`[note-gate] BETTER_AUTH_SECRETS lists version ${version} twice`);
+			}
+			seen.add(version);
+			if (index === 0) firstValue = value;
 		}
-		const version = Number(first.slice(0, colon).trim());
-		const value = first.slice(colon + 1).trim();
-		if (!Number.isInteger(version) || version < 0 || !value) {
-			throw new Error('[note-gate] BETTER_AUTH_SECRETS is malformed');
-		}
-		return value;
+		// `entries` is non-empty whenever `raw !== ''`, so this is the current
+		// (first) secret - the same one better-auth uses.
+		return firstValue as string;
 	}
 	const secret = (getEnv('BETTER_AUTH_SECRET') ?? '').trim();
 	if (!secret) {

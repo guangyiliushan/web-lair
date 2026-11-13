@@ -210,6 +210,22 @@ describe('note-gate auth secret selection (W2.11 / T4-B)', () => {
 		expect(() =>
 			currentAuthSecret(getEnv({ BETTER_AUTH_SECRETS: 'x:secret', BETTER_AUTH_SECRET: 'legacy' }))
 		).toThrow(/BETTER_AUTH_SECRETS/);
+		// A defect in a LATER entry makes better-auth throw; note-gate must not
+		// sign with the first value in that case.
+		expect(() =>
+			currentAuthSecret(getEnv({ BETTER_AUTH_SECRETS: '2:new,1:', BETTER_AUTH_SECRET: 'legacy' }))
+		).toThrow(/BETTER_AUTH_SECRETS/);
+		expect(() =>
+			currentAuthSecret(getEnv({ BETTER_AUTH_SECRETS: '2:new, ', BETTER_AUTH_SECRET: 'legacy' }))
+		).toThrow(/BETTER_AUTH_SECRETS/);
+		expect(() => currentAuthSecret(getEnv({ BETTER_AUTH_SECRETS: '2:new,2:again' }))).toThrow(
+			/twice/
+		);
+		// A whitespace-only value is NOT "unset" for better-auth: it tries to
+		// parse an entry and throws.
+		expect(() => currentAuthSecret(getEnv({ BETTER_AUTH_SECRETS: '   ' }))).toThrow(
+			/BETTER_AUTH_SECRETS/
+		);
 	});
 
 	it('invalidates outstanding unlock tokens when the current version rotates', async () => {
