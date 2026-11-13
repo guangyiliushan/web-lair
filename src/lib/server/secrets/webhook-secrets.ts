@@ -39,10 +39,6 @@ interface WebhookSecretRow {
 	previousExpiresAt: Date | null;
 }
 
-function errorText(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
 async function readSecretRow(db: SecretDb, webhookId: string): Promise<WebhookSecretRow | null> {
 	try {
 		const rows = await db
@@ -58,10 +54,11 @@ async function readSecretRow(db: SecretDb, webhookId: string): Promise<WebhookSe
 			.limit(1);
 		return rows[0] ?? null;
 	} catch (error) {
-		throw new SecretError(
-			'store_unavailable',
-			`Webhook secret store unavailable: ${errorText(error)}`
+		console.warn(
+			'[secrets] webhook secret store read failed',
+			error instanceof Error ? error.name : 'unknown'
 		);
+		throw new SecretError('store_unavailable', 'Webhook secret store unavailable');
 	}
 }
 
@@ -75,7 +72,11 @@ async function readLegacySecret(db: SecretDb, webhookId: string): Promise<string
 		const secret = rows[0]?.secret;
 		return secret && secret.length > 0 ? secret : null;
 	} catch (error) {
-		throw new SecretError('store_unavailable', `Webhook store unavailable: ${errorText(error)}`);
+		console.warn(
+			'[secrets] webhook legacy secret read failed',
+			error instanceof Error ? error.name : 'unknown'
+		);
+		throw new SecretError('store_unavailable', 'Webhook store unavailable');
 	}
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { SecretError } from './errors.ts';
 import { parseKeyring } from './keyring.ts';
 import {
@@ -72,6 +73,38 @@ describe('resolveProviderKey', () => {
 		);
 		expect(resolved).toMatchObject({ value: 'db-secret', source: 'db', keyVersion: 1 });
 		expect(resolved.hint).toBe('sk-…AbCd');
+	});
+
+	it('reports the version authenticated by the envelope, not the mirrored column', async () => {
+		const row = { ...secretRow(PROVIDER_ID, 'db-secret'), keyVersion: 9 };
+		const resolved = await resolveProviderKey(dbWithRows([row]), { id: PROVIDER_ID }, deps());
+		expect(resolved.keyVersion).toBe(1);
+	});
+
+	it('scopes the read to the requested provider row', async () => {
+		const seen: unknown[] = [];
+		const db = {
+			select: () => ({
+				from: () => ({
+					where: (condition: unknown) => {
+						seen.push(condition);
+						const promise = Promise.resolve([]);
+						return Object.assign(promise, { limit: async () => [] });
+					}
+				})
+			})
+		} as unknown as SecretDb;
+		await expect(
+			resolveProviderKey(
+				db,
+				{ id: PROVIDER_ID, apiKeyEnv: 'AI_TEST_KEY' },
+				deps({ AI_TEST_KEY: 'x' })
+			)
+		).resolves.toMatchObject({ source: 'env' });
+		expect(seen).toHaveLength(1);
+		const query = new PgDialect().sqlToQuery(seen[0] as never);
+		expect(query.sql).toContain('"ai_provider_secrets"."provider_id"');
+		expect(query.params).toContain(PROVIDER_ID);
 	});
 
 	it('falls back to the env name only when no row exists', async () => {

@@ -1,6 +1,6 @@
 import { eq, inArray } from 'drizzle-orm';
 import { aiProviderSecrets } from '../db/ai/ai-provider-secret.schema.ts';
-import { decryptSecret, encryptSecret, secretAad } from './crypto.ts';
+import { decryptSecret, encryptSecret, ciphertextKeyVersion, secretAad } from './crypto.ts';
 import { SecretError } from './errors.ts';
 import { KeyringConfigError, keyringFromEnv, type SecretKeyring } from './keyring.ts';
 
@@ -102,14 +102,15 @@ async function readProviderSecretRow(
 		return rows[0] ?? null;
 	} catch (error) {
 		// A missing table (migration not applied), a closed pool or a permission
-		// error must not be reinterpreted as "no key configured".
-		throw new SecretError('store_unavailable', `Secret store unavailable: ${errorText(error)}`);
+		// error must not be reinterpreted as "no key configured". The driver
+		// message can embed SQL and bound params, so it stays server-side and
+		// the typed failure carries a fixed public string.
+		console.warn(
+			'[secrets] provider secret store read failed',
+			error instanceof Error ? error.name : 'unknown'
+		);
+		throw new SecretError('store_unavailable', 'Secret store unavailable');
 	}
-}
-
-function errorText(error: unknown): string {
-	if (error instanceof Error) return error.message;
-	return String(error);
 }
 
 /**
@@ -130,12 +131,14 @@ export async function resolveProviderKey(
 		if (row) {
 			const keyring = loadKeyring(deps);
 			const aad = secretAad('ai_provider_secrets', providerId, 'ciphertext');
-			const { plaintext } = decryptSecret(row.ciphertext, keyring.resolve, aad);
+			const { plaintext, keyVersion } = decryptSecret(row.ciphertext, keyring.resolve, aad);
 			return {
 				value: plaintext,
 				source: 'db',
 				hint: row.hint,
-				keyVersion: row.keyVersion
+				// Report the authenticated version, not the mirrored column: a
+				// drift between the two must not be able to lie to the UI.
+				keyVersion
 			};
 		}
 	}
@@ -175,21 +178,30 @@ export async function readProviderKeyStatuses(
 			.select<{
 				providerId: string;
 				hint: string;
+				ciphertext: string;
 				keyVersion: number;
 				updatedAt: Date;
 			}>({
 				providerId: aiProviderSecrets.providerId,
 				hint: aiProviderSecrets.hint,
+				ciphertext: aiProviderSecrets.ciphertext,
 				keyVersion: aiProviderSecrets.keyVersion,
 				updatedAt: aiProviderSecrets.updatedAt
 			})
 			.from(aiProviderSecrets)
 			.where(inArray(aiProviderSecrets.providerId, [...providerIds]));
 		for (const row of rows) {
+			let version = row.keyVersion;
+			try {
+				version = ciphertextKeyVersion(row.ciphertext);
+			} catch {
+				// Unreadable envelopes still show as configured; the read path
+				// fails closed with a typed error.
+			}
 			out.set(row.providerId, {
 				configured: true,
 				hint: row.hint,
-				keyVersion: row.keyVersion,
+				keyVersion: version,
 				updatedAt: row.updatedAt
 			});
 		}
