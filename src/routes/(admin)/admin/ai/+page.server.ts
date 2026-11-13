@@ -222,14 +222,22 @@ export const actions: Actions = {
 	 */
 	purgeUsage: async ({ locals }) => {
 		await requireOwnerRole();
-		const [{ total }] = await db
-			.select({ total: sql<number>`count(*)`.mapWith(Number) })
-			.from(aiUsage);
-		await db.delete(aiUsage);
-		await recordActivity(db, {
-			event: 'ai.usage.purge',
-			actorId: locals.user?.id ?? null,
-			payload: { rows: total }
+		// One transaction: the wipe and its audit row share a fate. The event
+		// name is two-segment (`ai.usage_purge`) because `activities_event_check`
+		// only admits `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`; the old
+		// `ai.usage.purge` raised 23514 after the rows were already deleted, so
+		// the action 500ed on an empty ledger.
+		const total = await db.transaction(async (tx) => {
+			const [{ total }] = await tx
+				.select({ total: sql<number>`count(*)`.mapWith(Number) })
+				.from(aiUsage);
+			await tx.delete(aiUsage);
+			await recordActivity(tx, {
+				event: 'ai.usage_purge',
+				actorId: locals.user?.id ?? null,
+				payload: { rows: total }
+			});
+			return total;
 		});
 		return total === 0
 			? { message: m.admin_ai_purge_none() }

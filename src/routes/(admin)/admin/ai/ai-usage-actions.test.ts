@@ -11,12 +11,19 @@ overwriteGetLocale(() => 'zh-cn');
  * read surface with one exception: `ai_usage` has no per-row delete, so a bad
  * import can only be cleaned up wholesale - which is exactly the path that
  * must not be reachable without the owner role.
+ *
+ * The audit event is `ai.usage_purge`, not `ai.usage.purge`: the activities
+ * CHECK admits exactly one dot (`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`), and the
+ * old three-segment name raised 23514 AFTER the delete had committed - a 500
+ * with the ledger already empty. The wipe therefore runs as one transaction.
  */
 const { dbMock, state, authzMock, recordActivityMock } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		counts: [] as unknown[][],
-		deletedTables: [] as unknown[]
+		deletedTables: [] as unknown[],
+		tx: null as unknown,
+		txOpened: 0
 	},
 	authzMock: {
 		requireAdminRole: vi.fn(async () => {}),
@@ -56,13 +63,30 @@ describe('AI console ledger wipe', () => {
 	beforeEach(() => {
 		state.counts = [];
 		state.deletedTables = [];
+		state.txOpened = 0;
 		authzMock.requireOwnerRole.mockClear();
 		recordActivityMock.mockClear();
-		Object.assign(dbMock, {
+		// Count, delete and audit all run through the transaction handle; the
+		// bare `db` handle is booby-trapped so a future "just use db here" edit
+		// fails loudly instead of silently splitting the wipe from its receipt.
+		const tx = {
 			select: vi.fn(() => makeChain(state.counts.shift() ?? [])),
 			delete: vi.fn((table: unknown) => {
 				state.deletedTables.push(table);
 				return Promise.resolve();
+			})
+		};
+		state.tx = tx;
+		Object.assign(dbMock, {
+			transaction: vi.fn(async (callback: (handle: unknown) => Promise<unknown>) => {
+				state.txOpened += 1;
+				return callback(tx);
+			}),
+			select: vi.fn(() => {
+				throw new Error('purge must read through its transaction');
+			}),
+			delete: vi.fn(() => {
+				throw new Error('purge must delete through its transaction');
 			})
 		});
 	});
@@ -79,13 +103,28 @@ describe('AI console ledger wipe', () => {
 		state.counts = [[{ total: 3 }]];
 		await callPurge();
 		expect(recordActivityMock).toHaveBeenCalledWith(
-			expect.anything(),
+			state.tx,
 			expect.objectContaining({
-				event: 'ai.usage.purge',
+				event: 'ai.usage_purge',
 				actorId: 'owner-1',
 				payload: { rows: 3 }
 			})
 		);
+	});
+
+	it('records an event name the activities CHECK accepts', async () => {
+		// The P0-3 regression tooth: three segments (`ai.usage.purge`) violate
+		// the schema CHECK and raise 23514 after the rows are already gone.
+		state.counts = [[{ total: 1 }]];
+		await callPurge();
+		const [, input] = recordActivityMock.mock.calls[0] as unknown as [unknown, { event: string }];
+		expect(input.event).toMatch(/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/);
+	});
+
+	it('wipes and logs inside one transaction', async () => {
+		state.counts = [[{ total: 2 }]];
+		await callPurge();
+		expect(state.txOpened).toBe(1);
 	});
 
 	it('says so when the ledger was already empty', async () => {
@@ -98,5 +137,6 @@ describe('AI console ledger wipe', () => {
 		authzMock.requireOwnerRole.mockRejectedValueOnce(new Error('forbidden'));
 		await expect(callPurge()).rejects.toThrow('forbidden');
 		expect(state.deletedTables).toHaveLength(0);
+		expect(state.txOpened).toBe(0);
 	});
 });
