@@ -38,7 +38,7 @@ $EDITOR .env      # see §1.1 for the required keys
 
 | Key                                                   | Value                                                                                                             |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | strong, unique, **URL-safe** (`openssl rand -hex 32`) — the password is interpolated into `DATABASE_URL` verbatim; `deploy/compose-prod.sh` refuses to start on a missing or non-URL-safe value |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | strong, unique, **URL-safe** (`openssl rand -hex 32`) — the password is interpolated into `DATABASE_URL` verbatim |
 | `BETTER_AUTH_SECRET`                                  | ≥32 chars, high entropy                                                                                           |
 | `ORIGIN`                                              | `https://<domain>` (no trailing slash)                                                                            |
 | `DOMAIN`                                              | same host, used by Caddy                                                                                          |
@@ -55,6 +55,10 @@ $EDITOR .env      # see §1.1 for the required keys
 | `JOBS_HEARTBEAT_URL`                                  | per-tick drain ping (Kuma push or a second healthchecks check)                                                    |
 | `ALERT_WEBHOOK_URL`                                   | systemd `OnFailure` target; leave empty to disable the alert unit                                                 |
 | `MAIL_DEV_LOG` / `MAIL_DEV_LOG_OK`                    | dev/e2e only; production ignores dev logging unless BOTH are set                                                  |
+
+`POSTGRES_PASSWORD` is required too: `compose.prod.yaml` builds the app's
+`DATABASE_URL` from it at parse time, and `deploy/compose-prod.sh` refuses to
+start when it is missing or not URL-safe.
 
 `SUPPRESSION_HMAC_KEY` is mandatory before the first start (production boot
 refuses to start without it; dev needs it for subscribe/unsubscribe). Generate
@@ -78,7 +82,8 @@ never sees the credential that can delete the offsite repository:
 cp deploy/backup.env.example deploy/backup.env
 chmod 600 deploy/backup.env
 $EDITOR deploy/backup.env      # + POSTGRES_USER / POSTGRES_DB / DATA_DIR (same values as .env),
-                               #   RESTIC_* + AWS_* + BACKUP_PING_URL + CHECK_PING_URL
+                               #   RESTIC_* + RESTIC_CONFIG_* (second repository, own password)
+                               #   + AWS_* + BACKUP_PING_URL + CHECK_PING_URL; see §4
 ```
 
 ### 1.2 Mail route probes (deploy note Q7)
@@ -462,18 +467,35 @@ opt-outs can become mailable and new rows keep a NULL consent version.
 
 ## 4. Backups (D-4)
 
-Backup set:
+Two repositories with two passwords (T3-A, secrets register §0.1).
+
+**Data repository** — `RESTIC_REPOSITORY`:
 
 1. `pg_dump -Fc` → staging dir on the host (logical backup; never file-copy a
    running data directory).
 2. `$DATA_DIR` (user job scripts + sidecars).
 3. RustFS volume (media), mounted read-only into the backup container.
-4. `.env` only. compose/Caddyfile come from git; the **restic password** is
-   kept offline (password manager — losing it makes the repo unreadable).
+
+**Config repository** — `RESTIC_CONFIG_REPOSITORY`, **different password**:
+
+4. `.env` only, as a single file. It is never part of the data repository:
+   `.env` holds `BETTER_AUTH_SECRET`, `SUPPRESSION_HMAC_KEY` and the database
+   password, so a leaked data repository (and its password) must not decrypt
+   the application secrets. `deploy/backup.env` is backed up nowhere — it holds
+   both repository passwords; keep those in the password manager with an
+   **offline** copy (losing one makes its repository unreadable).
 
 ```bash
 # what the nightly unit runs (deploy/systemd/web-lair-backup.timer)
 /srv/web-lair/app/deploy/backup/backup.sh
+
+# one-time: create both repositories, each with its own password
+set -a; . deploy/backup.env; set +a
+docker run --rm -e RESTIC_REPOSITORY -e RESTIC_PASSWORD \
+  -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY restic/restic:0.19.1 init
+docker run --rm -e RESTIC_REPOSITORY="$RESTIC_CONFIG_REPOSITORY" \
+  -e RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD" \
+  -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY restic/restic:0.19.1 init
 ```
 
 Credentials come from `deploy/backup.env` (mode 600, loaded by the systemd
@@ -482,16 +504,45 @@ unit — never from `.env`, so the app container cannot read them).
 The script dumps PG to a temp file, validates it with `pg_restore -l`, swaps it
 over `pg.dump` (a failed night never truncates yesterday's good copy), resolves
 the RustFS volume from the running container, then runs restic with
-`--retry-lock 30m` and the retention policy. Pre-migration dumps live in
+`--retry-lock 30m` and the retention policy: data keeps 7 daily / 4 weekly /
+6 monthly, config 30 daily / 12 monthly. Pre-migration dumps live in
 `/srv/web-lair/pre-migrate` — **outside** the restic source paths, pruned by
 age, so deploy count does not grow the backup repo.
 
 - Weekly: `web-lair-backup-check.timer` runs
-  `restic --retry-lock 30m check --read-data-subset=5%` (the nightly job only
-  backs up) and pings `CHECK_PING_URL` only on success.
+  `restic --retry-lock 30m check --read-data-subset=5%` on the data repository
+  (the nightly job only backs up) and pings `CHECK_PING_URL` only on success.
 - Monthly drill: restore to a **separate** directory and, for PG, into a
   **scratch** database on a different port; compare row counts and sample media
-  hashes. The drill never touches the production database.
+  hashes. The drill never touches the production database. It also proves the
+  config split still holds:
+
+  ```bash
+  DRILL=$(mktemp -d)
+  set -a; . deploy/backup.env; set +a
+  # 1. the data repository must contain no .env anywhere
+  docker run --rm -e RESTIC_REPOSITORY -e RESTIC_PASSWORD \
+    -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY restic/restic:0.19.1 \
+    ls --host web-lair latest | grep -E '(^|/)\.env$' \
+    && { echo 'FAIL: .env is inside the data repository'; exit 1; }
+  # 2. the config repository restores a byte-identical .env
+  docker run --rm -e RESTIC_REPOSITORY="$RESTIC_CONFIG_REPOSITORY" \
+    -e RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD" \
+    -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+    -v "$DRILL":/restore restic/restic:0.19.1 \
+    restore --host web-lair-config latest --target /restore
+  cmp "$DRILL/config/.env" .env && echo 'OK: config restored'
+  # 3. the data password must NOT open the config repository
+  docker run --rm -e RESTIC_REPOSITORY="$RESTIC_CONFIG_REPOSITORY" \
+    -e RESTIC_PASSWORD="$RESTIC_PASSWORD" \
+    -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY restic/restic:0.19.1 snapshots \
+    && { echo 'FAIL: config repository opened with the data password'; exit 1; } \
+    || echo 'OK: repository passwords are separate'
+  rm -rf "$DRILL"
+  ```
+
+  Keep the receipt (date, snapshot ids, `cmp` result) with the ops notes.
+
 - A failed backup must fail **its own** check: `BACKUP_PING_URL` is pinged only
   on success and is deliberately separate from the 5-minute liveness URL
   (`DEADMAN_PING_URL`) — sharing one check would make a silent backup failure
