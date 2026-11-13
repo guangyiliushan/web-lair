@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SecretError } from '../secrets/errors.ts';
 
 /**
  * Failover is the whole point of aggregation, and it is the part that is easiest
@@ -254,5 +255,50 @@ describe('runAiCall failover', () => {
 		);
 		const result = await runAiCall(input, { ...deps, fetch: fetchImpl as never });
 		expect(result.model).toBe('pro');
+	});
+});
+
+describe('runAiCall encrypted key resolution (W2.4)', () => {
+	it('sends the DB-resolved key even when apiKeyEnv is not set', async () => {
+		mocks.chain = [candidate('a')];
+		const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => ok());
+		await runAiCall(input, {
+			...deps,
+			fetch: fetchImpl as never,
+			resolveKey: async () => ({ value: 'db-key', source: 'db' })
+		});
+		const init = fetchImpl.mock.calls[0][1] as RequestInit;
+		expect((init.headers as Record<string, string>).authorization).toBe('Bearer db-key');
+	});
+
+	it('does not fail over a decrypt failure (terminal, no second account)', async () => {
+		mocks.chain = [candidate('a'), candidate('b')];
+		const fetchImpl = vi.fn(async () => ok());
+		await expect(
+			runAiCall(input, {
+				...deps,
+				fetch: fetchImpl as never,
+				resolveKey: async () => {
+					throw new SecretError('decrypt_failed', 'bad tag');
+				}
+			})
+		).rejects.toMatchObject({ code: 'decrypt_failed' });
+		expect(fetchImpl).not.toHaveBeenCalled();
+		expect(mocks.recordUsage).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not fail over an unavailable secret store', async () => {
+		mocks.chain = [candidate('a'), candidate('b')];
+		const fetchImpl = vi.fn(async () => ok());
+		await expect(
+			runAiCall(input, {
+				...deps,
+				fetch: fetchImpl as never,
+				resolveKey: async () => {
+					throw new SecretError('store_unavailable', 'no table');
+				}
+			})
+		).rejects.toMatchObject({ code: 'secret_store_unavailable' });
+		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 });

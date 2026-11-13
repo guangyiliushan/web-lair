@@ -40,6 +40,12 @@ export interface AiProviderRow {
 	enabled: boolean;
 }
 
+/** Minimal shape of a resolved credential (W2.4); no ciphertext reaches here. */
+export interface ResolvedProviderKeyLike {
+	value: string;
+	source: 'db' | 'env';
+}
+
 export interface AiAssignment {
 	provider?: string;
 	model?: string;
@@ -128,6 +134,13 @@ export interface AiDeps {
 	db: AiDb;
 	/** Provider secrets are read through this seam (web: $env, jobs: process.env). */
 	getEnv: (name: string) => string | undefined;
+	/**
+	 * Encrypted-store read path (W2.4): resolves the key for one provider at
+	 * call time. The web bundle and the job drain wire
+	 * `resolveProviderKey`; a test or an env-only caller may omit it, in which
+	 * case `getEnv(apiKeyEnv)` is the whole answer.
+	 */
+	resolveKey?: (provider: AiProviderRow) => Promise<ResolvedProviderKeyLike>;
 	fetch?: typeof fetch;
 	now?: () => Date;
 	/** Test seam for retry backoff. */

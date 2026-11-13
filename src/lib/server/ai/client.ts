@@ -2,7 +2,9 @@ import { getOption } from '../config/options-registry.ts';
 import { isPrivateHost, resolvePublicAddresses } from '../security/ssrf-guard.ts';
 import { sanitizeErrorText } from '../jobs/error-text.ts';
 import { assertBudget, readBudgetState, recordBudgetAlerts } from './budget.ts';
-import { AiError, isFailoverCode } from './errors.ts';
+import { AiError, aiErrorFromSecretFailure, isFailoverCode } from './errors.ts';
+import { isSecretError } from '../secrets/errors.ts';
+import { reportSecretFailure } from '../secrets/report.ts';
 import { estimateCost } from './pricing.ts';
 import { defaultBaseUrl, providerUrl, resolveProviderChain } from './providers.ts';
 import { recordAiUsage } from './usage.ts';
@@ -34,6 +36,44 @@ type Adapter = (
 	deps: AiDeps,
 	signal: AbortSignal
 ) => Promise<AdapterResult>;
+
+/**
+ * Read one provider key at call time (W2.4). With `resolveKey` wired, the
+ * encrypted row is the primary source and `apiKeyEnv` is only its fallback;
+ * without it (tests, env-only callers) the environment name is the whole
+ * answer. Secret-store failures become typed `AiError`s here so no adapter has
+ * to know the resolver's vocabulary.
+ */
+async function readProviderKey(provider: AiProviderRow, deps: AiDeps): Promise<string | undefined> {
+	if (deps.resolveKey) {
+		try {
+			return (await deps.resolveKey(provider)).value;
+		} catch (caught) {
+			if (isSecretError(caught)) {
+				const event =
+					caught.code === 'missing'
+						? 'ai.key_missing'
+						: caught.code === 'decrypt_failed' || caught.code === 'unknown_key_version'
+							? 'ai.key_decrypt_failed'
+							: caught.code === 'denied'
+								? 'ai.key_denied'
+								: null;
+				if (event) {
+					await reportSecretFailure(deps.db as never, {
+						event,
+						providerId: provider.id,
+						providerName: provider.name,
+						reason: caught.code
+					});
+				}
+			}
+			const mapped = aiErrorFromSecretFailure(caught, provider.name);
+			if (mapped) throw mapped;
+			throw caught;
+		}
+	}
+	return provider.apiKeyEnv ? deps.getEnv(provider.apiKeyEnv) : undefined;
+}
 
 /**
  * SSRF guard for operator-supplied provider base URLs (the `custom` slot lets
@@ -288,7 +328,7 @@ const openAiCompatible: Adapter = async (input, provider, model, deps, signal) =
 		...(streaming ? { stream: true, stream_options: { include_usage: true } } : {})
 	};
 	const headers: Record<string, string> = { 'content-type': 'application/json' };
-	const key = provider.apiKeyEnv ? deps.getEnv(provider.apiKeyEnv) : undefined;
+	const key = await readProviderKey(provider, deps);
 	if (provider.apiKeyEnv && !key) {
 		throw new AiError('missing_key', `Environment variable ${provider.apiKeyEnv} is not set`, {
 			provider: provider.name
@@ -394,14 +434,9 @@ const deepl: Adapter = async (input, provider, model, deps, signal) => {
 	}
 	const base = provider.baseUrl?.trim() || defaultBaseUrl(provider.kind);
 	const headers: Record<string, string> = { 'content-type': 'application/json' };
-	const key = provider.apiKeyEnv ? deps.getEnv(provider.apiKeyEnv) : undefined;
-	if (!provider.apiKeyEnv) {
-		throw new AiError('missing_key', 'DeepL requires an API key env variable', {
-			provider: provider.name
-		});
-	}
+	const key = await readProviderKey(provider, deps);
 	if (!key) {
-		throw new AiError('missing_key', `Environment variable ${provider.apiKeyEnv} is not set`, {
+		throw new AiError('missing_key', 'DeepL requires an API key (DB secret or apiKeyEnv)', {
 			provider: provider.name
 		});
 	}

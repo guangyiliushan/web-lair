@@ -1,13 +1,15 @@
 import { getOption } from '../../config/options-registry.ts';
-import { AiError } from '../errors.ts';
+import { AiError, aiErrorFromSecretFailure } from '../errors.ts';
 import { estimateCost } from '../pricing.ts';
 import { defaultBaseUrl, resolveProvider } from '../providers.ts';
 import { recordAiUsage } from '../usage.ts';
 import { assertBudget } from '../budget.ts';
 import { sanitizeErrorText } from '../../jobs/error-text.ts';
+import { isSecretError } from '../../secrets/errors.ts';
+import { reportSecretFailure } from '../../secrets/report.ts';
 import { isPrivateHost, resolvePublicAddresses } from '../../security/ssrf-guard.ts';
 import { AGENT_TOOL_DEFINITIONS, agentTool } from './tools.ts';
-import type { AiDb } from '../types.ts';
+import type { AiDb, AiDeps, AiProviderRow } from '../types.ts';
 
 export interface AgentMessage {
 	role: 'system' | 'user' | 'assistant' | 'tool';
@@ -44,6 +46,45 @@ export interface AgentChatResult {
 const MAX_STEPS = 6;
 const TIMEOUT_MS = 60_000;
 
+/** Read one provider key through the encrypted store when it is wired (W2.4). */
+async function readAgentProviderKey(
+	provider: AiProviderRow,
+	input: {
+		db: AiDb;
+		getEnv: (name: string) => string | undefined;
+		resolveKey?: AiDeps['resolveKey'];
+	}
+): Promise<string | undefined> {
+	if (input.resolveKey) {
+		try {
+			return (await input.resolveKey(provider)).value;
+		} catch (caught) {
+			if (isSecretError(caught)) {
+				const event =
+					caught.code === 'missing'
+						? 'ai.key_missing'
+						: caught.code === 'decrypt_failed' || caught.code === 'unknown_key_version'
+							? 'ai.key_decrypt_failed'
+							: caught.code === 'denied'
+								? 'ai.key_denied'
+								: null;
+				if (event) {
+					await reportSecretFailure(input.db as never, {
+						event,
+						providerId: provider.id,
+						providerName: provider.name,
+						reason: caught.code
+					});
+				}
+			}
+			const mapped = aiErrorFromSecretFailure(caught, provider.name);
+			if (mapped) throw mapped;
+			throw caught;
+		}
+	}
+	return provider.apiKeyEnv ? input.getEnv(provider.apiKeyEnv) : undefined;
+}
+
 async function assertPublicBase(baseUrl: string, getEnv: (name: string) => string | undefined) {
 	let url: URL;
 	try {
@@ -71,6 +112,7 @@ async function assertPublicBase(baseUrl: string, getEnv: (name: string) => strin
 async function runAgentTurn(input: {
 	db: AiDb;
 	getEnv: (name: string) => string | undefined;
+	resolveKey?: AiDeps['resolveKey'];
 	conversationId: string;
 	actorId: string;
 	messages: AgentMessage[];
@@ -85,7 +127,7 @@ async function runAgentTurn(input: {
 	await assertBudget(input.db, true, input.now?.() ?? new Date());
 	const base = (provider.baseUrl?.trim() || defaultBaseUrl(provider.kind)).replace(/\/+$/, '');
 	await assertPublicBase(base, input.getEnv);
-	const key = provider.apiKeyEnv ? input.getEnv(provider.apiKeyEnv) : undefined;
+	const key = await readAgentProviderKey(provider, input);
 	if (provider.apiKeyEnv && !key) {
 		throw new AiError('missing_key', `Environment variable ${provider.apiKeyEnv} is not set`);
 	}
@@ -199,6 +241,7 @@ function summarizeResult(value: unknown): string {
 export async function runAgentChat(input: {
 	db: AiDb;
 	getEnv: (name: string) => string | undefined;
+	resolveKey?: AiDeps['resolveKey'];
 	conversationId: string;
 	actorId: string;
 	actorRole: 'owner' | 'admin';
@@ -238,6 +281,7 @@ export async function runAgentChat(input: {
 		const turn = await runAgentTurn({
 			db: input.db,
 			getEnv: input.getEnv,
+			resolveKey: input.resolveKey,
 			conversationId: input.conversationId,
 			actorId: input.actorId,
 			messages,
@@ -327,6 +371,7 @@ interface StreamedDelta {
 async function runAgentTurnStream(input: {
 	db: AiDb;
 	getEnv: (name: string) => string | undefined;
+	resolveKey?: AiDeps['resolveKey'];
 	conversationId: string;
 	actorId: string;
 	messages: AgentMessage[];
@@ -343,7 +388,7 @@ async function runAgentTurnStream(input: {
 	await assertBudget(input.db, true, input.now?.() ?? new Date());
 	const base = (provider.baseUrl?.trim() || defaultBaseUrl(provider.kind)).replace(/\/+$/, '');
 	await assertPublicBase(base, input.getEnv);
-	const key = provider.apiKeyEnv ? input.getEnv(provider.apiKeyEnv) : undefined;
+	const key = await readAgentProviderKey(provider, input);
 	if (provider.apiKeyEnv && !key) {
 		throw new AiError('missing_key', `Environment variable ${provider.apiKeyEnv} is not set`);
 	}
@@ -491,6 +536,7 @@ async function runAgentTurnStream(input: {
 export async function streamAgentChat(input: {
 	db: AiDb;
 	getEnv: (name: string) => string | undefined;
+	resolveKey?: AiDeps['resolveKey'];
 	conversationId: string;
 	actorId: string;
 	actorRole: 'owner' | 'admin';
@@ -531,6 +577,7 @@ export async function streamAgentChat(input: {
 		const turn = await runAgentTurnStream({
 			db: input.db,
 			getEnv: input.getEnv,
+			resolveKey: input.resolveKey,
 			conversationId: input.conversationId,
 			actorId: input.actorId,
 			messages,

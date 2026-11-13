@@ -1,3 +1,5 @@
+import { isSecretError } from '../secrets/errors.ts';
+
 /**
  * Typed AI failures. The web workbench and the job runner both map these to
  * user-facing copy / job summaries; no provider-specific status codes leak
@@ -9,6 +11,9 @@ export type AiErrorCode =
 	| 'provider_disabled'
 	| 'no_model'
 	| 'missing_key'
+	| 'decrypt_failed'
+	| 'secret_store_unavailable'
+	| 'secret_denied'
 	| 'unsupported'
 	| 'auth'
 	| 'rate_limit'
@@ -67,4 +72,25 @@ export class AiError extends Error {
 
 export function isAiError(value: unknown): value is AiError {
 	return value instanceof AiError;
+}
+
+/**
+ * Bridge the secret-store failure codes onto the AI runtime's vocabulary
+ * (W2.4). `missing` stays a failover code; every other code is terminal, so a
+ * wrong master key or a missing version never sends the request to the next
+ * provider (which would bill another account and hide the rotation bug).
+ */
+export function aiErrorFromSecretFailure(caught: unknown, provider: string): AiError | null {
+	if (!isSecretError(caught)) return null;
+	switch (caught.code) {
+		case 'missing':
+			return new AiError('missing_key', caught.message, { provider });
+		case 'decrypt_failed':
+		case 'unknown_key_version':
+			return new AiError('decrypt_failed', caught.message, { provider });
+		case 'store_unavailable':
+			return new AiError('secret_store_unavailable', caught.message, { provider });
+		case 'denied':
+			return new AiError('secret_denied', caught.message, { provider });
+	}
 }
