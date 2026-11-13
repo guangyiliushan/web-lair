@@ -34,6 +34,16 @@ describe('secret alert rules (A3)', () => {
 		expect(alerts[0]).toMatchObject({ rule: 'decrypt_failed', subject: 'openai', count: 1 });
 	});
 
+	it('fires on a webhook decrypt failure too (same keyring, own event family)', () => {
+		const alerts = evaluateSecretAlerts({
+			activities: [activity('webhook.key_decrypt_failed', { provider: 'ops-hook', minutes: 2 })],
+			usage: [],
+			now: NOW
+		});
+		expect(alerts).toHaveLength(1);
+		expect(alerts[0]).toMatchObject({ rule: 'decrypt_failed', subject: 'ops-hook', count: 1 });
+	});
+
 	it('ignores a decrypt failure older than 5 minutes', () => {
 		const alerts = evaluateSecretAlerts({
 			activities: [activity('ai.key_decrypt_failed', { provider: 'openai', minutes: 6 })],

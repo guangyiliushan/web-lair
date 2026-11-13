@@ -11,6 +11,7 @@ import { JOBS } from './registry.ts';
 import type { JobDefinition } from './registry.ts';
 import { webhookHeaders } from './signature.ts';
 import { isSecretError } from '../secrets/errors.ts';
+import { reportSecretFailure } from '../secrets/report.ts';
 import { resolveWebhookSigningSecrets } from '../secrets/webhook-secrets.ts';
 import type { SecretDb } from '../secrets/resolver.ts';
 import type { JobResult, JobTrigger } from '../db/system/job-run.schema.ts';
@@ -624,6 +625,7 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 		const [endpoint] = await tx
 			.select({
 				id: webhooks.id,
+				name: webhooks.name,
 				payloadUrl: webhooks.payloadUrl,
 				isEnabled: webhooks.isEnabled
 			})
@@ -678,6 +680,21 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 			);
 		} catch (err) {
 			const reason = isSecretError(err) ? err.code : 'store_unavailable';
+			if (isSecretError(err)) {
+				await reportSecretFailure(tx as never, {
+					event: err.code === 'missing' ? 'webhook.key_missing' : 'webhook.key_decrypt_failed',
+					providerName: endpoint.name,
+					subject: endpoint.id,
+					reason: err.code
+				});
+			}
+			// Environmental failures (keyring/table missing for this tick) are
+			// not this delivery's fault: leave the row queued and fail the
+			// segment, so a misconfiguration pauses delivery instead of
+			// burning the backlog at QUEUE_BATCH rows per minute.
+			if (reason === 'store_unavailable' || reason === 'unknown_key_version') {
+				throw new Error(`signing secret unavailable for webhook ${endpoint.id} (${reason})`);
+			}
 			await tx
 				.update(webhookDeliveries)
 				.set({

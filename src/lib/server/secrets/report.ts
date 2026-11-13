@@ -13,7 +13,12 @@ import { recordActivity } from '../audit.ts';
  * minute. That is acceptable for an audit signal; a durable per-minute
  * aggregation belongs to the M6 outbox, not here.
  */
-export type SecretFailureEvent = 'ai.key_missing' | 'ai.key_decrypt_failed' | 'ai.key_denied';
+export type SecretFailureEvent =
+	| 'ai.key_missing'
+	| 'ai.key_decrypt_failed'
+	| 'ai.key_denied'
+	| 'webhook.key_missing'
+	| 'webhook.key_decrypt_failed';
 
 const THROTTLE_MS = 60_000;
 const lastWritten = new Map<string, number>();
@@ -27,6 +32,8 @@ export interface SecretFailureInput {
 	event: SecretFailureEvent;
 	providerId?: string | null;
 	providerName?: string | null;
+	/** Throttle/payload subject when there is no provider id (webhooks). */
+	subject?: string | null;
 	/** Typed code (`decrypt_failed`, `missing`, ...) - never a value. */
 	reason?: string | null;
 	actorId?: string | null;
@@ -36,7 +43,7 @@ export async function reportSecretFailure(
 	executor: Parameters<typeof recordActivity>[0],
 	input: SecretFailureInput
 ): Promise<void> {
-	const key = `${input.event}:${input.providerId ?? 'global'}`;
+	const key = `${input.event}:${input.subject ?? input.providerId ?? 'global'}`;
 	const now = Date.now();
 	const previous = lastWritten.get(key);
 	if (previous !== undefined && previous + THROTTLE_MS > now) return;
@@ -49,6 +56,7 @@ export async function reportSecretFailure(
 			refId: input.providerId ?? undefined,
 			payload: {
 				provider: input.providerName ?? null,
+				subject: input.subject ?? null,
 				reason: input.reason ?? null
 			},
 			// Decision A2: secret metadata never fans out to webhooks.

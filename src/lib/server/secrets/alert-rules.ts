@@ -61,9 +61,12 @@ export function evaluateSecretAlerts(input: {
 	const alerts: SecretAlert[] = [];
 
 	// Rule 1: one decrypt failure is enough. A wrong keyring or a moved
-	// ciphertext is never routine.
+	// ciphertext is never routine. The webhook delivery path uses the same
+	// keyring and emits its own event family.
 	const decryptFailures = activities.filter(
-		(row) => row.event === 'ai.key_decrypt_failed' && within(row, now, WINDOW_DECRYPT_MS)
+		(row) =>
+			(row.event === 'ai.key_decrypt_failed' || row.event === 'webhook.key_decrypt_failed') &&
+			within(row, now, WINDOW_DECRYPT_MS)
 	);
 	if (decryptFailures.length > 0) {
 		const providers = new Set(decryptFailures.map((row) => providerOf(row) ?? 'unknown'));
