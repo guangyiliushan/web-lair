@@ -49,6 +49,20 @@
 				</div>
 			{/if}
 
+			{#if data.oauthError}
+				<div
+					class="mb-6 flex items-start gap-2 rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive"
+					role="alert"
+				>
+					<IconAlertCircle class="mt-0.5 size-4 shrink-0" />
+					<span>
+						{data.oauthError === 'admin_blocked'
+							? m.auth_login_oauth_admin_blocked()
+							: m.auth_login_oauth_error()}
+					</span>
+				</div>
+			{/if}
+
 			<form method="post" action="?/signIn" use:enhance>
 				<Field.FieldGroup>
 					<Field.Field>

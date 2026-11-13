@@ -1906,6 +1906,8 @@
 	"auth_forgot_title": "重置密码",
 	"auth_have_account": "已有账户？",
 	"auth_login_description": "登录您的账户以继续",
+	"auth_login_oauth_admin_blocked": "GitHub 登录仅限读者账户。管理员请使用邮箱 + 两步验证，或通行密钥登录。",
+	"auth_login_oauth_error": "GitHub 登录失败，请重试。",
 	"auth_login_title": "欢迎回来",
 	"auth_name": "姓名",
 	"auth_name_placeholder": "请输入姓名",

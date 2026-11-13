@@ -20,6 +20,7 @@ import {
 	userRole
 } from '$lib/server/auth/permissions';
 import { tailscaleSignIn } from '$lib/server/auth/tailscale-plugin';
+import { validateUserProvisioning } from '$lib/server/auth/admin-login-policy';
 import { getSiteOrganizationId } from '$lib/server/auth/site-organization';
 import { env } from '$env/dynamic/private';
 import { getRequestEvent } from '$app/server';
@@ -91,6 +92,20 @@ export const auth = betterAuth({
 	// and rotation steps live in deploy/RUNBOOK.md §3.1.
 	account: {
 		encryptOAuthTokens: true
+	},
+
+	// W1.6 (settings-truth plan, S3-B): GitHub is a reader-only method. The
+	// official `validateUserInfo` gate runs before the OAuth account/session
+	// write (and before linking a provider to an existing row), so an
+	// admin/owner account can only sign in with email + TOTP or a passkey.
+	user: {
+		validateUserInfo: validateUserProvisioning
+	},
+
+	// OAuth failures (including the gate above) return to the sign-in page with
+	// `?error=<code>` instead of better-auth's built-in error page.
+	onAPIError: {
+		errorURL: '/login'
 	},
 
 	emailAndPassword: {

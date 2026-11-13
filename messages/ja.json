@@ -1906,6 +1906,8 @@
 	"auth_forgot_title": "パスワードをリセット",
 	"auth_have_account": "既にアカウントをお持ちですか？",
 	"auth_login_description": "アカウントにサインインして続行します",
+	"auth_login_oauth_admin_blocked": "GitHub サインインは読者アカウント専用です。管理者はメールアドレス＋二段階認証、またはパスキーでサインインしてください。",
+	"auth_login_oauth_error": "GitHub サインインに失敗しました。もう一度お試しください。",
 	"auth_login_title": "おかえりなさい",
 	"auth_name": "お名前",
 	"auth_name_placeholder": "お名前を入力",

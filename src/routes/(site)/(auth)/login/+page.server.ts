@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
+import { ADMIN_OAUTH_BLOCKED_CODE } from '$lib/server/auth/admin-login-policy';
 import { safeRedirect } from '$lib/server/safe-redirect';
 import { APIError } from 'better-auth/api';
 
@@ -8,9 +9,14 @@ export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
 		redirect(302, '/admin');
 	}
+	const error = event.url.searchParams.get('error');
 	// PRG landing spot after a completed reset: the reset action redirects here
-	// with `?message=password-reset-success` (W1.4).
-	return { resetSuccess: event.url.searchParams.get('message') === 'password-reset-success' };
+	// with `?message=password-reset-success` (W1.4). OAuth failures (W1.6) carry
+	// `?error=<code>`; only the admin/GitHub refusal gets its own explanation.
+	return {
+		resetSuccess: event.url.searchParams.get('message') === 'password-reset-success',
+		oauthError: error ? (error === ADMIN_OAUTH_BLOCKED_CODE ? 'admin_blocked' : 'failed') : null
+	} as const;
 };
 
 export const actions: Actions = {
@@ -51,7 +57,11 @@ export const actions: Actions = {
 		const result = await auth.api.signInSocial({
 			body: {
 				provider: provider as 'github',
-				callbackURL
+				callbackURL,
+				// Failures (including the admin/GitHub refusal in auth.ts) come
+				// back to this page with `?error=<code>` instead of the API error
+				// page; see the load above for the message mapping.
+				errorCallbackURL: '/login'
 			}
 		});
 

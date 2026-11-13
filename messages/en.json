@@ -2140,6 +2140,8 @@
 	"auth_forgot_title": "Reset your password",
 	"auth_have_account": "Already have an account?",
 	"auth_login_description": "Sign in to your account to continue",
+	"auth_login_oauth_admin_blocked": "GitHub sign-in is for reader accounts. Admins sign in with email plus two-step verification, or a passkey.",
+	"auth_login_oauth_error": "GitHub sign-in failed. Please try again.",
 	"auth_login_title": "Welcome back",
 	"auth_name": "Name",
 	"auth_name_placeholder": "Your name",
