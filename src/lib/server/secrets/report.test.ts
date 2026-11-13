@@ -17,17 +17,22 @@ describe('reportSecretFailure', () => {
 	});
 
 	it('writes a two-segment audit row with no value and no fan-out', async () => {
+		const providerId = '66666666-6666-6666-6666-666666666666';
 		await reportSecretFailure(executor() as never, {
 			event: 'ai.key_decrypt_failed',
-			providerId: '66666666-6666-6666-6666-666666666666',
+			providerId,
 			providerName: 'openai',
 			reason: 'decrypt_failed'
 		});
 		expect(recordMock).toHaveBeenCalledTimes(1);
 		const [, input] = recordMock.mock.calls[0];
-		expect(input).toMatchObject({
+		// Exact shape: any added value/ciphertext/hint-sized field fails here.
+		expect(input).toEqual({
 			event: 'ai.key_decrypt_failed',
+			actorId: null,
 			refType: 'ai',
+			refId: providerId,
+			payload: { provider: 'openai', subject: null, reason: 'decrypt_failed' },
 			deliver: false
 		});
 		expect(JSON.stringify(input)).not.toContain('v1:');

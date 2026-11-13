@@ -578,6 +578,17 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 			).plaintext
 		).toBe('whsec_old_value');
 		expect(state.conflicts).toHaveLength(1);
+		// The rotation is audited, never fanned out, and the payload carries
+		// metadata only (no value, no ciphertext).
+		const rotateAudit = (
+			mocks.recordActivity as unknown as { mock: { calls: unknown[][] } }
+		).mock.calls.find((call) => (call[1] as { event?: string })?.event === 'webhook.key_rotate');
+		expect(rotateAudit).toBeTruthy();
+		expect(rotateAudit?.[1]).toMatchObject({ deliver: false });
+		const auditJson = JSON.stringify(rotateAudit?.[1]);
+		// The mask prefix is expected; the value itself and the envelope are not.
+		expect(auditJson).not.toContain('whsec_old_value');
+		expect(auditJson).not.toContain('v1:');
 		// The plaintext column is not touched when there is nothing to retire.
 		expect(state.updateTables).toHaveLength(0);
 

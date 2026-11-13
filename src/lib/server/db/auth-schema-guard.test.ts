@@ -70,7 +70,7 @@ describe('schema drift (H1)', () => {
 describe('the repository passes its own guard', () => {
 	const root = process.cwd();
 
-	it('no migration mutates a generated auth table', () => {
+	it('no migration alters or drops a generated auth table (structural DDL only)', () => {
 		const dir = join(root, 'drizzle');
 		// The baseline IS the generated initial schema (it necessarily creates
 		// the tables and their foreign keys); every LATER migration is a hand

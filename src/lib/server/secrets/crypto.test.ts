@@ -24,7 +24,7 @@ const NIST_CIPHERTEXT = Buffer.from('cea7403d4d606b6e074ec5d3baf39d18', 'hex');
 const NIST_TAG = Buffer.from('d0d1c8a799996bf0265b98b5d48ab919', 'hex');
 
 describe('AES-256-GCM envelope', () => {
-	it('matches the published AES-256-GCM test vector (case 13)', () => {
+	it('decrypts the published AES-256-GCM test vector (case 13)', () => {
 		const envelope = [
 			CIPHERTEXT_FORMAT_VERSION,
 			'1',
@@ -127,7 +127,31 @@ describe('AES-256-GCM envelope', () => {
 			} catch (caught) {
 				expect(caught).toBeInstanceOf(SecretError);
 				expect((caught as SecretError).code).toBe('decrypt_failed');
+				const message = (caught as SecretError).message;
+				// The public copy must be a fixed sentence: no OpenSSL text and
+				// no echo of the envelope.
+				expect(message).toMatch(/^(Ciphertext|Secret failed authentication)/);
+				expect(message).not.toMatch(/openssl|unable to authenticate|bad decrypt/i);
+				if (value) expect(message).not.toContain(value);
 			}
+		}
+	});
+
+	it('does not leak OpenSSL detail when authentication fails on a well-formed envelope', () => {
+		const envelope = encryptSecret('tamper-me', KEY_V1, 1, AAD);
+		const parts = envelope.split(':');
+		// Flip one ciphertext character: the envelope parses, GCM rejects it.
+		const ct = parts[4];
+		parts[4] = `${ct[0] === 'A' ? 'B' : 'A'}${ct.slice(1)}`;
+		try {
+			decryptSecret(parts.join(':'), keyring({ 1: KEY_V1 }), AAD);
+			throw new Error('expected a SecretError');
+		} catch (caught) {
+			expect((caught as SecretError).code).toBe('decrypt_failed');
+			expect((caught as SecretError).message).toBe(
+				'Secret failed authentication (wrong key or AAD)'
+			);
+			expect((caught as SecretError).message).not.toMatch(/openssl|bad decrypt/i);
 		}
 	});
 

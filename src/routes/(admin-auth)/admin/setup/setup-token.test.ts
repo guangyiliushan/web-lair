@@ -97,6 +97,20 @@ describe('one-time setup token', () => {
 		expect(state.signUpEmail).not.toHaveBeenCalled();
 	});
 
+	it('refuses a wrong token with 403 and never creates an account', async () => {
+		state.activityRows = [];
+		state.hasAdmin = false;
+		const result = (await (
+			actions as never as Record<string, (event: never) => Promise<unknown>>
+		).setup(setupEvent({ ...VALID_FORM, setupToken: 'wrong-token' }) as never)) as {
+			status: number;
+		};
+		expect(result).toMatchObject({ status: 403 });
+		expect(state.signUpEmail).not.toHaveBeenCalled();
+		expect(state.signInEmail).not.toHaveBeenCalled();
+		expect(state.recordActivity).not.toHaveBeenCalled();
+	});
+
 	it('writes the fingerprint marker before signing in (no token in the payload)', async () => {
 		// No marker yet: claim succeeds, then sign-in redirects.
 		await expect(
