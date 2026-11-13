@@ -137,24 +137,33 @@ without disabling the audit.
 
 ## 7. Verification checklist
 
+Status after the W2 gate (2026-11-13); items that need a live deployment stay
+open on purpose.
+
 - [x] Data repository contains no `.env` (backup.sh mounts only the dump dir,
       `$DATA_DIR`, RustFS volume).
-- [ ] Restore a dump **without** the keyring: every encrypted credential fails
-      with `decrypt_failed` / `unknown_key_version`, no env fallback for
-      provider keys.
-- [ ] Restore with the keyring: credentials work with no re-entry.
-- [ ] Rotate the keyring through all three phases: old rows readable, new rows
-      use the active version, retirement blocks on a stale row.
-- [ ] `grep -r` the page HTML, network responses, server logs and audit payloads
-      for a plaintext key: zero hits.
-- [ ] `ai.key_*` rows exist for set / rotate / clear / decrypt_failed / missing /
-      denied, with no value in the payload.
-- [ ] Alert rules fire against a local receiver (`ALERT_WEBHOOK_URL`).
+- [x] A row written under one keyring fails closed: a different key gives
+      `decrypt_failed`, an absent version gives `unknown_key_version`, and no
+      env value is consulted (local DB probe, 3/3). A full restic restore drill
+      is still required before production sign-off (RUNBOOK §4.2).
+- [ ] Restore **with** the keyring proves credentials work with no re-entry
+      (needs the production repository and a scratch database).
+- [x] Three-phase rotation is pinned by unit tests: old rows stay readable, new
+      writes use the active version, a retired version fails with
+      `unknown_key_version`. A live rotation follows RUNBOOK §4.2.
+- [ ] `grep` page HTML / network responses / live server logs for a plaintext
+      key: the write-only UI and resolver tests cover the code path, but no live
+      deployment was searched in this session.
+- [x] `ai.key_*` rows are written for set / rotate / clear / decrypt_failed /
+      missing / denied with no value in the payload (action and reporter tests;
+      `deliver: false` keeps them off the webhook plane).
+- [ ] Alert rules fire against a real receiver (`ALERT_WEBHOOK_URL`); only the
+      dry-run evaluation was exercised here.
 
 ## 8. Related documents
 
 - `deploy/RUNBOOK.md` §1.1 (required env), §3.1 (better-auth keyring),
-  §3.2 (SECRETS keyring), §4 (backup / restore).
+  §4.2 (runtime keyring, rotation, restore matrix), §4 (backup split).
 - `src/lib/server/db/AUTH_SCHEMA.md` (generated schema guard, allowed options).
 - `notes/notes/secrets-architecture-20261112.md` (design record),
   `notes/notes/secrets-decision-register-20261112.md` §0.1 (final rulings).
