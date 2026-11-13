@@ -716,6 +716,20 @@ is in the **data** repository. Restore order matters:
 installs. `SECRETS_KEYS` is not derived from `BETTER_AUTH_SECRET`: rotating the
 auth keyring must never destroy the credential store.
 
+#### Rollback window (webhook backfill)
+
+Migrations 0001/0002 are additive (two new tables; `webhooks.secret` becomes
+nullable). The **data** step is the one-way edge:
+
+| Point in time                                                                | Image rollback    | Notes                                                                                                                                                                      |
+| ---------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| After `migrate` (0001/0002), **before** `db:migrate-webhook-secrets --apply` | Safe              | Old code reads/writes the legacy `webhooks.secret`; the new tables are ignored.                                                                                            |
+| After `db:migrate-webhook-secrets --apply`                                   | **Not safe**      | The old drain selects only the legacy column, which is now NULL, so every delivery fails verification. Roll forward (keep the new image) or restore the pre-backfill dump. |
+| After the new image has run                                                  | Roll forward only | The new drain reads `webhook_secrets` first and falls back to the legacy column; an old image cannot read the encrypted rows.                                              |
+
+Keep `SECRETS_KEYS` and the encrypted rows together: an image rollback without
+the keyring turns every stored credential into `decrypt_failed`.
+
 ## 5. Monitoring
 
 | What                                       | Where                                                        |
