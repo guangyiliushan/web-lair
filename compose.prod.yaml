@@ -34,7 +34,12 @@ services:
       XFF_DEPTH: ${XFF_DEPTH:-1}
       BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-26M}
       # Service DNS overrides the loopback URLs from .env (dev values).
-      # Password must be URL-safe (special characters break the URL); see RUNBOOK §1.1.
+      # Built from the same POSTGRES_* values the db service gets — never a
+      # literal. A viewer that redacts URL userinfo renders this line as
+      # `user:***@host`, so the secrets audit read it as a `***` placeholder
+      # (P0-1); the file has always interpolated ${POSTGRES_PASSWORD}. The
+      # password must be URL-safe (RUNBOOK §1.1) and deploy/compose-prod.sh
+      # refuses to start otherwise.
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       RUSTFS_ENDPOINT: http://rustfs:9000
       VALKEY_URL: redis://valkey:6379

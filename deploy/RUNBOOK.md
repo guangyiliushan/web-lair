@@ -38,7 +38,7 @@ $EDITOR .env      # see §1.1 for the required keys
 
 | Key                                                   | Value                                                                                                             |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | strong, unique, **URL-safe** (`openssl rand -hex 32`) — the password is interpolated into `DATABASE_URL` verbatim |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | strong, unique, **URL-safe** (`openssl rand -hex 32`) — the password is interpolated into `DATABASE_URL` verbatim; `deploy/compose-prod.sh` refuses to start on a missing or non-URL-safe value |
 | `BETTER_AUTH_SECRET`                                  | ≥32 chars, high entropy                                                                                           |
 | `ORIGIN`                                              | `https://<domain>` (no trailing slash)                                                                            |
 | `DOMAIN`                                              | same host, used by Caddy                                                                                          |
