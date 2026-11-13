@@ -295,7 +295,7 @@ deploy/compose-prod.sh exec -T db pg_restore -l < "$BK/pre-e2-$STAMP.dump" > /de
 # TOC presence is not data: an empty dump still lists every table. Count the
 # user rows inside the archive before dropping anything.
 DUMP_USERS=$(docker exec -i db pg_restore -a -f - < "$BK/pre-e2-$STAMP.dump" 2>/dev/null | \
-  awk '/^COPY public\."user" /{f=1;next} f&&$0=="\\\\."{exit} f{n++} END{print n+0}')
+  bash deploy/backup/count-user-rows.sh)
 [ "$DUMP_USERS" = "$USERS" ] || { echo "dump has $DUMP_USERS user rows, expected $USERS; aborting" >&2; exit 1; }
 
 # Data-only file: column lists + FK triggers disabled inside the transaction.
@@ -417,7 +417,7 @@ DUMP=/srv/web-lair/pre-migrate/<matching-dump>.dump
 USERS=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"user\""')
 DUMP_USERS=$(deploy/compose-prod.sh exec -T db pg_restore -a -f - < "$DUMP" 2>/dev/null | \
-  awk '/^COPY public\."user" /{f=1;next} f&&$0=="\\\\."{exit} f{n++} END{print n+0}')
+  bash deploy/backup/count-user-rows.sh)
 [ "$DUMP_USERS" = "$USERS" ] || { echo "dump has $DUMP_USERS user rows, expected $USERS; aborting" >&2; exit 1; }
 # IMAGE must point at the tag that matches the dump.
 sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
@@ -491,12 +491,36 @@ Two repositories with two passwords (T3-A, secrets register §0.1).
 
 # one-time: create both repositories, each with its own password
 set -a; . deploy/backup.env; set +a
-docker run --rm -e RESTIC_REPOSITORY -e RESTIC_PASSWORD \
-  -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY restic/restic:0.19.1 init
-docker run --rm -e RESTIC_REPOSITORY="$RESTIC_CONFIG_REPOSITORY" \
-  -e RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD" \
-  -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY restic/restic:0.19.1 init
+# `-e VAR` (no value) forwards the loaded value. Never `-e VAR=$VALUE`: that puts
+# the repository password in argv (visible to `ps`) and in ~/.bash_history.
+docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+  restic/restic:0.19.1 --repo "$RESTIC_REPOSITORY" init
+( export RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD"
+  docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+    restic/restic:0.19.1 --repo "$RESTIC_CONFIG_REPOSITORY" init )
 ```
+
+### 4.1 Migrating a pre-split repository (one-off)
+
+A repository created by the old `backup.sh` holds snapshots whose path set includes
+`/config` (`.env` in the data repository). `--group-by paths` gives that path set
+its own forget group, so the new nightly snapshots never age those old ones out —
+the historical `.env` copies would stay readable with the data-repository password.
+
+```bash
+set -a; . deploy/backup.env; set +a
+# list the path set of every snapshot; old ones show "/config"
+docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+  restic/restic:0.19.1 --repo "$RESTIC_REPOSITORY" snapshots --json \
+  | grep -o '"paths":\[[^]]*\]'
+# after checking each id (destructive: prunes the data those snapshots own)
+docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+  restic/restic:0.19.1 --repo "$RESTIC_REPOSITORY" forget <ids> --prune
+```
+
+The drill below asserts "no `.env` in **any** data snapshot", so before this
+migration it fails by design — that failure is the confirmation that old snapshots
+exist, and the list above tells you which ids to forget.
 
 Credentials come from `deploy/backup.env` (mode 600, loaded by the systemd
 unit — never from `.env`, so the app container cannot read them).
@@ -518,27 +542,41 @@ age, so deploy count does not grow the backup repo.
   config split still holds:
 
   ```bash
-  DRILL=$(mktemp -d)
+  set -euo pipefail
+  DRILL=$(mktemp -d); trap 'rm -rf "$DRILL"' EXIT
   set -a; . deploy/backup.env; set +a
-  # 1. the data repository must contain no .env anywhere
-  docker run --rm -e RESTIC_REPOSITORY -e RESTIC_PASSWORD \
-    -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY restic/restic:0.19.1 \
-    ls --host web-lair latest | grep -E '(^|/)\.env$' \
-    && { echo 'FAIL: .env is inside the data repository'; exit 1; }
+  R=restic/restic:0.19.1
+  # `-e VAR` (no value) forwards the exported value: no password ever enters argv.
+  restic_data() { docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY "$R" --repo "$RESTIC_REPOSITORY" "$@"; }
+  restic_conf() { docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY "$R" --repo "$RESTIC_CONFIG_REPOSITORY" "$@"; }
+
+  # 1. no snapshot in the data repository may contain a .env (collect first:
+  #    a failed listing must not read as "no .env found")
+  ids=$(restic_data snapshots --host web-lair --json | grep -oE '"short_id":"[0-9a-f]+"' | cut -d'"' -f4) \
+    || { echo 'FAIL: cannot list the data repository'; exit 1; }
+  [ -n "$ids" ] || { echo 'FAIL: data repository has no snapshots'; exit 1; }
+  for id in $ids; do
+    if restic_data ls --host web-lair "$id" | grep -qE '(^|/)\.env$'; then
+      echo "FAIL: .env is inside data snapshot $id"; exit 1
+    fi
+  done
+  echo 'OK: no .env in any data snapshot'
+
   # 2. the config repository restores a byte-identical .env
-  docker run --rm -e RESTIC_REPOSITORY="$RESTIC_CONFIG_REPOSITORY" \
-    -e RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD" \
-    -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
-    -v "$DRILL":/restore restic/restic:0.19.1 \
-    restore --host web-lair-config latest --target /restore
+  ( export RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD"
+    docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+      -v "$DRILL":/restore "$R" --repo "$RESTIC_CONFIG_REPOSITORY" \
+      restore --host web-lair-config latest --target /restore )
   cmp "$DRILL/config/.env" .env && echo 'OK: config restored'
-  # 3. the data password must NOT open the config repository
-  docker run --rm -e RESTIC_REPOSITORY="$RESTIC_CONFIG_REPOSITORY" \
-    -e RESTIC_PASSWORD="$RESTIC_PASSWORD" \
-    -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY restic/restic:0.19.1 snapshots \
-    && { echo 'FAIL: config repository opened with the data password'; exit 1; } \
-    || echo 'OK: repository passwords are separate'
-  rm -rf "$DRILL"
+
+  # 3. the data password must NOT open the config repository — and the refusal
+  #    must be a password rejection, not a network error with the same exit code
+  if restic_conf snapshots >/dev/null 2>"$DRILL/err"; then
+    echo 'FAIL: config repository opened with the data password'; exit 1
+  fi
+  grep -qiE 'wrong password|no key found' "$DRILL/err" \
+    || { echo 'FAIL: unexpected error, not a password rejection'; cat "$DRILL/err"; exit 1; }
+  echo 'OK: repository passwords are separate'
   ```
 
   Keep the receipt (date, snapshot ids, `cmp` result) with the ops notes.

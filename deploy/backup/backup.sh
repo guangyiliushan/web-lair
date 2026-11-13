@@ -49,9 +49,11 @@ cd "$APP_DIR"
 "${DC}" exec -T db pg_restore -l < "$BACKUP_DIR/pg.dump.tmp" > /dev/null
 # TOC presence is not data. Compare the user-row count in the archive with the
 # live table so an empty/partial dump never replaces yesterday's good copy.
+# The counter lives in count-user-rows.sh: it must drain stdin (an early exit
+# SIGPIPEs pg_restore and, under pipefail, kills the whole run).
 EXPECTED_USERS=$("${DC}" exec -T db psql -U "${POSTGRES_USER:?}" -d "${POSTGRES_DB:?}" -tAc 'select count(*) from "user"')
-DUMP_USERS=$("${DC}" exec -T db pg_restore -a -f - < "$BACKUP_DIR/pg.dump.tmp" 2>/dev/null | \
-	awk '/^COPY public\."user" /{f=1;next} f&&/^\\\.$/{exit} f{n++} END{print n+0}')
+DUMP_USERS=$("${DC}" exec -T db pg_restore -a -f - < "$BACKUP_DIR/pg.dump.tmp" 2>/dev/null |
+	bash "${APP_DIR}/deploy/backup/count-user-rows.sh")
 [ "$DUMP_USERS" = "$EXPECTED_USERS" ] || {
 	echo "[backup] dump has $DUMP_USERS user rows, expected $EXPECTED_USERS; refusing to replace pg.dump" >&2
 	exit 1
@@ -71,38 +73,44 @@ fi
 # 2 + 3) One restic run mounts the dump dir, the data dir and the media volume
 # read-only. `.env` is not mounted: config is the second repository below.
 # --retry-lock survives an interrupted previous run instead of failing every
-# night until manual unlock. `--host` pins the snapshot host: without it every
-# nightly container gets a fresh hostname and `forget --keep-daily` groups each
-# run separately.
+# night until manual unlock.
+# `--host` is a snapshot label (the drill resolves `--host web-lair`); it is not
+# what keeps nightly runs in one forget group — `--group-by paths` does that.
 #
 # `docker --env-file` does not strip the quotes in `VAR="value"` (systemd does,
 # for this script's own environment), so a quoted backup.env would hand restic
 # a literal `"/repos"`. `-e VAR` (no value) forwards the value the script
 # validated instead; extra cloud/restic variables still come from the file.
-RESTIC_ENV=(-e RESTIC_REPOSITORY -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
+# The repository is a CLI flag, not an env var: a flag cannot be shadowed by
+# whatever the env file happens to contain, so the config run below can never
+# land in the data repository — a silent failure that would look like a green
+# night (T3-A).
+RESTIC_ENV=(-e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
 
 docker run --rm --env-file "$APP_DIR/deploy/backup.env" "${RESTIC_ENV[@]}" \
 	-v "$BACKUP_DIR":/backup:ro \
 	-v "$DATA_DIR":/data:ro \
 	-v "$RUSTFS_VOLUME":/rustfs:ro \
-	"$RESTIC_IMAGE" --retry-lock 30m backup --host web-lair /backup /data /rustfs
+	"$RESTIC_IMAGE" --repo "$RESTIC_REPOSITORY" --retry-lock 30m \
+	backup --host web-lair /backup /data /rustfs
 
 # 4) Config (.env) → its own repository, its own password. One file, no
-# directory: `--host` keeps it out of the data repo's forget groups. The
-# subshell re-exports the config credentials so the same `-e VAR` forwarding
-# above sends them, without leaking into the data runs.
+# directory. Isolation comes from the separate repository (and the flag above);
+# `--host web-lair-config` is just the label the drill looks up. The subshell
+# re-exports only the password so the data run's credential is untouched.
 (
-	export RESTIC_REPOSITORY="$RESTIC_CONFIG_REPOSITORY"
 	export RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD"
 	docker run --rm --env-file "$APP_DIR/deploy/backup.env" "${RESTIC_ENV[@]}" \
 		-v "$APP_DIR/.env":/config/.env:ro \
-		"$RESTIC_IMAGE" --retry-lock 30m backup --host web-lair-config /config
+		"$RESTIC_IMAGE" --repo "$RESTIC_CONFIG_REPOSITORY" --retry-lock 30m \
+		backup --host web-lair-config /config
 )
 
-# Retention: keep-daily 7 / weekly 4 / monthly 6. Group by paths (host is
-# pinned above); prune only on Sunday so the nightly run does not hold the repo
-# lock for a full data rewrite. The config repository keeps a month of dailies
-# plus a year of monthlies — it is a few KB per snapshot.
+# Retention: keep-daily 7 / weekly 4 / monthly 6. `--group-by paths` puts every
+# nightly run in one forget group (host is deliberately not part of the key);
+# prune only on Sunday so the nightly run does not hold the repo lock for a full
+# data rewrite. The config repository keeps a month of dailies plus a year of
+# monthlies — it is a few KB per snapshot.
 forget_args=(--keep-daily 7 --keep-weekly 4 --keep-monthly 6 --group-by paths)
 config_forget_args=(--keep-daily 30 --keep-monthly 12 --group-by paths)
 if [ "$(date +%u)" = "7" ]; then
@@ -110,12 +118,11 @@ if [ "$(date +%u)" = "7" ]; then
 	config_forget_args+=(--prune)
 fi
 docker run --rm --env-file "$APP_DIR/deploy/backup.env" "${RESTIC_ENV[@]}" \
-	"$RESTIC_IMAGE" --retry-lock 30m forget "${forget_args[@]}"
+	"$RESTIC_IMAGE" --repo "$RESTIC_REPOSITORY" --retry-lock 30m forget "${forget_args[@]}"
 (
-	export RESTIC_REPOSITORY="$RESTIC_CONFIG_REPOSITORY"
 	export RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD"
 	docker run --rm --env-file "$APP_DIR/deploy/backup.env" "${RESTIC_ENV[@]}" \
-		"$RESTIC_IMAGE" --retry-lock 30m forget "${config_forget_args[@]}"
+		"$RESTIC_IMAGE" --repo "$RESTIC_CONFIG_REPOSITORY" --retry-lock 30m forget "${config_forget_args[@]}"
 )
 
 # Dedicated backup check (never the 5-minute liveness URL: sharing it would

@@ -27,7 +27,16 @@ require_env_file() {
 }
 
 env_value() {
-	sed -n "s/^$1=//p" "$APP_DIR/.env" | tail -n 1 | tr -d '\r' | tr -d '"' | tr -d "'"
+	local raw
+	raw=$(sed -n "s/^$1=//p" "$APP_DIR/.env" | tail -n 1 | tr -d '\r')
+	# Remove at most one matching outer quote pair, the way compose's env_file
+	# parser does. Deleting every quote (as an earlier version did) validates a
+	# different string than compose uses: `p'ass` would be checked as `pass`.
+	case "$raw" in
+		\"*\") raw=${raw#\"}; raw=${raw%\"} ;;
+		\'*\') raw=${raw#\'}; raw=${raw%\'} ;;
+	esac
+	printf '%s' "$raw"
 }
 
 require_suppression_key() {
@@ -47,6 +56,10 @@ require_suppression_key() {
 # ${POSTGRES_PASSWORD} at parse time. A missing or non-URL-safe value produces
 # an unparseable DSN and an opaque auth failure inside the app, so refuse to
 # start instead of shipping the mistake to the container.
+# Allowed set = RFC 3986 unreserved characters plus `+` and `=`: those are legal
+# unencoded in URL userinfo and appear in base64-generated passwords, and `/`,
+# `@`, `:`, `?` and `#` genuinely break the DSN. Quotes are rejected too: an
+# interior quote survives env_file parsing and would land in the URL.
 require_postgres_password() {
 	local value
 	value=$(env_value POSTGRES_PASSWORD)
@@ -55,20 +68,27 @@ require_postgres_password() {
 		exit 1
 	fi
 	case "$value" in
-	*[!A-Za-z0-9._~-]*)
-		echo "[compose-prod] POSTGRES_PASSWORD contains characters that are not URL-safe; generate one with 'openssl rand -hex 32' (RUNBOOK §1.1)" >&2
+	*[!A-Za-z0-9._~+=-]*)
+		echo "[compose-prod] POSTGRES_PASSWORD contains characters that are not URL-safe (allowed: A-Z a-z 0-9 . _ ~ + = -); generate one with 'openssl rand -hex 32' (RUNBOOK §1.1)" >&2
 		exit 1
 		;;
 	esac
 }
 
-case "${1:-}" in
-	up | start | restart | run)
-		require_env_file
-		require_suppression_key
-		require_postgres_password
-		;;
-esac
+# The guards above must run whatever the command shape is: `up`, but also a
+# command preceded by global flags (`--profile x up`, `-p name up`) or `create`.
+# Scan the whole argument list instead of trusting $1.
+need_guards=0
+for arg in "$@"; do
+	case "$arg" in
+		up | start | restart | run | create) need_guards=1 ;;
+	esac
+done
+if [ "$need_guards" = 1 ]; then
+	require_env_file
+	require_suppression_key
+	require_postgres_password
+fi
 
 exec docker compose \
 	--project-directory "$APP_DIR" \
