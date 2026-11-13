@@ -8,7 +8,9 @@ export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
 		redirect(302, '/admin');
 	}
-	return {};
+	// PRG landing spot after a completed reset: the reset action redirects here
+	// with `?message=password-reset-success` (W1.4).
+	return { resetSuccess: event.url.searchParams.get('message') === 'password-reset-success' };
 };
 
 export const actions: Actions = {

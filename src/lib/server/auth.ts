@@ -85,6 +85,11 @@ export const auth = betterAuth({
 	emailAndPassword: {
 		enabled: true,
 		requireEmailVerification: true,
+		// W1.4: a completed reset invalidates every existing session of the
+		// account (better-auth's official option), so a stolen cookie cannot
+		// outlive the password it was minted under. The reset flow has no
+		// session of its own to keep.
+		revokeSessionsOnPasswordReset: true,
 		sendResetPassword: async ({ user, url }) => {
 			await sendMailOrDevLog({ to: user.email, ...resetPasswordMail(await siteMailLang(), url) });
 		}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
-	import type { ActionData } from './$types';
+	import type { ActionData, PageServerData } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import * as Card from '$lib/components/ui/card';
 	import * as Field from '$lib/components/ui/field';
@@ -11,8 +11,9 @@
 	import IconBrandGithub from '@tabler/icons-svelte-runes/icons/brand-github';
 	import IconMail from '@tabler/icons-svelte-runes/icons/mail';
 	import IconAlertCircle from '@tabler/icons-svelte-runes/icons/alert-circle';
+	import IconCircleCheck from '@tabler/icons-svelte-runes/icons/circle-check';
 
-	let { form }: { form: ActionData } = $props();
+	let { data, form }: { data: PageServerData; form: ActionData } = $props();
 
 	const redirectParam = $derived(
 		$page.url.searchParams.get('redirectTo')
@@ -28,6 +29,16 @@
 			<Card.Description>{m.auth_login_description()}</Card.Description>
 		</Card.Header>
 		<Card.Content>
+			{#if data.resetSuccess}
+				<div
+					class="mb-6 flex items-center gap-2 rounded-md bg-primary/10 px-4 py-3 text-sm text-primary"
+					role="status"
+				>
+					<IconCircleCheck class="size-4 shrink-0" />
+					<span>{m.auth_reset_success_message()}</span>
+				</div>
+			{/if}
+
 			{#if form?.message}
 				<div
 					class="mb-6 flex items-center gap-2 rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive"
