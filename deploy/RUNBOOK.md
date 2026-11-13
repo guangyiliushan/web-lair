@@ -454,14 +454,21 @@ HAS_E2=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('\''public.email_suppressions'\'') is not null"')
 HAS_PROV=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select exists (select 1 from information_schema.columns where table_schema='\''public'\'' and table_name='\''posts'\'' and column_name='\''writing_origin'\'')"')
-if [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
+HAS_SECRETS=$(deploy/compose-prod.sh exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('\''public.ai_provider_secrets'\'') is not null and to_regclass('\''public.webhook_secrets'\'') is not null"')
+# Do not key this gate on a table count: every migration changes it (49 -> 53
+# -> 55 ...). A provenance-era schema is verified against the image's own
+# journal by verify-baseline; older generations are pinned to a matching image.
+if [ "$HAS_SECRETS" = "t" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
+  deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
+elif [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
   deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
 elif [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "f" ]; then
   echo "restored pre-provenance schema (49 tables, E2, no writing_origin); verify-baseline skipped — use the matching pre-provenance image"
 elif [ "$TABLES" = "48" ] && [ "$HAS_E2" = "f" ]; then
   echo "restored pre-E2 schema (48 public tables); verify-baseline skipped"
 else
-  echo "unexpected restore shape (tables=$TABLES e2=$HAS_E2 provenance=$HAS_PROV); refusing to start" >&2
+  echo "unexpected restore shape (tables=$TABLES e2=$HAS_E2 provenance=$HAS_PROV secrets=$HAS_SECRETS); refusing to start" >&2
   exit 1
 fi
 deploy/compose-prod.sh up -d
@@ -721,14 +728,44 @@ auth keyring must never destroy the credential store.
 Migrations 0001/0002 are additive (two new tables; `webhooks.secret` becomes
 nullable). The **data** step is the one-way edge:
 
-| Point in time                                                                | Image rollback    | Notes                                                                                                                                                                      |
-| ---------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| After `migrate` (0001/0002), **before** `db:migrate-webhook-secrets --apply` | Safe              | Old code reads/writes the legacy `webhooks.secret`; the new tables are ignored.                                                                                            |
-| After `db:migrate-webhook-secrets --apply`                                   | **Not safe**      | The old drain selects only the legacy column, which is now NULL, so every delivery fails verification. Roll forward (keep the new image) or restore the pre-backfill dump. |
-| After the new image has run                                                  | Roll forward only | The new drain reads `webhook_secrets` first and falls back to the legacy column; an old image cannot read the encrypted rows.                                              |
+| Point in time                                                             | Image rollback    | Notes                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| After `migrate` (0001/0002), **before** `migrate-webhook-secrets --apply` | Safe              | Old code reads/writes the legacy `webhooks.secret`; the new tables are ignored. **0002 is data-dependent:** the first endpoint created by the new image has no legacy secret, so from then on `SET NOT NULL` cannot be restored and roll-forward is the only path. |
+| After `migrate-webhook-secrets --apply`                                   | **Not safe**      | The old drain selects the legacy column, which is NULL, and throws in `signingKey()` (`null.startsWith`) on every tick: queued rows stay queued while the segment errors. Roll forward (keep the new image) or restore the pre-backfill dump.                      |
+| After the new image has run                                               | Roll forward only | The new drain reads `webhook_secrets` first and falls back to the legacy column; an old image cannot read the encrypted rows.                                                                                                                                      |
 
 Keep `SECRETS_KEYS` and the encrypted rows together: an image rollback without
 the keyring turns every stored credential into `decrypt_failed`.
+
+### 4.3 Retire the legacy webhook secret (W2.6, one-way data step)
+
+Migrations 0001/0002 are additive and reversible; moving the plaintext value
+into `webhook_secrets` is not. Do it in this order:
+
+```bash
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+# 1) Dump immediately before the data step (this is the only undo).
+sudo -u deploy docker compose -f compose.prod.yaml exec -T db \
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > "/srv/web-lair/pre-webhook-backfill-$STAMP.dump"
+
+# 2) Dry run: prints every endpoint that would move, writes nothing.
+deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts
+
+# 3) Apply. All rows move in ONE transaction; on any conflict/round-trip
+#    failure it rolls back and no plaintext is retired.
+deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts --apply
+
+# 4) Prove idempotence and no plaintext left for a migrated endpoint.
+deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts   # "nothing to migrate"
+deploy/compose-prod.sh exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from webhooks where secret is not null"'
+```
+
+Record the dump name next to the rollback table above. The script is run with
+`node` (the container image has no `tsx`); the `pnpm db:migrate-webhook-secrets`
+alias is for a dev checkout only. A non-zero exit now means "rolled back, still
+safe" — there is no partial state.
 
 ## 5. Monitoring
 
