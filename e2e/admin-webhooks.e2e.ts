@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
-import { psql } from './support';
+import { decryptedWebhookSecret, psql } from './support';
 
 /**
  * SY acceptance: the Webhooks endpoint CRUD on the real database plus the
@@ -84,14 +84,18 @@ test.describe('SY webhooks (admin)', () => {
 		await expect(reveal).toContainText('whsec_');
 		await expect(reveal).toContainText('只会显示这一次');
 
-		// DB truth: generated secret + the roster event; the reveal shows the
-		// SAME value as the DB (a masked or stale reveal must turn this red).
+		// DB truth: the legacy column is retired, the encrypted row exists, and
+		// the reveal shows the SAME plaintext as the envelope (a masked or stale
+		// reveal must turn this red).
+		const hookId = psql(`select id from webhooks where name = '${HOOK}'`);
+		expect(psql(`select secret is null from webhooks where id = '${hookId}'`)).toBe('t');
 		expect(
-			psql(
-				`select secret like 'whsec_%' and events = '{schedule.create}' from webhooks where name = '${HOOK}'`
-			)
+			psql(`select left(ciphertext, 3) = 'v1:' from webhook_secrets where webhook_id = '${hookId}'`)
 		).toBe('t');
-		const raw = psql(`select secret from webhooks where name = '${HOOK}'`);
+		expect(psql(`select events = '{schedule.create}' from webhooks where id = '${hookId}'`)).toBe(
+			't'
+		);
+		const raw = decryptedWebhookSecret(hookId);
 		await expect(reveal).toContainText(raw);
 
 		// A fresh load: the reveal is gone, the row shows the mask only, and
@@ -229,7 +233,8 @@ test.describe('SY webhooks (admin)', () => {
 		await page.goto('/admin/settings/notification');
 		const row = endpointRow(page, HOOK_RENAMED);
 		await expect(row).toBeVisible({ timeout: 20_000 });
-		const before = psql(`select secret from webhooks where name = '${HOOK_RENAMED}'`);
+		const id = psql(`select id from webhooks where name = '${HOOK_RENAMED}'`);
+		const before = decryptedWebhookSecret(id);
 		await expect(async () => {
 			await row.getByRole('button', { name: '轮换密钥' }).click({ timeout: 5000 });
 			const confirm = page.getByRole('alertdialog');
@@ -240,9 +245,12 @@ test.describe('SY webhooks (admin)', () => {
 		await expect(
 			page.locator('[data-slot="secret-reveal"]').filter({ visible: true })
 		).toContainText('whsec_');
-		const after = psql(`select secret from webhooks where name = '${HOOK_RENAMED}'`);
+		const after = decryptedWebhookSecret(id);
 		expect(after.startsWith('whsec_')).toBe(true);
 		expect(after).not.toBe(before);
+		// Grace window: the replaced value is still verifiable from the
+		// previous slot (re-encrypted with its own AAD, not copied verbatim).
+		expect(decryptedWebhookSecret(id, 'previous_ciphertext')).toBe(before);
 		// The rotated reveal shows the NEW value itself, not a mask.
 		await expect(
 			page.locator('[data-slot="secret-reveal"]').filter({ visible: true })
