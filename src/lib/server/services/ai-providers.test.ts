@@ -104,13 +104,20 @@ describe('provider input schema', () => {
 
 describe('testProviderConnection', () => {
 	const noKey = () => undefined;
+	// The probe now enforces the SSRF boundary (private hosts + DNS). Tests
+	// use fake/offline hosts, so they opt into the allowlist explicitly; the
+	// blocking behaviour is covered by the dedicated case below.
+	const allowTestHosts = {
+		allowPrivateHosts: ['x.test', 'gw.test', 'api.openai.com', 'api.deepl.com']
+	};
 
 	it('reports a missing env value before any fetch', async () => {
 		const fetchImpl = vi.fn();
 		const result = await testProviderConnection(
 			{ kind: 'openai-compatible', baseUrl: null, apiKeyEnv: 'AI_OPENAI_KEY' },
 			noKey,
-			fetchImpl as never
+			fetchImpl as never,
+			allowTestHosts
 		);
 		expect(result.ok).toBe(false);
 		expect(result.message).toContain('AI_OPENAI_KEY');
@@ -126,7 +133,8 @@ describe('testProviderConnection', () => {
 		const result = await testProviderConnection(
 			{ kind: 'openai-compatible', baseUrl: 'https://x.test/v1/', apiKeyEnv: 'AI_K' },
 			() => 'sk-1',
-			fetchImpl as never
+			fetchImpl as never,
+			allowTestHosts
 		);
 		expect(result.ok).toBe(true);
 		expect(seen[0].url).toBe('https://x.test/v1/models');
@@ -143,12 +151,14 @@ describe('testProviderConnection', () => {
 		await testProviderConnection(
 			{ kind: 'openai-compatible', baseUrl: null, apiKeyEnv: 'AI_K' },
 			() => 'sk',
-			recording as never
+			recording as never,
+			allowTestHosts
 		);
 		await testProviderConnection(
 			{ kind: 'deepl', baseUrl: null, apiKeyEnv: 'AI_K' },
 			() => 'dk',
-			recording as never
+			recording as never,
+			allowTestHosts
 		);
 		expect(seen[0].url).toBe('https://api.openai.com/v1/models');
 		expect(seen[1].url).toBe('https://api.deepl.com/v2/usage');
@@ -157,7 +167,8 @@ describe('testProviderConnection', () => {
 		const noName = await testProviderConnection(
 			{ kind: 'openai-compatible', baseUrl: null, apiKeyEnv: null },
 			noKey,
-			fetchImpl as never
+			fetchImpl as never,
+			allowTestHosts
 		);
 		expect(noName).toEqual({ ok: false, message: '未配置密钥环境变量' });
 		expect(fetchImpl).not.toHaveBeenCalled();
@@ -172,7 +183,8 @@ describe('testProviderConnection', () => {
 		const result = await testProviderConnection(
 			{ kind: 'deepl', baseUrl: null, apiKeyEnv: 'AI_DEEPL_KEY' },
 			() => 'k',
-			fetchImpl as never
+			fetchImpl as never,
+			allowTestHosts
 		);
 		expect(result).toEqual({ ok: false, message: 'HTTP 401' });
 		expect(seen[0].url).toBe('https://api.deepl.com/v2/usage');
@@ -182,7 +194,8 @@ describe('testProviderConnection', () => {
 		const missing = await testProviderConnection(
 			{ kind: 'custom', baseUrl: null, apiKeyEnv: null },
 			noKey,
-			vi.fn() as never
+			vi.fn() as never,
+			allowTestHosts
 		);
 		expect(missing).toEqual({ ok: false, message: '自定义服务商需要填写 Base URL' });
 
@@ -190,7 +203,8 @@ describe('testProviderConnection', () => {
 		const ok = await testProviderConnection(
 			{ kind: 'custom', baseUrl: 'https://gw.test', apiKeyEnv: null },
 			noKey,
-			fetchImpl as never
+			fetchImpl as never,
+			allowTestHosts
 		);
 		expect(ok.ok).toBe(true);
 	});
@@ -202,7 +216,8 @@ describe('testProviderConnection', () => {
 		const failed = await testProviderConnection(
 			{ kind: 'custom', baseUrl: 'https://gw.test', apiKeyEnv: null },
 			noKey,
-			failing as never
+			failing as never,
+			allowTestHosts
 		);
 		expect(failed.message).toContain('连接失败');
 
@@ -214,8 +229,31 @@ describe('testProviderConnection', () => {
 		const timedOut = await testProviderConnection(
 			{ kind: 'custom', baseUrl: 'https://gw.test', apiKeyEnv: null },
 			noKey,
-			timeout as never
+			timeout as never,
+			allowTestHosts
 		);
 		expect(timedOut.message).toContain('超时');
+	});
+
+	it('refuses to send the key to a private or metadata host unless allowlisted', async () => {
+		const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+		for (const baseUrl of ['http://127.0.0.1:11434', 'http://169.254.169.254', 'http://10.0.0.5']) {
+			const result = await testProviderConnection(
+				{ kind: 'custom', baseUrl, apiKeyEnv: null },
+				() => 'sk-secret',
+				fetchImpl as never
+			);
+			expect(result.ok).toBe(false);
+			expect(result.message).toContain(new URL(baseUrl).hostname);
+		}
+		expect(fetchImpl).not.toHaveBeenCalled();
+		// The explicit allowlist is the local-LLM escape hatch.
+		const allowed = await testProviderConnection(
+			{ kind: 'custom', baseUrl: 'http://127.0.0.1:11434', apiKeyEnv: null },
+			() => 'sk-secret',
+			fetchImpl as never,
+			{ allowPrivateHosts: ['127.0.0.1'] }
+		);
+		expect(allowed.ok).toBe(true);
 	});
 });

@@ -111,7 +111,8 @@ const TEST_TIMEOUT_MS = 5000;
 export async function testProviderConnection(
 	provider: ProviderTarget,
 	getKey: (name: string) => string | undefined,
-	fetchImpl: FetchLike = fetch
+	fetchImpl: FetchLike = fetch,
+	options: { allowPrivateHosts?: string[] } = {}
 ): Promise<ProviderTestResult> {
 	try {
 		if (provider.kind === 'custom' && !provider.baseUrl) {
@@ -137,6 +138,33 @@ export async function testProviderConnection(
 			if (key) headers.authorization = `DeepL-Auth-Key ${key}`;
 		} else {
 			url = provider.baseUrl as string;
+		}
+
+		// Same SSRF boundary as the runtime and model discovery: the probe
+		// transmits the stored credential, so it must not be pointable at
+		// loopback/private/metadata addresses unless explicitly allowlisted.
+		let parsed: URL;
+		try {
+			parsed = new URL(url);
+		} catch {
+			return { ok: false, message: m.admin_settings_ai_err_base_url_format() };
+		}
+		if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+			return { ok: false, message: m.admin_settings_ai_err_base_url_format() };
+		}
+		const host = parsed.hostname.toLowerCase();
+		const allow = (options.allowPrivateHosts ?? [])
+			.map((entry) => entry.trim().toLowerCase())
+			.filter(Boolean);
+		const privateAllowed = allow.some((entry) => host === entry || host.endsWith(`.${entry}`));
+		if (isPrivateHost(host) && !privateAllowed) {
+			return { ok: false, message: m.admin_settings_ai_private_blocked({ host }) };
+		}
+		if (!privateAllowed) {
+			const addresses = await resolvePublicAddresses(host);
+			if (!addresses) {
+				return { ok: false, message: m.admin_settings_ai_private_blocked({ host }) };
+			}
 		}
 
 		const response = await fetchImpl(url, {

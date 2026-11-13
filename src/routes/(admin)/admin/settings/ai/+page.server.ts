@@ -658,7 +658,14 @@ export const actions: Actions = {
 				baseUrl: provider.baseUrl,
 				apiKeyEnv: provider.apiKeyEnv
 			},
-			lookup.getKey
+			lookup.getKey,
+			fetch,
+			{
+				allowPrivateHosts: (env.AI_ALLOW_PRIVATE_HOSTS ?? '')
+					.split(',')
+					.map((entry) => entry.trim())
+					.filter(Boolean)
+			}
 		);
 		// The probe leaves a trace (name + verdict only, never a secret).
 		console.warn('[ai] provider connection test', provider.name, result.ok ? 'ok' : result.message);
