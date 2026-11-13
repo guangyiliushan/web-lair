@@ -36,8 +36,9 @@ import { auth } from '../auth';
 import { validateUserProvisioning } from './admin-login-policy';
 
 interface AuthOptions {
-	user?: { validateUserInfo?: unknown };
+	user?: { validateUserInfo?: unknown; additionalFields?: Record<string, unknown> };
 	account?: { encryptOAuthTokens?: unknown };
+	database?: unknown;
 	onAPIError?: { errorURL?: unknown };
 	emailAndPassword?: {
 		revokeSessionsOnPasswordReset?: unknown;
@@ -54,5 +55,17 @@ describe('auth config security wiring', () => {
 		expect(options.emailAndPassword?.revokeSessionsOnPasswordReset).toBe(true);
 		expect(typeof options.emailAndPassword?.onPasswordReset).toBe('function');
 		expect(options.onAPIError?.errorURL).toBe('/login');
+	});
+
+	it('declares the app-owned user field through the official option (H2)', () => {
+		// `default_lang` must come from `additionalFields`, not a hand edit to
+		// auth.schema.ts - that is what makes `pnpm auth:schema` reproducible.
+		const options = auth.options as AuthOptions;
+		expect(options.user?.additionalFields).toEqual({
+			defaultLang: { type: 'string', required: false, input: false }
+		});
+		// The adapter stays the official drizzle adapter (mocked by id): no
+		// wrapper that would change better-auth's own storage semantics (H3).
+		expect(options.database).toEqual({ id: 'test-adapter' });
 	});
 });
