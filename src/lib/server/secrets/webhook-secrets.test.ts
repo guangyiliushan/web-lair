@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { webhookSecrets } from '../db/system/webhook-secret.schema.ts';
-import { webhooks } from '../db/system/webhook.schema.ts';
 import { SecretError } from './errors.ts';
 import { parseKeyring } from './keyring.ts';
 import type { SecretDb } from './resolver.ts';

@@ -261,7 +261,11 @@ describe('runAiCall failover', () => {
 describe('runAiCall encrypted key resolution (W2.4)', () => {
 	it('sends the DB-resolved key even when apiKeyEnv is not set', async () => {
 		mocks.chain = [candidate('a')];
-		const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => ok());
+		const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => {
+			void _url;
+			void _init;
+			return ok();
+		});
 		await runAiCall(input, {
 			...deps,
 			fetch: fetchImpl as never,
