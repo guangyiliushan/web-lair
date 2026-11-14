@@ -85,9 +85,7 @@ export class OwnerProfileError extends Error {
 const GRAPHEME_SEGMENTER = new Intl.Segmenter('en', { granularity: 'grapheme' });
 
 export function countGraphemes(value: string): number {
-	let count = 0;
-	for (const _ of GRAPHEME_SEGMENTER.segment(value)) count += 1;
-	return count;
+	return [...GRAPHEME_SEGMENTER.segment(value)].length;
 }
 
 const DISPLAY_NAME_MAX = 80;
@@ -113,7 +111,12 @@ function invalid(code: OwnerProfileErrorCode, message: string): never {
 }
 
 function assertPlainText(value: string, code: OwnerProfileErrorCode): string {
-	if (/[\u0000-\u001f\u007f]/.test(value)) invalid(code, 'Control characters are not allowed.');
+	for (const char of value) {
+		const point = char.codePointAt(0) ?? 0;
+		if (point < 0x20 || point === 0x7f) {
+			invalid(code, 'Control characters are not allowed.');
+		}
+	}
 	return value;
 }
 

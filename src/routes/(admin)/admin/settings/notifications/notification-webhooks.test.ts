@@ -184,7 +184,7 @@ function makeFormData(fields: Record<string, string | string[]>) {
 
 function makeEvent(fields: Record<string, string | string[]>, role: 'owner' | 'admin' = 'owner') {
 	return {
-		request: new Request('http://x/admin/settings/notification', {
+		request: new Request('http://x/admin/settings/notifications', {
 			method: 'POST',
 			body: makeFormData(fields)
 		}),

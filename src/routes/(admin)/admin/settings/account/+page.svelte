@@ -9,7 +9,6 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Separator from '$lib/components/ui/separator';
 	import { SettingsForm } from '$lib/components/admin/settings';
-	import IconShield from '@tabler/icons-svelte-runes/icons/shield';
 	import IconGlobe from '@tabler/icons-svelte-runes/icons/globe';
 	import IconKey from '@tabler/icons-svelte-runes/icons/key';
 
