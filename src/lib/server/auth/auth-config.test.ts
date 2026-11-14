@@ -34,6 +34,7 @@ vi.mock('@better-auth/drizzle-adapter', () => ({
 
 import { auth } from '../auth';
 import { validateUserProvisioning } from './admin-login-policy';
+import { hashAccountPassword, verifyAccountPassword } from './password';
 
 interface AuthOptions {
 	user?: { validateUserInfo?: unknown; additionalFields?: Record<string, unknown> };
@@ -73,8 +74,8 @@ describe('auth config security wiring', () => {
 
 	it('wires the W8.8 password hash/verify hooks and the 30-day/24-hour session policy', () => {
 		const options = auth.options as AuthOptions;
-		expect(typeof options.emailAndPassword?.password?.hash).toBe('function');
-		expect(typeof options.emailAndPassword?.password?.verify).toBe('function');
+		expect(options.emailAndPassword?.password?.hash).toBe(hashAccountPassword);
+		expect(options.emailAndPassword?.password?.verify).toBe(verifyAccountPassword);
 		expect(options.session).toEqual({
 			expiresIn: 30 * 24 * 60 * 60,
 			updateAge: 24 * 60 * 60

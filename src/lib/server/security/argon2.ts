@@ -80,6 +80,9 @@ export function parseArgon2idPhc(phc: string): ParsedArgon2idPhc | null {
 	if (!Number.isFinite(memory) || memory < ARGON2_MEMORY_KIB) return null;
 	if (!Number.isFinite(passes) || passes < ARGON2_PASSES) return null;
 	if (!Number.isInteger(parallelism) || parallelism < 1) return null;
+	// Upper bounds are a DoS guard for a stored row with absurd cost params;
+	// the floors keep weak rows from getting a cheap verification pass.
+	if (memory > 262_144 || passes > 10 || parallelism > 8) return null;
 	try {
 		const salt = Buffer.from(parts[4], 'base64');
 		const tag = Buffer.from(parts[5], 'base64');

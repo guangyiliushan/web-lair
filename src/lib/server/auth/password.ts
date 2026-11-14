@@ -19,13 +19,13 @@ import { hashArgon2id, isArgon2idPhc, verifyArgon2id } from '$lib/server/securit
  */
 export type AccountPasswordAlgorithm = 'argon2id' | 'scrypt';
 
-/** better-auth's legacy scrypt profile (salt 16 B, 64 B derived key). */
+/** better-auth's legacy scrypt profile (16 random bytes -> 32-char hex salt, 64 B key). */
 const SCRYPT = { N: 16384, r: 16, p: 1, dkLen: 64 } as const;
 const SCRYPT_SALT_BYTES = 16;
 
 const scryptAsync = promisify(scrypt) as (
 	password: string,
-	salt: Buffer,
+	salt: string | Buffer,
 	keylen: number,
 	options: { N: number; r: number; p: number; maxmem: number }
 ) => Promise<Buffer>;
@@ -37,14 +37,26 @@ export function accountPasswordAlgorithm(
 }
 
 async function hashScrypt(password: string): Promise<string> {
-	const salt = randomBytes(SCRYPT_SALT_BYTES);
+	// better-auth 1.7.5 passes `randomBytes(16).toString("hex")` - a 32-char
+	// string, i.e. 32 UTF-8 salt bytes - to node:crypto scrypt. Match that
+	// exactly so a rollback writes hashes the previous release can read.
+	const salt = randomBytes(SCRYPT_SALT_BYTES).toString('hex');
 	const key = await scryptAsync(password.normalize('NFKC'), salt, SCRYPT.dkLen, {
 		N: SCRYPT.N,
 		r: SCRYPT.r,
 		p: SCRYPT.p,
 		maxmem: 128 * SCRYPT.N * SCRYPT.r * 2
 	});
-	return `${salt.toString('hex')}:${key.toString('hex')}`;
+	return `${salt}:${key.toString('hex')}`;
+}
+
+async function scryptKey(password: string, salt: string | Buffer): Promise<Buffer> {
+	return scryptAsync(password.normalize('NFKC'), salt, SCRYPT.dkLen, {
+		N: SCRYPT.N,
+		r: SCRYPT.r,
+		p: SCRYPT.p,
+		maxmem: 128 * SCRYPT.N * SCRYPT.r * 2
+	});
 }
 
 async function verifyScrypt(password: string, hash: string): Promise<boolean> {
@@ -54,18 +66,16 @@ async function verifyScrypt(password: string, hash: string): Promise<boolean> {
 	// Buffer.from(..., 'hex') silently truncates invalid input.
 	if (!/^[0-9a-f]{32}$/i.test(saltHex) || !/^[0-9a-f]{128}$/i.test(keyHex)) return false;
 	const expected = Buffer.from(keyHex, 'hex');
-	const derived = await scryptAsync(
-		password.normalize('NFKC'),
-		Buffer.from(saltHex, 'hex'),
-		SCRYPT.dkLen,
-		{
-			N: SCRYPT.N,
-			r: SCRYPT.r,
-			p: SCRYPT.p,
-			maxmem: 128 * SCRYPT.N * SCRYPT.r * 2
-		}
-	);
-	return timingSafeEqual(derived, expected);
+
+	// Primary: better-auth's exact convention (the hex string is the salt).
+	const fromStringSalt = await scryptKey(password, saltHex);
+	if (timingSafeEqual(fromStringSalt, expected)) return true;
+
+	// Compatibility: hashes written by the first W8.8 cut decoded the hex
+	// salt to 16 raw bytes. Those rows exist only on this feature branch; the
+	// fallback keeps them verifiable until the next password change.
+	const fromRawSalt = await scryptKey(password, Buffer.from(saltHex, 'hex'));
+	return timingSafeEqual(fromRawSalt, expected);
 }
 
 /** New credential hash; switched by `PASSWORD_HASH_ALGO` for rollback. */

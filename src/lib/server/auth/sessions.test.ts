@@ -87,6 +87,8 @@ describe('session pruning helpers', () => {
 		const normalized = sql.toLowerCase();
 		expect(normalized).toContain('delete from');
 		expect(normalized).toContain('order by');
+		expect(normalized).toContain('created_at');
+		expect(normalized).toMatch(/created_at"?\s+desc/);
 		expect(normalized).toContain('offset');
 		expect(normalized).toContain('<>');
 		// user id and keep id appear in both the outer delete and the subquery;

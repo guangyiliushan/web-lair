@@ -11,15 +11,21 @@ import { accountPasswordAlgorithm, hashAccountPassword, verifyAccountPassword } 
  * format (never the read path).
  */
 function legacyScryptHash(password: string): string {
-	const salt = randomBytes(16);
+	// Match better-auth 1.7.5 exactly: randomBytes(16).toString("hex") is the
+	// salt STRING passed to node:crypto scrypt (32 UTF-8 bytes, not 16 raw).
+	const salt = randomBytes(16).toString('hex');
 	const key = scryptSync(password.normalize('NFKC'), salt, 64, {
 		N: 16384,
 		r: 16,
 		p: 1,
 		maxmem: 128 * 16384 * 16 * 2
 	});
-	return `${salt.toString('hex')}:${key.toString('hex')}`;
+	return `${salt}:${key.toString('hex')}`;
 }
+
+/** Pinned vector from better-auth's salt convention (regression tooth). */
+const BETTER_AUTH_LEGACY_VECTOR =
+	'0123456789abcdef0123456789abcdef:46b77c1ea1570f76bc0845b8112da56bbb4c3215cacb0e3af00f61d85d853f5ab387439b2059fa7b178b9dcc1c8bb90f39f93ba576d806aec791d5bbaaaf1015';
 
 describe('account password hashing', () => {
 	it('defaults to argon2id and honours PASSWORD_HASH_ALGO=scrypt', () => {
@@ -46,6 +52,21 @@ describe('account password hashing', () => {
 		expect(hash).not.toContain('$argon2id$');
 		expect(await verifyAccountPassword({ hash, password: 'legacy-password' })).toBe(true);
 		expect(await verifyAccountPassword({ hash, password: 'not-the-password' })).toBe(false);
+	});
+
+	it('accepts a pinned better-auth-shaped scrypt vector', async () => {
+		expect(
+			await verifyAccountPassword({
+				hash: BETTER_AUTH_LEGACY_VECTOR,
+				password: 'legacy-password'
+			})
+		).toBe(true);
+		expect(
+			await verifyAccountPassword({
+				hash: BETTER_AUTH_LEGACY_VECTOR,
+				password: 'legacy-passwore'
+			})
+		).toBe(false);
 	});
 
 	it('rejects malformed and empty stored hashes without throwing', async () => {
