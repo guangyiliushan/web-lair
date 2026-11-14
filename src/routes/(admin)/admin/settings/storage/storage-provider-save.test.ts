@@ -41,6 +41,20 @@ const state = vi.hoisted(() => ({
 	},
 	purge: { pendingDays: 7, detachedDays: 30 },
 	fileCount: 0,
+	credentialStatus: {
+		source: 'missing' as 'db' | 'env' | 'missing' | 'unavailable',
+		accessHint: null as string | null,
+		secretHint: null as string | null,
+		keyVersion: null as number | null,
+		updatedAt: null as Date | null
+	},
+	credentialError: null as Error | null,
+	savedCredentials: null as unknown,
+	resolvedCredentials: null as {
+		accessKeyId: string;
+		secretAccessKey: string;
+		source: 'db' | 'env';
+	} | null,
 	setOption: vi.fn<(key: string, value: unknown) => Promise<void>>(async () => {}),
 	recordActivity: vi.fn<(executor: unknown, input: unknown) => Promise<void>>(async () => {}),
 	guard: vi.fn(async () => {}),
@@ -67,6 +81,28 @@ vi.mock('$lib/server/storage/probe', () => ({
 	probeStorage: vi.fn(async () => state.probeResult)
 }));
 
+vi.mock('$lib/server/secrets/storage-credentials', () => {
+	class StorageCredentialError extends Error {
+		readonly reason: string;
+		constructor(reason: string, message: string) {
+			super(message);
+			this.name = 'StorageCredentialError';
+			this.reason = reason;
+		}
+	}
+	return {
+		StorageCredentialError,
+		readStorageCredentialStatus: vi.fn(async () => state.credentialStatus),
+		resolveStorageCredentials: vi.fn(async () => state.resolvedCredentials),
+		saveStorageCredentials: vi.fn(async (_db: unknown, input: unknown) => {
+			if (state.credentialError) throw state.credentialError;
+			state.savedCredentials = input;
+			return { keyVersion: 1 };
+		}),
+		clearStorageCredentials: vi.fn(async () => {})
+	};
+});
+
 vi.mock('$env/dynamic/private', () => ({
 	env: {
 		RUSTFS_ENDPOINT: 'http://127.0.0.1:9000',
@@ -89,6 +125,23 @@ vi.mock('$lib/server/config/options-registry', () => ({
 		if (key === 'storage.active') return state.active;
 		if (key === 'storage.status') return state.status;
 		if (key === 'media.purge') return state.purge;
+		if (key === 'storage.migration') {
+			return {
+				state: 'idle',
+				id: null,
+				startedAt: null,
+				finishedAt: null,
+				cutoverAt: null,
+				sourceFingerprint: null,
+				targetFingerprint: null,
+				total: 0,
+				copied: 0,
+				verified: 0,
+				failed: 0,
+				bytes: 0,
+				error: null
+			};
+		}
 		throw new Error(`unexpected option ${key}`);
 	}),
 	setOption: state.setOption
@@ -117,7 +170,11 @@ interface StoragePageData {
 	migrationRequired: boolean;
 	active: { endpoint: string | null; bucket: string | null; label: string };
 	credentials: {
-		source: 'env' | 'missing';
+		source: 'db' | 'env' | 'missing' | 'unavailable';
+		accessHint: string | null;
+		secretHint: string | null;
+		keyVersion: number | null;
+		updatedAt: string | null;
 		envNames: { accessKeyId: string; secretAccessKey: string };
 	};
 	envRefs: { accessKey: 'set' | 'missing' };
@@ -128,7 +185,7 @@ async function loadData(event: ReturnType<typeof makeEvent>): Promise<StoragePag
 }
 
 function call(
-	action: 'saveProvider' | 'savePurge' | 'testProvider',
+	action: 'saveProvider' | 'savePurge' | 'testProvider' | 'saveCredentials' | 'clearCredentials',
 	event: ReturnType<typeof makeEvent>
 ) {
 	return (actions as unknown as Record<string, (event: never) => Promise<unknown>>)[action](
@@ -385,5 +442,100 @@ describe('storage connection test (W7.3)', () => {
 		const result = await call('testProvider', makeEvent());
 
 		expect(result).toMatchObject({ status: 400, data: { step: 'test', ok: false } });
+	});
+});
+
+describe('storage credentials (W7.6)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		state.credentialStatus = {
+			source: 'missing',
+			accessHint: null,
+			secretHint: null,
+			keyVersion: null,
+			updatedAt: null
+		};
+		state.credentialError = null;
+		state.savedCredentials = null;
+	});
+
+	it('load exposes hints and never a plaintext value', async () => {
+		state.credentialStatus = {
+			source: 'db',
+			accessHint: 'AKIA…MPLE',
+			secretHint: 'wJal…MPLE',
+			keyVersion: 2,
+			updatedAt: new Date('2026-11-14T10:00:00.000Z')
+		};
+
+		const data = await loadData(makeEvent());
+
+		expect(data.credentials).toMatchObject({
+			source: 'db',
+			accessHint: 'AKIA…MPLE',
+			secretHint: 'wJal…MPLE',
+			keyVersion: 2
+		});
+		// Hints only: the env VAR NAMES may appear, no credential value can.
+		expect(JSON.stringify(data.credentials)).not.toContain('wJalrXUtnFEMI/K7MDENG');
+		expect(JSON.stringify(data.credentials)).not.toContain('AKIAIOSFODNN7EXAMPLE');
+	});
+
+	it('is owner-only for both write actions', async () => {
+		await expect(call('saveCredentials', makeEvent({}, 'admin'))).rejects.toMatchObject({
+			status: 403
+		});
+		await expect(call('clearCredentials', makeEvent({}, 'admin'))).rejects.toMatchObject({
+			status: 403
+		});
+		expect(state.savedCredentials).toBeNull();
+	});
+
+	it('saves the pair and audits the rotation without values', async () => {
+		const result = await call(
+			'saveCredentials',
+			makeEvent({ accessKeyId: 'AKIAIOSFODNN7EXAMPLE', secretAccessKey: 'wJalrXUtnFEMI/K7MDENG' })
+		);
+
+		expect(result).toMatchObject({ step: 'credentials', ok: true });
+		expect(state.savedCredentials).toEqual({
+			accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+			secretAccessKey: 'wJalrXUtnFEMI/K7MDENG'
+		});
+		const audit = state.recordActivity.mock.calls.at(-1)?.[1] as {
+			event: string;
+			payload: Record<string, unknown>;
+		};
+		expect(audit.event).toBe('storage.update');
+		expect(audit.payload).toMatchObject({ action: 'credentials_set', key_version: 1 });
+		expect(JSON.stringify(audit.payload)).not.toContain('AKIAIOSFODNN7EXAMPLE');
+		expect(JSON.stringify(audit.payload)).not.toContain('wJalrXUtnFEMI');
+	});
+
+	it('maps an input error to 400 and a store failure to 503', async () => {
+		const { StorageCredentialError } = await import('$lib/server/secrets/storage-credentials');
+		state.credentialError = new StorageCredentialError('missing', 'Both fields are required');
+		const invalid = await call(
+			'saveCredentials',
+			makeEvent({ accessKeyId: '', secretAccessKey: '' })
+		);
+		expect(invalid).toMatchObject({ status: 400, data: { step: 'credentials', ok: false } });
+
+		state.credentialError = new Error('keyring missing');
+		const unavailable = await call(
+			'saveCredentials',
+			makeEvent({ accessKeyId: 'AKIAIOSFODNN7EXAMPLE', secretAccessKey: 'secret-value' })
+		);
+		expect(unavailable).toMatchObject({ status: 503, data: { step: 'credentials', ok: false } });
+	});
+
+	it('clears the stored pair and audits it', async () => {
+		const result = await call('clearCredentials', makeEvent());
+
+		expect(result).toMatchObject({ step: 'credentials', ok: true });
+		const audit = state.recordActivity.mock.calls.at(-1)?.[1] as {
+			payload: Record<string, unknown>;
+		};
+		expect(audit.payload).toMatchObject({ action: 'credentials_clear' });
 	});
 });

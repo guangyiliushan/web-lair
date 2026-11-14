@@ -15,9 +15,15 @@ import {
 	providerFingerprint,
 	type StorageProviderConfig
 } from '$lib/server/storage/provider';
-import { S3_CREDENTIAL_ENV, providerCredentialsFromEnv } from '$lib/server/storage/config';
-import { buildStorageForProvider } from '$lib/server/storage';
+import { S3_CREDENTIAL_ENV } from '$lib/server/storage/config';
+import { buildStorageForProvider, storageCredentials } from '$lib/server/storage';
 import { sanitizeProviderError } from '$lib/server/settings/provider-status';
+import {
+	StorageCredentialError,
+	clearStorageCredentials,
+	readStorageCredentialStatus,
+	saveStorageCredentials
+} from '$lib/server/secrets/storage-credentials';
 import {
 	StorageEndpointError,
 	allowPrivateEndpoint,
@@ -64,7 +70,9 @@ export const load: PageServerLoad = async (event) => {
 			: active.config.endpoint;
 	const activeBucket =
 		active.config.driver === 'local' ? (env.RUSTFS_BUCKET?.trim() ?? null) : active.config.bucket;
-	const credentials = providerCredentialsFromEnv(env);
+	const credentialStatus = await readStorageCredentialStatus(db as never, {
+		getEnv: (name) => env[name]
+	});
 
 	return {
 		provider,
@@ -93,7 +101,11 @@ export const load: PageServerLoad = async (event) => {
 		migrationRequired: fileCount > 0,
 		migrationRunning: migration.state === 'copying',
 		credentials: {
-			source: credentials ? ('env' as const) : ('missing' as const),
+			source: credentialStatus.source,
+			accessHint: credentialStatus.accessHint,
+			secretHint: credentialStatus.secretHint,
+			keyVersion: credentialStatus.keyVersion,
+			updatedAt: credentialStatus.updatedAt?.toISOString() ?? null,
 			envNames: S3_CREDENTIAL_ENV
 		},
 		// Env references the local driver reads (names + presence only).
@@ -298,7 +310,7 @@ export const actions: Actions = {
 			}
 			const storage = buildStorageForProvider(provider, {
 				source: env,
-				credentials: providerCredentialsFromEnv(env),
+				credentials: provider.driver === 'local' ? null : await storageCredentials(),
 				// A probe must answer quickly; an unreachable endpoint is a
 				// result, not a hung request.
 				headersTimeoutMs: 10_000
@@ -390,6 +402,101 @@ export const actions: Actions = {
 			step: 'purge' as const,
 			ok: true,
 			message: m.admin_settings_storage_purge_saved()
+		};
+	},
+
+	/**
+	 * Write-only credential replacement (W7.6/Q3). The posted values are
+	 * encrypted immediately; the response, the audit row and the reloaded page
+	 * carry hints only. Owner-only (storage.credentials tier).
+	 */
+	saveCredentials: async (event) => {
+		await requireAdminRole();
+		assertSettingWrite(event.locals.admin?.role, 'storage', 'storage.credentials');
+
+		const form = await event.request.formData();
+		try {
+			const { keyVersion } = await saveStorageCredentials(
+				db as never,
+				{
+					accessKeyId: stringField(form, 'accessKeyId'),
+					secretAccessKey: stringField(form, 'secretAccessKey')
+				},
+				{
+					actorId: event.locals.user?.id ?? null,
+					deps: { getEnv: (name) => env[name] }
+				}
+			);
+			await recordActivity(db, {
+				event: 'storage.update',
+				actorId: event.locals.user?.id ?? null,
+				// Hints/values never enter the audit payload; the key version and
+				// the action are what an operator needs to see later.
+				payload: {
+					fields: ['storage_credentials'],
+					action: 'credentials_set',
+					key_version: keyVersion
+				},
+				deliver: false
+			});
+			return {
+				step: 'credentials' as const,
+				ok: true,
+				message: m.admin_settings_storage_credentials_saved()
+			};
+		} catch (caught) {
+			if (caught instanceof StorageCredentialError) {
+				return fail(400, {
+					step: 'credentials' as const,
+					ok: false,
+					message:
+						caught.reason === 'missing'
+							? m.admin_settings_storage_err_credentials_missing()
+							: m.admin_settings_storage_err_credentials_shape()
+				});
+			}
+			// Name only: a crypto/keyring message may name a key version but must
+			// never echo a value, and neither belongs in the response.
+			console.warn(
+				'[settings] storage credentials save failed',
+				caught instanceof Error ? caught.name : typeof caught
+			);
+			return fail(503, {
+				step: 'credentials' as const,
+				ok: false,
+				message: m.admin_settings_storage_credentials_store_unavailable()
+			});
+		}
+	},
+
+	/** Remove the stored pair; the environment fallback becomes active again. */
+	clearCredentials: async (event) => {
+		await requireAdminRole();
+		assertSettingWrite(event.locals.admin?.role, 'storage', 'storage.credentials');
+
+		try {
+			await clearStorageCredentials(db as never);
+		} catch (caught) {
+			console.warn(
+				'[settings] storage credentials clear failed',
+				caught instanceof Error ? caught.name : typeof caught
+			);
+			return fail(503, {
+				step: 'credentials' as const,
+				ok: false,
+				message: m.admin_settings_storage_credentials_store_unavailable()
+			});
+		}
+		await recordActivity(db, {
+			event: 'storage.update',
+			actorId: event.locals.user?.id ?? null,
+			payload: { fields: ['storage_credentials'], action: 'credentials_clear' },
+			deliver: false
+		});
+		return {
+			step: 'credentials' as const,
+			ok: true,
+			message: m.admin_settings_storage_credentials_cleared()
 		};
 	}
 };

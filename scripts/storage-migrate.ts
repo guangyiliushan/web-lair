@@ -3,10 +3,8 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '../src/lib/server/db/schema';
 import { getOption, setOption } from '../src/lib/server/config/options-registry';
 import { recordActivity } from '../src/lib/server/audit';
-import {
-	providerCredentialsFromEnv,
-	storageConfigForProvider
-} from '../src/lib/server/storage/config';
+import { storageConfigForProvider } from '../src/lib/server/storage/config';
+import { resolveStorageCredentials } from '../src/lib/server/secrets/storage-credentials';
 import { S3Storage } from '../src/lib/server/storage/s3';
 import {
 	copyObjects,
@@ -71,13 +69,16 @@ const execute = mode !== 'dry-run' && mode !== 'status';
 const sql = postgres(DATABASE_URL, { max: 1 });
 const db = drizzle(sql, { schema });
 
-function buildStorage(provider: StorageProviderConfig): S3Storage {
-	return new S3Storage(
-		storageConfigForProvider(provider, {
-			source: process.env,
-			credentials: providerCredentialsFromEnv(process.env)
-		})
-	);
+/**
+ * Credentials come from the encrypted store first, the environment second
+ * (W7.6). The local driver needs none, so it never touches the secret table.
+ */
+async function buildStorage(provider: StorageProviderConfig): Promise<S3Storage> {
+	const credentials =
+		provider.driver === 'local'
+			? null
+			: await resolveStorageCredentials(db as never, { getEnv: (name) => process.env[name] });
+	return new S3Storage(storageConfigForProvider(provider, { source: process.env, credentials }));
 }
 
 async function countFiles(): Promise<number> {
@@ -163,7 +164,7 @@ async function main(): Promise<void> {
 	}
 
 	if (mode === 'rollback') {
-		const target = buildStorage(active.config);
+		const target = await buildStorage(active.config);
 		try {
 			const result = await rollbackToPreviousProvider(activationStore(target));
 			console.log(`rolled back: ${describe(result.from)} → ${describe(result.to)}`);
@@ -179,8 +180,8 @@ async function main(): Promise<void> {
 	}
 
 	// Every remaining mode talks to both buckets.
-	const source = buildStorage(active.config);
-	const target = buildStorage(candidate);
+	const source = await buildStorage(active.config);
+	const target = await buildStorage(candidate);
 
 	if (mode === 'cutover') {
 		try {

@@ -156,11 +156,11 @@ function storageUnavailable(): Response {
 export const GET: RequestHandler = async ({ params, locals, getClientAddress }) => {
 	if (await throttled(getClientAddress)) return tooManyRequests();
 	const access = await resolveAccess(params, locals);
-	const storage = await getStorage();
 
 	let object;
 	let cacheControl: string | undefined;
 	try {
+		const storage = await getStorage();
 		object = await storage.get(access.key);
 		if (!object && access.fallbackKeys) {
 			for (const fallbackKey of access.fallbackKeys) {
@@ -187,11 +187,11 @@ export const GET: RequestHandler = async ({ params, locals, getClientAddress }) 
 export const HEAD: RequestHandler = async ({ params, locals, getClientAddress }) => {
 	if (await throttled(getClientAddress)) return tooManyRequests();
 	const access = await resolveAccess(params, locals);
-	const storage = await getStorage();
 
 	let object;
 	let cacheControl: string | undefined;
 	try {
+		const storage = await getStorage();
 		object = await storage.head(access.key);
 		if (!object && access.fallbackKeys) {
 			for (const fallbackKey of access.fallbackKeys) {

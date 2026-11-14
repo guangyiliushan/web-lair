@@ -1,13 +1,15 @@
 import { env } from '$env/dynamic/private';
+import { db } from '$lib/server/db';
 import { getOption } from '$lib/server/config/options-registry';
+import { resolveStorageCredentials } from '$lib/server/secrets/storage-credentials';
 import { storageConfigForProvider } from './config';
 import { S3Storage } from './s3';
-import type { ObjectStoragePort } from './port';
+import { StorageError, type ObjectStoragePort } from './port';
 import type { StorageProviderConfig } from './provider';
 import type { SigV4Credentials } from './signature';
 
 /**
- * Runtime storage handle (W7.1/W7.2).
+ * Runtime storage handle (W7.1/W7.2/W7.6).
  *
  * The adapter is built from the ACTIVE provider (`storage.active`), never from
  * the saved form — that is what makes "Save only saves, it does not switch"
@@ -19,10 +21,40 @@ import type { SigV4Credentials } from './signature';
  * primary-key read on a tiny table) so a cutover takes effect on the next
  * request in every replica. Hot routes resolve once and reuse the handle
  * inside the request.
+ *
+ * Credentials (W7.6): the local driver needs none; the external driver asks
+ * the secret store first and the environment second. A store failure becomes a
+ * StorageError (status 0) so every caller's unreachable-provider path — 503,
+ * no fallback — handles it the same way as a dead endpoint.
  */
 export async function getStorage(): Promise<ObjectStoragePort> {
 	const active = await getOption('storage.active');
-	return buildStorageForProvider(active.config);
+	if (active.config.driver === 'local') return buildStorageForProvider(active.config);
+	return buildStorageForProvider(active.config, {
+		credentials: await storageCredentials()
+	});
+}
+
+/**
+ * Resolved external credentials, or a StorageError when the store exists but
+ * cannot be read. `null` (nothing configured) is left to the config builder,
+ * whose message names the env vars without values.
+ */
+export async function storageCredentials(): Promise<SigV4Credentials | null> {
+	try {
+		const resolved = await resolveStorageCredentials(db as never, {
+			getEnv: (name) => env[name]
+		});
+		return resolved
+			? { accessKeyId: resolved.accessKeyId, secretAccessKey: resolved.secretAccessKey }
+			: null;
+	} catch (error) {
+		throw new StorageError(
+			`storage credentials unavailable: ${error instanceof Error ? error.name : 'unknown'}`,
+			0,
+			'SecretStoreUnavailable'
+		);
+	}
 }
 
 /**

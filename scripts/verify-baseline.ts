@@ -103,7 +103,8 @@ const MIGRATION_TABLE_NAMES = [
 	'ai_provider_secrets',
 	'webhook_secrets',
 	'home_hero',
-	'site_identity'
+	'site_identity',
+	'storage_secrets'
 ] as const;
 
 const MIGRATION_TABLE_COLUMNS = new Map<string, string[]>([
@@ -140,7 +141,22 @@ const MIGRATION_TABLE_COLUMNS = new Map<string, string[]>([
 			'updated_by'
 		]
 	],
-	['site_identity', ['id', 'owner_user_id', 'created_at', 'updated_at', 'updated_by']]
+	['site_identity', ['id', 'owner_user_id', 'created_at', 'updated_at', 'updated_by']],
+	[
+		'storage_secrets',
+		[
+			'id',
+			'access_key_ciphertext',
+			'access_key_hint',
+			'access_key_key_version',
+			'secret_ciphertext',
+			'secret_hint',
+			'secret_key_version',
+			'created_at',
+			'updated_at',
+			'updated_by'
+		]
+	]
 ]);
 
 /** Columns appended to a baseline table (A3 unions these into the expected set). */
@@ -150,7 +166,8 @@ const MIGRATION_INDEXES = new Map<string, string[]>([
 	['ai_provider_secrets', ['ai_provider_secrets_pkey']],
 	['webhook_secrets', ['webhook_secrets_pkey']],
 	['home_hero', ['home_hero_pkey']],
-	['site_identity', ['site_identity_pkey', 'site_identity_owner_user_id_idx']]
+	['site_identity', ['site_identity_pkey', 'site_identity_owner_user_id_idx']],
+	['storage_secrets', ['storage_secrets_pkey']]
 ]);
 
 const MIGRATION_CHECKS = new Map<string, string[]>([
@@ -184,6 +201,16 @@ const MIGRATION_CHECKS = new Map<string, string[]>([
 		]
 	],
 	['site_identity', ['site_identity_singleton_check']],
+	[
+		'storage_secrets',
+		[
+			'storage_secrets_id_check',
+			'storage_secrets_access_key_version_check',
+			'storage_secrets_secret_key_version_check',
+			'storage_secrets_ciphertext_check',
+			'storage_secrets_hint_check'
+		]
+	],
 	// Appended column checks override the baseline map for this table, so the
 	// full expected set has to be listed (the three baseline checks + the new one).
 	[
@@ -204,7 +231,8 @@ const MIGRATION_FKS = [
 	'webhook_secrets_updated_by_user_id_fk|webhook_secrets|user|set null',
 	'home_hero_updated_by_user_id_fk|home_hero|user|set null',
 	'site_identity_owner_user_id_user_id_fk|site_identity|user|restrict',
-	'site_identity_updated_by_user_id_fk|site_identity|user|set null'
+	'site_identity_updated_by_user_id_fk|site_identity|user|set null',
+	'storage_secrets_updated_by_user_id_fk|storage_secrets|user|set null'
 ];
 
 /** Nullable audit links: deliberately not indexed (low cardinality). */
@@ -212,7 +240,8 @@ const MIGRATION_FK_INDEX_GAPS = [
 	'ai_provider_secrets.ai_provider_secrets_updated_by_user_id_fk',
 	'webhook_secrets.webhook_secrets_updated_by_user_id_fk',
 	'home_hero.home_hero_updated_by_user_id_fk',
-	'site_identity.site_identity_updated_by_user_id_fk'
+	'site_identity.site_identity_updated_by_user_id_fk',
+	'storage_secrets.storage_secrets_updated_by_user_id_fk'
 ];
 
 const OFFICIAL_GENERATED_TABLES = new Set([

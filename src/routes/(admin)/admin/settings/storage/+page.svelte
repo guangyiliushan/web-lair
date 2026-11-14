@@ -80,6 +80,18 @@
 	const providerForm = $derived(form?.step === 'provider' ? form : null);
 	const purgeForm = $derived(form?.step === 'purge' ? form : null);
 	const testForm = $derived(form?.step === 'test' ? form : null);
+	const credentialsForm = $derived(form?.step === 'credentials' ? form : null);
+
+	// Write-only inputs: the page never receives a value back, so "dirty" is
+	// simply "the operator typed something".
+	let accessKeyId = $state('');
+	let secretAccessKey = $state('');
+	const credentialsDirty = $derived(accessKeyId !== '' || secretAccessKey !== '');
+
+	function resetCredentials() {
+		accessKeyId = '';
+		secretAccessKey = '';
+	}
 
 	const PROBE_STATUS_KEYS = {
 		ok: 'admin_settings_storage_test_ok',
@@ -361,28 +373,89 @@
 		{/if}
 	</section>
 
-	<!-- 3. Credentials (env reference; write-only store lands with W7.6) -->
+	<!-- 3. Credentials (W7.6: write-only, encrypted at rest) -->
 	<section class="space-y-3">
 		<header class="min-w-0">
 			<h2 class="text-sm font-medium">{m.admin_settings_storage_credentials()}</h2>
 			<p class="mt-1 text-xs text-muted-foreground">
-				{m.admin_settings_storage_credentials_env_hint()}
+				{m.admin_settings_storage_credentials_write_only_hint()}
 			</p>
 		</header>
 		<div class="divide-y rounded-lg border">
 			<SettingsProviderStatus
-				name={`env: ${data.credentials.envNames.accessKeyId}`}
-				state={data.credentials.source === 'env' ? 'configured' : 'not_configured'}
-				detail={data.credentials.source === 'env'
-					? m.admin_settings_storage_credentials_env()
-					: m.admin_settings_storage_credentials_missing()}
+				name={data.credentials.source === 'db'
+					? `${m.admin_settings_storage_credentials_source_db()} · ${data.credentials.accessHint ?? '—'}`
+					: data.credentials.source === 'env'
+						? `env: ${data.credentials.envNames.accessKeyId}`
+						: data.credentials.source === 'unavailable'
+							? m.admin_settings_storage_credentials_store_unavailable()
+							: m.admin_settings_common_not_configured()}
+				state={data.credentials.source === 'db' || data.credentials.source === 'env'
+					? 'configured'
+					: data.credentials.source === 'unavailable'
+						? 'error'
+						: 'not_configured'}
+				detail={data.credentials.source === 'db'
+					? `${m.admin_settings_storage_credentials_key_version()}: ${data.credentials.keyVersion ?? '—'}`
+					: data.credentials.source === 'env'
+						? m.admin_settings_storage_credentials_env()
+						: undefined}
 			/>
 			<SettingsProviderStatus
-				name={`env: ${data.credentials.envNames.secretAccessKey}`}
-				state={data.credentials.source === 'env' ? 'configured' : 'not_configured'}
+				name={data.credentials.source === 'db'
+					? `${m.admin_settings_storage_credentials_source_db()} · ${data.credentials.secretHint ?? '—'}`
+					: data.credentials.source === 'env'
+						? `env: ${data.credentials.envNames.secretAccessKey}`
+						: m.admin_settings_common_not_configured()}
+				state={data.credentials.source === 'db' || data.credentials.source === 'env'
+					? 'configured'
+					: data.credentials.source === 'unavailable'
+						? 'error'
+						: 'not_configured'}
 				detail={m.admin_settings_storage_credentials_never_shown()}
 			/>
 		</div>
+
+		{#if data.editable}
+			<SettingsForm
+				action="?/saveCredentials"
+				dirty={credentialsDirty}
+				message={credentialsForm?.message}
+				error={credentialsForm?.ok === false}
+				onCancel={resetCredentials}
+			>
+				<div class="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
+					<div class="space-y-2">
+						<Label for="accessKeyId">{m.admin_settings_storage_access_key_id()}</Label>
+						<Input
+							id="accessKeyId"
+							name="accessKeyId"
+							type="password"
+							autocomplete="new-password"
+							bind:value={accessKeyId}
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="secretAccessKey">{m.admin_settings_storage_secret_access_key()}</Label>
+						<Input
+							id="secretAccessKey"
+							name="secretAccessKey"
+							type="password"
+							autocomplete="new-password"
+							bind:value={secretAccessKey}
+						/>
+					</div>
+				</div>
+			</SettingsForm>
+			{#if data.credentials.source === 'db'}
+				<form method="POST" action="?/clearCredentials">
+					<Button type="submit" size="sm" variant="outline">
+						{m.admin_settings_storage_credentials_clear()}
+					</Button>
+				</form>
+			{/if}
+		{/if}
+
 		<p class="text-xs text-muted-foreground">
 			{m.admin_settings_storage_local_env()}: RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY ({data.envRefs
 				.accessKey === 'set'
