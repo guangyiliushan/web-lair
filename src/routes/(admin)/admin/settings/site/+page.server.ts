@@ -122,8 +122,9 @@ export const actions: Actions = {
 		const current = await getOption('site.icon');
 		let icon;
 		try {
-			// Version always moves forward, even when the URL is unchanged:
-			// favicon caches are sticky and the `?v=` is the only bust (S3).
+			// Version moves forward on every save. The shared SettingsForm only
+			// submits when the URL string changes, so the bump follows an icon
+			// change; it keeps the `?v=` cache bust moving (S3).
 			icon = validateOption('site.icon', {
 				url: formText(form, 'url'),
 				version: current.version + 1

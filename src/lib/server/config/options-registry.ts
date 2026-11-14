@@ -381,6 +381,7 @@ export const optionRegistry = {
 			avatar: z
 				.string()
 				.trim()
+				.max(2048, { error: () => m.admin_option_err_url_too_long() })
 				.refine((value) => value === '' || isHttpsUrl(value), {
 					error: () => m.admin_option_err_avatar_url()
 				})
@@ -396,6 +397,7 @@ export const optionRegistry = {
 			url: z
 				.string()
 				.trim()
+				.max(2048, { error: () => m.admin_option_err_url_too_long() })
 				.refine(isSiteIconUrl, { error: () => m.admin_option_err_icon_url() }),
 			version: z.number().int().nonnegative()
 		}),

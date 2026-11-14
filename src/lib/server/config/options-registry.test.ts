@@ -487,6 +487,14 @@ describe('options registry (AI-1.1)', () => {
 		await expect(
 			setOption('site.info', { name: 'Site', description: '', avatar: 'javascript:alert(1)' })
 		).rejects.toThrow(/https/);
+		// URLs are bounded like every other stored string (2048, ASVS-style).
+		await expect(
+			setOption('site.info', {
+				name: 'Site',
+				description: '',
+				avatar: `https://x/${'a'.repeat(2048)}`
+			})
+		).rejects.toThrow(/2048/);
 		expect(state.insertCalls).toHaveLength(0);
 
 		await setOption('site.info', {
@@ -523,6 +531,9 @@ describe('options registry (AI-1.1)', () => {
 		}
 		await expect(setOption('site.icon', { url: '/i/a.ico', version: -1 })).rejects.toThrow();
 		await expect(setOption('site.icon', { url: '/i/a.ico', version: 1.5 })).rejects.toThrow();
+		await expect(
+			setOption('site.icon', { url: `https://x/${'a'.repeat(2048)}`, version: 1 })
+		).rejects.toThrow(/2048/);
 		expect(state.insertCalls).toHaveLength(0);
 
 		await setOption('site.icon', { url: 'https://cdn.example/favicon.svg', version: 2 });

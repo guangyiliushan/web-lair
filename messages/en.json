@@ -997,6 +997,7 @@
 	"admin_option_err_tz_invalid_iana": "Invalid IANA time zone name",
 	"admin_option_err_tz_pg_rejected": "Time zone \"{tz}\" is not accepted by PostgreSQL (pg_timezone_names); write rejected",
 	"admin_option_err_unit01": "Must be between 0 and 1",
+	"admin_option_err_url_too_long": "URL is too long (≤2048 characters)",
 	"admin_pages_code_page": "code page",
 	"admin_pages_col_sort": "Sort",
 	"admin_pages_col_title": "Title",

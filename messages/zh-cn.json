@@ -835,6 +835,7 @@
 	"admin_option_err_tz_invalid_iana": "无效的 IANA 时区名",
 	"admin_option_err_tz_pg_rejected": "时区 \"{tz}\" 不被 PostgreSQL 接受（pg_timezone_names）；已拒绝写入",
 	"admin_option_err_unit01": "必须在 0–1 之间",
+	"admin_option_err_url_too_long": "URL 过长（≤2048 字符）",
 	"admin_pages_code_page": "code 页面",
 	"admin_pages_col_sort": "排序",
 	"admin_pages_col_title": "标题",
