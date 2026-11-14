@@ -27,7 +27,7 @@ const { envState, optionState, ownerState } = vi.hoisted(() => ({
 			displayName: 'Owner',
 			headerLabel: null as string | null,
 			avatarUrl: '/owner.png' as string | null,
-			links: null
+			links: null as { platform: string; href: string }[] | null
 		},
 		throwOn: false
 	}
@@ -55,9 +55,14 @@ vi.mock('$lib/server/services/owner-profile', () => ({
 		if (ownerState.throwOn) throw new Error('settings unavailable');
 		return ownerState.profile;
 	}),
-	ownerProfileToSiteOwner: (profile: { displayName: string; avatarUrl: string | null }) => ({
+	ownerProfileToSiteOwner: (profile: {
+		displayName: string;
+		avatarUrl: string | null;
+		headerLabel: string | null;
+	}) => ({
 		name: profile.displayName,
-		avatar: profile.avatarUrl ?? ''
+		avatar: profile.avatarUrl ?? '',
+		headerLabel: profile.headerLabel
 	})
 }));
 
@@ -93,6 +98,26 @@ describe('(site) layout server', () => {
 			siteOrigin: string | null;
 		};
 		expect(data.siteOrigin).toBeNull();
+	});
+
+	it('exposes the owner social links exactly as stored (single rail source)', async () => {
+		ownerState.profile.links = [
+			{ platform: 'github', href: 'https://github.com/owner' },
+			{ platform: 'email', href: 'mailto:owner@example.com' }
+		];
+		const data = (await load({
+			parent: async () => ({ auth: null }),
+			locals: {}
+		} as never)) as { ownerLinks: { platform: string; href: string }[] };
+		expect(data.ownerLinks).toEqual(ownerState.profile.links);
+	});
+
+	it('exposes an empty owner rail when the profile has no links', async () => {
+		const data = (await load({
+			parent: async () => ({ auth: null }),
+			locals: {}
+		} as never)) as { ownerLinks: unknown[] };
+		expect(data.ownerLinks).toEqual([]);
 	});
 
 	it('exposes the presence config for the shell and the detail widgets (R-7)', async () => {
@@ -136,10 +161,14 @@ describe('(site) layout server', () => {
 			parent: async () => ({ auth: null }),
 			locals: {}
 		} as never)) as {
-			siteOwner: { name: string; avatar: string };
+			siteOwner: { name: string; avatar: string; headerLabel: string | null };
 			ownerStatus: { enabled: boolean; kind: string };
 		};
-		expect(data.siteOwner).toEqual({ name: 'Owner', avatar: '/owner.png' });
+		expect(data.siteOwner).toEqual({
+			name: 'Owner',
+			avatar: '/owner.png',
+			headerLabel: null
+		});
 		expect(data.ownerStatus).toEqual(optionState.ownerStatus);
 	});
 

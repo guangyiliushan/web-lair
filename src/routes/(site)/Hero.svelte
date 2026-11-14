@@ -1,60 +1,30 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
 	import * as Avatar from '$lib/components/ui/avatar';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import { mergeProps } from 'bits-ui';
 	import { m } from '$lib/paraglide/messages';
-	import { siteHref } from '$lib/utils/href';
 	import { motion } from '@humanspeak/svelte-motion';
-	import IconBrandGithub from '@tabler/icons-svelte-runes/icons/brand-github';
-	import IconBrandTwitter from '@tabler/icons-svelte-runes/icons/brand-twitter';
-	import IconMail from '@tabler/icons-svelte-runes/icons/mail';
-	import IconRss from '@tabler/icons-svelte-runes/icons/rss';
-	import IconBrandTelegram from '@tabler/icons-svelte-runes/icons/brand-telegram';
-	import IconBrandX from '@tabler/icons-svelte-runes/icons/brand-x';
-	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
+	import SocialRail from '$lib/components/layout/SocialRail.svelte';
+	import type { SocialLinkLike } from '$lib/config/social';
+	import type { SiteOwner } from '$lib/config/owner-status';
+	import { firstGrapheme } from '$lib/config/owner-presence';
+	import type { HeroField } from '$lib/config/home-hero';
 
-	type SocialPlatform = 'github' | 'twitter' | 'email' | 'rss' | 'telegram' | 'x';
+	/**
+	 * Hero view (W4.3/W4.5): copy resolved server-side from `home_hero` with
+	 * the locale -> site default -> messages fallback chain. The owner avatar
+	 * replaces the old dicebear placeholder; the social rail and the default
+	 * `hero_title` are single-source, so changing the owner name updates both.
+	 */
+	let {
+		owner,
+		links,
+		hero
+	}: {
+		owner: SiteOwner;
+		links?: readonly SocialLinkLike[] | null;
+		hero: Record<HeroField, string>;
+	} = $props();
 
-	interface SocialLink {
-		platform: SocialPlatform;
-		href: string;
-		ariaLabel: string;
-	}
-
-	const socialLinks: SocialLink[] = [
-		{ platform: 'github', href: 'https://github.com/guangyiliushan', ariaLabel: 'GitHub' },
-		{ platform: 'twitter', href: 'https://twitter.com/guangyiliushan', ariaLabel: 'Twitter' },
-		{ platform: 'email', href: 'mailto:guangyiliushan@example.com', ariaLabel: 'Email' },
-		{ platform: 'rss', href: '/rss.xml', ariaLabel: 'RSS Feed' },
-		{ platform: 'telegram', href: 'https://t.me/guangyiliushan', ariaLabel: 'Telegram' },
-		{ platform: 'x', href: 'https://x.com/guangyiliushan', ariaLabel: 'X' }
-	];
-
-	const iconOf: Record<SocialPlatform, typeof IconBrandGithub> = {
-		github: IconBrandGithub,
-		twitter: IconBrandTwitter,
-		email: IconMail,
-		rss: IconRss,
-		telegram: IconBrandTelegram,
-		x: IconBrandX
-	};
-
-	// 头像配置
-	const avatarConfig = {
-		src: 'https://api.dicebear.com/10.x/lorelei/svg?flip=horizontal&seed=guangyiliushan',
-		alt: m.hero_avatar_alt(),
-		fallback: 'GL'
-	};
-
-	/** 平滑滚动 #content，兼容所有设 */
-	function scrollToContent(e: MouseEvent) {
-		e.preventDefault();
-		const target = document.querySelector('#content');
-		if (target) {
-			target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-		}
-	}
+	const avatarFallback = $derived(firstGrapheme(owner.name));
 </script>
 
 <section
@@ -71,44 +41,19 @@
 			transition={{ duration: 0.6 }}
 		>
 			<h1 class="mb-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-				{m.hero_title()}
+				{hero.title}
 			</h1>
 
 			<h2 class="mb-6 text-2xl font-semibold sm:text-3xl lg:text-4xl">
-				{m.hero_subtitle_prefix()}
-				<span class="font-mono text-primary-text">{m.hero_subtitle_highlight()}</span>
+				{hero.subtitlePrefix}
+				<span class="font-mono text-primary-text">{hero.subtitleHighlight}</span>
 			</h2>
 
 			<p class="mb-10 max-w-lg text-lg text-muted-foreground">
-				{m.hero_description()}
+				{hero.description}
 			</p>
 
-			<div class="flex flex-wrap items-center gap-3">
-				{#each socialLinks as link (link.platform)}
-					{@const Icon = iconOf[link.platform]}
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								{@const merged = mergeProps(props, { class: 'size-10 rounded-full' })}
-								<Button
-									variant="ghost"
-									size="icon"
-									href={siteHref(link.href)}
-									target="_blank"
-									rel="noopener noreferrer"
-									aria-label={link.ariaLabel}
-									{...merged}
-								>
-									<Icon data-icon="inline-start" />
-								</Button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content>
-							{link.ariaLabel}
-						</Tooltip.Content>
-					</Tooltip.Root>
-				{/each}
-			</div>
+			<SocialRail {links} variant="hero" />
 		</motion.div>
 
 		<!-- 头像区域：弹性缩放入 -->
@@ -121,28 +66,21 @@
 			<Avatar.Root
 				class="relative size-full overflow-hidden rounded-full border-4 border-background shadow-2xl"
 			>
-				<Avatar.Image src={avatarConfig.src} alt={avatarConfig.alt} loading="lazy" />
-				<Avatar.Fallback class="text-4xl">{avatarConfig.fallback}</Avatar.Fallback>
+				<Avatar.Image src={owner.avatar} alt={m.hero_avatar_alt()} loading="lazy" />
+				<Avatar.Fallback class="text-4xl">{avatarFallback}</Avatar.Fallback>
 			</Avatar.Root>
 		</motion.div>
 	</div>
 
-	<!-- 底部欢迎 + 可点击滚动指示器：多断点响应式，shrink-0 固定于首屏底 -->
+	<!-- 底部欢迎语：多断点响应式，shrink-0 固定于首屏底。D3=B 删除了
+	     指向 `#content` 的滚动指示器与占位正文。 -->
 	<div
 		class="z-10 flex shrink-0 flex-col items-center gap-2 pt-2 pb-4 sm:gap-2.5 sm:pt-3 sm:pb-6 md:gap-3 md:pt-4 md:pb-8 lg:pt-6 lg:pb-10"
 	>
 		<p
 			class="max-w-[18rem] text-center text-xs leading-relaxed text-muted-foreground sm:max-w-xs sm:text-sm md:max-w-sm md:text-base"
 		>
-			{m.hero_welcome()}
+			{hero.welcome}
 		</p>
-		<a
-			href="#content"
-			onclick={scrollToContent}
-			class="animate-bounce rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-		>
-			<IconChevronDown class="size-4 sm:size-5 md:size-6" />
-			<span class="sr-only">{m.hero_scroll_down()}</span>
-		</a>
 	</div>
 </section>

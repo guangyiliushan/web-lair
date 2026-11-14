@@ -26,6 +26,7 @@
 	import { getPhotosUi } from '$lib/components/photos/photos-ui.svelte';
 	import type { PhotoColumns } from '$lib/photos/query';
 	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
+	import type { SocialLinkLike } from '$lib/config/social';
 	import { ownerPresenceFromStatus, type OwnerPresence } from '$lib/config/owner-presence';
 	import type { NavMenuData, PagesMegaData } from '$lib/config/navigation.config';
 
@@ -43,6 +44,7 @@
 	let {
 		auth,
 		owner,
+		ownerLinks,
 		ownerStatus,
 		ownerPresence,
 		postsData,
@@ -52,6 +54,7 @@
 	}: {
 		auth?: AuthData;
 		owner: SiteOwner;
+		ownerLinks?: readonly SocialLinkLike[] | null;
 		ownerStatus: OwnerStatus;
 		ownerPresence?: OwnerPresence | null;
 		postsData?: NavMenuData | null;
@@ -97,12 +100,20 @@
 
 <HeaderShell>
 	<div class="flex items-center justify-between gap-2 px-4 py-2">
-		<SiteBrand {owner} {presence} enabled={ownerStatus.enabled} />
+		<SiteBrand {owner} {presence} />
 
 		<!-- Desktop: photo identity by default, site navigation on demand. -->
-		<div class="hidden min-w-0 flex-1 justify-center lg:flex">
+		<div class="hidden min-w-0 flex-1 justify-center @min-[56rem]:flex">
 			{#if siteNavOpen}
-				<SiteDesktopNav {owner} {ownerStatus} {postsData} {notesData} {timelineData} {pagesData} />
+				<SiteDesktopNav
+					{owner}
+					{ownerLinks}
+					{presence}
+					{postsData}
+					{notesData}
+					{timelineData}
+					{pagesData}
+				/>
 			{:else}
 				<div class="flex min-w-0 items-baseline gap-2">
 					<span class="truncate text-sm font-medium">{title}</span>
@@ -172,7 +183,7 @@
 				</a>
 			{/if}
 
-			<div class="hidden items-center gap-2 lg:flex">
+			<div class="hidden items-center gap-2 @min-[56rem]:flex">
 				<LangSwitcher />
 				<ThemeToggle />
 				<UserNav {auth} />
@@ -192,7 +203,7 @@
 				</Button>
 			</div>
 
-			<div class="flex items-center gap-1 lg:hidden">
+			<div class="flex items-center gap-1 @min-[56rem]:hidden">
 				<LangSwitcher />
 				<ThemeToggle />
 				<button
@@ -213,7 +224,7 @@
 
 	{#if mobileMenuOpen}
 		<div class="overflow-hidden" transition:slide={{ duration: 400, easing: quartInOut }}>
-			<SiteMobileMenu {auth} {postsData} {pagesData} onclose={closeMobileMenu} />
+			<SiteMobileMenu {auth} {ownerLinks} {postsData} {pagesData} onclose={closeMobileMenu} />
 		</div>
 	{/if}
 </HeaderShell>

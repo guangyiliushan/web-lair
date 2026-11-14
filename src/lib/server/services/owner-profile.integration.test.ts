@@ -143,6 +143,9 @@ describe.skipIf(!url)('owner profile service on a scratch database', () => {
 		expect(activity.ref_type).toBeNull();
 		expect(activity.ref_id).toBeNull();
 		expect(activity.payload.fields).toContain('subtitle_highlight');
+		const [{ count: homeDeliveries }] =
+			await sql`select count(*)::int as count from webhook_deliveries where event = 'home.update'`;
+		expect(homeDeliveries).toBe(0);
 		// Empty strings remove the override; an empty map falls back to messages.
 		const cleared = await saveHomeHero({ title: { en: '' } }, { actorId: OWNER, executor: db });
 		expect(cleared.title).toEqual({});

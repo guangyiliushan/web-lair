@@ -2,6 +2,7 @@ import { getOption } from '$lib/server/config/options-registry';
 import { getPublicOrigin } from '$lib/server/origin';
 import { effectiveReaderDots } from '$lib/server/services/presence';
 import { loadOwnerProfile, ownerProfileToSiteOwner } from '$lib/server/services/owner-profile';
+import type { ProfileLink } from '$lib/server/db/account';
 import {
 	OWNER_STATUS_DEFAULT,
 	SITE_OWNER_DEFAULT,
@@ -39,16 +40,23 @@ export async function loadSiteChrome({
 	locals: App.Locals;
 }) {
 	const { auth } = await parent();
-	const [postsData, notesData, timelineData, pagesData, presenceOptions, owner, ownerStatus] =
-		await Promise.all([
-			loadPostsMegaData(),
-			loadNotesMegaData(),
-			loadTimelineMegaData(),
-			loadPagesMegaData(),
-			loadPresenceOptions(),
-			loadSiteOwner(),
-			loadOwnerStatus()
-		]);
+	const [
+		postsData,
+		notesData,
+		timelineData,
+		pagesData,
+		presenceOptions,
+		ownerIdentity,
+		ownerStatus
+	] = await Promise.all([
+		loadPostsMegaData(),
+		loadNotesMegaData(),
+		loadTimelineMegaData(),
+		loadPagesMegaData(),
+		loadPresenceOptions(),
+		loadOwnerIdentity(),
+		loadOwnerStatus()
+	]);
 
 	return {
 		auth,
@@ -64,7 +72,9 @@ export async function loadSiteChrome({
 				topics: notesData?.stats?.topics ?? 0
 			}
 		},
-		siteOwner: owner,
+		siteOwner: ownerIdentity.owner,
+		/** Single social source (R-1): Hero, nav panel and mobile menu. */
+		ownerLinks: ownerIdentity.links,
 		ownerStatus,
 		presence: {
 			enabled: presenceOptions.enabled,
@@ -92,13 +102,17 @@ async function loadPresenceOptions(): Promise<{
 	}
 }
 
-/** Header owner badge; a DB or pointer blip fails open to the static default. */
-async function loadSiteOwner(): Promise<SiteOwner> {
+/** Header owner badge + the social rail source; a DB blip fails open. */
+async function loadOwnerIdentity(): Promise<{
+	owner: SiteOwner;
+	links: ProfileLink[];
+}> {
 	try {
 		const profile = await loadOwnerProfile();
-		return profile ? ownerProfileToSiteOwner(profile) : SITE_OWNER_DEFAULT;
+		if (!profile) return { owner: SITE_OWNER_DEFAULT, links: [] };
+		return { owner: ownerProfileToSiteOwner(profile), links: profile.links ?? [] };
 	} catch {
-		return SITE_OWNER_DEFAULT;
+		return { owner: SITE_OWNER_DEFAULT, links: [] };
 	}
 }
 

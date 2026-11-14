@@ -12,6 +12,7 @@
 	import SiteMobileMenu from '$lib/components/layout/SiteMobileMenu.svelte';
 	import UserNav from '$lib/components/account/UserNav.svelte';
 	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
+	import type { SocialLinkLike } from '$lib/config/social';
 	import { ownerPresenceFromStatus, type OwnerPresence } from '$lib/config/owner-presence';
 	import type { NavMenuData, PagesMegaData } from '$lib/config/navigation.config';
 
@@ -29,6 +30,7 @@
 	let {
 		auth,
 		owner,
+		ownerLinks,
 		ownerStatus,
 		ownerPresence,
 		postsData,
@@ -39,6 +41,8 @@
 		auth?: AuthData;
 		/** Public owner identity — identical for every visitor, never the session. */
 		owner: SiteOwner;
+		/** `user_profiles.links` — the single social rail source (R-1). */
+		ownerLinks?: readonly SocialLinkLike[] | null;
 		ownerStatus: OwnerStatus;
 		/**
 		 * Live pipeline view. Until the ActivityWatch bridge lands, the header
@@ -64,19 +68,27 @@
 </script>
 
 <HeaderShell>
-	<div class="flex items-center justify-between px-4 py-2">
-		<SiteBrand {owner} {presence} enabled={ownerStatus.enabled} />
+	<div class="flex items-center justify-between gap-2 px-4 py-2">
+		<SiteBrand {owner} {presence} />
 
-		<SiteDesktopNav {owner} {ownerStatus} {postsData} {notesData} {timelineData} {pagesData} />
+		<SiteDesktopNav
+			{owner}
+			{ownerLinks}
+			{presence}
+			{postsData}
+			{notesData}
+			{timelineData}
+			{pagesData}
+		/>
 
-		<div class="flex items-center gap-1">
-			<div class="hidden items-center gap-2 lg:flex">
+		<div class="flex shrink-0 items-center gap-1">
+			<div class="hidden items-center gap-2 @min-[56rem]:flex">
 				<LangSwitcher />
 				<ThemeToggle />
 				<UserNav {auth} />
 			</div>
 
-			<div class="flex items-center gap-1 lg:hidden">
+			<div class="flex items-center gap-1 @min-[56rem]:hidden">
 				<LangSwitcher />
 				<ThemeToggle />
 				<button
@@ -97,7 +109,7 @@
 
 	{#if menuOpen}
 		<div class="overflow-hidden" transition:slide={{ duration: 400, easing: quartInOut }}>
-			<SiteMobileMenu {auth} {postsData} {pagesData} onclose={closeMenu} />
+			<SiteMobileMenu {auth} {ownerLinks} {postsData} {pagesData} onclose={closeMenu} />
 		</div>
 	{/if}
 </HeaderShell>

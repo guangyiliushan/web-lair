@@ -10,18 +10,22 @@
 		type NavMenuData,
 		type PagesMegaData
 	} from '$lib/config/navigation.config';
-	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
+	import type { SiteOwner } from '$lib/config/owner-status';
+	import type { OwnerPresence } from '$lib/config/owner-presence';
+	import type { SocialLinkLike } from '$lib/config/social';
 
 	let {
 		owner,
-		ownerStatus,
+		ownerLinks,
+		presence,
 		postsData,
 		notesData,
 		timelineData,
 		pagesData
 	}: {
 		owner: SiteOwner;
-		ownerStatus: OwnerStatus;
+		ownerLinks?: readonly SocialLinkLike[] | null;
+		presence: OwnerPresence;
 		postsData?: NavMenuData | null;
 		notesData?: NavMenuData | null;
 		timelineData?: NavMenuData | null;
@@ -35,14 +39,15 @@
 	}
 </script>
 
-<nav class="hidden items-center gap-1 lg:flex" aria-label="Main navigation">
+<nav class="hidden shrink-0 items-center gap-1 @min-[56rem]:flex" aria-label="Main navigation">
 	{#each navigationConfig as item (item.key)}
 		{#if item.megaMenu}
 			<NavMenu
 				menu={item.megaMenu}
 				triggerAsButton={item.href === '#'}
 				{owner}
-				{ownerStatus}
+				{ownerLinks}
+				{presence}
 				serverData={item.key === 'nav_posts'
 					? (postsData ?? null)
 					: item.key === 'nav_notes'

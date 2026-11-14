@@ -41,8 +41,8 @@ test('all eight pages answer 200 with their section heading', async ({ page }) =
 	}
 });
 
-test('read-only pages render zero form controls', async ({ page }) => {
-	for (const id of ['profile', 'site', 'content', 'storage', 'integrations']) {
+test('planned/read-only pages render zero form controls', async ({ page }) => {
+	for (const id of ['site', 'content', 'storage', 'integrations']) {
 		const response = await page.goto(`/admin/settings/${id}`);
 		expect(response?.status(), id).toBe(200);
 		await expect(

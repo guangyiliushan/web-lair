@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
-	import { siteHref } from '$lib/utils/href';
 	import { tLabel } from '$lib/config/navigation.config';
 	import { Separator } from '$lib/components/ui/separator';
-	import type { Component } from 'svelte';
-	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
+	import type { SiteOwner } from '$lib/config/owner-status';
+	import type { OwnerPresence } from '$lib/config/owner-presence';
+	import type { SocialLinkLike } from '$lib/config/social';
+	import SocialRail from '$lib/components/layout/SocialRail.svelte';
 
 	/**
 	 * Left column of the home panel: identity, stat strip, social rail.
@@ -19,22 +20,22 @@
 	 */
 	let {
 		owner,
-		status,
+		presence,
 		stats,
-		social,
+		links,
 		class: className
 	}: {
 		owner: SiteOwner;
-		status: OwnerStatus;
+		presence: OwnerPresence;
 		/** Pre-resolved rows; rendered left to right. */
 		stats: { label: string; value: number | string }[];
-		social: { href: string; label: string; icon?: Component }[];
+		links: readonly SocialLinkLike[] | null | undefined;
 		class?: string;
 	} = $props();
 
-	// `idle` is the owner's "away" state (StatusTicket reads it the same way);
-	// a disabled ticket means the activity feed is off, so treat it as away.
-	const online = $derived(status.enabled && status.kind !== 'idle');
+	// D4/R-4: the only green dot is a real live heartbeat; `unknown` (static
+	// fallback or no pipeline) never claims the owner is online.
+	const online = $derived(presence.state === 'online');
 	const onlineLabel = $derived(tLabel('nav_home_owner_online'));
 </script>
 
@@ -72,17 +73,6 @@
 	<Separator class="my-0.5 mt-auto" />
 
 	<div class="flex items-center gap-0.5" data-slot="nav-menu-social">
-		{#each social as item (item.href)}
-			{@const IconComp = item.icon}
-			<a
-				href={siteHref(item.href)}
-				aria-label={item.label}
-				class="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-			>
-				{#if IconComp}
-					<IconComp class="size-3.5" />
-				{/if}
-			</a>
-		{/each}
+		<SocialRail {links} variant="nav" />
 	</div>
 </div>

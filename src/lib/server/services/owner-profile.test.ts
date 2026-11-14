@@ -90,7 +90,7 @@ describe('ownerProfileToSiteOwner', () => {
 				avatarUrl: null,
 				links: null
 			})
-		).toEqual({ name: 'Public Name', avatar: '' });
+		).toEqual({ name: 'Public Name', avatar: '', headerLabel: 'shan' });
 	});
 });
 
@@ -120,6 +120,18 @@ describe('owner profile validation', () => {
 		expect(() => normalizeDisplayName('x'.repeat(81))).toThrowError(OwnerProfileError);
 		expect(() => normalizeHeaderLabel('abcdefg')).toThrowError(/1-6/);
 		expect(() => normalizeHeaderLabel('two words')).toThrowError(/single word/);
+	});
+
+	it.each(['guang', 'shan', 'mikoto', 'luna', 'bob', '山田花子', '👨‍👩‍👧‍👦'.repeat(6), '😀😀😀😀😀😀'])(
+		'accepts the 1-6 grapheme header label %s',
+		(label) => {
+			expect(normalizeHeaderLabel(label)).toBe(label);
+		}
+	);
+
+	it('rejects seven-grapheme CJK and emoji labels', () => {
+		expect(() => normalizeHeaderLabel('山田花子文字列')).toThrowError(/1-6/);
+		expect(() => normalizeHeaderLabel('👨‍👩‍👧‍👦'.repeat(7))).toThrowError(/1-6/);
 	});
 
 	it('allows only https or /i/ avatars', () => {
