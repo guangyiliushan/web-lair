@@ -130,6 +130,22 @@
 			passkeyPending = false;
 		}
 	}
+
+	let copiedCallback = $state<'github' | 'google' | null>(null);
+	let copyFailed = $state(false);
+	async function copyCallback(provider: 'github' | 'google', value: string) {
+		copyFailed = false;
+		try {
+			if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+			await navigator.clipboard.writeText(value);
+			copiedCallback = provider;
+			setTimeout(() => {
+				if (copiedCallback === provider) copiedCallback = null;
+			}, 2000);
+		} catch {
+			copyFailed = true;
+		}
+	}
 	let lang = $state<string | null>(null);
 	const currentLang = $derived(lang ?? data.defaultLang ?? '');
 	const langDirty = $derived(lang !== null && lang !== (data.defaultLang ?? ''));
@@ -600,7 +616,10 @@
 			<IconBrandGithub class="size-5 text-muted-foreground" />
 			<h3 class="text-base font-semibold">{m.admin_settings_account_oauth()}</h3>
 		</div>
-		<p class="mb-3 text-sm text-muted-foreground">{m.admin_settings_account_oauth_desc()}</p>
+		<p class="mb-2 text-sm text-muted-foreground">{m.admin_settings_account_oauth_desc()}</p>
+		<p class="mb-3 text-xs text-muted-foreground">
+			{m.admin_settings_account_oauth_bypass()}
+		</p>
 
 		<ul class="divide-y overflow-hidden rounded-lg border">
 			<li class="space-y-1 px-4 py-3">
@@ -615,9 +634,22 @@
 					</Badge>
 				</div>
 				<p class="text-xs text-muted-foreground">
-					{m.admin_settings_account_callback_url()}:
-					<code class="break-all">{data.oauth.github.callback}</code>
+					{m.admin_settings_account_oauth_github_hint()}
 				</p>
+				<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+					<span>{m.admin_settings_account_callback_url()}:</span>
+					<code class="min-w-0 break-all">{data.oauth.github.callback}</code>
+					<Button
+						type="button"
+						variant="ghost"
+						size="xs"
+						onclick={() => copyCallback('github', data.oauth.github.callback)}
+					>
+						{copiedCallback === 'github'
+							? m.admin_settings_account_copied()
+							: m.admin_settings_account_copy_callback()}
+					</Button>
+				</div>
 			</li>
 			<li class="space-y-1 px-4 py-3">
 				<div class="flex flex-wrap items-center gap-2">
@@ -627,10 +659,28 @@
 					<Badge variant="secondary">{m.admin_settings_account_oauth_planned()}</Badge>
 				</div>
 				<p class="text-xs text-muted-foreground">
-					{m.admin_settings_account_callback_url()}:
-					<code class="break-all">{data.oauth.google.callback}</code>
+					{m.admin_settings_account_oauth_google_hint()}
 				</p>
+				<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+					<span>{m.admin_settings_account_callback_url()}:</span>
+					<code class="min-w-0 break-all">{data.oauth.google.callback}</code>
+					<Button
+						type="button"
+						variant="ghost"
+						size="xs"
+						onclick={() => copyCallback('google', data.oauth.google.callback)}
+					>
+						{copiedCallback === 'google'
+							? m.admin_settings_account_copied()
+							: m.admin_settings_account_copy_callback()}
+					</Button>
+				</div>
 			</li>
 		</ul>
+		{#if copyFailed}
+			<p class="mt-2 text-xs text-destructive" role="alert">
+				{m.admin_settings_account_copy_failed()}
+			</p>
+		{/if}
 	</section>
 </div>
