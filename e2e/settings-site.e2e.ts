@@ -61,14 +61,19 @@ test('Site identity/favicon save and read back; owner controls render', async ({
 			/\/i\/e2e-favicon\.svg\?v=\d+/
 		);
 	} finally {
+		// Reload first: the successful save resets the local dirty state via an
+		// effect, so clearing the field immediately afterwards can race that
+		// reset (the Save button stays disabled and the edit is lost).
+		await page.reload();
 		const iconInput = page.locator('#site-icon');
 		if (await iconInput.count()) {
 			await iconInput.fill('');
-			await page
+			const restoreSave = page
 				.locator('form')
 				.filter({ has: page.locator('#site-icon') })
-				.getByRole('button', { name: 'Save' })
-				.click();
+				.getByRole('button', { name: 'Save' });
+			await expect(restoreSave).toBeEnabled();
+			await restoreSave.click();
 			await expect(
 				page
 					.locator('form')
