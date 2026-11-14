@@ -12,6 +12,8 @@ test.describe.configure({ timeout: 120_000 });
 const FIXTURE_EMAIL = 'e2e-account@example.com';
 const FIXTURE_PASSWORD = 'e2e-account-password-1';
 const FIXTURE_NEW_PASSWORD = 'e2e-account-password-2';
+const PASSKEY_ONLY_EMAIL = 'e2e-passkey-only@example.com';
+const PASSKEY_ONLY_PASSWORD = 'e2e-passkey-only-password-1';
 
 async function sessionJson(context: BrowserContext): Promise<unknown> {
 	const response = await context.request.get('/api/auth/get-session');
@@ -169,6 +171,11 @@ test.describe('password change', () => {
 
 			expect(await sessionJson(other)).toBeNull();
 			expect(await sessionJson(page.context())).not.toBeNull();
+			expect(
+				psql(
+					`select count(*) from "session" s join "user" u on u.id = s.user_id where u.email = '${FIXTURE_EMAIL}'`
+				)
+			).toBe('1');
 
 			// The new password works and the old one no longer does.
 			const oldSignIn = await apiPost(page, '/api/auth/sign-in/email', {
@@ -225,6 +232,16 @@ test.describe('passkey management', () => {
 				)
 			).toBe('1');
 
+			const passkeyId = psql(
+				`select id from passkey where name = '${name.replaceAll("'", "''")}' limit 1`
+			);
+			expect(passkeyId).not.toBe('');
+			expect(
+				psql(
+					`select count(*) from activities where event = 'account.passkey_add' and payload->>'passkey_id' = '${passkeyId}'`
+				)
+			).toBe('1');
+
 			await row.getByText('Rename', { exact: true }).click();
 			await row.locator('input[name="name"]').fill(renamed);
 			await row.getByRole('button', { name: 'Save name' }).click();
@@ -236,6 +253,82 @@ test.describe('passkey management', () => {
 			await expect(page.getByText(renamed, { exact: true })).toHaveCount(0, {
 				timeout: 20_000
 			});
+		} finally {
+			await cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId }).catch(() => {});
+		}
+	});
+});
+
+test.describe('passkey last-key guard', () => {
+	test.beforeAll(() => {
+		psql(`delete from "user" where email = '${PASSKEY_ONLY_EMAIL}'`);
+	});
+	test.afterAll(() => {
+		psql(`delete from "user" where email = '${PASSKEY_ONLY_EMAIL}'`);
+	});
+
+	test('blocks deleting the last passkey when the account has no password', async ({
+		page,
+		context
+	}) => {
+		test.setTimeout(180_000);
+		const name = 'E2E only passkey';
+
+		const signUp = await apiPost(page, '/api/auth/sign-up/email', {
+			email: PASSKEY_ONLY_EMAIL,
+			name: 'E2E Passkey Only',
+			password: PASSKEY_ONLY_PASSWORD
+		});
+		expect([200, 422]).toContain(signUp.status());
+		psql(
+			`update "user" set email_verified = true, role = 'admin' where email = '${PASSKEY_ONLY_EMAIL}'`
+		);
+		const signIn = await apiPost(page, '/api/auth/sign-in/email', {
+			email: PASSKEY_ONLY_EMAIL,
+			password: PASSKEY_ONLY_PASSWORD
+		});
+		expect(signIn.ok()).toBeTruthy();
+
+		const cdp = await context.newCDPSession(page);
+		await cdp.send('WebAuthn.enable');
+		const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+			options: {
+				protocol: 'ctap2',
+				transport: 'internal',
+				hasResidentKey: true,
+				hasUserVerification: true,
+				isUserVerified: true,
+				automaticPresenceSimulation: true
+			}
+		});
+
+		try {
+			await gotoAccount(page);
+			await page.locator('#account-passkey-name').fill(name);
+			await page.getByRole('button', { name: 'Add passkey' }).click();
+			const row = page.locator('li').filter({ hasText: name }).first();
+			await expect(row).toBeVisible({ timeout: 30_000 });
+
+			// Simulate an OAuth-only account by removing the password credential
+			// row; the session itself stays valid.
+			psql(
+				`delete from "account" where user_id = (select id from "user" where email = '${PASSKEY_ONLY_EMAIL}') and provider_id = 'credential'`
+			);
+			await page.reload();
+			await expect(
+				page.getByText('This account has no password credential.', { exact: false })
+			).toBeVisible();
+
+			page.once('dialog', (dialog) => dialog.accept());
+			await row.getByRole('button', { name: 'Delete', exact: true }).click();
+			await expect(page.getByRole('alert')).toContainText(/cannot delete the last passkey/i, {
+				timeout: 20_000
+			});
+			expect(
+				psql(
+					`select count(*) from passkey where name = '${name}' and user_id = (select id from "user" where email = '${PASSKEY_ONLY_EMAIL}')`
+				)
+			).toBe('1');
 		} finally {
 			await cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId }).catch(() => {});
 		}

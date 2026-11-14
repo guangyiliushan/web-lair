@@ -447,7 +447,9 @@ describe('account security page', () => {
 		await callAction('disable', { password: 'current-password' });
 		await callAction('regenerateBackupCodes', { password: 'current-password' });
 
-		const events = auditMock.mock.calls.map((call) => (call[1] as { event: string }).event);
+		const events = (auditMock.mock.calls as unknown[][]).map(
+			(call) => (call[1] as { event: string }).event
+		);
 		expect(events.length).toBeGreaterThan(8);
 		for (const event of events) {
 			expect(event).toMatch(/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/);
