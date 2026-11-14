@@ -1,4 +1,5 @@
 import type { SigV4Credentials } from './signature';
+import type { StorageProviderConfig } from './provider';
 
 /**
  * S3-dialect connection settings (W7.1). One shape for both drivers: the
@@ -71,5 +72,59 @@ export function storageConfigFromEnv(source: Record<string, string | undefined>)
 		region: DEFAULT_RUSTFS_REGION,
 		forcePathStyle: true,
 		credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! }
+	};
+}
+
+/** Env names the external driver reads; the page shows them, never the values. */
+export const S3_CREDENTIAL_ENV = {
+	accessKeyId: 'STORAGE_S3_ACCESS_KEY',
+	secretAccessKey: 'STORAGE_S3_SECRET_KEY'
+} as const;
+
+/**
+ * External S3 credentials from the environment (W7.3 bootstrap path). Missing
+ * or partial pairs resolve null - the caller decides whether that is a
+ * "not configured" state (the page) or a hard failure (the runtime). Values
+ * are never logged, echoed into errors, or copied into an option row.
+ */
+export function providerCredentialsFromEnv(
+	source: Record<string, string | undefined>
+): SigV4Credentials | null {
+	const accessKeyId = source[S3_CREDENTIAL_ENV.accessKeyId]?.trim();
+	const secretAccessKey = source[S3_CREDENTIAL_ENV.secretAccessKey]?.trim();
+	if (!accessKeyId || !secretAccessKey) return null;
+	return { accessKeyId, secretAccessKey };
+}
+
+/**
+ * Builds the adapter config for a provider shape (W7.2). The local driver
+ * keeps reading RUSTFS_*; the external driver takes its addressing from the
+ * stored provider and its credentials from whatever the caller resolved
+ * (env today, the encrypted store after W7.6).
+ */
+export function storageConfigForProvider(
+	provider: StorageProviderConfig,
+	options: {
+		source: Record<string, string | undefined>;
+		credentials?: SigV4Credentials | null;
+	}
+): S3StorageConfig {
+	if (provider.driver === 'local') return storageConfigFromEnv(options.source);
+
+	const credentials = options.credentials ?? providerCredentialsFromEnv(options.source);
+	if (!credentials) {
+		throw new Error(
+			`External storage credentials are not configured (set ${S3_CREDENTIAL_ENV.accessKeyId} and ${S3_CREDENTIAL_ENV.secretAccessKey})`
+		);
+	}
+	if (!provider.endpoint || !provider.bucket) {
+		throw new Error('External storage provider is incomplete (endpoint and bucket are required)');
+	}
+	return {
+		endpoint: assertStorageEndpoint(provider.endpoint, 'storage.provider.endpoint'),
+		bucket: provider.bucket,
+		region: provider.region,
+		forcePathStyle: provider.forcePathStyle,
+		credentials
 	};
 }

@@ -143,12 +143,13 @@ function tooManyRequests(): Response {
 export const GET: RequestHandler = async ({ params, locals, getClientAddress }) => {
 	if (await throttled(getClientAddress)) return tooManyRequests();
 	const access = await resolveAccess(params, locals);
+	const storage = await getStorage();
 
-	let object = await getStorage().get(access.key);
+	let object = await storage.get(access.key);
 	let cacheControl: string | undefined;
 	if (!object && access.fallbackKeys) {
 		for (const fallbackKey of access.fallbackKeys) {
-			object = await getStorage().get(fallbackKey);
+			object = await storage.get(fallbackKey);
 			if (object) {
 				// Short cache: the real @grid object will replace this tier.
 				cacheControl = 'public, max-age=3600';
@@ -167,12 +168,13 @@ export const GET: RequestHandler = async ({ params, locals, getClientAddress }) 
 export const HEAD: RequestHandler = async ({ params, locals, getClientAddress }) => {
 	if (await throttled(getClientAddress)) return tooManyRequests();
 	const access = await resolveAccess(params, locals);
+	const storage = await getStorage();
 
-	let object = await getStorage().head(access.key);
+	let object = await storage.head(access.key);
 	let cacheControl: string | undefined;
 	if (!object && access.fallbackKeys) {
 		for (const fallbackKey of access.fallbackKeys) {
-			object = await getStorage().head(fallbackKey);
+			object = await storage.head(fallbackKey);
 			if (object) {
 				cacheControl = 'public, max-age=3600';
 				break;

@@ -51,6 +51,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 	const name = params.file ?? '';
 	if (!NAME_RE.test(name)) error(404, 'Not found');
 	const key = `maps/${name}`;
+	const storage = await getStorage();
 
 	/**
 	 * Local 416 with `Content-Range: bytes * /<size>` when the size is
@@ -58,9 +59,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 	 * not be memoised as if it were a body.
 	 */
 	const notSatisfiable = async (): Promise<Response> => {
-		const head = await getStorage()
-			.head(key)
-			.catch(() => null);
+		const head = await storage.head(key).catch(() => null);
 		const headers = new Headers({ 'accept-ranges': 'bytes', 'cache-control': 'no-store' });
 		if (head && head.byteSize !== null) {
 			headers.set('content-range', `bytes */${head.byteSize}`);
@@ -73,7 +72,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 
 	let object;
 	try {
-		object = await getStorage().get(key, parsed ? { range: parsed } : undefined);
+		object = await storage.get(key, parsed ? { range: parsed } : undefined);
 	} catch (caught) {
 		if (caught instanceof StorageError && caught.status === 416) return notSatisfiable();
 		throw caught;

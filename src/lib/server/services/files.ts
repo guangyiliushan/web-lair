@@ -43,7 +43,7 @@ export interface FilesDeps {
 async function resolveDeps(
 	deps: FilesDeps
 ): Promise<{ storage: ObjectStoragePort; database: FilesDb }> {
-	const storage = deps.storage ?? (await import('$lib/server/storage')).getStorage();
+	const storage = deps.storage ?? (await (await import('$lib/server/storage')).getStorage());
 	const database = deps.db ?? (await import('$lib/server/db')).db;
 	return { storage, database };
 }
