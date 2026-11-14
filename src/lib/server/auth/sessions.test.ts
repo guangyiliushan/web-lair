@@ -25,9 +25,11 @@ vi.mock('$lib/server/db', () => ({
 }));
 
 import {
+	enforceSessionLimit,
 	pruneOtherSessions,
 	pruneOtherSessionsKeepingNewest,
-	revokeSessionByToken
+	revokeSessionByToken,
+	SESSION_LIMIT
 } from './sessions';
 
 const dialect = new PgDialect();
@@ -74,5 +76,25 @@ describe('session pruning helpers', () => {
 		expect(sql.toLowerCase()).toContain('limit');
 		expect(sql).toContain('<>');
 		expect(params).toEqual(['user-2', 'user-2']);
+	});
+
+	it('enforceSessionLimit deletes the oldest rows beyond the cap, keeping the new one', async () => {
+		expect(SESSION_LIMIT).toBe(10);
+		await enforceSessionLimit('user-3', 'new-session');
+
+		expect(deleteSpy).toHaveBeenCalledTimes(0);
+		const { sql, params } = lastQuery();
+		const normalized = sql.toLowerCase();
+		expect(normalized).toContain('delete from');
+		expect(normalized).toContain('order by');
+		expect(normalized).toContain('created_at');
+		expect(normalized).toMatch(/created_at"?\s+desc/);
+		expect(normalized).toContain('offset');
+		expect(normalized).toContain('<>');
+		// user id and keep id appear in both the outer delete and the subquery;
+		// the offset is limit - 1 (9 for the default cap of 10).
+		expect(params.filter((value) => value === 'user-3')).toHaveLength(2);
+		expect(params.filter((value) => value === 'new-session')).toHaveLength(2);
+		expect(params).toContain(SESSION_LIMIT - 1);
 	});
 });

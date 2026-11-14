@@ -34,6 +34,7 @@ vi.mock('@better-auth/drizzle-adapter', () => ({
 
 import { auth } from '../auth';
 import { validateUserProvisioning } from './admin-login-policy';
+import { hashAccountPassword, verifyAccountPassword } from './password';
 
 interface AuthOptions {
 	user?: { validateUserInfo?: unknown; additionalFields?: Record<string, unknown> };
@@ -43,7 +44,9 @@ interface AuthOptions {
 	emailAndPassword?: {
 		revokeSessionsOnPasswordReset?: unknown;
 		onPasswordReset?: unknown;
+		password?: { hash?: unknown; verify?: unknown };
 	};
+	session?: { expiresIn?: unknown; updateAge?: unknown };
 }
 
 describe('auth config security wiring', () => {
@@ -67,5 +70,15 @@ describe('auth config security wiring', () => {
 		// The adapter stays the official drizzle adapter (mocked by id): no
 		// wrapper that would change better-auth's own storage semantics (H3).
 		expect(options.database).toEqual({ id: 'test-adapter' });
+	});
+
+	it('wires the W8.8 password hash/verify hooks and the 30-day/24-hour session policy', () => {
+		const options = auth.options as AuthOptions;
+		expect(options.emailAndPassword?.password?.hash).toBe(hashAccountPassword);
+		expect(options.emailAndPassword?.password?.verify).toBe(verifyAccountPassword);
+		expect(options.session).toEqual({
+			expiresIn: 30 * 24 * 60 * 60,
+			updateAge: 24 * 60 * 60
+		});
 	});
 });

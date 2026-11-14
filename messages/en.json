@@ -79,12 +79,17 @@
 	"admin_ai_memory_placeholder": "e.g. The site defaults to en, translations follow zh-cn; keep technical terms in English when writing.",
 	"admin_ai_message_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} message",
 				"countPlural=other": "{count} messages"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_ai_no_conversations": "No conversations yet",
@@ -102,12 +107,17 @@
 	"admin_ai_rail_collapse": "Collapse conversation list",
 	"admin_ai_rail_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} conversation",
 				"countPlural=other": "{count} conversations"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_ai_rail_expand": "Expand conversation list",
@@ -198,12 +208,17 @@
 	"admin_categories_err_has_posts": "This category still has posts and cannot be deleted",
 	"admin_categories_err_has_posts_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "This category still has {count} post and cannot be deleted",
 				"countPlural=other": "This category still has {count} posts and cannot be deleted"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_categories_err_missing_id": "Missing category ID",
@@ -212,12 +227,17 @@
 	"admin_categories_err_no_selection": "Select at least one post",
 	"admin_categories_err_placeholders": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "This category has {count} unpublished placeholder draft — discard them in Drafts first",
 				"countPlural=other": "This category has {count} unpublished placeholder drafts — discard them in Drafts first"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_categories_err_slug_required": "Slug is required",
@@ -233,12 +253,17 @@
 	"admin_categories_no_posts": "No posts",
 	"admin_categories_post_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} post",
 				"countPlural=other": "{count} posts"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_categories_posts_heading": "Posts in this category",
@@ -279,12 +304,17 @@
 	"admin_common_confirm": "Confirm",
 	"admin_common_count_entries": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} entry",
 				"countPlural=other": "{count} entries"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_common_create": "Create",
@@ -389,12 +419,17 @@
 	"admin_files_audit_truncated": "Note: the scan hit the row cap — results may be incomplete.",
 	"admin_files_cap_notice": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "Showing the first {count} item only (cap reached; narrow with filters).",
 				"countPlural=other": "Showing the first {count} items only (cap reached; narrow with filters)."
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_files_col_dimensions": "Dimensions",
@@ -433,22 +468,32 @@
 	"admin_files_purge_row": "{key} ({name}, {status}, {days} days)",
 	"admin_files_purge_summary": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "Purge preview: {count} candidate (read-only, nothing deleted)",
 				"countPlural=other": "Purge preview: {count} candidates (read-only, nothing deleted)"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_files_ref_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} content ref",
 				"countPlural=other": "{count} content refs"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_files_status_attached": "Attached",
@@ -601,12 +646,17 @@
 	"admin_maintenance_audit": "Audit (job / schedule events)",
 	"admin_maintenance_audit_cap": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "Showing the latest {count} audit record only — audit filters ship later; query the database for older records.",
 				"countPlural=other": "Showing the latest {count} audit records only — audit filters ship later; query the database for older records."
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_maintenance_builtin_diff": "Built-in diff (read-only)",
@@ -680,12 +730,17 @@
 	"admin_maintenance_runner_label": "runner: ",
 	"admin_maintenance_runs_cap": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "Showing the latest {count} run only — narrow with filters for older records.",
 				"countPlural=other": "Showing the latest {count} runs only — narrow with filters for older records."
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_maintenance_save_rejected": "Save rejected:",
@@ -715,12 +770,17 @@
 	"admin_maintenance_tc_files": " files / ",
 	"admin_maintenance_tc_issues": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "…{count} issue in total (the ledger result carries the full bounded list)",
 				"countPlural=other": "…{count} issues in total (the ledger result carries the full bounded list)"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_maintenance_tc_none": "No type-check records yet (click “Run type check” to queue one).",
@@ -741,12 +801,17 @@
 	"admin_media_err_too_big": "{name} exceeds the per-file limit",
 	"admin_media_err_too_many": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "At most {count} file per upload",
 				"countPlural=other": "At most {count} files per upload"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_media_err_unsupported": "Unsupported file type",
@@ -887,22 +952,32 @@
 	"admin_notes_topics_attach": "Add notes",
 	"admin_notes_topics_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} topic",
 				"countPlural=other": "{count} topics"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_notes_topics_count_from": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} note from this topic",
 				"countPlural=other": "{count} notes from this topic"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_notes_topics_create": "New topic",
@@ -922,12 +997,17 @@
 	"admin_notes_topics_err_icon_whitelist": "Icon not in the whitelist (won't render on the site)",
 	"admin_notes_topics_err_in_use": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "This topic still has {count} note; cannot delete (move them to another topic first)",
 				"countPlural=other": "This topic still has {count} notes; cannot delete (move them to another topic first)"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_notes_topics_err_missing_id": "Missing topic ID",
@@ -948,12 +1028,17 @@
 	"admin_notes_topics_not_set": "(Not set)",
 	"admin_notes_topics_note_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} note",
 				"countPlural=other": "{count} notes"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_notes_topics_select": "Select a topic",
@@ -964,12 +1049,17 @@
 	"admin_notes_topics_workspace_title": "Notes",
 	"admin_notes_total": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} note",
 				"countPlural=other": "{count} notes"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_option_err_account_dup": "Duplicate account for the same platform",
@@ -1040,12 +1130,17 @@
 	"admin_pages_hide_title": "Hide the default page?",
 	"admin_pages_hint": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} page total · the default page is pinned first, the rest follow their sort values.",
 				"countPlural=other": "{count} pages total · the default page is pinned first, the rest follow their sort values."
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_pages_internal": "Internal",
@@ -1068,12 +1163,17 @@
 	"admin_photos_bulk_tag": "Add tag",
 	"admin_photos_cap_notice": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "Showing the first {count} photo only (cap reached; narrow with filters).",
 				"countPlural=other": "Showing the first {count} photos only (cap reached; narrow with filters)."
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_photos_desc_locale": "Description · {locale}",
@@ -1102,23 +1202,33 @@
 	"admin_photos_public_visible": "Publicly visible",
 	"admin_photos_ref_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} ref",
 				"countPlural=other": "{count} refs"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_photos_ref_count_title": "Content reference count",
 	"admin_photos_ref_places": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "Referenced by {count} item",
 				"countPlural=other": "Referenced by {count} items"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_photos_remove": "Remove from gallery",
@@ -1487,12 +1597,18 @@
 	"admin_readiness_unassigned": "Not assigned",
 	"admin_settings_2fa_activate": "Activate",
 	"admin_settings_2fa_backup_codes": "Backup codes (shown once)",
+	"admin_settings_2fa_code": "Verification code",
 	"admin_settings_2fa_desc": "Protects this account with a code from your authenticator app.",
 	"admin_settings_2fa_disable": "Disable",
+	"admin_settings_2fa_disable_password": "Password to disable two-step verification",
 	"admin_settings_2fa_enable": "Enable",
+	"admin_settings_2fa_enable_password": "Password to enable two-step verification",
 	"admin_settings_2fa_password": "Confirm with your password",
+	"admin_settings_2fa_password_required": "Password sign-in is required to enable TOTP. This account has no password credential.",
 	"admin_settings_2fa_regenerate": "Regenerate backup codes",
+	"admin_settings_2fa_regenerate_password": "Password to regenerate backup codes",
 	"admin_settings_2fa_scan_hint": "Add this key to your authenticator app, then enter a code to finish.",
+	"admin_settings_2fa_scope": "TOTP applies only to password sign-in. GitHub OAuth, passkeys and Tailnet are alternative sign-in methods and are not challenged by TOTP.",
 	"admin_settings_2fa_secret": "Setup key",
 	"admin_settings_2fa_status_off": "Not enabled",
 	"admin_settings_2fa_status_on": "Enabled",
@@ -1506,32 +1622,95 @@
 	"admin_settings_account_client_secret": "Client Secret",
 	"admin_settings_account_copied": "Copied",
 	"admin_settings_account_copy_callback": "Copy callback URL",
+	"admin_settings_account_copy_failed": "Could not copy the callback URL.",
 	"admin_settings_account_desc": "Two-step verification, devices, password, passkey and OAuth",
 	"admin_settings_account_devices": "Signed-in devices",
+	"admin_settings_account_devices_desc": "Sessions signed in to this account. Revoke one you no longer recognise.",
+	"admin_settings_account_devices_empty": "Only this session is active.",
+	"admin_settings_account_devices_lifetime": "Sessions expire after 30 days; activity can refresh that window once every 24 hours.",
 	"admin_settings_account_err_2fa_activate_failed": "Could not activate two-step verification.",
 	"admin_settings_account_err_2fa_disable_failed": "Could not disable two-step verification.",
 	"admin_settings_account_err_2fa_start_failed": "Could not start two-step verification.",
 	"admin_settings_account_err_backup_codes_failed": "Could not regenerate backup codes.",
 	"admin_settings_account_err_code_required": "Enter the 6-digit code.",
+	"admin_settings_account_err_passkey_action": "Could not update that passkey.",
+	"admin_settings_account_err_passkey_last": "You cannot delete the last passkey while the account has no password.",
+	"admin_settings_account_err_passkey_name": "Enter a passkey name of 1–80 characters.",
+	"admin_settings_account_err_passkey_not_found": "That passkey no longer exists.",
+	"admin_settings_account_err_password_current_required": "Enter your current password.",
+	"admin_settings_account_err_password_failed": "Could not change the password.",
+	"admin_settings_account_err_password_incorrect": "The current password is incorrect.",
+	"admin_settings_account_err_password_mismatch": "The new passwords do not match.",
+	"admin_settings_account_err_password_new_long": "The new password must be at most 128 characters.",
+	"admin_settings_account_err_password_new_short": "The new password must be at least 8 characters.",
+	"admin_settings_account_err_password_unavailable": "This account has no password credential.",
 	"admin_settings_account_err_pw_required": "Password is required.",
+	"admin_settings_account_err_session_action": "Could not update that session.",
+	"admin_settings_account_err_session_current": "This is the current session. Use Sign out instead.",
+	"admin_settings_account_err_session_not_found": "That session no longer exists.",
 	"admin_settings_account_err_totp_unavailable": "TOTP is not available on this server.",
 	"admin_settings_account_kick": "Kick",
 	"admin_settings_account_kick_others": "Sign out other devices",
 	"admin_settings_account_msg_2fa_disabled": "Two-step verification is disabled.",
 	"admin_settings_account_msg_2fa_enabled": "Two-step verification is enabled.",
 	"admin_settings_account_msg_backup_codes": "New backup codes generated.",
+	"admin_settings_account_msg_passkey_added": "Passkey added.",
+	"admin_settings_account_msg_passkey_deleted": "Passkey deleted.",
+	"admin_settings_account_msg_passkey_renamed": "Passkey renamed.",
+	"admin_settings_account_msg_password_changed": "Password changed. Other devices were signed out.",
+	"admin_settings_account_msg_session_revoked": "Session revoked.",
+	"admin_settings_account_msg_sessions_revoked": "Other sessions were signed out.",
 	"admin_settings_account_oauth": "OAuth sign-in",
+	"admin_settings_account_oauth_bypass": "OAuth sign-in is an alternative method and is not challenged by TOTP.",
+	"admin_settings_account_oauth_configured": "Configured",
+	"admin_settings_account_oauth_desc": "OAuth providers are configured by the deployment environment and cannot be changed here.",
+	"admin_settings_account_oauth_github": "GitHub",
+	"admin_settings_account_oauth_github_hint": "Configured by GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in the deployment environment.",
+	"admin_settings_account_oauth_google": "Google (planned)",
+	"admin_settings_account_oauth_google_hint": "Planned. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and the Google provider to the auth config before enabling it.",
+	"admin_settings_account_oauth_not_configured": "Not configured",
+	"admin_settings_account_oauth_planned": "Planned",
 	"admin_settings_account_passkey": "Passkey",
-	"admin_settings_account_passkey_hint": "Sign in without a password using biometrics or a device PIN. Passkeys are safer and faster than passwords.",
+	"admin_settings_account_passkey_2fa_bypass": "TOTP only applies to password sign-in. A passkey signs in on its own and does not ask for a TOTP code.",
+	"admin_settings_account_passkey_add": "Add passkey",
+	"admin_settings_account_passkey_add_failed": "Could not add the passkey.",
+	"admin_settings_account_passkey_backed_up": "Synced",
+	"admin_settings_account_passkey_delete": "Delete",
+	"admin_settings_account_passkey_delete_confirm": "Delete this passkey?",
+	"admin_settings_account_passkey_empty": "No passkeys yet.",
+	"admin_settings_account_passkey_hint": "Sign in without a password using biometrics or a device PIN. Passkeys are an alternative sign-in method and are not challenged by TOTP.",
 	"admin_settings_account_passkey_manage": "Manage passkey",
+	"admin_settings_account_passkey_name": "Passkey name",
+	"admin_settings_account_passkey_name_ph": "e.g. Laptop",
+	"admin_settings_account_passkey_not_backed_up": "This device only",
+	"admin_settings_account_passkey_rename": "Rename",
+	"admin_settings_account_passkey_save_name": "Save name",
+	"admin_settings_account_passkey_session_stale": "Sign in again before adding a passkey.",
+	"admin_settings_account_passkey_unsupported": "This browser cannot create passkeys.",
 	"admin_settings_account_password": "Change password",
+	"admin_settings_account_password_confirm": "Confirm new password",
+	"admin_settings_account_password_current": "Current password",
+	"admin_settings_account_password_desc": "Use one strong password and change it only when you suspect it was exposed. Changing it signs out every other device. Note passwords are separate and are not affected.",
 	"admin_settings_account_password_hint": "Rotating your password regularly keeps the account safer. Prefer a strong password with upper- and lowercase letters, digits and symbols.",
+	"admin_settings_account_password_new": "New password",
+	"admin_settings_account_password_submit": "Change password",
+	"admin_settings_account_password_unavailable": "This account has no password credential. It signs in with OAuth or a passkey; setting a password is not available yet.",
 	"admin_settings_account_ph_github_client_id": "GitHub OAuth App Client ID",
 	"admin_settings_account_ph_github_client_secret": "GitHub OAuth App Client Secret",
 	"admin_settings_account_ph_google_client_id": "Google OAuth Client ID",
 	"admin_settings_account_ph_google_client_secret": "Google OAuth Client Secret",
+	"admin_settings_account_revoke": "Revoke",
+	"admin_settings_account_revoke_confirm": "Sign out this device?",
+	"admin_settings_account_revoke_others_confirm": "Sign out every other device?",
 	"admin_settings_account_save_config": "Save config",
+	"admin_settings_account_session_created": "Signed in",
+	"admin_settings_account_session_current_hint": "This is the session you are using now.",
+	"admin_settings_account_session_expires": "Expires",
+	"admin_settings_account_session_ip": "IP address",
+	"admin_settings_account_session_unknown": "Unknown",
+	"admin_settings_account_session_updated": "Last active",
 	"admin_settings_account_signout": "Sign out",
+	"admin_settings_account_signout_confirm": "Sign out of this device?",
 	"admin_settings_account_this_device": "This device",
 	"admin_settings_account_tokens_hint": "Manage API tokens for third-party apps or scripts that call the platform APIs. Keep your tokens safe.",
 	"admin_settings_account_tokens_manage": "Manage tokens",
@@ -1612,12 +1791,17 @@
 	"admin_settings_ai_flash_deleted_pool": "Deleted {name} and removed {models} models from the default pool",
 	"admin_settings_ai_flash_deleted_removed": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "Deleted {name} (removed {count} assignment)",
 				"countPlural=other": "Deleted {name} (removed {count} assignments)"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_settings_ai_flash_moderation": "Moderation settings saved",
@@ -1629,12 +1813,17 @@
 	"admin_settings_ai_flash_updated": "Provider updated",
 	"admin_settings_ai_flash_updated_synced": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "Provider updated (synced {count} assignment)",
 				"countPlural=other": "Provider updated (synced {count} assignments)"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_settings_ai_frozen_desc": "Translation gate 85, site default “review first”, auto-summary conditions (body ≥100 chars and no summary) stay at defaults; per-post translation mode and switches ship with the writing chain (P2/P3).",
@@ -1674,12 +1863,17 @@
 	"admin_settings_ai_mode_review": "Review (manual request)",
 	"admin_settings_ai_model_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} model",
 				"countPlural=other": "{count} models"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_settings_ai_model_pick": "Pick a model",
@@ -1859,12 +2053,17 @@
 	"admin_settings_content_title": "Content settings",
 	"admin_settings_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} item",
 				"countPlural=other": "{count} items"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"admin_settings_integrations": "Integrations",
@@ -2539,9 +2738,10 @@
 	"friends_unreachable": "Unreachable sites",
 	"hero_avatar_alt": "Avatar",
 	"hero_description": "An independent developer coding with love.",
+	"hero_scroll_down": "Scroll down to explore",
 	"hero_subtitle_highlight": "<Developer />",
 	"hero_subtitle_prefix": "A SvelteKit Full Stack",
-	"hero_title": "Hi, I'm {name} 👋",
+	"hero_title": "Hi, I'm guangyiliushan",
 	"hero_welcome": "When the first satellite flew beyond the atmosphere, we thought we would conquer the universe someday.",
 	"image_alt_label": "Alt text (optional)",
 	"image_alt_placeholder": "Describe this image",
@@ -2571,12 +2771,17 @@
 	"image_upload_failed": "Upload failed: {code}",
 	"image_upload_skipped": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} more file was not uploaded",
 				"countPlural=other": "{count} more files were not uploaded"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"image_uploading": "Uploading...",
@@ -2615,12 +2820,20 @@
 	"nav_account": "Account",
 	"nav_dashboard": "Dashboard",
 	"nav_home": "Home",
+	"nav_home_email": "Email",
+	"nav_home_email_desc": "Get in touch",
+	"nav_home_github": "GitHub",
+	"nav_home_github_desc": "Open source projects",
 	"nav_home_here": "Here",
 	"nav_home_owner_online": "Online",
 	"nav_home_quick_links": "Quick Links",
+	"nav_home_rss": "RSS Feed",
+	"nav_home_rss_desc": "Subscribe to updates",
 	"nav_home_stat_notes": "Notes",
 	"nav_home_stat_posts": "Posts",
 	"nav_home_stat_topics": "Topics",
+	"nav_home_twitter": "Twitter",
+	"nav_home_twitter_desc": "Follow for updates",
 	"nav_menu_empty": "Nothing here yet",
 	"nav_moments": "Moments",
 	"nav_more": "More",
@@ -2647,12 +2860,17 @@
 	"nav_posts_categories": "Categories",
 	"nav_posts_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} post",
 				"countPlural=other": "{count} posts"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"nav_posts_recent": "Recent",
@@ -2668,12 +2886,17 @@
 	"notes_back_to_all": "Back to notes",
 	"notes_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} note",
 				"countPlural=other": "{count} notes"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"notes_empty": "No notes yet.",
@@ -2815,12 +3038,17 @@
 	"presence_density_label": "Reading position distribution",
 	"presence_readers_now": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
 			"match": {
 				"countPlural=one": "{count} person is reading",
 				"countPlural=other": "{count} people are reading"
 			},
-			"selectors": ["countPlural"]
+			"selectors": [
+				"countPlural"
+			]
 		}
 	],
 	"projects_badge_archived": "Archived",
