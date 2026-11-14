@@ -6,9 +6,14 @@
 	import { getLocale, getTextDirection, shouldRedirect } from '$lib/paraglide/runtime';
 	import { afterNavigate } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { siteIconHref } from '$lib/utils/site-icon';
 	import type { LayoutProps } from './$types';
 
-	let { children }: LayoutProps = $props();
+	let { children, data }: LayoutProps = $props();
+
+	// `site.icon` (Settings → Site) wins when set; otherwise the bundled asset
+	// is the fallback. `?v=` busts the very sticky favicon cache (S3).
+	const iconHref = $derived(siteIconHref(data.siteIcon, favicon));
 
 	// Mirror the server-side URL canonicalisation on the client (the official
 	// SvelteKit recipe): the server middleware only redirects document
@@ -36,7 +41,9 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" href={iconHref} />
+	<link rel="manifest" href="/manifest.webmanifest" />
+	<meta property="og:site_name" content={data.siteName} />
 </svelte:head>
 
 <Tooltip.Provider>
