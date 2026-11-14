@@ -26,14 +26,15 @@ Free plan capabilities used here (Cloudflare docs, 2026):
 4. Add the single Free rate-limit rule on the most abused family — the
    credential and write endpoints:
 
-   | Field | Value |
-   |---|---|
-   | Path | `/login` and `/api/auth/*` (split into two rules only on Pro+) |
-   | Requests | 20 per 10 seconds per IP |
-   | Action | Block (or Managed Challenge) |
+   | Field    | Value                                                          |
+   | -------- | -------------------------------------------------------------- |
+   | Path     | `/login` and `/api/auth/*` (split into two rules only on Pro+) |
+   | Requests | 20 per 10 seconds per IP                                       |
+   | Action   | Block (or Managed Challenge)                                   |
 
    Application buckets below remain the authoritative limits; the edge rule
    only sheds floods before they reach Node.
+
 5. Custom rules (examples):
    - block requests to the origin with a Host header that is not the zone;
    - challenge `/admin/*` for non-verified bots;
@@ -77,18 +78,18 @@ All security endpoints use `rateLimitStrict` — a dead Valkey answers
 **503 + Retry-After**, never a free pass. Read paths keep the fail-open
 limiter so the site stays usable without the cache.
 
-| Endpoint | Bucket | Limit |
-|---|---|---|
-| Login | `limits:login:<ip>` | 10 / 15 min |
-| Register | `limits:signup:<ip>` | 5 / hour |
-| Verify email | `limits:verify:<ip>` | 5 / hour |
-| Password reset | `limits:password-reset:<ip>` | 5 / hour |
-| Comment create | per reader 2 / 60 s (fail-open, unchanged) **and** `limits:comment-ip:<ip>` 30 / 10 min (strict) |
-| Uploads (files/photos/editor) | `limits:upload:<uid>` 60 / 10 min + `limits:upload-ip:<ip>` 30 / 10 min (both strict) |
-| AI chat stream | `limits:ai-chat:<uid>` 30 / hour + `limits:ai-chat-ip:<ip>` 60 / hour (strict) |
-| AI transcribe | `limits:ai-transcribe:<uid>` 20 / hour + `limits:ai-transcribe-ip:<ip>` 40 / hour (strict) |
-| Presence SSE connect | `limits:presence-connect:<ip>` 30 / min (fail-open, 429 + X-Retry-After) |
-| Presence heartbeat | per token 30 / 60 s (fail-open, unchanged) |
+| Endpoint                      | Bucket                                                                                           | Limit       |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ | ----------- |
+| Login                         | `limits:login:<ip>`                                                                              | 10 / 15 min |
+| Register                      | `limits:signup:<ip>`                                                                             | 5 / hour    |
+| Verify email                  | `limits:verify:<ip>`                                                                             | 5 / hour    |
+| Password reset                | `limits:password-reset:<ip>`                                                                     | 5 / hour    |
+| Comment create                | per reader 2 / 60 s (fail-open, unchanged) **and** `limits:comment-ip:<ip>` 30 / 10 min (strict) |
+| Uploads (files/photos/editor) | `limits:upload:<uid>` 60 / 10 min + `limits:upload-ip:<ip>` 30 / 10 min (both strict)            |
+| AI chat stream                | `limits:ai-chat:<uid>` 30 / hour + `limits:ai-chat-ip:<ip>` 60 / hour (strict)                   |
+| AI transcribe                 | `limits:ai-transcribe:<uid>` 20 / hour + `limits:ai-transcribe-ip:<ip>` 40 / hour (strict)       |
+| Presence SSE connect          | `limits:presence-connect:<ip>` 30 / min (fail-open, 429 + X-Retry-After)                         |
+| Presence heartbeat            | per token 30 / 60 s (fail-open, unchanged)                                                       |
 
 IPv6 addresses are aggregated on their `/64` (`clientAddressKey`), so a client
 rotating inside its own subnet shares one budget. IPv4 keeps the exact

@@ -89,7 +89,7 @@ const validFields = {
 beforeEach(() => {
 	optionState['friends.apply'] = {
 		enabled: true,
-		allowSubPath: false,
+		allowSubPath: false
 	};
 	optionState['friends.policy'] = {
 		blockedHostSuffixes: [],
