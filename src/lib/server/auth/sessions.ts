@@ -46,3 +46,32 @@ export async function pruneOtherSessionsKeepingNewest(userId: string) {
 export async function revokeSessionByToken(token: string) {
 	await db.delete(authSession).where(eq(authSession.token, token));
 }
+
+/**
+ * W8.8 account hardening: cap the number of active sessions per account.
+ * Sign-in is cheap and admins accumulate devices; an unbounded table is both a
+ * privacy and a credential surface. The newest `limit` rows survive (the row
+ * that just triggered the check is always kept). Oldest rows are deleted
+ * first; ties on `created_at` break by id.
+ */
+export const SESSION_LIMIT = 10;
+
+export async function enforceSessionLimit(
+	userId: string,
+	keepSessionId: string,
+	limit: number = SESSION_LIMIT
+) {
+	if (limit < 1) return;
+	await db.execute(sql`
+		delete from ${authSession}
+		where ${authSession.userId} = ${userId}
+			and ${authSession.id} <> ${keepSessionId}
+			and ${authSession.id} in (
+				select ${authSession.id} from ${authSession}
+				where ${authSession.userId} = ${userId}
+					and ${authSession.id} <> ${keepSessionId}
+				order by ${authSession.createdAt} desc, ${authSession.id} desc
+				offset ${limit - 1}
+			)
+	`);
+}

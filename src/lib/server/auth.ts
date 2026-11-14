@@ -22,6 +22,8 @@ import {
 } from '$lib/server/auth/permissions';
 import { tailscaleSignIn } from '$lib/server/auth/tailscale-plugin';
 import { validateUserProvisioning } from '$lib/server/auth/admin-login-policy';
+import { hashAccountPassword, verifyAccountPassword } from '$lib/server/auth/password';
+import { enforceSessionLimit } from '$lib/server/auth/sessions';
 import { getSiteOrganizationId } from '$lib/server/auth/site-organization';
 import { env } from '$env/dynamic/private';
 import { getRequestEvent } from '$app/server';
@@ -122,6 +124,13 @@ export const auth = betterAuth({
 	emailAndPassword: {
 		enabled: true,
 		requireEmailVerification: true,
+		// W8.8 / S1-D: official hash/verify hooks only; the account table keeps
+		// storing one opaque hash string, so `pnpm auth:schema` stays the sole
+		// schema source. Verify accepts legacy scrypt rows for a safe rollout.
+		password: {
+			hash: hashAccountPassword,
+			verify: verifyAccountPassword
+		},
 		// W1.4: a completed reset invalidates every existing session of the
 		// account (better-auth's official option), so a stolen cookie cannot
 		// outlive the password it was minted under. The reset flow has no
@@ -231,6 +240,19 @@ export const auth = betterAuth({
 							error instanceof Error ? error.message : error
 						);
 						return;
+					}
+				},
+				// W8.8: cap concurrent sessions per account. A cleanup failure
+				// must never break sign-in; the oldest row simply survives until
+				// the next attempt (logged).
+				after: async (session) => {
+					try {
+						await enforceSessionLimit(session.userId, session.id);
+					} catch (error) {
+						console.warn(
+							'[auth] session limit cleanup failed:',
+							error instanceof Error ? error.message : error
+						);
 					}
 				}
 			}
