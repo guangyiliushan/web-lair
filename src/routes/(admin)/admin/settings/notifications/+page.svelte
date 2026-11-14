@@ -558,6 +558,18 @@
 					</div>
 				</div>
 			</section>
+
+			<!-- M6 human channels: static capability note, deliberately no controls
+			     (N1/N11) - the page must not claim Bark or admin email exists yet. -->
+			<section>
+				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_m6_title()}</h3>
+				<div class="space-y-2 rounded-lg border p-4 text-xs text-muted-foreground">
+					<p>{m.admin_settings_notification_m6_desc()}</p>
+					<p>{m.admin_settings_notification_m6_email()}</p>
+					<p>{m.admin_settings_notification_m6_bark()}</p>
+					<p>{m.admin_settings_notification_m6_note()}</p>
+				</div>
+			</section>
 		</div>
 	</div>
 </div>
