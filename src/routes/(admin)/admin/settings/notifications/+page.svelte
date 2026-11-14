@@ -13,6 +13,7 @@
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconKey from '@tabler/icons-svelte-runes/icons/key';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
+	import { SettingsProviderStatus } from '$lib/components/admin/settings';
 
 	let { data }: PageProps = $props();
 
@@ -223,6 +224,20 @@
 
 	<div class="min-h-0 flex-1 overflow-auto">
 		<div class="space-y-8 p-6">
+			<!-- Mail status (read-only; SMTP stays env-only, W9 adds the real test) -->
+			<section>
+				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notifications_mail()}</h3>
+				<div class="rounded-lg border">
+					<SettingsProviderStatus
+						name={m.admin_settings_notifications_mail()}
+						state={data.mail.configured ? 'configured' : 'not_configured'}
+						detail={data.mail.configured
+							? m.admin_settings_notifications_mail_configured()
+							: m.admin_settings_notifications_mail_unconfigured()}
+					/>
+				</div>
+			</section>
+
 			<!-- Webhooks (J-3: read-only endpoint list + delivery log + re-queue) -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_webhooks()}</h3>
@@ -232,6 +247,13 @@
 					</p>
 				{/if}
 				<div class="space-y-4 rounded-lg border p-4">
+					<SettingsProviderStatus
+						name={m.admin_settings_notification_webhooks()}
+						state={data.webhookEndpoints.length > 0 ? 'configured' : 'not_configured'}
+						detail={data.webhookEndpoints.length === 0
+							? m.admin_settings_notification_no_endpoints()
+							: undefined}
+					/>
 					<!-- Persistent status region (review round-2 SY-UI-04: a live
 					     region must exist before its content arrives). The one-time
 					     reveal lives in dedicated state (SY-UI-03) so unrelated

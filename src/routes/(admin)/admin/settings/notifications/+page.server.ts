@@ -188,6 +188,12 @@ export const load: PageServerLoad = async (event) => {
 		webhookEndpoints,
 		webhookEventRoster: [...WEBHOOK_EVENT_ROSTER],
 		editable: settingAccess(event.locals.admin?.role, 'notifications').editable,
+		mail: {
+			configured:
+				env.MAIL_ENABLED?.trim() === 'true' &&
+				Boolean(env.MAIL_SMTP_HOST?.trim()) &&
+				Boolean(env.MAIL_FROM?.trim())
+		},
 		webhookDeliveries: deliveryRows.map((row) => {
 			// The FK cascade removes a deleted endpoint's deliveries, so this
 			// lookup is total by construction (nine-dimension DB-04: the dead

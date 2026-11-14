@@ -2,7 +2,11 @@
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import { Badge } from '$lib/components/ui/badge';
-	import { SettingsStatusList, SettingsStatusRow } from '$lib/components/admin/settings';
+	import {
+		SettingsStatusList,
+		SettingsStatusRow,
+		SettingsProviderStatus
+	} from '$lib/components/admin/settings';
 
 	let { data }: PageProps = $props();
 </script>
@@ -18,15 +22,23 @@
 
 	<SettingsStatusList title={m.admin_settings_storage_current()}>
 		<SettingsStatusRow
-			label={m.admin_settings_storage_provider()}
-			value={m.admin_settings_storage_local()}
-			hint={m.admin_settings_storage_local_hint()}
-		/>
-		<SettingsStatusRow
 			label={m.admin_settings_storage_bucket()}
 			value={data.bucket ?? m.admin_settings_common_not_configured()}
 		/>
 	</SettingsStatusList>
+
+	<div class="divide-y rounded-lg border">
+		<SettingsProviderStatus
+			name={m.admin_settings_storage_local()}
+			state="configured"
+			detail={m.admin_settings_storage_local_hint()}
+		/>
+		<SettingsProviderStatus
+			name={m.admin_settings_storage_external()}
+			state="planned"
+			detail={m.admin_settings_storage_external_planned_hint()}
+		/>
+	</div>
 
 	<SettingsStatusList
 		title={m.admin_settings_storage_media_purge()}

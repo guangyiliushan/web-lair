@@ -2,7 +2,11 @@
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import { Badge } from '$lib/components/ui/badge';
-	import { SettingsStatusList, SettingsStatusRow } from '$lib/components/admin/settings';
+	import {
+		SettingsStatusList,
+		SettingsStatusRow,
+		SettingsProviderStatus
+	} from '$lib/components/admin/settings';
 
 	let { data }: PageProps = $props();
 </script>
@@ -44,20 +48,14 @@
 			value={m.admin_settings_common_configured()}
 		/>
 		<SettingsStatusRow
-			label={m.admin_settings_site_indexnow()}
-			badge={m.admin_settings_integrations_planned()}
-		/>
-		<SettingsStatusRow
-			label={m.admin_settings_site_baidu()}
-			badge={m.admin_settings_integrations_planned()}
-		/>
-		<SettingsStatusRow
-			label={m.admin_settings_site_bing()}
-			badge={m.admin_settings_integrations_planned()}
-		/>
-		<SettingsStatusRow
 			label={m.admin_settings_site_site_search()}
 			badge={m.admin_settings_site_not_implemented()}
 		/>
 	</SettingsStatusList>
+
+	<div class="divide-y rounded-lg border">
+		<SettingsProviderStatus name="IndexNow" state="planned" />
+		<SettingsProviderStatus name="Baidu" state="planned" />
+		<SettingsProviderStatus name="Bing" state="planned" />
+	</div>
 </div>
