@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { authClient } from '$lib/auth-client';
 	import { Button } from '$lib/components/ui/button';
 	import IconShieldLock from '@tabler/icons-svelte-runes/icons/shield-lock';
 	import IconAlertCircle from '@tabler/icons-svelte-runes/icons/alert-circle';
@@ -80,6 +82,54 @@
 	$effect(() => {
 		if (passwordForm?.step === 'password' && !passwordForm.status) resetPassword();
 	});
+	const passkeyForm = $derived(
+		form as {
+			message?: string | null;
+			step?: string;
+			status?: number;
+		} | null
+	);
+	const passkeyMessage = $derived(passkeyForm?.step === 'passkey' ? passkeyForm.message : null);
+	const passkeyError = $derived(Boolean(passkeyForm?.status && passkeyForm.status >= 400));
+	let newPasskeyName = $state('');
+	let passkeyPending = $state(false);
+	let passkeyClientError = $state<string | null>(null);
+	let passkeyNotice = $state<string | null>(null);
+
+	async function addPasskey() {
+		passkeyClientError = null;
+		passkeyNotice = null;
+		if (typeof window === 'undefined') return;
+		if (typeof PublicKeyCredential === 'undefined' || !window.isSecureContext) {
+			passkeyClientError = m.admin_settings_account_passkey_unsupported();
+			return;
+		}
+		passkeyPending = true;
+		try {
+			const result = await authClient.passkey.addPasskey({
+				name: newPasskeyName.trim() || undefined
+			});
+			if (result.error) {
+				const code = (result.error as { code?: string }).code ?? '';
+				// A cancelled WebAuthn prompt is not an error the user needs to
+				// read; every other failure has one actionable message.
+				if (code !== 'REGISTRATION_CANCELLED' && code !== 'AUTH_CANCELLED') {
+					passkeyClientError =
+						code === 'SESSION_NOT_FRESH'
+							? m.admin_settings_account_passkey_session_stale()
+							: m.admin_settings_account_passkey_add_failed();
+				}
+				return;
+			}
+			newPasskeyName = '';
+			passkeyNotice = m.admin_settings_account_msg_passkey_added();
+			await invalidateAll();
+		} catch {
+			passkeyClientError = m.admin_settings_account_passkey_add_failed();
+		} finally {
+			passkeyPending = false;
+		}
+	}
 	let lang = $state<string | null>(null);
 	const currentLang = $derived(lang ?? data.defaultLang ?? '');
 	const langDirty = $derived(lang !== null && lang !== (data.defaultLang ?? ''));
@@ -434,31 +484,108 @@
 
 	<Separator.Root />
 
-	<!-- Section: Passkeys (real rows · AC4; management lands with W8.4) -->
+	<!-- Section: Passkeys (list/add/rename/delete · AC4) -->
 	<section>
 		<div class="mb-4 flex items-center gap-2">
 			<IconFingerprint class="size-5 text-muted-foreground" />
 			<h3 class="text-base font-semibold">{m.admin_settings_account_passkey()}</h3>
 		</div>
-		<p class="mb-3 text-sm text-muted-foreground">{m.admin_settings_account_passkey_hint()}</p>
+		<p class="mb-2 text-sm text-muted-foreground">{m.admin_settings_account_passkey_hint()}</p>
+		<p class="mb-3 text-xs text-muted-foreground">
+			{m.admin_settings_account_passkey_2fa_bypass()}
+		</p>
+
+		{#if passkeyMessage}
+			<p
+				class="mb-3 text-sm {passkeyError ? 'text-destructive' : 'text-muted-foreground'}"
+				role={passkeyError ? 'alert' : 'status'}
+			>
+				{passkeyMessage}
+			</p>
+		{/if}
+		{#if passkeyClientError}
+			<p class="mb-3 text-sm text-destructive" role="alert">{passkeyClientError}</p>
+		{/if}
+		{#if passkeyNotice}
+			<p class="mb-3 text-sm text-muted-foreground" role="status">{passkeyNotice}</p>
+		{/if}
+
+		<div class="mb-4 flex flex-wrap items-end gap-2">
+			<div class="min-w-48 flex-1 space-y-1.5 sm:max-w-xs">
+				<label for="account-passkey-name" class="text-sm">
+					{m.admin_settings_account_passkey_name()}
+				</label>
+				<Input
+					id="account-passkey-name"
+					name="passkeyName"
+					maxlength={80}
+					placeholder={m.admin_settings_account_passkey_name_ph()}
+					bind:value={newPasskeyName}
+				/>
+			</div>
+			<Button type="button" size="sm" onclick={addPasskey} disabled={passkeyPending}>
+				<IconKey data-icon="inline-start" />
+				{m.admin_settings_account_passkey_add()}
+			</Button>
+		</div>
 
 		{#if data.passkeys.length === 0}
 			<p class="text-sm text-muted-foreground">{m.admin_settings_account_passkey_empty()}</p>
 		{:else}
 			<ul class="divide-y overflow-hidden rounded-lg border">
 				{#each data.passkeys as passkey (passkey.id)}
-					<li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm">
-						<span class="min-w-0 flex-1 truncate font-medium">
-							{passkey.name ?? m.admin_settings_account_passkey()}
-						</span>
-						<Badge variant={passkey.backedUp ? 'default' : 'secondary'}>
-							{passkey.backedUp
-								? m.admin_settings_account_passkey_backed_up()
-								: m.admin_settings_account_passkey_not_backed_up()}
-						</Badge>
-						<span class="text-xs text-muted-foreground">
-							{passkey.createdLabel ?? '—'}
-						</span>
+					<li class="space-y-2 px-4 py-3 text-sm">
+						<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+							<span class="min-w-0 flex-1 truncate font-medium">
+								{passkey.name ?? m.admin_settings_account_passkey()}
+							</span>
+							<Badge variant={passkey.backedUp ? 'default' : 'secondary'}>
+								{passkey.backedUp
+									? m.admin_settings_account_passkey_backed_up()
+									: m.admin_settings_account_passkey_not_backed_up()}
+							</Badge>
+							<span class="text-xs text-muted-foreground">
+								{passkey.createdLabel ?? '—'}
+							</span>
+						</div>
+						<div class="flex flex-wrap items-center gap-2">
+							<details class="min-w-0">
+								<summary class="cursor-pointer text-xs text-muted-foreground">
+									{m.admin_settings_account_passkey_rename()}
+								</summary>
+								<form
+									method="POST"
+									action="?/renamePasskey"
+									class="mt-2 flex flex-wrap items-end gap-2"
+								>
+									<input type="hidden" name="id" value={passkey.id} />
+									<Input
+										name="name"
+										value={passkey.name ?? ''}
+										maxlength={80}
+										required
+										aria-label={m.admin_settings_account_passkey_name()}
+									/>
+									<Button type="submit" variant="outline" size="sm">
+										{m.admin_settings_account_passkey_save_name()}
+									</Button>
+								</form>
+							</details>
+							<form
+								method="POST"
+								action="?/deletePasskey"
+								class="ml-auto"
+								onsubmit={(event) => {
+									if (!confirm(m.admin_settings_account_passkey_delete_confirm()))
+										event.preventDefault();
+								}}
+							>
+								<input type="hidden" name="id" value={passkey.id} />
+								<Button type="submit" variant="outline" size="sm" class="text-destructive">
+									{m.admin_settings_account_passkey_delete()}
+								</Button>
+							</form>
+						</div>
 					</li>
 				{/each}
 			</ul>

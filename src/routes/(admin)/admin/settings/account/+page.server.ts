@@ -26,6 +26,22 @@ function oauthCallback(origin: string, provider: string): string {
 	return new URL(`/api/auth/callback/${provider}`, origin).toString();
 }
 
+/** True when the account has a credential row that can verify a password. */
+async function hasPasswordCredential(userId: string): Promise<boolean> {
+	const rows = await db
+		.select({ id: authAccount.id })
+		.from(authAccount)
+		.where(
+			and(
+				eq(authAccount.userId, userId),
+				eq(authAccount.providerId, 'credential'),
+				isNotNull(authAccount.password)
+			)
+		)
+		.limit(1);
+	return rows.length > 0;
+}
+
 /**
  * B3 (ledger §4.24): TOTP management for the signed-in owner/admin.
  *
@@ -383,6 +399,115 @@ export const actions: Actions = {
 			message: m.admin_settings_account_msg_password_changed(),
 			step: 'password'
 		};
+	},
+
+	/**
+	 * AC4: delete one passkey. The last passkey cannot be removed while the
+	 * account has no password credential - that would lock the account out.
+	 * better-auth's endpoint enforces row ownership; the pre-read gives a
+	 * friendly 404 and drives the last-passkey guard.
+	 */
+	deletePasskey: async ({ request, locals }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'account', 'account.self');
+		const form = await request.formData();
+		const id = (form.get('id') ?? '').toString().trim();
+		const userId = locals.user?.id ?? '';
+
+		if (!id) {
+			return fail(400, {
+				message: m.admin_settings_account_err_passkey_not_found(),
+				step: 'passkey'
+			});
+		}
+
+		const [row] = await db
+			.select({ id: authPasskey.id })
+			.from(authPasskey)
+			.where(and(eq(authPasskey.id, id), eq(authPasskey.userId, userId)))
+			.limit(1);
+		if (!row) {
+			return fail(404, {
+				message: m.admin_settings_account_err_passkey_not_found(),
+				step: 'passkey'
+			});
+		}
+
+		const owned = await db
+			.select({ id: authPasskey.id })
+			.from(authPasskey)
+			.where(eq(authPasskey.userId, userId));
+		if (owned.length <= 1 && !(await hasPasswordCredential(userId))) {
+			return fail(400, {
+				message: m.admin_settings_account_err_passkey_last(),
+				step: 'passkey'
+			});
+		}
+
+		try {
+			await auth.api.deletePasskey({ body: { id }, headers: request.headers });
+		} catch (caught) {
+			console.warn(
+				'[account] delete passkey failed:',
+				caught instanceof Error ? caught.message : caught
+			);
+			return fail(500, {
+				message: m.admin_settings_account_err_passkey_action(),
+				step: 'passkey'
+			});
+		}
+
+		return { message: m.admin_settings_account_msg_passkey_deleted(), step: 'passkey' };
+	},
+
+	/** AC4: rename a passkey through the plugin's ownership-checked endpoint. */
+	renamePasskey: async ({ request, locals }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'account', 'account.self');
+		const form = await request.formData();
+		const id = (form.get('id') ?? '').toString().trim();
+		const name = (form.get('name') ?? '').toString().trim();
+		const userId = locals.user?.id ?? '';
+
+		if (!id) {
+			return fail(400, {
+				message: m.admin_settings_account_err_passkey_not_found(),
+				step: 'passkey'
+			});
+		}
+		if (!name || name.length > 80) {
+			return fail(400, {
+				message: m.admin_settings_account_err_passkey_name(),
+				step: 'passkey'
+			});
+		}
+
+		const [row] = await db
+			.select({ id: authPasskey.id })
+			.from(authPasskey)
+			.where(and(eq(authPasskey.id, id), eq(authPasskey.userId, userId)))
+			.limit(1);
+		if (!row) {
+			return fail(404, {
+				message: m.admin_settings_account_err_passkey_not_found(),
+				step: 'passkey'
+			});
+		}
+
+		try {
+			await auth.api.updatePasskey({ body: { id, name }, headers: request.headers });
+		} catch (caught) {
+			console.warn(
+				'[account] rename passkey failed:',
+				caught instanceof Error ? caught.message : caught
+			);
+			return fail(500, {
+				message: m.admin_settings_account_err_passkey_action(),
+				step: 'passkey'
+			});
+		}
+
+		return { message: m.admin_settings_account_msg_passkey_renamed(), step: 'passkey' };
 	},
 
 	/** Step 1: verify the password, receive the secret + one-time backup codes. */
