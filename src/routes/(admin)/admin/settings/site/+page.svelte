@@ -321,6 +321,7 @@
 		<SettingsStatusRow label={m.admin_settings_site_robots()} value="/robots.txt" />
 		<SettingsStatusRow
 			label={m.admin_settings_site_site_search()}
+			hint={m.admin_settings_site_site_search_hint()}
 			badge={m.admin_settings_site_not_implemented()}
 		/>
 	</SettingsStatusList>

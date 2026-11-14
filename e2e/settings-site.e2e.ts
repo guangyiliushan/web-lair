@@ -100,3 +100,29 @@ test('Site identity/favicon save and read back; owner controls render', async ({
 		page.locator('input[name="tls"], input[name="certificate"], input[name="acme"]')
 	).toHaveCount(0);
 });
+
+test('Search indexing is read-only, real routes only (W10.2)', async ({ page, request }) => {
+	const response = await page.goto('/admin/settings/site');
+	expect(response?.status()).toBe(200);
+
+	const section = page
+		.locator('section')
+		.filter({ has: page.getByRole('heading', { name: 'Search indexing', exact: true }) });
+	await expect(section).toBeVisible();
+	await expect(section.getByText('/sitemap.xml', { exact: true })).toBeVisible();
+	await expect(section.getByText('/robots.txt', { exact: true })).toBeVisible();
+	// Site search is called out as unimplemented, not offered as a setting.
+	await expect(section.getByText('Site search', { exact: true })).toBeVisible();
+	await expect(section.getByText('Not implemented', { exact: true })).toBeVisible();
+	await expect(section.getByText(/separate project/i)).toBeVisible();
+	// No key/token field and no Save in the SEO section.
+	await expect(section.locator('input, textarea, select, button, form')).toHaveCount(0);
+
+	// The two advertised endpoints are the real ones.
+	const sitemap = await request.get('/sitemap.xml');
+	expect(sitemap.status()).toBe(200);
+	expect(await sitemap.text()).toContain('urlset');
+	const robots = await request.get('/robots.txt');
+	expect(robots.status()).toBe(200);
+	expect(await robots.text()).toContain('Sitemap:');
+});
