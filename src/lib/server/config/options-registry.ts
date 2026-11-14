@@ -186,6 +186,17 @@ export const optionRegistry = {
 		schema: z.boolean(),
 		default: true
 	},
+	'payments.enabled': {
+		// W6.8 (C6): contract-only flag, deliberately without a consumer.
+		// Paid/member content is NOT implemented in M4: no table, no route, no
+		// settings UI reads or writes this key, and paid/member access modes do
+		// not exist. It is registered so the default is explicit and testable;
+		// flipping it on changes nothing until the trigger in the decision
+		// register §3C.4 (provider + tax/terms/refunds + entitlement model +
+		// SEO/leak-surface tests) opens a future schema window.
+		schema: z.boolean(),
+		default: false
+	},
 	'comments.privacy': {
 		// W6.2 (C2/C4/C5): request-time IP handling for comments. Off by
 		// default; when off nothing is looked up and nothing is stored. When
@@ -269,14 +280,13 @@ export const optionRegistry = {
 		default: { pendingDays: 7, detachedDays: 30 }
 	},
 	'friends.apply': {
+		// W6.4 (C8): applications open; home-page URLs only (no sub paths).
+		// `internalizeAvatars` was removed - it had zero consumers (register).
 		schema: z.object({
 			enabled: z.boolean(),
-			allowSubPath: z.boolean(),
-			internalizeAvatars: z.boolean()
+			allowSubPath: z.boolean()
 		}),
-		// Links plan §2.6: applications open; home-page URLs only (no sub
-		// paths); avatars stay hot-linked (localisation is a registered item).
-		default: { enabled: true, allowSubPath: false, internalizeAvatars: false }
+		default: { enabled: true, allowSubPath: false }
 	},
 	'friends.checks': {
 		schema: z.object({

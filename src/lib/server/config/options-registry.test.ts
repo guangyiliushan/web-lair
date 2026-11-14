@@ -83,6 +83,7 @@ describe('options registry (AI-1.1)', () => {
 				'friends.policy',
 				'media.purge',
 				'notes.gate',
+				'payments.enabled',
 				'presence.enabled',
 				'presence.readerDots',
 				'presence.readerView',
@@ -272,8 +273,7 @@ describe('options registry (AI-1.1)', () => {
 		state.selectRows = [[], [], [], []];
 		await expect(getOption('friends.apply')).resolves.toEqual({
 			enabled: true,
-			allowSubPath: false,
-			internalizeAvatars: false
+			allowSubPath: false
 		});
 		await expect(getOption('friends.checks')).resolves.toEqual({
 			enabled: true,
