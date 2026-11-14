@@ -2016,6 +2016,7 @@
 	"admin_settings_site_field_title": "Site title",
 	"admin_settings_site_icon": "Favicon",
 	"admin_settings_site_icon_hint": "Empty uses the bundled icon. https or a same-origin /i/ path; saving bumps the version to bust the browser cache.",
+	"admin_settings_site_icon_url": "Icon URL",
 	"admin_settings_site_icon_version": "Version",
 	"admin_settings_site_identity": "Site identity",
 	"admin_settings_site_indexnow": "IndexNow",

@@ -169,7 +169,7 @@
 		<fieldset class="space-y-4" disabled={!data.canEditIcon}>
 			<legend class="text-sm font-medium">{m.admin_settings_site_icon()}</legend>
 			<div class="space-y-1.5">
-				<label for="site-icon" class="text-sm">{m.admin_settings_site_icon()}</label>
+				<label for="site-icon" class="text-sm">{m.admin_settings_site_icon_url()}</label>
 				<Input
 					id="site-icon"
 					name="url"

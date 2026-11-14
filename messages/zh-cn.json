@@ -1782,6 +1782,7 @@
 	"admin_settings_site_field_title": "站点标题",
 	"admin_settings_site_icon": "站点图标",
 	"admin_settings_site_icon_hint": "留空使用内置图标。支持 https 或同源 /i/ 路径；保存会递增版本以刷新浏览器缓存。",
+	"admin_settings_site_icon_url": "图标 URL",
 	"admin_settings_site_icon_version": "版本",
 	"admin_settings_site_identity": "站点身份",
 	"admin_settings_site_indexnow": "IndexNow",
