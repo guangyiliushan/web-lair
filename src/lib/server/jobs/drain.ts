@@ -10,6 +10,11 @@ import { dueWindow } from './due.ts';
 import { JOBS } from './registry.ts';
 import type { JobDefinition } from './registry.ts';
 import { webhookHeaders } from './signature.ts';
+import {
+	WebhookUrlError,
+	assertDeliveryTarget,
+	webhookGuardOptionsFromEnv
+} from '../webhooks/url-guard.ts';
 import { isSecretError } from '../secrets/errors.ts';
 import { reportSecretFailure } from '../secrets/report.ts';
 import { resolveWebhookSigningSecrets } from '../secrets/webhook-secrets.ts';
@@ -669,6 +674,28 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 		}
 
 		const body = JSON.stringify(delivery.payload);
+		// W9.3: refuse a stored target that is (or now resolves) private. Rows
+		// created before the guard existed would otherwise keep posting to the
+		// metadata service. A blocked target is permanent - retrying cannot fix
+		// the URL, so there is no retry schedule for it.
+		try {
+			await assertDeliveryTarget(endpoint.payloadUrl, {
+				...webhookGuardOptionsFromEnv((name) => process.env[name])
+			});
+		} catch (error) {
+			if (!(error instanceof WebhookUrlError)) throw error;
+			await tx
+				.update(webhookDeliveries)
+				.set({
+					status: 'failed',
+					responseCode: null,
+					error: `blocked target (${error.reason})`,
+					deliveredAt: now
+				})
+				.where(eq(webhookDeliveries.id, delivery.id));
+			deps.log(`[drain] webhook ${endpoint.id}: blocked target (${error.reason}), delivery failed`);
+			return 'failed';
+		}
 		const timestampSeconds = Math.floor(now.getTime() / 1000);
 		// Signing secrets are encrypted at rest (W2.6). A typed failure here is
 		// a per-delivery outcome, not a segment crash: the row records why it

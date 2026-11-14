@@ -167,6 +167,15 @@ vi.mock('$env/dynamic/private', () => ({
 	}
 }));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: vi.fn(async () => 'Etc/UTC') }));
+// W9.3: the URL guard resolves hostnames; tests pin a public address so the
+// suite is deterministic and offline. Literal-IP cases never hit this mock.
+vi.mock('node:dns/promises', () => ({
+	lookup: vi.fn(async (hostname: string) =>
+		hostname === 'rebind.example'
+			? [{ address: '10.0.0.7', family: 4 }]
+			: [{ address: '93.184.216.34', family: 4 }]
+	)
+}));
 
 import { actions, load } from './+page.server';
 import {
@@ -506,6 +515,23 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(state.insertValues).toHaveLength(0);
 	});
 
+	it('create refuses http, credentials and private/metadata targets (W9.3 T2a)', async () => {
+		const cases = [
+			'http://example.com/hook',
+			'https://user:pass@example.com/hook',
+			'https://127.0.0.1/hook',
+			'https://169.254.169.254/latest/meta-data',
+			'https://10.0.0.5/hook',
+			'https://[::1]/hook',
+			'https://rebind.example/hook'
+		];
+		for (const payloadUrl of cases) {
+			const { result } = await callAction('create', { ...validForm, payloadUrl });
+			expect(result, payloadUrl).toMatchObject({ status: 400, data: { op: 'create' } });
+		}
+		expect(state.insertValues).toHaveLength(0);
+	});
+
 	it('create soft-rejects a duplicate name (case-insensitive, G3)', async () => {
 		state.selectQueue.push([{ id: 'existing' }]);
 		const { result } = await callAction('create', validForm);
@@ -547,6 +573,19 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(audit.deliver).toBe(false);
 		expect(audit.payload?.hint).toBe(secretRow.hint);
 		expect(JSON.stringify(audit)).not.toContain(String(result?.secret));
+		// W9.3 config audit: host + subscription, local only, never the secret.
+		const createAudit = recordCalls.find(
+			(call) => (call[1] as { event?: string }).event === 'webhook.create'
+		);
+		expect(createAudit).toBeDefined();
+		const config = createAudit?.[1] as { deliver?: boolean; payload?: Record<string, unknown> };
+		expect(config.deliver).toBe(false);
+		expect(config.payload).toMatchObject({
+			name: 'ops',
+			host: 'example.com',
+			events: ['job.run', 'schedule.toggle']
+		});
+		expect(JSON.stringify(config)).not.toContain(String(result?.secret));
 	});
 
 	it('create stores the normalized href for odd-but-valid urls (review round-1)', async () => {
@@ -615,6 +654,12 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		// The write predicate must target the row id (round-2 SYT-1: write
 		// WHEREs are recorded so a dropped/mis-aimed predicate turns red).
 		expect(sqlOf(state.updateWheres[0])).toContain('"webhooks"."id"');
+		const updateAudit = vi
+			.mocked(mocks.recordActivity)
+			.mock.calls.find((call) => (call[1] as { event?: string }).event === 'webhook.update');
+		expect(updateAudit).toBeDefined();
+		const updatePayload = (updateAudit?.[1] as { payload?: Record<string, unknown> }).payload;
+		expect(updatePayload).toMatchObject({ webhookId: WEBHOOK_ID, host: 'example.com' });
 	});
 
 	it('update stores the normalized href like create (round-2 SYT-4)', async () => {
@@ -641,6 +686,14 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(state.deleteTables[0]).toBe(webhooksMock);
 		// The delete predicate must target the row id (round-2 SYT-1).
 		expect(sqlOf(state.deleteWheres[0])).toContain('"webhooks"."id"');
+		// W9.3: deleting an endpoint is a config change and leaves an audit row.
+		const deleteAudit = vi
+			.mocked(mocks.recordActivity)
+			.mock.calls.find((call) => (call[1] as { event?: string }).event === 'webhook.delete');
+		expect(deleteAudit).toBeDefined();
+		expect((deleteAudit?.[1] as { payload?: Record<string, unknown> }).payload).toMatchObject({
+			webhookId: WEBHOOK_ID
+		});
 	});
 
 	it('toggle demands an explicit boolean and writes the desired state', async () => {
@@ -657,6 +710,13 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(state.updateSets[0]).toEqual({ isEnabled: false });
 		// The toggle predicate must target the row id (round-2 SYT-1).
 		expect(sqlOf(state.updateWheres[0])).toContain('"webhooks"."id"');
+		const toggleAudit = vi
+			.mocked(mocks.recordActivity)
+			.mock.calls.find((call) => (call[1] as { event?: string }).event === 'webhook.toggle');
+		expect((toggleAudit?.[1] as { payload?: Record<string, unknown> }).payload).toMatchObject({
+			webhookId: WEBHOOK_ID,
+			enabled: false
+		});
 
 		state.updateRows = [];
 		const gone = await callAction('toggle', { id: WEBHOOK_ID, enabled: 'true' });

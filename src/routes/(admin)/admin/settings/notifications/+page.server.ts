@@ -26,6 +26,11 @@ import { isUuid } from '$lib/utils/uuid';
 import { formatDateTime } from '$lib/utils/i18n';
 import { WEBHOOK_EVENT_ROSTER, isWebhookEventName } from '$lib/server/webhooks/events';
 import { generateWebhookSecret, maskWebhookSecret } from '$lib/server/webhooks/secret';
+import {
+	WebhookUrlError,
+	validateWebhookUrl,
+	webhookAllowPrivateTargets
+} from '$lib/server/webhooks/url-guard';
 import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
@@ -63,8 +68,26 @@ const PAYLOAD_URL_MAX_LENGTH = 2048;
 type ParsedEndpointForm =
 	{ ok: true; name: string; payloadUrl: string; events: string[] } | { ok: false; message: string };
 
+/** Map a URL-guard rejection to its localized message (W9.3). */
+function webhookUrlErrorMessage(error: unknown): string {
+	if (!(error instanceof WebhookUrlError)) return m.admin_settings_notification_err_url();
+	switch (error.reason) {
+		case 'insecure_scheme':
+			return m.admin_settings_notification_err_url_https();
+		case 'blocked_host':
+			return m.admin_settings_notification_err_url_private();
+		case 'unresolvable':
+			return m.admin_settings_notification_err_url_unresolvable();
+		default:
+			return m.admin_settings_notification_err_url();
+	}
+}
+
 /** Validate the endpoint form before any DB access. */
-function parseEndpointForm(form: FormData): ParsedEndpointForm {
+async function parseEndpointForm(
+	form: FormData,
+	options: { allowPrivate: boolean }
+): Promise<ParsedEndpointForm> {
 	const name = (form.get('name') ?? '').toString().trim();
 	if (!name || name.length > NAME_MAX_LENGTH) {
 		return { ok: false, message: m.admin_settings_notification_err_name() };
@@ -73,21 +96,14 @@ function parseEndpointForm(form: FormData): ParsedEndpointForm {
 	if (!payloadUrl || payloadUrl.length > PAYLOAD_URL_MAX_LENGTH) {
 		return { ok: false, message: m.admin_settings_notification_err_url() };
 	}
-	let parsedUrl: URL;
+	// W9.3 (T2a): HTTPS only, no embedded credentials, no private/loopback/
+	// link-local/metadata targets (literal or resolved). The guard returns
+	// the WHATWG-normalized href, which the DB CHECK requires.
+	let normalizedUrl: string;
 	try {
-		parsedUrl = new URL(payloadUrl);
-	} catch {
-		return { ok: false, message: m.admin_settings_notification_err_url() };
-	}
-	if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-		return { ok: false, message: m.admin_settings_notification_err_url() };
-	}
-	// Credentialed URLs (user:pass@host) are refused: Request construction
-	// throws on them (fetch spec), so such an endpoint could never deliver -
-	// and the password would sit in payload_url and on screen in clear text
-	// (nine-dimension SY-L2-01, verified against the fetch/URL specs).
-	if (parsedUrl.username || parsedUrl.password) {
-		return { ok: false, message: m.admin_settings_notification_err_url() };
+		normalizedUrl = await validateWebhookUrl(payloadUrl, { allowPrivate: options.allowPrivate });
+	} catch (error) {
+		return { ok: false, message: webhookUrlErrorMessage(error) };
 	}
 	const events = [...new Set(form.getAll('events').map((value) => value.toString()))];
 	if (events.length === 0) {
@@ -103,7 +119,16 @@ function parseEndpointForm(form: FormData): ParsedEndpointForm {
 	}
 	// Store the normalized form, not the raw string: the column CHECK
 	// (`^https?://`) must hold for everything this validator accepts.
-	return { ok: true, name, payloadUrl: parsedUrl.href, events };
+	return { ok: true, name, payloadUrl: normalizedUrl, events };
+}
+
+/** Host label for the config audit payload (paths may carry receiver tokens). */
+function webhookHostOf(payloadUrl: string): string {
+	try {
+		return new URL(payloadUrl).host;
+	} catch {
+		return 'invalid';
+	}
 }
 
 /** Case-insensitive name soft-reject (G3); `exceptId` excludes self on edit. */
@@ -346,7 +371,9 @@ export const actions: Actions = {
 		await requireAdminRole();
 		assertSettingWrite(locals.admin?.role, 'notifications', 'notifications.webhooks');
 		const form = await request.formData();
-		const parsed = parseEndpointForm(form);
+		const parsed = await parseEndpointForm(form, {
+			allowPrivate: webhookAllowPrivateTargets((name) => env[name])
+		});
 		if (!parsed.ok) return fail(400, { op: 'create', message: parsed.message });
 		if (await endpointNameTaken(parsed.name)) {
 			return fail(400, { op: 'create', message: m.admin_settings_notification_err_name_dup() });
@@ -378,6 +405,19 @@ export const actions: Actions = {
 					hint: encrypted.hint,
 					keyVersion: encrypted.keyVersion,
 					updatedBy: locals.user?.id ?? null
+				});
+				await recordActivity(tx, {
+					event: 'webhook.create',
+					actorId: locals.user?.id ?? null,
+					// Config audit: host + subscription only. The path can carry
+					// a receiver token, and the secret never enters a payload.
+					payload: {
+						webhookId: id,
+						name: parsed.name,
+						host: webhookHostOf(parsed.payloadUrl),
+						events: parsed.events
+					},
+					deliver: false
 				});
 				await recordActivity(tx, {
 					event: 'webhook.key_set',
@@ -414,20 +454,37 @@ export const actions: Actions = {
 				op: 'update',
 				message: m.admin_settings_notification_err_endpoint_bad_id()
 			});
-		const parsed = parseEndpointForm(form);
+		const parsed = await parseEndpointForm(form, {
+			allowPrivate: webhookAllowPrivateTargets((name) => env[name])
+		});
 		if (!parsed.ok) return fail(400, { op: 'update', message: parsed.message });
 		if (await endpointNameTaken(parsed.name, id)) {
 			return fail(400, { op: 'update', message: m.admin_settings_notification_err_name_dup() });
 		}
 		// Assigned on the try path; every catch path returns or rethrows, so
 		// the definite-assignment analysis below is sound without an init.
-		let updated: { id: string }[];
+		let updated: boolean;
 		try {
-			updated = await db
-				.update(webhooks)
-				.set({ name: parsed.name, payloadUrl: parsed.payloadUrl, events: parsed.events })
-				.where(eq(webhooks.id, id))
-				.returning({ id: webhooks.id });
+			updated = await db.transaction(async (tx) => {
+				const rows = await tx
+					.update(webhooks)
+					.set({ name: parsed.name, payloadUrl: parsed.payloadUrl, events: parsed.events })
+					.where(eq(webhooks.id, id))
+					.returning({ id: webhooks.id });
+				if (rows.length === 0) return false;
+				await recordActivity(tx, {
+					event: 'webhook.update',
+					actorId: locals.user?.id ?? null,
+					payload: {
+						webhookId: id,
+						name: parsed.name,
+						host: webhookHostOf(parsed.payloadUrl),
+						events: parsed.events
+					},
+					deliver: false
+				});
+				return true;
+			});
 		} catch (error) {
 			// Defense in depth behind the normalized-href guard (round-2 N1).
 			if (pgErrorCode(error) === '23514') {
@@ -435,7 +492,7 @@ export const actions: Actions = {
 			}
 			throw error;
 		}
-		if (updated.length === 0) {
+		if (!updated) {
 			return fail(404, {
 				op: 'update',
 				message: m.admin_settings_notification_err_endpoint_not_found()
@@ -454,11 +511,21 @@ export const actions: Actions = {
 				op: 'delete',
 				message: m.admin_settings_notification_err_endpoint_bad_id()
 			});
-		const deleted = await db
-			.delete(webhooks)
-			.where(eq(webhooks.id, id))
-			.returning({ id: webhooks.id });
-		if (deleted.length === 0) {
+		const deleted = await db.transaction(async (tx) => {
+			const rows = await tx
+				.delete(webhooks)
+				.where(eq(webhooks.id, id))
+				.returning({ id: webhooks.id, name: webhooks.name });
+			if (rows.length === 0) return null;
+			await recordActivity(tx, {
+				event: 'webhook.delete',
+				actorId: locals.user?.id ?? null,
+				payload: { webhookId: id, name: rows[0].name },
+				deliver: false
+			});
+			return rows[0];
+		});
+		if (!deleted) {
 			return fail(404, {
 				op: 'delete',
 				message: m.admin_settings_notification_err_endpoint_not_found()
@@ -481,12 +548,23 @@ export const actions: Actions = {
 		if (rawEnabled !== 'true' && rawEnabled !== 'false') {
 			return fail(400, { op: 'toggle', message: m.admin_settings_notification_err_bad_request() });
 		}
-		const toggled = await db
-			.update(webhooks)
-			.set({ isEnabled: rawEnabled === 'true' })
-			.where(eq(webhooks.id, id))
-			.returning({ id: webhooks.id });
-		if (toggled.length === 0) {
+		const enabled = rawEnabled === 'true';
+		const toggled = await db.transaction(async (tx) => {
+			const rows = await tx
+				.update(webhooks)
+				.set({ isEnabled: enabled })
+				.where(eq(webhooks.id, id))
+				.returning({ id: webhooks.id });
+			if (rows.length === 0) return false;
+			await recordActivity(tx, {
+				event: 'webhook.toggle',
+				actorId: locals.user?.id ?? null,
+				payload: { webhookId: id, enabled },
+				deliver: false
+			});
+			return true;
+		});
+		if (!toggled) {
 			return fail(404, {
 				op: 'toggle',
 				message: m.admin_settings_notification_err_endpoint_not_found()
