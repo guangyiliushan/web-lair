@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { getStorage } from '$lib/server/storage';
-import { StorageError } from '$lib/server/storage/port';
+import { StorageError, isStorageUnavailable } from '$lib/server/storage/port';
 import type { RequestHandler } from './$types';
 
 /**
@@ -75,6 +75,13 @@ export const GET: RequestHandler = async ({ params, request }) => {
 		object = await storage.get(key, parsed ? { range: parsed } : undefined);
 	} catch (caught) {
 		if (caught instanceof StorageError && caught.status === 416) return notSatisfiable();
+		// Active provider down (W7.5/Q14): 503, never another provider's bytes.
+		if (isStorageUnavailable(caught)) {
+			return new Response(null, {
+				status: 503,
+				headers: { 'retry-after': '30', 'cache-control': 'no-store' }
+			});
+		}
 		throw caught;
 	}
 	if (!object) {

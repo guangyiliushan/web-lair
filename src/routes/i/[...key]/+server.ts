@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { isRegisteredKey } from '$lib/server/services/files';
 import { getStorage } from '$lib/server/storage';
+import { isStorageUnavailable } from '$lib/server/storage/port';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
 import { KEY_PATTERN } from '$lib/media/keys';
@@ -140,22 +141,40 @@ function tooManyRequests(): Response {
 	});
 }
 
+/**
+ * Active provider unreachable/failing (W7.5/Q14): fail closed with 503 and
+ * NEVER transparently serve from another provider — a silent fallback would
+ * hand out objects the operator believes are gone (or vice versa).
+ */
+function storageUnavailable(): Response {
+	return new Response(null, {
+		status: 503,
+		headers: { 'retry-after': '30', 'cache-control': 'no-store' }
+	});
+}
+
 export const GET: RequestHandler = async ({ params, locals, getClientAddress }) => {
 	if (await throttled(getClientAddress)) return tooManyRequests();
 	const access = await resolveAccess(params, locals);
 	const storage = await getStorage();
 
-	let object = await storage.get(access.key);
+	let object;
 	let cacheControl: string | undefined;
-	if (!object && access.fallbackKeys) {
-		for (const fallbackKey of access.fallbackKeys) {
-			object = await storage.get(fallbackKey);
-			if (object) {
-				// Short cache: the real @grid object will replace this tier.
-				cacheControl = 'public, max-age=3600';
-				break;
+	try {
+		object = await storage.get(access.key);
+		if (!object && access.fallbackKeys) {
+			for (const fallbackKey of access.fallbackKeys) {
+				object = await storage.get(fallbackKey);
+				if (object) {
+					// Short cache: the real @grid object will replace this tier.
+					cacheControl = 'public, max-age=3600';
+					break;
+				}
 			}
 		}
+	} catch (caught) {
+		if (isStorageUnavailable(caught)) return storageUnavailable();
+		throw caught;
 	}
 	if (!object) throw error(404, 'Not found');
 
@@ -170,16 +189,22 @@ export const HEAD: RequestHandler = async ({ params, locals, getClientAddress })
 	const access = await resolveAccess(params, locals);
 	const storage = await getStorage();
 
-	let object = await storage.head(access.key);
+	let object;
 	let cacheControl: string | undefined;
-	if (!object && access.fallbackKeys) {
-		for (const fallbackKey of access.fallbackKeys) {
-			object = await storage.head(fallbackKey);
-			if (object) {
-				cacheControl = 'public, max-age=3600';
-				break;
+	try {
+		object = await storage.head(access.key);
+		if (!object && access.fallbackKeys) {
+			for (const fallbackKey of access.fallbackKeys) {
+				object = await storage.head(fallbackKey);
+				if (object) {
+					cacheControl = 'public, max-age=3600';
+					break;
+				}
 			}
 		}
+	} catch (caught) {
+		if (isStorageUnavailable(caught)) return storageUnavailable();
+		throw caught;
 	}
 	if (!object) throw error(404, 'Not found');
 

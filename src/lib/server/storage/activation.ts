@@ -125,7 +125,7 @@ export async function activateSavedProvider(store: ActivationStore): Promise<Act
 		);
 	}
 	const deletable = capabilities.versioning === 'off' && capabilities.objectLock !== true;
-	if (!deletable) {
+	if (!deletable && candidate.deleteMode !== 'logical') {
 		throw new ActivationError(
 			'versioning-blocked',
 			'The target bucket has versioning or object lock enabled; choose logical delete or use a plain bucket'
@@ -152,7 +152,8 @@ export async function activateSavedProvider(store: ActivationStore): Promise<Act
 		to: driverLabel(candidate),
 		files,
 		versioning: capabilities.versioning,
-		object_lock: capabilities.objectLock
+		object_lock: capabilities.objectLock,
+		delete_mode: candidate.deleteMode
 	});
 
 	return { from: active.config, to: candidate, files, activatedAt };

@@ -23,6 +23,7 @@
 	let bucket = $state(untrack(() => provider.bucket ?? ''));
 	let forcePathStyle = $state(untrack(() => provider.forcePathStyle));
 	let publicBaseUrl = $state(untrack(() => provider.publicBaseUrl ?? ''));
+	let deleteMode = $state<'hard' | 'logical'>(untrack(() => provider.deleteMode));
 
 	// Compare against the LOADED row, not a captured snapshot: after a save the
 	// page reloads with the new row, so the form becomes clean by construction.
@@ -34,7 +35,8 @@
 			region: provider.region,
 			bucket: provider.bucket ?? '',
 			forcePathStyle: provider.forcePathStyle,
-			publicBaseUrl: provider.publicBaseUrl ?? ''
+			publicBaseUrl: provider.publicBaseUrl ?? '',
+			deleteMode: provider.deleteMode
 		})
 	);
 	const providerDirty = $derived(
@@ -45,7 +47,8 @@
 			region,
 			bucket: driver === 'local' ? '' : bucket,
 			forcePathStyle: driver === 'local' ? true : forcePathStyle,
-			publicBaseUrl
+			publicBaseUrl,
+			deleteMode
 		}) !== savedProvider
 	);
 	// R2 only accepts region "auto"; the hint keeps the form honest before the
@@ -60,6 +63,7 @@
 		bucket = provider.bucket ?? '';
 		forcePathStyle = provider.forcePathStyle;
 		publicBaseUrl = provider.publicBaseUrl ?? '';
+		deleteMode = provider.deleteMode;
 	}
 
 	let pendingDays = $state(untrack(() => data.purge.pendingDays));
@@ -173,6 +177,12 @@
 			value={data.active.config.publicBaseUrl ?? '—'}
 		/>
 		<SettingsStatusRow
+			label={m.admin_settings_storage_delete_mode()}
+			value={data.active.config.deleteMode === 'logical'
+				? m.admin_settings_storage_delete_mode_logical()
+				: m.admin_settings_storage_delete_mode_hard()}
+		/>
+		<SettingsStatusRow
 			label={m.admin_settings_storage_activated_at()}
 			value={data.active.activatedAt ?? '—'}
 		/>
@@ -246,6 +256,24 @@
 								: m.admin_settings_storage_endpoint_hint()}
 						</p>
 					</fieldset>
+
+					<div class="space-y-2">
+						<Label for="deleteMode">{m.admin_settings_storage_delete_mode()}</Label>
+						<select
+							id="deleteMode"
+							name="deleteMode"
+							class="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+							bind:value={deleteMode}
+						>
+							<option value="hard">{m.admin_settings_storage_delete_mode_hard()}</option>
+							<option value="logical">{m.admin_settings_storage_delete_mode_logical()}</option>
+						</select>
+						<p class="text-xs text-muted-foreground">
+							{deleteMode === 'logical'
+								? m.admin_settings_storage_delete_mode_logical_hint()
+								: m.admin_settings_storage_delete_mode_hard_hint()}
+						</p>
+					</div>
 
 					{#if driver === 's3'}
 						<div class="grid gap-4 sm:grid-cols-2">

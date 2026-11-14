@@ -27,7 +27,8 @@ const EXTERNAL: StorageProviderConfig = {
 	region: 'us-east-1',
 	bucket: 'lair-media',
 	forcePathStyle: true,
-	publicBaseUrl: null
+	publicBaseUrl: null,
+	deleteMode: 'hard'
 };
 
 function makeStore(overrides: {
@@ -157,6 +158,21 @@ describe('activateSavedProvider', () => {
 				makeStore({ files: 0, capabilities: { versioning: 'off', objectLock: true } }).store
 			)
 		).rejects.toMatchObject({ code: 'versioning-blocked' });
+	});
+
+	it('allows a versioned bucket when logical delete was chosen (W7.5)', async () => {
+		const logical = { ...EXTERNAL, deleteMode: 'logical' as const };
+		const { store, state } = makeStore({
+			files: 0,
+			provider: logical,
+			capabilities: { versioning: 'enabled', objectLock: false }
+		});
+
+		const result = await activateSavedProvider(store);
+
+		expect(result.to.deleteMode).toBe('logical');
+		expect(state.active.config.deleteMode).toBe('logical');
+		expect(state.migration.state).toBe('cutover');
 	});
 
 	it('refuses to activate the config that is already live', async () => {

@@ -420,8 +420,10 @@ export async function removePhoto(
 		try {
 			const result = await deleteFile(current.fileId, {}, { storage, db: database });
 			fileDeleted = result.kind === 'ok';
-			// `mentioned` = the transition guard (content still references it).
-			fileBlocked = result.kind === 'referenced' || result.kind === 'mentioned';
+			// `mentioned` = the transition guard (content still references it);
+			// `blocked` = the bucket cannot hard-delete in this mode (W7.5).
+			fileBlocked =
+				result.kind === 'referenced' || result.kind === 'mentioned' || result.kind === 'blocked';
 		} catch (error) {
 			// The photo is already gone; a storage outage must not look like a
 			// full failure (round-2 review: the old 500 hid the partial state).

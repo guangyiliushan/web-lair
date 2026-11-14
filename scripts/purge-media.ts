@@ -26,14 +26,26 @@ const storage = new S3Storage(storageConfigFromEnv(process.env));
 
 const outcome = await purgeMedia({ dryRun: !execute }, { db, storage });
 
-if (outcome.blocked === 'migration') {
-	console.error(
-		'REFUSED: a storage provider migration is running (storage.migration = copying).\n' +
-			'Purge stays disabled until the copy finishes and `storage:migrate --cutover` runs\n' +
-			'(or `--reset` clears a stuck run).'
-	);
+if (outcome.blocked) {
+	const reasons: Record<string, string> = {
+		migration:
+			'a storage provider migration is running (storage.migration = copying). Purge stays\n' +
+			'disabled until the copy finishes and `storage:migrate --cutover` runs (or `--reset`\n' +
+			'clears a stuck run).',
+		capability:
+			'the active bucket versioning/object lock could not be read, so "frees space" cannot\n' +
+			'be proven. Fix the credentials or run the storage connection test first.',
+		versioning:
+			'the active bucket has versioning or object lock on. Choose "logical delete" in the\n' +
+			'storage provider form (accepting that space is not reclaimed) or use a plain bucket.'
+	};
+	console.error(`REFUSED: ${reasons[outcome.blocked] ?? outcome.blocked}`);
 	await sql.end();
 	process.exit(1);
+}
+
+if (outcome.logical) {
+	console.log('NOTE: logical delete mode — objects become delete markers; space is not reclaimed.');
 }
 
 console.log(`purge ${execute ? 'EXECUTE' : 'dry-run'} — candidates: ${outcome.candidates.length}`);
@@ -53,7 +65,8 @@ if (outcome.skipped.length > 0) {
 		['reused', 'used (dedupe anchor refreshed) since the snapshot'],
 		['referenced', 'gained references since the snapshot'],
 		['gone', 'vanished before the delete (concurrent purge)'],
-		['scan-truncated', 'fail-closed: mention scan hit its row cap']
+		['scan-truncated', 'fail-closed: mention scan hit its row cap'],
+		['blocked', 'deletion contract changed mid-run (W7.5)']
 	];
 	console.log(`skipped: ${outcome.skipped.length}`);
 	for (const [reason, label] of reasons) {

@@ -82,7 +82,16 @@ export const providerConfigSchema = z
 		bucket: z.string().trim().max(63).nullable(),
 		forcePathStyle: z.boolean(),
 		/** Optional CDN alias; the default stays the private `/i` proxy (Q9/Q12). */
-		publicBaseUrl: optionalHttpsUrl
+		publicBaseUrl: optionalHttpsUrl,
+		/**
+		 * Deletion contract (W7.5, decision Q8/Q16): `hard` is the normal mode
+		 * and is only allowed on a bucket whose versioning and object lock are
+		 * off. `logical` is the explicit opt-in for a versioned / locked bucket:
+		 * deletes still issue DELETE (a delete marker appears), the media stops
+		 * being served, and the bytes are NOT reclaimed — the operator says so
+		 * on purpose instead of discovering it during a purge.
+		 */
+		deleteMode: z.enum(['hard', 'logical']).default('hard')
 	})
 	.superRefine((value, ctx) => {
 		if (value.driver === 'local') {
@@ -144,7 +153,8 @@ export const DEFAULT_PROVIDER_CONFIG: StorageProviderConfig = {
 	region: DEFAULT_S3_REGION,
 	bucket: null,
 	forcePathStyle: true,
-	publicBaseUrl: null
+	publicBaseUrl: null,
+	deleteMode: 'hard'
 };
 
 /**

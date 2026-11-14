@@ -142,6 +142,16 @@ export const actions: Actions = {
 				message: m.admin_files_err_in_use({ parts: parts.join(m.admin_files_join()) })
 			});
 		}
+		if (result.kind === 'blocked') {
+			// W7.5: the bucket cannot hard-delete and logical mode was not chosen.
+			// 503 because it is a provider-configuration problem, not a bad request.
+			return fail(503, {
+				message:
+					result.reason === 'capability'
+						? m.admin_files_err_storage_capability()
+						: m.admin_files_err_storage_versioning()
+			});
+		}
 		throw redirect(303, '/admin/files?deleted=1');
 	},
 

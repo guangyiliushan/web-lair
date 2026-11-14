@@ -6,7 +6,7 @@ import { fileReferences } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { getOption } from '$lib/server/config/options-registry';
 import { I_KEY_PATTERN, VARIANT_NAMES, objectKeyFor, variantKeyFor } from '$lib/media/keys';
-import type { ObjectStoragePort } from '$lib/server/storage/port';
+import type { BucketVersioning, ObjectStoragePort } from '$lib/server/storage/port';
 import { processImage, readImageSize } from '$lib/server/media/variants';
 import {
 	MAX_BATCH_COUNT,
@@ -38,6 +38,49 @@ export type FilesDb = Pick<
 export interface FilesDeps {
 	storage?: ObjectStoragePort;
 	db?: FilesDb;
+	/**
+	 * Deletion policy (W7.5). Resolved live when omitted; purge resolves it
+	 * once and threads it through, so a run does not probe per object.
+	 */
+	policy?: StoragePolicy | null;
+}
+
+/**
+ * What the ACTIVE provider allows (W7.5, decisions Q8/Q16). `hard` frees the
+ * bytes; `logical` hides the object behind a delete marker (versioned bucket /
+ * object lock) and reclaims nothing. `null` from the resolver means "cannot be
+ * proven" — every caller fails closed on it.
+ */
+export interface StoragePolicy {
+	deleteMode: 'hard' | 'logical';
+	versioning: BucketVersioning;
+	objectLock: boolean | null;
+}
+
+/** One live capability read + the active provider's declared mode. */
+export async function resolveStoragePolicy(
+	storage: ObjectStoragePort,
+	database: FilesDb
+): Promise<StoragePolicy | null> {
+	const [active, capabilities] = await Promise.all([
+		getOption('storage.active', database),
+		storage.bucketCapabilities().catch(() => null)
+	]);
+	if (!capabilities) return null;
+	// `unknown` / null is not "off": refuse rather than promise a hard delete
+	// that would actually leave every version behind.
+	if (capabilities.versioning === 'unknown' || capabilities.objectLock === null) return null;
+	return {
+		deleteMode: active.config.deleteMode ?? 'hard',
+		versioning: capabilities.versioning,
+		objectLock: capabilities.objectLock
+	};
+}
+
+/** True when this policy permits deleting the object at all. */
+export function policyAllowsDelete(policy: StoragePolicy): boolean {
+	const reclaims = policy.versioning === 'off' && policy.objectLock !== true;
+	return reclaims || policy.deleteMode === 'logical';
 }
 
 async function resolveDeps(
@@ -462,7 +505,13 @@ export type DeleteFileResult =
 	 */
 	| { kind: 'mentioned'; scanTruncated?: boolean }
 	/** Purge only: the row was USED (anchor refreshed) after the snapshot. */
-	| { kind: 'reused' };
+	| { kind: 'reused' }
+	/**
+	 * W7.5: deletion is not provable/reclaimable — `capability` (the bucket's
+	 * versioning/object lock could not be read) or `versioning` (they are on and
+	 * the provider was not switched to logical delete).
+	 */
+	| { kind: 'blocked'; reason: 'capability' | 'versioning' };
 
 export interface DeleteFileOptions {
 	/**
@@ -504,6 +553,13 @@ export async function deleteFile(
 	deps: FilesDeps = {}
 ): Promise<DeleteFileResult> {
 	const { storage, database } = await resolveDeps(deps);
+
+	// Deletion contract first (W7.5): never start a delete that cannot free the
+	// bytes, and never guess the bucket's capabilities.
+	const policy =
+		deps.policy === undefined ? await resolveStoragePolicy(storage, database) : deps.policy;
+	if (!policy) return { kind: 'blocked', reason: 'capability' };
+	if (!policyAllowsDelete(policy)) return { kind: 'blocked', reason: 'versioning' };
 
 	// Transition guard (§6.3 "没有静默删除", review round 1): until the ST-3
 	// reference backfill lands, an `/i/<key>` mention in stored content is
@@ -635,7 +691,14 @@ export interface PurgeFailure {
 }
 
 /** Why a candidate was kept — never a silent drop (round-2 review). */
-export type PurgeSkipReason = 'mentioned' | 'reused' | 'referenced' | 'gone' | 'scan-truncated';
+export type PurgeSkipReason =
+	| 'mentioned'
+	| 'reused'
+	| 'referenced'
+	| 'gone'
+	| 'scan-truncated'
+	/** The deletion contract changed mid-run (W7.5). */
+	| 'blocked';
 
 export interface PurgeSkip {
 	objectKey: string;
@@ -645,11 +708,16 @@ export interface PurgeSkip {
 export interface PurgeOutcome {
 	dryRun: boolean;
 	/**
-	 * Set when the run refused to do anything (W7.4): a provider migration is
-	 * copying the registry, so deleting from the active bucket would lose
-	 * media that the copy has not reached yet.
+	 * Set when the run refused to do anything:
+	 *   `migration`  — a provider copy is in flight (W7.4);
+	 *   `capability` — the bucket's versioning/object lock could not be read,
+	 *                  so "frees space" cannot be proven (W7.5);
+	 *   `versioning` — versioning/object lock is on and the active provider is
+	 *                  not in logical-delete mode (W7.5).
 	 */
-	blocked: 'migration' | null;
+	blocked: PurgeBlocked | null;
+	/** True when this run deletes logically (delete markers; no space freed). */
+	logical: boolean;
 	candidates: PurgeCandidate[];
 	/**
 	 * Candidates kept, each tagged with its reason: `mentioned` (content
@@ -666,6 +734,9 @@ export interface PurgeOutcome {
 	scanTruncated: boolean;
 }
 
+/** Why a purge run refused to start (W7.4/W7.5); null on a normal run. */
+export type PurgeBlocked = 'migration' | 'capability' | 'versioning';
+
 /**
  * `purge-media` (§4.6): dry-run first by contract; deletion re-checks
  * references AND refuses keys still mentioned by stored content. Until the
@@ -678,21 +749,32 @@ export async function purgeMedia(
 	deps: FilesDeps = {}
 ): Promise<PurgeOutcome> {
 	const { storage, database } = await resolveDeps(deps);
+	const blockedOutcome = (reason: PurgeBlocked): PurgeOutcome => ({
+		dryRun: options.dryRun,
+		blocked: reason,
+		logical: false,
+		candidates: [],
+		skipped: [],
+		failed: [],
+		deleted: [],
+		scanTruncated: false
+	});
+
 	// W7.4: a purge deletes from the ACTIVE bucket, which is exactly the object
 	// set a running provider copy still needs. Refuse for the whole run —
 	// including dry-run, so the operator sees why nothing is listed.
-	if (await migrationFreezeActive(database)) {
-		return {
-			dryRun: options.dryRun,
-			blocked: 'migration',
-			candidates: [],
-			skipped: [],
-			failed: [],
-			deleted: [],
-			scanTruncated: false
-		};
-	}
-	const candidates = await listPurgeCandidates({ storage, db: database });
+	if (await migrationFreezeActive(database)) return blockedOutcome('migration');
+
+	// W7.5: the deletion contract. `unknown` capabilities or a versioned bucket
+	// without the explicit logical mode means the run would leave bytes behind
+	// while reporting success — refuse instead.
+	const policy =
+		deps.policy === undefined ? await resolveStoragePolicy(storage, database) : deps.policy;
+	if (!policy) return blockedOutcome('capability');
+	if (!policyAllowsDelete(policy)) return blockedOutcome('versioning');
+	const runDeps: FilesDeps = { storage, db: database, policy };
+
+	const candidates = await listPurgeCandidates(runDeps);
 	const { mentions, truncated } = await scanMentions(database);
 	const mentioned = new Set(mentions.map((mention) => mention.key));
 	const { pendingDays, detachedDays } = await getOption('media.purge', database);
@@ -729,7 +811,7 @@ export async function purgeMedia(
 				const result = await deleteFile(
 					candidate.id,
 					{ requireUnusedSince: cutoff, skipMentionScan: true },
-					{ storage, db: database }
+					runDeps
 				);
 				if (result.kind === 'ok') deleted.push(candidate.objectKey);
 				else if (result.kind === 'reused')
@@ -738,6 +820,8 @@ export async function purgeMedia(
 					skipped.push({ objectKey: candidate.objectKey, reason: 'referenced' });
 				else if (result.kind === 'not-found')
 					skipped.push({ objectKey: candidate.objectKey, reason: 'gone' });
+				else if (result.kind === 'blocked')
+					skipped.push({ objectKey: candidate.objectKey, reason: 'blocked' });
 				else skipped.push({ objectKey: candidate.objectKey, reason: 'mentioned' });
 			} catch (error) {
 				failed.push({
@@ -750,6 +834,7 @@ export async function purgeMedia(
 	return {
 		dryRun: options.dryRun,
 		blocked: null,
+		logical: policy.deleteMode === 'logical',
 		candidates,
 		skipped,
 		failed,

@@ -13,6 +13,7 @@ vi.mock('$lib/server/cache', () => ({ getCache: () => ({}) }));
 vi.mock('$lib/server/cache/store', () => ({ rateLimit: rateLimitMock }));
 
 import { GET, HEAD } from './[...key]/+server';
+import { StorageError } from '$lib/server/storage/port';
 
 /** sha256-shaped key whose directory equals the first two hex chars. */
 const SHA = 'ab' + 'c'.repeat(62);
@@ -280,5 +281,50 @@ describe('/i/<key> proxy (T9)', () => {
 		} as unknown as Parameters<typeof GET>[0]);
 		expect(res.status).toBe(429);
 		expect(storageMock.get).not.toHaveBeenCalled();
+	});
+});
+
+describe('/i/<key> provider outage (W7.5/Q14)', () => {
+	it('answers 503 with retry-after when the active provider is unreachable', async () => {
+		storageMock.get.mockRejectedValueOnce(
+			new StorageError('storage request failed: GET /x', 0, null)
+		);
+
+		const res = await GET(event(VARIANT_KEY));
+
+		expect(res.status).toBe(503);
+		expect(res.headers.get('retry-after')).toBe('30');
+		expect(res.headers.get('cache-control')).toBe('no-store');
+	});
+
+	it('answers 503 on an upstream 5xx and does not fall back', async () => {
+		storageMock.get.mockRejectedValueOnce(
+			new StorageError('storage get failed: HTTP 503', 503, 'SlowDown')
+		);
+
+		const res = await GET(event(VARIANT_KEY));
+
+		expect(res.status).toBe(503);
+		// One attempt only: no second key/bucket is consulted.
+		expect(storageMock.get).toHaveBeenCalledTimes(1);
+	});
+
+	it('rethrows a 4xx storage error instead of masking it as an outage', async () => {
+		storageMock.get.mockRejectedValueOnce(
+			new StorageError('storage get failed: HTTP 403', 403, 'AccessDenied')
+		);
+
+		await expect(GET(event(VARIANT_KEY))).rejects.toMatchObject({
+			name: 'StorageError',
+			status: 403
+		});
+	});
+
+	it('does the same for HEAD', async () => {
+		storageMock.head.mockRejectedValueOnce(new StorageError('storage request failed', 0, null));
+
+		const res = await HEAD(event(VARIANT_KEY));
+
+		expect(res.status).toBe(503);
 	});
 });

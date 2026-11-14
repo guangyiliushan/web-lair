@@ -52,6 +52,15 @@ export interface BucketCapabilities {
 	objectLock: boolean | null;
 }
 
+/**
+ * True when the provider is reachable-but-failing or unreachable (W7.5/Q14):
+ * the request cannot be served from this provider, and the app must NOT fall
+ * back to another one — 503 is the honest answer.
+ */
+export function isStorageUnavailable(error: unknown): boolean {
+	return error instanceof StorageError && (error.status === 0 || error.status >= 500);
+}
+
 /** Non-2xx storage response the caller cannot treat as "absent". */
 export class StorageError extends Error {
 	constructor(

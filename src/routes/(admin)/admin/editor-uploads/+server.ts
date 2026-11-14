@@ -11,6 +11,7 @@ import { listAdminPhotos } from '$lib/server/services/photos';
 import { photoEmbedSrc, photoTileSrc } from '$lib/components/photos/photo-tile';
 import type { PickerItem } from '$lib/media/editor-uploads';
 import { MAX_UPLOAD_BYTES, sniffUpload } from '$lib/server/media/sniff';
+import { isStorageUnavailable } from '$lib/server/storage/port';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
 
@@ -116,6 +117,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 							? 415
 							: 400;
 			return jsonPrivate({ code: error.code }, status);
+		}
+		// Active provider down (W7.5/Q14): a retryable 503, not a bad request.
+		if (isStorageUnavailable(error)) {
+			return jsonPrivate({ code: 'storage-unavailable' }, 503);
 		}
 		// Sanitized line only (house policy: driver messages never reach the
 		// logs or the client).

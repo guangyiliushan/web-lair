@@ -128,6 +128,8 @@ export function providerFromForm(form: FormData): StorageProviderConfig {
 	const bucket = stringField(form, 'bucket');
 	const publicBaseUrl = stringField(form, 'publicBaseUrl');
 	const region = stringField(form, 'region');
+	const deleteMode =
+		form.get('deleteMode') === 'logical' ? ('logical' as const) : ('hard' as const);
 	if (driver === 'local') {
 		return {
 			driver: 'local',
@@ -136,7 +138,8 @@ export function providerFromForm(form: FormData): StorageProviderConfig {
 			region: region || 'us-east-1',
 			bucket: null,
 			forcePathStyle: true,
-			publicBaseUrl: publicBaseUrl === '' ? null : publicBaseUrl
+			publicBaseUrl: publicBaseUrl === '' ? null : publicBaseUrl,
+			deleteMode
 		};
 	}
 	return {
@@ -146,7 +149,8 @@ export function providerFromForm(form: FormData): StorageProviderConfig {
 		region: region || 'us-east-1',
 		bucket: bucket === '' ? null : bucket,
 		forcePathStyle: form.get('forcePathStyle') === 'on' || form.get('forcePathStyle') === 'true',
-		publicBaseUrl: publicBaseUrl === '' ? null : publicBaseUrl
+		publicBaseUrl: publicBaseUrl === '' ? null : publicBaseUrl,
+		deleteMode
 	};
 }
 
