@@ -43,7 +43,9 @@ interface AuthOptions {
 	emailAndPassword?: {
 		revokeSessionsOnPasswordReset?: unknown;
 		onPasswordReset?: unknown;
+		password?: { hash?: unknown; verify?: unknown };
 	};
+	session?: { expiresIn?: unknown; updateAge?: unknown };
 }
 
 describe('auth config security wiring', () => {
@@ -67,5 +69,15 @@ describe('auth config security wiring', () => {
 		// The adapter stays the official drizzle adapter (mocked by id): no
 		// wrapper that would change better-auth's own storage semantics (H3).
 		expect(options.database).toEqual({ id: 'test-adapter' });
+	});
+
+	it('wires the W8.8 password hash/verify hooks and the 30-day/24-hour session policy', () => {
+		const options = auth.options as AuthOptions;
+		expect(typeof options.emailAndPassword?.password?.hash).toBe('function');
+		expect(typeof options.emailAndPassword?.password?.verify).toBe('function');
+		expect(options.session).toEqual({
+			expiresIn: 30 * 24 * 60 * 60,
+			updateAge: 24 * 60 * 60
+		});
 	});
 });
