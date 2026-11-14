@@ -31,12 +31,15 @@ export type WebhookUrlRejectReason =
 	'invalid_url' | 'insecure_scheme' | 'credentials' | 'blocked_host' | 'unresolvable';
 
 export class WebhookUrlError extends Error {
-	constructor(
-		readonly reason: WebhookUrlRejectReason,
-		message: string
-	) {
+	// Explicit field, not a constructor parameter property: `jobs/drain.ts`
+	// loads this module under plain Node type stripping, which rejects
+	// parameter properties (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX).
+	readonly reason: WebhookUrlRejectReason;
+
+	constructor(reason: WebhookUrlRejectReason, message: string) {
 		super(message);
 		this.name = 'WebhookUrlError';
+		this.reason = reason;
 	}
 }
 

@@ -846,6 +846,22 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 				deps.log(`[drain] webhook endpoint ${endpoint.id}: 410 Gone, endpoint disabled`);
 				return 'failed';
 			}
+			if (responseClass === 'permanent') {
+				// 3xx (never followed) and 4xx other than 408/429: retrying
+				// cannot succeed, so the row turns terminal immediately.
+				await tx
+					.update(webhookDeliveries)
+					.set({
+						status: 'failed',
+						attemptCount: attemptsMade,
+						nextAttemptAt: finishedAt,
+						responseCode: response.status,
+						error: `HTTP ${response.status}`,
+						deliveredAt: finishedAt
+					})
+					.where(eq(webhookDeliveries.id, delivery.id));
+				return 'failed';
+			}
 			const outcome = await finishAttempt({
 				attemptsMade,
 				responseCode: response.status,

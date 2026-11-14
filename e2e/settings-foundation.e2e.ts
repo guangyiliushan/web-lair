@@ -51,6 +51,25 @@ test('read-only pages render zero form controls', async ({ page }) => {
 	}
 });
 
+test('notifications shows Mail status, Webhooks and the static M6 note', async ({ page }) => {
+	const response = await page.goto('/admin/settings/notifications');
+	expect(response?.status()).toBe(200);
+	await expect(page.getByRole('heading', { name: 'Mail', exact: true }).first()).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Webhooks', exact: true }).first()).toBeVisible();
+	await expect(
+		page.getByRole('heading', { name: 'Human channels (planned)', exact: true }).first()
+	).toBeVisible();
+	// SMTP credentials are env-only: the page renders status values, never a
+	// password input (W9.2 deleted the mock credential fields).
+	await expect(page.locator('input[type="password"]')).toHaveCount(0);
+	// The mock Save is gone. The only mail control is the real test send, and
+	// it is disabled while MAIL_ENABLED is not set (e2e runs dev-log mail).
+	const send = page.getByRole('button', { name: 'Send test email' }).first();
+	await expect(send).toBeVisible();
+	await expect(send).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+});
+
 test('the old user/notification routes permanently redirect', async ({ page }) => {
 	await page.goto('/admin/settings/user');
 	await expect(page).toHaveURL(/\/admin\/settings\/profile$/);

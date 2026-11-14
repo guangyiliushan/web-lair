@@ -31,7 +31,15 @@ export async function pruneDiscardedTranslations(
 				// `updated_at` is what the workbench shows as the discard time: a
 				// row touched later is not old yet, and `created_at` alone would
 				// delete a freshly discarded long-lived draft.
-				lt(sql`coalesce(${translations.updatedAt}, ${translations.createdAt})`, cutoff)
+				//
+				// Bind the cutoff as an ISO string cast to timestamptz: the left
+				// side is a raw coalesce(), so the driver cannot infer the
+				// parameter type and rejects a JS Date with
+				// ERR_INVALID_ARG_TYPE (found by db:verify-jobs on W9.5).
+				lt(
+					sql`coalesce(${translations.updatedAt}, ${translations.createdAt})`,
+					sql`${cutoff.toISOString()}::timestamptz`
+				)
 			)
 		)
 		.returning({ id: translations.id });

@@ -71,6 +71,12 @@ describe('pruneDiscardedTranslations', () => {
 		// The cutoff rides on `updated_at` (falling back to `created_at`), not on
 		// the creation time alone.
 		expect(sqlText).toContain('updated_at');
+		// ...and it is bound as an ISO string cast to timestamptz. A JS Date
+		// against the raw coalesce() expression makes postgres.js throw
+		// ERR_INVALID_ARG_TYPE (db:verify-jobs caught it on W9.5).
+		expect(sqlText).toContain('timestamptz');
+		expect(sqlText).not.toContain('cutoff-date');
+		expect(sqlText).toMatch(/\d{4}-\d{2}-\d{2}T/);
 	});
 
 	it('does nothing when the retention window is disabled', async () => {
