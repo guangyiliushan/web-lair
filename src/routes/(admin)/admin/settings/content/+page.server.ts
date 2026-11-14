@@ -24,7 +24,9 @@ export const load: PageServerLoad = async (event) => {
 		readerView,
 		readerDots,
 		notesGate,
-		friendsApply
+		friendsApply,
+		friendsChecks,
+		friendsPolicy
 	] = await Promise.all([
 		getOption('comments.enabled'),
 		getOption('comments.privacy'),
@@ -33,7 +35,9 @@ export const load: PageServerLoad = async (event) => {
 		getOption('presence.readerView'),
 		getOption('presence.readerDots'),
 		getOption('notes.gate'),
-		getOption('friends.apply')
+		getOption('friends.apply'),
+		getOption('friends.checks'),
+		getOption('friends.policy')
 	]);
 	const role = event.locals.admin?.role;
 	return {
@@ -44,7 +48,7 @@ export const load: PageServerLoad = async (event) => {
 		moderation: moderation.enabled,
 		presence: { enabled: presenceEnabled, readerView, readerDots },
 		notesGate,
-		friendsApply,
+		friends: { apply: friendsApply, checks: friendsChecks, policy: friendsPolicy },
 		editable: {
 			comments: settingAccess(role, 'content', 'comments.enabled').editable,
 			privacy: settingAccess(role, 'content', 'comments.privacy').editable,
@@ -54,6 +58,14 @@ export const load: PageServerLoad = async (event) => {
 		}
 	};
 };
+
+/**
+ * Zod issues carry the localized registry copy for every bounded field; this
+ * keeps the first one and never invents a message of its own.
+ */
+function firstIssue(caught: z.ZodError, fallback: string): string {
+	return caught.issues[0]?.message ?? fallback;
+}
 
 export const actions: Actions = {
 	/** W6.1 (C1): the site-wide switch for NEW comments. */
@@ -130,5 +142,134 @@ export const actions: Actions = {
 			deliver: false
 		});
 		return { message: m.admin_settings_content_flash_privacy_saved() };
+	},
+
+	/** W6.4 (C8): friend-link application switches. */
+	saveFriendsApply: async ({ locals, request }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'content', 'friends.apply');
+		const form = await request.formData();
+		const value = {
+			enabled: form.get('enabled') !== null,
+			allowSubPath: form.get('allowSubPath') !== null
+		};
+		await setOption('friends.apply', value);
+		await recordActivity(db, {
+			event: 'friends.update',
+			actorId: locals.user?.id ?? null,
+			payload: { fields: ['friends.apply.enabled', 'friends.apply.allowSubPath'], ...value },
+			deliver: false
+		});
+		return { message: m.admin_settings_content_flash_friends_saved() };
+	},
+
+	/** W6.4 (C8): the checker cadence and strike policy. */
+	saveFriendsChecks: async ({ locals, request }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'content', 'friends.checks');
+		const form = await request.formData();
+		const numberField = (name: string) => Number((form.get(name) ?? '').toString().trim());
+		const value = {
+			enabled: form.get('enabled') !== null,
+			cadenceHours: numberField('cadenceHours'),
+			failStreak: numberField('failStreak'),
+			backlinkStreak: numberField('backlinkStreak'),
+			graceDays: numberField('graceDays'),
+			timeoutMs: numberField('timeoutMs'),
+			concurrency: numberField('concurrency')
+		};
+		try {
+			await setOption('friends.checks', value);
+		} catch (caught) {
+			if (caught instanceof z.ZodError) {
+				return fail(400, { message: firstIssue(caught, m.comment_error_generic()) });
+			}
+			throw caught;
+		}
+		await recordActivity(db, {
+			event: 'friends.update',
+			actorId: locals.user?.id ?? null,
+			payload: {
+				fields: [
+					'friends.checks.enabled',
+					'friends.checks.cadenceHours',
+					'friends.checks.failStreak',
+					'friends.checks.backlinkStreak',
+					'friends.checks.graceDays',
+					'friends.checks.timeoutMs',
+					'friends.checks.concurrency'
+				],
+				...value
+			},
+			deliver: false
+		});
+		return { message: m.admin_settings_content_flash_friends_saved() };
+	},
+
+	/** W6.4 (C8): the link policy lists. */
+	saveFriendsPolicy: async ({ locals, request }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'content', 'friends.policy');
+		const form = await request.formData();
+		const lines = (name: string) =>
+			(form.get(name) ?? '')
+				.toString()
+				.split('\n')
+				.map((entry) => entry.trim())
+				.filter(Boolean);
+		const value = {
+			blockedHostSuffixes: lines('blockedHostSuffixes'),
+			blockedTlds: lines('blockedTlds'),
+			acceptedBacklinkHosts: lines('acceptedBacklinkHosts'),
+			publicBannedList: form.get('publicBannedList') !== null
+		};
+		try {
+			await setOption('friends.policy', value);
+		} catch (caught) {
+			if (caught instanceof z.ZodError) {
+				return fail(400, { message: firstIssue(caught, m.comment_error_generic()) });
+			}
+			throw caught;
+		}
+		await recordActivity(db, {
+			event: 'friends.update',
+			actorId: locals.user?.id ?? null,
+			payload: {
+				fields: [
+					'friends.policy.blockedHostSuffixes',
+					'friends.policy.blockedTlds',
+					'friends.policy.acceptedBacklinkHosts',
+					'friends.policy.publicBannedList'
+				],
+				...value
+			},
+			deliver: false
+		});
+		return { message: m.admin_settings_content_flash_friends_saved() };
+	},
+
+	/** W6.5 (C8/IA8): reading-experience presence stays on Content. */
+	savePresence: async ({ locals, request }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'content', 'presence.enabled');
+		const form = await request.formData();
+		const enabled = form.get('enabled') !== null;
+		const readerView = form.get('readerView') !== null;
+		const readerDots = form.get('readerDots') !== null;
+		await setOption('presence.enabled', enabled);
+		await setOption('presence.readerView', readerView);
+		await setOption('presence.readerDots', readerDots);
+		await recordActivity(db, {
+			event: 'presence.update',
+			actorId: locals.user?.id ?? null,
+			payload: {
+				fields: ['presence.enabled', 'presence.readerView', 'presence.readerDots'],
+				enabled,
+				readerView,
+				readerDots
+			},
+			deliver: false
+		});
+		return { message: m.admin_settings_content_flash_presence_saved() };
 	}
 };

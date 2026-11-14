@@ -181,31 +181,304 @@
 		</div>
 	</section>
 
-	<SettingsStatusList title={m.admin_settings_content_friends_section()}>
-		<SettingsStatusRow
-			label={m.admin_settings_content_friends_apply()}
-			value={onOff(data.friendsApply.enabled)}
-		/>
-		<SettingsStatusRow
-			label={m.admin_settings_content_friend_subpaths()}
-			value={onOff(data.friendsApply.allowSubPath)}
-		/>
-	</SettingsStatusList>
+	<section class="rounded-lg border p-4" aria-labelledby="content-friends-title">
+		<h2 id="content-friends-title" class="text-sm font-semibold">
+			{m.admin_settings_content_friends_section()}
+		</h2>
+		<p class="mt-1 text-xs text-muted-foreground">{m.admin_settings_content_friends_desc()}</p>
 
-	<SettingsStatusList title={m.admin_settings_content_presence()}>
-		<SettingsStatusRow
-			label={m.admin_settings_content_presence()}
-			value={onOff(data.presence.enabled)}
-		/>
-		<SettingsStatusRow
-			label={m.admin_settings_content_reader_view()}
-			value={onOff(data.presence.readerView)}
-		/>
-		<SettingsStatusRow
-			label={m.admin_settings_content_reader_dots()}
-			value={onOff(data.presence.readerDots)}
-		/>
-	</SettingsStatusList>
+		<form method="POST" action="?/saveFriendsApply" class="mt-4 flex flex-col gap-3" use:enhance>
+			<label class="flex items-start gap-3">
+				<input
+					type="checkbox"
+					name="enabled"
+					checked={data.friends.apply.enabled}
+					disabled={!data.editable.friends}
+					class="mt-0.5 size-4 accent-primary"
+				/>
+				<span>
+					<span class="text-sm font-medium">{m.admin_settings_content_friends_apply()}</span>
+					<span class="block text-xs text-muted-foreground">
+						{m.admin_settings_content_friends_apply_hint()}
+					</span>
+				</span>
+			</label>
+			<label class="flex items-start gap-3">
+				<input
+					type="checkbox"
+					name="allowSubPath"
+					checked={data.friends.apply.allowSubPath}
+					disabled={!data.editable.friends}
+					class="mt-0.5 size-4 accent-primary"
+				/>
+				<span>
+					<span class="text-sm font-medium">{m.admin_settings_content_friend_subpaths()}</span>
+					<span class="block text-xs text-muted-foreground">
+						{m.admin_settings_content_friend_subpaths_hint()}
+					</span>
+				</span>
+			</label>
+			{#if data.editable.friends}
+				<div>
+					<Button type="submit" size="sm">{m.admin_settings_content_save()}</Button>
+				</div>
+			{/if}
+		</form>
+
+		<form
+			method="POST"
+			action="?/saveFriendsChecks"
+			class="mt-5 flex flex-col gap-3 border-t border-border/50 pt-4"
+			use:enhance
+		>
+			<div>
+				<h3 class="text-sm font-medium">{m.admin_settings_content_checks_section()}</h3>
+				<p class="text-xs text-muted-foreground">{m.admin_settings_content_checks_desc()}</p>
+			</div>
+			<label class="flex items-start gap-3">
+				<input
+					type="checkbox"
+					name="enabled"
+					checked={data.friends.checks.enabled}
+					disabled={!data.editable.friends}
+					class="mt-0.5 size-4 accent-primary"
+				/>
+				<span class="text-sm font-medium">{m.admin_settings_content_checks_enabled()}</span>
+			</label>
+			<div class="grid gap-3 sm:grid-cols-3">
+				<Field.Field>
+					<Field.Label for="checks-cadence">
+						{m.admin_settings_content_checks_cadence()}
+					</Field.Label>
+					<Input
+						id="checks-cadence"
+						name="cadenceHours"
+						type="number"
+						min="1"
+						step="1"
+						value={String(data.friends.checks.cadenceHours)}
+						disabled={!data.editable.friends}
+					/>
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="checks-fail">
+						{m.admin_settings_content_checks_fail()}
+					</Field.Label>
+					<Input
+						id="checks-fail"
+						name="failStreak"
+						type="number"
+						min="1"
+						step="1"
+						value={String(data.friends.checks.failStreak)}
+						disabled={!data.editable.friends}
+					/>
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="checks-backlink">
+						{m.admin_settings_content_checks_backlink()}
+					</Field.Label>
+					<Input
+						id="checks-backlink"
+						name="backlinkStreak"
+						type="number"
+						min="1"
+						step="1"
+						value={String(data.friends.checks.backlinkStreak)}
+						disabled={!data.editable.friends}
+					/>
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="checks-grace">
+						{m.admin_settings_content_checks_grace()}
+					</Field.Label>
+					<Input
+						id="checks-grace"
+						name="graceDays"
+						type="number"
+						min="1"
+						step="1"
+						value={String(data.friends.checks.graceDays)}
+						disabled={!data.editable.friends}
+					/>
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="checks-timeout">
+						{m.admin_settings_content_checks_timeout()}
+					</Field.Label>
+					<Input
+						id="checks-timeout"
+						name="timeoutMs"
+						type="number"
+						min="1000"
+						max="60000"
+						step="500"
+						value={String(data.friends.checks.timeoutMs)}
+						disabled={!data.editable.friends}
+					/>
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="checks-concurrency">
+						{m.admin_settings_content_checks_concurrency()}
+					</Field.Label>
+					<Input
+						id="checks-concurrency"
+						name="concurrency"
+						type="number"
+						min="1"
+						max="16"
+						step="1"
+						value={String(data.friends.checks.concurrency)}
+						disabled={!data.editable.friends}
+					/>
+				</Field.Field>
+			</div>
+			{#if data.editable.friends}
+				<div>
+					<Button type="submit" size="sm">{m.admin_settings_content_save()}</Button>
+				</div>
+			{/if}
+		</form>
+
+		<form
+			method="POST"
+			action="?/saveFriendsPolicy"
+			class="mt-5 flex flex-col gap-3 border-t border-border/50 pt-4"
+			use:enhance
+		>
+			<div>
+				<h3 class="text-sm font-medium">{m.admin_settings_content_policy_section()}</h3>
+				<p class="text-xs text-muted-foreground">{m.admin_settings_content_policy_desc()}</p>
+			</div>
+			<Field.Field>
+				<Field.Label for="policy-hosts">{m.admin_settings_content_policy_hosts()}</Field.Label>
+				<Textarea
+					id="policy-hosts"
+					name="blockedHostSuffixes"
+					rows={3}
+					value={data.friends.policy.blockedHostSuffixes.join('\n')}
+					disabled={!data.editable.friends}
+				/>
+				<p class="text-xs text-muted-foreground">
+					{m.admin_settings_content_policy_list_hint()}
+				</p>
+			</Field.Field>
+			<Field.Field>
+				<Field.Label for="policy-tlds">{m.admin_settings_content_policy_tlds()}</Field.Label>
+				<Textarea
+					id="policy-tlds"
+					name="blockedTlds"
+					rows={2}
+					value={data.friends.policy.blockedTlds.join('\n')}
+					disabled={!data.editable.friends}
+				/>
+				<p class="text-xs text-muted-foreground">
+					{m.admin_settings_content_policy_list_hint()}
+				</p>
+			</Field.Field>
+			<Field.Field>
+				<Field.Label for="policy-accepted">
+					{m.admin_settings_content_policy_accepted()}
+				</Field.Label>
+				<Textarea
+					id="policy-accepted"
+					name="acceptedBacklinkHosts"
+					rows={2}
+					value={data.friends.policy.acceptedBacklinkHosts.join('\n')}
+					disabled={!data.editable.friends}
+				/>
+				<p class="text-xs text-muted-foreground">
+					{m.admin_settings_content_policy_list_hint()}
+				</p>
+			</Field.Field>
+			<label class="flex items-start gap-3">
+				<input
+					type="checkbox"
+					name="publicBannedList"
+					checked={data.friends.policy.publicBannedList}
+					disabled={!data.editable.friends}
+					class="mt-0.5 size-4 accent-primary"
+				/>
+				<span class="text-sm font-medium">{m.admin_settings_content_policy_public()}</span>
+			</label>
+			{#if data.editable.friends}
+				<div>
+					<Button type="submit" size="sm">{m.admin_settings_content_save()}</Button>
+				</div>
+			{:else}
+				<p class="text-xs text-muted-foreground">{m.admin_settings_common_owner_only()}</p>
+			{/if}
+		</form>
+
+		<div class="mt-4 border-t border-border/50 pt-3 text-xs">
+			<a class="wl-accent-link underline underline-offset-2" href="/admin/friends">
+				{m.admin_settings_content_friends_console()}
+			</a>
+		</div>
+	</section>
+
+	<section class="rounded-lg border p-4" aria-labelledby="content-presence-title">
+		<h2 id="content-presence-title" class="text-sm font-semibold">
+			{m.admin_settings_content_presence()}
+		</h2>
+		<p class="mt-1 text-xs text-muted-foreground">
+			{m.admin_settings_content_presence_desc()}
+		</p>
+		<form method="POST" action="?/savePresence" class="mt-4 flex flex-col gap-3" use:enhance>
+			<label class="flex items-start gap-3">
+				<input
+					type="checkbox"
+					name="enabled"
+					checked={data.presence.enabled}
+					disabled={!data.editable.presence}
+					class="mt-0.5 size-4 accent-primary"
+				/>
+				<span>
+					<span class="text-sm font-medium">{m.admin_settings_content_presence()}</span>
+					<span class="block text-xs text-muted-foreground">
+						{m.admin_settings_content_presence_enable_hint()}
+					</span>
+				</span>
+			</label>
+			<label class="flex items-start gap-3">
+				<input
+					type="checkbox"
+					name="readerView"
+					checked={data.presence.readerView}
+					disabled={!data.editable.presence}
+					class="mt-0.5 size-4 accent-primary"
+				/>
+				<span>
+					<span class="text-sm font-medium">{m.admin_settings_content_reader_view()}</span>
+					<span class="block text-xs text-muted-foreground">
+						{m.admin_settings_content_reader_view_hint()}
+					</span>
+				</span>
+			</label>
+			<label class="flex items-start gap-3">
+				<input
+					type="checkbox"
+					name="readerDots"
+					checked={data.presence.readerDots}
+					disabled={!data.editable.presence}
+					class="mt-0.5 size-4 accent-primary"
+				/>
+				<span>
+					<span class="text-sm font-medium">{m.admin_settings_content_reader_dots()}</span>
+					<span class="block text-xs text-muted-foreground">
+						{m.admin_settings_content_reader_dots_hint()}
+					</span>
+				</span>
+			</label>
+			{#if data.editable.presence}
+				<div>
+					<Button type="submit" size="sm">{m.admin_settings_content_save()}</Button>
+				</div>
+			{:else}
+				<p class="text-xs text-muted-foreground">{m.admin_settings_common_owner_only()}</p>
+			{/if}
+		</form>
+	</section>
 
 	<SettingsStatusList title={m.admin_settings_content_notes_gate()}>
 		<SettingsStatusRow
