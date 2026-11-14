@@ -14,6 +14,8 @@ const FIXTURE_PASSWORD = 'e2e-account-password-1';
 const FIXTURE_NEW_PASSWORD = 'e2e-account-password-2';
 const PASSKEY_ONLY_EMAIL = 'e2e-passkey-only@example.com';
 const PASSKEY_ONLY_PASSWORD = 'e2e-passkey-only-password-1';
+const PASSKEY_EMAIL = 'e2e-passkey@example.com';
+const PASSKEY_PASSWORD = 'e2e-passkey-password-1';
 
 async function sessionJson(context: BrowserContext): Promise<unknown> {
 	const response = await context.request.get('/api/auth/get-session');
@@ -46,18 +48,33 @@ test.describe('real load / static truth', () => {
 		await expect(page.getByText('http://localhost:4173/api/auth/callback/google')).toBeVisible();
 		await expect(page.getByText('GitHub', { exact: true })).toBeVisible();
 		await expect(page.getByText('Google (planned)', { exact: true })).toBeVisible();
+		const oauth = page.locator('section').filter({
+			has: page.getByRole('heading', { name: 'OAuth sign-in', exact: true })
+		});
+		await expect(oauth.locator('[data-slot="badge"]').first()).toHaveText(
+			/Configured|Not configured/
+		);
+		await expect(oauth.locator('input[type="checkbox"], [role="switch"]')).toHaveCount(0);
 
 		// 2FA is scoped to password sign-in; passkeys are a documented bypass.
-		await expect(page.getByText(/TOTP applies only to password sign-in/i).first()).toBeVisible();
-		await expect(page.getByText(/not challenged by TOTP/i).first()).toBeVisible();
+		const twoFactor = page.locator('section').filter({
+			has: page.getByRole('heading', { name: 'Two-step verification (TOTP)', exact: true })
+		});
+		await expect(twoFactor.getByText(/TOTP applies only to password sign-in/i)).toBeVisible();
+		await expect(twoFactor.getByText(/not challenged by TOTP/i)).toBeVisible();
 	});
 
-	test('the page HTML contains no credential or session token', async ({ page }) => {
+	test('the page HTML contains no credential or session token', async ({ page, context }) => {
 		const response = await page.goto('/admin/settings/account');
+		expect(page.url()).toContain('/admin/settings/account');
 		const html = await response!.text();
+		expect(html).toContain('Signed-in devices');
 		expect(html).not.toContain('better-auth.session_token');
 		expect(html).not.toContain('GITHUB_CLIENT_SECRET=');
 		expect(html).not.toContain('"accessToken"');
+		for (const cookie of await context.cookies()) {
+			if (cookie.name.includes('session_token')) expect(html).not.toContain(cookie.value);
+		}
 	});
 });
 
@@ -210,7 +227,7 @@ test.describe('password change', () => {
 				email: FIXTURE_EMAIL,
 				password: FIXTURE_PASSWORD
 			});
-			expect(oldSignIn.ok()).toBeFalsy();
+			expect([400, 401]).toContain(oldSignIn.status());
 			const newSignIn = await apiPost(page, '/api/auth/sign-in/email', {
 				email: FIXTURE_EMAIL,
 				password: FIXTURE_NEW_PASSWORD
@@ -229,10 +246,32 @@ test.describe('password change', () => {
 });
 
 test.describe('passkey management', () => {
+	test.beforeAll(() => {
+		psql(`delete from "user" where email = '${PASSKEY_EMAIL}'`);
+	});
+	test.afterAll(() => {
+		psql(`delete from "user" where email = '${PASSKEY_EMAIL}'`);
+	});
+
 	test('adds, renames and deletes a virtual passkey', async ({ page, context }) => {
 		test.setTimeout(180_000);
 		const name = `E2E passkey ${Date.now()}`;
 		const renamed = `${name} renamed`;
+
+		const signUp = await apiPost(page, '/api/auth/sign-up/email', {
+			email: PASSKEY_EMAIL,
+			name: 'E2E Passkey',
+			password: PASSKEY_PASSWORD
+		});
+		expect([200, 422]).toContain(signUp.status());
+		psql(
+			`update "user" set email_verified = true, role = 'admin' where email = '${PASSKEY_EMAIL}'`
+		);
+		const signIn = await apiPost(page, '/api/auth/sign-in/email', {
+			email: PASSKEY_EMAIL,
+			password: PASSKEY_PASSWORD
+		});
+		expect(signIn.ok()).toBeTruthy();
 
 		const cdp = await context.newCDPSession(page);
 		await cdp.send('WebAuthn.enable');
@@ -274,6 +313,7 @@ test.describe('passkey management', () => {
 			await row.locator('input[name="name"]').fill(renamed);
 			await row.getByRole('button', { name: 'Save name' }).click();
 			await expect(page.getByText(renamed, { exact: true })).toBeVisible({ timeout: 20_000 });
+			expect(psql(`select name from passkey where id = '${passkeyId}'`)).toBe(renamed);
 
 			page.once('dialog', (dialog) => dialog.accept());
 			const renamedRow = page.locator('li').filter({ hasText: renamed }).first();
@@ -281,6 +321,12 @@ test.describe('passkey management', () => {
 			await expect(page.getByText(renamed, { exact: true })).toHaveCount(0, {
 				timeout: 20_000
 			});
+			expect(psql(`select count(*) from passkey where id = '${passkeyId}'`)).toBe('0');
+			expect(
+				psql(
+					`select count(*) from activities where event = 'account.passkey_delete' and payload->>'passkey_id' = '${passkeyId}'`
+				)
+			).toBe('1');
 		} finally {
 			await cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId }).catch(() => {});
 		}
