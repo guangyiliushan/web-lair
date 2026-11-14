@@ -6,7 +6,6 @@ import { auth } from '$lib/server/auth';
 import { ADMIN_BASE_PATH, ADMIN_HOME_PATH, assertAdminSlug } from '$lib/server/config/admin';
 import { getUserRole, hasAnyAdminCapability } from '$lib/server/authz';
 import { isSiteOrganizationMember } from '$lib/server/auth/site-organization';
-import { pruneOtherSessions } from '$lib/server/auth/sessions';
 import { safeRedirect } from '$lib/server/safe-redirect';
 
 export const load: PageServerLoad = async (event) => {
@@ -75,7 +74,10 @@ export const actions: Actions = {
 					return fail(500, { message: m.admin_auth_err_session_failed(), redirectTo });
 				}
 
-				await pruneOtherSessions(result.user.id, result.token);
+				// AC2 (settings-truth W8.2): email sign-in no longer prunes other
+				// sessions. Every admin-capable sign-in is listed on the account
+				// page and can be revoked there; a new sign-in must not silently
+				// sign out the owner's other browser.
 			}
 		} catch (caught) {
 			if (caught instanceof APIError) {

@@ -17,6 +17,17 @@ const { state, dbMock, guardMock, getOptionMock } = vi.hoisted(() => {
 	};
 	const dbMock = {
 		query: { user: { findFirst: vi.fn(async () => state.userRow) } },
+		select: vi.fn(() => {
+			const chain = {
+				from: () => chain,
+				where: () => chain,
+				orderBy: () => chain,
+				limit: async () => [],
+				// Passkey/session queries end on `where` (awaited directly).
+				then: (resolve: (value: unknown[]) => unknown) => Promise.resolve([]).then(resolve)
+			};
+			return chain;
+		}),
 		update: vi.fn((table: unknown) => ({
 			set: (values: Record<string, unknown>) => ({
 				where: async (where: unknown) => {
@@ -62,8 +73,10 @@ function makeEvent(fields: Record<string, string>, userId: string | null = 'user
 			method: 'POST',
 			body
 		}),
+		url: new URL('http://x/admin/settings/account'),
 		locals: {
 			user: userId === null ? null : { id: userId },
+			session: userId === null ? null : { id: 'session-1' },
 			admin: userId === null ? null : { userId, role: 'owner' as const }
 		}
 	};
@@ -95,12 +108,20 @@ describe('account content language', () => {
 
 		const result = await load(makeEvent({}) as never);
 
-		expect(result).toEqual({
+		expect(result).toMatchObject({
 			twoFactorEnabled: true,
 			defaultLang: 'ja',
 			siteDefaultLang: 'zh-cn',
 			langs: ['en', 'zh-cn', 'ja'],
-			editable: true
+			editable: true,
+			hasPassword: false,
+			currentSessionId: 'session-1',
+			sessions: [],
+			passkeys: [],
+			oauth: {
+				github: { configured: false, callback: 'http://x/api/auth/callback/github' },
+				google: { configured: false, callback: 'http://x/api/auth/callback/google' }
+			}
 		});
 	});
 

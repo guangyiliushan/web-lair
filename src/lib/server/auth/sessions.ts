@@ -3,10 +3,14 @@ import { db } from '$lib/server/db';
 import { session as authSession } from '$lib/server/db/auth.schema';
 
 /**
- * Single-session policy (ledger §4.25): an admin sign-in keeps only the newest
- * session for that account, so an older leaked cookie stops working. Used by
- * the password sign-in, the two-factor verification step, and the 2FA state
- * changes on the settings page.
+ * Session revocation helpers (ledger §4.25, revised by settings-truth AC2).
+ *
+ * Email sign-in no longer prunes other sessions: admins get a real device list
+ * on /admin/settings/account and revoke sessions explicitly. Pruning remains
+ * where a credential change must invalidate other devices:
+ *   - change password (`revokeOtherSessions: true` in better-auth)
+ *   - 2FA enable/disable (the plugin rotates the current session)
+ *   - backup-code regeneration (password-gated; keep the request token)
  */
 
 /** Deletes every session of `userId` except the one carrying `keepToken`. */

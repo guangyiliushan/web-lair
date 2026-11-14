@@ -47,6 +47,15 @@
 			status?: number;
 		} | null
 	);
+	const deviceForm = $derived(
+		form as {
+			message?: string | null;
+			step?: string;
+			status?: number;
+		} | null
+	);
+	const deviceMessage = $derived(deviceForm?.step === 'devices' ? deviceForm.message : null);
+	const deviceError = $derived(Boolean(deviceForm?.status && deviceForm.status >= 400));
 	let lang = $state<string | null>(null);
 	const currentLang = $derived(lang ?? data.defaultLang ?? '');
 	const langDirty = $derived(lang !== null && lang !== (data.defaultLang ?? ''));
@@ -214,12 +223,40 @@
 
 	<!-- Section: Signed-in devices (real session rows · AC10) -->
 	<section>
-		<div class="mb-4 flex items-center gap-2">
-			<IconDeviceLaptop class="size-5 text-muted-foreground" />
-			<h3 class="text-base font-semibold">{m.admin_settings_account_devices()}</h3>
-			<Badge variant="secondary">{data.sessions.length}</Badge>
+		<div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+			<div class="min-w-0">
+				<div class="flex items-center gap-2">
+					<IconDeviceLaptop class="size-5 text-muted-foreground" />
+					<h3 class="text-base font-semibold">{m.admin_settings_account_devices()}</h3>
+					<Badge variant="secondary">{data.sessions.length}</Badge>
+				</div>
+				<p class="mt-1 text-sm text-muted-foreground">
+					{m.admin_settings_account_devices_desc()}
+				</p>
+			</div>
+			{#if data.sessions.length > 1}
+				<form
+					method="POST"
+					action="?/revokeOthers"
+					onsubmit={(event) => {
+						if (!confirm(m.admin_settings_account_revoke_others_confirm())) event.preventDefault();
+					}}
+				>
+					<Button type="submit" variant="outline" size="sm">
+						{m.admin_settings_account_kick_others()}
+					</Button>
+				</form>
+			{/if}
 		</div>
-		<p class="mb-3 text-sm text-muted-foreground">{m.admin_settings_account_devices_desc()}</p>
+
+		{#if deviceMessage}
+			<p
+				class="mb-3 text-sm {deviceError ? 'text-destructive' : 'text-muted-foreground'}"
+				role={deviceError ? 'alert' : 'status'}
+			>
+				{deviceMessage}
+			</p>
+		{/if}
 
 		{#if data.sessions.length === 0}
 			<p class="text-sm text-muted-foreground">{m.admin_settings_account_devices_empty()}</p>
@@ -238,8 +275,39 @@
 								<Badge>{m.admin_settings_account_badge_current()}</Badge>
 							{:else}
 								<Badge variant="secondary">{m.admin_settings_account_badge_other()}</Badge>
+								<form
+									method="POST"
+									action="?/revokeSession"
+									onsubmit={(event) => {
+										if (!confirm(m.admin_settings_account_revoke_confirm())) event.preventDefault();
+									}}
+								>
+									<input type="hidden" name="id" value={session.id} />
+									<Button type="submit" variant="outline" size="sm">
+										{m.admin_settings_account_revoke()}
+									</Button>
+								</form>
+							{/if}
+							{#if session.current}
+								<form
+									method="POST"
+									action="?/signOut"
+									onsubmit={(event) => {
+										if (!confirm(m.admin_settings_account_signout_confirm()))
+											event.preventDefault();
+									}}
+								>
+									<Button type="submit" variant="outline" size="sm">
+										{m.admin_settings_account_signout()}
+									</Button>
+								</form>
 							{/if}
 						</div>
+						{#if session.current}
+							<p class="text-xs text-muted-foreground">
+								{m.admin_settings_account_session_current_hint()}
+							</p>
+						{/if}
 						<dl class="grid gap-x-6 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-2">
 							<div class="flex gap-1">
 								<dt>{m.admin_settings_account_session_ip()}:</dt>

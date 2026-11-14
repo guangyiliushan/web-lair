@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { m } from '$lib/paraglide/messages';
 import { APIError } from 'better-auth/api';
@@ -16,6 +16,7 @@ import { requireAdminRole } from '$lib/server/authz';
 import { settingAccess, assertSettingWrite } from '$lib/server/settings/tiers';
 import { getOption, OPTION_LANGS } from '$lib/server/config/options-registry';
 import { pruneOtherSessions, pruneOtherSessionsKeepingNewest } from '$lib/server/auth/sessions';
+import { getAdminConfig } from '$lib/server/config/admin';
 import { formatDateTime } from '$lib/utils/i18n';
 
 /** Rows the account page never exposes more of (AC10: token is never sent). */
@@ -186,6 +187,108 @@ export const actions: Actions = {
 			.where(eq(user.id, locals.user?.id ?? ''));
 
 		return { message: m.admin_settings_account_msg_content_lang(), step: 'contentLang' };
+	},
+
+	/**
+	 * AC10: revoke one session by its database id. The browser never receives a
+	 * session token; the server resolves the row for the signed-in user and
+	 * passes only that token to better-auth's official endpoint.
+	 */
+	revokeSession: async ({ request, locals }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'account', 'account.self');
+		const form = await request.formData();
+		const id = (form.get('id') ?? '').toString().trim();
+		const userId = locals.user?.id ?? '';
+
+		if (!id) {
+			return fail(400, {
+				message: m.admin_settings_account_err_session_not_found(),
+				step: 'devices'
+			});
+		}
+		if (id === locals.session?.id) {
+			return fail(400, {
+				message: m.admin_settings_account_err_session_current(),
+				step: 'devices'
+			});
+		}
+
+		const [row] = await db
+			.select({ token: authSession.token })
+			.from(authSession)
+			.where(and(eq(authSession.id, id), eq(authSession.userId, userId)))
+			.limit(1);
+		if (!row) {
+			return fail(404, {
+				message: m.admin_settings_account_err_session_not_found(),
+				step: 'devices'
+			});
+		}
+
+		try {
+			await auth.api.revokeSession({ body: { token: row.token }, headers: request.headers });
+		} catch (caught) {
+			if (caught instanceof APIError) {
+				console.warn('[account] revoke session rejected', { status: errorStatus(caught) });
+			} else {
+				console.warn(
+					'[account] revoke session failed:',
+					caught instanceof Error ? caught.message : caught
+				);
+			}
+			return fail(500, {
+				message: m.admin_settings_account_err_session_action(),
+				step: 'devices'
+			});
+		}
+
+		return { message: m.admin_settings_account_msg_session_revoked(), step: 'devices' };
+	},
+
+	/** AC2: sign out every session except the request's own cookie. */
+	revokeOthers: async ({ request, locals }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'account', 'account.self');
+
+		try {
+			await auth.api.revokeOtherSessions({ headers: request.headers });
+		} catch (caught) {
+			if (caught instanceof APIError) {
+				console.warn('[account] revoke other sessions rejected', {
+					status: errorStatus(caught)
+				});
+			} else {
+				console.warn(
+					'[account] revoke other sessions failed:',
+					caught instanceof Error ? caught.message : caught
+				);
+			}
+			return fail(500, {
+				message: m.admin_settings_account_err_session_action(),
+				step: 'devices'
+			});
+		}
+
+		return { message: m.admin_settings_account_msg_sessions_revoked(), step: 'devices' };
+	},
+
+	/** AC2: end the current session and return to the admin sign-in page. */
+	signOut: async ({ request, locals }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'account', 'account.self');
+
+		try {
+			await auth.api.signOut({ headers: request.headers });
+		} catch (caught) {
+			console.warn('[account] sign out failed:', caught instanceof Error ? caught.message : caught);
+			return fail(500, {
+				message: m.admin_settings_account_err_session_action(),
+				step: 'devices'
+			});
+		}
+
+		redirect(303, getAdminConfig().loginPath);
 	},
 
 	/** Step 1: verify the password, receive the secret + one-time backup codes. */
