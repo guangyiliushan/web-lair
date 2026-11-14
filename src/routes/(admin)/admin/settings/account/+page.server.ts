@@ -2,14 +2,28 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { m } from '$lib/paraglide/messages';
 import { APIError } from 'better-auth/api';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull } from 'drizzle-orm';
+import { env } from '$env/dynamic/private';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
-import { user } from '$lib/server/db/auth.schema';
+import {
+	account as authAccount,
+	passkey as authPasskey,
+	session as authSession,
+	user
+} from '$lib/server/db/auth.schema';
 import { requireAdminRole } from '$lib/server/authz';
 import { settingAccess, assertSettingWrite } from '$lib/server/settings/tiers';
 import { getOption, OPTION_LANGS } from '$lib/server/config/options-registry';
 import { pruneOtherSessions, pruneOtherSessionsKeepingNewest } from '$lib/server/auth/sessions';
+import { formatDateTime } from '$lib/utils/i18n';
+
+/** Rows the account page never exposes more of (AC10: token is never sent). */
+const SESSION_LIST_LIMIT = 50;
+
+function oauthCallback(origin: string, provider: string): string {
+	return new URL(`/api/auth/callback/${provider}`, origin).toString();
+}
 
 /**
  * B3 (ledger §4.24): TOTP management for the signed-in owner/admin.
@@ -51,17 +65,99 @@ function formError(caught: unknown, fallback: string, step: string, action: stri
 export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();
 
-	const row = await db.query.user.findFirst({
-		where: eq(user.id, event.locals.user?.id ?? ''),
-		columns: { twoFactorEnabled: true, defaultLang: true }
-	});
+	const userId = event.locals.user?.id ?? '';
+	const now = new Date();
+	const [row, siteTz, siteDefaultLang, sessionRows, passkeyRows, credentialRows] =
+		await Promise.all([
+			db.query.user.findFirst({
+				where: eq(user.id, userId),
+				columns: { twoFactorEnabled: true, defaultLang: true }
+			}),
+			getOption('site.timezone'),
+			getOption('site.default_lang'),
+			db
+				.select({
+					id: authSession.id,
+					createdAt: authSession.createdAt,
+					updatedAt: authSession.updatedAt,
+					expiresAt: authSession.expiresAt,
+					ipAddress: authSession.ipAddress,
+					userAgent: authSession.userAgent
+				})
+				.from(authSession)
+				.where(and(eq(authSession.userId, userId), gt(authSession.expiresAt, now)))
+				.orderBy(desc(authSession.updatedAt))
+				.limit(SESSION_LIST_LIMIT),
+			db
+				.select({
+					id: authPasskey.id,
+					name: authPasskey.name,
+					aaguid: authPasskey.aaguid,
+					createdAt: authPasskey.createdAt,
+					deviceType: authPasskey.deviceType,
+					backedUp: authPasskey.backedUp
+				})
+				.from(authPasskey)
+				.where(eq(authPasskey.userId, userId)),
+			db
+				.select({ id: authAccount.id })
+				.from(authAccount)
+				.where(
+					and(
+						eq(authAccount.userId, userId),
+						eq(authAccount.providerId, 'credential'),
+						isNotNull(authAccount.password)
+					)
+				)
+				.limit(1)
+		]);
+
+	const origin = env.ORIGIN || event.url.origin;
+	const currentSessionId = event.locals.session?.id ?? null;
 
 	return {
 		twoFactorEnabled: Boolean(row?.twoFactorEnabled),
 		defaultLang: row?.defaultLang ?? null,
-		siteDefaultLang: await getOption('site.default_lang'),
+		siteDefaultLang,
 		langs: [...OPTION_LANGS],
-		editable: settingAccess(event.locals.admin?.role, 'account').editable
+		editable: settingAccess(event.locals.admin?.role, 'account').editable,
+		hasPassword: credentialRows.length > 0,
+		currentSessionId,
+		sessions: sessionRows.map((session) => ({
+			id: session.id,
+			current: session.id === currentSessionId,
+			ipAddress: session.ipAddress ?? null,
+			userAgent: session.userAgent ?? null,
+			createdLabel: formatDateTime(session.createdAt, { timeZone: siteTz }),
+			updatedLabel: formatDateTime(session.updatedAt, { timeZone: siteTz }),
+			expiresLabel: formatDateTime(session.expiresAt, { timeZone: siteTz })
+		})),
+		passkeys: passkeyRows
+			.slice()
+			.sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+			.map((passkey) => ({
+				id: passkey.id,
+				name: passkey.name ?? null,
+				aaguid: passkey.aaguid ?? null,
+				deviceType: passkey.deviceType,
+				backedUp: passkey.backedUp,
+				createdLabel: passkey.createdAt
+					? formatDateTime(passkey.createdAt, { timeZone: siteTz })
+					: null
+			})),
+		oauth: {
+			github: {
+				configured: Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET),
+				callback: oauthCallback(origin, 'github')
+			},
+			google: {
+				// Google stays planned: env credentials may be staged, but the
+				// provider is not registered in auth.ts yet, so the page must not
+				// claim a working sign-in method.
+				configured: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+				callback: oauthCallback(origin, 'google')
+			}
+		}
 	};
 };
 
