@@ -577,5 +577,65 @@ pnpm storage:migrate --rollback`}</code
 				value="image/* + pdf, zip, txt, md"
 			/>
 		</SettingsStatusList>
+
+		{#if data.database}
+			<SettingsStatusList
+				title={m.admin_settings_storage_db()}
+				description={m.admin_settings_storage_db_hint()}
+			>
+				<SettingsStatusRow
+					label={m.admin_settings_storage_driver()}
+					value={data.database.mode === 'local'
+						? m.admin_settings_storage_db_mode_local()
+						: m.admin_settings_storage_db_mode_external()}
+				/>
+				<SettingsStatusRow label={m.admin_settings_storage_db_host()} value={data.database.host} />
+				<SettingsStatusRow
+					label={m.admin_settings_storage_db_name()}
+					value={data.database.database || '—'}
+				/>
+				<SettingsStatusRow
+					label={m.admin_settings_storage_db_ssl()}
+					value={data.database.sslMode ?? '—'}
+				/>
+				<SettingsStatusRow
+					label={m.admin_settings_storage_db_migrations()}
+					value={m.admin_settings_storage_db_migrations_value({
+						applied: data.database.migrations.applied,
+						expected: data.database.migrations.expected ?? '—'
+					})}
+					badge={data.database.migrations.upToDate === null
+						? undefined
+						: data.database.migrations.upToDate
+							? m.admin_settings_common_configured()
+							: m.admin_settings_storage_db_pending()}
+				/>
+			</SettingsStatusList>
+		{:else}
+			<SettingsStatusList title={m.admin_settings_storage_db()}>
+				<SettingsStatusRow
+					label={m.admin_settings_storage_db_host()}
+					value={m.admin_settings_common_not_configured()}
+				/>
+			</SettingsStatusList>
+		{/if}
+
+		<SettingsStatusList
+			title={m.admin_settings_storage_backup()}
+			description={m.admin_settings_storage_backup_hint()}
+		>
+			<SettingsStatusRow
+				label={m.admin_settings_storage_backup_db()}
+				value={m.admin_settings_common_configured()}
+			/>
+			<SettingsStatusRow
+				label={m.admin_settings_storage_backup_media()}
+				value={m.admin_settings_storage_backup_media_hint()}
+			/>
+			<SettingsStatusRow
+				label={m.admin_settings_storage_backup_versioning()}
+				value={m.admin_settings_storage_backup_versioning_hint()}
+			/>
+		</SettingsStatusList>
 	</section>
 </div>

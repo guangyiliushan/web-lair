@@ -32,6 +32,8 @@ import {
 import { probeStorage } from '$lib/server/storage/probe';
 import type { StorageProbeResult } from '$lib/server/storage/probe';
 import type { StorageStatusState } from '$lib/server/storage/provider';
+import { readDatabaseStatus, readJournal } from '$lib/server/storage/db-status';
+import { sql } from 'drizzle-orm';
 
 /**
  * Storage control plane (W7.2, decisions ST1/ST3/ST4/ST8/Q4).
@@ -74,6 +76,26 @@ export const load: PageServerLoad = async (event) => {
 		getEnv: (name) => env[name]
 	});
 
+	// Read-only database facts (W7.7/Q17): mode, masked host, migration ledger.
+	// `db.execute` on the app handle is the same connection the page just used,
+	// so a failure here means the ledger table is missing, not that the DB is
+	// down — readDatabaseStatus degrades instead of throwing.
+	const database = await readDatabaseStatus({
+		url: env.DATABASE_URL,
+		journal: readJournal(),
+		readLedger: async () => {
+			const rows = (await db.execute(sql`
+				select count(*)::int as applied, max(created_at) as latest
+				from drizzle.__drizzle_migrations
+			`)) as unknown as Array<{ applied: number; latest: string | number | null }>;
+			const row = rows[0];
+			return {
+				applied: row?.applied ?? 0,
+				latestMs: row?.latest === null || row?.latest === undefined ? null : Number(row.latest)
+			};
+		}
+	});
+
 	return {
 		provider,
 		providerTypes: [...STORAGE_PROVIDER_TYPES],
@@ -108,6 +130,7 @@ export const load: PageServerLoad = async (event) => {
 			updatedAt: credentialStatus.updatedAt?.toISOString() ?? null,
 			envNames: S3_CREDENTIAL_ENV
 		},
+		database,
 		// Env references the local driver reads (names + presence only).
 		envRefs: {
 			endpoint: env.RUSTFS_ENDPOINT?.trim() ? ('set' as const) : ('missing' as const),

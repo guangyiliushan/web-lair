@@ -767,6 +767,77 @@ Record the dump name next to the rollback table above. The script is run with
 alias is for a dev checkout only. A non-zero exit now means "rolled back, still
 safe" — there is no partial state.
 
+### 4.4 External media provider (W7) and the restore drill
+
+**What backs up what.** Database and config stay restic repositories (§4); the
+media objects follow the provider:
+
+| Data                    | Backup path                                                             |
+| ----------------------- | ----------------------------------------------------------------------- |
+| Postgres (all metadata) | restic data repository — `pg_dump -Fc`                                  |
+| `.env` (secrets)        | restic config repository, different password                            |
+| Bundled RustFS volume   | restic data repository (compose volume, read-only mount)                |
+| External S3 bucket      | provider versioning/replication **or** `rclone sync` to a second bucket |
+
+Versioning is not a backup: it protects against a wrong delete, not against
+account loss, a compromised key or a deleted bucket. Keep one copy the app
+cannot reach (different account or credentials).
+
+**Switching providers** (`/admin/settings/storage`, owner only). Uploads are
+frozen and purge refuses while the copy runs, so pick a quiet window:
+
+```bash
+# 1) Save the target on the page and run Test (HeadBucket + capability probe).
+# 2) Plan: HEADs both buckets, refuses if a registered object is missing.
+pnpm storage:migrate --dry-run
+# 3) Copy with a two-ended hash proof (resumes by verifying, never rewriting).
+pnpm storage:migrate --yes
+# 4) Cut over, then remove the old bucket when the evidence is in hand.
+pnpm storage:migrate --cutover
+pnpm storage:migrate --status
+# Rollback is symmetric and leaves the new objects in place:
+pnpm storage:migrate --rollback
+```
+
+A cutover is refused unless: a complete copy of exactly this target exists
+(when `files` > 0), and the bucket's versioning/object lock are off — or the
+provider is explicitly set to **logical delete** (deletes become delete
+markers; space is not reclaimed).
+
+After a cutover, re-publish the map tiles — `maps/*.pmtiles` are not `files`
+rows, so the migration does not carry them:
+
+```bash
+pnpm maps:publish           # against the now-active provider
+```
+
+**Restore drill** (quarterly, and before trusting a new repository). Record the
+result in the evidence folder; an untested backup is a guess.
+
+```bash
+# 1) Restore the newest data snapshot into a scratch directory.
+restic -r "$RESTIC_REPOSITORY" restore latest --target /srv/web-lair/restore-drill
+# 2) Restore the config repository separately and diff the keys (never print values).
+restic -r "$RESTIC_CONFIG_REPOSITORY" restore latest --target /srv/web-lair/restore-drill-config
+sudo -u deploy diff <(grep -o '^[A-Z_]*=' /srv/web-lair/app/.env | sort) \
+                    <(grep -o '^[A-Z_]*=' /srv/web-lair/restore-drill-config/.env | sort)
+# 3) Load the dump into a scratch database and run the baseline gate against it.
+createdb -h 127.0.0.1 -U "$POSTGRES_USER" drill
+pg_restore -h 127.0.0.1 -U "$POSTGRES_USER" -d drill --no-owner \
+  /srv/web-lair/restore-drill/pg.dump
+DATABASE_URL="postgres://…/drill" pnpm db:verify-baseline
+# 4) Prove the credentials still decrypt (the keyring must come with the
+#    encrypted rows): start the app against the scratch DB with .env restored,
+#    open /admin/settings/storage and check the credential source + key version.
+# 5) Prove media: `pnpm media:audit` against the active provider lists missing
+#    objects; a known `/i/<key>` must answer 200, a deleted one 404.
+```
+
+Evidence per drill: dump name + timestamp, baseline gate output, credential
+source/key version from the page, `/i` status for one live and one deleted key,
+and how long the drill took (RTO) — the page's read-only Database block shows
+the mode, masked host and applied-migration count after the restore.
+
 ## 5. Monitoring
 
 | What                                       | Where                                                        |

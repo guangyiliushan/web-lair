@@ -110,12 +110,17 @@ vi.mock('$env/dynamic/private', () => ({
 		RUSTFS_ACCESS_KEY: 'local-key',
 		RUSTFS_SECRET_KEY: 'local-secret',
 		STORAGE_S3_ACCESS_KEY: '',
-		STORAGE_S3_SECRET_KEY: ''
+		STORAGE_S3_SECRET_KEY: '',
+		DATABASE_URL: 'postgres://root:db-password@db.example.com:5432/lair'
 	}
 }));
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: state.guard }));
 vi.mock('$lib/server/db', () => ({
-	db: { $count: vi.fn(async () => state.fileCount), insert: vi.fn() }
+	db: {
+		$count: vi.fn(async () => state.fileCount),
+		insert: vi.fn(),
+		execute: vi.fn(async () => [{ applied: 7, latest: 1794670114375 }])
+	}
 }));
 vi.mock('$lib/server/db/content', () => ({ files: { __table: 'files' } }));
 vi.mock('$lib/server/audit', () => ({ recordActivity: state.recordActivity }));
@@ -177,6 +182,19 @@ interface StoragePageData {
 		updatedAt: string | null;
 		envNames: { accessKeyId: string; secretAccessKey: string };
 	};
+	database: {
+		mode: 'local' | 'external';
+		host: string;
+		port: string | null;
+		database: string;
+		sslMode: string | null;
+		migrations: {
+			applied: number;
+			latestAt: string | null;
+			upToDate: boolean | null;
+			expected: number | null;
+		};
+	} | null;
 	envRefs: { accessKey: 'set' | 'missing' };
 }
 
@@ -239,6 +257,20 @@ describe('storage settings route (W7.2)', () => {
 		expect(data.credentials.source).toBe('missing');
 		expect(data.credentials.envNames.accessKeyId).toBe('STORAGE_S3_ACCESS_KEY');
 		expect(data.envRefs.accessKey).toBe('set');
+	});
+
+	it('shows the database read-only facts with a masked host', async () => {
+		const data = await loadData(makeEvent());
+
+		expect(data.database).toMatchObject({
+			mode: 'external',
+			host: 'db.…',
+			port: '5432',
+			database: 'lair',
+			migrations: { applied: 7, upToDate: true }
+		});
+		// The connection string's password never reaches page data.
+		expect(JSON.stringify(data.database)).not.toContain('db-password');
 	});
 
 	it('turns the files count into the migration requirement', async () => {
