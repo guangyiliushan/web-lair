@@ -103,6 +103,7 @@ beforeEach(() => {
 		description: 'Notes and experiments',
 		avatar: 'https://cdn.example/avatar.png'
 	};
+	delete optionState['site.icon'];
 	optionState['friends.checks'] = {
 		enabled: true,
 		cadenceHours: 24,
@@ -179,6 +180,17 @@ describe('friends load', () => {
 		const data = await loadData();
 		expect(listMock).toHaveBeenCalledWith({ publicBannedList: false });
 		expect(data.siteInfo.avatar).toBeNull();
+	});
+
+	it('keeps the card identity limited to site.info; the favicon never becomes a card avatar (S5)', async () => {
+		optionState['site.icon'] = {
+			url: 'https://cdn.example/favicon.svg',
+			version: 2
+		};
+		const data = await loadData();
+		expect(Object.keys(data.siteInfo).sort()).toEqual(['avatar', 'description', 'name']);
+		expect(data.siteInfo.avatar).toBe('https://cdn.example/avatar.png');
+		expect(JSON.stringify(data.siteInfo)).not.toContain('favicon');
 	});
 });
 
