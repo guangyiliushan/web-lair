@@ -42,7 +42,9 @@ test('all eight pages answer 200 with their section heading', async ({ page }) =
 });
 
 test('planned/read-only pages render zero form controls', async ({ page }) => {
-	for (const id of ['site', 'content', 'storage', 'integrations']) {
+	// W4 (Profile) and W5 (Site) now ship real forms; content/storage/integrations
+	// stay read-only until their own waves land (W6/W7/W10).
+	for (const id of ['content', 'storage', 'integrations']) {
 		const response = await page.goto(`/admin/settings/${id}`);
 		expect(response?.status(), id).toBe(200);
 		await expect(
