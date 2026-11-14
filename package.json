@@ -78,6 +78,8 @@
 		"@eslint/compat": "^2.1.1",
 		"@eslint/js": "^10.0.1",
 		"@fontsource-variable/jetbrains-mono": "^5.3.0",
+		"@inlang/plugin-m-function-matcher": "^2.4.3",
+		"@inlang/plugin-message-format": "^4.6.0",
 		"@internationalized/date": "^3.12.4",
 		"@playwright/test": "^1.63.0",
 		"@shadcn-svelte/primitives": "^0.0.1",
