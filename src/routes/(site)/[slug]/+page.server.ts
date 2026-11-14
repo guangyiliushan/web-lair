@@ -3,6 +3,7 @@ import { getLocale, localizeHref, locales } from '$lib/paraglide/runtime';
 import { m } from '$lib/paraglide/messages';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { requireUser } from '$lib/server/authz';
+import { getOption } from '$lib/server/config/options-registry';
 import {
 	loadThreads,
 	resolveCommentPageTarget,
@@ -83,23 +84,27 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 
 	// Viewer state for the comment section (mirrors the posts/notes mounts;
 	// pages carry no per-row switch - plan §0 #46, so the threads always load).
+	// The site-wide switch still blocks new comments (W6.1 / C1) while existing
+	// approved rows keep rendering.
 	const user = locals.user;
 	const emailVerified = Boolean(user?.emailVerified);
-	const canComment = Boolean(user) && emailVerified;
+	const commentsEnabled = await getOption('comments.enabled');
+	const canComment = Boolean(user) && emailVerified && commentsEnabled;
 	const loginUrl = user
 		? null
 		: `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
+	const threads = await loadThreads({
+		targetType: 'page',
+		targetId: row.id,
+		viewerId: user?.id ?? null
+	});
 
 	return {
 		seo: { path: `/${row.slug}`, alternates },
 		page: { slug: row.slug, title, description },
 		html,
 		viewer: { emailVerified, canComment, loginUrl },
-		discussion: await loadThreads({
-			targetType: 'page',
-			targetId: row.id,
-			viewerId: user?.id ?? null
-		})
+		discussion: commentsEnabled || threads.visibleCount > 0 ? threads : null
 	};
 };
 

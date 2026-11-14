@@ -4,8 +4,8 @@ import { getLocale, localizeHref, locales } from '$lib/paraglide/runtime';
 import { m } from '$lib/paraglide/messages';
 import { db } from '$lib/server/db';
 import { categories, postTags, posts, tags } from '$lib/server/db/content';
-import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { requireUser } from '$lib/server/authz';
+import { getOption } from '$lib/server/config/options-registry';
 import { resolveCommentPostTarget, submitComment } from '$lib/server/services/comments';
 import {
 	commentDeleteAction,
@@ -204,30 +204,29 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 
 	// Viewer state for the comment section (spec §1 "已验证读者"): guests get
 	// the login link with a return path to this localized URL; signed-in
-	// readers need a verified email before they can submit.
+	// readers need a verified email before they can submit. The site-wide
+	// switch can only narrow the per-post row (W6.1 / C1): new comments need
+	// both, while existing approved rows stay readable either way.
 	const user = locals.user;
 	const emailVerified = Boolean(user?.emailVerified);
-	const canComment = Boolean(user) && emailVerified && row.allowComment;
+	const commentsEnabled = await getOption('comments.enabled');
+	const commentsOpen = commentsEnabled && row.allowComment;
+	const canComment = Boolean(user) && emailVerified && commentsOpen;
 	const loginUrl = user
 		? null
 		: `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
 
-	// When the thread is open the comment read path owns rendering: it derives
-	// the block directory from the same tree and applies segment marks before
-	// serializing (comment P3b). Closed threads keep the plain renderer.
-	const rendered = row.allowComment
-		? await renderDiscussion({
-				markdown: row.content ?? '',
-				targetType: 'post',
-				targetId: row.id,
-				viewerId: user?.id ?? null
-			})
-		: null;
-	const html = rendered
-		? rendered.html
-		: row.content
-			? await renderMarkdownToHtml(row.content)
-			: '';
+	// The comment read path always owns rendering when either side allows
+	// authoring or rows already exist: closed threads keep their approved
+	// comments visible (C1) and segment anchors stay resolved. A closed post
+	// with zero comments returns null so the section does not shout "0".
+	const rendered = await renderDiscussion({
+		markdown: row.content ?? '',
+		targetType: 'post',
+		targetId: row.id,
+		viewerId: user?.id ?? null
+	});
+	const html = rendered.html;
 
 	return {
 		seo: {
@@ -263,7 +262,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		provenance,
 		html,
 		viewer: { emailVerified, canComment, loginUrl },
-		discussion: rendered?.discussion ?? null
+		discussion: commentsOpen || rendered.discussion.visibleCount > 0 ? rendered.discussion : null
 	};
 };
 

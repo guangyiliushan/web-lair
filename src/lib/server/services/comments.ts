@@ -7,6 +7,7 @@ import { isAdminRole } from '$lib/server/auth/owner';
 import { evaluateCommentModeration, recordModerationEvents } from './comment-moderation';
 import { getCache } from '$lib/server/cache';
 import { rateLimit, type CacheStore } from '$lib/server/cache/store';
+import { getOption } from '$lib/server/config/options-registry';
 import { locales } from '$lib/paraglide/runtime';
 import { isUuid } from '$lib/utils/uuid';
 import {
@@ -502,6 +503,8 @@ export type SubmitCommentResult =
 	| { kind: 'created'; id: string; state: 'pending' | 'approved' | 'rejected' }
 	| { kind: 'throttled'; windowSeconds: number }
 	| { kind: 'unverified' }
+	/** Site-wide `comments.enabled` is off (W6.1): new comments are closed. */
+	| { kind: 'disabled' }
 	| { kind: 'empty' }
 	| { kind: 'too-long'; max: number }
 	| { kind: 'target-unavailable' }
@@ -516,6 +519,12 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	// service is the authoritative layer every future mount will call - it
 	// fails closed when the caller forgets the gate.
 	if (input.user.emailVerified !== true) return { kind: 'unverified' };
+
+	// W6.1 (C1): the site-wide switch gates NEW comments only - edit/delete of
+	// existing rows stay live, and the read path keeps rendering approved rows.
+	// A missing/corrupt option row yields the registry default (true) so a bad
+	// settings row can never silently close every thread.
+	if (!(await getOption('comments.enabled'))) return { kind: 'disabled' };
 
 	const text = normalizeCommentText(input.text);
 	const length = [...text].length;

@@ -1,10 +1,13 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { enhance } from '$app/forms';
 	import { m } from '$lib/paraglide/messages';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Button } from '$lib/components/ui/button';
+	import { Switch } from '$lib/components/ui/switch';
 	import { SettingsStatusList, SettingsStatusRow } from '$lib/components/admin/settings';
 
-	let { data }: PageProps = $props();
+	let { data, form }: PageProps = $props();
 
 	const onOff = (value: boolean) =>
 		value ? m.admin_settings_common_on() : m.admin_settings_common_off();
@@ -15,23 +18,59 @@
 </svelte:head>
 
 <div class="space-y-8">
-	<div class="flex flex-wrap items-center gap-2">
-		<Badge variant="secondary">{m.admin_settings_common_read_only()}</Badge>
-	</div>
+	{#if form?.message}
+		<p class="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground" role="status">
+			{form.message}
+		</p>
+	{/if}
 
-	<SettingsStatusList
-		title={m.admin_settings_content_comments_section()}
-		description={m.admin_settings_content_comments_desc()}
-	>
-		<SettingsStatusRow
-			label={m.admin_settings_content_moderation()}
-			value={onOff(data.moderation)}
-		/>
-		<SettingsStatusRow
-			label={m.admin_settings_content_privacy()}
-			badge={m.admin_settings_integrations_planned()}
-		/>
-	</SettingsStatusList>
+	<section class="rounded-lg border p-4" aria-labelledby="content-comments-title">
+		<h2 id="content-comments-title" class="text-sm font-semibold">
+			{m.admin_settings_content_comments_section()}
+		</h2>
+		<p class="mt-1 text-xs text-muted-foreground">{m.admin_settings_content_comments_desc()}</p>
+
+		<form method="POST" action="?/saveComments" class="mt-4 flex flex-col gap-4" use:enhance>
+			<div class="flex items-center justify-between gap-4">
+				<div>
+					<div class="text-sm font-medium">{m.admin_settings_content_comments_enable()}</div>
+					<div class="text-xs text-muted-foreground">
+						{m.admin_settings_content_comments_enable_hint()}
+					</div>
+				</div>
+				<Switch
+					name="enabled"
+					checked={data.commentsEnabled}
+					disabled={!data.editable.comments}
+					aria-label={m.admin_settings_content_comments_enable()}
+				/>
+			</div>
+			<p class="text-xs text-muted-foreground">{m.admin_settings_content_comments_closed_note()}</p>
+			{#if !data.editable.comments}
+				<p class="text-xs text-muted-foreground">{m.admin_settings_common_owner_only()}</p>
+			{:else}
+				<div>
+					<Button type="submit" size="sm">{m.admin_settings_content_save()}</Button>
+				</div>
+			{/if}
+		</form>
+
+		<div class="mt-4 flex flex-wrap gap-4 border-t border-border/50 pt-3 text-xs">
+			<a class="wl-accent-link underline underline-offset-2" href="/admin/comments">
+				{m.admin_settings_content_comments_queue_link()}
+			</a>
+			<a class="wl-accent-link underline underline-offset-2" href="/admin/settings/ai">
+				{m.admin_settings_content_comments_triage_link()}
+			</a>
+		</div>
+
+		<div class="mt-4 border-t border-border/50 pt-3">
+			<SettingsStatusRow
+				label={m.admin_settings_content_moderation()}
+				value={onOff(data.moderation)}
+			/>
+		</div>
+	</section>
 
 	<SettingsStatusList title={m.admin_settings_content_friends_section()}>
 		<SettingsStatusRow

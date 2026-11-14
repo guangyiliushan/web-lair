@@ -32,6 +32,17 @@ const { dbMock, state } = vi.hoisted(() => ({
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
+// W6.1: the service reads the site-wide switch before any target work. The
+// options registry is mocked so the recording executor's query queue stays
+// about the comments path itself; tests flip `commentsEnabled` to cover the
+// closed door.
+const { getOptionMock, optionState } = vi.hoisted(() => ({
+	getOptionMock: vi.fn(async (key: string) =>
+		key === 'comments.enabled' ? optionState.commentsEnabled : { enabled: false }
+	),
+	optionState: { commentsEnabled: true }
+}));
+vi.mock('$lib/server/config/options-registry', () => ({ getOption: getOptionMock }));
 // submitComment loads the renderer lazily for anchored submissions; stub it with
 // a one-paragraph tree so the write-path tests stay fast and deterministic.
 vi.mock('$lib/server/markdown', () => ({
@@ -145,6 +156,8 @@ beforeEach(() => {
 	state.wheres = [];
 	state.orderBys = [];
 	state.failWith = undefined;
+	optionState.commentsEnabled = true;
+	getOptionMock.mockClear();
 	selectMock.mockClear();
 	insertMock.mockClear();
 	updateMock.mockClear();
@@ -438,6 +451,16 @@ describe('submitComment', () => {
 		expect(result).toEqual({ kind: 'stale-anchor' });
 		expect(state.selectQueue).toHaveLength(0);
 		expect(state.inserts).toHaveLength(0);
+	});
+
+	it('rejects every new comment when the site-wide switch is off (W6.1)', async () => {
+		optionState.commentsEnabled = false;
+		const result = await submitComment(input());
+		expect(result).toEqual({ kind: 'disabled' });
+		// The switch is checked before any target lookup or insert.
+		expect(state.selectQueue).toHaveLength(0);
+		expect(state.inserts).toHaveLength(0);
+		expect(getOptionMock).toHaveBeenCalledWith('comments.enabled');
 	});
 
 	it('stores a server-derived anchor for a matching draft', async () => {

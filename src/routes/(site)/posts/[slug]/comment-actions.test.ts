@@ -293,6 +293,7 @@ describe('post comment actions', () => {
 		const cases: Array<[string, number, string]> = [
 			['throttled', 429, 'comment_throttled'],
 			['unverified', 403, 'comment_verify_hint'],
+			['disabled', 403, 'comment_disabled'],
 			['parent-unavailable', 400, 'comment_error_parent'],
 			['target-unavailable', 404, 'comment_error_unavailable'],
 			['empty', 400, 'comment_error_generic'],

@@ -100,6 +100,10 @@ export function commentSubmitResponse(
 			return fail(429, { message: m.comment_throttled() });
 		case 'unverified':
 			return fail(403, { message: m.comment_verify_hint() });
+		case 'disabled':
+			// 403, not 404: the thread exists and stays readable, but new
+			// comments are closed site-wide (C1 asks for an explicit rejection).
+			return fail(403, { message: m.comment_disabled() });
 		case 'empty':
 		case 'too-long':
 			return fail(400, { message: m.comment_error_generic() });

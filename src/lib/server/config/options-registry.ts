@@ -177,6 +177,14 @@ export const optionRegistry = {
 		// 9309 §1), never access control.
 		default: { answerEngine: true, training: true }
 	},
+	'comments.enabled': {
+		// W6.1 (C1): site-wide switch for NEW comments. Set false and the form
+		// disappears and every submit path rejects; existing approved rows stay
+		// visible (hiding them would be a separate `comments.visible`). A post
+		// / note `allow_comment` can only narrow this, never widen it.
+		schema: z.boolean(),
+		default: true
+	},
 	'comments.moderation': {
 		schema: z.object({
 			enabled: z.boolean(),

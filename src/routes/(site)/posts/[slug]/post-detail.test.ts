@@ -31,10 +31,16 @@ vi.mock('$lib/paraglide/messages', () => ({
 	m: new Proxy({}, { get: (_target, prop) => () => String(prop) })
 }));
 vi.mock('$lib/server/markdown', () => ({ renderMarkdownToHtml: vi.fn(async () => '') }));
+vi.mock('$lib/server/config/options-registry', () => ({
+	getOption: vi.fn(async (key: string) => (key === 'comments.enabled' ? true : undefined))
+}));
 vi.mock('$lib/server/services/comment-render', () => ({
 	// Slug-fallback tests do not exercise the thread read path; the route only
 	// needs the rendered pair (comment P3b entry).
-	renderDiscussion: vi.fn(async () => ({ html: '', discussion: null }))
+	renderDiscussion: vi.fn(async () => ({
+		html: '',
+		discussion: { roots: [], orphans: [], visibleCount: 0, orphanCount: 0, truncated: false }
+	}))
 }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
