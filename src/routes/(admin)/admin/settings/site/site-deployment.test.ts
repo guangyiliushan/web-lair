@@ -19,7 +19,8 @@ vi.mock('$lib/server/config/options-registry', () => ({
 	}),
 	setOption: vi.fn(),
 	validateOption: vi.fn((_key: string, value: unknown) => value),
-	OptionWriteError: class OptionWriteError extends Error {}
+	OptionWriteError: class OptionWriteError extends Error {},
+	OPTION_LANGS: ['en', 'zh-cn', 'ja']
 }));
 vi.mock('$lib/server/config/admin', () => ({ ADMIN_BASE_PATH: '/admin' }));
 vi.mock('$lib/server/origin', () => ({ getPublicOrigin: () => originState.origin }));

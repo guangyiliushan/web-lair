@@ -66,12 +66,14 @@ import { actions } from './+page.server';
 type ActionResult = { status?: number; data?: { message?: string; error?: boolean; op?: string } };
 
 async function run(
-	action: 'saveInfo' | 'saveIcon' | 'saveTimezone',
-	fields: Record<string, string>,
+	action: 'saveInfo' | 'saveIcon' | 'saveTimezone' | 'saveLanguages',
+	fields: Record<string, string | string[]>,
 	role: 'owner' | 'admin' | null = 'owner'
 ): Promise<ActionResult> {
 	const form = new FormData();
-	for (const [key, value] of Object.entries(fields)) form.set(key, value);
+	for (const [key, value] of Object.entries(fields)) {
+		for (const entry of Array.isArray(value) ? value : [value]) form.append(key, entry);
+	}
 	const handler = (actions as unknown as Record<string, (event: never) => Promise<unknown>>)[
 		action
 	];
@@ -224,5 +226,56 @@ describe('Site actions (W5.2)', () => {
 		const info = await run('saveInfo', { name: 'Site', description: '', avatar: '' }, 'admin');
 		expect(info.data?.error).toBeUndefined();
 		expect(writes).toHaveLength(1);
+	});
+
+	it('writes the language pair in ONE transaction, in canonical order (S7/W5.4)', async () => {
+		const result = await run('saveLanguages', {
+			enabled: ['ja', 'en'],
+			default: 'ja'
+		});
+
+		expect(result.data?.error).toBeUndefined();
+		expect(txState.opened).toBe(1);
+		expect(writes).toEqual([
+			{ key: 'site.languages', value: { enabled: ['en', 'ja'] }, tx: txState.tx },
+			{ key: 'site.default_lang', value: 'ja', tx: txState.tx }
+		]);
+		expect(auditCalls).toHaveLength(1);
+		expect(auditCalls[0].tx).toBe(txState.tx);
+		expect(auditCalls[0].input).toMatchObject({
+			event: 'site.update',
+			payload: { fields: ['languages', 'default_lang'] }
+		});
+	});
+
+	it('refuses a default language outside the enabled set before writing anything', async () => {
+		const result = await run('saveLanguages', { enabled: ['en'], default: 'ja' });
+		expect(result.status).toBe(400);
+		expect(result.data?.message).toContain('默认语言');
+		expect(writes).toHaveLength(0);
+		expect(txState.opened).toBe(0);
+	});
+
+	it('refuses an empty or duplicated enabled set (registry schema)', async () => {
+		const empty = await run('saveLanguages', { enabled: [], default: 'en' });
+		expect(empty.status).toBe(400);
+		expect(empty.data?.message).toContain('至少保留一种语言');
+
+		const duplicate = await run('saveLanguages', {
+			enabled: ['en', 'en'],
+			default: 'en'
+		});
+		expect(duplicate.status).toBe(400);
+		expect(duplicate.data?.message).toContain('只能启用一次');
+
+		expect(writes).toHaveLength(0);
+	});
+
+	it('is owner-only: an admin session is refused before parsing the form', async () => {
+		await expect(
+			run('saveLanguages', { enabled: ['en'], default: 'en' }, 'admin')
+		).rejects.toMatchObject({ status: 403 });
+		expect(writes).toHaveLength(0);
+		expect(txState.opened).toBe(0);
 	});
 });

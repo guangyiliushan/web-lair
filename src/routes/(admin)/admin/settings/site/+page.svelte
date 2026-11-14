@@ -59,6 +59,35 @@
 		'Australia/Sydney'
 	];
 
+	// --- Languages (owner-only, paired write) ---
+	// Mirrors OPTION_LANGS on the server; the generated page data already
+	// narrows to this union.
+	type SiteLang = 'en' | 'zh-cn' | 'ja';
+	let enabledLangs = $state<SiteLang[] | null>(null);
+	let defaultLang = $state<SiteLang | null>(null);
+	const currentEnabledLangs: SiteLang[] = $derived(enabledLangs ?? data.languages.enabled);
+	const currentDefaultLang: SiteLang = $derived(defaultLang ?? data.defaultLang);
+	const languagesDirty = $derived(
+		currentDefaultLang !== data.defaultLang ||
+			currentEnabledLangs.length !== data.languages.enabled.length ||
+			currentEnabledLangs.some((lang) => !data.languages.enabled.includes(lang))
+	);
+	function resetLanguages() {
+		enabledLangs = null;
+		defaultLang = null;
+	}
+	function toggleLanguage(lang: SiteLang, checked: boolean) {
+		const nextEnabled = data.langs.filter((option) =>
+			option === lang ? checked : currentEnabledLangs.includes(option)
+		);
+		enabledLangs = nextEnabled;
+		// The server rejects default ∉ enabled; don't let the client post that
+		// pair when the current default is unchecked.
+		if (!nextEnabled.includes(currentDefaultLang) && nextEnabled.length > 0) {
+			defaultLang = nextEnabled[0];
+		}
+	}
+
 	// A successful action returns the reloaded data; drop the local edits so
 	// the form reflects the stored value (and is clean again). Failed actions
 	// keep the user's input.
@@ -68,6 +97,7 @@
 		if (payload.op === 'info') resetInfo();
 		if (payload.op === 'icon') iconUrl = null;
 		if (payload.op === 'timezone') tz = null;
+		if (payload.op === 'languages') resetLanguages();
 	});
 </script>
 
@@ -156,21 +186,74 @@
 		</fieldset>
 	</SettingsForm>
 
-	<!-- Languages (owner-only write lands in W5.4; values are real today) -->
-	<SettingsStatusList
-		title={m.admin_settings_site_languages()}
-		description={m.admin_settings_site_languages_hint()}
-	>
-		<SettingsStatusRow
-			label={m.admin_settings_site_languages()}
-			value={data.languages.enabled.join(', ')}
-		/>
-		<SettingsStatusRow
-			label={m.admin_settings_site_default_lang()}
-			value={data.defaultLang}
-			hint={m.admin_settings_site_default_lang_hint()}
-		/>
-	</SettingsStatusList>
+	<!-- Languages · owner-only paired write (S7, W5.4) -->
+	{#if data.canEditLanguages}
+		<SettingsForm
+			action="?/saveLanguages"
+			dirty={languagesDirty}
+			message={messageFor('languages')}
+			error={errorFor('languages')}
+			onCancel={resetLanguages}
+		>
+			<fieldset class="space-y-4">
+				<legend class="text-sm font-medium">{m.admin_settings_site_languages()}</legend>
+				<p class="text-xs text-muted-foreground">{m.admin_settings_site_languages_hint()}</p>
+				<div class="space-y-2">
+					<span class="block text-sm">{m.admin_settings_site_enabled_languages()}</span>
+					{#each data.langs as lang (lang)}
+						<label class="flex items-center gap-2 text-sm">
+							<input
+								type="checkbox"
+								name="enabled"
+								value={lang}
+								checked={currentEnabledLangs.includes(lang)}
+								onchange={(event) => toggleLanguage(lang, event.currentTarget.checked)}
+								class="size-3.5 accent-primary"
+							/>
+							{lang}
+						</label>
+					{/each}
+				</div>
+				<div class="space-y-1.5">
+					<label for="site-default-lang" class="text-sm"
+						>{m.admin_settings_site_default_lang()}</label
+					>
+					<select
+						id="site-default-lang"
+						name="default"
+						value={currentDefaultLang}
+						onchange={(event) => (defaultLang = event.currentTarget.value as SiteLang)}
+						class="h-8 min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+					>
+						{#each currentEnabledLangs as lang (lang)}
+							<option value={lang}>{lang}</option>
+						{/each}
+					</select>
+					<p class="text-xs text-muted-foreground">
+						{m.admin_settings_site_default_lang_hint()}
+					</p>
+				</div>
+			</fieldset>
+		</SettingsForm>
+	{:else}
+		<SettingsStatusList
+			title={m.admin_settings_site_languages()}
+			description={m.admin_settings_site_languages_hint()}
+		>
+			{#snippet actions()}
+				<Badge variant="secondary">{m.admin_settings_common_owner_only()}</Badge>
+			{/snippet}
+			<SettingsStatusRow
+				label={m.admin_settings_site_languages()}
+				value={data.languages.enabled.join(', ')}
+			/>
+			<SettingsStatusRow
+				label={m.admin_settings_site_default_lang()}
+				value={data.defaultLang}
+				hint={m.admin_settings_site_default_lang_hint()}
+			/>
+		</SettingsStatusList>
+	{/if}
 
 	<!-- Time zone -->
 	<SettingsForm

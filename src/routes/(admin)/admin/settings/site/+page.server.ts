@@ -6,7 +6,8 @@ import {
 	getOption,
 	setOption,
 	validateOption,
-	OptionWriteError
+	OptionWriteError,
+	OPTION_LANGS
 } from '$lib/server/config/options-registry';
 import { ADMIN_BASE_PATH } from '$lib/server/config/admin';
 import { getPublicOrigin } from '$lib/server/origin';
@@ -66,6 +67,7 @@ export const load: PageServerLoad = async (event) => {
 		defaultLang,
 		timezone,
 		icon,
+		langs: [...OPTION_LANGS],
 		canEditInfo: settingAccess(role, 'site', 'site.info').editable,
 		canEditIcon: settingAccess(role, 'site', 'site.icon').editable,
 		canEditTimezone: settingAccess(role, 'site', 'site.timezone').editable,
@@ -190,6 +192,73 @@ export const actions: Actions = {
 		return {
 			op: 'timezone' satisfies SiteOp,
 			message: m.admin_settings_site_saved_timezone()
+		};
+	},
+
+	/**
+	 * Owner-only language pair (S7, W5.4): `site.languages` and
+	 * `site.default_lang` are validated as a pair and written in ONE
+	 * transaction - `setOption` deliberately does no cross-key validation, so
+	 * a crash between two separate writes must not leave `default_lang`
+	 * outside the enabled set. Disabling a language only changes the
+	 * translation/llms candidate set; existing content and translations stay
+	 * (the page copy says so).
+	 */
+	saveLanguages: async ({ request, locals }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'site', 'site.languages');
+		const form = await request.formData();
+		const enabled = form.getAll('enabled').map((value) => value.toString());
+		const defaultLang = formText(form, 'default');
+
+		let languages;
+		try {
+			// Min 1, no duplicates, canonical order (registry schema).
+			languages = validateOption('site.languages', { enabled });
+		} catch (error) {
+			if (error instanceof z.ZodError) {
+				return fail(400, {
+					op: 'languages' satisfies SiteOp,
+					error: true,
+					message: issueText(error, () => m.admin_settings_site_err_languages())
+				});
+			}
+			throw error;
+		}
+
+		let validDefault;
+		try {
+			validDefault = validateOption('site.default_lang', defaultLang);
+		} catch (error) {
+			if (error instanceof z.ZodError) {
+				return fail(400, {
+					op: 'languages' satisfies SiteOp,
+					error: true,
+					message: m.admin_settings_site_err_default_lang()
+				});
+			}
+			throw error;
+		}
+		if (!(languages.enabled as readonly string[]).includes(validDefault)) {
+			return fail(400, {
+				op: 'languages' satisfies SiteOp,
+				error: true,
+				message: m.admin_settings_site_err_default_lang()
+			});
+		}
+
+		await db.transaction(async (tx) => {
+			await setOption('site.languages', languages, tx);
+			await setOption('site.default_lang', validDefault, tx);
+			await recordActivity(tx, {
+				event: 'site.update',
+				actorId: locals.user?.id ?? null,
+				payload: { fields: ['languages', 'default_lang'] }
+			});
+		});
+		return {
+			op: 'languages' satisfies SiteOp,
+			message: m.admin_settings_site_saved_languages()
 		};
 	}
 };
