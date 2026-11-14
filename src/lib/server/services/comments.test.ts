@@ -520,9 +520,7 @@ describe('submitComment', () => {
 		});
 		const result = await submitComment(input({ cache, ip: '2001:db8:1:2::9' }));
 		expect(result).toEqual({ kind: 'throttled', windowSeconds: 600 });
-		expect(keys).toContain(
-			'limits:comment-ip:6:20010db8000100020000000000000000:64'
-		);
+		expect(keys).toContain('limits:comment-ip:6:20010db8000100020000000000000000:64');
 		expect(state.inserts).toHaveLength(0);
 	});
 
