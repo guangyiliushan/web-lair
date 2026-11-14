@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
-	import { siteHref } from '$lib/utils/href';
 	import { tLabel } from '$lib/config/navigation.config';
 	import { Separator } from '$lib/components/ui/separator';
-	import type { Component } from 'svelte';
 	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
+	import type { SocialLinkLike } from '$lib/config/social';
+	import SocialRail from '$lib/components/layout/SocialRail.svelte';
 
 	/**
 	 * Left column of the home panel: identity, stat strip, social rail.
@@ -21,14 +21,14 @@
 		owner,
 		status,
 		stats,
-		social,
+		links,
 		class: className
 	}: {
 		owner: SiteOwner;
 		status: OwnerStatus;
 		/** Pre-resolved rows; rendered left to right. */
 		stats: { label: string; value: number | string }[];
-		social: { href: string; label: string; icon?: Component }[];
+		links: readonly SocialLinkLike[] | null | undefined;
 		class?: string;
 	} = $props();
 
@@ -72,17 +72,6 @@
 	<Separator class="my-0.5 mt-auto" />
 
 	<div class="flex items-center gap-0.5" data-slot="nav-menu-social">
-		{#each social as item (item.href)}
-			{@const IconComp = item.icon}
-			<a
-				href={siteHref(item.href)}
-				aria-label={item.label}
-				class="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-			>
-				{#if IconComp}
-					<IconComp class="size-3.5" />
-				{/if}
-			</a>
-		{/each}
+		<SocialRail {links} variant="nav" />
 	</div>
 </div>

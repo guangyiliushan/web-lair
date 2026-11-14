@@ -1,25 +1,25 @@
 <script lang="ts">
 	import { tLabel, type I18nKey, type NavChild } from '$lib/config/navigation.config';
 	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
-	import type { Component } from 'svelte';
 	import { NAV_HOME_GRID_MAX, NAV_ROWS_PER_COL, navGridColumns } from './geometry';
 	import NavMenuHeading from './NavMenuHeading.svelte';
 	import NavMenuGridLink from './NavMenuGridLink.svelte';
 	import NavMenuProfile from './NavMenuProfile.svelte';
 	import NavMenuEmpty from './NavMenuEmpty.svelte';
 	import NavMenuSkeleton from './NavMenuSkeleton.svelte';
+	import type { SocialLinkLike } from '$lib/config/social';
 
 	/**
 	 * Home panel: identity + live stats on the left, the page grid on the right.
 	 *
-	 * The right side renders dynamic pages only — the static quick links are the
-	 * social rail in the left column, so nothing is listed twice (P1b split).
+	 * The right side renders dynamic pages only — the social rail (owner links
+	 * + fixed RSS) is the left column, so nothing is listed twice (P1b split).
 	 */
 	let {
 		owner,
 		status,
 		stats,
-		social,
+		links,
 		titleKey,
 		items,
 		loading = false
@@ -27,7 +27,7 @@
 		owner: SiteOwner;
 		status: OwnerStatus;
 		stats: { label: string; value: number | string }[];
-		social: { href: string; label: string; icon?: Component }[];
+		links: readonly SocialLinkLike[] | null | undefined;
 		titleKey?: I18nKey;
 		items: NavChild[];
 		loading?: boolean;
@@ -45,7 +45,7 @@
 <!-- `flex-1` lets the two columns fill the panel's fixed height, so the
      profile's social rail can sit on the bottom edge (reference layout). -->
 <div class="grid flex-1 gap-0" style:grid-template-columns={navGridColumns()}>
-	<NavMenuProfile {owner} {status} {stats} {social} class="pe-2" />
+	<NavMenuProfile {owner} {status} {stats} {links} class="pe-2" />
 
 	<div class="min-w-0 border-s border-border/70 ps-2">
 		{#if titleKey}

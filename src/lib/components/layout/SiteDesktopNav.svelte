@@ -11,9 +11,11 @@
 		type PagesMegaData
 	} from '$lib/config/navigation.config';
 	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
+	import type { SocialLinkLike } from '$lib/config/social';
 
 	let {
 		owner,
+		ownerLinks,
 		ownerStatus,
 		postsData,
 		notesData,
@@ -21,6 +23,7 @@
 		pagesData
 	}: {
 		owner: SiteOwner;
+		ownerLinks?: readonly SocialLinkLike[] | null;
 		ownerStatus: OwnerStatus;
 		postsData?: NavMenuData | null;
 		notesData?: NavMenuData | null;
@@ -42,6 +45,7 @@
 				menu={item.megaMenu}
 				triggerAsButton={item.href === '#'}
 				{owner}
+				{ownerLinks}
 				{ownerStatus}
 				serverData={item.key === 'nav_posts'
 					? (postsData ?? null)

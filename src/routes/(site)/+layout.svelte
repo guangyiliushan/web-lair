@@ -16,6 +16,7 @@
 	<Header
 		auth={data.auth}
 		owner={data.siteOwner}
+		ownerLinks={data.ownerLinks}
 		ownerStatus={data.ownerStatus}
 		postsData={data.postsData}
 		notesData={data.notesData}

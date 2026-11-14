@@ -21,7 +21,7 @@ describe('NavMenuProfile identity row', () => {
 			owner: SITE_OWNER_DEFAULT,
 			status: OWNER_STATUS_DEFAULT,
 			stats,
-			social: []
+			links: []
 		});
 
 		expect(document.body.textContent).toContain(SITE_OWNER_DEFAULT.name);
@@ -37,7 +37,7 @@ describe('NavMenuProfile identity row', () => {
 			owner: SITE_OWNER_DEFAULT,
 			status: { ...OWNER_STATUS_DEFAULT, kind: 'idle' },
 			stats,
-			social: []
+			links: []
 		});
 
 		expect(document.body.textContent).toContain(SITE_OWNER_DEFAULT.name);
@@ -49,7 +49,7 @@ describe('NavMenuProfile identity row', () => {
 			owner: SITE_OWNER_DEFAULT,
 			status: { ...OWNER_STATUS_DEFAULT, enabled: false },
 			stats,
-			social: []
+			links: []
 		});
 
 		expect(document.body.textContent).toContain(SITE_OWNER_DEFAULT.name);

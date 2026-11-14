@@ -1,44 +1,12 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
 	import * as Avatar from '$lib/components/ui/avatar';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import { mergeProps } from 'bits-ui';
 	import { m } from '$lib/paraglide/messages';
-	import { siteHref } from '$lib/utils/href';
 	import { motion } from '@humanspeak/svelte-motion';
-	import IconBrandGithub from '@tabler/icons-svelte-runes/icons/brand-github';
-	import IconBrandTwitter from '@tabler/icons-svelte-runes/icons/brand-twitter';
-	import IconMail from '@tabler/icons-svelte-runes/icons/mail';
-	import IconRss from '@tabler/icons-svelte-runes/icons/rss';
-	import IconBrandTelegram from '@tabler/icons-svelte-runes/icons/brand-telegram';
-	import IconBrandX from '@tabler/icons-svelte-runes/icons/brand-x';
 	import IconChevronDown from '@tabler/icons-svelte-runes/icons/chevron-down';
+	import SocialRail from '$lib/components/layout/SocialRail.svelte';
+	import type { SocialLinkLike } from '$lib/config/social';
 
-	type SocialPlatform = 'github' | 'twitter' | 'email' | 'rss' | 'telegram' | 'x';
-
-	interface SocialLink {
-		platform: SocialPlatform;
-		href: string;
-		ariaLabel: string;
-	}
-
-	const socialLinks: SocialLink[] = [
-		{ platform: 'github', href: 'https://github.com/guangyiliushan', ariaLabel: 'GitHub' },
-		{ platform: 'twitter', href: 'https://twitter.com/guangyiliushan', ariaLabel: 'Twitter' },
-		{ platform: 'email', href: 'mailto:guangyiliushan@example.com', ariaLabel: 'Email' },
-		{ platform: 'rss', href: '/rss.xml', ariaLabel: 'RSS Feed' },
-		{ platform: 'telegram', href: 'https://t.me/guangyiliushan', ariaLabel: 'Telegram' },
-		{ platform: 'x', href: 'https://x.com/guangyiliushan', ariaLabel: 'X' }
-	];
-
-	const iconOf: Record<SocialPlatform, typeof IconBrandGithub> = {
-		github: IconBrandGithub,
-		twitter: IconBrandTwitter,
-		email: IconMail,
-		rss: IconRss,
-		telegram: IconBrandTelegram,
-		x: IconBrandX
-	};
+	let { links }: { links?: readonly SocialLinkLike[] | null } = $props();
 
 	// 头像配置
 	const avatarConfig = {
@@ -83,32 +51,7 @@
 				{m.hero_description()}
 			</p>
 
-			<div class="flex flex-wrap items-center gap-3">
-				{#each socialLinks as link (link.platform)}
-					{@const Icon = iconOf[link.platform]}
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								{@const merged = mergeProps(props, { class: 'size-10 rounded-full' })}
-								<Button
-									variant="ghost"
-									size="icon"
-									href={siteHref(link.href)}
-									target="_blank"
-									rel="noopener noreferrer"
-									aria-label={link.ariaLabel}
-									{...merged}
-								>
-									<Icon data-icon="inline-start" />
-								</Button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content>
-							{link.ariaLabel}
-						</Tooltip.Content>
-					</Tooltip.Root>
-				{/each}
-			</div>
+			<SocialRail {links} variant="hero" />
 		</motion.div>
 
 		<!-- 头像区域：弹性缩放入 -->

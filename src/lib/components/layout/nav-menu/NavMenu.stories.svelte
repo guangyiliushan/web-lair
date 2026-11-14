@@ -9,6 +9,7 @@
 		longTitleData,
 		notesData,
 		notesMenu,
+		ownerLinks,
 		postsData,
 		postsMenu
 	} from './fixtures';
@@ -30,6 +31,7 @@
 		'rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground hover:text-primary-text';
 	const identity = {
 		owner: SITE_OWNER_DEFAULT,
+		ownerLinks,
 		ownerStatus: OWNER_STATUS_DEFAULT
 	};
 </script>
@@ -48,6 +50,7 @@
 			serverData={args.serverData}
 			triggerAsButton={args.triggerAsButton}
 			owner={args.owner}
+			ownerLinks={args.ownerLinks}
 			ownerStatus={args.ownerStatus}
 		>
 			{#snippet trigger({ props }: { props: Record<string, unknown> })}

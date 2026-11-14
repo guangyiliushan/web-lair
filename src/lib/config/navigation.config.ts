@@ -2,10 +2,6 @@ import type { Component } from 'svelte';
 import IconHome from '@tabler/icons-svelte-runes/icons/home';
 import IconBulb from '@tabler/icons-svelte-runes/icons/bulb';
 import IconCategory from '@tabler/icons-svelte-runes/icons/category';
-import IconRss from '@tabler/icons-svelte-runes/icons/rss';
-import IconMail from '@tabler/icons-svelte-runes/icons/mail';
-import IconBrandGithub from '@tabler/icons-svelte-runes/icons/brand-github';
-import IconBrandTwitter from '@tabler/icons-svelte-runes/icons/brand-twitter';
 import IconUsers from '@tabler/icons-svelte-runes/icons/users';
 import IconFlask from '@tabler/icons-svelte-runes/icons/flask';
 import IconQuote from '@tabler/icons-svelte-runes/icons/quote';
@@ -28,14 +24,6 @@ const t = {
 	nav_more: m.nav_more,
 	nav_about: m.nav_about,
 	nav_home_quick_links: m.nav_home_quick_links,
-	nav_home_rss: m.nav_home_rss,
-	nav_home_rss_desc: m.nav_home_rss_desc,
-	nav_home_github: m.nav_home_github,
-	nav_home_github_desc: m.nav_home_github_desc,
-	nav_home_twitter: m.nav_home_twitter,
-	nav_home_twitter_desc: m.nav_home_twitter_desc,
-	nav_home_email: m.nav_home_email,
-	nav_home_email_desc: m.nav_home_email_desc,
 	nav_more_friends: m.nav_more_friends,
 	nav_more_friends_desc: m.nav_more_friends_desc,
 	nav_more_photos: m.nav_more_photos,
@@ -182,49 +170,14 @@ export const navigationConfig: NavItem[] = [
 			columns: [
 				{
 					titleKey: 'nav_home_quick_links',
-					items: [
-						{
-							labelKey: 'nav_home_rss',
-							href: '/rss.xml',
-							descKey: 'nav_home_rss_desc',
-							icon: IconRss
-						},
-						{
-							labelKey: 'nav_home_github',
-							href: 'https://github.com/guangyiliushan',
-							descKey: 'nav_home_github_desc',
-							icon: IconBrandGithub
-						},
-						{
-							labelKey: 'nav_home_twitter',
-							href: 'https://twitter.com/guangyiliushan',
-							descKey: 'nav_home_twitter_desc',
-							icon: IconBrandTwitter
-						},
-						{
-							labelKey: 'nav_home_email',
-							href: 'mailto:guangyiliushan@example.com',
-							descKey: 'nav_home_email_desc',
-							icon: IconMail
-						}
-					]
+					// Personal socials and RSS are not navigation data: the
+					// single rail comes from `user_profiles.links` (R-1/R-2).
+					items: []
 				}
 			]
 		},
-		children: [
-			{ labelKey: 'nav_home_rss', href: '/rss.xml', icon: IconRss },
-			{
-				labelKey: 'nav_home_github',
-				href: 'https://github.com/guangyiliushan',
-				icon: IconBrandGithub
-			},
-			{
-				labelKey: 'nav_home_twitter',
-				href: 'https://twitter.com/guangyiliushan',
-				icon: IconBrandTwitter
-			},
-			{ labelKey: 'nav_home_email', href: 'mailto:guangyiliushan@example.com', icon: IconMail }
-		]
+		// No static children: the mobile menu renders the same owner rail.
+		children: []
 	},
 	{
 		key: 'nav_posts',
