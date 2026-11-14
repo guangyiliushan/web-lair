@@ -20,6 +20,9 @@ export default defineConfig({
 		// A cold production build takes ~50s on an idle machine and 130-260s
 		// on a loaded one; on 2026-10-02 the 300s budget was blown three
 		// times in a row (build 256s + preview boot). Keep a generous margin.
+		// A scratch-database run keeps one preview server alive across chunks;
+		// reusing it avoids rebuilding and keeps DATABASE_URL pinned.
+		reuseExistingServer: true,
 		timeout: 600_000,
 		// `preview` is a production build, so the loopback sign-in source has to
 		// be switched on explicitly (see security/tailscale-auth.ts).
