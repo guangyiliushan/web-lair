@@ -152,7 +152,7 @@ vi.mock('$lib/server/config/options-registry', () => ({
 	setOption: state.setOption
 }));
 
-import { actions, load, providerFromForm } from './+page.server';
+import { actions, load } from './+page.server';
 
 function makeEvent(fields: Record<string, string> = {}, role: 'owner' | 'admin' = 'owner') {
 	const body = new FormData();
@@ -334,16 +334,20 @@ describe('storage settings route (W7.2)', () => {
 		expect(state.setOption).not.toHaveBeenCalled();
 	});
 
-	it('refuses a local provider that smuggles external addressing', () => {
-		const form = new FormData();
-		form.set('driver', 'local');
-		form.set('endpoint', 'https://s3.example.com');
-		form.set('bucket', 'lair-media');
-		const parsed = providerFromForm(form);
-		expect(parsed.driver).toBe('local');
-		expect(parsed.endpoint).toBeNull();
-		expect(parsed.bucket).toBeNull();
-		expect(parsed.providerType).toBeNull();
+	it('refuses a local provider that smuggles external addressing', async () => {
+		// A stale form post (driver=local with s3 fields) must save a local
+		// provider with null addressing — never a local row carrying a bucket.
+		const result = await call('saveProvider', makeEvent({ driver: 'local', endpoint: 'https://93.184.216.34', bucket: 'lair-media' }));
+		expect(result).toMatchObject({ step: 'provider', ok: true });
+		expect(state.setOption).toHaveBeenCalledWith(
+			'storage.provider',
+			expect.objectContaining({
+				driver: 'local',
+				providerType: null,
+				endpoint: null,
+				bucket: null
+			})
+		);
 	});
 
 	it('keeps the 1-day floor on purge TTLs', async () => {

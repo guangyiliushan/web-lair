@@ -1,8 +1,7 @@
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '../src/lib/server/db/schema';
-import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { S3Storage } from '../src/lib/server/storage/s3';
+import { activeStorage } from './lib/active-storage';
 import { purgeMedia } from '../src/lib/server/services/files';
 
 /**
@@ -22,7 +21,8 @@ const execute = process.argv.includes('--yes');
 
 const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
-const storage = new S3Storage(storageConfigFromEnv(process.env));
+// W7.5: purge runs against the ACTIVE provider, never an assumed local one.
+const storage = await activeStorage(db);
 
 const outcome = await purgeMedia({ dryRun: !execute }, { db, storage });
 

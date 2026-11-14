@@ -93,29 +93,41 @@
 		secretAccessKey = '';
 	}
 
-	const PROBE_STATUS_KEYS = {
-		ok: 'admin_settings_storage_test_ok',
-		auth: 'admin_settings_storage_test_auth',
-		'not-found': 'admin_settings_storage_test_not_found',
-		timeout: 'admin_settings_storage_test_timeout',
-		network: 'admin_settings_storage_test_network',
-		write: 'admin_settings_storage_test_write',
-		capability: 'admin_settings_storage_test_capability',
-		unknown: 'admin_settings_storage_test_failed'
-	} as const;
+	// Static message lookups only (the i18n contract test rejects dynamic
+	// indexing); a computed key would break the compile-time guarantee.
 	const probeStatusLabel = $derived(
-		data.status.lastStatus ? m[PROBE_STATUS_KEYS[data.status.lastStatus]]() : null
+		data.status.lastStatus === null
+			? null
+			: data.status.lastStatus === 'ok'
+				? m.admin_settings_storage_test_ok()
+				: data.status.lastStatus === 'auth'
+					? m.admin_settings_storage_test_auth()
+					: data.status.lastStatus === 'not-found'
+						? m.admin_settings_storage_test_not_found()
+						: data.status.lastStatus === 'timeout'
+							? m.admin_settings_storage_test_timeout()
+							: data.status.lastStatus === 'network'
+								? m.admin_settings_storage_test_network()
+								: data.status.lastStatus === 'write'
+									? m.admin_settings_storage_test_write()
+									: data.status.lastStatus === 'capability'
+										? m.admin_settings_storage_test_capability()
+										: m.admin_settings_storage_test_failed()
 	);
 
-	const MIGRATION_STATE_KEYS = {
-		idle: 'admin_settings_storage_migration_state_idle',
-		copying: 'admin_settings_storage_migration_state_copying',
-		copied: 'admin_settings_storage_migration_state_copied',
-		failed: 'admin_settings_storage_migration_state_failed',
-		cutover: 'admin_settings_storage_migration_state_cutover',
-		'rolled-back': 'admin_settings_storage_migration_state_rolled_back'
-	} as const;
-	const migrationStateLabel = $derived(m[MIGRATION_STATE_KEYS[data.migration.state]]());
+	const migrationStateLabel = $derived(
+		data.migration.state === 'copying'
+			? m.admin_settings_storage_migration_state_copying()
+			: data.migration.state === 'copied'
+				? m.admin_settings_storage_migration_state_copied()
+				: data.migration.state === 'failed'
+					? m.admin_settings_storage_migration_state_failed()
+					: data.migration.state === 'cutover'
+						? m.admin_settings_storage_migration_state_cutover()
+						: data.migration.state === 'rolled-back'
+							? m.admin_settings_storage_migration_state_rolled_back()
+							: m.admin_settings_storage_migration_state_idle()
+	);
 
 	const lastTest = $derived(
 		data.status.lastTestAt
@@ -368,6 +380,12 @@
 				<SettingsStatusRow
 					label={m.admin_settings_storage_public_base_url()}
 					value={provider.publicBaseUrl ?? '—'}
+				/>
+				<SettingsStatusRow
+					label={m.admin_settings_storage_delete_mode()}
+					value={provider.deleteMode === 'logical'
+						? m.admin_settings_storage_delete_mode_logical()
+						: m.admin_settings_storage_delete_mode_hard()}
 				/>
 			</SettingsStatusList>
 		{/if}

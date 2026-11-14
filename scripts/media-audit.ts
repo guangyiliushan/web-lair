@@ -1,8 +1,7 @@
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '../src/lib/server/db/schema';
-import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { S3Storage } from '../src/lib/server/storage/s3';
+import { activeStorage } from './lib/active-storage';
 import { runMediaAudit } from '../src/lib/server/services/files';
 
 /**
@@ -24,7 +23,8 @@ const strict = process.argv.includes('--strict');
 
 const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
-const storage = new S3Storage(storageConfigFromEnv(process.env));
+// Audit the provider the app actually serves from (W7.5).
+const storage = await activeStorage(db);
 
 const report = await runMediaAudit({ db, storage });
 

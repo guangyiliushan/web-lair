@@ -156,7 +156,7 @@ function stringField(form: FormData, name: string): string {
  * nulls endpoint/bucket/providerType — the schema rejects a local provider that
  * carries external addressing, so a stale form post cannot smuggle one in.
  */
-export function providerFromForm(form: FormData): StorageProviderConfig {
+function providerFromForm(form: FormData): StorageProviderConfig {
 	const driver = form.get('driver') === 's3' ? 's3' : 'local';
 	const providerType = stringField(form, 'providerType');
 	const endpoint = stringField(form, 'endpoint');
