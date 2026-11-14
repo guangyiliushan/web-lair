@@ -102,7 +102,14 @@ export const auth = betterAuth({
 	// never mint an admin/owner session. Email + TOTP, passkey and the
 	// registered tailnet owner hand-off are separate paths.
 	user: {
-		validateUserInfo: validateUserProvisioning
+		validateUserInfo: validateUserProvisioning,
+		// W2.7/H1: `default_lang` is an application field on the user model,
+		// not a hand edit. Declaring it here is what lets `pnpm auth:schema`
+		// reproduce the column the writer-language feature reads; the value is
+		// managed by the app, so clients cannot set it through better-auth.
+		additionalFields: {
+			defaultLang: { type: 'string', required: false, input: false }
+		}
 	},
 
 	// OAuth failures (including the gate above) return to the sign-in page with

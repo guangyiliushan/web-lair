@@ -42,6 +42,16 @@
 				</div>
 			{/if}
 
+			{#if data.setupConsumed}
+				<div
+					class="mb-6 flex items-start gap-2 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+					role="alert"
+				>
+					<IconAlertTriangle class="mt-0.5 size-4 shrink-0" />
+					<span>{m.admin_setup_consumed()}</span>
+				</div>
+			{/if}
+
 			{#if form?.message}
 				<div
 					class="mb-6 flex items-center gap-2 rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive"
@@ -52,59 +62,61 @@
 				</div>
 			{/if}
 
-			<form method="post" action="?/setup" use:enhance>
-				<Field.FieldGroup>
-					<Field.Field>
-						<Field.FieldLabel for="name">{m.auth_setup_display_name()}</Field.FieldLabel>
-						<Input
-							id="name"
-							name="name"
-							type="text"
-							autocomplete="name"
-							placeholder={m.admin_setup_name_placeholder()}
-						/>
-					</Field.Field>
-					<Field.Field>
-						<Field.FieldLabel for="email">{m.auth_admin_email()}</Field.FieldLabel>
-						<Input
-							id="email"
-							name="email"
-							type="email"
-							autocomplete="email"
-							placeholder={m.auth_email_placeholder()}
-							required
-						/>
-					</Field.Field>
-					<Field.Field>
-						<Field.FieldLabel for="password">{m.auth_password()}</Field.FieldLabel>
-						<Input
-							id="password"
-							name="password"
-							type="password"
-							autocomplete="new-password"
-							placeholder={m.auth_password_hint()}
-							required
-						/>
-					</Field.Field>
-					{#if data.setupTokenConfigured}
+			{#if !data.setupConsumed}
+				<form method="post" action="?/setup" use:enhance>
+					<Field.FieldGroup>
 						<Field.Field>
-							<Field.FieldLabel for="setupToken">{m.auth_setup_token()}</Field.FieldLabel>
+							<Field.FieldLabel for="name">{m.auth_setup_display_name()}</Field.FieldLabel>
 							<Input
-								id="setupToken"
-								name="setupToken"
-								type="password"
-								autocomplete="off"
-								placeholder={m.admin_setup_token_placeholder()}
+								id="name"
+								name="name"
+								type="text"
+								autocomplete="name"
+								placeholder={m.admin_setup_name_placeholder()}
+							/>
+						</Field.Field>
+						<Field.Field>
+							<Field.FieldLabel for="email">{m.auth_admin_email()}</Field.FieldLabel>
+							<Input
+								id="email"
+								name="email"
+								type="email"
+								autocomplete="email"
+								placeholder={m.auth_email_placeholder()}
 								required
 							/>
 						</Field.Field>
-					{/if}
-					<Button type="submit" class="w-full" disabled={!data.setupTokenConfigured}>
-						<IconMail data-icon="inline-start" />
-						{m.auth_setup_create()}
-					</Button>
-				</Field.FieldGroup>
-			</form>
+						<Field.Field>
+							<Field.FieldLabel for="password">{m.auth_password()}</Field.FieldLabel>
+							<Input
+								id="password"
+								name="password"
+								type="password"
+								autocomplete="new-password"
+								placeholder={m.auth_password_hint()}
+								required
+							/>
+						</Field.Field>
+						{#if data.setupTokenConfigured}
+							<Field.Field>
+								<Field.FieldLabel for="setupToken">{m.auth_setup_token()}</Field.FieldLabel>
+								<Input
+									id="setupToken"
+									name="setupToken"
+									type="password"
+									autocomplete="off"
+									placeholder={m.admin_setup_token_placeholder()}
+									required
+								/>
+							</Field.Field>
+						{/if}
+						<Button type="submit" class="w-full" disabled={!data.setupTokenConfigured}>
+							<IconMail data-icon="inline-start" />
+							{m.auth_setup_create()}
+						</Button>
+					</Field.FieldGroup>
+				</form>
+			{/if}
 
 			<p class="mt-4 text-center text-xs text-muted-foreground">
 				{m.auth_setup_note()}

@@ -2,6 +2,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { translations } from '../db/content/translation.schema.ts';
 import type { TranslationProgressChunk } from '../db/content/translation.schema.ts';
 import { sanitizeErrorText } from '../jobs/error-text.ts';
+import { resolveProviderKey, type SecretDb } from '../secrets/resolver.ts';
 import { isAiError } from './errors.ts';
 import { generateTranslation } from './translate.ts';
 import {
@@ -266,6 +267,10 @@ export async function runTranslationJob(ctx: JobContext): Promise<void> {
 				{
 					db: ctx.db as unknown as AiDeps['db'],
 					getEnv: (name) => process.env[name],
+					resolveKey: (provider) =>
+						resolveProviderKey(ctx.db as unknown as SecretDb, provider, {
+							getEnv: (name) => process.env[name]
+						}),
 					log: (message) => ctx.logger.info(message),
 					timeoutMs: ATTEMPT_TIMEOUT_MS,
 					streamTimeoutMs: STREAM_TIMEOUT_MS,

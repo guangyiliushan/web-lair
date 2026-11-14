@@ -34,12 +34,27 @@ chmod 600 .env
 $EDITOR .env      # see §1.1 for the required keys
 ```
 
+Or generate the secrets instead of editing them by hand (W2.12):
+
+```bash
+./deploy/bootstrap-secrets.sh --dry-run   # names and targets, no values
+./deploy/bootstrap-secrets.sh             # writes .env + deploy/backup.env
+```
+
+The script keeps existing non-empty values, rotates only with
+`--rotate NAME`, writes no database rows and prints no secret. Its receipt
+(`install-receipt.json`) contains names and SHA-256 prefixes only. Copy
+`SECRETS_KEYS`, `RESTIC_PASSWORD` and `RESTIC_CONFIG_PASSWORD` to the offline
+password manager, then remove `ADMIN_SETUP_TOKEN` after `/admin/setup` succeeds;
+the app refuses a second use through its `admin.setup_complete` marker.
+
 ### 1.1 Required `.env` keys
 
 | Key                                                   | Value                                                                                                             |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | strong, unique, **URL-safe** (`openssl rand -hex 32`) — the password is interpolated into `DATABASE_URL` verbatim |
 | `BETTER_AUTH_SECRET`                                  | ≥32 chars, high entropy                                                                                           |
+| `SECRETS_KEYS` / `SECRETS_KEY_ACTIVE`                 | runtime secret keyring (W2); see §4.2 — required once an encrypted key exists                                     |
 | `ORIGIN`                                              | `https://<domain>` (no trailing slash)                                                                            |
 | `DOMAIN`                                              | same host, used by Caddy                                                                                          |
 | `ACME_EMAIL`                                          | Let's Encrypt expiry notices                                                                                      |
@@ -439,14 +454,21 @@ HAS_E2=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('\''public.email_suppressions'\'') is not null"')
 HAS_PROV=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select exists (select 1 from information_schema.columns where table_schema='\''public'\'' and table_name='\''posts'\'' and column_name='\''writing_origin'\'')"')
-if [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
+HAS_SECRETS=$(deploy/compose-prod.sh exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('\''public.ai_provider_secrets'\'') is not null and to_regclass('\''public.webhook_secrets'\'') is not null"')
+# Do not key this gate on a table count: every migration changes it (49 -> 53
+# -> 55 ...). A provenance-era schema is verified against the image's own
+# journal by verify-baseline; older generations are pinned to a matching image.
+if [ "$HAS_SECRETS" = "t" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
+  deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
+elif [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
   deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
 elif [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "f" ]; then
   echo "restored pre-provenance schema (49 tables, E2, no writing_origin); verify-baseline skipped — use the matching pre-provenance image"
 elif [ "$TABLES" = "48" ] && [ "$HAS_E2" = "f" ]; then
   echo "restored pre-E2 schema (48 public tables); verify-baseline skipped"
 else
-  echo "unexpected restore shape (tables=$TABLES e2=$HAS_E2 provenance=$HAS_PROV); refusing to start" >&2
+  echo "unexpected restore shape (tables=$TABLES e2=$HAS_E2 provenance=$HAS_PROV secrets=$HAS_SECRETS); refusing to start" >&2
   exit 1
 fi
 deploy/compose-prod.sh up -d
@@ -672,6 +694,78 @@ age, so deploy count does not grow the backup repo.
   on success and is deliberately separate from the 5-minute liveness URL
   (`DEADMAN_PING_URL`) — sharing one check would make a silent backup failure
   invisible on the next liveness tick.
+
+### 4.2 Restoring encrypted runtime credentials (W2.10)
+
+`ai_provider_secrets` and `webhook_secrets` are AES-256-GCM ciphertext under
+`SECRETS_KEYS`. The key is in the **config** repository (`.env`); the ciphertext
+is in the **data** repository. Restore order matters:
+
+1. Restore the config repository first: `SECRETS_KEYS` and
+   `SECRETS_KEY_ACTIVE` must be in `/srv/web-lair/app/.env` before the app
+   starts. A missing/mismatched key is reported as `store_unavailable` /
+   `decrypt_failed`; there is no plaintext fallback.
+2. Restore the data repository (database dump, `$DATA_DIR`, media).
+3. Start the app and verify: a provider probe on `/admin/settings/ai` must
+   authenticate, and a webhook delivery must carry a valid signature.
+4. Keep every key version that a retained backup may still reference. Retiring
+   a version makes dumps from before the rotation unreadable by design
+   (`scripts/verify-secret-key-versions.ts`, three-phase rotation).
+
+| Have                                    | Result                                                                                                                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DB dump only                            | Every encrypted column fails with `decrypt_failed`/`unknown_key_version`; provider keys and webhook signing secrets are unrecoverable without the key. |
+| Keyring only                            | No ciphertext to decrypt. The `.env` is still a full infrastructure secret (DB password, auth secret).                                                 |
+| Both, same rotation                     | Credentials work; no re-entry needed.                                                                                                                  |
+| Both, dump older than a retired version | Rows written under the retired version fail closed. Keep the old version in the keyring for the backup retention window.                               |
+
+`SECRETS_KEY` (single key, version 1) is the legacy form; do not use it for new
+installs. `SECRETS_KEYS` is not derived from `BETTER_AUTH_SECRET`: rotating the
+auth keyring must never destroy the credential store.
+
+#### Rollback window (webhook backfill)
+
+Migrations 0001/0002 are additive (two new tables; `webhooks.secret` becomes
+nullable). The **data** step is the one-way edge:
+
+| Point in time                                                             | Image rollback    | Notes                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| After `migrate` (0001/0002), **before** `migrate-webhook-secrets --apply` | Safe              | Old code reads/writes the legacy `webhooks.secret`; the new tables are ignored. **0002 is data-dependent:** the first endpoint created by the new image has no legacy secret, so from then on `SET NOT NULL` cannot be restored and roll-forward is the only path. |
+| After `migrate-webhook-secrets --apply`                                   | **Not safe**      | The old drain selects the legacy column, which is NULL, and throws in `signingKey()` (`null.startsWith`) on every tick: queued rows stay queued while the segment errors. Roll forward (keep the new image) or restore the pre-backfill dump.                      |
+| After the new image has run                                               | Roll forward only | The new drain reads `webhook_secrets` first and falls back to the legacy column; an old image cannot read the encrypted rows.                                                                                                                                      |
+
+Keep `SECRETS_KEYS` and the encrypted rows together: an image rollback without
+the keyring turns every stored credential into `decrypt_failed`.
+
+### 4.3 Retire the legacy webhook secret (W2.6, one-way data step)
+
+Migrations 0001/0002 are additive and reversible; moving the plaintext value
+into `webhook_secrets` is not. Do it in this order:
+
+```bash
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+# 1) Dump immediately before the data step (this is the only undo).
+sudo -u deploy docker compose -f compose.prod.yaml exec -T db \
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > "/srv/web-lair/pre-webhook-backfill-$STAMP.dump"
+
+# 2) Dry run: prints every endpoint that would move, writes nothing.
+deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts
+
+# 3) Apply. All rows move in ONE transaction; on any conflict/round-trip
+#    failure it rolls back and no plaintext is retired.
+deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts --apply
+
+# 4) Prove idempotence and no plaintext left for a migrated endpoint.
+deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts   # "nothing to migrate"
+deploy/compose-prod.sh exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from webhooks where secret is not null"'
+```
+
+Record the dump name next to the rollback table above. The script is run with
+`node` (the container image has no `tsx`); the `pnpm db:migrate-webhook-secrets`
+alias is for a dev checkout only. A non-zero exit now means "rolled back, still
+safe" — there is no partial state.
 
 ## 5. Monitoring
 

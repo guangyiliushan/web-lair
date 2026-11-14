@@ -16,6 +16,7 @@ import { getOption, setOption } from '$lib/server/config/options-registry';
 import { toConsoleMessages, type ConsoleMessageRow } from '$lib/components/admin/ai/console-view';
 import { runAgentChat } from '$lib/server/ai/agent/run';
 import { chatErrorMessage } from '$lib/server/ai/chat-error';
+import { resolveProviderKey, type SecretDb } from '$lib/server/secrets/resolver';
 import { aiReadiness, type ReadinessProvider } from '$lib/server/services/ai-readiness';
 import { m } from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
@@ -258,6 +259,10 @@ export const actions: Actions = {
 			const result = await runAgentChat({
 				db: db as never,
 				getEnv: (name) => env[name],
+				resolveKey: (provider) =>
+					resolveProviderKey(db as unknown as SecretDb, provider, {
+						getEnv: (name) => env[name]
+					}),
 				conversationId,
 				actorId: userId,
 				actorRole: role,

@@ -6,6 +6,7 @@ import { adminContextFor, requireAiUse } from '$lib/server/authz';
 import { recordActivity } from '$lib/server/audit';
 import { streamAgentChat } from '$lib/server/ai/agent/run';
 import { chatErrorMessage } from '$lib/server/ai/chat-error';
+import { resolveProviderKey, type SecretDb } from '$lib/server/secrets/resolver';
 import type { RequestHandler } from './$types';
 
 const MAX_USER_CHARS = 4000;
@@ -104,6 +105,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				const result = await streamAgentChat({
 					db: db as never,
 					getEnv: (name) => env[name],
+					resolveKey: (provider) =>
+						resolveProviderKey(db as unknown as SecretDb, provider, {
+							getEnv: (name) => env[name]
+						}),
 					conversationId,
 					actorId: userId,
 					actorRole: role,

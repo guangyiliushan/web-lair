@@ -4,5 +4,6 @@ export * from './ai-agent-message.schema';
 export * from './ai-agent-proposal.schema';
 export * from './ai-model-pool.schema';
 export * from './ai-provider.schema';
+export * from './ai-provider-secret.schema';
 export * from './ai-usage.schema';
 export * from './transcript.schema';

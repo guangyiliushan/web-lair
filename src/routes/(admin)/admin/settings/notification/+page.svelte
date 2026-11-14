@@ -25,7 +25,7 @@
 		payloadUrl: string;
 		events: string[];
 		isEnabled: boolean;
-		secretPreview: string;
+		secretPreview: string | null;
 	}
 
 	// Action results are echoed back via page.form. `op` routes dialog-scoped
@@ -572,7 +572,7 @@
 										<span class="text-muted-foreground">{endpoint.events.join(' · ')}</span>
 										<span class="text-muted-foreground"
 											>{m.admin_settings_notification_endpoint_secret()}:
-											<code>{endpoint.secretPreview}</code></span
+											<code>{endpoint.secretPreview ?? '—'}</code></span
 										>
 										<span class="ml-auto flex items-center gap-1">
 											<Button

@@ -3,9 +3,18 @@ import { z } from 'zod';
 import { desc, eq, inArray, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
-import { aiAgentMemories, aiModelPool, aiProviders } from '$lib/server/db/ai';
+import { aiAgentMemories, aiModelPool, aiProviderSecrets, aiProviders } from '$lib/server/db/ai';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { adminContextFor, requireAdminRole, requireOwnerRole } from '$lib/server/authz';
+import { recordActivity } from '$lib/server/audit';
+import { SecretError } from '$lib/server/secrets/errors';
+import {
+	encryptProviderKeyValue,
+	loadKeyring,
+	readProviderKeyStatuses,
+	resolveProviderKey,
+	type SecretDb
+} from '$lib/server/secrets/resolver';
 import { getOption, setOption } from '$lib/server/config/options-registry';
 import { poolEntries } from '$lib/server/ai/providers';
 import {
@@ -72,6 +81,97 @@ type PoolFailPayload = {
 /** Application rule for memory cards (AI-2): one owner, one small set of notes. */
 const MEMORY_LIMIT = 50;
 
+/** Provider key bounds (W2.5): a pasted credential, never a short PIN. */
+const PROVIDER_KEY_MIN = 8;
+const PROVIDER_KEY_MAX = 4096;
+
+type KeyLocals = { user?: { id?: string } | null };
+type KeyEventName = 'ai.key_missing' | 'ai.key_decrypt_failed' | 'ai.key_denied';
+
+/**
+ * Audit one secret failure without letting the audit path mask the real
+ * answer. Payload carries identifiers and a hint only - never the value or the
+ * ciphertext - and `deliver: false` keeps secret metadata off the webhook
+ * plane (decision A2).
+ */
+async function recordKeyEvent(
+	event: KeyEventName,
+	input: {
+		actorId: string | null;
+		action?: string;
+		providerId?: string | null;
+		providerName?: string | null;
+		hint?: string | null;
+		reason?: string | null;
+	}
+): Promise<void> {
+	try {
+		await recordActivity(db, {
+			event,
+			actorId: input.actorId,
+			refType: input.providerId ? 'ai' : undefined,
+			refId: input.providerId ?? undefined,
+			payload: {
+				action: input.action ?? null,
+				provider: input.providerName ?? null,
+				hint: input.hint ?? null,
+				reason: input.reason ?? null
+			},
+			deliver: false
+		});
+	} catch (error) {
+		console.warn(
+			'[secrets] key event not recorded',
+			event,
+			error instanceof Error ? error.name : 'unknown'
+		);
+	}
+}
+
+/** Owner-only secret writes; a refused attempt is itself an audited event. */
+async function guardOwnerForSecret(locals: KeyLocals, action: string): Promise<void> {
+	try {
+		await requireOwnerRole();
+	} catch (error) {
+		await recordKeyEvent('ai.key_denied', {
+			actorId: locals.user?.id ?? null,
+			action
+		});
+		throw error;
+	}
+}
+
+interface ProviderKeyLookup {
+	getKey: (name: string) => string | undefined;
+	failure: SecretError | null;
+}
+
+/**
+ * Probe seam: resolve the same way a real call would, then hand the probe a
+ * constant getter. `missing` degrades to the env lookup (the resolver already
+ * tried it); terminal failures are returned so the action can answer with a
+ * readable message instead of pretending the provider is unreachable.
+ */
+async function keyLookupForProvider(provider: {
+	id?: string | null;
+	apiKeyEnv?: string | null;
+}): Promise<ProviderKeyLookup> {
+	try {
+		const resolved = await resolveProviderKey(db as unknown as SecretDb, provider, {
+			getEnv: (name) => env[name]
+		});
+		return { getKey: () => resolved.value, failure: null };
+	} catch (error) {
+		if (error instanceof SecretError) {
+			if (error.code === 'missing') {
+				return { getKey: (name) => (name ? env[name] : undefined), failure: null };
+			}
+			return { getKey: () => undefined, failure: error };
+		}
+		throw error;
+	}
+}
+
 /**
  * AI settings (ai-line plan 禮5.2): providers CRUD, feature assignments and
  * the switches/thresholds block. All three sections persist through the
@@ -109,6 +209,31 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const envSet = Object.fromEntries(
 		providers.map((p) => [p.id, p.apiKeyEnv ? Boolean(env[p.apiKeyEnv]) : null])
 	);
+	// Encrypted rows (W2.5): status + hint only. The UI never receives the
+	// ciphertext, let alone the key.
+	const providerKeyStatuses = await readProviderKeyStatuses(
+		db as unknown as SecretDb,
+		providers.map((provider) => provider.id)
+	);
+	const providerKeys = Object.fromEntries(
+		providers.map((provider) => [
+			provider.id,
+			providerKeyStatuses.get(provider.id) ?? {
+				configured: false,
+				hint: null,
+				keyVersion: null,
+				updatedAt: null
+			}
+		])
+	);
+	// A provider with a DB-managed key must not read as `missing_env` just
+	// because the env variable is absent: readiness consumes this extra set.
+	const dbKeyEnvNames = new Set(
+		providers
+			.filter((provider) => provider.apiKeyEnv && providerKeys[provider.id]?.configured)
+			.map((provider) => provider.apiKeyEnv as string)
+	);
+	const hasKey = (name: string) => Boolean(env[name]) || dbKeyEnvNames.has(name);
 	// The pool card needs, per row: providers that serve the model (runtime
 	// order), each provider's verdict, and month-to-date spend. All three are
 	// derived here so the component renders instead of deciding.
@@ -122,7 +247,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			models: provider.models
 		})),
 		spent: new Map(entries.map((entry) => [entry.model, entry.spent])),
-		hasEnv: (name) => Boolean(env[name]),
+		hasEnv: hasKey,
 		runtimes: await runtimesFor(poolRows.map((row) => row.model))
 	});
 	return {
@@ -146,7 +271,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		crawl,
 		memories,
 		memoryLimit: MEMORY_LIMIT,
-		envSet
+		envSet,
+		providerKeys
 	};
 };
 
@@ -227,6 +353,133 @@ async function resolveSyncPricing(): Promise<
 }
 
 export const actions: Actions = {
+	/**
+	 * Write-only provider key (W2.5): paste a value, encrypt it with the active
+	 * keyring version, upsert the row, audit set/rotate. The response never
+	 * contains the value (or the ciphertext); the page reload shows a hint and
+	 * the source badge.
+	 */
+	saveProviderKey: async ({ request, locals }) => {
+		await guardOwnerForSecret(locals, 'saveProviderKey');
+		const form = await request.formData();
+		const id = (form.get('id') ?? '').toString().trim();
+		if (!id) return fail(400, { message: m.admin_settings_ai_key_err_missing() });
+		if (!isUuid(id)) return fail(400, { message: m.admin_settings_ai_key_err_bad_id() });
+		const value = (form.get('value') ?? '').toString().trim();
+		if (value.length < PROVIDER_KEY_MIN || value.length > PROVIDER_KEY_MAX) {
+			return fail(400, { message: m.admin_settings_ai_key_err_length() });
+		}
+		const [provider] = await db
+			.select({ id: aiProviders.id, name: aiProviders.name })
+			.from(aiProviders)
+			.where(eq(aiProviders.id, id))
+			.limit(1);
+		if (!provider) return fail(404, { message: m.admin_settings_ai_key_err_not_found() });
+
+		let encrypted;
+		try {
+			const keyring = loadKeyring({ getEnv: (name) => env[name] });
+			encrypted = encryptProviderKeyValue(provider.id, value, keyring);
+		} catch (error) {
+			if (error instanceof SecretError) {
+				console.warn('[secrets] provider key write refused:', error.code);
+				return fail(503, { message: m.admin_settings_ai_key_err_store() });
+			}
+			throw error;
+		}
+
+		const actorId = locals.user?.id ?? null;
+		try {
+			const rotated = await db.transaction(async (tx) => {
+				const existing = await tx
+					.select({ providerId: aiProviderSecrets.providerId })
+					.from(aiProviderSecrets)
+					.where(eq(aiProviderSecrets.providerId, provider.id))
+					.limit(1);
+				const stamp = new Date();
+				await tx
+					.insert(aiProviderSecrets)
+					.values({
+						providerId: provider.id,
+						ciphertext: encrypted.ciphertext,
+						hint: encrypted.hint,
+						keyVersion: encrypted.keyVersion,
+						updatedBy: actorId
+					})
+					.onConflictDoUpdate({
+						target: aiProviderSecrets.providerId,
+						set: {
+							ciphertext: encrypted.ciphertext,
+							hint: encrypted.hint,
+							keyVersion: encrypted.keyVersion,
+							updatedBy: actorId,
+							updatedAt: stamp
+						}
+					});
+				const isRotation = existing.length > 0;
+				await recordActivity(tx, {
+					event: isRotation ? 'ai.key_rotate' : 'ai.key_set',
+					actorId,
+					refType: 'ai',
+					refId: provider.id,
+					payload: {
+						provider: provider.name,
+						hint: encrypted.hint,
+						source: 'db',
+						keyVersion: encrypted.keyVersion
+					},
+					// Secret metadata stays local (decision A2).
+					deliver: false
+				});
+				return isRotation;
+			});
+			return {
+				message: rotated ? m.admin_settings_ai_key_rotated() : m.admin_settings_ai_key_saved()
+			};
+		} catch (error) {
+			if (error instanceof SecretError) {
+				return fail(503, { message: m.admin_settings_ai_key_err_store() });
+			}
+			throw error;
+		}
+	},
+
+	/** Remove the encrypted key; the provider's env fallback still applies. */
+	clearProviderKey: async ({ request, locals }) => {
+		await guardOwnerForSecret(locals, 'clearProviderKey');
+		const form = await request.formData();
+		const id = (form.get('id') ?? '').toString().trim();
+		if (!id) return fail(400, { message: m.admin_settings_ai_key_err_missing() });
+		if (!isUuid(id)) return fail(400, { message: m.admin_settings_ai_key_err_bad_id() });
+		const [provider] = await db
+			.select({ id: aiProviders.id, name: aiProviders.name })
+			.from(aiProviders)
+			.where(eq(aiProviders.id, id))
+			.limit(1);
+		if (!provider) return fail(404, { message: m.admin_settings_ai_key_err_not_found() });
+		const actorId = locals.user?.id ?? null;
+		const removed = await db.transaction(async (tx) => {
+			const rows = await tx
+				.delete(aiProviderSecrets)
+				.where(eq(aiProviderSecrets.providerId, provider.id))
+				.returning({ providerId: aiProviderSecrets.providerId });
+			if (rows.length === 0) return 0;
+			await recordActivity(tx, {
+				event: 'ai.key_clear',
+				actorId,
+				refType: 'ai',
+				refId: provider.id,
+				payload: { provider: provider.name },
+				deliver: false
+			});
+			return rows.length;
+		});
+		if (removed === 0) {
+			return fail(404, { message: m.admin_settings_ai_key_not_configured() });
+		}
+		return { message: m.admin_settings_ai_key_cleared() };
+	},
+
 	saveProvider: async ({ request }) => {
 		await requireOwnerRole();
 		const form = await request.formData();
@@ -362,7 +615,7 @@ export const actions: Actions = {
 		return { message: m.admin_settings_ai_flash_deleted({ name: outcome.name }) };
 	},
 
-	testProvider: async ({ request }) => {
+	testProvider: async ({ request, locals }) => {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
@@ -370,6 +623,34 @@ export const actions: Actions = {
 		if (!isUuid(id)) return fail(400, { message: m.admin_settings_ai_err_bad_id() });
 		const [provider] = await db.select().from(aiProviders).where(eq(aiProviders.id, id)).limit(1);
 		if (!provider) return fail(404, { message: m.admin_settings_ai_err_not_found() });
+		// Probe with the same key a real call would use (W2.4/W2.5): the
+		// encrypted row first, the env name as fallback.
+		const lookup = await keyLookupForProvider(provider);
+		if (lookup.failure) {
+			await recordKeyEvent(
+				lookup.failure.code === 'decrypt_failed' || lookup.failure.code === 'unknown_key_version'
+					? 'ai.key_decrypt_failed'
+					: 'ai.key_missing',
+				{
+					actorId: locals.user?.id ?? null,
+					action: 'testProvider',
+					providerId: provider.id,
+					providerName: provider.name,
+					reason: lookup.failure.code
+				}
+			);
+			return {
+				providerTest: {
+					id,
+					name: provider.name,
+					ok: false,
+					message:
+						lookup.failure.code === 'store_unavailable'
+							? m.admin_settings_ai_key_err_store()
+							: m.admin_settings_ai_key_err_decrypt()
+				}
+			};
+		}
 		// Drizzle types the text column as string; the CHECK pins the enum.
 		const result = await testProviderConnection(
 			{
@@ -377,7 +658,14 @@ export const actions: Actions = {
 				baseUrl: provider.baseUrl,
 				apiKeyEnv: provider.apiKeyEnv
 			},
-			(name) => env[name]
+			lookup.getKey,
+			fetch,
+			{
+				allowPrivateHosts: (env.AI_ALLOW_PRIVATE_HOSTS ?? '')
+					.split(',')
+					.map((entry) => entry.trim())
+					.filter(Boolean)
+			}
 		);
 		// The probe leaves a trace (name + verdict only, never a secret).
 		console.warn('[ai] provider connection test', provider.name, result.ok ? 'ok' : result.message);
@@ -385,7 +673,7 @@ export const actions: Actions = {
 		return { providerTest: { id, name: provider.name, ...result } };
 	},
 
-	refreshModels: async ({ request }) => {
+	refreshModels: async ({ request, locals }) => {
 		await requireOwnerRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString().trim();
@@ -408,7 +696,32 @@ export const actions: Actions = {
 			.split(',')
 			.map((entry) => entry.trim())
 			.filter(Boolean);
-		const result = await discoverProviderModels({ kind, baseUrl, apiKeyEnv }, (name) => env[name], {
+		// A saved provider may carry an encrypted key; an unsaved dialog only
+		// has the env name it is about to store.
+		const lookup = provider
+			? await keyLookupForProvider({ id: provider.id, apiKeyEnv })
+			: ({ getKey: (name: string) => (name ? env[name] : undefined), failure: null } as const);
+		if (lookup.failure) {
+			await recordKeyEvent(
+				lookup.failure.code === 'decrypt_failed' || lookup.failure.code === 'unknown_key_version'
+					? 'ai.key_decrypt_failed'
+					: 'ai.key_missing',
+				{
+					actorId: locals.user?.id ?? null,
+					action: 'refreshModels',
+					providerId: provider?.id ?? null,
+					providerName: provider?.name ?? null,
+					reason: lookup.failure.code
+				}
+			);
+			return fail(400, {
+				message:
+					lookup.failure.code === 'store_unavailable'
+						? m.admin_settings_ai_key_err_store()
+						: m.admin_settings_ai_key_err_decrypt()
+			});
+		}
+		const result = await discoverProviderModels({ kind, baseUrl, apiKeyEnv }, lookup.getKey, {
 			allowPrivateHosts
 		});
 		if (!result.ok) return fail(400, { message: result.message });

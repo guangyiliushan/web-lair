@@ -45,4 +45,27 @@ describe('webhookHeaders', () => {
 			signWebhookPayload('whsec_c2VjcmV0', 'delivery-1', 1700000000, '{"x":1}')
 		);
 	});
+
+	it('carries the current and previous signatures during a rotation (W2.6)', () => {
+		const headers = webhookHeaders('whsec_bmV3', 'delivery-2', 1700000000, '{"x":1}', [
+			'whsec_b2xk'
+		]);
+		const signatures = headers['webhook-signature'].split(' ');
+		expect(signatures).toHaveLength(2);
+		expect(signatures[0]).toBe(
+			signWebhookPayload('whsec_bmV3', 'delivery-2', 1700000000, '{"x":1}')
+		);
+		expect(signatures[1]).toBe(
+			signWebhookPayload('whsec_b2xk', 'delivery-2', 1700000000, '{"x":1}')
+		);
+		// A receiver holding the old secret can verify the second entry.
+		expect(signatures).toContain(
+			signWebhookPayload('whsec_b2xk', 'delivery-2', 1700000000, '{"x":1}')
+		);
+	});
+
+	it('never repeats an identical secret and ignores empty entries', () => {
+		const headers = webhookHeaders('same', 'delivery-3', 1700000000, 'b', ['same', '']);
+		expect(headers['webhook-signature'].split(' ')).toHaveLength(1);
+	});
 });

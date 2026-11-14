@@ -28,6 +28,7 @@ const { mocks, state } = vi.hoisted(() => {
 		insertTables: [] as unknown[],
 		insertRows: [{ id: 'new-delivery' }] as unknown[],
 		insertError: null as Error | null,
+		conflicts: [] as unknown[],
 		updateSets: [] as unknown[],
 		updateTables: [] as unknown[],
 		updateRows: [{ id: 'updated-row' }] as unknown[],
@@ -40,7 +41,8 @@ const { mocks, state } = vi.hoisted(() => {
 		whereConds: [] as unknown[]
 	};
 	const mocks = {
-		requireAdminRole: vi.fn(async () => {})
+		requireAdminRole: vi.fn(async () => {}),
+		recordActivity: vi.fn(async () => {})
 	};
 	return { mocks, state };
 });
@@ -56,9 +58,14 @@ vi.mock('$lib/server/db', () => {
 			},
 			where: (cond: unknown) => {
 				state.whereConds.push(cond);
-				return {
-					limit: async () => state.selectQueue.shift() ?? []
-				};
+				const rows = state.selectQueue.shift() ?? [];
+				return Object.assign(Promise.resolve(rows), { limit: async () => rows });
+			},
+			// W2.6: the ids-only select (`select({ id }).from(webhooks)`) has no
+			// orderBy/where and is awaited directly.
+			then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
+				const rows = state.selectQueue.shift() ?? [];
+				return Promise.resolve(rows).then(resolve, reject);
 			}
 		})
 	});
@@ -74,15 +81,29 @@ vi.mock('$lib/server/db', () => {
 			return {
 				values: (values: unknown) => {
 					state.insertValues.push(values);
+					const settle = async () => {
+						if (state.insertError) throw state.insertError;
+					};
 					return {
+						onConflictDoUpdate: async (config: unknown) => {
+							await settle();
+							state.conflicts.push(config);
+						},
 						returning: async () => {
-							if (state.insertError) throw state.insertError;
+							await settle();
 							return state.insertRows;
-						}
+						},
+						// W2.6 awaits `insert(...).values(...)` directly (no
+						// `.returning()`), so the fake has to be thenable.
+						then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
+							settle().then(() => resolve(undefined), reject)
 					};
 				}
 			};
 		},
+		// W2.6: create/rotate write the endpoint and its encrypted secret in one
+		// transaction; the fake runs the callback against the same recorder.
+		transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(db),
 		update: (table: unknown) => {
 			state.updateTables.push(table);
 			return {
@@ -122,14 +143,31 @@ vi.mock('$lib/server/db/system', async (importOriginal) => {
 	return { ...actual };
 });
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: mocks.requireAdminRole }));
+vi.mock('$lib/server/audit', () => ({ recordActivity: mocks.recordActivity }));
+// W2.6: the secret is encrypted before it is stored, so the route needs a
+// usable keyring. One fixed 32-byte test key, version 1.
+vi.mock('$env/dynamic/private', () => ({
+	env: {
+		SECRETS_KEYS: `1:${Buffer.alloc(32, 7).toString('base64')}`,
+		SECRETS_KEY_ACTIVE: '1'
+	}
+}));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: vi.fn(async () => 'Etc/UTC') }));
 
 import { actions, load } from './+page.server';
 import {
 	webhookDeliveries as webhookDeliveriesMock,
+	webhookSecrets as webhookSecretsMock,
 	webhooks as webhooksMock
 } from '$lib/server/db/system';
 import { maskWebhookSecret } from '$lib/server/webhooks/secret';
+import { decryptSecret, encryptSecret, secretAad } from '$lib/server/secrets/crypto';
+import { parseKeyring } from '$lib/server/secrets/keyring';
+
+const TEST_KEYRING = parseKeyring({
+	keys: `1:${Buffer.alloc(32, 7).toString('base64')}`,
+	active: '1'
+});
 
 const guardMock = vi.mocked(mocks.requireAdminRole);
 const DELIVERY_ID = '33333333-3333-7333-8333-333333333333';
@@ -179,6 +217,7 @@ function resetState() {
 	state.insertTables = [];
 	state.insertRows = [{ id: 'new-delivery' }];
 	state.insertError = null;
+	state.conflicts = [];
 	state.updateSets = [];
 	state.updateTables = [];
 	state.updateRows = [{ id: 'updated-row' }];
@@ -360,28 +399,46 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(sqlOf(state.whereConds[0])).toMatch(/lower\([^)]*name[^)]*\)/);
 	});
 
-	it('create inserts a generated whsec_ secret and reveals it exactly once', async () => {
-		state.insertRows = [{ id: WEBHOOK_ID }];
+	it('create stores the endpoint and an encrypted secret, revealing the raw value once', async () => {
 		const { result } = await callAction('create', validForm);
-		expect(result).toMatchObject({ op: 'create', created: true, id: WEBHOOK_ID });
+		expect(result).toMatchObject({ op: 'create', created: true });
 		expect(state.insertTables[0]).toBe(webhooksMock);
-		const inserted = state.insertValues[0] as Record<string, unknown>;
-		expect(inserted.name).toBe('ops');
-		expect(inserted.payloadUrl).toBe('https://example.com/hook');
-		expect(inserted.events).toEqual(['job.run', 'schedule.toggle']);
+		expect(state.insertTables[1]).toBe(webhookSecretsMock);
+		const endpointRow = state.insertValues[0] as Record<string, unknown>;
+		expect(endpointRow.name).toBe('ops');
+		expect(endpointRow.payloadUrl).toBe('https://example.com/hook');
+		expect(endpointRow.events).toEqual(['job.run', 'schedule.toggle']);
+		// The plaintext column is not written by the new path (W2.6).
+		expect(endpointRow).not.toHaveProperty('secret');
+		const secretRow = state.insertValues[1] as Record<string, unknown>;
 		// 32 random bytes -> exactly 44 base64 chars incl. the padding `=`.
-		expect(String(inserted.secret)).toMatch(/^whsec_[A-Za-z0-9+/]{43}=$/);
-		expect(result?.secret).toBe(inserted.secret);
+		expect(String(result?.secret)).toMatch(/^whsec_[A-Za-z0-9+/]{43}=$/);
+		expect(String(secretRow.ciphertext)).toMatch(/^v1:1:/);
+		expect(secretRow.keyVersion).toBe(1);
+		expect(String(secretRow.hint)).toMatch(/^whsec_\u2026/);
+		// The raw value never reaches a stored row.
+		expect(JSON.stringify(state.insertValues)).not.toContain(String(result?.secret));
+		// Audit is local (deliver:false) and carries only the hint.
+		const recordCalls = (mocks.recordActivity as unknown as { mock: { calls: unknown[][] } }).mock
+			.calls;
+		const auditCall = recordCalls.find(
+			(call) => (call[1] as { event?: string }).event === 'webhook.key_set'
+		);
+		expect(auditCall).toBeDefined();
+		const audit = auditCall?.[1] as { deliver?: boolean; payload?: Record<string, unknown> };
+		expect(audit.deliver).toBe(false);
+		expect(audit.payload?.hint).toBe(secretRow.hint);
+		expect(JSON.stringify(audit)).not.toContain(String(result?.secret));
 	});
 
 	it('create stores the normalized href for odd-but-valid urls (review round-1)', async () => {
-		state.insertRows = [{ id: WEBHOOK_ID }];
 		await callAction('create', { ...validForm, payloadUrl: 'https:example.com' });
 		await callAction('create', { ...validForm, payloadUrl: 'HTTPS://Example.com' });
+		// Each create writes two rows (endpoint + encrypted secret).
 		expect((state.insertValues[0] as { payloadUrl: string }).payloadUrl).toBe(
 			'https://example.com/'
 		);
-		expect((state.insertValues[1] as { payloadUrl: string }).payloadUrl).toBe(
+		expect((state.insertValues[2] as { payloadUrl: string }).payloadUrl).toBe(
 			'https://example.com/'
 		);
 	});
@@ -488,21 +545,65 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(gone.result).toMatchObject({ status: 404, data: { op: 'toggle' } });
 	});
 
-	it('rotate guards the id, replaces the secret and reveals the new one once', async () => {
+	it('rotate keeps the old value in the grace slot and reveals the new one once', async () => {
 		const badId = await callAction('rotate', { id: '' });
 		expect(badId.result).toMatchObject({ status: 400, data: { op: 'rotate' } });
+
+		// Existing encrypted row: it is decrypted and re-encrypted into the
+		// `previous_ciphertext` AAD slot (copying the envelope would fail every
+		// delivery for the whole grace window).
+		const oldCiphertext = encryptSecret(
+			'whsec_old_value',
+			Buffer.alloc(32, 7),
+			1,
+			secretAad('webhook_secrets', WEBHOOK_ID, 'ciphertext')
+		);
+		state.selectQueue.push([{ id: WEBHOOK_ID, name: 'ops', legacySecret: null }]);
+		state.selectQueue.push([{ ciphertext: oldCiphertext, keyVersion: 1 }]);
 		const { result } = await callAction('rotate', { id: WEBHOOK_ID });
 		expect(result).toMatchObject({ op: 'rotate', rotated: true });
-		expect(state.updateTables[0]).toBe(webhooksMock);
-		const set = state.updateSets[0] as { secret: string };
-		expect(state.updateSets[0]).toEqual({ secret: set.secret });
-		expect(set.secret).toMatch(/^whsec_[A-Za-z0-9+/]{43}=$/);
-		expect(result?.secret).toBe(set.secret);
-		// The rotate predicate must target the row id (round-2 SYT-1).
-		expect(sqlOf(state.updateWheres[0])).toContain('"webhooks"."id"');
-		state.updateRows = [];
+		expect(String(result?.secret)).toMatch(/^whsec_[A-Za-z0-9+/]{43}=$/);
+		expect(state.insertTables[0]).toBe(webhookSecretsMock);
+		const row = state.insertValues[0] as Record<string, unknown>;
+		expect(String(row.ciphertext)).toMatch(/^v1:1:/);
+		expect(row.previousKeyVersion).toBe(1);
+		expect(row.previousExpiresAt).toBeInstanceOf(Date);
+		expect((row.previousExpiresAt as Date).getTime()).toBeGreaterThan(Date.now());
+		// The grace value is readable through the previous-slot AAD.
+		expect(
+			decryptSecret(
+				String(row.previousCiphertext),
+				TEST_KEYRING.resolve,
+				secretAad('webhook_secrets', WEBHOOK_ID, 'previous_ciphertext')
+			).plaintext
+		).toBe('whsec_old_value');
+		expect(state.conflicts).toHaveLength(1);
+		// The rotation is audited, never fanned out, and the payload carries
+		// metadata only (no value, no ciphertext).
+		const rotateAudit = (
+			mocks.recordActivity as unknown as { mock: { calls: unknown[][] } }
+		).mock.calls.find((call) => (call[1] as { event?: string })?.event === 'webhook.key_rotate');
+		expect(rotateAudit).toBeTruthy();
+		expect(rotateAudit?.[1]).toMatchObject({ deliver: false });
+		const auditJson = JSON.stringify(rotateAudit?.[1]);
+		// The mask prefix is expected; the value itself and the envelope are not.
+		expect(auditJson).not.toContain('whsec_old_value');
+		expect(auditJson).not.toContain('v1:');
+		// The plaintext column is not touched when there is nothing to retire.
+		expect(state.updateTables).toHaveLength(0);
+
+		state.selectQueue.push([]);
 		const gone = await callAction('rotate', { id: WEBHOOK_ID });
 		expect(gone.result).toMatchObject({ status: 404, data: { op: 'rotate' } });
+
+		// An unreadable current envelope must abort the rotation: writing a
+		// previous slot we cannot re-encrypt would lose the only verifiable
+		// value.
+		state.selectQueue.push([{ id: WEBHOOK_ID, name: 'ops', legacySecret: 'whsec_legacy' }]);
+		state.selectQueue.push([{ ciphertext: 'v1:1:AA:BB:CC', keyVersion: 1 }]);
+		const broken = await callAction('rotate', { id: WEBHOOK_ID });
+		expect(broken.result).toMatchObject({ status: 503, data: { op: 'rotate' } });
+		expect(state.updateTables).toHaveLength(0);
 	});
 
 	it('refuses credentialed payload urls (nine-dimension SY-L2-01)', async () => {
