@@ -36,6 +36,12 @@ describe('WEBHOOK_EVENT_ROSTER', () => {
 		}
 	});
 
+	it('keeps settings/owner events out of the fan-out roster (R-7)', () => {
+		for (const event of ['profile.update', 'home.update', 'site.update', 'account.2fa_enable']) {
+			expect(isWebhookEventName(event), event).toBe(false);
+		}
+	});
+
 	it('producer call sites stay inside the roster (source scan, review round-1)', async () => {
 		// The literal-string emitters under these roots must all be roster
 		// members; a new producer event that forgets the roster turns red.
