@@ -2,6 +2,7 @@
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import { untrack } from 'svelte';
+	import { formatDateTime } from '$lib/utils/i18n';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -93,6 +94,15 @@
 		secretAccessKey = '';
 	}
 
+	// The action succeeded: drop the plaintext from memory and let the reloaded
+	// hints speak (review P1 — the state used to stay dirty forever).
+	$effect(() => {
+		if (credentialsForm?.ok) {
+			accessKeyId = '';
+			secretAccessKey = '';
+		}
+	});
+
 	// Static message lookups only (the i18n contract test rejects dynamic
 	// indexing); a computed key would break the compile-time guarantee.
 	const probeStatusLabel = $derived(
@@ -130,8 +140,8 @@
 	);
 
 	const lastTest = $derived(
-		data.status.lastTestAt
-			? `${new Date(data.status.lastTestAt).toLocaleString()} · ${
+		data.status.lastTestAt && data.statusMatchesActive
+			? `${formatDateTime(new Date(data.status.lastTestAt))} · ${
 					probeStatusLabel ??
 					(data.status.lastTestOk
 						? m.admin_settings_common_configured()
@@ -139,14 +149,19 @@
 				}`
 			: m.admin_settings_storage_never_tested()
 	);
+	const candidateTest = $derived(
+		data.status.lastTestAt && data.statusMatchesCandidate
+			? `${formatDateTime(new Date(data.status.lastTestAt))} · ${probeStatusLabel ?? '—'}`
+			: null
+	);
 	const versioningLabel = $derived(
-		data.status.bucketVersioning === null
+		data.status.bucketVersioning === null || data.status.bucketVersioning === 'unknown'
 			? m.admin_settings_storage_capability_unknown()
 			: data.status.bucketVersioning === 'off'
 				? m.admin_settings_common_off()
 				: data.status.bucketVersioning === 'enabled'
 					? m.admin_settings_common_on()
-					: data.status.bucketVersioning
+					: m.admin_settings_storage_versioning_suspended()
 	);
 	const lockLabel = $derived(
 		data.status.objectLock === null
@@ -218,7 +233,7 @@
 		{/if}
 	</SettingsStatusList>
 
-	{#if !data.statusMatchesActive}
+	{#if data.status.lastTestAt && !data.statusMatchesActive}
 		<p class="text-xs text-muted-foreground">{m.admin_settings_storage_test_stale()}</p>
 	{/if}
 
@@ -246,6 +261,12 @@
 				role={testForm.ok ? 'status' : 'alert'}
 			>
 				{testForm.message}
+			</p>
+		{/if}
+
+		{#if candidateTest}
+			<p class="text-xs text-muted-foreground">
+				{m.admin_settings_common_last_test()}: {candidateTest}
 			</p>
 		{/if}
 
@@ -299,6 +320,20 @@
 						</p>
 					</div>
 
+					<div class="space-y-2">
+						<Label for="publicBaseUrl">{m.admin_settings_storage_public_base_url()}</Label>
+						<Input
+							id="publicBaseUrl"
+							name="publicBaseUrl"
+							bind:value={publicBaseUrl}
+							placeholder="https://cdn.example.com"
+							autocomplete="off"
+						/>
+						<p class="text-xs text-muted-foreground">
+							{m.admin_settings_storage_public_base_url_hint()}
+						</p>
+					</div>
+
 					{#if driver === 's3'}
 						<div class="grid gap-4 sm:grid-cols-2">
 							<div class="space-y-2">
@@ -344,19 +379,6 @@
 									</span>
 								</span>
 							</label>
-							<div class="space-y-2 sm:col-span-2">
-								<Label for="publicBaseUrl">{m.admin_settings_storage_public_base_url()}</Label>
-								<Input
-									id="publicBaseUrl"
-									name="publicBaseUrl"
-									bind:value={publicBaseUrl}
-									placeholder="https://cdn.example.com"
-									autocomplete="off"
-								/>
-								<p class="text-xs text-muted-foreground">
-									{m.admin_settings_storage_public_base_url_hint()}
-								</p>
-							</div>
 						</div>
 					{/if}
 				</div>
@@ -506,6 +528,12 @@
 					value={`${data.migration.verified}/${data.migration.total}`}
 				/>
 			{/if}
+			{#if data.migration.failed > 0}
+				<SettingsStatusRow
+					label={m.admin_settings_storage_migration_failed()}
+					value={String(data.migration.failed)}
+				/>
+			{/if}
 			{#if data.migration.error}
 				<SettingsStatusRow label={m.admin_settings_common_error()} value={data.migration.error} />
 			{/if}
@@ -587,9 +615,18 @@ pnpm storage:migrate --rollback`}</code
 			title={m.admin_settings_storage_upload_limits()}
 			description={m.admin_settings_storage_upload_limits_hint()}
 		>
-			<SettingsStatusRow label={m.admin_settings_storage_max_image()} value="25 MB" />
-			<SettingsStatusRow label={m.admin_settings_storage_max_per_batch()} value="10" />
-			<SettingsStatusRow label={m.admin_settings_storage_max_per_hour()} value="60" />
+			<SettingsStatusRow
+				label={m.admin_settings_storage_max_image()}
+				value={`${Math.round(data.limits.maxBytes / (1024 * 1024))} MB`}
+			/>
+			<SettingsStatusRow
+				label={m.admin_settings_storage_max_per_batch()}
+				value={String(data.limits.maxBatch)}
+			/>
+			<SettingsStatusRow
+				label={m.admin_settings_storage_max_per_hour()}
+				value={`${data.limits.rateLimit} / ${Math.round(data.limits.rateWindowSeconds / 60)} min`}
+			/>
 			<SettingsStatusRow
 				label={m.admin_settings_storage_mime()}
 				value="image/* + pdf, zip, txt, md"
@@ -619,8 +656,7 @@ pnpm storage:migrate --rollback`}</code
 				<SettingsStatusRow
 					label={m.admin_settings_storage_db_migrations()}
 					value={m.admin_settings_storage_db_migrations_value({
-						applied: data.database.migrations.applied,
-						expected: data.database.migrations.expected ?? '—'
+						applied: data.database.migrations.applied
 					})}
 					badge={data.database.migrations.upToDate === null
 						? undefined

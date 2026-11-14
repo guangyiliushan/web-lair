@@ -112,7 +112,11 @@ export const actions: Actions = {
 			);
 			return { uploadResults: results };
 		} catch (error) {
-			if (error instanceof UploadRejected) return fail(400, { message: error.message });
+			if (error instanceof UploadRejected) {
+				// The migration freeze is temporary and retryable: 503, not 400
+				// (same contract as editor-uploads, review P2).
+				return fail(error.code === 'migration' ? 503 : 400, { message: error.message });
+			}
 			throw error;
 		}
 	},
@@ -148,8 +152,8 @@ export const actions: Actions = {
 			return fail(503, {
 				message:
 					result.reason === 'capability'
-						? m.admin_files_err_storage_capability()
-						: m.admin_files_err_storage_versioning()
+						? m.admin_settings_storage_delete_blocked_capability()
+						: m.admin_settings_storage_delete_blocked_versioning()
 			});
 		}
 		throw redirect(303, '/admin/files?deleted=1');

@@ -15,7 +15,8 @@ const state = vi.hoisted(() => ({
 		region: 'us-east-1' as string,
 		bucket: null as string | null,
 		forcePathStyle: true as boolean,
-		publicBaseUrl: null as string | null
+		publicBaseUrl: null as string | null,
+		deleteMode: 'hard' as 'hard' | 'logical'
 	},
 	active: {
 		config: {
@@ -25,11 +26,11 @@ const state = vi.hoisted(() => ({
 			region: 'us-east-1',
 			bucket: null,
 			forcePathStyle: true,
-			publicBaseUrl: null
+			publicBaseUrl: null,
+			deleteMode: 'hard'
 		},
 		previous: null as unknown,
-		activatedAt: null as string | null,
-		activatedBy: null as string | null
+		activatedAt: null as string | null
 	},
 	status: {
 		lastTestAt: null as string | null,
@@ -149,7 +150,16 @@ vi.mock('$lib/server/config/options-registry', () => ({
 		}
 		throw new Error(`unexpected option ${key}`);
 	}),
-	setOption: state.setOption
+	setOption: state.setOption,
+	// The page validates media.purge through the registry schema; this stand-in
+	// mirrors the real bounds (integer days, floor 1).
+	validateOption: vi.fn((key: string, value: { pendingDays: number; detachedDays: number }) => {
+		if (key !== 'media.purge') throw new Error(`unexpected option ${key}`);
+		for (const days of [value.pendingDays, value.detachedDays]) {
+			if (!Number.isInteger(days) || days < 1) throw new Error('invalid purge days');
+		}
+		return value;
+	})
 }));
 
 import { actions, load } from './+page.server';
@@ -169,8 +179,10 @@ function makeEvent(fields: Record<string, string> = {}, role: 'owner' | 'admin' 
 /** The load result shape the assertions read (PageServerLoad may also be void). */
 interface StoragePageData {
 	editable: boolean;
-	ownerOnly: boolean;
 	allowPrivateEndpoint: boolean;
+	statusMatchesActive: boolean;
+	statusMatchesCandidate: boolean;
+	limits: { maxBytes: number; maxBatch: number; rateLimit: number; rateWindowSeconds: number };
 	fileCount: number;
 	migrationRequired: boolean;
 	active: { endpoint: string | null; bucket: string | null; label: string };
@@ -179,7 +191,6 @@ interface StoragePageData {
 		accessHint: string | null;
 		secretHint: string | null;
 		keyVersion: number | null;
-		updatedAt: string | null;
 		envNames: { accessKeyId: string; secretAccessKey: string };
 	};
 	database: {
@@ -232,7 +243,8 @@ describe('storage settings route (W7.2)', () => {
 			region: 'us-east-1',
 			bucket: null,
 			forcePathStyle: true,
-			publicBaseUrl: null
+			publicBaseUrl: null,
+			deleteMode: 'hard'
 		};
 		state.fileCount = 0;
 		state.status.fingerprint = null;
@@ -241,11 +253,10 @@ describe('storage settings route (W7.2)', () => {
 	it('marks the page editable for the owner only', async () => {
 		const owner = await loadData(makeEvent({}, 'owner'));
 		expect(owner.editable).toBe(true);
-		expect(owner.ownerOnly).toBe(false);
+		expect(owner.limits.maxBatch).toBe(10);
 
 		const admin = await loadData(makeEvent({}, 'admin'));
 		expect(admin.editable).toBe(false);
-		expect(admin.ownerOnly).toBe(true);
 	});
 
 	it('reports the live env addressing and the env credential reference', async () => {
@@ -273,12 +284,28 @@ describe('storage settings route (W7.2)', () => {
 		expect(JSON.stringify(data.database)).not.toContain('db-password');
 	});
 
-	it('turns the files count into the migration requirement', async () => {
+	it('requires a migration only when the candidate is a different target', async () => {
 		await expect(loadData(makeEvent())).resolves.toMatchObject({
 			fileCount: 0,
 			migrationRequired: false
 		});
+		// Files exist but the candidate equals the live config: nothing to move.
 		state.fileCount = 3;
+		await expect(loadData(makeEvent())).resolves.toMatchObject({
+			fileCount: 3,
+			migrationRequired: false
+		});
+		// A different addressing target now needs the copy.
+		state.provider = {
+			driver: 's3',
+			providerType: 'minio',
+			endpoint: 'https://93.184.216.34',
+			region: 'us-east-1',
+			bucket: 'lair-media',
+			forcePathStyle: true,
+			publicBaseUrl: null,
+			deleteMode: 'hard'
+		};
 		await expect(loadData(makeEvent())).resolves.toMatchObject({
 			fileCount: 3,
 			migrationRequired: true
@@ -334,6 +361,25 @@ describe('storage settings route (W7.2)', () => {
 		expect(state.setOption).not.toHaveBeenCalled();
 	});
 
+	it('rejects a private or metadata endpoint at SAVE time (not only at probe time)', async () => {
+		for (const endpoint of ['https://192.168.1.10', 'https://169.254.169.254']) {
+			state.setOption.mockClear();
+			const result = await call('saveProvider', makeEvent({ ...S3_FIELDS, endpoint }));
+			expect(result, endpoint).toMatchObject({
+				status: 400,
+				data: { step: 'provider', ok: false }
+			});
+			expect(state.setOption, endpoint).not.toHaveBeenCalled();
+		}
+	});
+
+	it('rejects a form without a valid driver instead of coercing it to local', async () => {
+		state.setOption.mockClear();
+		const result = await call('saveProvider', makeEvent({ driver: 'gopher' }));
+		expect(result).toMatchObject({ status: 400, data: { step: 'provider', ok: false } });
+		expect(state.setOption).not.toHaveBeenCalled();
+	});
+
 	it('refuses a local provider that smuggles external addressing', async () => {
 		// A stale form post (driver=local with s3 fields) must save a local
 		// provider with null addressing — never a local row carrying a bucket.
@@ -383,7 +429,8 @@ describe('storage connection test (W7.3)', () => {
 			region: 'us-east-1',
 			bucket: null,
 			forcePathStyle: true,
-			publicBaseUrl: null
+			publicBaseUrl: null,
+			deleteMode: 'hard'
 		};
 		state.probeResult = {
 			ok: true,
@@ -452,7 +499,8 @@ describe('storage connection test (W7.3)', () => {
 			region: 'us-east-1',
 			bucket: 'lair-media',
 			forcePathStyle: true,
-			publicBaseUrl: null
+			publicBaseUrl: null,
+			deleteMode: 'hard'
 		};
 
 		const result = await call('testProvider', makeEvent());
@@ -475,7 +523,8 @@ describe('storage connection test (W7.3)', () => {
 			region: 'us-east-1',
 			bucket: 'lair-media',
 			forcePathStyle: true,
-			publicBaseUrl: null
+			publicBaseUrl: null,
+			deleteMode: 'hard'
 		};
 
 		const result = await call('testProvider', makeEvent());

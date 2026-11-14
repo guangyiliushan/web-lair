@@ -94,7 +94,11 @@ describe('storage endpoint guard', () => {
 			'169.254.169.254',
 			'169.254.170.2',
 			'100.100.100.200',
-			'fd00:ec2::254'
+			'fd00:ec2::254',
+			// v4-mapped forms: URL normalises [::ffff:169.254.169.254] to
+			// ::ffff:a9fe:a9fe, which must still hit the metadata denylist.
+			'::ffff:169.254.169.254',
+			'::ffff:a9fe:a9fe'
 		]) {
 			await expectCode(
 				assertStorageEndpointAllowed('https://s3.example.com', {
@@ -162,9 +166,12 @@ describe('storage endpoint guard', () => {
 		expect(allowPrivateEndpoint({ ALLOW_PRIVATE_STORAGE_ENDPOINT: ' TRUE ' })).toBe(true);
 	});
 
-	it('recognises the metadata denylist entries', () => {
+	it('recognises the metadata denylist entries, including v4-mapped forms', () => {
 		expect(isMetadataAddress('169.254.169.254')).toBe(true);
 		expect(isMetadataAddress('fd00:ec2::254')).toBe(true);
+		expect(isMetadataAddress('::ffff:169.254.169.254')).toBe(true);
+		expect(isMetadataAddress('::ffff:a9fe:a9fe')).toBe(true);
 		expect(isMetadataAddress('93.184.216.34')).toBe(false);
+		expect(isMetadataAddress('::ffff:93.184.216.34')).toBe(false);
 	});
 });

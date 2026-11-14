@@ -6,7 +6,11 @@ import { fileReferences } from '$lib/server/db/system';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { getOption } from '$lib/server/config/options-registry';
 import { I_KEY_PATTERN, VARIANT_NAMES, objectKeyFor, variantKeyFor } from '$lib/media/keys';
-import type { BucketVersioning, ObjectStoragePort } from '$lib/server/storage/port';
+import {
+	assessDeletion,
+	type BucketVersioning,
+	type ObjectStoragePort
+} from '$lib/server/storage/port';
 import { processImage, readImageSize } from '$lib/server/media/variants';
 import {
 	MAX_BATCH_COUNT,
@@ -68,8 +72,9 @@ export async function resolveStoragePolicy(
 	]);
 	if (!capabilities) return null;
 	// `unknown` / null is not "off": refuse rather than promise a hard delete
-	// that would actually leave every version behind.
-	if (capabilities.versioning === 'unknown' || capabilities.objectLock === null) return null;
+	// that would actually leave every version behind (shared predicate — the
+	// probe and the activation guard use the same one).
+	if (!assessDeletion(capabilities).provable) return null;
 	return {
 		deleteMode: active.config.deleteMode ?? 'hard',
 		versioning: capabilities.versioning,
@@ -79,8 +84,11 @@ export async function resolveStoragePolicy(
 
 /** True when this policy permits deleting the object at all. */
 export function policyAllowsDelete(policy: StoragePolicy): boolean {
-	const reclaims = policy.versioning === 'off' && policy.objectLock !== true;
-	return reclaims || policy.deleteMode === 'logical';
+	const { provable, reclaims } = assessDeletion({
+		versioning: policy.versioning,
+		objectLock: policy.objectLock
+	});
+	return provable && (reclaims || policy.deleteMode === 'logical');
 }
 
 async function resolveDeps(
@@ -136,14 +144,16 @@ const ROW_FIELDS = {
 } as const;
 
 /**
- * True while a provider copy is running (`storage.migration.state = copying`).
- * Both the upload path and the purge guard read it from the options table, so
- * a crash leaves the freeze in place until an operator resets it — the safe
- * direction (a stuck freeze is visible; a silent unfreeze is not).
+ * True while the maintenance window is open (W7.4): a provider copy is running
+ * OR has completed and is waiting for `--cutover`. The window spans both states
+ * on purpose — an upload that lands after the copy but before the cutover would
+ * be written to the OLD bucket and 404 after the switch, and the recorded
+ * counters cannot see it (review P1). `--reset` or a completed cutover/rollback
+ * closes the window.
  */
 export async function migrationFreezeActive(database: FilesDb): Promise<boolean> {
 	const migration = await getOption('storage.migration', database);
-	return migration.state === 'copying';
+	return migration.state === 'copying' || migration.state === 'copied';
 }
 
 async function findFileByHash(
@@ -390,7 +400,9 @@ export const FILE_LIST_LIMIT = 200;
  * the editor uploads endpoint used to carry three hand-synced copies of the
  * same limit/key - a review-round drift finding.
  */
-export const UPLOAD_RATE_LIMIT = { limit: 60, windowSeconds: 10 * 60 };
+// Single source: see media/upload-limits.ts (kept out of this module so
+// read-only pages do not import the media service).
+export { UPLOAD_RATE_LIMIT } from '$lib/media/upload-limits';
 
 /** Bucket key for the shared upload limit (single spelling). */
 export function uploadRateLimitKey(userId: string | null | undefined): string {

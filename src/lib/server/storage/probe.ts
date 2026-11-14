@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { StorageError, type BucketVersioning, type ObjectStoragePort } from './port';
+import {
+	StorageError,
+	assessDeletion,
+	type BucketVersioning,
+	type ObjectStoragePort
+} from './port';
 import { sanitizeProviderError } from '../settings/provider-status.ts';
 
 /**
@@ -31,8 +36,6 @@ export interface StorageProbeResult {
 export interface ProbeOptions {
 	/** Injectable clock for deterministic tests. */
 	clock?: () => Date;
-	/** Object-key prefix for the throwaway probe object. */
-	prefix?: string;
 }
 
 /** Probe objects never collide with content-addressed media keys. */
@@ -40,7 +43,11 @@ export const PROBE_KEY_PREFIX = 'probe/';
 
 function classify(error: unknown): { status: ProbeStatus; message: string } {
 	if (error instanceof StorageError) {
-		const detail = sanitizeProviderError(error.message);
+		// `sanitizeProviderError` strips URLs and key=value pairs but not a bare
+		// object key; a Put/Get failure message contains `probe/<uuid>.txt`, and
+		// that string is persisted in `storage.status` and rendered. Scrub the
+		// reserved probe prefix too.
+		const detail = sanitizeProviderError(error.message).replace(/probe\/[^\s:,)]+/g, '[probe]');
 		if (error.status === 0) {
 			const timedOut = /timed out|abort|timeout/i.test(error.message);
 			return { status: timedOut ? 'timeout' : 'network', message: detail };
@@ -94,10 +101,10 @@ export async function probeStorage(
 		const capabilities = await storage.bucketCapabilities();
 		versioning = capabilities.versioning;
 		objectLock = capabilities.objectLock;
-		if (capabilities.versioning === 'unknown' && capabilities.objectLock === null) {
-			// Neither read answered: the key likely lacks bucket-level reads. Not
-			// fatal for writing, but the purge guard cannot be proven, so the
-			// probe reports it instead of pretending all is well.
+		// Same predicate the purge/delete guards use: if the verdict is not
+		// provable, a green "Connection OK" would contradict a permanently
+		// refused delete. Report it here instead.
+		if (!assessDeletion(capabilities).provable) {
 			return finish('capability', 'Bucket capabilities could not be read');
 		}
 	} catch (error) {
@@ -105,7 +112,7 @@ export async function probeStorage(
 		return finish('capability', failure.message);
 	}
 
-	const key = `${options.prefix ?? PROBE_KEY_PREFIX}${randomUUID()}.txt`;
+	const key = `${PROBE_KEY_PREFIX}${randomUUID()}.txt`;
 	const payload = new TextEncoder().encode(`web-lair storage probe ${checkedAt}\n`);
 	try {
 		await storage.put(key, payload, { contentType: 'text/plain; charset=utf-8' });

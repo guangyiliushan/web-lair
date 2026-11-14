@@ -143,7 +143,8 @@ describe('migration copy', () => {
 		]);
 		// Only the canonical object exists on the source; the four variants are
 		// legitimately absent, so the plan lists them as missingVariants and the
-		// copy reports them as failures — expected for files without variants.
+		// copy skips them — a missing VARIANT is never a failure (only a missing
+		// canonical object is).
 		const first = await copyObjects(objects, {
 			source: source.port(),
 			target: target.port()
@@ -151,7 +152,8 @@ describe('migration copy', () => {
 
 		expect(first.copied).toBe(1);
 		expect(first.verified).toBe(1);
-		expect(first.failed).toHaveLength(4);
+		expect(first.failed).toEqual([]);
+		expect(first.missingVariants).toBe(4);
 		expect(Array.from(target.objects.keys())).toEqual([CANONICAL]);
 
 		// Second run: the canonical object is already correct → verified, not
@@ -201,6 +203,60 @@ describe('migration copy', () => {
 			{ source: port, target: bucket({}).port() }
 		);
 		expect(outcome.failed).toEqual([{ key: CANONICAL, reason: 'missing-source' }]);
+	});
+
+	it('reports a missing read-back after a successful write (no silent verified)', async () => {
+		const source = bucket({ [CANONICAL]: PAYLOAD });
+		const target = bucket({});
+		// Write succeeds, but the object is gone when verification reads it.
+		const port = target.port();
+		const flaky: typeof port = {
+			...port,
+			get: async () => null
+		};
+
+		const outcome = await copyObjects(
+			[
+				{
+					key: CANONICAL,
+					expectedHash: sha256Hex(PAYLOAD),
+					expectedBytes: PAYLOAD.byteLength,
+					kind: 'canonical'
+				}
+			],
+			{ source: source.port(), target: flaky }
+		);
+
+		expect(outcome.copied).toBe(1);
+		expect(outcome.verified).toBe(0);
+		expect(outcome.failed).toEqual([{ key: CANONICAL, reason: 'read-back-missing' }]);
+	});
+
+	it('reports a read-back mismatch when the target object differs', async () => {
+		const source = bucket({ [CANONICAL]: PAYLOAD });
+		const target = bucket({});
+		const port = target.port();
+		const flaky: typeof port = {
+			...port,
+			get: async () => bodyOf(new TextEncoder().encode('tampered bytes')),
+			put: port.put
+		};
+
+		const outcome = await copyObjects(
+			[
+				{
+					key: CANONICAL,
+					expectedHash: sha256Hex(PAYLOAD),
+					expectedBytes: PAYLOAD.byteLength,
+					kind: 'canonical'
+				}
+			],
+			{ source: source.port(), target: flaky }
+		);
+
+		expect(outcome.copied).toBe(1);
+		expect(outcome.verified).toBe(0);
+		expect(outcome.failed).toEqual([{ key: CANONICAL, reason: 'read-back-mismatch' }]);
 	});
 
 	it('reports a target write failure without claiming verification', async () => {

@@ -110,12 +110,6 @@ interface S3StorageOptions {
 	headersTimeoutMs?: number;
 	/** Stage 2: max gap between streamed body chunks (0 disables the guard). */
 	bodyIdleTimeoutMs?: number;
-	/**
-	 * HTTP redirects are never followed (SSRF: a 302 into the metadata
-	 * service must not become a read). Defaults to rejected; the option exists
-	 * so a test can pin the behaviour explicitly.
-	 */
-	followRedirects?: boolean;
 }
 
 /**
@@ -135,7 +129,6 @@ export class S3Storage implements ObjectStoragePort {
 	readonly #clock: () => Date;
 	readonly #headersTimeoutMs: number;
 	readonly #bodyIdleTimeoutMs: number;
-	readonly #redirect: RequestRedirect;
 
 	constructor(config: S3StorageConfig, options: S3StorageOptions = {}) {
 		this.#config = config;
@@ -143,7 +136,6 @@ export class S3Storage implements ObjectStoragePort {
 		this.#clock = options.clock ?? (() => new Date());
 		this.#headersTimeoutMs = options.headersTimeoutMs ?? DEFAULT_HEADERS_TIMEOUT_MS;
 		this.#bodyIdleTimeoutMs = options.bodyIdleTimeoutMs ?? DEFAULT_BODY_IDLE_TIMEOUT_MS;
-		this.#redirect = options.followRedirects ? 'follow' : 'error';
 	}
 
 	/** Bucket URL: `/bucket` in path style, `bucket.host/` in virtual-host style. */
@@ -370,7 +362,8 @@ export class S3Storage implements ObjectStoragePort {
 				// TS 5.7+ genericizes typed arrays; Node's fetch accepts any
 				// Uint8Array view at runtime, so adapt at the boundary.
 				body: options.payload as unknown as BodyInit | undefined,
-				redirect: this.#redirect,
+				// SSRF: a 302 into the metadata service must not become a read.
+				redirect: 'error',
 				signal: controller.signal
 			});
 			return { response, controller };

@@ -7,11 +7,11 @@ import { storageConfigForProvider } from '../src/lib/server/storage/config';
 import { resolveStorageCredentials } from '../src/lib/server/secrets/storage-credentials';
 import { S3Storage } from '../src/lib/server/storage/s3';
 import {
-	copyObjects,
 	enumerateMigrationObjects,
 	planMigration,
 	type MigrationSourceRow
 } from '../src/lib/server/storage/migrate';
+import { runCopyPhase } from '../src/lib/server/storage/migrate-run';
 import {
 	activateSavedProvider,
 	rollbackToPreviousProvider,
@@ -102,9 +102,23 @@ function activationStore(target: S3Storage): ActivationStore {
 		getActive: () => getOption('storage.active', db),
 		getProvider: () => getOption('storage.provider', db),
 		getMigration: () => getOption('storage.migration', db),
-		setActive: (value) => setOption('storage.active', value, db),
-		setMigration: (value) => setOption('storage.migration', value, db),
+		// One transaction: a cutover must never leave the live provider and the
+		// migration row disagreeing (review P2 — partial switch recovery).
+		applyActivation: (active, migration) =>
+			db.transaction(async (tx) => {
+				await setOption('storage.active', active, tx);
+				await setOption('storage.migration', migration, tx);
+			}),
 		countFiles,
+		countFilesSince: async (since) => {
+			const rows = since
+				? await sql<
+						{ n: number }[]
+					>`select count(*)::int as n from files where created_at > ${since}::timestamptz`
+				: await sql<{ n: number }[]>`select count(*)::int as n from files`;
+			return rows[0]?.n ?? 0;
+		},
+		headBucket: () => target.headBucket(),
 		capabilities: () => target.bucketCapabilities(),
 		audit: (event, payload) => recordActivity(db, { event, actorId: null, payload, deliver: false })
 	};
@@ -232,18 +246,6 @@ async function main(): Promise<void> {
 	}
 
 	const runId = crypto.randomUUID();
-	const startedAt = new Date().toISOString();
-	let state = {
-		...DEFAULT_STORAGE_MIGRATION,
-		state: 'copying' as const,
-		id: runId,
-		startedAt,
-		sourceFingerprint,
-		targetFingerprint,
-		total: plan.total,
-		bytes: plan.bytes
-	};
-	await setOption('storage.migration', state, db);
 	await recordActivity(db, {
 		event: 'storage.migrate',
 		actorId: null,
@@ -258,42 +260,27 @@ async function main(): Promise<void> {
 		deliver: false
 	});
 
-	const outcome = await copyObjects(
+	// The copy phase (state writes + heartbeat + final row) lives in the
+	// storage layer so it can be tested without importing this CLI.
+	const { state, outcome, present } = await runCopyPhase({
 		objects,
-		{ source, target },
-		{
-			onProgress: (progress) => {
-				if (progress.outcome !== 'verified' && progress.outcome !== 'copied') {
-					console.error(
-						`  ${progress.index}/${progress.total} ${progress.key}: ${progress.outcome}`
-					);
-				} else if (progress.index % 25 === 0 || progress.index === progress.total) {
-					console.log(`  ${progress.index}/${progress.total} objects (${progress.outcome})`);
-				}
-			},
-			onBefore: async (progress) => {
-				// Persist a heartbeat every 25 objects so a crash is visible and the
-				// UI freeze does not depend on the last successful object.
-				if (progress.index % 25 !== 1) return;
-				state = { ...state, copied: outcome.copied, verified: outcome.verified };
-				await setOption('storage.migration', state, db);
+		source,
+		target,
+		runId,
+		sourceFingerprint,
+		targetFingerprint,
+		plan,
+		saveState: (next) => setOption('storage.migration', next, db),
+		onProgress: (progress) => {
+			if (progress.outcome !== 'verified' && progress.outcome !== 'copied') {
+				console.error(`  ${progress.index}/${progress.total} ${progress.key}: ${progress.outcome}`);
+			} else if (progress.index % 25 === 0 || progress.index === progress.total) {
+				console.log(`  ${progress.index}/${progress.total} objects (${progress.outcome})`);
 			}
 		}
-	);
+	});
 
 	const failed = outcome.failed.length;
-	const finishedAt = new Date().toISOString();
-	const finalState = {
-		...state,
-		state: failed === 0 ? ('copied' as const) : ('failed' as const),
-		finishedAt,
-		copied: outcome.copied + outcome.skipped,
-		verified: outcome.verified,
-		failed,
-		bytes: outcome.bytes,
-		error: failed === 0 ? null : `${failed} object(s) failed`
-	};
-	await setOption('storage.migration', finalState, db);
 	await recordActivity(db, {
 		event: 'storage.migrate',
 		actorId: null,
@@ -301,9 +288,10 @@ async function main(): Promise<void> {
 			action: 'finish',
 			run: runId,
 			target: targetFingerprint,
-			total: plan.total,
+			total: present,
 			copied: outcome.copied,
 			skipped: outcome.skipped,
+			missing_variants: outcome.missingVariants,
 			verified: outcome.verified,
 			failed
 		},
@@ -311,9 +299,10 @@ async function main(): Promise<void> {
 	});
 
 	console.log(
-		`\ncopied ${outcome.copied}, already present ${outcome.skipped}, verified ${outcome.verified}/${plan.total}, failed ${failed}`
+		`
+copied ${outcome.copied}, already present ${outcome.skipped}, verified ${outcome.verified}/${present}, no variant ${outcome.missingVariants}, failed ${failed}`
 	);
-	if (failed > 0) {
+	if (state.state === 'failed') {
 		console.error('The copy is INCOMPLETE. Fix the failures and re-run --yes (it resumes).');
 		process.exitCode = 1;
 		return;

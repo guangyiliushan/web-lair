@@ -1,6 +1,10 @@
 import { error } from '@sveltejs/kit';
 import { getStorage } from '$lib/server/storage';
-import { StorageError, isStorageUnavailable } from '$lib/server/storage/port';
+import {
+	StorageError,
+	isStorageUnavailable,
+	storageUnavailableResponse
+} from '$lib/server/storage/port';
 import type { RequestHandler } from './$types';
 
 /**
@@ -64,7 +68,6 @@ export const GET: RequestHandler = async ({ params, request }) => {
 			head = await storage.head(key);
 		} catch {
 			// Size unknown: the 416 still stands, just without Content-Range.
-			head = null;
 		}
 		const headers = new Headers({ 'accept-ranges': 'bytes', 'cache-control': 'no-store' });
 		if (head && head.byteSize !== null) {
@@ -83,12 +86,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 	} catch (caught) {
 		if (caught instanceof StorageError && caught.status === 416) return notSatisfiable();
 		// Active provider down (W7.5/Q14): 503, never another provider's bytes.
-		if (isStorageUnavailable(caught)) {
-			return new Response(null, {
-				status: 503,
-				headers: { 'retry-after': '30', 'cache-control': 'no-store' }
-			});
-		}
+		if (isStorageUnavailable(caught)) return storageUnavailableResponse();
 		throw caught;
 	}
 	if (!object) {

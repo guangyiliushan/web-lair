@@ -194,6 +194,17 @@ describe('storage credential writes', () => {
 		expect(serialized).not.toContain(ACCESS);
 		expect(serialized).not.toContain(SECRET);
 		expect(String(captured.values?.accessKeyCiphertext)).toMatch(/^v1:1:/);
+		// The rotation path is the UPDATE half: it must carry the new envelopes,
+		// hints and key versions, not just touch the row.
+		expect(captured.upsert).toMatchObject({
+			accessKeyHint: 'AKIA…MPLE',
+			accessKeyKeyVersion: 1,
+			secretKeyVersion: 1,
+			updatedBy: 'user-1'
+		});
+		expect(String(captured.upsert?.accessKeyCiphertext)).toMatch(/^v1:1:/);
+		expect(String(captured.upsert?.secretCiphertext)).toMatch(/^v1:1:/);
+		expect(captured.upsert?.updatedAt).toBeInstanceOf(Date);
 	});
 
 	it('rejects an empty or whitespace-bearing pair before touching the store', async () => {

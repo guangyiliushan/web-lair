@@ -6,7 +6,7 @@ import { db } from '$lib/server/db';
 import { files } from '$lib/server/db/content';
 import { recordActivity } from '$lib/server/audit';
 import { requireAdminRole } from '$lib/server/authz';
-import { getOption, setOption } from '$lib/server/config/options-registry';
+import { getOption, setOption, validateOption } from '$lib/server/config/options-registry';
 import { assertSettingWrite, settingAccess } from '$lib/server/settings/tiers';
 import {
 	STORAGE_PROVIDER_TYPES,
@@ -16,6 +16,8 @@ import {
 	type StorageProviderConfig
 } from '$lib/server/storage/provider';
 import { S3_CREDENTIAL_ENV } from '$lib/server/storage/config';
+import { MAX_BATCH_COUNT, MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
+import { UPLOAD_RATE_LIMIT } from '$lib/media/upload-limits';
 import { buildStorageForProvider, storageCredentials } from '$lib/server/storage';
 import { sanitizeProviderError } from '$lib/server/settings/provider-status';
 import {
@@ -104,9 +106,7 @@ export const load: PageServerLoad = async (event) => {
 			label: driverLabel(active.config),
 			endpoint: activeEndpoint,
 			bucket: activeBucket,
-			activatedAt: active.activatedAt,
-			previous: active.previous,
-			fingerprint: providerFingerprint(active.config)
+			activatedAt: active.activatedAt
 		},
 		status,
 		migration: {
@@ -114,20 +114,28 @@ export const load: PageServerLoad = async (event) => {
 			total: migration.total,
 			verified: migration.verified,
 			failed: migration.failed,
-			startedAt: migration.startedAt,
-			cutoverAt: migration.cutoverAt,
 			error: migration.error
 		},
 		purge,
 		fileCount,
-		migrationRequired: fileCount > 0,
-		migrationRunning: migration.state === 'copying',
+		// "Migration required" means the candidate is a DIFFERENT target than
+		// the live one; a site that never switched still has files and must not
+		// be told to migrate (review P2).
+		migrationRequired:
+			fileCount > 0 && providerFingerprint(provider) !== providerFingerprint(active.config),
+		// The maintenance window spans copy AND the wait for cutover (W7.4).
+		migrationRunning: migration.state === 'copying' || migration.state === 'copied',
+		limits: {
+			maxBytes: MAX_UPLOAD_BYTES,
+			maxBatch: MAX_BATCH_COUNT,
+			rateLimit: UPLOAD_RATE_LIMIT.limit,
+			rateWindowSeconds: UPLOAD_RATE_LIMIT.windowSeconds
+		},
 		credentials: {
 			source: credentialStatus.source,
 			accessHint: credentialStatus.accessHint,
 			secretHint: credentialStatus.secretHint,
 			keyVersion: credentialStatus.keyVersion,
-			updatedAt: credentialStatus.updatedAt?.toISOString() ?? null,
 			envNames: S3_CREDENTIAL_ENV
 		},
 		database,
@@ -139,11 +147,16 @@ export const load: PageServerLoad = async (event) => {
 			secretKey: env.RUSTFS_SECRET_KEY?.trim() ? ('set' as const) : ('missing' as const)
 		},
 		editable: access.editable,
-		ownerOnly: !access.editable,
 		allowPrivateEndpoint: allowPrivateEndpoint(env),
 		// A stored probe result is only meaningful for the config it covered.
+		// The Test button probes the SAVED CANDIDATE, so both comparisons are
+		// exposed: the active section shows a test only when it belongs to the
+		// live config, and the provider section shows one when it belongs to the
+		// candidate.
 		statusMatchesActive:
-			status.fingerprint === null || status.fingerprint === providerFingerprint(active.config)
+			status.fingerprint === null || status.fingerprint === providerFingerprint(active.config),
+		statusMatchesCandidate:
+			status.fingerprint === null || status.fingerprint === providerFingerprint(provider)
 	};
 };
 
@@ -156,8 +169,10 @@ function stringField(form: FormData, name: string): string {
  * nulls endpoint/bucket/providerType — the schema rejects a local provider that
  * carries external addressing, so a stale form post cannot smuggle one in.
  */
-function providerFromForm(form: FormData): StorageProviderConfig {
-	const driver = form.get('driver') === 's3' ? 's3' : 'local';
+function providerFromForm(form: FormData): StorageProviderConfig | null {
+	const rawDriver = form.get('driver');
+	if (rawDriver !== 'local' && rawDriver !== 's3') return null;
+	const driver = rawDriver;
 	const providerType = stringField(form, 'providerType');
 	const endpoint = stringField(form, 'endpoint');
 	const bucket = stringField(form, 'bucket');
@@ -205,8 +220,9 @@ function configErrorMessage(config: StorageProviderConfig): string {
 			return m.admin_settings_storage_err_region();
 		case 'publicBaseUrl':
 			return m.admin_settings_storage_err_public_base_url();
+		case 'deleteMode':
 		default:
-			return issue?.message ?? m.admin_settings_storage_err_config();
+			return m.admin_settings_storage_err_config();
 	}
 }
 
@@ -255,6 +271,13 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const before = await getOption('storage.provider');
 		const candidate = providerFromForm(form);
+		if (!candidate) {
+			return fail(400, {
+				step: 'provider' as const,
+				ok: false,
+				message: m.admin_settings_storage_err_config()
+			});
+		}
 		const errorMessage = configErrorMessage(candidate);
 		if (errorMessage) {
 			return fail(400, { step: 'provider' as const, ok: false, message: errorMessage });
@@ -290,7 +313,8 @@ export const actions: Actions = {
 					'region',
 					'bucket',
 					'path_style',
-					'public_base_url'
+					'public_base_url',
+					'delete_mode'
 				],
 				before,
 				after: parsed
@@ -359,6 +383,10 @@ export const actions: Actions = {
 					lastTestOk: false,
 					lastError: sanitizeProviderError(failureMessage),
 					lastStatus: 'unknown',
+					// The probe never reached the capability read: keeping the old
+					// values would re-attribute them to this fingerprint.
+					bucketVersioning: null,
+					objectLock: null,
 					fingerprint
 				};
 
@@ -393,14 +421,12 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const pendingDays = Number(stringField(form, 'pendingDays'));
 		const detachedDays = Number(stringField(form, 'detachedDays'));
-		if (!Number.isInteger(pendingDays) || pendingDays < 1) {
-			return fail(400, {
-				step: 'purge' as const,
-				ok: false,
-				message: m.admin_settings_storage_err_purge_days()
-			});
-		}
-		if (!Number.isInteger(detachedDays) || detachedDays < 1) {
+		let parsedPurge: { pendingDays: number; detachedDays: number };
+		try {
+			// The registry schema is the single source of bounds; a future
+			// .max()/refinement must not surface as a 500 from setOption.
+			parsedPurge = validateOption('media.purge', { pendingDays, detachedDays });
+		} catch {
 			return fail(400, {
 				step: 'purge' as const,
 				ok: false,
@@ -409,14 +435,14 @@ export const actions: Actions = {
 		}
 
 		const before = await getOption('media.purge');
-		await setOption('media.purge', { pendingDays, detachedDays });
+		await setOption('media.purge', parsedPurge);
 		await recordActivity(db, {
 			event: 'storage.update',
 			actorId: event.locals.user?.id ?? null,
 			payload: {
 				fields: ['pending_days', 'detached_days'],
 				before,
-				after: { pendingDays, detachedDays }
+				after: parsedPurge
 			},
 			deliver: false
 		});

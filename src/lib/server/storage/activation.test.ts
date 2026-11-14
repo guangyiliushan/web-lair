@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	ActivationError,
 	activateSavedProvider,
+	activationIdentity,
 	rollbackToPreviousProvider,
 	type ActivationStore
 } from './activation';
@@ -15,9 +16,11 @@ import {
 } from './provider';
 
 /**
- * Activation guards (W7.4/Q13 + W7.5/Q8): a cutover needs a COMPLETE copy of
- * exactly this target, and a bucket that cannot hard-delete is refused even
- * when the copy succeeded. Rollback swaps back.
+ * Activation guards (W7.4/Q13 + W7.5/Q8): a cutover needs a COMPLETE copy of a
+ * NEW addressing target, the bucket must answer HEAD and a provable
+ * versioning/object-lock verdict, a deleteMode-only change is a legal
+ * activation without a copy, and rollback refuses when post-cutover objects
+ * would be stranded.
  */
 const LOCAL = DEFAULT_PROVIDER_CONFIG;
 const EXTERNAL: StorageProviderConfig = {
@@ -36,39 +39,43 @@ function makeStore(overrides: {
 	provider?: StorageProviderConfig;
 	migration?: StorageMigrationState;
 	files?: number;
-	capabilities?: { versioning: string; objectLock: boolean | null } | null;
+	filesSince?: number;
+	capabilities?: {
+		versioning: 'off' | 'enabled' | 'suspended' | 'unknown';
+		objectLock: boolean | null;
+	};
+	headBucketFails?: boolean;
 }) {
 	const state = {
 		active: overrides.active ?? {
 			config: LOCAL,
 			previous: null,
-			activatedAt: null,
-			activatedBy: null
+			activatedAt: null
 		},
 		provider: overrides.provider ?? EXTERNAL,
 		migration: overrides.migration ?? { ...DEFAULT_STORAGE_MIGRATION },
 		files: overrides.files ?? 0
 	};
 	const audit = vi.fn(async () => {});
+	const applyActivation = vi.fn(async (active: StorageActive, migration: StorageMigrationState) => {
+		state.active = active;
+		state.migration = migration;
+	});
 	const store: ActivationStore = {
 		getActive: async () => state.active,
 		getProvider: async () => state.provider,
 		getMigration: async () => state.migration,
-		setActive: async (value) => {
-			state.active = value;
-		},
-		setMigration: async (value) => {
-			state.migration = value;
-		},
+		applyActivation,
 		countFiles: async () => state.files,
-		capabilities: async () =>
-			overrides.capabilities === undefined
-				? { versioning: 'off', objectLock: false }
-				: overrides.capabilities,
+		countFilesSince: async () => overrides.filesSince ?? 0,
+		headBucket: async () => {
+			if (overrides.headBucketFails) throw new Error('HTTP 404 NoSuchBucket');
+		},
+		capabilities: async () => overrides.capabilities ?? { versioning: 'off', objectLock: false },
 		audit,
 		now: () => new Date(Date.UTC(2026, 10, 14, 9, 0, 0))
 	};
-	return { store, state, audit };
+	return { store, state, audit, applyActivation };
 }
 
 function completeCopy(target: StorageProviderConfig, total = 5): StorageMigrationState {
@@ -86,9 +93,17 @@ function completeCopy(target: StorageProviderConfig, total = 5): StorageMigratio
 	};
 }
 
+describe('activation identity', () => {
+	it('treats a deleteMode-only change as a different activation of the same bucket', () => {
+		const logical = { ...EXTERNAL, deleteMode: 'logical' as const };
+		expect(providerFingerprint(logical)).toBe(providerFingerprint(EXTERNAL));
+		expect(activationIdentity(logical)).not.toBe(activationIdentity(EXTERNAL));
+	});
+});
+
 describe('activateSavedProvider', () => {
 	it('activates directly when the registry is empty and remembers the previous config', async () => {
-		const { store, state, audit } = makeStore({ files: 0 });
+		const { store, state, audit, applyActivation } = makeStore({ files: 0 });
 
 		const result = await activateSavedProvider(store);
 
@@ -97,13 +112,15 @@ describe('activateSavedProvider', () => {
 		expect(state.active.previous).toEqual(LOCAL);
 		expect(state.active.activatedAt).toBe('2026-11-14T09:00:00.000Z');
 		expect(state.migration.state).toBe('cutover');
+		// One transactional write, not two independent upserts.
+		expect(applyActivation).toHaveBeenCalledTimes(1);
 		expect(audit).toHaveBeenCalledWith(
 			'storage.activate',
-			expect.objectContaining({ action: 'activate' })
+			expect.objectContaining({ action: 'activate', delete_mode: 'hard' })
 		);
 	});
 
-	it('refuses to cut over with media on disk but no completed copy', async () => {
+	it('refuses to cut over a NEW target with media on disk but no completed copy', async () => {
 		const { store, state } = makeStore({ files: 3 });
 		await expect(activateSavedProvider(store)).rejects.toMatchObject({
 			name: 'ActivationError',
@@ -120,10 +137,15 @@ describe('activateSavedProvider', () => {
 		});
 	});
 
-	it('refuses an incomplete copy (failed or unverified objects)', async () => {
-		const partial = { ...completeCopy(EXTERNAL), failed: 1, verified: 4 };
+	it('refuses a copy with failed objects, and separately one with unverified objects', async () => {
+		const failedOnly = { ...completeCopy(EXTERNAL), failed: 1, verified: 5 };
 		await expect(
-			activateSavedProvider(makeStore({ files: 3, migration: partial }).store)
+			activateSavedProvider(makeStore({ files: 3, migration: failedOnly }).store)
+		).rejects.toMatchObject({ code: 'migration-incomplete' });
+
+		const unverified = { ...completeCopy(EXTERNAL), failed: 0, verified: 4 };
+		await expect(
+			activateSavedProvider(makeStore({ files: 3, migration: unverified }).store)
 		).rejects.toMatchObject({ code: 'migration-incomplete' });
 	});
 
@@ -141,13 +163,48 @@ describe('activateSavedProvider', () => {
 		expect(state.active.config).toEqual(EXTERNAL);
 	});
 
-	it('fails closed when the bucket capabilities cannot be read', async () => {
+	it('allows a deleteMode-only change without requiring a copy', async () => {
+		const logical = { ...EXTERNAL, deleteMode: 'logical' as const };
+		const { store, state } = makeStore({
+			files: 7,
+			active: { config: EXTERNAL, previous: LOCAL, activatedAt: '2026-11-01T00:00:00.000Z' },
+			provider: logical,
+			migration: { ...DEFAULT_STORAGE_MIGRATION },
+			capabilities: { versioning: 'enabled', objectLock: false }
+		});
+
+		const result = await activateSavedProvider(store);
+
+		expect(result.to.deleteMode).toBe('logical');
+		expect(state.active.config.deleteMode).toBe('logical');
+	});
+
+	it('refuses a target bucket that does not answer HEAD', async () => {
 		await expect(
-			activateSavedProvider(makeStore({ files: 0, capabilities: null }).store)
+			activateSavedProvider(makeStore({ files: 0, headBucketFails: true }).store)
+		).rejects.toMatchObject({ code: 'target-unavailable' });
+	});
+
+	it('fails closed when the capability verdict is not provable', async () => {
+		await expect(
+			activateSavedProvider(
+				makeStore({
+					files: 0,
+					capabilities: { versioning: 'off', objectLock: null }
+				}).store
+			)
+		).rejects.toMatchObject({ code: 'capability-unknown' });
+		await expect(
+			activateSavedProvider(
+				makeStore({
+					files: 0,
+					capabilities: { versioning: 'unknown', objectLock: false }
+				}).store
+			)
 		).rejects.toMatchObject({ code: 'capability-unknown' });
 	});
 
-	it('refuses a versioned or object-locked bucket (W7.5)', async () => {
+	it('refuses a versioned or object-locked bucket unless logical delete was chosen', async () => {
 		await expect(
 			activateSavedProvider(
 				makeStore({ files: 0, capabilities: { versioning: 'enabled', objectLock: false } }).store
@@ -160,7 +217,7 @@ describe('activateSavedProvider', () => {
 		).rejects.toMatchObject({ code: 'versioning-blocked' });
 	});
 
-	it('allows a versioned bucket when logical delete was chosen (W7.5)', async () => {
+	it('allows a versioned bucket in logical delete mode', async () => {
 		const logical = { ...EXTERNAL, deleteMode: 'logical' as const };
 		const { store, state } = makeStore({
 			files: 0,
@@ -168,9 +225,8 @@ describe('activateSavedProvider', () => {
 			capabilities: { versioning: 'enabled', objectLock: false }
 		});
 
-		const result = await activateSavedProvider(store);
+		await activateSavedProvider(store);
 
-		expect(result.to.deleteMode).toBe('logical');
 		expect(state.active.config.deleteMode).toBe('logical');
 		expect(state.migration.state).toBe('cutover');
 	});
@@ -183,14 +239,14 @@ describe('activateSavedProvider', () => {
 });
 
 describe('rollbackToPreviousProvider', () => {
+	const active: StorageActive = {
+		config: EXTERNAL,
+		previous: LOCAL,
+		activatedAt: '2026-11-14T09:00:00.000Z'
+	};
+
 	it('swaps back to the previous config and marks the state', async () => {
-		const active: StorageActive = {
-			config: EXTERNAL,
-			previous: LOCAL,
-			activatedAt: '2026-11-14T09:00:00.000Z',
-			activatedBy: null
-		};
-		const { store, state, audit } = makeStore({ active, provider: EXTERNAL });
+		const { store, state, audit, applyActivation } = makeStore({ active, provider: EXTERNAL });
 
 		const result = await rollbackToPreviousProvider(store);
 
@@ -198,10 +254,20 @@ describe('rollbackToPreviousProvider', () => {
 		expect(state.active.config).toEqual(LOCAL);
 		expect(state.active.previous).toEqual(EXTERNAL);
 		expect(state.migration.state).toBe('rolled-back');
+		expect(applyActivation).toHaveBeenCalledTimes(1);
 		expect(audit).toHaveBeenCalledWith(
 			'storage.activate',
 			expect.objectContaining({ action: 'rollback' })
 		);
+	});
+
+	it('refuses when objects were uploaded after the cutover', async () => {
+		const { store, state } = makeStore({ active, filesSince: 2 });
+
+		await expect(rollbackToPreviousProvider(store)).rejects.toMatchObject({
+			code: 'post-cutover-objects'
+		});
+		expect(state.active.config).toEqual(EXTERNAL);
 	});
 
 	it('refuses when there is no previous provider', async () => {

@@ -165,8 +165,10 @@ export const DEFAULT_PROVIDER_CONFIG: StorageProviderConfig = {
 export const storageActiveSchema = z.object({
 	config: providerConfigSchema,
 	previous: providerConfigSchema.nullable(),
-	activatedAt: z.string().nullable(),
-	activatedBy: z.string().nullable()
+	// The audit trail lives in `activities` (storage.activate); the CLI has no
+	// interactive actor, so a never-populated `activatedBy` column would only
+	// look like one (review P2).
+	activatedAt: z.string().nullable()
 });
 
 export type StorageActive = z.infer<typeof storageActiveSchema>;
@@ -174,8 +176,7 @@ export type StorageActive = z.infer<typeof storageActiveSchema>;
 export const DEFAULT_STORAGE_ACTIVE: StorageActive = {
 	config: DEFAULT_PROVIDER_CONFIG,
 	previous: null,
-	activatedAt: null,
-	activatedBy: null
+	activatedAt: null
 };
 
 /**
@@ -252,11 +253,6 @@ export const DEFAULT_STORAGE_MIGRATION: StorageMigrationState = {
 	bytes: 0,
 	error: null
 };
-
-/** True while a copy is running (uploads freeze, purge refuses). */
-export function migrationInProgress(state: Pick<StorageMigrationState, 'state'>): boolean {
-	return state.state === 'copying';
-}
 
 /**
  * Stable fingerprint of the addressing half of a config (never credentials),

@@ -53,7 +53,22 @@ const METADATA_ADDRESSES = new Set([
 
 export function isMetadataAddress(address: string): boolean {
 	const clean = address.includes('%') ? address.slice(0, address.indexOf('%')) : address;
-	return METADATA_ADDRESSES.has(clean.toLowerCase());
+	const lower = clean.toLowerCase();
+	if (METADATA_ADDRESSES.has(lower)) return true;
+	// v4-mapped IPv6 (`::ffff:169.254.169.254`, normalised by WHATWG URL to
+	// `::ffff:a9fe:a9fe`) must not slip past the denylist — with the LAN
+	// opt-in on, the private-range check would otherwise be the only gate.
+	if (lower.startsWith('::ffff:')) {
+		const rest = lower.slice('::ffff:'.length);
+		if (/^\d{1,3}(\.\d{1,3}){3}$/.test(rest)) return METADATA_ADDRESSES.has(rest);
+		const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(rest);
+		if (hex) {
+			const hi = parseInt(hex[1], 16);
+			const lo = parseInt(hex[2], 16);
+			return METADATA_ADDRESSES.has(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+		}
+	}
+	return false;
 }
 
 function bareHost(hostname: string): string {

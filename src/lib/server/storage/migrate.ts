@@ -145,6 +145,8 @@ export interface CopyOutcome {
 	copied: number;
 	/** Objects already correct on the target. */
 	skipped: number;
+	/** Variant keys that do not exist on the source (normal: no variant made). */
+	missingVariants: number;
 	/** Objects whose bytes were proven on the target (copied + skipped). */
 	verified: number;
 	failed: CopyFailure[];
@@ -171,6 +173,7 @@ export async function copyObjects(
 	const outcome: CopyOutcome = {
 		copied: 0,
 		skipped: 0,
+		missingVariants: 0,
 		verified: 0,
 		failed: [],
 		bytes: 0
@@ -184,6 +187,19 @@ export async function copyObjects(
 		try {
 			const sourceObject = await storage.source.get(object.key);
 			if (!sourceObject) {
+				// A variant that was never generated is not a failure: only some
+				// files have variants (GIFs, attachments, small images). A missing
+				// CANONICAL object is fatal — the registry and the bucket disagree.
+				if (object.kind === 'variant') {
+					outcome.missingVariants += 1;
+					options.onProgress?.({
+						index: index + 1,
+						total: objects.length,
+						key: object.key,
+						outcome: 'no-variant'
+					});
+					continue;
+				}
 				outcome.failed.push({ key: object.key, reason: 'missing-source' });
 				options.onProgress?.({
 					index: index + 1,

@@ -1046,21 +1046,45 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 });
 
 describe('deletion contract (W7.4/W7.5)', () => {
-	it('refuses a purge while a provider copy is running', async () => {
-		getOptionMock.mockImplementation(async (key: string) => {
-			if (key === 'storage.migration') return { state: 'copying' };
-			if (key === 'media.purge') return { pendingDays: 7, detachedDays: 30 };
-			if (key === 'storage.active') return { config: { deleteMode: 'hard' } };
-			return undefined;
-		});
+	it('refuses a purge while the maintenance window is open (copying or copied)', async () => {
+		for (const state of ['copying', 'copied']) {
+			getOptionMock.mockImplementation(async (key: string) => {
+				if (key === 'storage.migration') return { state };
+				if (key === 'media.purge') return { pendingDays: 7, detachedDays: 30 };
+				if (key === 'storage.active') return { config: { deleteMode: 'hard' } };
+				return undefined;
+			});
 
-		const outcome = await purgeMedia(
-			{ dryRun: false },
-			{ storage: storageMock as never, db: dbMock as never }
-		);
+			const outcome = await purgeMedia(
+				{ dryRun: false },
+				{ storage: storageMock as never, db: dbMock as never }
+			);
 
-		expect(outcome).toMatchObject({ blocked: 'migration', deleted: [], candidates: [] });
+			expect(outcome, state).toMatchObject({ blocked: 'migration', deleted: [], candidates: [] });
+		}
 		expect(storageMock.delete).not.toHaveBeenCalled();
+	});
+	it('freezes uploads for both maintenance states (copying and copied)', async () => {
+		for (const state of ['copying', 'copied']) {
+			getOptionMock.mockImplementation(async (key: string) => {
+				if (key === 'storage.migration') return { state };
+				if (key === 'media.purge') return { pendingDays: 7, detachedDays: 30 };
+				if (key === 'storage.active') return { config: { deleteMode: 'hard' } };
+				return undefined;
+			});
+			storageMock.put.mockClear();
+			await expect(
+				uploadFile(
+					{
+						fileName: 'x.png',
+						bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+					},
+					{ storage: storageMock as never, db: dbMock as never }
+				),
+				state
+			).rejects.toMatchObject({ code: 'migration' });
+			expect(storageMock.put, state).not.toHaveBeenCalled();
+		}
 	});
 
 	it('fails closed when the bucket capabilities cannot be read', async () => {
@@ -1140,7 +1164,7 @@ describe('deletion contract (W7.4/W7.5)', () => {
 			{ storage: storageMock as never, db: dbMock as never, policy }
 		);
 		expect(outcome).toMatchObject({ blocked: null, logical: true });
-		// The policy was injected: no capability read happened for the run.
-		expect(storageMock.bucketCapabilities).not.toHaveBeenCalledWith();
+		// The policy was injected: the run performed no capability read at all.
+		expect(storageMock.bucketCapabilities).not.toHaveBeenCalled();
 	});
 });

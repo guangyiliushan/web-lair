@@ -20,13 +20,18 @@ import { policyAllowsDelete } from '../services/files';
  * guard depends on (off -> enabled), and a full migration from one bucket to
  * another with hash verification and resume.
  */
-const LIVE = process.env.STORAGE_LIVE === '1';
 const ENDPOINT = process.env.RUSTFS_ENDPOINT?.replace(/\/+$/, '');
 const ACCESS = process.env.RUSTFS_ACCESS_KEY;
 const SECRET = process.env.RUSTFS_SECRET_KEY;
-const SOURCE_BUCKET = 'wl-live-source';
-const TARGET_BUCKET = 'wl-live-target';
-const VERSIONED_BUCKET = 'wl-live-versioned';
+// Runs whenever the RUSTFS_* variables are present (the dedicated script loads
+// .env); the offline unit run has none and skips. STORAGE_LIVE=0 opts out.
+const LIVE = process.env.STORAGE_LIVE !== '0' && Boolean(ENDPOINT && ACCESS && SECRET);
+// Per-run bucket names: a crashed earlier run must not poison this one with
+// leftover objects (a fixed name made plan.pending assertion flaky).
+const RUN = Date.now().toString(36);
+const SOURCE_BUCKET = `wl-live-source-${RUN}`;
+const TARGET_BUCKET = `wl-live-target-${RUN}`;
+const VERSIONED_BUCKET = `wl-live-versioned-${RUN}`;
 
 function configFor(bucket: string): S3StorageConfig {
 	if (!ENDPOINT || !ACCESS || !SECRET) throw new Error('RUSTFS_* is not set');
@@ -171,9 +176,11 @@ describe.skipIf(!LIVE)('live S3 dialect against the bundled RustFS', () => {
 		const first = await copyObjects(objects, { source, target });
 		expect(first.copied).toBe(3);
 		expect(first.verified).toBe(3);
-		// The seven variants that do not exist on the source are reported, not
-		// silently dropped.
-		expect(first.failed).toHaveLength(7);
+		// Variants the source never had are skipped, not failed: otherwise any
+		// site with an attachment could never cut over (missing VARIANT ≠
+		// missing canonical object).
+		expect(first.failed).toEqual([]);
+		expect(first.missingVariants).toBe(7);
 
 		// Resume: the three present objects verify without a rewrite.
 		const second = await copyObjects(objects, { source, target });

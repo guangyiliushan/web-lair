@@ -148,13 +148,20 @@ describe('storage probe', () => {
 		expect(result).toMatchObject({ ok: false, status: 'auth' });
 	});
 
-	it('flags a bucket whose capabilities cannot be read (purge guard input)', async () => {
-		const { storage } = fakeStorage({
-			capabilities: async () => ({ versioning: 'unknown', objectLock: null })
-		});
-		const result = await probeStorage(storage, { clock: FIXED_CLOCK });
-		expect(result).toMatchObject({ ok: false, status: 'capability' });
-		expect(result.versioning).toBe('unknown');
+	it('flags a bucket whose capabilities cannot be PROVEN (same predicate as purge)', async () => {
+		for (const capabilities of [
+			{ versioning: 'unknown' as const, objectLock: null },
+			// One readable half is not enough: the purge guard fails closed here,
+			// so a green probe would contradict a permanently refused delete.
+			{ versioning: 'off' as const, objectLock: null }
+		]) {
+			const { storage } = fakeStorage({ capabilities: async () => capabilities });
+			const result = await probeStorage(storage, { clock: FIXED_CLOCK });
+			expect(result, JSON.stringify(capabilities)).toMatchObject({
+				ok: false,
+				status: 'capability'
+			});
+		}
 	});
 
 	it('fails when the read-back does not match the write', async () => {
@@ -171,6 +178,22 @@ describe('storage probe', () => {
 		expect(result).toMatchObject({ ok: false, status: 'write' });
 		// The probe object is still removed.
 		expect(calls.some((call) => call.startsWith('delete:'))).toBe(true);
+	});
+
+	it('keeps the probe object key out of a failure message', async () => {
+		const { storage } = fakeStorage({
+			put: async () => {
+				throw new StorageError(
+					'storage put probe/abc123.txt failed: HTTP 500',
+					500,
+					'InternalError'
+				);
+			}
+		});
+		const result = await probeStorage(storage, { clock: FIXED_CLOCK });
+		expect(result.status).not.toBe('ok');
+		expect(result.message).not.toContain('probe/');
+		expect(result.message).not.toContain('abc123');
 	});
 
 	it('keeps the failure message free of the endpoint and the key', async () => {

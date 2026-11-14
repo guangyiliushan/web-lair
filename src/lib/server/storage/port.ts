@@ -53,12 +53,44 @@ export interface BucketCapabilities {
 }
 
 /**
+ * One reading of "what can this bucket do with a DELETE" (W7.5). Every guard —
+ * probe, activation, purge, single-file delete — must reach the same verdict,
+ * so the rule lives here once:
+ *
+ *   provable  both reads answered (unknown/null is NOT "off" — fail closed);
+ *   reclaims  a plain DELETE actually frees the bytes.
+ */
+export interface DeletionAssessment {
+	provable: boolean;
+	reclaims: boolean;
+}
+
+export function assessDeletion(capabilities: BucketCapabilities): DeletionAssessment {
+	return {
+		provable: capabilities.versioning !== 'unknown' && capabilities.objectLock !== null,
+		reclaims: capabilities.versioning === 'off' && capabilities.objectLock !== true
+	};
+}
+
+/**
  * True when the provider is reachable-but-failing or unreachable (W7.5/Q14):
  * the request cannot be served from this provider, and the app must NOT fall
  * back to another one — 503 is the honest answer.
  */
 export function isStorageUnavailable(error: unknown): boolean {
 	return error instanceof StorageError && (error.status === 0 || error.status >= 500);
+}
+
+/**
+ * The one 503 wire contract for "active provider unavailable" — same status,
+ * Retry-After and no-store on every route that serves bytes (W7 review P2: it
+ * was written inline twice).
+ */
+export function storageUnavailableResponse(): Response {
+	return new Response(null, {
+		status: 503,
+		headers: { 'retry-after': '30', 'cache-control': 'no-store' }
+	});
 }
 
 /** Non-2xx storage response the caller cannot treat as "absent". */

@@ -5,23 +5,25 @@ import {
 	type StorageMigrationState,
 	type StorageProviderConfig
 } from './provider.ts';
+import { assessDeletion, type BucketCapabilities } from './port.ts';
 
 /**
- * Provider activation + rollback (W7.4, decision Q13/Q4).
+ * Provider activation + rollback (W7.4/W7.5, decisions Q4/Q8/Q13).
  *
  * Activation is deliberately NOT reachable from a form: `storage.provider` is
  * the candidate, and this module is the only writer of `storage.active` (the
- * cutover CLI calls it). Two guards stand in front of a switch:
+ * cutover CLI calls it). Three guards stand in front of a switch:
  *
- *   1. media on disk → the copy must be complete for THIS target fingerprint
- *      (`files` count vs verified count, zero failures). An empty `files` table
- *      may activate directly (there is nothing to copy).
- *   2. bucket capabilities (W7.5): a versioned / object-locked bucket cannot be
- *      hard-deleted into, so an activation that would pretend to reclaim space
- *      is refused unless logical delete was chosen explicitly.
+ *   1. a NEW addressing target needs a complete copy of exactly that
+ *      fingerprint when media exists (`files > 0`); a change that only flips
+ *      the delete mode needs no copy — the objects are already in the bucket.
+ *   2. the target bucket must answer HEAD, and its versioning/object-lock
+ *      verdict must be PROVABLE (unknown is not "off" — fail closed).
+ *   3. a versioned / object-locked bucket only activates in logical-delete
+ *      mode, which is an explicit operator choice.
  *
- * The previous live config is kept as the rollback slot; rollback swaps it
- * back and records `rolled-back` — the old provider stays readable throughout.
+ * Rollback refuses when files were uploaded after the cutover: those objects
+ * live only on the current provider, so switching back would 404 them.
  */
 
 export type ActivationErrorCode =
@@ -30,7 +32,9 @@ export type ActivationErrorCode =
 	| 'no-previous'
 	| 'same-provider'
 	| 'capability-unknown'
-	| 'versioning-blocked';
+	| 'versioning-blocked'
+	| 'target-unavailable'
+	| 'post-cutover-objects';
 
 export class ActivationError extends Error {
 	readonly code: ActivationErrorCode;
@@ -46,15 +50,15 @@ export interface ActivationStore {
 	getActive(): Promise<StorageActive>;
 	getProvider(): Promise<StorageProviderConfig>;
 	getMigration(): Promise<StorageMigrationState>;
-	setActive(active: StorageActive): Promise<void>;
-	setMigration(migration: StorageMigrationState): Promise<void>;
+	/** Both option rows in ONE transaction (a partial cutover must not exist). */
+	applyActivation(active: StorageActive, migration: StorageMigrationState): Promise<void>;
 	countFiles(): Promise<number>;
-	/**
-	 * Live capability read of the CANDIDATE bucket (W7.5). Returning null means
-	 * the probe could not answer, which fails closed.
-	 */
-	capabilities?(): Promise<{ versioning: string; objectLock: boolean | null } | null>;
-	audit?(event: string, payload: Record<string, unknown>): Promise<void>;
+	/** Files created after `since` (null = all files); used by the rollback guard. */
+	countFilesSince(since: string | null): Promise<number>;
+	/** The CANDIDATE bucket: HEAD + capabilities, with the candidate credentials. */
+	headBucket(): Promise<void>;
+	capabilities(): Promise<BucketCapabilities>;
+	audit(event: string, payload: Record<string, unknown>): Promise<void>;
 	now?(): Date;
 }
 
@@ -63,6 +67,16 @@ export interface ActivationResult {
 	to: StorageProviderConfig;
 	files: number;
 	activatedAt: string;
+}
+
+/**
+ * Identity of an activation, as opposed to a copy target: the addressing half
+ * plus the delete mode. A site must be able to move from hard to logical delete
+ * on the SAME bucket (that is the documented opt-in for a versioned bucket),
+ * so "already active" has to look at both.
+ */
+export function activationIdentity(config: StorageProviderConfig): string {
+	return `${providerFingerprint(config)}|${config.deleteMode}`;
 }
 
 /** Only an exact, complete copy of THIS target may be cut over. */
@@ -106,26 +120,35 @@ export async function activateSavedProvider(store: ActivationStore): Promise<Act
 		store.countFiles()
 	]);
 
-	if (providerFingerprint(active.config) === providerFingerprint(candidate)) {
+	const sameAddressing = providerFingerprint(active.config) === providerFingerprint(candidate);
+	if (sameAddressing && activationIdentity(active.config) === activationIdentity(candidate)) {
 		throw new ActivationError('same-provider', 'The saved provider is already the active one');
 	}
-
-	if (files > 0) {
+	if (!sameAddressing && files > 0) {
 		assertMigrationComplete(migration, candidate, files);
 	}
 
-	// W7.5 capability guard: refusing here is what keeps "purge frees space"
-	// true. A bucket with versioning/object lock on only ever gets logical
-	// deletion, which must be chosen explicitly in the provider form.
-	const capabilities = store.capabilities ? await store.capabilities() : null;
-	if (!capabilities) {
+	// The target must exist and be readable with these credentials. A typo'd
+	// bucket would otherwise activate on the empty-registry path and 503 every
+	// /i request afterwards.
+	try {
+		await store.headBucket();
+	} catch {
+		throw new ActivationError(
+			'target-unavailable',
+			'The target bucket is not reachable with the configured credentials (HEAD failed)'
+		);
+	}
+
+	const capabilities = await store.capabilities();
+	const assessment = assessDeletion(capabilities);
+	if (!assessment.provable) {
 		throw new ActivationError(
 			'capability-unknown',
 			'Bucket versioning/object lock could not be read; refusing to activate (fail closed)'
 		);
 	}
-	const deletable = capabilities.versioning === 'off' && capabilities.objectLock !== true;
-	if (!deletable && candidate.deleteMode !== 'logical') {
+	if (!assessment.reclaims && candidate.deleteMode !== 'logical') {
 		throw new ActivationError(
 			'versioning-blocked',
 			'The target bucket has versioning or object lock enabled; choose logical delete or use a plain bucket'
@@ -133,20 +156,16 @@ export async function activateSavedProvider(store: ActivationStore): Promise<Act
 	}
 
 	const activatedAt = (store.now?.() ?? new Date()).toISOString();
-	const next: StorageActive = {
-		config: candidate,
-		previous: active.config,
-		activatedAt,
-		activatedBy: null
-	};
-	await store.setActive(next);
-	await store.setMigration({
-		...migration,
-		state: 'cutover',
-		cutoverAt: activatedAt,
-		finishedAt: migration.finishedAt ?? activatedAt
-	});
-	await store.audit?.('storage.activate', {
+	await store.applyActivation(
+		{ config: candidate, previous: active.config, activatedAt },
+		{
+			...migration,
+			state: 'cutover',
+			cutoverAt: activatedAt,
+			finishedAt: migration.finishedAt ?? activatedAt
+		}
+	);
+	await store.audit('storage.activate', {
 		action: 'activate',
 		from: driverLabel(active.config),
 		to: driverLabel(candidate),
@@ -167,17 +186,30 @@ export async function rollbackToPreviousProvider(
 	if (!active.previous) {
 		throw new ActivationError('no-previous', 'There is no previous provider to roll back to');
 	}
+
+	// Objects written after the cutover exist only on the CURRENT provider.
+	// Rolling back without copying them makes them unreachable, so refuse and
+	// name the count (the operator can copy them back first).
+	const createdSinceCutover = await store.countFilesSince(active.activatedAt);
+	if (createdSinceCutover > 0) {
+		throw new ActivationError(
+			'post-cutover-objects',
+			`${createdSinceCutover} file(s) were uploaded after the cutover and exist only on the current provider; copy them back before rolling back`
+		);
+	}
+
 	const activatedAt = (store.now?.() ?? new Date()).toISOString();
 	const target = active.previous;
-	await store.setActive({
-		config: target,
-		// Swap, so a mistaken rollback can be re-run the other way.
-		previous: active.config,
-		activatedAt,
-		activatedBy: null
-	});
-	await store.setMigration({ ...migration, state: 'rolled-back' });
-	await store.audit?.('storage.activate', {
+	await store.applyActivation(
+		{
+			config: target,
+			// Swap, so a mistaken rollback can be re-run the other way.
+			previous: active.config,
+			activatedAt
+		},
+		{ ...migration, state: 'rolled-back' }
+	);
+	await store.audit('storage.activate', {
 		action: 'rollback',
 		from: driverLabel(active.config),
 		to: driverLabel(target),

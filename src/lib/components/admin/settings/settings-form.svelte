@@ -49,7 +49,12 @@
 	use:enhance={() => {
 		pending = true;
 		return async ({ update }) => {
-			await update();
+			// reset:false — the HTML reset would snap the DOM back to the
+			// page-load values while the component state keeps what the user
+			// typed (reset fires no input events), so a successful save would
+			// display the OLD values under a "saved" message. Pages that want
+			// a reset clear their own state (same convention as the AI page).
+			await update({ reset: false });
 			pending = false;
 		};
 	}}

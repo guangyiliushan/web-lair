@@ -175,7 +175,11 @@ export const actions: Actions = {
 			}
 			return { uploadResults: enriched };
 		} catch (error) {
-			if (error instanceof UploadRejected) return fail(400, { message: error.message });
+			if (error instanceof UploadRejected) {
+				// The migration freeze is temporary and retryable: 503, not 400
+				// (same contract as editor-uploads, review P2).
+				return fail(error.code === 'migration' ? 503 : 400, { message: error.message });
+			}
 			throw error;
 		}
 	},
