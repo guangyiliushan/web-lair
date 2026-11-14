@@ -523,6 +523,20 @@
 													? m.admin_settings_notification_succeeded()
 													: m.admin_settings_notification_queued()}
 										</Badge>
+										{#if delivery.status === 'queued' && delivery.attemptCount > 0}
+											<span class="text-muted-foreground">
+												{m.admin_settings_notification_retry_scheduled({
+													attempt: delivery.attemptCount + 1,
+													time: delivery.nextAttemptLabel ?? '—'
+												})}
+											</span>
+										{:else if delivery.status === 'failed'}
+											<span class="text-muted-foreground">
+												{m.admin_settings_notification_attempt_count({
+													count: delivery.attemptCount
+												})}
+											</span>
+										{/if}
 										{#if delivery.status === 'failed'}
 											<span class="text-muted-foreground">
 												{delivery.responseCode

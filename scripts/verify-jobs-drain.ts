@@ -140,8 +140,11 @@ const client = postgres(scratchUrl, { max: 6, onnotice: () => {} });
 const db = drizzle(client);
 
 async function resetLedger(): Promise<void> {
+	// webhook_secrets references webhooks: every referencing table must be in
+	// the list or Postgres refuses the TRUNCATE outright (W9.4 added the
+	// retry columns; the W2 secret table was already missing here).
 	await client.unsafe(
-		'truncate table job_runs, job_schedules, webhook_deliveries, webhooks, activities'
+		'truncate table job_runs, job_schedules, webhook_deliveries, webhook_secrets, webhooks, activities'
 	);
 }
 
@@ -181,6 +184,10 @@ function spawnDrain(extraEnv: Record<string, string> = {}): {
 	delete env.all_proxy;
 	delete env.NODE_USE_ENV_PROXY;
 	env.NO_PROXY = '*';
+	// W9.3 delivery guard: the fixture receiver is plain HTTP on 127.0.0.1.
+	// This escape hatch is explicit, test-only, and ignored in production.
+	env.WEBHOOK_ALLOW_INSECURE_LOOPBACK = 'true';
+	env.NODE_ENV = 'test';
 	const child = spawn(process.execPath, ['jobs/drain.ts'], {
 		cwd: repoRoot,
 		env: { ...env, DATABASE_URL: scratchUrl, DATA_DIR: fixtureDataDir, ...extraEnv }
@@ -746,7 +753,7 @@ async function t9bKillRealDrainMidDelivery(): Promise<void> {
 }
 
 async function webhookOutcomes(): Promise<void> {
-	section('webhooks: failure recording, 410 disables, disabled endpoints skip');
+	section('webhooks: retry schedule, 410 disables, disabled endpoints skip');
 	await resetLedger();
 	const failId = await createEndpoint('fail500', '/fail500', 'whsec_c2hhcmVkLXNlY3JldA==');
 	const goneId = await createEndpoint('gone410', '/gone410', 'whsec_c2hhcmVkLXNlY3JldA==');
@@ -764,14 +771,19 @@ async function webhookOutcomes(): Promise<void> {
 
 	const fail = await deliveryById(failDelivery);
 	check(
-		'500 -> failed with response_code 500',
-		fail?.status === 'failed' && fail?.responseCode === 500,
-		`status=${fail?.status} code=${fail?.responseCode}`
+		'500 -> queued for retry with response_code 500 and attempt 1',
+		fail?.status === 'queued' && fail?.responseCode === 500 && fail?.attemptCount === 1,
+		`status=${fail?.status} code=${fail?.responseCode} attempt=${fail?.attemptCount}`
+	);
+	check(
+		'500 -> next_attempt_at is in the future (backoff)',
+		fail?.nextAttemptAt instanceof Date && fail.nextAttemptAt.getTime() > Date.now(),
+		`next=${fail?.nextAttemptAt?.toISOString()}`
 	);
 	const gone = await deliveryById(goneDelivery);
 	check(
-		'410 -> failed with response_code 410',
-		gone?.status === 'failed' && gone?.responseCode === 410
+		'410 -> failed with response_code 410 after one attempt',
+		gone?.status === 'failed' && gone?.responseCode === 410 && gone?.attemptCount === 1
 	);
 	const [endpoint] = await db.select().from(webhooks).where(eq(webhooks.id, goneId));
 	check('410 disables the endpoint (Standard Webhooks etiquette)', endpoint?.isEnabled === false);
@@ -788,9 +800,51 @@ async function webhookOutcomes(): Promise<void> {
 	const again = await runDrainOnce();
 	check('second tick exits 0', again.code === 0);
 	check(
-		'v1: no retry - failed rows stay failed, no new request',
-		(await deliveryById(failDelivery))?.status === 'failed' &&
+		'not due yet: failed row stays queued and no new request is made',
+		(await deliveryById(failDelivery))?.status === 'queued' &&
 			captured.filter((r) => r.path.startsWith('/fail500')).length === before
+	);
+
+	// Force the retry point into the past: the same row is attempted again
+	// (same webhook-id), and the attempt counter advances.
+	await db
+		.update(webhookDeliveries)
+		.set({ nextAttemptAt: new Date(Date.now() - 1000) })
+		.where(eq(webhookDeliveries.id, failDelivery));
+	await runDrainOnce();
+	const retried = await deliveryById(failDelivery);
+	check(
+		'due retry -> attempt 2 on the SAME row, still queued',
+		retried?.id === failDelivery &&
+			retried?.attemptCount === 2 &&
+			retried?.status === 'queued' &&
+			captured.filter((r) => r.path.startsWith('/fail500')).length === before + 1,
+		`attempt=${retried?.attemptCount} requests=${captured.filter((r) => r.path.startsWith('/fail500')).length}`
+	);
+	check(
+		'retry keeps the same webhook-id header',
+		captured
+			.filter((r) => r.path.startsWith('/fail500'))
+			.every((r) => r.headers['webhook-id'] === failDelivery)
+	);
+
+	// Exhaust the budget: attempt 6 is the last one and turns terminal.
+	await db
+		.update(webhookDeliveries)
+		.set({ attemptCount: 5, nextAttemptAt: new Date(Date.now() - 1000) })
+		.where(eq(webhookDeliveries.id, failDelivery));
+	await runDrainOnce();
+	const exhausted = await deliveryById(failDelivery);
+	check(
+		'exhausted budget -> failed with attempt_count 6',
+		exhausted?.status === 'failed' && exhausted?.attemptCount === 6,
+		`status=${exhausted?.status} attempt=${exhausted?.attemptCount}`
+	);
+	const afterExhaust = captured.filter((r) => r.path.startsWith('/fail500')).length;
+	await runDrainOnce();
+	check(
+		'terminal failure is never retried again',
+		captured.filter((r) => r.path.startsWith('/fail500')).length === afterExhaust
 	);
 }
 

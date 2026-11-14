@@ -35,27 +35,25 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Notification settings · Webhooks section. J-3 built the read-only endpoint
- * list + delivery log + retry; SY S2 adds endpoint CRUD (ledger §26).
+ * Notification settings · Mail status/test + Webhooks (M4 W9).
  *
- * - Retry semantics (plan §26 / runbook §7): copy a new queued row - the
- *   failed row stays for the record, and the drain picks the copy up within
- *   <=1 tick. No audit row: the ledger §26 roster v1 covers only the job.*
- *   and schedule.* events, and the delivery rows themselves are the trail.
+ * - Mail (W9.1): read-only SMTP status from `.env` and a real test send to
+ *   the signed-in admin. SMTP credentials never reach this module.
+ * - Retry/replay (W9.4): manual replay re-queues the SAME delivery row, so
+ *   the `webhook-id` header is unchanged and receivers can deduplicate it
+ *   against the automatic retries; automatic retries live in the drain.
  * - Endpoint CRUD: secrets are server-generated only (whsec_ + base64, the
  *   Standard Webhooks shape). The load renders a MASKED preview; the raw
  *   value is revealed exactly once in the create/rotate action result.
  *   Names are soft-rejected case-insensitively at the application layer
  *   (no DB constraint - the 10-13 grill G3 ruling).
- * - Stored payload URLs are the WHATWG-normalized `href` (review round-1:
- *   `new URL()` accepts `https:example.com` / uppercase schemes and folds
- *   them to lowercase with `//`, while the DB CHECK `^https?://` is
- *   case-sensitive - storing the raw string let accepted inputs hit 23514
- *   as an unhandled 500). The create/update writes still map a 23514 to a
- *   400 as defense in depth (review round-2 N1).
- * - Endpoint CRUD writes no activity rows either - same ruling as retry
- *   above: the §26 roster v1 covers only the job.* and schedule.* events
- *   (round-2 R1-3).
+ * - URLs (W9.3): HTTPS only, credentials refused, private/loopback/link-local/
+ *   metadata targets refused (literal or resolved; LAN needs
+ *   `WEBHOOK_ALLOW_PRIVATE_TARGETS=true`). Stored values are the WHATWG-
+ *   normalized `href`; 23514 is still mapped to a 400 as defense in depth.
+ * - Config audit (W9.3): create/update/delete/toggle/key_set/key_rotate write
+ *   local `activities` rows (`deliver:false`); payloads carry the host, never
+ *   the path query or the secret.
  * - Registered hazard (round-2 N2): an admin delete racing an in-flight
  *   410 delivery can deadlock (40P01, ABBA on the webhook/delivery row
  *   locks) - rare, no corruption (one tx aborts; the drain side rolls
@@ -187,6 +185,8 @@ export const load: PageServerLoad = async (event) => {
 				createdAt: webhookDeliveries.createdAt,
 				event: webhookDeliveries.event,
 				status: webhookDeliveries.status,
+				attemptCount: webhookDeliveries.attemptCount,
+				nextAttemptAt: webhookDeliveries.nextAttemptAt,
 				responseCode: webhookDeliveries.responseCode,
 				error: webhookDeliveries.error,
 				deliveredAt: webhookDeliveries.deliveredAt
@@ -226,7 +226,10 @@ export const load: PageServerLoad = async (event) => {
 			return {
 				...row,
 				webhookName: endpoint?.name ?? '',
-				createdLabel: formatDateTime(row.createdAt, { timeZone: siteTz })
+				createdLabel: formatDateTime(row.createdAt, { timeZone: siteTz }),
+				nextAttemptLabel: row.nextAttemptAt
+					? formatDateTime(row.nextAttemptAt, { timeZone: siteTz })
+					: null
 			};
 		})
 	};
@@ -327,8 +330,6 @@ export const actions: Actions = {
 			.select({
 				id: webhookDeliveries.id,
 				webhookId: webhookDeliveries.webhookId,
-				event: webhookDeliveries.event,
-				payload: webhookDeliveries.payload,
 				status: webhookDeliveries.status
 			})
 			.from(webhookDeliveries)
@@ -346,25 +347,23 @@ export const actions: Actions = {
 		if (!endpoint) return fail(404, { message: m.admin_settings_notification_err_endpoint_gone() });
 		if (!endpoint.isEnabled)
 			return fail(400, { message: m.admin_settings_notification_err_disabled() });
-		try {
-			const [row] = await db
-				.insert(webhookDeliveries)
-				.values({
-					webhookId: delivery.webhookId,
-					event: delivery.event,
-					payload: delivery.payload,
-					status: 'queued'
-				})
-				.returning({ id: webhookDeliveries.id });
-			return { retried: true, id: row.id };
-		} catch (error) {
-			// TOCTOU tail (J-3 review P3-1): the endpoint can be deleted
-			// between the check above and this insert; the FK answers 23503.
-			if (pgErrorCode(error) === '23503') {
-				return fail(400, { message: m.admin_settings_notification_err_gone_race() });
-			}
-			throw error;
-		}
+		// W9.4: replay the SAME row. The delivery id is the `webhook-id`, so
+		// receivers deduplicate a manual replay exactly like an automatic
+		// retry; a copied row would mint a new id and look like a new event.
+		const [row] = await db
+			.update(webhookDeliveries)
+			.set({
+				status: 'queued',
+				attemptCount: 0,
+				nextAttemptAt: new Date(),
+				responseCode: null,
+				error: null,
+				deliveredAt: null
+			})
+			.where(eq(webhookDeliveries.id, id))
+			.returning({ id: webhookDeliveries.id });
+		if (!row) return fail(404, { message: m.admin_settings_notification_err_not_found() });
+		return { retried: true, id: row.id };
 	},
 
 	create: async ({ request, locals }) => {

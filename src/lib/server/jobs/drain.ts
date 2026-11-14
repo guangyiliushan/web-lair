@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lt, notInArray } from 'drizzle-orm';
+import { and, asc, eq, isNull, lt, lte, notInArray } from 'drizzle-orm';
 import { jobRuns } from '../db/system/job-run.schema.ts';
 import { jobSchedules } from '../db/system/job-schedule.schema.ts';
 import { webhooks } from '../db/system/webhook.schema.ts';
@@ -15,6 +15,7 @@ import {
 	assertDeliveryTarget,
 	webhookGuardOptionsFromEnv
 } from '../webhooks/url-guard.ts';
+import { classifyWebhookResponse, parseRetryAfter, planWebhookRetry } from '../webhooks/retry.ts';
 import { isSecretError } from '../secrets/errors.ts';
 import { reportSecretFailure } from '../secrets/report.ts';
 import { resolveWebhookSigningSecrets } from '../secrets/webhook-secrets.ts';
@@ -33,9 +34,10 @@ import type { JobContext, JobLogger, JobsDb, LoadedJob } from './types.ts';
  *   2. queue      - `job_runs(status='queued')` claimed with
  *                   FOR UPDATE SKIP LOCKED, then the same lock -> reclaim ->
  *                   claim -> execute pipeline.
- *   3. deliveries - `webhook_deliveries(status='queued')` signed with
- *                   Standard Webhooks headers and POSTed (v1: no retries;
- *                   a crash rolls the row back to queued).
+ *   3. deliveries - `webhook_deliveries(status='queued', next_attempt_at <=
+ *                   now())` signed with Standard Webhooks headers and POSTed;
+ *                   retryable failures stay queued with exponential backoff,
+ *                   permanent ones turn terminal, 410 disables the endpoint.
  *
  * All imports must stay Node-type-strippable (explicit `.ts` extensions, no
  * aliases, no SvelteKit virtual modules) because `jobs/drain.ts` runs under
@@ -92,7 +94,13 @@ export interface DrainSummary {
 		errors: number;
 	};
 	queue: { claimed: number; busy: number; errors: number };
-	deliveries: { sent: number; failed: number; skippedDisabled: number; errors: number };
+	deliveries: {
+		sent: number;
+		failed: number;
+		retried: number;
+		skippedDisabled: number;
+		errors: number;
+	};
 	/** Segment-level failures; the entry process exits non-zero when non-empty. */
 	segmentErrors: string[];
 	/** Set when a job timeout aborted the tick (the entry exits hard). */
@@ -132,7 +140,7 @@ export async function runDrain(deps: DrainDeps): Promise<DrainSummary> {
 			errors: 0
 		},
 		queue: { claimed: 0, busy: 0, errors: 0 },
-		deliveries: { sent: 0, failed: 0, skippedDisabled: 0, errors: 0 },
+		deliveries: { sent: 0, failed: 0, retried: 0, skippedDisabled: 0, errors: 0 },
 		segmentErrors: [],
 		aborted: false,
 		heartbeat: 'skipped'
@@ -184,6 +192,7 @@ export async function runDrain(deps: DrainDeps): Promise<DrainSummary> {
 			(stats.queue.busy > 0 ? ` / ${stats.queue.busy} busy` : '') +
 			(stats.queue.errors > 0 ? ` / ${stats.queue.errors} errored` : '') +
 			` | deliveries ${stats.deliveries.sent} sent / ${stats.deliveries.failed} failed` +
+			(stats.deliveries.retried > 0 ? ` / ${stats.deliveries.retried} retried` : '') +
 			(stats.deliveries.skippedDisabled > 0
 				? ` / ${stats.deliveries.skippedDisabled} disabled`
 				: '') +
@@ -593,26 +602,30 @@ async function runDeliverySegment(deps: ResolvedDeps, stats: DrainSummary): Prom
 		// transaction must not leave phantom numbers in the tick summary.
 		if (outcome === 'sent') stats.deliveries.sent += 1;
 		else if (outcome === 'disabled') stats.deliveries.skippedDisabled += 1;
+		else if (outcome === 'retried') stats.deliveries.retried += 1;
 		else stats.deliveries.failed += 1;
 		processed += 1;
 	}
 }
 
-type DeliveryOutcome = 'sent' | 'failed' | 'disabled';
+type DeliveryOutcome = 'sent' | 'failed' | 'retried' | 'disabled';
 
 /**
- * Claim + send + finalize ONE delivery inside a single transaction: the row
- * lock makes concurrent drains skip it, and a crash rolls the status back to
- * `queued` so the next tick retries (plan §4.5). `v1 no retry` applies to
- * FAILED attempts - a delivery that got a non-2xx or a network error is
- * marked failed and left alone.
+ * Claim + send + finalize ONE delivery attempt inside a single transaction:
+ * the row lock makes concurrent drains skip it, and a crash rolls the status
+ * back to `queued` so the next tick retries with the SAME row id (plan §4.5).
+ *
+ * W9.4: retryable outcomes (network/timeout, 408, 429, 5xx) put the row back
+ * to `queued` with `attemptCount + 1` and `nextAttemptAt` in the future;
+ * permanent outcomes (3xx, other 4xx, exhausted budget, blocked target) mark
+ * it `failed`. The id never changes, so `webhook-id` is stable across every
+ * attempt and manual replays.
  *
  * NB (registered): if the receiver answered 2xx but the COMMIT then fails,
  * the row falls back to queued and the next tick resends - stable
- * `webhook-id` lets receivers deduplicate, and that is the only window where
- * "no retry" degrades to at-least-once.
+ * `webhook-id` lets receivers deduplicate (at-least-once window).
  *
- * Returns null when there is nothing left to send.
+ * Returns null when there is nothing due to send.
  */
 async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 	const now = deps.now();
@@ -621,10 +634,11 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 			.select({
 				id: webhookDeliveries.id,
 				webhookId: webhookDeliveries.webhookId,
-				payload: webhookDeliveries.payload
+				payload: webhookDeliveries.payload,
+				attemptCount: webhookDeliveries.attemptCount
 			})
 			.from(webhookDeliveries)
-			.where(eq(webhookDeliveries.status, 'queued'))
+			.where(and(eq(webhookDeliveries.status, 'queued'), lte(webhookDeliveries.nextAttemptAt, now)))
 			.orderBy(asc(webhookDeliveries.createdAt))
 			.limit(1)
 			.for('update', { skipLocked: true });
@@ -697,6 +711,44 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 			return 'failed';
 		}
 		const timestampSeconds = Math.floor(now.getTime() / 1000);
+		/** Persist one attempt: queued for a retry, or terminal failed. */
+		const finishAttempt = async (input: {
+			attemptsMade: number;
+			responseCode: number | null;
+			error: string;
+			at: Date;
+			retryAfterMs?: number | null;
+		}): Promise<DeliveryOutcome> => {
+			const plan = planWebhookRetry(input.attemptsMade, {
+				retryAfterMs: input.retryAfterMs ?? null
+			});
+			if (plan.retry) {
+				await tx
+					.update(webhookDeliveries)
+					.set({
+						status: 'queued',
+						attemptCount: input.attemptsMade,
+						nextAttemptAt: new Date(input.at.getTime() + plan.delayMs),
+						responseCode: input.responseCode,
+						error: input.error,
+						deliveredAt: null
+					})
+					.where(eq(webhookDeliveries.id, delivery.id));
+				return 'retried';
+			}
+			await tx
+				.update(webhookDeliveries)
+				.set({
+					status: 'failed',
+					attemptCount: input.attemptsMade,
+					nextAttemptAt: input.at,
+					responseCode: input.responseCode,
+					error: input.error,
+					deliveredAt: input.at
+				})
+				.where(eq(webhookDeliveries.id, delivery.id));
+			return 'failed';
+		};
 		// Signing secrets are encrypted at rest (W2.6). A typed failure here is
 		// a per-delivery outcome, not a segment crash: the row records why it
 		// could not be signed and the next tick follows the normal retry rule.
@@ -731,6 +783,8 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 				.update(webhookDeliveries)
 				.set({
 					status: 'failed',
+					attemptCount: delivery.attemptCount + 1,
+					nextAttemptAt: now,
 					responseCode: null,
 					error: `signing secret unavailable (${reason})`,
 					deliveredAt: now
@@ -758,11 +812,15 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 			// The terminal stamp is the attempt-CLOSE time, not the claim time
 			// (nine-dimension DB-03: a slow POST must not record ~0 latency).
 			const finishedAt = deps.now();
-			if (response.ok) {
+			const attemptsMade = delivery.attemptCount + 1;
+			const responseClass = classifyWebhookResponse(response.status);
+			if (responseClass === 'success') {
 				await tx
 					.update(webhookDeliveries)
 					.set({
 						status: 'succeeded',
+						attemptCount: attemptsMade,
+						nextAttemptAt: finishedAt,
 						responseCode: response.status,
 						error: null,
 						deliveredAt: finishedAt
@@ -770,34 +828,55 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 					.where(eq(webhookDeliveries.id, delivery.id));
 				return 'sent';
 			}
-			await tx
-				.update(webhookDeliveries)
-				.set({
-					status: 'failed',
-					responseCode: response.status,
-					error: `HTTP ${response.status}`,
-					deliveredAt: finishedAt
-				})
-				.where(eq(webhookDeliveries.id, delivery.id));
-			if (response.status === 410) {
+			if (responseClass === 'disable') {
 				// Standard Webhooks: 410 Gone means "stop sending" - disable
 				// the endpoint so future events do not queue deliveries for it.
+				await tx
+					.update(webhookDeliveries)
+					.set({
+						status: 'failed',
+						attemptCount: attemptsMade,
+						nextAttemptAt: finishedAt,
+						responseCode: response.status,
+						error: 'HTTP 410',
+						deliveredAt: finishedAt
+					})
+					.where(eq(webhookDeliveries.id, delivery.id));
 				await tx.update(webhooks).set({ isEnabled: false }).where(eq(webhooks.id, endpoint.id));
 				deps.log(`[drain] webhook endpoint ${endpoint.id}: 410 Gone, endpoint disabled`);
+				return 'failed';
 			}
-			return 'failed';
+			const outcome = await finishAttempt({
+				attemptsMade,
+				responseCode: response.status,
+				error: `HTTP ${response.status}`,
+				at: finishedAt,
+				// 429/503 may carry the receiver's own backoff; the longer
+				// delay wins (clamped by the retry policy).
+				retryAfterMs: parseRetryAfter(response.headers.get('retry-after'), finishedAt)
+			});
+			if (outcome === 'retried') {
+				deps.log(
+					`[drain] webhook ${endpoint.id}: HTTP ${response.status}, ` +
+						`attempt ${attemptsMade} failed, retry scheduled`
+				);
+			}
+			return outcome;
 		} catch (err) {
 			const finishedAt = deps.now();
-			await tx
-				.update(webhookDeliveries)
-				.set({
-					status: 'failed',
-					responseCode: null,
-					error: errorText(err),
-					deliveredAt: finishedAt
-				})
-				.where(eq(webhookDeliveries.id, delivery.id));
-			return 'failed';
+			const outcome = await finishAttempt({
+				attemptsMade: delivery.attemptCount + 1,
+				responseCode: null,
+				error: errorText(err),
+				at: finishedAt
+			});
+			if (outcome === 'retried') {
+				deps.log(
+					`[drain] webhook ${endpoint.id}: transport error, ` +
+						`attempt ${delivery.attemptCount + 1} failed, retry scheduled`
+				);
+			}
+			return outcome;
 		}
 	});
 }

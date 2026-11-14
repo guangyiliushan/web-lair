@@ -335,6 +335,13 @@ describe('notification mail test (W9.1)', () => {
 			deliver: false
 		});
 	});
+
+	it('allows a non-owner admin to test mail (mail tier = admin)', async () => {
+		state.selectQueue.push([]);
+		const { result } = await callAction('testMail', {}, 'admin');
+		expect(result).toMatchObject({ mailTested: true });
+		expect(mocks.sendMail).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe('notification webhooks retry', () => {
@@ -400,22 +407,7 @@ describe('notification webhooks retry', () => {
 		expect(state.insertValues).toHaveLength(0);
 	});
 
-	it('maps a 23503 (endpoint deleted mid-flight) to 400 (J-3 review P3-1)', async () => {
-		state.selectQueue.push([
-			{ id: DELIVERY_ID, webhookId: 'w1', event: 'comment.created', payload: {}, status: 'failed' }
-		]);
-		state.selectQueue.push([{ isEnabled: true }]);
-		state.insertError = Object.assign(new Error('fk'), { cause: { code: '23503' } });
-		const { result } = await callRetry({ id: DELIVERY_ID });
-		expect(result).toMatchObject({ status: 400 });
-	});
-
-	it('load requires the admin role first (J-3 review I1)', async () => {
-		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
-		await expect(load({} as never)).rejects.toThrow('redirect: no session');
-	});
-
-	it('copies the failed row into a fresh queued delivery', async () => {
+	it('replays the same failed row - the delivery id (webhook-id) never changes', async () => {
 		state.selectQueue.push([
 			{
 				id: DELIVERY_ID,
@@ -427,15 +419,62 @@ describe('notification webhooks retry', () => {
 		]);
 		state.selectQueue.push([{ isEnabled: true }]);
 		const ok = await callRetry({ id: DELIVERY_ID });
-		expect(ok.result).toMatchObject({ retried: true, id: 'new-delivery' });
-		expect(state.insertValues[0]).toEqual({
-			webhookId: 'w1',
-			event: 'comment.created',
-			payload: { a: 1 },
-			status: 'queued'
+		expect(ok.result).toMatchObject({ retried: true, id: 'updated-row' });
+		// No copied row: the failed row itself is re-queued.
+		expect(state.insertValues).toHaveLength(0);
+		expect(state.updateTables[0]).toBe(webhookDeliveriesMock);
+		const set = state.updateSets[0] as Record<string, unknown>;
+		expect(set).toMatchObject({
+			status: 'queued',
+			attemptCount: 0,
+			responseCode: null,
+			error: null,
+			deliveredAt: null
 		});
-		// The copy must target the deliveries table (round-2 SYT-1).
-		expect(state.insertTables[0]).toBe(webhookDeliveriesMock);
+		expect(set.nextAttemptAt).toBeInstanceOf(Date);
+		expect(sqlOf(state.updateWheres[0])).toContain('"webhook_deliveries"."id"');
+	});
+
+	it('404s when the row vanishes between the read and the replay', async () => {
+		state.selectQueue.push([
+			{ id: DELIVERY_ID, webhookId: 'w1', event: 'comment.created', payload: {}, status: 'failed' }
+		]);
+		state.selectQueue.push([{ isEnabled: true }]);
+		state.updateRows = [];
+		const { result } = await callRetry({ id: DELIVERY_ID });
+		expect(result).toMatchObject({ status: 404 });
+	});
+
+	it('lets a non-owner admin replay (config is read-only, replay is not)', async () => {
+		state.selectQueue.push([
+			{ id: DELIVERY_ID, webhookId: 'w1', event: 'comment.created', payload: {}, status: 'failed' }
+		]);
+		state.selectQueue.push([{ isEnabled: true }]);
+		const { result, thrown } = await callAction('retry', { id: DELIVERY_ID }, 'admin');
+		expect(thrown).toBeUndefined();
+		expect(result).toMatchObject({ retried: true });
+	});
+
+	it('load requires the admin role first (J-3 review I1)', async () => {
+		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
+		await expect(load({} as never)).rejects.toThrow('redirect: no session');
+	});
+
+	it('replays without copying the failed row', async () => {
+		state.selectQueue.push([
+			{
+				id: DELIVERY_ID,
+				webhookId: 'w1',
+				event: 'comment.created',
+				payload: { a: 1 },
+				status: 'failed'
+			}
+		]);
+		state.selectQueue.push([{ isEnabled: true }]);
+		const ok = await callRetry({ id: DELIVERY_ID });
+		expect(ok.result).toMatchObject({ retried: true });
+		expect(state.insertValues).toHaveLength(0);
+		expect(state.updateSets[0]).toMatchObject({ status: 'queued', attemptCount: 0 });
 	});
 });
 
