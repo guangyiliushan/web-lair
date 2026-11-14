@@ -24,9 +24,16 @@ const PAGES = [
 	'ai',
 	'account'
 ];
-const PAGES_SOURCE = PAGES.map((id) =>
-	readFileSync(new URL(`./${id}/+page.svelte`, import.meta.url), 'utf8')
-).join('\n');
+const PAGES_SOURCE = [
+	...PAGES.flatMap((id) => [
+		new URL(`./${id}/+page.svelte`, import.meta.url),
+		new URL(`./${id}/+page.server.ts`, import.meta.url)
+	]),
+	// The index page's server load is where the old system mock block lived.
+	new URL('./+page.server.ts', import.meta.url)
+]
+	.map((url) => readFileSync(url, 'utf8'))
+	.join('\n');
 
 describe('System section removal (W10.3)', () => {
 	it('has no system route', () => {

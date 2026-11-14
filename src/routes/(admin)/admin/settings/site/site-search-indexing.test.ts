@@ -31,9 +31,17 @@ const SCHEMA_SOURCE = [
 ].join('\n');
 
 describe('Site search indexing (W5.6)', () => {
-	const section = PAGE.slice(PAGE.indexOf('<!-- Search indexing')).replace(/<!--[\s\S]*?-->/g, '');
+	// Bound the slice to the next comment so a later section cannot inherit
+	// these negatives (W10 review: the old slice ran to EOF).
+	const start = PAGE.indexOf('<!-- Search indexing');
+	const nextComment = start === -1 ? -1 : PAGE.indexOf('<!--', start + 1);
+	const section = PAGE.slice(start, nextComment === -1 ? undefined : nextComment).replace(
+		/<!--[\s\S]*?-->/g,
+		''
+	);
 
 	it('links the two routes that actually exist', () => {
+		expect(start, 'Search indexing marker').toBeGreaterThan(-1);
 		expect(section).toContain('href="/sitemap.xml"');
 		expect(section).toContain('href="/robots.txt"');
 		expect(existsSync(new URL('../../../../sitemap.xml/', import.meta.url))).toBe(true);
@@ -41,10 +49,10 @@ describe('Site search indexing (W5.6)', () => {
 	});
 
 	it('marks IndexNow, Baidu and Bing as planned without a token field', () => {
-		expect(section).toContain('name="IndexNow"');
-		expect(section).toContain('name="Baidu"');
-		expect(section).toContain('name="Bing"');
-		expect(section.match(/state="planned"/g)).toHaveLength(3);
+		expect(section).toContain('admin_settings_site_indexnow');
+		expect(section).toContain('admin_settings_site_baidu');
+		expect(section).toContain('admin_settings_site_bing');
+		expect(section.match(/admin_settings_integrations_planned/g)).toHaveLength(3);
 		expect(section).not.toContain('<Input');
 		expect(section).not.toContain('<input');
 		expect(section).not.toContain('type="submit"');

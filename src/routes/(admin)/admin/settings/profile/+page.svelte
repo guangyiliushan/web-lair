@@ -222,8 +222,10 @@
 
 <div class="space-y-8">
 	<div class="flex flex-wrap items-center gap-2">
-		<Badge variant="secondary">{m.admin_settings_common_read_only()}</Badge>
-		{#if !data.editable}
+		{#if data.editable}
+			<Badge>{m.admin_settings_common_owner_only()}</Badge>
+		{:else}
+			<Badge variant="secondary">{m.admin_settings_common_read_only()}</Badge>
 			<span class="text-xs text-muted-foreground">{m.admin_settings_common_owner_only()}</span>
 		{/if}
 	</div>

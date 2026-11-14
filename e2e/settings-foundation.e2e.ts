@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { apiPost, psql } from './support';
 
 /**
@@ -27,6 +27,19 @@ const PAGES = [
 	['account', 'Account']
 ] as const;
 
+/** Refuse to mutate anything unless the suite points at the scratch database. */
+function assertLocalE2e(): void {
+	expect(psql('select current_database()'), 'e2e must run against local_e2e').toBe('local_e2e');
+}
+
+/** One home for "this section ships no control", visibility-filtered. */
+async function expectNoControls(page: Page): Promise<void> {
+	await expect(page.locator('main')).toHaveCount(1);
+	await expect(
+		page.locator('main').locator('input, textarea, select, button').filter({ visible: true })
+	).toHaveCount(0);
+}
+
 test('the settings nav lists exactly the eight final sections', async ({ page }) => {
 	await page.goto('/admin/settings');
 	const hrefs = await page
@@ -50,13 +63,9 @@ test('all eight pages answer 200 with their section heading', async ({ page }) =
 test('planned/read-only pages render zero form controls', async ({ page }) => {
 	// Integrations is the last read-only section (W10.1): a capability map with
 	// no action, so it must render zero inputs, selects or buttons.
-	for (const id of ['integrations']) {
-		const response = await page.goto(`/admin/settings/${id}`);
-		expect(response?.status(), id).toBe(200);
-		await expect(
-			page.locator('main').locator('input, textarea, select, button').filter({ visible: true })
-		).toHaveCount(0);
-	}
+	const response = await page.goto('/admin/settings/integrations');
+	expect(response?.status()).toBe(200);
+	await expectNoControls(page);
 });
 
 test('integrations groups rich, planned and static cards with no token field', async ({ page }) => {
@@ -68,8 +77,12 @@ test('integrations groups rich, planned and static cards with no token field', a
 	// with GITHUB_TOKEN. The token value itself is never rendered.
 	await expect(page.getByText(/60\/h/).first()).toBeVisible();
 	await expect(page.getByText(/5,000\/h/).first()).toBeVisible();
-	await expect(page.locator('input[type="password"], input[name*="token" i]')).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+	// The static group names the four real providers; the old vague "Music"
+	// bucket must not come back.
+	for (const provider of ['arXiv', 'LeetCode', 'NetEase', 'QQ']) {
+		await expect(page.getByText(provider, { exact: true }).first()).toBeVisible();
+	}
+	await expect(page.getByText('Music', { exact: true })).toHaveCount(0);
 });
 
 test('content renders the real W6 forms and no dead control', async ({ page }) => {
@@ -108,6 +121,12 @@ test('notifications shows Mail status, Webhooks and the static M6 note', async (
 	const send = page.getByRole('button', { name: 'Send test email' }).first();
 	await expect(send).toBeVisible();
 	await expect(send).toBeDisabled();
+	// The M6 block is a static note: a fake Bark/email toggle added there would
+	// pass every page-wide assertion, so scope the zero-control check to it.
+	const m6 = page
+		.locator('section')
+		.filter({ has: page.getByRole('heading', { name: 'Human channels (planned)' }) });
+	await expect(m6.locator('input, textarea, select, button')).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
 });
 
@@ -131,7 +150,7 @@ test('every internal link on the eight pages resolves (W10.5)', async ({ page, r
 		const response = await page.goto(`/admin/settings/${id}`);
 		expect(response?.status(), id).toBe(200);
 		const hrefs = await page
-			.locator('main a[href^="/"]')
+			.locator('body a[href^="/"]')
 			.evaluateAll((links) => links.map((link) => link.getAttribute('href') ?? ''));
 		for (const href of hrefs) {
 			// Auth callbacks are POST-only; a GET probe would be a false negative.
@@ -139,7 +158,9 @@ test('every internal link on the eight pages resolves (W10.5)', async ({ page, r
 			targets.add(href.split('#')[0]);
 		}
 	}
-	expect(targets.size).toBeGreaterThan(0);
+	// Every page contributes at least the shell's links: a silent shrink to
+	// zero targets would otherwise pass this test vacuously.
+	expect(targets.size).toBeGreaterThanOrEqual(PAGES.length);
 	for (const href of targets) {
 		const response = await request.get(href);
 		expect(response.status(), href).toBeLessThan(400);
@@ -149,19 +170,33 @@ test('every internal link on the eight pages resolves (W10.5)', async ({ page, r
 test('a non-owner admin gets owner sections read-only (W10.5)', async ({ page }) => {
 	const email = 'e2e-settings-admin@example.com';
 	const password = 'e2e-settings-admin-password-1';
-	psql(`delete from "user" where email = '${email}'`);
 
-	const signUp = await apiPost(page, '/api/auth/sign-up/email', {
-		email,
-		name: 'E2E Settings Admin',
-		password
-	});
-	expect([200, 422]).toContain(signUp.status());
-	psql(`update "user" set email_verified = true, role = 'admin' where email = '${email}'`);
-	const signIn = await apiPost(page, '/api/auth/sign-in/email', { email, password });
-	expect(signIn.ok()).toBeTruthy();
+	// Owner precondition: the profile page must be an editable owner control
+	// plane before the role split is asserted, otherwise "Read-only" proves
+	// nothing about the role.
+	await page.goto('/admin/settings/profile');
+	await expect(page.getByText('Owner only', { exact: true }).first()).toBeVisible();
+	await expect(page.locator('main form').first()).toBeVisible();
 
 	try {
+		assertLocalE2e();
+		psql(`delete from "user" where email = '${email}'`);
+		const signUp = await apiPost(page, '/api/auth/sign-up/email', {
+			email,
+			name: 'E2E Settings Admin',
+			password
+		});
+		expect([200, 422]).toContain(signUp.status());
+		// `returning id` turns a silent UPDATE 0 (wrong database) into a clear
+		// failure before the confusing sign-in step.
+		expect(
+			psql(
+				`update "user" set email_verified = true, role = 'admin' where email = '${email}' returning id`
+			)
+		).not.toBe('');
+		const signIn = await apiPost(page, '/api/auth/sign-in/email', { email, password });
+		expect(signIn.ok()).toBeTruthy();
+
 		// Profile and Storage are owner control planes: an admin sees the same
 		// facts, a read-only badge and no writable control at all.
 		for (const id of ['profile', 'storage']) {
@@ -175,7 +210,7 @@ test('a non-owner admin gets owner sections read-only (W10.5)', async ({ page })
 		}
 		// Integrations is read-only for everyone, including the owner.
 		await page.goto('/admin/settings/integrations');
-		await expect(page.locator('main').locator('input, select, button')).toHaveCount(0);
+		await expectNoControls(page);
 	} finally {
 		psql(`delete from "user" where email = '${email}'`);
 	}

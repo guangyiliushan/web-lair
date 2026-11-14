@@ -63,8 +63,7 @@ export const SETTING_FIELD_TIERS: Record<string, SettingTier> = {
 	'ai.providers': 'admin',
 	'ai.budget': 'admin',
 	'ai.secrets': 'owner',
-	'account.self': 'admin',
-	'integrations.embed': 'read'
+	'account.self': 'admin'
 };
 
 export interface SettingAccess {

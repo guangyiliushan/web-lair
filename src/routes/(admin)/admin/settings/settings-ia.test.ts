@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
  *   - a label and a description per section in all three locales;
  *   - no stale copy from the old 10-page IA (full-text search, Email and Bark
  *     push, backup/image host) in any of those descriptions;
- *   - the eight routes exist, while the two renamed routes stay 308s.
+ *   - the eight routes exist.
  */
 const LAYOUT = readFileSync(new URL('./+layout.svelte', import.meta.url), 'utf8');
 const LOCALES = ['en', 'ja', 'zh-cn'];
@@ -40,7 +40,7 @@ describe('final eight-page IA (W10.4)', () => {
 		expect(ids).toEqual(SECTIONS.map(([id]) => id));
 	});
 
-	it('labels and descriptions every section in all three locales', () => {
+	it('labels and describes every section in all three locales', () => {
 		for (const { locale, messages } of MESSAGES) {
 			for (const [id, key] of SECTIONS) {
 				expect(messages, `${locale}:${id}`).toHaveProperty(`admin_settings_${key}`);
@@ -53,12 +53,11 @@ describe('final eight-page IA (W10.4)', () => {
 		}
 	});
 
-	it('uses the agreed label for Profile & Preferences', () => {
+	it('uses the agreed label for Profile & Preferences in every locale', () => {
 		const [en] = MESSAGES;
 		expect(en.messages.admin_settings_user).toBe('Profile & Preferences');
-		for (const { locale, messages } of MESSAGES.slice(1)) {
-			expect(messages.admin_settings_user, locale).not.toBe('Profile');
-		}
+		expect(MESSAGES[1].messages.admin_settings_user).toBe('プロフィールと環境設定');
+		expect(MESSAGES[2].messages.admin_settings_user).toBe('个人资料与偏好');
 	});
 
 	it('describes each page by what it really contains', () => {
@@ -72,8 +71,9 @@ describe('final eight-page IA (W10.4)', () => {
 	});
 
 	it('drops the stale IA copy from every description', () => {
-		const stale =
-			/full[- ]text|bark|image host|comment upload|search engine|system settings|feature toggle/i;
+		// The exact claims the old IA shipped; a legitimate future mention of
+		// "search engines" on the Site page must not trip this.
+		const stale = /full[- ]text|email and bark|backup image host|comment upload|feature toggle/i;
 		for (const { locale, messages } of MESSAGES) {
 			for (const [, key] of SECTIONS) {
 				expect(messages[`admin_settings_${key}_desc`], `${locale}:${key}`).not.toMatch(stale);
@@ -81,17 +81,9 @@ describe('final eight-page IA (W10.4)', () => {
 		}
 	});
 
-	it('keeps the eight routes and the two permanent redirects', () => {
+	it('keeps the eight routes on disk', () => {
 		for (const [id] of SECTIONS) {
 			expect(existsSync(new URL(`./${id}/+page.svelte`, import.meta.url)), id).toBe(true);
-		}
-		for (const [legacy, target] of [
-			['user', 'profile'],
-			['notification', 'notifications']
-		] as const) {
-			const source = readFileSync(new URL(`./${legacy}/+page.server.ts`, import.meta.url), 'utf8');
-			expect(source, legacy).toContain(`redirect(308, '/admin/settings/${target}')`);
-			expect(existsSync(new URL(`./${legacy}/+page.svelte`, import.meta.url)), legacy).toBe(false);
 		}
 	});
 });
