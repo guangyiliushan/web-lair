@@ -195,7 +195,8 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 			emailVerified,
 			canComment,
 			loginUrl,
-			privacyNotice: privacy.enabled,
+			privacyNotice: true,
+			commentsClosed: !commentsOpen,
 			countryOptIn: showCountry
 		},
 		discussion:

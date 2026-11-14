@@ -69,7 +69,13 @@ export const optionRegistry = {
 		// cookie (token crypto lives in services/note-gate.ts). Days only.
 		// The editor never writes this yet - TTL currently changes only
 		// through code or a deliberate `setOption` (no runtime writer).
-		schema: z.object({ ttlDays: z.number().int().min(1).max(365) }),
+		schema: z.object({
+			ttlDays: z
+				.number({ error: () => m.admin_settings_content_notes_ttl_hint() })
+				.int({ error: () => m.admin_settings_content_notes_ttl_hint() })
+				.min(1, { error: () => m.admin_settings_content_notes_ttl_hint() })
+				.max(365, { error: () => m.admin_settings_content_notes_ttl_hint() })
+		}),
 		default: { ttlDays: 30 }
 	},
 	'ai.assignments': {
@@ -199,7 +205,8 @@ export const optionRegistry = {
 	},
 	'comments.privacy': {
 		// W6.2 (C2/C4/C5): request-time IP handling for comments. Off by
-		// default; when off nothing is looked up and nothing is stored. When
+		// default; when off no GeoIP lookup, no CIDR match and no country storage
+		// happen (the per-IP rate bucket in W6.10 still runs). When
 		// on, the IP is matched against blockedCidrs and used for the per-IP
 		// limit only - the `comments.ip` column stays null. Country/region are
 		// stored only with collectCountry (edge header provider required) and

@@ -61,6 +61,7 @@ vi.mock('$lib/server/services/comment-render', () => ({
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
 import { load } from './+page.server';
+import { renderDiscussion } from '$lib/server/services/comment-render';
 
 function makeChain(result: unknown[]) {
 	const self: unknown = new Proxy(
@@ -155,6 +156,30 @@ describe('posts/[slug] load — slug fallback chain', () => {
 			{ lang: 'en', path: '/posts/current-slug' },
 			{ lang: 'zh-cn', path: '/posts/current-slug-zh' }
 		]);
+	});
+
+	it('closes the composer but keeps existing approved comments when comments are off (W6.1)', async () => {
+		optionState.commentsEnabled = false;
+		state.selectResults = [
+			[{ ...postRow, allowComment: true }],
+			[{ lang: 'en', slug: 'current-slug' }]
+		];
+		const threads = {
+			roots: [{ id: 'r1', replies: [] }],
+			orphans: [],
+			visibleCount: 1,
+			orphanCount: 0,
+			truncated: false
+		};
+		vi.mocked(renderDiscussion).mockResolvedValueOnce({ html: '', discussion: threads as never });
+		const data = (await load(makeEvent('current-slug', '', { id: 'u1', emailVerified: true }))) as {
+			viewer: { canComment: boolean; commentsClosed: boolean };
+			discussion: unknown;
+		};
+		expect(data.viewer.canComment).toBe(false);
+		expect(data.viewer.commentsClosed).toBe(true);
+		// Existing approved rows stay readable after the switch-off (C1).
+		expect(data.discussion).toEqual(threads);
 	});
 
 	it('closes the composer and the empty thread when comments are off site-wide (W6.1)', async () => {

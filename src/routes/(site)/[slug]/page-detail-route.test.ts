@@ -134,7 +134,8 @@ describe('(site)/[slug] load — universal md page', () => {
 			emailVerified: false,
 			canComment: false,
 			loginUrl: '/login?redirectTo=%2Fen%2Fabout',
-			privacyNotice: false,
+			privacyNotice: true,
+			commentsClosed: false,
 			countryOptIn: false
 		});
 		expect(data.discussion).toEqual(threads);
@@ -234,7 +235,8 @@ describe('(site)/[slug] load — universal md page', () => {
 			emailVerified: true,
 			canComment: true,
 			loginUrl: null,
-			privacyNotice: false,
+			privacyNotice: true,
+			commentsClosed: false,
 			countryOptIn: false
 		});
 		expect(service.loadThreads).toHaveBeenCalledWith({

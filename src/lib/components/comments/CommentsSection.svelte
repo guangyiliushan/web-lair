@@ -22,6 +22,8 @@
 		privacyNotice?: boolean;
 		/** Offer the public-country opt-in checkbox (W6.2). */
 		countryOptIn?: boolean;
+		/** New comments are closed (site or per-post switch). */
+		commentsClosed?: boolean;
 	}
 
 	let {
@@ -32,7 +34,8 @@
 		loginUrl,
 		form = null,
 		privacyNotice = false,
-		countryOptIn = false
+		countryOptIn = false,
+		commentsClosed = false
 	}: Props = $props();
 
 	// P3b view-model compat: `orphans`/`orphanCount` are optional so producers
@@ -114,6 +117,8 @@
 			</p>
 		{:else if !emailVerified}
 			<p class="text-sm text-muted-foreground">{m.comment_verify_hint()}</p>
+		{:else if commentsClosed}
+			<p class="text-sm text-muted-foreground">{m.comment_disabled()}</p>
 		{/if}
 	</div>
 

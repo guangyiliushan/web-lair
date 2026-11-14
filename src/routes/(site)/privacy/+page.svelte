@@ -30,7 +30,7 @@
 	<p class="mt-2 text-xs text-muted-foreground">{m.privacy_updated()}</p>
 
 	<div class="mt-10 flex flex-col gap-8">
-		{#each sections as section (section.title())}
+		{#each sections as section, index (index)}
 			<section>
 				<h2 class="text-base font-medium">{section.title()}</h2>
 				<p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-muted-foreground">

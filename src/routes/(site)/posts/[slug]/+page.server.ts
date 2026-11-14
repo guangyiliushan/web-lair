@@ -273,7 +273,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			emailVerified,
 			canComment,
 			loginUrl,
-			privacyNotice: privacy.enabled,
+			privacyNotice: true,
+			commentsClosed: !commentsOpen,
 			countryOptIn: showCountry
 		},
 		discussion: commentsOpen || rendered.discussion.visibleCount > 0 ? rendered.discussion : null

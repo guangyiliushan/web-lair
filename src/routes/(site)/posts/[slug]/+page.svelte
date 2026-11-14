@@ -207,6 +207,7 @@
 			form={form ?? null}
 			privacyNotice={data.viewer.privacyNotice}
 			countryOptIn={data.viewer.countryOptIn}
+			commentsClosed={data.viewer.commentsClosed}
 		/>
 	{/if}
 

@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 /**
  * W6.11: `jobs.prune` clears the comment country/region snapshot after the
  * configured retention window. The ledger prunes are exercised incidentally
- * (they all run in the same tick); this test pins the privacy UPDATE: only
- * when `comments.privacy.enabled`, only rows older than retentionDays, and
+ * (they all run in the same tick); this test pins the privacy UPDATE: always (even after the switch is off),
+ * only rows older than retentionDays, and
  * exactly the privacy columns - never text or authorship.
  */
 const mocks = vi.hoisted(() => ({

@@ -109,6 +109,7 @@
 		<span
 			class="text-xs text-muted-foreground"
 			title={m.comment_country_badge({ country })}
+			aria-label={m.comment_country_badge({ country })}
 			data-slot="comment-country">{country}</span
 		>
 	{/if}
@@ -355,7 +356,6 @@
 						<div class="min-w-0 flex-1">
 							<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
 								<span class="text-sm font-medium">{reply.author ?? '?'}</span>
-								{@render countryLabel(reply.country)}
 								{#if reply.isOwner}{@render ownerBadge()}{/if}
 								{#if reply.replyToAuthor}
 									<span class="text-xs text-muted-foreground">

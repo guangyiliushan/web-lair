@@ -64,8 +64,13 @@ test('content renders the real W6 forms and no dead control', async ({ page }) =
 	for (const form of await forms.all()) {
 		expect(await form.locator('button[type="submit"]').count()).toBeGreaterThan(0);
 	}
-	// The removed pseudo controls never come back.
-	await expect(page.getByText(/Anti-spam|Blocked IPs|Blocked words|Chinese only/)).toHaveCount(0);
+	// The removed pseudo controls never come back (case-insensitive: the old
+	// labels were sentence-case and the section copy changed in W6).
+	await expect(
+		page.getByText(
+			/anti-spam|blocked ips|blocked words|chinese only|disable comments|approved comments only|ai review|localize avatars/i
+		)
+	).toHaveCount(0);
 });
 
 test('the old user/notification routes permanently redirect', async ({ page }) => {

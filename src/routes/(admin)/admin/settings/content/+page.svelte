@@ -35,7 +35,7 @@
 
 <div class="space-y-8">
 	{#if form?.message}
-		<p class="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground" role="status">
+		<p class="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground" role="alert">
 			{form.message}
 		</p>
 	{/if}
@@ -46,7 +46,15 @@
 		</h2>
 		<p class="mt-1 text-xs text-muted-foreground">{m.admin_settings_content_comments_desc()}</p>
 
-		<form method="POST" action="?/saveComments" class="mt-4 flex flex-col gap-4" use:enhance>
+		<form
+			method="POST"
+			action="?/saveComments"
+			class="mt-4 flex flex-col gap-4"
+			use:enhance={() =>
+				async ({ update }) => {
+					await update({ reset: false });
+				}}
+		>
 			<div class="flex items-center justify-between gap-4">
 				<div>
 					<div class="text-sm font-medium">{m.admin_settings_content_comments_enable()}</div>
@@ -82,7 +90,15 @@
 
 		<div class="mt-4 border-t border-border/50 pt-4">
 			<h3 class="text-sm font-medium">{m.admin_settings_content_privacy()}</h3>
-			<form method="POST" action="?/savePrivacy" class="mt-3 flex flex-col gap-4" use:enhance>
+			<form
+				method="POST"
+				action="?/savePrivacy"
+				class="mt-3 flex flex-col gap-4"
+				use:enhance={() =>
+					async ({ update }) => {
+						await update({ reset: false });
+					}}
+			>
 				<label class="flex items-start gap-3">
 					<input
 						type="checkbox"
@@ -196,7 +212,15 @@
 		</h2>
 		<p class="mt-1 text-xs text-muted-foreground">{m.admin_settings_content_friends_desc()}</p>
 
-		<form method="POST" action="?/saveFriendsApply" class="mt-4 flex flex-col gap-3" use:enhance>
+		<form
+			method="POST"
+			action="?/saveFriendsApply"
+			class="mt-4 flex flex-col gap-3"
+			use:enhance={() =>
+				async ({ update }) => {
+					await update({ reset: false });
+				}}
+		>
 			<label class="flex items-start gap-3">
 				<input
 					type="checkbox"
@@ -238,7 +262,10 @@
 			method="POST"
 			action="?/saveFriendsChecks"
 			class="mt-5 flex flex-col gap-3 border-t border-border/50 pt-4"
-			use:enhance
+			use:enhance={() =>
+				async ({ update }) => {
+					await update({ reset: false });
+				}}
 		>
 			<div>
 				<h3 class="text-sm font-medium">{m.admin_settings_content_checks_section()}</h3>
@@ -353,7 +380,10 @@
 			method="POST"
 			action="?/saveFriendsPolicy"
 			class="mt-5 flex flex-col gap-3 border-t border-border/50 pt-4"
-			use:enhance
+			use:enhance={() =>
+				async ({ update }) => {
+					await update({ reset: false });
+				}}
 		>
 			<div>
 				<h3 class="text-sm font-medium">{m.admin_settings_content_policy_section()}</h3>
@@ -433,7 +463,15 @@
 		<p class="mt-1 text-xs text-muted-foreground">
 			{m.admin_settings_content_presence_desc()}
 		</p>
-		<form method="POST" action="?/savePresence" class="mt-4 flex flex-col gap-3" use:enhance>
+		<form
+			method="POST"
+			action="?/savePresence"
+			class="mt-4 flex flex-col gap-3"
+			use:enhance={() =>
+				async ({ update }) => {
+					await update({ reset: false });
+				}}
+		>
 			<label class="flex items-start gap-3">
 				<input
 					type="checkbox"
@@ -494,7 +532,15 @@
 			{m.admin_settings_content_notes_gate()}
 		</h2>
 		<p class="mt-1 text-xs text-muted-foreground">{m.admin_settings_content_notes_desc()}</p>
-		<form method="POST" action="?/saveNotesGate" class="mt-4 flex flex-col gap-3" use:enhance>
+		<form
+			method="POST"
+			action="?/saveNotesGate"
+			class="mt-4 flex flex-col gap-3"
+			use:enhance={() =>
+				async ({ update }) => {
+					await update({ reset: false });
+				}}
+		>
 			<Field.Field>
 				<Field.Label for="notes-ttl">{m.admin_settings_content_notes_ttl()}</Field.Label>
 				<Input
@@ -502,7 +548,7 @@
 					name="ttlDays"
 					type="number"
 					min="1"
-					max="3650"
+					max="365"
 					step="1"
 					value={String(data.notesGate.ttlDays)}
 					disabled={!data.editable.notes}
