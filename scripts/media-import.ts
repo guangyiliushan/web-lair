@@ -5,7 +5,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '../src/lib/server/db/schema';
 import { MAX_UPLOAD_BYTES } from '../src/lib/server/media/sniff';
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import { S3Storage } from '../src/lib/server/storage/s3';
 import { UploadRejected, uploadFile } from '../src/lib/server/services/files';
 import { createPhotoFromFile } from '../src/lib/server/services/photos';
 import { tagSlug } from '../src/lib/utils/slug';
@@ -178,7 +178,7 @@ if (!DATABASE_URL) {
 
 const sql = postgres(DATABASE_URL, { max: 2 + options.concurrency });
 const db = drizzle(sql, { schema });
-const storage = new RustFsStorage(storageConfigFromEnv(process.env));
+const storage = new S3Storage(storageConfigFromEnv(process.env));
 
 let scanned = 0;
 let videoSkipped = 0;

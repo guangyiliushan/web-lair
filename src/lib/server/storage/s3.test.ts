@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { storageConfigFromEnv } from './config';
-import { RustFsStorage } from './rustfs';
+import { storageConfigFromEnv, type S3StorageConfig } from './config';
+import { S3Storage } from './s3';
 import { sha256Hex } from './signature';
 
 const CONFIG = storageConfigFromEnv({
@@ -9,6 +9,13 @@ const CONFIG = storageConfigFromEnv({
 	RUSTFS_SECRET_KEY: 'test-secret',
 	RUSTFS_BUCKET: 'web-lair'
 });
+
+/** Virtual-host configuration (AWS S3 / R2): bucket in the hostname. */
+const VHOST_CONFIG: S3StorageConfig = {
+	...CONFIG,
+	endpoint: 'https://s3.us-east-1.amazonaws.com',
+	forcePathStyle: false
+};
 
 const envLike = {
 	RUSTFS_ENDPOINT: ' http://127.0.0.1:9000/ ',
@@ -35,8 +42,8 @@ function recordingFetch(respond: (call: CapturedCall) => Response | Promise<Resp
 	return { impl, calls };
 }
 
-function storageWith(impl: typeof fetch): RustFsStorage {
-	return new RustFsStorage(CONFIG, { fetchImpl: impl, clock: FIXED_CLOCK });
+function storageWith(impl: typeof fetch): S3Storage {
+	return new S3Storage(CONFIG, { fetchImpl: impl, clock: FIXED_CLOCK });
 }
 
 describe('storage config', () => {
@@ -50,10 +57,24 @@ describe('storage config', () => {
 		const config = storageConfigFromEnv(envLike);
 		expect(config.endpoint).toBe('http://127.0.0.1:9000');
 		expect(config.region).toBe('us-east-1');
+		expect(config.forcePathStyle).toBe(true);
+	});
+
+	it('rejects a non-http endpoint and one carrying credentials', () => {
+		const base = { ...envLike };
+		expect(() => storageConfigFromEnv({ ...base, RUSTFS_ENDPOINT: 'ftp://127.0.0.1:21' })).toThrow(
+			/must be http/
+		);
+		expect(() =>
+			storageConfigFromEnv({ ...base, RUSTFS_ENDPOINT: 'http://key:secret@127.0.0.1:9000' })
+		).toThrow(/must not embed credentials/);
+		expect(() => storageConfigFromEnv({ ...base, RUSTFS_ENDPOINT: 'not a url' })).toThrow(
+			/not a URL/
+		);
 	});
 });
 
-describe('RustFsStorage', () => {
+describe('S3Storage (path style, bundled RustFS)', () => {
 	it('PUT signs the request and encodes the object key segment-wise', async () => {
 		const { impl, calls } = recordingFetch(
 			() => new Response(null, { status: 200, headers: { etag: '"abc"' } })
@@ -80,12 +101,22 @@ describe('RustFsStorage', () => {
 		expect(new TextDecoder().decode(call.init.body as Uint8Array)).toBe('hello');
 	});
 
+	it('never follows a redirect (SSRF: a 302 must not be chased)', async () => {
+		const { impl, calls } = recordingFetch(() => new Response(null, { status: 200 }));
+		const storage = storageWith(impl);
+
+		await storage.head('a/one.bin');
+
+		expect(calls[0]!.init.redirect).toBe('error');
+	});
+
 	it('rejects dot segments before any request hits the wire (round-2)', async () => {
 		const { impl, calls } = recordingFetch(() => new Response(null, { status: 200 }));
 		const storage = storageWith(impl);
 
 		await expect(storage.put('a/../b', new Uint8Array(1))).rejects.toThrow(/dot segment/);
 		await expect(storage.get('a/./b')).rejects.toThrow(/dot segment/);
+		await expect(storage.head('')).rejects.toThrow(/empty/);
 		expect(calls).toHaveLength(0);
 	});
 
@@ -165,6 +196,174 @@ describe('RustFsStorage', () => {
 		expect(calls[0].url).toBe('http://127.0.0.1:9000/web-lair');
 		expect(calls[0].init.method).toBe('PUT');
 	});
+
+	it('headBucket resolves on 200 and reports a missing bucket as 404', async () => {
+		const ok = storageWith(recordingFetch(() => new Response(null, { status: 200 })).impl);
+		await expect(ok.headBucket()).resolves.toBeUndefined();
+
+		const missing = storageWith(recordingFetch(() => new Response(null, { status: 404 })).impl);
+		await expect(missing.headBucket()).rejects.toMatchObject({
+			name: 'StorageError',
+			status: 404,
+			code: 'NoSuchBucket'
+		});
+
+		const denied = storageWith(recordingFetch(() => new Response(null, { status: 403 })).impl);
+		await expect(denied.headBucket()).rejects.toMatchObject({ status: 403 });
+	});
+});
+
+describe('S3Storage bucket capabilities (W7.5)', () => {
+	/** Answers GET ?versioning= / ?object-lock= independently. */
+	function capabilityFetch(
+		versioning: () => Response | Promise<Response>,
+		objectLock: () => Response | Promise<Response>
+	) {
+		return recordingFetch((call) => {
+			const url = new URL(call.url);
+			if (url.searchParams.has('object-lock')) return objectLock();
+			if (url.searchParams.has('versioning')) return versioning();
+			return new Response(null, { status: 200 });
+		});
+	}
+
+	const OFF_VERSIONING = () =>
+		new Response(
+			'<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"></VersioningConfiguration>',
+			{ status: 200 }
+		);
+	const NO_LOCK = () =>
+		new Response('<Error><Code>ObjectLockConfigurationNotFoundError</Code></Error>', {
+			status: 404
+		});
+
+	it('reads an untouched RustFS bucket as versioning off + lock off', async () => {
+		const { impl, calls } = capabilityFetch(OFF_VERSIONING, NO_LOCK);
+		const storage = storageWith(impl);
+
+		await expect(storage.bucketCapabilities()).resolves.toEqual({
+			versioning: 'off',
+			objectLock: false
+		});
+		const urls = calls.map((call) => call.url);
+		expect(urls).toContain('http://127.0.0.1:9000/web-lair?versioning=');
+		expect(urls).toContain('http://127.0.0.1:9000/web-lair?object-lock=');
+		const headers = new Headers(calls[0]!.init.headers);
+		// The query travels inside the signature, not as a stray header.
+		expect(headers.get('authorization')).toMatch(
+			/SignedHeaders=host;x-amz-content-sha256;x-amz-date/
+		);
+	});
+
+	it('reports enabled / suspended versioning', async () => {
+		const enabled = storageWith(
+			capabilityFetch(
+				() =>
+					new Response(
+						'<VersioningConfiguration><Status>Enabled</Status></VersioningConfiguration>',
+						{ status: 200 }
+					),
+				NO_LOCK
+			).impl
+		);
+		expect((await enabled.bucketCapabilities()).versioning).toBe('enabled');
+
+		const suspended = storageWith(
+			capabilityFetch(
+				() =>
+					new Response(
+						'<VersioningConfiguration><Status>Suspended</Status></VersioningConfiguration>',
+						{ status: 200 }
+					),
+				NO_LOCK
+			).impl
+		);
+		expect((await suspended.bucketCapabilities()).versioning).toBe('suspended');
+	});
+
+	it('reports object lock on', async () => {
+		const storage = storageWith(
+			capabilityFetch(
+				OFF_VERSIONING,
+				() =>
+					new Response(
+						'<ObjectLockConfiguration><ObjectLockEnabled>Enabled</ObjectLockEnabled></ObjectLockConfiguration>',
+						{ status: 200 }
+					)
+			).impl
+		);
+		expect((await storage.bucketCapabilities()).objectLock).toBe(true);
+	});
+
+	it('maps a provider without the API (501) to off, not unknown', async () => {
+		const storage = storageWith(
+			capabilityFetch(
+				() => new Response('<Error><Code>NotImplemented</Code></Error>', { status: 501 }),
+				() => new Response('<Error><Code>NotImplemented</Code></Error>', { status: 501 })
+			).impl
+		);
+		await expect(storage.bucketCapabilities()).resolves.toEqual({
+			versioning: 'off',
+			objectLock: false
+		});
+	});
+
+	it('fails closed (unknown / null) when the provider refuses', async () => {
+		const storage = storageWith(
+			capabilityFetch(
+				() => new Response('<Error><Code>AccessDenied</Code></Error>', { status: 403 }),
+				() => new Response('<Error><Code>AccessDenied</Code></Error>', { status: 403 })
+			).impl
+		);
+		await expect(storage.bucketCapabilities()).resolves.toEqual({
+			versioning: 'unknown',
+			objectLock: null
+		});
+	});
+
+	it('surfaces a transport failure so callers can abort', async () => {
+		const impl = vi.fn(async () => {
+			throw new TypeError('fetch failed');
+		}) as unknown as typeof fetch;
+		await expect(storageWith(impl).bucketCapabilities()).rejects.toMatchObject({
+			name: 'StorageError',
+			status: 0
+		});
+	});
+});
+
+describe('S3Storage addressing', () => {
+	it('moves the bucket into the hostname in virtual-host style (AWS/R2)', async () => {
+		const { impl, calls } = recordingFetch(() => new Response(null, { status: 200 }));
+		const storage = new S3Storage(VHOST_CONFIG, { fetchImpl: impl, clock: FIXED_CLOCK });
+
+		await storage.put('ab/abc.webp', new TextEncoder().encode('x'));
+
+		expect(calls[0].url).toBe('https://web-lair.s3.us-east-1.amazonaws.com/ab/abc.webp');
+		const headers = new Headers(calls[0].init.headers);
+		expect(headers.get('authorization')).toContain('SignedHeaders=host;x-amz-content-sha256');
+		// The signed host is the bucket subdomain, not the bare endpoint.
+		const auth = headers.get('authorization') ?? '';
+		expect(auth).toMatch(/Signature=[0-9a-f]{64}$/);
+	});
+
+	it('signs bucket operations at the virtual-host root', async () => {
+		const { impl, calls } = recordingFetch((call) => {
+			if (call.init.method === 'HEAD') return new Response(null, { status: 200 });
+			return new Response(
+				'<VersioningConfiguration></VersioningConfiguration><ObjectLockConfiguration/>',
+				{ status: 200 }
+			);
+		});
+		const storage = new S3Storage(VHOST_CONFIG, { fetchImpl: impl, clock: FIXED_CLOCK });
+
+		await storage.headBucket();
+		await storage.bucketCapabilities();
+
+		expect(calls[0].url).toBe('https://web-lair.s3.us-east-1.amazonaws.com/');
+		expect(calls[1].url).toBe('https://web-lair.s3.us-east-1.amazonaws.com/?versioning=');
+		expect(calls[2].url).toBe('https://web-lair.s3.us-east-1.amazonaws.com/?object-lock=');
+	});
 });
 
 describe('staged read timeouts', () => {
@@ -177,7 +376,7 @@ describe('staged read timeouts', () => {
 					);
 				})
 		) as unknown as typeof fetch;
-		const storage = new RustFsStorage(CONFIG, {
+		const storage = new S3Storage(CONFIG, {
 			fetchImpl: impl,
 			clock: FIXED_CLOCK,
 			headersTimeoutMs: 25
@@ -203,7 +402,7 @@ describe('staged read timeouts', () => {
 				headers: { 'content-type': 'application/octet-stream' }
 			});
 		});
-		const storage = new RustFsStorage(CONFIG, {
+		const storage = new S3Storage(CONFIG, {
 			fetchImpl: impl,
 			clock: FIXED_CLOCK,
 			headersTimeoutMs: 10,
@@ -225,7 +424,7 @@ describe('staged read timeouts', () => {
 			});
 			return new Response(stream, { status: 200 });
 		});
-		const storage = new RustFsStorage(CONFIG, {
+		const storage = new S3Storage(CONFIG, {
 			fetchImpl: impl,
 			clock: FIXED_CLOCK,
 			bodyIdleTimeoutMs: 40

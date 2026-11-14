@@ -5,6 +5,7 @@ export * from './file-reference.schema';
 export * from './job-run.schema';
 export * from './job-schedule.schema';
 export * from './slug-tracker.schema';
+export * from './storage-secret.schema';
 export * from './subscription.schema';
 export * from './webhook-delivery.schema';
 export * from './webhook.schema';

@@ -8,6 +8,16 @@ import { isValidCidr } from '../../utils/cidr.ts';
 import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '../pg-timezone.ts';
 import { m } from '../../paraglide/messages.js';
 import { OWNER_STATUS_DEFAULT, OWNER_STATUS_KINDS } from '../../config/owner-status.ts';
+import {
+	DEFAULT_PROVIDER_CONFIG,
+	DEFAULT_STORAGE_ACTIVE,
+	DEFAULT_STORAGE_MIGRATION,
+	DEFAULT_STORAGE_STATUS,
+	providerConfigSchema,
+	storageActiveSchema,
+	storageMigrationSchema,
+	storageStatusSchema
+} from '../storage/provider.ts';
 
 /** Site languages (same set as the posts `lang` CHECK, ledger §9.16). */
 export const OPTION_LANGS = ['en', 'zh-cn', 'ja'] as const;
@@ -304,6 +314,30 @@ export const optionRegistry = {
 			trustedUsers: [],
 			thresholds: { allow: 0.9, block: 0.95 }
 		}
+	},
+	'storage.provider': {
+		// W7.2 (ST1/ST4/ST8): the SAVED candidate. Saving never changes the live
+		// target - activation runs through `storage:migrate --cutover` (Q4/Q13).
+		schema: providerConfigSchema,
+		default: DEFAULT_PROVIDER_CONFIG
+	},
+	'storage.active': {
+		// The live target plus its rollback slot. Written only by an activation
+		// path (empty-bucket activation or the cutover/rollback CLI).
+		schema: storageActiveSchema,
+		default: DEFAULT_STORAGE_ACTIVE
+	},
+	'storage.status': {
+		// Last connection probe (W7.3) and the bucket capabilities the purge
+		// guard needs (W7.5). Sanitized: no URL, key or driver message.
+		schema: storageStatusSchema,
+		default: DEFAULT_STORAGE_STATUS
+	},
+	'storage.migration': {
+		// W7.4: CLI migration bookkeeping. `copying` freezes uploads and makes
+		// purge refuse; a stuck state needs `storage:migrate --reset`.
+		schema: storageMigrationSchema,
+		default: DEFAULT_STORAGE_MIGRATION
 	},
 	'media.purge': {
 		schema: z.object({

@@ -1,6 +1,10 @@
 import { error } from '@sveltejs/kit';
 import { getStorage } from '$lib/server/storage';
-import { StorageError } from '$lib/server/storage/port';
+import {
+	StorageError,
+	isStorageUnavailable,
+	storageUnavailableResponse
+} from '$lib/server/storage/port';
 import type { RequestHandler } from './$types';
 
 /**
@@ -58,9 +62,13 @@ export const GET: RequestHandler = async ({ params, request }) => {
 	 * not be memoised as if it were a body.
 	 */
 	const notSatisfiable = async (): Promise<Response> => {
-		const head = await getStorage()
-			.head(key)
-			.catch(() => null);
+		let head = null;
+		try {
+			const storage = await getStorage();
+			head = await storage.head(key);
+		} catch {
+			// Size unknown: the 416 still stands, just without Content-Range.
+		}
 		const headers = new Headers({ 'accept-ranges': 'bytes', 'cache-control': 'no-store' });
 		if (head && head.byteSize !== null) {
 			headers.set('content-range', `bytes */${head.byteSize}`);
@@ -73,9 +81,12 @@ export const GET: RequestHandler = async ({ params, request }) => {
 
 	let object;
 	try {
-		object = await getStorage().get(key, parsed ? { range: parsed } : undefined);
+		const storage = await getStorage();
+		object = await storage.get(key, parsed ? { range: parsed } : undefined);
 	} catch (caught) {
 		if (caught instanceof StorageError && caught.status === 416) return notSatisfiable();
+		// Active provider down (W7.5/Q14): 503, never another provider's bytes.
+		if (isStorageUnavailable(caught)) return storageUnavailableResponse();
 		throw caught;
 	}
 	if (!object) {

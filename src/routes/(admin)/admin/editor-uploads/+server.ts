@@ -13,6 +13,7 @@ import { listAdminPhotos } from '$lib/server/services/photos';
 import { photoEmbedSrc, photoTileSrc } from '$lib/components/photos/photo-tile';
 import type { PickerItem } from '$lib/media/editor-uploads';
 import { MAX_UPLOAD_BYTES, sniffUpload } from '$lib/server/media/sniff';
+import { isStorageUnavailable } from '$lib/server/storage/port';
 import { getCache } from '$lib/server/cache';
 import { rateLimitStrict } from '$lib/server/cache/store';
 import { requestAddress } from '$lib/server/security/request-address';
@@ -133,9 +134,21 @@ export const POST: RequestHandler = async ({ request, locals, getClientAddress }
 		});
 	} catch (error) {
 		if (error instanceof UploadRejected) {
+			// 503 for the maintenance window: it is temporary and the client
+			// should retry after cutover, not treat it as a bad file (W7.4).
 			const status =
-				error.code === 'too-large' ? 413 : error.code === 'unsupported-type' ? 415 : 400;
+				error.code === 'migration'
+					? 503
+					: error.code === 'too-large'
+						? 413
+						: error.code === 'unsupported-type'
+							? 415
+							: 400;
 			return jsonPrivate({ code: error.code }, status);
+		}
+		// Active provider down (W7.5/Q14): a retryable 503, not a bad request.
+		if (isStorageUnavailable(error)) {
+			return jsonPrivate({ code: 'storage-unavailable' }, 503);
 		}
 		// Sanitized line only (house policy: driver messages never reach the
 		// logs or the client).

@@ -4,8 +4,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import * as schema from '../src/lib/server/db/schema';
 import { files } from '../src/lib/server/db/content';
 import { variantKeyFor } from '../src/lib/media/keys';
-import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import { activeStorage } from './lib/active-storage';
 import { processImage } from '../src/lib/server/media/variants';
 
 /**
@@ -30,7 +29,8 @@ const limit = limitArg ? Math.max(1, Number(limitArg.slice('--limit='.length))) 
 
 const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
-const storage = new RustFsStorage(storageConfigFromEnv(process.env));
+// Variants are written to the ACTIVE provider (W7.5).
+const storage = await activeStorage(db);
 
 const rows = await db
 	.select({ objectKey: files.objectKey, fileName: files.fileName, mimeType: files.mimeType })

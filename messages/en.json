@@ -79,17 +79,12 @@
 	"admin_ai_memory_placeholder": "e.g. The site defaults to en, translations follow zh-cn; keep technical terms in English when writing.",
 	"admin_ai_message_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} message",
 				"countPlural=other": "{count} messages"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_ai_no_conversations": "No conversations yet",
@@ -107,17 +102,12 @@
 	"admin_ai_rail_collapse": "Collapse conversation list",
 	"admin_ai_rail_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} conversation",
 				"countPlural=other": "{count} conversations"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_ai_rail_expand": "Expand conversation list",
@@ -209,17 +199,12 @@
 	"admin_categories_err_has_posts": "This category still has posts and cannot be deleted",
 	"admin_categories_err_has_posts_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "This category still has {count} post and cannot be deleted",
 				"countPlural=other": "This category still has {count} posts and cannot be deleted"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_categories_err_missing_id": "Missing category ID",
@@ -228,17 +213,12 @@
 	"admin_categories_err_no_selection": "Select at least one post",
 	"admin_categories_err_placeholders": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "This category has {count} unpublished placeholder draft — discard them in Drafts first",
 				"countPlural=other": "This category has {count} unpublished placeholder drafts — discard them in Drafts first"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_categories_err_slug_required": "Slug is required",
@@ -254,17 +234,12 @@
 	"admin_categories_no_posts": "No posts",
 	"admin_categories_post_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} post",
 				"countPlural=other": "{count} posts"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_categories_posts_heading": "Posts in this category",
@@ -305,17 +280,12 @@
 	"admin_common_confirm": "Confirm",
 	"admin_common_count_entries": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} entry",
 				"countPlural=other": "{count} entries"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_common_create": "Create",
@@ -420,17 +390,12 @@
 	"admin_files_audit_truncated": "Note: the scan hit the row cap — results may be incomplete.",
 	"admin_files_cap_notice": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "Showing the first {count} item only (cap reached; narrow with filters).",
 				"countPlural=other": "Showing the first {count} items only (cap reached; narrow with filters)."
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_files_col_dimensions": "Dimensions",
@@ -469,32 +434,22 @@
 	"admin_files_purge_row": "{key} ({name}, {status}, {days} days)",
 	"admin_files_purge_summary": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "Purge preview: {count} candidate (read-only, nothing deleted)",
 				"countPlural=other": "Purge preview: {count} candidates (read-only, nothing deleted)"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_files_ref_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} content ref",
 				"countPlural=other": "{count} content refs"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_files_status_attached": "Attached",
@@ -647,17 +602,12 @@
 	"admin_maintenance_audit": "Audit (job / schedule events)",
 	"admin_maintenance_audit_cap": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "Showing the latest {count} audit record only — audit filters ship later; query the database for older records.",
 				"countPlural=other": "Showing the latest {count} audit records only — audit filters ship later; query the database for older records."
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_maintenance_builtin_diff": "Built-in diff (read-only)",
@@ -731,17 +681,12 @@
 	"admin_maintenance_runner_label": "runner: ",
 	"admin_maintenance_runs_cap": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "Showing the latest {count} run only — narrow with filters for older records.",
 				"countPlural=other": "Showing the latest {count} runs only — narrow with filters for older records."
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_maintenance_save_rejected": "Save rejected:",
@@ -771,17 +716,12 @@
 	"admin_maintenance_tc_files": " files / ",
 	"admin_maintenance_tc_issues": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "…{count} issue in total (the ledger result carries the full bounded list)",
 				"countPlural=other": "…{count} issues in total (the ledger result carries the full bounded list)"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_maintenance_tc_none": "No type-check records yet (click “Run type check” to queue one).",
@@ -802,17 +742,12 @@
 	"admin_media_err_too_big": "{name} exceeds the per-file limit",
 	"admin_media_err_too_many": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "At most {count} file per upload",
 				"countPlural=other": "At most {count} files per upload"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_media_err_unavailable": "Uploads are temporarily unavailable (rate limiter offline). Try again shortly.",
@@ -954,32 +889,22 @@
 	"admin_notes_topics_attach": "Add notes",
 	"admin_notes_topics_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} topic",
 				"countPlural=other": "{count} topics"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_notes_topics_count_from": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} note from this topic",
 				"countPlural=other": "{count} notes from this topic"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_notes_topics_create": "New topic",
@@ -999,17 +924,12 @@
 	"admin_notes_topics_err_icon_whitelist": "Icon not in the whitelist (won't render on the site)",
 	"admin_notes_topics_err_in_use": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "This topic still has {count} note; cannot delete (move them to another topic first)",
 				"countPlural=other": "This topic still has {count} notes; cannot delete (move them to another topic first)"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_notes_topics_err_missing_id": "Missing topic ID",
@@ -1030,17 +950,12 @@
 	"admin_notes_topics_not_set": "(Not set)",
 	"admin_notes_topics_note_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} note",
 				"countPlural=other": "{count} notes"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_notes_topics_select": "Select a topic",
@@ -1051,17 +966,12 @@
 	"admin_notes_topics_workspace_title": "Notes",
 	"admin_notes_total": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} note",
 				"countPlural=other": "{count} notes"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_option_err_account_dup": "Duplicate account for the same platform",
@@ -1143,17 +1053,12 @@
 	"admin_pages_hide_title": "Hide the default page?",
 	"admin_pages_hint": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} page total · the default page is pinned first, the rest follow their sort values.",
 				"countPlural=other": "{count} pages total · the default page is pinned first, the rest follow their sort values."
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_pages_internal": "Internal",
@@ -1176,17 +1081,12 @@
 	"admin_photos_bulk_tag": "Add tag",
 	"admin_photos_cap_notice": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "Showing the first {count} photo only (cap reached; narrow with filters).",
 				"countPlural=other": "Showing the first {count} photos only (cap reached; narrow with filters)."
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_photos_desc_locale": "Description · {locale}",
@@ -1215,33 +1115,23 @@
 	"admin_photos_public_visible": "Publicly visible",
 	"admin_photos_ref_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} ref",
 				"countPlural=other": "{count} refs"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_photos_ref_count_title": "Content reference count",
 	"admin_photos_ref_places": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "Referenced by {count} item",
 				"countPlural=other": "Referenced by {count} items"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_photos_remove": "Remove from gallery",
@@ -1809,17 +1699,12 @@
 	"admin_settings_ai_flash_deleted_pool": "Deleted {name} and removed {models} models from the default pool",
 	"admin_settings_ai_flash_deleted_removed": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "Deleted {name} (removed {count} assignment)",
 				"countPlural=other": "Deleted {name} (removed {count} assignments)"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_settings_ai_flash_moderation": "Moderation settings saved",
@@ -1831,17 +1716,12 @@
 	"admin_settings_ai_flash_updated": "Provider updated",
 	"admin_settings_ai_flash_updated_synced": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "Provider updated (synced {count} assignment)",
 				"countPlural=other": "Provider updated (synced {count} assignments)"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_settings_ai_frozen_desc": "Translation gate 85, site default “review first”, auto-summary conditions (body ≥100 chars and no summary) stay at defaults; per-post translation mode and switches ship with the writing chain (P2/P3).",
@@ -1881,17 +1761,12 @@
 	"admin_settings_ai_mode_review": "Review (manual request)",
 	"admin_settings_ai_model_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} model",
 				"countPlural=other": "{count} models"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_settings_ai_model_pick": "Pick a model",
@@ -2119,17 +1994,12 @@
 	"admin_settings_content_title": "Content settings",
 	"admin_settings_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} item",
 				"countPlural=other": "{count} items"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"admin_settings_integrations": "Integrations",
@@ -2345,55 +2215,123 @@
 	"admin_settings_site_title": "Site settings",
 	"admin_settings_site_version": "Version",
 	"admin_settings_storage": "Storage",
-	"admin_settings_storage_auto_backup": "Auto-backup to S3",
-	"admin_settings_storage_backup": "Backup",
-	"admin_settings_storage_backup_s3_bucket": "S3 Bucket",
-	"admin_settings_storage_backup_s3_endpoint": "S3 Endpoint",
-	"admin_settings_storage_backup_s3_region": "S3 Region",
-	"admin_settings_storage_backup_s3_secret_id": "S3 Secret ID",
-	"admin_settings_storage_backup_s3_secret_key": "S3 Secret Key",
+	"admin_settings_storage_access_key_id": "Access key ID",
+	"admin_settings_storage_activated_at": "Activated at",
+	"admin_settings_storage_backup": "Backups",
+	"admin_settings_storage_backup_db": "Database + config",
+	"admin_settings_storage_backup_hint": "restic covers the database and the config file; media follows the provider. Runbook: deploy/RUNBOOK.md §4.",
+	"admin_settings_storage_backup_media": "Media",
+	"admin_settings_storage_backup_media_hint": "Provider versioning/replication or rclone, per the runbook",
+	"admin_settings_storage_backup_restic": "restic data + config repositories — runbook §4",
+	"admin_settings_storage_backup_versioning": "Versioning is not a backup",
+	"admin_settings_storage_backup_versioning_hint": "It protects against mistakes, not against account loss or a deleted bucket.",
 	"admin_settings_storage_bucket": "Bucket",
-	"admin_settings_storage_cdn": "Image CDN domain",
-	"admin_settings_storage_cleanup_interval": "Cleanup interval (minutes)",
-	"admin_settings_storage_comment_prefix": "Comment image path prefix",
-	"admin_settings_storage_comment_upload": "Comment image upload",
-	"admin_settings_storage_comment_upload_enabled": "Allow comment image uploads",
+	"admin_settings_storage_capability_unknown": "Unknown (not probed)",
+	"admin_settings_storage_credentials": "Credentials",
+	"admin_settings_storage_credentials_clear": "Clear stored credentials",
+	"admin_settings_storage_credentials_cleared": "Stored credentials removed; the environment fallback applies again.",
+	"admin_settings_storage_credentials_env": "Environment reference",
+	"admin_settings_storage_credentials_env_hint": "Credentials come from the environment today. The encrypted write-only store replaces this without ever showing a value.",
+	"admin_settings_storage_credentials_key_version": "Key version",
+	"admin_settings_storage_credentials_missing": "Not configured",
+	"admin_settings_storage_credentials_never_shown": "Never displayed, never logged.",
+	"admin_settings_storage_credentials_saved": "Credentials saved. They are used from the next request on.",
+	"admin_settings_storage_credentials_source_db": "Encrypted store",
+	"admin_settings_storage_credentials_store_unavailable": "The credential store is unavailable (is SECRETS_KEYS configured?). Nothing was saved.",
+	"admin_settings_storage_credentials_write_only_hint": "Write-only: values are encrypted at rest, never displayed and never logged. They take effect on the next request.",
 	"admin_settings_storage_current": "Current storage",
-	"admin_settings_storage_delete_spam": "Delete spam images",
+	"admin_settings_storage_db": "Database",
+	"admin_settings_storage_db_hint": "Read-only. DATABASE_URL is an install/deploy step; there is no in-app database switch.",
+	"admin_settings_storage_db_host": "Host (masked)",
+	"admin_settings_storage_db_migrations": "Migrations",
+	"admin_settings_storage_db_migrations_value": "{applied} applied",
+	"admin_settings_storage_db_mode_external": "External Postgres",
+	"admin_settings_storage_db_mode_local": "Local (bundled Postgres)",
+	"admin_settings_storage_db_name": "Database name",
+	"admin_settings_storage_db_pending": "Pending",
+	"admin_settings_storage_db_ssl": "SSL mode",
+	"admin_settings_storage_delete_blocked_capability": "The storage bucket capabilities could not be read, so deleting is disabled (fail closed).",
+	"admin_settings_storage_delete_blocked_versioning": "This bucket has versioning or object lock on. Switch the provider to logical delete or use a plain bucket.",
+	"admin_settings_storage_delete_mode": "Delete mode",
+	"admin_settings_storage_delete_mode_hard": "Hard delete (frees space)",
+	"admin_settings_storage_delete_mode_hard_hint": "Requires bucket versioning and object lock to be off. Deletes free the bytes.",
+	"admin_settings_storage_delete_mode_logical": "Logical delete (versioned bucket)",
+	"admin_settings_storage_delete_mode_logical_hint": "For versioned or object-locked buckets: objects become delete markers and space is NOT reclaimed.",
 	"admin_settings_storage_desc": "Provider, migration, purge and backup status",
 	"admin_settings_storage_detached_ttl": "Detached TTL (days)",
+	"admin_settings_storage_driver": "Driver",
+	"admin_settings_storage_endpoint": "Endpoint",
+	"admin_settings_storage_endpoint_hint": "HTTPS public endpoint only. A LAN endpoint needs ALLOW_PRIVATE_STORAGE_ENDPOINT.",
+	"admin_settings_storage_err_bucket": "Bucket names are 3–63 lowercase letters, digits, dots or hyphens.",
+	"admin_settings_storage_err_config": "That configuration is not valid.",
+	"admin_settings_storage_err_credentials_missing": "Enter both the access key ID and the secret access key.",
+	"admin_settings_storage_err_credentials_shape": "Credentials must be under the length limit and contain no whitespace.",
+	"admin_settings_storage_err_endpoint": "Use an https endpoint without credentials.",
+	"admin_settings_storage_err_endpoint_metadata": "Cloud metadata endpoints are always rejected.",
+	"admin_settings_storage_err_endpoint_private": "That endpoint resolves to a private address. Set ALLOW_PRIVATE_STORAGE_ENDPOINT=true for a LAN endpoint.",
+	"admin_settings_storage_err_endpoint_resolve": "The endpoint host did not resolve.",
+	"admin_settings_storage_err_provider_type": "Choose a provider type.",
+	"admin_settings_storage_err_public_base_url": "Use an https URL without credentials.",
+	"admin_settings_storage_err_purge_days": "Use whole days, at least 1.",
+	"admin_settings_storage_err_region": "Cloudflare R2 requires region \"auto\".",
 	"admin_settings_storage_external": "External S3",
-	"admin_settings_storage_external_planned_hint": "Provider configuration is not available yet.",
-	"admin_settings_storage_image_prefix": "Image path prefix",
-	"admin_settings_storage_images": "Image storage",
+	"admin_settings_storage_files_count": "Registered media files",
 	"admin_settings_storage_local": "Local (RustFS)",
+	"admin_settings_storage_local_env": "Local driver references",
 	"admin_settings_storage_local_hint": "Files live in the bundled RustFS container.",
-	"admin_settings_storage_max_image": "Max image size (MB)",
-	"admin_settings_storage_max_per_comment": "Max images per comment",
-	"admin_settings_storage_max_per_hour": "Max uploads per hour",
-	"admin_settings_storage_max_per_reader": "Max storage per user (MB)",
+	"admin_settings_storage_max_image": "Max image size",
+	"admin_settings_storage_max_per_batch": "Files per batch",
+	"admin_settings_storage_max_per_hour": "Uploads per window",
 	"admin_settings_storage_media_purge": "Media purge",
+	"admin_settings_storage_migration": "Migration & cutover",
+	"admin_settings_storage_migration_cli": "Owner-only. Run the dry-run first; purge is disabled while a migration runs.",
+	"admin_settings_storage_migration_desc": "Switching providers is a CLI operation: uploads freeze, objects copy with checksums, then cutover. The page never switches.",
+	"admin_settings_storage_migration_failed": "Failed objects",
+	"admin_settings_storage_migration_not_required": "Direct activation allowed",
+	"admin_settings_storage_migration_progress": "Verified objects",
+	"admin_settings_storage_migration_required": "Migration required",
+	"admin_settings_storage_migration_running": "The maintenance window is open (copying, or waiting for cutover): uploads are paused and purge is disabled until the switch completes.",
+	"admin_settings_storage_migration_state": "State",
+	"admin_settings_storage_migration_state_copied": "Copy complete",
+	"admin_settings_storage_migration_state_copying": "Copying",
+	"admin_settings_storage_migration_state_cutover": "Cutover done",
+	"admin_settings_storage_migration_state_failed": "Copy failed",
+	"admin_settings_storage_migration_state_idle": "No migration",
+	"admin_settings_storage_migration_state_rolled_back": "Rolled back",
 	"admin_settings_storage_mime": "MIME allowlist",
-	"admin_settings_storage_min_age": "Minimum account age (days)",
-	"admin_settings_storage_min_comments": "Minimum comments",
-	"admin_settings_storage_pending_ttl": "Pending TTL (minutes)",
+	"admin_settings_storage_never_tested": "Never tested",
+	"admin_settings_storage_object_lock": "Object lock",
+	"admin_settings_storage_open_files": "Open the media list",
+	"admin_settings_storage_path_style": "Path-style addressing",
+	"admin_settings_storage_path_style_hint": "On for RustFS/MinIO, off for AWS S3 and R2.",
 	"admin_settings_storage_pending_ttl_days": "Pending TTL (days)",
-	"admin_settings_storage_ph_access_key": "Access Key",
-	"admin_settings_storage_ph_access_key_id": "Access Key ID",
 	"admin_settings_storage_ph_auto": "auto",
-	"admin_settings_storage_ph_s3_endpoint": "https://s3.amazonaws.com",
-	"admin_settings_storage_ph_secret_access_key": "Secret Access Key",
-	"admin_settings_storage_ph_secret_key": "Secret Key",
+	"admin_settings_storage_ph_endpoint": "https://s3.us-east-1.amazonaws.com",
+	"admin_settings_storage_private_allowed": "ALLOW_PRIVATE_STORAGE_ENDPOINT is on: private (LAN) endpoints are allowed, metadata addresses never are.",
 	"admin_settings_storage_provider": "Provider",
-	"admin_settings_storage_purge_hint": "Saving TTL does not delete files; purge is a CLI run.",
-	"admin_settings_storage_remove_mime": "Remove {mime}",
-	"admin_settings_storage_s3_access": "Image S3 access key",
-	"admin_settings_storage_s3_bucket": "Image S3 bucket",
-	"admin_settings_storage_s3_enabled": "Enable S3 image storage",
-	"admin_settings_storage_s3_endpoint": "Image S3 endpoint",
-	"admin_settings_storage_s3_region": "Image S3 region",
-	"admin_settings_storage_s3_secret": "Image S3 secret key",
+	"admin_settings_storage_provider_desc": "Saved here only. Saving never switches the live provider — activation runs through storage:migrate.",
+	"admin_settings_storage_provider_type": "Provider type",
+	"admin_settings_storage_public_base_url": "Public base URL (optional)",
+	"admin_settings_storage_public_base_url_hint": "When set on the ACTIVE provider, /i redirects public keys here (the bucket must be public / fronted by the CDN). Default: private bucket behind /i.",
+	"admin_settings_storage_purge_hint": "Saving TTLs does not delete files; purge runs as a CLI job (floor 1 day).",
+	"admin_settings_storage_purge_saved": "Purge TTLs saved. Nothing was deleted.",
+	"admin_settings_storage_region": "Region",
+	"admin_settings_storage_saved_inactive": "Saved as inactive. The live provider did not change.",
+	"admin_settings_storage_secret_access_key": "Secret access key",
+	"admin_settings_storage_test_auth": "Authentication failed (403).",
+	"admin_settings_storage_test_capability": "The bucket capabilities could not be read.",
+	"admin_settings_storage_test_failed": "The connection test failed.",
+	"admin_settings_storage_test_network": "The endpoint could not be reached.",
+	"admin_settings_storage_test_not_found": "Bucket not found (404).",
+	"admin_settings_storage_test_ok": "Connection OK: bucket, credentials, write/read and delete all passed.",
+	"admin_settings_storage_test_stale": "The last test covered a different configuration.",
+	"admin_settings_storage_test_timeout": "The endpoint timed out.",
+	"admin_settings_storage_test_write": "The bucket is readable but not writable.",
 	"admin_settings_storage_title": "Storage settings",
+	"admin_settings_storage_upload_limits": "Upload limits",
+	"admin_settings_storage_upload_limits_hint": "Code-owned limits: they do not follow the provider.",
+	"admin_settings_storage_versioning": "Bucket versioning",
+	"admin_settings_storage_versioning_suspended": "Suspended",
 	"admin_settings_system": "System",
 	"admin_settings_system_amap_desc": "Location lookup for diary entries",
 	"admin_settings_system_amap_key": "Amap query API key",
@@ -2884,17 +2822,12 @@
 	"image_upload_failed": "Upload failed: {code}",
 	"image_upload_skipped": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} more file was not uploaded",
 				"countPlural=other": "{count} more files were not uploaded"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"image_uploading": "Uploading...",
@@ -2973,17 +2906,12 @@
 	"nav_posts_categories": "Categories",
 	"nav_posts_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} post",
 				"countPlural=other": "{count} posts"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"nav_posts_recent": "Recent",
@@ -2999,17 +2927,12 @@
 	"notes_back_to_all": "Back to notes",
 	"notes_count": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} note",
 				"countPlural=other": "{count} notes"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"notes_empty": "No notes yet.",
@@ -3151,17 +3074,12 @@
 	"presence_density_label": "Reading position distribution",
 	"presence_readers_now": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
 			"match": {
 				"countPlural=one": "{count} person is reading",
 				"countPlural=other": "{count} people are reading"
 			},
-			"selectors": [
-				"countPlural"
-			]
+			"selectors": ["countPlural"]
 		}
 	],
 	"privacy_account_body": "Creating an account stores your email address, display name, a password hash (Argon2id through Better Auth) and session records. An optional avatar URL is stored if you add one. The account exists for reading and commenting; there is no marketing profile.",

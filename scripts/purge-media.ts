@@ -1,8 +1,7 @@
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '../src/lib/server/db/schema';
-import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import { activeStorage } from './lib/active-storage';
 import { purgeMedia } from '../src/lib/server/services/files';
 
 /**
@@ -22,9 +21,32 @@ const execute = process.argv.includes('--yes');
 
 const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
-const storage = new RustFsStorage(storageConfigFromEnv(process.env));
+// W7.5: purge runs against the ACTIVE provider, never an assumed local one.
+const storage = await activeStorage(db);
 
 const outcome = await purgeMedia({ dryRun: !execute }, { db, storage });
+
+if (outcome.blocked) {
+	const reasons: Record<string, string> = {
+		migration:
+			'a storage provider migration is running (storage.migration = copying). Purge stays\n' +
+			'disabled until the copy finishes and `storage:migrate --cutover` runs (or `--reset`\n' +
+			'clears a stuck run).',
+		capability:
+			'the active bucket versioning/object lock could not be read, so "frees space" cannot\n' +
+			'be proven. Fix the credentials or run the storage connection test first.',
+		versioning:
+			'the active bucket has versioning or object lock on. Choose "logical delete" in the\n' +
+			'storage provider form (accepting that space is not reclaimed) or use a plain bucket.'
+	};
+	console.error(`REFUSED: ${reasons[outcome.blocked] ?? outcome.blocked}`);
+	await sql.end();
+	process.exit(1);
+}
+
+if (outcome.logical) {
+	console.log('NOTE: logical delete mode — objects become delete markers; space is not reclaimed.');
+}
 
 console.log(`purge ${execute ? 'EXECUTE' : 'dry-run'} — candidates: ${outcome.candidates.length}`);
 for (const candidate of outcome.candidates) {
@@ -43,7 +65,8 @@ if (outcome.skipped.length > 0) {
 		['reused', 'used (dedupe anchor refreshed) since the snapshot'],
 		['referenced', 'gained references since the snapshot'],
 		['gone', 'vanished before the delete (concurrent purge)'],
-		['scan-truncated', 'fail-closed: mention scan hit its row cap']
+		['scan-truncated', 'fail-closed: mention scan hit its row cap'],
+		['blocked', 'deletion contract changed mid-run (W7.5)']
 	];
 	console.log(`skipped: ${outcome.skipped.length}`);
 	for (const [reason, label] of reasons) {

@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { isRegisteredKey } from '$lib/server/services/files';
-import { getStorage } from '$lib/server/storage';
+import { buildStorageForActive, getActiveProvider } from '$lib/server/storage';
+import { isStorageUnavailable, storageUnavailableResponse } from '$lib/server/storage/port';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
 import { KEY_PATTERN } from '$lib/media/keys';
@@ -140,21 +141,52 @@ function tooManyRequests(): Response {
 	});
 }
 
+/**
+ * Optional CDN alias (W7.2 `publicBaseUrl`, Q9/Q12). When the ACTIVE provider
+ * declares one, public keys are served from it instead of proxying the bytes;
+ * the access check runs first, so private keys never reach this branch. Default
+ * (null) keeps the private `/i` proxy behaviour.
+ */
+function cdnRedirect(publicBaseUrl: string, key: string): Response {
+	return new Response(null, {
+		status: 302,
+		headers: {
+			location: `${publicBaseUrl.replace(/\/+$/, '')}/${key}`,
+			'cache-control': 'public, max-age=60'
+		}
+	});
+}
+
+/** Resolves the live provider once: the CDN alias and the adapter share it. */
+async function openStorage() {
+	const active = await getActiveProvider();
+	if (active.config.publicBaseUrl) return { active, storage: null };
+	return { active, storage: await buildStorageForActive(active) };
+}
+
 export const GET: RequestHandler = async ({ params, locals, getClientAddress }) => {
 	if (await throttled(getClientAddress)) return tooManyRequests();
 	const access = await resolveAccess(params, locals);
 
-	let object = await getStorage().get(access.key);
+	let object;
 	let cacheControl: string | undefined;
-	if (!object && access.fallbackKeys) {
-		for (const fallbackKey of access.fallbackKeys) {
-			object = await getStorage().get(fallbackKey);
-			if (object) {
-				// Short cache: the real @grid object will replace this tier.
-				cacheControl = 'public, max-age=3600';
-				break;
+	try {
+		const { active, storage } = await openStorage();
+		if (active.config.publicBaseUrl) return cdnRedirect(active.config.publicBaseUrl, access.key);
+		object = await storage!.get(access.key);
+		if (!object && access.fallbackKeys) {
+			for (const fallbackKey of access.fallbackKeys) {
+				object = await storage!.get(fallbackKey);
+				if (object) {
+					// Short cache: the real @grid object will replace this tier.
+					cacheControl = 'public, max-age=3600';
+					break;
+				}
 			}
 		}
+	} catch (caught) {
+		if (isStorageUnavailable(caught)) return storageUnavailableResponse();
+		throw caught;
 	}
 	if (!object) throw error(404, 'Not found');
 
@@ -168,16 +200,24 @@ export const HEAD: RequestHandler = async ({ params, locals, getClientAddress })
 	if (await throttled(getClientAddress)) return tooManyRequests();
 	const access = await resolveAccess(params, locals);
 
-	let object = await getStorage().head(access.key);
+	let object;
 	let cacheControl: string | undefined;
-	if (!object && access.fallbackKeys) {
-		for (const fallbackKey of access.fallbackKeys) {
-			object = await getStorage().head(fallbackKey);
-			if (object) {
-				cacheControl = 'public, max-age=3600';
-				break;
+	try {
+		const { active, storage } = await openStorage();
+		if (active.config.publicBaseUrl) return cdnRedirect(active.config.publicBaseUrl, access.key);
+		object = await storage!.head(access.key);
+		if (!object && access.fallbackKeys) {
+			for (const fallbackKey of access.fallbackKeys) {
+				object = await storage!.head(fallbackKey);
+				if (object) {
+					cacheControl = 'public, max-age=3600';
+					break;
+				}
 			}
 		}
+	} catch (caught) {
+		if (isStorageUnavailable(caught)) return storageUnavailableResponse();
+		throw caught;
 	}
 	if (!object) throw error(404, 'Not found');
 

@@ -44,9 +44,9 @@ test('all eight pages answer 200 with their section heading', async ({ page }) =
 });
 
 test('planned/read-only pages render zero form controls', async ({ page }) => {
-	// W4 (Profile), W5 (Site) and W6 (Content) now ship real forms; storage/integrations
-	// stay read-only until their own waves land (W7/W10).
-	for (const id of ['storage', 'integrations']) {
+	// Every wave that shipped real forms left this list (W4 profile, W5 site,
+	// W6 content, W7 storage); integrations stays read-only until W10.
+	for (const id of ['integrations']) {
 		const response = await page.goto(`/admin/settings/${id}`);
 		expect(response?.status(), id).toBe(200);
 		await expect(
@@ -73,6 +73,8 @@ test('content renders the real W6 forms and no dead control', async ({ page }) =
 			/anti-spam|blocked ips|blocked words|chinese only|disable comments|approved comments only|ai review|localize avatars/i
 		)
 	).toHaveCount(0);
+});
+
 test('notifications shows Mail status, Webhooks and the static M6 note', async ({ page }) => {
 	const response = await page.goto('/admin/settings/notifications');
 	expect(response?.status()).toBe(200);

@@ -36,6 +36,63 @@ export interface GetOptions {
 	range?: { start: number; end?: number } | { suffix: number };
 }
 
+/**
+ * Bucket versioning state (W7.5, decisions ST10/Q8/Q16).
+ *
+ * `off` covers both an explicitly "never enabled" bucket and a provider whose
+ * dialect has no versioning at all (HTTP 501/NotImplemented): in both cases a
+ * DELETE frees the bytes. `unknown` means the probe could not answer (403,
+ * transport failure) — callers must FAIL CLOSED on it, never assume `off`.
+ */
+export type BucketVersioning = 'off' | 'enabled' | 'suspended' | 'unknown';
+
+export interface BucketCapabilities {
+	versioning: BucketVersioning;
+	/** true when object lock is enabled; null when the probe could not tell. */
+	objectLock: boolean | null;
+}
+
+/**
+ * One reading of "what can this bucket do with a DELETE" (W7.5). Every guard —
+ * probe, activation, purge, single-file delete — must reach the same verdict,
+ * so the rule lives here once:
+ *
+ *   provable  both reads answered (unknown/null is NOT "off" — fail closed);
+ *   reclaims  a plain DELETE actually frees the bytes.
+ */
+export interface DeletionAssessment {
+	provable: boolean;
+	reclaims: boolean;
+}
+
+export function assessDeletion(capabilities: BucketCapabilities): DeletionAssessment {
+	return {
+		provable: capabilities.versioning !== 'unknown' && capabilities.objectLock !== null,
+		reclaims: capabilities.versioning === 'off' && capabilities.objectLock !== true
+	};
+}
+
+/**
+ * True when the provider is reachable-but-failing or unreachable (W7.5/Q14):
+ * the request cannot be served from this provider, and the app must NOT fall
+ * back to another one — 503 is the honest answer.
+ */
+export function isStorageUnavailable(error: unknown): boolean {
+	return error instanceof StorageError && (error.status === 0 || error.status >= 500);
+}
+
+/**
+ * The one 503 wire contract for "active provider unavailable" — same status,
+ * Retry-After and no-store on every route that serves bytes (W7 review P2: it
+ * was written inline twice).
+ */
+export function storageUnavailableResponse(): Response {
+	return new Response(null, {
+		status: 503,
+		headers: { 'retry-after': '30', 'cache-control': 'no-store' }
+	});
+}
+
 /** Non-2xx storage response the caller cannot treat as "absent". */
 export class StorageError extends Error {
 	constructor(
@@ -52,6 +109,13 @@ export class StorageError extends Error {
 export interface ObjectStoragePort {
 	/** Idempotent: creates the configured bucket when it is missing. */
 	ensureBucket(): Promise<void>;
+	/** Resolves when the bucket exists and these credentials can see it. */
+	headBucket(): Promise<void>;
+	/**
+	 * Bucket versioning + object lock, read with the same credentials. Resolves
+	 * `unknown`/null instead of guessing when the provider refuses.
+	 */
+	bucketCapabilities(): Promise<BucketCapabilities>;
 	put(key: string, data: Uint8Array, options?: PutOptions): Promise<{ etag: string | null }>;
 	/** Resolves null when the object does not exist (404). */
 	get(key: string, options?: GetOptions): Promise<StoredObjectBody | null>;

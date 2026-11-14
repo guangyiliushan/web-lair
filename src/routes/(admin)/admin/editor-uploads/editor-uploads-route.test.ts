@@ -101,6 +101,7 @@ vi.mock('$lib/server/media/sniff', async (importOriginal) => {
 
 import { GET, POST } from './+server';
 import { UploadRejected } from '$lib/server/services/files';
+import { StorageError } from '$lib/server/storage/port';
 import { MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
 
 function makeEvent(body?: BodyInit) {
@@ -243,13 +244,22 @@ describe('POST /admin/editor-uploads', () => {
 		for (const [code, status] of [
 			['too-large', 413],
 			['unsupported-type', 415],
-			['empty', 400]
+			['empty', 400],
+			// W7.4: the migration freeze is temporary — 503, not 400.
+			['migration', 503]
 		] as const) {
 			state.throwWith = new UploadRejected(code, code);
 			const response = await POST(makeEvent(fileForm(new File(['x'], 'x.png'))));
 			expect(response.status, code).toBe(status);
 			expect(await response.json(), code).toEqual({ code });
 		}
+	});
+
+	it('answers 503 (retryable) when the active provider is down', async () => {
+		state.throwWith = new StorageError('storage request failed: PUT /bucket/key', 0, null);
+		const response = await POST(makeEvent(fileForm(new File(['x'], 'x.png'))));
+		expect(response.status).toBe(503);
+		expect(await response.json()).toEqual({ code: 'storage-unavailable' });
 	});
 
 	it('answers a sanitized 500 when the pipeline blows up', async () => {

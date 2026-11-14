@@ -135,7 +135,11 @@ export const actions: Actions = {
 			);
 			return { uploadResults: results };
 		} catch (error) {
-			if (error instanceof UploadRejected) return fail(400, { message: error.message });
+			if (error instanceof UploadRejected) {
+				// The migration freeze is temporary and retryable: 503, not 400
+				// (same contract as editor-uploads, review P2).
+				return fail(error.code === 'migration' ? 503 : 400, { message: error.message });
+			}
 			throw error;
 		}
 	},
@@ -163,6 +167,16 @@ export const actions: Actions = {
 			if (result.isInGallery) parts.push(m.admin_files_gallery_ref());
 			return fail(409, {
 				message: m.admin_files_err_in_use({ parts: parts.join(m.admin_files_join()) })
+			});
+		}
+		if (result.kind === 'blocked') {
+			// W7.5: the bucket cannot hard-delete and logical mode was not chosen.
+			// 503 because it is a provider-configuration problem, not a bad request.
+			return fail(503, {
+				message:
+					result.reason === 'capability'
+						? m.admin_settings_storage_delete_blocked_capability()
+						: m.admin_settings_storage_delete_blocked_versioning()
 			});
 		}
 		throw redirect(303, '/admin/files?deleted=1');

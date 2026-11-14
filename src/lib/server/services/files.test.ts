@@ -37,7 +37,14 @@ const storageMock = vi.hoisted(() => ({
 	delete: vi.fn<(key: string) => Promise<void>>(async () => {}),
 	head: vi.fn<(key: string) => Promise<StoredObjectHead | null>>(async () => null),
 	get: vi.fn<(key: string) => Promise<StoredObjectBody | null>>(async () => null),
-	ensureBucket: vi.fn<() => Promise<void>>(async () => {})
+	ensureBucket: vi.fn<() => Promise<void>>(async () => {}),
+	headBucket: vi.fn<() => Promise<void>>(async () => {}),
+	bucketCapabilities: vi.fn<
+		() => Promise<{
+			versioning: 'off' | 'enabled' | 'suspended' | 'unknown';
+			objectLock: boolean | null;
+		}>
+	>(async () => ({ versioning: 'off', objectLock: false }))
 }));
 const processImageMock = vi.hoisted(() => vi.fn());
 const readImageSizeMock = vi.hoisted(() => vi.fn());
@@ -137,7 +144,15 @@ const PROCESSED = {
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	getOptionMock.mockResolvedValue({ pendingDays: 7, detachedDays: 30 });
+	// Key-aware defaults: the services read media.purge, storage.migration and
+	// storage.active on the same call path (W7.4/W7.5).
+	getOptionMock.mockImplementation(async (key: string) => {
+		if (key === 'media.purge') return { pendingDays: 7, detachedDays: 30 };
+		if (key === 'storage.migration') return { state: 'idle' };
+		if (key === 'storage.active') return { config: { deleteMode: 'hard' } };
+		return undefined;
+	});
+	storageMock.bucketCapabilities.mockResolvedValue({ versioning: 'off', objectLock: false });
 	storageMock.put.mockResolvedValue({ etag: '"etag"' });
 	storageMock.delete.mockResolvedValue(undefined);
 	dbMock.update.mockReturnValue(updateChain);
@@ -1027,5 +1042,129 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 			'draft',
 			'comment'
 		]);
+	});
+});
+
+describe('deletion contract (W7.4/W7.5)', () => {
+	it('refuses a purge while the maintenance window is open (copying or copied)', async () => {
+		for (const state of ['copying', 'copied']) {
+			getOptionMock.mockImplementation(async (key: string) => {
+				if (key === 'storage.migration') return { state };
+				if (key === 'media.purge') return { pendingDays: 7, detachedDays: 30 };
+				if (key === 'storage.active') return { config: { deleteMode: 'hard' } };
+				return undefined;
+			});
+
+			const outcome = await purgeMedia(
+				{ dryRun: false },
+				{ storage: storageMock as never, db: dbMock as never }
+			);
+
+			expect(outcome, state).toMatchObject({ blocked: 'migration', deleted: [], candidates: [] });
+		}
+		expect(storageMock.delete).not.toHaveBeenCalled();
+	});
+	it('freezes uploads for both maintenance states (copying and copied)', async () => {
+		for (const state of ['copying', 'copied']) {
+			getOptionMock.mockImplementation(async (key: string) => {
+				if (key === 'storage.migration') return { state };
+				if (key === 'media.purge') return { pendingDays: 7, detachedDays: 30 };
+				if (key === 'storage.active') return { config: { deleteMode: 'hard' } };
+				return undefined;
+			});
+			storageMock.put.mockClear();
+			await expect(
+				uploadFile(
+					{
+						fileName: 'x.png',
+						bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+					},
+					{ storage: storageMock as never, db: dbMock as never }
+				),
+				state
+			).rejects.toMatchObject({ code: 'migration' });
+			expect(storageMock.put, state).not.toHaveBeenCalled();
+		}
+	});
+
+	it('fails closed when the bucket capabilities cannot be read', async () => {
+		storageMock.bucketCapabilities.mockResolvedValue({
+			versioning: 'unknown',
+			objectLock: null
+		});
+
+		const outcome = await purgeMedia(
+			{ dryRun: true },
+			{ storage: storageMock as never, db: dbMock as never }
+		);
+
+		expect(outcome).toMatchObject({ blocked: 'capability' });
+	});
+
+	it('refuses a versioned bucket unless logical delete is chosen', async () => {
+		storageMock.bucketCapabilities.mockResolvedValue({
+			versioning: 'enabled',
+			objectLock: false
+		});
+
+		const refusal = await purgeMedia(
+			{ dryRun: false },
+			{ storage: storageMock as never, db: dbMock as never }
+		);
+		expect(refusal).toMatchObject({ blocked: 'versioning' });
+		expect(storageMock.delete).not.toHaveBeenCalled();
+
+		getOptionMock.mockImplementation(async (key: string) => {
+			if (key === 'storage.migration') return { state: 'idle' };
+			if (key === 'storage.active') return { config: { deleteMode: 'logical' } };
+			if (key === 'media.purge') return { pendingDays: 7, detachedDays: 30 };
+			return undefined;
+		});
+		// Nothing is a candidate in this fixture, so the run proves the policy
+		// gate opened (no refusal) rather than performing a delete.
+		const logical = await purgeMedia(
+			{ dryRun: true },
+			{ storage: storageMock as never, db: dbMock as never }
+		);
+		expect(logical).toMatchObject({ blocked: null, logical: true });
+	});
+
+	it('blocks deleteFile with a typed reason instead of guessing', async () => {
+		storageMock.bucketCapabilities.mockResolvedValue({
+			versioning: 'enabled',
+			objectLock: false
+		});
+
+		const versioned = await deleteFile(
+			'file-1',
+			{},
+			{ storage: storageMock as never, db: dbMock as never }
+		);
+		expect(versioned).toEqual({ kind: 'blocked', reason: 'versioning' });
+
+		storageMock.bucketCapabilities.mockResolvedValue({ versioning: 'unknown', objectLock: null });
+		const unknown = await deleteFile(
+			'file-1',
+			{},
+			{ storage: storageMock as never, db: dbMock as never }
+		);
+		expect(unknown).toEqual({ kind: 'blocked', reason: 'capability' });
+
+		expect(storageMock.delete).not.toHaveBeenCalled();
+	});
+
+	it('accepts an explicit policy so a purge run probes once', async () => {
+		const policy = {
+			deleteMode: 'logical' as const,
+			versioning: 'enabled' as const,
+			objectLock: false
+		};
+		const outcome = await purgeMedia(
+			{ dryRun: true },
+			{ storage: storageMock as never, db: dbMock as never, policy }
+		);
+		expect(outcome).toMatchObject({ blocked: null, logical: true });
+		// The policy was injected: the run performed no capability read at all.
+		expect(storageMock.bucketCapabilities).not.toHaveBeenCalled();
 	});
 });
