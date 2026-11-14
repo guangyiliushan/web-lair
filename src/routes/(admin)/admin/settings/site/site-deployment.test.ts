@@ -27,6 +27,7 @@ vi.mock('$lib/server/origin', () => ({ getPublicOrigin: () => originState.origin
 vi.mock('$env/dynamic/private', () => envState);
 
 import { load } from './+page.server';
+import { APP_VERSION } from '$lib/server/version';
 
 describe('Site deployment status', () => {
 	beforeEach(() => {
@@ -62,7 +63,28 @@ describe('Site deployment status', () => {
 			deployment: { origin: string | null; version: string };
 		};
 		expect(data.deployment.origin).toBeNull();
-		expect(data.deployment.version).toBe('0.0.1');
+		expect(data.deployment.version).toBe(APP_VERSION);
+	});
+
+	it('returns the full template payload (info, languages, timezone, icon, langs)', async () => {
+		const data = (await load({
+			locals: { admin: { role: 'admin' } }
+		} as never)) as unknown as {
+			info: { name: string };
+			languages: { enabled: string[] };
+			defaultLang: string;
+			timezone: string;
+			icon: { url: string; version: number };
+			langs: string[];
+		};
+		expect(data).toMatchObject({
+			info: { name: 'Site' },
+			languages: { enabled: ['en', 'zh-cn', 'ja'] },
+			defaultLang: 'en',
+			timezone: 'UTC',
+			icon: { url: '', version: 0 },
+			langs: ['en', 'zh-cn', 'ja']
+		});
 	});
 
 	it('exposes granular edit flags: admin edits identity/icon/timezone but not languages', async () => {

@@ -171,6 +171,19 @@ describe('Site actions (W5.2)', () => {
 			event: 'site.update',
 			payload: { fields: ['icon'] }
 		});
+
+		// Unchanged URL: the version still moves - the page's "Refresh icon
+		// version" button posts exactly this to bust a same-address file swap.
+		optionState['site.icon'] = { url: 'https://cdn.example/favicon.svg', version: 5 };
+		await run('saveIcon', { url: 'https://cdn.example/favicon.svg' });
+		expect(writes[1]).toMatchObject({
+			value: { url: 'https://cdn.example/favicon.svg', version: 6 }
+		});
+
+		// The same-origin /i/ proxy goes through the same action path.
+		optionState['site.icon'] = { url: '', version: 0 };
+		await run('saveIcon', { url: '/i/favicon.ico' });
+		expect(writes[2]).toMatchObject({ value: { url: '/i/favicon.ico', version: 1 } });
 	});
 
 	it('rejects a javascript:/data:/http favicon and keeps the stored value', async () => {
@@ -181,7 +194,7 @@ describe('Site actions (W5.2)', () => {
 		expect(writes).toHaveLength(0);
 	});
 
-	it('saves a valid IANA zone (with the same-origin /i/ allowance intact for icons)', async () => {
+	it('saves a valid IANA zone', async () => {
 		const result = await run('saveTimezone', { tz: ' Asia/Taipei ' });
 
 		expect(result.data?.error).toBeUndefined();
@@ -224,8 +237,12 @@ describe('Site actions (W5.2)', () => {
 
 	it('allows an admin (not owner) to save identity, icon and time zone', async () => {
 		const info = await run('saveInfo', { name: 'Site', description: '', avatar: '' }, 'admin');
+		const icon = await run('saveIcon', { url: '' }, 'admin');
+		const timezone = await run('saveTimezone', { tz: 'UTC' }, 'admin');
 		expect(info.data?.error).toBeUndefined();
-		expect(writes).toHaveLength(1);
+		expect(icon.data?.error).toBeUndefined();
+		expect(timezone.data?.error).toBeUndefined();
+		expect(writes.map((write) => write.key)).toEqual(['site.info', 'site.icon', 'site.timezone']);
 	});
 
 	it('writes the language pair in ONE transaction, in canonical order (S7/W5.4)', async () => {

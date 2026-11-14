@@ -77,7 +77,7 @@ export const optionRegistry = {
 		// schema cannot see both options.
 		schema: z.object({
 			enabled: z
-				.array(z.enum(OPTION_LANGS))
+				.array(z.enum(OPTION_LANGS, { error: () => m.admin_option_err_languages_invalid() }))
 				.min(1, { error: () => m.admin_option_err_languages_empty() })
 				.refine((langs) => new Set(langs).size === langs.length, {
 					error: () => m.admin_option_err_languages_duplicate()

@@ -2,6 +2,7 @@
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import {
 		SettingsForm,
@@ -110,7 +111,7 @@
 	<SettingsForm
 		action="?/saveInfo"
 		dirty={infoDirty}
-		message={messageFor('info')}
+		message={infoDirty && !errorFor('info') ? null : messageFor('info')}
 		error={errorFor('info')}
 		onCancel={resetInfo}
 	>
@@ -162,7 +163,7 @@
 	<SettingsForm
 		action="?/saveIcon"
 		dirty={iconDirty}
-		message={messageFor('icon')}
+		message={iconDirty && !errorFor('icon') ? null : messageFor('icon')}
 		error={errorFor('icon')}
 		onCancel={() => (iconUrl = null)}
 	>
@@ -181,8 +182,14 @@
 			</div>
 			<dl class="flex items-center justify-between gap-4 text-sm">
 				<dt class="text-muted-foreground">{m.admin_settings_site_icon_version()}</dt>
-				<dd class="tabular-nums">{data.icon.version}</dd>
+				<dd class="tabular-nums" data-testid="site-icon-version">{data.icon.version}</dd>
 			</dl>
+			<div class="flex flex-wrap items-center gap-2">
+				<Button type="submit" variant="outline" size="sm">
+					{m.admin_settings_site_icon_bump()}
+				</Button>
+				<span class="text-xs text-muted-foreground">{m.admin_settings_site_icon_bump_hint()}</span>
+			</div>
 		</fieldset>
 	</SettingsForm>
 
@@ -191,15 +198,15 @@
 		<SettingsForm
 			action="?/saveLanguages"
 			dirty={languagesDirty}
-			message={messageFor('languages')}
+			message={languagesDirty && !errorFor('languages') ? null : messageFor('languages')}
 			error={errorFor('languages')}
 			onCancel={resetLanguages}
 		>
 			<fieldset class="space-y-4">
 				<legend class="text-sm font-medium">{m.admin_settings_site_languages()}</legend>
 				<p class="text-xs text-muted-foreground">{m.admin_settings_site_languages_hint()}</p>
-				<div class="space-y-2">
-					<span class="block text-sm">{m.admin_settings_site_enabled_languages()}</span>
+				<fieldset class="space-y-2">
+					<legend class="text-sm">{m.admin_settings_site_enabled_languages()}</legend>
 					{#each data.langs as lang (lang)}
 						<label class="flex items-center gap-2 text-sm">
 							<input
@@ -213,7 +220,7 @@
 							{lang}
 						</label>
 					{/each}
-				</div>
+				</fieldset>
 				<div class="space-y-1.5">
 					<label for="site-default-lang" class="text-sm"
 						>{m.admin_settings_site_default_lang()}</label
@@ -259,7 +266,7 @@
 	<SettingsForm
 		action="?/saveTimezone"
 		dirty={tzDirty}
-		message={messageFor('timezone')}
+		message={tzDirty && !errorFor('timezone') ? null : messageFor('timezone')}
 		error={errorFor('timezone')}
 		onCancel={() => (tz = null)}
 	>

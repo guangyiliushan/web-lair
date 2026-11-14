@@ -26,6 +26,15 @@ describe('siteIconHref (W5.3)', () => {
 		);
 	});
 
+	it('places the cache bust before a fragment instead of inside it', () => {
+		expect(siteIconHref({ url: 'https://cdn.example/icon.svg#dark', version: 2 }, FALLBACK)).toBe(
+			'https://cdn.example/icon.svg?v=2#dark'
+		);
+		expect(siteIconHref({ url: '/i/icon.svg#dark', version: 3 }, FALLBACK)).toBe(
+			'/i/icon.svg?v=3#dark'
+		);
+	});
+
 	it('falls back for schemes the registry never stores', () => {
 		for (const url of ['http://example.com/a.ico', 'javascript:alert(1)', 'data:,x', 'i/a.ico']) {
 			expect(siteIconHref({ url, version: 1 }, FALLBACK)).toBe(FALLBACK);

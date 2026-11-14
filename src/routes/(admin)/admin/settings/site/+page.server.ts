@@ -13,6 +13,7 @@ import { ADMIN_BASE_PATH } from '$lib/server/config/admin';
 import { getPublicOrigin } from '$lib/server/origin';
 import { APP_VERSION } from '$lib/server/version';
 import { assertSettingWrite, settingAccess } from '$lib/server/settings/tiers';
+import { SITE_UPDATE_EVENT } from '$lib/server/settings/site-events';
 import { db } from '$lib/server/db';
 import { recordActivity } from '$lib/server/audit';
 import { m } from '$lib/paraglide/messages';
@@ -107,7 +108,7 @@ export const actions: Actions = {
 		await db.transaction(async (tx) => {
 			await setOption('site.info', info, tx);
 			await recordActivity(tx, {
-				event: 'site.update',
+				event: SITE_UPDATE_EVENT,
 				actorId: locals.user?.id ?? null,
 				payload: { fields: ['info'] }
 			});
@@ -142,7 +143,7 @@ export const actions: Actions = {
 		await db.transaction(async (tx) => {
 			await setOption('site.icon', icon, tx);
 			await recordActivity(tx, {
-				event: 'site.update',
+				event: SITE_UPDATE_EVENT,
 				actorId: locals.user?.id ?? null,
 				payload: { fields: ['icon'] }
 			});
@@ -172,7 +173,7 @@ export const actions: Actions = {
 			await db.transaction(async (tx) => {
 				await setOption('site.timezone', timezone, tx);
 				await recordActivity(tx, {
-					event: 'site.update',
+					event: SITE_UPDATE_EVENT,
 					actorId: locals.user?.id ?? null,
 					payload: { fields: ['timezone'] }
 				});
@@ -252,7 +253,7 @@ export const actions: Actions = {
 			await setOption('site.languages', languages, tx);
 			await setOption('site.default_lang', validDefault, tx);
 			await recordActivity(tx, {
-				event: 'site.update',
+				event: SITE_UPDATE_EVENT,
 				actorId: locals.user?.id ?? null,
 				payload: { fields: ['languages', 'default_lang'] }
 			});

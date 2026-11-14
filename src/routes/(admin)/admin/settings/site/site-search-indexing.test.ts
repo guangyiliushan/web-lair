@@ -35,7 +35,17 @@ describe('Site search indexing (W5.6)', () => {
 	it('has no standalone settings/search route and no nav entry for it', () => {
 		expect(existsSync(SEARCH_ROUTE)).toBe(false);
 		expect(NAV).not.toMatch(/id:\s*'(?:search|system)'/);
-		expect(NAV.match(/id:\s*'/g)).toHaveLength(8);
+		const ids = [...NAV.matchAll(/id:\s*'([a-z-]+)'/g)].map((match) => match[1]);
+		expect(ids).toEqual([
+			'profile',
+			'site',
+			'content',
+			'notifications',
+			'integrations',
+			'storage',
+			'ai',
+			'account'
+		]);
 	});
 
 	it('still says site search is not implemented (SE3)', () => {

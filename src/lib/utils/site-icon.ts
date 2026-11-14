@@ -27,6 +27,14 @@ export function siteIconHref(icon: SiteIconValue | null | undefined, fallback: s
 	if (!url) return fallback;
 	if (!url.startsWith('/i/') && !isHttpsUrl(url)) return fallback;
 	const version = Number.isInteger(icon?.version) ? icon!.version : 0;
-	const separator = url.includes('?') ? '&' : '?';
-	return `${url}${separator}v=${version}`;
+	// Parse rather than concatenate: a URL carrying a fragment must get the
+	// cache bust before the `#`, otherwise the request URL never changes
+	// (`...svg#dark?v=2` is still `...svg`).
+	try {
+		const parsed = new URL(url, 'https://site.local');
+		parsed.searchParams.set('v', String(version));
+		return url.startsWith('/') ? `${parsed.pathname}${parsed.search}${parsed.hash}` : parsed.href;
+	} catch {
+		return fallback;
+	}
 }

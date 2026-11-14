@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WEBHOOK_EVENT_ROSTER } from '$lib/server/webhooks/events';
+import { SITE_UPDATE_EVENT } from '$lib/server/settings/site-events';
 
 /**
  * W5.7 audit contract: `site.update` must satisfy the activities CHECK
@@ -9,10 +10,10 @@ import { WEBHOOK_EVENT_ROSTER } from '$lib/server/webhooks/events';
  */
 describe('site.update audit contract (W5.7)', () => {
 	it('has the two-segment shape the activities CHECK requires', () => {
-		expect('site.update').toMatch(/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/);
+		expect(SITE_UPDATE_EVENT).toMatch(/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/);
 	});
 
 	it('is not a webhook event, so a save fans out to zero deliveries', () => {
-		expect(WEBHOOK_EVENT_ROSTER as readonly string[]).not.toContain('site.update');
+		expect(WEBHOOK_EVENT_ROSTER as readonly string[]).not.toContain(SITE_UPDATE_EVENT);
 	});
 });

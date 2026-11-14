@@ -2,27 +2,29 @@ import { expect, test } from '@playwright/test';
 
 /**
  * W5 Site acceptance (goal: W5.2/W5.4/W5.5 arcs): the page is a real editor
- * for the owner (identity form + owner-only language pair), saves round-trip
- * through the database, and the deployment block remains read-only. The
- * scratch `local_e2e` database is mutated by the identity round-trip and then
- * restored, so later specs (friends/micro-c2) still see the original name.
+ * for the owner (identity + favicon + owner-only language pair), saves
+ * round-trip through the database, and the deployment block remains read-only.
+ * The scratch `local_e2e` database is mutated by the round-trips and restored
+ * (name + icon URL), so later specs still see the original identity.
  */
 test.describe.configure({ timeout: 120_000 });
 
-test('Site identity saves and reads back; languages are owner-editable', async ({ page }) => {
+test('Site identity/favicon save and read back; owner controls render', async ({ page }) => {
 	await page.goto('/admin/settings/site');
 	await expect(page.getByRole('heading', { name: 'Site', exact: true }).first()).toBeVisible();
 
+	const identity = page.locator('form').filter({ has: page.locator('#site-name') });
 	const nameInput = page.locator('#site-name');
 	await expect(nameInput).toBeVisible();
 	const original = await nameInput.inputValue();
 	const probe = `${original} E2E`.slice(0, 80);
 
-	const identity = page.locator('form').filter({ has: page.locator('#site-name') });
 	try {
 		await nameInput.fill(probe);
 		await identity.getByRole('button', { name: 'Save' }).click();
 		await expect(identity.getByRole('status')).toContainText(/saved/i);
+		// A clean form proves the action finished (the reload guard is disarmed).
+		await expect(identity.getByRole('button', { name: 'Save' })).toBeDisabled();
 
 		await page.reload();
 		await expect(page.locator('#site-name')).toHaveValue(probe);
@@ -44,8 +46,49 @@ test('Site identity saves and reads back; languages are owner-editable', async (
 		}
 	}
 
-	// Owner-only language pair: the form is present (three checkboxes + default
-	// select) and the deployment block has no TLS/certificate control.
+	// Favicon: the /i/ proxy needs no network probe, so the version row and the
+	// root-layout `?v=` link can be asserted deterministically.
+	const iconForm = page.locator('form').filter({ has: page.locator('#site-icon') });
+	const versionRow = page.getByTestId('site-icon-version');
+	const before = Number(await versionRow.textContent());
+	try {
+		await page.locator('#site-icon').fill('/i/e2e-favicon.svg');
+		await iconForm.getByRole('button', { name: 'Save' }).click();
+		await expect(iconForm.getByRole('status')).toContainText(/saved/i);
+		await expect(versionRow).toHaveText(String(before + 1));
+		await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
+			'href',
+			/\/i\/e2e-favicon\.svg\?v=\d+/
+		);
+	} finally {
+		const iconInput = page.locator('#site-icon');
+		if (await iconInput.count()) {
+			await iconInput.fill('');
+			await page
+				.locator('form')
+				.filter({ has: page.locator('#site-icon') })
+				.getByRole('button', { name: 'Save' })
+				.click();
+			await expect(
+				page
+					.locator('form')
+					.filter({ has: page.locator('#site-icon') })
+					.getByRole('status')
+			).toContainText(/saved/i);
+		}
+	}
+
+	// Root head: manifest + og:site_name reach the home page (W5.3).
+	await page.goto('/');
+	await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
+		'href',
+		'/manifest.webmanifest'
+	);
+	await expect(page.locator('meta[property="og:site_name"]')).toHaveAttribute('content', /.+/);
+	await expect(page.locator('link[rel="icon"]')).toHaveCount(1);
+
+	// Owner-only language pair renders its real controls; no TLS input exists.
+	await page.goto('/admin/settings/site');
 	await expect(page.locator('input[name="enabled"]')).toHaveCount(3);
 	await expect(page.locator('#site-default-lang')).toBeVisible();
 	await expect(
