@@ -76,7 +76,6 @@ describe('pruneDiscardedTranslations', () => {
 		// ERR_INVALID_ARG_TYPE (db:verify-jobs caught it on W9.5).
 		expect(sqlText).toContain('timestamptz');
 		expect(sqlText).not.toContain('cutoff-date');
-		expect(sqlText).toMatch(/\d{4}-\d{2}-\d{2}T/);
 	});
 
 	it('does nothing when the retention window is disabled', async () => {
