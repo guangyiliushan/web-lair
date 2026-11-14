@@ -86,6 +86,7 @@ describe('options registry (AI-1.1)', () => {
 				'presence.readerView',
 				'projects.sync_targets',
 				'site.default_lang',
+				'site.icon',
 				'site.info',
 				'site.languages',
 				'site.ownerStatus',
@@ -452,6 +453,104 @@ describe('options registry (AI-1.1)', () => {
 				{ provider: 'github', account: 'guang' },
 				{ provider: 'gitlab', account: 'guang' }
 			]
+		});
+	});
+
+	it('ships the site.icon key with the bundled-icon fallback (S3)', async () => {
+		state.selectRows = [[]];
+		await expect(getOption('site.icon')).resolves.toEqual({ url: '', version: 0 });
+	});
+
+	it('enforces the site.info name/description bounds and the avatar scheme (S1/S5)', async () => {
+		await expect(setOption('site.info', { name: '', description: '', avatar: '' })).rejects.toThrow(
+			/站点名称不能为空/
+		);
+		await expect(
+			setOption('site.info', { name: '   ', description: '', avatar: '' })
+		).rejects.toThrow(/站点名称不能为空/);
+		await expect(
+			setOption('site.info', { name: 'x'.repeat(81), description: '', avatar: '' })
+		).rejects.toThrow(/80/);
+		await expect(
+			setOption('site.info', { name: 'Site', description: 'a'.repeat(301), avatar: '' })
+		).rejects.toThrow(/300/);
+		await expect(
+			setOption('site.info', { name: 'Site', description: 'two\nlines', avatar: '' })
+		).rejects.toThrow(/单行/);
+		await expect(
+			setOption('site.info', { name: 'Site', description: '', avatar: 'http://example.com/a.png' })
+		).rejects.toThrow(/https/);
+		// The friend-card avatar is https-only; `/i/` is the favicon's allowance.
+		await expect(
+			setOption('site.info', { name: 'Site', description: '', avatar: '/i/a.png' })
+		).rejects.toThrow(/https/);
+		await expect(
+			setOption('site.info', { name: 'Site', description: '', avatar: 'javascript:alert(1)' })
+		).rejects.toThrow(/https/);
+		expect(state.insertCalls).toHaveLength(0);
+
+		await setOption('site.info', {
+			name: '  Web Lair  ',
+			description: ' A short blurb. ',
+			avatar: 'https://cdn.example/a.png'
+		});
+		expect(state.insertCalls[0].values).toEqual({
+			name: 'site.info',
+			value: {
+				name: 'Web Lair',
+				description: 'A short blurb.',
+				avatar: 'https://cdn.example/a.png'
+			}
+		});
+	});
+
+	it('accepts a 80-char name and a 300-char single-line description (positive bounds)', async () => {
+		await setOption('site.info', {
+			name: 'n'.repeat(80),
+			description: 'd'.repeat(300),
+			avatar: ''
+		});
+		expect(state.insertCalls).toHaveLength(1);
+	});
+
+	it('stores site.icon only as https or same-origin /i/ with an integer version', async () => {
+		for (const url of [
+			'http://example.com/a.ico',
+			'javascript:alert(1)',
+			'data:image/svg+xml;base64,AAAA'
+		]) {
+			await expect(setOption('site.icon', { url, version: 1 })).rejects.toThrow(/图标/);
+		}
+		await expect(setOption('site.icon', { url: '/i/a.ico', version: -1 })).rejects.toThrow();
+		await expect(setOption('site.icon', { url: '/i/a.ico', version: 1.5 })).rejects.toThrow();
+		expect(state.insertCalls).toHaveLength(0);
+
+		await setOption('site.icon', { url: 'https://cdn.example/favicon.svg', version: 2 });
+		expect(state.insertCalls[0].values).toEqual({
+			name: 'site.icon',
+			value: { url: 'https://cdn.example/favicon.svg', version: 2 }
+		});
+		await setOption('site.icon', { url: '/i/favicon.ico', version: 3 });
+		expect(state.insertCalls[1].values).toEqual({
+			name: 'site.icon',
+			value: { url: '/i/favicon.ico', version: 3 }
+		});
+	});
+
+	it('rejects empty or duplicate site.languages and stores the canonical order (S7)', async () => {
+		await expect(setOption('site.languages', { enabled: [] })).rejects.toThrow(/至少保留一种语言/);
+		await expect(setOption('site.languages', { enabled: ['en', 'en'] })).rejects.toThrow(
+			/同一语言只能启用一次/
+		);
+		await expect(setOption('site.languages', { enabled: ['fr'] as never })).rejects.toThrow();
+		expect(state.insertCalls).toHaveLength(0);
+
+		// Enabled languages are stored in the catalog order (en, zh-cn, ja)
+		// regardless of the checkbox order the browser posts.
+		await setOption('site.languages', { enabled: ['ja', 'en'] });
+		expect(state.insertCalls[0].values).toEqual({
+			name: 'site.languages',
+			value: { enabled: ['en', 'ja'] }
 		});
 	});
 });

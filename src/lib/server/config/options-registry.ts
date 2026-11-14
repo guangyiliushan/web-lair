@@ -11,6 +11,32 @@ import { OWNER_STATUS_DEFAULT, OWNER_STATUS_KINDS } from '../../config/owner-sta
 /** Site languages (same set as the posts `lang` CHECK, ledger §9.16). */
 export const OPTION_LANGS = ['en', 'zh-cn', 'ja'] as const;
 
+/**
+ * Public site asset URLs (decision register §3A, S3/S5): empty means "unset".
+ * `site.info.avatar` is https-only - the friend card renderer runs the same
+ * URL through `safeHttpsUrl`, which drops everything else. The favicon may
+ * additionally point at the same-origin `/i/` media proxy.
+ */
+function isHttpsUrl(value: string): boolean {
+	if (!value) return false;
+	try {
+		return new URL(value).protocol === 'https:';
+	} catch {
+		return false;
+	}
+}
+
+function isSiteIconUrl(value: string): boolean {
+	if (value === '') return true;
+	if (value.startsWith('/i/')) return true;
+	return isHttpsUrl(value);
+}
+
+/** Descriptions are single-line: a stray newline breaks card/llms layout. */
+function isSingleLine(value: string): boolean {
+	return !/[\r\n]/.test(value);
+}
+
 interface RegistryEntry {
 	schema: z.ZodType;
 	default: unknown;
@@ -45,7 +71,19 @@ async function defaultExecutor(): Promise<RegistryExecutor> {
  */
 export const optionRegistry = {
 	'site.languages': {
-		schema: z.object({ enabled: z.array(z.enum(OPTION_LANGS)) }),
+		// S7 (decision register §3A): at least one language, no duplicates and
+		// a canonical order. `default_lang ∈ enabled` is a cross-field
+		// invariant the Site page's paired write enforces - a single-key
+		// schema cannot see both options.
+		schema: z.object({
+			enabled: z
+				.array(z.enum(OPTION_LANGS))
+				.min(1, { error: () => m.admin_option_err_languages_empty() })
+				.refine((langs) => new Set(langs).size === langs.length, {
+					error: () => m.admin_option_err_languages_duplicate()
+				})
+				.transform((langs) => OPTION_LANGS.filter((lang) => langs.includes(lang)))
+		}),
 		default: { enabled: [...OPTION_LANGS] }
 	},
 	'site.default_lang': {
@@ -325,9 +363,43 @@ export const optionRegistry = {
 		}
 	},
 	'site.info': {
-		schema: z.object({ name: z.string(), description: z.string(), avatar: z.string() }),
+		// `name` feeds friend cards, llms.txt, the web manifest and
+		// `og:site_name` (decision S4); `description` is the friend-card
+		// blurb; `avatar` is the optional card avatar (S5). All three are
+		// edited on Settings → Site.
+		schema: z.object({
+			name: z
+				.string()
+				.trim()
+				.min(1, { error: () => m.admin_option_err_name_required() })
+				.max(80, { error: () => m.admin_option_err_name_too_long() }),
+			description: z
+				.string()
+				.trim()
+				.max(300, { error: () => m.admin_option_err_description_too_long() })
+				.refine(isSingleLine, { error: () => m.admin_option_err_description_multiline() }),
+			avatar: z
+				.string()
+				.trim()
+				.refine((value) => value === '' || isHttpsUrl(value), {
+					error: () => m.admin_option_err_avatar_url()
+				})
+		}),
 		// Public "our link info" block on /friends (plan §2.6).
 		default: { name: 'Web Lair', description: '', avatar: '' }
+	},
+	'site.icon': {
+		// Favicon (decision S3): empty url = the bundled static asset; `version`
+		// is bumped by the Site page on every save so the root layout's
+		// `?v=` cache bust changes even when the URL does not.
+		schema: z.object({
+			url: z
+				.string()
+				.trim()
+				.refine(isSiteIconUrl, { error: () => m.admin_option_err_icon_url() }),
+			version: z.number().int().nonnegative()
+		}),
+		default: { url: '', version: 0 }
 	},
 	// `site.owner` is retired (M4 foundation, O-C2): the header reads
 	// site_identity -> user_profiles -> user. Do not reintroduce a projection.
@@ -437,6 +509,13 @@ export function validateOption<K extends OptionKey>(key: K, value: unknown): Opt
 	return entry.schema.parse(value) as OptionValue<K>;
 }
 
+/**
+ * A registry write rejected by a database-backed check (the PostgreSQL
+ * zoneinfo membership gate). Route actions map it to a 400 instead of a 500;
+ * a `ZodError` covers the schema-level rejections.
+ */
+export class OptionWriteError extends Error {}
+
 /** Validate and upsert a value. Throws on invalid input or unknown keys. */
 export async function setOption<K extends OptionKey>(
 	key: K,
@@ -456,7 +535,7 @@ export async function setOption<K extends OptionKey>(
 			executor as unknown as PgTimeZoneExecutor | undefined
 		);
 		if (!accepted) {
-			throw new Error(m.admin_option_err_tz_pg_rejected({ tz: String(parsed) }));
+			throw new OptionWriteError(m.admin_option_err_tz_pg_rejected({ tz: String(parsed) }));
 		}
 	}
 	const database = executor ?? (await defaultExecutor());
