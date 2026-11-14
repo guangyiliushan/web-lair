@@ -390,7 +390,10 @@ test.describe('passkey last-key guard', () => {
 			);
 			await page.reload();
 			await expect(
-				page.getByText('This account has no password credential.', { exact: false })
+				page.getByText(
+					'This account has no password credential. It signs in with OAuth or a passkey',
+					{ exact: false }
+				)
 			).toBeVisible();
 
 			page.once('dialog', (dialog) => dialog.accept());
