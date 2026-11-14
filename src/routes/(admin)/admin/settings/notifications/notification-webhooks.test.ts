@@ -42,7 +42,13 @@ const { mocks, state } = vi.hoisted(() => {
 	};
 	const mocks = {
 		requireAdminRole: vi.fn(async () => {}),
-		recordActivity: vi.fn(async () => {})
+		recordActivity: vi.fn(async (...args: unknown[]) => {
+			void args;
+		}),
+		sendMail: vi.fn(async (...args: unknown[]) => {
+			void args;
+		}),
+		isMailConfigured: vi.fn(() => true)
 	};
 	return { mocks, state };
 });
@@ -59,7 +65,11 @@ vi.mock('$lib/server/db', () => {
 			where: (cond: unknown) => {
 				state.whereConds.push(cond);
 				const rows = state.selectQueue.shift() ?? [];
-				return Object.assign(Promise.resolve(rows), { limit: async () => rows });
+				const pending = Promise.resolve(rows);
+				return Object.assign(pending, {
+					limit: async () => rows,
+					orderBy: () => ({ limit: async () => rows })
+				});
 			},
 			// W2.6: the ids-only select (`select({ id }).from(webhooks)`) has no
 			// orderBy/where and is awaited directly.
@@ -144,6 +154,10 @@ vi.mock('$lib/server/db/system', async (importOriginal) => {
 });
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: mocks.requireAdminRole }));
 vi.mock('$lib/server/audit', () => ({ recordActivity: mocks.recordActivity }));
+vi.mock('$lib/server/mail/transport', () => ({
+	isMailConfigured: mocks.isMailConfigured,
+	sendMail: mocks.sendMail
+}));
 // W2.6: the secret is encrypted before it is stored, so the route needs a
 // usable keyring. One fixed 32-byte test key, version 1.
 vi.mock('$env/dynamic/private', () => ({
@@ -182,14 +196,18 @@ function makeFormData(fields: Record<string, string | string[]>) {
 	return body;
 }
 
-function makeEvent(fields: Record<string, string | string[]>, role: 'owner' | 'admin' = 'owner') {
+function makeEvent(
+	fields: Record<string, string | string[]>,
+	role: 'owner' | 'admin' = 'owner',
+	userOverrides: Record<string, unknown> = {}
+) {
 	return {
 		request: new Request('http://x/admin/settings/notifications', {
 			method: 'POST',
 			body: makeFormData(fields)
 		}),
 		locals: {
-			user: { id: 'admin-1', role },
+			user: { id: 'admin-1', role, email: 'owner@example.com', ...userOverrides },
 			admin: { userId: 'admin-1', role }
 		}
 	};
@@ -198,11 +216,15 @@ function makeEvent(fields: Record<string, string | string[]>, role: 'owner' | 'a
 async function callAction(
 	name: string,
 	fields: Record<string, string | string[]>,
-	role: 'owner' | 'admin' = 'owner'
+	role: 'owner' | 'admin' = 'owner',
+	userOverrides: Record<string, unknown> = {}
 ) {
 	try {
 		const fn = (actions as unknown as Record<string, (event: never) => Promise<unknown>>)[name];
-		const result = (await fn(makeEvent(fields, role) as never)) as Record<string, unknown>;
+		const result = (await fn(makeEvent(fields, role, userOverrides) as never)) as Record<
+			string,
+			unknown
+		>;
 		return { result, thrown: undefined as unknown };
 	} catch (thrown) {
 		return { result: undefined, thrown };
@@ -236,6 +258,75 @@ function resetState() {
 	state.selectCount = 0;
 	state.whereConds = [];
 }
+
+describe('notification mail test (W9.1)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		resetState();
+	});
+
+	it('runs requireAdminRole first', async () => {
+		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
+		const { thrown } = await callAction('testMail', {});
+		expect(thrown).toBeInstanceOf(Error);
+		expect(state.selectCount).toBe(0);
+	});
+
+	it('refuses when SMTP is not configured (the button is disabled too)', async () => {
+		mocks.isMailConfigured.mockReturnValueOnce(false);
+		const { result } = await callAction('testMail', {});
+		expect(result).toMatchObject({ status: 400 });
+		expect(state.selectCount).toBe(0);
+		expect(mocks.sendMail).not.toHaveBeenCalled();
+	});
+
+	it('refuses an account without an email address', async () => {
+		const { result } = await callAction('testMail', {}, 'owner', { email: null });
+		expect(result).toMatchObject({ status: 400 });
+		expect(state.selectCount).toBe(0);
+	});
+
+	it('throttles a second send inside the minute window', async () => {
+		state.selectQueue.push([{ createdAt: new Date(Date.now() - 5_000) }]);
+		const { result } = await callAction('testMail', {});
+		expect(result).toMatchObject({ status: 429 });
+		expect(mocks.sendMail).not.toHaveBeenCalled();
+		expect(mocks.recordActivity).not.toHaveBeenCalled();
+		// The throttle reads this actor's own mail.test rows, not another admin's.
+		const where = sqlOf(state.whereConds[0]);
+		expect(where).toContain('"activities"."event"');
+		expect(where).toContain('"activities"."actor_id"');
+	});
+
+	it('sends to the signed-in address and audits mail.test with a masked recipient', async () => {
+		state.selectQueue.push([]);
+		const { result } = await callAction('testMail', {});
+		expect(result).toMatchObject({ op: 'testMail', mailTested: true });
+		expect(mocks.sendMail).toHaveBeenCalledTimes(1);
+		const mail = mocks.sendMail.mock.calls[0]![0] as { to: string; subject: string; text: string };
+		expect(mail.to).toBe('owner@example.com');
+		expect(mail.subject).toContain('SMTP test email');
+		expect(mocks.recordActivity).toHaveBeenCalledTimes(1);
+		expect(mocks.recordActivity.mock.calls[0]![1]).toMatchObject({
+			event: 'mail.test',
+			actorId: 'admin-1',
+			payload: { to: 'o***@example.com', ok: true },
+			deliver: false
+		});
+	});
+
+	it('audits a failed send (the attempt still counts toward the limit)', async () => {
+		state.selectQueue.push([]);
+		mocks.sendMail.mockRejectedValueOnce(new Error('550 relay denied'));
+		const { result } = await callAction('testMail', {});
+		expect(result).toMatchObject({ status: 502 });
+		expect(mocks.recordActivity.mock.calls[0]![1]).toMatchObject({
+			event: 'mail.test',
+			payload: { to: 'o***@example.com', ok: false, error: '550 relay denied' },
+			deliver: false
+		});
+	});
+});
 
 describe('notification webhooks retry', () => {
 	beforeEach(() => {

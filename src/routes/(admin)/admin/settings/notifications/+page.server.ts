@@ -1,13 +1,17 @@
 import { fail } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
-import { asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { pgErrorCode } from '$lib/server/db/pg-error';
-import { webhookDeliveries, webhookSecrets, webhooks } from '$lib/server/db/system';
+import { activities, webhookDeliveries, webhookSecrets, webhooks } from '$lib/server/db/system';
 import { requireAdminRole } from '$lib/server/authz';
 import { assertSettingWrite, settingAccess } from '$lib/server/settings/tiers';
 import { recordActivity } from '$lib/server/audit';
+import { isMailConfigured, sendMail } from '$lib/server/mail/transport';
+import { readMailStatus, maskEmailAddress } from '$lib/server/mail/status';
+import { buildTestMailContent, evaluateMailTestRateLimit } from '$lib/server/mail/test';
+
 import { SecretError } from '$lib/server/secrets/errors';
 import { decryptSecret, secretAad } from '$lib/server/secrets/crypto';
 import { loadKeyring, type SecretDb } from '$lib/server/secrets/resolver';
@@ -188,12 +192,7 @@ export const load: PageServerLoad = async (event) => {
 		webhookEndpoints,
 		webhookEventRoster: [...WEBHOOK_EVENT_ROSTER],
 		editable: settingAccess(event.locals.admin?.role, 'notifications').editable,
-		mail: {
-			configured:
-				env.MAIL_ENABLED?.trim() === 'true' &&
-				Boolean(env.MAIL_SMTP_HOST?.trim()) &&
-				Boolean(env.MAIL_FROM?.trim())
-		},
+		mail: readMailStatus((name) => env[name]),
 		webhookDeliveries: deliveryRows.map((row) => {
 			// The FK cascade removes a deleted endpoint's deliveries, so this
 			// lookup is total by construction (nine-dimension DB-04: the dead
@@ -209,6 +208,90 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
+	/**
+	 * Real SMTP test (W9.1 / decision N2). The recipient is the signed-in
+	 * admin's own address - never a form field, so the page cannot be used to
+	 * send mail to third parties. SMTP stays env-only; there is no editable
+	 * host/user/password here.
+	 *
+	 * Throttling reads the `mail.test` audit rows themselves (one source of
+	 * truth across replicas). A failed send is audited too and counts toward
+	 * the limit: a broken SMTP relay must not be hammered by retry clicks.
+	 */
+	testMail: async ({ locals }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'notifications', 'notifications.mail');
+		const to = locals.user?.email?.trim();
+		if (!to) {
+			return fail(400, {
+				op: 'testMail',
+				message: m.admin_settings_notification_test_no_address()
+			});
+		}
+		if (!isMailConfigured()) {
+			return fail(400, {
+				op: 'testMail',
+				message: m.admin_settings_notification_test_unconfigured()
+			});
+		}
+		const now = new Date();
+		const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+		const recent = await db
+			.select({ createdAt: activities.createdAt })
+			.from(activities)
+			.where(
+				and(
+					eq(activities.event, 'mail.test'),
+					eq(activities.actorId, locals.user?.id ?? ''),
+					gte(activities.createdAt, hourAgo)
+				)
+			)
+			.orderBy(desc(activities.createdAt))
+			.limit(10);
+		const verdict = evaluateMailTestRateLimit(
+			recent.map((row) => row.createdAt),
+			now
+		);
+		if (!verdict.allowed) {
+			return fail(429, {
+				op: 'testMail',
+				message: m.admin_settings_notification_test_rate_limited({
+					seconds: Math.ceil(verdict.retryAfterMs / 1000)
+				})
+			});
+		}
+		const content = buildTestMailContent(now);
+		try {
+			await sendMail({ to, subject: content.subject, text: content.text });
+		} catch (error) {
+			const reason = (error instanceof Error ? error.message || error.name : 'unknown error').slice(
+				0,
+				200
+			);
+			await recordActivity(db, {
+				event: 'mail.test',
+				actorId: locals.user?.id ?? null,
+				payload: { to: maskEmailAddress(to), ok: false, error: reason },
+				deliver: false
+			});
+			return fail(502, {
+				op: 'testMail',
+				message: m.admin_settings_notification_test_failed({ reason })
+			});
+		}
+		await recordActivity(db, {
+			event: 'mail.test',
+			actorId: locals.user?.id ?? null,
+			payload: { to: maskEmailAddress(to), ok: true },
+			deliver: false
+		});
+		return {
+			op: 'testMail',
+			mailTested: true,
+			message: m.admin_settings_notification_test_sent({ to })
+		};
+	},
+
 	retry: async ({ request }) => {
 		await requireAdminRole();
 		const form = await request.formData();

@@ -110,6 +110,10 @@
 	let rotatePending = $state(false);
 	let retryPendingId = $state<string | null>(null);
 	let togglePendingId = $state<string | null>(null);
+	// Mail test (W9.1): the send result stays local to the Mail section; the
+	// page-wide `form` slot belongs to the webhook actions.
+	let mailPending = $state(false);
+	let mailNotice = $state<{ kind: 'ok' | 'error'; text: string } | null>(null);
 	// One-time plaintext reveal in DEDICATED state (review round-2 SY-UI-03):
 	// deriving it from the page-wide form slot meant any unrelated submission
 	// (a toggle, a retry) replaced page.form and silently wiped it mid-copy.
@@ -224,7 +228,7 @@
 
 	<div class="min-h-0 flex-1 overflow-auto">
 		<div class="space-y-8 p-6">
-			<!-- Mail status (read-only; SMTP stays env-only, W9 adds the real test) -->
+			<!-- Mail status (read-only; SMTP stays env-only, W9.1 adds the real test) -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notifications_mail()}</h3>
 				<div class="rounded-lg border">
@@ -235,6 +239,95 @@
 							? m.admin_settings_notifications_mail_configured()
 							: m.admin_settings_notifications_mail_unconfigured()}
 					/>
+					<dl class="grid gap-x-6 gap-y-2 border-t p-4 text-xs sm:grid-cols-2">
+						<div class="flex items-baseline justify-between gap-3">
+							<dt class="text-muted-foreground">{m.admin_settings_notification_mail_enabled()}</dt>
+							<dd>
+								{data.mail.enabled
+									? m.admin_settings_notification_mail_enabled_on()
+									: m.admin_settings_notification_mail_enabled_off()}
+							</dd>
+						</div>
+						<div class="flex items-baseline justify-between gap-3">
+							<dt class="text-muted-foreground">{m.admin_settings_notification_mail_host()}</dt>
+							<dd class="font-mono">{data.mail.host ?? '—'}</dd>
+						</div>
+						<div class="flex items-baseline justify-between gap-3">
+							<dt class="text-muted-foreground">{m.admin_settings_notification_mail_port()}</dt>
+							<dd class="font-mono">{data.mail.port ?? '—'}</dd>
+						</div>
+						<div class="flex items-baseline justify-between gap-3">
+							<dt class="text-muted-foreground">{m.admin_settings_notification_mail_from()}</dt>
+							<dd class="font-mono break-all">{data.mail.from ?? '—'}</dd>
+						</div>
+						<div class="flex items-baseline justify-between gap-3">
+							<dt class="text-muted-foreground">{m.admin_settings_notification_mail_tls()}</dt>
+							<dd>
+								{data.mail.tls === 'implicit'
+									? m.admin_settings_notification_mail_tls_implicit()
+									: data.mail.tls === 'starttls'
+										? m.admin_settings_notification_mail_tls_starttls()
+										: data.mail.tls === 'opportunistic'
+											? m.admin_settings_notification_mail_tls_opportunistic()
+											: '—'}
+							</dd>
+						</div>
+						<div class="flex items-baseline justify-between gap-3">
+							<dt class="text-muted-foreground">{m.admin_settings_notification_mail_dkim()}</dt>
+							<dd>
+								{data.mail.dkim.configured
+									? m.admin_settings_notification_mail_dkim_on({
+											selector: data.mail.dkim.selector ?? '',
+											domain: data.mail.dkim.domain ?? ''
+										})
+									: m.admin_settings_notification_mail_dkim_off()}
+							</dd>
+						</div>
+					</dl>
+					<form
+						method="POST"
+						action="?/testMail"
+						class="space-y-2 border-t p-4"
+						use:enhance={() => {
+							mailPending = true;
+							mailNotice = null;
+							return async ({ result, update }) => {
+								await update();
+								mailPending = false;
+								if (result.type === 'success') {
+									const message = (result.data as { message?: unknown } | undefined)?.message;
+									mailNotice = {
+										kind: 'ok',
+										text: typeof message === 'string' ? message : ''
+									};
+								} else if (result.type === 'failure') {
+									mailNotice = {
+										kind: 'error',
+										text: failureMessage(result.data) ?? ''
+									};
+								}
+							};
+						}}
+					>
+						<p class="text-xs text-muted-foreground">
+							{m.admin_settings_notification_test_mail_desc()}
+						</p>
+						<div class="flex flex-wrap items-center gap-2">
+							<Button
+								type="submit"
+								variant="outline"
+								size="sm"
+								disabled={!data.mail.configured || mailPending}
+							>
+								{m.admin_settings_notification_send_test()}
+							</Button>
+							{#if mailNotice?.kind === 'ok' && mailNotice.text}
+								<p role="status" class="text-xs text-muted-foreground">{mailNotice.text}</p>
+							{:else if mailNotice?.kind === 'error' && mailNotice.text}
+								<p role="alert" class="text-xs text-destructive">{mailNotice.text}</p>
+							{/if}
+						</div>
+					</form>
 				</div>
 			</section>
 
