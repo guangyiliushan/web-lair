@@ -57,12 +57,12 @@ test('content renders the real W6 forms and no dead control', async ({ page }) =
 	await page.goto('/admin/settings/content');
 	// Seven real forms: comments, comment privacy, friends apply, friends
 	// checks, friends policy, reading presence, notes gate.
-	await expect(page.locator('main form')).toHaveCount(7);
-	const buttons = page.locator('main button');
-	const count = await buttons.count();
-	expect(count).toBeGreaterThan(0);
-	for (let i = 0; i < count; i += 1) {
-		await expect(buttons.nth(i)).toHaveAttribute('type', 'submit');
+	const forms = page.locator('main form');
+	await expect(forms).toHaveCount(7);
+	// Every form has a real submit button (the bits-ui Switch is a button
+	// without an explicit type attribute, so assert per form, not globally).
+	for (const form of await forms.all()) {
+		expect(await form.locator('button[type="submit"]').count()).toBeGreaterThan(0);
 	}
 	// The removed pseudo controls never come back.
 	await expect(page.getByText(/Anti-spam|Blocked IPs|Blocked words|Chinese only/)).toHaveCount(0);
