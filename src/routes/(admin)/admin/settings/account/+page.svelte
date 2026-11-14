@@ -27,6 +27,7 @@
 			totpURI?: string;
 			backupCodes?: string[];
 			step?: string;
+			error?: boolean;
 		} | null
 	);
 
@@ -39,26 +40,43 @@
 	let pendingTotpURI = $state<string | null>(null);
 	let pendingBackupCodes = $state<string[]>([]);
 
+	// No-JS fallback: an action response re-renders the page with `form`, so
+	// the secret/codes must also be readable from the payload; local state only
+	// carries them across a failed activation submit.
+	const shownTotpURI = $derived(pendingTotpURI ?? actionForm?.totpURI ?? null);
+	const shownBackupCodes = $derived(
+		pendingBackupCodes.length ? pendingBackupCodes : (actionForm?.backupCodes ?? [])
+	);
+	const setupKey = $derived.by(() => {
+		const uri = shownTotpURI;
+		if (!uri) return null;
+		try {
+			return new URL(uri).searchParams.get('secret') ?? uri;
+		} catch {
+			return uri;
+		}
+	});
+
 	// Content language moved to Profile & Preferences (IA2/W4.7); the account
 	// page is security-only.
 	const deviceForm = $derived(
 		form as {
 			message?: string | null;
 			step?: string;
-			status?: number;
+			error?: boolean;
 		} | null
 	);
 	const deviceMessage = $derived(deviceForm?.step === 'devices' ? deviceForm.message : null);
-	const deviceError = $derived(Boolean(deviceForm?.status && deviceForm.status >= 400));
+	const deviceError = $derived(Boolean(deviceForm?.error));
 	const passwordForm = $derived(
 		form as {
 			message?: string | null;
 			step?: string;
-			status?: number;
+			error?: boolean;
 		} | null
 	);
 	const passwordMessage = $derived(passwordForm?.step === 'password' ? passwordForm.message : null);
-	const passwordError = $derived(Boolean(passwordForm?.status && passwordForm.status >= 400));
+	const passwordError = $derived(Boolean(passwordForm?.error));
 	let currentPassword = $state('');
 	let newPassword = $state('');
 	let confirmPassword = $state('');
@@ -71,17 +89,18 @@
 		confirmPassword = '';
 	}
 	$effect(() => {
-		if (passwordForm?.step === 'password' && !passwordForm.status) resetPassword();
+		if (passwordForm?.step === 'password' && passwordForm.message && !passwordForm.error)
+			resetPassword();
 	});
 	const passkeyForm = $derived(
 		form as {
 			message?: string | null;
 			step?: string;
-			status?: number;
+			error?: boolean;
 		} | null
 	);
 	const passkeyMessage = $derived(passkeyForm?.step === 'passkey' ? passkeyForm.message : null);
-	const passkeyError = $derived(Boolean(passkeyForm?.status && passkeyForm.status >= 400));
+	const passkeyError = $derived(Boolean(passkeyForm?.error));
 	let newPasskeyName = $state('');
 	let passkeyPending = $state(false);
 	let passkeyClientError = $state<string | null>(null);
@@ -104,7 +123,11 @@
 				const code = (result.error as { code?: string }).code ?? '';
 				// A cancelled WebAuthn prompt is not an error the user needs to
 				// read; every other failure has one actionable message.
-				if (code !== 'REGISTRATION_CANCELLED' && code !== 'AUTH_CANCELLED') {
+				if (
+					code !== 'REGISTRATION_CANCELLED' &&
+					code !== 'AUTH_CANCELLED' &&
+					code !== 'ERROR_CEREMONY_ABORTED'
+				) {
 					passkeyClientError =
 						code === 'SESSION_NOT_FRESH'
 							? m.admin_settings_account_passkey_session_stale()
@@ -167,18 +190,23 @@
 		<p class="mb-3 text-xs text-muted-foreground">{m.admin_settings_2fa_scope()}</p>
 
 		{#if actionForm?.message && ['enable', 'activate', 'disable', 'regenerate', 'regenerated', 'done'].includes(actionForm.step ?? '')}
-			<div class="mb-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm" role="status">
+			<div
+				class="mb-3 flex items-center gap-2 rounded-md px-3 py-2 text-sm {actionForm.error
+					? 'bg-destructive/10 text-destructive'
+					: 'bg-muted'}"
+				role={actionForm.error ? 'alert' : 'status'}
+			>
 				<IconAlertCircle class="size-4 shrink-0" />
 				<span>{actionForm.message}</span>
 			</div>
 		{/if}
 
-		{#if pendingTotpURI}
+		{#if shownTotpURI}
 			<div class="space-y-3 rounded-lg border bg-background p-3">
 				<p class="text-sm">{m.admin_settings_2fa_scan_hint()}</p>
 				<div class="space-y-1">
 					<div class="text-xs text-muted-foreground">{m.admin_settings_2fa_secret()}</div>
-					<code class="block rounded bg-muted px-2 py-1 text-xs break-all">{pendingTotpURI}</code>
+					<code class="block rounded bg-muted px-2 py-1 text-xs break-all">{setupKey}</code>
 				</div>
 				<form method="post" action="?/activate" use:enhance class="flex items-end gap-2">
 					<Input
@@ -187,6 +215,7 @@
 						inputmode="numeric"
 						autocomplete="one-time-code"
 						placeholder="123456"
+						aria-label={m.admin_settings_2fa_code()}
 						required
 					/>
 					<Button type="submit" size="sm">
@@ -197,11 +226,11 @@
 			</div>
 		{/if}
 
-		{#if pendingBackupCodes.length}
+		{#if shownBackupCodes.length}
 			<div class="space-y-2 rounded-lg border bg-background p-3">
 				<div class="text-xs text-muted-foreground">{m.admin_settings_2fa_backup_codes()}</div>
 				<div class="grid grid-cols-2 gap-1">
-					{#each pendingBackupCodes as backupCode (backupCode)}
+					{#each shownBackupCodes as backupCode (backupCode)}
 						<code class="rounded bg-muted px-2 py-1 text-xs">{backupCode}</code>
 					{/each}
 				</div>
@@ -221,6 +250,7 @@
 						type="password"
 						autocomplete="current-password"
 						placeholder={m.admin_settings_2fa_password()}
+						aria-label={m.admin_settings_2fa_regenerate_password()}
 						required
 					/>
 					<Button type="submit" variant="outline" size="sm">
@@ -233,6 +263,7 @@
 						type="password"
 						autocomplete="current-password"
 						placeholder={m.admin_settings_2fa_password()}
+						aria-label={m.admin_settings_2fa_disable_password()}
 						required
 					/>
 					<Button type="submit" variant="outline" size="sm" class="text-destructive">
@@ -240,17 +271,24 @@
 					</Button>
 				</form>
 			</div>
-		{:else if !pendingTotpURI}
-			<form method="post" action="?/enable" use:enhance class="flex items-end gap-2">
-				<Input
-					name="password"
-					type="password"
-					autocomplete="current-password"
-					placeholder={m.admin_settings_2fa_password()}
-					required
-				/>
-				<Button type="submit" size="sm">{m.admin_settings_2fa_enable()}</Button>
-			</form>
+		{:else if !shownTotpURI}
+			{#if data.hasPassword}
+				<form method="post" action="?/enable" use:enhance class="flex items-end gap-2">
+					<Input
+						name="password"
+						type="password"
+						autocomplete="current-password"
+						placeholder={m.admin_settings_2fa_password()}
+						aria-label={m.admin_settings_2fa_enable_password()}
+						required
+					/>
+					<Button type="submit" size="sm">{m.admin_settings_2fa_enable()}</Button>
+				</form>
+			{:else}
+				<p class="text-sm text-muted-foreground">
+					{m.admin_settings_2fa_password_required()}
+				</p>
+			{/if}
 		{/if}
 	</section>
 
@@ -503,6 +541,7 @@
 							<span class="min-w-0 flex-1 truncate font-medium">
 								{passkey.name ?? m.admin_settings_account_passkey()}
 							</span>
+							<span class="text-xs text-muted-foreground">{passkey.deviceType}</span>
 							<Badge variant={passkey.backedUp ? 'default' : 'secondary'}>
 								{passkey.backedUp
 									? m.admin_settings_account_passkey_backed_up()

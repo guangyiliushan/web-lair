@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIError } from 'better-auth/api';
 import { isRedirect } from '@sveltejs/kit';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 /**
  * Account security route tests (W8.9). The load must expose only database
@@ -11,7 +13,8 @@ import { isRedirect } from '@sveltejs/kit';
 const { state, dbMock, api, guardMock, sessionsMock, auditMock, getOptionMock } = vi.hoisted(() => {
 	const state = {
 		userRow: { twoFactorEnabled: false },
-		rows: new Map<unknown, unknown[]>()
+		rows: new Map<unknown, unknown[]>(),
+		whereCalls: [] as unknown[]
 	};
 	const api = {
 		revokeSession: vi.fn(async () => ({ status: true })),
@@ -37,7 +40,10 @@ const { state, dbMock, api, guardMock, sessionsMock, auditMock, getOptionMock } 
 				table = value;
 				return chain;
 			};
-			chain.where = () => chain;
+			chain.where = (condition: unknown) => {
+				state.whereCalls.push(condition);
+				return chain;
+			};
 			chain.orderBy = () => chain;
 			chain.limit = async () => state.rows.get(table) ?? [];
 			chain.then = (resolve: (value: unknown[]) => unknown, reject: (reason: unknown) => unknown) =>
@@ -122,6 +128,11 @@ function rows(table: unknown, values: unknown[]) {
 	state.rows.set(table, values);
 }
 
+const dialect = new PgDialect();
+function lastWhere() {
+	return dialect.sqlToQuery(state.whereCalls.at(-1) as SQL);
+}
+
 function lastAudit() {
 	const call = auditMock.mock.calls.at(-1) as unknown as [unknown, Record<string, unknown>];
 	return call?.[1];
@@ -136,6 +147,7 @@ describe('account security page', () => {
 		vi.clearAllMocks();
 		state.userRow = { twoFactorEnabled: false };
 		state.rows = new Map();
+		state.whereCalls = [];
 		rows(accountTable, [{ id: 'cred-1' }]);
 	});
 
@@ -163,7 +175,6 @@ describe('account security page', () => {
 				{
 					id: 'pk-1',
 					name: 'Laptop',
-					aaguid: 'aaguid-1',
 					createdAt: NOW,
 					deviceType: 'singleDevice',
 					backedUp: false
@@ -200,7 +211,6 @@ describe('account security page', () => {
 				{
 					id: 'pk-1',
 					name: 'Laptop',
-					aaguid: 'aaguid-1',
 					deviceType: 'singleDevice',
 					backedUp: false,
 					createdLabel: NOW.toISOString()
@@ -214,7 +224,6 @@ describe('account security page', () => {
 					callback: 'http://localhost:4173/api/auth/callback/github'
 				},
 				google: {
-					configured: false,
 					callback: 'http://localhost:4173/api/auth/callback/google'
 				}
 			});
@@ -249,6 +258,11 @@ describe('account security page', () => {
 			expect(JSON.stringify(result)).not.toContain('stored-token');
 			expect(lastAuditEvent()).toBe('account.session_revoke');
 			expect(lastAudit()?.payload).toEqual({ session_id: 'session-2' });
+			expect(lastAudit()).toMatchObject({ actorId: 'user-1', deliver: false });
+			const where = lastWhere();
+			expect(where.sql.toLowerCase()).toContain('"session"."user_id"');
+			expect(where.params).toContain('user-1');
+			expect(where.params).toContain('session-2');
 		});
 
 		it('returns 404 for a session id that is not owned by the signed-in user', async () => {
@@ -320,6 +334,24 @@ describe('account security page', () => {
 			expect(sessionsMock.pruneOtherSessionsKeepingNewest).not.toHaveBeenCalled();
 		});
 
+		it('maps a missing credential account to the unavailable error', async () => {
+			api.changePassword.mockRejectedValueOnce(
+				APIError.from('BAD_REQUEST', {
+					code: 'CREDENTIAL_ACCOUNT_NOT_FOUND',
+					message: 'Credential account not found'
+				})
+			);
+			const result = await callAction('changePassword', {
+				currentPassword: 'old-password',
+				newPassword: 'new-password-1',
+				confirmPassword: 'new-password-1'
+			});
+			expect(result).toMatchObject({
+				status: 400,
+				data: { message: 'This account has no password credential.', step: 'password' }
+			});
+		});
+
 		it('changes the password with revokeOtherSessions and records a secret-free audit row', async () => {
 			const result = await callAction('changePassword', {
 				currentPassword: 'old-password',
@@ -341,6 +373,7 @@ describe('account security page', () => {
 				step: 'password'
 			});
 			expect(lastAuditEvent()).toBe('account.password_change');
+			expect(lastAudit()).toMatchObject({ actorId: 'user-1', deliver: false });
 			const payload = JSON.stringify(lastAudit()?.payload ?? {});
 			expect(payload).not.toContain('new-password-1');
 			expect(payload).not.toContain('old-password');
@@ -360,6 +393,17 @@ describe('account security page', () => {
 				data: { message: 'You cannot delete the last passkey while the account has no password.' }
 			});
 			expect(api.deletePasskey).not.toHaveBeenCalled();
+		});
+
+		it('allows deleting one of two passkeys when no password credential exists', async () => {
+			rows(passkeyTable, [{ id: 'pk-1' }, { id: 'pk-2' }]);
+			rows(accountTable, []);
+			const result = await callAction('deletePasskey', { id: 'pk-1' });
+			expect(api.deletePasskey).toHaveBeenCalledWith({
+				body: { id: 'pk-1' },
+				headers: expect.any(Headers)
+			});
+			expect(result).toMatchObject({ step: 'passkey' });
 		});
 
 		it('deletes the last passkey when a password credential exists', async () => {
@@ -399,9 +443,18 @@ describe('account security page', () => {
 			const result = await callAction('enable', { password: 'current-password' });
 			expect(result).toMatchObject({ step: 'activate', backupCodes: ['code-1', 'code-2'] });
 			expect(lastAuditEvent()).toBe('account.two_factor_enable');
+			expect(lastAudit()).toMatchObject({ actorId: 'user-1', deliver: false });
 			const payload = JSON.stringify(lastAudit()?.payload ?? {});
 			expect(payload).not.toContain('ABC');
 			expect(payload).not.toContain('code-1');
+		});
+
+		it('does not log the raw failure message (which may embed DB parameters)', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			api.enableTwoFactor.mockRejectedValueOnce(new Error('insert failed: secret ABC'));
+			await callAction('enable', { password: 'current-password' });
+			expect(JSON.stringify(warn.mock.calls)).not.toContain('ABC');
+			warn.mockRestore();
 		});
 
 		it('activates and disables the factor, keeping the audit trail', async () => {
@@ -450,7 +503,18 @@ describe('account security page', () => {
 		const events = (auditMock.mock.calls as unknown[][]).map(
 			(call) => (call[1] as { event: string }).event
 		);
-		expect(events.length).toBeGreaterThan(8);
+		expect(events.slice().sort()).toEqual([
+			'account.passkey_delete',
+			'account.passkey_rename',
+			'account.password_change',
+			'account.session_revoke',
+			'account.session_revoke_others',
+			'account.session_sign_out',
+			'account.two_factor_activate',
+			'account.two_factor_backup_codes',
+			'account.two_factor_disable',
+			'account.two_factor_enable'
+		]);
 		for (const event of events) {
 			expect(event).toMatch(/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/);
 		}

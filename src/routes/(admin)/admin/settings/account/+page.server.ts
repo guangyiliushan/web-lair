@@ -14,7 +14,7 @@ import {
 } from '$lib/server/db/auth.schema';
 import { requireAdminRole } from '$lib/server/authz';
 import { recordActivity } from '$lib/server/audit';
-import { settingAccess, assertSettingWrite } from '$lib/server/settings/tiers';
+import { assertSettingWrite } from '$lib/server/settings/tiers';
 import { getOption } from '$lib/server/config/options-registry';
 import { pruneOtherSessions, pruneOtherSessionsKeepingNewest } from '$lib/server/auth/sessions';
 import { getAdminConfig } from '$lib/server/config/admin';
@@ -98,6 +98,23 @@ function errorCode(caught: APIError): string {
 }
 
 /**
+ * Best-effort prune after a credential mutation. The credential change has
+ * already succeeded; a cleanup failure must not turn it into a 500 (the next
+ * sign-in also enforces the 10-session cap).
+ */
+async function pruneToNewestSession(userId: string | undefined): Promise<void> {
+	if (!userId) return;
+	try {
+		await pruneOtherSessionsKeepingNewest(userId);
+	} catch (error) {
+		console.warn(
+			'[account] session prune after credential change failed:',
+			error instanceof Error ? error.message : error
+		);
+	}
+}
+
+/**
  * `step` rides along on every failure so the page can keep the user inside the
  * activation flow: without it a failed activation used to drop the rendered
  * secret and force a full re-enable (B3.1 review).
@@ -105,10 +122,12 @@ function errorCode(caught: APIError): string {
 function formError(caught: unknown, fallback: string, step: string, action: string) {
 	if (caught instanceof APIError) {
 		console.warn(`[2fa] ${action} rejected`, { status: errorStatus(caught) });
-		return fail(400, { message: caught.message || fallback, step });
+		return fail(400, { error: true, message: caught.message || fallback, step });
 	}
-	console.warn(`[2fa] ${action} failed:`, caught instanceof Error ? caught.message : caught);
-	return fail(500, { message: fallback, step });
+	console.warn(`[2fa] ${action} failed`, {
+		name: caught instanceof Error ? caught.name : typeof caught
+	});
+	return fail(500, { error: true, message: fallback, step });
 }
 
 export const load: PageServerLoad = async (event) => {
@@ -139,7 +158,6 @@ export const load: PageServerLoad = async (event) => {
 			.select({
 				id: authPasskey.id,
 				name: authPasskey.name,
-				aaguid: authPasskey.aaguid,
 				createdAt: authPasskey.createdAt,
 				deviceType: authPasskey.deviceType,
 				backedUp: authPasskey.backedUp
@@ -164,7 +182,6 @@ export const load: PageServerLoad = async (event) => {
 
 	return {
 		twoFactorEnabled: Boolean(row?.twoFactorEnabled),
-		editable: settingAccess(event.locals.admin?.role, 'account').editable,
 		hasPassword: credentialRows.length > 0,
 		currentSessionId,
 		sessions: sessionRows.map((session) => ({
@@ -182,7 +199,6 @@ export const load: PageServerLoad = async (event) => {
 			.map((passkey) => ({
 				id: passkey.id,
 				name: passkey.name ?? null,
-				aaguid: passkey.aaguid ?? null,
 				deviceType: passkey.deviceType,
 				backedUp: passkey.backedUp,
 				createdLabel: passkey.createdAt
@@ -198,7 +214,6 @@ export const load: PageServerLoad = async (event) => {
 				// Google stays planned: env credentials may be staged, but the
 				// provider is not registered in auth.ts yet, so the page must not
 				// claim a working sign-in method.
-				configured: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
 				callback: oauthCallback(origin, 'google')
 			}
 		}
@@ -220,12 +235,14 @@ export const actions: Actions = {
 
 		if (!id) {
 			return fail(400, {
+				error: true,
 				message: m.admin_settings_account_err_session_not_found(),
 				step: 'devices'
 			});
 		}
 		if (id === locals.session?.id) {
 			return fail(400, {
+				error: true,
 				message: m.admin_settings_account_err_session_current(),
 				step: 'devices'
 			});
@@ -238,6 +255,7 @@ export const actions: Actions = {
 			.limit(1);
 		if (!row) {
 			return fail(404, {
+				error: true,
 				message: m.admin_settings_account_err_session_not_found(),
 				step: 'devices'
 			});
@@ -251,10 +269,11 @@ export const actions: Actions = {
 			} else {
 				console.warn(
 					'[account] revoke session failed:',
-					caught instanceof Error ? caught.message : caught
+					caught instanceof Error ? caught.name : typeof caught
 				);
 			}
 			return fail(500, {
+				error: true,
 				message: m.admin_settings_account_err_session_action(),
 				step: 'devices'
 			});
@@ -279,10 +298,11 @@ export const actions: Actions = {
 			} else {
 				console.warn(
 					'[account] revoke other sessions failed:',
-					caught instanceof Error ? caught.message : caught
+					caught instanceof Error ? caught.name : typeof caught
 				);
 			}
 			return fail(500, {
+				error: true,
 				message: m.admin_settings_account_err_session_action(),
 				step: 'devices'
 			});
@@ -303,8 +323,12 @@ export const actions: Actions = {
 		try {
 			await auth.api.signOut({ headers: request.headers });
 		} catch (caught) {
-			console.warn('[account] sign out failed:', caught instanceof Error ? caught.message : caught);
+			console.warn(
+				'[account] sign out failed:',
+				caught instanceof Error ? caught.name : typeof caught
+			);
 			return fail(500, {
+				error: true,
 				message: m.admin_settings_account_err_session_action(),
 				step: 'devices'
 			});
@@ -331,24 +355,28 @@ export const actions: Actions = {
 
 		if (!currentPassword) {
 			return fail(400, {
+				error: true,
 				message: m.admin_settings_account_err_password_current_required(),
 				step: 'password'
 			});
 		}
 		if (newPassword.length < 8) {
 			return fail(400, {
+				error: true,
 				message: m.admin_settings_account_err_password_new_short(),
 				step: 'password'
 			});
 		}
 		if (newPassword.length > 128) {
 			return fail(400, {
+				error: true,
 				message: m.admin_settings_account_err_password_new_long(),
 				step: 'password'
 			});
 		}
 		if (newPassword !== confirmPassword) {
 			return fail(400, {
+				error: true,
 				message: m.admin_settings_account_err_password_mismatch(),
 				step: 'password'
 			});
@@ -369,12 +397,14 @@ export const actions: Actions = {
 				console.warn('[account] change password rejected', { status: errorStatus(caught), code });
 				if (code === 'INVALID_PASSWORD') {
 					return fail(400, {
+						error: true,
 						message: m.admin_settings_account_err_password_incorrect(),
 						step: 'password'
 					});
 				}
 				if (code === 'CREDENTIAL_ACCOUNT_NOT_FOUND') {
 					return fail(400, {
+						error: true,
 						message: m.admin_settings_account_err_password_unavailable(),
 						step: 'password'
 					});
@@ -382,19 +412,18 @@ export const actions: Actions = {
 			} else {
 				console.warn(
 					'[account] change password failed:',
-					caught instanceof Error ? caught.message : caught
+					caught instanceof Error ? caught.name : typeof caught
 				);
 			}
 			return fail(500, {
+				error: true,
 				message: m.admin_settings_account_err_password_failed(),
 				step: 'password'
 			});
 		}
 
 		const userId = locals.user?.id;
-		if (userId) {
-			await pruneOtherSessionsKeepingNewest(userId);
-		}
+		await pruneToNewestSession(userId);
 		await recordAccountEvent(userId, 'account.password_change', {
 			revoke_other_sessions: true
 		});
@@ -420,6 +449,7 @@ export const actions: Actions = {
 
 		if (!id) {
 			return fail(400, {
+				error: true,
 				message: m.admin_settings_account_err_passkey_not_found(),
 				step: 'passkey'
 			});
@@ -432,6 +462,7 @@ export const actions: Actions = {
 			.limit(1);
 		if (!row) {
 			return fail(404, {
+				error: true,
 				message: m.admin_settings_account_err_passkey_not_found(),
 				step: 'passkey'
 			});
@@ -443,6 +474,7 @@ export const actions: Actions = {
 			.where(eq(authPasskey.userId, userId));
 		if (owned.length <= 1 && !(await hasPasswordCredential(userId))) {
 			return fail(400, {
+				error: true,
 				message: m.admin_settings_account_err_passkey_last(),
 				step: 'passkey'
 			});
@@ -453,9 +485,10 @@ export const actions: Actions = {
 		} catch (caught) {
 			console.warn(
 				'[account] delete passkey failed:',
-				caught instanceof Error ? caught.message : caught
+				caught instanceof Error ? caught.name : typeof caught
 			);
 			return fail(500, {
+				error: true,
 				message: m.admin_settings_account_err_passkey_action(),
 				step: 'passkey'
 			});
@@ -476,12 +509,14 @@ export const actions: Actions = {
 
 		if (!id) {
 			return fail(400, {
+				error: true,
 				message: m.admin_settings_account_err_passkey_not_found(),
 				step: 'passkey'
 			});
 		}
 		if (!name || name.length > 80) {
 			return fail(400, {
+				error: true,
 				message: m.admin_settings_account_err_passkey_name(),
 				step: 'passkey'
 			});
@@ -494,6 +529,7 @@ export const actions: Actions = {
 			.limit(1);
 		if (!row) {
 			return fail(404, {
+				error: true,
 				message: m.admin_settings_account_err_passkey_not_found(),
 				step: 'passkey'
 			});
@@ -504,9 +540,10 @@ export const actions: Actions = {
 		} catch (caught) {
 			console.warn(
 				'[account] rename passkey failed:',
-				caught instanceof Error ? caught.message : caught
+				caught instanceof Error ? caught.name : typeof caught
 			);
 			return fail(500, {
+				error: true,
 				message: m.admin_settings_account_err_passkey_action(),
 				step: 'passkey'
 			});
@@ -519,11 +556,16 @@ export const actions: Actions = {
 	/** Step 1: verify the password, receive the secret + one-time backup codes. */
 	enable: async (event) => {
 		await requireAdminRole();
+		assertSettingWrite(event.locals.admin?.role, 'account', 'account.self');
 		const formData = await event.request.formData();
 		const password = formData.get('password')?.toString() ?? '';
 
 		if (!password) {
-			return fail(400, { message: m.admin_settings_account_err_pw_required(), step: 'enable' });
+			return fail(400, {
+				error: true,
+				message: m.admin_settings_account_err_pw_required(),
+				step: 'enable'
+			});
 		}
 
 		try {
@@ -536,6 +578,7 @@ export const actions: Actions = {
 			// provider is configured, which this deployment does not have.
 			if (!('totpURI' in result)) {
 				return fail(400, {
+					error: true,
 					message: m.admin_settings_account_err_totp_unavailable(),
 					step: 'enable'
 				});
@@ -561,11 +604,16 @@ export const actions: Actions = {
 	/** Step 2: the first valid code activates the factor. */
 	activate: async (event) => {
 		await requireAdminRole();
+		assertSettingWrite(event.locals.admin?.role, 'account', 'account.self');
 		const formData = await event.request.formData();
 		const code = formData.get('code')?.toString().trim() ?? '';
 
 		if (!code) {
-			return fail(400, { message: m.admin_settings_account_err_code_required(), step: 'activate' });
+			return fail(400, {
+				error: true,
+				message: m.admin_settings_account_err_code_required(),
+				step: 'activate'
+			});
 		}
 
 		try {
@@ -582,9 +630,7 @@ export const actions: Actions = {
 		// The plugin rotated the current session (see the header comment): keep
 		// the new one and drop every other session the account still holds.
 		const userId = event.locals.user?.id;
-		if (userId) {
-			await pruneOtherSessionsKeepingNewest(userId);
-		}
+		await pruneToNewestSession(userId);
 
 		console.info('[2fa] activated', { userId });
 		await recordAccountEvent(userId, 'account.two_factor_activate');
@@ -593,11 +639,16 @@ export const actions: Actions = {
 
 	disable: async (event) => {
 		await requireAdminRole();
+		assertSettingWrite(event.locals.admin?.role, 'account', 'account.self');
 		const formData = await event.request.formData();
 		const password = formData.get('password')?.toString() ?? '';
 
 		if (!password) {
-			return fail(400, { message: m.admin_settings_account_err_pw_required(), step: 'disable' });
+			return fail(400, {
+				error: true,
+				message: m.admin_settings_account_err_pw_required(),
+				step: 'disable'
+			});
 		}
 
 		try {
@@ -616,9 +667,7 @@ export const actions: Actions = {
 
 		// Same rotation as activate: keep the fresh session, drop the rest.
 		const userId = event.locals.user?.id;
-		if (userId) {
-			await pruneOtherSessionsKeepingNewest(userId);
-		}
+		await pruneToNewestSession(userId);
 
 		console.info('[2fa] disabled', { userId });
 		await recordAccountEvent(userId, 'account.two_factor_disable');
@@ -627,11 +676,16 @@ export const actions: Actions = {
 
 	regenerateBackupCodes: async (event) => {
 		await requireAdminRole();
+		assertSettingWrite(event.locals.admin?.role, 'account', 'account.self');
 		const formData = await event.request.formData();
 		const password = formData.get('password')?.toString() ?? '';
 
 		if (!password) {
-			return fail(400, { message: m.admin_settings_account_err_pw_required(), step: 'regenerate' });
+			return fail(400, {
+				error: true,
+				message: m.admin_settings_account_err_pw_required(),
+				step: 'regenerate'
+			});
 		}
 
 		try {
