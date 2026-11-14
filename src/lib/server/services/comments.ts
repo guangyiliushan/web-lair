@@ -64,9 +64,10 @@ export const COMMENT_RATE_LIMIT = { limit: 2, windowSeconds: 60 } as const;
  * Per-IP submission window (W6.10 / register 3B.1): the per-reader window
  * cannot stop one client cycling accounts. Fail-CLOSED (a dead cache answers
  * 503) and keyed on the /64 for IPv6; this is request-time only - the raw
- * address is never stored.
+ * address is never stored. 30/10min stays well above a busy shared household
+ * while still bounding a flood.
  */
-export const COMMENT_IP_RATE_LIMIT = { limit: 10, windowSeconds: 10 * 60 } as const;
+export const COMMENT_IP_RATE_LIMIT = { limit: 30, windowSeconds: 10 * 60 } as const;
 
 /**
  * Segment-anchor validation budget (2026-10-17 grill G1). Anchor submissions

@@ -133,13 +133,16 @@ describe('(site)/[slug] load — universal md page', () => {
 		expect(data.viewer).toEqual({
 			emailVerified: false,
 			canComment: false,
-			loginUrl: '/login?redirectTo=%2Fen%2Fabout'
+			loginUrl: '/login?redirectTo=%2Fen%2Fabout',
+			privacyNotice: false,
+			countryOptIn: false
 		});
 		expect(data.discussion).toEqual(threads);
 		expect(service.loadThreads).toHaveBeenCalledWith({
 			targetType: 'page',
 			targetId: 'p-1',
-			viewerId: null
+			viewerId: null,
+			showCountry: false
 		});
 	});
 
@@ -227,11 +230,18 @@ describe('(site)/[slug] load — universal md page', () => {
 			})
 		)) as { viewer: { emailVerified: boolean; canComment: boolean; loginUrl: string | null } };
 
-		expect(data.viewer).toEqual({ emailVerified: true, canComment: true, loginUrl: null });
+		expect(data.viewer).toEqual({
+			emailVerified: true,
+			canComment: true,
+			loginUrl: null,
+			privacyNotice: false,
+			countryOptIn: false
+		});
 		expect(service.loadThreads).toHaveBeenCalledWith({
 			targetType: 'page',
 			targetId: 'p-1',
-			viewerId: 'u-9'
+			viewerId: 'u-9',
+			showCountry: false
 		});
 	});
 });
@@ -257,6 +267,9 @@ describe('(site)/[slug] comment actions (P4 mount)', () => {
 			user: { id: 'u-1', name: 'Reader', emailVerified: true },
 			author: 'Reader',
 			avatar: null,
+			ip: null,
+			geo: { country: null, region: null },
+			showCountry: false,
 			now: expect.any(Date)
 		});
 	});

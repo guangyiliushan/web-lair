@@ -86,7 +86,7 @@ export function readCommentAnchorDraft(form: FormData): AnchorDraftRead {
  */
 export function commentSubmitResponse(
 	result: SubmitCommentResult,
-	event?: { setHeaders(headers: Record<string, string>): void }
+	event?: { setHeaders?(headers: Record<string, string>): void }
 ): { submitted: 'pending' | 'approved' } | ActionFailure<{ message: string }> {
 	switch (result.kind) {
 		case 'created':
@@ -100,10 +100,10 @@ export function commentSubmitResponse(
 		case 'throttled':
 			// W6.10: rate answers carry Retry-After so a client can back off
 			// without guessing.
-			event?.setHeaders({ 'retry-after': String(result.windowSeconds) });
+			event?.setHeaders?.({ 'retry-after': String(result.windowSeconds) });
 			return fail(429, { message: m.comment_throttled() });
 		case 'unavailable':
-			event?.setHeaders({ 'retry-after': '60' });
+			event?.setHeaders?.({ 'retry-after': '60' });
 			return fail(503, { message: m.auth_err_unavailable() });
 		case 'unverified':
 			return fail(403, { message: m.comment_verify_hint() });

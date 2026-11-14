@@ -511,7 +511,7 @@ describe('submitComment', () => {
 	});
 
 	it('throttles an address over its own budget (W6.10)', async () => {
-		const cache = fakeStore(async (key) => (key.startsWith('limits:comment-ip:') ? 11 : 1));
+		const cache = fakeStore(async (key) => (key.startsWith('limits:comment-ip:') ? 31 : 1));
 		const result = await submitComment(input({ cache, ip: '2001:db8:1:2::9' }));
 		expect(result).toEqual({ kind: 'throttled', windowSeconds: 600 });
 		expect(state.inserts).toHaveLength(0);

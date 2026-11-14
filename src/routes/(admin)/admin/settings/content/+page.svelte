@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
+	import { untrack } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { m } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
@@ -10,6 +11,19 @@
 	import { SettingsStatusRow } from '$lib/components/admin/settings';
 
 	let { data, form }: PageProps = $props();
+
+	// Live mirrors for the privacy sub-switch chain: collect/show must become
+	// tappable the moment the master switch is ticked, not only after a save.
+	// `untrack` keeps the initializer a one-shot snapshot (no compile warning);
+	// the effect below re-syncs after every successful save.
+	let privacyEnabled = $state(untrack(() => data.commentsPrivacy.enabled));
+	let privacyCollect = $state(untrack(() => data.commentsPrivacy.collectCountry));
+	let privacyShow = $state(untrack(() => data.commentsPrivacy.showCountry));
+	$effect(() => {
+		privacyEnabled = data.commentsPrivacy.enabled;
+		privacyCollect = data.commentsPrivacy.collectCountry;
+		privacyShow = data.commentsPrivacy.showCountry;
+	});
 
 	const onOff = (value: boolean) =>
 		value ? m.admin_settings_common_on() : m.admin_settings_common_off();
@@ -73,7 +87,7 @@
 					<input
 						type="checkbox"
 						name="enabled"
-						checked={data.commentsPrivacy.enabled}
+						bind:checked={privacyEnabled}
 						disabled={!data.editable.privacy}
 						class="mt-0.5 size-4 accent-primary"
 					/>
@@ -88,10 +102,8 @@
 					<input
 						type="checkbox"
 						name="collectCountry"
-						checked={data.commentsPrivacy.collectCountry}
-						disabled={!data.editable.privacy ||
-							!data.commentsPrivacy.enabled ||
-							!data.geoipConfigured}
+						bind:checked={privacyCollect}
+						disabled={!data.editable.privacy || !privacyEnabled || !data.geoipConfigured}
 						class="mt-0.5 size-4 accent-primary"
 					/>
 					<span>
@@ -112,10 +124,8 @@
 					<input
 						type="checkbox"
 						name="showCountry"
-						checked={data.commentsPrivacy.showCountry}
-						disabled={!data.editable.privacy ||
-							!data.commentsPrivacy.enabled ||
-							!data.commentsPrivacy.collectCountry}
+						bind:checked={privacyShow}
+						disabled={!data.editable.privacy || !privacyEnabled || !privacyCollect}
 						class="mt-0.5 size-4 accent-primary"
 					/>
 					<span>

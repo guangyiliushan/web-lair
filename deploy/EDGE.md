@@ -83,7 +83,7 @@ limiter so the site stays usable without the cache.
 | Register | `limits:signup:<ip>` | 5 / hour |
 | Verify email | `limits:verify:<ip>` | 5 / hour |
 | Password reset | `limits:password-reset:<ip>` | 5 / hour |
-| Comment create | per reader 2 / 60 s (fail-open, unchanged) **and** `limits:comment-ip:<ip>` 10 / 10 min (strict) |
+| Comment create | per reader 2 / 60 s (fail-open, unchanged) **and** `limits:comment-ip:<ip>` 30 / 10 min (strict) |
 | Uploads (files/photos/editor) | `limits:upload:<uid>` 60 / 10 min + `limits:upload-ip:<ip>` 30 / 10 min (both strict) |
 | AI chat stream | `limits:ai-chat:<uid>` 30 / hour + `limits:ai-chat-ip:<ip>` 60 / hour (strict) |
 | AI transcribe | `limits:ai-transcribe:<uid>` 20 / hour + `limits:ai-transcribe-ip:<ip>` 40 / hour (strict) |
