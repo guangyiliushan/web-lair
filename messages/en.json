@@ -2050,6 +2050,8 @@
 	"admin_settings_system_toggle_email": "Toggle email subscription",
 	"admin_settings_system_toggle_proxy": "Toggle admin reverse proxy",
 	"admin_settings_title": "Settings",
+	"admin_settings_unsaved": "You have unsaved changes.",
+	"admin_settings_unsaved_leave": "Leave without saving?",
 	"admin_settings_user": "Profile & Preferences",
 	"admin_settings_user_avatar": "Avatar",
 	"admin_settings_user_bio": "Bio",

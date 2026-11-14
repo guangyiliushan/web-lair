@@ -7,7 +7,7 @@ import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/auth.schema';
 import { requireAdminRole } from '$lib/server/authz';
-import { settingAccess } from '$lib/server/settings/tiers';
+import { settingAccess, assertSettingWrite } from '$lib/server/settings/tiers';
 import { getOption, OPTION_LANGS } from '$lib/server/config/options-registry';
 import { pruneOtherSessions, pruneOtherSessionsKeepingNewest } from '$lib/server/auth/sessions';
 
@@ -73,6 +73,7 @@ export const actions: Actions = {
 	 */
 	contentLang: async ({ request, locals }) => {
 		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'account', 'account.self');
 		const form = await request.formData();
 		const lang = (form.get('lang') ?? '').toString();
 

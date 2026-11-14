@@ -8,6 +8,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Separator from '$lib/components/ui/separator';
+	import { SettingsForm } from '$lib/components/admin/settings';
 	import IconShield from '@tabler/icons-svelte-runes/icons/shield';
 	import IconGlobe from '@tabler/icons-svelte-runes/icons/globe';
 	import IconKey from '@tabler/icons-svelte-runes/icons/key';
@@ -34,6 +35,25 @@
 	let pendingTotpURI = $state<string | null>(null);
 	let pendingBackupCodes = $state<string[]>([]);
 
+	// Content language is a real single-field form; the shared SettingsForm
+	// supplies the dirty indicator, Save/Cancel pair, leave-guard and the
+	// readable error/success slot. Cancel restores the loaded value.
+	const langForm = $derived(
+		form as {
+			message?: string | null;
+			step?: string;
+			status?: number;
+		} | null
+	);
+	let lang = $state<string | null>(null);
+	const currentLang = $derived(lang ?? data.defaultLang ?? '');
+	const langDirty = $derived(lang !== null && lang !== (data.defaultLang ?? ''));
+	const langError = $derived(Boolean(langForm?.status && langForm.status >= 400));
+
+	$effect(() => {
+		if (langForm?.step === 'contentLang' && !langForm.status) lang = null;
+	});
+
 	$effect(() => {
 		const payload = actionForm;
 		if (!payload) return;
@@ -57,28 +77,30 @@
 			{m.admin_settings_account_content_lang_desc()}
 		</p>
 
-		{#if actionForm?.message && actionForm.step === 'contentLang'}
-			<div class="mb-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm" role="status">
-				<IconAlertCircle class="size-4 shrink-0" />
-				<span>{actionForm.message}</span>
-			</div>
-		{/if}
-
-		<form method="post" action="?/contentLang" use:enhance class="flex items-end gap-2">
+		<SettingsForm
+			action="?/contentLang"
+			dirty={langDirty}
+			message={langForm?.step === 'contentLang' ? langForm.message : null}
+			error={langError}
+			onCancel={() => (lang = null)}
+		>
 			<select
 				name="lang"
+				value={currentLang}
+				onchange={(event) => (lang = event.currentTarget.value)}
 				aria-label={m.admin_settings_account_content_lang()}
 				class="h-8 min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
 			>
-				<option value="" selected={(data.defaultLang ?? '') === ''}
-					>{m.admin_settings_account_content_lang_site({ lang: data.siteDefaultLang })}</option
+				<option value=""
+					>{m.admin_settings_account_content_lang_site({
+						lang: data.siteDefaultLang
+					})}</option
 				>
-				{#each data.langs as lang (lang)}
-					<option value={lang} selected={data.defaultLang === lang}>{lang}</option>
+				{#each data.langs as option (option)}
+					<option value={option}>{option}</option>
 				{/each}
 			</select>
-			<Button type="submit">{m.admin_common_save()}</Button>
-		</form>
+		</SettingsForm>
 	</section>
 
 	<Separator.Root />

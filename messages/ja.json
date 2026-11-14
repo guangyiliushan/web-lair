@@ -1816,6 +1816,8 @@
 	"admin_settings_system_toggle_email": "メール購読を切替",
 	"admin_settings_system_toggle_proxy": "管理リバースプロキシを切替",
 	"admin_settings_title": "設定",
+	"admin_settings_unsaved": "保存されていない変更があります。",
+	"admin_settings_unsaved_leave": "保存せずに離れますか？",
 	"admin_settings_user": "プロフィールと設定",
 	"admin_settings_user_avatar": "アバター",
 	"admin_settings_user_bio": "自己紹介",
