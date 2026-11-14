@@ -62,7 +62,10 @@ function makeEvent(fields: Record<string, string>, userId: string | null = 'user
 			method: 'POST',
 			body
 		}),
-		locals: { user: userId === null ? null : { id: userId } }
+		locals: {
+			user: userId === null ? null : { id: userId },
+			admin: userId === null ? null : { userId, role: 'owner' as const }
+		}
 	};
 }
 
@@ -96,7 +99,8 @@ describe('account content language', () => {
 			twoFactorEnabled: true,
 			defaultLang: 'ja',
 			siteDefaultLang: 'zh-cn',
-			langs: ['en', 'zh-cn', 'ja']
+			langs: ['en', 'zh-cn', 'ja'],
+			editable: true
 		});
 	});
 

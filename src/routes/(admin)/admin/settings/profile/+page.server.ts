@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { requireAdminRole } from '$lib/server/authz';
 import { loadOwnerEditorView } from '$lib/server/services/owner-profile';
+import { settingAccess } from '$lib/server/settings/tiers';
 
 /**
  * Foundation read view for Profile & Preferences (W3.5). The edit form is
@@ -13,8 +14,11 @@ export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();
 	const view = await loadOwnerEditorView();
 	const admin = event.locals.admin;
+	const access = settingAccess(admin?.role, 'profile');
 	return {
 		view,
-		editable: Boolean(admin?.role === 'owner' && view.pointerUserId === admin.userId)
+		editable: Boolean(
+			access.editable && admin?.role === 'owner' && view.pointerUserId === admin.userId
+		)
 	};
 };

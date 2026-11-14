@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { requireAdminRole } from '$lib/server/authz';
 import { getOption } from '$lib/server/config/options-registry';
+import { settingAccess } from '$lib/server/settings/tiers';
 
 /**
  * Foundation read view for Content (W3.5). W6 adds the real forms; the
@@ -8,7 +9,7 @@ import { getOption } from '$lib/server/config/options-registry';
  * dead toggle. `comments.moderation` stays owned by the AI page (single
  * writer), which is why this page links to it instead of duplicating it.
  */
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();
 	const [moderation, presenceEnabled, readerView, readerDots, notesGate, friendsApply] =
 		await Promise.all([
@@ -23,6 +24,7 @@ export const load: PageServerLoad = async () => {
 		moderation: moderation.enabled,
 		presence: { enabled: presenceEnabled, readerView, readerDots },
 		notesGate,
-		friendsApply
+		friendsApply,
+		editable: settingAccess(event.locals.admin?.role, 'content').editable
 	};
 };

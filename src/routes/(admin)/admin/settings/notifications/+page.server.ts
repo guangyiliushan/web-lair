@@ -6,6 +6,7 @@ import { db } from '$lib/server/db';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { webhookDeliveries, webhookSecrets, webhooks } from '$lib/server/db/system';
 import { requireAdminRole } from '$lib/server/authz';
+import { assertSettingWrite, settingAccess } from '$lib/server/settings/tiers';
 import { recordActivity } from '$lib/server/audit';
 import { SecretError } from '$lib/server/secrets/errors';
 import { decryptSecret, secretAad } from '$lib/server/secrets/crypto';
@@ -135,7 +136,7 @@ function webhookKeyring(): ReturnType<typeof loadKeyring> | null {
 	}
 }
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();
 	const siteTz = await getOption('site.timezone');
 	const [webhookRows, deliveryRows, secretStatuses] = await Promise.all([
@@ -186,6 +187,7 @@ export const load: PageServerLoad = async () => {
 	return {
 		webhookEndpoints,
 		webhookEventRoster: [...WEBHOOK_EVENT_ROSTER],
+		editable: settingAccess(event.locals.admin?.role, 'notifications').editable,
 		webhookDeliveries: deliveryRows.map((row) => {
 			// The FK cascade removes a deleted endpoint's deliveries, so this
 			// lookup is total by construction (nine-dimension DB-04: the dead
@@ -253,6 +255,7 @@ export const actions: Actions = {
 
 	create: async ({ request, locals }) => {
 		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'notifications', 'notifications.webhooks');
 		const form = await request.formData();
 		const parsed = parseEndpointForm(form);
 		if (!parsed.ok) return fail(400, { op: 'create', message: parsed.message });
@@ -312,8 +315,9 @@ export const actions: Actions = {
 		}
 	},
 
-	update: async ({ request }) => {
+	update: async ({ request, locals }) => {
 		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'notifications', 'notifications.webhooks');
 		const form = await request.formData();
 		const id = endpointId(form);
 		if (!id)
@@ -351,8 +355,9 @@ export const actions: Actions = {
 		return { op: 'update', updated: true };
 	},
 
-	delete: async ({ request }) => {
+	delete: async ({ request, locals }) => {
 		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'notifications', 'notifications.webhooks');
 		const form = await request.formData();
 		const id = endpointId(form);
 		if (!id)
@@ -373,8 +378,9 @@ export const actions: Actions = {
 		return { op: 'delete', deleted: true };
 	},
 
-	toggle: async ({ request }) => {
+	toggle: async ({ request, locals }) => {
 		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'notifications', 'notifications.webhooks');
 		const form = await request.formData();
 		const id = endpointId(form);
 		if (!id)
@@ -406,6 +412,7 @@ export const actions: Actions = {
 
 	rotate: async ({ request, locals }) => {
 		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'notifications', 'notifications.webhooks');
 		const form = await request.formData();
 		const id = endpointId(form);
 		if (!id)

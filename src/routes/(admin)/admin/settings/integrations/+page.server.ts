@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { env } from '$env/dynamic/private';
 import { requireAdminRole } from '$lib/server/authz';
+import { settingAccess } from '$lib/server/settings/tiers';
 
 /**
  * Planned/read-only capability map for Integrations (W3.5, IA5/W10.1).
@@ -8,7 +9,10 @@ import { requireAdminRole } from '$lib/server/authz';
  * embed-meta endpoint); nothing on this page writes, so it renders statuses
  * only and never a token input or toggle.
  */
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();
-	return { githubConfigured: Boolean(env.GITHUB_TOKEN?.trim()) };
+	return {
+		githubConfigured: Boolean(env.GITHUB_TOKEN?.trim()),
+		editable: settingAccess(event.locals.admin?.role, 'integrations').editable
+	};
 };

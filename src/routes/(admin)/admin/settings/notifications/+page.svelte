@@ -226,6 +226,11 @@
 			<!-- Webhooks (J-3: read-only endpoint list + delivery log + re-queue) -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_webhooks()}</h3>
+				{#if !data.editable}
+					<p class="-mt-3 mb-3 text-xs text-muted-foreground">
+						{m.admin_settings_common_owner_only()}
+					</p>
+				{/if}
 				<div class="space-y-4 rounded-lg border p-4">
 					<!-- Persistent status region (review round-2 SY-UI-04: a live
 					     region must exist before its content arrives). The one-time
@@ -276,15 +281,15 @@
 							<h4 class="text-xs font-medium text-muted-foreground">
 								{m.admin_settings_notification_endpoints()}
 							</h4>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onclick={() => openEndpointDialog(null)}
-							>
-								<IconPlus class="size-3.5" />
-								{m.admin_settings_notification_add_endpoint()}
-							</Button>
+							{#if data.editable}<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onclick={() => openEndpointDialog(null)}
+								>
+									<IconPlus class="size-3.5" />
+									{m.admin_settings_notification_add_endpoint()}
+								</Button>{/if}
 						</div>
 						{#if data.webhookEndpoints.length === 0}
 							<p class="text-xs text-muted-foreground">
@@ -305,65 +310,69 @@
 											<code>{endpoint.secretPreview ?? '—'}</code></span
 										>
 										<span class="ml-auto flex items-center gap-1">
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-sm"
-												aria-label={`${m.admin_common_edit()} (${endpoint.name})`}
-												onclick={() => openEndpointDialog(endpoint)}
-											>
-												<IconPencil />
-											</Button>
-											<form
-												method="POST"
-												action="?/toggle"
-												use:enhance={() => {
-													togglePendingId = endpoint.id;
-													return async ({ update }) => {
-														await update();
-														// Conditional clear (round-2 N3/SY-UI-05): only the
-														// submitter clears its own marker, so a response for
-														// one row cannot re-enable another row mid-flight.
-														if (togglePendingId === endpoint.id) togglePendingId = null;
-													};
-												}}
-											>
-												<input type="hidden" name="id" value={endpoint.id} />
-												<input
-													type="hidden"
-													name="enabled"
-													value={endpoint.isEnabled ? 'false' : 'true'}
-												/>
-												<Button
-													type="submit"
+											{#if data.editable}<Button
+													type="button"
 													variant="ghost"
-													size="sm"
-													disabled={togglePendingId === endpoint.id}
-													aria-label={`${
-														endpoint.isEnabled ? m.admin_common_disable() : m.admin_common_enable()
-													} (${endpoint.name})`}
+													size="icon-sm"
+													aria-label={`${m.admin_common_edit()} (${endpoint.name})`}
+													onclick={() => openEndpointDialog(endpoint)}
 												>
-													{endpoint.isEnabled ? m.admin_common_disable() : m.admin_common_enable()}
-												</Button>
-											</form>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-sm"
-												aria-label={`${m.admin_settings_notification_rotate_secret()} (${endpoint.name})`}
-												onclick={() => openRotateDialog(endpoint)}
-											>
-												<IconKey />
-											</Button>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-sm"
-												aria-label={`${m.admin_common_delete()} (${endpoint.name})`}
-												onclick={() => openDeleteDialog(endpoint)}
-											>
-												<IconTrash />
-											</Button>
+													<IconPencil />
+												</Button>{/if}
+											{#if data.editable}<form
+													method="POST"
+													action="?/toggle"
+													use:enhance={() => {
+														togglePendingId = endpoint.id;
+														return async ({ update }) => {
+															await update();
+															// Conditional clear (round-2 N3/SY-UI-05): only the
+															// submitter clears its own marker, so a response for
+															// one row cannot re-enable another row mid-flight.
+															if (togglePendingId === endpoint.id) togglePendingId = null;
+														};
+													}}
+												>
+													<input type="hidden" name="id" value={endpoint.id} />
+													<input
+														type="hidden"
+														name="enabled"
+														value={endpoint.isEnabled ? 'false' : 'true'}
+													/>
+													<Button
+														type="submit"
+														variant="ghost"
+														size="sm"
+														disabled={togglePendingId === endpoint.id}
+														aria-label={`${
+															endpoint.isEnabled
+																? m.admin_common_disable()
+																: m.admin_common_enable()
+														} (${endpoint.name})`}
+													>
+														{endpoint.isEnabled
+															? m.admin_common_disable()
+															: m.admin_common_enable()}
+													</Button>
+												</form>{/if}
+											{#if data.editable}<Button
+													type="button"
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`${m.admin_settings_notification_rotate_secret()} (${endpoint.name})`}
+													onclick={() => openRotateDialog(endpoint)}
+												>
+													<IconKey />
+												</Button>{/if}
+											{#if data.editable}<Button
+													type="button"
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`${m.admin_common_delete()} (${endpoint.name})`}
+													onclick={() => openDeleteDialog(endpoint)}
+												>
+													<IconTrash />
+												</Button>{/if}
 										</span>
 									</li>
 								{/each}
