@@ -574,6 +574,24 @@ SQL
 This logs the admins out once; their next email + TOTP (or passkey) sign-in
 re-establishes the session under the new policy. No schema change is involved.
 
+### 3.3 Password hashing and rollback (W8.8)
+
+New credential hashes use Argon2id (`$argon2id$...`) through better-auth's
+official `emailAndPassword.password` hooks. Verification is format-aware:
+pre-rollout better-auth scrypt rows (`<32-hex salt>:<128-hex key>`) still
+verify, and an Argon2id row written by this release stays verifiable.
+
+To roll new hashes back to better-auth's legacy scrypt format:
+
+1. Set `PASSWORD_HASH_ALGO=scrypt` in `.env`.
+2. Restart the app container.
+3. Keep the setting until the next password change; existing Argon2id rows
+   keep working either way, so there is no lockout and no schema migration.
+
+The default (`PASSWORD_HASH_ALGO` unset or `argon2id`) is the recommended
+state. Node 24+ is required because Argon2id uses `node:crypto` `argon2`
+(`engines.node` enforces it).
+
 ## 4. Backups (D-4)
 
 Two repositories with two passwords (T3-A, secrets register §0.1).

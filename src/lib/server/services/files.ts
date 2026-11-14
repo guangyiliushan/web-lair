@@ -408,6 +408,18 @@ export { UPLOAD_RATE_LIMIT } from '$lib/media/upload-limits';
 export function uploadRateLimitKey(userId: string | null | undefined): string {
 	return `limits:upload:${userId ?? 'anonymous'}`;
 }
+
+/**
+ * Per-IP companion bucket (W6.10): uploads are a security endpoint, so the
+ * account bucket alone is not enough - a compromised session should not be
+ * able to flood from one address, and an address should not fan out across
+ * accounts. Same fail-CLOSED contract as the account bucket.
+ */
+export const UPLOAD_IP_RATE_LIMIT = { limit: 30, windowSeconds: 10 * 60 };
+
+export function uploadIpRateLimitKey(addressKey: string): string {
+	return `limits:upload-ip:${addressKey}`;
+}
 /** Guard for the text-scanning audit phases (§11: paginate as content grows). */
 const SCAN_LIMIT = 2000;
 

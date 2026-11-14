@@ -22,6 +22,7 @@ export const SETTINGS_EVENT_FAMILIES = [
 	'notes_gate',
 	'privacy',
 	'mail',
+	'webhook',
 	'account',
 	'ai'
 ] as const;

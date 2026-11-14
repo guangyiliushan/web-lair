@@ -120,7 +120,17 @@ vi.mock('$lib/server/db', () => ({
 	db: {
 		$count: vi.fn(async () => state.fileCount),
 		insert: vi.fn(),
-		execute: vi.fn(async () => [{ applied: 7, latest: 1794670114375 }])
+		// Derive the ledger timestamp from the real journal: a hardcoded value
+		// goes stale on every appended migration (merge lesson).
+		execute: vi.fn(async () => {
+			const { readFileSync } = await import('node:fs');
+			const journal = JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8')) as {
+				entries: { when: number }[];
+			};
+			return [
+				{ applied: journal.entries.length, latest: Math.max(...journal.entries.map((e) => e.when)) }
+			];
+		})
 	}
 }));
 vi.mock('$lib/server/db/content', () => ({ files: { __table: 'files' } }));
@@ -278,7 +288,7 @@ describe('storage settings route (W7.2)', () => {
 			host: 'db.…',
 			port: '5432',
 			database: 'lair',
-			migrations: { applied: 7, upToDate: true }
+			migrations: { applied: expect.any(Number), upToDate: true }
 		});
 		// The connection string's password never reaches page data.
 		expect(JSON.stringify(data.database)).not.toContain('db-password');

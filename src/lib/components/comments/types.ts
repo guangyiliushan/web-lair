@@ -24,6 +24,12 @@ export interface CommentView {
 	editedAt: Date | null;
 	/** The signed-in viewer authored this comment (edit/delete entries). */
 	isMine: boolean;
+	/**
+	 * Public country label (W6.2). Present only when the site enabled
+	 * `showCountry`, the row was stored with a country, and the commenter
+	 * opted in at submit time; region/city detail never reaches the client.
+	 */
+	country?: string | null;
 }
 
 export interface ThreadReply extends CommentView {

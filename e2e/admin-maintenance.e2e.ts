@@ -227,7 +227,11 @@ test.describe('J-3 maintenance (admin)', () => {
 		);
 	});
 
-	test('webhook retry copies the failed delivery into a queued row', async ({ page }) => {
+	test('webhook retry re-queues the same failed delivery row', async ({ page }) => {
+		const failedId = psql(
+			`select d.id from webhook_deliveries d join webhooks w on w.id = d.webhook_id where w.name = '${HOOK}' and d.status = 'failed' limit 1`
+		);
+		expect(failedId).toMatch(/^[0-9a-f-]{36}$/);
 		await page.goto('/admin/settings/notifications');
 		await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 20_000 });
 		const row = page
@@ -246,7 +250,13 @@ test.describe('J-3 maintenance (admin)', () => {
 		}).toPass({ timeout: 30_000 });
 		expect(
 			psql(
-				`select count(*) from webhook_deliveries d join webhooks w on w.id = d.webhook_id where w.name = '${HOOK}' and d.status = 'queued'`
+				`select d.id from webhook_deliveries d join webhooks w on w.id = d.webhook_id where w.name = '${HOOK}' and d.status = 'queued'`
+			)
+		).toBe(failedId);
+		// No copied row: the failed row itself was re-queued.
+		expect(
+			psql(
+				`select count(*) from webhook_deliveries d join webhooks w on w.id = d.webhook_id where w.name = '${HOOK}'`
 			)
 		).toBe('1');
 		// The fresh queued row renders without a retry button.

@@ -89,6 +89,7 @@ export { webhookDeliveries } from '../db/system/webhook-delivery.schema.ts';
 export { deriveAcceptedHosts, publicOrigin, runLinkCheck } from '../links/job.ts';
 export { EMAIL_RETENTION_DAYS, pruneOutdated, prunePrecheckRuns } from '../links/prune.ts';
 export { links } from '../db/content/link.schema.ts';
+export { comments } from '../db/content/comment.schema.ts';
 export { runSync } from '../projects/sync.ts';
 export { runJobsTypecheck } from './typecheck.ts';
 

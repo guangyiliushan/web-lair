@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * W3 foundation acceptance: the 8-page IA, the two permanent redirects and
- * the deletion of the old system/search routes, plus the structural promise
- * that read-only pages ship zero controls (no input/toggle/dead Save).
+ * W3 foundation acceptance plus the W6 content rewrite: the 8-page IA, the two
+ * permanent redirects, the deletion of the old system/search routes, and the
+ * structural promise that the still-read-only pages ship zero controls (no
+ * input/toggle/dead Save). Content is editable since W6, so it is audited for
+ * the opposite: every section renders a real form whose buttons submit.
  *
  * The loopback origin auto-authenticates as the site owner in the preview
  * (same seam as admin-ai/admin-webhooks), so no login fixture is needed.
@@ -42,14 +44,54 @@ test('all eight pages answer 200 with their section heading', async ({ page }) =
 });
 
 test('planned/read-only pages render zero form controls', async ({ page }) => {
-	// Storage left this list in W7: it is now a real owner control plane.
-	for (const id of ['site', 'content', 'integrations']) {
+	// Every wave that shipped real forms left this list (W4 profile, W5 site,
+	// W6 content, W7 storage); integrations stays read-only until W10.
+	for (const id of ['integrations']) {
 		const response = await page.goto(`/admin/settings/${id}`);
 		expect(response?.status(), id).toBe(200);
 		await expect(
 			page.locator('main').locator('input, textarea, select, button').filter({ visible: true })
 		).toHaveCount(0);
 	}
+});
+
+test('content renders the real W6 forms and no dead control', async ({ page }) => {
+	await page.goto('/admin/settings/content');
+	// Seven real forms: comments, comment privacy, friends apply, friends
+	// checks, friends policy, reading presence, notes gate.
+	const forms = page.locator('main form');
+	await expect(forms).toHaveCount(7);
+	// Every form has a real submit button (the bits-ui Switch is a button
+	// without an explicit type attribute, so assert per form, not globally).
+	for (const form of await forms.all()) {
+		expect(await form.locator('button[type="submit"]').count()).toBeGreaterThan(0);
+	}
+	// The removed pseudo controls never come back (case-insensitive: the old
+	// labels were sentence-case and the section copy changed in W6).
+	await expect(
+		page.getByText(
+			/anti-spam|blocked ips|blocked words|chinese only|disable comments|approved comments only|ai review|localize avatars/i
+		)
+	).toHaveCount(0);
+});
+
+test('notifications shows Mail status, Webhooks and the static M6 note', async ({ page }) => {
+	const response = await page.goto('/admin/settings/notifications');
+	expect(response?.status()).toBe(200);
+	await expect(page.getByRole('heading', { name: 'Mail', exact: true }).first()).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Webhooks', exact: true }).first()).toBeVisible();
+	await expect(
+		page.getByRole('heading', { name: 'Human channels (planned)', exact: true }).first()
+	).toBeVisible();
+	// SMTP credentials are env-only: the page renders status values, never a
+	// password input (W9.2 deleted the mock credential fields).
+	await expect(page.locator('input[type="password"]')).toHaveCount(0);
+	// The mock Save is gone. The only mail control is the real test send, and
+	// it is disabled while MAIL_ENABLED is not set (e2e runs dev-log mail).
+	const send = page.getByRole('button', { name: 'Send test email' }).first();
+	await expect(send).toBeVisible();
+	await expect(send).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
 });
 
 test('the old user/notification routes permanently redirect', async ({ page }) => {

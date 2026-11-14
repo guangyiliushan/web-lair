@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth/minimal';
+import { createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { passkey } from '@better-auth/passkey';
@@ -21,6 +22,8 @@ import {
 } from '$lib/server/auth/permissions';
 import { tailscaleSignIn } from '$lib/server/auth/tailscale-plugin';
 import { validateUserProvisioning } from '$lib/server/auth/admin-login-policy';
+import { hashAccountPassword, verifyAccountPassword } from '$lib/server/auth/password';
+import { enforceSessionLimit } from '$lib/server/auth/sessions';
 import { getSiteOrganizationId } from '$lib/server/auth/site-organization';
 import { env } from '$env/dynamic/private';
 import { getRequestEvent } from '$app/server';
@@ -121,6 +124,13 @@ export const auth = betterAuth({
 	emailAndPassword: {
 		enabled: true,
 		requireEmailVerification: true,
+		// W8.8 / S1-D: official hash/verify hooks only; the account table keeps
+		// storing one opaque hash string, so `pnpm auth:schema` stays the sole
+		// schema source. Verify accepts legacy scrypt rows for a safe rollout.
+		password: {
+			hash: hashAccountPassword,
+			verify: verifyAccountPassword
+		},
 		// W1.4: a completed reset invalidates every existing session of the
 		// account (better-auth's official option), so a stolen cookie cannot
 		// outlive the password it was minted under. The reset flow has no
@@ -160,8 +170,49 @@ export const auth = betterAuth({
 	},
 
 	session: {
+		// AC8 (W8.7): keep the sliding 30-day lifetime with a 24-hour refresh
+		// and do NOT claim AAL2. AAL1 allows 30 days; AAL2 would require an
+		// absolute 24-hour cutoff (or the registered admin-only 7-day check),
+		// which is a future compliance-triggered change, not today's policy.
 		expiresIn: 30 * 24 * 60 * 60, // 30 days
 		updateAge: 24 * 60 * 60 // refresh every 24 hours when active
+	},
+
+	hooks: {
+		after: createAuthMiddleware(async (ctx) => {
+			// AC4/W8.7: passkey registration is the one credential change that
+			// happens on the client (WebAuthn), so its audit row is written here
+			// instead of a form action. The returned row is already persisted;
+			// an audit failure must not turn a successful registration into an
+			// error, so it is logged best-effort.
+			if (ctx.path !== '/passkey/verify-registration') return;
+			// The plugin returns the persisted passkey row directly (not a
+			// `{ passkey }` wrapper). Accept both shapes so an upstream change
+			// cannot silently kill the audit row.
+			const returned = ctx.context.returned as
+				| {
+						passkey?: { id?: string; userId?: string };
+						id?: string;
+						userId?: string;
+				  }
+				| undefined;
+			const passkey = returned?.passkey ?? returned;
+			if (!passkey?.id || !passkey.userId) return;
+			try {
+				const { recordActivity } = await import('$lib/server/audit');
+				await recordActivity(db, {
+					event: 'account.passkey_add',
+					actorId: passkey.userId,
+					payload: { passkey_id: passkey.id },
+					deliver: false
+				});
+			} catch (error) {
+				console.warn(
+					'[account] passkey add audit failed:',
+					error instanceof Error ? error.message : error
+				);
+			}
+		})
 	},
 
 	databaseHooks: {
@@ -197,6 +248,19 @@ export const auth = betterAuth({
 							error instanceof Error ? error.message : error
 						);
 						return;
+					}
+				},
+				// W8.8: cap concurrent sessions per account. A cleanup failure
+				// must never break sign-in; the oldest row simply survives until
+				// the next attempt (logged).
+				after: async (session) => {
+					try {
+						await enforceSessionLimit(session.userId, session.id);
+					} catch (error) {
+						console.warn(
+							'[auth] session limit cleanup failed:',
+							error instanceof Error ? error.message : error
+						);
 					}
 				}
 			}

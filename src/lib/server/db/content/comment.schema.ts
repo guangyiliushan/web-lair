@@ -72,7 +72,11 @@ export const comments = pgTable(
 		// produces no DDL, so the anchor contract lives in the application layer.
 		anchor: jsonb('anchor').$type<CommentAnchor | null>(),
 		isOwnerReply: boolean('is_owner_reply').notNull().default(false),
-		countryCode: text('country_code')
+		countryCode: text('country_code'),
+		// W6.2 (C2/C4): the region the deployment's edge resolved at request
+		// time. Only set when `comments.privacy.collectCountry` is on; cleared
+		// by the retention job. The raw IP is never stored (`ip` stays null).
+		regionCode: text('region_code')
 	},
 	(table) => [
 		check(

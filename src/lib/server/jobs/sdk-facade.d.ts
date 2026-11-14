@@ -111,6 +111,8 @@ export declare function prunePrecheckRuns(
 	options?: any
 ): Promise<{ matched: number; deleted: number }>;
 export declare const links: any;
+/** Comment rows (W6.2 country/region retention sweep in `jobs.prune`). */
+export declare const comments: any;
 
 /** Four-platform projects sync (projects line). */
 export declare function runSync(input: any): Promise<any>;

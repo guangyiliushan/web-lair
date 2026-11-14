@@ -71,6 +71,7 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
 import { actions } from './+page.server';
 import { resolveCommentPostTarget } from '$lib/server/services/comments';
+import { commentSubmitResponse } from '$lib/server/services/comments-actions';
 
 const resolveMock = vi.mocked(resolveCommentPostTarget);
 const commentAction = actions.comment as (event: never) => Promise<Record<string, unknown>>;
@@ -292,7 +293,10 @@ describe('post comment actions', () => {
 	it('maps every service result kind to the localized failure', async () => {
 		const cases: Array<[string, number, string]> = [
 			['throttled', 429, 'comment_throttled'],
+			['unavailable', 503, 'auth_err_unavailable'],
 			['unverified', 403, 'comment_verify_hint'],
+			['disabled', 403, 'comment_disabled'],
+			['blocked', 403, 'comment_error_blocked'],
 			['parent-unavailable', 400, 'comment_error_parent'],
 			['target-unavailable', 404, 'comment_error_unavailable'],
 			['empty', 400, 'comment_error_generic'],
@@ -302,6 +306,17 @@ describe('post comment actions', () => {
 			state.submitResults = [{ kind }];
 			const result = await commentAction(makeEvent(fd({ text: 'hi' })));
 			expect(result, kind).toMatchObject({ status, data: { message } });
+		}
+	});
+
+	it('sets Retry-After on throttled and unavailable answers (W6.10)', () => {
+		for (const [result, status, retry] of [
+			[{ kind: 'throttled', windowSeconds: 60 }, 429, '60'],
+			[{ kind: 'unavailable' }, 503, '60']
+		] as const) {
+			const setHeaders = vi.fn();
+			expect(commentSubmitResponse(result, { setHeaders })).toMatchObject({ status });
+			expect(setHeaders).toHaveBeenCalledWith({ 'retry-after': retry });
 		}
 	});
 

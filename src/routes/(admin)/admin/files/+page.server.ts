@@ -3,19 +3,23 @@ import { requireAdminRole } from '$lib/server/authz';
 import { isUuid } from '$lib/utils/uuid';
 import {
 	FILE_LIST_LIMIT,
+	UPLOAD_IP_RATE_LIMIT,
 	UPLOAD_RATE_LIMIT,
 	deleteFile,
 	listFiles,
 	listPurgeCandidates,
 	runMediaAudit,
 	uploadFiles,
+	uploadIpRateLimitKey,
 	uploadRateLimitKey,
 	UploadRejected
 } from '$lib/server/services/files';
 import { createPhotoFromFile } from '$lib/server/services/photos';
 import { MAX_BATCH_COUNT, MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
 import { getCache } from '$lib/server/cache';
-import { rateLimit } from '$lib/server/cache/store';
+import { rateLimitStrict } from '$lib/server/cache/store';
+import { requestAddress } from '$lib/server/security/request-address';
+import { clientAddressKey } from '$lib/utils/cidr';
 import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
@@ -72,17 +76,36 @@ export const load: PageServerLoad = async ({ url }) => {
 };
 
 export const actions: Actions = {
-	upload: async ({ request, locals }) => {
+	upload: async ({ request, locals, getClientAddress, setHeaders }) => {
 		await requireAdminRole();
-		// Fail-open counter (plan §7): a seatbelt against runaway POSTs, never
-		// a gate — a dead Valkey still lets every upload through.
-		const rate = await rateLimit(
-			getCache(),
-			uploadRateLimitKey(locals.user?.id),
-			UPLOAD_RATE_LIMIT.limit,
-			UPLOAD_RATE_LIMIT.windowSeconds
-		);
-		if (!rate.allowed) return fail(429, { message: m.admin_media_err_rate() });
+		// Security endpoint (W6.10): fail CLOSED on a dead cache, with the
+		// account bucket and a per-IP companion (IPv6 aggregated on /64).
+		const address = clientAddressKey(requestAddress(getClientAddress));
+		const [accountRate, addressRate] = await Promise.all([
+			rateLimitStrict(
+				getCache(),
+				uploadRateLimitKey(locals.user?.id),
+				UPLOAD_RATE_LIMIT.limit,
+				UPLOAD_RATE_LIMIT.windowSeconds
+			),
+			rateLimitStrict(
+				getCache(),
+				uploadIpRateLimitKey(address),
+				UPLOAD_IP_RATE_LIMIT.limit,
+				UPLOAD_IP_RATE_LIMIT.windowSeconds
+			)
+		]);
+		if (!accountRate.allowed || !addressRate.allowed) {
+			const unavailable = accountRate.unavailable || addressRate.unavailable;
+			const retryAfter = Math.max(
+				UPLOAD_RATE_LIMIT.windowSeconds,
+				UPLOAD_IP_RATE_LIMIT.windowSeconds
+			);
+			setHeaders({ 'retry-after': String(retryAfter) });
+			return fail(unavailable ? 503 : 429, {
+				message: unavailable ? m.admin_media_err_unavailable() : m.admin_media_err_rate()
+			});
+		}
 		const form = await request.formData();
 		const uploads = form
 			.getAll('files')

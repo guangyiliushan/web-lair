@@ -27,4 +27,10 @@ describe('maskWebhookSecret', () => {
 		expect(masked).not.toContain(secret.slice(8, 20));
 		expect(masked.length).toBeLessThan(secret.length);
 	});
+
+	it('hides the tail of a short legacy value entirely', () => {
+		const masked = maskWebhookSecret('whsec_short');
+		expect(masked).toBe('whsec_…');
+		expect(masked).not.toContain('short');
+	});
 });

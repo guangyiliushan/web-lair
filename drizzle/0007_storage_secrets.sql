@@ -1,4 +1,4 @@
-CREATE TABLE "storage_secrets" (
+CREATE TABLE IF NOT EXISTS "storage_secrets" (
 	"id" text PRIMARY KEY NOT NULL,
 	"access_key_ciphertext" text NOT NULL,
 	"access_key_hint" text NOT NULL,
@@ -16,4 +16,13 @@ CREATE TABLE "storage_secrets" (
 	CONSTRAINT "storage_secrets_hint_check" CHECK (length("storage_secrets"."access_key_hint") > 0 and length("storage_secrets"."secret_hint") > 0)
 );
 --> statement-breakpoint
-ALTER TABLE "storage_secrets" ADD CONSTRAINT "storage_secrets_updated_by_user_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;
+-- Idempotency guard (W7 ruling ③): the dev database already carries this table
+-- from the pre-merge 0005, so re-running must be a no-op there while a fresh
+-- database still gets the foreign key.
+DO $$ BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint WHERE conname = 'storage_secrets_updated_by_user_id_fk'
+	) THEN
+		ALTER TABLE "storage_secrets" ADD CONSTRAINT "storage_secrets_updated_by_user_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;
+	END IF;
+END $$;

@@ -4,6 +4,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import { m } from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
@@ -46,7 +47,12 @@
 					<Button type="submit">{m.subscribe_submit()}</Button>
 				</form>
 			{/if}
-			<p class="mt-6 text-xs text-muted-foreground">{m.subscribe_privacy()}</p>
+			<p class="mt-6 text-xs text-muted-foreground">
+				{m.subscribe_privacy()}
+				<a class="wl-accent-link underline underline-offset-2" href={localizeHref('/privacy')}>
+					{m.subscribe_privacy_link()}
+				</a>
+			</p>
 		</Card.Content>
 	</Card.Root>
 </div>

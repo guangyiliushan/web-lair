@@ -11,6 +11,7 @@
 		message,
 		error = false,
 		onCancel,
+		submitLabel = m.admin_common_save(),
 		children
 	}: {
 		action: string;
@@ -18,6 +19,7 @@
 		message?: string | null;
 		error?: boolean;
 		onCancel?: () => void;
+		submitLabel?: string;
 		children: Snippet;
 	} = $props();
 
@@ -76,7 +78,7 @@
 			{m.admin_common_cancel()}
 		</Button>
 		<Button type="submit" size="sm" disabled={!dirty || pending}>
-			{m.admin_common_save()}
+			{submitLabel}
 		</Button>
 	</div>
 </form>

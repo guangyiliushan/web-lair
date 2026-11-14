@@ -3,10 +3,14 @@ import { db } from '$lib/server/db';
 import { session as authSession } from '$lib/server/db/auth.schema';
 
 /**
- * Single-session policy (ledger §4.25): an admin sign-in keeps only the newest
- * session for that account, so an older leaked cookie stops working. Used by
- * the password sign-in, the two-factor verification step, and the 2FA state
- * changes on the settings page.
+ * Session revocation helpers (ledger §4.25, revised by settings-truth AC2).
+ *
+ * Email sign-in no longer prunes other sessions: admins get a real device list
+ * on /admin/settings/account and revoke sessions explicitly. Pruning remains
+ * where a credential change must invalidate other devices:
+ *   - change password (`revokeOtherSessions: true` in better-auth)
+ *   - 2FA enable/disable (the plugin rotates the current session)
+ *   - backup-code regeneration (password-gated; keep the request token)
  */
 
 /** Deletes every session of `userId` except the one carrying `keepToken`. */
@@ -41,4 +45,33 @@ export async function pruneOtherSessionsKeepingNewest(userId: string) {
 /** Revokes one session by token (used when a verified account fails admission). */
 export async function revokeSessionByToken(token: string) {
 	await db.delete(authSession).where(eq(authSession.token, token));
+}
+
+/**
+ * W8.8 account hardening: cap the number of active sessions per account.
+ * Sign-in is cheap and admins accumulate devices; an unbounded table is both a
+ * privacy and a credential surface. The newest `limit` rows survive (the row
+ * that just triggered the check is always kept). Oldest rows are deleted
+ * first; ties on `created_at` break by id.
+ */
+export const SESSION_LIMIT = 10;
+
+export async function enforceSessionLimit(
+	userId: string,
+	keepSessionId: string,
+	limit: number = SESSION_LIMIT
+) {
+	if (limit < 1) return;
+	await db.execute(sql`
+		delete from ${authSession}
+		where ${authSession.userId} = ${userId}
+			and ${authSession.id} <> ${keepSessionId}
+			and ${authSession.id} in (
+				select ${authSession.id} from ${authSession}
+				where ${authSession.userId} = ${userId}
+					and ${authSession.id} <> ${keepSessionId}
+				order by ${authSession.createdAt} desc, ${authSession.id} desc
+				offset ${limit - 1}
+			)
+	`);
 }

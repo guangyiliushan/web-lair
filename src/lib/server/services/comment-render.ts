@@ -23,6 +23,8 @@ export interface RenderDiscussionInput {
 	targetId: string;
 	/** Signed-in reader id; drives own-pending visibility. */
 	viewerId: string | null;
+	/** W6.2: render the per-comment country label (site + commenter opt-in). */
+	showCountry?: boolean;
 }
 
 export interface RenderedDiscussion {
@@ -40,7 +42,8 @@ export async function renderDiscussion(input: RenderDiscussionInput): Promise<Re
 			targetType: input.targetType,
 			targetId: input.targetId,
 			viewerId: input.viewerId,
-			blocks
+			blocks,
+			showCountry: input.showCountry
 		});
 		threads = loaded.threads;
 		if (loaded.marks.length > 0) {
@@ -70,7 +73,8 @@ export async function renderDiscussion(input: RenderDiscussionInput): Promise<Re
 				targetType: input.targetType,
 				targetId: input.targetId,
 				viewerId: input.viewerId,
-				blocks: []
+				blocks: [],
+				showCountry: input.showCountry
 			})
 		).threads;
 	}

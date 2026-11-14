@@ -5,8 +5,11 @@ import { APIError } from 'better-auth/api';
 import { isMailDeliveryAvailable, isMailDeliveryAvailableLive } from '$lib/server/mail/transport';
 import { m } from '$lib/paraglide/messages';
 import { getCache } from '$lib/server/cache';
-import { rateLimit } from '$lib/server/cache/store';
+import { rateLimitStrict } from '$lib/server/cache/store';
 import { requestAddress } from '$lib/server/security/request-address';
+import { clientAddressKey } from '$lib/utils/cidr';
+
+const SIGNUP_RATE_LIMIT = { limit: 5, windowSeconds: 60 * 60 } as const;
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -17,9 +20,20 @@ export const load: PageServerLoad = (event) => {
 
 export const actions: Actions = {
 	signUp: async (event) => {
-		const address = requestAddress(event.getClientAddress);
-		const rate = await rateLimit(getCache(), `limits:signup:${address}`, 5, 60 * 60);
-		if (!rate.allowed) return fail(429, { message: m.auth_register_err_rate() });
+		// W6.10: security endpoint, fail-closed, IPv6 aggregated on /64.
+		const address = clientAddressKey(requestAddress(event.getClientAddress));
+		const rate = await rateLimitStrict(
+			getCache(),
+			`limits:signup:${address}`,
+			SIGNUP_RATE_LIMIT.limit,
+			SIGNUP_RATE_LIMIT.windowSeconds
+		);
+		if (!rate.allowed) {
+			event.setHeaders({ 'retry-after': String(SIGNUP_RATE_LIMIT.windowSeconds) });
+			return fail(rate.unavailable ? 503 : 429, {
+				message: rate.unavailable ? m.auth_err_unavailable() : m.auth_register_err_rate()
+			});
+		}
 		if (!(await isMailDeliveryAvailableLive())) {
 			return fail(503, { message: m.auth_register_mail_unconfigured() });
 		}
@@ -31,6 +45,12 @@ export const actions: Actions = {
 
 		if (!name || !email || !password || !confirmPassword) {
 			return fail(400, { message: 'All fields are required' });
+		}
+
+		// W6.3 (C3): informed consent is required and never pre-checked. The
+		// checkbox is also `required` in the browser; this is the server gate.
+		if (formData.get('privacyConsent') !== 'on') {
+			return fail(400, { message: m.auth_register_privacy_required() });
 		}
 
 		if (password !== confirmPassword) {
