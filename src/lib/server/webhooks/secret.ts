@@ -21,5 +21,9 @@ export function generateWebhookSecret(): string {
  */
 export function maskWebhookSecret(secret: string): string {
 	const body = secret.replace(/=+$/, '');
+	// Legacy/imported values can be arbitrarily short; revealing four tail
+	// characters of a 10-char value would hide almost nothing. Keep the
+	// prefix only for anything below a safe length (generated values are 51).
+	if (body.length < 16) return `${body.slice(0, Math.min(6, body.length))}\u2026`;
 	return `${body.slice(0, 6)}\u2026${body.slice(-4)}`;
 }

@@ -52,6 +52,7 @@ import { deleteUserJob } from '../src/lib/server/jobs/job-scripts';
 import { toggleSchedule } from '../src/lib/server/jobs/job-schedules';
 import { builtinModuleFile, jobLockKey } from '../src/lib/server/jobs/registry';
 import { signWebhookPayload } from '../src/lib/server/jobs/signature';
+import { WEBHOOK_MAX_ATTEMPTS } from '../src/lib/server/webhooks/retry';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ensureJobsScaffold } from '../src/lib/server/jobs/scaffold';
@@ -75,12 +76,10 @@ const fixtureDataDir = await mkdtemp(join(tmpdir(), 'wl-jobs-verify-data-'));
 let checks = 0;
 let failures = 0;
 // Denominator guard (round-2 SYT-9): a silently skipped scenario/check must
-// turn the harness red instead of printing a green total. 163 = the real
-// checks (161 + the 2 probe read-backs); this self-check's own increment
-// makes the ALL summary print 164. The comparison reads the counter at
-// argument-evaluation time, i.e. before its own increment (round-3 SY3-5:
-// the summary now prints AFTER this check).
-const EXPECTED_CHECKS = 163;
+// turn the harness red instead of printing a green total. 168 = the real
+// checks (163 baseline + 5 net W9.4 retry/audit checks); this self-check's own
+// increment makes the ALL summary print 169.
+const EXPECTED_CHECKS = 168;
 
 function check(name: string, ok: boolean, detail = ''): void {
 	checks += 1;
@@ -140,8 +139,11 @@ const client = postgres(scratchUrl, { max: 6, onnotice: () => {} });
 const db = drizzle(client);
 
 async function resetLedger(): Promise<void> {
+	// webhook_secrets references webhooks: every referencing table must be in
+	// the list or Postgres refuses the TRUNCATE outright (W9.4 added the
+	// retry columns; the W2 secret table was already missing here).
 	await client.unsafe(
-		'truncate table job_runs, job_schedules, webhook_deliveries, webhooks, activities'
+		'truncate table job_runs, job_schedules, webhook_deliveries, webhook_secrets, webhooks, activities'
 	);
 }
 
@@ -181,6 +183,10 @@ function spawnDrain(extraEnv: Record<string, string> = {}): {
 	delete env.all_proxy;
 	delete env.NODE_USE_ENV_PROXY;
 	env.NO_PROXY = '*';
+	// W9.3 delivery guard: the fixture receiver is plain HTTP on 127.0.0.1.
+	// This escape hatch is explicit, test-only, and ignored in production.
+	env.WEBHOOK_ALLOW_INSECURE_LOOPBACK = 'true';
+	env.NODE_ENV = 'test';
 	const child = spawn(process.execPath, ['jobs/drain.ts'], {
 		cwd: repoRoot,
 		env: { ...env, DATABASE_URL: scratchUrl, DATA_DIR: fixtureDataDir, ...extraEnv }
@@ -582,9 +588,12 @@ async function t3StaleReclamation(): Promise<void> {
 		reclaimed?.status === 'failed' && reclaimed?.error === 'stale',
 		`status=${reclaimed?.status} error=${reclaimed?.error}`
 	);
+	const queueRuns = await runsFor('jobs.prune');
+	const freshRun = queueRuns.find((run) => run.id !== zombie?.id);
 	check(
 		'queued run survived the crash and executed',
-		(await runsFor('jobs.prune')).some((run) => run.id !== zombie?.id && run.status === 'succeeded')
+		freshRun?.status === 'succeeded',
+		`status=${freshRun?.status} error=${freshRun?.error ?? ''}`
 	);
 
 	// Negative direction: while the lock is held the reclaimer must NOT touch
@@ -675,9 +684,12 @@ async function t9CrashRecovery(): Promise<void> {
 		'dangling row reclaimed as failed:stale',
 		runs.find((run) => run.id === zombie?.id)?.error === 'stale'
 	);
+	const pruneRuns = await runsFor('jobs.prune');
+	const queuedPrune = pruneRuns.find((run) => run.id !== zombie?.id);
 	check(
 		'queued jobs.prune executed',
-		runs.some((run) => run.id !== zombie?.id && run.status === 'succeeded')
+		queuedPrune?.status === 'succeeded',
+		`status=${queuedPrune?.status} error=${queuedPrune?.error ?? ''}`
 	);
 	check(
 		'queued system.resources executed too',
@@ -746,7 +758,7 @@ async function t9bKillRealDrainMidDelivery(): Promise<void> {
 }
 
 async function webhookOutcomes(): Promise<void> {
-	section('webhooks: failure recording, 410 disables, disabled endpoints skip');
+	section('webhooks: retry schedule, 410 disables, disabled endpoints skip');
 	await resetLedger();
 	const failId = await createEndpoint('fail500', '/fail500', 'whsec_c2hhcmVkLXNlY3JldA==');
 	const goneId = await createEndpoint('gone410', '/gone410', 'whsec_c2hhcmVkLXNlY3JldA==');
@@ -764,17 +776,31 @@ async function webhookOutcomes(): Promise<void> {
 
 	const fail = await deliveryById(failDelivery);
 	check(
-		'500 -> failed with response_code 500',
-		fail?.status === 'failed' && fail?.responseCode === 500,
-		`status=${fail?.status} code=${fail?.responseCode}`
+		'500 -> queued for retry with response_code 500 and attempt 1',
+		fail?.status === 'queued' && fail?.responseCode === 500 && fail?.attemptCount === 1,
+		`status=${fail?.status} code=${fail?.responseCode} attempt=${fail?.attemptCount}`
+	);
+	check(
+		'500 -> next_attempt_at is in the future (backoff)',
+		fail?.nextAttemptAt instanceof Date && fail.nextAttemptAt.getTime() > Date.now(),
+		`next=${fail?.nextAttemptAt?.toISOString()}`
 	);
 	const gone = await deliveryById(goneDelivery);
 	check(
-		'410 -> failed with response_code 410',
-		gone?.status === 'failed' && gone?.responseCode === 410
+		'410 -> failed with response_code 410 after one attempt',
+		gone?.status === 'failed' && gone?.responseCode === 410 && gone?.attemptCount === 1
 	);
 	const [endpoint] = await db.select().from(webhooks).where(eq(webhooks.id, goneId));
 	check('410 disables the endpoint (Standard Webhooks etiquette)', endpoint?.isEnabled === false);
+	const autoDisable = await db
+		.select({ id: activities.id })
+		.from(activities)
+		.where(eq(activities.event, 'webhook.auto_disable'));
+	check(
+		'410 writes a local webhook.auto_disable audit row',
+		autoDisable.length === 1,
+		`rows=${autoDisable.length}`
+	);
 	const disabled = await deliveryById(disabledDelivery);
 	check(
 		'disabled endpoint -> failed without a request',
@@ -788,9 +814,51 @@ async function webhookOutcomes(): Promise<void> {
 	const again = await runDrainOnce();
 	check('second tick exits 0', again.code === 0);
 	check(
-		'v1: no retry - failed rows stay failed, no new request',
-		(await deliveryById(failDelivery))?.status === 'failed' &&
+		'not due yet: failed row stays queued and no new request is made',
+		(await deliveryById(failDelivery))?.status === 'queued' &&
 			captured.filter((r) => r.path.startsWith('/fail500')).length === before
+	);
+
+	// Force the retry point into the past: the same row is attempted again
+	// (same webhook-id), and the attempt counter advances.
+	await db
+		.update(webhookDeliveries)
+		.set({ nextAttemptAt: new Date(Date.now() - 1000) })
+		.where(eq(webhookDeliveries.id, failDelivery));
+	await runDrainOnce();
+	const retried = await deliveryById(failDelivery);
+	check(
+		'due retry -> attempt 2 on the SAME row, still queued',
+		retried?.id === failDelivery &&
+			retried?.attemptCount === 2 &&
+			retried?.status === 'queued' &&
+			captured.filter((r) => r.path.startsWith('/fail500')).length === before + 1,
+		`attempt=${retried?.attemptCount} requests=${captured.filter((r) => r.path.startsWith('/fail500')).length}`
+	);
+	check(
+		'retry keeps the same webhook-id header',
+		captured
+			.filter((r) => r.path.startsWith('/fail500'))
+			.every((r) => r.headers['webhook-id'] === failDelivery)
+	);
+
+	// Exhaust the budget: the last attempt turns terminal.
+	await db
+		.update(webhookDeliveries)
+		.set({ attemptCount: WEBHOOK_MAX_ATTEMPTS - 1, nextAttemptAt: new Date(Date.now() - 1000) })
+		.where(eq(webhookDeliveries.id, failDelivery));
+	await runDrainOnce();
+	const exhausted = await deliveryById(failDelivery);
+	check(
+		`exhausted budget -> failed with attempt_count ${WEBHOOK_MAX_ATTEMPTS}`,
+		exhausted?.status === 'failed' && exhausted?.attemptCount === WEBHOOK_MAX_ATTEMPTS,
+		`status=${exhausted?.status} attempt=${exhausted?.attemptCount}`
+	);
+	const afterExhaust = captured.filter((r) => r.path.startsWith('/fail500')).length;
+	await runDrainOnce();
+	check(
+		'terminal failure is never retried again',
+		captured.filter((r) => r.path.startsWith('/fail500')).length === afterExhaust
 	);
 }
 
@@ -1099,7 +1167,7 @@ async function reserveDefinitelyClosedPort(): Promise<number> {
 }
 
 async function deadEndpointRecordsNetworkFailure(): Promise<void> {
-	section('delivery: unreachable endpoint -> failed, no response code, sanitized error');
+	section('delivery: unreachable endpoint -> retry scheduled, sanitized error');
 	await resetLedger();
 	const deadPort = await reserveDefinitelyClosedPort();
 	const [endpoint] = await db
@@ -1117,8 +1185,12 @@ async function deadEndpointRecordsNetworkFailure(): Promise<void> {
 	check('drain exits 0', result.code === 0);
 	const delivery = await deliveryById(deliveryId);
 	check(
-		'unreachable endpoint -> failed, response_code NULL',
-		delivery?.status === 'failed' && delivery?.responseCode === null,
+		'unreachable endpoint -> queued for retry, response_code NULL, attempt 1',
+		delivery?.status === 'queued' &&
+			delivery?.responseCode === null &&
+			delivery?.attemptCount === 1 &&
+			delivery?.nextAttemptAt instanceof Date &&
+			delivery.nextAttemptAt.getTime() > Date.now(),
 		`status=${delivery?.status} code=${delivery?.responseCode} port=${deadPort} err=${delivery?.error?.slice(0, 80) ?? ''}`
 	);
 	check(
@@ -1936,8 +2008,8 @@ async function s3PipelineDelivery(): Promise<void> {
 		`rows=${goneAfter.length}`
 	);
 
-	// (3) Manual-retry arc (mirrors the J-3 retry action): copy the failed row
-	// as a NEW queued row; one tick later it is delivered, the original stays.
+	// (3) Manual-replay arc (mirrors the W9.4 action): the SAME failed row is
+	// re-queued; one tick later it is delivered with the same webhook-id.
 	const flakyId = await createEndpoint('s3-flaky', '/flaky-s3', secret, true, ['probe.retry']);
 	flakyRemaining = 1;
 	await recordActivity(db, { event: 'probe.retry', actorId: null, payload: { round: 3 } });
@@ -1947,38 +2019,40 @@ async function s3PipelineDelivery(): Promise<void> {
 		.from(webhookDeliveries)
 		.where(eq(webhookDeliveries.event, 'probe.retry'));
 	check(
-		'first attempt failed (500) with exactly one request sent',
-		firstAttempt?.status === 'failed' &&
+		'first attempt 500 -> queued for retry (attempt 1, one request)',
+		firstAttempt?.status === 'queued' &&
 			firstAttempt?.responseCode === 500 &&
+			firstAttempt?.attemptCount === 1 &&
 			captured.filter((r) => r.path.startsWith('/flaky-s3')).length === 1,
-		`status=${firstAttempt?.status}`
+		`status=${firstAttempt?.status} code=${firstAttempt?.responseCode} attempt=${firstAttempt?.attemptCount}`
 	);
-	const [copy] = await db
-		.insert(webhookDeliveries)
-		.values({
-			webhookId: flakyId,
-			event: 'probe.retry',
-			payload: firstAttempt?.payload ?? null,
-			status: 'queued'
+	// The route action's replay write, applied directly.
+	await db
+		.update(webhookDeliveries)
+		.set({
+			status: 'queued',
+			attemptCount: 0,
+			nextAttemptAt: new Date(),
+			responseCode: null,
+			error: null,
+			deliveredAt: null
 		})
-		.returning({ id: webhookDeliveries.id });
+		.where(eq(webhookDeliveries.id, firstAttempt.id));
 	await runDrainOnce();
-	const copied = await deliveryById(copy.id);
+	const replayed = await deliveryById(firstAttempt.id);
 	check(
-		'manual retry re-queue is drained within one tick: succeeded @200',
-		copied?.status === 'succeeded' && copied?.responseCode === 200,
-		`status=${copied?.status} code=${copied?.responseCode}`
-	);
-	check(
-		'the original failed row stays for the record',
-		(firstAttempt ? await deliveryById(firstAttempt.id) : undefined)?.status === 'failed'
+		'manual replay re-queues the SAME row: succeeded @200',
+		replayed?.status === 'succeeded' && replayed?.responseCode === 200,
+		`status=${replayed?.status} code=${replayed?.responseCode}`
 	);
 	const flakyPosts = captured.filter((r) => r.path.startsWith('/flaky-s3'));
 	check(
-		'retry issues a NEW webhook-id (v1 new-row retry; stable-id deviation registered)',
+		'replay keeps the same webhook-id across attempts (no copied row)',
 		flakyPosts.length === 2 &&
-			flakyPosts[1]?.headers['webhook-id'] === copy.id &&
-			flakyPosts[1]?.headers['webhook-id'] !== flakyPosts[0]?.headers['webhook-id']
+			flakyPosts[0]?.headers['webhook-id'] === firstAttempt.id &&
+			flakyPosts[1]?.headers['webhook-id'] === firstAttempt.id &&
+			(await db.select().from(webhookDeliveries).where(eq(webhookDeliveries.event, 'probe.retry')))
+				.length === 1
 	);
 
 	// C3 hardening (review round-1): a NULL payload row must be recorded

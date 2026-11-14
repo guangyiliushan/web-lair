@@ -153,6 +153,27 @@ test.describe('SY webhooks (admin)', () => {
 		await expect(mixedDialog).toBeHidden();
 	});
 
+	test('create negative: private/loopback/insecure URLs are refused (W9.3 SSRF)', async ({
+		page
+	}) => {
+		await page.goto('/admin/settings/notifications');
+		await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 20_000 });
+		const dialog = await openCreateDialog(page);
+		await dialog.getByLabel('名称').fill(`${HOOK}-ssrf`);
+		await dialog.getByRole('checkbox', { name: 'job.run' }).check();
+		for (const [url, message] of [
+			['http://example.com/hook', '必须使用 https://'],
+			['https://169.254.169.254/latest/meta-data', '私有、回环或链路本地'],
+			['https://127.0.0.1/hook', '私有、回环或链路本地']
+		] as const) {
+			await dialog.getByLabel('回调地址').fill(url);
+			await dialog.getByRole('button', { name: '保存' }).click({ timeout: 10_000 });
+			await expect(dialog.getByRole('alert')).toContainText(message, { timeout: 10_000 });
+		}
+		expect(psql(`select count(*) from webhooks where name = '${HOOK}-ssrf'`)).toBe('0');
+		await dialog.getByRole('button', { name: '取消' }).click();
+	});
+
 	test('edit: the dialog prefills and saving renames the endpoint', async ({ page }) => {
 		await page.goto('/admin/settings/notifications');
 		const row = endpointRow(page, HOOK);

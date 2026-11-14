@@ -148,14 +148,16 @@ const MIGRATION_COLUMN_ADDITIONS = new Map<string, string[]>([
 	['user_profiles', ['header_label']],
 	// W6.2 (approved schema exception): comments.privacy stores the edge
 	// region next to country_code; nullable and additive.
-	['comments', ['region_code']]
+	['comments', ['region_code']],
+	['webhook_deliveries', ['attempt_count', 'next_attempt_at']]
 ]);
 
 const MIGRATION_INDEXES = new Map<string, string[]>([
 	['ai_provider_secrets', ['ai_provider_secrets_pkey']],
 	['webhook_secrets', ['webhook_secrets_pkey']],
 	['home_hero', ['home_hero_pkey']],
-	['site_identity', ['site_identity_pkey', 'site_identity_owner_user_id_idx']]
+	['site_identity', ['site_identity_pkey', 'site_identity_owner_user_id_idx']],
+	['webhook_deliveries', ['webhook_deliveries_due_idx']]
 ]);
 
 const MIGRATION_CHECKS = new Map<string, string[]>([
@@ -189,6 +191,12 @@ const MIGRATION_CHECKS = new Map<string, string[]>([
 		]
 	],
 	['site_identity', ['site_identity_singleton_check']],
+	// Appended column checks override the baseline map for this table, so the
+	// full expected set has to be listed (the baseline status check + the new one).
+	[
+		'webhook_deliveries',
+		['webhook_deliveries_status_check', 'webhook_deliveries_attempt_count_check']
+	],
 	// Appended column checks override the baseline map for this table, so the
 	// full expected set has to be listed (the three baseline checks + the new one).
 	[

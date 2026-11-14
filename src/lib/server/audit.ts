@@ -57,3 +57,21 @@ export async function recordActivity(executor: AuditExecutor, input: ActivityInp
 		await enqueueWebhookDeliveries(executor, { event: input.event, payload: input.payload });
 	}
 }
+
+/**
+ * System-initiated endpoint disable (410 Gone from the receiver). Kept here,
+ * not inline in `jobs/drain.ts`: the webhook event-roster source scan treats
+ * every `event:` literal under `src/lib/server/jobs` as a subscription
+ * producer, and this is an audit-only event.
+ */
+export async function recordWebhookAutoDisable(
+	executor: AuditExecutor,
+	input: { webhookId: string; name: string }
+): Promise<void> {
+	await recordActivity(executor, {
+		event: 'webhook.auto_disable',
+		actorId: null,
+		payload: { ...input, status: 410 },
+		deliver: false
+	});
+}

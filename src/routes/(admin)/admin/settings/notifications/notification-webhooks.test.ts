@@ -42,7 +42,13 @@ const { mocks, state } = vi.hoisted(() => {
 	};
 	const mocks = {
 		requireAdminRole: vi.fn(async () => {}),
-		recordActivity: vi.fn(async () => {})
+		recordActivity: vi.fn(async (...args: unknown[]) => {
+			void args;
+		}),
+		sendMail: vi.fn(async (...args: unknown[]) => {
+			void args;
+		}),
+		isMailConfigured: vi.fn(() => true)
 	};
 	return { mocks, state };
 });
@@ -59,7 +65,11 @@ vi.mock('$lib/server/db', () => {
 			where: (cond: unknown) => {
 				state.whereConds.push(cond);
 				const rows = state.selectQueue.shift() ?? [];
-				return Object.assign(Promise.resolve(rows), { limit: async () => rows });
+				const pending = Promise.resolve(rows);
+				return Object.assign(pending, {
+					limit: async () => rows,
+					orderBy: () => ({ limit: async () => rows })
+				});
 			},
 			// W2.6: the ids-only select (`select({ id }).from(webhooks)`) has no
 			// orderBy/where and is awaited directly.
@@ -144,6 +154,10 @@ vi.mock('$lib/server/db/system', async (importOriginal) => {
 });
 vi.mock('$lib/server/authz', () => ({ requireAdminRole: mocks.requireAdminRole }));
 vi.mock('$lib/server/audit', () => ({ recordActivity: mocks.recordActivity }));
+vi.mock('$lib/server/mail/transport', () => ({
+	isMailConfigured: mocks.isMailConfigured,
+	sendMail: mocks.sendMail
+}));
 // W2.6: the secret is encrypted before it is stored, so the route needs a
 // usable keyring. One fixed 32-byte test key, version 1.
 vi.mock('$env/dynamic/private', () => ({
@@ -153,6 +167,15 @@ vi.mock('$env/dynamic/private', () => ({
 	}
 }));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: vi.fn(async () => 'Etc/UTC') }));
+// W9.3: the URL guard resolves hostnames; tests pin a public address so the
+// suite is deterministic and offline. Literal-IP cases never hit this mock.
+vi.mock('node:dns/promises', () => ({
+	lookup: vi.fn(async (hostname: string) =>
+		hostname === 'rebind.example'
+			? [{ address: '10.0.0.7', family: 4 }]
+			: [{ address: '93.184.216.34', family: 4 }]
+	)
+}));
 
 import { actions, load } from './+page.server';
 import {
@@ -182,14 +205,18 @@ function makeFormData(fields: Record<string, string | string[]>) {
 	return body;
 }
 
-function makeEvent(fields: Record<string, string | string[]>, role: 'owner' | 'admin' = 'owner') {
+function makeEvent(
+	fields: Record<string, string | string[]>,
+	role: 'owner' | 'admin' = 'owner',
+	userOverrides: Record<string, unknown> = {}
+) {
 	return {
 		request: new Request('http://x/admin/settings/notifications', {
 			method: 'POST',
 			body: makeFormData(fields)
 		}),
 		locals: {
-			user: { id: 'admin-1', role },
+			user: { id: 'admin-1', role, email: 'owner@example.com', ...userOverrides },
 			admin: { userId: 'admin-1', role }
 		}
 	};
@@ -198,11 +225,15 @@ function makeEvent(fields: Record<string, string | string[]>, role: 'owner' | 'a
 async function callAction(
 	name: string,
 	fields: Record<string, string | string[]>,
-	role: 'owner' | 'admin' = 'owner'
+	role: 'owner' | 'admin' = 'owner',
+	userOverrides: Record<string, unknown> = {}
 ) {
 	try {
 		const fn = (actions as unknown as Record<string, (event: never) => Promise<unknown>>)[name];
-		const result = (await fn(makeEvent(fields, role) as never)) as Record<string, unknown>;
+		const result = (await fn(makeEvent(fields, role, userOverrides) as never)) as Record<
+			string,
+			unknown
+		>;
 		return { result, thrown: undefined as unknown };
 	} catch (thrown) {
 		return { result: undefined, thrown };
@@ -236,6 +267,82 @@ function resetState() {
 	state.selectCount = 0;
 	state.whereConds = [];
 }
+
+describe('notification mail test (W9.1)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		resetState();
+	});
+
+	it('runs requireAdminRole first', async () => {
+		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
+		const { thrown } = await callAction('testMail', {});
+		expect(thrown).toBeInstanceOf(Error);
+		expect(state.selectCount).toBe(0);
+	});
+
+	it('refuses when SMTP is not configured (the button is disabled too)', async () => {
+		mocks.isMailConfigured.mockReturnValueOnce(false);
+		const { result } = await callAction('testMail', {});
+		expect(result).toMatchObject({ status: 400 });
+		expect(state.selectCount).toBe(0);
+		expect(mocks.sendMail).not.toHaveBeenCalled();
+	});
+
+	it('refuses an account without an email address', async () => {
+		const { result } = await callAction('testMail', {}, 'owner', { email: null });
+		expect(result).toMatchObject({ status: 400 });
+		expect(state.selectCount).toBe(0);
+	});
+
+	it('throttles a second send inside the minute window', async () => {
+		state.selectQueue.push([{ createdAt: new Date(Date.now() - 5_000) }]);
+		const { result } = await callAction('testMail', {});
+		expect(result).toMatchObject({ status: 429 });
+		expect(mocks.sendMail).not.toHaveBeenCalled();
+		expect(mocks.recordActivity).not.toHaveBeenCalled();
+		// The throttle reads this actor's own mail.test rows, not another admin's.
+		const where = sqlOf(state.whereConds[0]);
+		expect(where).toContain('"activities"."event"');
+		expect(where).toContain('"activities"."actor_id"');
+	});
+
+	it('sends to the signed-in address and audits mail.test with a masked recipient', async () => {
+		state.selectQueue.push([]);
+		const { result } = await callAction('testMail', {});
+		expect(result).toMatchObject({ op: 'testMail', mailTested: true });
+		expect(mocks.sendMail).toHaveBeenCalledTimes(1);
+		const mail = mocks.sendMail.mock.calls[0]![0] as { to: string; subject: string; text: string };
+		expect(mail.to).toBe('owner@example.com');
+		expect(mail.subject).toContain('SMTP test email');
+		expect(mocks.recordActivity).toHaveBeenCalledTimes(1);
+		expect(mocks.recordActivity.mock.calls[0]![1]).toMatchObject({
+			event: 'mail.test',
+			actorId: 'admin-1',
+			payload: { to: 'o***@example.com', ok: true },
+			deliver: false
+		});
+	});
+
+	it('audits a failed send (the attempt still counts toward the limit)', async () => {
+		state.selectQueue.push([]);
+		mocks.sendMail.mockRejectedValueOnce(new Error('550 relay denied'));
+		const { result } = await callAction('testMail', {});
+		expect(result).toMatchObject({ status: 502 });
+		expect(mocks.recordActivity.mock.calls[0]![1]).toMatchObject({
+			event: 'mail.test',
+			payload: { to: 'o***@example.com', ok: false, error: '550 relay denied' },
+			deliver: false
+		});
+	});
+
+	it('allows a non-owner admin to test mail (mail tier = admin)', async () => {
+		state.selectQueue.push([]);
+		const { result } = await callAction('testMail', {}, 'admin');
+		expect(result).toMatchObject({ mailTested: true });
+		expect(mocks.sendMail).toHaveBeenCalledTimes(1);
+	});
+});
 
 describe('notification webhooks retry', () => {
 	beforeEach(() => {
@@ -300,22 +407,7 @@ describe('notification webhooks retry', () => {
 		expect(state.insertValues).toHaveLength(0);
 	});
 
-	it('maps a 23503 (endpoint deleted mid-flight) to 400 (J-3 review P3-1)', async () => {
-		state.selectQueue.push([
-			{ id: DELIVERY_ID, webhookId: 'w1', event: 'comment.created', payload: {}, status: 'failed' }
-		]);
-		state.selectQueue.push([{ isEnabled: true }]);
-		state.insertError = Object.assign(new Error('fk'), { cause: { code: '23503' } });
-		const { result } = await callRetry({ id: DELIVERY_ID });
-		expect(result).toMatchObject({ status: 400 });
-	});
-
-	it('load requires the admin role first (J-3 review I1)', async () => {
-		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
-		await expect(load({} as never)).rejects.toThrow('redirect: no session');
-	});
-
-	it('copies the failed row into a fresh queued delivery', async () => {
+	it('replays the same failed row - the delivery id (webhook-id) never changes', async () => {
 		state.selectQueue.push([
 			{
 				id: DELIVERY_ID,
@@ -327,15 +419,72 @@ describe('notification webhooks retry', () => {
 		]);
 		state.selectQueue.push([{ isEnabled: true }]);
 		const ok = await callRetry({ id: DELIVERY_ID });
-		expect(ok.result).toMatchObject({ retried: true, id: 'new-delivery' });
-		expect(state.insertValues[0]).toEqual({
-			webhookId: 'w1',
-			event: 'comment.created',
-			payload: { a: 1 },
-			status: 'queued'
+		expect(ok.result).toMatchObject({ retried: true, id: 'updated-row' });
+		// No copied row: the failed row itself is re-queued.
+		expect(state.insertValues).toHaveLength(0);
+		expect(state.updateTables[0]).toBe(webhookDeliveriesMock);
+		const set = state.updateSets[0] as Record<string, unknown>;
+		expect(set).toMatchObject({
+			status: 'queued',
+			attemptCount: 0,
+			responseCode: null,
+			error: null,
+			deliveredAt: null
 		});
-		// The copy must target the deliveries table (round-2 SYT-1).
-		expect(state.insertTables[0]).toBe(webhookDeliveriesMock);
+		expect(set.nextAttemptAt).toBeInstanceOf(Date);
+		expect(sqlOf(state.updateWheres[0])).toContain('"webhook_deliveries"."id"');
+	});
+
+	it('400s when the row vanishes or is no longer failed before the replay write', async () => {
+		state.selectQueue.push([
+			{ id: DELIVERY_ID, webhookId: 'w1', event: 'comment.created', payload: {}, status: 'failed' }
+		]);
+		state.selectQueue.push([{ isEnabled: true }]);
+		state.updateRows = [];
+		const { result } = await callRetry({ id: DELIVERY_ID });
+		expect(result).toMatchObject({ status: 400 });
+	});
+
+	it('lets a non-owner admin replay (config is read-only, replay is not)', async () => {
+		state.selectQueue.push([
+			{ id: DELIVERY_ID, webhookId: 'w1', event: 'comment.created', payload: {}, status: 'failed' }
+		]);
+		state.selectQueue.push([{ isEnabled: true }]);
+		const { result, thrown } = await callAction('retry', { id: DELIVERY_ID }, 'admin');
+		expect(thrown).toBeUndefined();
+		expect(result).toMatchObject({ retried: true });
+	});
+
+	it('load requires the admin role first (J-3 review I1)', async () => {
+		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
+		await expect(load({} as never)).rejects.toThrow('redirect: no session');
+	});
+
+	it('load renders webhook config read-only for a non-owner admin (mail stays editable)', async () => {
+		state.selectQueue.push([]); // endpoints
+		state.selectQueue.push([]); // deliveries
+		const data = (await load({
+			locals: { admin: { userId: 'admin-1', role: 'admin' } }
+		} as never)) as { editable: boolean; mailEditable: boolean };
+		expect(data.editable).toBe(false);
+		expect(data.mailEditable).toBe(true);
+	});
+
+	it('replays without copying the failed row', async () => {
+		state.selectQueue.push([
+			{
+				id: DELIVERY_ID,
+				webhookId: 'w1',
+				event: 'comment.created',
+				payload: { a: 1 },
+				status: 'failed'
+			}
+		]);
+		state.selectQueue.push([{ isEnabled: true }]);
+		const ok = await callRetry({ id: DELIVERY_ID });
+		expect(ok.result).toMatchObject({ retried: true });
+		expect(state.insertValues).toHaveLength(0);
+		expect(state.updateSets[0]).toMatchObject({ status: 'queued', attemptCount: 0 });
 	});
 });
 
@@ -415,6 +564,23 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(state.insertValues).toHaveLength(0);
 	});
 
+	it('create refuses http, credentials and private/metadata targets (W9.3 T2a)', async () => {
+		const cases = [
+			'http://example.com/hook',
+			'https://user:pass@example.com/hook',
+			'https://127.0.0.1/hook',
+			'https://169.254.169.254/latest/meta-data',
+			'https://10.0.0.5/hook',
+			'https://[::1]/hook',
+			'https://rebind.example/hook'
+		];
+		for (const payloadUrl of cases) {
+			const { result } = await callAction('create', { ...validForm, payloadUrl });
+			expect(result, payloadUrl).toMatchObject({ status: 400, data: { op: 'create' } });
+		}
+		expect(state.insertValues).toHaveLength(0);
+	});
+
 	it('create soft-rejects a duplicate name (case-insensitive, G3)', async () => {
 		state.selectQueue.push([{ id: 'existing' }]);
 		const { result } = await callAction('create', validForm);
@@ -456,6 +622,19 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(audit.deliver).toBe(false);
 		expect(audit.payload?.hint).toBe(secretRow.hint);
 		expect(JSON.stringify(audit)).not.toContain(String(result?.secret));
+		// W9.3 config audit: host + subscription, local only, never the secret.
+		const createAudit = recordCalls.find(
+			(call) => (call[1] as { event?: string }).event === 'webhook.create'
+		);
+		expect(createAudit).toBeDefined();
+		const config = createAudit?.[1] as { deliver?: boolean; payload?: Record<string, unknown> };
+		expect(config.deliver).toBe(false);
+		expect(config.payload).toMatchObject({
+			name: 'ops',
+			host: 'example.com',
+			events: ['job.run', 'schedule.toggle']
+		});
+		expect(JSON.stringify(config)).not.toContain(String(result?.secret));
 	});
 
 	it('create stores the normalized href for odd-but-valid urls (review round-1)', async () => {
@@ -524,6 +703,12 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		// The write predicate must target the row id (round-2 SYT-1: write
 		// WHEREs are recorded so a dropped/mis-aimed predicate turns red).
 		expect(sqlOf(state.updateWheres[0])).toContain('"webhooks"."id"');
+		const updateAudit = vi
+			.mocked(mocks.recordActivity)
+			.mock.calls.find((call) => (call[1] as { event?: string }).event === 'webhook.update');
+		expect(updateAudit).toBeDefined();
+		const updatePayload = (updateAudit?.[1] as { payload?: Record<string, unknown> }).payload;
+		expect(updatePayload).toMatchObject({ webhookId: WEBHOOK_ID, host: 'example.com' });
 	});
 
 	it('update stores the normalized href like create (round-2 SYT-4)', async () => {
@@ -550,6 +735,14 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(state.deleteTables[0]).toBe(webhooksMock);
 		// The delete predicate must target the row id (round-2 SYT-1).
 		expect(sqlOf(state.deleteWheres[0])).toContain('"webhooks"."id"');
+		// W9.3: deleting an endpoint is a config change and leaves an audit row.
+		const deleteAudit = vi
+			.mocked(mocks.recordActivity)
+			.mock.calls.find((call) => (call[1] as { event?: string }).event === 'webhook.delete');
+		expect(deleteAudit).toBeDefined();
+		expect((deleteAudit?.[1] as { payload?: Record<string, unknown> }).payload).toMatchObject({
+			webhookId: WEBHOOK_ID
+		});
 	});
 
 	it('toggle demands an explicit boolean and writes the desired state', async () => {
@@ -566,6 +759,13 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(state.updateSets[0]).toEqual({ isEnabled: false });
 		// The toggle predicate must target the row id (round-2 SYT-1).
 		expect(sqlOf(state.updateWheres[0])).toContain('"webhooks"."id"');
+		const toggleAudit = vi
+			.mocked(mocks.recordActivity)
+			.mock.calls.find((call) => (call[1] as { event?: string }).event === 'webhook.toggle');
+		expect((toggleAudit?.[1] as { payload?: Record<string, unknown> }).payload).toMatchObject({
+			webhookId: WEBHOOK_ID,
+			enabled: false
+		});
 
 		state.updateRows = [];
 		const gone = await callAction('toggle', { id: WEBHOOK_ID, enabled: 'true' });
