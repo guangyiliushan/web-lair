@@ -6,10 +6,10 @@ import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isAdminRole } from '$lib/server/auth/owner';
 import { evaluateCommentModeration, recordModerationEvents } from './comment-moderation';
 import { getCache } from '$lib/server/cache';
-import { rateLimit, type CacheStore } from '$lib/server/cache/store';
+import { rateLimit, rateLimitStrict, type CacheStore } from '$lib/server/cache/store';
 import { getOption } from '$lib/server/config/options-registry';
 import { normalizeCountry, normalizeRegion } from '$lib/server/security/geoip';
-import { ipMatchesCidrs } from '$lib/utils/cidr';
+import { clientAddressKey, ipMatchesCidrs } from '$lib/utils/cidr';
 import { locales } from '$lib/paraglide/runtime';
 import { isUuid } from '$lib/utils/uuid';
 import {
@@ -59,6 +59,14 @@ export const THREAD_REPLY_LIMIT = 500;
 
 /** Per-reader submission window (spec §1: 60s <= 2; grill Q1/Q2). */
 export const COMMENT_RATE_LIMIT = { limit: 2, windowSeconds: 60 } as const;
+
+/**
+ * Per-IP submission window (W6.10 / register 3B.1): the per-reader window
+ * cannot stop one client cycling accounts. Fail-CLOSED (a dead cache answers
+ * 503) and keyed on the /64 for IPv6; this is request-time only - the raw
+ * address is never stored.
+ */
+export const COMMENT_IP_RATE_LIMIT = { limit: 10, windowSeconds: 10 * 60 } as const;
 
 /**
  * Segment-anchor validation budget (2026-10-17 grill G1). Anchor submissions
@@ -536,6 +544,8 @@ export interface SubmitCommentInput {
 export type SubmitCommentResult =
 	| { kind: 'created'; id: string; state: 'pending' | 'approved' | 'rejected' }
 	| { kind: 'throttled'; windowSeconds: number }
+	/** The strict limiter store is down: answer 503, never fail open (W6.10). */
+	| { kind: 'unavailable' }
 	| { kind: 'unverified' }
 	/** Site-wide `comments.enabled` is off (W6.1): new comments are closed. */
 	| { kind: 'disabled' }
@@ -568,6 +578,21 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	const privacy = await getOption('comments.privacy');
 	if (privacy.enabled && input.ip && ipMatchesCidrs(input.ip, privacy.blockedCidrs)) {
 		return { kind: 'blocked' };
+	}
+
+	// W6.10: per-IP strict bucket, independent of the privacy switch (an IP is
+	// needed for the limit, not stored). Fail-closed on a dead cache; IPv6 is
+	// aggregated on the /64 so a rotating client cannot multiply its budget.
+	const addressGuard = await rateLimitStrict(
+		input.cache ?? getCache(),
+		`limits:comment-ip:${clientAddressKey(input.ip ?? '')}`,
+		COMMENT_IP_RATE_LIMIT.limit,
+		COMMENT_IP_RATE_LIMIT.windowSeconds
+	);
+	if (!addressGuard.allowed) {
+		return addressGuard.unavailable
+			? { kind: 'unavailable' }
+			: { kind: 'throttled', windowSeconds: COMMENT_IP_RATE_LIMIT.windowSeconds };
 	}
 
 	const text = normalizeCommentText(input.text);

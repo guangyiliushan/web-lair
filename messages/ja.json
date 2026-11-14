@@ -2674,5 +2674,9 @@
 	"admin_settings_content_flash_presence_saved": "閲覧状況の設定を保存しました。",
 	"admin_settings_content_notes_desc": "パスワード付きノートの解錠は期間限定で、この期間を過ぎると Cookie が失効します。",
 	"admin_settings_content_notes_ttl_hint": "解錠の有効期間（日、1〜3650）。",
-	"admin_settings_content_flash_notes_saved": "ノートのパスワード設定を保存しました。"
+	"admin_settings_content_flash_notes_saved": "ノートのパスワード設定を保存しました。",
+	"auth_err_unavailable": "サービスが一時的に利用できません。しばらくしてから再度お試しください。",
+	"auth_login_err_rate": "サインインの試行が多すぎます。数分待ってから再度お試しください。",
+	"admin_media_err_unavailable": "アップロードは一時的に利用できません（レートリミッターがオフライン）。しばらくしてから再度お試しください。",
+	"admin_ai_transcribe_rate": "文字起こしの上限に達しました。しばらくしてから再度お試しください。"
 }

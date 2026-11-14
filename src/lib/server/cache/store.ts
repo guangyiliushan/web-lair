@@ -107,3 +107,28 @@ export async function rateLimit(
 		return { allowed: true, count: 0 };
 	}
 }
+
+export interface StrictRateLimitResult extends RateLimitResult {
+	/** True when the store threw: the caller must fail CLOSED (503). */
+	unavailable: boolean;
+}
+
+/**
+ * Fail-closed variant for security endpoints (W6.10 / register 3B.3): login,
+ * register, verify-email, comment/upload/AI writes. A dead cache must not be
+ * a free pass — the caller answers 503 + Retry-After instead. Read paths keep
+ * using `rateLimit` (availability wins there).
+ */
+export async function rateLimitStrict(
+	store: CacheStore,
+	key: string,
+	limit: number,
+	windowSeconds: number
+): Promise<StrictRateLimitResult> {
+	try {
+		const count = await store.incr(key, windowSeconds);
+		return { allowed: count <= limit, count, unavailable: false };
+	} catch {
+		return { allowed: false, count: 0, unavailable: true };
+	}
+}

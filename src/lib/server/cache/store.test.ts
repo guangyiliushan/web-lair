@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryCacheStore } from './memory';
 import { exclusiveLowerBound, ValkeyCacheStore } from './valkey';
-import { cached, rateLimit, type CacheStore } from './store';
+import { cached, rateLimit, rateLimitStrict, type CacheStore } from './store';
 
 function throwingStore(): CacheStore {
 	const boom = async (): Promise<never> => {
@@ -194,6 +194,19 @@ describe('rateLimit()', () => {
 
 	it('fails open when the counter store is down', async () => {
 		expect((await rateLimit(throwingStore(), 'limits:up', 1, 60)).allowed).toBe(true);
+	});
+
+	it('fails CLOSED for security endpoints when the store is down (W6.10)', async () => {
+		const result = await rateLimitStrict(throwingStore(), 'limits:login', 5, 60);
+		expect(result).toEqual({ allowed: false, count: 0, unavailable: true });
+	});
+
+	it('still enforces the window when the strict store is healthy', async () => {
+		const store = new MemoryCacheStore();
+		expect((await rateLimitStrict(store, 'limits:login', 2, 60)).allowed).toBe(true);
+		expect((await rateLimitStrict(store, 'limits:login', 2, 60)).allowed).toBe(true);
+		const third = await rateLimitStrict(store, 'limits:login', 2, 60);
+		expect(third).toEqual({ allowed: false, count: 3, unavailable: false });
 	});
 });
 

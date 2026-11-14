@@ -202,7 +202,7 @@ function row(overrides: Partial<CommentRow> = {}): CommentRow {
 	};
 }
 
-function fakeStore(incr: () => Promise<number>): CacheStore {
+function fakeStore(incr: (key: string, windowSeconds: number) => Promise<number>): CacheStore {
 	return {
 		get: async () => null,
 		set: async () => undefined,
@@ -502,6 +502,21 @@ describe('submitComment', () => {
 		expect(getOptionMock).toHaveBeenCalledWith('comments.enabled');
 	});
 
+	it('fails CLOSED when the per-IP limiter store is down (W6.10)', async () => {
+		const cache = fakeStore(async () => {
+			throw new Error('valkey down');
+		});
+		expect(await submitComment(input({ cache }))).toEqual({ kind: 'unavailable' });
+		expect(state.inserts).toHaveLength(0);
+	});
+
+	it('throttles an address over its own budget (W6.10)', async () => {
+		const cache = fakeStore(async (key) => (key.startsWith('limits:comment-ip:') ? 11 : 1));
+		const result = await submitComment(input({ cache, ip: '2001:db8:1:2::9' }));
+		expect(result).toEqual({ kind: 'throttled', windowSeconds: 600 });
+		expect(state.inserts).toHaveLength(0);
+	});
+
 	it('stores a server-derived anchor for a matching draft', async () => {
 		state.selectQueue = [
 			[{ id: TARGET, allowComment: true }],
@@ -695,7 +710,9 @@ describe('submitComment', () => {
 				now
 			})
 		);
-		expect(incr).not.toHaveBeenCalled();
+		expect(incr).toHaveBeenCalledTimes(1);
+		// Only the per-IP guard ran; the per-reader window is skipped for staff.
+		expect(incr).toHaveBeenCalledWith('limits:comment-ip:unknown', 600);
 		expect(result).toEqual({ kind: 'created', id: 'new-4', state: 'approved' });
 		expect(state.inserts[0].values).toMatchObject({
 			state: 'approved',
@@ -710,7 +727,9 @@ describe('submitComment', () => {
 		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
 		const result = await submitComment(input({ cache: fakeStore(incr) }));
 		expect(result).toEqual({ kind: 'throttled', windowSeconds: 60 });
-		expect(incr).toHaveBeenCalledTimes(1);
+		// The per-IP guard runs first, then the shared per-reader window.
+		expect(incr).toHaveBeenCalledTimes(2);
+		expect(incr).toHaveBeenCalledWith('limits:comment-ip:unknown', 600);
 		// The shared window key (pre-release review 03-P3-1): submit and edit
 		// charge one and the same bucket per reader.
 		expect(incr).toHaveBeenCalledWith('limits:comment:' + VIEWER, 60);
@@ -723,17 +742,21 @@ describe('submitComment', () => {
 		expect(await submitComment(input({ cache: fakeStore(incr) }))).toEqual({
 			kind: 'target-unavailable'
 		});
-		expect(incr).not.toHaveBeenCalled();
+		// The per-IP guard charged its own bucket before the target lookup;
+		// the per-reader window is only charged after validation succeeds.
+		expect(incr).toHaveBeenCalledTimes(1);
+		expect(incr).toHaveBeenCalledWith('limits:comment-ip:unknown', 600);
 	});
 
-	it('stays fail-open when the cache store is down (T14) and says so', async () => {
+	it('stays fail-open on the per-reader window when only that store call fails', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
 		state.insertResults = [[{ id: 'new-5', state: 'pending' }]];
 		const result = await submitComment(
 			input({
-				cache: fakeStore(async () => {
-					throw new Error('valkey down');
+				cache: fakeStore(async (key) => {
+					if (key.startsWith('limits:comment:')) throw new Error('valkey down');
+					return 1;
 				})
 			})
 		);

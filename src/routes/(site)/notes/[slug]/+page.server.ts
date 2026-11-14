@@ -345,7 +345,7 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 		now
 	});
 
-	return commentSubmitResponse(result);
+	return commentSubmitResponse(result, event);
 }
 
 export const actions = {

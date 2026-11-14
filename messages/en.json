@@ -2944,5 +2944,9 @@
 	"admin_settings_content_flash_presence_saved": "Reading presence settings saved.",
 	"admin_settings_content_notes_desc": "Password-gated notes unlock for a limited time; the cookie expires after this window.",
 	"admin_settings_content_notes_ttl_hint": "Unlock TTL in days (1–3650).",
-	"admin_settings_content_flash_notes_saved": "Notes gate settings saved."
+	"admin_settings_content_flash_notes_saved": "Notes gate settings saved.",
+	"auth_err_unavailable": "The service is temporarily unavailable. Please try again shortly.",
+	"auth_login_err_rate": "Too many sign-in attempts. Please wait a few minutes and try again.",
+	"admin_media_err_unavailable": "Uploads are temporarily unavailable (rate limiter offline). Try again shortly.",
+	"admin_ai_transcribe_rate": "Transcription budget reached. Try again later."
 }

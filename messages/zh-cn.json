@@ -2674,5 +2674,9 @@
 	"admin_settings_content_flash_presence_saved": "阅读状态设置已保存。",
 	"admin_settings_content_notes_desc": "密码手记解锁具有有效期，过期后 Cookie 失效。",
 	"admin_settings_content_notes_ttl_hint": "解锁有效期（天，1–3650）。",
-	"admin_settings_content_flash_notes_saved": "手记密码门设置已保存。"
+	"admin_settings_content_flash_notes_saved": "手记密码门设置已保存。",
+	"auth_err_unavailable": "服务暂时不可用，请稍后再试。",
+	"auth_login_err_rate": "登录尝试过于频繁，请等待几分钟后再试。",
+	"admin_media_err_unavailable": "上传暂时不可用（限流服务离线），请稍后再试。",
+	"admin_ai_transcribe_rate": "转写次数已达上限，请稍后再试。"
 }
