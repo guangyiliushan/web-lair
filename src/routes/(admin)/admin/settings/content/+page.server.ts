@@ -271,5 +271,30 @@ export const actions: Actions = {
 			deliver: false
 		});
 		return { message: m.admin_settings_content_flash_presence_saved() };
+	},
+
+	/** W6.6 (C8): the password-gate unlock TTL (notes.gate.ttlDays). */
+	saveNotesGate: async ({ locals, request }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'content', 'notes.gate');
+		const form = await request.formData();
+		const ttlDays = Number((form.get('ttlDays') ?? '').toString().trim());
+		try {
+			await setOption('notes.gate', { ttlDays });
+		} catch (caught) {
+			if (caught instanceof z.ZodError) {
+				return fail(400, {
+					message: firstIssue(caught, m.admin_settings_content_notes_ttl_hint())
+				});
+			}
+			throw caught;
+		}
+		await recordActivity(db, {
+			event: 'notes_gate.update',
+			actorId: locals.user?.id ?? null,
+			payload: { fields: ['notes.gate.ttlDays'], ttlDays },
+			deliver: false
+		});
+		return { message: m.admin_settings_content_flash_notes_saved() };
 	}
 };

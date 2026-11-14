@@ -8,7 +8,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import * as Field from '$lib/components/ui/field';
-	import { SettingsStatusList, SettingsStatusRow } from '$lib/components/admin/settings';
+	import { SettingsStatusRow } from '$lib/components/admin/settings';
 
 	let { data, form }: PageProps = $props();
 
@@ -480,10 +480,36 @@
 		</form>
 	</section>
 
-	<SettingsStatusList title={m.admin_settings_content_notes_gate()}>
-		<SettingsStatusRow
-			label={m.admin_settings_content_notes_ttl()}
-			value={String(data.notesGate.ttlDays)}
-		/>
-	</SettingsStatusList>
+	<section class="rounded-lg border p-4" aria-labelledby="content-notes-title">
+		<h2 id="content-notes-title" class="text-sm font-semibold">
+			{m.admin_settings_content_notes_gate()}
+		</h2>
+		<p class="mt-1 text-xs text-muted-foreground">{m.admin_settings_content_notes_desc()}</p>
+		<form method="POST" action="?/saveNotesGate" class="mt-4 flex flex-col gap-3" use:enhance>
+			<Field.Field>
+				<Field.Label for="notes-ttl">{m.admin_settings_content_notes_ttl()}</Field.Label>
+				<Input
+					id="notes-ttl"
+					name="ttlDays"
+					type="number"
+					min="1"
+					max="3650"
+					step="1"
+					value={String(data.notesGate.ttlDays)}
+					disabled={!data.editable.notes}
+					class="w-32"
+				/>
+				<p class="text-xs text-muted-foreground">
+					{m.admin_settings_content_notes_ttl_hint()}
+				</p>
+			</Field.Field>
+			{#if data.editable.notes}
+				<div>
+					<Button type="submit" size="sm">{m.admin_settings_content_save()}</Button>
+				</div>
+			{:else}
+				<p class="text-xs text-muted-foreground">{m.admin_settings_common_owner_only()}</p>
+			{/if}
+		</form>
+	</section>
 </div>

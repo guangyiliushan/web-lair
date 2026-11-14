@@ -2687,5 +2687,8 @@
 	"admin_settings_content_presence_enable_hint": "心跳、实时流与读者徽标的总开关。",
 	"admin_settings_content_reader_view_hint": "显示“N 人正在阅读”徽标与位置密度条。",
 	"admin_settings_content_reader_dots_hint": "向读者显示单个位置点。默认关闭；管理员始终可见。",
-	"admin_settings_content_flash_presence_saved": "阅读状态设置已保存。"
+	"admin_settings_content_flash_presence_saved": "阅读状态设置已保存。",
+	"admin_settings_content_notes_desc": "密码手记解锁具有有效期，过期后 Cookie 失效。",
+	"admin_settings_content_notes_ttl_hint": "解锁有效期（天，1–3650）。",
+	"admin_settings_content_flash_notes_saved": "手记密码门设置已保存。"
 }

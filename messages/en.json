@@ -2957,5 +2957,8 @@
 	"admin_settings_content_presence_enable_hint": "Master switch for heartbeats, the stream and the reader badge.",
 	"admin_settings_content_reader_view_hint": "Shows the “N reading now” badge and the position density strip.",
 	"admin_settings_content_reader_dots_hint": "Shows individual position dots to readers. Off by default; admins always see dots.",
-	"admin_settings_content_flash_presence_saved": "Reading presence settings saved."
+	"admin_settings_content_flash_presence_saved": "Reading presence settings saved.",
+	"admin_settings_content_notes_desc": "Password-gated notes unlock for a limited time; the cookie expires after this window.",
+	"admin_settings_content_notes_ttl_hint": "Unlock TTL in days (1–3650).",
+	"admin_settings_content_flash_notes_saved": "Notes gate settings saved."
 }
