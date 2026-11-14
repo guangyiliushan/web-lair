@@ -91,27 +91,27 @@ export default {
 		// lazy because `translations` pulls the content schema graph.
 		const prunedTranslations = await runTranslationsPrune(ctx);
 
-		// W6.2 (C5): comment privacy retention. Only rows that still carry any
-		// privacy field are touched, so a site with privacy off pays one cheap
-		// no-op query; the raw IP column is never written in the first place.
+		// W6.2 (C5): comment privacy retention. The sweep runs even when the
+		// privacy switch is currently off: values collected during an earlier
+		// on-period must still age out. Only rows that carry a privacy field
+		// match, so an unused feature costs one cheap no-op query; the raw IP
+		// column is never written in the first place.
 		const privacy = await getOption('comments.privacy');
-		const prunedCommentGeo = privacy.enabled
-			? await ctx.db
-					.update(comments)
-					.set({ countryCode: null, regionCode: null, location: null, agent: null })
-					.where(
-						and(
-							lt(comments.createdAt, sql`now() - make_interval(days => ${privacy.retentionDays})`),
-							or(
-								isNotNull(comments.countryCode),
-								isNotNull(comments.regionCode),
-								isNotNull(comments.location),
-								isNotNull(comments.agent)
-							)
-						)
+		const prunedCommentGeo = await ctx.db
+			.update(comments)
+			.set({ countryCode: null, regionCode: null, location: null, agent: null })
+			.where(
+				and(
+					lt(comments.createdAt, sql`now() - make_interval(days => ${privacy.retentionDays})`),
+					or(
+						isNotNull(comments.countryCode),
+						isNotNull(comments.regionCode),
+						isNotNull(comments.location),
+						isNotNull(comments.agent)
 					)
-					.returning({ id: comments.id })
-			: [];
+				)
+			)
+			.returning({ id: comments.id });
 
 		ctx.summary({
 			jobRuns: prunedRuns.length,

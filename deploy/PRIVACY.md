@@ -6,18 +6,18 @@ both files change in the same batch.
 
 ## 1. Data inventory and retention
 
-| Data | Where | Retention | Notes |
-|---|---|---|---|
-| Account email, name, password hash, sessions | `user`, `session` (Better Auth) | until account deletion | Argon2id hash; no plaintext |
-| Profile (display name, avatar URL, header label) | `user_profiles` | until account deletion / clear | |
-| Comments (text, author snapshot, timestamps, moderation, anchors) | `comments` | author-controlled (soft delete) | `ip`, `agent`, `location` stay NULL by construction |
-| Comment country / region | `comments.country_code`, `comments.region_code` | `comments.privacy.retentionDays` (default 90) | only with `collectCountry`; cleared by `jobs.prune`; deleting a comment clears immediately |
-| Comment country opt-in flag | `comments.meta.showCountry` | same as the comment | public label needs site `showCountry` **and** this flag |
-| Newsletter subscriptions | `subscriptions` | until unsubscribe | token links are excluded from access logs |
-| Audit trail | `activities` | 24 months (`jobs.prune`) | settings events carry `deliver:false` (no webhook fan-out) |
-| AI usage / chat | `ai_usage`, `ai_agent_conversations` | 24 months / `ai.chat.retentionDays` (archived only) | |
-| Uploaded media | storage provider + `files` rows | until purge / delete | |
-| HTTP access log | Caddy `caddy_logs` volume | 30 days (`roll_keep_for 720h`) | the only place an IP appears; token paths excluded |
+| Data                                                              | Where                                           | Retention                                           | Notes                                                                                                                          |
+| ----------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Account email, name, password hash, sessions                      | `user`, `session` (Better Auth)                 | until account deletion                              | Argon2id hash; no plaintext                                                                                                    |
+| Profile (display name, avatar URL, header label)                  | `user_profiles`                                 | until account deletion / clear                      |                                                                                                                                |
+| Comments (text, author snapshot, timestamps, moderation, anchors) | `comments`                                      | author-controlled (soft delete)                     | `ip`, `agent`, `location` stay NULL by construction                                                                            |
+| Comment country / region                                          | `comments.country_code`, `comments.region_code` | `comments.privacy.retentionDays` (default 90)       | only with `collectCountry`; cleared by `jobs.prune` even after the switch is turned off; deleting a comment clears immediately |
+| Comment country opt-in flag                                       | `comments.meta.showCountry`                     | same as the comment                                 | public label needs site `showCountry` **and** this flag                                                                        |
+| Newsletter subscriptions                                          | `subscriptions`                                 | until unsubscribe                                   | token links are excluded from access logs                                                                                      |
+| Audit trail                                                       | `activities`                                    | 24 months (`jobs.prune`)                            | settings events carry `deliver:false` (no webhook fan-out)                                                                     |
+| AI usage / chat                                                   | `ai_usage`, `ai_agent_conversations`            | 24 months / `ai.chat.retentionDays` (archived only) |                                                                                                                                |
+| Uploaded media                                                    | storage provider + `files` rows                 | until purge / delete                                |                                                                                                                                |
+| HTTP access log                                                   | Caddy `caddy_logs` volume                       | 30 days (`roll_keep_for 720h`)                      | the only place an IP appears; token paths excluded                                                                             |
 
 The raw commenter IP is **never** written to a business table. It is read from
 the adapter, used in-request for the per-IP rate bucket and optional CIDR
@@ -66,6 +66,7 @@ select email, lang, state, created_at from subscriptions where email = $1;
    ```
 
    (Check FKs first; `comments.reader_id` is `ON DELETE SET NULL`.)
+
 3. Subscriptions: unsubscribe from the email link, or move the address to the
    suppression list.
 

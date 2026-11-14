@@ -108,10 +108,11 @@ describe('jobs.prune comment privacy retention', () => {
 		expect(mocks.summaries.at(-1)?.commentGeo).toBe(2);
 	});
 
-	it('skips the sweep entirely when comment privacy is off', async () => {
+	it('still ages out values collected before the switch was turned off', async () => {
 		mocks.privacy.enabled = false;
 		await pruneJob.run(makeCtx());
-		expect(mocks.updates.find((entry) => 'countryCode' in entry.values)).toBeUndefined();
-		expect(mocks.summaries.at(-1)?.commentGeo).toBe(0);
+		const privacyUpdate = mocks.updates.find((entry) => 'countryCode' in entry.values);
+		expect(privacyUpdate).toBeDefined();
+		expect(mocks.summaries.at(-1)?.commentGeo).toBe(2);
 	});
 });
