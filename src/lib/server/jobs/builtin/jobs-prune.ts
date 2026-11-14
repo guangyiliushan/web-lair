@@ -3,11 +3,13 @@ import {
 	aiAgentConversations,
 	aiUsage,
 	and,
+	comments,
 	getOption,
 	inArray,
 	isNotNull,
 	jobRuns,
 	lt,
+	or,
 	runTranslationsPrune,
 	sql,
 	webhookDeliveries,
@@ -89,16 +91,39 @@ export default {
 		// lazy because `translations` pulls the content schema graph.
 		const prunedTranslations = await runTranslationsPrune(ctx);
 
+		// W6.2 (C5): comment privacy retention. Only rows that still carry any
+		// privacy field are touched, so a site with privacy off pays one cheap
+		// no-op query; the raw IP column is never written in the first place.
+		const privacy = await getOption('comments.privacy');
+		const prunedCommentGeo = privacy.enabled
+			? await ctx.db
+					.update(comments)
+					.set({ countryCode: null, regionCode: null, location: null, agent: null })
+					.where(
+						and(
+							lt(comments.createdAt, sql`now() - make_interval(days => ${privacy.retentionDays})`),
+							or(
+								isNotNull(comments.countryCode),
+								isNotNull(comments.regionCode),
+								isNotNull(comments.location),
+								isNotNull(comments.agent)
+							)
+						)
+					)
+					.returning({ id: comments.id })
+			: [];
+
 		ctx.summary({
 			jobRuns: prunedRuns.length,
 			webhookDeliveries: prunedDeliveries.length,
 			activities: prunedActivities.length,
 			aiUsage: prunedUsage.length,
 			discardedTranslations: prunedTranslations,
-			chats: prunedChats.length
+			chats: prunedChats.length,
+			commentGeo: prunedCommentGeo.length
 		});
 		ctx.logger.info(
-			`pruned job_runs=${prunedRuns.length} webhook_deliveries=${prunedDeliveries.length} activities=${prunedActivities.length} ai_usage=${prunedUsage.length} discarded_translations=${prunedTranslations} chats=${prunedChats.length}`
+			`pruned job_runs=${prunedRuns.length} webhook_deliveries=${prunedDeliveries.length} activities=${prunedActivities.length} ai_usage=${prunedUsage.length} discarded_translations=${prunedTranslations} chats=${prunedChats.length} comment_geo=${prunedCommentGeo.length}`
 		);
 	}
 };

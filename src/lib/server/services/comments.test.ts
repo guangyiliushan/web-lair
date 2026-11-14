@@ -38,9 +38,22 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 // closed door.
 const { getOptionMock, optionState } = vi.hoisted(() => ({
 	getOptionMock: vi.fn(async (key: string) =>
-		key === 'comments.enabled' ? optionState.commentsEnabled : { enabled: false }
+		key === 'comments.enabled'
+			? optionState.commentsEnabled
+			: key === 'comments.privacy'
+				? optionState.privacy
+				: { enabled: false }
 	),
-	optionState: { commentsEnabled: true }
+	optionState: {
+		commentsEnabled: true,
+		privacy: {
+			enabled: false,
+			collectCountry: false,
+			showCountry: false,
+			retentionDays: 90,
+			blockedCidrs: [] as string[]
+		}
+	}
 }));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: getOptionMock }));
 // submitComment loads the renderer lazily for anchored submissions; stub it with
@@ -157,6 +170,13 @@ beforeEach(() => {
 	state.orderBys = [];
 	state.failWith = undefined;
 	optionState.commentsEnabled = true;
+	optionState.privacy = {
+		enabled: false,
+		collectCountry: false,
+		showCountry: false,
+		retentionDays: 90,
+		blockedCidrs: []
+	};
 	getOptionMock.mockClear();
 	selectMock.mockClear();
 	insertMock.mockClear();
@@ -234,6 +254,25 @@ describe('visibleCommentCondition', () => {
 });
 
 describe('assembleThreads', () => {
+	it('renders a country only when the site and the commenter both opted in (W6.2)', () => {
+		const root = row({ id: 'r1', countryCode: 'US', meta: { showCountry: true } });
+		const reply = row({
+			id: 'p1',
+			parentCommentId: 'r1',
+			rootCommentId: 'r1',
+			countryCode: 'JP',
+			meta: { showCountry: true }
+		});
+		const shown = assembleThreads([root], [reply], { showCountry: true });
+		expect(shown.roots[0].country).toBe('US');
+		expect(shown.roots[0].replies[0].country).toBe('JP');
+		// Site switch off: stored country never reaches the view.
+		expect(assembleThreads([root], [reply]).roots[0].country).toBeNull();
+		// Commenter did not opt in on this row: same rule.
+		const optOut = row({ id: 'r2', countryCode: 'US', meta: {} });
+		expect(assembleThreads([optOut], [], { showCountry: true }).roots[0].country).toBeNull();
+	});
+
 	it('keeps visible replies, drops deleted ones, derives the count', () => {
 		const root = row({ id: 'r1' });
 		const alive = row({ id: 'p1', parentCommentId: 'r1', rootCommentId: 'r1', author: 'Bob' });
@@ -549,10 +588,67 @@ describe('submitComment', () => {
 			reviewedBy: null,
 			reviewedAt: null
 		});
-		// Spec §1: the non-collected fields must never be written.
-		for (const key of ['ip', 'agent', 'location', 'countryCode', 'mail', 'url']) {
+		// Spec §1 / W6.2: the raw request fields must never be written. The
+		// privacy columns are written as explicit nulls (the insert names them),
+		// which is the same nothing on disk and easier to audit.
+		for (const key of ['ip', 'agent', 'location', 'mail', 'url']) {
 			expect(values).not.toHaveProperty(key);
 		}
+		expect(values.countryCode).toBeNull();
+		expect(values.regionCode).toBeNull();
+		expect(values.meta).toBeNull();
+	});
+
+	it('stores country/region only with privacy + collectCountry on (W6.2)', async () => {
+		optionState.privacy = {
+			enabled: true,
+			collectCountry: true,
+			showCountry: true,
+			retentionDays: 90,
+			blockedCidrs: []
+		};
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'new-geo', state: 'pending' }]];
+		const result = await submitComment(
+			input({
+				ip: '203.0.113.9',
+				geo: { country: 'us', region: 'ca' },
+				showCountry: true
+			})
+		);
+		expect(result).toEqual({ kind: 'created', id: 'new-geo', state: 'pending' });
+		const values = state.inserts[0].values;
+		expect(values.countryCode).toBe('US');
+		expect(values.regionCode).toBe('CA');
+		expect(values.meta).toEqual({ showCountry: true });
+		// The raw address never rides along.
+		expect(values).not.toHaveProperty('ip');
+	});
+
+	it('drops country storage when privacy is off but still never stores the IP', async () => {
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'new-plain', state: 'pending' }]];
+		await submitComment(
+			input({ ip: '203.0.113.9', geo: { country: 'US', region: 'CA' }, showCountry: true })
+		);
+		const values = state.inserts[0].values;
+		expect(values.countryCode).toBeNull();
+		expect(values.regionCode).toBeNull();
+		expect(values.meta).toBeNull();
+	});
+
+	it('blocks a request address matching a configured CIDR (W6.2)', async () => {
+		optionState.privacy = {
+			enabled: true,
+			collectCountry: false,
+			showCountry: false,
+			retentionDays: 90,
+			blockedCidrs: ['203.0.113.0/24', '2001:db8::/32']
+		};
+		expect(await submitComment(input({ ip: '203.0.113.55' }))).toEqual({ kind: 'blocked' });
+		expect(await submitComment(input({ ip: '2001:db8:9::1' }))).toEqual({ kind: 'blocked' });
+		// A neighbouring range and a missing address both pass.
+		expect(state.inserts).toHaveLength(0);
 	});
 
 	it('re-checks the target against id + lang + visibility (SQL teeth)', async () => {

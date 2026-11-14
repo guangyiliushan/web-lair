@@ -5,6 +5,9 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Switch } from '$lib/components/ui/switch';
+	import { Input } from '$lib/components/ui/input';
+	import { Textarea } from '$lib/components/ui/textarea';
+	import * as Field from '$lib/components/ui/field';
 	import { SettingsStatusList, SettingsStatusRow } from '$lib/components/admin/settings';
 
 	let { data, form }: PageProps = $props();
@@ -62,6 +65,112 @@
 			<a class="wl-accent-link underline underline-offset-2" href="/admin/settings/ai">
 				{m.admin_settings_content_comments_triage_link()}
 			</a>
+		</div>
+
+		<div class="mt-4 border-t border-border/50 pt-4">
+			<h3 class="text-sm font-medium">{m.admin_settings_content_privacy()}</h3>
+			<form method="POST" action="?/savePrivacy" class="mt-3 flex flex-col gap-4" use:enhance>
+				<label class="flex items-start gap-3">
+					<input
+						type="checkbox"
+						name="enabled"
+						checked={data.commentsPrivacy.enabled}
+						disabled={!data.editable.privacy}
+						class="mt-0.5 size-4 accent-primary"
+					/>
+					<span>
+						<span class="text-sm font-medium">{m.admin_settings_content_privacy_enable()}</span>
+						<span class="block text-xs text-muted-foreground">
+							{m.admin_settings_content_privacy_enable_hint()}
+						</span>
+					</span>
+				</label>
+				<label class="flex items-start gap-3">
+					<input
+						type="checkbox"
+						name="collectCountry"
+						checked={data.commentsPrivacy.collectCountry}
+						disabled={!data.editable.privacy ||
+							!data.commentsPrivacy.enabled ||
+							!data.geoipConfigured}
+						class="mt-0.5 size-4 accent-primary"
+					/>
+					<span>
+						<span class="text-sm font-medium">
+							{m.admin_settings_content_privacy_collect()}
+						</span>
+						<span class="block text-xs text-muted-foreground">
+							{m.admin_settings_content_privacy_collect_hint()}
+						</span>
+						{#if !data.geoipConfigured}
+							<span class="block text-xs text-muted-foreground">
+								{m.admin_settings_content_privacy_provider_missing()}
+							</span>
+						{/if}
+					</span>
+				</label>
+				<label class="flex items-start gap-3">
+					<input
+						type="checkbox"
+						name="showCountry"
+						checked={data.commentsPrivacy.showCountry}
+						disabled={!data.editable.privacy ||
+							!data.commentsPrivacy.enabled ||
+							!data.commentsPrivacy.collectCountry}
+						class="mt-0.5 size-4 accent-primary"
+					/>
+					<span>
+						<span class="text-sm font-medium">{m.admin_settings_content_privacy_show()}</span>
+						<span class="block text-xs text-muted-foreground">
+							{m.admin_settings_content_privacy_show_hint()}
+						</span>
+					</span>
+				</label>
+				<Field.Field>
+					<Field.Label for="privacy-retention">
+						{m.admin_settings_content_privacy_retention()}
+					</Field.Label>
+					<Input
+						id="privacy-retention"
+						name="retentionDays"
+						type="number"
+						min="1"
+						max="3650"
+						step="1"
+						value={String(data.commentsPrivacy.retentionDays)}
+						disabled={!data.editable.privacy}
+						class="w-32"
+					/>
+					<p class="text-xs text-muted-foreground">
+						{m.admin_settings_content_privacy_retention_hint()}
+					</p>
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="privacy-cidrs">
+						{m.admin_settings_content_privacy_cidrs()}
+					</Field.Label>
+					<Textarea
+						id="privacy-cidrs"
+						name="blockedCidrs"
+						rows={3}
+						value={data.commentsPrivacy.blockedCidrs.join('\n')}
+						disabled={!data.editable.privacy}
+						placeholder="203.0.113.0/24"
+					/>
+					<p class="text-xs text-muted-foreground">
+						{m.admin_settings_content_privacy_cidrs_hint()}
+					</p>
+				</Field.Field>
+				{#if !data.editable.privacy}
+					<p class="text-xs text-muted-foreground">
+						{m.admin_settings_content_privacy_owner_hint()}
+					</p>
+				{:else}
+					<div>
+						<Button type="submit" size="sm">{m.admin_settings_content_save()}</Button>
+					</div>
+				{/if}
+			</form>
 		</div>
 
 		<div class="mt-4 border-t border-border/50 pt-3">

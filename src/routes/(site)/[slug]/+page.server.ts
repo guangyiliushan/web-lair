@@ -4,6 +4,8 @@ import { m } from '$lib/paraglide/messages';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { requireUser } from '$lib/server/authz';
 import { getOption } from '$lib/server/config/options-registry';
+import { requestIp } from '$lib/server/security/request-address';
+import { geoFromHeaders } from '$lib/server/security/geoip';
 import {
 	loadThreads,
 	resolveCommentPageTarget,
@@ -89,6 +91,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const user = locals.user;
 	const emailVerified = Boolean(user?.emailVerified);
 	const commentsEnabled = await getOption('comments.enabled');
+	const privacy = await getOption('comments.privacy');
+	const showCountry = privacy.enabled && privacy.collectCountry && privacy.showCountry;
 	const canComment = Boolean(user) && emailVerified && commentsEnabled;
 	const loginUrl = user
 		? null
@@ -96,14 +100,21 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const threads = await loadThreads({
 		targetType: 'page',
 		targetId: row.id,
-		viewerId: user?.id ?? null
+		viewerId: user?.id ?? null,
+		showCountry
 	});
 
 	return {
 		seo: { path: `/${row.slug}`, alternates },
 		page: { slug: row.slug, title, description },
 		html,
-		viewer: { emailVerified, canComment, loginUrl },
+		viewer: {
+			emailVerified,
+			canComment,
+			loginUrl,
+			privacyNotice: privacy.enabled,
+			countryOptIn: showCountry
+		},
 		discussion: commentsEnabled || threads.visibleCount > 0 ? threads : null
 	};
 };
@@ -140,6 +151,9 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 		user,
 		author: profile?.displayName ?? user.name ?? 'Reader',
 		avatar: profile?.avatarUrl ?? user.image ?? null,
+		ip: requestIp(event.getClientAddress),
+		geo: geoFromHeaders(event.request.headers),
+		showCountry: form.get('showCountry') !== null,
 		now
 	});
 

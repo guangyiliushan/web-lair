@@ -6,6 +6,8 @@ import { db } from '$lib/server/db';
 import { categories, postTags, posts, tags } from '$lib/server/db/content';
 import { requireUser } from '$lib/server/authz';
 import { getOption } from '$lib/server/config/options-registry';
+import { requestIp } from '$lib/server/security/request-address';
+import { geoFromHeaders } from '$lib/server/security/geoip';
 import { resolveCommentPostTarget, submitComment } from '$lib/server/services/comments';
 import {
 	commentDeleteAction,
@@ -210,6 +212,11 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const user = locals.user;
 	const emailVerified = Boolean(user?.emailVerified);
 	const commentsEnabled = await getOption('comments.enabled');
+	// W6.2 read side: country labels need the whole chain on (privacy +
+	// collect + show). Pages pass the flag to the assembly instead of letting
+	// the component guess.
+	const privacy = await getOption('comments.privacy');
+	const showCountry = privacy.enabled && privacy.collectCountry && privacy.showCountry;
 	const commentsOpen = commentsEnabled && row.allowComment;
 	const canComment = Boolean(user) && emailVerified && commentsOpen;
 	const loginUrl = user
@@ -224,7 +231,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		markdown: row.content ?? '',
 		targetType: 'post',
 		targetId: row.id,
-		viewerId: user?.id ?? null
+		viewerId: user?.id ?? null,
+		showCountry
 	});
 	const html = rendered.html;
 
@@ -261,7 +269,13 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		},
 		provenance,
 		html,
-		viewer: { emailVerified, canComment, loginUrl },
+		viewer: {
+			emailVerified,
+			canComment,
+			loginUrl,
+			privacyNotice: privacy.enabled,
+			countryOptIn: showCountry
+		},
 		discussion: commentsOpen || rendered.discussion.visibleCount > 0 ? rendered.discussion : null
 	};
 };
@@ -305,6 +319,9 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 		user,
 		author: profile?.displayName ?? user.name ?? 'Reader',
 		avatar: profile?.avatarUrl ?? user.image ?? null,
+		ip: requestIp(event.getClientAddress),
+		geo: geoFromHeaders(event.request.headers),
+		showCountry: form.get('showCountry') !== null,
 		now
 	});
 

@@ -8,6 +8,8 @@ import { requireUser } from '$lib/server/authz';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
 import { getOption } from '$lib/server/config/options-registry';
+import { requestIp } from '$lib/server/security/request-address';
+import { geoFromHeaders } from '$lib/server/security/geoip';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { submitComment } from '$lib/server/services/comments';
 import {
@@ -148,6 +150,8 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 	const emailVerified = Boolean(user?.emailVerified);
 	const open = !note.locked || unlocked;
 	const commentsEnabled = await getOption('comments.enabled');
+	const privacy = await getOption('comments.privacy');
+	const showCountry = privacy.enabled && privacy.collectCountry && privacy.showCountry;
 	const commentsOpen = commentsEnabled && note.allowComment && open;
 	const canComment = Boolean(user) && emailVerified && commentsOpen;
 	const loginUrl = user
@@ -164,7 +168,8 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 				markdown: body,
 				targetType: 'note',
 				targetId: note.id,
-				viewerId: user?.id ?? null
+				viewerId: user?.id ?? null,
+				showCountry
 			})
 		: null;
 	const html = rendered ? rendered.html : body ? await renderMarkdownToHtml(body) : '';
@@ -186,7 +191,13 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 		},
 		html,
 		gate: { locked: note.locked, unlocked },
-		viewer: { emailVerified, canComment, loginUrl },
+		viewer: {
+			emailVerified,
+			canComment,
+			loginUrl,
+			privacyNotice: privacy.enabled,
+			countryOptIn: showCountry
+		},
 		discussion:
 			rendered && (commentsOpen || rendered.discussion.visibleCount > 0)
 				? rendered.discussion
@@ -328,6 +339,9 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 		user,
 		author: profile?.displayName ?? user.name ?? 'Reader',
 		avatar: profile?.avatarUrl ?? user.image ?? null,
+		ip: requestIp(event.getClientAddress),
+		geo: geoFromHeaders(event.request.headers),
+		showCountry: form.get('showCountry') !== null,
 		now
 	});
 

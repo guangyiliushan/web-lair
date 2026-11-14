@@ -156,6 +156,8 @@
 				emailVerified={data.viewer.emailVerified}
 				loginUrl={data.viewer.loginUrl}
 				form={form ?? null}
+				privacyNotice={data.viewer.privacyNotice}
+				countryOptIn={data.viewer.countryOptIn}
 			/>
 		{/if}
 	{/if}

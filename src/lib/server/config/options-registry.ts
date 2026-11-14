@@ -4,6 +4,7 @@ import { options } from '../db/config/index.ts';
 import { AI_FUNCTIONS } from '../../utils/ai-meta.ts';
 import { PROJECT_SYNC_PROVIDERS } from '../../utils/project-meta.ts';
 import { isValidIanaTimeZone } from '../../utils/timezone.ts';
+import { isValidCidr } from '../../utils/cidr.ts';
 import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '../pg-timezone.ts';
 import { m } from '../../paraglide/messages.js';
 import { OWNER_STATUS_DEFAULT, OWNER_STATUS_KINDS } from '../../config/owner-status.ts';
@@ -184,6 +185,30 @@ export const optionRegistry = {
 		// / note `allow_comment` can only narrow this, never widen it.
 		schema: z.boolean(),
 		default: true
+	},
+	'comments.privacy': {
+		// W6.2 (C2/C4/C5): request-time IP handling for comments. Off by
+		// default; when off nothing is looked up and nothing is stored. When
+		// on, the IP is matched against blockedCidrs and used for the per-IP
+		// limit only - the `comments.ip` column stays null. Country/region are
+		// stored only with collectCountry (edge header provider required) and
+		// cleared by the retention job after retentionDays.
+		schema: z.object({
+			enabled: z.boolean(),
+			collectCountry: z.boolean(),
+			showCountry: z.boolean(),
+			retentionDays: z.number().int().min(1).max(3650),
+			blockedCidrs: z
+				.array(z.string().refine(isValidCidr, { error: () => m.admin_option_err_cidr() }))
+				.max(200)
+		}),
+		default: {
+			enabled: false,
+			collectCountry: false,
+			showCountry: false,
+			retentionDays: 90,
+			blockedCidrs: []
+		}
 	},
 	'comments.moderation': {
 		schema: z.object({

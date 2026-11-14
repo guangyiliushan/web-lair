@@ -104,6 +104,10 @@ export function commentSubmitResponse(
 			// 403, not 404: the thread exists and stays readable, but new
 			// comments are closed site-wide (C1 asks for an explicit rejection).
 			return fail(403, { message: m.comment_disabled() });
+		case 'blocked':
+			// Request-time CIDR block (W6.2): same neutral copy as an
+			// unavailable target - the block list is not echoed back.
+			return fail(403, { message: m.comment_error_blocked() });
 		case 'empty':
 		case 'too-long':
 			return fail(400, { message: m.comment_error_generic() });

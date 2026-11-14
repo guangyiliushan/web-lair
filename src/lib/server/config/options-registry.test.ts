@@ -77,6 +77,7 @@ describe('options registry (AI-1.1)', () => {
 				'ai.translation',
 				'comments.enabled',
 				'comments.moderation',
+				'comments.privacy',
 				'friends.apply',
 				'friends.checks',
 				'friends.policy',
