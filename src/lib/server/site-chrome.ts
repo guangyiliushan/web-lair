@@ -1,6 +1,7 @@
 import { getOption } from '$lib/server/config/options-registry';
 import { getPublicOrigin } from '$lib/server/origin';
 import { effectiveReaderDots } from '$lib/server/services/presence';
+import { loadOwnerProfile, ownerProfileToSiteOwner } from '$lib/server/services/owner-profile';
 import {
 	OWNER_STATUS_DEFAULT,
 	SITE_OWNER_DEFAULT,
@@ -91,10 +92,11 @@ async function loadPresenceOptions(): Promise<{
 	}
 }
 
-/** Header owner badge; a settings blip fails open to the registry default. */
+/** Header owner badge; a DB or pointer blip fails open to the static default. */
 async function loadSiteOwner(): Promise<SiteOwner> {
 	try {
-		return await getOption('site.owner');
+		const profile = await loadOwnerProfile();
+		return profile ? ownerProfileToSiteOwner(profile) : SITE_OWNER_DEFAULT;
 	} catch {
 		return SITE_OWNER_DEFAULT;
 	}

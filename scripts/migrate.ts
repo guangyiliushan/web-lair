@@ -49,6 +49,7 @@ try {
 			taxonomy: boolean;
 			defaultCategory: boolean;
 			translationRuntime: boolean;
+			m4Foundation: boolean;
 		}[]
 	>`select
 		to_regclass('public.email_suppressions') is not null as suppressions,
@@ -100,7 +101,15 @@ try {
 					'runs', 'attempt', 'started_at', 'heartbeat_at', 'stage',
 					'waiting_reason', 'cancel_requested', 'progress', 'overwrite_target'
 				)
-		) as "translationRuntime"`;
+		) as "translationRuntime",
+		(
+			select count(*) = 3 from information_schema.columns
+			where table_schema = 'public' and (
+				(table_name = 'user_profiles' and column_name = 'header_label')
+				or (table_name = 'site_identity' and column_name = 'owner_user_id')
+				or (table_name = 'home_hero' and column_name = 'subtitle_highlight')
+			)
+		) as "m4Foundation"`;
 	if (!schema?.suppressions || !schema.consent || !schema.tokenHash || !schema.tokenHashIndex) {
 		console.error(
 			'[migrate] this database predates the E2 baseline (missing email_suppressions / consent_version / token_hash / token_hash index).'
@@ -152,6 +161,15 @@ try {
 		);
 		console.error(
 			'[migrate] the journal timestamp is unchanged, so the migrator skips the regenerated baseline; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> verify).'
+		);
+		process.exitCode = 1;
+	}
+	if (schema?.m4Foundation === false) {
+		console.error(
+			'[migrate] this database is missing the M4 foundation objects (user_profiles.header_label / site_identity / home_hero).'
+		);
+		console.error(
+			'[migrate] append 0003 did not land; do not start the app. Re-run migrate and check the SQL.'
 		);
 		process.exitCode = 1;
 	}

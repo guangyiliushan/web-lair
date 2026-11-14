@@ -1,140 +1,34 @@
-import type { PageServerLoad, Actions } from './$types';
-import { m } from '$lib/paraglide/messages';
+import type { PageServerLoad } from './$types';
+import { requireAdminRole } from '$lib/server/authz';
+import { getOption } from '$lib/server/config/options-registry';
+import {
+	auditChanges,
+	listSettingsActivity,
+	SETTINGS_EVENT_FAMILIES
+} from '$lib/server/settings/activity';
+import { formatDateTime } from '$lib/utils/i18n';
 
-export const load: PageServerLoad = async () => {
+/**
+ * Settings index: the 8-page list lives in the layout; this page adds the
+ * cross-cutting change history (W3.6d). Event families are a closed set, so
+ * the query parameter cannot widen the read.
+ */
+export const load: PageServerLoad = async ({ url }) => {
+	await requireAdminRole();
+	const family = url.searchParams.get('event') ?? '';
+	const [siteTz, events] = await Promise.all([
+		getOption('site.timezone'),
+		listSettingsActivity({ family })
+	]);
 	return {
-		headerTitle: m.admin_settings_title(),
-		settings: {
-			user: {
-				nickname: 'test',
-				username: 'test',
-				email: 'test@test.com',
-				avatar: 'https://cravatar.cn/avatar/b642b4217b34b1e8d3bd915fc65c4452?d=retro',
-				site: '',
-				bio: '',
-				lastLogin: '2026/07/17 11:11'
-			},
-			site: {
-				frontendUrl: 'http://localhost:2323',
-				adminUrl: 'http://localhost:2333/proxy/qaqdmin',
-				apiUrl: 'http://localhost:2333',
-				gatewayUrl: 'http://localhost:2333',
-				title: 'My Little World',
-				description: 'Hi, welcome!',
-				lightIcon: '',
-				darkIcon: '',
-				keywords: [] as string[]
-			},
-			content: {
-				antiSpam: false,
-				aiReview: false,
-				aiReviewMode: 'binary',
-				aiReviewThreshold: 5,
-				disableComments: false,
-				allowAnonymousComments: true,
-				blockedKeywords: [] as string[],
-				blockedIps: [] as string[],
-				rejectNonChinese: false,
-				onlyApproved: false,
-				showCommentLocation: true,
-				allowFriendApps: true,
-				allowSubPathFriends: false,
-				internalizeAvatars: true
-			},
-			notification: {
-				emailEnabled: false,
-				emailProvider: 'smtp',
-				senderEmail: '',
-				smtpUser: '',
-				smtpPass: '',
-				smtpHost: '',
-				smtpPort: '',
-				smtpTls: false,
-				rateLimit: 10,
-				retryCount: 3,
-				barkEnabled: false,
-				barkKey: '',
-				barkServer: 'https://api.day.app',
-				barkCommentNotify: true,
-				barkRateLimitNotify: false
-			},
-			search: {
-				baiduEnabled: false,
-				baiduToken: '',
-				bingEnabled: false,
-				bingApiKey: ''
-			},
-			storage: {
-				autoBackup: true,
-				s3Endpoint: '',
-				s3SecretId: '',
-				s3SecretKey: '',
-				s3Bucket: '',
-				s3Region: '',
-				s3ImageEnabled: false,
-				s3ImageEndpoint: '',
-				s3ImageAccessKey: '',
-				s3ImageSecretKey: '',
-				s3ImageBucket: '',
-				s3ImageRegion: 'auto',
-				s3ImageCdn: '',
-				s3ImagePrefix: '',
-				s3CommentPrefix: '',
-				commentUploadEnabled: true,
-				pendingTtl: 120,
-				detachedTtl: 30,
-				cleanupInterval: 15,
-				maxImageSize: 5,
-				maxImagesPerComment: 4,
-				maxUploadsPerHour: 10,
-				maxStoragePerReader: 50,
-				minAccountAge: 0,
-				minCommentsPosted: 0,
-				deleteSpamImages: true,
-				mimeWhitelist: ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-			},
-			integrations: {
-				github: { enabled: true, token: '' },
-				tmdb: { enabled: false, apiKey: '' },
-				bangumi: { enabled: true, token: '' },
-				neodb: { enabled: true },
-				arxiv: { enabled: true },
-				leetcode: { enabled: true },
-				neteaseMusic: { enabled: true },
-				qqMusic: { enabled: true },
-				ogFallback: { enabled: true, fetchMode: 'fetch', timeout: 8000, maxSize: 524288 },
-				screenshot: {
-					enabled: false,
-					maxCached: 500,
-					maxStorage: 104857600,
-					maxImageSize: 524288,
-					webpQuality: 75
-				},
-				twelveData: { enabled: false, apiKey: '' },
-				polygon: { enabled: false, apiKey: '' }
-			},
-			system: {
-				adminProxy: true,
-				loginBg: '',
-				amapKey: '',
-				emailSubscription: false
-			},
-			account: {
-				github: {
-					enabled: false,
-					clientId: '',
-					clientSecret: '',
-					callbackUrl: 'http://127.0.0.1:2333/api/v3/auth/callback/github'
-				},
-				google: {
-					enabled: false,
-					clientId: '',
-					clientSecret: '',
-					callbackUrl: 'http://127.0.0.1:2333/api/v3/auth/callback/google'
-				}
-			}
-		}
+		family: (SETTINGS_EVENT_FAMILIES as readonly string[]).includes(family) ? family : '',
+		families: [...SETTINGS_EVENT_FAMILIES],
+		events: events.map((event) => ({
+			id: event.id,
+			event: event.event,
+			actorName: event.actorName,
+			createdLabel: formatDateTime(event.createdAt, { timeZone: siteTz }),
+			changes: auditChanges(event.payload)
+		}))
 	};
 };
-
-export const actions = {} satisfies Actions;

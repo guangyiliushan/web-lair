@@ -6,18 +6,16 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import * as Select from '$lib/components/ui/select';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import IconMail from '@tabler/icons-svelte-runes/icons/mail';
-	import IconDeviceFloppy from '@tabler/icons-svelte-runes/icons/device-floppy';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconPencil from '@tabler/icons-svelte-runes/icons/pencil';
 	import IconKey from '@tabler/icons-svelte-runes/icons/key';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
+	import { SettingsProviderStatus } from '$lib/components/admin/settings';
 
 	let { data }: PageProps = $props();
-	let s = $derived(data.settings);
 
 	interface EndpointRow {
 		id: string;
@@ -222,281 +220,40 @@
 			<IconMail class="size-4 shrink-0 text-muted-foreground" />
 			<h2 class="truncate text-sm font-semibold">{m.admin_settings_notification()}</h2>
 		</div>
-		<div class="flex shrink-0 items-center gap-2">
-			<Button size="sm" variant="outline">
-				<IconMail data-icon="inline-start" />
-				{m.admin_settings_notification_send_test()}
-			</Button>
-			<Button size="sm">
-				<IconDeviceFloppy data-icon="inline-start" />
-				{m.admin_common_save()}
-			</Button>
-		</div>
 	</header>
 
 	<div class="min-h-0 flex-1 overflow-auto">
 		<div class="space-y-8 p-6">
-			<!-- Email notifications -->
+			<!-- Mail status (read-only; SMTP stays env-only, W9 adds the real test) -->
 			<section>
-				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_email()}</h3>
-				<div class="space-y-4 rounded-lg border p-4">
-					<!-- emailEnabled -->
-					<div class="flex items-center justify-between gap-4">
-						<label for="notif-emailEnabled" class="text-sm"
-							>{m.admin_settings_notification_email_enabled()}</label
-						>
-						<button
-							type="button"
-							role="switch"
-							aria-checked={Boolean(s.notification.emailEnabled)}
-							aria-label={m.admin_settings_notification_email_enabled()}
-							id="notif-emailEnabled"
-							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
-							class:bg-accent={s.notification.emailEnabled}
-							class:bg-surface-inset={!s.notification.emailEnabled}
-						>
-							<span
-								class="block size-4 rounded-full bg-white shadow-xs transition-transform"
-								class:translate-x-4={s.notification.emailEnabled}
-							></span>
-						</button>
-					</div>
-
-					<!-- emailProvider -->
-					<div class="space-y-1.5">
-						<label for="notif-emailProvider" class="text-sm"
-							>{m.admin_settings_notification_provider()}</label
-						>
-						<Select.Root type="single" bind:value={s.notification.emailProvider as never}>
-							<Select.Trigger id="notif-emailProvider" class="w-full justify-between">
-								<span class="truncate">
-									{#if s.notification.emailProvider === 'resend'}
-										Resend
-									{:else}
-										SMTP
-									{/if}
-								</span>
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Item value="smtp">SMTP</Select.Item>
-								<Select.Item value="resend">Resend</Select.Item>
-							</Select.Content>
-						</Select.Root>
-					</div>
-
-					<!-- senderEmail -->
-					<div class="space-y-1.5">
-						<label for="notif-senderEmail" class="text-sm"
-							>{m.admin_settings_notification_sender()}</label
-						>
-						<Input
-							id="notif-senderEmail"
-							bind:value={s.notification.senderEmail}
-							placeholder="noreply@example.com"
-						/>
-					</div>
-
-					<!-- smtpUser -->
-					<div class="space-y-1.5">
-						<label for="notif-smtpUser" class="text-sm"
-							>{m.admin_settings_notification_smtp_user()}</label
-						>
-						<Input
-							id="notif-smtpUser"
-							bind:value={s.notification.smtpUser}
-							placeholder={m.admin_settings_notification_smtp_user_ph()}
-						/>
-					</div>
-
-					<!-- smtpPass -->
-					<div class="space-y-1.5">
-						<label for="notif-smtpPass" class="text-sm"
-							>{m.admin_settings_notification_smtp_pass()}</label
-						>
-						<Input
-							id="notif-smtpPass"
-							type="password"
-							bind:value={s.notification.smtpPass}
-							placeholder={m.admin_settings_notification_smtp_pass_ph()}
-						/>
-					</div>
-
-					<!-- smtpHost -->
-					<div class="space-y-1.5">
-						<label for="notif-smtpHost" class="text-sm"
-							>{m.admin_settings_notification_smtp_host()}</label
-						>
-						<Input
-							id="notif-smtpHost"
-							bind:value={s.notification.smtpHost}
-							placeholder="smtp.example.com"
-						/>
-					</div>
-
-					<!-- smtpPort -->
-					<div class="space-y-1.5">
-						<label for="notif-smtpPort" class="text-sm"
-							>{m.admin_settings_notification_smtp_port()}</label
-						>
-						<Input
-							id="notif-smtpPort"
-							type="number"
-							bind:value={s.notification.smtpPort}
-							placeholder="587"
-						/>
-					</div>
-
-					<!-- smtpTls -->
-					<div class="flex items-center justify-between gap-4">
-						<label for="notif-smtpTls" class="text-sm"
-							>{m.admin_settings_notification_smtp_tls()}</label
-						>
-						<button
-							type="button"
-							role="switch"
-							aria-checked={Boolean(s.notification.smtpTls)}
-							aria-label={m.admin_settings_notification_smtp_tls()}
-							id="notif-smtpTls"
-							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
-							class:bg-accent={s.notification.smtpTls}
-							class:bg-surface-inset={!s.notification.smtpTls}
-						>
-							<span
-								class="block size-4 rounded-full bg-white shadow-xs transition-transform"
-								class:translate-x-4={s.notification.smtpTls}
-							></span>
-						</button>
-					</div>
-
-					<!-- rateLimit -->
-					<div class="space-y-1.5">
-						<label for="notif-rateLimit" class="text-sm"
-							>{m.admin_settings_notification_rate_limit()}</label
-						>
-						<Input
-							id="notif-rateLimit"
-							type="number"
-							bind:value={s.notification.rateLimit}
-							placeholder="10"
-						/>
-					</div>
-
-					<!-- retryCount -->
-					<div class="space-y-1.5">
-						<label for="notif-retryCount" class="text-sm"
-							>{m.admin_settings_notification_retries()}</label
-						>
-						<Input
-							id="notif-retryCount"
-							type="number"
-							bind:value={s.notification.retryCount}
-							placeholder="3"
-						/>
-					</div>
-				</div>
-			</section>
-
-			<!-- Bark notifications -->
-			<section>
-				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_bark()}</h3>
-				<div class="space-y-4 rounded-lg border p-4">
-					<!-- barkEnabled -->
-					<div class="flex items-center justify-between gap-4">
-						<label for="notif-barkEnabled" class="text-sm"
-							>{m.admin_settings_notification_bark_enabled()}</label
-						>
-						<button
-							type="button"
-							role="switch"
-							aria-checked={Boolean(s.notification.barkEnabled)}
-							aria-label={m.admin_settings_notification_bark_enabled()}
-							id="notif-barkEnabled"
-							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
-							class:bg-accent={s.notification.barkEnabled}
-							class:bg-surface-inset={!s.notification.barkEnabled}
-						>
-							<span
-								class="block size-4 rounded-full bg-white shadow-xs transition-transform"
-								class:translate-x-4={s.notification.barkEnabled}
-							></span>
-						</button>
-					</div>
-
-					<!-- barkKey -->
-					<div class="space-y-1.5">
-						<label for="notif-barkKey" class="text-sm"
-							>{m.admin_settings_notification_bark_key()}</label
-						>
-						<Input
-							id="notif-barkKey"
-							type="password"
-							bind:value={s.notification.barkKey}
-							placeholder={m.admin_settings_notification_bark_key_ph()}
-						/>
-					</div>
-
-					<!-- barkServer -->
-					<div class="space-y-1.5">
-						<label for="notif-barkServer" class="text-sm"
-							>{m.admin_settings_notification_bark_server()}</label
-						>
-						<Input
-							id="notif-barkServer"
-							bind:value={s.notification.barkServer}
-							placeholder="https://api.day.app"
-						/>
-					</div>
-
-					<!-- barkCommentNotify -->
-					<div class="flex items-center justify-between gap-4">
-						<label for="notif-barkCommentNotify" class="text-sm"
-							>{m.admin_settings_notification_comment_notify()}</label
-						>
-						<button
-							type="button"
-							role="switch"
-							aria-checked={Boolean(s.notification.barkCommentNotify)}
-							aria-label={m.admin_settings_notification_comment_notify()}
-							id="notif-barkCommentNotify"
-							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
-							class:bg-accent={s.notification.barkCommentNotify}
-							class:bg-surface-inset={!s.notification.barkCommentNotify}
-						>
-							<span
-								class="block size-4 rounded-full bg-white shadow-xs transition-transform"
-								class:translate-x-4={s.notification.barkCommentNotify}
-							></span>
-						</button>
-					</div>
-
-					<!-- barkRateLimitNotify -->
-					<div class="flex items-center justify-between gap-4">
-						<label for="notif-barkRateLimitNotify" class="text-sm"
-							>{m.admin_settings_notification_ratelimit_notify()}</label
-						>
-						<button
-							type="button"
-							role="switch"
-							aria-checked={Boolean(s.notification.barkRateLimitNotify)}
-							aria-label={m.admin_settings_notification_ratelimit_notify()}
-							id="notif-barkRateLimitNotify"
-							class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
-							class:bg-accent={s.notification.barkRateLimitNotify}
-							class:bg-surface-inset={!s.notification.barkRateLimitNotify}
-						>
-							<span
-								class="block size-4 rounded-full bg-white shadow-xs transition-transform"
-								class:translate-x-4={s.notification.barkRateLimitNotify}
-							></span>
-						</button>
-					</div>
+				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notifications_mail()}</h3>
+				<div class="rounded-lg border">
+					<SettingsProviderStatus
+						name={m.admin_settings_notifications_mail()}
+						state={data.mail.configured ? 'configured' : 'not_configured'}
+						detail={data.mail.configured
+							? m.admin_settings_notifications_mail_configured()
+							: m.admin_settings_notifications_mail_unconfigured()}
+					/>
 				</div>
 			</section>
 
 			<!-- Webhooks (J-3: read-only endpoint list + delivery log + re-queue) -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_webhooks()}</h3>
+				{#if !data.editable}
+					<p class="-mt-3 mb-3 text-xs text-muted-foreground">
+						{m.admin_settings_common_owner_only()}
+					</p>
+				{/if}
 				<div class="space-y-4 rounded-lg border p-4">
+					<SettingsProviderStatus
+						name={m.admin_settings_notification_webhooks()}
+						state={data.webhookEndpoints.length > 0 ? 'configured' : 'not_configured'}
+						detail={data.webhookEndpoints.length === 0
+							? m.admin_settings_notification_no_endpoints()
+							: undefined}
+					/>
 					<!-- Persistent status region (review round-2 SY-UI-04: a live
 					     region must exist before its content arrives). The one-time
 					     reveal lives in dedicated state (SY-UI-03) so unrelated
@@ -546,15 +303,15 @@
 							<h4 class="text-xs font-medium text-muted-foreground">
 								{m.admin_settings_notification_endpoints()}
 							</h4>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onclick={() => openEndpointDialog(null)}
-							>
-								<IconPlus class="size-3.5" />
-								{m.admin_settings_notification_add_endpoint()}
-							</Button>
+							{#if data.editable}<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onclick={() => openEndpointDialog(null)}
+								>
+									<IconPlus class="size-3.5" />
+									{m.admin_settings_notification_add_endpoint()}
+								</Button>{/if}
 						</div>
 						{#if data.webhookEndpoints.length === 0}
 							<p class="text-xs text-muted-foreground">
@@ -575,65 +332,69 @@
 											<code>{endpoint.secretPreview ?? '—'}</code></span
 										>
 										<span class="ml-auto flex items-center gap-1">
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-sm"
-												aria-label={`${m.admin_common_edit()} (${endpoint.name})`}
-												onclick={() => openEndpointDialog(endpoint)}
-											>
-												<IconPencil />
-											</Button>
-											<form
-												method="POST"
-												action="?/toggle"
-												use:enhance={() => {
-													togglePendingId = endpoint.id;
-													return async ({ update }) => {
-														await update();
-														// Conditional clear (round-2 N3/SY-UI-05): only the
-														// submitter clears its own marker, so a response for
-														// one row cannot re-enable another row mid-flight.
-														if (togglePendingId === endpoint.id) togglePendingId = null;
-													};
-												}}
-											>
-												<input type="hidden" name="id" value={endpoint.id} />
-												<input
-													type="hidden"
-													name="enabled"
-													value={endpoint.isEnabled ? 'false' : 'true'}
-												/>
-												<Button
-													type="submit"
+											{#if data.editable}<Button
+													type="button"
 													variant="ghost"
-													size="sm"
-													disabled={togglePendingId === endpoint.id}
-													aria-label={`${
-														endpoint.isEnabled ? m.admin_common_disable() : m.admin_common_enable()
-													} (${endpoint.name})`}
+													size="icon-sm"
+													aria-label={`${m.admin_common_edit()} (${endpoint.name})`}
+													onclick={() => openEndpointDialog(endpoint)}
 												>
-													{endpoint.isEnabled ? m.admin_common_disable() : m.admin_common_enable()}
-												</Button>
-											</form>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-sm"
-												aria-label={`${m.admin_settings_notification_rotate_secret()} (${endpoint.name})`}
-												onclick={() => openRotateDialog(endpoint)}
-											>
-												<IconKey />
-											</Button>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-sm"
-												aria-label={`${m.admin_common_delete()} (${endpoint.name})`}
-												onclick={() => openDeleteDialog(endpoint)}
-											>
-												<IconTrash />
-											</Button>
+													<IconPencil />
+												</Button>{/if}
+											{#if data.editable}<form
+													method="POST"
+													action="?/toggle"
+													use:enhance={() => {
+														togglePendingId = endpoint.id;
+														return async ({ update }) => {
+															await update();
+															// Conditional clear (round-2 N3/SY-UI-05): only the
+															// submitter clears its own marker, so a response for
+															// one row cannot re-enable another row mid-flight.
+															if (togglePendingId === endpoint.id) togglePendingId = null;
+														};
+													}}
+												>
+													<input type="hidden" name="id" value={endpoint.id} />
+													<input
+														type="hidden"
+														name="enabled"
+														value={endpoint.isEnabled ? 'false' : 'true'}
+													/>
+													<Button
+														type="submit"
+														variant="ghost"
+														size="sm"
+														disabled={togglePendingId === endpoint.id}
+														aria-label={`${
+															endpoint.isEnabled
+																? m.admin_common_disable()
+																: m.admin_common_enable()
+														} (${endpoint.name})`}
+													>
+														{endpoint.isEnabled
+															? m.admin_common_disable()
+															: m.admin_common_enable()}
+													</Button>
+												</form>{/if}
+											{#if data.editable}<Button
+													type="button"
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`${m.admin_settings_notification_rotate_secret()} (${endpoint.name})`}
+													onclick={() => openRotateDialog(endpoint)}
+												>
+													<IconKey />
+												</Button>{/if}
+											{#if data.editable}<Button
+													type="button"
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`${m.admin_common_delete()} (${endpoint.name})`}
+													onclick={() => openDeleteDialog(endpoint)}
+												>
+													<IconTrash />
+												</Button>{/if}
 										</span>
 									</li>
 								{/each}

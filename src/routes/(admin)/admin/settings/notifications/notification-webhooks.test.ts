@@ -182,20 +182,27 @@ function makeFormData(fields: Record<string, string | string[]>) {
 	return body;
 }
 
-function makeEvent(fields: Record<string, string | string[]>) {
+function makeEvent(fields: Record<string, string | string[]>, role: 'owner' | 'admin' = 'owner') {
 	return {
-		request: new Request('http://x/admin/settings/notification', {
+		request: new Request('http://x/admin/settings/notifications', {
 			method: 'POST',
 			body: makeFormData(fields)
 		}),
-		locals: { user: { id: 'admin-1' } }
+		locals: {
+			user: { id: 'admin-1', role },
+			admin: { userId: 'admin-1', role }
+		}
 	};
 }
 
-async function callAction(name: string, fields: Record<string, string | string[]>) {
+async function callAction(
+	name: string,
+	fields: Record<string, string | string[]>,
+	role: 'owner' | 'admin' = 'owner'
+) {
 	try {
 		const fn = (actions as unknown as Record<string, (event: never) => Promise<unknown>>)[name];
-		const result = (await fn(makeEvent(fields) as never)) as Record<string, unknown>;
+		const result = (await fn(makeEvent(fields, role) as never)) as Record<string, unknown>;
 		return { result, thrown: undefined as unknown };
 	} catch (thrown) {
 		return { result: undefined, thrown };
@@ -355,6 +362,26 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 				events: 'job.run'
 			});
 			expect(thrown).toBeInstanceOf(Error);
+		}
+		expect(state.insertValues).toHaveLength(0);
+		expect(state.updateSets).toHaveLength(0);
+		expect(state.selectCount).toBe(0);
+	});
+
+	it('re-checks the owner-only webhook tier for a non-owner admin', async () => {
+		for (const name of ['create', 'update', 'delete', 'toggle', 'rotate']) {
+			const { thrown } = await callAction(
+				name,
+				{
+					id: WEBHOOK_ID,
+					name: 'ops',
+					payloadUrl: 'https://example.com/hook',
+					enabled: 'true',
+					events: 'job.run'
+				},
+				'admin'
+			);
+			expect((thrown as { status?: number } | undefined)?.status).toBe(403);
 		}
 		expect(state.insertValues).toHaveLength(0);
 		expect(state.updateSets).toHaveLength(0);
@@ -658,7 +685,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 			}
 		]);
 		state.selectQueue.push([]);
-		const data = (await load({} as never)) as {
+		const data = (await load({ locals: { admin: { role: 'owner' } } } as never)) as {
 			webhookEndpoints: Record<string, unknown>[];
 		};
 		const endpoint = data.webhookEndpoints[0];

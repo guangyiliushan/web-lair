@@ -63,7 +63,7 @@ test.describe('SY webhooks (admin)', () => {
 	}
 
 	test('create: dialog -> generated secret revealed once -> masked row', async ({ page }) => {
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 20_000 });
 
 		const dialog = await openCreateDialog(page);
@@ -100,7 +100,7 @@ test.describe('SY webhooks (admin)', () => {
 
 		// A fresh load: the reveal is gone, the row shows the mask only, and
 		// the raw secret appears NOWHERE in the rendered markup.
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const row = endpointRow(page, HOOK);
 		await expect(row).toBeVisible({ timeout: 20_000 });
 		await expect(row).toContainText('whsec_…');
@@ -109,7 +109,7 @@ test.describe('SY webhooks (admin)', () => {
 	});
 
 	test('create negative: a duplicate name is soft-rejected inside the dialog', async ({ page }) => {
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		// Hydration gate: a click before the settings island mounts is a no-op
 		// and the dialog then never opens (SvelteKit island hydration is async).
 		await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 20_000 });
@@ -154,7 +154,7 @@ test.describe('SY webhooks (admin)', () => {
 	});
 
 	test('edit: the dialog prefills and saving renames the endpoint', async ({ page }) => {
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const row = endpointRow(page, HOOK);
 		await expect(row).toBeVisible({ timeout: 20_000 });
 		await expect(async () => {
@@ -179,7 +179,7 @@ test.describe('SY webhooks (admin)', () => {
 	});
 
 	test('toggle: disable then re-enable persists', async ({ page }) => {
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const row = endpointRow(page, HOOK_RENAMED);
 		await expect(row).toBeVisible({ timeout: 20_000 });
 		await expect(async () => {
@@ -220,7 +220,7 @@ test.describe('SY webhooks (admin)', () => {
 			)
 			.toBe('1');
 
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const deliveryRow = page
 			.locator('[data-slot="delivery-row"]')
 			.filter({ visible: true })
@@ -230,7 +230,7 @@ test.describe('SY webhooks (admin)', () => {
 	});
 
 	test('rotate: confirm issues a fresh secret, the mask changes', async ({ page }) => {
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const row = endpointRow(page, HOOK_RENAMED);
 		await expect(row).toBeVisible({ timeout: 20_000 });
 		const id = psql(`select id from webhooks where name = '${HOOK_RENAMED}'`);
@@ -260,7 +260,7 @@ test.describe('SY webhooks (admin)', () => {
 	test('delete: confirm removes the endpoint and its delivery log cascades', async ({ page }) => {
 		const hookId = psql(`select id from webhooks where name = '${HOOK_RENAMED}'`);
 		expect(hookId).toMatch(/^[0-9a-f-]{36}$/);
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const row = endpointRow(page, HOOK_RENAMED);
 		await expect(row).toBeVisible({ timeout: 20_000 });
 		await expect(async () => {

@@ -8,15 +8,9 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Separator from '$lib/components/ui/separator';
-	import IconShield from '@tabler/icons-svelte-runes/icons/shield';
+	import { SettingsForm } from '$lib/components/admin/settings';
 	import IconGlobe from '@tabler/icons-svelte-runes/icons/globe';
-	import IconLock from '@tabler/icons-svelte-runes/icons/lock';
 	import IconKey from '@tabler/icons-svelte-runes/icons/key';
-	import IconCopy from '@tabler/icons-svelte-runes/icons/copy';
-	import IconDeviceFloppy from '@tabler/icons-svelte-runes/icons/device-floppy';
-	import IconDeviceLaptop from '@tabler/icons-svelte-runes/icons/device-laptop';
-	import IconBrandGithub from '@tabler/icons-svelte-runes/icons/brand-github';
-	import IconBrandGoogle from '@tabler/icons-svelte-runes/icons/brand-google';
 
 	let { data, form }: PageProps = $props();
 
@@ -40,6 +34,25 @@
 	let pendingTotpURI = $state<string | null>(null);
 	let pendingBackupCodes = $state<string[]>([]);
 
+	// Content language is a real single-field form; the shared SettingsForm
+	// supplies the dirty indicator, Save/Cancel pair, leave-guard and the
+	// readable error/success slot. Cancel restores the loaded value.
+	const langForm = $derived(
+		form as {
+			message?: string | null;
+			step?: string;
+			status?: number;
+		} | null
+	);
+	let lang = $state<string | null>(null);
+	const currentLang = $derived(lang ?? data.defaultLang ?? '');
+	const langDirty = $derived(lang !== null && lang !== (data.defaultLang ?? ''));
+	const langError = $derived(Boolean(langForm?.status && langForm.status >= 400));
+
+	$effect(() => {
+		if (langForm?.step === 'contentLang' && !langForm.status) lang = null;
+	});
+
 	$effect(() => {
 		const payload = actionForm;
 		if (!payload) return;
@@ -50,45 +63,6 @@
 			pendingBackupCodes = [];
 		}
 	});
-
-	let s = $derived(data.settings);
-
-	const devices = [
-		{
-			id: 1,
-			name: m.admin_settings_account_this_device(),
-			ip: '192.168.1.100',
-			ua: 'Chrome 131.0 / Windows 11',
-			time: '2026-07-22 10:30',
-			current: true
-		},
-		{
-			id: 2,
-			name: 'MacBook Pro',
-			ip: '10.0.0.52',
-			ua: 'Safari 18.2 / macOS 15.2',
-			time: '2026-07-20 08:15',
-			current: false
-		}
-	];
-
-	let copiedGh = $state(false);
-	let copiedGoogle = $state(false);
-
-	async function copyToClipboard(text: string, which: 'gh' | 'google') {
-		try {
-			await navigator.clipboard.writeText(text);
-			if (which === 'gh') {
-				copiedGh = true;
-				setTimeout(() => (copiedGh = false), 2000);
-			} else {
-				copiedGoogle = true;
-				setTimeout(() => (copiedGoogle = false), 2000);
-			}
-		} catch {
-			// clipboard not available
-		}
-	}
 </script>
 
 <div class="space-y-8">
@@ -102,28 +76,30 @@
 			{m.admin_settings_account_content_lang_desc()}
 		</p>
 
-		{#if actionForm?.message && actionForm.step === 'contentLang'}
-			<div class="mb-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm" role="status">
-				<IconAlertCircle class="size-4 shrink-0" />
-				<span>{actionForm.message}</span>
-			</div>
-		{/if}
-
-		<form method="post" action="?/contentLang" use:enhance class="flex items-end gap-2">
+		<SettingsForm
+			action="?/contentLang"
+			dirty={langDirty}
+			message={langForm?.step === 'contentLang' ? langForm.message : null}
+			error={langError}
+			onCancel={() => (lang = null)}
+		>
 			<select
 				name="lang"
+				value={currentLang}
+				onchange={(event) => (lang = event.currentTarget.value)}
 				aria-label={m.admin_settings_account_content_lang()}
 				class="h-8 min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
 			>
-				<option value="" selected={(data.defaultLang ?? '') === ''}
-					>{m.admin_settings_account_content_lang_site({ lang: data.siteDefaultLang })}</option
+				<option value=""
+					>{m.admin_settings_account_content_lang_site({
+						lang: data.siteDefaultLang
+					})}</option
 				>
-				{#each data.langs as lang (lang)}
-					<option value={lang} selected={data.defaultLang === lang}>{lang}</option>
+				{#each data.langs as option (option)}
+					<option value={option}>{option}</option>
 				{/each}
 			</select>
-			<Button type="submit">{m.admin_common_save()}</Button>
-		</form>
+		</SettingsForm>
 	</section>
 
 	<Separator.Root />
@@ -229,246 +205,5 @@
 				<Button type="submit" size="sm">{m.admin_settings_2fa_enable()}</Button>
 			</form>
 		{/if}
-	</section>
-
-	<Separator.Root />
-
-	<!-- Section: Signed-in devices -->
-	<section>
-		<div class="mb-4 flex items-center justify-between">
-			<div class="flex items-center gap-2">
-				<IconDeviceLaptop class="size-5 text-muted-foreground" />
-				<h3 class="text-base font-semibold">{m.admin_settings_account_devices()}</h3>
-			</div>
-			<Button variant="outline" size="sm">{m.admin_settings_account_kick_others()}</Button>
-		</div>
-		<div class="space-y-3">
-			{#each devices as device (device.id)}
-				<div
-					class="flex items-center gap-3 rounded-lg border bg-background p-3 {device.current
-						? 'border-emerald-500/30'
-						: ''}"
-				>
-					<div class="min-w-0 flex-1">
-						<div class="flex items-center gap-2">
-							<span class="truncate text-sm font-medium">{device.name}</span>
-							<Badge
-								variant={device.current ? 'default' : 'secondary'}
-								class={device.current ? 'bg-emerald-500 text-emerald-50 hover:bg-emerald-500' : ''}
-							>
-								{device.current
-									? m.admin_settings_account_badge_current()
-									: m.admin_settings_account_badge_other()}
-							</Badge>
-						</div>
-						<div class="mt-1 space-y-0.5 text-xs text-muted-foreground">
-							<div>IP: {device.ip}</div>
-							<div>{device.ua}</div>
-							<div>{device.time}</div>
-						</div>
-					</div>
-					<Button variant="ghost" size="sm" class="shrink-0 text-destructive">
-						{device.current ? m.admin_settings_account_signout() : m.admin_settings_account_kick()}
-					</Button>
-				</div>
-			{/each}
-		</div>
-	</section>
-
-	<Separator.Root />
-
-	<!-- Section: Change password -->
-	<section>
-		<div class="mb-4 flex items-center gap-2">
-			<IconLock class="size-5 text-muted-foreground" />
-			<h3 class="text-base font-semibold">{m.admin_settings_account_password()}</h3>
-		</div>
-		<p class="mb-3 text-sm text-muted-foreground">
-			{m.admin_settings_account_password_hint()}
-		</p>
-		<Button variant="outline" size="sm">
-			<IconLock data-icon="inline-start" />
-			{m.admin_settings_account_password()}
-		</Button>
-	</section>
-
-	<Separator.Root />
-
-	<!-- Section: API Token -->
-	<section>
-		<div class="mb-4 flex items-center gap-2">
-			<IconKey class="size-5 text-muted-foreground" />
-			<h3 class="text-base font-semibold">{m.admin_settings_account_api_token()}</h3>
-		</div>
-		<p class="mb-3 text-sm text-muted-foreground">
-			{m.admin_settings_account_tokens_hint()}
-		</p>
-		<Button variant="outline" size="sm">{m.admin_settings_account_tokens_manage()}</Button>
-	</section>
-
-	<Separator.Root />
-
-	<!-- Section: Passkey -->
-	<section>
-		<div class="mb-4 flex items-center gap-2">
-			<IconShield class="size-5 text-muted-foreground" />
-			<h3 class="text-base font-semibold">{m.admin_settings_account_passkey()}</h3>
-		</div>
-		<p class="mb-3 text-sm text-muted-foreground">
-			{m.admin_settings_account_passkey_hint()}
-		</p>
-		<Button variant="outline" size="sm">{m.admin_settings_account_passkey_manage()}</Button>
-	</section>
-
-	<Separator.Root />
-
-	<!-- Section: OAuth sign-in -->
-	<section>
-		<div class="mb-4 flex items-center gap-2">
-			<IconGlobe class="size-5 text-muted-foreground" />
-			<h3 class="text-base font-semibold">{m.admin_settings_account_oauth()}</h3>
-		</div>
-
-		<!-- GitHub OAuth -->
-		<div class="rounded-lg border bg-background p-4">
-			<div class="mb-3 flex items-center gap-3">
-				<IconBrandGithub class="size-5" />
-				<span class="text-sm font-medium">GitHub</span>
-				<label class="relative inline-flex cursor-pointer items-center">
-					<input type="checkbox" class="peer sr-only" bind:checked={s.account.github.enabled} />
-					<div
-						class="h-5 w-9 rounded-full bg-border transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
-					></div>
-					<div
-						class="absolute inset-s-1 size-3.5 rounded-full bg-background shadow-sm transition-transform peer-checked:translate-x-4"
-					></div>
-				</label>
-			</div>
-			<div class="space-y-3">
-				<div class="grid gap-2 sm:grid-cols-2">
-					<div>
-						<label class="mb-1 block text-xs text-muted-foreground" for="github-client-id"
-							>{m.admin_settings_account_client_id()}</label
-						>
-						<Input
-							id="github-client-id"
-							bind:value={s.account.github.clientId}
-							placeholder={m.admin_settings_account_ph_github_client_id()}
-						/>
-					</div>
-					<div>
-						<label class="mb-1 block text-xs text-muted-foreground" for="github-client-secret"
-							>{m.admin_settings_account_client_secret()}</label
-						>
-						<Input
-							id="github-client-secret"
-							type="password"
-							bind:value={s.account.github.clientSecret}
-							placeholder={m.admin_settings_account_ph_github_client_secret()}
-						/>
-					</div>
-				</div>
-				<div>
-					<span class="mb-1 block text-xs text-muted-foreground"
-						>{m.admin_settings_account_callback_url()}</span
-					>
-					<div class="flex items-center gap-2">
-						<code class="flex-1 truncate rounded-lg border bg-muted/50 px-2.5 py-1.5 text-xs">
-							{s.account.github.callbackUrl}
-						</code>
-						<Button
-							variant="ghost"
-							size="icon-xs"
-							onclick={() => copyToClipboard(s.account.github.callbackUrl, 'gh')}
-							aria-label={m.admin_settings_account_copy_callback()}
-						>
-							{#if copiedGh}
-								<span class="text-xs text-emerald-500">{m.admin_settings_account_copied()}</span>
-							{:else}
-								<IconCopy />
-							{/if}
-						</Button>
-					</div>
-				</div>
-				<div class="flex items-center gap-2 pt-1">
-					<Button variant="outline" size="sm">{m.admin_settings_account_verify()}</Button>
-					<Button variant="default" size="sm">
-						<IconDeviceFloppy data-icon="inline-start" />
-						{m.admin_settings_account_save_config()}
-					</Button>
-				</div>
-			</div>
-		</div>
-
-		<!-- Google OAuth -->
-		<div class="mt-4 rounded-lg border bg-background p-4">
-			<div class="mb-3 flex items-center gap-3">
-				<IconBrandGoogle class="size-5" />
-				<span class="text-sm font-medium">Google</span>
-				<label class="relative inline-flex cursor-pointer items-center">
-					<input type="checkbox" class="peer sr-only" bind:checked={s.account.google.enabled} />
-					<div
-						class="h-5 w-9 rounded-full bg-border transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
-					></div>
-					<div
-						class="absolute inset-s-1 size-3.5 rounded-full bg-background shadow-sm transition-transform peer-checked:translate-x-4"
-					></div>
-				</label>
-			</div>
-			<div class="space-y-3">
-				<div class="grid gap-2 sm:grid-cols-2">
-					<div>
-						<label class="mb-1 block text-xs text-muted-foreground" for="google-client-id"
-							>{m.admin_settings_account_client_id()}</label
-						>
-						<Input
-							id="google-client-id"
-							bind:value={s.account.google.clientId}
-							placeholder={m.admin_settings_account_ph_google_client_id()}
-						/>
-					</div>
-					<div>
-						<label class="mb-1 block text-xs text-muted-foreground" for="google-client-secret"
-							>{m.admin_settings_account_client_secret()}</label
-						>
-						<Input
-							id="google-client-secret"
-							type="password"
-							bind:value={s.account.google.clientSecret}
-							placeholder={m.admin_settings_account_ph_google_client_secret()}
-						/>
-					</div>
-				</div>
-				<div>
-					<span class="mb-1 block text-xs text-muted-foreground"
-						>{m.admin_settings_account_callback_url()}</span
-					>
-					<div class="flex items-center gap-2">
-						<code class="flex-1 truncate rounded-lg border bg-muted/50 px-2.5 py-1.5 text-xs">
-							{s.account.google.callbackUrl}
-						</code>
-						<Button
-							variant="ghost"
-							size="icon-xs"
-							onclick={() => copyToClipboard(s.account.google.callbackUrl, 'google')}
-							aria-label={m.admin_settings_account_copy_callback()}
-						>
-							{#if copiedGoogle}
-								<span class="text-xs text-emerald-500">{m.admin_settings_account_copied()}</span>
-							{:else}
-								<IconCopy />
-							{/if}
-						</Button>
-					</div>
-				</div>
-				<div class="flex items-center gap-2 pt-1">
-					<Button variant="outline" size="sm">{m.admin_settings_account_verify()}</Button>
-					<Button variant="default" size="sm">
-						<IconDeviceFloppy data-icon="inline-start" />
-						{m.admin_settings_account_save_config()}
-					</Button>
-				</div>
-			</div>
-		</div>
 	</section>
 </div>
