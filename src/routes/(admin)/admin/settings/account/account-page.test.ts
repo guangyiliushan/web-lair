@@ -8,58 +8,56 @@ import { isRedirect } from '@sveltejs/kit';
  * official better-auth endpoint, keep the session/audit invariants and never
  * echo a secret back to the page.
  */
-const { state, dbMock, api, guardMock, sessionsMock, auditMock, getOptionMock } = vi.hoisted(
-	() => {
-		const state = {
-			userRow: { twoFactorEnabled: false },
-			rows: new Map<unknown, unknown[]>()
-		};
-		const api = {
-			revokeSession: vi.fn(async () => ({ status: true })),
-			revokeOtherSessions: vi.fn(async () => ({ status: true })),
-			signOut: vi.fn(async () => ({ success: true })),
-			changePassword: vi.fn(async () => ({ token: 'new-token', user: { id: 'user-1' } })),
-			deletePasskey: vi.fn(async () => ({ status: true })),
-			updatePasskey: vi.fn(async () => ({ passkey: { id: 'pk-1' } })),
-			enableTwoFactor: vi.fn(async () => ({
-				totpURI: 'otpauth://totp/x?secret=ABC',
-				backupCodes: ['code-1', 'code-2']
-			})),
-			verifyTOTP: vi.fn(async () => ({ token: 'rotated-token' })),
-			disableTwoFactor: vi.fn(async () => ({ status: true })),
-			generateBackupCodes: vi.fn(async () => ({ backupCodes: ['new-1', 'new-2'] }))
-		};
-		const dbMock = {
-			query: { user: { findFirst: vi.fn(async () => state.userRow) } },
-			select: vi.fn(() => {
-				const chain: Record<string, unknown> = {};
-				let table: unknown;
-				chain.from = (value: unknown) => {
-					table = value;
-					return chain;
-				};
-				chain.where = () => chain;
-				chain.orderBy = () => chain;
-				chain.limit = async () => state.rows.get(table) ?? [];
-				chain.then = (resolve: (value: unknown[]) => unknown, reject: (reason: unknown) => unknown) =>
-					Promise.resolve(state.rows.get(table) ?? []).then(resolve, reject);
+const { state, dbMock, api, guardMock, sessionsMock, auditMock, getOptionMock } = vi.hoisted(() => {
+	const state = {
+		userRow: { twoFactorEnabled: false },
+		rows: new Map<unknown, unknown[]>()
+	};
+	const api = {
+		revokeSession: vi.fn(async () => ({ status: true })),
+		revokeOtherSessions: vi.fn(async () => ({ status: true })),
+		signOut: vi.fn(async () => ({ success: true })),
+		changePassword: vi.fn(async () => ({ token: 'new-token', user: { id: 'user-1' } })),
+		deletePasskey: vi.fn(async () => ({ status: true })),
+		updatePasskey: vi.fn(async () => ({ passkey: { id: 'pk-1' } })),
+		enableTwoFactor: vi.fn(async () => ({
+			totpURI: 'otpauth://totp/x?secret=ABC',
+			backupCodes: ['code-1', 'code-2']
+		})),
+		verifyTOTP: vi.fn(async () => ({ token: 'rotated-token' })),
+		disableTwoFactor: vi.fn(async () => ({ status: true })),
+		generateBackupCodes: vi.fn(async () => ({ backupCodes: ['new-1', 'new-2'] }))
+	};
+	const dbMock = {
+		query: { user: { findFirst: vi.fn(async () => state.userRow) } },
+		select: vi.fn(() => {
+			const chain: Record<string, unknown> = {};
+			let table: unknown;
+			chain.from = (value: unknown) => {
+				table = value;
 				return chain;
-			})
-		};
-		return {
-			state,
-			dbMock,
-			api,
-			guardMock: vi.fn(async () => {}),
-			sessionsMock: {
-				pruneOtherSessions: vi.fn(async () => {}),
-				pruneOtherSessionsKeepingNewest: vi.fn(async () => {})
-			},
-			auditMock: vi.fn(async () => {}),
-			getOptionMock: vi.fn(async () => 'UTC')
-		};
-	}
-);
+			};
+			chain.where = () => chain;
+			chain.orderBy = () => chain;
+			chain.limit = async () => state.rows.get(table) ?? [];
+			chain.then = (resolve: (value: unknown[]) => unknown, reject: (reason: unknown) => unknown) =>
+				Promise.resolve(state.rows.get(table) ?? []).then(resolve, reject);
+			return chain;
+		})
+	};
+	return {
+		state,
+		dbMock,
+		api,
+		guardMock: vi.fn(async () => {}),
+		sessionsMock: {
+			pruneOtherSessions: vi.fn(async () => {}),
+			pruneOtherSessionsKeepingNewest: vi.fn(async () => {})
+		},
+		auditMock: vi.fn(async () => {}),
+		getOptionMock: vi.fn(async () => 'UTC')
+	};
+});
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$lib/server/auth', () => ({ auth: { api } }));
@@ -408,7 +406,9 @@ describe('account security page', () => {
 
 		it('activates and disables the factor, keeping the audit trail', async () => {
 			await callAction('activate', { code: '123456' });
-			expect(api.verifyTOTP).toHaveBeenCalledWith(expect.objectContaining({ body: { code: '123456' } }));
+			expect(api.verifyTOTP).toHaveBeenCalledWith(
+				expect.objectContaining({ body: { code: '123456' } })
+			);
 			expect(sessionsMock.pruneOtherSessionsKeepingNewest).toHaveBeenCalledWith('user-1');
 			expect(lastAuditEvent()).toBe('account.two_factor_activate');
 
@@ -447,9 +447,7 @@ describe('account security page', () => {
 		await callAction('disable', { password: 'current-password' });
 		await callAction('regenerateBackupCodes', { password: 'current-password' });
 
-		const events = auditMock.mock.calls.map(
-			(call) => (call[1] as { event: string }).event
-		);
+		const events = auditMock.mock.calls.map((call) => (call[1] as { event: string }).event);
 		expect(events.length).toBeGreaterThan(8);
 		for (const event of events) {
 			expect(event).toMatch(/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/);

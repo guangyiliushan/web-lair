@@ -3,11 +3,7 @@ import { randomBytes, scryptSync } from 'node:crypto';
 
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
-import {
-	accountPasswordAlgorithm,
-	hashAccountPassword,
-	verifyAccountPassword
-} from './password';
+import { accountPasswordAlgorithm, hashAccountPassword, verifyAccountPassword } from './password';
 
 /**
  * W8.8 password-format tests: Argon2id is the default, the legacy better-auth
@@ -28,20 +24,20 @@ function legacyScryptHash(password: string): string {
 describe('account password hashing', () => {
 	it('defaults to argon2id and honours PASSWORD_HASH_ALGO=scrypt', () => {
 		expect(accountPasswordAlgorithm(() => undefined)).toBe('argon2id');
-		expect(accountPasswordAlgorithm((name) => (name === 'PASSWORD_HASH_ALGO' ? 'scrypt' : ''))).toBe(
-			'scrypt'
-		);
-		expect(accountPasswordAlgorithm((name) => (name === 'PASSWORD_HASH_ALGO' ? 'ARGON2ID' : ''))).toBe(
-			'argon2id'
-		);
+		expect(
+			accountPasswordAlgorithm((name) => (name === 'PASSWORD_HASH_ALGO' ? 'scrypt' : ''))
+		).toBe('scrypt');
+		expect(
+			accountPasswordAlgorithm((name) => (name === 'PASSWORD_HASH_ALGO' ? 'ARGON2ID' : ''))
+		).toBe('argon2id');
 	});
 
 	it('writes an argon2id PHC string and verifies only the right password', async () => {
 		const hash = await hashAccountPassword('correct horse battery staple', () => undefined);
 		expect(hash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/);
-		expect(
-			await verifyAccountPassword({ hash, password: 'correct horse battery staple' })
-		).toBe(true);
+		expect(await verifyAccountPassword({ hash, password: 'correct horse battery staple' })).toBe(
+			true
+		);
 		expect(await verifyAccountPassword({ hash, password: 'wrong password' })).toBe(false);
 	});
 

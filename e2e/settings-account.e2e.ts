@@ -46,9 +46,7 @@ test.describe('real load / static truth', () => {
 		await expect(page.getByText('Google (planned)', { exact: true })).toBeVisible();
 
 		// 2FA is scoped to password sign-in; passkeys are a documented bypass.
-		await expect(
-			page.getByText(/TOTP applies only to password sign-in/i).first()
-		).toBeVisible();
+		await expect(page.getByText(/TOTP applies only to password sign-in/i).first()).toBeVisible();
 		await expect(page.getByText(/not challenged by TOTP/i).first()).toBeVisible();
 	});
 
@@ -120,7 +118,10 @@ test.describe('password change', () => {
 		psql(`delete from "user" where email = '${FIXTURE_EMAIL}'`);
 	});
 
-	test('rejects a wrong current password, then revokes other sessions', async ({ browser, page }) => {
+	test('rejects a wrong current password, then revokes other sessions', async ({
+		browser,
+		page
+	}) => {
 		test.setTimeout(180_000);
 		const signUp = await apiPost(page, '/api/auth/sign-up/email', {
 			email: FIXTURE_EMAIL,
@@ -162,9 +163,9 @@ test.describe('password change', () => {
 			await page.locator('input[name="newPassword"]').fill(FIXTURE_NEW_PASSWORD);
 			await page.locator('input[name="confirmPassword"]').fill(FIXTURE_NEW_PASSWORD);
 			await page.getByRole('button', { name: 'Change password' }).click();
-			await expect(page.getByText('Password changed. Other devices were signed out.')).toBeVisible(
-				{ timeout: 30_000 }
-			);
+			await expect(page.getByText('Password changed. Other devices were signed out.')).toBeVisible({
+				timeout: 30_000
+			});
 
 			expect(await sessionJson(other)).toBeNull();
 			expect(await sessionJson(page.context())).not.toBeNull();
