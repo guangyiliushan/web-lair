@@ -337,7 +337,10 @@ describe('storage settings route (W7.2)', () => {
 	it('refuses a local provider that smuggles external addressing', async () => {
 		// A stale form post (driver=local with s3 fields) must save a local
 		// provider with null addressing — never a local row carrying a bucket.
-		const result = await call('saveProvider', makeEvent({ driver: 'local', endpoint: 'https://93.184.216.34', bucket: 'lair-media' }));
+		const result = await call(
+			'saveProvider',
+			makeEvent({ driver: 'local', endpoint: 'https://93.184.216.34', bucket: 'lair-media' })
+		);
 		expect(result).toMatchObject({ step: 'provider', ok: true });
 		expect(state.setOption).toHaveBeenCalledWith(
 			'storage.provider',
