@@ -38,6 +38,22 @@
 		<SettingsStatusRow label={m.admin_settings_site_timezone()} value={data.timezone} />
 	</SettingsStatusList>
 
+	<SettingsStatusList title={m.admin_settings_site_deployment()}>
+		<SettingsStatusRow
+			label={m.admin_settings_site_origin()}
+			value={data.deployment.origin ?? '—'}
+		/>
+		<SettingsStatusRow
+			label={m.admin_settings_site_admin_path()}
+			value={data.deployment.adminPath}
+		/>
+		<SettingsStatusRow
+			label={m.admin_settings_site_environment()}
+			value={data.deployment.environment}
+		/>
+		<SettingsStatusRow label={m.admin_settings_site_version()} value={data.deployment.version} />
+	</SettingsStatusList>
+
 	<SettingsStatusList title={m.admin_settings_site_search_indexing()}>
 		<SettingsStatusRow
 			label={m.admin_settings_site_sitemap()}

@@ -1,6 +1,10 @@
 import type { PageServerLoad } from './$types';
+import { env } from '$env/dynamic/private';
 import { requireAdminRole } from '$lib/server/authz';
 import { getOption } from '$lib/server/config/options-registry';
+import { ADMIN_BASE_PATH } from '$lib/server/config/admin';
+import { getPublicOrigin } from '$lib/server/origin';
+import { APP_VERSION } from '$lib/server/version';
 import { settingAccess } from '$lib/server/settings/tiers';
 
 /**
@@ -21,6 +25,12 @@ export const load: PageServerLoad = async (event) => {
 		languages,
 		defaultLang,
 		timezone,
-		editable: settingAccess(event.locals.admin?.role, 'site').editable
+		editable: settingAccess(event.locals.admin?.role, 'site').editable,
+		deployment: {
+			origin: getPublicOrigin(),
+			adminPath: ADMIN_BASE_PATH,
+			environment: process.env.NODE_ENV ?? 'development',
+			version: env.APP_VERSION?.trim() || APP_VERSION
+		}
 	};
 };
