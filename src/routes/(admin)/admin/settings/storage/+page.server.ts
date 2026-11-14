@@ -16,6 +16,16 @@ import {
 	type StorageProviderConfig
 } from '$lib/server/storage/provider';
 import { S3_CREDENTIAL_ENV, providerCredentialsFromEnv } from '$lib/server/storage/config';
+import { buildStorageForProvider } from '$lib/server/storage';
+import { sanitizeProviderError } from '$lib/server/settings/provider-status';
+import {
+	StorageEndpointError,
+	allowPrivateEndpoint,
+	assertStorageEndpointAllowed
+} from '$lib/server/storage/endpoint-guard';
+import { probeStorage } from '$lib/server/storage/probe';
+import type { StorageProbeResult } from '$lib/server/storage/probe';
+import type { StorageStatusState } from '$lib/server/storage/provider';
 
 /**
  * Storage control plane (W7.2, decisions ST1/ST3/ST4/ST8/Q4).
@@ -84,6 +94,7 @@ export const load: PageServerLoad = async (event) => {
 		},
 		editable: access.editable,
 		ownerOnly: !access.editable,
+		allowPrivateEndpoint: allowPrivateEndpoint(env),
 		// A stored probe result is only meaningful for the config it covered.
 		statusMatchesActive:
 			status.fingerprint === null || status.fingerprint === providerFingerprint(active.config)
@@ -149,6 +160,38 @@ function configErrorMessage(config: StorageProviderConfig): string {
 	}
 }
 
+/** Maps the SSRF guard's closed failure codes to readable form errors. */
+function endpointErrorMessage(error: unknown): string {
+	if (error instanceof StorageEndpointError) {
+		if (error.code === 'private') return m.admin_settings_storage_err_endpoint_private();
+		if (error.code === 'metadata') return m.admin_settings_storage_err_endpoint_metadata();
+		if (error.code === 'resolve') return m.admin_settings_storage_err_endpoint_resolve();
+		return m.admin_settings_storage_err_endpoint();
+	}
+	// Anything else here is an unusable configuration (missing credentials, an
+	// incomplete provider): sanitize and show it, since it names env vars only.
+	return sanitizeProviderError(error);
+}
+
+/** Localized probe outcome; the sanitized detail follows when there is one. */
+function probeMessage(result: StorageProbeResult): string {
+	const label =
+		result.status === 'auth'
+			? m.admin_settings_storage_test_auth()
+			: result.status === 'not-found'
+				? m.admin_settings_storage_test_not_found()
+				: result.status === 'timeout'
+					? m.admin_settings_storage_test_timeout()
+					: result.status === 'network'
+						? m.admin_settings_storage_test_network()
+						: result.status === 'write'
+							? m.admin_settings_storage_test_write()
+							: result.status === 'capability'
+								? m.admin_settings_storage_test_capability()
+								: m.admin_settings_storage_test_failed();
+	return result.message ? `${label} — ${result.message}` : label;
+}
+
 export const actions: Actions = {
 	/**
 	 * Save the CANDIDATE only (decision Q4). `storage.active` is untouched on
@@ -167,6 +210,23 @@ export const actions: Actions = {
 			return fail(400, { step: 'provider' as const, ok: false, message: errorMessage });
 		}
 		const parsed = providerConfigSchema.parse(candidate);
+
+		// SSRF policy (W7.3/Q19): the saved endpoint is what the runtime will
+		// use, so it is validated here (https, no credentials, public DNS unless
+		// the operator opted into a LAN endpoint, never a metadata address).
+		if (parsed.driver === 's3') {
+			try {
+				await assertStorageEndpointAllowed(parsed.endpoint!, {
+					allowPrivate: allowPrivateEndpoint(env)
+				});
+			} catch (caught) {
+				return fail(400, {
+					step: 'provider' as const,
+					ok: false,
+					message: endpointErrorMessage(caught)
+				});
+			}
+		}
 
 		await setOption('storage.provider', parsed);
 		await recordActivity(db, {
@@ -195,6 +255,84 @@ export const actions: Actions = {
 			ok: true,
 			message: m.admin_settings_storage_saved_inactive()
 		};
+	},
+
+	/**
+	 * Connection probe (W7.3, decision Q19). Probes the SAVED candidate with the
+	 * configured credentials: HeadBucket, bucket capabilities, then a
+	 * Put/Get/Delete roundtrip under `probe/`. The result is stored sanitized
+	 * and audited; a successful probe is NOT an activation (Q4).
+	 */
+	testProvider: async (event) => {
+		await requireAdminRole();
+		assertSettingWrite(event.locals.admin?.role, 'storage', 'storage.provider');
+
+		const provider = await getOption('storage.provider');
+		const fingerprint = providerFingerprint(provider);
+		const previous = await getOption('storage.status');
+		let result: StorageProbeResult | null = null;
+		let failureMessage = '';
+
+		try {
+			// Defence in depth: the endpoint was checked at save time, but the
+			// probe is the one place that actually dials a candidate.
+			if (provider.driver === 's3') {
+				await assertStorageEndpointAllowed(provider.endpoint!, {
+					allowPrivate: allowPrivateEndpoint(env)
+				});
+			}
+			const storage = buildStorageForProvider(provider, {
+				source: env,
+				credentials: providerCredentialsFromEnv(env),
+				// A probe must answer quickly; an unreachable endpoint is a
+				// result, not a hung request.
+				headersTimeoutMs: 10_000
+			});
+			result = await probeStorage(storage);
+		} catch (caught) {
+			failureMessage = endpointErrorMessage(caught);
+		}
+
+		const status: StorageStatusState = result
+			? {
+					lastTestAt: result.checkedAt,
+					lastTestOk: result.ok,
+					lastError: result.message ? sanitizeProviderError(result.message) : null,
+					lastStatus: result.status,
+					bucketVersioning: result.versioning,
+					objectLock: result.objectLock,
+					fingerprint
+				}
+			: {
+					...previous,
+					lastTestAt: new Date().toISOString(),
+					lastTestOk: false,
+					lastError: sanitizeProviderError(failureMessage),
+					lastStatus: 'unknown',
+					fingerprint
+				};
+
+		await setOption('storage.status', status);
+		await recordActivity(db, {
+			event: 'storage.test',
+			actorId: event.locals.user?.id ?? null,
+			payload: {
+				ok: status.lastTestOk,
+				status: status.lastStatus,
+				fingerprint,
+				versioning: status.bucketVersioning,
+				object_lock: status.objectLock
+			},
+			deliver: false
+		});
+
+		if (!result) {
+			return fail(400, { step: 'test' as const, ok: false, message: failureMessage });
+		}
+		if (!result.ok) {
+			return fail(502, { step: 'test' as const, ok: false, message: probeMessage(result) });
+		}
+		return { step: 'test' as const, ok: true, message: m.admin_settings_storage_test_ok() };
 	},
 
 	/** Purge TTLs (W7.2/ST10): floor 1 day, unit days, saving deletes nothing. */

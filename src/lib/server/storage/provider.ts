@@ -176,6 +176,11 @@ export const storageStatusSchema = z.object({
 	lastTestAt: z.string().nullable(),
 	lastTestOk: z.boolean().nullable(),
 	lastError: z.string().max(300).nullable(),
+	/** Closed status code of the last probe (W7.3); the page localizes it. */
+	lastStatus: z
+		.enum(['ok', 'auth', 'not-found', 'timeout', 'network', 'write', 'capability', 'unknown'])
+		.nullable()
+		.default(null),
 	/** Bucket versioning at probe time; `unknown` blocks a hard-delete switch. */
 	bucketVersioning: z.enum(['off', 'enabled', 'suspended', 'unknown']).nullable(),
 	objectLock: z.boolean().nullable(),
@@ -189,6 +194,7 @@ export const DEFAULT_STORAGE_STATUS: StorageStatusState = {
 	lastTestAt: null,
 	lastTestOk: null,
 	lastError: null,
+	lastStatus: null,
 	bucketVersioning: null,
 	objectLock: null,
 	fingerprint: null

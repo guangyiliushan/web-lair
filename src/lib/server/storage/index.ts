@@ -35,12 +35,16 @@ export function buildStorageForProvider(
 	options: {
 		source?: Record<string, string | undefined>;
 		credentials?: SigV4Credentials | null;
+		/** Header-stage timeout; the connection probe keeps this short. */
+		headersTimeoutMs?: number;
 	} = {}
 ): ObjectStoragePort {
+	const config = storageConfigForProvider(provider, {
+		source: options.source ?? env,
+		credentials: options.credentials
+	});
 	return new S3Storage(
-		storageConfigForProvider(provider, {
-			source: options.source ?? env,
-			credentials: options.credentials
-		})
+		config,
+		options.headersTimeoutMs === undefined ? {} : { headersTimeoutMs: options.headersTimeoutMs }
 	);
 }

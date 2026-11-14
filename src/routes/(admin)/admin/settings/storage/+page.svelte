@@ -75,13 +75,29 @@
 
 	const providerForm = $derived(form?.step === 'provider' ? form : null);
 	const purgeForm = $derived(form?.step === 'purge' ? form : null);
+	const testForm = $derived(form?.step === 'test' ? form : null);
+
+	const PROBE_STATUS_KEYS = {
+		ok: 'admin_settings_storage_test_ok',
+		auth: 'admin_settings_storage_test_auth',
+		'not-found': 'admin_settings_storage_test_not_found',
+		timeout: 'admin_settings_storage_test_timeout',
+		network: 'admin_settings_storage_test_network',
+		write: 'admin_settings_storage_test_write',
+		capability: 'admin_settings_storage_test_capability',
+		unknown: 'admin_settings_storage_test_failed'
+	} as const;
+	const probeStatusLabel = $derived(
+		data.status.lastStatus ? m[PROBE_STATUS_KEYS[data.status.lastStatus]]() : null
+	);
 
 	const lastTest = $derived(
 		data.status.lastTestAt
 			? `${new Date(data.status.lastTestAt).toLocaleString()} · ${
-					data.status.lastTestOk
+					probeStatusLabel ??
+					(data.status.lastTestOk
 						? m.admin_settings_common_configured()
-						: m.admin_settings_common_error()
+						: m.admin_settings_common_error())
 				}`
 			: m.admin_settings_storage_never_tested()
 	);
@@ -153,6 +169,9 @@
 		<SettingsStatusRow label={m.admin_settings_storage_versioning()} value={versioningLabel} />
 		<SettingsStatusRow label={m.admin_settings_storage_object_lock()} value={lockLabel} />
 		<SettingsStatusRow label={m.admin_settings_common_last_test()} value={lastTest} />
+		{#if data.status.lastError}
+			<SettingsStatusRow label={m.admin_settings_common_error()} value={data.status.lastError} />
+		{/if}
 	</SettingsStatusList>
 
 	{#if !data.statusMatchesActive}
@@ -161,10 +180,36 @@
 
 	<!-- 2. Provider candidate (owner) -->
 	<section class="space-y-3">
-		<header class="min-w-0">
-			<h2 class="text-sm font-medium">{m.admin_settings_storage_provider()}</h2>
-			<p class="mt-1 text-xs text-muted-foreground">{m.admin_settings_storage_provider_desc()}</p>
+		<header class="flex flex-wrap items-start justify-between gap-3">
+			<div class="min-w-0">
+				<h2 class="text-sm font-medium">{m.admin_settings_storage_provider()}</h2>
+				<p class="mt-1 text-xs text-muted-foreground">
+					{m.admin_settings_storage_provider_desc()}
+				</p>
+			</div>
+			{#if data.editable}
+				<form method="POST" action="?/testProvider">
+					<Button type="submit" size="sm" variant="outline">
+						{m.admin_settings_common_test()}
+					</Button>
+				</form>
+			{/if}
 		</header>
+
+		{#if testForm?.message}
+			<p
+				class="text-sm {testForm.ok ? 'text-muted-foreground' : 'text-destructive'}"
+				role={testForm.ok ? 'status' : 'alert'}
+			>
+				{testForm.message}
+			</p>
+		{/if}
+
+		{#if data.allowPrivateEndpoint}
+			<p class="text-xs text-muted-foreground">
+				{m.admin_settings_storage_private_allowed()}
+			</p>
+		{/if}
 
 		{#if data.editable}
 			<SettingsForm
