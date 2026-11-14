@@ -1841,7 +1841,7 @@
 	"admin_settings_content_checks_section": "Link checks",
 	"admin_settings_content_checks_timeout": "Fetch timeout (ms)",
 	"admin_settings_content_comments_closed_note": "Existing approved comments stay visible when comments are closed.",
-	"admin_settings_content_comments_desc": "Comment moderation and filtering. Anti-spam and triage live on the AI page.",
+	"admin_settings_content_comments_desc": "Comment moderation and filtering. Triage lives on the AI settings page.",
 	"admin_settings_content_comments_enable": "Enable comments",
 	"admin_settings_content_comments_enable_hint": "New comments need this switch and the per-post switch. Turning it off only stops new comments.",
 	"admin_settings_content_comments_queue_link": "Review queue",

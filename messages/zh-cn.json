@@ -1616,7 +1616,7 @@
 	"admin_settings_content_checks_section": "链接检查",
 	"admin_settings_content_checks_timeout": "抓取超时（毫秒）",
 	"admin_settings_content_comments_closed_note": "关闭评论后，已有审核通过的评论仍然可见。",
-	"admin_settings_content_comments_desc": "评论审核与过滤；反垃圾与分诊在 AI 设置页。",
+	"admin_settings_content_comments_desc": "评论审核与过滤；分诊在 AI 设置页。",
 	"admin_settings_content_comments_enable": "开启评论",
 	"admin_settings_content_comments_enable_hint": "新评论需要此开关与文章级开关同时开启。关闭只停止新评论。",
 	"admin_settings_content_comments_queue_link": "审核队列",

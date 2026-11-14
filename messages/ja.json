@@ -1616,7 +1616,7 @@
 	"admin_settings_content_checks_section": "リンク検査",
 	"admin_settings_content_checks_timeout": "取得タイムアウト（ms）",
 	"admin_settings_content_comments_closed_note": "コメントを閉じても、承認済みのコメントは引き続き表示されます。",
-	"admin_settings_content_comments_desc": "コメント審査とフィルタ。スパム対策とトリアージは AI 設定ページにあります。",
+	"admin_settings_content_comments_desc": "コメント審査とフィルタ。トリアージは AI 設定ページにあります。",
 	"admin_settings_content_comments_enable": "コメントを有効にする",
 	"admin_settings_content_comments_enable_hint": "新しいコメントにはこのスイッチと記事ごとのスイッチの両方が必要です。オフにすると新規コメントのみ停止します。",
 	"admin_settings_content_comments_queue_link": "審査キュー",
