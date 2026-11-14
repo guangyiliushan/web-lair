@@ -99,7 +99,12 @@ const EXPECTED_TABLE_NAMES: string[] = [
 // FILE checks above keep pinning the generated baseline itself; the DB checks
 // below union both sets.
 // ---------------------------------------------------------------------------
-const MIGRATION_TABLE_NAMES = ['ai_provider_secrets', 'webhook_secrets'] as const;
+const MIGRATION_TABLE_NAMES = [
+	'ai_provider_secrets',
+	'webhook_secrets',
+	'home_hero',
+	'site_identity'
+] as const;
 
 const MIGRATION_TABLE_COLUMNS = new Map<string, string[]>([
 	[
@@ -120,12 +125,32 @@ const MIGRATION_TABLE_COLUMNS = new Map<string, string[]>([
 			'previous_expires_at',
 			'updated_by'
 		]
-	]
+	],
+	[
+		'home_hero',
+		[
+			'id',
+			'title',
+			'subtitle_prefix',
+			'subtitle_highlight',
+			'description',
+			'welcome',
+			'created_at',
+			'updated_at',
+			'updated_by'
+		]
+	],
+	['site_identity', ['id', 'owner_user_id', 'created_at', 'updated_at', 'updated_by']]
 ]);
+
+/** Columns appended to a baseline table (A3 unions these into the expected set). */
+const MIGRATION_COLUMN_ADDITIONS = new Map<string, string[]>([['user_profiles', ['header_label']]]);
 
 const MIGRATION_INDEXES = new Map<string, string[]>([
 	['ai_provider_secrets', ['ai_provider_secrets_pkey']],
-	['webhook_secrets', ['webhook_secrets_pkey']]
+	['webhook_secrets', ['webhook_secrets_pkey']],
+	['home_hero', ['home_hero_pkey']],
+	['site_identity', ['site_identity_pkey', 'site_identity_owner_user_id_idx']]
 ]);
 
 const MIGRATION_CHECKS = new Map<string, string[]>([
@@ -146,6 +171,29 @@ const MIGRATION_CHECKS = new Map<string, string[]>([
 			'webhook_secrets_previous_pair_check',
 			'webhook_secrets_previous_key_version_check'
 		]
+	],
+	[
+		'home_hero',
+		[
+			'home_hero_singleton_check',
+			'home_hero_title_object_check',
+			'home_hero_subtitle_prefix_object_check',
+			'home_hero_subtitle_highlight_object_check',
+			'home_hero_description_object_check',
+			'home_hero_welcome_object_check'
+		]
+	],
+	['site_identity', ['site_identity_singleton_check']],
+	// Appended column checks override the baseline map for this table, so the
+	// full expected set has to be listed (the three baseline checks + the new one).
+	[
+		'user_profiles',
+		[
+			'user_profiles_status_check',
+			'user_profiles_deleted_at_check',
+			'user_profiles_links_is_array_check',
+			'user_profiles_header_label_check'
+		]
 	]
 ]);
 
@@ -153,13 +201,18 @@ const MIGRATION_FKS = [
 	'ai_provider_secrets_provider_id_ai_providers_id_fk|ai_provider_secrets|ai_providers|cascade',
 	'ai_provider_secrets_updated_by_user_id_fk|ai_provider_secrets|user|set null',
 	'webhook_secrets_webhook_id_webhooks_id_fk|webhook_secrets|webhooks|cascade',
-	'webhook_secrets_updated_by_user_id_fk|webhook_secrets|user|set null'
+	'webhook_secrets_updated_by_user_id_fk|webhook_secrets|user|set null',
+	'home_hero_updated_by_user_id_fk|home_hero|user|set null',
+	'site_identity_owner_user_id_user_id_fk|site_identity|user|restrict',
+	'site_identity_updated_by_user_id_fk|site_identity|user|set null'
 ];
 
 /** Nullable audit links: deliberately not indexed (low cardinality). */
 const MIGRATION_FK_INDEX_GAPS = [
 	'ai_provider_secrets.ai_provider_secrets_updated_by_user_id_fk',
-	'webhook_secrets.webhook_secrets_updated_by_user_id_fk'
+	'webhook_secrets.webhook_secrets_updated_by_user_id_fk',
+	'home_hero.home_hero_updated_by_user_id_fk',
+	'site_identity.site_identity_updated_by_user_id_fk'
 ];
 
 const OFFICIAL_GENERATED_TABLES = new Set([
@@ -428,7 +481,8 @@ const COLUMN_TYPE_PINS: Array<[string, string, string]> = [
 	['posts', 'allow_comment', 'boolean'],
 	['posts', 'writing_origin', 'text'],
 	['posts', 'provenance_source', 'text'],
-	['posts', 'ai_help', 'ARRAY']
+	['posts', 'ai_help', 'ARRAY'],
+	['user_profiles', 'header_label', 'text']
 ];
 
 /** Official generated-table exception for the FK leading-index rule. */
@@ -668,7 +722,7 @@ async function dbChecks(): Promise<void> {
 				await sql`select attname from pg_attribute where attrelid = ${'public.' + table}::regclass and attnum > 0 and not attisdropped order by attnum`;
 			sameSets(
 				rows.map((r) => r.attname),
-				expected,
+				[...expected, ...(MIGRATION_COLUMN_ADDITIONS.get(table) ?? [])],
 				`A3 ${table} columns`
 			);
 		}
