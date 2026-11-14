@@ -317,7 +317,7 @@
 								type="submit"
 								variant="outline"
 								size="sm"
-								disabled={!data.mail.configured || mailPending}
+								disabled={!data.mail.configured || !data.mailEditable || mailPending}
 							>
 								{m.admin_settings_notification_send_test()}
 							</Button>

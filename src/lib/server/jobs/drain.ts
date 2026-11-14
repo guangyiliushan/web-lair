@@ -18,6 +18,7 @@ import {
 import { classifyWebhookResponse, parseRetryAfter, planWebhookRetry } from '../webhooks/retry.ts';
 import { isSecretError } from '../secrets/errors.ts';
 import { reportSecretFailure } from '../secrets/report.ts';
+import { recordWebhookAutoDisable } from '../audit.ts';
 import { resolveWebhookSigningSecrets } from '../secrets/webhook-secrets.ts';
 import type { SecretDb } from '../secrets/resolver.ts';
 import type { JobResult, JobTrigger } from '../db/system/job-run.schema.ts';
@@ -770,11 +771,11 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 					reason: err.code
 				});
 			}
-			// Environmental failures (keyring/table missing for this tick) are
-			// not this delivery's fault: leave the row queued and fail the
-			// segment, so a misconfiguration pauses delivery instead of
-			// burning the backlog at QUEUE_BATCH rows per minute.
-			if (reason === 'store_unavailable' || reason === 'unknown_key_version') {
+			// Only a transient store outage pauses the segment. A retired key
+			// version is terminal for THIS row: throwing here would roll back
+			// the tx, leave attempt_count at 0, and re-select the same oldest
+			// row forever, blocking every newer delivery.
+			if (reason === 'store_unavailable') {
 				throw new Error(`signing secret unavailable for webhook ${endpoint.id} (${reason})`, {
 					cause: err
 				});
@@ -843,6 +844,7 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 					})
 					.where(eq(webhookDeliveries.id, delivery.id));
 				await tx.update(webhooks).set({ isEnabled: false }).where(eq(webhooks.id, endpoint.id));
+				await recordWebhookAutoDisable(tx, { webhookId: endpoint.id, name: endpoint.name });
 				deps.log(`[drain] webhook endpoint ${endpoint.id}: 410 Gone, endpoint disabled`);
 				return 'failed';
 			}

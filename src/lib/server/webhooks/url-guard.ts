@@ -54,6 +54,29 @@ export interface WebhookUrlGuardOptions {
 	allowInsecureLoopback?: boolean;
 	/** Test seam: resolve every address for a hostname. */
 	lookup?: (hostname: string) => Promise<string[]>;
+	/** DNS deadline; a hung resolver must not hold the delivery row lock. */
+	lookupTimeoutMs?: number;
+}
+
+/** DNS lookup with a hard deadline (the caller decides fail-open/closed). */
+async function lookupWithin(
+	lookup: (hostname: string) => Promise<string[]>,
+	hostname: string,
+	timeoutMs: number
+): Promise<string[]> {
+	return await new Promise<string[]>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error('dns lookup timed out')), timeoutMs);
+		lookup(hostname).then(
+			(addresses) => {
+				clearTimeout(timer);
+				resolve(addresses);
+			},
+			(error) => {
+				clearTimeout(timer);
+				reject(error);
+			}
+		);
+	});
 }
 
 async function defaultLookup(hostname: string): Promise<string[]> {
@@ -113,7 +136,7 @@ function blockedIpv4(octets: number[], allowPrivate: boolean, allowLoopback: boo
 	if (a === 127) return !allowLoopback; // loopback
 	if (a === 169 && b === 254) return true; // link-local + cloud metadata
 	if (a === 172 && b >= 16 && b <= 31) return !allowPrivate;
-	if (a === 192 && b === 0) return true; // IETF assignments
+	if (a === 192 && b === 0) return true; // IETF assignments (incl. 192.0.2.0/24)
 	if (a === 192 && b === 88 && c === 99) return true; // 6to4 relay anycast
 	if (a === 192 && b === 168) return !allowPrivate;
 	if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
@@ -149,11 +172,16 @@ export function isBlockedWebhookAddress(
 	if (ipv6.slice(0, 7).every((group) => group === 0) && ipv6[7] === 1) {
 		return !allowLoopback; // ::1
 	}
+	// IPv4-compatible ::a.b.c.d (::127.0.0.1) is deprecated but still routable
+	// on some stacks; the mapped ::ffff: form was handled above.
+	if (ipv6.slice(0, 6).every((group) => group === 0)) return true;
 	const first = ipv6[0];
 	if ((first & 0xfe00) === 0xfc00) return !allowPrivate; // fc00::/7 ULA
 	if ((first & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+	if ((first & 0xffc0) === 0xfec0) return true; // fec0::/10 deprecated site-local
 	if ((first & 0xff00) === 0xff00) return true; // multicast
 	if (first === 0x2001 && ipv6[1] === 0x0db8) return true; // documentation
+	if (first === 0x2001 && ipv6[1] === 0) return true; // Teredo 2001::/32
 	if (first === 0x0064 && ipv6[1] === 0xff9b) return true; // NAT64
 	if (first === 0x2002) return true; // 6to4
 	return false;
@@ -176,7 +204,7 @@ export function isBlockedWebhookHostname(
 	if (
 		host === 'localhost' ||
 		host.endsWith('.localhost') ||
-		host.endsWith('.local') ||
+		(host.endsWith('.local') && options.allowPrivate !== true) ||
 		host.endsWith('.internal')
 	) {
 		return true;
@@ -239,7 +267,7 @@ export async function validateWebhookUrl(
 		const lookup = options.lookup ?? defaultLookup;
 		let addresses: string[];
 		try {
-			addresses = await lookup(host);
+			addresses = await lookupWithin(lookup, host, options.lookupTimeoutMs ?? 5_000);
 		} catch {
 			throw new WebhookUrlError('unresolvable', 'Webhook hostname could not be resolved');
 		}
@@ -274,7 +302,7 @@ export async function assertDeliveryTarget(
 	const lookup = options.lookup ?? defaultLookup;
 	let addresses: string[];
 	try {
-		addresses = await lookup(host);
+		addresses = await lookupWithin(lookup, host, options.lookupTimeoutMs ?? 5_000);
 	} catch {
 		return;
 	}
@@ -300,6 +328,6 @@ export function webhookGuardOptionsFromEnv(
 		allowPrivate: webhookAllowPrivateTargets(getEnv),
 		allowInsecureLoopback:
 			getEnv('WEBHOOK_ALLOW_INSECURE_LOOPBACK')?.trim() === 'true' &&
-			getEnv('NODE_ENV') !== 'production'
+			(getEnv('NODE_ENV') === 'test' || getEnv('NODE_ENV') === 'development')
 	};
 }

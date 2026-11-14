@@ -1949,7 +1949,7 @@
 	"admin_settings_notification_recent_deliveries": "Recent deliveries (50)",
 	"admin_settings_notification_requeue": "Re-queue",
 	"admin_settings_notification_requeued": "Re-queued: the same delivery will be retried within a tick (delivery id unchanged)",
-	"admin_settings_notification_retry_scheduled": "Retry {attempt} at {time}",
+	"admin_settings_notification_retry_scheduled": "Attempt {attempt} at {time}",
 	"admin_settings_notification_rotate_secret": "Rotate secret",
 	"admin_settings_notification_rotate_secret_confirm": "The old secret of “{name}” stops verifying immediately. Deploy the new secret to the receiver.",
 	"admin_settings_notification_secret_rotated": "Secret rotated.",

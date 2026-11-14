@@ -69,8 +69,12 @@ describe('webhook url guard: stored URLs (W9.3)', () => {
 			'https://[::1]/hook',
 			'https://[fc00::1]/hook',
 			'https://[fe80::1]/hook',
+			'https://[fec0::1]/hook',
 			'https://[::ffff:127.0.0.1]/hook',
 			'https://[::ffff:10.0.0.1]/hook',
+			'https://[::127.0.0.1]/hook',
+			'https://[::10.0.0.1]/hook',
+			'https://[2001::1]/hook',
 			'https://[2001:db8::1]/hook',
 			'https://[::]/hook'
 		];
@@ -139,6 +143,12 @@ describe('webhook url guard: stored URLs (W9.3)', () => {
 				lookup: async () => ['10.0.0.5']
 			})
 		).resolves.toBe('https://nas/hook');
+		await expect(
+			validateWebhookUrl('https://nas.local/hook', {
+				allowPrivate: true,
+				lookup: async () => ['192.168.1.20']
+			})
+		).resolves.toBe('https://nas.local/hook');
 		for (const url of [
 			'https://127.0.0.1/hook',
 			'https://169.254.169.254/latest/meta-data',
@@ -191,9 +201,15 @@ describe('webhook url guard: stored URLs (W9.3)', () => {
 				envOf({ WEBHOOK_ALLOW_INSECURE_LOOPBACK: 'true', NODE_ENV: 'production' })
 			).allowInsecureLoopback
 		).toBe(false);
+		// Undefined NODE_ENV is NOT a test environment: fail closed.
 		expect(
 			webhookGuardOptionsFromEnv(envOf({ WEBHOOK_ALLOW_INSECURE_LOOPBACK: 'true' }))
 				.allowInsecureLoopback
+		).toBe(false);
+		expect(
+			webhookGuardOptionsFromEnv(
+				envOf({ WEBHOOK_ALLOW_INSECURE_LOOPBACK: 'true', NODE_ENV: 'test' })
+			).allowInsecureLoopback
 		).toBe(true);
 	});
 });

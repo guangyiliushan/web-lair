@@ -43,8 +43,32 @@ describe('webhook delivery retry migration (W9.4/W9.5)', () => {
 		);
 	});
 
-	it('is registered as the newest journal entry', () => {
+	it('is registered in the journal with a matching snapshot', () => {
 		const entries = JSON.parse(JOURNAL).entries as Array<{ idx: number; tag: string }>;
-		expect(entries.at(-1)).toMatchObject({ idx: 5, tag: '0005_webhook_delivery_retry' });
+		const entry = entries.find((item) => item.tag === '0005_webhook_delivery_retry');
+		expect(entry).toBeDefined();
+		// Drizzle diffs against the highest SNAPSHOT, not the journal: a missing
+		// 0005 snapshot would make the next generate re-emit these columns.
+		const snapshotPath = fileURLToPath(
+			new URL('../../../../../drizzle/meta/0005_snapshot.json', import.meta.url)
+		);
+		const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf8')) as {
+			prevId: string;
+			tables: Record<
+				string,
+				{ columns: Record<string, unknown>; indexes: Record<string, unknown> }
+			>;
+		};
+		const prev = JSON.parse(
+			readFileSync(
+				fileURLToPath(new URL('../../../../../drizzle/meta/0004_snapshot.json', import.meta.url)),
+				'utf8'
+			)
+		) as { id: string };
+		expect(snapshot.prevId).toBe(prev.id);
+		const delivery = snapshot.tables['public.webhook_deliveries'];
+		expect(delivery.columns).toHaveProperty('attempt_count');
+		expect(delivery.columns).toHaveProperty('next_attempt_at');
+		expect(delivery.indexes).toHaveProperty('webhook_deliveries_due_idx');
 	});
 });

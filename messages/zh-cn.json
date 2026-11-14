@@ -1715,7 +1715,7 @@
 	"admin_settings_notification_recent_deliveries": "最近投递（50 条）",
 	"admin_settings_notification_requeue": "重投",
 	"admin_settings_notification_requeued": "已重投：同一投递行将在 1 tick 内重试（投递 ID 不变）",
-	"admin_settings_notification_retry_scheduled": "第 {attempt} 次重试：{time}",
+	"admin_settings_notification_retry_scheduled": "第 {attempt} 次尝试：{time}",
 	"admin_settings_notification_rotate_secret": "轮换密钥",
 	"admin_settings_notification_rotate_secret_confirm": "「{name}」的旧密钥将立即失效，请及时将新密钥部署到接收端。",
 	"admin_settings_notification_secret_rotated": "密钥已轮换。",

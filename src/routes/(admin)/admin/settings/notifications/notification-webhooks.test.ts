@@ -435,14 +435,14 @@ describe('notification webhooks retry', () => {
 		expect(sqlOf(state.updateWheres[0])).toContain('"webhook_deliveries"."id"');
 	});
 
-	it('404s when the row vanishes between the read and the replay', async () => {
+	it('400s when the row vanishes or is no longer failed before the replay write', async () => {
 		state.selectQueue.push([
 			{ id: DELIVERY_ID, webhookId: 'w1', event: 'comment.created', payload: {}, status: 'failed' }
 		]);
 		state.selectQueue.push([{ isEnabled: true }]);
 		state.updateRows = [];
 		const { result } = await callRetry({ id: DELIVERY_ID });
-		expect(result).toMatchObject({ status: 404 });
+		expect(result).toMatchObject({ status: 400 });
 	});
 
 	it('lets a non-owner admin replay (config is read-only, replay is not)', async () => {
@@ -458,6 +458,16 @@ describe('notification webhooks retry', () => {
 	it('load requires the admin role first (J-3 review I1)', async () => {
 		guardMock.mockRejectedValueOnce(new Error('redirect: no session'));
 		await expect(load({} as never)).rejects.toThrow('redirect: no session');
+	});
+
+	it('load renders webhook config read-only for a non-owner admin (mail stays editable)', async () => {
+		state.selectQueue.push([]); // endpoints
+		state.selectQueue.push([]); // deliveries
+		const data = (await load({
+			locals: { admin: { userId: 'admin-1', role: 'admin' } }
+		} as never)) as { editable: boolean; mailEditable: boolean };
+		expect(data.editable).toBe(false);
+		expect(data.mailEditable).toBe(true);
 	});
 
 	it('replays without copying the failed row', async () => {

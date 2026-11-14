@@ -9,7 +9,7 @@ import { requireAdminRole } from '$lib/server/authz';
 import { assertSettingWrite, settingAccess } from '$lib/server/settings/tiers';
 import { recordActivity } from '$lib/server/audit';
 import { isMailConfigured, sendMail } from '$lib/server/mail/transport';
-import { readMailStatus, maskEmailAddress } from '$lib/server/mail/status';
+import { readMailStatus, maskEmailAddress, redactMailError } from '$lib/server/mail/status';
 import { buildTestMailContent, evaluateMailTestRateLimit } from '$lib/server/mail/test';
 
 import { SecretError } from '$lib/server/secrets/errors';
@@ -216,7 +216,12 @@ export const load: PageServerLoad = async (event) => {
 	return {
 		webhookEndpoints,
 		webhookEventRoster: [...WEBHOOK_EVENT_ROSTER],
-		editable: settingAccess(event.locals.admin?.role, 'notifications').editable,
+		// N3: config is owner-only; admins get a read-only list + manual replay.
+		// The section tier ('notifications' = admin) is NOT the field tier.
+		editable: settingAccess(event.locals.admin?.role, 'notifications', 'notifications.webhooks')
+			.editable,
+		mailEditable: settingAccess(event.locals.admin?.role, 'notifications', 'notifications.mail')
+			.editable,
 		mail: readMailStatus((name) => env[name]),
 		webhookDeliveries: deliveryRows.map((row) => {
 			// The FK cascade removes a deleted endpoint's deliveries, so this
@@ -292,10 +297,8 @@ export const actions: Actions = {
 		try {
 			await sendMail({ to, subject: content.subject, text: content.text });
 		} catch (error) {
-			const reason = (error instanceof Error ? error.message || error.name : 'unknown error').slice(
-				0,
-				200
-			);
+			// SMTP errors echo the recipient/banners; never let them defeat the mask.
+			const reason = redactMailError(error);
 			await recordActivity(db, {
 				event: 'mail.test',
 				actorId: locals.user?.id ?? null,
@@ -320,7 +323,7 @@ export const actions: Actions = {
 		};
 	},
 
-	retry: async ({ request }) => {
+	retry: async ({ request, locals }) => {
 		await requireAdminRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString();
@@ -330,7 +333,8 @@ export const actions: Actions = {
 			.select({
 				id: webhookDeliveries.id,
 				webhookId: webhookDeliveries.webhookId,
-				status: webhookDeliveries.status
+				status: webhookDeliveries.status,
+				attemptCount: webhookDeliveries.attemptCount
 			})
 			.from(webhookDeliveries)
 			.where(eq(webhookDeliveries.id, id))
@@ -350,20 +354,38 @@ export const actions: Actions = {
 		// W9.4: replay the SAME row. The delivery id is the `webhook-id`, so
 		// receivers deduplicate a manual replay exactly like an automatic
 		// retry; a copied row would mint a new id and look like a new event.
-		const [row] = await db
-			.update(webhookDeliveries)
-			.set({
-				status: 'queued',
-				attemptCount: 0,
-				nextAttemptAt: new Date(),
-				responseCode: null,
-				error: null,
-				deliveredAt: null
-			})
-			.where(eq(webhookDeliveries.id, id))
-			.returning({ id: webhookDeliveries.id });
-		if (!row) return fail(404, { message: m.admin_settings_notification_err_not_found() });
-		return { retried: true, id: row.id };
+		// The status predicate makes the write idempotent under two admins
+		// (a drain commit between the read and this write cannot be undone).
+		const replayed = await db.transaction(async (tx) => {
+			const [row] = await tx
+				.update(webhookDeliveries)
+				.set({
+					status: 'queued',
+					attemptCount: 0,
+					nextAttemptAt: new Date(),
+					responseCode: null,
+					error: null,
+					deliveredAt: null
+				})
+				.where(and(eq(webhookDeliveries.id, id), eq(webhookDeliveries.status, 'failed')))
+				.returning({ id: webhookDeliveries.id, webhookId: webhookDeliveries.webhookId });
+			if (!row) return null;
+			// Admins (not just owners) may replay, so the actor must be recorded
+			// even though the replay writes no configuration.
+			await recordActivity(tx, {
+				event: 'webhook.replay',
+				actorId: locals.user?.id ?? null,
+				payload: {
+					webhookId: row.webhookId,
+					deliveryId: row.id,
+					previousAttempts: delivery.attemptCount
+				},
+				deliver: false
+			});
+			return row;
+		});
+		if (!replayed) return fail(400, { message: m.admin_settings_notification_err_not_failed() });
+		return { retried: true, id: replayed.id };
 	},
 
 	create: async ({ request, locals }) => {

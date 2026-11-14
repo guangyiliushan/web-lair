@@ -52,6 +52,7 @@ import { deleteUserJob } from '../src/lib/server/jobs/job-scripts';
 import { toggleSchedule } from '../src/lib/server/jobs/job-schedules';
 import { builtinModuleFile, jobLockKey } from '../src/lib/server/jobs/registry';
 import { signWebhookPayload } from '../src/lib/server/jobs/signature';
+import { WEBHOOK_MAX_ATTEMPTS } from '../src/lib/server/webhooks/retry';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ensureJobsScaffold } from '../src/lib/server/jobs/scaffold';
@@ -76,11 +77,9 @@ let checks = 0;
 let failures = 0;
 // Denominator guard (round-2 SYT-9): a silently skipped scenario/check must
 // turn the harness red instead of printing a green total. 168 = the real
-// checks (161 + 2 probe read-backs + 5 W9.4 retry checks); this self-check's
-// own increment makes the ALL summary print 169. The comparison reads the
-// counter at argument-evaluation time, i.e. before its own increment
-// (round-3 SY3-5: the summary now prints AFTER this check).
-const EXPECTED_CHECKS = 167;
+// checks (163 baseline + 5 net W9.4 retry/audit checks); this self-check's own
+// increment makes the ALL summary print 169.
+const EXPECTED_CHECKS = 168;
 
 function check(name: string, ok: boolean, detail = ''): void {
 	checks += 1;
@@ -793,6 +792,15 @@ async function webhookOutcomes(): Promise<void> {
 	);
 	const [endpoint] = await db.select().from(webhooks).where(eq(webhooks.id, goneId));
 	check('410 disables the endpoint (Standard Webhooks etiquette)', endpoint?.isEnabled === false);
+	const autoDisable = await db
+		.select({ id: activities.id })
+		.from(activities)
+		.where(eq(activities.event, 'webhook.auto_disable'));
+	check(
+		'410 writes a local webhook.auto_disable audit row',
+		autoDisable.length === 1,
+		`rows=${autoDisable.length}`
+	);
 	const disabled = await deliveryById(disabledDelivery);
 	check(
 		'disabled endpoint -> failed without a request',
@@ -834,16 +842,16 @@ async function webhookOutcomes(): Promise<void> {
 			.every((r) => r.headers['webhook-id'] === failDelivery)
 	);
 
-	// Exhaust the budget: attempt 6 is the last one and turns terminal.
+	// Exhaust the budget: the last attempt turns terminal.
 	await db
 		.update(webhookDeliveries)
-		.set({ attemptCount: 5, nextAttemptAt: new Date(Date.now() - 1000) })
+		.set({ attemptCount: WEBHOOK_MAX_ATTEMPTS - 1, nextAttemptAt: new Date(Date.now() - 1000) })
 		.where(eq(webhookDeliveries.id, failDelivery));
 	await runDrainOnce();
 	const exhausted = await deliveryById(failDelivery);
 	check(
-		'exhausted budget -> failed with attempt_count 6',
-		exhausted?.status === 'failed' && exhausted?.attemptCount === 6,
+		`exhausted budget -> failed with attempt_count ${WEBHOOK_MAX_ATTEMPTS}`,
+		exhausted?.status === 'failed' && exhausted?.attemptCount === WEBHOOK_MAX_ATTEMPTS,
 		`status=${exhausted?.status} attempt=${exhausted?.attemptCount}`
 	);
 	const afterExhaust = captured.filter((r) => r.path.startsWith('/fail500')).length;

@@ -1715,7 +1715,7 @@
 	"admin_settings_notification_recent_deliveries": "最近の配信（50 件）",
 	"admin_settings_notification_requeue": "再キュー",
 	"admin_settings_notification_requeued": "再キュー済み：同じ配信行が 1 tick 以内に再試行されます（配信 ID は変わりません）",
-	"admin_settings_notification_retry_scheduled": "再試行 {attempt}：{time}",
+	"admin_settings_notification_retry_scheduled": "試行 {attempt}：{time}",
 	"admin_settings_notification_rotate_secret": "シークレットをローテーション",
 	"admin_settings_notification_rotate_secret_confirm": "「{name}」の旧シークレットは直ちに無効になります。新しいシークレットを受信側にデプロイしてください。",
 	"admin_settings_notification_secret_rotated": "シークレットをローテーションしました。",

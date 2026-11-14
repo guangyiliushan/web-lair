@@ -83,3 +83,16 @@ export function maskEmailAddress(email: string): string {
 	if (!domain) return '[redacted]';
 	return `${local.slice(0, 1)}***@${domain}`;
 }
+
+/**
+ * SMTP/nodemailer errors routinely echo the recipient ("550 5.1.1
+ * <user@example.com>: ...") and server banners. Audit rows and flash text must
+ * not undo the masked `to` field, so every address-shaped token is redacted
+ * before the message is stored or shown.
+ */
+export function redactMailError(error: unknown): string {
+	const raw = error instanceof Error ? error.message || error.name : 'unknown error';
+	return raw
+		.replace(/[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g, '[redacted]')
+		.slice(0, 200);
+}

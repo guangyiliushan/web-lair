@@ -16,9 +16,14 @@
  * `webhook-id` header is therefore stable across retries and manual replays,
  * which is what lets receivers deduplicate.
  */
-export const WEBHOOK_MAX_ATTEMPTS = 6;
+/**
+ * Retry budget: the decision register (N5/T2b) asks for up to three days of
+ * exponential backoff. Fourteen attempts with a 12-hour cap cover that window
+ * (1m · 2m · … · 12h ≈ 65h) without keeping a poison row alive forever.
+ */
+export const WEBHOOK_MAX_ATTEMPTS = 14;
 export const WEBHOOK_BASE_DELAY_MS = 60_000;
-export const WEBHOOK_MAX_DELAY_MS = 6 * 60 * 60 * 1000;
+export const WEBHOOK_MAX_DELAY_MS = 12 * 60 * 60 * 1000;
 export const WEBHOOK_JITTER_RATIO = 0.2;
 
 export type WebhookResponseClass = 'success' | 'retryable' | 'permanent' | 'disable';

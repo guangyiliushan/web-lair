@@ -55,11 +55,10 @@ describe('webhook backoff (W9.4)', () => {
 		]);
 	});
 
-	it('caps the delay', () => {
-		const planned = planWebhookRetry(5, { random: noJitter });
-		expect(planned.delayMs).toBeLessThanOrEqual(WEBHOOK_MAX_DELAY_MS);
-		const capped = planWebhookRetry(5, { random: () => 1 });
-		expect(capped.delayMs).toBeLessThanOrEqual(WEBHOOK_MAX_DELAY_MS);
+	it('caps the delay once the exponent would exceed it', () => {
+		// 60s * 2^11 > 12h: attempt 12 is the first capped step.
+		expect(planWebhookRetry(12, { random: noJitter }).delayMs).toBe(WEBHOOK_MAX_DELAY_MS);
+		expect(planWebhookRetry(13, { random: () => 1 }).delayMs).toBe(WEBHOOK_MAX_DELAY_MS);
 	});
 
 	it('applies jitter within the configured band', () => {
