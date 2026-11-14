@@ -1,14 +1,18 @@
 import { expect, test } from '@playwright/test';
+import { apiPost, psql } from './support';
 
 /**
- * W3 foundation acceptance plus the W6 content rewrite: the 8-page IA, the two
- * permanent redirects, the deletion of the old system/search routes, and the
- * structural promise that the still-read-only pages ship zero controls (no
- * input/toggle/dead Save). Content is editable since W6, so it is audited for
- * the opposite: every section renders a real form whose buttons submit.
+ * W3 foundation acceptance, extended by W10.5: the 8-page IA, the two
+ * permanent redirects, the deletion of the old system/search routes, the
+ * structural promise that the still-read-only page ships zero controls, a
+ * dead-link walk over all eight pages, and the permission split that keeps
+ * owner-only sections read-only for a non-owner admin. Content is editable
+ * since W6, so it is audited for the opposite: every section renders a real
+ * form whose buttons submit.
  *
  * The loopback origin auto-authenticates as the site owner in the preview
- * (same seam as admin-ai/admin-webhooks), so no login fixture is needed.
+ * (same seam as admin-ai/admin-webhooks), so no login fixture is needed -
+ * except in the permission test, which signs in as a fixture admin.
  */
 test.describe.configure({ timeout: 120_000 });
 
@@ -119,4 +123,60 @@ test('system and search are gone (404)', async ({ page }) => {
 	expect(system?.status()).toBe(404);
 	const search = await page.goto('/admin/settings/search');
 	expect(search?.status()).toBe(404);
+});
+
+test('every internal link on the eight pages resolves (W10.5)', async ({ page, request }) => {
+	const targets = new Set<string>();
+	for (const [id] of PAGES) {
+		const response = await page.goto(`/admin/settings/${id}`);
+		expect(response?.status(), id).toBe(200);
+		const hrefs = await page
+			.locator('main a[href^="/"]')
+			.evaluateAll((links) => links.map((link) => link.getAttribute('href') ?? ''));
+		for (const href of hrefs) {
+			// Auth callbacks are POST-only; a GET probe would be a false negative.
+			if (!href || href.startsWith('/api/auth')) continue;
+			targets.add(href.split('#')[0]);
+		}
+	}
+	expect(targets.size).toBeGreaterThan(0);
+	for (const href of targets) {
+		const response = await request.get(href);
+		expect(response.status(), href).toBeLessThan(400);
+	}
+});
+
+test('a non-owner admin gets owner sections read-only (W10.5)', async ({ page }) => {
+	const email = 'e2e-settings-admin@example.com';
+	const password = 'e2e-settings-admin-password-1';
+	psql(`delete from "user" where email = '${email}'`);
+
+	const signUp = await apiPost(page, '/api/auth/sign-up/email', {
+		email,
+		name: 'E2E Settings Admin',
+		password
+	});
+	expect([200, 422]).toContain(signUp.status());
+	psql(`update "user" set email_verified = true, role = 'admin' where email = '${email}'`);
+	const signIn = await apiPost(page, '/api/auth/sign-in/email', { email, password });
+	expect(signIn.ok()).toBeTruthy();
+
+	try {
+		// Profile and Storage are owner control planes: an admin sees the same
+		// facts, a read-only badge and no writable control at all.
+		for (const id of ['profile', 'storage']) {
+			const response = await page.goto(`/admin/settings/${id}`);
+			expect(response?.status(), id).toBe(200);
+			await expect(page.getByText('Read-only', { exact: true }).first()).toBeVisible();
+			await expect(page.locator('main input, main textarea, main select')).toHaveCount(0);
+			await expect(
+				page.locator('main').getByRole('button', { name: 'Save', exact: true })
+			).toHaveCount(0);
+		}
+		// Integrations is read-only for everyone, including the owner.
+		await page.goto('/admin/settings/integrations');
+		await expect(page.locator('main').locator('input, select, button')).toHaveCount(0);
+	} finally {
+		psql(`delete from "user" where email = '${email}'`);
+	}
 });
