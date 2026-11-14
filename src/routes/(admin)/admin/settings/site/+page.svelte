@@ -2,13 +2,73 @@
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Input } from '$lib/components/ui/input';
 	import {
+		SettingsForm,
+		SettingsProviderStatus,
 		SettingsStatusList,
-		SettingsStatusRow,
-		SettingsProviderStatus
+		SettingsStatusRow
 	} from '$lib/components/admin/settings';
 
-	let { data }: PageProps = $props();
+	let { data, form }: PageProps = $props();
+
+	type SiteOp = 'info' | 'icon' | 'timezone' | 'languages';
+	type SiteActionForm = { op?: SiteOp; message?: string; error?: boolean } | null;
+	const actionForm = $derived(form as SiteActionForm);
+	const messageFor = (op: SiteOp) => (actionForm?.op === op ? (actionForm.message ?? null) : null);
+	const errorFor = (op: SiteOp) => actionForm?.op === op && actionForm.error === true;
+
+	// --- Site identity (name / description / avatar) ---
+	let name = $state<string | null>(null);
+	let description = $state<string | null>(null);
+	let avatar = $state<string | null>(null);
+	const currentName = $derived(name ?? data.info.name);
+	const currentDescription = $derived(description ?? data.info.description);
+	const currentAvatar = $derived(avatar ?? data.info.avatar);
+	const infoDirty = $derived(
+		currentName !== data.info.name ||
+			currentDescription !== data.info.description ||
+			currentAvatar !== data.info.avatar
+	);
+	function resetInfo() {
+		name = null;
+		description = null;
+		avatar = null;
+	}
+
+	// --- Favicon ---
+	let iconUrl = $state<string | null>(null);
+	const currentIconUrl = $derived(iconUrl ?? data.icon.url);
+	const iconDirty = $derived(currentIconUrl !== data.icon.url);
+
+	// --- Time zone ---
+	let tz = $state<string | null>(null);
+	const currentTz = $derived(tz ?? data.timezone);
+	const tzDirty = $derived(currentTz !== data.timezone);
+	// Suggestions only; the server validates against Intl + pg_timezone_names.
+	const TZ_SUGGESTIONS = [
+		'UTC',
+		'Asia/Taipei',
+		'Asia/Shanghai',
+		'Asia/Tokyo',
+		'Asia/Singapore',
+		'Europe/London',
+		'Europe/Berlin',
+		'America/New_York',
+		'America/Los_Angeles',
+		'Australia/Sydney'
+	];
+
+	// A successful action returns the reloaded data; drop the local edits so
+	// the form reflects the stored value (and is clean again). Failed actions
+	// keep the user's input.
+	$effect(() => {
+		const payload = actionForm;
+		if (!payload || payload.error) return;
+		if (payload.op === 'info') resetInfo();
+		if (payload.op === 'icon') iconUrl = null;
+		if (payload.op === 'timezone') tz = null;
+	});
 </script>
 
 <svelte:head>
@@ -16,29 +76,137 @@
 </svelte:head>
 
 <div class="space-y-8">
-	<div class="flex flex-wrap items-center gap-2">
-		<Badge variant="secondary">{m.admin_settings_common_read_only()}</Badge>
-	</div>
+	<!-- Site identity · S1/S4/S5 -->
+	<SettingsForm
+		action="?/saveInfo"
+		dirty={infoDirty}
+		message={messageFor('info')}
+		error={errorFor('info')}
+		onCancel={resetInfo}
+	>
+		<fieldset class="space-y-4" disabled={!data.canEditInfo}>
+			<legend class="text-sm font-medium">{m.admin_settings_site_identity()}</legend>
+			<div class="space-y-1.5">
+				<label for="site-name" class="text-sm">{m.admin_settings_site_name()}</label>
+				<Input
+					id="site-name"
+					name="name"
+					required
+					maxlength={80}
+					value={currentName}
+					oninput={(event) => (name = event.currentTarget.value)}
+				/>
+				<p class="text-xs text-muted-foreground">{m.admin_settings_site_name_hint()}</p>
+			</div>
+			<div class="space-y-1.5">
+				<label for="site-description" class="text-sm"
+					>{m.admin_settings_site_field_description()}</label
+				>
+				<Input
+					id="site-description"
+					name="description"
+					maxlength={300}
+					value={currentDescription}
+					oninput={(event) => (description = event.currentTarget.value)}
+				/>
+				<p class="text-xs text-muted-foreground">
+					{m.admin_settings_site_description_hint()}
+				</p>
+			</div>
+			<div class="space-y-1.5">
+				<label for="site-avatar" class="text-sm">{m.admin_settings_site_avatar()}</label>
+				<Input
+					id="site-avatar"
+					name="avatar"
+					type="url"
+					placeholder="https://…"
+					value={currentAvatar}
+					oninput={(event) => (avatar = event.currentTarget.value)}
+				/>
+				<p class="text-xs text-muted-foreground">{m.admin_settings_site_avatar_hint()}</p>
+			</div>
+		</fieldset>
+	</SettingsForm>
 
-	<SettingsStatusList title={m.admin_settings_site_identity()}>
-		<SettingsStatusRow label={m.admin_settings_site_field_title()} value={data.info.name} />
-		<SettingsStatusRow
-			label={m.admin_settings_site_field_description()}
-			value={data.info.description}
-		/>
-		<SettingsStatusRow label={m.admin_settings_user_avatar()} value={data.info.avatar} />
-	</SettingsStatusList>
+	<!-- Favicon · S3 -->
+	<SettingsForm
+		action="?/saveIcon"
+		dirty={iconDirty}
+		message={messageFor('icon')}
+		error={errorFor('icon')}
+		onCancel={() => (iconUrl = null)}
+	>
+		<fieldset class="space-y-4" disabled={!data.canEditIcon}>
+			<legend class="text-sm font-medium">{m.admin_settings_site_icon()}</legend>
+			<div class="space-y-1.5">
+				<label for="site-icon" class="text-sm">{m.admin_settings_site_icon()}</label>
+				<Input
+					id="site-icon"
+					name="url"
+					placeholder="https://… or /i/…"
+					value={currentIconUrl}
+					oninput={(event) => (iconUrl = event.currentTarget.value)}
+				/>
+				<p class="text-xs text-muted-foreground">{m.admin_settings_site_icon_hint()}</p>
+			</div>
+			<dl class="flex items-center justify-between gap-4 text-sm">
+				<dt class="text-muted-foreground">{m.admin_settings_site_icon_version()}</dt>
+				<dd class="tabular-nums">{data.icon.version}</dd>
+			</dl>
+		</fieldset>
+	</SettingsForm>
 
-	<SettingsStatusList title={m.admin_settings_site_languages()}>
+	<!-- Languages (owner-only write lands in W5.4; values are real today) -->
+	<SettingsStatusList
+		title={m.admin_settings_site_languages()}
+		description={m.admin_settings_site_languages_hint()}
+	>
 		<SettingsStatusRow
 			label={m.admin_settings_site_languages()}
 			value={data.languages.enabled.join(', ')}
 		/>
-		<SettingsStatusRow label={m.admin_settings_site_default_lang()} value={data.defaultLang} />
-		<SettingsStatusRow label={m.admin_settings_site_timezone()} value={data.timezone} />
+		<SettingsStatusRow
+			label={m.admin_settings_site_default_lang()}
+			value={data.defaultLang}
+			hint={m.admin_settings_site_default_lang_hint()}
+		/>
 	</SettingsStatusList>
 
-	<SettingsStatusList title={m.admin_settings_site_deployment()}>
+	<!-- Time zone -->
+	<SettingsForm
+		action="?/saveTimezone"
+		dirty={tzDirty}
+		message={messageFor('timezone')}
+		error={errorFor('timezone')}
+		onCancel={() => (tz = null)}
+	>
+		<fieldset class="space-y-4" disabled={!data.canEditTimezone}>
+			<legend class="text-sm font-medium">{m.admin_settings_site_timezone()}</legend>
+			<div class="space-y-1.5">
+				<label for="site-timezone" class="text-sm">{m.admin_settings_site_timezone()}</label>
+				<Input
+					id="site-timezone"
+					name="tz"
+					list="site-timezone-suggestions"
+					required
+					value={currentTz}
+					oninput={(event) => (tz = event.currentTarget.value)}
+				/>
+				<datalist id="site-timezone-suggestions">
+					{#each TZ_SUGGESTIONS as suggestion (suggestion)}
+						<option value={suggestion}></option>
+					{/each}
+				</datalist>
+				<p class="text-xs text-muted-foreground">{m.admin_settings_site_timezone_hint()}</p>
+			</div>
+		</fieldset>
+	</SettingsForm>
+
+	<!-- Deployment · read-only (S2/S8): no URL editor, no TLS/ACME controls -->
+	<SettingsStatusList
+		title={m.admin_settings_site_deployment()}
+		description={m.admin_settings_site_deployment_hint()}
+	>
 		<SettingsStatusRow
 			label={m.admin_settings_site_origin()}
 			value={data.deployment.origin ?? '—'}
@@ -54,6 +222,7 @@
 		<SettingsStatusRow label={m.admin_settings_site_version()} value={data.deployment.version} />
 	</SettingsStatusList>
 
+	<!-- Search indexing · read-only (SE1-SE4); real routes only -->
 	<SettingsStatusList title={m.admin_settings_site_search_indexing()}>
 		<SettingsStatusRow
 			label={m.admin_settings_site_sitemap()}
