@@ -89,8 +89,7 @@ const validFields = {
 beforeEach(() => {
 	optionState['friends.apply'] = {
 		enabled: true,
-		allowSubPath: false,
-		internalizeAvatars: false
+		allowSubPath: false
 	};
 	optionState['friends.policy'] = {
 		blockedHostSuffixes: [],

@@ -29,6 +29,8 @@
 		onCancel?: () => void;
 		/** Extra hidden fields (segment-anchor payload, comment P3b). */
 		hiddenValues?: Record<string, string>;
+		/** Offer the public-country opt-in (W6.2; root composer only). */
+		showCountryOptIn?: boolean;
 	}
 
 	let {
@@ -41,7 +43,8 @@
 		compact = false,
 		autofocus = false,
 		onCancel,
-		hiddenValues = {}
+		hiddenValues = {},
+		showCountryOptIn = false
 	}: Props = $props();
 	let submitting = $state(false);
 	let errorMessage = $state<string | null>(null);
@@ -101,6 +104,14 @@
 	/>
 	{#if hint}
 		<p class="text-xs text-muted-foreground">{hint}</p>
+	{/if}
+	{#if showCountryOptIn}
+		<!-- W6.2/C3: public country display is a per-comment opt-in, never
+		     pre-checked (GDPR Art 13 informed consent shape). -->
+		<label class="flex items-center gap-2 text-xs text-muted-foreground">
+			<input type="checkbox" name="showCountry" class="size-3.5 accent-primary" />
+			<span>{m.comment_show_country()}</span>
+		</label>
 	{/if}
 	{#if errorMessage}
 		<p class="text-xs text-destructive" role="alert">{errorMessage}</p>

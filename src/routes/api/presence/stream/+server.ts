@@ -2,6 +2,10 @@ import type { RequestHandler } from './$types';
 import { getOption } from '$lib/server/config/options-registry';
 import { effectiveReaderDots } from '$lib/server/services/presence';
 import { isUuid } from '$lib/utils/uuid';
+import { getCache } from '$lib/server/cache';
+import { rateLimit } from '$lib/server/cache/store';
+import { requestAddress } from '$lib/server/security/request-address';
+import { clientAddressKey } from '$lib/utils/cidr';
 import { PRESENCE_KEEPALIVE_TICKS, PRESENCE_SNAPSHOT_MS, snapshotFor } from './snapshot';
 
 /**
@@ -35,7 +39,10 @@ export const prerender = false;
 export const HEAD: RequestHandler = () =>
 	new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
 
-export const GET: RequestHandler = async ({ url, request, locals }) => {
+/** Pre-stream connect budget (W6.10): 30 streams/min per IPv6-/64 address. */
+const PRESENCE_CONNECT_RATE_LIMIT = { limit: 30, windowSeconds: 60 } as const;
+
+export const GET: RequestHandler = async ({ url, request, locals, getClientAddress }) => {
 	let enabled = true;
 	try {
 		enabled = await getOption('presence.enabled');
@@ -43,6 +50,31 @@ export const GET: RequestHandler = async ({ url, request, locals }) => {
 		// fail-open: an options read failure must not kill the stream
 	}
 	if (!enabled) return new Response(null, { status: 204 });
+
+	// A stream is an expensive long-lived connection: bound the reconnect
+	// rate per address. Delivery stays fail-open (presence is not a security
+	// control); an aggressive client gets 429 + X-Retry-After. A malformed
+	// VALKEY_URL must not kill the stream, so construction failures are
+	// swallowed like any other cache outage.
+	const address = clientAddressKey(requestAddress(getClientAddress));
+	let connectAllowed = true;
+	try {
+		const connectRate = await rateLimit(
+			getCache(),
+			`limits:presence-connect:${address}`,
+			PRESENCE_CONNECT_RATE_LIMIT.limit,
+			PRESENCE_CONNECT_RATE_LIMIT.windowSeconds
+		);
+		connectAllowed = connectRate.allowed;
+	} catch {
+		// fail-open: a dead cache never blocks a reader's stream
+	}
+	if (!connectAllowed) {
+		return new Response(null, {
+			status: 429,
+			headers: { 'x-retry-after': String(PRESENCE_CONNECT_RATE_LIMIT.windowSeconds) }
+		});
+	}
 
 	const candidate = url.searchParams.get('c');
 	if (candidate !== null && !isUuid(candidate)) return new Response(null, { status: 400 });

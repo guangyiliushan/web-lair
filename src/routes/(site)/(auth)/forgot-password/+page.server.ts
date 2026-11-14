@@ -4,8 +4,9 @@ import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
 import { m } from '$lib/paraglide/messages';
 import { getCache } from '$lib/server/cache';
-import { rateLimit } from '$lib/server/cache/store';
+import { rateLimitStrict } from '$lib/server/cache/store';
 import { requestAddress } from '$lib/server/security/request-address';
+import { clientAddressKey } from '$lib/utils/cidr';
 import { isMailDeliveryAvailable, isMailDeliveryAvailableLive } from '$lib/server/mail/transport';
 import { sanitizeErrorText } from '$lib/server/jobs/error-text';
 
@@ -35,9 +36,15 @@ export const load: PageServerLoad = () => {
 
 export const actions: Actions = {
 	sendReset: async (event) => {
-		const address = requestAddress(event.getClientAddress);
-		const rate = await rateLimit(getCache(), `limits:password-reset:${address}`, 5, 60 * 60);
-		if (!rate.allowed) return fail(429, { message: m.auth_forgot_err_rate() });
+		// W6.10: fail-closed per-IP bucket (IPv6 aggregated on /64).
+		const address = clientAddressKey(requestAddress(event.getClientAddress));
+		const rate = await rateLimitStrict(getCache(), `limits:password-reset:${address}`, 5, 60 * 60);
+		if (!rate.allowed) {
+			event.setHeaders({ 'retry-after': '3600' });
+			return fail(rate.unavailable ? 503 : 429, {
+				message: rate.unavailable ? m.auth_err_unavailable() : m.auth_forgot_err_rate()
+			});
+		}
 
 		const formData = await event.request.formData();
 		const email = formData.get('email')?.toString().trim() ?? '';

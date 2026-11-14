@@ -8,6 +8,8 @@ import { requireUser } from '$lib/server/authz';
 import { getCache } from '$lib/server/cache';
 import { rateLimit } from '$lib/server/cache/store';
 import { getOption } from '$lib/server/config/options-registry';
+import { requestIp } from '$lib/server/security/request-address';
+import { geoFromHeaders } from '$lib/server/security/geoip';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { submitComment } from '$lib/server/services/comments';
 import {
@@ -141,27 +143,35 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 		.map((sibling) => ({ lang: sibling.lang, path: `/notes/${sibling.slug}` }));
 
 	// Viewer state for the comment section: guests get a login link with a
-	// return path; gated rows only render the section after an unlock.
+	// return path; gated rows only render the section after an unlock. The
+	// site-wide switch narrows the per-note row (W6.1 / C1); existing approved
+	// rows stay readable when either switch is off.
 	const user = locals.user;
 	const emailVerified = Boolean(user?.emailVerified);
 	const open = !note.locked || unlocked;
-	const canComment = Boolean(user) && emailVerified && note.allowComment && open;
+	const commentsEnabled = await getOption('comments.enabled');
+	const privacy = await getOption('comments.privacy');
+	const showCountry = privacy.enabled && privacy.collectCountry && privacy.showCountry;
+	const commentsOpen = commentsEnabled && note.allowComment && open;
+	const canComment = Boolean(user) && emailVerified && commentsOpen;
 	const loginUrl = user
 		? null
 		: `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
 
 	// Open threads own the render: block directory + segment marks are derived
-	// from the same tree the reader gets (comment P3b). A locked diary renders
-	// no body at all, so the plain renderer path stays empty.
-	const rendered =
-		note.allowComment && open
-			? await renderDiscussion({
-					markdown: body,
-					targetType: 'note',
-					targetId: note.id,
-					viewerId: user?.id ?? null
-				})
-			: null;
+	// from the same tree the reader gets (comment P3b). A closed-but-unlocked
+	// thread still renders so approved comments survive the switch (C1). A
+	// locked diary renders no body at all, so the plain renderer path stays
+	// empty.
+	const rendered = open
+		? await renderDiscussion({
+				markdown: body,
+				targetType: 'note',
+				targetId: note.id,
+				viewerId: user?.id ?? null,
+				showCountry
+			})
+		: null;
 	const html = rendered ? rendered.html : body ? await renderMarkdownToHtml(body) : '';
 
 	return {
@@ -181,8 +191,18 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 		},
 		html,
 		gate: { locked: note.locked, unlocked },
-		viewer: { emailVerified, canComment, loginUrl },
-		discussion: rendered?.discussion ?? null
+		viewer: {
+			emailVerified,
+			canComment,
+			loginUrl,
+			privacyNotice: true,
+			commentsClosed: !commentsOpen,
+			countryOptIn: showCountry
+		},
+		discussion:
+			rendered && (commentsOpen || rendered.discussion.visibleCount > 0)
+				? rendered.discussion
+				: null
 	};
 };
 
@@ -320,10 +340,13 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 		user,
 		author: profile?.displayName ?? user.name ?? 'Reader',
 		avatar: profile?.avatarUrl ?? user.image ?? null,
+		ip: requestIp(event.getClientAddress),
+		geo: geoFromHeaders(event.request.headers),
+		showCountry: form.get('showCountry') !== null,
 		now
 	});
 
-	return commentSubmitResponse(result);
+	return commentSubmitResponse(result, event);
 }
 
 export const actions = {

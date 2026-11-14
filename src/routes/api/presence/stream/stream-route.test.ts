@@ -209,6 +209,18 @@ describe('presence stream route', () => {
 		ac.abort();
 	});
 
+	it('answers 429 + X-Retry-After when one address opens too many streams (W6.10)', async () => {
+		const store = state.store as MemoryCacheStore;
+		for (let i = 0; i < 30; i += 1) {
+			await store.incr('limits:presence-connect:unknown', 60);
+		}
+		const ac = new AbortController();
+		const response = await requestStream({ c: CONTENT, signal: ac.signal });
+		expect(response.status).toBe(429);
+		expect(response.headers.get('x-retry-after')).toBe('60');
+		ac.abort();
+	});
+
 	it('degrades to null fields with a 200 when the cache is down', async () => {
 		const boom = async (): Promise<never> => {
 			throw new Error('cache down');

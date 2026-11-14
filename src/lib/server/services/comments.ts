@@ -6,7 +6,10 @@ import { pgErrorCode } from '$lib/server/db/pg-error';
 import { isAdminRole } from '$lib/server/auth/owner';
 import { evaluateCommentModeration, recordModerationEvents } from './comment-moderation';
 import { getCache } from '$lib/server/cache';
-import { rateLimit, type CacheStore } from '$lib/server/cache/store';
+import { rateLimit, rateLimitStrict, type CacheStore } from '$lib/server/cache/store';
+import { getOption } from '$lib/server/config/options-registry';
+import { normalizeCountry, normalizeRegion } from '$lib/server/security/geoip';
+import { clientAddressKey, ipMatchesCidrs } from '$lib/utils/cidr';
 import { locales } from '$lib/paraglide/runtime';
 import { isUuid } from '$lib/utils/uuid';
 import {
@@ -56,6 +59,15 @@ export const THREAD_REPLY_LIMIT = 500;
 
 /** Per-reader submission window (spec §1: 60s <= 2; grill Q1/Q2). */
 export const COMMENT_RATE_LIMIT = { limit: 2, windowSeconds: 60 } as const;
+
+/**
+ * Per-IP submission window (W6.10 / register 3B.1): the per-reader window
+ * cannot stop one client cycling accounts. Fail-CLOSED (a dead cache answers
+ * 503) and keyed on the /64 for IPv6; this is request-time only - the raw
+ * address is never stored. 30/10min stays well above a busy shared household
+ * while still bounding a flood.
+ */
+export const COMMENT_IP_RATE_LIMIT = { limit: 30, windowSeconds: 10 * 60 } as const;
 
 /**
  * Segment-anchor validation budget (2026-10-17 grill G1). Anchor submissions
@@ -114,7 +126,12 @@ const commentColumns = {
 	// boolean `isMine` so the client never receives reader ids (P4).
 	readerId: comments.readerId,
 	// Stored segment anchor (P3b): resolved in the assembly, never serialized raw.
-	anchor: comments.anchor
+	anchor: comments.anchor,
+	// W6.2: privacy fields surface only through the `showCountry` opt-in gate.
+	// `region_code` is written for retention/audit only; the view model carries
+	// the country label, so it is not selected on every thread read.
+	countryCode: comments.countryCode,
+	meta: comments.meta
 };
 
 export interface CommentRow {
@@ -133,6 +150,9 @@ export interface CommentRow {
 	readerId: string | null;
 	/** Stored jsonb anchor; `unknown` on purpose (Zod decides, not the row type). */
 	anchor?: unknown;
+	/** W6.2 privacy snapshot (never rendered without the per-comment opt-in). */
+	countryCode?: string | null;
+	meta?: Record<string, unknown> | null;
 }
 
 /**
@@ -160,6 +180,8 @@ export interface LoadThreadsInput {
 	targetId: string;
 	/** Signed-in reader id; null for guests. */
 	viewerId: string | null;
+	/** Offer the per-comment country label (W6.2); default off. */
+	showCountry?: boolean;
 }
 
 /**
@@ -175,7 +197,8 @@ export async function loadThreads(input: LoadThreadsInput): Promise<ThreadsPage>
 	const rows = await fetchThreadRows(input);
 	return assembleDiscussion(rows.rootRows, rows.replyRows, {
 		truncated: rows.truncated,
-		viewerId: input.viewerId
+		viewerId: input.viewerId,
+		showCountry: input.showCountry
 	}).threads;
 }
 
@@ -196,7 +219,8 @@ export async function loadDiscussion(input: LoadDiscussionInput): Promise<Discus
 	return assembleDiscussion(rows.rootRows, rows.replyRows, {
 		truncated: rows.truncated,
 		viewerId: input.viewerId,
-		blocks: input.blocks
+		blocks: input.blocks,
+		showCountry: input.showCountry
 	});
 }
 
@@ -242,6 +266,11 @@ export interface AssemblyOptions {
 	viewerId?: string | null;
 	/** When present, segment anchors are resolved and marks are produced. */
 	blocks?: AnchorBlock[];
+	/**
+	 * Render the per-comment country label (W6.2). The row must ALSO carry the
+	 * commenter's own opt-in in `meta.showCountry`; region/city never render.
+	 */
+	showCountry?: boolean;
 }
 
 export interface DiscussionRead {
@@ -278,6 +307,10 @@ export function assembleDiscussion(
 ): DiscussionRead {
 	const viewerId = options.viewerId ?? null;
 	const isMine = (row: CommentRow) => viewerId !== null && row.readerId === viewerId;
+	// Country is a two-key decision (W6.2): the site must opt in AND the
+	// commenter must have opted in on their own row. Region/city never render.
+	const publicCountry = (row: CommentRow): string | null =>
+		options.showCountry && row.meta?.showCountry === true ? (row.countryCode ?? null) : null;
 	const repliesByRoot = new Map<string, CommentRow[]>();
 	for (const row of replyRows) {
 		// A deleted reply leaves no trace; replies without a root pointer are
@@ -360,6 +393,7 @@ export function assembleDiscussion(
 			createdAt: row.createdAt,
 			pin: row.pin,
 			isDeleted: row.isDeleted,
+			country: row.isDeleted ? null : publicCountry(row),
 			anchor: row.isDeleted ? null : anchor.view,
 			replies
 		};
@@ -492,6 +526,15 @@ export interface SubmitCommentInput {
 	user: { id: string; role?: unknown; emailVerified?: boolean };
 	author: string;
 	avatar: string | null;
+	/**
+	 * Request address (W6.2 / W6.10). Used in-request only: CIDR block,
+	 * per-IP bucket, optional GeoIP handoff. NEVER written to the row.
+	 */
+	ip?: string | null;
+	/** Edge GeoIP hints; consulted only with comments.privacy.collectCountry. */
+	geo?: { country: string | null; region: string | null } | null;
+	/** Commenter's own opt-in for the public country label (W6.2 / C3). */
+	showCountry?: boolean;
 	/** Test seam: cache store override (defaults to the process-wide store). */
 	cache?: CacheStore;
 	/** Test seam: clock. */
@@ -501,7 +544,13 @@ export interface SubmitCommentInput {
 export type SubmitCommentResult =
 	| { kind: 'created'; id: string; state: 'pending' | 'approved' | 'rejected' }
 	| { kind: 'throttled'; windowSeconds: number }
+	/** The strict limiter store is down: answer 503, never fail open (W6.10). */
+	| { kind: 'unavailable' }
 	| { kind: 'unverified' }
+	/** Site-wide `comments.enabled` is off (W6.1): new comments are closed. */
+	| { kind: 'disabled' }
+	/** The request address matched a configured blocked CIDR (W6.2). */
+	| { kind: 'blocked' }
 	| { kind: 'empty' }
 	| { kind: 'too-long'; max: number }
 	| { kind: 'target-unavailable' }
@@ -516,6 +565,35 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	// service is the authoritative layer every future mount will call - it
 	// fails closed when the caller forgets the gate.
 	if (input.user.emailVerified !== true) return { kind: 'unverified' };
+
+	// W6.1 (C1): the site-wide switch gates NEW comments only - edit/delete of
+	// existing rows stay live, and the read path keeps rendering approved rows.
+	// A missing/corrupt option row yields the registry default (true) so a bad
+	// settings row can never silently close every thread.
+	if (!(await getOption('comments.enabled'))) return { kind: 'disabled' };
+
+	// W6.2 (C2/C4): request-time IP policy. Blocked CIDRs are matched before
+	// any target lookup; the address is not recorded anywhere. Privacy off =
+	// no CIDR matching and no GeoIP at all, by construction.
+	const privacy = await getOption('comments.privacy');
+	if (privacy.enabled && input.ip && ipMatchesCidrs(input.ip, privacy.blockedCidrs)) {
+		return { kind: 'blocked' };
+	}
+
+	// W6.10: per-IP strict bucket, independent of the privacy switch (an IP is
+	// needed for the limit, not stored). Fail-closed on a dead cache; IPv6 is
+	// aggregated on the /64 so a rotating client cannot multiply its budget.
+	const addressGuard = await rateLimitStrict(
+		input.cache ?? getCache(),
+		`limits:comment-ip:${clientAddressKey(input.ip ?? '')}`,
+		COMMENT_IP_RATE_LIMIT.limit,
+		COMMENT_IP_RATE_LIMIT.windowSeconds
+	);
+	if (!addressGuard.allowed) {
+		return addressGuard.unavailable
+			? { kind: 'unavailable' }
+			: { kind: 'throttled', windowSeconds: COMMENT_IP_RATE_LIMIT.windowSeconds };
+	}
 
 	const text = normalizeCommentText(input.text);
 	const length = [...text].length;
@@ -704,6 +782,15 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		autoApprove
 	});
 	const state = autoApprove ? 'approved' : (moderation?.state ?? 'pending');
+	// W6.2: country/region are stored only with the privacy switch and the
+	// collectCountry sub-switch; the public label additionally needs the site's
+	// showCountry and the commenter's own opt-in. The raw IP/agent/location
+	// columns stay null - they are never written by this path.
+	const collectGeo = !parentCommentId && privacy.enabled && privacy.collectCountry;
+	const countryCode = collectGeo ? normalizeCountry(input.geo?.country) : null;
+	const regionCode = collectGeo ? normalizeRegion(input.geo?.region) : null;
+	const privacyMeta =
+		countryCode && privacy.showCountry && input.showCountry ? { showCountry: true } : null;
 	try {
 		const [created] = await db
 			.insert(comments)
@@ -718,6 +805,9 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 				parentCommentId,
 				rootCommentId,
 				anchor: anchorValue,
+				countryCode,
+				regionCode,
+				meta: privacyMeta,
 				reviewedBy: autoApprove ? input.user.id : null,
 				// reviewed_at/by are human-decision columns: machine rule outcomes keep
 				// them null so the audit trail cannot read as a human review.
@@ -943,7 +1033,17 @@ export async function deleteComment(input: DeleteCommentInput): Promise<DeleteCo
 
 	const updated = await db
 		.update(comments)
-		.set({ isDeleted: true, deletedAt: now, pin: false })
+		.set({
+			isDeleted: true,
+			deletedAt: now,
+			pin: false,
+			// W6.2 erasure: a retracted comment keeps no location snapshot and
+			// no country opt-in flag (the approved floor placeholder never
+			// renders them either, but the row itself is minimised).
+			countryCode: null,
+			regionCode: null,
+			meta: null
+		})
 		.where(
 			and(
 				eq(comments.id, input.commentId),

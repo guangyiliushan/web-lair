@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * W3 foundation acceptance: the 8-page IA, the two permanent redirects and
- * the deletion of the old system/search routes, plus the structural promise
- * that read-only pages ship zero controls (no input/toggle/dead Save).
+ * W3 foundation acceptance plus the W6 content rewrite: the 8-page IA, the two
+ * permanent redirects, the deletion of the old system/search routes, and the
+ * structural promise that the still-read-only pages ship zero controls (no
+ * input/toggle/dead Save). Content is editable since W6, so it is audited for
+ * the opposite: every section renders a real form whose buttons submit.
  *
  * The loopback origin auto-authenticates as the site owner in the preview
  * (same seam as admin-ai/admin-webhooks), so no login fixture is needed.
@@ -42,15 +44,35 @@ test('all eight pages answer 200 with their section heading', async ({ page }) =
 });
 
 test('planned/read-only pages render zero form controls', async ({ page }) => {
-	// W4 (Profile) and W5 (Site) now ship real forms; content/storage/integrations
-	// stay read-only until their own waves land (W6/W7/W10).
-	for (const id of ['content', 'storage', 'integrations']) {
+	// W4 (Profile), W5 (Site) and W6 (Content) now ship real forms; storage/integrations
+	// stay read-only until their own waves land (W7/W10).
+	for (const id of ['storage', 'integrations']) {
 		const response = await page.goto(`/admin/settings/${id}`);
 		expect(response?.status(), id).toBe(200);
 		await expect(
 			page.locator('main').locator('input, textarea, select, button').filter({ visible: true })
 		).toHaveCount(0);
 	}
+});
+
+test('content renders the real W6 forms and no dead control', async ({ page }) => {
+	await page.goto('/admin/settings/content');
+	// Seven real forms: comments, comment privacy, friends apply, friends
+	// checks, friends policy, reading presence, notes gate.
+	const forms = page.locator('main form');
+	await expect(forms).toHaveCount(7);
+	// Every form has a real submit button (the bits-ui Switch is a button
+	// without an explicit type attribute, so assert per form, not globally).
+	for (const form of await forms.all()) {
+		expect(await form.locator('button[type="submit"]').count()).toBeGreaterThan(0);
+	}
+	// The removed pseudo controls never come back (case-insensitive: the old
+	// labels were sentence-case and the section copy changed in W6).
+	await expect(
+		page.getByText(
+			/anti-spam|blocked ips|blocked words|chinese only|disable comments|approved comments only|ai review|localize avatars/i
+		)
+	).toHaveCount(0);
 });
 
 test('the old user/notification routes permanently redirect', async ({ page }) => {

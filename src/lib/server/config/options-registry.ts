@@ -4,6 +4,7 @@ import { options } from '../db/config/index.ts';
 import { AI_FUNCTIONS } from '../../utils/ai-meta.ts';
 import { PROJECT_SYNC_PROVIDERS } from '../../utils/project-meta.ts';
 import { isValidIanaTimeZone } from '../../utils/timezone.ts';
+import { isValidCidr } from '../../utils/cidr.ts';
 import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '../pg-timezone.ts';
 import { m } from '../../paraglide/messages.js';
 import { OWNER_STATUS_DEFAULT, OWNER_STATUS_KINDS } from '../../config/owner-status.ts';
@@ -106,7 +107,13 @@ export const optionRegistry = {
 		// cookie (token crypto lives in services/note-gate.ts). Days only.
 		// The editor never writes this yet - TTL currently changes only
 		// through code or a deliberate `setOption` (no runtime writer).
-		schema: z.object({ ttlDays: z.number().int().min(1).max(365) }),
+		schema: z.object({
+			ttlDays: z
+				.number({ error: () => m.admin_settings_content_notes_ttl_hint() })
+				.int({ error: () => m.admin_settings_content_notes_ttl_hint() })
+				.min(1, { error: () => m.admin_settings_content_notes_ttl_hint() })
+				.max(365, { error: () => m.admin_settings_content_notes_ttl_hint() })
+		}),
 		default: { ttlDays: 30 }
 	},
 	'ai.assignments': {
@@ -215,6 +222,50 @@ export const optionRegistry = {
 		// 9309 §1), never access control.
 		default: { answerEngine: true, training: true }
 	},
+	'comments.enabled': {
+		// W6.1 (C1): site-wide switch for NEW comments. Set false and the form
+		// disappears and every submit path rejects; existing approved rows stay
+		// visible (hiding them would be a separate `comments.visible`). A post
+		// / note `allow_comment` can only narrow this, never widen it.
+		schema: z.boolean(),
+		default: true
+	},
+	'payments.enabled': {
+		// W6.8 (C6): contract-only flag, deliberately without a consumer.
+		// Paid/member content is NOT implemented in M4: no table, no route, no
+		// settings UI reads or writes this key, and paid/member access modes do
+		// not exist. It is registered so the default is explicit and testable;
+		// flipping it on changes nothing until the trigger in the decision
+		// register §3C.4 (provider + tax/terms/refunds + entitlement model +
+		// SEO/leak-surface tests) opens a future schema window.
+		schema: z.boolean(),
+		default: false
+	},
+	'comments.privacy': {
+		// W6.2 (C2/C4/C5): request-time IP handling for comments. Off by
+		// default; when off no GeoIP lookup, no CIDR match and no country storage
+		// happen (the per-IP rate bucket in W6.10 still runs). When
+		// on, the IP is matched against blockedCidrs and used for the per-IP
+		// limit only - the `comments.ip` column stays null. Country/region are
+		// stored only with collectCountry (edge header provider required) and
+		// cleared by the retention job after retentionDays.
+		schema: z.object({
+			enabled: z.boolean(),
+			collectCountry: z.boolean(),
+			showCountry: z.boolean(),
+			retentionDays: z.number().int().min(1).max(3650),
+			blockedCidrs: z
+				.array(z.string().refine(isValidCidr, { error: () => m.admin_option_err_cidr() }))
+				.max(200)
+		}),
+		default: {
+			enabled: false,
+			collectCountry: false,
+			showCountry: false,
+			retentionDays: 90,
+			blockedCidrs: []
+		}
+	},
 	'comments.moderation': {
 		schema: z.object({
 			enabled: z.boolean(),
@@ -274,14 +325,13 @@ export const optionRegistry = {
 		default: { pendingDays: 7, detachedDays: 30 }
 	},
 	'friends.apply': {
+		// W6.4 (C8): applications open; home-page URLs only (no sub paths).
+		// `internalizeAvatars` was removed - it had zero consumers (register).
 		schema: z.object({
 			enabled: z.boolean(),
-			allowSubPath: z.boolean(),
-			internalizeAvatars: z.boolean()
+			allowSubPath: z.boolean()
 		}),
-		// Links plan §2.6: applications open; home-page URLs only (no sub
-		// paths); avatars stay hot-linked (localisation is a registered item).
-		default: { enabled: true, allowSubPath: false, internalizeAvatars: false }
+		default: { enabled: true, allowSubPath: false }
 	},
 	'friends.checks': {
 		schema: z.object({

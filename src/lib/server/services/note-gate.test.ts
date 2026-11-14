@@ -10,8 +10,11 @@ import { promisify } from 'node:util';
  * revocation, missing-secret fail-closed).
  */
 vi.mock('$env/dynamic/private', () => ({ env: { BETTER_AUTH_SECRET: 'unit-test-secret' } }));
+const { gateState } = vi.hoisted(() => ({ gateState: { ttlDays: 30 } }));
 vi.mock('$lib/server/config/options-registry', () => ({
-	getOption: vi.fn(async (key: string) => (key === 'notes.gate' ? { ttlDays: 30 } : null))
+	getOption: vi.fn(async (key: string) =>
+		key === 'notes.gate' ? { ttlDays: gateState.ttlDays } : null
+	)
 }));
 
 import {
@@ -170,6 +173,15 @@ describe('note-gate unlock tokens', () => {
 describe('note-gate configuration', () => {
 	it('derives the cookie TTL from the notes.gate option', async () => {
 		expect(await noteGateTtlSeconds()).toBe(30 * 86400);
+	});
+
+	it('follows a changed TTL instead of pinning the default (W6.6)', async () => {
+		gateState.ttlDays = 7;
+		try {
+			expect(await noteGateTtlSeconds()).toBe(7 * 86400);
+		} finally {
+			gateState.ttlDays = 30;
+		}
 	});
 
 	it('names the cookie per note row', () => {

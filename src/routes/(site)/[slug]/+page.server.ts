@@ -3,6 +3,9 @@ import { getLocale, localizeHref, locales } from '$lib/paraglide/runtime';
 import { m } from '$lib/paraglide/messages';
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { requireUser } from '$lib/server/authz';
+import { getOption } from '$lib/server/config/options-registry';
+import { requestIp } from '$lib/server/security/request-address';
+import { geoFromHeaders } from '$lib/server/security/geoip';
 import {
 	loadThreads,
 	resolveCommentPageTarget,
@@ -83,23 +86,37 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 
 	// Viewer state for the comment section (mirrors the posts/notes mounts;
 	// pages carry no per-row switch - plan §0 #46, so the threads always load).
+	// The site-wide switch still blocks new comments (W6.1 / C1) while existing
+	// approved rows keep rendering.
 	const user = locals.user;
 	const emailVerified = Boolean(user?.emailVerified);
-	const canComment = Boolean(user) && emailVerified;
+	const commentsEnabled = await getOption('comments.enabled');
+	const privacy = await getOption('comments.privacy');
+	const showCountry = privacy.enabled && privacy.collectCountry && privacy.showCountry;
+	const canComment = Boolean(user) && emailVerified && commentsEnabled;
 	const loginUrl = user
 		? null
 		: `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
+	const threads = await loadThreads({
+		targetType: 'page',
+		targetId: row.id,
+		viewerId: user?.id ?? null,
+		showCountry
+	});
 
 	return {
 		seo: { path: `/${row.slug}`, alternates },
 		page: { slug: row.slug, title, description },
 		html,
-		viewer: { emailVerified, canComment, loginUrl },
-		discussion: await loadThreads({
-			targetType: 'page',
-			targetId: row.id,
-			viewerId: user?.id ?? null
-		})
+		viewer: {
+			emailVerified,
+			canComment,
+			loginUrl,
+			privacyNotice: true,
+			commentsClosed: !commentsEnabled,
+			countryOptIn: showCountry
+		},
+		discussion: commentsEnabled || threads.visibleCount > 0 ? threads : null
 	};
 };
 
@@ -135,10 +152,13 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 		user,
 		author: profile?.displayName ?? user.name ?? 'Reader',
 		avatar: profile?.avatarUrl ?? user.image ?? null,
+		ip: requestIp(event.getClientAddress),
+		geo: geoFromHeaders(event.request.headers),
+		showCountry: form.get('showCountry') !== null,
 		now
 	});
 
-	return commentSubmitResponse(result);
+	return commentSubmitResponse(result, event);
 }
 
 export const actions = {

@@ -32,6 +32,30 @@ const { dbMock, state } = vi.hoisted(() => ({
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
+// W6.1: the service reads the site-wide switch before any target work. The
+// options registry is mocked so the recording executor's query queue stays
+// about the comments path itself; tests flip `commentsEnabled` to cover the
+// closed door.
+const { getOptionMock, optionState } = vi.hoisted(() => ({
+	getOptionMock: vi.fn(async (key: string) =>
+		key === 'comments.enabled'
+			? optionState.commentsEnabled
+			: key === 'comments.privacy'
+				? optionState.privacy
+				: { enabled: false }
+	),
+	optionState: {
+		commentsEnabled: true,
+		privacy: {
+			enabled: false,
+			collectCountry: false,
+			showCountry: false,
+			retentionDays: 90,
+			blockedCidrs: [] as string[]
+		}
+	}
+}));
+vi.mock('$lib/server/config/options-registry', () => ({ getOption: getOptionMock }));
 // submitComment loads the renderer lazily for anchored submissions; stub it with
 // a one-paragraph tree so the write-path tests stay fast and deterministic.
 vi.mock('$lib/server/markdown', () => ({
@@ -145,6 +169,15 @@ beforeEach(() => {
 	state.wheres = [];
 	state.orderBys = [];
 	state.failWith = undefined;
+	optionState.commentsEnabled = true;
+	optionState.privacy = {
+		enabled: false,
+		collectCountry: false,
+		showCountry: false,
+		retentionDays: 90,
+		blockedCidrs: []
+	};
+	getOptionMock.mockClear();
 	selectMock.mockClear();
 	insertMock.mockClear();
 	updateMock.mockClear();
@@ -169,7 +202,7 @@ function row(overrides: Partial<CommentRow> = {}): CommentRow {
 	};
 }
 
-function fakeStore(incr: () => Promise<number>): CacheStore {
+function fakeStore(incr: (key: string, windowSeconds: number) => Promise<number>): CacheStore {
 	return {
 		get: async () => null,
 		set: async () => undefined,
@@ -221,6 +254,27 @@ describe('visibleCommentCondition', () => {
 });
 
 describe('assembleThreads', () => {
+	it('renders a country only when the site and the commenter both opted in (W6.2)', () => {
+		const root = row({ id: 'r1', countryCode: 'US', meta: { showCountry: true } });
+		const reply = row({
+			id: 'p1',
+			parentCommentId: 'r1',
+			rootCommentId: 'r1',
+			countryCode: 'JP',
+			meta: { showCountry: true }
+		});
+		const shown = assembleThreads([root], [reply], { showCountry: true });
+		expect(shown.roots[0].country).toBe('US');
+		// Replies never collect a country (no per-reply opt-in), so the view
+		// model must not carry one either (W6 review: dead data path removed).
+		expect(shown.roots[0].replies[0].country).toBeUndefined();
+		// Site switch off: stored country never reaches the view.
+		expect(assembleThreads([root], [reply]).roots[0].country).toBeNull();
+		// Commenter did not opt in on this row: same rule.
+		const optOut = row({ id: 'r2', countryCode: 'US', meta: {} });
+		expect(assembleThreads([optOut], [], { showCountry: true }).roots[0].country).toBeNull();
+	});
+
 	it('keeps visible replies, drops deleted ones, derives the count', () => {
 		const root = row({ id: 'r1' });
 		const alive = row({ id: 'p1', parentCommentId: 'r1', rootCommentId: 'r1', author: 'Bob' });
@@ -440,6 +494,36 @@ describe('submitComment', () => {
 		expect(state.inserts).toHaveLength(0);
 	});
 
+	it('rejects every new comment when the site-wide switch is off (W6.1)', async () => {
+		optionState.commentsEnabled = false;
+		const result = await submitComment(input());
+		expect(result).toEqual({ kind: 'disabled' });
+		// The switch is checked before any target lookup or insert.
+		expect(state.selectQueue).toHaveLength(0);
+		expect(state.inserts).toHaveLength(0);
+		expect(getOptionMock).toHaveBeenCalledWith('comments.enabled');
+	});
+
+	it('fails CLOSED when the per-IP limiter store is down (W6.10)', async () => {
+		const cache = fakeStore(async () => {
+			throw new Error('valkey down');
+		});
+		expect(await submitComment(input({ cache }))).toEqual({ kind: 'unavailable' });
+		expect(state.inserts).toHaveLength(0);
+	});
+
+	it('throttles an address over its own budget (W6.10)', async () => {
+		const keys: string[] = [];
+		const cache = fakeStore(async (key) => {
+			keys.push(key);
+			return key.startsWith('limits:comment-ip:') ? 31 : 1;
+		});
+		const result = await submitComment(input({ cache, ip: '2001:db8:1:2::9' }));
+		expect(result).toEqual({ kind: 'throttled', windowSeconds: 600 });
+		expect(keys).toContain('limits:comment-ip:6:20010db8000100020000000000000000:64');
+		expect(state.inserts).toHaveLength(0);
+	});
+
 	it('stores a server-derived anchor for a matching draft', async () => {
 		state.selectQueue = [
 			[{ id: TARGET, allowComment: true }],
@@ -526,10 +610,67 @@ describe('submitComment', () => {
 			reviewedBy: null,
 			reviewedAt: null
 		});
-		// Spec §1: the non-collected fields must never be written.
-		for (const key of ['ip', 'agent', 'location', 'countryCode', 'mail', 'url']) {
+		// Spec §1 / W6.2: the raw request fields must never be written. The
+		// privacy columns are written as explicit nulls (the insert names them),
+		// which is the same nothing on disk and easier to audit.
+		for (const key of ['ip', 'agent', 'location', 'mail', 'url']) {
 			expect(values).not.toHaveProperty(key);
 		}
+		expect(values.countryCode).toBeNull();
+		expect(values.regionCode).toBeNull();
+		expect(values.meta).toBeNull();
+	});
+
+	it('stores country/region only with privacy + collectCountry on (W6.2)', async () => {
+		optionState.privacy = {
+			enabled: true,
+			collectCountry: true,
+			showCountry: true,
+			retentionDays: 90,
+			blockedCidrs: []
+		};
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'new-geo', state: 'pending' }]];
+		const result = await submitComment(
+			input({
+				ip: '203.0.113.9',
+				geo: { country: 'us', region: 'ca' },
+				showCountry: true
+			})
+		);
+		expect(result).toEqual({ kind: 'created', id: 'new-geo', state: 'pending' });
+		const values = state.inserts[0].values;
+		expect(values.countryCode).toBe('US');
+		expect(values.regionCode).toBe('CA');
+		expect(values.meta).toEqual({ showCountry: true });
+		// The raw address never rides along.
+		expect(values).not.toHaveProperty('ip');
+	});
+
+	it('drops country storage when privacy is off but still never stores the IP', async () => {
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'new-plain', state: 'pending' }]];
+		await submitComment(
+			input({ ip: '203.0.113.9', geo: { country: 'US', region: 'CA' }, showCountry: true })
+		);
+		const values = state.inserts[0].values;
+		expect(values.countryCode).toBeNull();
+		expect(values.regionCode).toBeNull();
+		expect(values.meta).toBeNull();
+	});
+
+	it('blocks a request address matching a configured CIDR (W6.2)', async () => {
+		optionState.privacy = {
+			enabled: true,
+			collectCountry: false,
+			showCountry: false,
+			retentionDays: 90,
+			blockedCidrs: ['203.0.113.0/24', '2001:db8::/32']
+		};
+		expect(await submitComment(input({ ip: '203.0.113.55' }))).toEqual({ kind: 'blocked' });
+		expect(await submitComment(input({ ip: '2001:db8:9::1' }))).toEqual({ kind: 'blocked' });
+		// A neighbouring range and a missing address both pass.
+		expect(state.inserts).toHaveLength(0);
 	});
 
 	it('re-checks the target against id + lang + visibility (SQL teeth)', async () => {
@@ -576,7 +717,9 @@ describe('submitComment', () => {
 				now
 			})
 		);
-		expect(incr).not.toHaveBeenCalled();
+		expect(incr).toHaveBeenCalledTimes(1);
+		// Only the per-IP guard ran; the per-reader window is skipped for staff.
+		expect(incr).toHaveBeenCalledWith('limits:comment-ip:unknown', 600);
 		expect(result).toEqual({ kind: 'created', id: 'new-4', state: 'approved' });
 		expect(state.inserts[0].values).toMatchObject({
 			state: 'approved',
@@ -591,7 +734,9 @@ describe('submitComment', () => {
 		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
 		const result = await submitComment(input({ cache: fakeStore(incr) }));
 		expect(result).toEqual({ kind: 'throttled', windowSeconds: 60 });
-		expect(incr).toHaveBeenCalledTimes(1);
+		// The per-IP guard runs first, then the shared per-reader window.
+		expect(incr).toHaveBeenCalledTimes(2);
+		expect(incr).toHaveBeenCalledWith('limits:comment-ip:unknown', 600);
 		// The shared window key (pre-release review 03-P3-1): submit and edit
 		// charge one and the same bucket per reader.
 		expect(incr).toHaveBeenCalledWith('limits:comment:' + VIEWER, 60);
@@ -604,17 +749,21 @@ describe('submitComment', () => {
 		expect(await submitComment(input({ cache: fakeStore(incr) }))).toEqual({
 			kind: 'target-unavailable'
 		});
-		expect(incr).not.toHaveBeenCalled();
+		// The per-IP guard charged its own bucket before the target lookup;
+		// the per-reader window is only charged after validation succeeds.
+		expect(incr).toHaveBeenCalledTimes(1);
+		expect(incr).toHaveBeenCalledWith('limits:comment-ip:unknown', 600);
 	});
 
-	it('stays fail-open when the cache store is down (T14) and says so', async () => {
+	it('stays fail-open on the per-reader window when only that store call fails', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
 		state.insertResults = [[{ id: 'new-5', state: 'pending' }]];
 		const result = await submitComment(
 			input({
-				cache: fakeStore(async () => {
-					throw new Error('valkey down');
+				cache: fakeStore(async (key) => {
+					if (key.startsWith('limits:comment:')) throw new Error('valkey down');
+					return 1;
 				})
 			})
 		);

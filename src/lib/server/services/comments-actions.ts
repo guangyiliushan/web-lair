@@ -85,7 +85,8 @@ export function readCommentAnchorDraft(form: FormData): AnchorDraftRead {
  * falling through to an undefined "success".
  */
 export function commentSubmitResponse(
-	result: SubmitCommentResult
+	result: SubmitCommentResult,
+	event?: { setHeaders?(headers: Record<string, string>): void }
 ): { submitted: 'pending' | 'approved' } | ActionFailure<{ message: string }> {
 	switch (result.kind) {
 		case 'created':
@@ -97,9 +98,23 @@ export function commentSubmitResponse(
 			}
 			return { submitted: result.state };
 		case 'throttled':
+			// W6.10: rate answers carry Retry-After so a client can back off
+			// without guessing.
+			event?.setHeaders?.({ 'retry-after': String(result.windowSeconds) });
 			return fail(429, { message: m.comment_throttled() });
+		case 'unavailable':
+			event?.setHeaders?.({ 'retry-after': '60' });
+			return fail(503, { message: m.auth_err_unavailable() });
 		case 'unverified':
 			return fail(403, { message: m.comment_verify_hint() });
+		case 'disabled':
+			// 403, not 404: the thread exists and stays readable, but new
+			// comments are closed site-wide (C1 asks for an explicit rejection).
+			return fail(403, { message: m.comment_disabled() });
+		case 'blocked':
+			// Request-time CIDR block (W6.2): same neutral copy as an
+			// unavailable target - the block list is not echoed back.
+			return fail(403, { message: m.comment_error_blocked() });
 		case 'empty':
 		case 'too-long':
 			return fail(400, { message: m.comment_error_generic() });

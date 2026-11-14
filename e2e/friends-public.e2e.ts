@@ -71,7 +71,7 @@ test.beforeAll(() => {
 	cleanup();
 	// Force the two switches the spec depends on; the values mirror the
 	// registry defaults (plan 2.6) so the page renders its documented shape.
-	setOption('friends.apply', '{"enabled":true,"allowSubPath":false,"internalizeAvatars":false}');
+	setOption('friends.apply', '{"enabled":true,"allowSubPath":false}');
 	setOption(
 		'friends.policy',
 		'{"blockedHostSuffixes":["github.io"],"blockedTlds":[".tk"],"acceptedBacklinkHosts":[],"publicBannedList":true}'
@@ -343,7 +343,7 @@ test('no horizontal overflow at mobile and desktop widths', async ({ page }) => 
 });
 
 test('friends.apply.enabled=false hides the form and shows the closed copy', async ({ page }) => {
-	setOption('friends.apply', '{"enabled":false,"allowSubPath":false,"internalizeAvatars":false}');
+	setOption('friends.apply', '{"enabled":false,"allowSubPath":false}');
 	await page.goto('/zh-cn/friends');
 	await expect(page.getByText('申请暂时关闭。')).toBeVisible();
 	await expect(page.getByRole('button', { name: '申请友链' })).toHaveCount(0);

@@ -75,12 +75,15 @@ describe('options registry (AI-1.1)', () => {
 				'ai.styleGuide',
 				'ai.summary',
 				'ai.translation',
+				'comments.enabled',
 				'comments.moderation',
+				'comments.privacy',
 				'friends.apply',
 				'friends.checks',
 				'friends.policy',
 				'media.purge',
 				'notes.gate',
+				'payments.enabled',
 				'presence.enabled',
 				'presence.readerDots',
 				'presence.readerView',
@@ -102,6 +105,16 @@ describe('options registry (AI-1.1)', () => {
 		await expect(getOption('site.timezone')).resolves.toBe('UTC');
 		await expect(getOption('site.languages')).resolves.toEqual({
 			enabled: ['en', 'zh-cn', 'ja']
+		});
+		// W6.1/W6.2: the shipped defaults are part of the contract (comments
+		// open by default; privacy collection off until the owner opts in).
+		await expect(getOption('comments.enabled')).resolves.toBe(true);
+		await expect(getOption('comments.privacy')).resolves.toMatchObject({
+			enabled: false,
+			collectCountry: false,
+			showCountry: false,
+			retentionDays: 90,
+			blockedCidrs: []
 		});
 		await expect(getOption('comments.moderation')).resolves.toMatchObject({
 			enabled: false,
@@ -271,8 +284,7 @@ describe('options registry (AI-1.1)', () => {
 		state.selectRows = [[], [], [], []];
 		await expect(getOption('friends.apply')).resolves.toEqual({
 			enabled: true,
-			allowSubPath: false,
-			internalizeAvatars: false
+			allowSubPath: false
 		});
 		await expect(getOption('friends.checks')).resolves.toEqual({
 			enabled: true,

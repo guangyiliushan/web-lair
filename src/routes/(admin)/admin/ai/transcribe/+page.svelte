@@ -22,9 +22,11 @@
 					? m.admin_ai_transcribe_bad_type()
 					: error === 'unavailable'
 						? m.admin_ai_transcribe_unavailable()
-						: error
-							? m.admin_ai_transcribe_failed()
-							: ''
+						: error === 'rate'
+							? m.admin_ai_transcribe_rate()
+							: error
+								? m.admin_ai_transcribe_failed()
+								: ''
 	);
 
 	function formatDuration(seconds: number | null): string {
