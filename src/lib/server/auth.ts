@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth/minimal';
+import { createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { passkey } from '@better-auth/passkey';
@@ -160,8 +161,41 @@ export const auth = betterAuth({
 	},
 
 	session: {
+		// AC8 (W8.7): keep the sliding 30-day lifetime with a 24-hour refresh
+		// and do NOT claim AAL2. AAL1 allows 30 days; AAL2 would require an
+		// absolute 24-hour cutoff (or the registered admin-only 7-day check),
+		// which is a future compliance-triggered change, not today's policy.
 		expiresIn: 30 * 24 * 60 * 60, // 30 days
 		updateAge: 24 * 60 * 60 // refresh every 24 hours when active
+	},
+
+	hooks: {
+		after: createAuthMiddleware(async (ctx) => {
+			// AC4/W8.7: passkey registration is the one credential change that
+			// happens on the client (WebAuthn), so its audit row is written here
+			// instead of a form action. The returned row is already persisted;
+			// an audit failure must not turn a successful registration into an
+			// error, so it is logged best-effort.
+			if (ctx.path !== '/passkey/verify-registration') return;
+			const returned = ctx.context.returned as
+				{ passkey?: { id?: string; userId?: string } } | undefined;
+			const passkey = returned?.passkey;
+			if (!passkey?.id || !passkey.userId) return;
+			try {
+				const { recordActivity } = await import('$lib/server/audit');
+				await recordActivity(db, {
+					event: 'account.passkey_add',
+					actorId: passkey.userId,
+					payload: { passkey_id: passkey.id },
+					deliver: false
+				});
+			} catch (error) {
+				console.warn(
+					'[account] passkey add audit failed:',
+					error instanceof Error ? error.message : error
+				);
+			}
+		})
 	},
 
 	databaseHooks: {

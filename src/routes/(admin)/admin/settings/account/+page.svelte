@@ -163,7 +163,8 @@
 					: m.admin_settings_2fa_status_off()}
 			</Badge>
 		</div>
-		<p class="mb-3 text-sm text-muted-foreground">{m.admin_settings_2fa_desc()}</p>
+		<p class="mb-2 text-sm text-muted-foreground">{m.admin_settings_2fa_desc()}</p>
+		<p class="mb-3 text-xs text-muted-foreground">{m.admin_settings_2fa_scope()}</p>
 
 		{#if actionForm?.message && ['enable', 'activate', 'disable', 'regenerate', 'regenerated', 'done'].includes(actionForm.step ?? '')}
 			<div class="mb-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm" role="status">
@@ -266,6 +267,9 @@
 				</div>
 				<p class="mt-1 text-sm text-muted-foreground">
 					{m.admin_settings_account_devices_desc()}
+				</p>
+				<p class="mt-1 text-xs text-muted-foreground">
+					{m.admin_settings_account_devices_lifetime()}
 				</p>
 			</div>
 			{#if data.sessions.length > 1}

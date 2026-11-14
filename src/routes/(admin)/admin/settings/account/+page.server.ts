@@ -13,6 +13,7 @@ import {
 	user
 } from '$lib/server/db/auth.schema';
 import { requireAdminRole } from '$lib/server/authz';
+import { recordActivity } from '$lib/server/audit';
 import { settingAccess, assertSettingWrite } from '$lib/server/settings/tiers';
 import { getOption } from '$lib/server/config/options-registry';
 import { pruneOtherSessions, pruneOtherSessionsKeepingNewest } from '$lib/server/auth/sessions';
@@ -40,6 +41,31 @@ async function hasPasswordCredential(userId: string): Promise<boolean> {
 		)
 		.limit(1);
 	return rows.length > 0;
+}
+
+/**
+ * Account security audit (AC6/W8.7). Events are two-segment
+ * `account.<action>` names, local-only (`deliver: false`) so credential
+ * metadata never fans out to webhook subscribers, and payloads carry ids or
+ * booleans only - never passwords, tokens, TOTP secrets or backup codes.
+ *
+ * Best-effort by design: the credential mutation has already succeeded, so a
+ * failed audit write is logged rather than turned into a misleading error.
+ */
+async function recordAccountEvent(
+	userId: string | undefined,
+	event: string,
+	payload: Record<string, unknown> = {}
+): Promise<void> {
+	if (!userId) return;
+	try {
+		await recordActivity(db, { event, actorId: userId, payload, deliver: false });
+	} catch (error) {
+		console.warn(
+			`[account] audit ${event} failed:`,
+			error instanceof Error ? error.message : error
+		);
+	}
 }
 
 /**
@@ -234,6 +260,8 @@ export const actions: Actions = {
 			});
 		}
 
+		await recordAccountEvent(userId, 'account.session_revoke', { session_id: id });
+
 		return { message: m.admin_settings_account_msg_session_revoked(), step: 'devices' };
 	},
 	/** AC2: sign out every session except the request's own cookie. */
@@ -260,6 +288,10 @@ export const actions: Actions = {
 			});
 		}
 
+		await recordAccountEvent(locals.user?.id, 'account.session_revoke_others', {
+			kept_session_id: locals.session?.id ?? null
+		});
+
 		return { message: m.admin_settings_account_msg_sessions_revoked(), step: 'devices' };
 	},
 
@@ -278,6 +310,7 @@ export const actions: Actions = {
 			});
 		}
 
+		await recordAccountEvent(locals.user?.id, 'account.session_sign_out');
 		redirect(303, getAdminConfig().loginPath);
 	},
 
@@ -362,6 +395,9 @@ export const actions: Actions = {
 		if (userId) {
 			await pruneOtherSessionsKeepingNewest(userId);
 		}
+		await recordAccountEvent(userId, 'account.password_change', {
+			revoke_other_sessions: true
+		});
 
 		return {
 			message: m.admin_settings_account_msg_password_changed(),
@@ -425,6 +461,7 @@ export const actions: Actions = {
 			});
 		}
 
+		await recordAccountEvent(userId, 'account.passkey_delete', { passkey_id: id });
 		return { message: m.admin_settings_account_msg_passkey_deleted(), step: 'passkey' };
 	},
 
@@ -475,6 +512,7 @@ export const actions: Actions = {
 			});
 		}
 
+		await recordAccountEvent(userId, 'account.passkey_rename', { passkey_id: id });
 		return { message: m.admin_settings_account_msg_passkey_renamed(), step: 'passkey' };
 	},
 
@@ -505,6 +543,9 @@ export const actions: Actions = {
 
 			console.info('[2fa] enable started (pending activation)', {
 				userId: event.locals.user?.id
+			});
+			await recordAccountEvent(event.locals.user?.id, 'account.two_factor_enable', {
+				stage: 'pending'
 			});
 
 			return {
@@ -546,6 +587,7 @@ export const actions: Actions = {
 		}
 
 		console.info('[2fa] activated', { userId });
+		await recordAccountEvent(userId, 'account.two_factor_activate');
 		return { message: m.admin_settings_account_msg_2fa_enabled(), step: 'done' as const };
 	},
 
@@ -579,6 +621,7 @@ export const actions: Actions = {
 		}
 
 		console.info('[2fa] disabled', { userId });
+		await recordAccountEvent(userId, 'account.two_factor_disable');
 		return { message: m.admin_settings_account_msg_2fa_disabled(), step: 'done' as const };
 	},
 
@@ -612,6 +655,7 @@ export const actions: Actions = {
 				userId,
 				count: result.backupCodes.length
 			});
+			await recordAccountEvent(userId, 'account.two_factor_backup_codes');
 
 			return {
 				backupCodes: result.backupCodes,
