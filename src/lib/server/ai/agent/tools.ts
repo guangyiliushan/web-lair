@@ -18,6 +18,7 @@ import { aiReadiness, type ReadinessProvider } from '$lib/server/services/ai-rea
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { loadDraftByPostId, saveDraftWork } from '$lib/server/services/post-drafts';
 import { loadNoteDraftByNoteId, saveNoteDraftWork } from '$lib/server/services/note-drafts';
+import { SETTING_KEYS, SETTING_TIERS } from './settings-allowlist';
 
 /**
  * Agent v1 tool surface (AI-v3 Q1/Q3): read-only site inspection plus a
@@ -60,40 +61,6 @@ function truncate(value: string | null, max: number): string | null {
 	if (value === null) return null;
 	return value.length > max ? `${value.slice(0, max)}…` : value;
 }
-
-const SETTING_KEYS = [
-	'site.info',
-	'site.timezone',
-	'site.languages',
-	'site.default_lang',
-	'presence.enabled',
-	'notes.gate',
-	'ai.styleGuide',
-	'ai.summary',
-	'ai.translation',
-	'ai.crawl',
-	'comments.moderation',
-	'ai.assignments',
-	'ai.budget',
-	'ai.pricing'
-] as const;
-
-const SETTING_TIERS: Record<string, 'read' | 'tier1' | 'tier2'> = {
-	'site.info': 'tier1',
-	'site.timezone': 'tier1',
-	'site.languages': 'tier2',
-	'site.default_lang': 'tier2',
-	'presence.enabled': 'tier1',
-	'notes.gate': 'tier1',
-	'ai.styleGuide': 'tier1',
-	'ai.summary': 'tier1',
-	'ai.translation': 'tier1',
-	'ai.crawl': 'tier1',
-	'comments.moderation': 'tier1',
-	'ai.assignments': 'tier2',
-	'ai.budget': 'tier2',
-	'ai.pricing': 'tier2'
-};
 
 const getSiteOverview: AgentTool = {
 	definition: {
