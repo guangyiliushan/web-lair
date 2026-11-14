@@ -1,5 +1,5 @@
 {
-  "id": "06cdaec2-d338-45ad-bde7-775e6f75a226",
+  "id": "9947f654-b6e8-4685-80c4-02a1ea3124b0",
   "prevId": "40bb6c1b-10a4-4508-a820-d59cc932a062",
   "version": "7",
   "dialect": "postgresql",
@@ -1700,6 +1700,12 @@
         },
         "country_code": {
           "name": "country_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "region_code": {
+          "name": "region_code",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -7355,20 +7361,6 @@
           "notNull": true,
           "default": "'queued'"
         },
-        "attempt_count": {
-          "name": "attempt_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "next_attempt_at": {
-          "name": "next_attempt_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
         "response_code": {
           "name": "response_code",
           "type": "integer",
@@ -7430,27 +7422,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "webhook_deliveries_due_idx": {
-          "name": "webhook_deliveries_due_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "next_attempt_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -7475,10 +7446,6 @@
         "webhook_deliveries_status_check": {
           "name": "webhook_deliveries_status_check",
           "value": "\"webhook_deliveries\".\"status\" in ('queued', 'succeeded', 'failed')"
-        },
-        "webhook_deliveries_attempt_count_check": {
-          "name": "webhook_deliveries_attempt_count_check",
-          "value": "\"webhook_deliveries\".\"attempt_count\" >= 0"
         }
       },
       "isRLSEnabled": false

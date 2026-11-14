@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
  * backlog by the age of the row).
  */
 const MIGRATION = readFileSync(
-	fileURLToPath(new URL('../../../../../drizzle/0005_webhook_delivery_retry.sql', import.meta.url)),
+	fileURLToPath(new URL('../../../../../drizzle/0006_webhook_delivery_retry.sql', import.meta.url)),
 	'utf8'
 );
 const JOURNAL = readFileSync(
@@ -43,14 +43,15 @@ describe('webhook delivery retry migration (W9.4/W9.5)', () => {
 		);
 	});
 
-	it('is registered in the journal with a matching snapshot', () => {
+	it('is registered as 0006 chained to the W6 0005 snapshot', () => {
 		const entries = JSON.parse(JOURNAL).entries as Array<{ idx: number; tag: string }>;
-		const entry = entries.find((item) => item.tag === '0005_webhook_delivery_retry');
+		expect(entries.find((item) => item.tag === '0005_comments_region_code')).toBeDefined();
+		const entry = entries.find((item) => item.tag === '0006_webhook_delivery_retry');
 		expect(entry).toBeDefined();
-		// Drizzle diffs against the highest SNAPSHOT, not the journal: a missing
-		// 0005 snapshot would make the next generate re-emit these columns.
+		// Drizzle diffs against the highest SNAPSHOT, not the journal: the W6
+		// 0005 snapshot is the base (integration order), so 0006 chains to it.
 		const snapshotPath = fileURLToPath(
-			new URL('../../../../../drizzle/meta/0005_snapshot.json', import.meta.url)
+			new URL('../../../../../drizzle/meta/0006_snapshot.json', import.meta.url)
 		);
 		const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf8')) as {
 			prevId: string;
@@ -61,11 +62,15 @@ describe('webhook delivery retry migration (W9.4/W9.5)', () => {
 		};
 		const prev = JSON.parse(
 			readFileSync(
-				fileURLToPath(new URL('../../../../../drizzle/meta/0004_snapshot.json', import.meta.url)),
+				fileURLToPath(new URL('../../../../../drizzle/meta/0005_snapshot.json', import.meta.url)),
 				'utf8'
 			)
 		) as { id: string };
 		expect(snapshot.prevId).toBe(prev.id);
+		// The merged snapshot keeps W6's comments column and adds W9's retry
+		// columns/index/check.
+		const comments = snapshot.tables['public.comments'];
+		expect(comments.columns).toHaveProperty('region_code');
 		const delivery = snapshot.tables['public.webhook_deliveries'];
 		expect(delivery.columns).toHaveProperty('attempt_count');
 		expect(delivery.columns).toHaveProperty('next_attempt_at');
