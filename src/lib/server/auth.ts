@@ -186,9 +186,17 @@ export const auth = betterAuth({
 			// an audit failure must not turn a successful registration into an
 			// error, so it is logged best-effort.
 			if (ctx.path !== '/passkey/verify-registration') return;
+			// The plugin returns the persisted passkey row directly (not a
+			// `{ passkey }` wrapper). Accept both shapes so an upstream change
+			// cannot silently kill the audit row.
 			const returned = ctx.context.returned as
-				{ passkey?: { id?: string; userId?: string } } | undefined;
-			const passkey = returned?.passkey;
+				| {
+						passkey?: { id?: string; userId?: string };
+						id?: string;
+						userId?: string;
+				  }
+				| undefined;
+			const passkey = returned?.passkey ?? returned;
 			if (!passkey?.id || !passkey.userId) return;
 			try {
 				const { recordActivity } = await import('$lib/server/audit');
