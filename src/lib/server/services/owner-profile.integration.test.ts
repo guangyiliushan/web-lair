@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '$lib/server/db/schema';
+import { auditChanges, listSettingsActivity } from '$lib/server/settings/activity';
 import { OwnerProfileError, saveHomeHero, saveOwnerProfile } from './owner-profile';
 
 /**
@@ -133,5 +134,17 @@ describe.skipIf(!url)('owner profile service on a scratch database', () => {
 		// Empty strings remove the override; an empty map falls back to messages.
 		const cleared = await saveHomeHero({ title: { en: '' } }, { actorId: OWNER, executor: db });
 		expect(cleared.title).toEqual({});
+	});
+
+	it('lists the settings events for the change-history surface', async () => {
+		const rows = await listSettingsActivity({ family: 'profile', executor: db });
+		const profileRow = rows.find((row) => row.event === 'profile.update');
+		expect(profileRow).toBeDefined();
+		expect(profileRow?.actorName).toBe('Owner');
+		expect(profileRow?.payload).not.toHaveProperty('secret');
+		const changes = auditChanges(profileRow?.payload ?? null);
+		expect(changes.map((change) => change.field)).toContain('header_label');
+		const all = await listSettingsActivity({ family: 'unknown-family', executor: db });
+		expect(all.some((row) => row.event === 'home.update')).toBe(true);
 	});
 });
