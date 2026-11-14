@@ -2,7 +2,6 @@
 	import type { PageProps } from './$types';
 	import { enhance } from '$app/forms';
 	import { m } from '$lib/paraglide/messages';
-	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Input } from '$lib/components/ui/input';
