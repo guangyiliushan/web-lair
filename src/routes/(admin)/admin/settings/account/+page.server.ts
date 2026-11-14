@@ -49,6 +49,12 @@ function errorStatus(caught: APIError): string {
 	return String((caught as { status?: unknown }).status ?? '');
 }
 
+/** better-auth's machine-readable code (APIError.body.code), when present. */
+function errorCode(caught: APIError): string {
+	const body = (caught as { body?: { code?: unknown } }).body;
+	return typeof body?.code === 'string' ? body.code : '';
+}
+
 /**
  * `step` rides along on every failure so the page can keep the user inside the
  * activation flow: without it a failed activation used to drop the rendered
@@ -289,6 +295,94 @@ export const actions: Actions = {
 		}
 
 		redirect(303, getAdminConfig().loginPath);
+	},
+
+	/**
+	 * AC3: change the account password. better-auth verifies the current
+	 * password, rewrites the credential hash and (with
+	 * `revokeOtherSessions: true`) replaces every session with a fresh one,
+	 * setting the new cookie on this response. `pruneOtherSessionsKeepingNewest`
+	 * is the belt-and-braces pass the decision register asks for.
+	 */
+	changePassword: async ({ request, locals }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'account', 'account.self');
+		const form = await request.formData();
+		const currentPassword = (form.get('currentPassword') ?? '').toString();
+		const newPassword = (form.get('newPassword') ?? '').toString();
+		const confirmPassword = (form.get('confirmPassword') ?? '').toString();
+
+		if (!currentPassword) {
+			return fail(400, {
+				message: m.admin_settings_account_err_password_current_required(),
+				step: 'password'
+			});
+		}
+		if (newPassword.length < 8) {
+			return fail(400, {
+				message: m.admin_settings_account_err_password_new_short(),
+				step: 'password'
+			});
+		}
+		if (newPassword.length > 128) {
+			return fail(400, {
+				message: m.admin_settings_account_err_password_new_long(),
+				step: 'password'
+			});
+		}
+		if (newPassword !== confirmPassword) {
+			return fail(400, {
+				message: m.admin_settings_account_err_password_mismatch(),
+				step: 'password'
+			});
+		}
+
+		try {
+			await auth.api.changePassword({
+				body: {
+					currentPassword,
+					newPassword,
+					revokeOtherSessions: true
+				},
+				headers: request.headers
+			});
+		} catch (caught) {
+			if (caught instanceof APIError) {
+				const code = errorCode(caught);
+				console.warn('[account] change password rejected', { status: errorStatus(caught), code });
+				if (code === 'INVALID_PASSWORD') {
+					return fail(400, {
+						message: m.admin_settings_account_err_password_incorrect(),
+						step: 'password'
+					});
+				}
+				if (code === 'CREDENTIAL_ACCOUNT_NOT_FOUND') {
+					return fail(400, {
+						message: m.admin_settings_account_err_password_unavailable(),
+						step: 'password'
+					});
+				}
+			} else {
+				console.warn(
+					'[account] change password failed:',
+					caught instanceof Error ? caught.message : caught
+				);
+			}
+			return fail(500, {
+				message: m.admin_settings_account_err_password_failed(),
+				step: 'password'
+			});
+		}
+
+		const userId = locals.user?.id;
+		if (userId) {
+			await pruneOtherSessionsKeepingNewest(userId);
+		}
+
+		return {
+			message: m.admin_settings_account_msg_password_changed(),
+			step: 'password'
+		};
 	},
 
 	/** Step 1: verify the password, receive the secret + one-time backup codes. */

@@ -7,6 +7,7 @@
 	import IconAlertCircle from '@tabler/icons-svelte-runes/icons/alert-circle';
 	import IconDeviceLaptop from '@tabler/icons-svelte-runes/icons/device-laptop';
 	import IconFingerprint from '@tabler/icons-svelte-runes/icons/fingerprint';
+	import IconLock from '@tabler/icons-svelte-runes/icons/lock';
 	import IconBrandGithub from '@tabler/icons-svelte-runes/icons/brand-github';
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
@@ -56,6 +57,29 @@
 	);
 	const deviceMessage = $derived(deviceForm?.step === 'devices' ? deviceForm.message : null);
 	const deviceError = $derived(Boolean(deviceForm?.status && deviceForm.status >= 400));
+	const passwordForm = $derived(
+		form as {
+			message?: string | null;
+			step?: string;
+			status?: number;
+		} | null
+	);
+	const passwordMessage = $derived(passwordForm?.step === 'password' ? passwordForm.message : null);
+	const passwordError = $derived(Boolean(passwordForm?.status && passwordForm.status >= 400));
+	let currentPassword = $state('');
+	let newPassword = $state('');
+	let confirmPassword = $state('');
+	const passwordDirty = $derived(
+		currentPassword !== '' || newPassword !== '' || confirmPassword !== ''
+	);
+	function resetPassword() {
+		currentPassword = '';
+		newPassword = '';
+		confirmPassword = '';
+	}
+	$effect(() => {
+		if (passwordForm?.step === 'password' && !passwordForm.status) resetPassword();
+	});
 	let lang = $state<string | null>(null);
 	const currentLang = $derived(lang ?? data.defaultLang ?? '');
 	const langDirty = $derived(lang !== null && lang !== (data.defaultLang ?? ''));
@@ -331,6 +355,80 @@
 					</li>
 				{/each}
 			</ul>
+		{/if}
+	</section>
+
+	<Separator.Root />
+
+	<!-- Section: Change password (real credential · AC3) -->
+	<section>
+		<div class="mb-4 flex items-center gap-2">
+			<IconLock class="size-5 text-muted-foreground" />
+			<h3 class="text-base font-semibold">{m.admin_settings_account_password()}</h3>
+		</div>
+		<p class="mb-3 text-sm text-muted-foreground">
+			{m.admin_settings_account_password_desc()}
+		</p>
+
+		{#if data.hasPassword}
+			<SettingsForm
+				action="?/changePassword"
+				dirty={passwordDirty}
+				message={passwordMessage}
+				error={passwordError}
+				submitLabel={m.admin_settings_account_password_submit()}
+				onCancel={resetPassword}
+			>
+				<div class="grid gap-3 sm:grid-cols-3">
+					<div class="space-y-1.5">
+						<label for="account-current-password" class="text-sm">
+							{m.admin_settings_account_password_current()}
+						</label>
+						<Input
+							id="account-current-password"
+							name="currentPassword"
+							type="password"
+							autocomplete="current-password"
+							required
+							bind:value={currentPassword}
+						/>
+					</div>
+					<div class="space-y-1.5">
+						<label for="account-new-password" class="text-sm">
+							{m.admin_settings_account_password_new()}
+						</label>
+						<Input
+							id="account-new-password"
+							name="newPassword"
+							type="password"
+							autocomplete="new-password"
+							minlength={8}
+							maxlength={128}
+							required
+							bind:value={newPassword}
+						/>
+					</div>
+					<div class="space-y-1.5">
+						<label for="account-confirm-password" class="text-sm">
+							{m.admin_settings_account_password_confirm()}
+						</label>
+						<Input
+							id="account-confirm-password"
+							name="confirmPassword"
+							type="password"
+							autocomplete="new-password"
+							minlength={8}
+							maxlength={128}
+							required
+							bind:value={confirmPassword}
+						/>
+					</div>
+				</div>
+			</SettingsForm>
+		{:else}
+			<p class="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+				{m.admin_settings_account_password_unavailable()}
+			</p>
 		{/if}
 	</section>
 
