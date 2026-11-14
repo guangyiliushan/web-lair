@@ -146,6 +146,9 @@ const MIGRATION_TABLE_COLUMNS = new Map<string, string[]>([
 /** Columns appended to a baseline table (A3 unions these into the expected set). */
 const MIGRATION_COLUMN_ADDITIONS = new Map<string, string[]>([
 	['user_profiles', ['header_label']],
+	// W6.2 (approved schema exception): comments.privacy stores the edge
+	// region next to country_code; nullable and additive.
+	['comments', ['region_code']],
 	['webhook_deliveries', ['attempt_count', 'next_attempt_at']]
 ]);
 
@@ -492,7 +495,8 @@ const COLUMN_TYPE_PINS: Array<[string, string, string]> = [
 	['posts', 'writing_origin', 'text'],
 	['posts', 'provenance_source', 'text'],
 	['posts', 'ai_help', 'ARRAY'],
-	['user_profiles', 'header_label', 'text']
+	['user_profiles', 'header_label', 'text'],
+	['comments', 'region_code', 'text']
 ];
 
 /** Official generated-table exception for the FK leading-index rule. */
