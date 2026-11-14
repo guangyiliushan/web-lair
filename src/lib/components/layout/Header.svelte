@@ -68,7 +68,7 @@
 </script>
 
 <HeaderShell>
-	<div class="flex items-center justify-between px-4 py-2">
+	<div class="flex items-center justify-between gap-2 px-4 py-2">
 		<SiteBrand {owner} {presence} enabled={ownerStatus.enabled} />
 
 		<SiteDesktopNav
@@ -81,14 +81,14 @@
 			{pagesData}
 		/>
 
-		<div class="flex items-center gap-1">
-			<div class="hidden items-center gap-2 lg:flex">
+		<div class="flex shrink-0 items-center gap-1">
+			<div class="hidden items-center gap-2 @min-[56rem]:flex">
 				<LangSwitcher />
 				<ThemeToggle />
 				<UserNav {auth} />
 			</div>
 
-			<div class="flex items-center gap-1 lg:hidden">
+			<div class="flex items-center gap-1 @min-[56rem]:hidden">
 				<LangSwitcher />
 				<ThemeToggle />
 				<button

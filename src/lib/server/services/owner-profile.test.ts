@@ -90,7 +90,7 @@ describe('ownerProfileToSiteOwner', () => {
 				avatarUrl: null,
 				links: null
 			})
-		).toEqual({ name: 'Public Name', avatar: '' });
+		).toEqual({ name: 'Public Name', avatar: '', headerLabel: 'shan' });
 	});
 });
 

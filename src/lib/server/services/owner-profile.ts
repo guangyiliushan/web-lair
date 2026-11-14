@@ -379,7 +379,11 @@ export async function loadHomeHero(
 
 /** Header badge projection: full name stays the identity; label is layout-only. */
 export function ownerProfileToSiteOwner(profile: OwnerProfile): SiteOwner {
-	return { name: profile.displayName, avatar: profile.avatarUrl ?? '' };
+	return {
+		name: profile.displayName,
+		avatar: profile.avatarUrl ?? '',
+		headerLabel: profile.headerLabel
+	};
 }
 
 async function assertOwnerPointer(tx: OwnerTx, actorId: string): Promise<string> {

@@ -18,7 +18,7 @@
 	<div
 		data-slot="site-header-bar"
 		class={cn(
-			'pointer-events-auto w-full max-w-5xl rounded-3xl border bg-background/70 shadow-sm backdrop-blur-md',
+			'@container pointer-events-auto w-full max-w-5xl rounded-3xl border bg-background/70 shadow-sm backdrop-blur-md',
 			className
 		)}
 	>

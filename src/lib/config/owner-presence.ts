@@ -27,7 +27,11 @@ export interface OwnerPresence {
 }
 
 export const OWNER_NAME_LONG_MIN = 10;
-export const OWNER_NAME_SHORT_MAX = 5;
+/**
+ * R-5: 6 keeps `mikoto` (the Q6 six-grapheme example) in the short tier.
+ * The final inline-app-name guard is still `appNameFits`' ResizeObserver.
+ */
+export const OWNER_NAME_SHORT_MAX = 6;
 
 /** Grapheme count: an emoji or a combining mark must not count as two names. */
 export function ownerNameLength(name: string): number {
@@ -49,6 +53,22 @@ export function ownerNameTier(name: string): OwnerNameTier {
 	if (length >= OWNER_NAME_LONG_MIN) return 'long';
 	if (length <= OWNER_NAME_SHORT_MAX) return 'short';
 	return 'medium';
+}
+
+/** First grapheme (not the first UTF-16 unit) for avatar fallbacks. */
+export function firstGrapheme(name: string): string {
+	const trimmed = name.trim();
+	if (trimmed === '') return '?';
+	try {
+		if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+			const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+			const first = segmenter.segment(trimmed)[Symbol.iterator]().next();
+			if (!first.done) return first.value.segment;
+		}
+	} catch {
+		// Older runtimes fall through to code-point splitting.
+	}
+	return Array.from(trimmed)[0] ?? '?';
 }
 
 /**

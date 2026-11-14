@@ -55,9 +55,14 @@ vi.mock('$lib/server/services/owner-profile', () => ({
 		if (ownerState.throwOn) throw new Error('settings unavailable');
 		return ownerState.profile;
 	}),
-	ownerProfileToSiteOwner: (profile: { displayName: string; avatarUrl: string | null }) => ({
+	ownerProfileToSiteOwner: (profile: {
+		displayName: string;
+		avatarUrl: string | null;
+		headerLabel: string | null;
+	}) => ({
 		name: profile.displayName,
-		avatar: profile.avatarUrl ?? ''
+		avatar: profile.avatarUrl ?? '',
+		headerLabel: profile.headerLabel
 	})
 }));
 
@@ -156,10 +161,14 @@ describe('(site) layout server', () => {
 			parent: async () => ({ auth: null }),
 			locals: {}
 		} as never)) as {
-			siteOwner: { name: string; avatar: string };
+			siteOwner: { name: string; avatar: string; headerLabel: string | null };
 			ownerStatus: { enabled: boolean; kind: string };
 		};
-		expect(data.siteOwner).toEqual({ name: 'Owner', avatar: '/owner.png' });
+		expect(data.siteOwner).toEqual({
+			name: 'Owner',
+			avatar: '/owner.png',
+			headerLabel: null
+		});
 		expect(data.ownerStatus).toEqual(optionState.ownerStatus);
 	});
 

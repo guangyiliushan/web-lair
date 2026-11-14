@@ -21,6 +21,8 @@ export type OwnerStatusKind = (typeof OWNER_STATUS_KINDS)[number];
 export interface SiteOwner {
 	name: string;
 	avatar: string;
+	/** Compact header label (1–6 graphemes); null means the full name. */
+	headerLabel?: string | null;
 }
 
 export interface OwnerStatus {

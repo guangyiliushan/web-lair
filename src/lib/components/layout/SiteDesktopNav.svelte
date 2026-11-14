@@ -38,7 +38,7 @@
 	}
 </script>
 
-<nav class="hidden items-center gap-1 lg:flex" aria-label="Main navigation">
+<nav class="hidden shrink-0 items-center gap-1 @min-[56rem]:flex" aria-label="Main navigation">
 	{#each navigationConfig as item (item.key)}
 		{#if item.megaMenu}
 			<NavMenu
