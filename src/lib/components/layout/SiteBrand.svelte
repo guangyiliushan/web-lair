@@ -30,6 +30,7 @@
 			<Avatar.Fallback>{avatarFallback}</Avatar.Fallback>
 		</Avatar.Root>
 		<span
+			data-slot="site-brand-name"
 			class="hidden max-w-[7.5rem] truncate text-[17px] font-bold tracking-tight @min-[20rem]:inline-block"
 		>
 			{visibleName}

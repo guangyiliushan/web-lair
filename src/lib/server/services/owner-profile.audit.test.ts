@@ -70,10 +70,13 @@ describe('owner profile audit rows', () => {
 			links: null
 		});
 
-		await saveOwnerProfile({ displayName: 'guangyiliushan', headerLabel: 'shan' }, {
-			actorId: OWNER,
-			executor
-		});
+		await saveOwnerProfile(
+			{ displayName: 'guangyiliushan', headerLabel: 'shan' },
+			{
+				actorId: OWNER,
+				executor
+			}
+		);
 
 		expect(recordActivity).toHaveBeenCalledTimes(1);
 		const [tx, input] = recordActivity.mock.calls[0] as unknown as [
@@ -102,10 +105,7 @@ describe('owner profile audit rows', () => {
 		await saveHomeHero({ title: { en: 'Hello {name}' } }, { actorId: OWNER, executor });
 
 		expect(recordActivity).toHaveBeenCalledTimes(1);
-		const [, input] = recordActivity.mock.calls[0] as unknown as [
-			unknown,
-			Record<string, unknown>
-		];
+		const [, input] = recordActivity.mock.calls[0] as unknown as [unknown, Record<string, unknown>];
 		expect(input).toMatchObject({
 			event: 'home.update',
 			actorId: OWNER,

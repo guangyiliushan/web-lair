@@ -249,13 +249,7 @@
 					<div class="grid gap-4 sm:grid-cols-2">
 						<label class="flex flex-col gap-1.5 text-sm">
 							<span class="font-medium">{m.admin_settings_profile_full_name()}</span>
-							<Input
-								name="displayName"
-								bind:value={displayName}
-								required
-								maxlength={80}
-								autocomplete="nickname"
-							/>
+							<Input name="displayName" bind:value={displayName} required autocomplete="nickname" />
 						</label>
 
 						<label class="flex flex-col gap-1.5 text-sm">
@@ -264,7 +258,6 @@
 								<Input
 									name="headerLabel"
 									bind:value={headerLabel}
-									maxlength={64}
 									placeholder={m.admin_settings_profile_header_label_placeholder()}
 								/>
 								<Button
@@ -399,7 +392,7 @@
 			>
 				<div
 					class="flex flex-wrap items-center gap-2"
-					role="tablist"
+					role="group"
 					aria-label={m.admin_settings_profile_hero_locale()}
 				>
 					{#each data.hero.locales as locale (locale)}
