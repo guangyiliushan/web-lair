@@ -1,0 +1,2 @@
+ALTER TABLE "user_profiles" DROP CONSTRAINT "user_profiles_header_label_check";--> statement-breakpoint
+ALTER TABLE "user_profiles" ADD CONSTRAINT "user_profiles_header_label_check" CHECK ("user_profiles"."header_label" is null or (char_length("user_profiles"."header_label") between 1 and 64 and "user_profiles"."header_label" = btrim("user_profiles"."header_label")));

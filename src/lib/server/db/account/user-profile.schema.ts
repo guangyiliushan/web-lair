@@ -55,7 +55,7 @@ export const userProfiles = pgTable(
 		),
 		check(
 			'user_profiles_header_label_check',
-			sql`${table.headerLabel} is null or (char_length(${table.headerLabel}) between 1 and 24 and ${table.headerLabel} = btrim(${table.headerLabel}))`
+			sql`${table.headerLabel} is null or (char_length(${table.headerLabel}) between 1 and 64 and ${table.headerLabel} = btrim(${table.headerLabel}))`
 		)
 	]
 );

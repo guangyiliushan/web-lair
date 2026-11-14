@@ -88,6 +88,18 @@ describe.skipIf(!url)('owner profile service on a scratch database', () => {
 		expect(count).toBe(0);
 	});
 
+	it('accepts a 6-grapheme emoji header label (DB bound is codepoints)', async () => {
+		const label = '👨‍👩‍👧‍👦'.repeat(6);
+		expect([...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(label)]).toHaveLength(
+			6
+		);
+		const saved = await saveOwnerProfile(
+			{ displayName: 'guangyiliushan', headerLabel: label },
+			{ actorId: OWNER, executor: db }
+		);
+		expect(saved.headerLabel).toBe(label);
+	});
+
 	it('rejects a non-owner actor with a 409 pointer mismatch and leaves the row alone', async () => {
 		const failure = await saveOwnerProfile(
 			{ displayName: 'Hijacked' },
