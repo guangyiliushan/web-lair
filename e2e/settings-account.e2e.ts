@@ -62,15 +62,42 @@ test.describe('real load / static truth', () => {
 });
 
 test.describe('multi-session devices', () => {
+	const DEVICE_EMAIL = 'e2e-devices@example.com';
+	const DEVICE_PASSWORD = 'e2e-devices-password-1';
+
+	test.beforeAll(() => {
+		psql(`delete from "user" where email = '${DEVICE_EMAIL}'`);
+	});
+	test.afterAll(() => {
+		psql(`delete from "user" where email = '${DEVICE_EMAIL}'`);
+	});
+
+	async function signInFixture(page: Page) {
+		const signUp = await apiPost(page, '/api/auth/sign-up/email', {
+			email: DEVICE_EMAIL,
+			name: 'E2E Devices',
+			password: DEVICE_PASSWORD
+		});
+		expect([200, 422]).toContain(signUp.status());
+		psql(`update "user" set email_verified = true, role = 'admin' where email = '${DEVICE_EMAIL}'`);
+		const signIn = await apiPost(page, '/api/auth/sign-in/email', {
+			email: DEVICE_EMAIL,
+			password: DEVICE_PASSWORD
+		});
+		expect(signIn.ok()).toBeTruthy();
+	}
+
 	test('revoke one device, revoke others and sign out', async ({ browser, page }) => {
+		test.setTimeout(180_000);
+		await signInFixture(page);
+
 		const other: BrowserContext = await browser.newContext();
 		const otherPage = await other.newPage();
 		try {
+			await signInFixture(otherPage);
 			await gotoAccount(page);
 			await gotoAccount(otherPage);
 
-			// Both loopback contexts are the owner; each has its own session.
-			await page.reload();
 			const devices = page.locator('section').filter({
 				has: page.getByRole('heading', { name: 'Signed-in devices', exact: true })
 			});
@@ -89,6 +116,7 @@ test.describe('multi-session devices', () => {
 			const third: BrowserContext = await browser.newContext();
 			const thirdPage = await third.newPage();
 			try {
+				await signInFixture(thirdPage);
 				await gotoAccount(thirdPage);
 				await page.reload();
 				await expect(rows).toHaveCount(2);
