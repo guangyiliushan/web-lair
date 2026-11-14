@@ -7,6 +7,7 @@ import type { LocalizedCopy } from '$lib/server/db/settings';
 import { recordActivity } from '$lib/server/audit';
 import { OPTION_LANGS } from '$lib/server/config/options-registry';
 import type { SiteOwner } from '$lib/config/owner-status';
+import { SOCIAL_PRESETS, isSafeSocialHref, type SocialUserPlatform } from '$lib/config/social';
 
 /**
  * Owner profile + home hero service (M4 foundation, W3.3).
@@ -96,15 +97,7 @@ const LINKS_MAX = 8;
 const HERO_TITLE_MAX = 120;
 const HERO_DESCRIPTION_MAX = 300;
 
-const SOCIAL_PRESETS: Record<string, readonly string[]> = {
-	github: ['github.com'],
-	x: ['x.com', 'twitter.com'],
-	telegram: ['t.me', 'telegram.me'],
-	email: [],
-	bilibili: ['bilibili.com', 'b23.tv'],
-	zhihu: ['zhihu.com'],
-	youtube: ['youtube.com', 'youtu.be']
-};
+const SOCIAL_PRESET_PLATFORMS = Object.keys(SOCIAL_PRESETS) as SocialUserPlatform[];
 
 function invalid(code: OwnerProfileErrorCode, message: string): never {
 	throw new OwnerProfileError(code, message, 400);
@@ -169,10 +162,6 @@ export function normalizeAvatarUrl(value: unknown): string | null {
 	return parsed.toString();
 }
 
-function hostMatches(host: string, allowed: readonly string[]): boolean {
-	return allowed.some((base) => host === base || host.endsWith(`.${base}`));
-}
-
 export function normalizeLinks(value: unknown): ProfileLink[] | null {
 	if (value === undefined || value === null) return null;
 	if (!Array.isArray(value)) invalid('links_invalid', 'Social links must be a list.');
@@ -186,16 +175,19 @@ export function normalizeLinks(value: unknown): ProfileLink[] | null {
 		const platform = (raw as ProfileLink).platform;
 		const hrefRaw = (raw as ProfileLink).href;
 		const labelRaw = (raw as ProfileLink).label;
-		if (typeof platform !== 'string' || !(platform in SOCIAL_PRESETS)) {
+		if (
+			typeof platform !== 'string' ||
+			!SOCIAL_PRESET_PLATFORMS.includes(platform as SocialUserPlatform)
+		) {
 			invalid('links_invalid', 'Unknown social platform.');
 		}
 		if (typeof hrefRaw !== 'string') invalid('links_invalid', 'A social link needs a URL.');
 		const href = assertPlainText(hrefRaw.trim(), 'links_invalid');
-		if (platform === 'email') {
-			if (!/^mailto:[^@\s]+@[^@\s]+\.[^@\s]+$/.test(href)) {
+		const typedPlatform = platform as SocialUserPlatform;
+		if (!isSafeSocialHref(typedPlatform, href)) {
+			if (typedPlatform === 'email') {
 				invalid('links_invalid', 'Email links must be a mailto: address.');
 			}
-		} else {
 			let parsed: URL;
 			try {
 				parsed = new URL(href);
@@ -205,9 +197,7 @@ export function normalizeLinks(value: unknown): ProfileLink[] | null {
 			if (parsed.protocol !== 'https:') {
 				invalid('links_invalid', 'Social links must use https.');
 			}
-			if (!hostMatches(parsed.hostname.toLowerCase(), SOCIAL_PRESETS[platform])) {
-				invalid('links_invalid', `Link host does not match the ${platform} preset.`);
-			}
+			invalid('links_invalid', `Link host does not match the ${typedPlatform} preset.`);
 		}
 		let label: string | undefined;
 		if (labelRaw !== undefined && labelRaw !== null) {
