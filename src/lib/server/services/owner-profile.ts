@@ -337,6 +337,46 @@ export async function loadOwnerEditorView(
 	return { profile: rowToProfile(row), email: row.email, pointerUserId: row.userId };
 }
 
+export interface HomeHeroRecord {
+	title: LocalizedCopy;
+	subtitlePrefix: LocalizedCopy;
+	subtitleHighlight: LocalizedCopy;
+	description: LocalizedCopy;
+	welcome: LocalizedCopy;
+	updatedAt: Date | null;
+	updatedBy: string | null;
+}
+
+/** Admin view needs the raw overrides; the homepage resolves them per request. */
+export async function loadHomeHero(
+	executor: OwnerProfileReadExecutor = db
+): Promise<HomeHeroRecord> {
+	const rows = await executor
+		.select({
+			title: homeHero.title,
+			subtitlePrefix: homeHero.subtitlePrefix,
+			subtitleHighlight: homeHero.subtitleHighlight,
+			description: homeHero.description,
+			welcome: homeHero.welcome,
+			updatedAt: homeHero.updatedAt,
+			updatedBy: homeHero.updatedBy
+		})
+		.from(homeHero)
+		.where(eq(homeHero.id, 1))
+		.limit(1);
+	return (
+		rows[0] ?? {
+			title: {},
+			subtitlePrefix: {},
+			subtitleHighlight: {},
+			description: {},
+			welcome: {},
+			updatedAt: null,
+			updatedBy: null
+		}
+	);
+}
+
 /** Header badge projection: full name stays the identity; label is layout-only. */
 export function ownerProfileToSiteOwner(profile: OwnerProfile): SiteOwner {
 	return { name: profile.displayName, avatar: profile.avatarUrl ?? '' };

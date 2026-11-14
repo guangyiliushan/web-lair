@@ -4,11 +4,21 @@ import { m } from '$lib/paraglide/messages';
 import { requireAdminRole } from '$lib/server/authz';
 import {
 	OwnerProfileError,
+	loadHomeHero,
 	loadOwnerEditorView,
+	saveHomeHero,
 	saveOwnerProfile,
+	type HomeHeroInput,
 	type OwnerProfileInput
 } from '$lib/server/services/owner-profile';
 import { assertSettingWrite, settingAccess } from '$lib/server/settings/tiers';
+import { getOption, OPTION_LANGS } from '$lib/server/config/options-registry';
+import {
+	HERO_FIELDS,
+	type HeroCopy,
+	type HeroDefaults,
+	type HeroField
+} from '$lib/config/home-hero';
 
 /**
  * Profile & Preferences (W4.1): the owner's public persona. Only the pointer
@@ -18,16 +28,50 @@ import { assertSettingWrite, settingAccess } from '$lib/server/settings/tiers';
  */
 export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();
-	const view = await loadOwnerEditorView();
+	const [view, home, siteDefaultLang] = await Promise.all([
+		loadOwnerEditorView(),
+		loadHomeHero(),
+		getOption('site.default_lang')
+	]);
 	const admin = event.locals.admin;
 	const access = settingAccess(admin?.role, 'profile');
+	const heroCopy: HeroCopy = {
+		title: home.title ?? {},
+		subtitlePrefix: home.subtitlePrefix ?? {},
+		subtitleHighlight: home.subtitleHighlight ?? {},
+		description: home.description ?? {},
+		welcome: home.welcome ?? {}
+	};
 	return {
 		view,
 		editable: Boolean(
 			access.editable && admin?.role === 'owner' && view.pointerUserId === admin.userId
-		)
+		),
+		hero: {
+			copy: heroCopy,
+			// Built-in copy per locale; "copy default" and the effective
+			// preview use this when an override is absent.
+			defaults: heroDefaults(),
+			siteDefaultLang,
+			locales: [...OPTION_LANGS],
+			updatedAt: home.updatedAt?.toISOString() ?? null
+		}
 	};
 };
+
+function heroDefaults(): HeroDefaults {
+	const defaults = {} as HeroDefaults;
+	for (const locale of OPTION_LANGS) {
+		defaults[locale] = {
+			title: m.hero_title({}, { locale }),
+			subtitlePrefix: m.hero_subtitle_prefix({}, { locale }),
+			subtitleHighlight: m.hero_subtitle_highlight({}, { locale }),
+			description: m.hero_description({}, { locale }),
+			welcome: m.hero_welcome({}, { locale })
+		};
+	}
+	return defaults;
+}
 
 function stringField(form: FormData, name: string): string {
 	return (form.get(name) ?? '').toString();
@@ -89,6 +133,56 @@ export const actions: Actions = {
 			return fail(500, {
 				message: m.admin_settings_profile_err_save(),
 				step: 'profile' as const,
+				ok: false
+			});
+		}
+	},
+
+	/**
+	 * Home hero copy (W4.2). Every field is a per-locale map; an empty input
+	 * removes that locale's override, so the field falls back to the site
+	 * default language and then to the built-in copy.
+	 */
+	saveHero: async (event) => {
+		await requireAdminRole();
+		assertSettingWrite(event.locals.admin?.role, 'profile', 'profile.home_hero');
+
+		const form = await event.request.formData();
+		const input: HomeHeroInput = {};
+		for (const field of HERO_FIELDS) {
+			const map: Record<string, string> = {};
+			for (const locale of OPTION_LANGS) {
+				const value = form.get(`hero.${field}.${locale}`);
+				if (typeof value === 'string') map[locale] = value;
+			}
+			input[field as HeroField] = map;
+		}
+
+		try {
+			const saved = await saveHomeHero(input, {
+				actorId: event.locals.user?.id ?? ''
+			});
+			return {
+				step: 'hero' as const,
+				ok: true,
+				hero: saved,
+				message: m.admin_settings_profile_hero_saved()
+			};
+		} catch (caught) {
+			if (caught instanceof OwnerProfileError) {
+				return fail(caught.status, {
+					message: caught.message,
+					step: 'hero' as const,
+					ok: false
+				});
+			}
+			console.warn(
+				'[settings] home hero save failed:',
+				caught instanceof Error ? caught.message : caught
+			);
+			return fail(500, {
+				message: m.admin_settings_profile_hero_err_save(),
+				step: 'hero' as const,
 				ok: false
 			});
 		}

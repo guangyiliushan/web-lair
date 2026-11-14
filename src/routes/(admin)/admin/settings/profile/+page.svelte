@@ -5,17 +5,29 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import { Textarea } from '$lib/components/ui/textarea';
 	import {
 		SettingsForm,
 		SettingsStatusList,
 		SettingsStatusRow
 	} from '$lib/components/admin/settings';
 	import { SOCIAL_PRESETS, SOCIAL_USER_PLATFORMS } from '$lib/config/social';
+	import {
+		HERO_FIELDS,
+		HERO_FIELD_MAX,
+		resolveHeroField,
+		type HeroCopy,
+		type HeroField,
+		type HeroSource
+	} from '$lib/config/home-hero';
+	import { localeLabels } from '$lib/stores/locale.svelte';
+	import type { HomeHeroInput } from '$lib/server/services/owner-profile';
 	import type { ProfileLink } from '$lib/server/db/account';
 	import IconPlus from '@tabler/icons-svelte-runes/icons/plus';
 	import IconTrash from '@tabler/icons-svelte-runes/icons/trash';
 	import IconUser from '@tabler/icons-svelte-runes/icons/user';
 	import IconLink from '@tabler/icons-svelte-runes/icons/link';
+	import IconSparkles from '@tabler/icons-svelte-runes/icons/sparkles';
 
 	let { data, form }: PageProps = $props();
 
@@ -31,6 +43,7 @@
 				avatarUrl: string | null;
 				links: ProfileLink[] | null;
 			};
+			hero?: HomeHeroInput;
 		} | null
 	);
 
@@ -40,6 +53,89 @@
 	let links = $state<ProfileLink[]>(
 		untrack(() => (profile?.links ?? []).map((link) => ({ ...link })))
 	);
+
+	const heroInitialCopy = untrack(() => cloneHeroCopy(data.hero.copy));
+	let heroCopy = $state<HeroCopy>(cloneHeroCopy(heroInitialCopy));
+	let heroLocale = $state(
+		untrack(() =>
+			data.hero.locales.includes(data.hero.siteDefaultLang)
+				? data.hero.siteDefaultLang
+				: (data.hero.locales[0] ?? 'en')
+		)
+	);
+	const heroInitial = $derived(JSON.stringify(heroSnapshot(data.hero.copy)));
+	const heroCurrent = $derived(JSON.stringify(heroSnapshot(heroCopy)));
+	const heroDirty = $derived(heroCurrent !== heroInitial);
+	const heroTokens = $derived({
+		name: data.view.profile?.displayName ?? '',
+		label: data.view.profile?.headerLabel ?? data.view.profile?.displayName ?? ''
+	});
+
+	function cloneHeroCopy(copy: HeroCopy): HeroCopy {
+		const cloned = {} as HeroCopy;
+		for (const field of HERO_FIELDS) cloned[field] = { ...(copy[field] ?? {}) };
+		return cloned;
+	}
+
+	/** Absent locale and an empty string are the same "no override" state. */
+	function heroSnapshot(copy: HeroCopy): string {
+		const canonical: Record<string, Record<string, string>> = {};
+		for (const field of HERO_FIELDS) {
+			canonical[field] = {};
+			for (const locale of data.hero.locales) {
+				canonical[field][locale] = copy[field]?.[locale] ?? '';
+			}
+		}
+		return JSON.stringify(canonical);
+	}
+
+	function updateHeroField(field: HeroField, value: string) {
+		heroCopy = {
+			...heroCopy,
+			[field]: { ...heroCopy[field], [heroLocale]: value }
+		};
+	}
+
+	function copyHeroDefault() {
+		const defaults = data.hero.defaults[heroLocale];
+		if (!defaults) return;
+		const next = cloneHeroCopy(heroCopy);
+		for (const field of HERO_FIELDS) next[field][heroLocale] = defaults[field];
+		heroCopy = next;
+	}
+
+	function resetHero() {
+		heroCopy = cloneHeroCopy(data.hero.copy);
+	}
+
+	function heroPreview(field: HeroField) {
+		return resolveHeroField(
+			heroCopy[field],
+			field,
+			heroLocale,
+			data.hero.siteDefaultLang,
+			data.hero.defaults,
+			heroTokens
+		);
+	}
+
+	function heroSourceLabel(source: HeroSource): string {
+		if (source === 'override') return m.admin_settings_profile_hero_source_override();
+		if (source === 'site_default') return m.admin_settings_profile_hero_source_site_default();
+		return m.admin_settings_profile_hero_source_default();
+	}
+
+	function heroFieldLabel(field: HeroField): string {
+		if (field === 'title') return m.admin_settings_profile_hero_title();
+		if (field === 'subtitlePrefix') return m.admin_settings_profile_hero_subtitle_prefix();
+		if (field === 'subtitleHighlight') return m.admin_settings_profile_hero_subtitle_highlight();
+		if (field === 'description') return m.admin_settings_profile_hero_description();
+		return m.admin_settings_profile_hero_welcome();
+	}
+
+	function heroOverrideCount(locale: string): number {
+		return HERO_FIELDS.filter((field) => (heroCopy[field]?.[locale] ?? '').trim() !== '').length;
+	}
 
 	const initial = $derived(
 		JSON.stringify({
@@ -80,11 +176,16 @@
 	// URL); sync local fields so the form never shows the pre-normalized text.
 	$effect(() => {
 		const payload = formState;
-		if (!payload || payload.step !== 'profile' || payload.ok === false || !payload.profile) return;
-		displayName = payload.profile.displayName;
-		headerLabel = payload.profile.headerLabel ?? '';
-		avatarUrl = payload.profile.avatarUrl ?? '';
-		links = (payload.profile.links ?? []).map((link) => ({ ...link }));
+		if (!payload || payload.ok === false) return;
+		if (payload.step === 'profile' && payload.profile) {
+			displayName = payload.profile.displayName;
+			headerLabel = payload.profile.headerLabel ?? '';
+			avatarUrl = payload.profile.avatarUrl ?? '';
+			links = (payload.profile.links ?? []).map((link) => ({ ...link }));
+		}
+		if (payload.step === 'hero' && payload.hero) {
+			heroCopy = cloneHeroCopy(payload.hero as HeroCopy);
+		}
 	});
 
 	function reset() {
@@ -265,6 +366,93 @@
 				</section>
 			</div>
 		</SettingsForm>
+
+		<section class="mt-10">
+			<div class="mb-4 flex flex-wrap items-center gap-2">
+				<IconSparkles class="size-5 text-muted-foreground" />
+				<h3 class="text-base font-semibold">{m.admin_settings_profile_hero()}</h3>
+			</div>
+			<p class="mb-1 text-sm text-muted-foreground">{m.admin_settings_profile_hero_desc()}</p>
+			<p class="mb-4 text-xs text-muted-foreground">
+				{m.admin_settings_profile_hero_tokens()}
+				<code class="rounded bg-muted px-1 py-0.5">{'{name}'}</code>
+				<code class="rounded bg-muted px-1 py-0.5">{'{label}'}</code>
+			</p>
+
+			<SettingsForm
+				action="?/saveHero"
+				dirty={heroDirty}
+				message={formState?.step === 'hero' ? formState.message : null}
+				error={formState?.step === 'hero' && formState.ok === false}
+				onCancel={resetHero}
+			>
+				<div
+					class="flex flex-wrap items-center gap-2"
+					role="tablist"
+					aria-label={m.admin_settings_profile_hero_locale()}
+				>
+					{#each data.hero.locales as locale (locale)}
+						<Button
+							type="button"
+							size="sm"
+							variant={heroLocale === locale ? 'default' : 'ghost'}
+							aria-pressed={heroLocale === locale}
+							onclick={() => (heroLocale = locale)}
+						>
+							{localeLabels[locale] ?? locale}
+						</Button>
+					{/each}
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						class="ms-auto"
+						onclick={copyHeroDefault}
+					>
+						{m.admin_settings_profile_hero_copy_default()}
+					</Button>
+				</div>
+				<p class="mt-2 text-xs text-muted-foreground">
+					{m.admin_settings_profile_hero_copy_default_hint()}
+				</p>
+
+				<div class="mt-4 grid gap-4">
+					{#each HERO_FIELDS as field (field)}
+						{@const preview = heroPreview(field)}
+						<label class="flex flex-col gap-1.5 text-sm">
+							<span class="font-medium">
+								{heroFieldLabel(field)}
+								<span class="font-normal text-muted-foreground">({HERO_FIELD_MAX[field]})</span>
+							</span>
+							{#if field === 'description'}
+								<Textarea
+									name={`hero.${field}.${heroLocale}`}
+									value={heroCopy[field]?.[heroLocale] ?? ''}
+									rows={3}
+									oninput={(event) => updateHeroField(field, event.currentTarget.value)}
+								/>
+							{:else}
+								<Input
+									name={`hero.${field}.${heroLocale}`}
+									value={heroCopy[field]?.[heroLocale] ?? ''}
+									oninput={(event) => updateHeroField(field, event.currentTarget.value)}
+								/>
+							{/if}
+							<span
+								class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
+								data-slot="hero-effective"
+							>
+								<span>{m.admin_settings_profile_hero_effective()}</span>
+								<Badge variant="outline">{heroSourceLabel(preview.source)}</Badge>
+								<span class="text-foreground/80">
+									{preview.value || m.admin_settings_profile_hero_empty()}
+								</span>
+							</span>
+						</label>
+					{/each}
+				</div>
+			</SettingsForm>
+		</section>
 	{:else}
 		<SettingsStatusList
 			title={m.admin_settings_user_title()}
@@ -292,6 +480,20 @@
 				label={m.admin_settings_user_email()}
 				value={data.view.email ?? m.admin_settings_common_not_configured()}
 			/>
+		</SettingsStatusList>
+
+		<SettingsStatusList
+			title={m.admin_settings_profile_hero()}
+			description={m.admin_settings_profile_hero_desc()}
+		>
+			{#each data.hero.locales as locale (locale)}
+				<SettingsStatusRow
+					label={localeLabels[locale] ?? locale}
+					value={m.admin_settings_profile_hero_override_count({
+						count: heroOverrideCount(locale)
+					})}
+				/>
+			{/each}
 		</SettingsStatusList>
 	{/if}
 </div>
