@@ -2741,7 +2741,7 @@
 	"hero_scroll_down": "Scroll down to explore",
 	"hero_subtitle_highlight": "<Developer />",
 	"hero_subtitle_prefix": "A SvelteKit Full Stack",
-	"hero_title": "Hi, I'm guangyiliushan",
+	"hero_title": "Hi, I'm {name} 👋",
 	"hero_welcome": "When the first satellite flew beyond the atmosphere, we thought we would conquer the universe someday.",
 	"image_alt_label": "Alt text (optional)",
 	"image_alt_placeholder": "Describe this image",
