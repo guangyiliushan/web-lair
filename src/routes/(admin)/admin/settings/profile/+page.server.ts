@@ -51,7 +51,7 @@ export const load: PageServerLoad = async (event) => {
 			copy: heroCopy,
 			// Built-in copy per locale; "copy default" and the effective
 			// preview use this when an override is absent.
-			defaults: heroDefaults(),
+			defaults: heroDefaults(view.profile?.displayName ?? ''),
 			siteDefaultLang,
 			locales: [...OPTION_LANGS],
 			updatedAt: home.updatedAt?.toISOString() ?? null
@@ -59,11 +59,11 @@ export const load: PageServerLoad = async (event) => {
 	};
 };
 
-function heroDefaults(): HeroDefaults {
+function heroDefaults(name: string): HeroDefaults {
 	const defaults = {} as HeroDefaults;
 	for (const locale of OPTION_LANGS) {
 		defaults[locale] = {
-			title: m.hero_title({}, { locale }),
+			title: m.hero_title({ name }, { locale }),
 			subtitlePrefix: m.hero_subtitle_prefix({}, { locale }),
 			subtitleHighlight: m.hero_subtitle_highlight({}, { locale }),
 			description: m.hero_description({}, { locale }),
