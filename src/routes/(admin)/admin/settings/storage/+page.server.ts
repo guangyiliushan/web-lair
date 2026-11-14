@@ -45,10 +45,11 @@ import type { StorageStatusState } from '$lib/server/storage/provider';
  */
 export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();
-	const [provider, active, status, purge, fileCount] = await Promise.all([
+	const [provider, active, status, migration, purge, fileCount] = await Promise.all([
 		getOption('storage.provider'),
 		getOption('storage.active'),
 		getOption('storage.status'),
+		getOption('storage.migration'),
 		getOption('media.purge'),
 		db.$count(files)
 	]);
@@ -78,9 +79,19 @@ export const load: PageServerLoad = async (event) => {
 			fingerprint: providerFingerprint(active.config)
 		},
 		status,
+		migration: {
+			state: migration.state,
+			total: migration.total,
+			verified: migration.verified,
+			failed: migration.failed,
+			startedAt: migration.startedAt,
+			cutoverAt: migration.cutoverAt,
+			error: migration.error
+		},
 		purge,
 		fileCount,
 		migrationRequired: fileCount > 0,
+		migrationRunning: migration.state === 'copying',
 		credentials: {
 			source: credentials ? ('env' as const) : ('missing' as const),
 			envNames: S3_CREDENTIAL_ENV

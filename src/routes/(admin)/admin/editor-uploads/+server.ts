@@ -105,8 +105,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		});
 	} catch (error) {
 		if (error instanceof UploadRejected) {
+			// 503 for the maintenance window: it is temporary and the client
+			// should retry after cutover, not treat it as a bad file (W7.4).
 			const status =
-				error.code === 'too-large' ? 413 : error.code === 'unsupported-type' ? 415 : 400;
+				error.code === 'migration'
+					? 503
+					: error.code === 'too-large'
+						? 413
+						: error.code === 'unsupported-type'
+							? 415
+							: 400;
 			return jsonPrivate({ code: error.code }, status);
 		}
 		// Sanitized line only (house policy: driver messages never reach the

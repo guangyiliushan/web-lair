@@ -10,9 +10,11 @@ import { OWNER_STATUS_DEFAULT, OWNER_STATUS_KINDS } from '../../config/owner-sta
 import {
 	DEFAULT_PROVIDER_CONFIG,
 	DEFAULT_STORAGE_ACTIVE,
+	DEFAULT_STORAGE_MIGRATION,
 	DEFAULT_STORAGE_STATUS,
 	providerConfigSchema,
 	storageActiveSchema,
+	storageMigrationSchema,
 	storageStatusSchema
 } from '../storage/provider.ts';
 
@@ -241,6 +243,12 @@ export const optionRegistry = {
 		// guard needs (W7.5). Sanitized: no URL, key or driver message.
 		schema: storageStatusSchema,
 		default: DEFAULT_STORAGE_STATUS
+	},
+	'storage.migration': {
+		// W7.4: CLI migration bookkeeping. `copying` freezes uploads and makes
+		// purge refuse; a stuck state needs `storage:migrate --reset`.
+		schema: storageMigrationSchema,
+		default: DEFAULT_STORAGE_MIGRATION
 	},
 	'media.purge': {
 		schema: z.object({

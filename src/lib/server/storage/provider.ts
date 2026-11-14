@@ -201,6 +201,54 @@ export const DEFAULT_STORAGE_STATUS: StorageStatusState = {
 };
 
 /**
+ * Migration bookkeeping (W7.4, decision Q13): a CLI-only copy with a
+ * maintenance window, persisted so the app can freeze uploads / refuse purge
+ * while it runs and so a crashed run is visible instead of silent.
+ */
+export const storageMigrationSchema = z.object({
+	state: z.enum(['idle', 'copying', 'copied', 'failed', 'cutover', 'rolled-back']),
+	/** Run id (uuid) of the last attempt; null before the first run. */
+	id: z.string().nullable(),
+	startedAt: z.string().nullable(),
+	finishedAt: z.string().nullable(),
+	cutoverAt: z.string().nullable(),
+	/** Fingerprints of the source/target provider snapshots. */
+	sourceFingerprint: z.string().nullable(),
+	targetFingerprint: z.string().nullable(),
+	/** Objects planned (canonical files + their variants). */
+	total: z.number().int().nonnegative(),
+	copied: z.number().int().nonnegative(),
+	verified: z.number().int().nonnegative(),
+	failed: z.number().int().nonnegative(),
+	bytes: z.number().int().nonnegative(),
+	/** Sanitized reason of the last failure. */
+	error: z.string().max(300).nullable()
+});
+
+export type StorageMigrationState = z.infer<typeof storageMigrationSchema>;
+
+export const DEFAULT_STORAGE_MIGRATION: StorageMigrationState = {
+	state: 'idle',
+	id: null,
+	startedAt: null,
+	finishedAt: null,
+	cutoverAt: null,
+	sourceFingerprint: null,
+	targetFingerprint: null,
+	total: 0,
+	copied: 0,
+	verified: 0,
+	failed: 0,
+	bytes: 0,
+	error: null
+};
+
+/** True while a copy is running (uploads freeze, purge refuses). */
+export function migrationInProgress(state: Pick<StorageMigrationState, 'state'>): boolean {
+	return state.state === 'copying';
+}
+
+/**
  * Stable fingerprint of the addressing half of a config (never credentials),
  * so a stored test result can say which configuration it belongs to.
  */

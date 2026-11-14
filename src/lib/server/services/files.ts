@@ -48,7 +48,8 @@ async function resolveDeps(
 	return { storage, database };
 }
 
-export type UploadErrorCode = 'empty' | 'too-large' | 'unsupported-type' | 'batch-too-large';
+export type UploadErrorCode =
+	'empty' | 'too-large' | 'unsupported-type' | 'batch-too-large' | 'migration';
 
 export class UploadRejected extends Error {
 	constructor(
@@ -90,6 +91,17 @@ const ROW_FIELDS = {
 	height: files.height,
 	status: files.status
 } as const;
+
+/**
+ * True while a provider copy is running (`storage.migration.state = copying`).
+ * Both the upload path and the purge guard read it from the options table, so
+ * a crash leaves the freeze in place until an operator resets it — the safe
+ * direction (a stuck freeze is visible; a silent unfreeze is not).
+ */
+export async function migrationFreezeActive(database: FilesDb): Promise<boolean> {
+	const migration = await getOption('storage.migration', database);
+	return migration.state === 'copying';
+}
 
 async function findFileByHash(
 	contentHash: string,
@@ -143,6 +155,16 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 	}
 
 	const { storage, database } = await resolveDeps(deps);
+
+	// Maintenance window (W7.4/Q13): a provider copy enumerates the registry,
+	// so a new write would either miss the copy or land in the wrong bucket.
+	// Freezing uploads is the cheap, honest half of "no online dual-write".
+	if (await migrationFreezeActive(database)) {
+		throw new UploadRejected(
+			'migration',
+			'Storage migration in progress: uploads are paused until cutover'
+		);
+	}
 	const contentHash = createHash('sha256').update(input.bytes).digest('hex');
 	const existing = await findFileByHash(contentHash, database);
 	if (existing) {
@@ -622,6 +644,12 @@ export interface PurgeSkip {
 
 export interface PurgeOutcome {
 	dryRun: boolean;
+	/**
+	 * Set when the run refused to do anything (W7.4): a provider migration is
+	 * copying the registry, so deleting from the active bucket would lose
+	 * media that the copy has not reached yet.
+	 */
+	blocked: 'migration' | null;
 	candidates: PurgeCandidate[];
 	/**
 	 * Candidates kept, each tagged with its reason: `mentioned` (content
@@ -650,6 +678,20 @@ export async function purgeMedia(
 	deps: FilesDeps = {}
 ): Promise<PurgeOutcome> {
 	const { storage, database } = await resolveDeps(deps);
+	// W7.4: a purge deletes from the ACTIVE bucket, which is exactly the object
+	// set a running provider copy still needs. Refuse for the whole run —
+	// including dry-run, so the operator sees why nothing is listed.
+	if (await migrationFreezeActive(database)) {
+		return {
+			dryRun: options.dryRun,
+			blocked: 'migration',
+			candidates: [],
+			skipped: [],
+			failed: [],
+			deleted: [],
+			scanTruncated: false
+		};
+	}
 	const candidates = await listPurgeCandidates({ storage, db: database });
 	const { mentions, truncated } = await scanMentions(database);
 	const mentioned = new Set(mentions.map((mention) => mention.key));
@@ -705,7 +747,15 @@ export async function purgeMedia(
 			}
 		}
 	}
-	return { dryRun: options.dryRun, candidates, skipped, failed, deleted, scanTruncated: truncated };
+	return {
+		dryRun: options.dryRun,
+		blocked: null,
+		candidates,
+		skipped,
+		failed,
+		deleted,
+		scanTruncated: truncated
+	};
 }
 
 // ---------------------------------------------------------------------------

@@ -91,6 +91,7 @@ describe('options registry (AI-1.1)', () => {
 				'site.ownerStatus',
 				'site.timezone',
 				'storage.active',
+				'storage.migration',
 				'storage.provider',
 				'storage.status',
 				'translations.retention'

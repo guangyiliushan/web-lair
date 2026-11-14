@@ -26,6 +26,16 @@ const storage = new S3Storage(storageConfigFromEnv(process.env));
 
 const outcome = await purgeMedia({ dryRun: !execute }, { db, storage });
 
+if (outcome.blocked === 'migration') {
+	console.error(
+		'REFUSED: a storage provider migration is running (storage.migration = copying).\n' +
+			'Purge stays disabled until the copy finishes and `storage:migrate --cutover` runs\n' +
+			'(or `--reset` clears a stuck run).'
+	);
+	await sql.end();
+	process.exit(1);
+}
+
 console.log(`purge ${execute ? 'EXECUTE' : 'dry-run'} — candidates: ${outcome.candidates.length}`);
 for (const candidate of outcome.candidates) {
 	console.log(

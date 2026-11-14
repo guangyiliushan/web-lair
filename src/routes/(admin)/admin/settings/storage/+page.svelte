@@ -91,6 +91,16 @@
 		data.status.lastStatus ? m[PROBE_STATUS_KEYS[data.status.lastStatus]]() : null
 	);
 
+	const MIGRATION_STATE_KEYS = {
+		idle: 'admin_settings_storage_migration_state_idle',
+		copying: 'admin_settings_storage_migration_state_copying',
+		copied: 'admin_settings_storage_migration_state_copied',
+		failed: 'admin_settings_storage_migration_state_failed',
+		cutover: 'admin_settings_storage_migration_state_cutover',
+		'rolled-back': 'admin_settings_storage_migration_state_rolled_back'
+	} as const;
+	const migrationStateLabel = $derived(m[MIGRATION_STATE_KEYS[data.migration.state]]());
+
 	const lastTest = $derived(
 		data.status.lastTestAt
 			? `${new Date(data.status.lastTestAt).toLocaleString()} · ${
@@ -367,7 +377,25 @@
 					? m.admin_settings_storage_migration_required()
 					: m.admin_settings_storage_migration_not_required()}
 			/>
+			<SettingsStatusRow
+				label={m.admin_settings_storage_migration_state()}
+				value={migrationStateLabel}
+			/>
+			{#if data.migration.state !== 'idle'}
+				<SettingsStatusRow
+					label={m.admin_settings_storage_migration_progress()}
+					value={`${data.migration.verified}/${data.migration.total}`}
+				/>
+			{/if}
+			{#if data.migration.error}
+				<SettingsStatusRow label={m.admin_settings_common_error()} value={data.migration.error} />
+			{/if}
 		</SettingsStatusList>
+		{#if data.migrationRunning}
+			<p class="text-sm text-destructive" role="alert">
+				{m.admin_settings_storage_migration_running()}
+			</p>
+		{/if}
 		<pre class="overflow-x-auto rounded-lg border bg-muted/30 p-3 text-xs"><code
 				>{`pnpm storage:migrate --dry-run
 pnpm storage:migrate --yes
