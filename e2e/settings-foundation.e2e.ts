@@ -42,7 +42,10 @@ test('all eight pages answer 200 with their section heading', async ({ page }) =
 });
 
 test('read-only pages render zero form controls', async ({ page }) => {
-	for (const id of ['profile', 'site', 'content', 'storage', 'integrations']) {
+	// W5: Site now ships real identity/icon/timezone/language forms, so it is
+	// no longer part of this list; the remaining pages are still read-only in
+	// this wave.
+	for (const id of ['profile', 'content', 'storage', 'integrations']) {
 		const response = await page.goto(`/admin/settings/${id}`);
 		expect(response?.status(), id).toBe(200);
 		await expect(
