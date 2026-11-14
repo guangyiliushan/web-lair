@@ -33,6 +33,12 @@ export const actions: Actions = {
 			return fail(400, { message: 'All fields are required' });
 		}
 
+		// W6.3 (C3): informed consent is required and never pre-checked. The
+		// checkbox is also `required` in the browser; this is the server gate.
+		if (formData.get('privacyConsent') === null) {
+			return fail(400, { message: m.auth_register_privacy_required() });
+		}
+
 		if (password !== confirmPassword) {
 			return fail(400, { message: 'Passwords do not match' });
 		}
