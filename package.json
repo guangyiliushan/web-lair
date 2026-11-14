@@ -26,6 +26,7 @@
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright install && playwright test",
 		"test:integration-refs": "vitest run --project server src/lib/server/services/file-references.integration.test.ts",
+		"test:storage-live": "node --env-file=.env node_modules/vitest/vitest.mjs run --project server src/lib/server/storage/storage-live.integration.test.ts",
 		"db:start": "docker compose up",
 		"db:push": "drizzle-kit push",
 		"db:generate": "drizzle-kit generate",

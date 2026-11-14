@@ -804,6 +804,12 @@ A cutover is refused unless: a complete copy of exactly this target exists
 provider is explicitly set to **logical delete** (deletes become delete
 markers; space is not reclaimed).
 
+Provider support is tiered (decision Q11): **Tier 1 = AWS S3, Cloudflare R2,
+MinIO** — the tested matrix (`providerType` aws-s3 / r2 / minio).
+**Tier 2 = B2, Wasabi, Spaces** are best-effort: run the connection test and
+one real upload before trusting them, and treat a failure there as a provider
+gap rather than a bug in this app.
+
 After a cutover, re-publish the map tiles — `maps/*.pmtiles` are not `files`
 rows, so the migration does not carry them:
 

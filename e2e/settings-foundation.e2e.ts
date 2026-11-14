@@ -42,7 +42,8 @@ test('all eight pages answer 200 with their section heading', async ({ page }) =
 });
 
 test('planned/read-only pages render zero form controls', async ({ page }) => {
-	for (const id of ['site', 'content', 'storage', 'integrations']) {
+	// Storage left this list in W7: it is now a real owner control plane.
+	for (const id of ['site', 'content', 'integrations']) {
 		const response = await page.goto(`/admin/settings/${id}`);
 		expect(response?.status(), id).toBe(200);
 		await expect(
