@@ -172,7 +172,6 @@ describe('applyForLink', () => {
 		state.options['friends.apply'] = {
 			enabled: false,
 			allowSubPath: false,
-			internalizeAvatars: false
 		};
 		const { db, calls } = fakeDb([]);
 		expect(await applyForLink(baseInput, { db, rateLimit: allow })).toEqual({
