@@ -1,6 +1,9 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { m } from '$lib/paraglide/messages';
+import { eq } from 'drizzle-orm';
+import { db } from '$lib/server/db';
+import { user } from '$lib/server/db/auth.schema';
 import { requireAdminRole } from '$lib/server/authz';
 import {
 	OwnerProfileError,
@@ -28,10 +31,14 @@ import {
  */
 export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();
-	const [view, home, siteDefaultLang] = await Promise.all([
+	const [view, home, siteDefaultLang, langRow] = await Promise.all([
 		loadOwnerEditorView(),
 		loadHomeHero(),
-		getOption('site.default_lang')
+		getOption('site.default_lang'),
+		db.query.user.findFirst({
+			where: eq(user.id, event.locals.user?.id ?? ''),
+			columns: { defaultLang: true }
+		})
 	]);
 	const admin = event.locals.admin;
 	const access = settingAccess(admin?.role, 'profile');
@@ -55,7 +62,12 @@ export const load: PageServerLoad = async (event) => {
 			siteDefaultLang,
 			locales: [...OPTION_LANGS],
 			updatedAt: home.updatedAt?.toISOString() ?? null
-		}
+		},
+		// Content language (IA2): a per-user preference lives here, not in the
+		// security-only Account page. Empty = follow the site default.
+		defaultLang: langRow?.defaultLang ?? null,
+		siteDefaultLang,
+		langs: [...OPTION_LANGS]
 	};
 };
 
@@ -186,5 +198,37 @@ export const actions: Actions = {
 				ok: false
 			});
 		}
+	},
+
+	/**
+	 * Content language (W4.7/IA2): the language new content starts in. Stored on
+	 * the signed-in user only; empty means "follow site.default_lang" and is
+	 * stored as NULL, so a later site-default change still reaches this author.
+	 */
+	contentLang: async (event) => {
+		await requireAdminRole();
+		assertSettingWrite(event.locals.admin?.role, 'profile', 'profile.content_language');
+
+		const form = await event.request.formData();
+		const lang = (form.get('lang') ?? '').toString();
+
+		if (lang !== '' && !(OPTION_LANGS as readonly string[]).includes(lang)) {
+			return fail(400, {
+				message: m.admin_settings_profile_err_content_lang(),
+				step: 'contentLang' as const,
+				ok: false
+			});
+		}
+
+		await db
+			.update(user)
+			.set({ defaultLang: lang || null })
+			.where(eq(user.id, event.locals.user?.id ?? ''));
+
+		return {
+			message: m.admin_settings_profile_msg_content_lang(),
+			step: 'contentLang' as const,
+			ok: true
+		};
 	}
 };

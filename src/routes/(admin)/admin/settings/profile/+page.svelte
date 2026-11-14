@@ -28,6 +28,7 @@
 	import IconUser from '@tabler/icons-svelte-runes/icons/user';
 	import IconLink from '@tabler/icons-svelte-runes/icons/link';
 	import IconSparkles from '@tabler/icons-svelte-runes/icons/sparkles';
+	import IconGlobe from '@tabler/icons-svelte-runes/icons/globe';
 
 	let { data, form }: PageProps = $props();
 
@@ -62,6 +63,13 @@
 				? data.hero.siteDefaultLang
 				: (data.hero.locales[0] ?? 'en')
 		)
+	);
+	// Content language is per-user; `null` means "no unsaved edit", while the
+	// loaded value may itself be null (follow the site default).
+	let contentLang = $state<string | null>(null);
+	const currentContentLang = $derived(contentLang ?? data.defaultLang ?? '');
+	const contentLangDirty = $derived(
+		contentLang !== null && contentLang !== (data.defaultLang ?? '')
 	);
 	const heroInitial = $derived(JSON.stringify(heroSnapshot(data.hero.copy)));
 	const heroCurrent = $derived(JSON.stringify(heroSnapshot(heroCopy)));
@@ -185,6 +193,9 @@
 		}
 		if (payload.step === 'hero' && payload.hero) {
 			heroCopy = cloneHeroCopy(payload.hero as HeroCopy);
+		}
+		if (payload.step === 'contentLang' && payload.ok) {
+			contentLang = null;
 		}
 	});
 
@@ -453,6 +464,39 @@
 				</div>
 			</SettingsForm>
 		</section>
+
+		<section class="mt-10">
+			<div class="mb-4 flex items-center gap-2">
+				<IconGlobe class="size-5 text-muted-foreground" />
+				<h3 class="text-base font-semibold">{m.admin_settings_profile_content_lang()}</h3>
+			</div>
+			<p class="mb-4 text-sm text-muted-foreground">
+				{m.admin_settings_profile_content_lang_desc()}
+			</p>
+
+			<SettingsForm
+				action="?/contentLang"
+				dirty={contentLangDirty}
+				message={formState?.step === 'contentLang' ? formState.message : null}
+				error={formState?.step === 'contentLang' && formState.ok === false}
+				onCancel={() => (contentLang = null)}
+			>
+				<select
+					name="lang"
+					value={currentContentLang}
+					onchange={(event) => (contentLang = event.currentTarget.value)}
+					aria-label={m.admin_settings_profile_content_lang()}
+					class="h-8 min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+				>
+					<option value="">
+						{m.admin_settings_profile_content_lang_site({ lang: data.siteDefaultLang })}
+					</option>
+					{#each data.langs as option (option)}
+						<option value={option}>{option}</option>
+					{/each}
+				</select>
+			</SettingsForm>
+		</section>
 	{:else}
 		<SettingsStatusList
 			title={m.admin_settings_user_title()}
@@ -479,6 +523,11 @@
 			<SettingsStatusRow
 				label={m.admin_settings_user_email()}
 				value={data.view.email ?? m.admin_settings_common_not_configured()}
+			/>
+			<SettingsStatusRow
+				label={m.admin_settings_profile_content_lang()}
+				value={data.defaultLang ??
+					m.admin_settings_profile_content_lang_site({ lang: data.siteDefaultLang })}
 			/>
 		</SettingsStatusList>
 

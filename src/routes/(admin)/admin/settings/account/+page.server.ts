@@ -7,8 +7,7 @@ import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/auth.schema';
 import { requireAdminRole } from '$lib/server/authz';
-import { settingAccess, assertSettingWrite } from '$lib/server/settings/tiers';
-import { getOption, OPTION_LANGS } from '$lib/server/config/options-registry';
+import { settingAccess } from '$lib/server/settings/tiers';
 import { pruneOtherSessions, pruneOtherSessionsKeepingNewest } from '$lib/server/auth/sessions';
 
 /**
@@ -53,45 +52,16 @@ export const load: PageServerLoad = async (event) => {
 
 	const row = await db.query.user.findFirst({
 		where: eq(user.id, event.locals.user?.id ?? ''),
-		columns: { twoFactorEnabled: true, defaultLang: true }
+		columns: { twoFactorEnabled: true }
 	});
 
 	return {
 		twoFactorEnabled: Boolean(row?.twoFactorEnabled),
-		defaultLang: row?.defaultLang ?? null,
-		siteDefaultLang: await getOption('site.default_lang'),
-		langs: [...OPTION_LANGS],
 		editable: settingAccess(event.locals.admin?.role, 'account').editable
 	};
 };
 
 export const actions: Actions = {
-	/**
-	 * A4: the language new posts start in. An empty value means "follow the
-	 * site default" and is stored as NULL, so changing the site default later
-	 * moves every author who never picked one.
-	 */
-	contentLang: async ({ request, locals }) => {
-		await requireAdminRole();
-		assertSettingWrite(locals.admin?.role, 'account', 'account.self');
-		const form = await request.formData();
-		const lang = (form.get('lang') ?? '').toString();
-
-		if (lang !== '' && !(OPTION_LANGS as readonly string[]).includes(lang)) {
-			return fail(400, {
-				message: m.admin_settings_account_err_content_lang(),
-				step: 'contentLang'
-			});
-		}
-
-		await db
-			.update(user)
-			.set({ defaultLang: lang || null })
-			.where(eq(user.id, locals.user?.id ?? ''));
-
-		return { message: m.admin_settings_account_msg_content_lang(), step: 'contentLang' };
-	},
-
 	/** Step 1: verify the password, receive the secret + one-time backup codes. */
 	enable: async (event) => {
 		await requireAdminRole();
