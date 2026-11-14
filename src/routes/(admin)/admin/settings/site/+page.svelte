@@ -305,21 +305,26 @@
 		<SettingsStatusRow label={m.admin_settings_site_version()} value={data.deployment.version} />
 	</SettingsStatusList>
 
-	<!-- Search indexing · read-only (SE1-SE4); real routes only -->
-	<SettingsStatusList title={m.admin_settings_site_search_indexing()}>
-		<SettingsStatusRow
-			label={m.admin_settings_site_sitemap()}
-			value={m.admin_settings_common_configured()}
-		/>
-		<SettingsStatusRow
-			label={m.admin_settings_site_robots()}
-			value={m.admin_settings_common_configured()}
-		/>
+	<!-- Search indexing · read-only (SE1-SE4); real routes only, no key fields -->
+	<SettingsStatusList
+		title={m.admin_settings_site_search_indexing()}
+		description={m.admin_settings_site_search_indexing_hint()}
+	>
+		<SettingsStatusRow label={m.admin_settings_site_sitemap()} value="/sitemap.xml" />
+		<SettingsStatusRow label={m.admin_settings_site_robots()} value="/robots.txt" />
 		<SettingsStatusRow
 			label={m.admin_settings_site_site_search()}
 			badge={m.admin_settings_site_not_implemented()}
 		/>
 	</SettingsStatusList>
+	<p class="-mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+		<a class="underline underline-offset-2" href="/sitemap.xml" target="_blank" rel="noopener">
+			{m.admin_settings_site_open_sitemap()}
+		</a>
+		<a class="underline underline-offset-2" href="/robots.txt" target="_blank" rel="noopener">
+			{m.admin_settings_site_open_robots()}
+		</a>
+	</p>
 
 	<div class="divide-y rounded-lg border">
 		<SettingsProviderStatus name="IndexNow" state="planned" />
