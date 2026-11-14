@@ -47,7 +47,7 @@ vi.mock('#jobs-sdk', () => ({
 	runTranslationsPrune: vi.fn(async () => 0)
 }));
 
-import pruneJob from './jobs-prune';
+import pruneJob from './builtin/jobs-prune';
 
 function makeCtx() {
 	return {

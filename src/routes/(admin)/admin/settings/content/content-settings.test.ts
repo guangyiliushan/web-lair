@@ -7,8 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * events never fan out to webhooks).
  */
 const mocks = vi.hoisted(() => ({
-	setOption: vi.fn(async (_key: string, _value: unknown) => {}),
-	recordActivity: vi.fn(async (_executor: unknown, _input: Record<string, unknown>) => {}),
+	setOption: vi.fn(),
+	recordActivity: vi.fn(),
 	geoipConfigured: { value: true }
 }));
 
@@ -178,13 +178,16 @@ describe('content settings actions', () => {
 			publicBannedList: true
 		});
 
-		const events = mocks.recordActivity.mock.calls.map(
-			([, input]) => (input as { event: string; deliver: boolean }).event
-		);
-		expect(events).toEqual(['friends.update', 'friends.update', 'friends.update']);
-		for (const [, input] of mocks.recordActivity.mock.calls) {
-			expect((input as { deliver: boolean }).deliver).toBe(false);
-		}
+		const calls = mocks.recordActivity.mock.calls as unknown as [
+			unknown,
+			{ event: string; deliver: boolean }
+		][];
+		expect(calls.map(([, input]) => input.event)).toEqual([
+			'friends.update',
+			'friends.update',
+			'friends.update'
+		]);
+		for (const [, input] of calls) expect(input.deliver).toBe(false);
 	});
 
 	it('writes the three presence switches together', async () => {
