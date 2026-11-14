@@ -36,6 +36,7 @@
 		"build-storybook": "storybook build",
 		"auth:schema": "npx auth@1.7.5 generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes",
 		"db:seed-owner": "tsx --env-file=.env scripts/seed-owner.ts",
+		"owner:rebuild": "tsx --env-file-if-exists=.env scripts/rebuild-site-owner.ts",
 		"db:seed-demo": "tsx --env-file=.env scripts/seed-demo.ts",
 		"db:verify-owner": "tsx --env-file=.env scripts/verify-owner-uniqueness.ts",
 		"db:reset-2fa": "tsx --env-file=.env scripts/reset-2fa.ts",

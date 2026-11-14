@@ -6,13 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * feeds — deleting or bypassing this wiring used to leave every gate green
  * while silently re-introducing the request-origin fallback in production.
  */
-const { envState, optionState } = vi.hoisted(() => ({
+const { envState, optionState, ownerState } = vi.hoisted(() => ({
 	envState: { env: {} as Record<string, string | undefined> },
 	optionState: {
 		enabled: true,
 		readerView: true,
 		readerDots: false,
-		owner: { name: 'Owner', avatar: '/owner.png' },
 		ownerStatus: {
 			enabled: true,
 			kind: 'coding' as const,
@@ -21,6 +20,16 @@ const { envState, optionState } = vi.hoisted(() => ({
 			href: ''
 		},
 		throwOn: null as string | null
+	},
+	ownerState: {
+		profile: {
+			userId: 'owner-1',
+			displayName: 'Owner',
+			headerLabel: null as string | null,
+			avatarUrl: '/owner.png' as string | null,
+			links: null
+		},
+		throwOn: false
 	}
 }));
 
@@ -37,9 +46,18 @@ vi.mock('$lib/server/config/options-registry', () => ({
 		if (key === 'presence.enabled') return optionState.enabled;
 		if (key === 'presence.readerView') return optionState.readerView;
 		if (key === 'presence.readerDots') return optionState.readerDots;
-		if (key === 'site.owner') return optionState.owner;
 		if (key === 'site.ownerStatus') return optionState.ownerStatus;
 		throw new Error(`unexpected option key: ${key}`);
+	})
+}));
+vi.mock('$lib/server/services/owner-profile', () => ({
+	loadOwnerProfile: vi.fn(async () => {
+		if (ownerState.throwOn) throw new Error('settings unavailable');
+		return ownerState.profile;
+	}),
+	ownerProfileToSiteOwner: (profile: { displayName: string; avatarUrl: string | null }) => ({
+		name: profile.displayName,
+		avatar: profile.avatarUrl ?? ''
 	})
 }));
 
@@ -52,6 +70,14 @@ describe('(site) layout server', () => {
 		optionState.readerView = true;
 		optionState.readerDots = false;
 		optionState.throwOn = null;
+		ownerState.throwOn = false;
+		ownerState.profile = {
+			userId: 'owner-1',
+			displayName: 'Owner',
+			headerLabel: null,
+			avatarUrl: '/owner.png',
+			links: null
+		};
 	});
 
 	it('exposes the public ORIGIN for the SEO head', async () => {
@@ -117,8 +143,8 @@ describe('(site) layout server', () => {
 		expect(data.ownerStatus).toEqual(optionState.ownerStatus);
 	});
 
-	it('falls back to the owner defaults when their settings rows cannot be read', async () => {
-		optionState.throwOn = 'site.owner';
+	it('falls back to the owner defaults when the pointer read fails', async () => {
+		ownerState.throwOn = true;
 		const data = (await load({
 			parent: async () => ({ auth: null }),
 			locals: {}

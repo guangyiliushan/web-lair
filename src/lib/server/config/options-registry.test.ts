@@ -88,7 +88,6 @@ describe('options registry (AI-1.1)', () => {
 				'site.default_lang',
 				'site.info',
 				'site.languages',
-				'site.owner',
 				'site.ownerStatus',
 				'site.timezone',
 				'translations.retention'
@@ -297,8 +296,7 @@ describe('options registry (AI-1.1)', () => {
 		});
 	});
 
-	it('ships the header owner badge and activity ticket defaults', async () => {
-		await expect(getOption('site.owner')).resolves.toEqual({ name: 'Lair', avatar: '' });
+	it('ships the activity ticket default (site.owner retired)', async () => {
 		await expect(getOption('site.ownerStatus')).resolves.toEqual({
 			enabled: true,
 			kind: 'coding',
