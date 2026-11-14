@@ -8,7 +8,9 @@ import { JOBS, builtinModuleFile } from './registry';
 describe('registry', () => {
 	it('every entry is self-consistent and has a builtin module on disk', async () => {
 		const dir = fileURLToPath(new URL('./builtin', import.meta.url));
-		const files = (await readdir(dir)).filter((file) => file.endsWith('.ts')).sort();
+		const files = (await readdir(dir))
+			.filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+			.sort();
 		expect(files).toEqual(Object.keys(JOBS).map(builtinModuleFile).sort());
 		for (const [key, definition] of Object.entries(JOBS)) {
 			expect(definition.name).toBe(key);

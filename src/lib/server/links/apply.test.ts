@@ -85,7 +85,7 @@ const baseInput = {
 
 beforeEach(() => {
 	state.options = {
-		'friends.apply': { enabled: true, allowSubPath: false, internalizeAvatars: false },
+		'friends.apply': { enabled: true, allowSubPath: false },
 		'friends.checks': {
 			enabled: false,
 			cadenceHours: 24,
@@ -171,7 +171,7 @@ describe('applyForLink', () => {
 	it('is closed when friends.apply.enabled is false', async () => {
 		state.options['friends.apply'] = {
 			enabled: false,
-			allowSubPath: false,
+			allowSubPath: false
 		};
 		const { db, calls } = fakeDb([]);
 		expect(await applyForLink(baseInput, { db, rateLimit: allow })).toEqual({

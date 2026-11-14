@@ -7,12 +7,14 @@ import { APIError } from 'better-auth/api';
  * `sendResetPassword` mail callback), keep the anti-enumeration answer, and
  * refuse when the transport cannot deliver at all.
  */
-const { requestResetMock, mailAvailableMock, mailLiveMock, rateLimitMock } = vi.hoisted(() => ({
-	requestResetMock: vi.fn(),
-	mailAvailableMock: vi.fn(() => true),
-	mailLiveMock: vi.fn(async () => true),
-	rateLimitMock: vi.fn(async () => ({ allowed: true, count: 1 }))
-}));
+const { requestResetMock, mailAvailableMock, mailLiveMock, rateLimitStrictMock } = vi.hoisted(
+	() => ({
+		requestResetMock: vi.fn(),
+		mailAvailableMock: vi.fn(() => true),
+		mailLiveMock: vi.fn(async () => true),
+		rateLimitStrictMock: vi.fn(async () => ({ allowed: true, count: 1, unavailable: false }))
+	})
+);
 
 vi.mock('$lib/server/auth', () => ({
 	auth: { api: { requestPasswordReset: requestResetMock } }
@@ -22,12 +24,13 @@ vi.mock('$lib/server/mail/transport', () => ({
 	isMailDeliveryAvailableLive: mailLiveMock
 }));
 vi.mock('$lib/server/cache', () => ({ getCache: () => ({}) }));
-vi.mock('$lib/server/cache/store', () => ({ rateLimit: rateLimitMock }));
+vi.mock('$lib/server/cache/store', () => ({ rateLimitStrict: rateLimitStrictMock }));
 vi.mock('$lib/paraglide/messages', () => ({
 	m: {
 		auth_forgot_err_email: () => 'err-email',
 		auth_forgot_err_rate: () => 'err-rate',
-		auth_forgot_mail_unconfigured: () => 'err-mail'
+		auth_forgot_mail_unconfigured: () => 'err-mail',
+		auth_err_unavailable: () => 'err-unavailable'
 	}
 }));
 
@@ -41,7 +44,8 @@ function event(fields: Record<string, string> = {}) {
 	return {
 		request: new Request('http://localhost/forgot-password', { method: 'POST', body }),
 		getClientAddress: () => '203.0.113.9',
-		url: new URL('http://localhost/forgot-password')
+		url: new URL('http://localhost/forgot-password'),
+		setHeaders: vi.fn()
 	};
 }
 
@@ -54,7 +58,7 @@ beforeEach(() => {
 	requestResetMock.mockResolvedValue({ status: true });
 	mailAvailableMock.mockReturnValue(true);
 	mailLiveMock.mockResolvedValue(true);
-	rateLimitMock.mockResolvedValue({ allowed: true, count: 1 });
+	rateLimitStrictMock.mockResolvedValue({ allowed: true, count: 1, unavailable: false });
 });
 
 describe('forgot-password action', () => {
@@ -123,7 +127,11 @@ describe('forgot-password action', () => {
 	});
 
 	it('caps reset mails per client address', async () => {
-		rateLimitMock.mockResolvedValueOnce({ allowed: false, count: 6 });
+		rateLimitStrictMock.mockResolvedValueOnce({
+			allowed: false,
+			count: 6,
+			unavailable: false
+		});
 
 		const result = (await call({ email: 'reader@example.com' })) as {
 			status: number;
@@ -132,12 +140,27 @@ describe('forgot-password action', () => {
 
 		expect(result.status).toBe(429);
 		expect(result.data.message).toBe('err-rate');
-		expect(rateLimitMock).toHaveBeenCalledWith(
+		expect(rateLimitStrictMock).toHaveBeenCalledWith(
 			expect.anything(),
-			'limits:password-reset:203.0.113.9',
+			'limits:password-reset:4:cb007109',
 			5,
 			3600
 		);
+		expect(requestResetMock).not.toHaveBeenCalled();
+	});
+
+	it('fails closed with 503 when the limiter store is down (W6.10)', async () => {
+		rateLimitStrictMock.mockResolvedValueOnce({
+			allowed: false,
+			count: 0,
+			unavailable: true
+		});
+		const result = (await call({ email: 'reader@example.com' })) as {
+			status: number;
+			data: { message: string };
+		};
+		expect(result.status).toBe(503);
+		expect(result.data.message).toBe('err-unavailable');
 		expect(requestResetMock).not.toHaveBeenCalled();
 	});
 

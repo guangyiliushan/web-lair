@@ -78,7 +78,7 @@ export const actions: Actions = {
 		await recordActivity(db, {
 			event: 'comments.settings_update',
 			actorId: locals.user?.id ?? null,
-			payload: { fields: ['comments.enabled'], enabled },
+			payload: { fields: ['enabled'], enabled },
 			deliver: false
 		});
 		return { message: m.admin_settings_content_flash_comments_saved() };
@@ -130,13 +130,7 @@ export const actions: Actions = {
 			event: 'privacy.update',
 			actorId: locals.user?.id ?? null,
 			payload: {
-				fields: [
-					'comments.privacy.enabled',
-					'comments.privacy.collectCountry',
-					'comments.privacy.showCountry',
-					'comments.privacy.retentionDays',
-					'comments.privacy.blockedCidrs'
-				],
+				fields: ['enabled', 'collectCountry', 'showCountry', 'retentionDays', 'blockedCidrs'],
 				...value
 			},
 			deliver: false
@@ -157,7 +151,7 @@ export const actions: Actions = {
 		await recordActivity(db, {
 			event: 'friends.update',
 			actorId: locals.user?.id ?? null,
-			payload: { fields: ['friends.apply.enabled', 'friends.apply.allowSubPath'], ...value },
+			payload: { fields: ['enabled', 'allowSubPath'], ...value },
 			deliver: false
 		});
 		return { message: m.admin_settings_content_flash_friends_saved() };
@@ -191,13 +185,13 @@ export const actions: Actions = {
 			actorId: locals.user?.id ?? null,
 			payload: {
 				fields: [
-					'friends.checks.enabled',
-					'friends.checks.cadenceHours',
-					'friends.checks.failStreak',
-					'friends.checks.backlinkStreak',
-					'friends.checks.graceDays',
-					'friends.checks.timeoutMs',
-					'friends.checks.concurrency'
+					'enabled',
+					'cadenceHours',
+					'failStreak',
+					'backlinkStreak',
+					'graceDays',
+					'timeoutMs',
+					'concurrency'
 				],
 				...value
 			},
@@ -235,12 +229,7 @@ export const actions: Actions = {
 			event: 'friends.update',
 			actorId: locals.user?.id ?? null,
 			payload: {
-				fields: [
-					'friends.policy.blockedHostSuffixes',
-					'friends.policy.blockedTlds',
-					'friends.policy.acceptedBacklinkHosts',
-					'friends.policy.publicBannedList'
-				],
+				fields: ['blockedHostSuffixes', 'blockedTlds', 'acceptedBacklinkHosts', 'publicBannedList'],
 				...value
 			},
 			deliver: false
@@ -263,7 +252,7 @@ export const actions: Actions = {
 			event: 'presence.update',
 			actorId: locals.user?.id ?? null,
 			payload: {
-				fields: ['presence.enabled', 'presence.readerView', 'presence.readerDots'],
+				fields: ['enabled', 'readerView', 'readerDots'],
 				enabled,
 				readerView,
 				readerDots
@@ -292,7 +281,7 @@ export const actions: Actions = {
 		await recordActivity(db, {
 			event: 'notes_gate.update',
 			actorId: locals.user?.id ?? null,
-			payload: { fields: ['notes.gate.ttlDays'], ttlDays },
+			payload: { fields: ['ttlDays'], ttlDays },
 			deliver: false
 		});
 		return { message: m.admin_settings_content_flash_notes_saved() };
