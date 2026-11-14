@@ -10,7 +10,7 @@ import { pruneOtherSessions } from '$lib/server/auth/sessions';
 import { safeRedirect } from '$lib/server/safe-redirect';
 import { getCache } from '$lib/server/cache';
 import { rateLimitStrict } from '$lib/server/cache/store';
-import { requestAddress } from '$lib/server/security/request-address';
+import { credentialBucketKey, requestAddress } from '$lib/server/security/request-address';
 import { clientAddressKey } from '$lib/utils/cidr';
 
 /** Admin credentials endpoint budget (W6.10): 10 attempts / 15 min / IP. */
@@ -36,12 +36,14 @@ export const load: PageServerLoad = async (event) => {
 export const actions: Actions = {
 	signIn: async (event) => {
 		const config = assertAdminSlug(event.params.adminSlug);
-		// W6.10: the admin credentials form is the most valuable login target;
-		// fail-closed per-IP budget (IPv6 aggregated on /64).
+		const formData = await event.request.formData();
+		const email = formData.get('email')?.toString().trim().toLowerCase() ?? '';
+		// W6.10 / review P1: admin credentials bucket keyed on the /64 address
+		// AND a hash of the email, so an office NAT cannot lock out the owner.
 		const address = clientAddressKey(requestAddress(event.getClientAddress));
 		const rate = await rateLimitStrict(
 			getCache(),
-			`limits:admin-login:${address}`,
+			credentialBucketKey('admin-login', address, email),
 			ADMIN_LOGIN_RATE_LIMIT.limit,
 			ADMIN_LOGIN_RATE_LIMIT.windowSeconds
 		);
@@ -51,8 +53,6 @@ export const actions: Actions = {
 				message: rate.unavailable ? m.auth_err_unavailable() : m.auth_login_err_rate()
 			});
 		}
-		const formData = await event.request.formData();
-		const email = formData.get('email')?.toString().trim().toLowerCase() ?? '';
 		const password = formData.get('password')?.toString() ?? '';
 		const redirectTo = safeRedirect(formData.get('redirectTo')?.toString(), ADMIN_HOME_PATH, {
 			allowedPrefix: ADMIN_BASE_PATH

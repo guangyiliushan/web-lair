@@ -6,7 +6,7 @@ import { safeRedirect } from '$lib/server/safe-redirect';
 import { APIError } from 'better-auth/api';
 import { getCache } from '$lib/server/cache';
 import { rateLimitStrict } from '$lib/server/cache/store';
-import { requestAddress } from '$lib/server/security/request-address';
+import { credentialBucketKey, requestAddress } from '$lib/server/security/request-address';
 import { clientAddressKey } from '$lib/utils/cidr';
 import { m } from '$lib/paraglide/messages';
 
@@ -29,11 +29,15 @@ export const load: PageServerLoad = (event) => {
 
 export const actions: Actions = {
 	signIn: async (event) => {
-		// W6.10: credentials endpoint — fail-closed per-IP bucket (IPv6 /64).
+		const formData = await event.request.formData();
+		const email = formData.get('email')?.toString() ?? '';
+		// W6.10 / review P1: fail-closed credentials bucket keyed on the /64
+		// address AND a hash of the email, so one NAT/office IP cannot lock out
+		// every account (the raw email never reaches Valkey).
 		const address = clientAddressKey(requestAddress(event.getClientAddress));
 		const rate = await rateLimitStrict(
 			getCache(),
-			`limits:login:${address}`,
+			credentialBucketKey('login', address, email),
 			LOGIN_RATE_LIMIT.limit,
 			LOGIN_RATE_LIMIT.windowSeconds
 		);
@@ -44,8 +48,6 @@ export const actions: Actions = {
 			});
 		}
 
-		const formData = await event.request.formData();
-		const email = formData.get('email')?.toString() ?? '';
 		const password = formData.get('password')?.toString() ?? '';
 		const redirectTo = safeRedirect(event.url.searchParams.get('redirectTo'));
 

@@ -80,7 +80,15 @@ export function parseIp(raw: string): ParsedIp | null {
 	if (text === '') return null;
 	if (text.includes(':')) {
 		const value = parseIpv6(text);
-		return value === null ? null : { version: 6, value };
+		if (value === null) return null;
+		// IPv4-mapped IPv6 (`::ffff:1.2.3.4`): adapters and some proxies emit
+		// this form. Treat it as the IPv4 address it is, otherwise a blocked
+		// IPv4 range would silently fail open and every mapped client would
+		// collapse into one IPv6 /64 bucket (fail-closed => global lockout).
+		if (value >> 32n === 0xffffn) {
+			return { version: 4, value: value & 0xffffffffn };
+		}
+		return { version: 6, value };
 	}
 	const value = parseIpv4(text);
 	return value === null ? null : { version: 4, value };
@@ -143,17 +151,10 @@ export function clientAddressKey(raw: string | null | undefined): string {
 	const ip = parseIp(raw ?? '');
 	if (!ip) return 'unknown';
 	if (ip.version === 4) {
-		const value = ip.value.toString(16).padStart(8, '0');
-		return `4:${value}`;
+		return `4:${ip.value.toString(16).padStart(8, '0')}`;
 	}
-	const prefix = parseCidr(`${formatIpv6(ip.value)}/64`);
-	return prefix ? `6:${prefix.value.toString(16)}:64` : `6:${ip.value.toString(16)}`;
-}
-
-function formatIpv6(value: bigint): string {
-	const groups: string[] = [];
-	for (let shift = 112n; shift >= 0n; shift -= 16n) {
-		groups.push(((value >> shift) & 0xffffn).toString(16));
-	}
-	return groups.join(':');
+	// Zero the host bits directly; formatting to a string only to re-parse it
+	// would be pointless work on every request.
+	const network = (ip.value >> 64n) << 64n;
+	return `6:${network.toString(16)}:64`;
 }

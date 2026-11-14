@@ -58,6 +58,17 @@ describe('parseCidr / ipInCidr', () => {
 });
 
 describe('clientAddressKey', () => {
+	it('unwraps IPv4-mapped IPv6 to the IPv4 address (W6 review P0)', () => {
+		expect(parseIp('::ffff:192.0.2.1')).toEqual(parseIp('192.0.2.1'));
+		expect(parseIp('::ffff:c000:201')).toEqual(parseIp('192.0.2.1'));
+		expect(clientAddressKey('::ffff:192.0.2.1')).toBe('4:c0000201');
+		expect(clientAddressKey('::ffff:192.0.2.1')).toBe(clientAddressKey('192.0.2.1'));
+		expect(ipMatchesCidrs('::ffff:192.0.2.5', ['192.0.2.0/24'])).toBe(true);
+		// A real IPv6 loopback stays IPv6 and keeps its own /64 bucket.
+		expect(parseIp('::1')?.version).toBe(6);
+		expect(clientAddressKey('::1')).toBe('6:0:64');
+	});
+
 	it('keeps IPv4 exact and aggregates IPv6 on /64', () => {
 		expect(clientAddressKey('192.0.2.1')).toBe('4:c0000201');
 		const a = clientAddressKey('2001:db8:1:2::1');

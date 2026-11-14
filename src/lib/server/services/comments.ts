@@ -128,8 +128,9 @@ const commentColumns = {
 	// Stored segment anchor (P3b): resolved in the assembly, never serialized raw.
 	anchor: comments.anchor,
 	// W6.2: privacy fields surface only through the `showCountry` opt-in gate.
+	// `region_code` is written for retention/audit only; the view model carries
+	// the country label, so it is not selected on every thread read.
 	countryCode: comments.countryCode,
-	regionCode: comments.regionCode,
 	meta: comments.meta
 };
 
@@ -151,7 +152,6 @@ export interface CommentRow {
 	anchor?: unknown;
 	/** W6.2 privacy snapshot (never rendered without the per-comment opt-in). */
 	countryCode?: string | null;
-	regionCode?: string | null;
 	meta?: Record<string, unknown> | null;
 }
 
@@ -372,7 +372,6 @@ export function assembleDiscussion(
 			isMine: isMine(reply),
 			editedAt: reply.editedAt,
 			createdAt: reply.createdAt,
-			country: publicCountry(reply),
 			replyToAuthor:
 				reply.parentCommentId && reply.parentCommentId !== reply.rootCommentId
 					? (authorById.get(reply.parentCommentId) ?? null)
@@ -787,7 +786,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	// collectCountry sub-switch; the public label additionally needs the site's
 	// showCountry and the commenter's own opt-in. The raw IP/agent/location
 	// columns stay null - they are never written by this path.
-	const collectGeo = privacy.enabled && privacy.collectCountry;
+	const collectGeo = !parentCommentId && privacy.enabled && privacy.collectCountry;
 	const countryCode = collectGeo ? normalizeCountry(input.geo?.country) : null;
 	const regionCode = collectGeo ? normalizeRegion(input.geo?.region) : null;
 	const privacyMeta =

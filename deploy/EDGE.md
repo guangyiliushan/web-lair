@@ -68,6 +68,12 @@ Do not rate-limit or challenge:
   `*/subscribe/confirm*`, `*/unsubscribe*`, `*/reset-password*` and
   `/api/auth/*` excluded so bearer tokens never reach a log file.
 
+**GeoIP header trust:** with grey-cloud DNS, a visitor can send
+`CF-IPCountry`/`CF-Region-Code` themselves. Either leave `GEOIP_*` unset or
+uncomment the two `request_header -CF-IPCountry` / `-CF-Region-Code` lines in
+the Caddyfile. With the orange cloud, keep them (Cloudflare overwrites the
+headers at the edge).
+
 Self-hosted alternative to Cloudflare: `caddy-ratelimit` (community module,
 requires an xcaddy build) plus CrowdSec and nftables. It has no volumetric
 cleaning; treat it as a fallback, not an equivalent.

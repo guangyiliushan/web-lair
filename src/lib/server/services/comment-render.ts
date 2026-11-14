@@ -73,7 +73,8 @@ export async function renderDiscussion(input: RenderDiscussionInput): Promise<Re
 				targetType: input.targetType,
 				targetId: input.targetId,
 				viewerId: input.viewerId,
-				blocks: []
+				blocks: [],
+				showCountry: input.showCountry
 			})
 		).threads;
 	}

@@ -265,7 +265,9 @@ describe('assembleThreads', () => {
 		});
 		const shown = assembleThreads([root], [reply], { showCountry: true });
 		expect(shown.roots[0].country).toBe('US');
-		expect(shown.roots[0].replies[0].country).toBe('JP');
+		// Replies never collect a country (no per-reply opt-in), so the view
+		// model must not carry one either (W6 review: dead data path removed).
+		expect(shown.roots[0].replies[0].country).toBeUndefined();
 		// Site switch off: stored country never reaches the view.
 		expect(assembleThreads([root], [reply]).roots[0].country).toBeNull();
 		// Commenter did not opt in on this row: same rule.
@@ -511,9 +513,16 @@ describe('submitComment', () => {
 	});
 
 	it('throttles an address over its own budget (W6.10)', async () => {
-		const cache = fakeStore(async (key) => (key.startsWith('limits:comment-ip:') ? 31 : 1));
+		const keys: string[] = [];
+		const cache = fakeStore(async (key) => {
+			keys.push(key);
+			return key.startsWith('limits:comment-ip:') ? 31 : 1;
+		});
 		const result = await submitComment(input({ cache, ip: '2001:db8:1:2::9' }));
 		expect(result).toEqual({ kind: 'throttled', windowSeconds: 600 });
+		expect(keys).toContain(
+			'limits:comment-ip:6:20010db8000100020000000000000000:64'
+		);
 		expect(state.inserts).toHaveLength(0);
 	});
 
