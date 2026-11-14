@@ -2,10 +2,10 @@
 	import { page } from '$app/state';
 	import { m } from '$lib/paraglide/messages';
 	import * as ListDetail from '$lib/components/admin/list-detail';
-	import IconSettings from '@tabler/icons-svelte-runes/icons/settings';
 	import IconUser from '@tabler/icons-svelte-runes/icons/user';
-	import IconMail from '@tabler/icons-svelte-runes/icons/mail';
-	import IconSearch from '@tabler/icons-svelte-runes/icons/search';
+	import IconWorld from '@tabler/icons-svelte-runes/icons/world';
+	import IconMessage from '@tabler/icons-svelte-runes/icons/message';
+	import IconBell from '@tabler/icons-svelte-runes/icons/bell';
 	import IconDatabase from '@tabler/icons-svelte-runes/icons/database';
 	import IconSparkles from '@tabler/icons-svelte-runes/icons/sparkles';
 	import IconPuzzle from '@tabler/icons-svelte-runes/icons/puzzle';
@@ -14,21 +14,25 @@
 
 	let { children }: { children: Snippet } = $props();
 
+	/**
+	 * Final 8-page IA (decision register §3K): Profile & Preferences / Site /
+	 * Content / Notifications / Integrations / Storage / AI / Account.
+	 * `system` is deleted and `search` is merged into Site, so neither appears
+	 * here; the old `/user` and `/notification` routes redirect.
+	 */
 	type SectionId =
-		| 'user'
+		| 'profile'
 		| 'site'
 		| 'content'
-		| 'notification'
-		| 'search'
+		| 'notifications'
+		| 'integrations'
 		| 'storage'
 		| 'ai'
-		| 'integrations'
-		| 'system'
 		| 'account';
 
 	const sections: { id: SectionId; label: string; desc: string; icon: Component }[] = [
 		{
-			id: 'user',
+			id: 'profile',
 			label: m.admin_settings_user(),
 			desc: m.admin_settings_user_desc(),
 			icon: IconUser
@@ -37,25 +41,25 @@
 			id: 'site',
 			label: m.admin_settings_site(),
 			desc: m.admin_settings_site_desc(),
-			icon: IconSettings
+			icon: IconWorld
 		},
 		{
 			id: 'content',
 			label: m.admin_settings_content(),
 			desc: m.admin_settings_content_desc(),
-			icon: IconMail
+			icon: IconMessage
 		},
 		{
-			id: 'notification',
+			id: 'notifications',
 			label: m.admin_settings_notification(),
 			desc: m.admin_settings_notification_desc(),
-			icon: IconMail
+			icon: IconBell
 		},
 		{
-			id: 'search',
-			label: m.admin_settings_search(),
-			desc: m.admin_settings_search_desc(),
-			icon: IconSearch
+			id: 'integrations',
+			label: m.admin_settings_integrations(),
+			desc: m.admin_settings_integrations_desc(),
+			icon: IconPuzzle
 		},
 		{
 			id: 'storage',
@@ -68,18 +72,6 @@
 			label: m.admin_settings_ai(),
 			desc: m.admin_settings_ai_desc(),
 			icon: IconSparkles
-		},
-		{
-			id: 'integrations',
-			label: m.admin_settings_integrations(),
-			desc: m.admin_settings_integrations_desc(),
-			icon: IconPuzzle
-		},
-		{
-			id: 'system',
-			label: m.admin_settings_system(),
-			desc: m.admin_settings_system_desc(),
-			icon: IconSettings
 		},
 		{
 			id: 'account',

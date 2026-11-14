@@ -228,7 +228,7 @@ test.describe('J-3 maintenance (admin)', () => {
 	});
 
 	test('webhook retry copies the failed delivery into a queued row', async ({ page }) => {
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 20_000 });
 		const row = page
 			.locator('[data-slot="delivery-row"]')
