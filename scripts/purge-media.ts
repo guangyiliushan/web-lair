@@ -2,7 +2,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '../src/lib/server/db/schema';
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import { S3Storage } from '../src/lib/server/storage/s3';
 import { purgeMedia } from '../src/lib/server/services/files';
 
 /**
@@ -22,7 +22,7 @@ const execute = process.argv.includes('--yes');
 
 const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
-const storage = new RustFsStorage(storageConfigFromEnv(process.env));
+const storage = new S3Storage(storageConfigFromEnv(process.env));
 
 const outcome = await purgeMedia({ dryRun: !execute }, { db, storage });
 

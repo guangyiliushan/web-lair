@@ -1,7 +1,9 @@
 import { EMPTY_PAYLOAD_SHA256, sha256Hex, signRequest, uriEncode } from './signature';
-import type { RustFsConfig } from './config';
+import type { S3StorageConfig } from './config';
 import {
 	StorageError,
+	type BucketCapabilities,
+	type BucketVersioning,
 	type GetOptions,
 	type ObjectStoragePort,
 	type PutOptions,
@@ -91,43 +93,78 @@ function numericHeader(value: string | null): number | null {
 	return Number.isFinite(parsed) ? parsed : null;
 }
 
-interface RustFsStorageOptions {
+/** `<Code>` of an S3 error body, or null when the body is not S3 XML. */
+async function errorCodeOf(response: Response): Promise<string | null> {
+	try {
+		const text = await withTimeout(response.text(), ERROR_BODY_TIMEOUT_MS);
+		return /<Code>([^<]+)<\/Code>/.exec(text)?.[1]?.trim() ?? null;
+	} catch {
+		return null;
+	}
+}
+
+interface S3StorageOptions {
 	fetchImpl?: typeof fetch;
 	clock?: () => Date;
 	/** Stage 1: request start → response headers. */
 	headersTimeoutMs?: number;
 	/** Stage 2: max gap between streamed body chunks (0 disables the guard). */
 	bodyIdleTimeoutMs?: number;
+	/**
+	 * HTTP redirects are never followed (SSRF: a 302 into the metadata
+	 * service must not become a read). Defaults to rejected; the option exists
+	 * so a test can pin the behaviour explicitly.
+	 */
+	followRedirects?: boolean;
 }
 
 /**
- * S3-dialect adapter for RustFS (ledger §21): path-style addressing, SigV4
- * signing, and only the tested subset of verbs (PUT/GET/DELETE/HEAD). The
- * endpoint is loopback-only — RustFS itself is never exposed publicly; all
- * reads/writes flow through this adapter (v1 does not presign).
+ * S3-dialect adapter (W7.1, decision Q2): one implementation for the bundled
+ * RustFS (`driver=local`, path-style over loopback) and any external
+ * S3-compatible provider (`driver=s3`: AWS S3 / R2 / MinIO / B2 / Wasabi /
+ * Spaces). Only the tested subset of verbs is implemented (PUT/GET/DELETE/
+ * HEAD + bucket HEAD/PUT and the two capability reads the purge guards need);
+ * reads and writes always flow through this adapter — v1 does not presign.
+ *
+ * Addressing follows `forcePathStyle`: `true` → `endpoint/bucket/key`
+ * (RustFS, MinIO), `false` → `bucket.endpoint/key` (AWS S3, R2).
  */
-export class RustFsStorage implements ObjectStoragePort {
-	readonly #config: RustFsConfig;
+export class S3Storage implements ObjectStoragePort {
+	readonly #config: S3StorageConfig;
 	readonly #fetch: typeof fetch;
 	readonly #clock: () => Date;
 	readonly #headersTimeoutMs: number;
 	readonly #bodyIdleTimeoutMs: number;
+	readonly #redirect: RequestRedirect;
 
-	constructor(config: RustFsConfig, options: RustFsStorageOptions = {}) {
+	constructor(config: S3StorageConfig, options: S3StorageOptions = {}) {
 		this.#config = config;
 		this.#fetch = options.fetchImpl ?? fetch;
 		this.#clock = options.clock ?? (() => new Date());
 		this.#headersTimeoutMs = options.headersTimeoutMs ?? DEFAULT_HEADERS_TIMEOUT_MS;
 		this.#bodyIdleTimeoutMs = options.bodyIdleTimeoutMs ?? DEFAULT_BODY_IDLE_TIMEOUT_MS;
+		this.#redirect = options.followRedirects ? 'follow' : 'error';
+	}
+
+	/** Bucket URL: `/bucket` in path style, `bucket.host/` in virtual-host style. */
+	#bucketLocation(): { url: URL; canonicalUri: string } {
+		const url = new URL(this.#config.endpoint);
+		if (this.#config.forcePathStyle) {
+			url.pathname = `/${uriEncode(this.#config.bucket, true)}`;
+		} else {
+			url.host = `${this.#config.bucket}.${url.host}`;
+			url.pathname = '/';
+		}
+		return { url, canonicalUri: url.pathname };
 	}
 
 	/**
-	 * URL path for an object: bucket + key, encoded segment-wise. Exact `.` /
-	 * `..` segments are rejected outright (round-2 review): unvetted callers
-	 * must not rely on the encoder to neutralise path dot-segments — this
-	 * check makes "no traversal reaches the wire" an adapter property.
+	 * Object URL: bucket + key, encoded segment-wise. Exact `.` / `..`
+	 * segments are rejected outright (round-2 review): unvetted callers must
+	 * not rely on the encoder to neutralise path dot-segments — this check
+	 * makes "no traversal reaches the wire" an adapter property.
 	 */
-	#objectPath(key: string): string {
+	#objectLocation(key: string): { url: URL; canonicalUri: string } {
 		const encoded = key
 			.split('/')
 			.filter((segment) => segment.length > 0)
@@ -138,14 +175,90 @@ export class RustFsStorage implements ObjectStoragePort {
 				return uriEncode(segment, true);
 			})
 			.join('/');
-		return `/${this.#config.bucket}/${encoded}`;
+		if (encoded === '') throw new StorageError(`storage key is empty: ${key}`, 0, null);
+		const url = new URL(this.#config.endpoint);
+		if (this.#config.forcePathStyle) {
+			url.pathname = `/${uriEncode(this.#config.bucket, true)}/${encoded}`;
+		} else {
+			url.host = `${this.#config.bucket}.${url.host}`;
+			url.pathname = `/${encoded}`;
+		}
+		return { url, canonicalUri: url.pathname };
 	}
 
 	async ensureBucket(): Promise<void> {
-		const { response: res } = await this.#send('PUT', `/${this.#config.bucket}`);
+		const { response: res } = await this.#send('PUT', this.#bucketLocation());
 		// 200 = created now; 409 = already owned (idempotent re-run).
 		if (res.ok || res.status === 409) return;
 		throw await this.#toError('ensureBucket', res);
+	}
+
+	async headBucket(): Promise<void> {
+		const { response: res } = await this.#send('HEAD', this.#bucketLocation());
+		if (res.ok) return;
+		if (res.status === 404) {
+			throw new StorageError(
+				`storage bucket not found: ${this.#config.bucket}`,
+				404,
+				'NoSuchBucket'
+			);
+		}
+		throw await this.#toError('headBucket', res);
+	}
+
+	/**
+	 * Versioning and object lock are the two properties that decide whether a
+	 * DELETE actually frees bytes (W7.5). A provider that answers 501/
+	 * NotImplemented has no such feature, so the value cannot be "on"; any
+	 * other refusal resolves `unknown` and the caller fails closed.
+	 */
+	async bucketCapabilities(): Promise<BucketCapabilities> {
+		return {
+			versioning: await this.#versioning(),
+			objectLock: await this.#objectLock()
+		};
+	}
+
+	async #versioning(): Promise<BucketVersioning> {
+		const { response: res } = await this.#send('GET', this.#bucketLocation(), {
+			query: 'versioning='
+		});
+		if (res.ok) {
+			let body: string;
+			try {
+				body = await withTimeout(res.text(), ERROR_BODY_TIMEOUT_MS);
+			} catch {
+				return 'unknown';
+			}
+			const status = /<Status>([^<]+)<\/Status>/.exec(body)?.[1]?.trim();
+			if (status === 'Enabled') return 'enabled';
+			if (status === 'Suspended') return 'suspended';
+			// An empty <VersioningConfiguration/> is "never enabled".
+			return 'off';
+		}
+		if (res.status === 501) return 'off';
+		const code = await errorCodeOf(res);
+		if (code === 'NotImplemented') return 'off';
+		return 'unknown';
+	}
+
+	async #objectLock(): Promise<boolean | null> {
+		const { response: res } = await this.#send('GET', this.#bucketLocation(), {
+			query: 'object-lock='
+		});
+		if (res.ok) {
+			let body: string;
+			try {
+				body = await withTimeout(res.text(), ERROR_BODY_TIMEOUT_MS);
+			} catch {
+				return null;
+			}
+			return /<ObjectLockEnabled>\s*Enabled\s*<\/ObjectLockEnabled>/.test(body);
+		}
+		const code = await errorCodeOf(res);
+		if (code === 'ObjectLockConfigurationNotFoundError') return false;
+		if (res.status === 501 || code === 'NotImplemented') return false;
+		return null;
 	}
 
 	async put(
@@ -153,7 +266,7 @@ export class RustFsStorage implements ObjectStoragePort {
 		data: Uint8Array,
 		options: PutOptions = {}
 	): Promise<{ etag: string | null }> {
-		const { response: res } = await this.#send('PUT', this.#objectPath(key), {
+		const { response: res } = await this.#send('PUT', this.#objectLocation(key), {
 			payload: data,
 			contentType: options.contentType
 		});
@@ -162,7 +275,7 @@ export class RustFsStorage implements ObjectStoragePort {
 	}
 
 	async get(key: string, options: GetOptions = {}): Promise<StoredObjectBody | null> {
-		const { response: res, controller } = await this.#send('GET', this.#objectPath(key), {
+		const { response: res, controller } = await this.#send('GET', this.#objectLocation(key), {
 			range: options.range
 		});
 		if (res.status === 404) return null;
@@ -184,7 +297,7 @@ export class RustFsStorage implements ObjectStoragePort {
 	}
 
 	async head(key: string): Promise<StoredObjectHead | null> {
-		const { response: res } = await this.#send('HEAD', this.#objectPath(key));
+		const { response: res } = await this.#send('HEAD', this.#objectLocation(key));
 		if (res.status === 404) return null;
 		if (!res.ok) throw await this.#toError(`head ${key}`, res);
 		return {
@@ -196,7 +309,7 @@ export class RustFsStorage implements ObjectStoragePort {
 	}
 
 	async delete(key: string): Promise<void> {
-		const { response: res } = await this.#send('DELETE', this.#objectPath(key));
+		const { response: res } = await this.#send('DELETE', this.#objectLocation(key));
 		// Idempotent by contract: a missing object is already the goal state.
 		if (res.ok || res.status === 404) return;
 		throw await this.#toError(`delete ${key}`, res);
@@ -204,10 +317,18 @@ export class RustFsStorage implements ObjectStoragePort {
 
 	async #send(
 		method: string,
-		path: string,
-		options: { payload?: Uint8Array; contentType?: string; range?: GetOptions['range'] } = {}
+		location: { url: URL; canonicalUri: string },
+		options: {
+			payload?: Uint8Array;
+			contentType?: string;
+			range?: GetOptions['range'];
+			query?: string;
+		} = {}
 	): Promise<{ response: Response; controller: AbortController }> {
-		const url = new URL(path, this.#config.endpoint);
+		const { url, canonicalUri } = location;
+		// The URL carries the same query the signature covers (S3 accepts
+		// `?versioning=` for both). Kept on the URL, not as a header.
+		if (options.query) url.search = options.query;
 		const payloadHash = options.payload ? sha256Hex(options.payload) : EMPTY_PAYLOAD_SHA256;
 		// S3 requires `host` in SignedHeaders (the AWS SigV4 vectors sign it
 		// too). The value is derived from the URL rather than sent as an
@@ -218,7 +339,8 @@ export class RustFsStorage implements ObjectStoragePort {
 		const signed = signRequest(
 			{
 				method,
-				canonicalUri: path,
+				canonicalUri,
+				query: options.query ?? '',
 				headers,
 				payloadHash,
 				region: this.#config.region,
@@ -248,11 +370,14 @@ export class RustFsStorage implements ObjectStoragePort {
 				// TS 5.7+ genericizes typed arrays; Node's fetch accepts any
 				// Uint8Array view at runtime, so adapt at the boundary.
 				body: options.payload as unknown as BodyInit | undefined,
+				redirect: this.#redirect,
 				signal: controller.signal
 			});
 			return { response, controller };
 		} catch (cause) {
-			throw new StorageError(`storage request failed: ${method} ${path}`, 0, null, { cause });
+			throw new StorageError(`storage request failed: ${method} ${canonicalUri}`, 0, null, {
+				cause
+			});
 		} finally {
 			clearTimeout(timer);
 		}

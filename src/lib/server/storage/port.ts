@@ -36,6 +36,22 @@ export interface GetOptions {
 	range?: { start: number; end?: number } | { suffix: number };
 }
 
+/**
+ * Bucket versioning state (W7.5, decisions ST10/Q8/Q16).
+ *
+ * `off` covers both an explicitly "never enabled" bucket and a provider whose
+ * dialect has no versioning at all (HTTP 501/NotImplemented): in both cases a
+ * DELETE frees the bytes. `unknown` means the probe could not answer (403,
+ * transport failure) — callers must FAIL CLOSED on it, never assume `off`.
+ */
+export type BucketVersioning = 'off' | 'enabled' | 'suspended' | 'unknown';
+
+export interface BucketCapabilities {
+	versioning: BucketVersioning;
+	/** true when object lock is enabled; null when the probe could not tell. */
+	objectLock: boolean | null;
+}
+
 /** Non-2xx storage response the caller cannot treat as "absent". */
 export class StorageError extends Error {
 	constructor(
@@ -52,6 +68,13 @@ export class StorageError extends Error {
 export interface ObjectStoragePort {
 	/** Idempotent: creates the configured bucket when it is missing. */
 	ensureBucket(): Promise<void>;
+	/** Resolves when the bucket exists and these credentials can see it. */
+	headBucket(): Promise<void>;
+	/**
+	 * Bucket versioning + object lock, read with the same credentials. Resolves
+	 * `unknown`/null instead of guessing when the provider refuses.
+	 */
+	bucketCapabilities(): Promise<BucketCapabilities>;
 	put(key: string, data: Uint8Array, options?: PutOptions): Promise<{ etag: string | null }>;
 	/** Resolves null when the object does not exist (404). */
 	get(key: string, options?: GetOptions): Promise<StoredObjectBody | null>;

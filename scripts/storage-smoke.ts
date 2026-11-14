@@ -1,5 +1,5 @@
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import { S3Storage } from '../src/lib/server/storage/s3';
 
 /**
  * ST-1 infra smoke (ledger §21): ensures the bucket exists and exercises the
@@ -8,7 +8,7 @@ import { RustFsStorage } from '../src/lib/server/storage/rustfs';
  */
 async function main(): Promise<void> {
 	const config = storageConfigFromEnv(process.env);
-	const storage = new RustFsStorage(config);
+	const storage = new S3Storage(config);
 	const probeKey = `smoke/probe-${Date.now().toString(36)}.txt`;
 	const payloadText = `web-lair storage smoke ${new Date().toISOString()}\n`;
 	const payload = new TextEncoder().encode(payloadText);

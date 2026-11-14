@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import { OVERLAY_FIXTURE_DIMENSIONS, OVERLAY_FIXTURE_KEYS } from '../e2e/overlay-fixture-keys';
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import { S3Storage } from '../src/lib/server/storage/s3';
 
 /**
  * Fixture bytes for e2e/photos-viewer-overlay.e2e.ts (ST-3 3c-4). Those
@@ -19,7 +19,7 @@ const TARGETS = Object.values(OVERLAY_FIXTURE_KEYS);
 const BACKGROUND = { r: 72, g: 96, b: 160 };
 
 async function main(): Promise<void> {
-	const storage = new RustFsStorage(storageConfigFromEnv(process.env));
+	const storage = new S3Storage(storageConfigFromEnv(process.env));
 	await storage.ensureBucket();
 	for (const key of TARGETS) {
 		const bytes = await sharp({

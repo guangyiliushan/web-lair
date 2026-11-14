@@ -34,7 +34,9 @@ const storageMock = vi.hoisted(() => ({
 	put: vi.fn(),
 	delete: vi.fn(),
 	head: vi.fn(),
-	ensureBucket: vi.fn()
+	ensureBucket: vi.fn(),
+	headBucket: vi.fn(),
+	bucketCapabilities: vi.fn(async () => ({ versioning: 'off' as const, objectLock: false }))
 }));
 const exifMock = vi.hoisted(() => vi.fn());
 const makerNotesMock = vi.hoisted(() =>

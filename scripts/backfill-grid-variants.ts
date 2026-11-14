@@ -5,7 +5,7 @@ import * as schema from '../src/lib/server/db/schema';
 import { files } from '../src/lib/server/db/content';
 import { variantKeyFor } from '../src/lib/media/keys';
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import { S3Storage } from '../src/lib/server/storage/s3';
 import { processImage } from '../src/lib/server/media/variants';
 
 /**
@@ -30,7 +30,7 @@ const limit = limitArg ? Math.max(1, Number(limitArg.slice('--limit='.length))) 
 
 const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
-const storage = new RustFsStorage(storageConfigFromEnv(process.env));
+const storage = new S3Storage(storageConfigFromEnv(process.env));
 
 const rows = await db
 	.select({ objectKey: files.objectKey, fileName: files.fileName, mimeType: files.mimeType })

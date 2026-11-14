@@ -37,7 +37,9 @@ const storageMock = vi.hoisted(() => ({
 	delete: vi.fn<(key: string) => Promise<void>>(async () => {}),
 	head: vi.fn<(key: string) => Promise<StoredObjectHead | null>>(async () => null),
 	get: vi.fn<(key: string) => Promise<StoredObjectBody | null>>(async () => null),
-	ensureBucket: vi.fn<() => Promise<void>>(async () => {})
+	ensureBucket: vi.fn<() => Promise<void>>(async () => {}),
+	headBucket: vi.fn<() => Promise<void>>(async () => {}),
+	bucketCapabilities: vi.fn(async () => ({ versioning: 'off' as const, objectLock: false }))
 }));
 const processImageMock = vi.hoisted(() => vi.fn());
 const readImageSizeMock = vi.hoisted(() => vi.fn());

@@ -9,7 +9,7 @@ import sharp from 'sharp';
 import * as schema from '../src/lib/server/db/schema';
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
 import { StorageError } from '../src/lib/server/storage/port';
-import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import { S3Storage } from '../src/lib/server/storage/s3';
 import { objectKeyFor, variantKeyFor } from '../src/lib/media/keys';
 import {
 	deleteFile,
@@ -46,7 +46,7 @@ if (!DATABASE_URL) {
 
 const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
-const storage = new RustFsStorage(storageConfigFromEnv(process.env));
+const storage = new S3Storage(storageConfigFromEnv(process.env));
 const deps = { db, storage };
 /** Narrowed copy: TS does not carry the module-level guard into closures. */
 const DB_URL: string = DATABASE_URL;

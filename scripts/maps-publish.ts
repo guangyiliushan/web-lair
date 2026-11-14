@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import { S3Storage } from '../src/lib/server/storage/s3';
 
 /**
  * Publish a local PMTiles archive into the `maps/` prefix (plan §8): the
@@ -23,7 +23,7 @@ if (!/^[a-z0-9][a-z0-9._-]*\.pmtiles$/.test(name)) {
 	process.exit(1);
 }
 const bytes = await readFile(file);
-const storage = new RustFsStorage(storageConfigFromEnv(process.env));
+const storage = new S3Storage(storageConfigFromEnv(process.env));
 await storage.ensureBucket();
 const { etag } = await storage.put(`maps/${name}`, new Uint8Array(bytes), {
 	contentType: 'application/vnd.pmtiles'

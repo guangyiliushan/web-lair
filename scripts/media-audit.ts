@@ -2,7 +2,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '../src/lib/server/db/schema';
 import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import { S3Storage } from '../src/lib/server/storage/s3';
 import { runMediaAudit } from '../src/lib/server/services/files';
 
 /**
@@ -24,7 +24,7 @@ const strict = process.argv.includes('--strict');
 
 const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
-const storage = new RustFsStorage(storageConfigFromEnv(process.env));
+const storage = new S3Storage(storageConfigFromEnv(process.env));
 
 const report = await runMediaAudit({ db, storage });
 
