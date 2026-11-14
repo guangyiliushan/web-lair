@@ -1,7 +1,7 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import NavMenu from '$lib/components/layout/NavMenu.svelte';
-	import { OWNER_STATUS_DEFAULT, SITE_OWNER_DEFAULT } from '$lib/config/owner-status';
+	import { SITE_OWNER_DEFAULT } from '$lib/config/owner-status';
 	import {
 		emptyData,
 		homeData,
@@ -26,13 +26,28 @@
 
 <script lang="ts">
 	import type { ComponentProps } from 'svelte';
+	import type { OwnerPresence } from '$lib/config/owner-presence';
 
 	const triggerClass =
 		'rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground hover:text-primary-text';
+	const unknownPresence: OwnerPresence = {
+		state: 'unknown',
+		activity: null,
+		app: null,
+		updatedAt: null,
+		lastSeenAt: null
+	};
+	const livePresence: OwnerPresence = {
+		state: 'online',
+		activity: 'coding',
+		app: { name: 'VS Code', icon: '' },
+		updatedAt: null,
+		lastSeenAt: null
+	};
 	const identity = {
 		owner: SITE_OWNER_DEFAULT,
 		ownerLinks,
-		ownerStatus: OWNER_STATUS_DEFAULT
+		presence: unknownPresence
 	};
 </script>
 
@@ -51,7 +66,7 @@
 			triggerAsButton={args.triggerAsButton}
 			owner={args.owner}
 			ownerLinks={args.ownerLinks}
-			ownerStatus={args.ownerStatus}
+			presence={args.presence}
 		>
 			{#snippet trigger({ props }: { props: Record<string, unknown> })}
 				<button {...props} class={triggerClass} type="button">Menu</button>
@@ -66,15 +81,16 @@
 	{template}
 />
 
-<!-- Away: the identity row keeps the name and drops the online light. -->
+<!-- Live presence: only a real online heartbeat renders the green light. -->
 <Story
-	name="Home / owner away"
+	name="Home / live presence"
 	args={{
 		menu: homeMenu,
 		serverData: homeData,
 		open: true,
 		owner: SITE_OWNER_DEFAULT,
-		ownerStatus: { ...OWNER_STATUS_DEFAULT, kind: 'idle' }
+		ownerLinks,
+		presence: livePresence
 	}}
 	{template}
 />

@@ -7,12 +7,10 @@
 
 	let {
 		owner,
-		presence,
-		enabled
+		presence
 	}: {
 		owner: SiteOwner;
 		presence: OwnerPresence;
-		enabled: boolean;
 	} = $props();
 
 	// Q6: the compact label never replaces the full name in aria/title/hover.
@@ -37,5 +35,8 @@
 			{visibleName}
 		</span>
 	</a>
-	<OwnerStatusHoverCard ownerName={owner.name} {presence} {enabled} />
+	<!-- D4/R-4: without live presence the ticket must not render at all. -->
+	{#if presence.state !== 'unknown'}
+		<OwnerStatusHoverCard ownerName={owner.name} {presence} />
+	{/if}
 </div>

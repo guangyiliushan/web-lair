@@ -26,14 +26,17 @@ describe('owner presence view model', () => {
 		expect(firstGrapheme('   ')).toBe('?');
 	});
 
-	it('adapts the static setting into the preview shape', () => {
+	it('maps the static setting to unknown, never online/offline', () => {
 		const presence = ownerPresenceFromStatus(OWNER_STATUS_DEFAULT);
 		expect(presence).toEqual({
-			state: 'online',
-			activity: 'coding',
-			app: { name: 'VS Code', icon: '' },
+			state: 'unknown',
+			activity: null,
+			app: null,
 			updatedAt: null,
 			lastSeenAt: null
 		});
+
+		const disabled = ownerPresenceFromStatus({ ...OWNER_STATUS_DEFAULT, enabled: false });
+		expect(disabled.state).toBe('unknown');
 	});
 });

@@ -26,8 +26,7 @@ describe('SiteBrand (Q6)', () => {
 	it('shows the compact label but keeps the full name in aria/title', async () => {
 		await render(SiteBrand, {
 			owner: { name: 'guangyiliushan', avatar: '', headerLabel: 'shan' },
-			presence: unknown,
-			enabled: false
+			presence: unknown
 		});
 
 		expect(document.body.textContent).toContain('shan');
@@ -39,8 +38,7 @@ describe('SiteBrand (Q6)', () => {
 	it('falls back to the full name when no label is set', async () => {
 		await render(SiteBrand, {
 			owner: { name: 'mikoto', avatar: '', headerLabel: null },
-			presence: unknown,
-			enabled: false
+			presence: unknown
 		});
 
 		expect(document.body.textContent).toContain('mikoto');

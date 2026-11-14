@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tLabel, type I18nKey, type NavChild } from '$lib/config/navigation.config';
-	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
+	import type { SiteOwner } from '$lib/config/owner-status';
+	import type { OwnerPresence } from '$lib/config/owner-presence';
 	import { NAV_HOME_GRID_MAX, NAV_ROWS_PER_COL, navGridColumns } from './geometry';
 	import NavMenuHeading from './NavMenuHeading.svelte';
 	import NavMenuGridLink from './NavMenuGridLink.svelte';
@@ -17,7 +18,7 @@
 	 */
 	let {
 		owner,
-		status,
+		presence,
 		stats,
 		links,
 		titleKey,
@@ -25,7 +26,7 @@
 		loading = false
 	}: {
 		owner: SiteOwner;
-		status: OwnerStatus;
+		presence: OwnerPresence;
 		stats: { label: string; value: number | string }[];
 		links: readonly SocialLinkLike[] | null | undefined;
 		titleKey?: I18nKey;
@@ -45,7 +46,7 @@
 <!-- `flex-1` lets the two columns fill the panel's fixed height, so the
      profile's social rail can sit on the bottom edge (reference layout). -->
 <div class="grid flex-1 gap-0" style:grid-template-columns={navGridColumns()}>
-	<NavMenuProfile {owner} {status} {stats} {links} class="pe-2" />
+	<NavMenuProfile {owner} {presence} {stats} {links} class="pe-2" />
 
 	<div class="min-w-0 border-s border-border/70 ps-2">
 		{#if titleKey}

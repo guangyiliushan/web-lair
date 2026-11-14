@@ -2,7 +2,8 @@
 	import { cn } from '$lib/utils';
 	import { tLabel } from '$lib/config/navigation.config';
 	import { Separator } from '$lib/components/ui/separator';
-	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
+	import type { SiteOwner } from '$lib/config/owner-status';
+	import type { OwnerPresence } from '$lib/config/owner-presence';
 	import type { SocialLinkLike } from '$lib/config/social';
 	import SocialRail from '$lib/components/layout/SocialRail.svelte';
 
@@ -19,22 +20,22 @@
 	 */
 	let {
 		owner,
-		status,
+		presence,
 		stats,
 		links,
 		class: className
 	}: {
 		owner: SiteOwner;
-		status: OwnerStatus;
+		presence: OwnerPresence;
 		/** Pre-resolved rows; rendered left to right. */
 		stats: { label: string; value: number | string }[];
 		links: readonly SocialLinkLike[] | null | undefined;
 		class?: string;
 	} = $props();
 
-	// `idle` is the owner's "away" state (StatusTicket reads it the same way);
-	// a disabled ticket means the activity feed is off, so treat it as away.
-	const online = $derived(status.enabled && status.kind !== 'idle');
+	// D4/R-4: the only green dot is a real live heartbeat; `unknown` (static
+	// fallback or no pipeline) never claims the owner is online.
+	const online = $derived(presence.state === 'online');
 	const onlineLabel = $derived(tLabel('nav_home_owner_online'));
 </script>
 

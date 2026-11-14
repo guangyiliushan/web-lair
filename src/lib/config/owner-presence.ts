@@ -72,18 +72,19 @@ export function firstGrapheme(name: string): string {
 }
 
 /**
- * Temporary adapter for the static `site.ownerStatus` setting.
+ * Adapter for the static `site.ownerStatus` setting.
  *
- * It keeps the current header preview working until the live pipeline lands.
- * The `online` value here is intentionally only a preview: the real dot is
- * derived server-side from a fresh heartbeat, never from this static setting.
+ * The setting is a manual fallback, not a live signal. Until the ActivityWatch
+ * pipeline lands there is no fresh heartbeat, so the honest state is
+ * `unknown` — never `online`/`offline` and never a green dot (D4/R-4/R-11).
+ * `kind`/`detail`/`icon`/`href` resume only with real presence data.
  */
 export function ownerPresenceFromStatus(status: OwnerStatus): OwnerPresence {
-	const appName = status.detail.trim();
+	void status;
 	return {
-		state: status.enabled ? 'online' : 'offline',
-		activity: status.kind,
-		app: status.kind !== 'idle' && appName !== '' ? { name: appName, icon: status.iconUrl } : null,
+		state: 'unknown',
+		activity: null,
+		app: null,
 		updatedAt: null,
 		lastSeenAt: null
 	};

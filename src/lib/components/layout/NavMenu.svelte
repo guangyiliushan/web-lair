@@ -11,7 +11,8 @@
 	import { NAV_PANEL_HEIGHT } from './nav-menu/geometry';
 	import { tLabel, type NavMenuConfig, type NavMenuData } from '$lib/config/navigation.config';
 	import type { Snippet } from 'svelte';
-	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
+	import type { SiteOwner } from '$lib/config/owner-status';
+	import type { OwnerPresence } from '$lib/config/owner-presence';
 	import type { SocialLinkLike } from '$lib/config/social';
 	import NavMenuHomeContent from './nav-menu/NavMenuHomeContent.svelte';
 	import NavMenuTwoColumnContent from './nav-menu/NavMenuTwoColumnContent.svelte';
@@ -46,7 +47,7 @@
 		/** Home panel identity block; ignored by every other layout. */
 		owner?: SiteOwner;
 		ownerLinks?: readonly SocialLinkLike[] | null;
-		ownerStatus?: OwnerStatus;
+		presence?: OwnerPresence;
 		trigger: Snippet<[TriggerState]>;
 	}
 
@@ -59,7 +60,7 @@
 		loading = false,
 		owner,
 		ownerLinks,
-		ownerStatus,
+		presence,
 		trigger
 	}: Props = $props();
 
@@ -260,12 +261,12 @@
 									<NavMenuHomeContent
 										{loading}
 										owner={owner ?? { name: '', avatar: '' }}
-										status={ownerStatus ?? {
-											enabled: false,
-											kind: 'idle',
-											detail: '',
-											iconUrl: '',
-											href: ''
+										presence={presence ?? {
+											state: 'unknown',
+											activity: null,
+											app: null,
+											updatedAt: null,
+											lastSeenAt: null
 										}}
 										stats={statRows}
 										links={ownerLinks ?? []}

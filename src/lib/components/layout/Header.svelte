@@ -69,12 +69,12 @@
 
 <HeaderShell>
 	<div class="flex items-center justify-between gap-2 px-4 py-2">
-		<SiteBrand {owner} {presence} enabled={ownerStatus.enabled} />
+		<SiteBrand {owner} {presence} />
 
 		<SiteDesktopNav
 			{owner}
 			{ownerLinks}
-			{ownerStatus}
+			{presence}
 			{postsData}
 			{notesData}
 			{timelineData}
