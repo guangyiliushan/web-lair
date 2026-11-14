@@ -6,7 +6,6 @@
 	import { Input } from '$lib/components/ui/input';
 	import {
 		SettingsForm,
-		SettingsProviderStatus,
 		SettingsStatusList,
 		SettingsStatusRow
 	} from '$lib/components/admin/settings';
@@ -321,7 +320,20 @@
 		<SettingsStatusRow label={m.admin_settings_site_robots()} value="/robots.txt" />
 		<SettingsStatusRow
 			label={m.admin_settings_site_site_search()}
+			hint={m.admin_settings_site_site_search_hint()}
 			badge={m.admin_settings_site_not_implemented()}
+		/>
+		<SettingsStatusRow
+			label={m.admin_settings_site_indexnow()}
+			badge={m.admin_settings_integrations_planned()}
+		/>
+		<SettingsStatusRow
+			label={m.admin_settings_site_baidu()}
+			badge={m.admin_settings_integrations_planned()}
+		/>
+		<SettingsStatusRow
+			label={m.admin_settings_site_bing()}
+			badge={m.admin_settings_integrations_planned()}
 		/>
 	</SettingsStatusList>
 	<p class="-mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -332,10 +344,4 @@
 			{m.admin_settings_site_open_robots()}
 		</a>
 	</p>
-
-	<div class="divide-y rounded-lg border">
-		<SettingsProviderStatus name="IndexNow" state="planned" />
-		<SettingsProviderStatus name="Baidu" state="planned" />
-		<SettingsProviderStatus name="Bing" state="planned" />
-	</div>
 </div>

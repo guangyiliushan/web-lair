@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -11,10 +11,37 @@ const PAGE = readFileSync(new URL('./+page.svelte', import.meta.url), 'utf8');
 const NAV = readFileSync(new URL('../+layout.svelte', import.meta.url), 'utf8');
 const SEARCH_ROUTE = new URL('../search/', import.meta.url);
 
+/** Parsed locale files, for the W10.2 dead-key and copy audit. */
+const LOCALES = ['en', 'ja', 'zh-cn'];
+const MESSAGES = LOCALES.map((locale) => ({
+	locale,
+	messages: JSON.parse(
+		readFileSync(new URL(`../../../../../../messages/${locale}.json`, import.meta.url), 'utf8')
+	) as Record<string, string>
+}));
+
+/** The schema module plus every migration, joined: `search_documents` must not return. */
+const SCHEMA_SOURCE = [
+	readFileSync(new URL('../../../../../../src/lib/server/db/schema.ts', import.meta.url), 'utf8'),
+	...readdirSync(new URL('../../../../../../drizzle/', import.meta.url))
+		.filter((name) => name.endsWith('.sql'))
+		.map((name) =>
+			readFileSync(new URL(`../../../../../../drizzle/${name}`, import.meta.url), 'utf8')
+		)
+].join('\n');
+
 describe('Site search indexing (W5.6)', () => {
-	const section = PAGE.slice(PAGE.indexOf('<!-- Search indexing')).replace(/<!--[\s\S]*?-->/g, '');
+	// Bound the slice to the next comment so a later section cannot inherit
+	// these negatives (W10 review: the old slice ran to EOF).
+	const start = PAGE.indexOf('<!-- Search indexing');
+	const nextComment = start === -1 ? -1 : PAGE.indexOf('<!--', start + 1);
+	const section = PAGE.slice(start, nextComment === -1 ? undefined : nextComment).replace(
+		/<!--[\s\S]*?-->/g,
+		''
+	);
 
 	it('links the two routes that actually exist', () => {
+		expect(start, 'Search indexing marker').toBeGreaterThan(-1);
 		expect(section).toContain('href="/sitemap.xml"');
 		expect(section).toContain('href="/robots.txt"');
 		expect(existsSync(new URL('../../../../sitemap.xml/', import.meta.url))).toBe(true);
@@ -22,10 +49,10 @@ describe('Site search indexing (W5.6)', () => {
 	});
 
 	it('marks IndexNow, Baidu and Bing as planned without a token field', () => {
-		expect(section).toContain('name="IndexNow"');
-		expect(section).toContain('name="Baidu"');
-		expect(section).toContain('name="Bing"');
-		expect(section.match(/state="planned"/g)).toHaveLength(3);
+		expect(section).toContain('admin_settings_site_indexnow');
+		expect(section).toContain('admin_settings_site_baidu');
+		expect(section).toContain('admin_settings_site_bing');
+		expect(section.match(/admin_settings_integrations_planned/g)).toHaveLength(3);
 		expect(section).not.toContain('<Input');
 		expect(section).not.toContain('<input');
 		expect(section).not.toContain('type="submit"');
@@ -50,5 +77,28 @@ describe('Site search indexing (W5.6)', () => {
 
 	it('still says site search is not implemented (SE3)', () => {
 		expect(section).toContain('admin_settings_site_not_implemented');
+	});
+
+	it('spells out that site search is a separate project (W10.2)', () => {
+		expect(section).toContain('admin_settings_site_site_search_hint');
+		for (const { locale, messages } of MESSAGES) {
+			expect(messages.admin_settings_site_site_search_hint, locale).toMatch(
+				/separate project|別プロジェクト|独立项目/
+			);
+		}
+	});
+
+	it('leaves no search-page message keys behind in any locale', () => {
+		for (const { locale, messages } of MESSAGES) {
+			expect(
+				Object.keys(messages).filter((key) => key.startsWith('admin_settings_search')),
+				locale
+			).toEqual([]);
+			expect(messages, locale).toHaveProperty('admin_settings_site_search_indexing');
+		}
+	});
+
+	it('does not revive the search_documents table', () => {
+		expect(SCHEMA_SOURCE).not.toContain('search_documents');
 	});
 });
