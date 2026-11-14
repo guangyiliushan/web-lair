@@ -15,7 +15,6 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Separator from '$lib/components/ui/separator';
 	import { SettingsForm } from '$lib/components/admin/settings';
-	import IconGlobe from '@tabler/icons-svelte-runes/icons/globe';
 	import IconKey from '@tabler/icons-svelte-runes/icons/key';
 
 	let { data, form }: PageProps = $props();
@@ -40,16 +39,8 @@
 	let pendingTotpURI = $state<string | null>(null);
 	let pendingBackupCodes = $state<string[]>([]);
 
-	// Content language is a real single-field form; the shared SettingsForm
-	// supplies the dirty indicator, Save/Cancel pair, leave-guard and the
-	// readable error/success slot. Cancel restores the loaded value.
-	const langForm = $derived(
-		form as {
-			message?: string | null;
-			step?: string;
-			status?: number;
-		} | null
-	);
+	// Content language moved to Profile & Preferences (IA2/W4.7); the account
+	// page is security-only.
 	const deviceForm = $derived(
 		form as {
 			message?: string | null;
@@ -146,15 +137,6 @@
 			copyFailed = true;
 		}
 	}
-	let lang = $state<string | null>(null);
-	const currentLang = $derived(lang ?? data.defaultLang ?? '');
-	const langDirty = $derived(lang !== null && lang !== (data.defaultLang ?? ''));
-	const langError = $derived(Boolean(langForm?.status && langForm.status >= 400));
-
-	$effect(() => {
-		if (langForm?.step === 'contentLang' && !langForm.status) lang = null;
-	});
-
 	$effect(() => {
 		const payload = actionForm;
 		if (!payload) return;
@@ -168,44 +150,6 @@
 </script>
 
 <div class="space-y-8">
-	<!-- Section: Content language (real feature · A4) -->
-	<section>
-		<div class="mb-4 flex items-center gap-2">
-			<IconGlobe class="size-5 text-muted-foreground" />
-			<h3 class="text-base font-semibold">{m.admin_settings_account_content_lang()}</h3>
-		</div>
-		<p class="mb-3 text-sm text-muted-foreground">
-			{m.admin_settings_account_content_lang_desc()}
-		</p>
-
-		<SettingsForm
-			action="?/contentLang"
-			dirty={langDirty}
-			message={langForm?.step === 'contentLang' ? langForm.message : null}
-			error={langError}
-			onCancel={() => (lang = null)}
-		>
-			<select
-				name="lang"
-				value={currentLang}
-				onchange={(event) => (lang = event.currentTarget.value)}
-				aria-label={m.admin_settings_account_content_lang()}
-				class="h-8 min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-			>
-				<option value=""
-					>{m.admin_settings_account_content_lang_site({
-						lang: data.siteDefaultLang
-					})}</option
-				>
-				{#each data.langs as option (option)}
-					<option value={option}>{option}</option>
-				{/each}
-			</select>
-		</SettingsForm>
-	</section>
-
-	<Separator.Root />
-
 	<!-- Section: Two-step verification (real feature · B3) -->
 	<section>
 		<div class="mb-4 flex items-center justify-between">
@@ -221,7 +165,7 @@
 		</div>
 		<p class="mb-3 text-sm text-muted-foreground">{m.admin_settings_2fa_desc()}</p>
 
-		{#if actionForm?.message && actionForm.step !== 'contentLang'}
+		{#if actionForm?.message && ['enable', 'activate', 'disable', 'regenerate', 'regenerated', 'done'].includes(actionForm.step ?? '')}
 			<div class="mb-3 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm" role="status">
 				<IconAlertCircle class="size-4 shrink-0" />
 				<span>{actionForm.message}</span>

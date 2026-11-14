@@ -14,7 +14,7 @@ import {
 } from '$lib/server/db/auth.schema';
 import { requireAdminRole } from '$lib/server/authz';
 import { settingAccess, assertSettingWrite } from '$lib/server/settings/tiers';
-import { getOption, OPTION_LANGS } from '$lib/server/config/options-registry';
+import { getOption } from '$lib/server/config/options-registry';
 import { pruneOtherSessions, pruneOtherSessionsKeepingNewest } from '$lib/server/auth/sessions';
 import { getAdminConfig } from '$lib/server/config/admin';
 import { formatDateTime } from '$lib/utils/i18n';
@@ -90,59 +90,54 @@ export const load: PageServerLoad = async (event) => {
 
 	const userId = event.locals.user?.id ?? '';
 	const now = new Date();
-	const [row, siteTz, siteDefaultLang, sessionRows, passkeyRows, credentialRows] =
-		await Promise.all([
-			db.query.user.findFirst({
-				where: eq(user.id, userId),
-				columns: { twoFactorEnabled: true, defaultLang: true }
-			}),
-			getOption('site.timezone'),
-			getOption('site.default_lang'),
-			db
-				.select({
-					id: authSession.id,
-					createdAt: authSession.createdAt,
-					updatedAt: authSession.updatedAt,
-					expiresAt: authSession.expiresAt,
-					ipAddress: authSession.ipAddress,
-					userAgent: authSession.userAgent
-				})
-				.from(authSession)
-				.where(and(eq(authSession.userId, userId), gt(authSession.expiresAt, now)))
-				.orderBy(desc(authSession.updatedAt))
-				.limit(SESSION_LIST_LIMIT),
-			db
-				.select({
-					id: authPasskey.id,
-					name: authPasskey.name,
-					aaguid: authPasskey.aaguid,
-					createdAt: authPasskey.createdAt,
-					deviceType: authPasskey.deviceType,
-					backedUp: authPasskey.backedUp
-				})
-				.from(authPasskey)
-				.where(eq(authPasskey.userId, userId)),
-			db
-				.select({ id: authAccount.id })
-				.from(authAccount)
-				.where(
-					and(
-						eq(authAccount.userId, userId),
-						eq(authAccount.providerId, 'credential'),
-						isNotNull(authAccount.password)
-					)
+	const [row, siteTz, sessionRows, passkeyRows, credentialRows] = await Promise.all([
+		db.query.user.findFirst({
+			where: eq(user.id, userId),
+			columns: { twoFactorEnabled: true }
+		}),
+		getOption('site.timezone'),
+		db
+			.select({
+				id: authSession.id,
+				createdAt: authSession.createdAt,
+				updatedAt: authSession.updatedAt,
+				expiresAt: authSession.expiresAt,
+				ipAddress: authSession.ipAddress,
+				userAgent: authSession.userAgent
+			})
+			.from(authSession)
+			.where(and(eq(authSession.userId, userId), gt(authSession.expiresAt, now)))
+			.orderBy(desc(authSession.updatedAt))
+			.limit(SESSION_LIST_LIMIT),
+		db
+			.select({
+				id: authPasskey.id,
+				name: authPasskey.name,
+				aaguid: authPasskey.aaguid,
+				createdAt: authPasskey.createdAt,
+				deviceType: authPasskey.deviceType,
+				backedUp: authPasskey.backedUp
+			})
+			.from(authPasskey)
+			.where(eq(authPasskey.userId, userId)),
+		db
+			.select({ id: authAccount.id })
+			.from(authAccount)
+			.where(
+				and(
+					eq(authAccount.userId, userId),
+					eq(authAccount.providerId, 'credential'),
+					isNotNull(authAccount.password)
 				)
-				.limit(1)
-		]);
+			)
+			.limit(1)
+	]);
 
 	const origin = env.ORIGIN || event.url.origin;
 	const currentSessionId = event.locals.session?.id ?? null;
 
 	return {
 		twoFactorEnabled: Boolean(row?.twoFactorEnabled),
-		defaultLang: row?.defaultLang ?? null,
-		siteDefaultLang,
-		langs: [...OPTION_LANGS],
 		editable: settingAccess(event.locals.admin?.role, 'account').editable,
 		hasPassword: credentialRows.length > 0,
 		currentSessionId,
@@ -185,32 +180,6 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
-	/**
-	 * A4: the language new posts start in. An empty value means "follow the
-	 * site default" and is stored as NULL, so changing the site default later
-	 * moves every author who never picked one.
-	 */
-	contentLang: async ({ request, locals }) => {
-		await requireAdminRole();
-		assertSettingWrite(locals.admin?.role, 'account', 'account.self');
-		const form = await request.formData();
-		const lang = (form.get('lang') ?? '').toString();
-
-		if (lang !== '' && !(OPTION_LANGS as readonly string[]).includes(lang)) {
-			return fail(400, {
-				message: m.admin_settings_account_err_content_lang(),
-				step: 'contentLang'
-			});
-		}
-
-		await db
-			.update(user)
-			.set({ defaultLang: lang || null })
-			.where(eq(user.id, locals.user?.id ?? ''));
-
-		return { message: m.admin_settings_account_msg_content_lang(), step: 'contentLang' };
-	},
-
 	/**
 	 * AC10: revoke one session by its database id. The browser never receives a
 	 * session token; the server resolves the row for the signed-in user and
@@ -267,7 +236,6 @@ export const actions: Actions = {
 
 		return { message: m.admin_settings_account_msg_session_revoked(), step: 'devices' };
 	},
-
 	/** AC2: sign out every session except the request's own cookie. */
 	revokeOthers: async ({ request, locals }) => {
 		await requireAdminRole();
