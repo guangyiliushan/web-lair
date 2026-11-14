@@ -44,8 +44,8 @@ test('all eight pages answer 200 with their section heading', async ({ page }) =
 });
 
 test('planned/read-only pages render zero form controls', async ({ page }) => {
-	// Every wave that shipped real forms left this list (W4 profile, W5 site,
-	// W6 content, W7 storage); integrations stays read-only until W10.
+	// Integrations is the last read-only section (W10.1): a capability map with
+	// no action, so it must render zero inputs, selects or buttons.
 	for (const id of ['integrations']) {
 		const response = await page.goto(`/admin/settings/${id}`);
 		expect(response?.status(), id).toBe(200);
@@ -53,6 +53,19 @@ test('planned/read-only pages render zero form controls', async ({ page }) => {
 			page.locator('main').locator('input, textarea, select, button').filter({ visible: true })
 		).toHaveCount(0);
 	}
+});
+
+test('integrations groups rich, planned and static cards with no token field', async ({ page }) => {
+	await page.goto('/admin/settings/integrations');
+	for (const heading of ['Rich embeds', 'Planned rich cards', 'Static embeds']) {
+		await expect(page.getByRole('heading', { name: heading, exact: true }).first()).toBeVisible();
+	}
+	// The rate-limit facts are the page's whole point: 60/h anonymous, 5,000/h
+	// with GITHUB_TOKEN. The token value itself is never rendered.
+	await expect(page.getByText(/60\/h/).first()).toBeVisible();
+	await expect(page.getByText(/5,000\/h/).first()).toBeVisible();
+	await expect(page.locator('input[type="password"], input[name*="token" i]')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
 });
 
 test('content renders the real W6 forms and no dead control', async ({ page }) => {
