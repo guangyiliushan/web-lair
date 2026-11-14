@@ -240,15 +240,30 @@ test('db:reset-2fa disables the factor, revokes sessions, and is idempotent', as
 	// Two pnpm invocations (tsx cold start each) blow past the 30s default.
 	test.setTimeout(180_000);
 
+	// Contract change (W8.2 -> commit 14f3033 "keep multi-session for email plus
+	// TOTP sign-in"): the 2FA challenge is a sign-in method, not a single-session
+	// policy, so verify-totp no longer prunes the account's other sessions.
+	//   old contract: a fresh email+TOTP sign-in left exactly one session row,
+	//                 hence the old `expect(sessionCount()).toBe('1')`;
+	//   new contract: it adds exactly one row and every earlier session survives
+	//                 (the tests before this one run in fresh browser contexts
+	//                 with no cookie, so their `sign-out` cannot delete those
+	//                 rows - see the note in "rejects a wrong code").
+	// Assert the increment instead of the total, so the row count stays honest
+	// whatever the rest of the serial file left behind.
+	const sessionsBefore = Number(sessionCount());
 	const signInResponse = await challengeSignIn(page);
 	expect(signInResponse.ok()).toBeTruthy();
 	await verifyTotpViaApi(page, secret);
-	expect(sessionCount()).toBe('1');
+	expect(Number(sessionCount())).toBe(sessionsBefore + 1);
 
 	const first = runResetScript();
 	expect(first).toContain('twoFactorEnabled=false');
+	// The reset is the documented emergency path and revokes EVERY session of
+	// the account - the new contract keeps those rows alive until this point.
 	expect(first).toContain('sessions=0');
 	expect(first).toContain('Reset at');
+	expect(sessionCount()).toBe('0');
 	expect(psql(`select two_factor_enabled from "user" where email = '${FIXTURE_EMAIL}'`)).toBe('f');
 	expect(
 		psql(
