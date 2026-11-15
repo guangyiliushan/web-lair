@@ -12,11 +12,11 @@ import {
 	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
-import { user } from '../auth.schema';
-import { categories } from './category.schema';
-import type { LocalizedMarkdown, LocalizedText } from './localized';
-import type { PostDraftPayload } from './post-provenance';
-import { topics } from './topic.schema';
+import { user } from '../auth.schema.ts';
+import { categories } from './category.schema.ts';
+import type { LocalizedMarkdown, LocalizedText } from './localized.ts';
+import type { PostDraftPayload } from './post-provenance.ts';
+import { topics } from './topic.schema.ts';
 
 /**
  * Drafts are the unpublished working copy of a post (edit isolation, ledger

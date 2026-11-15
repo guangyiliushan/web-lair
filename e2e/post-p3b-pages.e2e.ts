@@ -163,7 +163,7 @@ test.describe('P3-b pages', () => {
 	test('nav active state follows the de-localised path (review pin)', async ({ page }) => {
 		// `hover:text-primary` also contains the substring — match a standalone
 		// token only, or the inactive state would satisfy a naive regex.
-		const active = /(^|\s)text-primary(\s|$)/;
+		const active = /(^|\s)text-primary(?:-text)?(\s|$)/;
 
 		await page.goto(`/en/posts/${SLUG1}`);
 		const postsNav = page.getByRole('banner').getByRole('link', { name: 'Posts' }).first();

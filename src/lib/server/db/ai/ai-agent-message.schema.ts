@@ -9,7 +9,7 @@ import {
 	uuid,
 	integer
 } from 'drizzle-orm/pg-core';
-import { aiAgentConversations } from './ai-agent-conversation.schema';
+import { aiAgentConversations } from './ai-agent-conversation.schema.ts';
 
 /** Placeholder payload contract for one message; the full shape firms up in AI-2. */
 export interface MessageContent {

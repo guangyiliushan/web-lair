@@ -111,6 +111,18 @@ export declare function prunePrecheckRuns(
 	options?: any
 ): Promise<{ matched: number; deleted: number }>;
 export declare const links: any;
+
+/** Revision retention (revisions.prune): newest N publish snapshots per post. */
+export declare const REVISION_KEEP_PER_POST: number;
+export declare function pruneRevisions(options: any, deps: any): Promise<any>;
+
+/** Orphan sweep (orphans.purge): dangling file references and old orphan drafts. */
+export declare const DRAFT_ORPHAN_GRACE_DAYS: number;
+export declare function purgeOrphans(options: any, deps: any): Promise<any>;
+
+/** Trash retention (trash.purge): whole-family delete past the grace window. */
+export declare const TRASH_GRACE_DAYS: number;
+export declare function purgeTrashedPosts(options: any, deps: any): Promise<any>;
 /** Comment rows (W6.2 country/region retention sweep in `jobs.prune`). */
 export declare const comments: any;
 

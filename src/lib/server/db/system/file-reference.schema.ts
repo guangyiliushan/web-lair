@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { check, index, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { files } from '../content/file.schema';
+import { files } from '../content/file.schema.ts';
 
 /** ref_type whitelist; `'draft'` is part of the single baseline's CHECK (regenerated, ST-3 3b2). */
 export const FILE_REF_TYPES = ['post', 'note', 'page', 'comment', 'draft'] as const;

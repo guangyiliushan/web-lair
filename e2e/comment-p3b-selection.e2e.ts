@@ -77,7 +77,7 @@ async function ownerPage(browser: Browser): Promise<{ context: BrowserContext; p
 	const page = await context.newPage();
 	// Visiting the queue acquires the loopback owner session for this context.
 	await page.goto('/admin/comments');
-	await expect(page.getByRole('tab', { name: /待审/ })).toBeVisible({ timeout: 15000 });
+	await expect(page.getByRole('radio', { name: /待审/ })).toBeVisible({ timeout: 15000 });
 	return { context, page };
 }
 

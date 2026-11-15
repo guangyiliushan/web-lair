@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { check, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { user } from '../auth.schema';
-import { aiAgentConversations } from './ai-agent-conversation.schema';
+import { user } from '../auth.schema.ts';
+import { aiAgentConversations } from './ai-agent-conversation.schema.ts';
 
 /**
  * A proposed settings write (AI-v3 Q2). The agent can only create a pending

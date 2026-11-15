@@ -231,7 +231,7 @@ test('the owners own comment auto-approves and is public immediately', async ({ 
 	const ownerPage = await owner.newPage();
 	// Visiting /admin first acquires the loopback owner session for this context.
 	await ownerPage.goto('/admin/comments');
-	await expect(ownerPage.getByRole('tab', { name: /待审/ })).toBeVisible({ timeout: 15000 });
+	await expect(ownerPage.getByRole('radio', { name: /待审/ })).toBeVisible({ timeout: 15000 });
 
 	await ownerPage.goto(POST_PATH);
 	await ownerPage.getByRole('textbox', { name: '评论内容' }).fill(T_OWNER);

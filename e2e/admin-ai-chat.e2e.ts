@@ -10,16 +10,21 @@ test.use(zhCnLocale);
  */
 test('creates and deletes a chat conversation', async ({ page }) => {
 	await page.goto('/admin/ai/chat');
+	// The header action is registered during hydration; wait for the network to
+	// settle so the click cannot land before the registry exists.
+	await page.waitForLoadState('networkidle');
 	await expect(page.getByRole('heading', { name: '管理对话' })).toBeVisible({ timeout: 15000 });
 
-	await page.getByRole('button', { name: '新建会话' }).click();
+	const newButton = page.getByRole('button', { name: '新建', exact: true });
+	await expect(newButton).toBeEnabled({ timeout: 15000 });
+	await newButton.click();
 	await expect(page.getByText('问站点状态、最近用量或内容库。')).toBeVisible({ timeout: 15000 });
 
-	// No provider is assigned to `chat` in the fixture DB, so the SSE route
-	// must surface a visible error instead of hanging or silently dropping it.
-	await page.locator('textarea[name="text"]').fill('站点现在有多少篇文章？');
-	await page.getByRole('button', { name: '发送' }).click();
-	await expect(page.getByRole('alert')).toBeVisible({ timeout: 20000 });
+	// No provider is assigned to `chat` in the fixture DB: the composer is
+	// disabled and the readiness strip names the reason, so there is no send
+	// path to exercise here.
+	await expect(page.getByTestId('chat-readiness')).toBeVisible({ timeout: 20000 });
+	await expect(page.locator('textarea[name="text"]')).toBeDisabled();
 
 	page.on('dialog', (dialog) => void dialog.accept());
 	await page.getByRole('button', { name: '删除会话' }).click();

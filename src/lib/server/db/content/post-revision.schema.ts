@@ -9,8 +9,8 @@ import {
 	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
-import { user } from '../auth.schema';
-import { posts } from './post.schema';
+import { user } from '../auth.schema.ts';
+import { posts } from './post.schema.ts';
 
 /**
  * Publish-time snapshots only (ledger §9.3): every publish appends one

@@ -9,7 +9,7 @@ import {
 	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
-import { posts } from './post.schema';
+import { posts } from './post.schema.ts';
 
 /**
  * Tags are a real entity since P1 (ledger §9.12): the posts.tags array

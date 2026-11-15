@@ -1,6 +1,6 @@
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { index, integer, pgTable, primaryKey, uuid } from 'drizzle-orm/pg-core';
-import { posts } from './post.schema';
+import { posts } from './post.schema.ts';
 
 export const postRelatedPosts = pgTable(
 	'post_related_posts',

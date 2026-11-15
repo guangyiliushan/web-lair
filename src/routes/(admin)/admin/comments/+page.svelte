@@ -50,7 +50,6 @@
 	<div class="flex h-12 shrink-0 items-center gap-2 border-b bg-surface-card px-3">
 		<ToggleGroup.Root
 			type="single"
-			role="tablist"
 			value={data.state}
 			onValueChange={(value) => {
 				if (value && value !== data.state) {
@@ -62,7 +61,7 @@
 			class="gap-1"
 		>
 			{#each tabs as tab (tab.id)}
-				<ToggleGroup.Item value={tab.id} role="tab" aria-selected={data.state === tab.id}>
+				<ToggleGroup.Item value={tab.id} aria-current={data.state === tab.id ? 'true' : undefined}>
 					{tab.label}
 					{#if data.counts[tab.id] > 0}
 						<span class="ml-0.5 text-xs opacity-60">{data.counts[tab.id]}</span>

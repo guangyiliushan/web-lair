@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
-import { user } from '../auth.schema';
+import { user } from '../auth.schema.ts';
 
 /**
  * One-row pointer to the site owner (M4 foundation, O-C2/OP-7).

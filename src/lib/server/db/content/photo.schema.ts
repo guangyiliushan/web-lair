@@ -13,9 +13,9 @@ import {
 	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
-import { files } from './file.schema';
-import { tags } from './tag.schema';
-import type { LocalizedText } from './localized';
+import { files } from './file.schema.ts';
+import { tags } from './tag.schema.ts';
+import type { LocalizedText } from './localized.ts';
 
 /** Photo gallery entity (storage line §3.3): 1:1 with a files row. */
 export const photos = pgTable(

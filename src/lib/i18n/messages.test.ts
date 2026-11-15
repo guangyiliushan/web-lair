@@ -123,6 +123,24 @@ function collectUsages(): Usage[] {
 	return usages;
 }
 
+/**
+ * Keys stored in config objects for dynamic lookups (readiness copy resolves
+ * `labelKey`/`hintKey` through `messageByKey`). A static `m.` scan cannot see
+ * them, so every quoted string that matches a catalog key counts as a use.
+ */
+function collectLiteralKeys(catalog: Set<string>): Set<string> {
+	const used = new Set<string>();
+	const literal = /'([A-Za-z_$][\w$]*)'|"([A-Za-z_$][\w$]*)"/g;
+	for (const filePath of walkSources(join(ROOT, 'src'))) {
+		const source = readFileSync(filePath, 'utf8');
+		for (const match of source.matchAll(literal)) {
+			const key = match[1] ?? match[2];
+			if (catalog.has(key)) used.add(key);
+		}
+	}
+	return used;
+}
+
 /** Placeholders like `{count}` that the compiled message reads from its inputs. */
 function requiredPlaceholders(message: string): string[] {
 	return [...message.matchAll(/\{\s*(\w+)\s*\}/g)].map((match) => match[1]);
@@ -211,6 +229,23 @@ describe('paraglide message contract', () => {
 				}
 			}
 			expect(missing).toEqual([]);
+		},
+		WALK_TIMEOUT_MS
+	);
+
+	// Reverse direction: a key nobody references is dead weight, and the first
+	// place a half-removed feature hides. Zero-tolerance - no allowlist; the
+	// remedy for a legitimately reserved key is to delete it until it is used.
+	// "Referenced" includes quoted key literals (see `collectLiteralKeys`).
+	it(
+		'references every catalog key from src, so unused messages cannot accumulate',
+		() => {
+			const catalog = readLocaleMessages(BASE_LOCALE);
+			const keys = new Set(Object.keys(catalog).filter((key) => !key.startsWith('$')));
+			const used = new Set(collectUsages().map((usage) => usage.key));
+			for (const key of collectLiteralKeys(keys)) used.add(key);
+			const unused = [...keys].filter((key) => !used.has(key)).sort();
+			expect(unused).toEqual([]);
 		},
 		WALK_TIMEOUT_MS
 	);

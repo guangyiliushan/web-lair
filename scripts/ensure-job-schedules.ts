@@ -37,7 +37,12 @@ const SCHEDULES = [
 	// Links L4: the public policy promises scheduled checks and a grace-period
 	// prune, so both rows must exist on a fresh install (prune runs after check).
 	{ job: 'links.check', cron: '0 5 * * *' },
-	{ job: 'links.prune', cron: '30 5 * * *' }
+	{ job: 'links.prune', cron: '30 5 * * *' },
+	// M5 content maintenance: revisions keep a per-post cap (cheap, daily);
+	// trash/orphans are registered but seeded separately (single-operator rule:
+	// `trash.purge` gets no schedule by default).
+	{ job: 'revisions.prune', cron: '10 3 * * *' },
+	{ job: 'orphans.purge', cron: '40 3 * * 0' }
 ] as const;
 
 async function main(): Promise<void> {

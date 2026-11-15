@@ -3,7 +3,7 @@ import {
 	isEmptyProvenance,
 	normalizeProvenance,
 	postProvenanceFromPayload
-} from './post-provenance';
+} from './post-provenance.ts';
 
 describe('normalizeProvenance', () => {
 	it('keeps only known enum values and normalizes comma-separated help', () => {

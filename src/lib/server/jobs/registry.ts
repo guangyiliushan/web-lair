@@ -81,6 +81,30 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 		scheduleHint: '30 5 * * *',
 		timeoutMs: 300_000
 	},
+	'revisions.prune': {
+		name: 'revisions.prune',
+		description:
+			'Delete publish-time post revisions beyond the newest 20 per post (ledger §9.3); the cap is a code constant.',
+		manual: true,
+		scheduleHint: '10 3 * * *',
+		timeoutMs: 300_000
+	},
+	'orphans.purge': {
+		name: 'orphans.purge',
+		description:
+			'Clear file references whose polymorphic target is gone (through syncFileReferences) and delete orphan drafts past 30 days; moments excluded (M5).',
+		manual: true,
+		scheduleHint: '40 3 * * 0',
+		timeoutMs: 600_000
+	},
+	'trash.purge': {
+		name: 'trash.purge',
+		description:
+			'Delete trashed post families past the grace window when every member is trashed; manual only, no default schedule (single-operator ruling Q5).',
+		manual: true,
+		scheduleHint: null,
+		timeoutMs: 600_000
+	},
 	'projects.sync': {
 		name: 'projects.sync',
 		description:

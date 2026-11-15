@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { SETTINGS_SECTIONS } from '$lib/server/settings/tiers';
 
 /**
  * W10.4 acceptance: the final eight-page IA (decision register §3K) is
@@ -12,7 +13,6 @@ import { describe, expect, it } from 'vitest';
  *     push, backup/image host) in any of those descriptions;
  *   - the eight routes exist.
  */
-const LAYOUT = readFileSync(new URL('./+layout.svelte', import.meta.url), 'utf8');
 const LOCALES = ['en', 'ja', 'zh-cn'];
 
 /** section id → message key suffix used for its label/description. */
@@ -36,7 +36,10 @@ const MESSAGES = LOCALES.map((locale) => ({
 
 describe('final eight-page IA (W10.4)', () => {
 	it('declares exactly the eight sections in order', () => {
-		const ids = [...LAYOUT.matchAll(/id:\s*'([a-z-]+)'/g)].map((match) => match[1]);
+		// The ordered list lives in `tiers.ts` (single source); the literal
+		// expectation below stays in the test so a reordering is still a
+		// deliberate, reviewable change rather than a tautology.
+		const ids = [...SETTINGS_SECTIONS];
 		expect(ids).toEqual(SECTIONS.map(([id]) => id));
 	});
 

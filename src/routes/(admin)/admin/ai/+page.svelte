@@ -163,7 +163,6 @@
 	<div class="flex h-10 shrink-0 items-center gap-2 border-b px-4">
 		<ToggleGroup.Root
 			type="single"
-			role="tablist"
 			aria-label={m.admin_ai_view_label()}
 			value={data.filters.view}
 			onValueChange={(value) => {
@@ -180,12 +179,14 @@
 		>
 			<ToggleGroup.Item
 				value="activity"
-				role="tab"
-				aria-selected={data.filters.view === 'activity'}
+				aria-current={data.filters.view === 'activity' ? 'true' : undefined}
 			>
 				{m.admin_ai_view_activity()}
 			</ToggleGroup.Item>
-			<ToggleGroup.Item value="summary" role="tab" aria-selected={data.filters.view === 'summary'}>
+			<ToggleGroup.Item
+				value="summary"
+				aria-current={data.filters.view === 'summary' ? 'true' : undefined}
+			>
 				{m.admin_ai_view_summary()}
 			</ToggleGroup.Item>
 		</ToggleGroup.Root>

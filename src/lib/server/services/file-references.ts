@@ -1,10 +1,10 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 // Type-only: the module never touches the connection itself (the executor is
 // injected), and a value import would keep node scripts from reusing it.
-import type { db } from '$lib/server/db';
-import { files } from '$lib/server/db/content';
-import { fileReferences, type FileRefType } from '$lib/server/db/system';
-import { I_KEY_PATTERN } from '$lib/media/keys';
+import type { db } from '../db/index.ts';
+import { files } from '../db/content/index.ts';
+import { fileReferences, type FileRefType } from '../db/system/index.ts';
+import { I_KEY_PATTERN } from '../../media/keys.ts';
 
 /**
  * Reference maintenance (storage line §4.6; ST-3 3b1). The write side lives

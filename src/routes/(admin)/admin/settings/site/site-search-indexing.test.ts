@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { SETTINGS_SECTIONS } from '$lib/server/settings/tiers';
 
 /**
  * W5.6 acceptance: Search indexing lives in Site, shows the two real routes,
@@ -8,7 +9,6 @@ import { describe, expect, it } from 'vitest';
  * IA3); a regression here would resurrect a second place to configure SEO.
  */
 const PAGE = readFileSync(new URL('./+page.svelte', import.meta.url), 'utf8');
-const NAV = readFileSync(new URL('../+layout.svelte', import.meta.url), 'utf8');
 const SEARCH_ROUTE = new URL('../search/', import.meta.url);
 
 /** Parsed locale files, for the W10.2 dead-key and copy audit. */
@@ -61,8 +61,9 @@ describe('Site search indexing (W5.6)', () => {
 
 	it('has no standalone settings/search route and no nav entry for it', () => {
 		expect(existsSync(SEARCH_ROUTE)).toBe(false);
-		expect(NAV).not.toMatch(/id:\s*'(?:search|system)'/);
-		const ids = [...NAV.matchAll(/id:\s*'([a-z-]+)'/g)].map((match) => match[1]);
+		expect(SETTINGS_SECTIONS as readonly string[]).not.toContain('search');
+		expect(SETTINGS_SECTIONS as readonly string[]).not.toContain('system');
+		const ids = [...SETTINGS_SECTIONS];
 		expect(ids).toEqual([
 			'profile',
 			'site',

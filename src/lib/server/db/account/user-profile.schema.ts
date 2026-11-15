@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
-import { user } from '../auth.schema';
+import { user } from '../auth.schema.ts';
 
 /** One outbound link on a profile (`links` jsonb array element). */
 export interface ProfileLink {

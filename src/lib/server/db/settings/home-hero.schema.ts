@@ -8,7 +8,7 @@ import {
 	text,
 	timestamp
 } from 'drizzle-orm/pg-core';
-import { user } from '../auth.schema';
+import { user } from '../auth.schema.ts';
 
 /** `{ [locale]: copy }`; an empty map (or an empty string) falls back to messages. */
 export type LocalizedCopy = Record<string, string>;

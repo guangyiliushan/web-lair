@@ -188,8 +188,15 @@
 		!canGenerate && (langState === 'missing' || langState === 'empty')
 	);
 
+	/**
+	 * Readiness is a model-call gate. Accept / open-target / discard are local
+	 * actions on an existing row: a missing provider must not freeze them, or a
+	 * candidate could never be accepted.
+	 */
+	const readinessGated = $derived(primary?.action === 'generate' || primary?.action === 'retry');
+
 	const primaryDisabled = $derived(
-		busy || langState === 'queued' || needsPublishedBody || notReady
+		busy || langState === 'queued' || (readinessGated && (needsPublishedBody || notReady))
 	);
 	const primaryLabel = $derived(
 		busy || langState === 'queued'

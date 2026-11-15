@@ -25,6 +25,9 @@ function cleanup(): void {
 	psql(`delete from quotes where content like 'e2e-c3-%'`);
 	psql(`delete from thoughts where content like 'e2e-c3-%'`);
 	psql(`delete from moments where content like 'e2e-c3-%'`);
+	// Markdown fixtures start with a heading token, so the prefix above misses
+	// them; match the shared marker instead.
+	psql(`delete from moments where content like '%e2e-c3-md%'`);
 }
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 });
@@ -140,7 +143,7 @@ test.describe('micro C3 admin', () => {
 				const expected = psql(sql);
 				const title = quick.getByText(label, { exact: true });
 				await expect(title).toBeVisible({ timeout: 5000 });
-				const count = title.locator('xpath=following-sibling::p[1]');
+				const count = title.locator('xpath=following-sibling::span[1]');
 				await expect(count).toHaveText(expected, { timeout: 5000 });
 			}).toPass({ timeout: 30_000 });
 		}
@@ -151,7 +154,7 @@ test.describe('micro C3 public', () => {
 	test('quotes: the waterfall lists the fixture and the uuid detail renders', async ({ page }) => {
 		await page.goto('/zh-cn/quotes');
 		await expect(page.getByRole('heading', { name: '摘录' })).toBeVisible({ timeout: 20_000 });
-		await expect(page.getByText('言语的片段')).toBeVisible();
+		await expect(page.getByText('拾得的句子')).toBeVisible();
 		await expect(page.getByText(FIX_QUOTE)).toBeVisible({ timeout: 20_000 });
 
 		const id = psql(`select id from quotes where content = '${FIX_QUOTE}'`);
@@ -218,7 +221,9 @@ test.describe('micro C3 public', () => {
 		// renders the HTML (the stream keeps the plain-text excerpt).
 		const md = '## e2e-c3-md 标题 **加粗**';
 		psql(`insert into moments (content, type) values ('${md}', 'tech')`);
-		const id = psql(`select id from moments where content = '${md}'`);
+		const id = psql(
+			`select id from moments where content = '${md}' order by created_at desc limit 1`
+		);
 		await page.goto(`/zh-cn/moments/${id}`);
 		await expect(page.getByRole('heading', { level: 2, name: /e2e-c3-md 标题/ })).toBeVisible({
 			timeout: 20_000

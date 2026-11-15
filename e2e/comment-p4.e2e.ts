@@ -356,7 +356,7 @@ test('the owners edit auto-approves: public immediately with the edited marker',
 	// Visiting /admin first acquires the loopback owner session for this
 	// context (the same recipe as the p3a owner case).
 	await ownerPage.goto('/admin/comments');
-	await expect(ownerPage.getByRole('tab', { name: /待审/ })).toBeVisible({ timeout: 15000 });
+	await expect(ownerPage.getByRole('radio', { name: /待审/ })).toBeVisible({ timeout: 15000 });
 
 	await ownerPage.goto(POST_PATH);
 	const textarea = ownerPage.getByRole('textbox', { name: '评论内容' });
@@ -402,7 +402,7 @@ test('an edit inside the approval window voids the stale queue click', async ({ 
 	const owner = await guestContext(browser);
 	const ownerPage = await owner.newPage();
 	await ownerPage.goto('/admin/comments');
-	await expect(ownerPage.getByRole('tab', { name: /待审/ })).toBeVisible({ timeout: 15000 });
+	await expect(ownerPage.getByRole('radio', { name: /待审/ })).toBeVisible({ timeout: 15000 });
 	const row = ownerPage.locator('label').filter({ hasText: T_RACE1 });
 	await expect(row).toBeVisible({ timeout: 15000 });
 

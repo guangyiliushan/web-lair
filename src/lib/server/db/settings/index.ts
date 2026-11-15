@@ -1,2 +1,2 @@
-export * from './home-hero.schema';
-export * from './site-identity.schema';
+export * from './home-hero.schema.ts';
+export * from './site-identity.schema.ts';

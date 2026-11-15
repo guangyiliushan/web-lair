@@ -174,7 +174,9 @@ test('the eye toggle flips a row between visible and hidden', async ({ page }) =
 
 	await expect(async () => {
 		if ((await rowA.getByText('隐藏', { exact: true }).count()) === 0) {
-			await rowA.getByRole('button', { name: '隐藏' }).click();
+			// The status action lives in the row's overflow menu now.
+			await rowA.getByRole('button', { name: '更多操作' }).click();
+			await page.getByRole('menuitem', { name: '隐藏' }).click();
 		}
 		await expect
 			.poll(() => rowA.getByText('隐藏', { exact: true }).isVisible(), {
@@ -185,7 +187,8 @@ test('the eye toggle flips a row between visible and hidden', async ({ page }) =
 
 	await expect(async () => {
 		if ((await rowA.getByText('可见', { exact: true }).count()) === 0) {
-			await rowA.getByRole('button', { name: '显示' }).click();
+			await rowA.getByRole('button', { name: '更多操作' }).click();
+			await page.getByRole('menuitem', { name: '显示' }).click();
 		}
 		await expect
 			.poll(() => rowA.getByText('可见', { exact: true }).isVisible(), {
@@ -203,7 +206,8 @@ test('default rows expose no delete and fold hiding behind a confirmation', asyn
 
 	await expect(async () => {
 		if ((await page.getByText('隐藏默认页？').count()) === 0) {
-			await rowAbout.getByRole('button', { name: '隐藏' }).click();
+			await rowAbout.getByRole('button', { name: '更多操作' }).click();
+			await page.getByRole('menuitem', { name: '隐藏' }).click();
 		}
 		await expect(page.getByText('隐藏默认页？')).toBeVisible({ timeout: 5000 });
 	}).toPass({ timeout: 30_000 });

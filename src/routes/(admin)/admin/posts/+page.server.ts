@@ -1,11 +1,11 @@
 import { and, desc, eq, ilike, inArray, sql } from 'drizzle-orm';
 import { fail, type Actions } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
-import { categories, drafts, posts } from '$lib/server/db/content';
+import { categories, posts } from '$lib/server/db/content';
 import { requireAdminRole } from '$lib/server/authz';
 import { OPTION_LANGS } from '$lib/server/config/options-registry';
 import { draftsForPosts } from '$lib/server/services/post-drafts';
-import { syncFileReferences } from '$lib/server/services/file-references';
+import { purgePostFamily } from '$lib/server/maintenance/post-purge';
 import { isUuid } from '$lib/utils/uuid';
 import type { PageServerLoad } from './$types';
 import { m } from '$lib/paraglide/messages';
@@ -186,16 +186,9 @@ export const actions: Actions = {
 	 * already in the trash, so the destructive path is two deliberate steps
 	 * (trash → purge) and a mis-click on the row button can never lose data.
 	 *
-	 * Mirrors the pages hard-delete (M1 / R2-3): drafts first, because
-	 * `drafts.ref_id` is polymorphic and no FK can cascade for it; then the
-	 * rows (comments / revisions / related posts / tags cascade); then the
-	 * file-reference cleanup, in the same lock order publish and discard use.
-	 *
-	 * A source row anchors its translation family, and the DB keeps exactly one
-	 * source per group (`posts_group_source_uniq`). Purging it therefore purges
-	 * the whole family: siblings are deleted FIRST, because letting the
-	 * self-FK's `SET NULL` run while the source is still there makes every
-	 * sibling a second "source" and violates that index (the old 500).
+	 * The family/drafts/file-reference semantics live in `purgePostFamily`
+	 * (`$lib/server/maintenance/post-purge`), shared with the `trash.purge`
+	 * maintenance job so there is one delete primitive.
 	 */
 	purge: async ({ request }) => {
 		await requireAdminRole();
@@ -203,52 +196,8 @@ export const actions: Actions = {
 		const id = (form.get('id') ?? '').toString();
 		if (!id || !isUuid(id)) return fail(400, { error: m.admin_posts_edit_err_bad_post_id() });
 
-		const result = await db.transaction(async (tx) => {
-			const [row] = await tx
-				.select({
-					id: posts.id,
-					translationGroup: posts.translationGroup,
-					translatedFromPostId: posts.translatedFromPostId
-				})
-				.from(posts)
-				.where(eq(posts.id, id))
-				.limit(1)
-				.for('update');
-			if (!row) return { kind: 'not-found' as const };
-
-			const siblings =
-				row.translatedFromPostId === null
-					? (
-							await tx
-								.select({ id: posts.id })
-								.from(posts)
-								.where(eq(posts.translationGroup, row.translationGroup))
-								.for('update')
-						)
-							.map((member) => member.id)
-							.filter((memberId) => memberId !== row.id)
-					: [];
-
-			const draftRows = await tx
-				.delete(drafts)
-				.where(and(eq(drafts.refType, 'post'), inArray(drafts.refId, [row.id, ...siblings])))
-				.returning({ id: drafts.id });
-			for (const memberId of siblings) {
-				await tx.delete(posts).where(eq(posts.id, memberId));
-			}
-			await tx.delete(posts).where(eq(posts.id, row.id));
-			for (const draft of draftRows) {
-				await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
-			}
-			for (const memberId of siblings) {
-				await syncFileReferences(tx, { type: 'post', id: memberId }, []);
-			}
-			await syncFileReferences(tx, { type: 'post', id: row.id }, []);
-			return { kind: 'deleted' as const };
-		});
-
-		if (result.kind === 'not-found')
-			return fail(404, { error: m.admin_posts_edit_err_not_found() });
+		const result = await purgePostFamily(db, id);
+		if (result === 'not-found') return fail(404, { error: m.admin_posts_edit_err_not_found() });
 		return { success: true };
 	}
 };

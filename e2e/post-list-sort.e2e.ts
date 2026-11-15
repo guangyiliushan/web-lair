@@ -171,6 +171,13 @@ function cleanup(): void {
 	psql(`delete from categories where slug = '${CATEGORY_SLUG}'`);
 }
 
+/**
+ * The shared e2e database may hold real `ja` posts. They are not part of this
+ * spec's fixture set and would shift both the ordering and the page boundaries,
+ * so they are hidden (status -> draft) for the run and restored afterwards.
+ */
+let hiddenJaIds: string[] = [];
+
 test.beforeAll(() => {
 	cleanup();
 	psql(
@@ -184,10 +191,25 @@ test.beforeAll(() => {
 	psql(
 		`insert into posts (id, slug, title, content, lang, status, published_at, updated_at, category_id, translation_group, pin_at, writing_origin) values ${values}`
 	);
+
+	hiddenJaIds = psql(
+		`select coalesce(string_agg(id::text, ','), '') from posts where lang = 'ja' and status = 'published' and slug not like '${PREFIX}%'`
+	)
+		.split(',')
+		.filter(Boolean);
+	if (hiddenJaIds.length > 0) {
+		const ids = hiddenJaIds.map((id) => `'${id}'`).join(',');
+		psql(`update posts set status = 'draft' where id in (${ids})`);
+	}
 });
 
 test.afterAll(() => {
 	cleanup();
+	if (hiddenJaIds.length > 0) {
+		const ids = hiddenJaIds.map((id) => `'${id}'`).join(',');
+		psql(`update posts set status = 'published' where id in (${ids})`);
+		hiddenJaIds = [];
+	}
 });
 
 async function sortTitles(page: Page): Promise<string[]> {
@@ -338,7 +360,7 @@ test.describe('posts list sorting', () => {
 		await expect(page.getByTestId('post-ai-filter')).toHaveAttribute('href', '/ja/posts');
 		await expect(page.getByTestId('post-ai-filter')).toHaveAttribute(
 			'aria-label',
-			'Show all posts (Not AI-generated filter active)'
+			/「AI 生成ではない」/
 		);
 		await expect(page.getByText('2 posts')).toBeVisible();
 		await expect(page.getByTestId('pinned-card')).toHaveCount(0);

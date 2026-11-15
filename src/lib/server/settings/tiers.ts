@@ -14,8 +14,14 @@ import type { AdminRole } from '$lib/server/auth/owner';
  * every action MUST re-check with `assertSettingWrite` (the layout guard does
  * not run before a form action). `read` never permits a write.
  */
-export type SettingSection =
-	'profile' | 'site' | 'content' | 'notifications' | 'integrations' | 'storage' | 'ai' | 'account';
+/**
+ * The eight settings sections in navigation order. Shared with the layout via
+ * `$lib/settings/sections.ts` (a browser-safe module); this file only owns the
+ * server-side tier map, which is keyed by the same union so a new section
+ * cannot miss its tier.
+ */
+export { SETTINGS_SECTIONS, type SettingSection } from '$lib/settings/sections';
+import type { SettingSection } from '$lib/settings/sections';
 
 export type SettingTier = 'owner' | 'admin' | 'read';
 

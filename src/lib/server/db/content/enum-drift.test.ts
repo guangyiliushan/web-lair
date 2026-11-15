@@ -6,12 +6,12 @@ import {
 	PROJECT_STATUSES as META_PROJECT_STATUSES,
 	PROJECT_SYNC_PROVIDERS
 } from '$lib/utils/project-meta';
-import { NOTE_MOODS, NOTES_STATUSES } from './note.schema';
-import { WRITING_ORIGINS } from './post-provenance';
-import { PROJECT_PROVIDERS, PROJECT_STATUSES } from './project.schema';
-import { DRAFT_REF_TYPES } from './draft.schema';
-import { SLUG_TRACKER_TYPES } from '../system/slug-tracker.schema';
-import { FILE_REF_TYPES } from '../system/file-reference.schema';
+import { NOTE_MOODS, NOTES_STATUSES } from './note.schema.ts';
+import { WRITING_ORIGINS } from './post-provenance.ts';
+import { PROJECT_PROVIDERS, PROJECT_STATUSES } from './project.schema.ts';
+import { DRAFT_REF_TYPES } from './draft.schema.ts';
+import { SLUG_TRACKER_TYPES } from '../system/slug-tracker.schema.ts';
+import { FILE_REF_TYPES } from '../system/file-reference.schema.ts';
 import { MOMENT_KINDS } from '$lib/utils/moment-meta';
 
 // Guards the reviewed "enum dual-source" risk: the TS constants consumed by

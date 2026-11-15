@@ -11,6 +11,7 @@
 	import IconPuzzle from '@tabler/icons-svelte-runes/icons/puzzle';
 	import IconShield from '@tabler/icons-svelte-runes/icons/shield';
 	import type { Component, Snippet } from 'svelte';
+	import { SETTINGS_SECTIONS, type SettingSection } from '$lib/settings/sections';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -19,67 +20,62 @@
 	 * Content / Notifications / Integrations / Storage / AI / Account.
 	 * `system` is deleted and `search` is merged into Site, so neither appears
 	 * here; the old `/user` and `/notification` routes redirect.
+	 *
+	 * The ordered id list lives in `$lib/server/settings/tiers`; this map only
+	 * attaches the label/description/icon, so the list has one source.
 	 */
-	type SectionId =
-		| 'profile'
-		| 'site'
-		| 'content'
-		| 'notifications'
-		| 'integrations'
-		| 'storage'
-		| 'ai'
-		| 'account';
-
-	const sections: { id: SectionId; label: string; desc: string; icon: Component }[] = [
-		{
-			id: 'profile',
-			label: m.admin_settings_user(),
-			desc: m.admin_settings_user_desc(),
+	const SECTION_META: Record<
+		SettingSection,
+		{ label: () => string; desc: () => string; icon: Component }
+	> = {
+		profile: {
+			label: m.admin_settings_user,
+			desc: m.admin_settings_user_desc,
 			icon: IconUser
 		},
-		{
-			id: 'site',
-			label: m.admin_settings_site(),
-			desc: m.admin_settings_site_desc(),
+		site: {
+			label: m.admin_settings_site,
+			desc: m.admin_settings_site_desc,
 			icon: IconWorld
 		},
-		{
-			id: 'content',
-			label: m.admin_settings_content(),
-			desc: m.admin_settings_content_desc(),
+		content: {
+			label: m.admin_settings_content,
+			desc: m.admin_settings_content_desc,
 			icon: IconMessage
 		},
-		{
-			id: 'notifications',
-			label: m.admin_settings_notification(),
-			desc: m.admin_settings_notification_desc(),
+		notifications: {
+			label: m.admin_settings_notification,
+			desc: m.admin_settings_notification_desc,
 			icon: IconBell
 		},
-		{
-			id: 'integrations',
-			label: m.admin_settings_integrations(),
-			desc: m.admin_settings_integrations_desc(),
+		integrations: {
+			label: m.admin_settings_integrations,
+			desc: m.admin_settings_integrations_desc,
 			icon: IconPuzzle
 		},
-		{
-			id: 'storage',
-			label: m.admin_settings_storage(),
-			desc: m.admin_settings_storage_desc(),
+		storage: {
+			label: m.admin_settings_storage,
+			desc: m.admin_settings_storage_desc,
 			icon: IconDatabase
 		},
-		{
-			id: 'ai',
-			label: m.admin_settings_ai(),
-			desc: m.admin_settings_ai_desc(),
+		ai: {
+			label: m.admin_settings_ai,
+			desc: m.admin_settings_ai_desc,
 			icon: IconSparkles
 		},
-		{
-			id: 'account',
-			label: m.admin_settings_account(),
-			desc: m.admin_settings_account_desc(),
+		account: {
+			label: m.admin_settings_account,
+			desc: m.admin_settings_account_desc,
 			icon: IconShield
 		}
-	];
+	};
+
+	const sections = SETTINGS_SECTIONS.map((id) => ({
+		id,
+		label: SECTION_META[id].label(),
+		desc: SECTION_META[id].desc(),
+		icon: SECTION_META[id].icon
+	}));
 
 	/**
 	 * Sections are already real routes (`/admin/settings/site`), so the browser

@@ -100,12 +100,13 @@
 	bind:this={formEl}
 	use:enhance={() => {
 		return async ({ result, update }) => {
-			// A redirect/success unmounts the page; only a failure restores the
-			// guard (the edits are still unsaved at that point).
+			// Always run the update: a success/redirect must navigate away, or the
+			// page stays on "Saving..." forever (the enhance default was skipped).
+			// Only a failure restores the leave guard - the edits are still unsaved.
+			await update();
 			if (result.type === 'failure' || result.type === 'error') {
 				saving = false;
 				allowLeave = false;
-				await update();
 			}
 		};
 	}}

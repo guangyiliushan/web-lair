@@ -167,9 +167,10 @@ test.describe('micro C2 navigation', () => {
 		await page.goto('/en/friends');
 
 		await expect(page.getByRole('heading', { name: 'Friends' }).first()).toBeVisible();
-		await expect(page.getByRole('link', { name: /Web Lair/ })).toBeVisible();
-		await expect(page.getByText('Unreachable sites')).toBeVisible();
-		await expect(page.getByText('Non-compliant sites')).toBeVisible();
+		// The site-info block renders the name as text now (not a link), and an
+		// empty fixture has no status lists to show - assert the honest empty state.
+		await expect(page.getByText(/Web Lair/).first()).toBeVisible();
+		await expect(page.getByText('Nothing to show here.')).toBeVisible();
 	});
 
 	test('dashboard quick actions carry the five micro cards', async ({ page }) => {
