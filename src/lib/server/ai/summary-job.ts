@@ -5,6 +5,7 @@ import { posts } from '../db/content/post.schema.ts';
 import { summaries } from '../db/content/summary.schema.ts';
 import { SUMMARY_KEEP_UNADOPTED } from './summary-retention.ts';
 import { sanitizeErrorText } from '../jobs/error-text.ts';
+import { resolveProviderKey, type SecretDb } from '../secrets/resolver.ts';
 import { generateSummary } from './summarize.ts';
 import type { AiDeps } from './types.ts';
 import type { JobContext } from '../jobs/types.ts';
@@ -69,6 +70,10 @@ export async function runSummaryJob(ctx: JobContext): Promise<void> {
 				{
 					db: ctx.db as unknown as AiDeps['db'],
 					getEnv: (name) => process.env[name],
+					resolveKey: (provider) =>
+						resolveProviderKey(ctx.db as unknown as SecretDb, provider, {
+							getEnv: (name) => process.env[name]
+						}),
 					log: (message) => ctx.logger.info(message)
 				}
 			);

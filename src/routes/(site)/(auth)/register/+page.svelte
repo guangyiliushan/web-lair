@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import type { ActionData, PageData } from './$types';
 	import { m } from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 	import * as Card from '$lib/components/ui/card';
 	import * as Field from '$lib/components/ui/field';
 	import { Input } from '$lib/components/ui/input';
@@ -88,6 +89,23 @@
 							required
 						/>
 					</Field.Field>
+					<label class="flex items-start gap-2 text-xs text-muted-foreground">
+						<input
+							type="checkbox"
+							name="privacyConsent"
+							required
+							class="mt-0.5 size-3.5 shrink-0 accent-primary"
+						/>
+						<span>
+							{m.auth_register_privacy_consent()}
+							<a
+								class="wl-accent-link underline underline-offset-2"
+								href={localizeHref('/privacy')}
+								target="_blank"
+								rel="noopener noreferrer">{m.auth_register_privacy_link()}</a
+							>
+						</span>
+					</label>
 					<Button
 						type="submit"
 						class="w-full"

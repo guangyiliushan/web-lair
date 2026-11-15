@@ -14,7 +14,11 @@ const { state, uploadMock, listFilesMock, photosMock, sniffMock } = vi.hoisted((
 		uploads: [] as Record<string, unknown>[],
 		result: null as Record<string, unknown> | null,
 		throwWith: null as Error | null,
-		rate: { allowed: true, count: 1 },
+		rate: { allowed: true, count: 1 } as {
+			allowed: boolean;
+			count: number;
+			unavailable?: boolean;
+		},
 		rateCalls: [] as unknown[][],
 		admin: true,
 		user: true,
@@ -77,13 +81,15 @@ vi.mock('$lib/server/services/files', () => ({
 	// Mirrors of the real single-source constants; the real module is
 	// re-imported below to weld the two spellings.
 	UPLOAD_RATE_LIMIT: { limit: 60, windowSeconds: 10 * 60 },
+	UPLOAD_IP_RATE_LIMIT: { limit: 30, windowSeconds: 10 * 60 },
 	uploadRateLimitKey: (userId: string | null | undefined) =>
-		`limits:upload:${userId ?? 'anonymous'}`
+		`limits:upload:${userId ?? 'anonymous'}`,
+	uploadIpRateLimitKey: (addressKey: string) => `limits:upload-ip:${addressKey}`
 }));
 vi.mock('$lib/server/services/photos', () => ({ listAdminPhotos: photosMock }));
 vi.mock('$lib/server/cache', () => ({ getCache: () => ({}) }));
 vi.mock('$lib/server/cache/store', () => ({
-	rateLimit: vi.fn(async (...args: unknown[]) => {
+	rateLimitStrict: vi.fn(async (...args: unknown[]) => {
 		state.rateCalls.push(args);
 		return state.rate;
 	})
@@ -95,6 +101,7 @@ vi.mock('$lib/server/media/sniff', async (importOriginal) => {
 
 import { GET, POST } from './+server';
 import { UploadRejected } from '$lib/server/services/files';
+import { StorageError } from '$lib/server/storage/port';
 import { MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
 
 function makeEvent(body?: BodyInit) {
@@ -163,15 +170,28 @@ describe('POST /admin/editor-uploads', () => {
 		expect(uploadMock).not.toHaveBeenCalled();
 	});
 
+	it('fails closed with 503 + Retry-After when the limiter is offline (W6.10)', async () => {
+		state.rate = { allowed: false, count: 0, unavailable: true };
+		const response = await POST(makeEvent(fileForm(new File(['x'], 'x.png'))));
+		expect(response.status).toBe(503);
+		expect(await response.json()).toEqual({ code: 'unavailable' });
+		expect(response.headers.get('retry-after')).toBe('600');
+		expect(uploadMock).not.toHaveBeenCalled();
+	});
+
 	it('throttles through the shared upload bucket with its exact arguments', async () => {
 		await POST(makeEvent(fileForm(new File(['x'], 'x.png'))));
 		expect(state.rateCalls[0]).toEqual([{}, 'limits:upload:u1', 60, 600]);
+		// W6.10: the per-IP companion bucket (unknown address -> shared key).
+		expect(state.rateCalls[1]).toEqual([{}, 'limits:upload-ip:unknown', 30, 600]);
 		// Weld the mirrors to the real module (single source in files.ts).
 		const actual = await vi.importActual<typeof import('$lib/server/services/files')>(
 			'$lib/server/services/files'
 		);
 		expect(actual.UPLOAD_RATE_LIMIT).toEqual({ limit: 60, windowSeconds: 600 });
+		expect(actual.UPLOAD_IP_RATE_LIMIT).toEqual({ limit: 30, windowSeconds: 600 });
 		expect(actual.uploadRateLimitKey('u1')).toBe('limits:upload:u1');
+		expect(actual.uploadIpRateLimitKey('4:c0000201')).toBe('limits:upload-ip:4:c0000201');
 		expect(actual.uploadRateLimitKey(null)).toBe('limits:upload:anonymous');
 		// The dynamic importActual pulls the real server module chain (storage,
 		// sharp), which can cost seconds on a cold run - explicit budget.
@@ -224,13 +244,22 @@ describe('POST /admin/editor-uploads', () => {
 		for (const [code, status] of [
 			['too-large', 413],
 			['unsupported-type', 415],
-			['empty', 400]
+			['empty', 400],
+			// W7.4: the migration freeze is temporary — 503, not 400.
+			['migration', 503]
 		] as const) {
 			state.throwWith = new UploadRejected(code, code);
 			const response = await POST(makeEvent(fileForm(new File(['x'], 'x.png'))));
 			expect(response.status, code).toBe(status);
 			expect(await response.json(), code).toEqual({ code });
 		}
+	});
+
+	it('answers 503 (retryable) when the active provider is down', async () => {
+		state.throwWith = new StorageError('storage request failed: PUT /bucket/key', 0, null);
+		const response = await POST(makeEvent(fileForm(new File(['x'], 'x.png'))));
+		expect(response.status).toBe(503);
+		expect(await response.json()).toEqual({ code: 'storage-unavailable' });
 	});
 
 	it('answers a sanitized 500 when the pipeline blows up', async () => {

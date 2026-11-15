@@ -5,10 +5,14 @@ import { getOption } from '$lib/server/config/options-registry';
 import { zonedNaiveOf, zonedNaiveToUtc } from '$lib/server/media/exif';
 import { MAX_BATCH_COUNT, MAX_UPLOAD_BYTES } from '$lib/server/media/sniff';
 import { getCache } from '$lib/server/cache';
-import { rateLimit } from '$lib/server/cache/store';
+import { rateLimitStrict } from '$lib/server/cache/store';
+import { requestAddress } from '$lib/server/security/request-address';
+import { clientAddressKey } from '$lib/utils/cidr';
 import {
+	UPLOAD_IP_RATE_LIMIT,
 	UPLOAD_RATE_LIMIT,
 	uploadFiles,
+	uploadIpRateLimitKey,
 	uploadRateLimitKey,
 	UploadRejected
 } from '$lib/server/services/files';
@@ -108,16 +112,35 @@ function tagNamesFrom(form: FormData): string[] {
 }
 
 export const actions: Actions = {
-	upload: async ({ request, locals }) => {
+	upload: async ({ request, locals, getClientAddress, setHeaders }) => {
 		await requireAdminRole();
-		// Same fail-open seatbelt as /admin/files (plan §7).
-		const rate = await rateLimit(
-			getCache(),
-			uploadRateLimitKey(locals.user?.id),
-			UPLOAD_RATE_LIMIT.limit,
-			UPLOAD_RATE_LIMIT.windowSeconds
-		);
-		if (!rate.allowed) return fail(429, { message: m.admin_media_err_rate() });
+		// Same fail-CLOSED account + per-IP pair as /admin/files (W6.10).
+		const address = clientAddressKey(requestAddress(getClientAddress));
+		const [accountRate, addressRate] = await Promise.all([
+			rateLimitStrict(
+				getCache(),
+				uploadRateLimitKey(locals.user?.id),
+				UPLOAD_RATE_LIMIT.limit,
+				UPLOAD_RATE_LIMIT.windowSeconds
+			),
+			rateLimitStrict(
+				getCache(),
+				uploadIpRateLimitKey(address),
+				UPLOAD_IP_RATE_LIMIT.limit,
+				UPLOAD_IP_RATE_LIMIT.windowSeconds
+			)
+		]);
+		if (!accountRate.allowed || !addressRate.allowed) {
+			const unavailable = accountRate.unavailable || addressRate.unavailable;
+			setHeaders({
+				'retry-after': String(
+					Math.max(UPLOAD_RATE_LIMIT.windowSeconds, UPLOAD_IP_RATE_LIMIT.windowSeconds)
+				)
+			});
+			return fail(unavailable ? 503 : 429, {
+				message: unavailable ? m.admin_media_err_unavailable() : m.admin_media_err_rate()
+			});
+		}
 		const form = await request.formData();
 		const uploads = form
 			.getAll('files')
@@ -175,7 +198,11 @@ export const actions: Actions = {
 			}
 			return { uploadResults: enriched };
 		} catch (error) {
-			if (error instanceof UploadRejected) return fail(400, { message: error.message });
+			if (error instanceof UploadRejected) {
+				// The migration freeze is temporary and retryable: 503, not 400
+				// (same contract as editor-uploads, review P2).
+				return fail(error.code === 'migration' ? 503 : 400, { message: error.message });
+			}
 			throw error;
 		}
 	},

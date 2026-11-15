@@ -1,20 +1,53 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
+import { ADMIN_OAUTH_BLOCKED_CODE } from '$lib/server/auth/admin-login-policy';
 import { safeRedirect } from '$lib/server/safe-redirect';
 import { APIError } from 'better-auth/api';
+import { getCache } from '$lib/server/cache';
+import { rateLimitStrict } from '$lib/server/cache/store';
+import { credentialBucketKey, requestAddress } from '$lib/server/security/request-address';
+import { clientAddressKey } from '$lib/utils/cidr';
+import { m } from '$lib/paraglide/messages';
+
+/** Login budget: 10 attempts per IP per 15 minutes, fail-closed (W6.10). */
+const LOGIN_RATE_LIMIT = { limit: 10, windowSeconds: 15 * 60 } as const;
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
 		redirect(302, '/admin');
 	}
-	return {};
+	const error = event.url.searchParams.get('error');
+	// PRG landing spot after a completed reset: the reset action redirects here
+	// with `?message=password-reset-success` (W1.4). OAuth failures (W1.6) carry
+	// `?error=<code>`; only the admin/GitHub refusal gets its own explanation.
+	return {
+		resetSuccess: event.url.searchParams.get('message') === 'password-reset-success',
+		oauthError: error ? (error === ADMIN_OAUTH_BLOCKED_CODE ? 'admin_blocked' : 'failed') : null
+	} as const;
 };
 
 export const actions: Actions = {
 	signIn: async (event) => {
 		const formData = await event.request.formData();
 		const email = formData.get('email')?.toString() ?? '';
+		// W6.10 / review P1: fail-closed credentials bucket keyed on the /64
+		// address AND a hash of the email, so one NAT/office IP cannot lock out
+		// every account (the raw email never reaches Valkey).
+		const address = clientAddressKey(requestAddress(event.getClientAddress));
+		const rate = await rateLimitStrict(
+			getCache(),
+			credentialBucketKey('login', address, email),
+			LOGIN_RATE_LIMIT.limit,
+			LOGIN_RATE_LIMIT.windowSeconds
+		);
+		if (!rate.allowed) {
+			event.setHeaders({ 'retry-after': String(LOGIN_RATE_LIMIT.windowSeconds) });
+			return fail(rate.unavailable ? 503 : 429, {
+				message: rate.unavailable ? m.auth_err_unavailable() : m.auth_login_err_rate()
+			});
+		}
+
 		const password = formData.get('password')?.toString() ?? '';
 		const redirectTo = safeRedirect(event.url.searchParams.get('redirectTo'));
 
@@ -49,7 +82,11 @@ export const actions: Actions = {
 		const result = await auth.api.signInSocial({
 			body: {
 				provider: provider as 'github',
-				callbackURL
+				callbackURL,
+				// Failures (including the admin/GitHub refusal in auth.ts) come
+				// back to this page with `?error=<code>` instead of the API error
+				// page; see the load above for the message mapping.
+				errorCallbackURL: '/login'
 			}
 		});
 

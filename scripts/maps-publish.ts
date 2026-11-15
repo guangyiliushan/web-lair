@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { storageConfigFromEnv } from '../src/lib/server/storage/config';
-import { RustFsStorage } from '../src/lib/server/storage/rustfs';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import * as schema from '../src/lib/server/db/schema';
+import { activeStorage } from './lib/active-storage';
 
 /**
  * Publish a local PMTiles archive into the `maps/` prefix (plan §8): the
@@ -23,7 +25,15 @@ if (!/^[a-z0-9][a-z0-9._-]*\.pmtiles$/.test(name)) {
 	process.exit(1);
 }
 const bytes = await readFile(file);
-const storage = new RustFsStorage(storageConfigFromEnv(process.env));
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+	console.error('DATABASE_URL is required (use --env-file=.env) to resolve the active provider.');
+	process.exit(1);
+}
+const sql = postgres(DATABASE_URL, { max: 1 });
+const db = drizzle(sql, { schema });
+// Tiles follow the ACTIVE provider, the same one /maps reads (W7.5).
+const storage = await activeStorage(db);
 await storage.ensureBucket();
 const { etag } = await storage.put(`maps/${name}`, new Uint8Array(bytes), {
 	contentType: 'application/vnd.pmtiles'
@@ -33,3 +43,4 @@ console.log(
 	`published maps/${name}: ${bytes.byteLength} bytes, etag=${etag}, head.size=${head?.byteSize}, type=${head?.contentType}`
 );
 process.exitCode = 0;
+await sql.end();

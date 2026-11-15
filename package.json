@@ -3,7 +3,7 @@
 	"private": true,
 	"version": "0.0.1",
 	"engines": {
-		"node": ">=22.19.0"
+		"node": ">=24.0.0"
 	},
 	"type": "module",
 	"imports": {
@@ -26,6 +26,7 @@
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright install && playwright test",
 		"test:integration-refs": "vitest run --project server src/lib/server/services/file-references.integration.test.ts",
+		"test:storage-live": "node --env-file=.env node_modules/vitest/vitest.mjs run --project server src/lib/server/storage/storage-live.integration.test.ts",
 		"db:start": "docker compose up",
 		"db:push": "drizzle-kit push",
 		"db:generate": "drizzle-kit generate",
@@ -36,6 +37,7 @@
 		"build-storybook": "storybook build",
 		"auth:schema": "npx auth@1.7.5 generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes",
 		"db:seed-owner": "tsx --env-file=.env scripts/seed-owner.ts",
+		"owner:rebuild": "tsx --env-file-if-exists=.env scripts/rebuild-site-owner.ts",
 		"db:seed-demo": "tsx --env-file=.env scripts/seed-demo.ts",
 		"db:verify-owner": "tsx --env-file=.env scripts/verify-owner-uniqueness.ts",
 		"db:reset-2fa": "tsx --env-file=.env scripts/reset-2fa.ts",
@@ -60,12 +62,18 @@
 		"db:ensure-schedules": "tsx --env-file=.env scripts/ensure-job-schedules.ts",
 		"db:verify-pages": "tsx --env-file=.env scripts/verify-pages.ts",
 		"storage:smoke": "tsx --env-file=.env scripts/storage-smoke.ts",
+		"storage:migrate": "tsx --env-file=.env scripts/storage-migrate.ts",
 		"e2e:overlay-fixtures": "tsx --env-file=.env scripts/e2e-overlay-fixtures.ts",
 		"media:audit": "tsx --env-file=.env scripts/media-audit.ts",
 		"media:import": "tsx --env-file=.env scripts/media-import.ts",
 		"maps:publish": "tsx --env-file=.env scripts/maps-publish.ts",
 		"media:purge": "tsx --env-file=.env scripts/purge-media.ts",
-		"db:verify-media": "tsx --env-file=.env scripts/verify-media.ts"
+		"db:verify-media": "tsx --env-file=.env scripts/verify-media.ts",
+		"secrets:alerts": "tsx --env-file-if-exists=.env scripts/secret-alerts.ts",
+		"db:migrate-webhook-secrets": "tsx --env-file=.env scripts/migrate-webhook-secrets.ts",
+		"auth:check": "tsx scripts/auth-schema-guard.ts",
+		"auth:check:migrations": "tsx scripts/auth-schema-guard.ts --migrations-only",
+		"secrets:verify-keys": "tsx --env-file-if-exists=.env scripts/verify-secret-key-versions.ts"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "^4.13.0",
@@ -73,6 +81,8 @@
 		"@eslint/compat": "^2.1.1",
 		"@eslint/js": "^10.0.1",
 		"@fontsource-variable/jetbrains-mono": "^5.3.0",
+		"@inlang/plugin-m-function-matcher": "^2.4.3",
+		"@inlang/plugin-message-format": "^4.6.0",
 		"@internationalized/date": "^3.12.4",
 		"@playwright/test": "^1.63.0",
 		"@shadcn-svelte/primitives": "^0.0.1",

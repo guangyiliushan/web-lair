@@ -1,19 +1,26 @@
 #!/usr/bin/env bash
 #
-# Nightly backup (deploy batch D-4, platform plan §C.6).
+# Nightly backup (deploy batch D-4, platform plan §C.6; split per T3-A).
 #
-# Backup set:
+# Backup set (data repository):
 #   1. pg_dump -Fc           (logical dump; never file-copy a running PG dir)
 #   2. $DATA_DIR             (user job scripts + sidecars)
 #   3. RustFS volume         (media, read-only mount)
-#   4. .env + backup env     (config; restic password also kept OFFLINE)
 #
-# The restic repo is the offsite target (R2/B2). There is deliberately no
-# local repo on the same disk: that is a snapshot, not a backup.
+# `.env` is deliberately NOT in that set. It goes to a SECOND repository with a
+# DIFFERENT password, because it holds BETTER_AUTH_SECRET, SUPPRESSION_HMAC_KEY
+# and the DB password: a leaked data repository plus its password must not
+# decrypt the application secrets (T3-A, secrets register §0.1).
+# deploy/backup.env is backed up nowhere — it holds both repository passwords,
+# which live in the password manager with an offline copy (RUNBOOK §4).
+#
+# Both repositories are offsite targets (R2/B2). There is deliberately no
+# local repository on the same disk: that is a snapshot, not a backup.
 #
 # Env (systemd EnvironmentFile=/srv/web-lair/app/deploy/backup.env):
 #   POSTGRES_USER, POSTGRES_DB, DATA_DIR
 #   RESTIC_REPOSITORY, RESTIC_PASSWORD, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#   RESTIC_CONFIG_REPOSITORY, RESTIC_CONFIG_PASSWORD   (second repo, own key)
 #   BACKUP_PING_URL (optional, dedicated check — never the liveness one)
 #
 # Failures are loud: set -e aborts before the backup ping, so a missing ping
@@ -28,6 +35,8 @@ RESTIC_IMAGE=${RESTIC_IMAGE:-restic/restic:0.19.1}
 
 : "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is not set}"
 : "${RESTIC_PASSWORD:?RESTIC_PASSWORD is not set}"
+: "${RESTIC_CONFIG_REPOSITORY:?RESTIC_CONFIG_REPOSITORY is not set}"
+: "${RESTIC_CONFIG_PASSWORD:?RESTIC_CONFIG_PASSWORD is not set}"
 : "${DATA_DIR:?DATA_DIR is not set}"
 
 mkdir -p "$BACKUP_DIR"
@@ -40,9 +49,11 @@ cd "$APP_DIR"
 "${DC}" exec -T db pg_restore -l < "$BACKUP_DIR/pg.dump.tmp" > /dev/null
 # TOC presence is not data. Compare the user-row count in the archive with the
 # live table so an empty/partial dump never replaces yesterday's good copy.
+# The counter lives in count-user-rows.sh: it must drain stdin (an early exit
+# SIGPIPEs pg_restore and, under pipefail, kills the whole run).
 EXPECTED_USERS=$("${DC}" exec -T db psql -U "${POSTGRES_USER:?}" -d "${POSTGRES_DB:?}" -tAc 'select count(*) from "user"')
-DUMP_USERS=$("${DC}" exec -T db pg_restore -a -f - < "$BACKUP_DIR/pg.dump.tmp" 2>/dev/null | \
-	awk '/^COPY public\."user" /{f=1;next} f&&$0=="\\\\."{exit} f{n++} END{print n+0}')
+DUMP_USERS=$("${DC}" exec -T db pg_restore -a -f - < "$BACKUP_DIR/pg.dump.tmp" 2>/dev/null |
+	bash "${APP_DIR}/deploy/backup/count-user-rows.sh")
 [ "$DUMP_USERS" = "$EXPECTED_USERS" ] || {
 	echo "[backup] dump has $DUMP_USERS user rows, expected $EXPECTED_USERS; refusing to replace pg.dump" >&2
 	exit 1
@@ -55,29 +66,64 @@ RUSTFS_VOLUME=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"
 : "${RUSTFS_VOLUME:?could not resolve the rustfs volume from the rustfs container}"
 
 if [ ! -f "$APP_DIR/.env" ]; then
-	echo "[backup] $APP_DIR/.env is missing; refusing to snapshot a directory" >&2
+	echo "[backup] $APP_DIR/.env is missing; the config backup would be empty" >&2
 	exit 1
 fi
 
-# 2 + 3 + 4) One restic run mounts the dump dir, the data dir, the media
-# volume and the config file read-only. --retry-lock survives an interrupted
-# previous run instead of failing every night until manual unlock.
-# `--host` pins the snapshot host: without it every nightly container gets a
-# fresh hostname and `forget --keep-daily` groups each run separately.
-docker run --rm --env-file "$APP_DIR/deploy/backup.env" \
+# 2 + 3) One restic run mounts the dump dir, the data dir and the media volume
+# read-only. `.env` is not mounted: config is the second repository below.
+# --retry-lock survives an interrupted previous run instead of failing every
+# night until manual unlock.
+# `--host` is a snapshot label (the drill resolves `--host web-lair`); it is not
+# what keeps nightly runs in one forget group — `--group-by paths` does that.
+#
+# `docker --env-file` does not strip the quotes in `VAR="value"` (systemd does,
+# for this script's own environment), so a quoted backup.env would hand restic
+# a literal `"/repos"`. `-e VAR` (no value) forwards the value the script
+# validated instead; extra cloud/restic variables still come from the file.
+# The repository is a CLI flag, not an env var: a flag cannot be shadowed by
+# whatever the env file happens to contain, so the config run below can never
+# land in the data repository — a silent failure that would look like a green
+# night (T3-A).
+RESTIC_ENV=(-e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
+
+docker run --rm --env-file "$APP_DIR/deploy/backup.env" "${RESTIC_ENV[@]}" \
 	-v "$BACKUP_DIR":/backup:ro \
 	-v "$DATA_DIR":/data:ro \
 	-v "$RUSTFS_VOLUME":/rustfs:ro \
-	-v "$APP_DIR/.env":/config/.env:ro \
-	"$RESTIC_IMAGE" --retry-lock 30m backup --host web-lair /backup /data /rustfs /config
+	"$RESTIC_IMAGE" --repo "$RESTIC_REPOSITORY" --retry-lock 30m \
+	backup --host web-lair /backup /data /rustfs
 
-# Retention: keep-daily 7 / weekly 4 / monthly 6. Group by paths (host is
-# pinned above); prune only on Sunday so the nightly run does not hold the repo
-# lock for a full data rewrite.
+# 4) Config (.env) → its own repository, its own password. One file, no
+# directory. Isolation comes from the separate repository (and the flag above);
+# `--host web-lair-config` is just the label the drill looks up. The subshell
+# re-exports only the password so the data run's credential is untouched.
+(
+	export RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD"
+	docker run --rm --env-file "$APP_DIR/deploy/backup.env" "${RESTIC_ENV[@]}" \
+		-v "$APP_DIR/.env":/config/.env:ro \
+		"$RESTIC_IMAGE" --repo "$RESTIC_CONFIG_REPOSITORY" --retry-lock 30m \
+		backup --host web-lair-config /config
+)
+
+# Retention: keep-daily 7 / weekly 4 / monthly 6. `--group-by paths` puts every
+# nightly run in one forget group (host is deliberately not part of the key);
+# prune only on Sunday so the nightly run does not hold the repo lock for a full
+# data rewrite. The config repository keeps a month of dailies plus a year of
+# monthlies — it is a few KB per snapshot.
 forget_args=(--keep-daily 7 --keep-weekly 4 --keep-monthly 6 --group-by paths)
-if [ "$(date +%u)" = "7" ]; then forget_args+=(--prune); fi
-docker run --rm --env-file "$APP_DIR/deploy/backup.env" \
-	"$RESTIC_IMAGE" --retry-lock 30m forget "${forget_args[@]}"
+config_forget_args=(--keep-daily 30 --keep-monthly 12 --group-by paths)
+if [ "$(date +%u)" = "7" ]; then
+	forget_args+=(--prune)
+	config_forget_args+=(--prune)
+fi
+docker run --rm --env-file "$APP_DIR/deploy/backup.env" "${RESTIC_ENV[@]}" \
+	"$RESTIC_IMAGE" --repo "$RESTIC_REPOSITORY" --retry-lock 30m forget "${forget_args[@]}"
+(
+	export RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD"
+	docker run --rm --env-file "$APP_DIR/deploy/backup.env" "${RESTIC_ENV[@]}" \
+		"$RESTIC_IMAGE" --repo "$RESTIC_CONFIG_REPOSITORY" --retry-lock 30m forget "${config_forget_args[@]}"
+)
 
 # Dedicated backup check (never the 5-minute liveness URL: sharing it would
 # make a failed backup invisible on the next liveness tick).

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./webhooks/outbox.ts', () => ({ enqueueWebhookDeliveries: vi.fn() }));
 
@@ -6,6 +6,10 @@ import { recordActivity } from './audit';
 import { enqueueWebhookDeliveries } from './webhooks/outbox.ts';
 
 const enqueueMock = vi.mocked(enqueueWebhookDeliveries);
+
+beforeEach(() => {
+	enqueueMock.mockClear();
+});
 
 function fakeExecutor() {
 	const insert = vi.fn(() => ({ values: vi.fn(async () => undefined) }));
@@ -36,5 +40,17 @@ describe('recordActivity -> outbox seam (nine-dimension SYF-2)', () => {
 		// The audit row was written before the enqueue threw; the caller's
 		// transaction (or fail-loud surface) owns the shared fate.
 		expect(executor.insert).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps secret events local when deliver is false (decision A2)', async () => {
+		const executor = fakeExecutor();
+		await recordActivity(executor as never, {
+			event: 'ai.key_set',
+			actorId: null,
+			payload: { providerId: 'x', hint: 'sk-…AbCd' },
+			deliver: false
+		});
+		expect(executor.insert).toHaveBeenCalledTimes(1);
+		expect(enqueueMock).not.toHaveBeenCalled();
 	});
 });

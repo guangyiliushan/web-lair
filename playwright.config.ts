@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 import {
 	TEST_MAIL_EVENTS_HMAC_KEY,
+	TEST_SECRETS_KEY,
 	TEST_SUBSCRIBE_HMAC_KEY,
 	TEST_SUBSCRIBE_TOKEN_SECRET,
 	TEST_SUPPRESSION_HMAC_KEY
@@ -19,6 +20,9 @@ export default defineConfig({
 		// A cold production build takes ~50s on an idle machine and 130-260s
 		// on a loaded one; on 2026-10-02 the 300s budget was blown three
 		// times in a row (build 256s + preview boot). Keep a generous margin.
+		// A scratch-database run keeps one preview server alive across chunks;
+		// reusing it avoids rebuilding and keeps DATABASE_URL pinned.
+		reuseExistingServer: true,
 		timeout: 600_000,
 		// `preview` is a production build, so the loopback sign-in source has to
 		// be switched on explicitly (see security/tailscale-auth.ts).
@@ -31,6 +35,10 @@ export default defineConfig({
 		env: {
 			TAILSCALE_ALLOW_LOOPBACK: 'true',
 			ORIGIN: 'http://localhost:4173',
+			// Isolation seam: when the caller points DATABASE_URL at a scratch
+			// database (local_e2e), the preview and the psql helper must use it
+			// too. Unset keeps the historical dev database.
+			...(process.env.DATABASE_URL ? { DATABASE_URL: process.env.DATABASE_URL } : {}),
 			// Mail is unconfigured in tests: the transport logs the message
 			// instead of failing (production keeps the fail-loud contract).
 			MAIL_DEV_LOG: 'true',
@@ -41,7 +49,11 @@ export default defineConfig({
 			SUBSCRIBE_HMAC_KEY: TEST_SUBSCRIBE_HMAC_KEY,
 			SUBSCRIBE_TOKEN_SECRET: TEST_SUBSCRIBE_TOKEN_SECRET,
 			SUPPRESSION_HMAC_KEY: TEST_SUPPRESSION_HMAC_KEY,
-			MAIL_EVENTS_HMAC_KEY: TEST_MAIL_EVENTS_HMAC_KEY
+			MAIL_EVENTS_HMAC_KEY: TEST_MAIL_EVENTS_HMAC_KEY,
+			// W2: webhook signing secrets are encrypted before insert, so the
+			// preview needs a usable keyring for the create/rotate actions.
+			SECRETS_KEYS: `1:${TEST_SECRETS_KEY}`,
+			SECRETS_KEY_ACTIVE: '1'
 		}
 	},
 	testDir: 'e2e',

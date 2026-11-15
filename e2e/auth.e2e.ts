@@ -33,9 +33,12 @@ test.describe('Auth pages', () => {
 		await expect(page.getByRole('status')).toContainText('重置链接');
 	});
 
-	test('reset-password redirects without token', async ({ page }) => {
-		await page.goto('/reset-password');
-		await expect(page).toHaveURL(/\/forgot-password/);
+	test('reset-password shows a recovery state without a token', async ({ page }) => {
+		const response = await page.goto('/reset-password');
+		// W1.4: the reset URL never answers 404; a bare visit gets the same
+		// "link expired" card as an expired callback (?error=INVALID_TOKEN).
+		expect(response?.status()).toBe(200);
+		await expect(page.locator('[data-slot="card-title"]')).toHaveText('链接已失效');
 	});
 
 	test('verify-email page renders', async ({ page }) => {

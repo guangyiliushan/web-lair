@@ -2,15 +2,27 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
+import { m } from '$lib/paraglide/messages';
 
+/** Form-level marker: the link is expired, already used, or forged. */
+const INVALID_TOKEN = 'invalid_token';
+
+/**
+ * W1.4 (settings-truth plan, P0-4). The token arrives as `?token=` after
+ * better-auth's callback endpoint (`/api/auth/reset-password/:token`) has
+ * verified it; an expired or used token is redirected back here with
+ * `?error=INVALID_TOKEN`. Both cases render the recovery state - the reset
+ * URL must never answer 404, and a bare visit needs a path forward.
+ */
 export const load: PageServerLoad = (event) => {
 	// The token is in this URL; strict-origin keeps the path out of Referer.
 	event.setHeaders({ 'referrer-policy': 'strict-origin' });
 	const token = event.url.searchParams.get('token');
-	if (!token) {
-		redirect(302, '/forgot-password');
+	const rejected = event.url.searchParams.has('error');
+	if (!token || rejected) {
+		return { state: 'invalid' as const, token: '' };
 	}
-	return { token };
+	return { state: 'form' as const, token };
 };
 
 export const actions: Actions = {
@@ -21,35 +33,53 @@ export const actions: Actions = {
 		const confirmPassword = formData.get('confirmPassword')?.toString() ?? '';
 
 		if (!token) {
-			return fail(400, { message: 'Reset token is missing' });
+			return fail(400, {
+				message: m.auth_reset_err_invalid_token(),
+				errorCode: INVALID_TOKEN
+			});
 		}
 
 		if (!password || !confirmPassword) {
-			return fail(400, { message: 'All fields are required' });
+			return fail(400, { message: m.auth_reset_err_required(), errorCode: '' });
 		}
 
 		if (password !== confirmPassword) {
-			return fail(400, { message: 'Passwords do not match' });
+			return fail(400, { message: m.auth_reset_err_mismatch(), errorCode: '' });
 		}
 
 		if (password.length < 8) {
-			return fail(400, { message: 'Password must be at least 8 characters' });
+			return fail(400, { message: m.auth_reset_err_short(), errorCode: '' });
 		}
 
 		try {
+			// `revokeSessionsOnPasswordReset` (auth.ts) deletes every session of
+			// the account, so a stolen cookie cannot outlive the reset.
 			await auth.api.resetPassword({
-				body: {
-					newPassword: password,
-					token
-				}
+				body: { newPassword: password, token },
+				headers: event.request.headers
 			});
 		} catch (error) {
 			if (error instanceof APIError) {
-				return fail(400, { message: error.message || 'Password reset failed' });
+				const code =
+					error.body && typeof error.body === 'object' && 'code' in error.body
+						? String(error.body.code)
+						: '';
+				if (code === 'INVALID_TOKEN') {
+					console.warn('[reset-password] rejected a token', code);
+					return fail(400, {
+						message: m.auth_reset_err_invalid_token(),
+						errorCode: INVALID_TOKEN
+					});
+				}
+				// Upstream wording (password policy, user lookup) is internal and
+				// English-only; the page owns the localized copy.
+				console.warn('[reset-password] rejected', code || 'unknown');
+				return fail(400, { message: m.auth_reset_err_unexpected(), errorCode: '' });
 			}
-			return fail(500, { message: 'An unexpected error occurred' });
+			console.error('[reset-password] unexpected failure', (error as Error).name);
+			return fail(500, { message: m.auth_reset_err_unexpected(), errorCode: '' });
 		}
 
-		redirect(302, '/login?message=password-reset-success');
+		redirect(303, '/login?message=password-reset-success');
 	}
 };

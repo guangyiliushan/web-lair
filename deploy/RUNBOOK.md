@@ -34,12 +34,27 @@ chmod 600 .env
 $EDITOR .env      # see §1.1 for the required keys
 ```
 
+Or generate the secrets instead of editing them by hand (W2.12):
+
+```bash
+./deploy/bootstrap-secrets.sh --dry-run   # names and targets, no values
+./deploy/bootstrap-secrets.sh             # writes .env + deploy/backup.env
+```
+
+The script keeps existing non-empty values, rotates only with
+`--rotate NAME`, writes no database rows and prints no secret. Its receipt
+(`install-receipt.json`) contains names and SHA-256 prefixes only. Copy
+`SECRETS_KEYS`, `RESTIC_PASSWORD` and `RESTIC_CONFIG_PASSWORD` to the offline
+password manager, then remove `ADMIN_SETUP_TOKEN` after `/admin/setup` succeeds;
+the app refuses a second use through its `admin.setup_complete` marker.
+
 ### 1.1 Required `.env` keys
 
 | Key                                                   | Value                                                                                                             |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | strong, unique, **URL-safe** (`openssl rand -hex 32`) — the password is interpolated into `DATABASE_URL` verbatim |
 | `BETTER_AUTH_SECRET`                                  | ≥32 chars, high entropy                                                                                           |
+| `SECRETS_KEYS` / `SECRETS_KEY_ACTIVE`                 | runtime secret keyring (W2); see §4.2 — required once an encrypted key exists                                     |
 | `ORIGIN`                                              | `https://<domain>` (no trailing slash)                                                                            |
 | `DOMAIN`                                              | same host, used by Caddy                                                                                          |
 | `ACME_EMAIL`                                          | Let's Encrypt expiry notices                                                                                      |
@@ -55,6 +70,10 @@ $EDITOR .env      # see §1.1 for the required keys
 | `JOBS_HEARTBEAT_URL`                                  | per-tick drain ping (Kuma push or a second healthchecks check)                                                    |
 | `ALERT_WEBHOOK_URL`                                   | systemd `OnFailure` target; leave empty to disable the alert unit                                                 |
 | `MAIL_DEV_LOG` / `MAIL_DEV_LOG_OK`                    | dev/e2e only; production ignores dev logging unless BOTH are set                                                  |
+
+`POSTGRES_PASSWORD` is required too: `compose.prod.yaml` builds the app's
+`DATABASE_URL` from it at parse time, and `deploy/compose-prod.sh` refuses to
+start when it is missing or not URL-safe.
 
 `SUPPRESSION_HMAC_KEY` is mandatory before the first start (production boot
 refuses to start without it; dev needs it for subscribe/unsubscribe). Generate
@@ -78,7 +97,8 @@ never sees the credential that can delete the offsite repository:
 cp deploy/backup.env.example deploy/backup.env
 chmod 600 deploy/backup.env
 $EDITOR deploy/backup.env      # + POSTGRES_USER / POSTGRES_DB / DATA_DIR (same values as .env),
-                               #   RESTIC_* + AWS_* + BACKUP_PING_URL + CHECK_PING_URL
+                               #   RESTIC_* + RESTIC_CONFIG_* (second repository, own password)
+                               #   + AWS_* + BACKUP_PING_URL + CHECK_PING_URL; see §4
 ```
 
 ### 1.2 Mail route probes (deploy note Q7)
@@ -290,7 +310,7 @@ deploy/compose-prod.sh exec -T db pg_restore -l < "$BK/pre-e2-$STAMP.dump" > /de
 # TOC presence is not data: an empty dump still lists every table. Count the
 # user rows inside the archive before dropping anything.
 DUMP_USERS=$(docker exec -i db pg_restore -a -f - < "$BK/pre-e2-$STAMP.dump" 2>/dev/null | \
-  awk '/^COPY public\."user" /{f=1;next} f&&$0=="\\\\."{exit} f{n++} END{print n+0}')
+  bash deploy/backup/count-user-rows.sh)
 [ "$DUMP_USERS" = "$USERS" ] || { echo "dump has $DUMP_USERS user rows, expected $USERS; aborting" >&2; exit 1; }
 
 # Data-only file: column lists + FK triggers disabled inside the transaction.
@@ -412,7 +432,7 @@ DUMP=/srv/web-lair/pre-migrate/<matching-dump>.dump
 USERS=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"user\""')
 DUMP_USERS=$(deploy/compose-prod.sh exec -T db pg_restore -a -f - < "$DUMP" 2>/dev/null | \
-  awk '/^COPY public\."user" /{f=1;next} f&&$0=="\\\\."{exit} f{n++} END{print n+0}')
+  bash deploy/backup/count-user-rows.sh)
 [ "$DUMP_USERS" = "$USERS" ] || { echo "dump has $DUMP_USERS user rows, expected $USERS; aborting" >&2; exit 1; }
 # IMAGE must point at the tag that matches the dump.
 sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
@@ -434,14 +454,21 @@ HAS_E2=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('\''public.email_suppressions'\'') is not null"')
 HAS_PROV=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select exists (select 1 from information_schema.columns where table_schema='\''public'\'' and table_name='\''posts'\'' and column_name='\''writing_origin'\'')"')
-if [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
+HAS_SECRETS=$(deploy/compose-prod.sh exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('\''public.ai_provider_secrets'\'') is not null and to_regclass('\''public.webhook_secrets'\'') is not null"')
+# Do not key this gate on a table count: every migration changes it (49 -> 53
+# -> 55 ...). A provenance-era schema is verified against the image's own
+# journal by verify-baseline; older generations are pinned to a matching image.
+if [ "$HAS_SECRETS" = "t" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
+  deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
+elif [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
   deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
 elif [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "f" ]; then
   echo "restored pre-provenance schema (49 tables, E2, no writing_origin); verify-baseline skipped — use the matching pre-provenance image"
 elif [ "$TABLES" = "48" ] && [ "$HAS_E2" = "f" ]; then
   echo "restored pre-E2 schema (48 public tables); verify-baseline skipped"
 else
-  echo "unexpected restore shape (tables=$TABLES e2=$HAS_E2 provenance=$HAS_PROV); refusing to start" >&2
+  echo "unexpected restore shape (tables=$TABLES e2=$HAS_E2 provenance=$HAS_PROV secrets=$HAS_SECRETS); refusing to start" >&2
   exit 1
 fi
 deploy/compose-prod.sh up -d
@@ -460,21 +487,167 @@ subscriptions without `consent_version` and opt-outs without
 three idempotent backfills again (§8) before enabling mail. Otherwise historical
 opt-outs can become mailable and new rows keep a NULL consent version.
 
+### 3.1 Auth keyring and OAuth token encryption (W1.5)
+
+`src/lib/server/auth.ts` enables better-auth's official
+`account.encryptOAuthTokens`. New OAuth access/refresh tokens are stored as
+`$ba$<key-version>$<hex>` envelopes (XChaCha20-Poly1305 keyed by the auth
+secret) when the keyring is set, and as bare hex otherwise; the `account` table
+layout is unchanged. Legacy plaintext rows keep working - better-auth only
+decrypts values that look encrypted (`$ba$...` or a bare even-length hex
+string) - so no backfill is needed: a token is rewritten the next time that
+account signs in or refreshes. (GitHub tokens are `gho_`/`ghu_`-prefixed, so
+they are never mistaken for ciphertext.)
+
+`BETTER_AUTH_SECRETS` is optional. It is the keyring:
+
+| Value               | Meaning                                                                                                                                                        |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unset               | Every value is keyed by `BETTER_AUTH_SECRET` alone; encrypted tokens are **bare hex**, no envelope                                                             |
+| `"2:<new>,1:<old>"` | New writes use version 2; values carrying `$ba$1$...` stay readable; `BETTER_AUTH_SECRET` remains the legacy key for values written before the keyring existed |
+
+**Before touching the keyring, note what else it keys:**
+
+- The first entry is also the **session cookie / JWT signing secret**
+  (`create-context.mjs`: `secret = secrets[0].value`). Adding or rotating a
+  version signs every current user out on restart - this is not a
+  zero-downtime operation.
+- It wraps **2FA/TOTP secrets** as well as OAuth tokens. TOTP secrets are
+  written once and never rewritten, so a version that wrote one must stay in
+  the list for that account's lifetime (or the owner re-enrolls 2FA first).
+  Dropping it makes decryption fail closed and locks that account out of
+  email + TOTP - the remaining admin path.
+- Keep `BETTER_AUTH_SECRET` **set** while any bare-hex values exist: it is the
+  `legacySecret` that decrypts them when no envelope is present.
+
+Rotation has three phases: prepend the new version and restart (sessions are
+reissued) -> wait until no _OAuth token_ still needs the old version -> drop
+it, **unless a stored TOTP secret still needs it**. Dropping a version makes
+values written under it unreadable (fail-closed: sign-in/decrypt errors, no
+silent plaintext fallback).
+
+Verification (prints counts only, never a token; the script ships in the
+runtime image, `Dockerfile`):
+
+```bash
+deploy/compose-prod.sh run --rm app node scripts/verify-oauth-token-storage.ts
+```
+
+Exit 0 means every stored OAuth token is encrypted (or none exist). Exit 1
+means plaintext rows remain (expected right after the switch, green after the
+affected accounts sign in again) **or the script itself failed** - its
+`query failed` line distinguishes the two; do not read every exit 1 as
+"plaintext remains".
+
+Rollback:
+
+- **Preferred: keep the new image and fix forward.** Rotating the keyring back
+  is safe as long as the version that encrypted the rows stays in the list.
+- **Image rollback after tokens were encrypted is not symmetric.** The older
+  image has `encryptOAuthTokens` off, so it hands `$ba$...` strings to the
+  GitHub API and those accounts fail until they sign in again (a fresh OAuth
+  callback writes a new token) - or until the pre-deploy dump is restored.
+  Budget one re-sign-in per affected account, and do not restore a
+  pre-encryption dump unless every row written after it can be lost.
+
+### 3.2 Admin/GitHub sign-in policy (W1.6)
+
+GitHub can no longer mint an admin/owner session (`user.validateUserInfo`
+rejects it with `admin_github_sign_in_blocked`; the refusal is logged as
+`[auth] admin GitHub sign-in blocked`). Email + TOTP or a passkey remain; the
+passkey sign-in UI lands with W8, so email + TOTP is the available admin path
+today. The tailnet owner hand-off (loopback/tailnet identity) is a separate,
+registered path.
+
+Sessions minted through GitHub **before** this deploy are not distinguishable
+after the fact (the session row stores no login method) and keep their role
+until they expire or are pruned. To enforce the policy immediately, revoke
+every admin/owner session once after the deploy:
+
+```bash
+deploy/compose-prod.sh exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' <<'SQL'
+delete from session where user_id in (select id from "user" where role in ('owner', 'admin'));
+SQL
+```
+
+This logs the admins out once; their next email + TOTP (or passkey) sign-in
+re-establishes the session under the new policy. No schema change is involved.
+
+### 3.3 Password hashing and rollback (W8.8)
+
+New credential hashes use Argon2id (`$argon2id$...`) through better-auth's
+official `emailAndPassword.password` hooks. Verification is format-aware:
+pre-rollout better-auth scrypt rows (`<32-hex salt>:<128-hex key>`) still
+verify, and an Argon2id row written by this release stays verifiable.
+
+To roll new hashes back to better-auth's legacy scrypt format:
+
+1. Set `PASSWORD_HASH_ALGO=scrypt` in `.env`.
+2. Restart the app container.
+3. Keep the setting until the next password change; existing Argon2id rows
+   keep working either way, so there is no lockout and no schema migration.
+
+The default (`PASSWORD_HASH_ALGO` unset or `argon2id`) is the recommended
+state. Node 24+ is required because Argon2id uses `node:crypto` `argon2`
+(`engines.node` enforces it).
+
 ## 4. Backups (D-4)
 
-Backup set:
+Two repositories with two passwords (T3-A, secrets register §0.1).
+
+**Data repository** — `RESTIC_REPOSITORY`:
 
 1. `pg_dump -Fc` → staging dir on the host (logical backup; never file-copy a
    running data directory).
 2. `$DATA_DIR` (user job scripts + sidecars).
 3. RustFS volume (media), mounted read-only into the backup container.
-4. `.env` only. compose/Caddyfile come from git; the **restic password** is
-   kept offline (password manager — losing it makes the repo unreadable).
+
+**Config repository** — `RESTIC_CONFIG_REPOSITORY`, **different password**:
+
+4. `.env` only, as a single file. It is never part of the data repository:
+   `.env` holds `BETTER_AUTH_SECRET`, `SUPPRESSION_HMAC_KEY` and the database
+   password, so a leaked data repository (and its password) must not decrypt
+   the application secrets. `deploy/backup.env` is backed up nowhere — it holds
+   both repository passwords; keep those in the password manager with an
+   **offline** copy (losing one makes its repository unreadable).
 
 ```bash
 # what the nightly unit runs (deploy/systemd/web-lair-backup.timer)
 /srv/web-lair/app/deploy/backup/backup.sh
+
+# one-time: create both repositories, each with its own password
+set -a; . deploy/backup.env; set +a
+# `-e VAR` (no value) forwards the loaded value. Never `-e VAR=$VALUE`: that puts
+# the repository password in argv (visible to `ps`) and in ~/.bash_history.
+docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+  restic/restic:0.19.1 --repo "$RESTIC_REPOSITORY" init
+( export RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD"
+  docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+    restic/restic:0.19.1 --repo "$RESTIC_CONFIG_REPOSITORY" init )
 ```
+
+### 4.1 Migrating a pre-split repository (one-off)
+
+A repository created by the old `backup.sh` holds snapshots whose path set includes
+`/config` (`.env` in the data repository). `--group-by paths` gives that path set
+its own forget group, so the new nightly snapshots never age those old ones out —
+the historical `.env` copies would stay readable with the data-repository password.
+
+```bash
+set -a; . deploy/backup.env; set +a
+# list the path set of every snapshot; old ones show "/config"
+docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+  restic/restic:0.19.1 --repo "$RESTIC_REPOSITORY" snapshots --json \
+  | grep -o '"paths":\[[^]]*\]'
+# after checking each id (destructive: prunes the data those snapshots own)
+docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+  restic/restic:0.19.1 --repo "$RESTIC_REPOSITORY" forget <ids> --prune
+```
+
+The drill below asserts "no `.env` in **any** data snapshot", so before this
+migration it fails by design — that failure is the confirmation that old snapshots
+exist, and the list above tells you which ids to forget.
 
 Credentials come from `deploy/backup.env` (mode 600, loaded by the systemd
 unit — never from `.env`, so the app container cannot read them).
@@ -482,20 +655,212 @@ unit — never from `.env`, so the app container cannot read them).
 The script dumps PG to a temp file, validates it with `pg_restore -l`, swaps it
 over `pg.dump` (a failed night never truncates yesterday's good copy), resolves
 the RustFS volume from the running container, then runs restic with
-`--retry-lock 30m` and the retention policy. Pre-migration dumps live in
+`--retry-lock 30m` and the retention policy: data keeps 7 daily / 4 weekly /
+6 monthly, config 30 daily / 12 monthly. Pre-migration dumps live in
 `/srv/web-lair/pre-migrate` — **outside** the restic source paths, pruned by
 age, so deploy count does not grow the backup repo.
 
 - Weekly: `web-lair-backup-check.timer` runs
-  `restic --retry-lock 30m check --read-data-subset=5%` (the nightly job only
-  backs up) and pings `CHECK_PING_URL` only on success.
+  `restic --retry-lock 30m check --read-data-subset=5%` on the data repository
+  (the nightly job only backs up) and pings `CHECK_PING_URL` only on success.
 - Monthly drill: restore to a **separate** directory and, for PG, into a
   **scratch** database on a different port; compare row counts and sample media
-  hashes. The drill never touches the production database.
+  hashes. The drill never touches the production database. It also proves the
+  config split still holds:
+
+  ```bash
+  set -euo pipefail
+  DRILL=$(mktemp -d); trap 'rm -rf "$DRILL"' EXIT
+  set -a; . deploy/backup.env; set +a
+  R=restic/restic:0.19.1
+  # `-e VAR` (no value) forwards the exported value: no password ever enters argv.
+  restic_data() { docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY "$R" --repo "$RESTIC_REPOSITORY" "$@"; }
+  restic_conf() { docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY "$R" --repo "$RESTIC_CONFIG_REPOSITORY" "$@"; }
+
+  # 1. no snapshot in the data repository may contain a .env (collect first:
+  #    a failed listing must not read as "no .env found")
+  ids=$(restic_data snapshots --host web-lair --json | grep -oE '"short_id":"[0-9a-f]+"' | cut -d'"' -f4) \
+    || { echo 'FAIL: cannot list the data repository'; exit 1; }
+  [ -n "$ids" ] || { echo 'FAIL: data repository has no snapshots'; exit 1; }
+  for id in $ids; do
+    if restic_data ls --host web-lair "$id" | grep -qE '(^|/)\.env$'; then
+      echo "FAIL: .env is inside data snapshot $id"; exit 1
+    fi
+  done
+  echo 'OK: no .env in any data snapshot'
+
+  # 2. the config repository restores a byte-identical .env
+  ( export RESTIC_PASSWORD="$RESTIC_CONFIG_PASSWORD"
+    docker run --rm -e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+      -v "$DRILL":/restore "$R" --repo "$RESTIC_CONFIG_REPOSITORY" \
+      restore --host web-lair-config latest --target /restore )
+  cmp "$DRILL/config/.env" .env && echo 'OK: config restored'
+
+  # 3. the data password must NOT open the config repository — and the refusal
+  #    must be a password rejection, not a network error with the same exit code
+  if restic_conf snapshots >/dev/null 2>"$DRILL/err"; then
+    echo 'FAIL: config repository opened with the data password'; exit 1
+  fi
+  grep -qiE 'wrong password|no key found' "$DRILL/err" \
+    || { echo 'FAIL: unexpected error, not a password rejection'; cat "$DRILL/err"; exit 1; }
+  echo 'OK: repository passwords are separate'
+  ```
+
+  Keep the receipt (date, snapshot ids, `cmp` result) with the ops notes.
+
 - A failed backup must fail **its own** check: `BACKUP_PING_URL` is pinged only
   on success and is deliberately separate from the 5-minute liveness URL
   (`DEADMAN_PING_URL`) — sharing one check would make a silent backup failure
   invisible on the next liveness tick.
+
+### 4.2 Restoring encrypted runtime credentials (W2.10)
+
+`ai_provider_secrets` and `webhook_secrets` are AES-256-GCM ciphertext under
+`SECRETS_KEYS`. The key is in the **config** repository (`.env`); the ciphertext
+is in the **data** repository. Restore order matters:
+
+1. Restore the config repository first: `SECRETS_KEYS` and
+   `SECRETS_KEY_ACTIVE` must be in `/srv/web-lair/app/.env` before the app
+   starts. A missing/mismatched key is reported as `store_unavailable` /
+   `decrypt_failed`; there is no plaintext fallback.
+2. Restore the data repository (database dump, `$DATA_DIR`, media).
+3. Start the app and verify: a provider probe on `/admin/settings/ai` must
+   authenticate, and a webhook delivery must carry a valid signature.
+4. Keep every key version that a retained backup may still reference. Retiring
+   a version makes dumps from before the rotation unreadable by design
+   (`scripts/verify-secret-key-versions.ts`, three-phase rotation).
+
+| Have                                    | Result                                                                                                                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DB dump only                            | Every encrypted column fails with `decrypt_failed`/`unknown_key_version`; provider keys and webhook signing secrets are unrecoverable without the key. |
+| Keyring only                            | No ciphertext to decrypt. The `.env` is still a full infrastructure secret (DB password, auth secret).                                                 |
+| Both, same rotation                     | Credentials work; no re-entry needed.                                                                                                                  |
+| Both, dump older than a retired version | Rows written under the retired version fail closed. Keep the old version in the keyring for the backup retention window.                               |
+
+`SECRETS_KEY` (single key, version 1) is the legacy form; do not use it for new
+installs. `SECRETS_KEYS` is not derived from `BETTER_AUTH_SECRET`: rotating the
+auth keyring must never destroy the credential store.
+
+#### Rollback window (webhook backfill)
+
+Migrations 0001/0002 are additive (two new tables; `webhooks.secret` becomes
+nullable). The **data** step is the one-way edge:
+
+| Point in time                                                             | Image rollback    | Notes                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| After `migrate` (0001/0002), **before** `migrate-webhook-secrets --apply` | Safe              | Old code reads/writes the legacy `webhooks.secret`; the new tables are ignored. **0002 is data-dependent:** the first endpoint created by the new image has no legacy secret, so from then on `SET NOT NULL` cannot be restored and roll-forward is the only path. |
+| After `migrate-webhook-secrets --apply`                                   | **Not safe**      | The old drain selects the legacy column, which is NULL, and throws in `signingKey()` (`null.startsWith`) on every tick: queued rows stay queued while the segment errors. Roll forward (keep the new image) or restore the pre-backfill dump.                      |
+| After the new image has run                                               | Roll forward only | The new drain reads `webhook_secrets` first and falls back to the legacy column; an old image cannot read the encrypted rows.                                                                                                                                      |
+
+Keep `SECRETS_KEYS` and the encrypted rows together: an image rollback without
+the keyring turns every stored credential into `decrypt_failed`.
+
+### 4.3 Retire the legacy webhook secret (W2.6, one-way data step)
+
+Migrations 0001/0002 are additive and reversible; moving the plaintext value
+into `webhook_secrets` is not. Do it in this order:
+
+```bash
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+# 1) Dump immediately before the data step (this is the only undo).
+sudo -u deploy docker compose -f compose.prod.yaml exec -T db \
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > "/srv/web-lair/pre-webhook-backfill-$STAMP.dump"
+
+# 2) Dry run: prints every endpoint that would move, writes nothing.
+deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts
+
+# 3) Apply. All rows move in ONE transaction; on any conflict/round-trip
+#    failure it rolls back and no plaintext is retired.
+deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts --apply
+
+# 4) Prove idempotence and no plaintext left for a migrated endpoint.
+deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts   # "nothing to migrate"
+deploy/compose-prod.sh exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from webhooks where secret is not null"'
+```
+
+Record the dump name next to the rollback table above. The script is run with
+`node` (the container image has no `tsx`); the `pnpm db:migrate-webhook-secrets`
+alias is for a dev checkout only. A non-zero exit now means "rolled back, still
+safe" — there is no partial state.
+
+### 4.4 External media provider (W7) and the restore drill
+
+**What backs up what.** Database and config stay restic repositories (§4); the
+media objects follow the provider:
+
+| Data                    | Backup path                                                             |
+| ----------------------- | ----------------------------------------------------------------------- |
+| Postgres (all metadata) | restic data repository — `pg_dump -Fc`                                  |
+| `.env` (secrets)        | restic config repository, different password                            |
+| Bundled RustFS volume   | restic data repository (compose volume, read-only mount)                |
+| External S3 bucket      | provider versioning/replication **or** `rclone sync` to a second bucket |
+
+Versioning is not a backup: it protects against a wrong delete, not against
+account loss, a compromised key or a deleted bucket. Keep one copy the app
+cannot reach (different account or credentials).
+
+**Switching providers** (`/admin/settings/storage`, owner only). Uploads are
+frozen and purge refuses while the copy runs, so pick a quiet window:
+
+```bash
+# 1) Save the target on the page and run Test (HeadBucket + capability probe).
+# 2) Plan: HEADs both buckets, refuses if a registered object is missing.
+pnpm storage:migrate --dry-run
+# 3) Copy with a two-ended hash proof (resumes by verifying, never rewriting).
+pnpm storage:migrate --yes
+# 4) Cut over, then remove the old bucket when the evidence is in hand.
+pnpm storage:migrate --cutover
+pnpm storage:migrate --status
+# Rollback is symmetric and leaves the new objects in place:
+pnpm storage:migrate --rollback
+```
+
+A cutover is refused unless: a complete copy of exactly this target exists
+(when `files` > 0), and the bucket's versioning/object lock are off — or the
+provider is explicitly set to **logical delete** (deletes become delete
+markers; space is not reclaimed).
+
+Provider support is tiered (decision Q11): **Tier 1 = AWS S3, Cloudflare R2,
+MinIO** — the tested matrix (`providerType` aws-s3 / r2 / minio).
+**Tier 2 = B2, Wasabi, Spaces** are best-effort: run the connection test and
+one real upload before trusting them, and treat a failure there as a provider
+gap rather than a bug in this app.
+
+After a cutover, re-publish the map tiles — `maps/*.pmtiles` are not `files`
+rows, so the migration does not carry them:
+
+```bash
+pnpm maps:publish           # against the now-active provider
+```
+
+**Restore drill** (quarterly, and before trusting a new repository). Record the
+result in the evidence folder; an untested backup is a guess.
+
+```bash
+# 1) Restore the newest data snapshot into a scratch directory.
+restic -r "$RESTIC_REPOSITORY" restore latest --target /srv/web-lair/restore-drill
+# 2) Restore the config repository separately and diff the keys (never print values).
+restic -r "$RESTIC_CONFIG_REPOSITORY" restore latest --target /srv/web-lair/restore-drill-config
+sudo -u deploy diff <(grep -o '^[A-Z_]*=' /srv/web-lair/app/.env | sort) \
+                    <(grep -o '^[A-Z_]*=' /srv/web-lair/restore-drill-config/.env | sort)
+# 3) Load the dump into a scratch database and run the baseline gate against it.
+createdb -h 127.0.0.1 -U "$POSTGRES_USER" drill
+pg_restore -h 127.0.0.1 -U "$POSTGRES_USER" -d drill --no-owner \
+  /srv/web-lair/restore-drill/pg.dump
+DATABASE_URL="postgres://…/drill" pnpm db:verify-baseline
+# 4) Prove the credentials still decrypt (the keyring must come with the
+#    encrypted rows): start the app against the scratch DB with .env restored,
+#    open /admin/settings/storage and check the credential source + key version.
+# 5) Prove media: `pnpm media:audit` against the active provider lists missing
+#    objects; a known `/i/<key>` must answer 200, a deleted one 404.
+```
+
+Evidence per drill: dump name + timestamp, baseline gate output, credential
+source/key version from the page, `/i` status for one live and one deleted key,
+and how long the drill took (RTO) — the page's read-only Database block shows
+the mode, masked host and applied-migration count after the restore.
 
 ## 5. Monitoring
 

@@ -4,15 +4,23 @@ const storageMock = vi.hoisted(() => ({
 	get: vi.fn(),
 	head: vi.fn()
 }));
+const activeMock = vi.hoisted(() => ({
+	config: { publicBaseUrl: null as string | null }
+}));
 const isRegisteredKeyMock = vi.hoisted(() => vi.fn());
 const rateLimitMock = vi.hoisted(() => vi.fn());
 
-vi.mock('$lib/server/storage', () => ({ getStorage: () => storageMock }));
+vi.mock('$lib/server/storage', () => ({
+	getStorage: async () => storageMock,
+	getActiveProvider: async () => activeMock,
+	buildStorageForActive: async () => storageMock
+}));
 vi.mock('$lib/server/services/files', () => ({ isRegisteredKey: isRegisteredKeyMock }));
 vi.mock('$lib/server/cache', () => ({ getCache: () => ({}) }));
 vi.mock('$lib/server/cache/store', () => ({ rateLimit: rateLimitMock }));
 
 import { GET, HEAD } from './[...key]/+server';
+import { StorageError } from '$lib/server/storage/port';
 
 /** sha256-shaped key whose directory equals the first two hex chars. */
 const SHA = 'ab' + 'c'.repeat(62);
@@ -43,6 +51,7 @@ beforeEach(() => {
 	isRegisteredKeyMock.mockReset();
 	rateLimitMock.mockReset();
 	rateLimitMock.mockResolvedValue({ allowed: true, count: 1 });
+	activeMock.config.publicBaseUrl = null;
 });
 
 describe('/i/<key> proxy (T9)', () => {
@@ -280,5 +289,87 @@ describe('/i/<key> proxy (T9)', () => {
 		} as unknown as Parameters<typeof GET>[0]);
 		expect(res.status).toBe(429);
 		expect(storageMock.get).not.toHaveBeenCalled();
+	});
+});
+
+describe('/i/<key> CDN alias (W7.2 publicBaseUrl)', () => {
+	it('redirects public keys to the alias and never proxies the bytes', async () => {
+		activeMock.config.publicBaseUrl = 'https://cdn.example.com';
+
+		const res = await GET(event(VARIANT_KEY));
+
+		expect(res.status).toBe(302);
+		expect(res.headers.get('location')).toBe(`https://cdn.example.com/${VARIANT_KEY}`);
+		expect(storageMock.get).not.toHaveBeenCalled();
+	});
+
+	it('keeps the private proxy when no alias is configured', async () => {
+		storageMock.get.mockResolvedValueOnce({
+			body: bodyOf('img'),
+			byteSize: 3,
+			contentType: 'image/webp',
+			etag: null
+		});
+
+		const res = await GET(event(VARIANT_KEY));
+
+		expect(res.status).toBe(200);
+		expect(storageMock.get).toHaveBeenCalledWith(VARIANT_KEY);
+	});
+});
+
+describe('/i/<key> provider outage (W7.5/Q14)', () => {
+	it('answers 503 with retry-after when the active provider is unreachable', async () => {
+		storageMock.get.mockRejectedValueOnce(
+			new StorageError('storage request failed: GET /x', 0, null)
+		);
+
+		const res = await GET(event(VARIANT_KEY));
+
+		expect(res.status).toBe(503);
+		expect(res.headers.get('retry-after')).toBe('30');
+		expect(res.headers.get('cache-control')).toBe('no-store');
+	});
+
+	it('answers 503 on an upstream 5xx and does not fall back', async () => {
+		storageMock.get.mockRejectedValueOnce(
+			new StorageError('storage get failed: HTTP 503', 503, 'SlowDown')
+		);
+
+		const res = await GET(event(VARIANT_KEY));
+
+		expect(res.status).toBe(503);
+		// One attempt only: no second key/bucket is consulted.
+		expect(storageMock.get).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not retry the fallback tier after a 5xx (grid keys have one)', async () => {
+		storageMock.get.mockRejectedValueOnce(
+			new StorageError('storage get failed: HTTP 503', 503, 'SlowDown')
+		);
+
+		const res = await GET(event(GRID_KEY));
+
+		expect(res.status).toBe(503);
+		expect(storageMock.get).toHaveBeenCalledTimes(1);
+	});
+
+	it('rethrows a 4xx storage error instead of masking it as an outage', async () => {
+		storageMock.get.mockRejectedValueOnce(
+			new StorageError('storage get failed: HTTP 403', 403, 'AccessDenied')
+		);
+
+		await expect(GET(event(VARIANT_KEY))).rejects.toMatchObject({
+			name: 'StorageError',
+			status: 403
+		});
+	});
+
+	it('does the same for HEAD', async () => {
+		storageMock.head.mockRejectedValueOnce(new StorageError('storage request failed', 0, null));
+
+		const res = await HEAD(event(VARIANT_KEY));
+
+		expect(res.status).toBe(503);
 	});
 });

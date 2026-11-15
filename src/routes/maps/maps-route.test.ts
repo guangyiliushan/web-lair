@@ -196,4 +196,15 @@ describe('GET /maps/[file]', () => {
 		expect(response.headers.get('content-range')).toBe('bytes */256');
 		expect(response.headers.get('cache-control')).toBe('no-store');
 	});
+
+	it('answers 503 when the active provider is unreachable (W7.5/Q14)', async () => {
+		const { StorageError } = await import('$lib/server/storage/port');
+		storage.get.mockRejectedValue(new StorageError('storage request failed', 0, null));
+
+		const response = await GET(makeEvent('w.pmtiles'));
+
+		expect(response.status).toBe(503);
+		expect(response.headers.get('retry-after')).toBe('30');
+		expect(response.headers.get('cache-control')).toBe('no-store');
+	});
 });

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import type { ActionData } from './$types';
+	import type { ActionData, PageServerData } from './$types';
 	import { m } from '$lib/paraglide/messages';
 	import * as Card from '$lib/components/ui/card';
 	import * as Field from '$lib/components/ui/field';
@@ -9,7 +9,7 @@
 	import IconMail from '@tabler/icons-svelte-runes/icons/mail';
 	import IconAlertCircle from '@tabler/icons-svelte-runes/icons/alert-circle';
 
-	let { form }: { form: ActionData } = $props();
+	let { data, form }: { data: PageServerData; form: ActionData } = $props();
 </script>
 
 <div class="flex w-full flex-col items-center justify-center">
@@ -39,6 +39,16 @@
 				</div>
 			{/if}
 
+			{#if !data.mailConfigured}
+				<div
+					id="forgot-mail-notice"
+					class="mb-6 rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground"
+					role="status"
+				>
+					{m.auth_forgot_mail_unconfigured()}
+				</div>
+			{/if}
+
 			<form method="post" action="?/sendReset" use:enhance>
 				<Field.FieldGroup>
 					<Field.Field>
@@ -52,7 +62,12 @@
 							required
 						/>
 					</Field.Field>
-					<Button type="submit" class="w-full">
+					<Button
+						type="submit"
+						class="w-full"
+						disabled={!data.mailConfigured}
+						aria-describedby={!data.mailConfigured ? 'forgot-mail-notice' : undefined}
+					>
 						<IconMail data-icon="inline-start" />
 						{m.auth_send_reset()}
 					</Button>

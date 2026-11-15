@@ -8,6 +8,8 @@
 	import { slide } from 'svelte/transition';
 	import { cubicInOut } from 'svelte/easing';
 	import { Separator } from '$lib/components/ui/separator';
+	import SocialRail from '$lib/components/layout/SocialRail.svelte';
+	import type { SocialLinkLike } from '$lib/config/social';
 	import {
 		navigationConfig,
 		tLabel,
@@ -29,11 +31,13 @@
 
 	let {
 		auth,
+		ownerLinks,
 		postsData,
 		pagesData,
 		onclose
 	}: {
 		auth?: AuthData;
+		ownerLinks?: readonly SocialLinkLike[] | null;
 		postsData?: NavMenuData | null;
 		pagesData?: PagesMegaData | null;
 		onclose: () => void;
@@ -204,6 +208,7 @@
 
 	<Separator class="mt-4" />
 	<div class="pt-4">
+		<SocialRail links={ownerLinks} variant="mobile" class="px-1 pb-4" />
 		{#if auth?.user}
 			<div class="flex items-center gap-3">
 				<div

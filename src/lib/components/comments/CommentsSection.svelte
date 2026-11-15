@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 	import CommentComposer from './CommentComposer.svelte';
 	import CommentItem from './CommentItem.svelte';
 	import type { CommentFormState, CommentTargetType, ThreadsPage } from './types';
@@ -17,9 +18,25 @@
 		loginUrl: string | null;
 		/** Latest form action result (page form), when present. */
 		form?: CommentFormState | null;
+		/** Show the privacy notice under the composer (W6.2 / C3). */
+		privacyNotice?: boolean;
+		/** Offer the public-country opt-in checkbox (W6.2). */
+		countryOptIn?: boolean;
+		/** New comments are closed (site or per-post switch). */
+		commentsClosed?: boolean;
 	}
 
-	let { targetType, threads, canComment, emailVerified, loginUrl, form = null }: Props = $props();
+	let {
+		targetType,
+		threads,
+		canComment,
+		emailVerified,
+		loginUrl,
+		form = null,
+		privacyNotice = false,
+		countryOptIn = false,
+		commentsClosed = false
+	}: Props = $props();
 
 	// P3b view-model compat: `orphans`/`orphanCount` are optional so producers
 	// from before segment anchors keep rendering (derive instead of crashing).
@@ -82,7 +99,15 @@
 
 	<div class="mt-6">
 		{#if canComment}
-			<CommentComposer action="?/comment" />
+			<CommentComposer action="?/comment" showCountryOptIn={countryOptIn} />
+			{#if privacyNotice}
+				<p class="mt-2 text-xs leading-relaxed text-muted-foreground">
+					{m.comment_privacy_notice()}
+					<a class="wl-accent-link underline underline-offset-2" href={localizeHref('/privacy')}>
+						{m.comment_privacy_link()}
+					</a>
+				</p>
+			{/if}
 		{:else if loginUrl}
 			<p class="text-sm text-muted-foreground">
 				{m.comment_login_prompt()}
@@ -92,6 +117,8 @@
 			</p>
 		{:else if !emailVerified}
 			<p class="text-sm text-muted-foreground">{m.comment_verify_hint()}</p>
+		{:else if commentsClosed}
+			<p class="text-sm text-muted-foreground">{m.comment_disabled()}</p>
 		{/if}
 	</div>
 

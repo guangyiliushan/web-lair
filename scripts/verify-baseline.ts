@@ -94,6 +94,169 @@ const EXPECTED_TABLE_NAMES: string[] = [
 	'webhooks'
 ];
 
+// ---------------------------------------------------------------------------
+// Migration deltas (0001+): the live schema is the baseline plus these. The
+// FILE checks above keep pinning the generated baseline itself; the DB checks
+// below union both sets.
+// ---------------------------------------------------------------------------
+const MIGRATION_TABLE_NAMES = [
+	'ai_provider_secrets',
+	'webhook_secrets',
+	'home_hero',
+	'site_identity',
+	'storage_secrets'
+] as const;
+
+const MIGRATION_TABLE_COLUMNS = new Map<string, string[]>([
+	[
+		'ai_provider_secrets',
+		['provider_id', 'ciphertext', 'hint', 'key_version', 'created_at', 'updated_at', 'updated_by']
+	],
+	[
+		'webhook_secrets',
+		[
+			'webhook_id',
+			'ciphertext',
+			'hint',
+			'key_version',
+			'created_at',
+			'updated_at',
+			'previous_ciphertext',
+			'previous_key_version',
+			'previous_expires_at',
+			'updated_by'
+		]
+	],
+	[
+		'home_hero',
+		[
+			'id',
+			'title',
+			'subtitle_prefix',
+			'subtitle_highlight',
+			'description',
+			'welcome',
+			'created_at',
+			'updated_at',
+			'updated_by'
+		]
+	],
+	['site_identity', ['id', 'owner_user_id', 'created_at', 'updated_at', 'updated_by']],
+	[
+		'storage_secrets',
+		[
+			'id',
+			'access_key_ciphertext',
+			'access_key_hint',
+			'access_key_key_version',
+			'secret_ciphertext',
+			'secret_hint',
+			'secret_key_version',
+			'created_at',
+			'updated_at',
+			'updated_by'
+		]
+	]
+]);
+
+/** Columns appended to a baseline table (A3 unions these into the expected set). */
+const MIGRATION_COLUMN_ADDITIONS = new Map<string, string[]>([
+	['user_profiles', ['header_label']],
+	// W6.2 (approved schema exception): comments.privacy stores the edge
+	// region next to country_code; nullable and additive.
+	['comments', ['region_code']],
+	['webhook_deliveries', ['attempt_count', 'next_attempt_at']]
+]);
+
+const MIGRATION_INDEXES = new Map<string, string[]>([
+	['ai_provider_secrets', ['ai_provider_secrets_pkey']],
+	['webhook_secrets', ['webhook_secrets_pkey']],
+	['home_hero', ['home_hero_pkey']],
+	['site_identity', ['site_identity_pkey', 'site_identity_owner_user_id_idx']],
+	['webhook_deliveries', ['webhook_deliveries_due_idx']],
+	['storage_secrets', ['storage_secrets_pkey']]
+]);
+
+const MIGRATION_CHECKS = new Map<string, string[]>([
+	[
+		'ai_provider_secrets',
+		[
+			'ai_provider_secrets_key_version_check',
+			'ai_provider_secrets_ciphertext_check',
+			'ai_provider_secrets_hint_check'
+		]
+	],
+	[
+		'webhook_secrets',
+		[
+			'webhook_secrets_key_version_check',
+			'webhook_secrets_ciphertext_check',
+			'webhook_secrets_hint_check',
+			'webhook_secrets_previous_pair_check',
+			'webhook_secrets_previous_key_version_check'
+		]
+	],
+	[
+		'home_hero',
+		[
+			'home_hero_singleton_check',
+			'home_hero_title_object_check',
+			'home_hero_subtitle_prefix_object_check',
+			'home_hero_subtitle_highlight_object_check',
+			'home_hero_description_object_check',
+			'home_hero_welcome_object_check'
+		]
+	],
+	['site_identity', ['site_identity_singleton_check']],
+	[
+		'storage_secrets',
+		[
+			'storage_secrets_id_check',
+			'storage_secrets_access_key_version_check',
+			'storage_secrets_secret_key_version_check',
+			'storage_secrets_ciphertext_check',
+			'storage_secrets_hint_check'
+		]
+	],
+	// Appended column checks override the baseline map for this table, so the
+	// full expected set has to be listed (the baseline status check + the new one).
+	[
+		'webhook_deliveries',
+		['webhook_deliveries_status_check', 'webhook_deliveries_attempt_count_check']
+	],
+	// Appended column checks override the baseline map for this table, so the
+	// full expected set has to be listed (the three baseline checks + the new one).
+	[
+		'user_profiles',
+		[
+			'user_profiles_status_check',
+			'user_profiles_deleted_at_check',
+			'user_profiles_links_is_array_check',
+			'user_profiles_header_label_check'
+		]
+	]
+]);
+
+const MIGRATION_FKS = [
+	'ai_provider_secrets_provider_id_ai_providers_id_fk|ai_provider_secrets|ai_providers|cascade',
+	'ai_provider_secrets_updated_by_user_id_fk|ai_provider_secrets|user|set null',
+	'webhook_secrets_webhook_id_webhooks_id_fk|webhook_secrets|webhooks|cascade',
+	'webhook_secrets_updated_by_user_id_fk|webhook_secrets|user|set null',
+	'home_hero_updated_by_user_id_fk|home_hero|user|set null',
+	'site_identity_owner_user_id_user_id_fk|site_identity|user|restrict',
+	'site_identity_updated_by_user_id_fk|site_identity|user|set null',
+	'storage_secrets_updated_by_user_id_fk|storage_secrets|user|set null'
+];
+
+/** Nullable audit links: deliberately not indexed (low cardinality). */
+const MIGRATION_FK_INDEX_GAPS = [
+	'ai_provider_secrets.ai_provider_secrets_updated_by_user_id_fk',
+	'webhook_secrets.webhook_secrets_updated_by_user_id_fk',
+	'home_hero.home_hero_updated_by_user_id_fk',
+	'site_identity.site_identity_updated_by_user_id_fk',
+	'storage_secrets.storage_secrets_updated_by_user_id_fk'
+];
+
 const OFFICIAL_GENERATED_TABLES = new Set([
 	'account',
 	'invitation',
@@ -360,7 +523,9 @@ const COLUMN_TYPE_PINS: Array<[string, string, string]> = [
 	['posts', 'allow_comment', 'boolean'],
 	['posts', 'writing_origin', 'text'],
 	['posts', 'provenance_source', 'text'],
-	['posts', 'ai_help', 'ARRAY']
+	['posts', 'ai_help', 'ARRAY'],
+	['user_profiles', 'header_label', 'text'],
+	['comments', 'region_code', 'text']
 ];
 
 /** Official generated-table exception for the FK leading-index rule. */
@@ -576,7 +741,7 @@ async function dbChecks(): Promise<void> {
 			await sql`select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`;
 		sameSets(
 			tableRows.map((r) => r.table_name),
-			EXPECTED_TABLE_NAMES,
+			[...EXPECTED_TABLE_NAMES, ...MIGRATION_TABLE_NAMES],
 			'A1 table set'
 		);
 
@@ -594,13 +759,13 @@ async function dbChecks(): Promise<void> {
 		}
 
 		// A3 - column sets for hand-written tables.
-		for (const [table, expected] of tableColumns) {
+		for (const [table, expected] of new Map([...tableColumns, ...MIGRATION_TABLE_COLUMNS])) {
 			if (OFFICIAL_GENERATED_TABLES.has(table)) continue;
 			const rows =
 				await sql`select attname from pg_attribute where attrelid = ${'public.' + table}::regclass and attnum > 0 and not attisdropped order by attnum`;
 			sameSets(
 				rows.map((r) => r.attname),
-				expected,
+				[...expected, ...(MIGRATION_COLUMN_ADDITIONS.get(table) ?? [])],
 				`A3 ${table} columns`
 			);
 		}
@@ -623,12 +788,13 @@ async function dbChecks(): Promise<void> {
 		for (const def of indexDefs) {
 			expectedByTable.set(def.table, [...(expectedByTable.get(def.table) ?? []), def.name]);
 		}
-		for (const table of tableColumns.keys()) {
+		for (const table of [...tableColumns.keys(), ...MIGRATION_TABLE_NAMES]) {
 			const pkIndex = tablePkIndex.get(table);
 			const expected = [
 				...(expectedByTable.get(table) ?? []),
 				...(pkIndex ? [pkIndex] : []),
-				...(tableInlineUniques.get(table) ?? [])
+				...(tableInlineUniques.get(table) ?? []),
+				...(MIGRATION_INDEXES.get(table) ?? [])
 			];
 			const actual = dbIdx.filter((r) => r.tablename === table).map((r) => r.indexname);
 			sameSets(actual, expected, `A4 ${table} indexes`);
@@ -641,7 +807,7 @@ async function dbChecks(): Promise<void> {
 		}
 
 		// A5 - CHECK constraint names per hand table.
-		for (const [table, expected] of tableChecks) {
+		for (const [table, expected] of new Map([...tableChecks, ...MIGRATION_CHECKS])) {
 			if (OFFICIAL_GENERATED_TABLES.has(table)) continue;
 			const rows =
 				await sql`select conname from pg_constraint where conrelid = ${'public.' + table}::regclass and contype = 'c'`;
@@ -669,9 +835,10 @@ async function dbChecks(): Promise<void> {
 					`${r.conname}|${r.child.replace('public.', '').replaceAll('"', '')}|${r.ref.replace('public.', '').replaceAll('"', '')}|${actionMap[r.confdeltype] ?? r.confdeltype}`
 			)
 			.sort();
-		const expectedFkTuples = fks
-			.map((f) => `${f.name}|${f.table}|${f.refTable}|${f.onDelete}`)
-			.sort();
+		const expectedFkTuples = [
+			...fks.map((f) => `${f.name}|${f.table}|${f.refTable}|${f.onDelete}`),
+			...MIGRATION_FKS
+		].sort();
 		sameSets(dbFkTuples, expectedFkTuples, 'A6 foreign keys');
 
 		// A7 - FK leading-index rule (single registered exception: official table).
@@ -679,7 +846,7 @@ async function dbChecks(): Promise<void> {
 			await sql`select c.conrelid::regclass::text || '.' || c.conname as fk from pg_constraint c where c.contype = 'f' and c.connamespace = 'public'::regnamespace and cardinality(c.conkey) = 1 and not exists (select 1 from pg_index i where i.indrelid = c.conrelid and i.indkey[0] = c.conkey[1])`;
 		sameSets(
 			gaps.map((r) => r.fk),
-			[FK_INDEX_EXCEPTION],
+			[FK_INDEX_EXCEPTION, ...MIGRATION_FK_INDEX_GAPS],
 			'A7 FK leading-index gaps'
 		);
 

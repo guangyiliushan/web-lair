@@ -64,7 +64,7 @@ describe('options registry (AI-1.1)', () => {
 		});
 	});
 
-	it('ships exactly the planned keys (storage: media.purge; links: friends.* / site.info; micro: ai.translation; projects: projects.sync_targets; realtime: presence.*)', () => {
+	it('ships exactly the planned keys (storage: media.purge + provider control plane; links: friends.* / site.info; micro: ai.translation; projects: projects.sync_targets; realtime: presence.*)', () => {
 		expect([...optionKeys].sort()).toEqual(
 			[
 				'ai.assignments',
@@ -75,22 +75,29 @@ describe('options registry (AI-1.1)', () => {
 				'ai.styleGuide',
 				'ai.summary',
 				'ai.translation',
+				'comments.enabled',
 				'comments.moderation',
+				'comments.privacy',
 				'friends.apply',
 				'friends.checks',
 				'friends.policy',
 				'media.purge',
 				'notes.gate',
+				'payments.enabled',
 				'presence.enabled',
 				'presence.readerDots',
 				'presence.readerView',
 				'projects.sync_targets',
 				'site.default_lang',
+				'site.icon',
 				'site.info',
 				'site.languages',
-				'site.owner',
 				'site.ownerStatus',
 				'site.timezone',
+				'storage.active',
+				'storage.migration',
+				'storage.provider',
+				'storage.status',
 				'translations.retention'
 			].sort()
 		);
@@ -102,6 +109,16 @@ describe('options registry (AI-1.1)', () => {
 		await expect(getOption('site.timezone')).resolves.toBe('UTC');
 		await expect(getOption('site.languages')).resolves.toEqual({
 			enabled: ['en', 'zh-cn', 'ja']
+		});
+		// W6.1/W6.2: the shipped defaults are part of the contract (comments
+		// open by default; privacy collection off until the owner opts in).
+		await expect(getOption('comments.enabled')).resolves.toBe(true);
+		await expect(getOption('comments.privacy')).resolves.toMatchObject({
+			enabled: false,
+			collectCountry: false,
+			showCountry: false,
+			retentionDays: 90,
+			blockedCidrs: []
 		});
 		await expect(getOption('comments.moderation')).resolves.toMatchObject({
 			enabled: false,
@@ -271,8 +288,7 @@ describe('options registry (AI-1.1)', () => {
 		state.selectRows = [[], [], [], []];
 		await expect(getOption('friends.apply')).resolves.toEqual({
 			enabled: true,
-			allowSubPath: false,
-			internalizeAvatars: false
+			allowSubPath: false
 		});
 		await expect(getOption('friends.checks')).resolves.toEqual({
 			enabled: true,
@@ -297,8 +313,7 @@ describe('options registry (AI-1.1)', () => {
 		});
 	});
 
-	it('ships the header owner badge and activity ticket defaults', async () => {
-		await expect(getOption('site.owner')).resolves.toEqual({ name: 'Lair', avatar: '' });
+	it('ships the activity ticket default (site.owner retired)', async () => {
 		await expect(getOption('site.ownerStatus')).resolves.toEqual({
 			enabled: true,
 			kind: 'coding',
@@ -454,6 +469,115 @@ describe('options registry (AI-1.1)', () => {
 				{ provider: 'github', account: 'guang' },
 				{ provider: 'gitlab', account: 'guang' }
 			]
+		});
+	});
+
+	it('ships the site.icon key with the bundled-icon fallback (S3)', async () => {
+		state.selectRows = [[]];
+		await expect(getOption('site.icon')).resolves.toEqual({ url: '', version: 0 });
+	});
+
+	it('enforces the site.info name/description bounds and the avatar scheme (S1/S5)', async () => {
+		await expect(setOption('site.info', { name: '', description: '', avatar: '' })).rejects.toThrow(
+			/站点名称不能为空/
+		);
+		await expect(
+			setOption('site.info', { name: '   ', description: '', avatar: '' })
+		).rejects.toThrow(/站点名称不能为空/);
+		await expect(
+			setOption('site.info', { name: 'x'.repeat(81), description: '', avatar: '' })
+		).rejects.toThrow(/80/);
+		await expect(
+			setOption('site.info', { name: 'Site', description: 'a'.repeat(301), avatar: '' })
+		).rejects.toThrow(/300/);
+		await expect(
+			setOption('site.info', { name: 'Site', description: 'two\nlines', avatar: '' })
+		).rejects.toThrow(/单行/);
+		await expect(
+			setOption('site.info', { name: 'Site', description: '', avatar: 'http://example.com/a.png' })
+		).rejects.toThrow(/https/);
+		// The friend-card avatar is https-only; `/i/` is the favicon's allowance.
+		await expect(
+			setOption('site.info', { name: 'Site', description: '', avatar: '/i/a.png' })
+		).rejects.toThrow(/https/);
+		await expect(
+			setOption('site.info', { name: 'Site', description: '', avatar: 'javascript:alert(1)' })
+		).rejects.toThrow(/https/);
+		// URLs are bounded like every other stored string (2048, ASVS-style).
+		await expect(
+			setOption('site.info', {
+				name: 'Site',
+				description: '',
+				avatar: `https://x/${'a'.repeat(2048)}`
+			})
+		).rejects.toThrow(/2048/);
+		expect(state.insertCalls).toHaveLength(0);
+
+		await setOption('site.info', {
+			name: '  Web Lair  ',
+			description: ' A short blurb. ',
+			avatar: 'https://cdn.example/a.png'
+		});
+		expect(state.insertCalls[0].values).toEqual({
+			name: 'site.info',
+			value: {
+				name: 'Web Lair',
+				description: 'A short blurb.',
+				avatar: 'https://cdn.example/a.png'
+			}
+		});
+	});
+
+	it('accepts a 80-char name and a 300-char single-line description (positive bounds)', async () => {
+		await setOption('site.info', {
+			name: 'n'.repeat(80),
+			description: 'd'.repeat(300),
+			avatar: ''
+		});
+		expect(state.insertCalls).toHaveLength(1);
+	});
+
+	it('stores site.icon only as https or same-origin /i/ with an integer version', async () => {
+		for (const url of [
+			'http://example.com/a.ico',
+			'javascript:alert(1)',
+			'data:image/svg+xml;base64,AAAA'
+		]) {
+			await expect(setOption('site.icon', { url, version: 1 })).rejects.toThrow(/图标/);
+		}
+		await expect(setOption('site.icon', { url: '/i/a.ico', version: -1 })).rejects.toThrow();
+		await expect(setOption('site.icon', { url: '/i/a.ico', version: 1.5 })).rejects.toThrow();
+		await expect(
+			setOption('site.icon', { url: `https://x/${'a'.repeat(2048)}`, version: 1 })
+		).rejects.toThrow(/2048/);
+		expect(state.insertCalls).toHaveLength(0);
+
+		await setOption('site.icon', { url: 'https://cdn.example/favicon.svg', version: 2 });
+		expect(state.insertCalls[0].values).toEqual({
+			name: 'site.icon',
+			value: { url: 'https://cdn.example/favicon.svg', version: 2 }
+		});
+		await setOption('site.icon', { url: '/i/favicon.ico', version: 3 });
+		expect(state.insertCalls[1].values).toEqual({
+			name: 'site.icon',
+			value: { url: '/i/favicon.ico', version: 3 }
+		});
+	});
+
+	it('rejects empty or duplicate site.languages and stores the canonical order (S7)', async () => {
+		await expect(setOption('site.languages', { enabled: [] })).rejects.toThrow(/至少保留一种语言/);
+		await expect(setOption('site.languages', { enabled: ['en', 'en'] })).rejects.toThrow(
+			/同一语言只能启用一次/
+		);
+		await expect(setOption('site.languages', { enabled: ['fr'] as never })).rejects.toThrow();
+		expect(state.insertCalls).toHaveLength(0);
+
+		// Enabled languages are stored in the catalog order (en, zh-cn, ja)
+		// regardless of the checkbox order the browser posts.
+		await setOption('site.languages', { enabled: ['ja', 'en'] });
+		expect(state.insertCalls[0].values).toEqual({
+			name: 'site.languages',
+			value: { enabled: ['en', 'ja'] }
 		});
 	});
 });

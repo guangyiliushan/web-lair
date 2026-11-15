@@ -15,7 +15,9 @@ import { recordActivity } from '$lib/server/audit';
 import { getOption, setOption } from '$lib/server/config/options-registry';
 import { toConsoleMessages, type ConsoleMessageRow } from '$lib/components/admin/ai/console-view';
 import { runAgentChat } from '$lib/server/ai/agent/run';
+import { agentSettingTier } from '$lib/server/ai/agent/setting-tiers';
 import { chatErrorMessage } from '$lib/server/ai/chat-error';
+import { resolveProviderKey, type SecretDb } from '$lib/server/secrets/resolver';
 import { aiReadiness, type ReadinessProvider } from '$lib/server/services/ai-readiness';
 import { m } from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
@@ -258,6 +260,10 @@ export const actions: Actions = {
 			const result = await runAgentChat({
 				db: db as never,
 				getEnv: (name) => env[name],
+				resolveKey: (provider) =>
+					resolveProviderKey(db as unknown as SecretDb, provider, {
+						getEnv: (name) => env[name]
+					}),
 				conversationId,
 				actorId: userId,
 				actorRole: role,
@@ -358,6 +364,14 @@ export const actions: Actions = {
 				.set({ status: 'expired', resolvedAt: new Date() })
 				.where(eq(aiAgentProposals.id, id));
 			return fail(410, { message: m.admin_ai_chat_error({ message: 'expired' }) });
+		}
+		// Read-tier keys (site.languages / site.default_lang) never get new
+		// proposals; a stale pending row from before that tier change is
+		// refused here too instead of being half-applied (W5.4).
+		if (agentSettingTier(proposal.settingKey) === 'read') {
+			return fail(400, {
+				message: m.admin_ai_chat_error({ message: 'read-only setting' })
+			});
 		}
 		const hash = createHash('sha256')
 			.update(

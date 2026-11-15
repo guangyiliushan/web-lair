@@ -4,16 +4,49 @@ import { options } from '../db/config/index.ts';
 import { AI_FUNCTIONS } from '../../utils/ai-meta.ts';
 import { PROJECT_SYNC_PROVIDERS } from '../../utils/project-meta.ts';
 import { isValidIanaTimeZone } from '../../utils/timezone.ts';
+import { isValidCidr } from '../../utils/cidr.ts';
 import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '../pg-timezone.ts';
 import { m } from '../../paraglide/messages.js';
+import { OWNER_STATUS_DEFAULT, OWNER_STATUS_KINDS } from '../../config/owner-status.ts';
 import {
-	OWNER_STATUS_DEFAULT,
-	OWNER_STATUS_KINDS,
-	SITE_OWNER_DEFAULT
-} from '../../config/owner-status.ts';
+	DEFAULT_PROVIDER_CONFIG,
+	DEFAULT_STORAGE_ACTIVE,
+	DEFAULT_STORAGE_MIGRATION,
+	DEFAULT_STORAGE_STATUS,
+	providerConfigSchema,
+	storageActiveSchema,
+	storageMigrationSchema,
+	storageStatusSchema
+} from '../storage/provider.ts';
 
 /** Site languages (same set as the posts `lang` CHECK, ledger §9.16). */
 export const OPTION_LANGS = ['en', 'zh-cn', 'ja'] as const;
+
+/**
+ * Public site asset URLs (decision register §3A, S3/S5): empty means "unset".
+ * `site.info.avatar` is https-only - the friend card renderer runs the same
+ * URL through `safeHttpsUrl`, which drops everything else. The favicon may
+ * additionally point at the same-origin `/i/` media proxy.
+ */
+function isHttpsUrl(value: string): boolean {
+	if (!value) return false;
+	try {
+		return new URL(value).protocol === 'https:';
+	} catch {
+		return false;
+	}
+}
+
+function isSiteIconUrl(value: string): boolean {
+	if (value === '') return true;
+	if (value.startsWith('/i/')) return true;
+	return isHttpsUrl(value);
+}
+
+/** Descriptions are single-line: a stray newline breaks card/llms layout. */
+function isSingleLine(value: string): boolean {
+	return !/[\r\n]/.test(value);
+}
 
 interface RegistryEntry {
 	schema: z.ZodType;
@@ -49,7 +82,19 @@ async function defaultExecutor(): Promise<RegistryExecutor> {
  */
 export const optionRegistry = {
 	'site.languages': {
-		schema: z.object({ enabled: z.array(z.enum(OPTION_LANGS)) }),
+		// S7 (decision register §3A): at least one language, no duplicates and
+		// a canonical order. `default_lang ∈ enabled` is a cross-field
+		// invariant the Site page's paired write enforces - a single-key
+		// schema cannot see both options.
+		schema: z.object({
+			enabled: z
+				.array(z.enum(OPTION_LANGS, { error: () => m.admin_option_err_languages_invalid() }))
+				.min(1, { error: () => m.admin_option_err_languages_empty() })
+				.refine((langs) => new Set(langs).size === langs.length, {
+					error: () => m.admin_option_err_languages_duplicate()
+				})
+				.transform((langs) => OPTION_LANGS.filter((lang) => langs.includes(lang)))
+		}),
 		default: { enabled: [...OPTION_LANGS] }
 	},
 	'site.default_lang': {
@@ -72,7 +117,13 @@ export const optionRegistry = {
 		// cookie (token crypto lives in services/note-gate.ts). Days only.
 		// The editor never writes this yet - TTL currently changes only
 		// through code or a deliberate `setOption` (no runtime writer).
-		schema: z.object({ ttlDays: z.number().int().min(1).max(365) }),
+		schema: z.object({
+			ttlDays: z
+				.number({ error: () => m.admin_settings_content_notes_ttl_hint() })
+				.int({ error: () => m.admin_settings_content_notes_ttl_hint() })
+				.min(1, { error: () => m.admin_settings_content_notes_ttl_hint() })
+				.max(365, { error: () => m.admin_settings_content_notes_ttl_hint() })
+		}),
 		default: { ttlDays: 30 }
 	},
 	'ai.assignments': {
@@ -181,6 +232,50 @@ export const optionRegistry = {
 		// 9309 §1), never access control.
 		default: { answerEngine: true, training: true }
 	},
+	'comments.enabled': {
+		// W6.1 (C1): site-wide switch for NEW comments. Set false and the form
+		// disappears and every submit path rejects; existing approved rows stay
+		// visible (hiding them would be a separate `comments.visible`). A post
+		// / note `allow_comment` can only narrow this, never widen it.
+		schema: z.boolean(),
+		default: true
+	},
+	'payments.enabled': {
+		// W6.8 (C6): contract-only flag, deliberately without a consumer.
+		// Paid/member content is NOT implemented in M4: no table, no route, no
+		// settings UI reads or writes this key, and paid/member access modes do
+		// not exist. It is registered so the default is explicit and testable;
+		// flipping it on changes nothing until the trigger in the decision
+		// register §3C.4 (provider + tax/terms/refunds + entitlement model +
+		// SEO/leak-surface tests) opens a future schema window.
+		schema: z.boolean(),
+		default: false
+	},
+	'comments.privacy': {
+		// W6.2 (C2/C4/C5): request-time IP handling for comments. Off by
+		// default; when off no GeoIP lookup, no CIDR match and no country storage
+		// happen (the per-IP rate bucket in W6.10 still runs). When
+		// on, the IP is matched against blockedCidrs and used for the per-IP
+		// limit only - the `comments.ip` column stays null. Country/region are
+		// stored only with collectCountry (edge header provider required) and
+		// cleared by the retention job after retentionDays.
+		schema: z.object({
+			enabled: z.boolean(),
+			collectCountry: z.boolean(),
+			showCountry: z.boolean(),
+			retentionDays: z.number().int().min(1).max(3650),
+			blockedCidrs: z
+				.array(z.string().refine(isValidCidr, { error: () => m.admin_option_err_cidr() }))
+				.max(200)
+		}),
+		default: {
+			enabled: false,
+			collectCountry: false,
+			showCountry: false,
+			retentionDays: 90,
+			blockedCidrs: []
+		}
+	},
 	'comments.moderation': {
 		schema: z.object({
 			enabled: z.boolean(),
@@ -220,6 +315,30 @@ export const optionRegistry = {
 			thresholds: { allow: 0.9, block: 0.95 }
 		}
 	},
+	'storage.provider': {
+		// W7.2 (ST1/ST4/ST8): the SAVED candidate. Saving never changes the live
+		// target - activation runs through `storage:migrate --cutover` (Q4/Q13).
+		schema: providerConfigSchema,
+		default: DEFAULT_PROVIDER_CONFIG
+	},
+	'storage.active': {
+		// The live target plus its rollback slot. Written only by an activation
+		// path (empty-bucket activation or the cutover/rollback CLI).
+		schema: storageActiveSchema,
+		default: DEFAULT_STORAGE_ACTIVE
+	},
+	'storage.status': {
+		// Last connection probe (W7.3) and the bucket capabilities the purge
+		// guard needs (W7.5). Sanitized: no URL, key or driver message.
+		schema: storageStatusSchema,
+		default: DEFAULT_STORAGE_STATUS
+	},
+	'storage.migration': {
+		// W7.4: CLI migration bookkeeping. `copying` freezes uploads and makes
+		// purge refuse; a stuck state needs `storage:migrate --reset`.
+		schema: storageMigrationSchema,
+		default: DEFAULT_STORAGE_MIGRATION
+	},
 	'media.purge': {
 		schema: z.object({
 			pendingDays: z
@@ -240,14 +359,13 @@ export const optionRegistry = {
 		default: { pendingDays: 7, detachedDays: 30 }
 	},
 	'friends.apply': {
+		// W6.4 (C8): applications open; home-page URLs only (no sub paths).
+		// `internalizeAvatars` was removed - it had zero consumers (register).
 		schema: z.object({
 			enabled: z.boolean(),
-			allowSubPath: z.boolean(),
-			internalizeAvatars: z.boolean()
+			allowSubPath: z.boolean()
 		}),
-		// Links plan §2.6: applications open; home-page URLs only (no sub
-		// paths); avatars stay hot-linked (localisation is a registered item).
-		default: { enabled: true, allowSubPath: false, internalizeAvatars: false }
+		default: { enabled: true, allowSubPath: false }
 	},
 	'friends.checks': {
 		schema: z.object({
@@ -329,17 +447,48 @@ export const optionRegistry = {
 		}
 	},
 	'site.info': {
-		schema: z.object({ name: z.string(), description: z.string(), avatar: z.string() }),
+		// `name` feeds friend cards, llms.txt, the web manifest and
+		// `og:site_name` (decision S4); `description` is the friend-card
+		// blurb; `avatar` is the optional card avatar (S5). All three are
+		// edited on Settings → Site.
+		schema: z.object({
+			name: z
+				.string()
+				.trim()
+				.min(1, { error: () => m.admin_option_err_name_required() })
+				.max(80, { error: () => m.admin_option_err_name_too_long() }),
+			description: z
+				.string()
+				.trim()
+				.max(300, { error: () => m.admin_option_err_description_too_long() })
+				.refine(isSingleLine, { error: () => m.admin_option_err_description_multiline() }),
+			avatar: z
+				.string()
+				.trim()
+				.max(2048, { error: () => m.admin_option_err_url_too_long() })
+				.refine((value) => value === '' || isHttpsUrl(value), {
+					error: () => m.admin_option_err_avatar_url()
+				})
+		}),
 		// Public "our link info" block on /friends (plan §2.6).
 		default: { name: 'Web Lair', description: '', avatar: '' }
 	},
-	'site.owner': {
-		// Public owner identity for the header badge (replaces the placeholder
-		// logo block): every visitor sees the same name/avatar, so this never
-		// reads the session — the account control on the right owns that.
-		schema: z.object({ name: z.string().min(1), avatar: z.string() }),
-		default: SITE_OWNER_DEFAULT
+	'site.icon': {
+		// Favicon (decision S3): empty url = the bundled static asset; `version`
+		// is bumped by the Site page on every save so the root layout's
+		// `?v=` cache bust changes even when the URL does not.
+		schema: z.object({
+			url: z
+				.string()
+				.trim()
+				.max(2048, { error: () => m.admin_option_err_url_too_long() })
+				.refine(isSiteIconUrl, { error: () => m.admin_option_err_icon_url() }),
+			version: z.number().int().nonnegative()
+		}),
+		default: { url: '', version: 0 }
 	},
+	// `site.owner` is retired (M4 foundation, O-C2): the header reads
+	// site_identity -> user_profiles -> user. Do not reintroduce a projection.
 	'site.ownerStatus': {
 		// Owner activity ticket next to the badge (static stage): one datum —
 		// the app/site name (capped at 10 chars in the UI) plus its icon.
@@ -446,6 +595,13 @@ export function validateOption<K extends OptionKey>(key: K, value: unknown): Opt
 	return entry.schema.parse(value) as OptionValue<K>;
 }
 
+/**
+ * A registry write rejected by a database-backed check (the PostgreSQL
+ * zoneinfo membership gate). Route actions map it to a 400 instead of a 500;
+ * a `ZodError` covers the schema-level rejections.
+ */
+export class OptionWriteError extends Error {}
+
 /** Validate and upsert a value. Throws on invalid input or unknown keys. */
 export async function setOption<K extends OptionKey>(
 	key: K,
@@ -465,7 +621,7 @@ export async function setOption<K extends OptionKey>(
 			executor as unknown as PgTimeZoneExecutor | undefined
 		);
 		if (!accepted) {
-			throw new Error(m.admin_option_err_tz_pg_rejected({ tz: String(parsed) }));
+			throw new OptionWriteError(m.admin_option_err_tz_pg_rejected({ tz: String(parsed) }));
 		}
 	}
 	const database = executor ?? (await defaultExecutor());

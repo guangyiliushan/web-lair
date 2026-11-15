@@ -28,12 +28,17 @@
 		<MarkdownRenderer html={data.html} prose />
 	</div>
 
-	<CommentsSection
-		targetType="page"
-		threads={data.discussion}
-		canComment={data.viewer.canComment}
-		emailVerified={data.viewer.emailVerified}
-		loginUrl={data.viewer.loginUrl}
-		form={form ?? null}
-	/>
+	{#if data.discussion}
+		<CommentsSection
+			targetType="page"
+			threads={data.discussion}
+			canComment={data.viewer.canComment}
+			emailVerified={data.viewer.emailVerified}
+			loginUrl={data.viewer.loginUrl}
+			form={form ?? null}
+			privacyNotice={data.viewer.privacyNotice}
+			countryOptIn={data.viewer.countryOptIn}
+			commentsClosed={data.viewer.commentsClosed}
+		/>
+	{/if}
 </article>

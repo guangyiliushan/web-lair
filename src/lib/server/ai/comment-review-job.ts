@@ -3,6 +3,7 @@ import { comments } from '../db/content/comment.schema.ts';
 import { commentModerationEvents } from '../db/content/comment-moderation-event.schema.ts';
 import { getOption } from '../config/options-registry.ts';
 import { sanitizeErrorText } from '../jobs/error-text.ts';
+import { resolveProviderKey, type SecretDb } from '../secrets/resolver.ts';
 import { resolveProvider } from './providers.ts';
 import { reviewComment } from './moderate.ts';
 import type { AiDeps } from './types.ts';
@@ -67,6 +68,10 @@ export async function runCommentReviewJob(ctx: JobContext): Promise<void> {
 				{
 					db: ctx.db as unknown as AiDeps['db'],
 					getEnv: (name) => process.env[name],
+					resolveKey: (provider) =>
+						resolveProviderKey(ctx.db as unknown as SecretDb, provider, {
+							getEnv: (name) => process.env[name]
+						}),
 					log: (message) => ctx.logger.info(message)
 				}
 			);

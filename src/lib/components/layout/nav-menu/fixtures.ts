@@ -17,27 +17,17 @@ export const homeMenu: NavMenuConfig = {
 	columns: [
 		{
 			titleKey: 'nav_home_quick_links',
-			items: [
-				{ labelKey: 'nav_home_rss', href: '/rss.xml', iconName: 'messages' },
-				{
-					labelKey: 'nav_home_github',
-					href: 'https://github.com/guangyiliushan',
-					iconName: 'code'
-				},
-				{
-					labelKey: 'nav_home_twitter',
-					href: 'https://twitter.com/guangyiliushan',
-					iconName: 'sparkles'
-				},
-				{
-					labelKey: 'nav_home_email',
-					href: 'mailto:guangyiliushan@example.com',
-					iconName: 'feather'
-				}
-			]
+			// Socials/RSS live in `ownerLinks`; the panel rail is the only copy.
+			items: []
 		}
 	]
 };
+
+/** Owner social links fixture; RSS is appended by SocialRail. */
+export const ownerLinks = [
+	{ platform: 'github', href: 'https://github.com/example' },
+	{ platform: 'email', href: 'mailto:me@example.com' }
+] as const;
 
 /** Defaults → extras → quick links, the order `pages-p1b` asserts on. */
 export const homeData: NavMenuData = {

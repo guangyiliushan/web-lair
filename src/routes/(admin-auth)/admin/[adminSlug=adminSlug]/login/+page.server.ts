@@ -6,8 +6,14 @@ import { auth } from '$lib/server/auth';
 import { ADMIN_BASE_PATH, ADMIN_HOME_PATH, assertAdminSlug } from '$lib/server/config/admin';
 import { getUserRole, hasAnyAdminCapability } from '$lib/server/authz';
 import { isSiteOrganizationMember } from '$lib/server/auth/site-organization';
-import { pruneOtherSessions } from '$lib/server/auth/sessions';
 import { safeRedirect } from '$lib/server/safe-redirect';
+import { getCache } from '$lib/server/cache';
+import { rateLimitStrict } from '$lib/server/cache/store';
+import { credentialBucketKey, requestAddress } from '$lib/server/security/request-address';
+import { clientAddressKey } from '$lib/utils/cidr';
+
+/** Admin credentials endpoint budget (W6.10): 10 attempts / 15 min / IP. */
+const ADMIN_LOGIN_RATE_LIMIT = { limit: 10, windowSeconds: 15 * 60 } as const;
 
 export const load: PageServerLoad = async (event) => {
 	assertAdminSlug(event.params.adminSlug);
@@ -31,6 +37,21 @@ export const actions: Actions = {
 		const config = assertAdminSlug(event.params.adminSlug);
 		const formData = await event.request.formData();
 		const email = formData.get('email')?.toString().trim().toLowerCase() ?? '';
+		// W6.10 / review P1: admin credentials bucket keyed on the /64 address
+		// AND a hash of the email, so an office NAT cannot lock out the owner.
+		const address = clientAddressKey(requestAddress(event.getClientAddress));
+		const rate = await rateLimitStrict(
+			getCache(),
+			credentialBucketKey('admin-login', address, email),
+			ADMIN_LOGIN_RATE_LIMIT.limit,
+			ADMIN_LOGIN_RATE_LIMIT.windowSeconds
+		);
+		if (!rate.allowed) {
+			event.setHeaders({ 'retry-after': String(ADMIN_LOGIN_RATE_LIMIT.windowSeconds) });
+			return fail(rate.unavailable ? 503 : 429, {
+				message: rate.unavailable ? m.auth_err_unavailable() : m.auth_login_err_rate()
+			});
+		}
 		const password = formData.get('password')?.toString() ?? '';
 		const redirectTo = safeRedirect(formData.get('redirectTo')?.toString(), ADMIN_HOME_PATH, {
 			allowedPrefix: ADMIN_BASE_PATH
@@ -75,7 +96,10 @@ export const actions: Actions = {
 					return fail(500, { message: m.admin_auth_err_session_failed(), redirectTo });
 				}
 
-				await pruneOtherSessions(result.user.id, result.token);
+				// AC2 (settings-truth W8.2): email sign-in no longer prunes other
+				// sessions. Every admin-capable sign-in is listed on the account
+				// page and can be revoked there; a new sign-in must not silently
+				// sign out the owner's other browser.
 			}
 		} catch (caught) {
 			if (caught instanceof APIError) {

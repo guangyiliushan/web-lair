@@ -1,64 +1,53 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { m } from '$lib/paraglide/messages';
-	import { Input } from '$lib/components/ui/input';
+	import { Badge } from '$lib/components/ui/badge';
+	import { SettingsStatusList, SettingsStatusRow } from '$lib/components/admin/settings';
 
 	let { data }: PageProps = $props();
-	let s = $derived(data.settings);
 </script>
 
 <svelte:head>
-	<title>{m.admin_settings_integrations()} - Lair Admin</title>
+	<title>{m.admin_settings_integrations_section()} - Lair Admin</title>
 </svelte:head>
 
-<div class="space-y-10">
-	<section class="space-y-4">
-		<header>
-			<h2 class="inline-flex items-center gap-2 text-base font-medium">
-				{m.admin_settings_integrations_section()}
-			</h2>
-		</header>
-		<div class="space-y-5">
-			{#each [['GitHub', 'github', true, m.admin_settings_integrations_token_pat(), m.admin_settings_integrations_github_desc()], ['TMDB', 'tmdb', true, m.admin_settings_integrations_token_api_key(), ''], ['Bangumi', 'bangumi', true, m.admin_settings_integrations_token_access(), ''], ['NeoDB', 'neodb', false, '', ''], ['Arxiv', 'arxiv', false, '', ''], ['Leetcode', 'leetcode', false, '', ''], ['NetEase Cloud Music', 'neteaseMusic', false, '', ''], ['QQ Music', 'qqMusic', false, '', '']] as [label, id, hasToken, tokenLabel, tokenDesc] (id)}
-				{@const integration = s.integrations[id as keyof typeof s.integrations]}
-				<section class="space-y-3">
-					<h4 class="text-xs font-semibold text-muted-foreground uppercase">{label}</h4>
-					<div class="space-y-5">
-						<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
-							<div class="md:pt-1.5">
-								<div class="text-sm">{m.admin_settings_integrations_enabled()}</div>
-							</div>
-							<div class="md:flex md:justify-end md:pt-1">
-								<button
-									type="button"
-									role="switch"
-									aria-checked={integration.enabled}
-									aria-label={m.admin_settings_integrations_toggle({ name: label })}
-									class="relative inline-flex h-5 min-w-9 items-center rounded-full px-0.5 outline-hidden transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/15"
-									class:bg-accent={integration.enabled}
-									class:bg-surface-inset={!integration.enabled}
-								>
-									<span
-										class="block size-4 rounded-full bg-white shadow-xs transition-transform"
-										class:translate-x-4={integration.enabled}
-									></span>
-								</button>
-							</div>
-						</div>
-						{#if hasToken}
-							<div class="grid items-start gap-x-8 gap-y-2 md:grid-cols-2">
-								<div class="md:pt-1.5">
-									<div class="text-sm">{tokenLabel}</div>
-									{#if tokenDesc}<p class="mt-1 text-xs leading-5 text-muted-foreground">
-											{tokenDesc}
-										</p>{/if}
-								</div>
-								<div class="min-w-0"><Input type="password" /></div>
-							</div>
-						{/if}
-					</div>
-				</section>
-			{/each}
-		</div>
-	</section>
+<div class="space-y-8">
+	<div class="flex flex-wrap items-center gap-2">
+		<Badge variant="secondary">{m.admin_settings_common_read_only()}</Badge>
+	</div>
+
+	<!-- GitHub rich cards: the only provider with a real consumer (GITHUB_TOKEN). -->
+	<SettingsStatusList
+		title={m.admin_settings_integrations_rich_group()}
+		description={m.admin_settings_integrations_rich_hint()}
+	>
+		<SettingsStatusRow
+			label={m.admin_settings_integrations_github()}
+			hint={m.admin_settings_integrations_github_hint()}
+			badge={data.githubConfigured
+				? m.admin_settings_common_configured()
+				: m.admin_settings_common_not_configured()}
+		/>
+	</SettingsStatusList>
+
+	<!-- Future rich cards: no key consumer exists, so no field is rendered. -->
+	<SettingsStatusList
+		title={m.admin_settings_integrations_planned_group()}
+		description={m.admin_settings_integrations_planned_hint()}
+	>
+		<SettingsStatusRow label="TMDB" badge={m.admin_settings_integrations_planned()} />
+		<SettingsStatusRow label="Bangumi" badge={m.admin_settings_integrations_planned()} />
+		<SettingsStatusRow label="NeoDB" badge={m.admin_settings_integrations_planned()} />
+	</SettingsStatusList>
+
+	<!-- Static embeds: rendered from the public URL, nothing to configure. -->
+	<SettingsStatusList
+		title={m.admin_settings_integrations_static_group()}
+		description={m.admin_settings_integrations_static_hint()}
+	>
+		<SettingsStatusRow label="arXiv" badge={m.admin_settings_integrations_static()} />
+		<SettingsStatusRow label="LeetCode" badge={m.admin_settings_integrations_static()} />
+		<SettingsStatusRow label="NetEase" badge={m.admin_settings_integrations_static()} />
+		<SettingsStatusRow label="QQ" badge={m.admin_settings_integrations_static()} />
+	</SettingsStatusList>
 </div>

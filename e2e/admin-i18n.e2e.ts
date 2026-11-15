@@ -37,6 +37,7 @@ test('admin sidebar follows the configured navigation order', async ({ page }) =
 			'/admin/dashboard',
 			'/admin/posts',
 			'/admin/notes',
+			'/admin/translations',
 			'/admin/moments',
 			'/admin/comments',
 			'/admin/pages',

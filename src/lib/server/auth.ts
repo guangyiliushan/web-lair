@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth/minimal';
+import { createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { passkey } from '@better-auth/passkey';
@@ -20,11 +21,16 @@ import {
 	userRole
 } from '$lib/server/auth/permissions';
 import { tailscaleSignIn } from '$lib/server/auth/tailscale-plugin';
+import { validateUserProvisioning } from '$lib/server/auth/admin-login-policy';
+import { hashAccountPassword, verifyAccountPassword } from '$lib/server/auth/password';
+import { enforceSessionLimit } from '$lib/server/auth/sessions';
 import { getSiteOrganizationId } from '$lib/server/auth/site-organization';
 import { env } from '$env/dynamic/private';
 import { getRequestEvent } from '$app/server';
 import { db } from '$lib/server/db';
+import { verification } from '$lib/server/db/auth.schema';
 import { userProfiles } from '$lib/server/db/account/user-profile.schema';
+import { and, eq, like } from 'drizzle-orm';
 import { sendMailOrDevLog } from '$lib/server/mail/transport';
 import {
 	isMailLang,
@@ -82,9 +88,69 @@ export const auth = betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg' }),
 
+	// W1.5 (settings-truth plan, P0-5/H2): official option, data format only.
+	// New OAuth access/refresh tokens are written as `$ba$<key-version>$<hex>`
+	// (XChaCha20-Poly1305) and decrypted on read; the account table is not
+	// touched structurally. Legacy plaintext rows keep working - better-auth
+	// only decrypts values that look encrypted - and are rewritten on the next
+	// sign-in/refresh. Key versions come from `BETTER_AUTH_SECRETS`; rollback
+	// and rotation steps live in deploy/RUNBOOK.md §3.1.
+	account: {
+		encryptOAuthTokens: true
+	},
+
+	// W1.6 (settings-truth plan, S3-B): GitHub is a reader-only method. The
+	// official `validateUserInfo` gate runs before the OAuth account/session
+	// write (and before linking a provider to an existing row), so GitHub can
+	// never mint an admin/owner session. Email + TOTP, passkey and the
+	// registered tailnet owner hand-off are separate paths.
+	user: {
+		validateUserInfo: validateUserProvisioning,
+		// W2.7/H1: `default_lang` is an application field on the user model,
+		// not a hand edit. Declaring it here is what lets `pnpm auth:schema`
+		// reproduce the column the writer-language feature reads; the value is
+		// managed by the app, so clients cannot set it through better-auth.
+		additionalFields: {
+			defaultLang: { type: 'string', required: false, input: false }
+		}
+	},
+
+	// OAuth failures (including the gate above) return to the sign-in page with
+	// `?error=<code>` instead of better-auth's built-in error page.
+	onAPIError: {
+		errorURL: '/login'
+	},
+
 	emailAndPassword: {
 		enabled: true,
 		requireEmailVerification: true,
+		// W8.8 / S1-D: official hash/verify hooks only; the account table keeps
+		// storing one opaque hash string, so `pnpm auth:schema` stays the sole
+		// schema source. Verify accepts legacy scrypt rows for a safe rollout.
+		password: {
+			hash: hashAccountPassword,
+			verify: verifyAccountPassword
+		},
+		// W1.4: a completed reset invalidates every existing session of the
+		// account (better-auth's official option), so a stolen cookie cannot
+		// outlive the password it was minted under. The reset flow has no
+		// session of its own to keep.
+		revokeSessionsOnPasswordReset: true,
+		// better-auth consumes only the presented reset token; an older mailed
+		// link would stay valid for its full hour. Sweep every outstanding token
+		// for the account. Best-effort: the password is already changed, so a
+		// cleanup failure must not turn the reset into an error.
+		onPasswordReset: async ({ user }) => {
+			try {
+				await db
+					.delete(verification)
+					.where(
+						and(eq(verification.value, user.id), like(verification.identifier, 'reset-password:%'))
+					);
+			} catch (error) {
+				console.warn('[auth] reset-token sweep failed', (error as Error).name);
+			}
+		},
 		sendResetPassword: async ({ user, url }) => {
 			await sendMailOrDevLog({ to: user.email, ...resetPasswordMail(await siteMailLang(), url) });
 		}
@@ -104,8 +170,49 @@ export const auth = betterAuth({
 	},
 
 	session: {
+		// AC8 (W8.7): keep the sliding 30-day lifetime with a 24-hour refresh
+		// and do NOT claim AAL2. AAL1 allows 30 days; AAL2 would require an
+		// absolute 24-hour cutoff (or the registered admin-only 7-day check),
+		// which is a future compliance-triggered change, not today's policy.
 		expiresIn: 30 * 24 * 60 * 60, // 30 days
 		updateAge: 24 * 60 * 60 // refresh every 24 hours when active
+	},
+
+	hooks: {
+		after: createAuthMiddleware(async (ctx) => {
+			// AC4/W8.7: passkey registration is the one credential change that
+			// happens on the client (WebAuthn), so its audit row is written here
+			// instead of a form action. The returned row is already persisted;
+			// an audit failure must not turn a successful registration into an
+			// error, so it is logged best-effort.
+			if (ctx.path !== '/passkey/verify-registration') return;
+			// The plugin returns the persisted passkey row directly (not a
+			// `{ passkey }` wrapper). Accept both shapes so an upstream change
+			// cannot silently kill the audit row.
+			const returned = ctx.context.returned as
+				| {
+						passkey?: { id?: string; userId?: string };
+						id?: string;
+						userId?: string;
+				  }
+				| undefined;
+			const passkey = returned?.passkey ?? returned;
+			if (!passkey?.id || !passkey.userId) return;
+			try {
+				const { recordActivity } = await import('$lib/server/audit');
+				await recordActivity(db, {
+					event: 'account.passkey_add',
+					actorId: passkey.userId,
+					payload: { passkey_id: passkey.id },
+					deliver: false
+				});
+			} catch (error) {
+				console.warn(
+					'[account] passkey add audit failed:',
+					error instanceof Error ? error.message : error
+				);
+			}
+		})
 	},
 
 	databaseHooks: {
@@ -141,6 +248,19 @@ export const auth = betterAuth({
 							error instanceof Error ? error.message : error
 						);
 						return;
+					}
+				},
+				// W8.8: cap concurrent sessions per account. A cleanup failure
+				// must never break sign-in; the oldest row simply survives until
+				// the next attempt (logged).
+				after: async (session) => {
+					try {
+						await enforceSessionLimit(session.userId, session.id);
+					} catch (error) {
+						console.warn(
+							'[auth] session limit cleanup failed:',
+							error instanceof Error ? error.message : error
+						);
 					}
 				}
 			}

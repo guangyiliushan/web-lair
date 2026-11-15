@@ -51,7 +51,11 @@ COPY --from=build /app/scripts/ensure-job-schedules.ts ./scripts/ensure-job-sche
 COPY --from=build /app/scripts/backfill-email-consent.ts ./scripts/backfill-email-consent.ts
 COPY --from=build /app/scripts/backfill-suppressions.ts ./scripts/backfill-suppressions.ts
 COPY --from=build /app/scripts/verify-suppression-version.ts ./scripts/verify-suppression-version.ts
+COPY --from=build /app/scripts/verify-oauth-token-storage.ts ./scripts/verify-oauth-token-storage.ts
 COPY --from=build /app/scripts/print-subscribe-token.ts ./scripts/print-subscribe-token.ts
+COPY --from=build /app/scripts/secret-alerts.ts ./scripts/secret-alerts.ts
+COPY --from=build /app/scripts/migrate-webhook-secrets.ts ./scripts/migrate-webhook-secrets.ts
+COPY --from=build /app/scripts/verify-secret-key-versions.ts ./scripts/verify-secret-key-versions.ts
 # Drain executes `node jobs/drain.ts`; that graph uses only relative .ts imports,
 # so ship the jobs tree and the server modules it pulls in.
 COPY --from=build /app/jobs ./jobs

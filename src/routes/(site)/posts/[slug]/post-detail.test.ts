@@ -9,9 +9,19 @@ import { PgDialect } from 'drizzle-orm/pg-core';
  * keeps its behaviour when no tracker matches. The db module is mocked with
  * a queue of select results (P1.1 route-test pattern).
  */
-const { dbMock, state } = vi.hoisted(() => ({
+const { dbMock, state, optionState } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
-	state: { selectResults: [] as unknown[][], whereArgs: [] as unknown[] }
+	state: { selectResults: [] as unknown[][], whereArgs: [] as unknown[] },
+	optionState: {
+		commentsEnabled: true,
+		privacy: {
+			enabled: false,
+			collectCountry: false,
+			showCountry: false,
+			retentionDays: 90,
+			blockedCidrs: [] as string[]
+		}
+	}
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
@@ -31,14 +41,27 @@ vi.mock('$lib/paraglide/messages', () => ({
 	m: new Proxy({}, { get: (_target, prop) => () => String(prop) })
 }));
 vi.mock('$lib/server/markdown', () => ({ renderMarkdownToHtml: vi.fn(async () => '') }));
+vi.mock('$lib/server/config/options-registry', () => ({
+	getOption: vi.fn(async (key: string) =>
+		key === 'comments.enabled'
+			? optionState.commentsEnabled
+			: key === 'comments.privacy'
+				? optionState.privacy
+				: undefined
+	)
+}));
 vi.mock('$lib/server/services/comment-render', () => ({
 	// Slug-fallback tests do not exercise the thread read path; the route only
 	// needs the rendered pair (comment P3b entry).
-	renderDiscussion: vi.fn(async () => ({ html: '', discussion: null }))
+	renderDiscussion: vi.fn(async () => ({
+		html: '',
+		discussion: { roots: [], orphans: [], visibleCount: 0, orphanCount: 0, truncated: false }
+	}))
 }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
 import { load } from './+page.server';
+import { renderDiscussion } from '$lib/server/services/comment-render';
 
 function makeChain(result: unknown[]) {
 	const self: unknown = new Proxy(
@@ -63,9 +86,9 @@ const dialect = new PgDialect();
 const selectMock = vi.fn(() => makeChain(state.selectResults.shift() ?? []));
 const selectDistinctMock = vi.fn(() => makeChain(state.selectResults.shift() ?? []));
 
-function makeEvent(slug = 'old-slug', search = '') {
+function makeEvent(slug = 'old-slug', search = '', user: unknown = null) {
 	return {
-		locals: { user: null },
+		locals: { user },
 		params: { slug },
 		url: new URL(`http://localhost/en/posts/${slug}${search}`)
 	} as never;
@@ -98,6 +121,7 @@ describe('posts/[slug] load — slug fallback chain', () => {
 	beforeEach(() => {
 		state.selectResults = [];
 		state.whereArgs = [];
+		optionState.commentsEnabled = true;
 		selectMock.mockClear();
 		selectDistinctMock.mockClear();
 		Object.assign(dbMock, { select: selectMock, selectDistinct: selectDistinctMock });
@@ -132,6 +156,67 @@ describe('posts/[slug] load — slug fallback chain', () => {
 			{ lang: 'en', path: '/posts/current-slug' },
 			{ lang: 'zh-cn', path: '/posts/current-slug-zh' }
 		]);
+	});
+
+	it('closes the composer but keeps existing approved comments when comments are off (W6.1)', async () => {
+		optionState.commentsEnabled = false;
+		state.selectResults = [
+			[{ ...postRow, allowComment: true }],
+			[{ lang: 'en', slug: 'current-slug' }]
+		];
+		const threads = {
+			roots: [{ id: 'r1', replies: [] }],
+			orphans: [],
+			visibleCount: 1,
+			orphanCount: 0,
+			truncated: false
+		};
+		vi.mocked(renderDiscussion).mockResolvedValueOnce({ html: '', discussion: threads as never });
+		const data = (await load(makeEvent('current-slug', '', { id: 'u1', emailVerified: true }))) as {
+			viewer: { canComment: boolean; commentsClosed: boolean };
+			discussion: unknown;
+		};
+		expect(data.viewer.canComment).toBe(false);
+		expect(data.viewer.commentsClosed).toBe(true);
+		// Existing approved rows stay readable after the switch-off (C1).
+		expect(data.discussion).toEqual(threads);
+	});
+
+	it('closes the composer and the empty thread when comments are off site-wide (W6.1)', async () => {
+		optionState.commentsEnabled = false;
+		state.selectResults = [
+			[{ ...postRow, allowComment: true }],
+			[{ lang: 'en', slug: 'current-slug' }]
+		];
+		const data = (await load(makeEvent('current-slug', '', { id: 'u1', emailVerified: true }))) as {
+			viewer: { canComment: boolean };
+			discussion: unknown;
+		};
+		expect(data.viewer.canComment).toBe(false);
+		// No comments exist and the thread is closed: no empty section either.
+		expect(data.discussion).toBeNull();
+	});
+
+	it('keeps the composer when the site and the post both allow comments (W6.1)', async () => {
+		state.selectResults = [
+			[{ ...postRow, allowComment: true }],
+			[{ lang: 'en', slug: 'current-slug' }]
+		];
+		const data = (await load(makeEvent('current-slug', '', { id: 'u1', emailVerified: true }))) as {
+			viewer: { canComment: boolean };
+		};
+		expect(data.viewer.canComment).toBe(true);
+	});
+
+	it('lets the per-post switch close comments under a global on (W6.1)', async () => {
+		state.selectResults = [
+			[{ ...postRow, allowComment: false }],
+			[{ lang: 'en', slug: 'current-slug' }]
+		];
+		const data = (await load(makeEvent('current-slug', '', { id: 'u1', emailVerified: true }))) as {
+			viewer: { canComment: boolean };
+		};
+		expect(data.viewer.canComment).toBe(false);
 	});
 
 	it('marks the group source language for the translation switcher', async () => {

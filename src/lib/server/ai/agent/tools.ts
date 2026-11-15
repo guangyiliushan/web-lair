@@ -18,6 +18,7 @@ import { aiReadiness, type ReadinessProvider } from '$lib/server/services/ai-rea
 import { renderMarkdownToHtml } from '$lib/server/markdown';
 import { loadDraftByPostId, saveDraftWork } from '$lib/server/services/post-drafts';
 import { loadNoteDraftByNoteId, saveNoteDraftWork } from '$lib/server/services/note-drafts';
+import { AGENT_SETTING_KEYS, agentSettingTier, agentWriteDenial } from './setting-tiers';
 
 /**
  * Agent v1 tool surface (AI-v3 Q1/Q3): read-only site inspection plus a
@@ -61,39 +62,7 @@ function truncate(value: string | null, max: number): string | null {
 	return value.length > max ? `${value.slice(0, max)}…` : value;
 }
 
-const SETTING_KEYS = [
-	'site.info',
-	'site.timezone',
-	'site.languages',
-	'site.default_lang',
-	'presence.enabled',
-	'notes.gate',
-	'ai.styleGuide',
-	'ai.summary',
-	'ai.translation',
-	'ai.crawl',
-	'comments.moderation',
-	'ai.assignments',
-	'ai.budget',
-	'ai.pricing'
-] as const;
-
-const SETTING_TIERS: Record<string, 'read' | 'tier1' | 'tier2'> = {
-	'site.info': 'tier1',
-	'site.timezone': 'tier1',
-	'site.languages': 'tier2',
-	'site.default_lang': 'tier2',
-	'presence.enabled': 'tier1',
-	'notes.gate': 'tier1',
-	'ai.styleGuide': 'tier1',
-	'ai.summary': 'tier1',
-	'ai.translation': 'tier1',
-	'ai.crawl': 'tier1',
-	'comments.moderation': 'tier1',
-	'ai.assignments': 'tier2',
-	'ai.budget': 'tier2',
-	'ai.pricing': 'tier2'
-};
+const SETTING_KEYS = [...AGENT_SETTING_KEYS] as const;
 
 const getSiteOverview: AgentTool = {
 	definition: {
@@ -179,7 +148,7 @@ const getSettings: AgentTool = {
 				continue;
 			}
 			out[key] = {
-				tier: SETTING_TIERS[key] ?? 'read',
+				tier: agentSettingTier(key),
 				value: await getOption(key as never)
 			};
 		}
@@ -452,10 +421,9 @@ const proposeSettingChange: AgentTool = {
 		if (!(SETTING_KEYS as readonly string[]).includes(key)) {
 			return { error: 'not_allowlisted' };
 		}
-		const tier = SETTING_TIERS[key] ?? 'read';
-		if (tier === 'tier2' && ctx.role !== 'owner') {
-			return { error: 'owner_required' };
-		}
+		const denial = agentWriteDenial(key, ctx.role);
+		if (denial) return { error: denial };
+		const tier = agentSettingTier(key);
 		const before = await getOption(key as never);
 		let after: unknown;
 		try {

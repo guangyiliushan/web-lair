@@ -35,6 +35,12 @@ export interface ActivityInput {
 	refType?: ActivityRefType;
 	refId?: string;
 	payload?: Record<string, unknown>;
+	/**
+	 * Set `false` to keep the row local (W2.5 / decision A2). Secret event
+	 * metadata must not leave the box: a key-set/rotate/clear row or a failure
+	 * burst would otherwise fan out to every subscribed webhook.
+	 */
+	deliver?: boolean;
 }
 
 export async function recordActivity(executor: AuditExecutor, input: ActivityInput): Promise<void> {
@@ -47,5 +53,25 @@ export async function recordActivity(executor: AuditExecutor, input: ActivityInp
 	});
 	// Deliveries ride the same call path: the audit row and its outbound
 	// fan-out share one fate (the caller's transaction when one is in scope).
-	await enqueueWebhookDeliveries(executor, { event: input.event, payload: input.payload });
+	if (input.deliver !== false) {
+		await enqueueWebhookDeliveries(executor, { event: input.event, payload: input.payload });
+	}
+}
+
+/**
+ * System-initiated endpoint disable (410 Gone from the receiver). Kept here,
+ * not inline in `jobs/drain.ts`: the webhook event-roster source scan treats
+ * every `event:` literal under `src/lib/server/jobs` as a subscription
+ * producer, and this is an audit-only event.
+ */
+export async function recordWebhookAutoDisable(
+	executor: AuditExecutor,
+	input: { webhookId: string; name: string }
+): Promise<void> {
+	await recordActivity(executor, {
+		event: 'webhook.auto_disable',
+		actorId: null,
+		payload: { ...input, status: 410 },
+		deliver: false
+	});
 }

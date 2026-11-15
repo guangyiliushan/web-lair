@@ -16,6 +16,14 @@ export const userProfiles = pgTable(
 			.primaryKey()
 			.references(() => user.id, { onDelete: 'cascade' }),
 		displayName: text('display_name').notNull(),
+		/**
+		 * Optional compact header label (M4 foundation, OP-2). App-level rule:
+		 * 1-6 graphemes, NULL/empty = full display name. The DB bound is a
+		 * loose sanity check only (graphemes are counted with Intl.Segmenter
+		 * at the service layer); the label never replaces the full name in
+		 * aria/title/hover.
+		 */
+		headerLabel: text('header_label'),
 		slug: text('slug').notNull().unique(),
 		bio: text('bio'),
 		avatarUrl: text('avatar_url'),
@@ -44,6 +52,10 @@ export const userProfiles = pgTable(
 		check(
 			'user_profiles_links_is_array_check',
 			sql`${table.links} is null or jsonb_typeof(${table.links}) = 'array'`
+		),
+		check(
+			'user_profiles_header_label_check',
+			sql`${table.headerLabel} is null or (char_length(${table.headerLabel}) between 1 and 64 and ${table.headerLabel} = btrim(${table.headerLabel}))`
 		)
 	]
 );

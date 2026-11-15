@@ -104,6 +104,17 @@
 	<Badge variant="secondary">{m.comment_pending_badge()}</Badge>
 {/snippet}
 
+{#snippet countryLabel(country: string | null | undefined)}
+	{#if country}
+		<span
+			class="text-xs text-muted-foreground"
+			title={m.comment_country_badge({ country })}
+			aria-label={m.comment_country_badge({ country })}
+			data-slot="comment-country">{country}</span
+		>
+	{/if}
+{/snippet}
+
 {#snippet editedMark(editedAt: Date | null)}
 	{#if editedAt}
 		<time
@@ -294,6 +305,7 @@
 			<div class="min-w-0 flex-1">
 				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
 					<span class="text-sm font-medium">{root.author ?? '?'}</span>
+					{@render countryLabel(root.country)}
 					{#if root.isOwner}{@render ownerBadge()}{/if}
 					{#if root.pin}
 						<Badge variant="secondary" class="gap-0.5">

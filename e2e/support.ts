@@ -1,5 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { expect, type APIResponse, type BrowserContext, type Page } from '@playwright/test';
+import { decryptSecret, secretAad } from '../src/lib/server/secrets/crypto';
+import { parseKeyring } from '../src/lib/server/secrets/keyring';
+import { TEST_SECRETS_KEY } from './test-keys';
 
 /**
  * Shared acceptance-test plumbing (comment P3a review follow-up): the docker
@@ -10,12 +13,47 @@ import { expect, type APIResponse, type BrowserContext, type Page } from '@playw
  */
 export const ORIGIN = 'http://localhost:4173';
 
+/** Database the specs query directly: DATABASE_URL's name, else the dev default. */
+function databaseName(): string {
+	const url = process.env.DATABASE_URL;
+	if (!url) return 'local';
+	try {
+		return new URL(url).pathname.replace(/^\//, '') || 'local';
+	} catch {
+		return 'local';
+	}
+}
+
 export function psql(sql: string): string {
 	return execFileSync(
 		'docker',
-		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', 'local', '-tAc', sql],
+		['exec', '-i', 'web-lair-db-1', 'psql', '-U', 'root', '-d', databaseName(), '-tAc', sql],
 		{ encoding: 'utf8' }
 	).trim();
+}
+
+/** The W2 preview keyring (same fixed key the playwright webServer gets). */
+const E2E_KEYRING = parseKeyring({ keys: `1:${TEST_SECRETS_KEY}`, active: '1' });
+
+/**
+ * Decrypt one webhook-signing envelope from the test DB (W2.6).
+ *
+ * The legacy `webhooks.secret` column is NULL after create/rotate; the DB
+ * truth now lives in `webhook_secrets`, bound to the row id and slot via AAD.
+ * Specs use this to compare the one-time reveal with what was actually stored
+ * without weakening the encryption.
+ */
+export function decryptedWebhookSecret(
+	webhookId: string,
+	slot: 'ciphertext' | 'previous_ciphertext' = 'ciphertext'
+): string {
+	const ciphertext = psql(`select ${slot} from webhook_secrets where webhook_id = '${webhookId}'`);
+	if (!ciphertext) throw new Error(`no ${slot} for webhook ${webhookId}`);
+	return decryptSecret(
+		ciphertext,
+		E2E_KEYRING.resolve,
+		secretAad('webhook_secrets', webhookId, slot)
+	).plaintext;
 }
 
 /**

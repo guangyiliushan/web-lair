@@ -8,16 +8,12 @@
 	import { NavigationMenu as NavigationMenuPrimitive } from 'bits-ui';
 	import * as NavigationMenu from '$lib/components/ui/navigation-menu';
 	import { cn } from '$lib/utils';
-	import { navIcon } from '$lib/config/nav-icons';
 	import { NAV_PANEL_HEIGHT } from './nav-menu/geometry';
-	import {
-		tLabel,
-		type NavChild,
-		type NavMenuConfig,
-		type NavMenuData
-	} from '$lib/config/navigation.config';
+	import { tLabel, type NavMenuConfig, type NavMenuData } from '$lib/config/navigation.config';
 	import type { Snippet } from 'svelte';
-	import type { OwnerStatus, SiteOwner } from '$lib/config/owner-status';
+	import type { SiteOwner } from '$lib/config/owner-status';
+	import type { OwnerPresence } from '$lib/config/owner-presence';
+	import type { SocialLinkLike } from '$lib/config/social';
 	import NavMenuHomeContent from './nav-menu/NavMenuHomeContent.svelte';
 	import NavMenuTwoColumnContent from './nav-menu/NavMenuTwoColumnContent.svelte';
 	import NavMenuSimpleContent from './nav-menu/NavMenuSimpleContent.svelte';
@@ -50,7 +46,8 @@
 		loading?: boolean;
 		/** Home panel identity block; ignored by every other layout. */
 		owner?: SiteOwner;
-		ownerStatus?: OwnerStatus;
+		ownerLinks?: readonly SocialLinkLike[] | null;
+		presence?: OwnerPresence;
 		trigger: Snippet<[TriggerState]>;
 	}
 
@@ -62,7 +59,8 @@
 		triggerAsButton = false,
 		loading = false,
 		owner,
-		ownerStatus,
+		ownerLinks,
+		presence,
 		trigger
 	}: Props = $props();
 
@@ -96,14 +94,6 @@
 		{ label: tLabel('nav_home_stat_notes'), value: serverData?.stats?.notes ?? 0 },
 		{ label: tLabel('nav_home_stat_topics'), value: serverData?.stats?.topics ?? 0 }
 	]);
-
-	const social = $derived(
-		(menu.columns[0]?.items ?? []).map((child: NavChild) => ({
-			href: child.href,
-			label: child.label ?? tLabel(child.labelKey!),
-			icon: child.icon ?? navIcon(child.iconName) ?? undefined
-		}))
-	);
 
 	// ── Collision clamp ──
 	//
@@ -271,15 +261,15 @@
 									<NavMenuHomeContent
 										{loading}
 										owner={owner ?? { name: '', avatar: '' }}
-										status={ownerStatus ?? {
-											enabled: false,
-											kind: 'idle',
-											detail: '',
-											iconUrl: '',
-											href: ''
+										presence={presence ?? {
+											state: 'unknown',
+											activity: null,
+											app: null,
+											updatedAt: null,
+											lastSeenAt: null
 										}}
 										stats={statRows}
-										{social}
+										links={ownerLinks ?? []}
 										titleKey={menu.columns[0]?.titleKey}
 										items={leftItems}
 									/>

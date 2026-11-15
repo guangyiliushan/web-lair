@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
-import { psql } from './support';
+import { decryptedWebhookSecret, psql } from './support';
 
 /**
  * SY acceptance: the Webhooks endpoint CRUD on the real database plus the
@@ -63,7 +63,7 @@ test.describe('SY webhooks (admin)', () => {
 	}
 
 	test('create: dialog -> generated secret revealed once -> masked row', async ({ page }) => {
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 20_000 });
 
 		const dialog = await openCreateDialog(page);
@@ -84,19 +84,23 @@ test.describe('SY webhooks (admin)', () => {
 		await expect(reveal).toContainText('whsec_');
 		await expect(reveal).toContainText('只会显示这一次');
 
-		// DB truth: generated secret + the roster event; the reveal shows the
-		// SAME value as the DB (a masked or stale reveal must turn this red).
+		// DB truth: the legacy column is retired, the encrypted row exists, and
+		// the reveal shows the SAME plaintext as the envelope (a masked or stale
+		// reveal must turn this red).
+		const hookId = psql(`select id from webhooks where name = '${HOOK}'`);
+		expect(psql(`select secret is null from webhooks where id = '${hookId}'`)).toBe('t');
 		expect(
-			psql(
-				`select secret like 'whsec_%' and events = '{schedule.create}' from webhooks where name = '${HOOK}'`
-			)
+			psql(`select left(ciphertext, 3) = 'v1:' from webhook_secrets where webhook_id = '${hookId}'`)
 		).toBe('t');
-		const raw = psql(`select secret from webhooks where name = '${HOOK}'`);
+		expect(psql(`select events = '{schedule.create}' from webhooks where id = '${hookId}'`)).toBe(
+			't'
+		);
+		const raw = decryptedWebhookSecret(hookId);
 		await expect(reveal).toContainText(raw);
 
 		// A fresh load: the reveal is gone, the row shows the mask only, and
 		// the raw secret appears NOWHERE in the rendered markup.
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const row = endpointRow(page, HOOK);
 		await expect(row).toBeVisible({ timeout: 20_000 });
 		await expect(row).toContainText('whsec_…');
@@ -105,7 +109,7 @@ test.describe('SY webhooks (admin)', () => {
 	});
 
 	test('create negative: a duplicate name is soft-rejected inside the dialog', async ({ page }) => {
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		// Hydration gate: a click before the settings island mounts is a no-op
 		// and the dialog then never opens (SvelteKit island hydration is async).
 		await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 20_000 });
@@ -149,8 +153,29 @@ test.describe('SY webhooks (admin)', () => {
 		await expect(mixedDialog).toBeHidden();
 	});
 
+	test('create negative: private/loopback/insecure URLs are refused (W9.3 SSRF)', async ({
+		page
+	}) => {
+		await page.goto('/admin/settings/notifications');
+		await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 20_000 });
+		const dialog = await openCreateDialog(page);
+		await dialog.getByLabel('名称').fill(`${HOOK}-ssrf`);
+		await dialog.getByRole('checkbox', { name: 'job.run' }).check();
+		for (const [url, message] of [
+			['http://example.com/hook', '必须使用 https://'],
+			['https://169.254.169.254/latest/meta-data', '私有、回环或链路本地'],
+			['https://127.0.0.1/hook', '私有、回环或链路本地']
+		] as const) {
+			await dialog.getByLabel('回调地址').fill(url);
+			await dialog.getByRole('button', { name: '保存' }).click({ timeout: 10_000 });
+			await expect(dialog.getByRole('alert')).toContainText(message, { timeout: 10_000 });
+		}
+		expect(psql(`select count(*) from webhooks where name = '${HOOK}-ssrf'`)).toBe('0');
+		await dialog.getByRole('button', { name: '取消' }).click();
+	});
+
 	test('edit: the dialog prefills and saving renames the endpoint', async ({ page }) => {
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const row = endpointRow(page, HOOK);
 		await expect(row).toBeVisible({ timeout: 20_000 });
 		await expect(async () => {
@@ -175,7 +200,7 @@ test.describe('SY webhooks (admin)', () => {
 	});
 
 	test('toggle: disable then re-enable persists', async ({ page }) => {
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const row = endpointRow(page, HOOK_RENAMED);
 		await expect(row).toBeVisible({ timeout: 20_000 });
 		await expect(async () => {
@@ -216,7 +241,7 @@ test.describe('SY webhooks (admin)', () => {
 			)
 			.toBe('1');
 
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const deliveryRow = page
 			.locator('[data-slot="delivery-row"]')
 			.filter({ visible: true })
@@ -226,10 +251,11 @@ test.describe('SY webhooks (admin)', () => {
 	});
 
 	test('rotate: confirm issues a fresh secret, the mask changes', async ({ page }) => {
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const row = endpointRow(page, HOOK_RENAMED);
 		await expect(row).toBeVisible({ timeout: 20_000 });
-		const before = psql(`select secret from webhooks where name = '${HOOK_RENAMED}'`);
+		const id = psql(`select id from webhooks where name = '${HOOK_RENAMED}'`);
+		const before = decryptedWebhookSecret(id);
 		await expect(async () => {
 			await row.getByRole('button', { name: '轮换密钥' }).click({ timeout: 5000 });
 			const confirm = page.getByRole('alertdialog');
@@ -240,9 +266,12 @@ test.describe('SY webhooks (admin)', () => {
 		await expect(
 			page.locator('[data-slot="secret-reveal"]').filter({ visible: true })
 		).toContainText('whsec_');
-		const after = psql(`select secret from webhooks where name = '${HOOK_RENAMED}'`);
+		const after = decryptedWebhookSecret(id);
 		expect(after.startsWith('whsec_')).toBe(true);
 		expect(after).not.toBe(before);
+		// Grace window: the replaced value is still verifiable from the
+		// previous slot (re-encrypted with its own AAD, not copied verbatim).
+		expect(decryptedWebhookSecret(id, 'previous_ciphertext')).toBe(before);
 		// The rotated reveal shows the NEW value itself, not a mask.
 		await expect(
 			page.locator('[data-slot="secret-reveal"]').filter({ visible: true })
@@ -252,7 +281,7 @@ test.describe('SY webhooks (admin)', () => {
 	test('delete: confirm removes the endpoint and its delivery log cascades', async ({ page }) => {
 		const hookId = psql(`select id from webhooks where name = '${HOOK_RENAMED}'`);
 		expect(hookId).toMatch(/^[0-9a-f-]{36}$/);
-		await page.goto('/admin/settings/notification');
+		await page.goto('/admin/settings/notifications');
 		const row = endpointRow(page, HOOK_RENAMED);
 		await expect(row).toBeVisible({ timeout: 20_000 });
 		await expect(async () => {

@@ -1,0 +1,25 @@
+name: auth-schema
+
+on:
+  push:
+    branches: [main, dev, dev/v0.0.1]
+  pull_request:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.16.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # No network and no auth CLI: catches a hand-written ALTER/DROP/index on
+      # a generated table and the H3 customizations.
+      - run: pnpm auth:check:migrations
+      # Regenerates the schema into a temp file and diffs the committed one.
+      - run: pnpm auth:check

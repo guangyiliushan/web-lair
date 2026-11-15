@@ -29,8 +29,10 @@ export const PAGE_RESERVED_SLUGS: ReadonlySet<string> = new Set([
 	'ja',
 	'login',
 	'llms.txt', // M2: root llms file; SLUG_RE already rejects dots
+	'manifest.webmanifest', // W5.3: web manifest route; SLUG_RE rejects dots
 	'maps', // platform-reserved (storage line keeps the map surface)
 	'photos', // platform-reserved (storage line public pages)
+	'privacy', // W6.3: the public privacy notice
 	'register',
 	'reset-password',
 	'robots.txt', // defensive: SLUG_RE already rejects dots

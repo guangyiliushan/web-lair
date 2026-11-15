@@ -134,7 +134,7 @@ describe('two-factor verify action', () => {
 		expect(pruneMock).not.toHaveBeenCalled();
 	});
 
-	it('prunes other sessions and redirects for an admitted account', async () => {
+	it('keeps other sessions and redirects for an admitted account', async () => {
 		verifyTotpMock.mockResolvedValue({
 			token: 'fresh-token',
 			user: { id: 'user-1', emailVerified: true }
@@ -142,7 +142,7 @@ describe('two-factor verify action', () => {
 		roleMock.mockReturnValue('admin');
 
 		const { thrown } = await callVerifyCatching(makeEvent({ code: '123456' }));
-		expect(pruneMock).toHaveBeenCalledWith('user-1', 'fresh-token');
+		expect(pruneMock).not.toHaveBeenCalled();
 		expect((thrown as { status?: number; location?: string }).status).toBe(302);
 		expect((thrown as { status?: number; location?: string }).location).toBe('/admin');
 	});

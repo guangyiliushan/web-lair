@@ -1,29 +1,26 @@
-import { createHash, createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
-import { argon2 } from 'node:crypto';
-import { promisify } from 'node:util';
+import { createHash, createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { getOption } from '$lib/server/config/options-registry';
+import { hashArgon2id, verifyArgon2id } from '$lib/server/security/argon2';
 
 /**
  * Password gate for notes (N1 detail page; notes plan v0.4 §2.5, ledger
- * §13.9). KDF = argon2id at the OWASP-cheatsheet minimum recommendation
- * (m=19456 KiB, t=2, p=1, 16 B salt, 32 B tag), run through the promisified
- * Node 24 `crypto.argon2` (async, libuv threadpool - the unlock endpoint is
- * public and must not block the event loop). Storage is a self-describing
- * PHC string: m/t/p are all read back on verify, so a future parameter bump
- * keeps existing rows verifiable without a migration. Unlock tokens are
- * HMAC-signed with a key derived from BETTER_AUTH_SECRET via HKDF (zero new
- * env vars) and bind the CURRENT password hash — changing or removing the
- * password invalidates every outstanding unlock automatically.
+ * §13.9). The KDF is the shared Argon2id implementation in
+ * `$lib/server/security/argon2` (OWASP minimum profile, async on the libuv
+ * thread pool). Unlock tokens are HMAC-signed with a key derived from
+ * BETTER_AUTH_SECRET via HKDF (zero new env vars) and bind the CURRENT note
+ * password hash — changing or removing the note password invalidates every
+ * outstanding unlock automatically.
  */
 
-/** Argon2 parameters (OWASP Password Storage Cheat Sheet, minimum profile). */
-export const ARGON2_MEMORY_KIB = 19456;
-export const ARGON2_PASSES = 2;
-export const ARGON2_PARALLELISM = 1;
-export const ARGON2_TAG_LENGTH = 32;
-export const ARGON2_SALT_LENGTH = 16;
-const ARGON2_ID = 'argon2id';
+/** Re-exported for existing callers/tests that pin the KDF profile. */
+export {
+	ARGON2_MEMORY_KIB,
+	ARGON2_PASSES,
+	ARGON2_PARALLELISM,
+	ARGON2_SALT_LENGTH,
+	ARGON2_TAG_LENGTH
+} from '$lib/server/security/argon2';
 
 /** Unlock cookie name prefix (per note row; the note id completes the name). */
 export const NOTE_UNLOCK_COOKIE_PREFIX = 'wl_note_';
@@ -35,111 +32,72 @@ export function noteUnlockCookieName(noteId: string): string {
 	return `${NOTE_UNLOCK_COOKIE_PREFIX}${noteId}`;
 }
 
-/**
- * Async KDF on the libuv threadpool (`crypto.argon2` is callback-based).
- * The unlock form is a PUBLIC endpoint: a synchronous argon2 (~39 ms at the
- * OWASP minimum profile) would block the event loop for the whole process
- * on every attempt (review finding), while the async form keeps concurrent
- * verifications off the main thread.
- */
-type Argon2Options = {
-	message: Buffer;
-	nonce: Buffer;
-	tagLength: number;
-	memory: number;
-	passes: number;
-	parallelism: number;
-};
-const argon2Async = promisify(argon2) as (
-	algorithm: string,
-	options: Argon2Options
-) => Promise<Buffer>;
-
-/** PHC string for a password (write side; the only place hashes are created). */
-export async function hashNotePassword(password: string): Promise<string> {
-	const salt = randomBytes(ARGON2_SALT_LENGTH);
-	const tag = await argon2Async(ARGON2_ID, {
-		message: Buffer.from(password, 'utf8'),
-		nonce: salt,
-		tagLength: ARGON2_TAG_LENGTH,
-		memory: ARGON2_MEMORY_KIB,
-		passes: ARGON2_PASSES,
-		parallelism: ARGON2_PARALLELISM
-	});
-	return `$argon2id$v=19$m=${ARGON2_MEMORY_KIB},t=${ARGON2_PASSES},p=${ARGON2_PARALLELISM}$${salt.toString('base64')}$${tag.toString('base64')}`;
-}
-
-interface ParsedNotePhc {
-	salt: Buffer;
-	tag: Buffer;
-	memory: number;
-	passes: number;
-	parallelism: number;
-}
-
-/**
- * Parse a PHC string into verifiable parts. Only the shape we emit is
- * accepted, and the cost parameters are floored at the current minimum:
- * a (hypothetical) weak-parameter row from outside the write path must
- * not get a cheap verification pass.
- */
-function parseNotePhc(phc: string): ParsedNotePhc | null {
-	const parts = phc.split('$');
-	// ['', 'argon2id', 'v=19', 'm=...,t=...,p=...', <salt b64>, <tag b64>]
-	if (parts.length !== 6 || parts[0] !== '' || parts[1] !== 'argon2id') return null;
-	if (parts[2] !== 'v=19') return null;
-	const params = new Map<string, string>();
-	for (const pair of parts[3].split(',')) {
-		const [key, value] = pair.split('=');
-		if (key && value !== undefined) params.set(key, value);
-	}
-	const memory = Number(params.get('m'));
-	const passes = Number(params.get('t'));
-	// `p` is read from the string and USED for verification (floor 1): a
-	// future constant bump must not make existing p=1 rows unverifiable
-	// (review finding).
-	const parallelism = Number(params.get('p'));
-	if (!Number.isFinite(memory) || memory < ARGON2_MEMORY_KIB) return null;
-	if (!Number.isFinite(passes) || passes < ARGON2_PASSES) return null;
-	if (!Number.isInteger(parallelism) || parallelism < 1) return null;
-	try {
-		const salt = Buffer.from(parts[4], 'base64');
-		const tag = Buffer.from(parts[5], 'base64');
-		if (salt.length < 8 || tag.length < 16) return null;
-		return { salt, tag, memory, passes, parallelism };
-	} catch {
-		return null;
-	}
-}
+/** PHC string for a note password (kept as a named wrapper for callers). */
+export const hashNotePassword = hashArgon2id;
 
 /** Constant-time password check against a stored PHC string. */
-export async function verifyNotePassword(password: string, phc: string): Promise<boolean> {
-	const parsed = parseNotePhc(phc);
-	if (!parsed) return false;
-	const computed = await argon2Async(ARGON2_ID, {
-		message: Buffer.from(password, 'utf8'),
-		nonce: parsed.salt,
-		tagLength: parsed.tag.length,
-		memory: parsed.memory,
-		passes: parsed.passes,
-		parallelism: parsed.parallelism
-	});
-	return timingSafeEqual(computed, parsed.tag);
-}
+export const verifyNotePassword = verifyArgon2id;
 
 const GATE_KEY_INFO = 'web-lair:notes-gate';
 
 /**
- * HKDF-derived signing key (RFC 5869; domain-separated from every other
- * consumer of BETTER_AUTH_SECRET). Zero new environment variables; rotating
- * the auth secret invalidates all outstanding unlocks, which is acceptable
- * inside the 30-day TTL.
+ * The secret better-auth currently signs with (W2.11 / decision T4-B).
+ *
+ * `BETTER_AUTH_SECRETS` is the official keyring: `"<version>:<secret>,..."`,
+ * newest first, and better-auth's `secretConfig.current` is the FIRST entry
+ * (verified in 1.7.5 `secret-utils.mjs`). Reading the same entry keeps the
+ * note-gate HMAC in step with the auth plane without adding a
+ * `NOTE_GATE_SECRET` bootstrap key. A malformed keyring throws instead of
+ * silently falling back to the legacy secret - a divergence here would sign
+ * unlock tokens with a different key than every other replica.
  */
-function gateSigningKey(): Buffer {
-	const secret = env.BETTER_AUTH_SECRET ?? '';
+export function currentAuthSecret(getEnv: (name: string) => string | undefined): string {
+	const raw = getEnv('BETTER_AUTH_SECRETS') ?? '';
+	if (raw !== '') {
+		// Validate EVERY entry with better-auth's rules (parseSecretsEnv): an
+		// empty or malformed later entry makes better-auth throw, so note-gate
+		// must not silently sign with the first value in that case.
+		const entries = raw.split(',');
+		let firstValue: string | null = null;
+		const seen = new Set<number>();
+		for (const [index, entry] of entries.entries()) {
+			const trimmed = entry.trim();
+			const colon = trimmed.indexOf(':');
+			if (colon <= 0 || colon === trimmed.length - 1) {
+				throw new Error(
+					`[note-gate] BETTER_AUTH_SECRETS entry ${index + 1} must look like "<version>:<secret>"`
+				);
+			}
+			const version = Number(trimmed.slice(0, colon).trim());
+			const value = trimmed.slice(colon + 1).trim();
+			if (!Number.isInteger(version) || version < 0 || !value) {
+				throw new Error('[note-gate] BETTER_AUTH_SECRETS is malformed');
+			}
+			if (seen.has(version)) {
+				throw new Error(`[note-gate] BETTER_AUTH_SECRETS lists version ${version} twice`);
+			}
+			seen.add(version);
+			if (index === 0) firstValue = value;
+		}
+		// `entries` is non-empty whenever `raw !== ''`, so this is the current
+		// (first) secret - the same one better-auth uses.
+		return firstValue as string;
+	}
+	const secret = (getEnv('BETTER_AUTH_SECRET') ?? '').trim();
 	if (!secret) {
 		throw new Error('[note-gate] BETTER_AUTH_SECRET is not set; unlock tokens cannot be signed');
 	}
+	return secret;
+}
+
+/**
+ * HKDF-derived signing key (RFC 5869; domain-separated from every other
+ * consumer of the current auth secret). Rotating the auth keyring invalidates
+ * all outstanding unlocks - acceptable inside the 30-day TTL and required by
+ * W2.11: one current version, no second key to keep in sync.
+ */
+function gateSigningKey(): Buffer {
+	const secret = currentAuthSecret((name) => env[name]);
 	return Buffer.from(hkdfSync('sha256', secret, '', GATE_KEY_INFO, 32));
 }
 

@@ -1,18 +1,23 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
+	UPLOAD_IP_RATE_LIMIT,
 	UPLOAD_RATE_LIMIT,
 	UploadRejected,
 	listFiles,
 	uploadFile,
+	uploadIpRateLimitKey,
 	uploadRateLimitKey
 } from '$lib/server/services/files';
 import { listAdminPhotos } from '$lib/server/services/photos';
 import { photoEmbedSrc, photoTileSrc } from '$lib/components/photos/photo-tile';
 import type { PickerItem } from '$lib/media/editor-uploads';
 import { MAX_UPLOAD_BYTES, sniffUpload } from '$lib/server/media/sniff';
+import { isStorageUnavailable } from '$lib/server/storage/port';
 import { getCache } from '$lib/server/cache';
-import { rateLimit } from '$lib/server/cache/store';
+import { rateLimitStrict } from '$lib/server/cache/store';
+import { requestAddress } from '$lib/server/security/request-address';
+import { clientAddressKey } from '$lib/utils/cidr';
 
 /**
  * Editor image uploads (ST-3 3a, storage plan §9): one file per request -
@@ -45,24 +50,48 @@ import { rateLimit } from '$lib/server/cache/store';
  */
 
 /** Admin JSON responses are never cacheable (multi-admin browsers/proxies). */
-function jsonPrivate(body: unknown, status = 200): Response {
-	return json(body, { status, headers: { 'cache-control': 'private, no-store' } });
+function jsonPrivate(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
+	return json(body, {
+		status,
+		headers: { 'cache-control': 'private, no-store', ...headers }
+	});
 }
 
-export const POST: RequestHandler = async ({ request, locals }) => {
+export const POST: RequestHandler = async ({ request, locals, getClientAddress }) => {
 	if (!locals.admin) {
 		return locals.user
 			? jsonPrivate({ code: 'forbidden' }, 403)
 			: jsonPrivate({ code: 'unauthorized' }, 401);
 	}
 
-	const rate = await rateLimit(
-		getCache(),
-		uploadRateLimitKey(locals.user?.id),
-		UPLOAD_RATE_LIMIT.limit,
-		UPLOAD_RATE_LIMIT.windowSeconds
-	);
-	if (!rate.allowed) return jsonPrivate({ code: 'throttled' }, 429);
+	// Security endpoint (W6.10): fail CLOSED, account + IPv6-/64 IP buckets.
+	const address = clientAddressKey(requestAddress(getClientAddress));
+	const [accountRate, addressRate] = await Promise.all([
+		rateLimitStrict(
+			getCache(),
+			uploadRateLimitKey(locals.user?.id),
+			UPLOAD_RATE_LIMIT.limit,
+			UPLOAD_RATE_LIMIT.windowSeconds
+		),
+		rateLimitStrict(
+			getCache(),
+			uploadIpRateLimitKey(address),
+			UPLOAD_IP_RATE_LIMIT.limit,
+			UPLOAD_IP_RATE_LIMIT.windowSeconds
+		)
+	]);
+	if (!accountRate.allowed || !addressRate.allowed) {
+		const unavailable = accountRate.unavailable || addressRate.unavailable;
+		return jsonPrivate(
+			{ code: unavailable ? 'unavailable' : 'throttled' },
+			unavailable ? 503 : 429,
+			{
+				'retry-after': String(
+					Math.max(UPLOAD_RATE_LIMIT.windowSeconds, UPLOAD_IP_RATE_LIMIT.windowSeconds)
+				)
+			}
+		);
+	}
 
 	let form: FormData;
 	try {
@@ -105,9 +134,21 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		});
 	} catch (error) {
 		if (error instanceof UploadRejected) {
+			// 503 for the maintenance window: it is temporary and the client
+			// should retry after cutover, not treat it as a bad file (W7.4).
 			const status =
-				error.code === 'too-large' ? 413 : error.code === 'unsupported-type' ? 415 : 400;
+				error.code === 'migration'
+					? 503
+					: error.code === 'too-large'
+						? 413
+						: error.code === 'unsupported-type'
+							? 415
+							: 400;
 			return jsonPrivate({ code: error.code }, status);
+		}
+		// Active provider down (W7.5/Q14): a retryable 503, not a bad request.
+		if (isStorageUnavailable(error)) {
+			return jsonPrivate({ code: 'storage-unavailable' }, 503);
 		}
 		// Sanitized line only (house policy: driver messages never reach the
 		// logs or the client).

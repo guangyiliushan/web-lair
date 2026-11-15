@@ -6,7 +6,7 @@ import { auth } from '$lib/server/auth';
 import { ADMIN_BASE_PATH, ADMIN_HOME_PATH, assertAdminSlug } from '$lib/server/config/admin';
 import { getUserRole } from '$lib/server/authz';
 import { isSiteOrganizationMember } from '$lib/server/auth/site-organization';
-import { pruneOtherSessions, revokeSessionByToken } from '$lib/server/auth/sessions';
+import { revokeSessionByToken } from '$lib/server/auth/sessions';
 import { safeRedirect } from '$lib/server/safe-redirect';
 
 type VerifiedUser = { id?: string; role?: unknown; emailVerified?: boolean };
@@ -131,26 +131,12 @@ export const actions: Actions = {
 					);
 				}
 			}
-			return fail(403, { message: m.admin_auth_err_no_admin_access() });
+			return fail(403, { message: m.admin_auth_err_no_admin_access(), error: true });
 		}
 
-		if (sessionToken) {
-			try {
-				await pruneOtherSessions(userId, sessionToken);
-			} catch (caught) {
-				console.warn(
-					'[2fa] single-session prune failed:',
-					caught instanceof Error ? caught.message : caught
-				);
-			}
-		} else {
-			// The plugin always issues a session here; a missing token means the
-			// response shape changed - log instead of failing open silently.
-			console.warn('[2fa] verify succeeded without a session token; nothing to prune', {
-				userId
-			});
-		}
-
+		// AC2: the 2FA challenge is a sign-in method, not a single-session
+		// policy. Other sessions stay alive so the account page's device list
+		// governs revocation (the enable/disable actions still prune).
 		console.info('[2fa] verified', { userId, method: useBackupCode ? 'backup' : 'totp' });
 		redirect(302, redirectTo);
 	}
