@@ -5,10 +5,9 @@ import {
 } from '$lib/server/services/presence';
 
 /**
- * Snapshot assembly + SSE cadence for the presence stream (realtime R2). A
- * sibling module rather than exports of `+server.ts`: SvelteKit route modules
- * only allow +-prefixed exports, and the production build's route analysis
- * rejects anything else (caught by the batch-tail preview build).
+ * Snapshot assembly + SSE cadence for the presence stream. A sibling module rather
+ * than exports of `+server.ts`: SvelteKit route modules only allow +-prefixed
+ * exports and the production route analysis rejects anything else.
  */
 
 export const PRESENCE_SNAPSHOT_MS = 5_000;
@@ -33,9 +32,8 @@ export async function snapshotFor(
 	deps: PresenceDeps = {}
 ): Promise<PresenceSnapshot> {
 	if (contentId !== null) {
-		// Single read per tick (review finding): the slice carries count,
-		// histogram AND the capped dots, so dots-on connections stop paying a
-		// second full-key scan.
+		// Single read per tick: the slice carries count, histogram AND the capped
+		// dots, so dots-on connections stop paying a second full-key scan.
 		const slice = await readContentSlice(contentId, deps);
 		const snapshot: PresenceSnapshot = {
 			content: slice === null ? null : { count: slice.count, hist: slice.histogram }

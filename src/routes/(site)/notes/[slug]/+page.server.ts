@@ -43,9 +43,9 @@ import type { Cookies } from '@sveltejs/kit';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
 
 /**
- * Public note detail (N1): the row must exist in the URL's locale and pass
+ * Public note detail: the row must exist in the URL's locale and pass
  * the shared visibility condition. A retired slug resolves through
- * slug_trackers with one 301 hop (P3-b resolver; visibility re-checked on
+ * slug_trackers with one 301 hop (visibility is re-checked on
  * the target). A missing language version 404s with a hint listing the
  * languages that do have the slug - never an automatic fallback.
  *
@@ -101,11 +101,10 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 		error(404, 'Not found');
 	}
 
-	// Unlock state: the cookie token is verified against the CURRENT stored
-	// hash, so a password change revokes it. Verified unlocks re-read the
-	// body AND the diary metadata server-side - the SSR page then carries the
-	// decrypted diary (body-only re-reads used to leave mood/weather/...
-	// missing forever; review finding).
+	// Unlock state: the cookie token is verified against the CURRENT stored hash, so
+	// a password change revokes it. Verified unlocks re-read the body AND the diary
+	// metadata server-side; re-reading only the body leaves mood/weather permanently
+	// missing from the SSR page.
 	let unlocked = false;
 	let unlockedBody: string | null = null;
 	let unlockedMeta: NoteUnlockedMeta | null = null;
@@ -142,10 +141,10 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 		.sort((a, b) => localeOrder.indexOf(a.lang) - localeOrder.indexOf(b.lang))
 		.map((sibling) => ({ lang: sibling.lang, path: `/notes/${sibling.slug}` }));
 
-	// Viewer state for the comment section: guests get a login link with a
-	// return path; gated rows only render the section after an unlock. The
-	// site-wide switch narrows the per-note row (W6.1 / C1); existing approved
-	// rows stay readable when either switch is off.
+	// Viewer state for the comment section: guests get a login link with a return
+	// path; gated rows only render the section after an unlock. The site-wide switch
+	// narrows the per-note row; existing approved rows stay readable when either
+	// switch is off.
 	const user = locals.user;
 	const emailVerified = Boolean(user?.emailVerified);
 	const open = !note.locked || unlocked;
@@ -158,11 +157,10 @@ export const load: PageServerLoad = async ({ cookies, locals, params, url }) => 
 		? null
 		: `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
 
-	// Open threads own the render: block directory + segment marks are derived
-	// from the same tree the reader gets (comment P3b). A closed-but-unlocked
-	// thread still renders so approved comments survive the switch (C1). A
-	// locked diary renders no body at all, so the plain renderer path stays
-	// empty.
+	// Open threads own the render: the block directory and segment marks come from
+	// the same tree the reader gets. A closed-but-unlocked thread still renders so
+	// approved comments survive the switch; a locked diary has no body, so the plain
+	// renderer path stays empty.
 	const rendered = open
 		? await renderDiscussion({
 				markdown: body,
@@ -275,10 +273,9 @@ async function handleUnlock(event: RequestEvent) {
 		secure: event.url.protocol === 'https:',
 		maxAge: ttlSeconds
 	});
-	// The browser replaces the document query with the action suffix
-	// (`?/unlock`), so event.url.search is never the original query - redirect
-	// to the clean canonical URL (review finding: a dirty `?/unlock` used to
-	// land in the address bar).
+	// The browser replaces the document query with the action suffix (`?/unlock`),
+	// so `event.url.search` is never the original query; redirect to the clean
+	// canonical URL or the action suffix lands in the address bar.
 	redirect(
 		303,
 		localizeHref(`/notes/${note.slug}`, {
@@ -288,9 +285,9 @@ async function handleUnlock(event: RequestEvent) {
 }
 
 /**
- * Locked-diary gate shared by the reader write actions (submit / edit /
- * delete): the note must be visible and either unlocked or carrying a valid
- * unlock cookie; everything else stays fail-closed (spec §7).
+ * Locked-diary gate shared by the reader write actions (submit / edit / delete):
+ * the note must be visible and either unlocked or carrying a valid unlock cookie;
+ * everything else stays fail-closed.
  */
 async function resolveGatedNote(event: RequestEvent, now: Date) {
 	const lang = getLocale();
@@ -317,13 +314,13 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 
 	const now = new Date();
 	const lang = getLocale();
-	// Resolve the target ourselves so the gate state is known before the
-	// service re-validates: an unlocked gated row is commentable (spec §7),
-	// everything else stays fail-closed.
+	// Resolve the target ourselves so the gate state is known before the service
+	// re-validates: an unlocked gated row is commentable, everything else stays
+	// fail-closed.
 	const gate = await resolveGatedNote(event, now);
 	if (!gate) return fail(404, { message: m.comment_error_unavailable() });
 
-	// Anchors belong to roots (spec §2): replies never carry one, even if the
+	// Anchors belong to roots: replies never carry one, even if the
 	// form smuggles the fields in.
 	const anchorRead = isReply ? ({ kind: 'none' } as const) : readCommentAnchorDraft(form);
 	if (anchorRead.kind === 'invalid') return fail(400, { message: m.comment_error_generic() });
@@ -353,10 +350,10 @@ export const actions = {
 	unlock: handleUnlock,
 	comment: (event) => handleSubmit(event, false),
 	reply: (event) => handleSubmit(event, true),
-	// The reader write actions keep the locked-diary gate as a page-level UX
-	// layer (the authoritative gate is the ownership CAS in the service);
-	// auth runs first so anonymous requests get the login redirect, not a
-	// 404 that pretends the note is gone (review P3-2).
+	// The reader write actions keep the locked-diary gate as a page-level UX layer;
+	// the authoritative gate is the ownership CAS in the service. Auth runs first so
+	// anonymous requests get the login redirect, not a 404 that pretends the note is
+	// gone.
 	edit: async (event) => {
 		requireUser();
 		if (!(await resolveGatedNote(event, new Date()))) {

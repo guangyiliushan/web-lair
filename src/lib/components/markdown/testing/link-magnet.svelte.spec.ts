@@ -47,16 +47,17 @@ describe('link magnet', () => {
 					clientY: rect.top + 5
 				})
 			);
-			// rAF 一帧后变量落盘
+			// Values settle one rAF later
 			await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 			expect(link.hasAttribute('data-magnet')).toBe(true);
-			// 坐标跟随鼠标(容差 ±2px:iframe 布局 settle 会引起亚像素漂移)
+			// Coordinates follow the mouse (tolerance ±2px: iframe layout settling causes
+			// sub-pixel drift)
 			const mx = parseFloat(link.style.getPropertyValue('--mx'));
 			const my = parseFloat(link.style.getPropertyValue('--my'));
 			expect(Math.abs(mx - 10)).toBeLessThanOrEqual(2);
 			expect(Math.abs(my - 5)).toBeLessThanOrEqual(2);
 
-			// 同容器另一个链接:印章转移,旧的清除
+			// Another link in the same container: the stamp moves, the old one is cleared
 			const other = document.querySelector(
 				'.markdown-body a[href="https://developer.mozilla.org"]'
 			) as HTMLAnchorElement;

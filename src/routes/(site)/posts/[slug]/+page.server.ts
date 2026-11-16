@@ -23,11 +23,10 @@ import { formatDate } from '$lib/utils/i18n';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
 
 /**
- * Public post detail (P3-a read side + comment P3a threads): the post must
- * exist in the URL's locale and pass the shared visibility condition. A
- * missing language version is a 404 with a hint listing the languages that do
- * have the same slug — never an automatic fallback (ledger §9.16.5). A retired slug resolves through
- * slug_trackers with a single 301 hop (P3-b).
+ * Public post detail: the post must exist in the URL's locale and pass the shared
+ * visibility condition. A missing language version is a 404 with a hint listing
+ * the languages that have the same slug, never an automatic fallback. A retired
+ * slug resolves through `slug_trackers` with a single 301 hop.
  */
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const lang = getLocale();
@@ -69,10 +68,10 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		.limit(1);
 
 	if (!row) {
-		// Slug fallback chain (P3-b, ledger §9.16.5): a retired slug resolves
-		// through slug_trackers (single hop — trackers point at the row id, so
-		// chains cannot form). An invisible, missing or self-referencing target
-		// is a plain 404: never redirect into hidden content or a loop.
+		// Slug fallback chain: a retired slug resolves through `slug_trackers`
+		// (single hop — trackers point at the row id, so chains cannot form). An
+		// invisible, missing or self-referencing target is a plain 404: never
+		// redirect into hidden content or a loop.
 		const trackedId = await findSlugTargetId('post', lang, slug);
 		if (trackedId) {
 			const [target] = await db
@@ -81,8 +80,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 				.where(and(eq(posts.id, trackedId), eq(posts.lang, lang), visiblePostCondition(now)))
 				.limit(1);
 			if (target && target.slug !== slug) {
-				// Preserve the original query string (tracking params etc.) —
-				// review finding: the bare-path redirect dropped it.
+				// Preserve the original query string (tracking params etc.) — the
+				// bare-path redirect dropped it.
 				redirect(
 					301,
 					localizeHref(`/posts/${target.slug}${url.search}`, {
@@ -114,7 +113,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		error(404, 'Not found');
 	}
 
-	// hreflang set (P3-b): every visible language of the same translation
+	// hreflang set: every visible language of the same translation
 	// group, in locale order — self included; x-default stays deferred.
 	const localeOrder = locales as readonly string[];
 	const sourceId = row.translatedFromPostId;
@@ -204,17 +203,15 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		provenance.aiHelp = null;
 	}
 
-	// Viewer state for the comment section (spec §1 "已验证读者"): guests get
-	// the login link with a return path to this localized URL; signed-in
-	// readers need a verified email before they can submit. The site-wide
-	// switch can only narrow the per-post row (W6.1 / C1): new comments need
-	// both, while existing approved rows stay readable either way.
+	// Viewer state for the comment section: guests get the login link with a return
+	// path to this localized URL; signed-in readers need a verified email to submit.
+	// The site-wide switch can only narrow the per-post row — new comments need both,
+	// while existing approved rows stay readable either way.
 	const user = locals.user;
 	const emailVerified = Boolean(user?.emailVerified);
 	const commentsEnabled = await getOption('comments.enabled');
-	// W6.2 read side: country labels need the whole chain on (privacy +
-	// collect + show). Pages pass the flag to the assembly instead of letting
-	// the component guess.
+	// Country labels need the whole chain on (privacy + collect + show). The page
+	// passes the flag to the assembly instead of letting the component guess.
 	const privacy = await getOption('comments.privacy');
 	const showCountry = privacy.enabled && privacy.collectCountry && privacy.showCountry;
 	const commentsOpen = commentsEnabled && row.allowComment;
@@ -223,10 +220,10 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		? null
 		: `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`;
 
-	// The comment read path always owns rendering when either side allows
-	// authoring or rows already exist: closed threads keep their approved
-	// comments visible (C1) and segment anchors stay resolved. A closed post
-	// with zero comments returns null so the section does not shout "0".
+	// The comment read path always owns rendering when either side allows authoring
+	// or rows already exist: closed threads keep their approved comments visible and
+	// segment anchors stay resolved. A closed post with zero comments returns null so
+	// the section does not shout "0".
 	const rendered = await renderDiscussion({
 		markdown: row.content ?? '',
 		targetType: 'post',
@@ -304,7 +301,7 @@ async function handleSubmit(event: RequestEvent, isReply: boolean) {
 	const targetId = await resolveCommentPostTarget(lang, event.params.slug, now);
 	if (!targetId) return fail(404, { message: m.comment_error_unavailable() });
 
-	// Anchors belong to roots (spec §2): replies never carry one, even if the
+	// Anchors belong to roots: replies never carry one, even if the
 	// form smuggles the fields in.
 	const anchorRead = isReply ? ({ kind: 'none' } as const) : readCommentAnchorDraft(form);
 	if (anchorRead.kind === 'invalid') return fail(400, { message: m.comment_error_generic() });

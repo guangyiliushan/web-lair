@@ -2,10 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIError } from 'better-auth/api';
 
 /**
- * W1.4/P0-4: the forgot-password action must reach better-auth's
- * `requestPasswordReset` (the only thing that mints a token and calls the
- * `sendResetPassword` mail callback), keep the anti-enumeration answer, and
- * refuse when the transport cannot deliver at all.
+ * Forgot-password action: it must reach better-auth's `requestPasswordReset` (the
+ * only thing that mints a token and calls the mail callback), keep the
+ * anti-enumeration answer, and refuse when the transport cannot deliver.
  */
 const { requestResetMock, mailAvailableMock, mailLiveMock, rateLimitStrictMock } = vi.hoisted(
 	() => ({
@@ -149,7 +148,7 @@ describe('forgot-password action', () => {
 		expect(requestResetMock).not.toHaveBeenCalled();
 	});
 
-	it('fails closed with 503 when the limiter store is down (W6.10)', async () => {
+	it('fails closed with 503 when the limiter store is down', async () => {
 		rateLimitStrictMock.mockResolvedValueOnce({
 			allowed: false,
 			count: 0,

@@ -32,13 +32,13 @@ export const rehypeMermaid: Plugin<[], Root> = () => {
 
 			if (!classList(child).includes('language-mermaid')) return;
 
-			// 提取代码内容
+			// Extract the code content
 			const codeContent = (child.children ?? [])
 				.filter((c) => c.type === 'text')
 				.map((c) => (c as { value: string }).value)
 				.join('');
 
-			// 替换为 mermaid 挂载点
+			// Replace it with the mermaid mount point
 			node.tagName = 'pre';
 			node.properties = { className: ['mermaid'] };
 			node.children = [{ type: 'text', value: codeContent }];

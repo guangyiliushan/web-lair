@@ -1,12 +1,12 @@
 // scripts/seed-demo.ts
-// 用法:
-//   pnpm db:start          (首次:起数据库容器)
-//   pnpm db:migrate        (首次:建表)
-//   pnpm db:seed-demo      — 幂等:已存在即跳过(已删除的文章不会被找回)
-//   pnpm db:seed-demo --force — 重写演示文章的正文、标题与摘要
+// Usage:
+//   pnpm db:start          (first run: start the database container)
+//   pnpm db:migrate        (first run: create the tables)
+//   pnpm db:seed-demo      — idempotent: existing rows are skipped (deleted posts stay deleted)
+//   pnpm db:seed-demo --force — rewrite the demo post's body, title and summary
 //
-// 环境变量:
-//   DATABASE_URL — PostgreSQL 连接串(.env 由 --env-file)注入)
+// Environment variables:
+//   DATABASE_URL — PostgreSQL connection string (the .env file is injected via --env-file)
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -41,7 +41,7 @@ async function main(): Promise<void> {
 	const client = postgres(DATABASE_URL as string);
 	const db = drizzle(client);
 
-	// 分类:按 slug 查,缺则建(--force 不改分类)
+	// Category: looked up by slug, created when missing (--force leaves categories alone)
 	const existingCategory = await db
 		.select()
 		.from(categories)
@@ -60,7 +60,7 @@ async function main(): Promise<void> {
 		console.log(`+ category "${CATEGORY_NAME}" created (${categoryId})`);
 	}
 
-	// 文章:按 slug 查;存在则跳过(--force 时重写正文/标题/摘要)
+	// Post: looked up by slug; skipped when present (--force rewrites body/title/summary)
 	const existingPost = await db.select().from(posts).where(eq(posts.slug, POST_SLUG)).limit(1);
 	if (existingPost.length > 0) {
 		if (!force) {

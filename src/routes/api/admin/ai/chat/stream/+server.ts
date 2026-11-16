@@ -15,7 +15,7 @@ import type { RequestHandler } from './$types';
 
 const MAX_USER_CHARS = 4000;
 
-/** Cost-bearing endpoint (W6.10): 30 turns/hour per account, 60 per IP. */
+/** Cost-bearing endpoint: 30 turns/hour per account, 60 per IP. */
 const AI_RATE_LIMIT = { limit: 30, windowSeconds: 60 * 60 } as const;
 const AI_IP_RATE_LIMIT = { limit: 60, windowSeconds: 60 * 60 } as const;
 
@@ -33,7 +33,7 @@ export const POST: RequestHandler = async ({ request, locals, getClientAddress }
 	const userId = locals.user?.id;
 	if (!userId) return new Response('unauthorized', { status: 401 });
 
-	// W6.10: fail-closed budget before any provider work happens.
+	// Fail-closed budget before any provider work happens.
 	const address = clientAddressKey(requestAddress(getClientAddress));
 	const [accountRate, addressRate] = await Promise.all([
 		rateLimitStrict(

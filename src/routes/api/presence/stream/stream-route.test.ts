@@ -3,14 +3,13 @@ import { MemoryCacheStore } from '$lib/server/cache/memory';
 import { dateStamp } from '$lib/server/services/presence';
 
 /**
- * Route tests for the presence SSE stream (realtime R2, ledger §23): the
- * always-200 contract (degradation happens inside the payload — WHATWG makes
- * any non-200 a permanent EventSource failure), the one deliberate 204
- * (presence disabled = stop reconnecting), the scoping guards, the payload
- * shapes for the three viewer classes, the immediate first frame, the 5s
- * cadence with the 15s keepalive and the abort cleanup. The REAL presence
- * service runs against a MemoryCacheStore, so the shapes exercised here are
- * the production ones.
+ * Route tests for the presence SSE stream: the always-200 contract (degradation
+ * happens inside the payload - WHATWG makes any non-200 a permanent EventSource
+ * failure), the one deliberate 204 (presence disabled = stop reconnecting), the
+ * scoping guards, the payload shapes for the three viewer classes, the immediate
+ * first frame, the 5s cadence with the 15s keepalive and the abort cleanup. The
+ * REAL presence service runs against a MemoryCacheStore, so the shapes exercised
+ * here are the production ones.
  */
 const { state } = vi.hoisted(() => ({
 	state: {
@@ -209,7 +208,7 @@ describe('presence stream route', () => {
 		ac.abort();
 	});
 
-	it('answers 429 + X-Retry-After when one address opens too many streams (W6.10)', async () => {
+	it('answers 429 + X-Retry-After when one address opens too many streams', async () => {
 		const store = state.store as MemoryCacheStore;
 		for (let i = 0; i < 30; i += 1) {
 			await store.incr('limits:presence-connect:unknown', 60);

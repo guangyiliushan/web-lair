@@ -9,9 +9,9 @@ import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad } from './$types';
 
 /**
- * Public 摘录 detail (C3): uuid-addressed and language-neutral. A malformed
- * id never reaches the uuid column (22P02 guard) and both malformed and
- * missing ids answer a plain 404.
+ * Public quote detail (`摘录`): uuid-addressed and language-neutral. A malformed id
+ * never reaches the uuid column (22P02 guard), and both malformed and missing ids
+ * answer a plain 404.
  */
 export const load: PageServerLoad = async ({ params }) => {
 	if (!isUuid(params.id)) throw error(404, 'Not found');

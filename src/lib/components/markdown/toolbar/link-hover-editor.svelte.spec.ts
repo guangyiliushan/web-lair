@@ -14,7 +14,8 @@ overwriteGetLocale(() => 'zh-cn');
 
 const LINK_MD = '前缀 [示例链接](https://example.com/old) 后缀';
 
-/** 浮层节点每次现查:编辑态切换会重渲染,旧引用失效。 */
+/** The overlay node is looked up fresh every time: toggling edit state re-renders and
+ * invalidates the old reference. */
 const pane = () => document.querySelector('[aria-label="链接"]') as HTMLElement | null;
 
 async function mountHost(md = LINK_MD) {
@@ -130,7 +131,7 @@ describe('link hover editor', () => {
 		const input = pane()?.querySelector('input') as HTMLInputElement;
 		input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 		await new Promise((r) => setTimeout(r, 200));
-		// 回到查看态:浮层仍在且显示 URL 文本(而非输入框)
+		// Back to view state: the pane is still there and shows the URL text (not the input)
 		expect(pane()?.textContent).toContain('https://example.com/old');
 		expect(pane()?.querySelector('input')).toBeNull();
 	});

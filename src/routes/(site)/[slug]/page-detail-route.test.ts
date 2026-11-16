@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the universal md-page route (P1b): strict language
+ * The universal md-page route: strict language
  * serving (missing locale → 404 with an ordered hint, never a fallback),
  * external / contentless rows as plain 404s, hidden rows directly reachable,
  * display-field fallback for the head, and the content-locales hreflang set.
@@ -38,8 +38,8 @@ vi.mock('$lib/server/services/comments-actions', async (importOriginal) => {
 	return {
 		commentEditAction: service.commentEditAction,
 		commentDeleteAction: service.commentDeleteAction,
-		// The real mapping: the route's submit path rides on it (pre-release
-		// review 01-P2-1) - the mock must not fake it away.
+		// The real mapping: the route's submit path rides on it, so the mock must
+		// not fake it away.
 		commentSubmitResponse: actual.commentSubmitResponse
 	};
 });
@@ -128,8 +128,7 @@ describe('(site)/[slug] load — universal md page', () => {
 			{ lang: 'zh-cn', path: '/about' }
 		]);
 		expect(data.page).toEqual({ slug: 'about', title: 'About Me', description: 'About desc' });
-		// P4 comment mount: guests get the login link; the threads always load
-		// (pages carry no per-row switch).
+		// Guests get the login link; threads always load (pages have no per-row switch).
 		expect(data.viewer).toEqual({
 			emailVerified: false,
 			canComment: false,
@@ -203,7 +202,7 @@ describe('(site)/[slug] load — universal md page', () => {
 		expect(data.page.description).toBeNull();
 	});
 
-	it('404s locale-shaped slugs before touching the registry (P1b review belt)', async () => {
+	it('404s locale-shaped slugs before touching the registry', async () => {
 		await expect(load(makeEvent('en'))).rejects.toMatchObject({ status: 404 });
 		await expect(load(makeEvent('zh-cn'))).rejects.toMatchObject({ status: 404 });
 		await expect(load(makeEvent('ja'))).rejects.toMatchObject({ status: 404 });
@@ -248,7 +247,7 @@ describe('(site)/[slug] load — universal md page', () => {
 	});
 });
 
-describe('(site)/[slug] comment actions (P4 mount)', () => {
+describe('(site)/[slug] comment actions', () => {
 	it('submits through the slug-resolved page target', async () => {
 		service.resolveCommentPageTarget.mockResolvedValue('p-1');
 		const fd = new FormData();

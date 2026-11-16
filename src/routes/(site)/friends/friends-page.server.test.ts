@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Public friends route (M3): load wiring for the three zones + site.info,
- * and the application action's honeypot/refusal/status mapping. The service
- * and the registry are mocked; their own rules are covered by
- * `src/lib/server/links/apply.test.ts`.
+ * Public friends route: load wiring for the three zones + site.info, and the
+ * application action's honeypot/refusal/status mapping. The service and registry
+ * are mocked; their own rules are covered by `src/lib/server/links/apply.test.ts`.
  */
 const { optionState, applyMock, listMock, scheduleState } = vi.hoisted(() => {
 	const optionState: Record<string, unknown> = {};

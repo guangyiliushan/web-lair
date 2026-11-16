@@ -110,13 +110,14 @@ describe('editor toolbar character formats', () => {
 		await body.click();
 		await user.keyboard('{End}');
 		await user.keyboard('{Shift>}{Home}{/Shift}');
-		// 限定顶部工具栏(选区存在时浮动工具栏也会出现同名按钮)
+		// Restrict to the top toolbar (the floating toolbar also shows same-named buttons
+		// when a selection exists)
 		await page
 			.getByRole('toolbar', { name: '编辑器工具栏' })
 			.getByRole('button', { name: '粗体' })
 			.click();
 
-		// 选区文本被包裹为 strong
+		// The selected text is wrapped in strong
 		await expect.element(page.getByRole('strong')).toHaveTextContent('hello world');
 	});
 
@@ -133,22 +134,22 @@ describe('editor toolbar character formats', () => {
 			await expect.element(body).toBeInTheDocument();
 			const toolbar = page.getByRole('toolbar', { name: '编辑器工具栏' });
 
-			// 先聚焦获得光标,插入命令才有落点
+			// Focus first so the insert command has a place to land
 			await body.click();
 			await toolbar.getByRole('button', { name: '插入表格' }).click();
 			await expect.element(page.getByRole('table')).toBeInTheDocument();
 
-			// 块级插入禁用
+			// Block-level inserts are disabled
 			await expect.element(toolbar.getByRole('button', { name: '插入图片' })).toBeDisabled();
 			await expect.element(toolbar.getByRole('button', { name: '分割线' })).toBeDisabled();
 			await expect.element(toolbar.getByRole('button', { name: 'Callout' })).toBeDisabled();
 			await expect.element(toolbar.getByRole('button', { name: '代码块' })).toBeDisabled();
-			// 行内插入保持可用
+			// Inline inserts stay enabled
 			await expect.element(toolbar.getByRole('button', { name: '插入标签' })).toBeEnabled();
 		});
 	});
 
-	// Regression: the overflow ("更多") menu must stay inside the viewport on
+	// Regression: the overflow (更多) menu must stay inside the viewport on
 	// small or short screens and scroll within itself instead of the page.
 	describe('overflow menu responsiveness', () => {
 		// Note: only static viewports are covered here. After a dynamic
@@ -174,7 +175,7 @@ describe('editor toolbar character formats', () => {
 
 				const moreBtn = toolbar.getByRole('button', { name: '更多' });
 				if (!menuExpected) {
-					// 大屏所有按钮平铺,不应出现溢出菜单
+					// On large screens every button is laid out inline, so no overflow menu appears
 					await expect.element(moreBtn).not.toBeInTheDocument();
 					return;
 				}
@@ -197,12 +198,13 @@ describe('editor toolbar character formats', () => {
 					right: r.right,
 					overflowY: getComputedStyle(menuEl).overflowY
 				};
-				// 菜单完整落在视口内
+				// The menu fits entirely inside the viewport
 				expect(box.top).toBeGreaterThanOrEqual(0);
 				expect(box.bottom).toBeLessThanOrEqual(height);
 				expect(box.left).toBeGreaterThanOrEqual(0);
 				expect(box.right).toBeLessThanOrEqual(width);
-				// 放不下时组件内滚动(而非撑破页面);放得下时保持 visible 即可
+				// When it does not fit it scrolls internally (instead of breaking the page);
+				// when it fits, being visible is enough
 				const scrollsInternally = menuEl.scrollHeight > menuEl.clientHeight + 1;
 				if (scrollsInternally) {
 					expect(box.overflowY).toBe('auto');

@@ -17,15 +17,16 @@ import { TabsNode } from '$lib/components/markdown/tabs/tabs-node';
 import { GridNode } from '$lib/components/markdown/grid/grid-node';
 
 /**
- * 嵌套编辑器节点子集与 Theme 配置。
+ * Nested editor node subset and Theme configuration.
  *
- * 独立成模块且不引用自定义 TagNode/AlertNode：依赖链
- * alert-node → alert-decorator → 本模块 必须在此终止，
- * 否则在 alert-node 先于 editor-nodes 初始化的导入顺序下，
- * 自定义节点类处于 TDZ，数组/依赖里会得到 undefined。
+ * A standalone module that never imports the custom TagNode/AlertNode: the
+ * dependency chain alert-node → alert-decorator → this module must terminate here,
+ * otherwise, in an import order where alert-node initialises before editor-nodes,
+ * the custom node classes are still in the TDZ and the arrays/dependencies get
+ * undefined.
  */
 
-/** 嵌套编辑器节点子集（不含 AlertNode 和 TagNode，防止无限嵌套） */
+/** Nested editor node subset (AlertNode and TagNode excluded to prevent infinite nesting) */
 export const NESTED_EDITOR_NODES = [
 	HeadingNode,
 	ListNode,
@@ -49,13 +50,13 @@ export const NESTED_EDITOR_NODES = [
 ];
 
 /**
- * Lexical 编辑器 Theme 配置。
+ * Lexical editor Theme configuration.
  *
- * 将各节点类型映射到语义化 CSS 类名，由组件层 CSS 提供实际样式。
- * 参考 Mx Space Admin 的 rich-heading-h1/h2/h3 命名惯例。
+ * Maps each node type to a semantic CSS class; the component layer's CSS provides the
+ * actual styling. Follows the rich-heading-h1/h2/h3 naming convention of Mx Space Admin.
  *
- * 注意：类名通过 `:global()` 定义在 MarkdownEditor.svelte 的 scoped style 中，
- * 支持 Tailwind `@apply` 以确保与设计系统一致。
+ * Note: the class names are declared with `:global()` in MarkdownEditor.svelte's scoped
+ * style and support Tailwind `@apply`, keeping them aligned with the design system.
  */
 export const EDITOR_THEME: EditorThemeClasses = {
 	heading: {
@@ -79,7 +80,8 @@ export const EDITOR_THEME: EditorThemeClasses = {
 	},
 	quote: 'rich-editor-quote',
 	code: 'rich-editor-code-block',
-	// ── 表格（@lexical/table 0.46 主题键，tableCellSelected/tableSelection 由包自动增删）──
+	// ── Table (the @lexical/table 0.46 theme keys; tableCellSelected/tableSelection are
+	// added and removed by the package itself) ──
 	table: 'rich-editor-table',
 	tableRow: 'rich-editor-table-row',
 	tableCell: 'rich-editor-table-cell',

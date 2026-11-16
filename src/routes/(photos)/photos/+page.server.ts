@@ -12,13 +12,12 @@ import { parsePhotoQuery, photoQueryParams, UUID_RE, type PhotoQuery } from '$li
 import type { PageServerLoad } from './$types';
 
 /**
- * Public gallery feed (§5.1): keyset pagination on `(sort_at, id) DESC` with
- * a stateless "load more" chain. Every shown page boundary travels as a `c`
- * query param (`<iso>~<id>`), so the button is a plain link that works
- * without JS; the route always re-fetches from page one and RECOMPUTES the
- * boundaries from the actual rows — stored cursors only bound the chain
- * length, they are never trusted as query values. A malformed entry ends the
- * chain at that point; the chain is capped regardless.
+ * Public gallery feed: keyset pagination on `(sort_at, id) DESC` with a stateless
+ * "load more" chain. Every shown page boundary travels as a `c` query param
+ * (`<iso>~<id>`), so the button is a plain link that works without JS; the route
+ * always re-fetches from page one and RECOMPUTES the boundaries from the actual
+ * rows - stored cursors only bound the chain length, never query values. A
+ * malformed entry ends the chain there, and the chain is capped regardless.
  */
 const PAGE_SIZE = PHOTO_PAGE_DEFAULT;
 const MAX_CHAIN = 12;
@@ -84,8 +83,7 @@ export const load: PageServerLoad = ({ url }) => {
 
 			// A cursor/filter drift could double-serve one boundary row; ids win.
 			// Public coordinates are fuzzed to two decimals at the read boundary
-			// (plan §5.1: ~1km render-time blur; the admin face keeps full
-			// precision — review round 1 caught the exact values leaking here).
+			// (~1km blur); the admin face keeps full precision.
 			const seen = new Set<string>();
 			const unique = items
 				.filter((entry) => !seen.has(entry.id) && (seen.add(entry.id), true))

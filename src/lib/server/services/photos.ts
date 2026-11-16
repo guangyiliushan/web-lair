@@ -20,7 +20,7 @@ import type { ObjectStoragePort } from '$lib/server/storage/port';
  * the files boundary, and the public read surface. The reference-guarded
  * `deleteFile` counterpart lives in `./files` — photo removal never deletes
  * the underlying blob unless the file itself is unreferenced (§6.3:
- * "没有静默删除").
+ * "no silent deletion").
  */
 
 export type PhotosDb = Pick<

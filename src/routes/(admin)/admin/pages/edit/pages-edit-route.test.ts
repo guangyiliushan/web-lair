@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the pages editor (T6 unit side; P2 metadata + P5-2
- * draft flow): load addressing, the save guards (uuid / empty title / icon
- * whitelist / external URL / reserved and default-row slug rules), the
- * md-row narrowing (icon / external_url only), the draft actions
- * (saveDraft / publish / discard) parameter normalisation and redirect
- * mapping, and the 23505 → 409 conflict mapping. The db module is mocked
- * with a recording chain; the page-drafts service is mocked function-wise.
+ * Route-level tests for the pages editor (metadata + draft flow): load addressing,
+ * the save guards (uuid / empty title / icon whitelist / external URL / reserved and
+ * default-row slug rules), the md-row narrowing (icon / external_url only), the draft
+ * actions (saveDraft / publish / discard) parameter normalisation and redirect
+ * mapping, and the 23505 → 409 conflict mapping. The db module is mocked with a
+ * recording chain; the page-drafts service is mocked function-wise.
  */
 const { dbMock, state, service } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -122,7 +121,7 @@ function resetState() {
 	});
 }
 
-describe('admin page editor · metadata save (P2)', () => {
+describe('admin page editor · metadata save', () => {
 	beforeEach(resetState);
 
 	it('404s malformed ids before touching the database', async () => {
@@ -171,8 +170,8 @@ describe('admin page editor · metadata save (P2)', () => {
 		state.selectQueue = [[baseRow]];
 		expect((await run('save', { id: PAGE_ID, title_en: 'X', slug: 'admin' })).status).toBe(400);
 
-		// draft- prefix rename refused (R2-1: the prefix flips the row into
-		// the editor domain while external_url may stay set - a black hole)
+		// draft- prefix rename refused: the prefix flips the row into the editor
+		// domain while external_url may stay set - a black hole
 		state.selectQueue = [[baseRow]];
 		expect((await run('save', { id: PAGE_ID, title_en: 'X', slug: 'draft-x1' })).status).toBe(400);
 
@@ -261,7 +260,7 @@ describe('admin page editor · metadata save (P2)', () => {
 		expect(state.setCalls[1]).toEqual({ icon: null, externalUrl: null });
 	});
 
-	it('treats a never-published placeholder like an md row (props-only save, B1/M3)', async () => {
+	it('treats a never-published placeholder like an md row (props-only save)', async () => {
 		state.selectQueue = [[{ id: PAGE_ID, slug: 'draft-abc123', isDefault: false, content: null }]];
 		state.returningQueue = [[{ id: PAGE_ID }]];
 		const ok = await run('save', {
@@ -276,7 +275,7 @@ describe('admin page editor · metadata save (P2)', () => {
 	});
 });
 
-describe('pages editor · draft actions (P5-2)', () => {
+describe('pages editor · draft actions', () => {
 	beforeEach(resetState);
 
 	const BASE_SAVE = {
@@ -507,7 +506,7 @@ describe('pages editor · load', () => {
 		expect(service.loadPageDraftByPageId).not.toHaveBeenCalled();
 	});
 
-	it('hands the published body through for working-copy seeding (P5 e2e fix)', async () => {
+	it('hands the published body through for working-copy seeding', async () => {
 		state.selectQueue = [
 			[
 				{
@@ -532,7 +531,7 @@ describe('pages editor · load', () => {
 		expect(data.draft).toBeNull();
 	});
 
-	it('flags code / external rows as NOT editor rows (R2-7)', async () => {
+	it('flags code / external rows as NOT editor rows', async () => {
 		state.selectQueue = [
 			[
 				{
@@ -557,12 +556,12 @@ describe('pages editor · load', () => {
 			placeholder: false,
 			editorMode: false
 		});
-		// R2-4: a non-editor row never gets a draft handed out.
+		// A non-editor row never gets a draft handed out.
 		expect(data.draft).toBeNull();
 		expect(service.loadPageDraftByPageId).not.toHaveBeenCalled();
 	});
 
-	it('answers new-mode (no id) with a virtual editor target (P5-3)', async () => {
+	it('answers new-mode (no id) with a virtual editor target', async () => {
 		const data = (await load(loadEvent())) as {
 			page: Record<string, unknown>;
 			draft: unknown;

@@ -3,14 +3,11 @@ import { getOption } from '$lib/server/config/options-registry';
 import type { RequestHandler } from './$types';
 
 /**
- * Dynamic robots.txt (P3-b, ledger §22): ORIGIN is the single source for
- * the Sitemap line, with a request-origin fallback in dev (review finding).
- * Minimal by design — crawl management only; admin and account pages are
- * protected by auth, not by robots (Google: robots.txt is not a mechanism
- * for keeping a page out of the index).
- *
- * The two AI policy groups are voluntary signals, not access control
- * (RFC 9309 §1). Product tokens change over time; keep the lists here.
+ * Dynamic robots.txt: ORIGIN drives the Sitemap line, the request origin is the
+ * dev fallback. Deliberately minimal — admin and account pages are protected by
+ * auth, not by robots (Google: robots.txt is not an access-control mechanism).
+ * The AI policy groups are voluntary signals (RFC 9309 §1), not access control;
+ * product tokens change over time, so the lists live here.
  */
 const AI_ANSWER_ENGINES = ['OAI-SearchBot', 'ChatGPT-User', 'PerplexityBot'];
 const AI_TRAINING = ['GPTBot', 'Google-Extended', 'CCBot', 'ClaudeBot'];

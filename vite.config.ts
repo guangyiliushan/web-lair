@@ -6,44 +6,36 @@ import { playwright } from '@vitest/browser-playwright';
 import { sveltekit } from '@sveltejs/kit/vite';
 import path from 'node:path';
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
+
 const dirname = import.meta.dirname;
 
-/** Cookie-first chain for the exempt surfaces (ledger §9.18.1/§9.18.3). */
+/** Locale chain for the locale-free surfaces, in precedence order (no `url` source). */
 const COOKIE_CHAIN = ['cookie', 'preferredLanguage', 'baseLocale'] as const;
 
+const DEFAULT_BROWSER_API_PORT = 43017;
+
 /**
- * Port for the Vitest browser API server.
- *
- * Vitest defaults to 63315, which on Windows can land inside a Hyper-V/WSL
- * reserved range (this host reserves 63269-63368, so bind() fails with EACCES
- * on ::1). `port: 0` is not an escape hatch: vitest resolves a falsy port back
- * to the default (`resolveApiServerConfig`), and it does not retry on EADDRINUSE
- * for the browser server. Default to a port below the Windows ephemeral range
- * (49152+) so the OS never hands it out, and let any machine or checkout override
- * it when the default is taken.
+ * Keep the port outside Windows' reserved bands: Vitest's 63315 default can land in a
+ * Hyper-V/WSL reservation (bind fails with EACCES), and `port: 0` resolves back to that
+ * default instead of picking a free port. 43017 is below the ephemeral range (49152+).
  */
 function browserApiPort(): number {
 	const raw = process.env.VITEST_BROWSER_API_PORT;
-	const port = Number(raw ?? 43017);
+	const port = Number(raw ?? DEFAULT_BROWSER_API_PORT);
 	if (!Number.isInteger(port) || port < 1 || port > 65535) {
-		// dev/build/check load this file too: fail loudly only for test runs,
-		// where a typo would otherwise silently pick another port.
+		// dev/build/check load this file too; only a test run should fail hard.
 		const message = `VITEST_BROWSER_API_PORT must be a TCP port (1-65535), got "${raw}"`;
 		if (process.env.VITEST) throw new Error(message);
-		console.warn(`[vite.config] ${message}; using 43017`);
-		return 43017;
+		console.warn(`[vite.config] ${message}; using ${DEFAULT_BROWSER_API_PORT}`);
+		return DEFAULT_BROWSER_API_PORT;
 	}
 	return port;
 }
 
 /**
- * Client-side packages that Vite's startup dependency scan does not reach
- * (dynamic imports, lazily-mounted admin widgets, map/chart islands).
- *
- * When the dev server discovers one of these mid-session it re-bundles *every*
- * optimized dependency, prints "new dependencies optimized" and forces a full
- * page reload — minutes on Windows with this dependency tree. Listing them here
- * pays that cost once at startup instead.
+ * Packages the startup scan cannot reach (dynamic imports, lazy admin widgets, map/chart
+ * islands). Discovering one mid-session re-bundles every dependency and reloads the page,
+ * which costs minutes on Windows; listing them pays that once at startup.
  */
 const lazyClientDeps = [
 	// Markdown editor + preview
@@ -82,29 +74,46 @@ const lazyClientDeps = [
 	'thumbhash'
 ];
 
-// More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
+/** Icon modules only browser specs mount: same mid-test reload hazard as `lazyClientDeps`. */
+const specIconDeps = [
+	// Owner presence badges (StatusTicket / OwnerStatusCard)
+	'@tabler/icons-svelte-runes/icons/app-window',
+	'@tabler/icons-svelte-runes/icons/brand-vscode',
+	// media-upload-dialog's tree (upload / photo / file / x)
+	'@tabler/icons-svelte-runes/icons/file',
+	'@tabler/icons-svelte-runes/icons/photo',
+	'@tabler/icons-svelte-runes/icons/upload',
+	'@tabler/icons-svelte-runes/icons/x',
+	// Admin dashboard / analytics specs
+	'@tabler/icons-svelte-runes/icons/activity',
+	'@tabler/icons-svelte-runes/icons/arrow-right',
+	'@tabler/icons-svelte-runes/icons/article',
+	'@tabler/icons-svelte-runes/icons/bulb',
+	'@tabler/icons-svelte-runes/icons/notebook',
+	'@tabler/icons-svelte-runes/icons/quote',
+	'@tabler/icons-svelte-runes/icons/refresh',
+	'@tabler/icons-svelte-runes/icons/tool',
+	'@tabler/icons-svelte-runes/icons/trending-up',
+	'@tabler/icons-svelte-runes/icons/users',
+	'@tabler/icons-svelte-runes/icons/writing'
+];
+
 export default defineConfig({
 	optimizeDeps: {
 		include: lazyClientDeps,
-		// Ships `.svelte` sources in dist; the esbuild pre-bundler cannot parse
-		// them, so let the Svelte plugin handle the package instead.
+		// Ships raw `.svelte` sources in dist; the dependency pre-bundler cannot parse them.
 		exclude: ['@shadcn-svelte/primitives']
 	},
 	ssr: {
-		// Same reason as `exclude` above, for the SSR module graph: the
-		// headless chat primitives (message-scroller, questionnaire) are
-		// `.svelte` files that Node cannot load natively.
+		// Same package, SSR graph: Node cannot load its `.svelte` sources.
 		noExternal: ['@shadcn-svelte/primitives']
 	},
 	server: {
-		// `build/` (adapter-node output) and `storybook-static/` are generated
-		// artifacts; watching 43 MB of them on Windows stalls the file watcher
-		// and invalidates the module graph for no reason.
+		// Generated output (`build/`, `storybook-static/`): watching it stalls Windows' watcher.
 		watch: {
 			ignored: ['**/build/**', '**/storybook-static/**']
 		},
-		// Transform the admin shell and the editor routes while the server boots
-		// so the first client navigation does not pay for it.
+		// Pre-transform the admin shell and editor routes to avoid a transform waterfall.
 		warmup: {
 			clientFiles: [
 				'./src/routes/+layout.svelte',
@@ -122,23 +131,13 @@ export default defineConfig({
 		paraglideVitePlugin({
 			project: './project.inlang',
 			outdir: './src/lib/paraglide',
-			// Strategy chain (P3-a, ledger §9.18.3): the URL prefix is the first
-			// source of truth for content pages; cookie = the user's own choice
-			// (server-visible), preferredLanguage = first-visit detection
-			// (navigator.languages / Accept-Language), baseLocale = fallback.
-			// Exempt surfaces override the chain via routeStrategies below —
-			// without `url` they keep the cookie-first behaviour. The compiler
-			// default also includes `globalVariable`, which the docs call
-			// testing/quick-start only and warn about for server-side
-			// cross-request issues.
+			// Order is precedence: URL prefix, then the user's cookie, then first-visit
+			// detection, then the base locale. `globalVariable` (the compiler default) is
+			// module-level state shared across SSR requests, so it is unsafe here.
 			strategy: ['url', 'cookie', 'preferredLanguage', 'baseLocale'],
-			// Every locale is prefixed on content routes (/en/…, /zh-cn/…,
-			// /ja/…). The bare-locale entries come FIRST (specific patterns
-			// before the wildcard — urlpattern.com ordering): they keep `/en`,
-			// `/zh-cn` and `/ja` from de-localizing to the homepage. No route
-			// matches them, so SvelteKit answers with its standard 404 instead
-			// of rendering `/` (ledger §9.18.1/§11-C1; `/en/` normalises to
-			// `/en` first via Kit's trailing-slash 308).
+			// Patterns match in declaration order, so the bare-locale entries stay first:
+			// otherwise `/en` hits the catch-all and de-localizes to `/`. With them `/en`
+			// reaches Kit unchanged and 404s (`/en/` is a trailing-slash 308 to `/en`).
 			urlPatterns: [
 				{ pattern: '/en', localized: [['en', '/en']] },
 				{ pattern: '/zh-cn', localized: [['zh-cn', '/zh-cn']] },
@@ -152,14 +151,9 @@ export default defineConfig({
 					]
 				}
 			],
-			// Exempt surfaces (ledger §9.18.2, plus §21 for /i): routes that
-			// must not carry a locale prefix resolve the locale from
-			// cookie/detection instead of the URL; `exclude: true` skips the
-			// i18n middleware entirely (API, demos and the /i asset proxy —
-			// the docs' prescribed treatment for routes with no i18n surface).
-			// Both lists live in `src/lib/config/locale-surfaces.ts`, the same
-			// module the runtime link helper (`src/lib/utils/href.ts`) uses —
-			// middleware overrides and chrome links cannot drift apart (P3-b).
+			// Exempt surfaces resolve the locale from the cookie chain, or skip the i18n
+			// middleware entirely (`exclude`: API, demos, `/i`). Both lists live in
+			// `src/lib/config/locale-surfaces.ts`, which `href.ts` shares, so links cannot drift.
 			routeStrategies: [
 				...cookieSurfaceMatches().map((match) => ({ match, strategy: [...COOKIE_CHAIN] })),
 				...excludedSurfaceMatches().map((match) => ({ match, exclude: true as const }))
@@ -172,15 +166,13 @@ export default defineConfig({
 		},
 		projects: [
 			{
-				extends: './vite.config.ts',
+				extends: true,
 				test: {
 					name: 'client',
 					browser: {
 						enabled: true,
 						provider: playwright(),
 						testerHtmlPath: './vitest-tester.html',
-						// Default 43017 sits outside the Windows excluded bands; override
-						// with VITEST_BROWSER_API_PORT when a checkout needs another port.
 						api: { host: '127.0.0.1', port: browserApiPort() },
 						viewport: { width: 1280, height: 720 },
 						instances: [
@@ -192,45 +184,18 @@ export default defineConfig({
 					},
 					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
 					exclude: ['src/lib/server/**'],
-					// One resource-timing floor for every browser spec (review 3d).
+					// Shared browser setup: raises Chromium's 250-entry resource-timing buffer.
 					setupFiles: ['./src/lib/testing/client-setup.ts'],
-					// Browser interactions need headroom when the machine is
-					// loaded (concurrent suites, review probes): the 15 s
-					// default turns slow-but-correct runs into false negatives.
+					// Slow-but-correct browser runs need headroom over the 15 s default.
 					testTimeout: 30000
 				},
-				// Same lazy-import hazard as dev (see `lazyClientDeps`), plus the
-				// icon modules that only specs mount: an optimizer pass mid-test
-				// under full-suite load blows the 30 s test timeout.
+				// Same hazard as dev, plus the icons only specs mount.
 				optimizeDeps: {
-					include: [
-						...lazyClientDeps,
-						'@tabler/icons-svelte-runes/icons/app-window',
-						'@tabler/icons-svelte-runes/icons/brand-vscode',
-						// media-upload-dialog's tree (upload / photo / file / x) — same
-						// mid-test reload hazard as the two above when a spec mounts it.
-						'@tabler/icons-svelte-runes/icons/file',
-						'@tabler/icons-svelte-runes/icons/photo',
-						'@tabler/icons-svelte-runes/icons/upload',
-						'@tabler/icons-svelte-runes/icons/x',
-						// Admin dashboard / analytics specs: a cold optimizer run used
-						// to reload mid-test on these (P6).
-						'@tabler/icons-svelte-runes/icons/activity',
-						'@tabler/icons-svelte-runes/icons/arrow-right',
-						'@tabler/icons-svelte-runes/icons/article',
-						'@tabler/icons-svelte-runes/icons/bulb',
-						'@tabler/icons-svelte-runes/icons/notebook',
-						'@tabler/icons-svelte-runes/icons/quote',
-						'@tabler/icons-svelte-runes/icons/refresh',
-						'@tabler/icons-svelte-runes/icons/tool',
-						'@tabler/icons-svelte-runes/icons/trending-up',
-						'@tabler/icons-svelte-runes/icons/users',
-						'@tabler/icons-svelte-runes/icons/writing'
-					]
+					include: [...lazyClientDeps, ...specIconDeps]
 				}
 			},
 			{
-				extends: './vite.config.ts',
+				extends: true,
 				test: {
 					name: 'server',
 					environment: 'node',
@@ -244,6 +209,7 @@ export default defineConfig({
 					// The plugin will run tests for the stories defined in your Storybook config
 					// See options at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon#storybooktest
 					storybookTest({
+						// Pin to this file's dir: the default resolves `.storybook` from the CWD.
 						configDir: path.join(dirname, '.storybook')
 					})
 				],

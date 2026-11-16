@@ -32,7 +32,7 @@ export interface CommentPoint {
 }
 
 /**
- * Admin dashboard (C3): the load is admin-guarded. The quick-action counters
+ * Admin dashboard: the load is admin-guarded. The quick-action counters
  * and the data-statistics block read real rows; the realtime cards carry SSR
  * initial values from the presence service (site window / today's unique tabs
  * / daily peak sentinel) and the page upgrades them over the admin SSE
@@ -171,7 +171,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			: Promise.resolve([] as Array<{ id: string; createdAt: Date; ipAddress: string | null }>),
 		readSiteTimezone(),
 		readPresenceEnabled(),
-		// Fail-open traffic card (P6): the same 60 s cache the analytics
+		// Fail-open traffic card: the same 60 s cache the analytics
 		// page uses; null means Sentinel is down or unconfigured.
 		readTrafficSnapshot({ range: '24h' })
 	]);

@@ -482,7 +482,7 @@ export async function listFiles(
 	}
 	let orphanOrder: ReturnType<typeof purgeExpiresAt> | null = null;
 	if (filters.orphan) {
-		// §6.1 "游离" filter — the same criteria as listPurgeCandidates; keep
+		// §6.1 "orphaned" filter — the same criteria as listPurgeCandidates; keep
 		// the two in sync when the TTL semantics change.
 		const { pendingDays, detachedDays } = await getOption('media.purge', database);
 		conditions.push(
@@ -585,7 +585,7 @@ export async function deleteFile(
 	if (!policy) return { kind: 'blocked', reason: 'capability' };
 	if (!policyAllowsDelete(policy)) return { kind: 'blocked', reason: 'versioning' };
 
-	// Transition guard (§6.3 "没有静默删除", review round 1): until the ST-3
+	// Transition guard (§6.3 "no silent deletion", review round 1): until the ST-3
 	// reference backfill lands, an `/i/<key>` mention in stored content is
 	// the only in-use signal. The admin delete path used to skip this guard
 	// entirely (only purgeMedia had it), so a file referenced by a post body

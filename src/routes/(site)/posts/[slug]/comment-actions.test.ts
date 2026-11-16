@@ -2,12 +2,11 @@ import { redirect } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the posts/[slug] comment actions (comment P3a,
- * spec §10): the session + verification gates, server-side target resolution
- * from the URL slug via the service resolver (client-supplied ids are
- * ignored) and the result-kind to localized-failure mapping. The service
- * module is mocked with call recording so guard order and payloads have
- * teeth (P1.1 route-test pattern).
+ * The posts/[slug] comment actions: the session + verification gates,
+ * server-side target resolution from the URL slug via the service resolver
+ * (client-supplied ids are ignored) and the result-kind to localized-failure
+ * mapping. The service module is mocked with call recording so guard order and
+ * payloads have teeth.
  */
 const { state } = vi.hoisted(() => {
 	const state = {
@@ -272,7 +271,7 @@ describe('post comment actions', () => {
 		expect(state.submitCalls).toHaveLength(0);
 	});
 
-	it('routes edit and delete through the shared handlers (review P3-6)', async () => {
+	it('routes edit and delete through the shared handlers', async () => {
 		const editAction = actions.edit as (event: never) => Promise<Record<string, unknown>>;
 		const deleteAction = actions.delete as (event: never) => Promise<Record<string, unknown>>;
 
@@ -309,7 +308,7 @@ describe('post comment actions', () => {
 		}
 	});
 
-	it('sets Retry-After on throttled and unavailable answers (W6.10)', () => {
+	it('sets Retry-After on throttled and unavailable answers', () => {
 		for (const [result, status, retry] of [
 			[{ kind: 'throttled', windowSeconds: 60 }, 429, '60'],
 			[{ kind: 'unavailable' }, 503, '60']
@@ -321,8 +320,8 @@ describe('post comment actions', () => {
 	});
 
 	it('maps every edit/delete failure onto the localized response', async () => {
-		// The three hosts share the edit/delete handlers, so this mapping has
-		// one home - and now one test home (pre-release review 03-P2-1).
+		// The three hosts share the edit/delete handlers, so this mapping has one
+		// home — and one test home.
 		const editAction = actions.edit as (event: never) => Promise<Record<string, unknown>>;
 		const deleteAction = actions.delete as (event: never) => Promise<Record<string, unknown>>;
 		const editForm = fd({ id: 'aaaaaaaa-1111-1111-1111-111111111111', text: 'edited' });

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Route-level tests for the tag detail (P3-b): unknown tag 404, locale +
+ * The tag detail: unknown tag 404, locale +
  * visibility filtering of the post list, localized dates. The db module is
  * mocked with a queue of select results; the second WHERE clause is
  * inspected through drizzle's own dialect.

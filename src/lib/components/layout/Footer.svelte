@@ -28,7 +28,7 @@
 	interface FooterProps {
 		/** Optional custom navigation sections; falls back to localized defaults */
 		sections?: FooterSection[];
-		/** ICP 备案号 (for China-based sites) */
+		/** ICP filing number (for China-based sites) */
 		icpNumber?: string;
 		/** Online visitor count (optional) */
 		onlineCount?: number;

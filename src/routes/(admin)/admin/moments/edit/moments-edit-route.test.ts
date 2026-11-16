@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the moments editor (B2a UI P0, P7).
+ * Route-level tests for the moments editor.
  *
  * The write surface moved off the list dialog: `load` reads `?id=` (malformed
  * and missing ids are both 404, guard first), and one `save` action branches

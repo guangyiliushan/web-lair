@@ -20,7 +20,7 @@ async function manifest(): Promise<Response> {
 	return (await GET({} as never)) as Response;
 }
 
-describe('GET /manifest.webmanifest (W5.3)', () => {
+describe('GET /manifest.webmanifest', () => {
 	beforeEach(() => {
 		failMode.fail = false;
 		optionState['site.info'] = { name: 'Example Site', description: '', avatar: '' };

@@ -34,8 +34,9 @@ export const load: PageServerLoad = async ({ url }) => {
 	if (keyword) conditions.push(ilike(posts.title, `%${keyword}%`));
 	const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-	// 译文与原文合并成一行（UX-1020）：按 translation_group 分页，行内给出
-	// 每个语言的状态。先分页到组再取成员，家庭不会被页边界劈开。
+	// Translations merge into one row with their source (UX-1020): paginate by
+	// translation_group and show each language's state inline. Page to groups first,
+	// then fetch the members, so a family is never split across a page boundary.
 	const [groups, totals, allCategories] = await Promise.all([
 		db
 			.select({ group: posts.translationGroup })

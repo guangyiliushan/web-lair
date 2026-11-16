@@ -17,13 +17,13 @@ export interface SerializedImageNode extends SerializedLexicalNode {
 }
 
 /**
- * 块级图片节点（WYSIWYG）。
+ * Block-level image node (WYSIWYG).
  *
- * 参考 HorizontalRuleNode 的纯 DOM DecoratorNode 模式：
- * createDOM 直接构建 figure > img，不需要 Svelte decorator。
- * isKeyboardSelectable 使节点可被方向键选中、Backspace/Delete 删除。
+ * Follows HorizontalRuleNode's pure-DOM DecoratorNode pattern: createDOM builds the
+ * figure > img directly, no Svelte decorator needed. isKeyboardSelectable lets the
+ * node be selected with the arrow keys and deleted with Backspace/Delete.
  *
- * Markdown 往返由 imageTransformer（markdown-transformers.ts）负责：
+ * Markdown round-trip belongs to imageTransformer (markdown-transformers.ts):
  * `![alt](src)` ↔ ImageNode。
  */
 export class ImageNode extends DecoratorNode<HTMLElement> {
@@ -97,12 +97,13 @@ export class ImageNode extends DecoratorNode<HTMLElement> {
 	}
 
 	// ── Decorator ──
-	// 纯 DOM 模式：decorate 不返回组件（基类返回 null），内容由 createDOM 呈现
+	// Pure DOM mode: decorate returns no component (the base class returns null);
+	// createDOM renders the content
 	decorate(): null {
 		return null;
 	}
 
-	// ── 行为 ──
+	// ── Behaviour ──
 	isInline(): boolean {
 		return false;
 	}
@@ -115,7 +116,7 @@ export class ImageNode extends DecoratorNode<HTMLElement> {
 		return '';
 	}
 
-	// ── 数据写回 ──
+	// ── Data write-back ──
 	setSrc(src: string): void {
 		const writable = this.getWritable();
 		writable.__src = src;

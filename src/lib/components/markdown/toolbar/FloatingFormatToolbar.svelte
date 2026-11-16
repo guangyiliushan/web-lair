@@ -11,7 +11,7 @@
 	} from '$lib/components/markdown/editor/lexical-helpers';
 	import { openLinkEditor } from './link-editor-channel';
 
-	// ── 图标 ──
+	// ── Icons ──
 	import IconBold from '@tabler/icons-svelte-runes/icons/bold';
 	import IconItalic from '@tabler/icons-svelte-runes/icons/italic';
 	import IconUnderline from '@tabler/icons-svelte-runes/icons/underline';
@@ -29,15 +29,15 @@
 
 	let { editor }: Props = $props();
 
-	// ── 可见性与位置 ──
+	// ── Visibility and position ──
 	let visible = $state(false);
 	let top = $state(0);
 	let left = $state(0);
 
-	// ── 格式状态 ──
+	// ── Format state ──
 	let toolbarState = $state<ToolbarState>(emptyToolbarState());
 
-	// ── 监听选区变化 ──
+	// ── Track selection changes ──
 	$effect(() => {
 		if (!editor) return;
 		const activeEditor = editor;
@@ -48,18 +48,19 @@
 			});
 		});
 
-		// 监听原生 selectionchange 以更新位置和可见性
+		// Listen to native selectionchange to update position and visibility
 		function onSelectionChange() {
 			const rect = getSelectionRect();
 			if (!rect) {
 				visible = false;
 				return;
 			}
-			// 计算位置：选区上方居中，留 10px 间距
+			// Position: centred above the selection with a 10px gap
 			const toolbarH = 36; // 预估工具栏高度
 			top = rect.top - toolbarH - 10;
 			left = rect.left + rect.width / 2;
-			// 上方空间不足、或会盖住编辑器上沿之外的区域(如顶部工具栏)则放到下方
+			// If there is not enough room above, or it would cover area outside the editor's
+			// top edge (e.g. the top toolbar), place it below
 			const editorTop = activeEditor.getRootElement()?.getBoundingClientRect().top ?? 8;
 			if (top < 8 || top < editorTop) {
 				top = rect.bottom + 10;
@@ -77,11 +78,11 @@
 
 	function handleInsertLink() {
 		if (!editor) return;
-		// 原位编辑浮层接管(与顶部工具栏同一通道)
+		// The in-place link editor pane takes over (same channel as the top toolbar)
 		openLinkEditor();
 	}
 
-	// ── 辅助：active 态按钮 ──
+	// ── Helper: active-state buttons ──
 	function isActive(key: keyof ToolbarState): boolean {
 		return !!toolbarState[key];
 	}
@@ -96,7 +97,7 @@
 		tabindex="-1"
 		onmousedown={(e) => e.preventDefault()}
 	>
-		<!-- 文本格式组 1: B I U S -->
+		<!-- Inline format group 1: B I U S -->
 		<Button
 			variant={isActive('isBold') ? 'secondary' : 'ghost'}
 			size="icon-sm"
@@ -138,10 +139,10 @@
 			<IconStrikethrough data-icon="inline-start" />
 		</Button>
 
-		<!-- 分隔 -->
+		<!-- Divider -->
 		<span class="mx-0.5 h-5 w-px bg-border" aria-hidden="true"></span>
 
-		<!-- 文本格式组 2: 上标 / 下标 -->
+		<!-- Inline format group 2: superscript / subscript -->
 		<Button
 			variant={isActive('isSuperscript') ? 'secondary' : 'ghost'}
 			size="icon-sm"
@@ -163,10 +164,10 @@
 			<IconSubscript data-icon="inline-start" />
 		</Button>
 
-		<!-- 分隔 -->
+		<!-- Divider -->
 		<span class="mx-0.5 h-5 w-px bg-border" aria-hidden="true"></span>
 
-		<!-- 特殊格式: 行内代码 / 高亮 / 链接 -->
+		<!-- Special formats: inline code / highlight / link -->
 		<Button
 			variant={isActive('isCode') ? 'secondary' : 'ghost'}
 			size="icon-sm"

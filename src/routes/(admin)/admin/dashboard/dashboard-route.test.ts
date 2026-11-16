@@ -5,10 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
 /**
- * Route-level tests for the admin dashboard load (realtime R4 + dashboard
- * data statistics, 2026-10-21): the guard runs first, the quick-action
- * counters and the statistics block read real rows, and the realtime cards
- * carry the presence SSR initial values - read only while presence is
+ * Route-level tests for the admin dashboard load: the guard runs first, the
+ * quick-action counters and the statistics block read real rows, and the realtime
+ * cards carry the presence SSR initial values - read only while presence is
  * enabled, `null` (the "—" fallback) when it is off or when the cache read
  * degrades.
  *

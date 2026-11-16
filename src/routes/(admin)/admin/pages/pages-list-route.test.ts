@@ -4,14 +4,13 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { drafts, pages } from '$lib/server/db/content';
 
 /**
- * Route-level tests for the P2 pages admin (T6 unit side) and the P5-3
- * create action: the chrome order + locale-fallback title in load, the ▲/▼
- * swap as a full renumber inside one locked transaction, the cross-group/edge
- * no-ops, the status whitelist, the delete guards (uuid / default protection /
- * locked re-check), the guard-order binding, and the direct external-entry
- * insert (no draft). The db module is mocked with a recording chain so a
- * dropped WHERE, a dropped lock, a wrong order, an unprotected default or an
- * unvalidated create turns red.
+ * Route-level tests for the pages admin and the create action: the chrome order +
+ * locale-fallback title in load, the ▲/▼ swap as a full renumber inside one locked
+ * transaction, the cross-group/edge no-ops, the status whitelist, the delete guards
+ * (uuid / default protection / locked re-check), the guard-order binding, and the
+ * direct external-entry insert (no draft). The db module is mocked with a recording
+ * chain so a dropped WHERE, a dropped lock, a wrong order, an unprotected default or
+ * an unvalidated create turns red.
  */
 const { dbMock, draftsForPagesMock, state, service, syncCheck } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -39,7 +38,7 @@ vi.mock('$lib/server/authz', () => ({ requireAdminRole: service.requireAdminRole
 // The reference cleanup runs inside the delete transaction; its own teeth
 // live in file-references.test.ts - here we pin that a hard delete calls it.
 vi.mock('$lib/server/services/file-references', () => ({ syncFileReferences: syncCheck }));
-// The draft- prefix guard for「新增」外链 (P5-3) lives in the draft service;
+// The draft- prefix guard for「新增」外链 lives in the draft service;
 // its own teeth live in page-drafts.test.ts.
 vi.mock('$lib/server/services/page-drafts', () => ({
 	isPagePlaceholderSlug: (slug: string) => slug.startsWith('draft-'),
@@ -94,10 +93,10 @@ function makeTx(): Record<string, unknown> {
 			const rendered = dialect.sqlToQuery(query as never);
 			state.executes.push({ sql: rendered.sql, params: rendered.params });
 		},
-		// Supports both `await tx.delete(t).where(...)` and the R2-3 cascade
-		// shape `...where(...).returning({ id })`; rows come from the
-		// deleteResults queue, one entry per delete call. `deleteThrow`
-		// injects a failure (e.g. a 40P01-shaped error) for the busy mapping.
+		// Supports both `await tx.delete(t).where(...)` and the cascade shape
+		// `...where(...).returning({ id })`; rows come from the deleteResults
+		// queue, one entry per delete call. `deleteThrow` injects a failure (e.g. a
+		// 40P01-shaped error) for the busy mapping.
 		delete: (table: unknown) => ({
 			where: (cond: unknown) => {
 				state.deletes.push({ table, cond });
@@ -114,9 +113,9 @@ function makeTx(): Record<string, unknown> {
 	return c;
 }
 
-// Shared harness reset (P5-5 T15/P1): the hoisted mock is module-level
-// state both describes share - ONE beforeEach at the top level instead of
-// two near-identical copies that can drift (the T6 review's point).
+// Shared harness reset: the hoisted mock is module-level state both describes
+// share - ONE beforeEach at the top level instead of two near-identical copies
+// that can drift.
 beforeEach(() => {
 	state.selectQueue = [];
 	state.returningQueue = [];
@@ -167,7 +166,7 @@ beforeEach(() => {
 	});
 });
 
-describe('admin pages list (P2)', () => {
+describe('admin pages list', () => {
 	it('lists rows in chrome order with the locale fallback title', async () => {
 		state.selectQueue = [
 			[
@@ -206,7 +205,7 @@ describe('admin pages list (P2)', () => {
 		expect(fragments[2].toLowerCase()).toContain('asc');
 	});
 
-	it('marks rows that carry a pending draft (T11)', async () => {
+	it('marks rows that carry a pending draft', async () => {
 		state.selectQueue = [
 			[
 				{
@@ -359,16 +358,16 @@ describe('admin pages list (P2)', () => {
 		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toEqual({
 			success: true
 		});
-		// Drafts go first (R2-3 review: drafts → files lock order), then the
-		// page: both deletes recorded in that order.
+		// Drafts go first (drafts → files lock order), then the page: both
+		// deletes recorded in that order.
 		expect(state.deletes).toHaveLength(2);
 		expect(state.deletes[0].table).toBe(drafts);
 		expect(dialect.sqlToQuery(state.deletes[0].cond as never).params).toEqual(['page', PAGE_ID]);
 		expect(state.deletes[1].table).toBe(pages);
 		expect(dialect.sqlToQuery(state.deletes[1].cond as never).params).toEqual([PAGE_ID]);
 		expect(dbMock.transaction).toHaveBeenCalled();
-		// Q15 deletion hooks: the cascaded draft's references AND the page's
-		// are cleared inside the same transaction, in order.
+		// Deletion hooks: the cascaded draft's references AND the page's are
+		// cleared inside the same transaction, in order.
 		expect(syncCheck).toHaveBeenCalledTimes(2);
 		expect(syncCheck).toHaveBeenNthCalledWith(1, state.tx, { type: 'draft', id: DRAFT_ID }, []);
 		expect(syncCheck).toHaveBeenNthCalledWith(2, state.tx, { type: 'page', id: PAGE_ID }, []);
@@ -380,7 +379,7 @@ describe('admin pages list (P2)', () => {
 		});
 	});
 
-	it('maps a deadlock / serialization failure to 409 busy (R2-3)', async () => {
+	it('maps a deadlock / serialization failure to 409 busy', async () => {
 		state.selectQueue = [[{ id: PAGE_ID, isDefault: false }]];
 		state.deleteThrow = Object.assign(new Error('deadlock detected'), { code: '40P01' });
 		expect(await actions.delete!(formEvent({ id: PAGE_ID }) as never)).toMatchObject({
@@ -389,8 +388,8 @@ describe('admin pages list (P2)', () => {
 	});
 });
 
-describe('admin pages list · create external entry (P5-3)', () => {
-	// The shared top-level beforeEach resets the whole harness (P5-5 T15/P1).
+describe('admin pages list · create external entry', () => {
+	// The shared top-level beforeEach resets the whole harness.
 
 	it('inserts a direct external row after the validation chain (no draft)', async () => {
 		state.returningQueue = [[{ id: PAGE_ID }]];

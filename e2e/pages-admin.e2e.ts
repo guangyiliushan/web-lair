@@ -429,7 +429,7 @@ test('a never-published placeholder reopens in the draft editor (B1)', async ({ 
 	await expect(titleInput).toHaveValue('E2E Admin Reload', { timeout: 15_000 });
 	await expect(page.getByRole('button', { name: '发布' })).toBeVisible();
 	// The P2 metadata form must not render for this row: its (unreached)
-	// title field is the structural probe (三审 F3) - copy-free, unlike the
+	// title field is the structural probe (third review F3) - copy-free, unlike the
 	// "保存" button that stays hidden only behind the closed Sheet.
 	await expect(page.locator('input[name="title_en"]')).toHaveCount(0);
 

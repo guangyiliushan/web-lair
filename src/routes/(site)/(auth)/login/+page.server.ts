@@ -10,7 +10,7 @@ import { credentialBucketKey, requestAddress } from '$lib/server/security/reques
 import { clientAddressKey } from '$lib/utils/cidr';
 import { m } from '$lib/paraglide/messages';
 
-/** Login budget: 10 attempts per IP per 15 minutes, fail-closed (W6.10). */
+/** Login budget: 10 attempts per IP per 15 minutes, fail-closed. */
 const LOGIN_RATE_LIMIT = { limit: 10, windowSeconds: 15 * 60 } as const;
 
 export const load: PageServerLoad = (event) => {
@@ -18,9 +18,9 @@ export const load: PageServerLoad = (event) => {
 		redirect(302, '/admin');
 	}
 	const error = event.url.searchParams.get('error');
-	// PRG landing spot after a completed reset: the reset action redirects here
-	// with `?message=password-reset-success` (W1.4). OAuth failures (W1.6) carry
-	// `?error=<code>`; only the admin/GitHub refusal gets its own explanation.
+	// PRG landing spot: the reset action redirects here with
+	// `?message=password-reset-success`. OAuth failures carry `?error=<code>`;
+	// only the admin/GitHub refusal gets its own explanation.
 	return {
 		resetSuccess: event.url.searchParams.get('message') === 'password-reset-success',
 		oauthError: error ? (error === ADMIN_OAUTH_BLOCKED_CODE ? 'admin_blocked' : 'failed') : null
@@ -31,9 +31,9 @@ export const actions: Actions = {
 	signIn: async (event) => {
 		const formData = await event.request.formData();
 		const email = formData.get('email')?.toString() ?? '';
-		// W6.10 / review P1: fail-closed credentials bucket keyed on the /64
-		// address AND a hash of the email, so one NAT/office IP cannot lock out
-		// every account (the raw email never reaches Valkey).
+		// Fail-closed credentials bucket keyed on the /64 address AND an email hash,
+		// so one NAT/office IP cannot lock out every account; the raw email never
+		// reaches Valkey.
 		const address = clientAddressKey(requestAddress(event.getClientAddress));
 		const rate = await rateLimitStrict(
 			getCache(),
@@ -83,9 +83,8 @@ export const actions: Actions = {
 			body: {
 				provider: provider as 'github',
 				callbackURL,
-				// Failures (including the admin/GitHub refusal in auth.ts) come
-				// back to this page with `?error=<code>` instead of the API error
-				// page; see the load above for the message mapping.
+				// Failures (including the admin/GitHub refusal in `auth.ts`) return to
+				// this page as `?error=<code>`; the load above maps them to messages.
 				errorCallbackURL: '/login'
 			}
 		});

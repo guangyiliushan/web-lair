@@ -27,7 +27,7 @@
 	let fieldContent = $state('');
 	let fieldAuthor = $state('');
 	let fieldSource = $state('');
-	// Double-submit guard (C3 review): kit does not merge submissions.
+	// Double-submit guard: kit does not merge submissions.
 	let submitting = $state(false);
 
 	// Dashboard write deep link: /admin/quotes?add=1 opens the dialog once.
@@ -196,7 +196,7 @@
 		onclose={() => (deleteTarget = null)}
 	/>
 
-	<!-- Quote list (streamed loading: skeleton first, then content, ui-ux C1) -->
+	<!-- Quote list (streamed loading: skeleton first, then content) -->
 	<div class="min-h-0 flex-1 overflow-auto">
 		{#await data.rows}
 			<div class="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-6" aria-hidden="true">

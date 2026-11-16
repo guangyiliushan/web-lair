@@ -1,8 +1,9 @@
 /**
- * Markdown 组件模块统一导出。
+ * Unified exports of the Markdown component module.
  *
  * @module markdown
- * @description 基于 Unified (remark/rehype) 渲染管线 + Lexical 编辑器的 Markdown 组件层。
+ * @description Markdown component layer built on a Unified (remark/rehype) render
+ * pipeline plus a Lexical editor.
  */
 
 export { MarkdownEditor, MarkdownRenderer } from '$lib/components/markdown/editor';
@@ -35,6 +36,6 @@ export {
 export type { AlertType } from '$lib/components/markdown/alert/alert-types';
 export type { SerializedAlertNode } from '$lib/components/markdown/alert/alert-node';
 
-// 服务端渲染（仅在 server context 可用）
-// 注：不要在这里 re-export src/lib/server/markdown.ts，
-// 由调用方直接 import '$lib/server/markdown' 以确保 server-only 边界。
+// Server-side rendering (only available in a server context)
+// Note: do not re-export src/lib/server/markdown.ts here; callers import
+// '$lib/server/markdown' directly to keep the server-only boundary.

@@ -17,11 +17,11 @@ import type { PageServerLoad } from './$types';
 const PAGE_SIZE = POSTS_PAGE_SIZE;
 
 /**
- * Public posts list (P3-a read side, ledger §9.18): posts of the URL locale
- * only, filtered by the shared visibility condition. `sort` is additive:
- * latest keeps editorial pinning first; oldest/updated honour the chosen
- * order strictly (a pin never jumps the queue). Every ordering ends with an
- * id tie-break so pagination cannot shuffle tied rows.
+ * Public posts list: posts of the URL locale only, filtered by the shared
+ * visibility condition. `sort` is additive — latest keeps editorial pinning first,
+ * while oldest/updated honour the chosen order strictly (a pin never jumps the
+ * queue). Every ordering ends with an id tie-break so pagination cannot shuffle
+ * tied rows.
  */
 const ORDER_BY = {
 	oldest: [sql`${posts.publishedAt} asc nulls last`, sql`${posts.id} asc`],

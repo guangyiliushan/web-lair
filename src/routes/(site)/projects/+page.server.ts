@@ -7,11 +7,10 @@ import { safeHttpUrl } from '$lib/utils/url-safety';
 import type { PageServerLoad } from './$types';
 
 /**
- * Public projects grid (P batch, plan §5): published rows only, ordered by
- * `sort_order ASC, created_at DESC`. The pushed-at label is formatted here
- * in the site timezone so the card stays presentational. Streams for the
- * ui-ux Skeleton pattern. URLs pass through the shared http(s) filter
- * (`$lib/utils/url-safety`) before reaching the card.
+ * Public projects grid: published rows only, ordered by `sort_order ASC,
+ * created_at DESC`. The pushed-at label is formatted here in the site timezone so
+ * the card stays presentational, and streaming suits the skeleton layout. URLs pass
+ * through the shared http(s) filter (`$lib/utils/url-safety`) before the card.
  */
 export const load: PageServerLoad = async () => {
 	const siteTz = await getOption('site.timezone');

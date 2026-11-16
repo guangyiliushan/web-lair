@@ -20,7 +20,7 @@ export const actions: Actions = {
 			.toLowerCase();
 		if (!email) return fail(400, { message: m.auth_email() });
 
-		// W6.10: fail-closed per-IP bucket (IPv6 aggregated on /64).
+		// Fail-closed per-IP bucket (IPv6 aggregated on /64).
 		const address = clientAddressKey(requestAddress(event.getClientAddress));
 		const rate = await rateLimitStrict(getCache(), `limits:verify:${address}`, 5, 60 * 60);
 		if (!rate.allowed) {

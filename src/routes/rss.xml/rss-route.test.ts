@@ -5,10 +5,9 @@ import { escapeXml } from '$lib/server/feeds';
 import { plainTextExcerpt } from '$lib/utils/excerpt';
 
 /**
- * Route-level tests for /{lang}/rss.xml and the bare /rss.xml alias (P3-b):
- * urn:uuid guids, content:encoded bodies, the temporary 302 alias to the
- * default language, the strong-ETag cache contract (derived from the body,
- * INM-only conditional handling — review round 2) and the empty-feed shape.
+ * `/{lang}/rss.xml` and the bare `/rss.xml` alias: `urn:uuid` guids,
+ * `content:encoded` bodies, the 302 alias to the default language, the
+ * body-derived ETag contract (If-None-Match only) and the empty-feed shape.
  */
 const { dbMock, state, envState } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -143,7 +142,7 @@ describe('rss route', () => {
 		expect(body).toContain('<description>Picked summary</description>');
 	});
 
-	it('skips an item whose render fails instead of failing the whole feed (review round 2)', async () => {
+	it('skips an item whose render fails instead of failing the whole feed', async () => {
 		state.selectResults = [
 			[
 				helloRow,
@@ -181,8 +180,8 @@ describe('rss route', () => {
 		state.selectResults = [[], []];
 		await GET(event('/en/rss.xml'));
 
-		// Second select = notes. Render-level assertion (review lesson): the
-		// SQL must carry the visibility predicate plus the password gate.
+		// Second select = notes; the SQL must carry the visibility predicate plus the
+		// password gate.
 		const whereSql = state.whereArgs[1]
 			.map((arg) => dbDialect.sqlToQuery(arg as never).sql)
 			.join(' | ');
@@ -286,8 +285,8 @@ describe('rss route', () => {
 		const weakMatch = await GET(event('/en/rss.xml', { 'if-none-match': `W/${etag}` }));
 		expect(weakMatch.status).toBe(304);
 
-		// IMS alone never 304s: Last-Modified is informational (review round 2 —
-		// max(updated_at) is not a consistent last-modification date).
+		// IMS alone never 304s: Last-Modified is informational — max(updated_at) is not
+		// a consistent last-modification date.
 		state.selectResults = [[helloRow]];
 		const imsAlone = await GET(event('/en/rss.xml', { 'if-modified-since': lastModified }));
 		expect(imsAlone.status).toBe(200);

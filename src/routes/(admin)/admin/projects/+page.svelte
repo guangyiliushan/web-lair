@@ -31,10 +31,9 @@
 	import type { PageProps } from './$types';
 
 	/**
-	 * Admin projects surface (batch A, plan §4): real queue replacing the
-	 * mockup. Rows are not wrapped in one giant form - the checkboxes feed a
-	 * client-side selection set and the bulk action bar posts the selected
-	 * ids; per-row sort buttons live in their own small reorder forms.
+	 * Admin projects surface. Rows are not wrapped in one giant form - the
+	 * checkboxes feed a client-side selection set and the bulk action bar posts the
+	 * selected ids; per-row sort buttons live in their own small reorder forms.
 	 */
 	let { data, form }: PageProps = $props();
 
@@ -238,7 +237,7 @@
 		if (prefill.externalId) {
 			createProviderRaw = prefill.provider;
 		} else {
-			// OG imports land as site/other (§4.4); honor the resolved default.
+			// OG imports land as site/other; honor the resolved default.
 			createProvider = prefill.provider === 'other' ? 'other' : 'site';
 		}
 		fieldName = prefill.name;
@@ -1020,8 +1019,8 @@
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<div class="flex justify-end gap-2">
-			<!-- Cancel stays OUTSIDE the destructive form (original P1 find)
-			     and the wrapper now defaults type="button" too. -->
+			<!-- Cancel stays OUTSIDE the destructive form and the wrapper now
+			     defaults type="button" too. -->
 			<AlertDialog.Cancel>{m.admin_common_cancel()}</AlertDialog.Cancel>
 			<form method="post" action="?/delete" use:enhance={bulkSubmitter}>
 				{#each selectedIds as id (id)}

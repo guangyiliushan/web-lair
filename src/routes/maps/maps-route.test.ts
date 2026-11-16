@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the PMTiles service route (plan §8, T12): single
- * ranges pass through with the storage's 206 fields mirrored, non-single /
- * malformed / precision-losing ranges fall back to a full 200, unsatisfiable
- * ranges answer a local 416 with Content-Range, the name whitelist blocks
- * traversal and foreign keys, and storage misses answer a plain uncached 404.
+ * `/maps/[file]`: single ranges pass through with the storage's 206 fields
+ * mirrored; non-single, malformed or precision-losing ranges fall back to a full
+ * 200; unsatisfiable ranges answer a local 416 with Content-Range; the name
+ * whitelist blocks traversal; storage misses answer a plain uncached 404.
  */
 const { storage } = vi.hoisted(() => ({
 	storage: { get: vi.fn(), head: vi.fn() }
@@ -197,7 +196,7 @@ describe('GET /maps/[file]', () => {
 		expect(response.headers.get('cache-control')).toBe('no-store');
 	});
 
-	it('answers 503 when the active provider is unreachable (W7.5/Q14)', async () => {
+	it('answers 503 when the active provider is unreachable', async () => {
 		const { StorageError } = await import('$lib/server/storage/port');
 		storage.get.mockRejectedValue(new StorageError('storage request failed', 0, null));
 

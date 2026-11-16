@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { reroute } from './hooks';
 
 /**
- * Pins the routing-side half of the locale model (second review round): the
- * `reroute` hook de-localises prefixed paths, which is what makes the root
- * distribution endpoints answer under `/{lang}/…` (200 aliases). Removing it
- * would silently 404 every prefixed feed.
+ * Pins the `reroute` hook: de-localizing prefixed paths is what keeps the root
+ * distribution endpoints answering under `/{lang}/…` (200 aliases). Removing it
+ * silently 404s every prefixed feed.
  */
 describe('reroute (locale-prefixed paths resolve to neutral routes)', () => {
 	it('de-localises feed and file paths so the root endpoints answer', () => {

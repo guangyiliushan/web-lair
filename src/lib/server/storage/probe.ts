@@ -8,7 +8,7 @@ import {
 import { sanitizeProviderError } from '../settings/provider-status.ts';
 
 /**
- * Storage connection probe (W7.3, decision Q19: "测试连接 = SSRF 探针").
+ * Storage connection probe (W7.3, decision Q19: "test connection = SSRF probe").
  *
  * Four checks, in order, all with the configured credentials:
  *   1. HeadBucket — the bucket exists and the key can see it;

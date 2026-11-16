@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * W6 review P0: the admin credentials form must fail closed before any
- * authentication work, answer 429/503 with Retry-After, and key its bucket on
- * the address + a hashed email (one NAT cannot lock out the owner).
+ * The admin credentials form must fail closed before any authentication work,
+ * answer 429/503 with Retry-After, and key its bucket on the address + a hashed
+ * email (one NAT cannot lock out the owner).
  */
 const mocks = vi.hoisted(() => ({
 	signIn: vi.fn(async () => ({

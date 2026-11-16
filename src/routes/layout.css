@@ -11,10 +11,9 @@
 :root {
 	color-scheme: light;
 
-	/* layerchart tooltips colour themselves from --color-surface-*; without
-	   these they fall back to light-dark(white, black) and end up a white box
-	   with white text under the dark theme. Read with raw var(), so they live
-	   in :root rather than @theme inline. */
+	/* layerchart tooltips read --color-surface-* through raw var(); without them
+	   they fall back to light-dark(white, black) — a white box with white text
+	   under the dark theme. Hence :root, not @theme inline. */
 	--color-surface-100: var(--card);
 	--color-surface-300: var(--popover);
 	--color-surface-content: var(--card-foreground);
@@ -32,8 +31,8 @@
 
 	--primary: oklch(0.666 0.096 169.696);
 
-	/* Text-safe accent: --primary is a fill colour (2.9:1 on white); this
-	   darker variant clears WCAG 1.4.3 (4.5:1) for 12px metadata. */
+	/* Text-safe accent: --primary is a fill colour (2.9:1 on white); this darker
+	   variant clears WCAG 1.4.3 (4.5:1) for 12px metadata. */
 	--primary-text: oklch(0.3 0.096 169.696);
 
 	--primary-foreground: oklch(0.979 0.021 166.113);
@@ -58,7 +57,7 @@
 
 	--ring: oklch(0.723 0.014 214.4);
 
-	/* Chart series colours: validated categorical order (adjacent CVD dE >= 8, normal-vision >= 15) in both modes. */
+	/* Chart series: validated categorical order (adjacent CVD dE >= 8, normal >= 15). */
 
 	--chart-1: #2a78d6;
 
@@ -138,7 +137,7 @@
 
 	--ring: oklch(0.56 0.021 213.5);
 
-	/* Dark steps of the same eight hues, re-validated against the dark surface (not a flip). */
+	/* Dark steps of the same eight hues, re-validated on the dark surface (not a flip). */
 
 	--chart-1: #3987e5;
 
@@ -312,10 +311,9 @@
 		background: transparent;
 	}
 
-	/* Spoiler: same-color masking (text merged into a neutral
-	   block), hover fades the block away over 0.5s to reveal the content.
-	   Shared by the render side's <span class=spoiler> and the editor's
-	   SpoilerNode, so one rule styles both. */
+	/* Spoiler: same-colour masking; hover fades the block out to reveal the text.
+	   Shared by the render side's <span class=spoiler> and the editor's SpoilerNode,
+	   so one rule styles both. */
 	.spoiler {
 		border-radius: 3px;
 		background-color: var(--muted-foreground);
@@ -329,12 +327,11 @@
 		background-color: transparent;
 		color: inherit;
 	}
-	/* ── 行内链接磁吸(批 3a)──
-	   JS 侧 link-magnet.ts 在 hover 时打 data-magnet 并写入 --mx/--my(链接
-	   内像素坐标)。视觉全部由 absolute 伪元素承载:文本保持 inline 流,排版
-	   零影响(比常驻 inline-block 方案更安全);气泡走 backdrop-blur 渐显,
-	   箭头为 tabler external-link 的 mask 内联 SVG(MIT)。仅发布渲染容器
-	   生效——编辑器遵守零偏移守则,由 LinkHoverEditor 承担交互。 */
+	/* ── Inline link magnet ──
+	   link-magnet.ts sets data-magnet and --mx/--my (pointer position) on hover;
+	   the visuals are absolute pseudo-elements, so the text stays in normal inline
+	   flow with no layout shift. Publish renderer only: the editor keeps zero-offset
+	   typography and uses LinkHoverEditor. Arrow: Tabler external-link (MIT), masked. */
 	.markdown-body a[data-magnet] {
 		position: relative;
 		text-decoration-color: color-mix(in oklch, var(--primary) 60%, transparent);
@@ -391,7 +388,7 @@
 		[data-slot='comment-mark-hover'] {
 			display: none !important;
 		}
-		/* mask reveals in print: the blocks must not print as solid bars (spec 7) */
+		/* Print: masked blocks would come out as solid bars. */
 		.spoiler {
 			background-color: transparent;
 			color: inherit;
@@ -411,8 +408,7 @@
 			display: none;
 		}
 	}
-	/* Mention pill: shared by the render side's <a class=mention> and the
-		editor's MentionNode, so one rule styles both. */
+	/* Mention pill: one rule styles both `<a class=mention>` and the editor's MentionNode. */
 	.mention {
 		border-radius: 999px;
 		background: var(--muted);
@@ -422,7 +418,7 @@
 		text-decoration: none;
 	}
 
-	/* ── Inline tag (<tag> element, spec 4.5) — matches the editor .rich-editor-tag look */
+	/* ── Inline tag (`<tag>` element) — matches the editor's .rich-editor-tag look ── */
 	tag {
 		display: inline-block;
 		vertical-align: baseline;
@@ -434,8 +430,8 @@
 		color: var(--foreground);
 	}
 
-	/* ── Alerts (> [!NOTE] etc. → div.alert, spec 3.1; the only alert syntax) ──
-	   matches the editor .rich-editor-alert: left accent bar, right-only rounding */
+	/* ── Alerts (> [!NOTE] etc. → div.alert; the only alert syntax) ──
+	   left accent bar, right-only rounding — matches the editor .rich-editor-alert */
 	.alert {
 		position: relative;
 		margin-block: 1rem;
@@ -508,7 +504,7 @@
 		background-color: hsl(0 40% 12% / 0.85);
 	}
 
-	/* ── L2 containers (spec 3.2): grid / tabs / details ── */
+	/* ── L2 containers: grid / tabs / details ── */
 	.md-grid {
 		display: grid;
 		gap: var(--md-gap, 1rem);
@@ -557,7 +553,7 @@
 	.md-grid[data-gap='16'] {
 		--md-gap: 1rem;
 	}
-	/* masonry and carousel honour the same closed parameter set (cols/gap) */
+	/* Masonry and carousel honour the same closed parameter set (cols/gap). */
 	.md-grid[data-layout='masonry'] {
 		display: block;
 		columns: var(--md-cols, 2);
@@ -627,7 +623,7 @@
 		border-style: dashed;
 	}
 
-	/* ── Code info-string rendering (spec 3.3) ── */
+	/* ── Code info-string rendering ── */
 	.md-code-collapsed {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
@@ -646,11 +642,11 @@
 		font-size: 0.875rem;
 		margin-block: 0.25rem 0;
 	}
-	/* ── Code line numbers and collapse previews (spec 3.3) ── */
+	/* ── Code line numbers and collapse previews ── */
 	.md-code-line {
-		/* Unconditional: the light pipeline splits plain-text code into these
-		   spans, so block display is what keeps any code block multi-line —
-		   scoping it to the numbering class glued `linenos=off` blocks. */
+		/* Unconditional: the light pipeline splits plain-text code into these spans,
+		   so block display keeps any code block multi-line; scoping it to the
+		   numbering class glued `linenos=off` blocks together. */
 		display: block;
 	}
 	.md-code-linenos {
@@ -666,10 +662,9 @@
 		color: var(--muted-foreground);
 		user-select: none;
 	}
-	/* collapsed=N previews its first N lines on screen. The closed details'
-	   content is otherwise hidden by the UA's ::details-content rule, so the
-	   preview has to reveal the content and then hide the lines beyond N.
-	   Keyed on data-md-collapse: bare `collapsed` is a full collapse. */
+	/* collapsed=N previews its first N lines: the closed details' content is hidden
+	   by the UA ::details-content rule, so reveal it and hide lines beyond N. Keyed
+	   on data-md-collapse — bare `collapsed` is a full collapse. */
 	.md-code-collapsed[data-md-collapse]:not([open])::details-content {
 		content-visibility: visible;
 	}
@@ -677,25 +672,25 @@
 		display: none;
 	}
 	@media print {
-		/* spec 7: collapsed blocks are force-expanded when printing */
+		/* Print: force-expand collapsed blocks. */
 		.md-code-collapsed > summary {
 			display: none;
 		}
 		.md-code-collapsed::details-content {
 			content-visibility: visible;
 		}
-		/* legacy engines without ::details-content support */
+		/* Fallback for engines without ::details-content. */
 		.md-code-collapsed:not([open]) > *:not(summary) {
 			display: block;
 		}
-		/* the screen hiding rule again: equal specificity, later in source, so
-		   paper gets every line (spec 7) */
+		/* Undo the screen hiding rule: equal specificity, later in source, so print
+		   keeps every line. */
 		.md-code-collapsed[data-md-collapse]:not([open]) .md-code-line-hidden {
 			display: block;
 		}
 	}
 
-	/* ── Heading anchors (spec 3.6) ── */
+	/* ── Heading anchors ── */
 	.md-anchor {
 		margin-inline-end: 0.35em;
 		color: var(--muted-foreground);
@@ -720,13 +715,12 @@
 		scroll-margin-top: 4rem;
 	}
 
-	/* ── Segment-comment marks (comment P3b, spec §7/§8) ──
-	   A reader must see WHAT is commented on without hovering: wavy underline
-	   for other readers, dashed for the viewer's own pending row, and a target
-	   pulse after a "jump to source". Contrast is the primary token at 70% over
-	   the page background (WCAG 1.4.11 wants ≥3:1 for the non-text cue). */
-	/* Text-safe accent: full-strength primary on white is 2.90:1 (WCAG 1.4.3
-	   needs 4.5:1 for body text); the foreground mix clears it in both themes. */
+	/* ── Segment-comment marks ──
+	   The mark must be readable without hovering: wavy underline for other readers,
+	   dashed for the viewer's own pending row, and a target background after a
+	   "jump to source". The cue is subject to non-text contrast (WCAG 1.4.11: 3:1). */
+	/* Text-safe accent: full-strength primary is 2.90:1 on white (WCAG 1.4.3 needs
+	   4.5:1 for body text); the foreground mix clears it in both themes. */
 	.wl-accent-link {
 		color: color-mix(in oklch, var(--primary) 60%, var(--foreground));
 	}
@@ -734,10 +728,9 @@
 		text-decoration: underline wavy;
 		text-decoration-thickness: 1px;
 		text-underline-offset: 3px;
-		/* `--primary` alone is a light teal: measured 2.90:1 against the page
-		   background, below the 3:1 WCAG 2.2 SC 1.4.11 floor. Mixing 40% of the
-		   foreground keeps it recognisably the accent colour while clearing the
-		   floor in both themes (the foreground flips with the theme). */
+		/* `--primary` alone is 2.90:1 on the page background, under the 3:1
+		   WCAG 1.4.11 floor for non-text cues; mixing in 40% foreground clears it
+		   in both themes while keeping the accent hue. */
 		text-decoration-color: color-mix(in oklch, var(--primary) 60%, var(--foreground));
 		scroll-margin-top: 5rem;
 	}
@@ -763,7 +756,7 @@
 		overflow-x: auto;
 	}
 
-	/* Shiki 双主题：配合项目 .dark 类切换 */
+	/* Shiki dual-theme output: one block per scheme, toggled by the .dark class. */
 	[data-theme='light'] {
 		display: block;
 	}

@@ -350,7 +350,7 @@ describe('editor actions (P2)', () => {
 		const exists = await callAction('createTranslation', { id: POST_ID, lang: 'zh-cn' });
 		expect(exists.result).toMatchObject({ status: 400 });
 
-		// R7 禁链式: only a group source may spawn a translation (P2 review fix).
+		// R7 no chaining: only a group source may spawn a translation (P2 review fix).
 		translateMock.mockResolvedValue({ kind: 'not-source' });
 		const chained = await callAction('createTranslation', { id: POST_ID, lang: 'zh-cn' });
 		expect(chained.result).toMatchObject({ status: 400 });

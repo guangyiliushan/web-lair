@@ -32,38 +32,40 @@ import {
 
 import type { Schema } from 'hast-util-sanitize';
 
-// ── 类型定义 ──
+// ── Types ──
 
-/** 按需启用的 Markdown 特性开关 */
+/** Markdown feature flags, enabled on demand */
 export interface MarkdownFeatureFlags {
-	/** KaTeX 数学公式（块级 + 行内），默认 true */
+	/** KaTeX math (block + inline), defaults to true */
 	math?: boolean;
-	/** GitHub Flavored Markdown 表格/任务列表/删除线，默认 true */
+	/** GitHub Flavored Markdown tables/task lists/strikethrough, defaults to true */
 	gfm?: boolean;
-	/** 围栏代码块 Shiki 高亮（仅服务端可用），默认 false（客户端预览不高亮） */
+	/** Shiki highlighting for fenced code blocks (server-side only); defaults to false
+	 * (the client preview does not highlight) */
 	codeHighlight?: boolean;
-	/** 是否允许原始 HTML 标签通过（默认 false，极度危险） */
+	/** Allow raw HTML tags through (defaults to false — extremely dangerous) */
 	allowHtml?: boolean;
 }
 
-/** 渲染选项 */
+/** Render options */
 export interface MarkdownRenderOptions {
-	/** 特性开关 */
+	/** Feature flags */
 	features?: MarkdownFeatureFlags;
-	/** 链接 target */
+	/** Link target */
 	linkTarget?: '_blank' | '_self';
-	/** 渲染后是否做 HTML sanitize，默认 true */
+	/** Whether to sanitize the rendered HTML, defaults to true */
 	sanitize?: boolean;
 }
 
-/** MarkdownEditor.svelte props 类型 */
+/** Props type of MarkdownEditor.svelte */
 export interface MarkdownEditorProps {
 	/**
-	 * 初始 markdown。编辑器只在挂载时读取一次；换内容请换 `key` 或走代码模式
-	 * 的往返（历史上还有个 `value`（Lexical JSON）prop，声明了却从未接线，已删）。
+	 * Initial markdown. The editor reads it only once on mount; to swap content, change
+	 * `key` or round-trip through code mode (a `value` prop holding Lexical JSON also
+	 * existed historically — declared but never wired up, now removed).
 	 */
 	initialMarkdown?: string;
-	/** 是否可编辑，默认 true */
+	/** Whether the editor is editable, defaults to true */
 	editable?: boolean;
 	placeholder?: string;
 	theme?: 'default' | 'compact';
@@ -72,30 +74,31 @@ export interface MarkdownEditorProps {
 	class?: string;
 }
 
-/** 编辑器变更事件载荷 */
+/** Payload of the editor change event */
 export interface MarkdownEditorChangeDetail {
-	/** Lexical JSON 字符串（页面层存入 content 字段） */
+	/** Lexical JSON string (the page layer stores it in the content column) */
 	editorStateJson: string;
-	/** 投影的 markdown 文本（页面层存入 text 字段） */
+	/** Projected markdown text (the page layer stores it in the text column) */
 	markdown: string;
-	/** 纯文本（用于摘要/搜索） */
+	/** Plain text (for summaries/search) */
 	plainText: string;
-	/** 编辑器是否为空 */
+	/** Whether the editor is empty */
 	isEmpty: boolean;
 }
 
-/** MarkdownRenderer.svelte props 类型 */
+/** Props type of MarkdownRenderer.svelte */
 export interface MarkdownRendererProps {
-	/** markdown 源码（客户端同步渲染） */
+	/** Markdown source (rendered synchronously on the client) */
 	source?: string;
-	/** 预渲染 HTML（SSR 场景优先使用，跳过客户端渲染） */
+	/** Pre-rendered HTML (preferred in SSR, skips client rendering) */
 	html?: string;
 	features?: MarkdownFeatureFlags;
 	class?: string;
 	prose?: boolean;
-	/** 是否对传入的 html 做二次清洗，默认 true（若 html 已由服务端清洗可设 false） */
+	/** Whether to sanitize the incoming html again, defaults to true (set false when the
+	 * server already sanitized it) */
 	sanitize?: boolean;
-	/** 空态插槽 */
+	/** Empty-state snippet */
 	children?: import('svelte').Snippet;
 }
 
@@ -178,7 +181,7 @@ export function buildSanitizeSchema(): Schema {
 				'style',
 				'dataLine',
 				'ariaHidden',
-				// spoiler 原文提示(管线产物,来自 attention handler)
+				// spoiler tooltip text (pipeline output, produced by the attention handler)
 				'title'
 			],
 			div: [
@@ -209,7 +212,7 @@ export function buildSanitizeSchema(): Schema {
 			// identical to RAW_ATTRS in rehype-raw-html-whitelist.ts
 			video: ['src', 'poster', 'width', 'height', 'muted', 'loop', 'preload'],
 			audio: ['src', 'width', 'height', 'muted', 'loop', 'preload'],
-			// KaTeX 输出的 MathML 标签属性
+			// Attributes of the MathML tags KaTeX emits
 			math: ['xmlns', 'display'],
 			annotation: ['encoding'],
 			mspace: ['width'],
@@ -227,7 +230,7 @@ export function buildSanitizeSchema(): Schema {
 			'audio',
 			'video',
 			'time',
-			// KaTeX MathML 标签（rehype-katex output: 'htmlAndMathml' 会输出这些）
+			// KaTeX MathML tags (rehype-katex output: 'htmlAndMathml' emits these)
 			'math',
 			'semantics',
 			'annotation',
@@ -267,19 +270,20 @@ export function buildSanitizeSchema(): Schema {
 	};
 }
 
-// ── 轻量同步渲染（客户端预览用）──
+// ── Lightweight synchronous rendering (for the client preview) ──
 
-/** 管线 Processor 的精确类型 — 与 src/lib/server/markdown.ts 保持一致 */
+/** Exact type of the pipeline Processor — kept in sync with src/lib/server/markdown.ts */
 type MarkdownProcessor = Processor<MdastRoot, MdastRoot, HastRoot, HastRoot, string>;
 
 /**
- * 客户端轻量 processor 单例。
+ * Client-side lightweight processor singleton.
  *
- * 不包含 rehype-pretty-code（Shiki）：需要异步初始化，不适合同步预览场景。
- * rehype-mermaid 包含在内（且与服务器端同位置、在 pretty-code 之前）：
- * 未加载 mermaid.js 时挂载点显示原始代码文本，双管线 DOM 因此保持一致。
+ * It leaves out rehype-pretty-code (Shiki), which needs async initialisation and does
+ * not fit the synchronous preview. rehype-mermaid is included (at the same position as
+ * on the server, before pretty-code): without mermaid.js loaded its mount point shows
+ * the raw code text, so the two pipelines agree on the DOM.
  *
- * rehype-katex 和所有 remark 插件都是同步的，processSync() 可用。
+ * rehype-katex and every remark plugin are synchronous, so processSync() is usable.
  */
 let lightProcessor: MarkdownProcessor | null = null;
 
@@ -300,7 +304,7 @@ function getLightProcessor(): MarkdownProcessor {
 		.use(remarkImageAttr)
 		.use(remarkCodeMeta)
 		.use(remarkImageEmbed)
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload 限制
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload limitations
 		.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload
 		.use(rehypeKatex as any, { throwOnError: false })
@@ -320,13 +324,14 @@ function getLightProcessor(): MarkdownProcessor {
 }
 
 /**
- * 客户端同步渲染（无 Shiki 代码高亮；Mermaid 仅输出挂载点，执行端在 MarkdownRenderer 客户端）。
+ * Client-side synchronous rendering (no Shiki highlighting; Mermaid only emits the
+ * mount point, executed client-side in MarkdownRenderer).
  *
- * 用于：
- * - MarkdownRenderer 的客户端渲染模式（当未传入 html prop 时）
+ * Used by:
+ * - MarkdownRenderer's client rendering mode (no html prop passed)
  *
- * @param markdown 原始 Markdown 字符串
- * @returns 已清洗的安全 HTML 字符串
+ * @param markdown raw Markdown string
+ * @returns sanitized, safe HTML string
  */
 export function renderMarkdownToHtmlSync(markdown: string): string {
 	if (!markdown?.trim()) return '';
@@ -334,7 +339,7 @@ export function renderMarkdownToHtmlSync(markdown: string): string {
 	return String(processor.processSync(markdown));
 }
 
-/** 清除 processor 缓存（主要用于测试场景） */
+/** Clear the processor cache (mainly for tests) */
 export function clearRendererCache(): void {
 	lightProcessor = null;
 }

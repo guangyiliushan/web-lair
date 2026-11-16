@@ -10,7 +10,7 @@ import {
 } from './format';
 
 /**
- * Payload shaping teeth (M6 P5, T5.4 "payload ≤200 字、无 PII"): the cap is a
+ * Payload shaping teeth (M6 P5, T5.4 "payload ≤200 chars, no PII"): the cap is a
  * promise the adapters rely on, and an address inside a comment excerpt must
  * not reach a phone push or the delivery table.
  */

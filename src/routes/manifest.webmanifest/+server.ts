@@ -3,13 +3,10 @@ import { SITE_BRANDING_DEFAULT } from '$lib/server/site-branding';
 import type { RequestHandler } from './$types';
 
 /**
- * Web app manifest (decision S4, W5.3).
- *
- * Minimal by ruling: `name`/`short_name` both come from `site.info.name`
- * (`site.short_name` is a registered deferral), `start_url` is the locale
- * redirect root, and no icons are advertised - 192/512 PWA icons are a
- * separate registered item. A settings/DB failure serves the defaults instead
- * of 500ing a manifest request.
+ * Web app manifest. Minimal on purpose: `name` and `short_name` both come from
+ * `site.info.name`, `start_url` is `/` (the locale redirect), and no icons are
+ * advertised yet. A settings or DB failure serves the default name instead of
+ * 500ing a manifest request.
  */
 export const GET: RequestHandler = async () => {
 	let name = SITE_BRANDING_DEFAULT.name;

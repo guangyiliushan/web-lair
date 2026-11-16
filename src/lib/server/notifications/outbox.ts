@@ -23,7 +23,8 @@ import type { NotificationSink } from './notify.ts';
  *  - the comment service, INSIDE the comment insert's transaction - so a
  *    notification either commits with the comment or not at all, while a
  *    failed enqueue (DB error, bad key) rolls back only the savepoint and
- *    never the business write ("评论事务内写 outbox，失败不阻塞业务");
+ *    never the business write (the outbox is written in the comment transaction, so its
+ *    failure cannot block business);
  *  - the `notify()` sink installed by the drain, where the executor is the
  *    drain's db handle and the savepoint is the same mechanism.
  *

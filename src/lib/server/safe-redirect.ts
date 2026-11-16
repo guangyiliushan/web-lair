@@ -12,7 +12,7 @@ export function safeRedirect(
 	if (!url) return fallback;
 	const trimmed = url.trim();
 
-	// 拒绝以 http://, https://, //, \ 开头的外部 URL
+	// Reject external URLs starting with http://, https://, // or \
 	if (
 		trimmed.startsWith('http://') ||
 		trimmed.startsWith('https://') ||
@@ -22,7 +22,7 @@ export function safeRedirect(
 		return fallback;
 	}
 
-	// 只允许以 / 开头且不含 // 的相对路径
+	// Only allow relative paths that start with / and contain no //
 	if (trimmed.startsWith('/') && !trimmed.includes('//')) {
 		if (options?.allowedPrefix && !trimmed.startsWith(options.allowedPrefix)) {
 			return fallback;

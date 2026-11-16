@@ -8,11 +8,10 @@ import { m } from '$lib/paraglide/messages';
 const INVALID_TOKEN = 'invalid_token';
 
 /**
- * W1.4 (settings-truth plan, P0-4). The token arrives as `?token=` after
- * better-auth's callback endpoint (`/api/auth/reset-password/:token`) has
- * verified it; an expired or used token is redirected back here with
- * `?error=INVALID_TOKEN`. Both cases render the recovery state - the reset
- * URL must never answer 404, and a bare visit needs a path forward.
+ * The token arrives as `?token=` after better-auth's callback endpoint
+ * (`/api/auth/reset-password/:token`) verified it; an expired or used token comes
+ * back with `?error=INVALID_TOKEN`. Both cases render the recovery state — this URL
+ * must never answer 404, and a bare visit still needs a path forward.
  */
 export const load: PageServerLoad = (event) => {
 	// The token is in this URL; strict-origin keeps the path out of Referer.

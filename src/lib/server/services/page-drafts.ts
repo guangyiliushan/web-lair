@@ -141,8 +141,8 @@ function foldLocalized(value: Record<string, string>): Record<string, string> | 
 	return Object.keys(value).length === 0 ? null : value;
 }
 
-/** The "hash 不变不写" comparison basis (§9.10) - payload + slug vs stored
- * row. The slug rides the shared drafts column, hence the explicit argument. */
+/** The "don't write when the hash is unchanged" comparison basis (§9.10) - payload + slug
+ * vs stored row. The slug rides the shared drafts column, hence the explicit argument. */
 export function pageDraftHash(slug: string | null | undefined, payload: PageDraftPayload): string {
 	return hashNormalized(normalizePageDraft(slug, payload));
 }
@@ -362,7 +362,7 @@ async function updateExistingPageDraft(
 ): Promise<SavePageDraftResult> {
 	const pageId = draft.refId ?? '';
 
-	// "hash 不变不写" - identical payloads never bump the version.
+	// "don't write when the hash is unchanged" - identical payloads never bump the version.
 	if (hashRow(draft) === hashNormalized(normalized)) {
 		return { kind: 'unchanged', draftId: draft.id, version: draft.version, pageId };
 	}
@@ -513,7 +513,7 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 				.limit(1)
 				.for('update');
 			if (!locked) return { kind: 'not-found' as const };
-			// Belt to the snapshot guard above (R2-4 / 三审 F2): the locked
+			// Belt to the snapshot guard above (R2-4 / third review F2): the locked
 			// row is the authoritative face check.
 			if (!isPageEditorRow(locked)) return { kind: 'not-found' as const };
 

@@ -10,10 +10,10 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Admin thoughts CRUD (C3): content-only rows from `thoughts`. The load and
- * every action follow the P2 contract (requireAdminRole first, uuid entry
- * guard, explicit 400s; unknown ids 404 through the `returning` probe). The
- * list streams as a deferred promise for the ui-ux plan C1 Skeleton.
+ * Admin thoughts CRUD: content-only rows from `thoughts`. The load and every action
+ * follow the same contract (requireAdminRole first, uuid entry guard, explicit 400s;
+ * unknown ids 404 through the `returning` probe). The list streams as a deferred
+ * promise for the page skeleton.
  */
 export const load: PageServerLoad = async () => {
 	await requireAdminRole();

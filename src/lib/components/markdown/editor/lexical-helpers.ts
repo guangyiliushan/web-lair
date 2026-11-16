@@ -43,11 +43,12 @@ import { resolveProviderId } from '$lib/components/markdown/embed/registry';
 import { $createMermaidNode } from '$lib/components/markdown/editor/mermaid-block-node';
 import { $createTabsNode, type SerializedTabEntry } from '$lib/components/markdown/tabs/tabs-node';
 import { $createGridNode } from '$lib/components/markdown/grid/grid-node';
-// ── 选区块定位（工具栏状态与 toggle 的统一依据）──
+// ── Selection-block resolution (single basis for toolbar state and toggles) ──
 
 /**
- * 获取选区所在的顶层块节点（root 的直接子级）。
- * 光标在段落/标题/引用内返回该块；在列表内返回外层 ListNode；在表格内返回 TableNode。
+ * Get the top-level block node containing the selection (a direct child of root).
+ * Inside a paragraph/heading/quote it returns that block; inside a list the outer
+ * ListNode; inside a table the TableNode.
  */
 function $getTopLevelBlockFromSelection(): LexicalNode | null {
 	const selection = $getSelection();
@@ -58,8 +59,8 @@ function $getTopLevelBlockFromSelection(): LexicalNode | null {
 }
 
 /**
- * 获取选区所在的最近 ListNode 祖先（不在列表中时返回 null）。
- * 嵌套列表时返回光标直接所在的那层列表。
+ * Get the nearest ListNode ancestor of the selection (null when not in a list).
+ * For nested lists it returns the level the cursor sits directly in.
  */
 function $getNearestListNodeFromSelection(): ListNode | null {
 	const selection = $getSelection();
@@ -72,7 +73,7 @@ function $getNearestListNodeFromSelection(): ListNode | null {
 	return null;
 }
 
-/** 切换标题级别：已是该级别则降为段落 */
+/** Toggle a heading level: back to a paragraph when already at that level */
 export function toggleHeading(editor: LexicalEditor, level: HeadingTagType) {
 	editor.update(() => {
 		const selection = $getSelection();
@@ -90,7 +91,7 @@ export function toggleHeading(editor: LexicalEditor, level: HeadingTagType) {
 	});
 }
 
-/** 切换引用块 */
+/** Toggle the blockquote */
 export function toggleBlockquote(editor: LexicalEditor) {
 	editor.update(() => {
 		const selection = $getSelection();
@@ -106,7 +107,8 @@ export function toggleBlockquote(editor: LexicalEditor) {
 	});
 }
 
-/** 切换无序列表（按选区所在列表判断开关，而非全文首个块） */
+/** Toggle the bullet list (state read from the list containing the selection,
+ * not from the document's first block) */
 export function toggleBulletList(editor: LexicalEditor) {
 	editor.update(() => {
 		const list = $getNearestListNodeFromSelection();
@@ -118,7 +120,7 @@ export function toggleBulletList(editor: LexicalEditor) {
 	});
 }
 
-/** 切换有序列表（按选区所在列表判断开关） */
+/** Toggle the ordered list (state read from the list containing the selection) */
 export function toggleOrderedList(editor: LexicalEditor) {
 	editor.update(() => {
 		const list = $getNearestListNodeFromSelection();
@@ -130,16 +132,16 @@ export function toggleOrderedList(editor: LexicalEditor) {
 	});
 }
 
-/** 插入水平分割线 */
+/** Insert a horizontal rule */
 export function insertHorizontalRule(editor: LexicalEditor) {
 	editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined);
 }
 
-// ── 插入辅助：链接 / 图片 / 表格 / 待办（markdown 语法 + Lexical 节点混合）──
+// ── Insert helpers: link / image / table / checklist (markdown syntax plus Lexical nodes) ──
 
 /**
- * 插入链接。选中文本包裹为 LinkNode（WYSIWYG），
- * 未选中时以 URL 为文本创建链接。
+ * Insert a link. A text selection is wrapped into a LinkNode (WYSIWYG); with no
+ * selection the URL itself becomes the link text.
  */
 /**
  * Link shapes accepted by the editor's insert/display paths, aligned with
@@ -167,8 +169,8 @@ export function insertLink(editor: LexicalEditor, url: string) {
 }
 
 /**
- * 插入图片（ImageNode，WYSIWYG）。
- * 编辑器内直接渲染 <img>，保存时由 imageTransformer 导出 ![alt](src)。
+ * Insert an image (ImageNode, WYSIWYG).
+ * The editor renders <img> directly; imageTransformer exports ![alt](src) on save.
  */
 export function insertImage(
 	editor: LexicalEditor,
@@ -185,9 +187,9 @@ export function insertImage(
 }
 
 /**
- * 插入 3×3 表格（TableNode，WYSIWYG）。
- * 由 registerTablePlugin 处理 INSERT_TABLE_COMMAND 创建节点；
- * Markdown 往返由 tableTransformer 负责。
+ * Insert a 3×3 table (TableNode, WYSIWYG).
+ * registerTablePlugin handles INSERT_TABLE_COMMAND and creates the nodes;
+ * tableTransformer owns the Markdown round-trip.
  */
 export function insertTable(
 	editor: LexicalEditor,
@@ -195,7 +197,7 @@ export function insertTable(
 	columns = 3,
 	includeHeaders: { rows: boolean; columns: boolean } = { rows: true, columns: false }
 ) {
-	// 0.46 的 payload 中 rows/columns 为字符串类型
+	// In 0.46's payload rows/columns are strings
 	editor.dispatchCommand(INSERT_TABLE_COMMAND, {
 		rows: String(rows),
 		columns: String(columns),
@@ -204,8 +206,8 @@ export function insertTable(
 }
 
 /**
- * 插入代码块（CodeNode，WYSIWYG）。
- * 使用 Lexical 原生 CodeNode，编辑器内即可见代码块样式。
+ * Insert a code block (CodeNode, WYSIWYG).
+ * Uses Lexical's native CodeNode, so code-block styling shows in the editor.
  */
 export function insertCodeBlock(editor: LexicalEditor, language: string = '') {
 	// focus() so typing lands in the editor right after the dialog closes;
@@ -221,9 +223,9 @@ export function insertCodeBlock(editor: LexicalEditor, language: string = '') {
 }
 
 /**
- * 插入/关闭待办列表项（toggle）。
- * 利用 Lexical ListNode + ListItemNode 的 checklist 变体；
- * 光标已在待办列表内时移除列表（转为普通段落）。
+ * Insert/toggle a checklist item.
+ * Uses the checklist variant of Lexical's ListNode + ListItemNode; when the cursor
+ * is already in a checklist the list is removed (back to a plain paragraph).
  */
 export function insertCheckList(editor: LexicalEditor) {
 	editor.update(() => {
@@ -237,11 +239,12 @@ export function insertCheckList(editor: LexicalEditor) {
 }
 
 /**
- * 插入数学公式（`$$ ... $$` 源码文本，独占段落）。
+ * Insert a math formula (`$$ ... $$` source text, alone in its paragraph).
  *
- * 编辑器内保持源码文本（与渲染管线的 remark-math/rehype-katex 约定一致）。
- * 公式作为独立段落插入当前块之后——micromark-extension-math 中 `$$...$$`
- * 只有独占一行才是块级公式，插在段落中间会被解析为行内公式。
+ * The editor keeps the source text (matching the render pipeline's remark-math /
+ * rehype-katex contract). The formula is inserted as its own paragraph after the
+ * current block — in micromark-extension-math `$$...$$` is block-level only when
+ * alone on a line; inserting it mid-paragraph parses as inline math.
  */
 export function insertMath(editor: LexicalEditor, latex: string) {
 	editor.update(() => {
@@ -262,8 +265,8 @@ export function insertMath(editor: LexicalEditor, latex: string) {
 }
 
 /**
- * 插入 Tag（内联彩色标签，TextNode 子类）。
- * 选中文本则转为 Tag，否则插入默认文本 "tag"。
+ * Insert a Tag (inline coloured label, a TextNode subclass).
+ * A text selection becomes the Tag; otherwise the default text "tag" is inserted.
  */
 export function insertTag(editor: LexicalEditor) {
 	editor.update(() => {
@@ -365,8 +368,8 @@ export function toggleSpoiler(editor: LexicalEditor) {
 }
 
 /**
- * 插入 Alert/Callout 结构化块（DecoratorNode）。
- * 替代原来的 markdown 文本 Callout 插入方式。
+ * Insert a structured Alert/Callout block (DecoratorNode).
+ * Replaces the old markdown-text Callout insertion path.
  */
 export function insertAlert(editor: LexicalEditor, type: AlertType = DEFAULT_ALERT_TYPE) {
 	editor.update(() => {
@@ -427,9 +430,9 @@ export function formatTextWithFocus(editor: LexicalEditor | null, format: TextFo
 	editor.focus();
 }
 
-// ── 工具栏状态读取（封装 $ 前缀函数，避免 .svelte 文件直接导入）──
+// ── Toolbar state readers (wrap the $-prefixed helpers so .svelte never imports them) ──
 
-/** 工具栏需要追踪的格式状态 */
+/** Format state the toolbar tracks */
 export interface ToolbarState {
 	isBold: boolean;
 	isItalic: boolean;
@@ -441,15 +444,15 @@ export interface ToolbarState {
 	isHighlight: boolean;
 	isSpoiler: boolean;
 	blockType: 'paragraph' | 'h1' | 'h2' | 'h3' | 'bullet' | 'number' | 'check' | 'quote';
-	/** 光标是否在表格单元格内(块级插入应禁用) */
+	/** Whether the cursor sits inside a table cell (block-level inserts must be disabled) */
 	inTable: boolean;
 }
 
 /**
- * 在 editorState.read() 上下文中读取当前选区的格式状态。
+ * Read the format state of the current selection inside editorState.read().
  *
- * 封装 Lexical 的 $ 前缀函数，使 .svelte 文件无需直接导入它们
- * （Svelte 5 编译器会误将 $ 前缀解析为 store 自动订阅）。
+ * Wraps Lexical's $-prefixed functions so .svelte files need not import them
+ * (the Svelte 5 compiler would read a leading $ as a store auto-subscription).
  */
 export function readToolbarState(): ToolbarState {
 	const selection = $getSelection();
@@ -467,7 +470,7 @@ export function readToolbarState(): ToolbarState {
 		state.isSpoiler =
 			$isSpoilerNode(selection.anchor.getNode()) || $isSpoilerNode(selection.focus.getNode());
 
-		// 从锚点向上找表格祖先(块级插入在表格内应禁用)
+		// Walk up from the anchor to the table ancestor (block inserts must be disabled in a table)
 		let tableNode: LexicalNode | null = selection.anchor.getNode();
 		while (tableNode) {
 			if ($isTableNode(tableNode)) {
@@ -478,7 +481,8 @@ export function readToolbarState(): ToolbarState {
 		}
 	}
 
-	// 当前块：优先按选区所在列表（含嵌套），否则按选区顶层块判定
+	// Current block: prefer the list containing the selection (nested included), otherwise
+	// fall back to the selection's top-level block
 	const list = $getNearestListNodeFromSelection();
 	if (list) {
 		const listType = list.getListType();
@@ -497,7 +501,7 @@ export function readToolbarState(): ToolbarState {
 	return state;
 }
 
-/** 将当前块转换为段落（用于 BlockMenu 的"正文"选项） */
+/** Convert the current block into a paragraph (BlockMenu's "body text" option) */
 export function applyParagraph(editor: LexicalEditor) {
 	editor.update(() => {
 		const selection = $getSelection();
@@ -507,27 +511,28 @@ export function applyParagraph(editor: LexicalEditor) {
 }
 
 /**
- * 获取当前文本选区的 DOM 矩形，用于浮动工具栏定位。
- * 返回 null 表示无有效选区。
+ * Get the DOM rect of the current text selection, used to position the floating toolbar.
+ * Returns null when there is no usable selection.
  */
 export function getSelectionRect(): DOMRect | null {
 	const sel = window.getSelection();
 	if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
 	const range = sel.getRangeAt(0);
-	// 忽略编辑器外的选区
+	// Ignore selections outside the editor
 	const editorRoot = document.querySelector('[data-lexical-editor="true"]');
 	if (editorRoot && !editorRoot.contains(range.commonAncestorContainer)) return null;
 	return range.getBoundingClientRect();
 }
 
-// 来自 alert-node.ts 的 $ 前缀函数也需要别名
+// $-prefixed helpers from alert-node.ts need aliases here as well
 export { $isAlertNode as isAlertNode };
 
-// ── 插入面（脚注 / 提及 / 折叠块 / 卡片链接 / 容器）─────────────────────
+// ── Insert surface (footnote / mention / details / embed card / containers) ─────
 //
-// 这些节点、`$create*` 工厂与往返 transformer 早已存在，缺的只是工具栏入口
-// （UX-1020「恢复被删掉的插入能力」）。工厂一律按导出侧的源码字面量建节点，
-// 保证 插入 → 导出 markdown → 再导入 恒等。
+// These nodes, their `$create*` factories and round-trip transformers already
+// existed; only the toolbar entry points were missing (UX-1020 "restore the
+// removed insert capabilities"). Every factory builds nodes from the exported
+// source literals, so insert → export markdown → import is an identity.
 
 /** Walks every text node under the root (for the next free footnote label). */
 function collectTextNodes(): TextNode[] {
@@ -557,7 +562,7 @@ function nextFootnoteLabel(): string {
 	return String(max + 1);
 }
 
-/** 脚注引用 `[^N]`：原子 chip，标签自动递增，无需输入。 */
+/** Footnote reference `[^N]`: atomic chip, labels auto-increment, nothing to type. */
 export function insertFootnoteRef(editor: LexicalEditor, label?: string) {
 	editor.update(() => {
 		const selection = $getSelection();
@@ -567,7 +572,7 @@ export function insertFootnoteRef(editor: LexicalEditor, label?: string) {
 	});
 }
 
-/** 行内脚注 `^[正文]`（pandoc 风格），正文由调用方给定。 */
+/** Inline footnote `^[body]` (pandoc style); the body is supplied by the caller. */
 export function insertFootnoteInline(editor: LexicalEditor, text: string) {
 	editor.update(() => {
 		const selection = $getSelection();
@@ -578,8 +583,9 @@ export function insertFootnoteInline(editor: LexicalEditor, text: string) {
 }
 
 /**
- * 提及 `@gh:user` / `@tw:user` / `@tg:user`。原子 token，光标不能进，
- * 所以 handle 必须在插入前确定（工具栏走输入框，不走 window.prompt）。
+ * Mention `@gh:user` / `@tw:user` / `@tg:user`. The token is atomic and the cursor
+ * cannot enter it, so the handle must be settled before insertion (the toolbar
+ * uses an input field, never `window.prompt`).
  */
 export function insertMention(editor: LexicalEditor, handle: string) {
 	editor.update(() => {
@@ -591,7 +597,7 @@ export function insertMention(editor: LexicalEditor, handle: string) {
 	});
 }
 
-/** 折叠块 `:::details{…}` / `:::spoiler{…}`，默认 details + 展开 + 空正文。 */
+/** Details block `:::details{…}` / `:::spoiler{…}`; defaults to open with an empty body. */
 export function insertDetails(editor: LexicalEditor, variant: 'details' | 'spoiler' = 'details') {
 	editor.update(() => {
 		const node = $createDetailsNode(variant, '', '', false, true, createDefaultAlertContent());
@@ -603,7 +609,7 @@ export function insertDetails(editor: LexicalEditor, variant: 'details' | 'spoil
 	});
 }
 
-/** 卡片链接（embed card）：provider 从 URL 解析，解不出就用 generic。 */
+/** Embed card: the provider is resolved from the URL, falling back to generic. */
 export function insertEmbed(editor: LexicalEditor, url: string, title = '') {
 	editor.update(() => {
 		const trimmed = url.trim();
@@ -623,7 +629,7 @@ export function insertEmbed(editor: LexicalEditor, url: string, title = '') {
  */
 export const DEFAULT_MERMAID_SOURCE = 'graph TD\n  A[Start] --> B[End]';
 
-/** Mermaid 图（```mermaid 围栏）。 */
+/** Mermaid diagram (```mermaid fence). */
 export function insertMermaid(editor: LexicalEditor, source: string = DEFAULT_MERMAID_SOURCE) {
 	editor.update(() => {
 		const node = $createMermaidNode(source);
@@ -634,7 +640,7 @@ export function insertMermaid(editor: LexicalEditor, source: string = DEFAULT_ME
 	});
 }
 
-/** 标签页容器 `:::tabs`，默认两页。 */
+/** Tabs container `:::tabs`, two panes by default. */
 export function insertTabs(editor: LexicalEditor, labels: string[] = ['Tab 1', 'Tab 2']) {
 	editor.update(() => {
 		const tabs: SerializedTabEntry[] = labels.map((label) => ({
@@ -654,7 +660,7 @@ export function insertTabs(editor: LexicalEditor, labels: string[] = ['Tab 1', '
 	});
 }
 
-/** 分栏容器（grid / masonry / carousel）。 */
+/** Column container (grid / masonry / carousel). */
 export function insertGrid(
 	editor: LexicalEditor,
 	layout: 'grid' | 'masonry' | 'carousel' = 'grid',

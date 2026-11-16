@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * W6.3 review P0: the registration privacy consent must be enforced by the
- * action, not just the browser's `required` attribute. A missing/odd value
- * never reaches better-auth.
+ * Registration consent is enforced by the action, not by the browser's `required`
+ * attribute: a missing or forged value never reaches better-auth.
  */
 const mocks = vi.hoisted(() => ({
 	signUp: vi.fn(async () => ({})),

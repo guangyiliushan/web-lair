@@ -563,7 +563,7 @@ export type SubmitCommentResult =
 export async function submitComment(input: SubmitCommentInput): Promise<SubmitCommentResult> {
 	const now = input.now ?? new Date();
 
-	// Defense in depth (spec §1 "已验证读者"): the route checks too, but this
+	// Defense in depth (spec §1 "verified reader"): the route checks too, but this
 	// service is the authoritative layer every future mount will call - it
 	// fails closed when the caller forgets the gate.
 	if (input.user.emailVerified !== true) return { kind: 'unverified' };
@@ -799,7 +799,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		// share ONE transaction. The enqueue creates its own savepoint and
 		// swallows its failures, so a broken notification path can never roll
 		// back the reader's comment - the alert is best-effort, the comment is
-		// not ("评论事务内写 outbox，失败不阻塞业务").
+		// not (the outbox is written in the comment transaction; failure never blocks business).
 		const [created] = await db.transaction(async (tx) => {
 			const inserted = await tx
 				.insert(comments)
@@ -935,7 +935,7 @@ export type EditCommentResult =
 /**
  * Author-only edit (spec §6): the new text always re-enters review - an
  * approved comment drops back to `pending`, so a post-approval rewrite can
- * never ride the old approval ("审核后注入" guard) - and gets the public
+ * never ride the old approval ("inject after approval" guard) - and gets the public
  * `edited_at` stamp. Owner/admin edits auto-approve like their submissions
  * and skip the window. A missing row, a foreign author, a deleted row and a
  * rejected row are one indistinguishable `unavailable` (fail-closed).
@@ -1027,7 +1027,7 @@ export async function editComment(input: EditCommentInput): Promise<EditCommentR
 				eq(comments.isDeleted, false),
 				// A concurrent rejection must not be revived by this write
 				// (review P2-1). `approved` deliberately stays allowed: the
-				// edit pulls it back to pending - the "审核后注入" guard.
+				// edit pulls it back to pending - the "inject after approval" guard.
 				inArray(comments.state, ['pending', 'approved'])
 			)
 		)

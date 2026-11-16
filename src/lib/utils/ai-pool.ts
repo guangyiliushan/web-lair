@@ -51,7 +51,7 @@ export function isPoolRowBlocked(row: PoolRowView): boolean {
 	return false;
 }
 
-/** `$0.12 / $1.00` or `$0.12 / 不封顶`. */
+/** `$0.12 / $1.00`, or `$0.12 / no cap`. */
 export function budgetLabel(row: PoolRowView): string {
 	return `${money(row.spent)} / ${row.monthlyBudget > 0 ? money(row.monthlyBudget) : '—'}`;
 }

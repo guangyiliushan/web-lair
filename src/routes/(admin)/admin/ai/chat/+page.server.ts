@@ -367,7 +367,7 @@ export const actions: Actions = {
 		}
 		// Read-tier keys (site.languages / site.default_lang) never get new
 		// proposals; a stale pending row from before that tier change is
-		// refused here too instead of being half-applied (W5.4).
+		// refused here too instead of being half-applied.
 		if (agentSettingTier(proposal.settingKey) === 'read') {
 			return fail(400, {
 				message: m.admin_ai_chat_error({ message: 'read-only setting' })

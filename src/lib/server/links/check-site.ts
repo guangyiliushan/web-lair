@@ -338,7 +338,7 @@ export async function checkSite(
 				outcome = scan(result, started);
 				// A declared page that failed hard (404/410/5xx final) falls
 				// back to the homepage for the link scan (plan §4.1
-				// "申报页失败回退首页").
+				// "when the declaration page fails, fall back to the home page").
 				if (outcome.axis === 'missing' && outcome.entry.err === 'page_missing') {
 					outcome = (await homepageFallback()) ?? outcome;
 				}

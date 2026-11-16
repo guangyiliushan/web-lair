@@ -112,7 +112,8 @@ export const conformanceCases: ConformanceCase[] = [
 		id: 'l2-spoiler-inline',
 		spec: '§2 #6',
 		input: '剧透 ||隐藏内容|| 结束',
-		// title = 原文提示(hover tooltip);tabindex 提供键盘可达(:focus 揭示)
+		// title = original-text tooltip (hover); tabindex provides keyboard reachability
+		// (:focus reveals it)
 		contains: ['<span class="spoiler" title="隐藏内容" tabindex="0">隐藏内容</span>']
 	},
 	{
@@ -498,7 +499,7 @@ export const conformanceCases: ConformanceCase[] = [
 		input: '```nosuchlang\nplain text\n```',
 		contains: ['<pre', 'plain text']
 	},
-	// ── 代码围栏信息串(§3.3,批 5)──
+	// ── Code fence info string (§3.3, batch 5) ──
 	{
 		id: 'l2-code-meta-collapsed',
 		spec: '§3.3',
@@ -570,7 +571,7 @@ export const conformanceCases: ConformanceCase[] = [
 		input: ':::info\n孤儿容器内容',
 		contains: ['孤儿容器内容']
 	},
-	// ── 嵌入判定(§3.4 ①-⑤,批 6)──
+	// ── Embed detection (§3.4 ①-⑤, batch 6) ──
 	{
 		id: 'l2-embed-extension-image',
 		spec: '§3.4 ③',
@@ -825,7 +826,7 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['()'],
 		notContains: ['katex']
 	},
-	// ── L2 容器(§3.2,批 4a:grid/tabs/tab/details;退役 gallery/banner)──
+	// ── L2 containers (§3.2, batch 4a: grid/tabs/tab/details; gallery/banner retired) ──
 	{
 		id: 'l2-grid-basic',
 		spec: '§3.2',

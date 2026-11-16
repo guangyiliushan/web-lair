@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * `/llms.txt` language wiring (W5.7 / SE1-SE4): `site.languages` decides
- * which locale paths exist (/ja/llms.txt 404s when ja is disabled) and
- * `site.default_lang` only drives the root redirect. Disabling a language
- * must not remove the `/ja/` UI routes - that is Paraglide's job, not this
- * endpoint - so only this feed 404s.
+ * `/llms.txt` language wiring: `site.languages` decides which locale paths exist
+ * (`/ja/llms.txt` 404s when ja is disabled) while `site.default_lang` only drives
+ * the root redirect. Disabling a language must not remove the `/ja/` UI routes —
+ * that is Paraglide's job — so only this feed 404s.
  */
 const { optionState } = vi.hoisted(() => ({
 	optionState: {
@@ -28,7 +27,7 @@ function request(path: string): HandlerEvent {
 	return { url: new URL(`https://example.com${path}`) } as unknown as HandlerEvent;
 }
 
-describe('/llms.txt language gating (W5.7)', () => {
+describe('/llms.txt language gating', () => {
 	beforeEach(() => {
 		optionState['site.default_lang'] = 'en';
 		optionState['site.languages'] = { enabled: ['en', 'zh-cn', 'ja'] };

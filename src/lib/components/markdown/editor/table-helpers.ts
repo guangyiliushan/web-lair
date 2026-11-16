@@ -16,19 +16,19 @@ import {
 	type TableCellNode
 } from '@lexical/table';
 
-// ── 表格行列操作辅助（供 TableCellMenu.svelte 使用）──
-// 与 lexical-helpers.ts 同理：封装 $ 前缀函数，避免 .svelte 直接导入。
+// ── Table row/column helpers (used by TableCellMenu.svelte) ──
+// Same pattern as lexical-helpers.ts: wrap the $-prefixed helpers so .svelte never imports them.
 
-/** 表格选区上下文（浮动菜单定位依据） */
+/** Table selection context (basis for positioning the floating menu) */
 export interface TableCellMenuContext {
 	cellKey: string;
 }
 
-/** 获取选区所在的表格单元格（TableSelection 时取 anchor 单元格） */
+/** Get the table cell containing the selection (the anchor cell for a TableSelection) */
 function $getSelectedCell(): TableCellNode | null {
 	const selection = $getSelection();
 	if ($isTableSelection(selection)) {
-		// TableSelection 的 anchor.key 即 TableCellNode 的 key
+		// A TableSelection's anchor.key is the key of the TableCellNode
 		const cell = $getNodeByKey(selection.anchor.key);
 		return $isTableCellNode(cell) ? cell : null;
 	}
@@ -43,41 +43,41 @@ function $getSelectedCell(): TableCellNode | null {
 }
 
 /**
- * 在 editorState.read() 上下文中读取浮动菜单上下文。
- * 光标/选区不在表格内时返回 null。
+ * Read the floating-menu context inside editorState.read().
+ * Returns null when the cursor/selection is not inside a table.
  */
 export function readTableCellContext(): TableCellMenuContext | null {
 	const cell = $getSelectedCell();
 	return cell ? { cellKey: cell.getKey() } : null;
 }
 
-/** 获取单元格 DOM 矩形（用于浮动菜单定位） */
+/** Get the cell's DOM rect (for positioning the floating menu) */
 export function getCellRect(editor: LexicalEditor, cellKey: string): DOMRect | null {
 	return editor.getElementByKey(cellKey)?.getBoundingClientRect() ?? null;
 }
 
-/** 在当前单元格上方/下方插入行 */
+/** Insert a row above/below the current cell */
 export function tableInsertRow(editor: LexicalEditor, after: boolean) {
 	editor.update(() => {
 		$insertTableRowAtSelection(after);
 	});
 }
 
-/** 在当前单元格左侧/右侧插入列 */
+/** Insert a column left/right of the current cell */
 export function tableInsertColumn(editor: LexicalEditor, after: boolean) {
 	editor.update(() => {
 		$insertTableColumnAtSelection(after);
 	});
 }
 
-/** 删除当前行 */
+/** Delete the current row */
 export function tableDeleteRow(editor: LexicalEditor) {
 	editor.update(() => {
 		$deleteTableRowAtSelection();
 	});
 }
 
-/** 删除当前列 */
+/** Delete the current column */
 export function tableDeleteColumn(editor: LexicalEditor) {
 	editor.update(() => {
 		$deleteTableColumnAtSelection();
@@ -85,7 +85,8 @@ export function tableDeleteColumn(editor: LexicalEditor) {
 }
 
 /**
- * 切换当前行表头态（以 anchor 单元格是否为表头为准，整行统一切换）。
+ * Toggle the header state of the current row (decided by whether the anchor cell is a
+ * header cell; the whole row flips together).
  */
 export function tableToggleHeader(editor: LexicalEditor) {
 	editor.update(() => {

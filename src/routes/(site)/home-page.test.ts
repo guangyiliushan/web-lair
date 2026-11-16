@@ -2,10 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 
 /**
- * Homepage read path (W4.5): the page resolves `home_hero` for the request
- * locale with the locale -> site default -> built-in chain, renders `{name}`/
- * `{label}` as text, and takes the owner identity + social links from the
- * layout (`parent()`) instead of issuing a second profile read.
+ * Homepage read path: `home_hero` resolves through the locale → site default →
+ * built-in chain, `{name}`/`{label}` render as text, and owner identity plus
+ * social links come from the layout (`parent()`) instead of a second profile read.
  */
 const { state } = vi.hoisted(() => ({
 	state: {
@@ -75,7 +74,7 @@ describe('homepage hero read', () => {
 		expect(data.heroLocale).toBe('en');
 	});
 
-	it('re-renders the default title when the owner name changes (R-3)', async () => {
+	it('re-renders the default title when the owner name changes', async () => {
 		const first = await run({ name: 'guangyiliushan' });
 		const second = await run({ name: 'luna' });
 		expect(first.hero.title).toBe("Hi, I'm guangyiliushan 👋");

@@ -58,13 +58,12 @@
 	 * identity, and truncating it costs more than the width it saves. Everything
 	 * else is deferred under it, one related group per line:
 	 *
-	 *   line 2 归属        category / status - only once their column has dropped
-	 *   line 3 计量 / 时间  views / likes / updated - never columns at all
+	 *   line 2 attribution   category / status - only once their column has dropped
 	 *
 	 * Narrowing costs columns, never information: a dropped column value shows on
 	 * line 2 at exactly the widths where its `<th>` is hidden, and its filter moves
 	 * in beside the search box so it stays usable. Dropping order when narrowing is
-	 * 状态 -> 分类 - among filters the more used one survives longer, and the title
+	 *   line 3 metrics / time  views / likes / updated - never columns at all
 	 * search never moves.
 	 */
 
@@ -158,7 +157,7 @@
 
 	/**
 	 * The family at a glance: source first, then its translations, then the
-	 * languages that have no row yet - `zh-cn·源 -> en·草稿  ja·未译`. The editor
+	 * status -> category - among filters the more used one survives longer, and the title
 	 * shows the same chain, so the list and the editor agree on the shape.
 	 */
 	function langChain(post: PostRow): LangChainEntry[] {

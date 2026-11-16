@@ -19,10 +19,9 @@ import type { RequestHandler } from './$types';
 const ITEM_LIMIT = 20;
 
 /**
- * Machine-readable disclosure tokens for `<item><category>`. Deliberately
- * stable English and NOT localised: feeds are consumed by software, and a
- * category that changes with the request locale cannot be filtered on.
- * `null` (undisclosed) emits nothing - an empty claim is not a claim.
+ * Stable English tokens for `<item><category>`, deliberately not localised: feeds
+ * are consumed by software, and a category that shifts with the request locale
+ * cannot be filtered on. `null` (undisclosed) emits nothing.
  */
 const WRITING_CATEGORY: Record<WritingOrigin, string> = {
 	none: 'No AI',
@@ -32,26 +31,14 @@ const WRITING_CATEGORY: Record<WritingOrigin, string> = {
 };
 
 /**
- * Per-language feeds live inside the language segment (`/{lang}/rss.xml`);
- * the bare root path is only an alias pointing at the default-language feed
- * with a temporary redirect (R1-Q3: `site.default_lang` is configurable, so
- * a permanent redirect would cache a stale target).
- *
- * Scope (ledger §22, N1 seam): posts + notes share ONE feed - latest 20
- * across both sources after merging, future-dated items excluded by the
- * shared visibility predicates, and password-gated notes ALSO excluded
- * (`feedableNoteCondition`, notes plan §3.3 exclusion face). `urn:uuid`
- * guids so slug changes never re-deliver an item. Caching (R1-Q2): strong
- * ETag = representation hash + Last-Modified from the newest updated_at;
- * conditional requests use the strong If-None-Match (weak list comparison,
- * RFC 9110 §13.1.2). If-Modified-Since is intentionally not evaluated -
- * Last-Modified is informational (max(updated_at) is not consistent under
- * lazy visibility; second review round 2026-10-02).
- *
- * The locale comes from the path: this endpoint is excluded from the i18n
- * route strategy (locale-surfaces), so getLocale() is not available here.
+ * `/{lang}/rss.xml`; the bare root is a 302 alias to `site.default_lang` (the
+ * default is configurable, so not permanent). Posts and notes share one feed: the
+ * latest 20 merged, future-dated and password-gated items excluded, `urn:uuid`
+ * guids so slug changes never re-deliver. Cache: strong ETag over the body; only
+ * If-None-Match counts — `Last-Modified` is informational under lazy visibility.
  */
 export const GET: RequestHandler = async ({ url, request }) => {
+	// Not `getLocale()`: this route is excluded from the i18n route strategy.
 	const locale = localeFromPath(url.pathname);
 	if (!locale) {
 		const defaultLang = await getOption('site.default_lang');
@@ -94,13 +81,10 @@ export const GET: RequestHandler = async ({ url, request }) => {
 			.limit(ITEM_LIMIT)
 	]);
 
-	// Merge BEFORE rendering: only the surviving top-N runs the markdown
-	// pipeline (the old shape rendered up to 40 items per request and then
-	// dropped half of them - round-7 review finding). Array.prototype.sort is
-	// stable, so equal timestamps keep a deterministic posts-then-notes order
-	// (byte-stable ETag; byte-identical to the old shape on the success path.
-	// One deliberate difference: a single failed render no longer backfills
-	// from the rank-21+ candidates - it just drops that item).
+	// Merge BEFORE rendering: only the surviving top-N runs the markdown pipeline.
+	// `sort` is stable, so equal timestamps keep a deterministic posts-then-notes
+	// order and the ETag stays byte-stable. A failed render now drops that item
+	// instead of backfilling from rank 21+.
 	const merged = [
 		...postRows.map((row) => ({ kind: 'post' as const, row })),
 		...noteRows.map((row) => ({ kind: 'note' as const, row }))
@@ -138,8 +122,7 @@ export const GET: RequestHandler = async ({ url, request }) => {
 						description: plainTextExcerpt(row.content ?? '')
 					};
 				} catch (error) {
-					// One broken item must not take the whole feed down
-					// (second review round): log and skip it.
+					// One broken item must not take the whole feed down: log and skip it.
 					console.warn(`[rss] ${kind} item render failed`, row.id, error);
 					return null;
 				}

@@ -20,14 +20,11 @@ import { assertSuppressionKey } from '$lib/server/services/suppressions';
 import { assertSubscriptionTokenSecret } from '$lib/server/services/subscriptions';
 
 /**
- * Fail fast on boot when a required key is missing. Unkeyed fallback was
- * removed after review: a later key would orphan every existing opt-out.
- * `SUBSCRIBE_TOKEN_SECRET` (F-13) joined the guard: without it no confirmation
- * link can be derived, and a random-token fallback would silently reintroduce
- * the plaintext column's job.
- * `building` is excluded because SvelteKit may call init during prerender.
- * Development starts without the keys, but any subscribe/confirm/unsubscribe
- * (reads included) fails until they are set.
+ * Fail fast on boot when a required key is missing: without one, opt-out hashes
+ * cannot be re-derived (`SUPPRESSION_HMAC_KEY`) and confirmation links cannot be
+ * minted (`SUBSCRIBE_TOKEN_SECRET`). `building` is exempt because SvelteKit may
+ * run `init` during prerender; dev boots keyless, but subscribe/confirm/
+ * unsubscribe (reads included) fail until both keys are set.
  */
 export const init: ServerInit = () => {
 	if (!dev && !building) {
@@ -37,17 +34,11 @@ export const init: ServerInit = () => {
 };
 
 /**
- * CSRF (RFC 8058 exception design, 2026-10-18).
- *
- * SvelteKit's built-in check runs in `respond.js` before every hook, so a hook
- * cannot exempt the one-click unsubscribe endpoint. `svelte.config.js`
- * therefore disables the framework check (`csrf.trustedOrigins: ['*']`) and
- * this hook reproduces it exactly for every other form request. Keep the
- * predicate in `$lib/server/security/csrf` aligned with upstream on upgrade.
- *
- * The only exemption is the one-click endpoint, which RFC 8058 requires to
- * accept a cookie-less, Origin-less POST. Its token is the credential; the
- * request carries no ambient authority for CSRF to abuse.
+ * SvelteKit's CSRF check runs before any hook, so it cannot exempt the RFC 8058
+ * one-click unsubscribe endpoint. `svelte.config.js` turns the framework check
+ * off (`csrf.trustedOrigins: ['*']`) and this hook re-implements it for every
+ * other form request; keep `$lib/server/security/csrf` aligned with upstream.
+ * The exempted POST is token-authenticated and carries no ambient authority.
  */
 const ONE_CLICK_PATH = '/api/unsubscribe/one-click';
 
@@ -81,10 +72,9 @@ const handleParaglide: Handle = async ({ event, resolve }) =>
 				html.replace('%lang%', locale).replace('%dir%', getTextDirection(locale))
 		});
 
-		// The rendered page depends on the locale cookie and - on a first visit
-		// with no cookie yet - on Accept-Language, so a shared cache has to key
-		// on both (MDN: Vary). Rebuild the response instead of mutating it:
-		// Headers can be immutable on some runtimes.
+		// The page depends on the locale cookie and, on a first visit, on
+		// Accept-Language, so shared caches must key on both. Rebuild the response
+		// rather than mutate it: Headers can be immutable on some runtimes.
 		if (!response.headers.get('content-type')?.includes('text/html')) return response;
 		const headers = new Headers(response.headers);
 		const tokens = (headers.get('vary') ?? '')
@@ -112,8 +102,8 @@ function clientAddress(event: Parameters<Handle>[0]['event']): string {
 
 const handleBetterAuth: Handle = async ({ event, resolve }) => {
 	if (isSignUpRequest({ method: event.request.method, pathname: event.url.pathname })) {
-		// Verify the SMTP handshake on the one path where a swallowed send error
-		// would create an account that can never be verified.
+		// Probe SMTP here: a swallowed send error would create an account that
+		// can never be verified.
 		if (!(await isMailDeliveryAvailableLive())) {
 			return new Response(JSON.stringify({ code: 'mail_unavailable' }), {
 				status: 503,
@@ -151,16 +141,15 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	// Tailnet sign-in: with no session, hand /admin off to the official plugin
-	// endpoint, which resolves the identity and issues a real session + cookie.
-	// No session row is ever inserted here (ledger §4.27 洞②).
+	// Tailnet sign-in: with no session, hand /admin to the official plugin endpoint,
+	// which resolves the identity and issues a real session + cookie. No session row
+	// is inserted here.
 	if (!session && isAdminPath(event.url.pathname)) {
 		const { loginPath, twoFactorPath } = getAdminConfig();
 		const isLoginPage = event.url.pathname.startsWith(loginPath);
 		const isSetupPage = event.url.pathname.startsWith(`${ADMIN_BASE_PATH}/setup`);
-		// The 2FA challenge page is where the second factor is enforced:
-		// auto-signing in through the Tailnet hand-off here would silently skip
-		// it for the owner's trusted devices (B3.1 review).
+		// The 2FA page is where the second factor is enforced; auto-signing in via
+		// the Tailnet hand-off would silently skip it on trusted devices.
 		const isTwoFactorPage = event.url.pathname.startsWith(twoFactorPath);
 
 		if (!isLoginPage && !isSetupPage && !isTwoFactorPage) {
@@ -181,10 +170,9 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 export const handle: Handle = sequence(handleCsrf, handleParaglide, handleBetterAuth);
 
 /**
- * P2 review finding: Kit's default error hook logs the raw error, and every
- * drizzle failure is a DrizzleQueryError whose message embeds the SQL plus its
- * bound parameters - i.e. draft titles and bodies would land in the server log.
- * Log a status + route id + PG code only, and answer with a generic message.
+ * Kit's default error hook logs the raw error; a `DrizzleQueryError` embeds the
+ * SQL and bound parameters, so draft titles and bodies would land in the server
+ * log. Log status + route id + PG code only and answer with a generic message.
  */
 export const handleError: HandleServerError = ({ error, event, status, message }) => {
 	const code =

@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the admin moments *delete* action (C3).
+ * Route-level tests for the admin moments *delete* action.
  *
  * Create/update moved to `/admin/moments/edit` together with the Markdown
- * editor (B2a UI P0, P7) - their coverage lives in
- * `edit/moments-edit-route.test.ts`. This file pins the list-side surface:
- * guard first, uuid entry guard, 404 via `returning`.
+ * editor - their coverage lives in `edit/moments-edit-route.test.ts`. This file
+ * pins the list-side surface: guard first, uuid entry guard, 404 via `returning`.
  */
 const { dbMock, state } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,

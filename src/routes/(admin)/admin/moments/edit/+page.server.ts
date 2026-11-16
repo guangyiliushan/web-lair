@@ -12,15 +12,14 @@ import type { PageServerLoad, Actions } from './$types';
 const LIST_PATH = '/admin/moments';
 
 /**
- * Admin moment editor (B2a UI P0, checkpoint P7): the write surface moved out
- * of the list dialog into its own route so the body uses the same Markdown
- * editor as posts / notes.
+ * Admin moment editor: the write surface lives in its own route so the body uses
+ * the same Markdown editor as posts / notes.
  *
  * There is no `drafts` row for moments - `drafts.ref_type` only whitelists
- * post/page/note (draft.schema.ts) - so this page saves directly instead of
- * staging a draft. The client keeps an unsaved-changes guard instead; the
- * `save` action either inserts (no `id`) or updates (`id`, 404 via
- * `returning`) and always redirects back to the list with a one-shot flash.
+ * post/page/note (draft.schema.ts) - so this page saves directly instead of staging
+ * a draft. The client keeps an unsaved-changes guard instead; the `save` action
+ * either inserts (no `id`) or updates (`id`, 404 via `returning`) and always
+ * redirects back to the list with a one-shot flash.
  */
 export const load: PageServerLoad = async (event) => {
 	// Guard first: an unauthorised call must never reach the query layer.
@@ -82,7 +81,7 @@ export const actions: Actions = {
 
 		// Form encoding normalizes newlines to CRLF (HTML entry-list spec); the
 		// markdown import boundary expects LF, and CRLF breaks line-anchored
-		// transformers on re-open (posts/notes lesson, ST-3 3b1). Normalise
+		// transformers on re-open (posts/notes lesson). Normalise
 		// here so the stored body is LF-only.
 		const content = (form.get('content') ?? '').toString().replace(/\r\n?/g, '\n').trim();
 		if (!content) return fail(400, { error: m.admin_moments_err_content() });

@@ -4,12 +4,11 @@ import { sql } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Route-level tests for /sitemap.xml (P3-b): home + visible posts per
- * language, per-group alternates, lastmod only from updated_at, stable
- * (lang, slug) ordering, locale whitelisting and the strong-validator cache
- * contract (ETag derived from the body); P1b adds the pages source
- * (per-content-locale locs, same-path alternates). The db module is mocked
- * with a queue of select results.
+ * `/sitemap.xml`: home + visible posts per language, per-group alternates,
+ * `lastmod` only from `updated_at`, stable `(lang, slug)` ordering, locale
+ * whitelisting, the body-derived ETag contract and the pages source
+ * (per-content-locale locs, same-path alternates). The db module is mocked with a
+ * queue of select results.
  */
 const { dbMock, state, envState } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -126,7 +125,7 @@ describe('sitemap route', () => {
 		expect(body).toContain('<loc>http://localhost/</loc>');
 	});
 
-	it('skips rows outside the configured locales (review round 2)', async () => {
+	it('skips rows outside the configured locales', async () => {
 		state.selectResults = [
 			[
 				...groupRows,
@@ -172,7 +171,7 @@ describe('sitemap route', () => {
 		const weak = await GET(event({ 'if-none-match': `W/${etag}` }));
 		expect(weak.status).toBe(304);
 
-		// IMS alone never 304s: Last-Modified is informational (review round 2).
+		// IMS alone never 304s: Last-Modified is informational.
 		state.selectResults = [groupRows];
 		const imsAlone = await GET(event({ 'if-modified-since': lastModified }));
 		expect(imsAlone.status).toBe(200);
@@ -198,7 +197,7 @@ describe('sitemap route', () => {
 		expect(response.headers.get('last-modified')).toBeNull();
 	});
 
-	it('lists feedable notes and topic pages with their alternates (N1 seam)', async () => {
+	it('lists feedable notes and topic pages with their alternates', async () => {
 		const noteEn = {
 			lang: 'en',
 			slug: 'n-en',
@@ -262,7 +261,7 @@ describe('sitemap route', () => {
 	it('gates the notes source on the feedable predicate (visible AND not gated)', async () => {
 		await GET(event());
 
-		// Second select = notes (render-level assertion, review lesson).
+		// Second select = notes (asserted at the SQL level).
 		const whereSql = state.whereArgs[1]
 			.map((arg) => dbDialect.sqlToQuery(arg as never).sql)
 			.join(' | ');
@@ -271,7 +270,7 @@ describe('sitemap route', () => {
 		expect(whereSql).toContain('"notes"."password_hash" is null');
 	});
 
-	it('lists content-bearing pages with per-locale locs and same-path alternates (P1b seam)', async () => {
+	it('lists content-bearing pages with per-locale locs and same-path alternates', async () => {
 		state.selectResults = [
 			[],
 			[],
@@ -296,8 +295,8 @@ describe('sitemap route', () => {
 		expect(body).toContain('hreflang="en" href="https://example.com/en/about"');
 		expect(body).toContain('hreflang="zh-cn" href="https://example.com/zh-cn/about"');
 		expect(body).toContain('<loc>https://example.com/ja/solo</loc>');
-		// Alternates carry the CONTENT locales only - the full locale list
-		// would add a ja alternate for the en/zh page (P1b review teeth).
+		// Alternates carry the CONTENT locales only; the full locale list would add a
+		// ja alternate for the en/zh page.
 		expect(body).not.toContain('hreflang="ja" href="https://example.com/ja/about"');
 		expect(body).toContain('hreflang="ja" href="https://example.com/ja/solo"');
 
@@ -309,7 +308,7 @@ describe('sitemap route', () => {
 		);
 	});
 
-	it('pins the pages source predicate and slug ordering (P1b seam)', async () => {
+	it('pins the pages source predicate and slug ordering', async () => {
 		await GET(event());
 
 		// Third where (posts, notes, pages — topics carries none); fourth

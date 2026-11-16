@@ -1,17 +1,18 @@
 // scripts/seed-owner.ts
-// 用法:
-//   1. pnpm dev （启动 dev server）
+// Usage:
+//   1. pnpm dev  (start the dev server)
 //   2. pnpm db:seed-owner
 //
-// 环境变量:
-//   OWNER_EMAIL     — 站长（site owner）邮箱，必填
-//   OWNER_PASSWORD  — 密码（最少 8 位）
-//   OWNER_NAME      — 显示名称（默认 "Admin"）
-//   ORIGIN          — SvelteKit server 地址（默认 http://localhost:5173）
-//   DATABASE_URL    — PostgreSQL 连接串
+// Environment variables:
+//   OWNER_EMAIL     — site owner email, required
+//   OWNER_PASSWORD  — password (at least 8 characters)
+//   OWNER_NAME      — display name (default "Admin")
+//   ORIGIN          — SvelteKit server address (default http://localhost:5173)
+//   DATABASE_URL    — PostgreSQL connection string
 //
-// 角色来自 better-auth 的 admin 插件；owner 唯一性由应用层保证（Step 5 的条件更新），
-// 因此脚本幂等：重复执行不会产生第二个 owner。
+// The role comes from better-auth's admin plugin; owner uniqueness is guaranteed by the
+// application layer (the conditional update in step 5), so the script is idempotent:
+// running it again never creates a second owner.
 
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -23,8 +24,8 @@ const FETCH_TIMEOUT_MS = 10_000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * 读取必填环境变量，缺失时报错并退出。
- * 返回值始终为 string（非 undefined），因为 process.exit 返回 never。
+ * Read a required environment variable, failing loudly when it is missing.
+ * The return type is always string (never undefined) because process.exit returns never.
  */
 function requireEnv(name: string, value: string | undefined): string {
 	if (!value?.trim()) {
@@ -34,14 +35,14 @@ function requireEnv(name: string, value: string | undefined): string {
 	return value;
 }
 
-// ── 解析环境变量 ──
+// ── Parse the environment ──
 const ORIGIN = process.env.ORIGIN || 'http://localhost:5173';
 const NAME = process.env.OWNER_NAME || 'Admin';
 const EMAIL = (process.env.OWNER_EMAIL ?? '').trim().toLowerCase();
 const PASSWORD = requireEnv('OWNER_PASSWORD', process.env.OWNER_PASSWORD);
 const DB_URL = requireEnv('DATABASE_URL', process.env.DATABASE_URL);
 
-// ── 校验 ──
+// ── Validation ──
 if (!EMAIL) {
 	console.error('✗ OWNER_EMAIL is required.');
 	process.exit(1);
@@ -55,7 +56,7 @@ if (PASSWORD.length < 8) {
 	process.exit(1);
 }
 
-// ── 辅助：带超时的 fetch ──
+// ── Helper: fetch with a timeout ──
 async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -71,7 +72,7 @@ async function main() {
 	const db = drizzle(pg);
 
 	try {
-		// ── Step 1: 检查用户是否已存在（幂等性核心）──
+		// ── Step 1: check whether the user already exists (the core of idempotency) ──
 		const [existing] = await db
 			.select({ id: user.id, emailVerified: user.emailVerified })
 			.from(user)
@@ -81,7 +82,7 @@ async function main() {
 		if (existing) {
 			console.log(`→ User already exists: ${EMAIL}`);
 		} else {
-			// ── Step 2: 用户不存在，调用 Better Auth 注册 API ──
+			// ── Step 2: no such user, call the Better Auth sign-up API ──
 			console.log(`→ Creating user via Better Auth API: ${EMAIL} ...`);
 			const signUpRes = await fetchWithTimeout(`${ORIGIN}/api/auth/sign-up/email`, {
 				method: 'POST',
@@ -101,11 +102,11 @@ async function main() {
 
 			console.log('✓ User created.');
 
-			// 等待 databaseHooks (user.create.after → userProfiles) 完成
+			// Wait for databaseHooks (user.create.after → userProfiles) to finish
 			await new Promise((r) => setTimeout(r, 500));
 		}
 
-		// ── Step 3: 获取用户 ID（可能刚注册，重新查询）──
+		// ── Step 3: read the user id (it may have just been created, so re-query) ──
 		const [u] = await db
 			.select({ id: user.id, emailVerified: user.emailVerified })
 			.from(user)
@@ -117,7 +118,7 @@ async function main() {
 			process.exit(1);
 		}
 
-		// ── Step 4: 设置 emailVerified = true（幂等）──
+		// ── Step 4: set emailVerified = true (idempotent) ──
 		if (!u.emailVerified) {
 			await db.update(user).set({ emailVerified: true }).where(eq(user.email, EMAIL));
 			console.log('✓ emailVerified set to true.');
@@ -125,8 +126,9 @@ async function main() {
 			console.log('→ emailVerified already true, skipping.');
 		}
 
-		// ── Step 5: 认领 owner 角色（咨询锁 + 条件更新，幂等）──
-		// 锁与谓词来自 src/lib/server/auth/owner-claim.ts，与 app 侧 claimOwnerRole 同源。
+		// ── Step 5: claim the owner role (advisory lock + conditional update, idempotent) ──
+		// Lock and predicate come from src/lib/server/auth/owner-claim.ts — the same source
+		// as the app-side claimOwnerRole.
 		const claimed = await db.transaction(async (tx) => {
 			await tx.execute(ownerClaimLock());
 			const rows = await tx

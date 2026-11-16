@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIError } from 'better-auth/api';
 
 /**
- * W1.4/P0-4: the reset route never answers 404 - a missing, expired or
- * already-used token renders the recovery state - and a successful reset
- * redirects to the sign-in page with the success marker.
+ * The reset route never answers 404 — missing, expired or used tokens render the
+ * recovery state — and a successful reset redirects to sign-in with the success
+ * marker.
  */
 const { resetMock } = vi.hoisted(() => ({ resetMock: vi.fn() }));
 

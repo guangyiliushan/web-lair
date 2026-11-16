@@ -158,8 +158,8 @@
 									{m.admin_comments_anchor_gated()}
 								</p>
 							{:else if entry.anchorQuote}
-								<!-- Segment anchor (P3b): the quote the reader selected plus
-								     its context window, straight from the stored anchor. -->
+								<!-- Segment anchor: the quote the reader selected plus its
+								     context window, straight from the stored anchor. -->
 								<div class="mt-1.5 space-y-0.5 text-xs" data-slot="comment-anchor-context">
 									<!-- Border instead of CJK quote marks: the admin i18n guard
 									     forbids hardcoded CJK, and a rule reads better anyway. -->

@@ -19,7 +19,7 @@ const USER = {
 	image: null
 };
 
-describe('root layout branding (W5.3)', () => {
+describe('root layout branding', () => {
 	beforeEach(() => {
 		brandingMock.mockClear();
 	});

@@ -196,9 +196,9 @@
 	const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.tif,.tiff,.pdf,.zip,.txt,.md';
 
 	/**
-	 * Public content URL: webp `@full` for transcoded photos, the ORIGINAL
-	 * key for GIFs (plan §4.3 pass-through — the original is the public tier) and for
-	 * attachments (public once registered; /i enforces the registry check).
+	 * Public content URL: webp `@full` for transcoded photos, the ORIGINAL key for
+	 * GIFs (pass-through: the original is the public tier) and for attachments
+	 * (public once registered; /i enforces the registry check).
 	 */
 	function publicUrl(row: FileRow): string {
 		if (row.mimeType === 'image/gif') return `/i/${row.objectKey}`;

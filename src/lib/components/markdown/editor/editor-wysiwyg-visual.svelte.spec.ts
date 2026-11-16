@@ -9,21 +9,24 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 /**
- * 可视化测试:编辑器对 v0.3 新语法集合的所见即所得渲染 + 全尺寸截图。
+ * Visual test: WYSIWYG rendering of the v0.3 syntax set in the editor, plus full-size
+ * screenshots.
  *
- * 接缝(与 editor-viewport-matrix.svelte.spec.ts 互补——那边是空内容的
- * 布局不变量,这边是真实语法文档):
- *  1. MarkdownEditor 公共组件(经 ToolbarTestHost 挂载,镜像 posts/edit 的
- *     h-screen flex 链),真实 Chromium + 真实 layout.css;
- *  2. initialMarkdown 属性:markdown 源 → 编辑器 DOM(WYSIWYG 导入);
- *  3. 代码模式切换按钮:markdown 源 ↔ 富文本(往返保真)。
+ * Seam (complementary to editor-viewport-matrix.svelte.spec.ts — that one covers the
+ * layout invariants of empty content, this one a real syntax document):
+ *  1. the public MarkdownEditor component (mounted through ToolbarTestHost, mirroring
+ *     the h-screen flex chain of posts/edit), real Chromium + the real layout.css;
+ *  2. the initialMarkdown prop: markdown source → editor DOM (WYSIWYG import);
+ *  3. the code-mode toggle button: markdown source ↔ rich text (round-trip fidelity).
  *
- * 截图存仓库外 ../../../../../../editor-visual-shots/(惯例:截图不进 git)。
- * 已知范围限定:浅色主题;mention 在编辑器中按设计显示 token 原文
- * (`@gh:user`),由渲染端重写为真实地址,故不参与“无字面 markdown”扫描。
+ * Screenshots land outside the repo at ../../../../../../editor-visual-shots/
+ * (convention: screenshots never enter git). Known scoping: light theme only; mentions
+ * keep their token source text in the editor by design (`@gh:user`) and the renderer
+ * rewrites them to real addresses, so they sit outside the "no literal markdown" scan.
  */
 
-/** 覆盖编辑器 EDITOR_TRANSFORMERS 全部 v0.3 新语法 + 常规块的样例文档 */
+/** Sample document covering every v0.3 syntax in EDITOR_TRANSFORMERS plus the ordinary
+ * blocks */
 const SYNTAX_DOC = [
 	'# 编辑器可视化测试',
 	'',
@@ -71,7 +74,8 @@ const SYNTAX_DOC = [
 	'```'
 ].join('\n');
 
-/** 等待整棵文档导入完成的最深节点(告警装饰器是最后挂载的 Svelte 子树) */
+/** Deepest node to wait on so the whole document has imported (the alert decorator
+ * is the last Svelte subtree to mount) */
 async function waitForImport() {
 	await expect
 		.poll(() => document.querySelectorAll('.rich-editor-alert-host').length)
@@ -79,7 +83,7 @@ async function waitForImport() {
 	await expect.poll(() => document.querySelectorAll('.spoiler').length).toBeGreaterThanOrEqual(1);
 }
 
-/** 编辑器根 textbox 的 innerText(嵌套告警编辑器内容包含在内) */
+/** innerText of the editor's root textbox (nested alert editor content included) */
 async function editorInnerText(): Promise<string> {
 	// findElement waits for the node (element() is the synchronous escape hatch)
 	const el = await page
@@ -88,7 +92,8 @@ async function editorInnerText(): Promise<string> {
 	return el.textContent ?? '';
 }
 
-/** 从大到小、覆盖手机/折叠屏/平板/笔记本/桌面/带鱼屏的截图矩阵 */
+/** Screenshot matrix from large to small: phone / foldable / tablet / laptop /
+ * desktop / ultrawide */
 const SHOT_MATRIX: Array<{ w: number; h: number; label: string }> = [
 	{ w: 2560, h: 1200, label: 'ultrawide-desktop' },
 	{ w: 1920, h: 1080, label: 'desktop-fhd' },
@@ -113,11 +118,11 @@ describe('editor WYSIWYG visual (v0.3 syntax set)', () => {
 		await render(ToolbarTestHost, { initialMarkdown: SYNTAX_DOC, placeholder: '输入正文...' });
 		await waitForImport();
 
-		// ── 新语法:spoiler / mark / mention / tag ──
+		// ── New syntax: spoiler / mark / mention / tag ──
 		await expect
 			.poll(() => document.querySelector('.spoiler')?.textContent)
 			.toBe('这里是被隐藏的剧透内容');
-		// Lexical 渲染 highlight 为 <mark> 包裹 + 主题类在内层 span 上
+		// Lexical renders highlight as a <mark> wrapper with the theme class on an inner span
 		await expect
 			.poll(() => document.querySelector('.rich-editor-highlight')?.textContent)
 			.toBe('重点标记文本');
@@ -128,17 +133,18 @@ describe('editor WYSIWYG visual (v0.3 syntax set)', () => {
 			.poll(() => document.querySelector('.rich-editor-tag')?.textContent)
 			.toBe('测试标签');
 
-		// ── 新语法:告警(装饰器 + 类型变体) ──
+		// ── New syntax: alerts (decorator + type variants) ──
 		expect(document.querySelectorAll('.rich-editor-alert.rich-editor-alert-note').length).toBe(1);
 		expect(document.querySelectorAll('.rich-editor-alert.rich-editor-alert-warning').length).toBe(
 			1
 		);
 
-		// ── 新语法:sup / sub ──
+		// ── New syntax: sup / sub ──
 		expect(document.querySelector('sup')?.textContent).toBe('2');
 		expect(document.querySelector('sub')?.textContent).toBe('2');
 
-		// ── 常规块:标题/行内格式/链接/引用/列表/表格/HR/图片/代码块 ──
+		// ── Ordinary blocks: heading / inline formats / link / quote / list / table / HR /
+		// image / code block ──
 		expect(document.querySelectorAll('.rich-editor-h1').length).toBe(1);
 		expect(document.querySelectorAll('.rich-editor-h2').length).toBe(2);
 		expect(document.querySelector('.rich-editor-bold')?.textContent).toBe('加粗');
@@ -155,8 +161,8 @@ describe('editor WYSIWYG visual (v0.3 syntax set)', () => {
 		expect(document.querySelector('figure img')?.getAttribute('alt')).toBe('示意图');
 		expect(document.querySelector('.rich-editor-code-block')?.textContent).toContain('Lexical');
 
-		// ── 所见即所得:正文不得残留字面 markdown 定界符 ──
-		// (mention token 按设计保留原文,不在此列)
+		// ── WYSIWYG: the body must not retain literal markdown delimiters ──
+		// (mention tokens keep their source text by design and are not part of this check)
 		const text = await editorInnerText();
 		for (const literal of [
 			'||',
@@ -182,9 +188,10 @@ describe('editor WYSIWYG visual (v0.3 syntax set)', () => {
 		await render(ToolbarTestHost, { initialMarkdown: SYNTAX_DOC, placeholder: '输入正文...' });
 		await waitForImport();
 
-		// 进入代码模式:导出的 markdown 源必须保留全部语法定界
+		// Enter code mode: the exported markdown source must keep every syntax delimiter
 		await page.getByRole('button', { name: '切换到代码模式' }).click();
-		// findElement 会等待元素出现(4.1+);element() 是同步逃生舱,找不到即抛
+		// findElement waits for the element to appear (4.1+); element() is the synchronous
+		// escape hatch and throws when nothing matches
 		const textarea = (await page
 			.getByRole('textbox', { name: '输入正文...' })
 			.findElement({ timeout: 15_000 })) as HTMLTextAreaElement;
@@ -209,7 +216,7 @@ describe('editor WYSIWYG visual (v0.3 syntax set)', () => {
 			expect(src, `code mode lost markdown syntax: ${expected}`).toContain(expected);
 		}
 
-		// 切回富文本:重新渲染且仍无字面 markdown 残留
+		// Back to rich text: re-rendered, still no literal markdown left over
 		await page.getByRole('button', { name: '切换到富文本模式' }).click();
 		await waitForImport();
 		const text = await editorInnerText();
@@ -224,14 +231,15 @@ describe('editor WYSIWYG visual (v0.3 syntax set)', () => {
 			await render(ToolbarTestHost, { initialMarkdown: SYNTAX_DOC, placeholder: '输入正文...' });
 			await waitForImport();
 
-			// 真实内容下也不允许水平溢出(空内容场景由 viewport-matrix 覆盖)
+			// No horizontal overflow with real content either (empty content is covered by
+			// viewport-matrix)
 			const de = document.documentElement;
 			expect(
 				de.scrollWidth <= de.clientWidth + 1,
 				`horizontal overflow with rich content at ${w}x${h}`
 			).toBe(true);
 
-			// 截图:仓库外 editor-visual-shots/,按尺寸命名
+			// Screenshot: editor-visual-shots/ outside the repo, named by size
 			await page.screenshot({
 				path: `../../../../../../editor-visual-shots/${label}-${w}x${h}.png`
 			});

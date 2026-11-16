@@ -20,7 +20,7 @@ export const load: PageServerLoad = (event) => {
 
 export const actions: Actions = {
 	signUp: async (event) => {
-		// W6.10: security endpoint, fail-closed, IPv6 aggregated on /64.
+		// Security endpoint: fail closed, IPv6 aggregated on /64.
 		const address = clientAddressKey(requestAddress(event.getClientAddress));
 		const rate = await rateLimitStrict(
 			getCache(),
@@ -47,8 +47,8 @@ export const actions: Actions = {
 			return fail(400, { message: 'All fields are required' });
 		}
 
-		// W6.3 (C3): informed consent is required and never pre-checked. The
-		// checkbox is also `required` in the browser; this is the server gate.
+		// Informed consent is required and never pre-checked; the browser `required`
+		// attribute is not the gate.
 		if (formData.get('privacyConsent') !== 'on') {
 			return fail(400, { message: m.auth_register_privacy_required() });
 		}

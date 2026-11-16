@@ -200,7 +200,7 @@ export async function approveQueueRow(
 }
 
 /**
- * Sign-up + SQL-verify + explicit sign-in (spec §1 "已验证读者"), shared by
+ * Sign-up + SQL-verify + explicit sign-in (spec §1 "verified reader"), shared by
  * the comment specs (the two local copies were verbatim - pre-release review
  * 04-F4). The password stays a caller parameter: each spec owns its fixture
  * namespace.

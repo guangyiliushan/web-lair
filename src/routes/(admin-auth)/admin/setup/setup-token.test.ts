@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * One-time setup token (W2.12 / T5-A).
+ * One-time setup token.
  *
  * The old guard only asked "does an admin exist?", which becomes true again if
  * the user table is emptied. The durable `admin.setup_complete` audit row is

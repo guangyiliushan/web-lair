@@ -9,7 +9,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Draft management (ledger §9.14.3): every pending working copy, oldest
+ * Draft management: every pending working copy, oldest
  * activity first, with explicit discard. No auto-cleanup by design.
  */
 export const load: PageServerLoad = async () => {

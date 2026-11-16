@@ -4,9 +4,9 @@ import { listNotes, toNoteRow } from '$lib/server/services/notes';
 import type { PageServerLoad } from './$types';
 
 /**
- * Public notes list (N1): belongs-to year / topic filters, pin-first order
- * on page one, gated rows reduced to title + lock. Filtered views are
- * noindex-neutral - they consolidate on `/notes` via the page canonical.
+ * Public notes list: belongs-to year / topic filters, pin-first order on page one,
+ * gated rows reduced to title + lock. Filtered views are noindex-neutral - they
+ * consolidate on `/notes` via the page canonical.
  */
 export const load: PageServerLoad = async ({ url }) => {
 	const lang = getLocale();

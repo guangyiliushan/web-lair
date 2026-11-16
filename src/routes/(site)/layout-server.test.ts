@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the (site) layout load (second review round): the
- * public origin handed to the SEO head is the SINGLE source shared with the
- * feeds — deleting or bypassing this wiring used to leave every gate green
+ * `(site)` layout load: the public origin handed to the SEO head is the single
+ * source shared with the feeds — bypassing this wiring leaves every gate green
  * while silently re-introducing the request-origin fallback in production.
  */
 const { envState, optionState, ownerState } = vi.hoisted(() => ({
@@ -120,7 +119,7 @@ describe('(site) layout server', () => {
 		expect(data.ownerLinks).toEqual([]);
 	});
 
-	it('exposes the presence config for the shell and the detail widgets (R-7)', async () => {
+	it('exposes the presence config for the shell and the detail widgets', async () => {
 		const data = (await load({
 			parent: async () => ({ auth: null }),
 			locals: {}
@@ -130,7 +129,7 @@ describe('(site) layout server', () => {
 		expect(data.presence).toEqual({ enabled: true, readerView: true, readerDots: false });
 	});
 
-	it('flips readerDots on for an admin viewer (E2)', async () => {
+	it('flips readerDots on for an admin viewer', async () => {
 		const data = (await load({
 			parent: async () => ({ auth: null }),
 			locals: { admin: { userId: 'admin-1' } }

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the public gallery feed (§5.1): the load is a
- * stateless cursor chain — stored `c` params only bound the page count, the
- * route re-fetches from page one and recomputes boundaries from the actual
- * rows; a malformed entry truncates the chain; filters are shape-validated
- * and echoed as repeated URL keys.
+ * Route-level tests for the public gallery feed: the load is a stateless cursor
+ * chain - stored `c` params only bound the page count, the route re-fetches from
+ * page one and recomputes boundaries from the actual rows; a malformed entry
+ * truncates the chain; filters are shape-validated and echoed as repeated URL
+ * keys.
  */
 const { service } = vi.hoisted(() => ({
 	service: {

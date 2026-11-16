@@ -18,7 +18,7 @@ const noHeaders = () => new Headers();
 /**
  * These cases replace the old e2e "untrusted origin" spec: a spoofed
  * `x-real-ip` header must not resolve to a trusted identity any more
- * (ledger §4.27 洞①), and that branch is unreachable from the browser tests.
+ * (ledger §4.27, hole ①), and that branch is unreachable from the browser tests.
  */
 describe('normalizeAddress', () => {
 	it('unwraps IPv6-mapped IPv4 and brackets', () => {

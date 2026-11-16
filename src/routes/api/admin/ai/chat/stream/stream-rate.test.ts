@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * W6 review P0: the AI chat stream is a cost-bearing security endpoint. The
- * strict account + /64 buckets must reject before any conversation/provider
- * work, with 429/503 and Retry-After.
+ * The AI chat stream is a cost-bearing security endpoint. The strict account +
+ * /64 buckets must reject before any conversation/provider work, with 429/503
+ * and Retry-After.
  */
 const mocks = vi.hoisted(() => ({
 	rate: vi.fn(async () => ({ allowed: true, count: 1, unavailable: false })),

@@ -2,11 +2,11 @@ import { createContext } from 'svelte';
 import type { LexicalEditor, EditorThemeClasses } from 'lexical';
 
 export interface EditorRuntimeContext {
-	/** 主编辑器实例（延迟就绪） */
+	/** Main editor instance (ready lazily) */
 	editor: LexicalEditor | null;
-	/** 主题配置引用 */
+	/** Theme configuration reference */
 	theme: EditorThemeClasses;
-	/** 错误回调 */
+	/** Error callback */
 	onError: (error: Error) => void;
 }
 

@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the public map load (review round 1): located rows
- * only, coordinates fuzzed to two decimals at the public boundary, and
- * unparseable rows filtered out.
+ * Route-level tests for the public map load: located rows only, coordinates fuzzed
+ * to two decimals at the public boundary, and unparseable rows filtered out.
  */
 const { service } = vi.hoisted(() => ({ service: { listPublicPhotos: vi.fn() } }));
 

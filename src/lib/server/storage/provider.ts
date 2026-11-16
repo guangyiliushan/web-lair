@@ -7,7 +7,7 @@ import { z } from 'zod';
  * effect by itself. The live target is `storage.active.config`, written only
  * by an activation path (first activation with an empty `files` table, or
  * `storage:migrate --cutover`). Saving therefore cannot switch a running site
- * onto a half-configured bucket (decision Q4: "禁止 Save 即切").
+ * onto a half-configured bucket (decision Q4: "Save must not switch immediately").
  *
  * The shape is deliberately small: driver + addressing + bucket, no `keyPrefix`
  * and no parallel "backup S3"/"comment prefix" fields (ST8). Credentials never

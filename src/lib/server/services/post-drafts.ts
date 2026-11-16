@@ -87,7 +87,8 @@ function normalizePayload(payload: DraftPayload): NormalizedDraft {
 	};
 }
 
-/** The "hash 不变不写" comparison basis (§9.10) - payload vs stored row. */
+/** The "don't write when the hash is unchanged" comparison basis (§9.10) - payload vs
+ * stored row. */
 export function draftHash(payload: DraftPayload): string {
 	return hashNormalized(normalizePayload(payload));
 }
@@ -356,7 +357,7 @@ async function updateExistingDraft(
 		categoryId: payload.categoryId || (draft.categoryId ?? '')
 	};
 
-	// "hash 不变不写" - identical payloads never bump the version.
+	// "don't write when the hash is unchanged" - identical payloads never bump the version.
 	if (hashRow(draft) === hashNormalized(effective)) {
 		return { kind: 'unchanged', draftId: draft.id, version: draft.version, postId };
 	}
@@ -452,8 +453,9 @@ export async function publishDraft(
 	const title = draft.title.trim();
 	const slug = (draft.slug ?? '').trim();
 	const categoryId = draft.categoryId ?? '';
-	// 共用 slug:译文的地址由源文章决定并在发布时继承，所以不校验它自己的
-	// slug（存量译文草稿仍可能是 null / placeholder）。
+	// Shared slug: a translation's address is decided by the source post and inherited at
+	// publish time, so its own slug is not validated (legacy translation drafts may still
+	// be null / placeholder).
 	// Boolean(), not an `!== null` test: a row that simply has no value must
 	// never read as a translation (that skipped slug validation entirely).
 	const isTranslation = Boolean(post.translatedFromPostId);
@@ -519,7 +521,7 @@ export async function publishDraft(
 			}
 
 			// Optimistic base check: fail when the article moved on meanwhile
-			// (another tab published), never silently overwrite (§9.10, 情景16).
+			// (another tab published), never silently overwrite (§9.10, scenario 16).
 			if (locked.version !== lockedDraft.baseVersion) {
 				return { kind: 'conflict' as const, server: { version: locked.version } };
 			}
@@ -575,11 +577,13 @@ export async function publishDraft(
 				};
 			}
 
-			// 共用 slug（源文章定）:整组一个地址，换语言不换 slug。
-			// - 译文发布时直接采用源 slug（源是权威），UI 上 slug 是只读的，
-			//   但存量数据/旧草稿可能仍带着分叉 slug，这里强制收敛。
-			// - 源发布时若 slug 变了，整组跟随，每语言留一条 slug_trackers
-			//   保证旧地址 301 可达。
+			// Shared slug (fixed by the source post): one address for the whole group, changing
+			// language never changes the slug.
+			// - A translation publishes straight onto the source slug (the source is
+			//   authoritative); the UI shows it read-only, but legacy data / old drafts may still
+			//   carry a forked slug, so it is forced back in line here.
+			// - When the source's slug changes on publish the whole group follows, and every
+			//   language leaves a slug_trackers row so the old address still 301s.
 			let effectiveSlug = finalSlug;
 			if (isTranslation && locked.translatedFromPostId) {
 				const [sourceRow] = await tx
@@ -780,7 +784,7 @@ export type CreateTranslationResult =
 	| { kind: 'not-found' }
 	| { kind: 'same-lang' }
 	| { kind: 'lang-exists' }
-	/** R7 禁链式: only a group source can spawn a translation. */
+	/** R7 no chaining: only a group source can spawn a translation. */
 	| { kind: 'not-source' };
 
 export async function createTranslationDraft(
@@ -804,10 +808,11 @@ export async function createTranslationDraft(
 
 	try {
 		return await db.transaction(async (tx) => {
-			// 共用 slug（源文章定）:译文从诞生起就带源 slug，而不是各自造一个
-			// （历史做法是 draft.slug = null + placeholder tempSlug()，译文因此
-			// 分叉，公共路由的「同 slug 语言提示」也就落空了）。源还没发布时
-			// 它自己就是 placeholder，此时无 slug 可继承，退回 tempSlug()。
+			// Shared slug (fixed by the source post): a translation carries the source slug from
+			// birth instead of minting its own (the historic draft.slug = null + placeholder
+			// tempSlug() forked translations, which also defeated the public route's "same slug,
+			// different language" hint). Before the source is published it is itself a
+			// placeholder, so there is no slug to inherit and tempSlug() is the fallback.
 			// Guarded on the value as well as the placeholder marker: an unset
 			// slug must fall back to a temp one, never to an empty string.
 			const inheritedSlug = source.slug && !isPlaceholderSlug(source.slug) ? source.slug : null;

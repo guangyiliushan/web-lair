@@ -173,7 +173,7 @@ async function keyLookupForProvider(provider: {
 }
 
 /**
- * AI settings (ai-line plan 禮5.2): providers CRUD, feature assignments and
+ * AI settings (ai-line plan §5.2): providers CRUD, feature assignments and
  * the switches/thresholds block. All three sections persist through the
  * options registry (validated writes) except providers, which live in
  * `ai_providers`; keys are only ever shown by NAME (env var, AI_*-namespaced),

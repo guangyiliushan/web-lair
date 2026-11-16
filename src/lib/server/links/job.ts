@@ -235,7 +235,7 @@ export function publicOrigin(): string | null {
 /**
  * Accepted backlink hosts = ORIGIN's host (+ extra hosts; normalization
  * strips `www.`, so the www variant folds in automatically). Empty result =
- * the backlink axis is skipped for the whole run (plan §4.5 "ORIGIN 必配").
+ * the backlink axis is skipped for the whole run (plan §4.5 "ORIGIN is mandatory").
  */
 export function deriveAcceptedHosts(origin: string | null, extra: string[]): string[] {
 	const hosts = new Set<string>();

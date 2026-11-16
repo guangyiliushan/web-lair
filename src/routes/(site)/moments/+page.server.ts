@@ -8,10 +8,10 @@ import { plainTextExcerpt } from '$lib/utils/excerpt';
 import type { PageServerLoad } from './$types';
 
 /**
- * Public 微记 stream (C3): language-neutral rows with a `?kind=` filter
- * (validated against the shared whitelist; an unknown kind shows the
- * unfiltered stream rather than 404ing a filter chip). Streams for the ui-ux
- * plan C1 Skeleton.
+ * Public micro-post stream (`微记`): language-neutral rows with a `?kind=` filter
+ * validated against the shared whitelist — an unknown kind shows the unfiltered
+ * stream rather than 404ing a filter chip. Streams so the page can render a
+ * skeleton immediately.
  */
 export const load: PageServerLoad = async ({ url }) => {
 	const siteTz = await getOption('site.timezone');

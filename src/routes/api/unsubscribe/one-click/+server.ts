@@ -10,7 +10,7 @@ import type { RequestHandler } from './$types';
  *
  * Mail receivers POST the `List-Unsubscribe-Post` key/value pair to the HTTPS
  * URI from `List-Unsubscribe` with **no cookies, no authorization and no
- * prior context** (§3.1). The token in the query string is the credential.
+ * prior context. The token in the query string is the credential.
  *
  * Contract:
  * - `200` empty for a valid token (processed or already terminal) and for an

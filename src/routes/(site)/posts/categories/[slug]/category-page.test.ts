@@ -2,10 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Route-level tests for the site category page (P1 review: the only public DB
- * read path had zero coverage). The db module is mocked with a queue of
- * select results; the WHERE clause is inspected through drizzle's own dialect
- * so the visibility predicate cannot silently change.
+ * Route-level tests for the site category page: the db module is mocked with a
+ * queue of select results; the WHERE clause is inspected through drizzle's own
+ * dialect so the visibility predicate cannot silently change.
  */
 const { dbMock, state } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -93,14 +92,14 @@ describe('site category page', () => {
 			[2024, 2]
 		]);
 		// The hand-editable stored slug is the link identity - computing it from
-		// the name would produce a dead link (P1.1 review).
+		// the name would produce a dead link.
 		expect(data.tags).toEqual([
 			{ name: 'AI', slug: 'custom-slug', count: 2 },
 			{ name: 'Web', slug: 'web', count: 1 }
 		]);
 	});
 
-	it('keeps same-name tags with different slugs as distinct chips (review finding)', async () => {
+	it('keeps same-name tags with different slugs as distinct chips', async () => {
 		state.selectResults = [
 			[{ id: 'p1', title: 'One', slug: 'one', createdAt: new Date('2024-03-01T00:00:00Z') }],
 			[

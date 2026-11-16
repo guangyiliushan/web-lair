@@ -8,26 +8,14 @@ import { KEY_PATTERN } from '$lib/media/keys';
 import type { RequestHandler } from './$types';
 
 /**
- * Content media proxy (ledger §21 / plan §4.4). RustFS is loopback-only —
- * everything public flows through `/i/<key>`:
- *
- * - the key grammar lives in `$lib/media/keys` (shared with the upload
- *   pipeline; round-2 review). Anything that does not parse is a 404 before
- *   storage is touched.
- * - variants are public and immutable (content-addressed, max-age one year).
- * - bare keys: `gif` serves publicly by design (plan §4.3 "GIF 直通" — the
- *   original IS the public tier and GIF carries no EXIF); attachments
- *   (`pdf/zip/txt/md`) serve publicly once registered (the registry check
- *   lives in the files service, not the route); photo originals (the private
- *   archive, EXIF intact) stay admin-only, and anonymous requests see the
- *   same 404 as a missing object.
- *
- * Content-Length / Content-Type / ETag pass through from the object store in
- * BOTH directions (round-2 review: ETag used to be HEAD-only). "Content-Length
- * from the registry" and 410 semantics stay registered as deferred (§11).
+ * Content media proxy: storage is loopback-only, so every public asset flows
+ * through `/i/<key>`. The key grammar lives in `$lib/media/keys` (shared with the
+ * upload pipeline); anything that does not parse is a 404 before storage is
+ * touched. Variants are public and immutable (one-year max-age); GIFs and
+ * registered attachments are public; photo originals stay admin-only (404).
  */
 
-/** Attachment extensions (plan §4.2) public via the registry, not by pattern. */
+/** Public once registered: the registry, not the extension pattern, grants access. */
 const ATTACHMENT_EXTS = new Set(['pdf', 'zip', 'txt', 'md']);
 
 const IMMUTABLE = 'public, max-age=31536000, immutable';
@@ -86,15 +74,13 @@ function objectHeaders(
 }
 
 /**
- * `getClientAddress()` throws when adapter-node cannot resolve an address
- * (dev without ADDRESS_HEADER). A per-IP bucket is impossible then, and a
- * global one would 429 every image on a proxy mistake — so the fallback is a
- * coarse shared bucket, not an unbounded pass.
+ * `getClientAddress()` throws when adapter-node cannot resolve an address (dev
+ * without ADDRESS_HEADER), so a per-IP bucket is impossible then — see
+ * `UNRESOLVED_BUCKET` for the fallback.
  */
 let warnedMissingAddress = false;
 
-/** A per-IP bucket would 429 the whole site on a proxy misconfiguration; a
- * coarse shared bucket still bounds abuse without that blast radius. */
+/** Coarse shared bucket: still bounds abuse without a site-wide 429 blast radius. */
 const UNRESOLVED_BUCKET = { limit: 6000, windowSeconds: 60 } as const;
 const UNRESOLVED_KEY = 'limits:i:unresolved';
 
@@ -142,10 +128,9 @@ function tooManyRequests(): Response {
 }
 
 /**
- * Optional CDN alias (W7.2 `publicBaseUrl`, Q9/Q12). When the ACTIVE provider
- * declares one, public keys are served from it instead of proxying the bytes;
- * the access check runs first, so private keys never reach this branch. Default
- * (null) keeps the private `/i` proxy behaviour.
+ * Optional CDN alias (`publicBaseUrl`). When the active provider declares one,
+ * public keys are 302'd to it instead of proxied; the access check runs first, so
+ * private keys never reach this branch.
  */
 function cdnRedirect(publicBaseUrl: string, key: string): Response {
 	return new Response(null, {

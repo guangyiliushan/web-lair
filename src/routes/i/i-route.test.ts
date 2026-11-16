@@ -54,7 +54,7 @@ beforeEach(() => {
 	activeMock.config.publicBaseUrl = null;
 });
 
-describe('/i/<key> proxy (T9)', () => {
+describe('/i/<key> proxy', () => {
 	it('serves variant keys publicly with immutable caching + passthrough validators', async () => {
 		storageMock.get.mockResolvedValueOnce({
 			body: bodyOf('img'),
@@ -143,7 +143,7 @@ describe('/i/<key> proxy (T9)', () => {
 		expect(await res.text()).toBe('orig');
 	});
 
-	it('serves GIF originals publicly as the pass-through tier (plan §4.3)', async () => {
+	it('serves GIF originals publicly as the pass-through tier', async () => {
 		storageMock.get.mockResolvedValueOnce({
 			body: bodyOf('gif'),
 			byteSize: 3,
@@ -292,7 +292,7 @@ describe('/i/<key> proxy (T9)', () => {
 	});
 });
 
-describe('/i/<key> CDN alias (W7.2 publicBaseUrl)', () => {
+describe('/i/<key> CDN alias (publicBaseUrl)', () => {
 	it('redirects public keys to the alias and never proxies the bytes', async () => {
 		activeMock.config.publicBaseUrl = 'https://cdn.example.com';
 
@@ -318,7 +318,7 @@ describe('/i/<key> CDN alias (W7.2 publicBaseUrl)', () => {
 	});
 });
 
-describe('/i/<key> provider outage (W7.5/Q14)', () => {
+describe('/i/<key> provider outage', () => {
 	it('answers 503 with retry-after when the active provider is unreachable', async () => {
 		storageMock.get.mockRejectedValueOnce(
 			new StorageError('storage request failed: GET /x', 0, null)

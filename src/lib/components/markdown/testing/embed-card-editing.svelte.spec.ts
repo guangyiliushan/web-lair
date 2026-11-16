@@ -39,12 +39,13 @@ describe('embed card editing', () => {
 		link.addEventListener('click', (e) => {
 			e.preventDefault();
 		});
-		// 点卡片任意位置(链接上)
+		// Click anywhere on the card (on the link)
 		link.click();
 		await expect.poll(() => hostEl().getAttribute('data-selected'), { timeout: 5000 }).toBe('true');
-		// 捕获阶段 preventDefault:监听器(link 上,冒泡段)不应收到默认导航意图
-		// —— 合成 click 的 preventDefault 语义:捕获段 preventDefault 后,
-		// 后续监听器仍会执行但 defaultPrevented=true。
+		// Capture-phase preventDefault: the listener (on the link, bubble phase) must not
+		// receive a default navigation intent — synthetic click preventDefault semantics:
+		// once the capture phase calls preventDefault, later listeners still run but see
+		// defaultPrevented=true.
 		const evt = new MouseEvent('click', { bubbles: true, cancelable: true });
 		link.dispatchEvent(evt);
 		expect(evt.defaultPrevented).toBe(true);
@@ -54,9 +55,9 @@ describe('embed card editing', () => {
 		await mountHost();
 		hostEl().click();
 		await expect.poll(() => hostEl().getAttribute('data-selected'), { timeout: 5000 }).toBe('true');
-		// 焦点在编辑器上(NodeSelection 与编辑器焦点);直接按键
+		// Focus is in the editor (NodeSelection plus editor focus); press keys directly
 		await page.getByRole('textbox', { name: '输入正文...' }).click();
-		// 重新选中(点击正文可能重置选区)
+		// Re-select (clicking the body may reset the selection)
 		hostEl().click();
 		await expect.poll(() => hostEl().getAttribute('data-selected'), { timeout: 5000 }).toBe('true');
 		await userEvent.keyboard('{Backspace}');
@@ -83,7 +84,7 @@ describe('embed card editing', () => {
 		) as HTMLElement;
 		apply.click();
 
-		// 卡片 URL 更新(编辑器内)
+		// The card URL updates (inside the editor)
 		await expect
 			.poll(
 				() => (hostEl().querySelector('a.embed-link') as HTMLAnchorElement)?.getAttribute('href'),
@@ -91,14 +92,14 @@ describe('embed card editing', () => {
 			)
 			.toBe('https://github.com/example-org/example-repo');
 
-		// 导出(代码模式)含新 URL
+		// Export (code mode) contains the new URL
 		await page.getByRole('button', { name: '切换到代码模式' }).click();
 		await expect
 			.poll(() => document.querySelector('textarea') !== null, { timeout: 5000 })
 			.toBe(true);
 		const ta = document.querySelector('textarea') as HTMLTextAreaElement;
 		expect(ta.value).toContain('(https://github.com/example-org/example-repo)');
-		// alt 文本未改则保留原值
+		// Alt text keeps its original value when unchanged
 		expect(ta.value).toContain('![example-org/example-repo]');
 		void screen;
 	});

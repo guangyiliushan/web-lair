@@ -26,31 +26,27 @@ import {
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
 
 /**
- * Universal md-page route (pages line P1b; 2026-10-03 rulings). Any-status
- * rows serve their body STRICTLY in the current locale: a missing language is
- * a 404 with a hint listing the locales that do carry content - never a
- * silent fallback (mirror of the posts/notes language contract). External
- * rows and rows without body content are plain 404s here; code rows live on
- * their own file routes, which rank above this dynamic segment. `hidden` rows
- * stay directly reachable - hiding is a menu-level concern.
+ * Universal md-page route. Rows serve their body strictly in the current locale: a
+ * missing language is a 404 with a hint listing the locales that do carry content,
+ * never a silent fallback (same contract as posts and notes). External rows and
+ * rows without a body are plain 404s; `hidden` rows stay directly reachable —
+ * hiding is a menu-level concern, not access control.
  */
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const lang = getLocale();
 
-	// Locale tags are never page slugs: the bare-language roots stay 404s by
-	// design (P3-a identity patterns), and a row claiming e.g. `en` would turn
-	// `/en` into a 200 with collapsed localised links. The admin editor and
-	// `db:verify-pages` reject such slugs through the shared reserved list;
-	// this is the read-side belt for rows that predate that entry.
+	// Locale tags are never page slugs: a row claiming `en` would turn `/en` into a
+	// 200 with collapsed localised links. The editor and `db:verify-pages` reject
+	// such slugs via the shared reserved list; this is the read-side belt for rows
+	// that predate that entry.
 	if ((locales as readonly string[]).includes(params.slug)) {
 		error(404, 'Not found');
 	}
 
 	const row = await getPageBySlug(params.slug);
 
-	// The structural half of the servable-page predicate is shared with the
-	// comment write path (pre-release review 01-P2-2); the missing-language
-	// hint below stays route-owned.
+	// The structural half of the servable-page predicate is shared with the comment
+	// write path; the missing-language hint below stays route-owned.
 	if (!row || !isServablePageRow(row)) {
 		error(404, 'Not found');
 	}
@@ -77,17 +73,16 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const title = resolveLocalized(row.title, lang) ?? row.slug;
 	const description = resolveLocalized(row.description, lang);
 
-	// hreflang set: the locales that carry content, same path per locale, self
-	// included (x-default stays deferred; ruling 2026-10-03).
+	// hreflang set: content locales only, same path per locale, self included
+	// (`x-default` is not emitted).
 	const alternates = contentLangs.map((tag) => ({
 		lang: tag,
 		path: `/${row.slug}`
 	}));
 
-	// Viewer state for the comment section (mirrors the posts/notes mounts;
-	// pages carry no per-row switch - plan §0 #46, so the threads always load).
-	// The site-wide switch still blocks new comments (W6.1 / C1) while existing
-	// approved rows keep rendering.
+	// Viewer state for the comment section (mirrors the posts/notes mounts). Pages
+	// have no per-row switch, so threads always load; the site-wide switch still
+	// blocks new comments while existing approved rows keep rendering.
 	const user = locals.user;
 	const emailVerified = Boolean(user?.emailVerified);
 	const commentsEnabled = await getOption('comments.enabled');

@@ -7,7 +7,7 @@ import { resolveTaxonomyName } from '$lib/server/services/taxonomy';
 import type { PageServerLoad } from './$types';
 
 /**
- * Categories index (P3-b): every category that has at least one visible post
+ * Categories index: every category that has at least one visible post
  * in the URL locale, ordered by the curated sort order. Empty categories are
  * not linked here (an index of reachable content — the category page itself
  * stays reachable by its own URL).

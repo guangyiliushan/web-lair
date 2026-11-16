@@ -6,22 +6,15 @@ import { isUuid } from '$lib/utils/uuid';
 import { PRESENCE_HEARTBEAT_RATE_LIMIT, presenceHeartbeatLimitKey } from './limit';
 
 /**
- * Presence heartbeat (realtime batch R2, ledger §23 / plan §B): one small
- * JSON POST per tab every 15s refreshing the site window, the day set, the
- * peak sentinel and — on content pages — the caller's position bucket.
- *
- * The endpoint is a dumb writer: it never reads options (the render side and
- * the stream gate the feature), it never touches IP or cookies, and success
- * is always 204 because heartbeats are best-effort — a dropped beat just
- * means the tab ages out of the 60s window.
- *
- * Guards: `application/json` required (415; this also keeps browser-form
- * CSRF carriers out — kit only origin-checks form content types), strict
- * `token` / `c` / `bucket` validation (400, before the limiter so a junk
- * token never spends a bucket), per-token bucket `limits:presence:<token>`
- * 30/60s fail-open (M6; the budget math lives in limit.ts), 429 +
- * X-Retry-After when exceeded — the client is a dumb interval and only needs
- * to know it may drop this beat).
+ * Presence heartbeat: one small JSON POST per tab every 15s refreshing the site
+ * window, the day set, the peak sentinel and - on content pages - the caller's
+ * position bucket. It is a dumb writer: no option reads, no IP, no cookies, and
+ * always 204, because a dropped beat merely ages the tab out of the 60s window.
+ * Guards: `application/json` (415; kit only origin-checks form content types, so
+ * this also keeps browser-form CSRF carriers out), strict `token` / `c` / `bucket`
+ * validation (400 before the limiter, so junk never spends a bucket), then a
+ * per-token 30/60s bucket (budget math in `limit.ts`) that fails open - a 429 with
+ * `X-Retry-After` only tells the client's plain interval to drop this beat.
  */
 
 export const prerender = false;
@@ -62,8 +55,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (!input) return new Response(null, { status: 400 });
 
 	// Cache construction may throw on a malformed VALKEY_URL; the endpoint is
-	// a dumb writer whose contract is "always 204" — a configuration fault
-	// drops the beat instead of surfacing a 500 (review finding).
+	// a dumb writer whose contract is "always 204" - a configuration fault
+	// drops the beat instead of surfacing a 500.
 	try {
 		const store = getCache();
 		const rate = await rateLimit(

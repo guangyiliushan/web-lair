@@ -32,8 +32,8 @@
 	/** Locale rows for the external-entry dialog (same shape as the editor). */
 	const LOCALES = locales.map((code) => ({ code, label: localeLabels[code] }));
 
-	/** 「新增」双类型 (P5-3): the md type starts in the draft editor; the
-	 * external entry inserts directly from the dialog below (no draft). */
+	/** 「新增」双类型: the md type starts in the draft editor; the external entry
+	 * inserts directly from the dialog below (no draft). */
 	let createExternalOpen = $state(false);
 	let creating = $state(false);
 
@@ -71,7 +71,7 @@
 	let hideTarget = $state<PageRow | null>(null);
 	let deleteTarget = $state<PageRow | null>(null);
 
-	/** Delete copy branches on what the row actually holds (R2-8). */
+	/** Delete copy branches on what the row actually holds. */
 	const deleteDescription = $derived(
 		deleteTarget
 			? `${m.admin_pages_delete_desc({ title: deleteTarget.title })}${
@@ -92,9 +92,9 @@
 	// assignment; the next submission resyncs it from `form`.
 	let errorText = $derived(form?.error ?? null);
 
-	// ?discarded=1 flash (T12): transient banner after a discard redirects
-	// back to the list (mirrors the editor's afterNavigate handling; NOT an
-	// $effect - replaceState throws before the router is initialized).
+	// ?discarded=1 flash: transient banner after a discard redirects back to the
+	// list (mirrors the editor's afterNavigate handling; NOT an $effect -
+	// replaceState throws before the router is initialized).
 	let flash = $state<string | null>(null);
 	let flashTimer: ReturnType<typeof setTimeout> | null = null;
 	afterNavigate(() => {
@@ -107,8 +107,8 @@
 		goto(url.pathname + url.search, { replaceState: true, noScroll: true });
 	});
 
-	// ▲/▼ dead zones (P2 review): defaults render first, so the first extra
-	// row cannot move up and the last default row cannot move down.
+	// ▲/▼ dead zones: defaults render first, so the first extra row cannot move up
+	// and the last default row cannot move down.
 	let submitting = $state(false);
 	const firstExtraIndex = $derived(data.pages.findIndex((row) => !row.isDefault));
 	const lastDefaultIndex = $derived(
@@ -317,7 +317,7 @@
 	<input type="hidden" name="status" value={statusAction} />
 </form>
 
-<!-- External-entry dialog (P5-3): direct insert, no draft -->
+<!-- External-entry dialog: direct insert, no draft -->
 <Dialog.Root
 	open={createExternalOpen}
 	onOpenChange={(open) => !open && (createExternalOpen = false)}

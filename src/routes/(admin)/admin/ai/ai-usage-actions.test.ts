@@ -118,7 +118,7 @@ describe('AI console ledger wipe', () => {
 	});
 
 	it('records an event name the activities CHECK accepts', async () => {
-		// The P0-3 regression tooth: three segments (`ai.usage.purge`) violate
+		// The regression tooth: three segments (`ai.usage.purge`) violate
 		// the schema CHECK and raise 23514 with the rows already gone.
 		state.deletedRows = purgedRows(1);
 		await callPurge();

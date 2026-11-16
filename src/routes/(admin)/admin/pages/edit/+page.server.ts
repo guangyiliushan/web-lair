@@ -22,29 +22,28 @@ import { m } from '$lib/paraglide/messages';
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const LOCALES = ['en', 'zh-cn', 'ja'] as const;
 
-// The editor-ownership predicate lives in the service (isPageEditorRow):
-// THE single source (R2-5 review) shared by this route's load / `?/save`,
-// the service's attach / publish guards and the admin list.
+// The editor-ownership predicate lives in the service (isPageEditorRow): THE single
+// source shared by this route's load / `?/save`, the service's attach / publish
+// guards and the admin list.
 
 /**
- * Pages editor. Two shapes share the route (P5-2 single-source rule):
+ * Pages editor. Two shapes share the route:
  *
- * - md rows (`content` not null): the md editor is the SINGLE SOURCE - the
- *   title / description / content / slug editing surface lives in one
- *   `drafts.payload` (ledger §19.10) and only the publish transaction writes
- *   the row. `?/save` is narrowed there to the row properties (icon /
- *   external_url), which are never staged in drafts.
- * - code / external rows (`content` null): the P2 metadata form, unchanged.
+ * - md rows (`content` not null): the md editor is the SINGLE SOURCE - the title /
+ *   description / content / slug editing surface lives in one `drafts.payload` and
+ *   only the publish transaction writes the row. `?/save` is narrowed there to the
+ *   row properties (icon / external_url), which are never staged in drafts.
+ * - code / external rows (`content` null): the metadata form, unchanged.
  *
- * Draft actions mirror the notes editor (`?/saveDraft` / `?/publish` /
- * `?/discard`); conflicts answer 409 so the client refuses to overwrite.
+ * Draft actions mirror the notes editor (`?/saveDraft` / `?/publish` / `?/discard`);
+ * conflicts answer 409 so the client refuses to overwrite.
  */
 export const load: PageServerLoad = async ({ url }) => {
 	await requireAdminRole();
 
-	// ?id= loads an existing row; WITHOUT it the page is new (P5-3): the
-	// editor materializes the placeholder row on the first draft save
-	// (auto-draft, mirroring the notes editor).
+	// ?id= loads an existing row; WITHOUT it the page is new: the editor
+	// materializes the placeholder row on the first draft save (auto-draft,
+	// mirroring the notes editor).
 	const id = url.searchParams.get('id');
 	if (id && !isUuid(id)) error(404, m.admin_pages_err_not_found());
 
@@ -58,9 +57,9 @@ export const load: PageServerLoad = async ({ url }) => {
 	if (id) {
 		[row] = await db.select().from(pages).where(eq(pages.id, id)).limit(1);
 		if (!row) error(404, m.admin_pages_err_not_found());
-		// Only editor rows hand out a draft (R2-4 review): the P2 form never
-		// publishes, so a legacy / hand-written draft on a code / external
-		// row must not resurface here at all.
+		// Only editor rows hand out a draft: the metadata form never publishes, so a
+		// legacy / hand-written draft on a code / external row must not resurface
+		// here at all.
 		if (isPageEditorRow(row)) draftRow = await loadPageDraftByPageId(row.id);
 	}
 
@@ -88,15 +87,15 @@ export const load: PageServerLoad = async ({ url }) => {
 					placeholder: isPagePlaceholderSlug(row.slug),
 					newPage: false,
 					editorMode: isPageEditorRow(row),
-					// The published body rides along so the editor can seed its
-					// working copy when no draft exists (P5 e2e finding: the
-					// first edit of an existing page must carry its body).
+					// The published body rides along so the editor can seed its working
+					// copy when no draft exists (the first edit of an existing page must
+					// carry its body).
 					content: row.content ?? {},
 					updatedAt: row.updatedAt
 				}
 			: {
-					// New-mode virtual target (P5-3): the editor runs on an
-					// empty payload; the first draft save materializes the row.
+					// New-mode virtual target: the editor runs on an empty payload; the
+					// first draft save materializes the row.
 					id: '',
 					slug: '',
 					title: {} as LocalizedText,
@@ -144,11 +143,10 @@ function localizedFrom(form: FormData, prefix: string, trim = true): LocalizedTe
 
 export const actions: Actions = {
 	/**
-	 * Row-properties direct save. For md rows (content !== null) this writes
-	 * ONLY the row-level properties (icon / external_url): title /
-	 * description / content / slug are draft-owned there (single source) and
-	 * travel through the draft actions below. Code / external rows keep the
-	 * full P2 metadata write.
+	 * Row-properties direct save. For md rows (content !== null) this writes ONLY
+	 * the row-level properties (icon / external_url): title / description / content
+	 * / slug are draft-owned there (single source) and travel through the draft
+	 * actions below. Code / external rows keep the full metadata write.
 	 */
 	save: async ({ request }) => {
 		await requireAdminRole();
@@ -179,9 +177,9 @@ export const actions: Actions = {
 		}
 
 		if (isPageEditorRow(row)) {
-			// md row (incl. its never-published placeholder form): properties
-			// only - the editor owns everything else (R2-5: same predicate as
-			// the load projection's `editorMode`).
+			// md row (incl. its never-published placeholder form): properties only -
+			// the editor owns everything else (same predicate as the load
+			// projection's `editorMode`).
 			const updated = await db
 				.update(pages)
 				.set({
@@ -206,10 +204,10 @@ export const actions: Actions = {
 		if (slug !== row.slug) {
 			if (row.isDefault) return fail(400, { error: m.admin_pages_err_slug_locked() });
 			if (isReservedPageSlug(slug)) return fail(400, { error: m.admin_pages_err_slug_reserved() });
-			// The draft- prefix means "the draft editor owns this row" since
-			// B1 (R2-1 review): letting the metadata form mint one would flip
-			// a code / external row into the editor while its external_url
-			// stays set - published content the site then 404s forever.
+			// The draft- prefix means "the draft editor owns this row": letting the
+			// metadata form mint one would flip a code / external row into the editor
+			// while its external_url stays set - published content the site then 404s
+			// forever.
 			if (isPagePlaceholderSlug(slug))
 				return fail(400, { error: m.admin_editor_err_slug_reserved_prefix() });
 		}
@@ -328,9 +326,9 @@ export const actions: Actions = {
 					message: m.admin_posts_edit_err_publish_validation()
 				});
 			case 'slug-taken':
-				// Field-level 400, unlike the metadata form's 409 (T9 review -
-				// deliberate). The message surfaces in the publish banner
-				// (four-review #6: there is no inline slug-input rendering).
+				// Field-level 400, unlike the metadata form's 409 (deliberate). The
+				// message surfaces in the publish banner (there is no inline
+				// slug-input rendering).
 				return fail(400, { errors: { slug: m.admin_pages_err_slug_taken() } });
 			case 'busy':
 				return fail(409, { message: m.admin_posts_edit_err_busy() });

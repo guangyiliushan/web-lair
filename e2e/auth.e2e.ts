@@ -53,7 +53,7 @@ test.describe('Route protection', () => {
 	// session (TAILSCALE_ALLOW_LOOPBACK=true in the playwright webServer env).
 	//
 	// The untrusted branch no longer needs a spoofed x-real-ip header - that
-	// header is not trusted at all any more (ledger §4.27 洞①). It is covered
+	// header is not trusted at all any more (ledger §4.27, hole ①). It is covered
 	// by unit tests in src/lib/server/security/identity.test.ts.
 	test('admin area auto-authenticates the trusted localhost origin', async ({ page }) => {
 		await page.goto('/admin');

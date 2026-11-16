@@ -57,7 +57,7 @@ beforeEach(() => {
 	suppressMock.mockResolvedValue(undefined);
 });
 
-describe('mail events endpoint (E2-4)', () => {
+describe('mail events endpoint', () => {
 	it('accepts a signed bounce and suppresses the address', async () => {
 		const response = await call(
 			signed(JSON.stringify({ email: 'Bounce@Example.com', reason: 'bounced' }))

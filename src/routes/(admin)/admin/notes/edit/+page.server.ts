@@ -24,11 +24,10 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * N1 notes editor (ledger §9.10 / §13.4): the notes row is the published
- * version and is only written by the publish transaction; text editing goes
- * through one `drafts` row per target. Publish parameters and row-level
- * settings (pin_at / allow_comment / password_hash / meta.emotions) travel
- * as ACTION PARAMETERS, never through drafts (§2.3 contract).
+ * Notes editor: the notes row is the published version and is only written by the
+ * publish transaction; text editing goes through one `drafts` row per target.
+ * Publish parameters and row-level settings (pin_at / allow_comment / password_hash
+ * / meta.emotions) travel as ACTION PARAMETERS, never through drafts.
  */
 
 function str(form: FormData, key: string): string {
@@ -47,10 +46,10 @@ type NoteDraftFormRead =
 
 /**
  * Shared reader for `save` and `publish`. Both carry the same payload because
- * publish is save→publish inside ONE request (UX-1020-04): the old flow did a
- * client-side save and then `requestSubmit()` of a hidden form, so a first-time
- * publish (no draft row yet) raced the two requests and only ever saved -
- * which is how a placeholder-slug draft ended up in the database.
+ * publish is save→publish inside ONE request: a client-side save followed by a
+ * `requestSubmit()` of a hidden form races the two requests, so a first-time
+ * publish (no draft row yet) only ever saved - which is how a placeholder-slug
+ * draft ended up in the database.
  */
 function readNoteDraftForm(form: FormData): NoteDraftFormRead {
 	const rawId = str(form, 'id').trim();
@@ -198,7 +197,7 @@ export const load: PageServerLoad = async ({ url }) => {
 export const actions: Actions = {
 	/**
 	 * Autosave (`autosave=1`) and the manual "Save draft" share this action;
-	 * conflicts answer 409 so the client refuses to overwrite (§9.10).
+	 * conflicts answer 409 so the client refuses to overwrite.
 	 */
 	save: async ({ request, locals }) => {
 		await requireAdminRole();

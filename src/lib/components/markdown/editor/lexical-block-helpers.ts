@@ -23,10 +23,10 @@ import { $setBlocksType } from '@lexical/selection';
 type BlockCommandMap = Record<string, AnyLexicalCommand>;
 type BlockCreatorMap = Record<string, () => ElementNode>;
 
-// ── Block Handle 辅助函数 ──
+// ── Block Handle helpers ──
 
 /**
- * 在指定 key 的块节点之后插入一个空段落并聚焦。
+ * Insert an empty paragraph after the block with the given key and focus it.
  */
 export function insertBlockAfter(editor: LexicalEditor, blockKey: string) {
 	editor.update(() => {
@@ -39,8 +39,8 @@ export function insertBlockAfter(editor: LexicalEditor, blockKey: string) {
 }
 
 /**
- * 复制指定 key 的块节点，插入到其后。
- * 支持通过 selectedKeys 批量复制（selectedKeys 为空时仅复制 blockKey）。
+ * Duplicate the block with the given key and insert the copy after it.
+ * selectedKeys duplicates several blocks at once (when empty, only blockKey is copied).
  */
 export function duplicateBlocks(
 	editor: LexicalEditor,
@@ -59,7 +59,7 @@ export function duplicateBlocks(
 
 		let insertAfter = nodesToDuplicate.at(-1)!;
 		for (const node of nodesToDuplicate) {
-			// 通过 JSON 序列化实现深层克隆
+			// Deep clone through JSON serialization
 			const Klass = node.constructor as typeof LexicalNode;
 			const serialized = node.exportJSON();
 			const clone = Klass.importJSON(serialized);
@@ -74,7 +74,7 @@ export function duplicateBlocks(
 	});
 }
 
-/** 递归克隆子节点 */
+/** Recursively clone child nodes */
 function cloneChild(node: LexicalNode): LexicalNode {
 	const Klass = node.constructor as typeof LexicalNode;
 	const serialized = node.exportJSON();
@@ -88,7 +88,7 @@ function cloneChild(node: LexicalNode): LexicalNode {
 }
 
 /**
- * 上移块：将其与前一个兄弟节点交换位置。
+ * Move the block up: swap it with its previous sibling.
  */
 export function moveBlockUp(editor: LexicalEditor, blockKey: string, selectedKeys: string[] = []) {
 	const keys = selectedKeys.length > 0 ? selectedKeys : [blockKey];
@@ -112,7 +112,7 @@ export function moveBlockUp(editor: LexicalEditor, blockKey: string, selectedKey
 }
 
 /**
- * 下移块：将其与后一个兄弟节点交换位置。
+ * Move the block down: swap it with its next sibling.
  */
 export function moveBlockDown(
 	editor: LexicalEditor,
@@ -140,7 +140,8 @@ export function moveBlockDown(
 }
 
 /**
- * 删除指定 key 的块及其选中的兄弟块，并恢复选区到合理位置。
+ * Delete the block with the given key together with the selected siblings and restore
+ * the selection to a sensible position.
  */
 export function deleteBlocks(editor: LexicalEditor, blockKey: string, selectedKeys: string[] = []) {
 	const keys = selectedKeys.length > 0 ? selectedKeys : [blockKey];
@@ -162,7 +163,7 @@ export function deleteBlocks(editor: LexicalEditor, blockKey: string, selectedKe
 			node.remove();
 		}
 
-		// 确保根节点至少有一个段落
+		// Keep at least one paragraph in the root
 		if (root.getChildrenSize() === 0) {
 			const paragraph = $createParagraphNode();
 			root.append(paragraph);
@@ -179,17 +180,18 @@ export function deleteBlocks(editor: LexicalEditor, blockKey: string, selectedKe
 }
 
 /**
- * 将指定块转换为其他类型（paragraph / h1 / h2 / h3 / bullet / numbered / todo / quote / code / divider）。
+ * Convert the given block into another type (paragraph / h1 / h2 / h3 / bullet /
+ * numbered / todo / quote / code / divider).
  */
 export function turnBlockInto(editor: LexicalEditor, blockKey: string, type: string) {
 	if (['bullet', 'numbered', 'todo', 'divider'].includes(type)) {
-		// 先聚焦到该节点
+		// Focus the node first
 		editor.update(() => {
 			const node = $getNodeByKey(blockKey);
 			if (node && $isElementNode(node)) node.selectStart();
 		});
 
-		// 然后用 command 转换
+		// Then convert through the command
 		const commands: BlockCommandMap = {
 			bullet: INSERT_UNORDERED_LIST_COMMAND,
 			numbered: INSERT_ORDERED_LIST_COMMAND,
@@ -221,7 +223,7 @@ export function turnBlockInto(editor: LexicalEditor, blockKey: string, type: str
 	});
 }
 
-/** 通过 DOM 元素找到其对应的顶级块（parentElement === rootElement 的子元素） */
+/** Resolve a DOM element to its top-level block (a child whose parentElement === rootElement) */
 export function getBlockElement(editor: LexicalEditor, target: HTMLElement): HTMLElement | null {
 	const rootElement = editor.getRootElement();
 	if (!rootElement) return null;
@@ -233,7 +235,7 @@ export function getBlockElement(editor: LexicalEditor, target: HTMLElement): HTM
 	return null;
 }
 
-/** 根据 clientY 找到最近的顶级块元素 */
+/** Find the nearest top-level block element by clientY */
 export function getNearestBlockByY(rootElement: HTMLElement, clientY: number): HTMLElement | null {
 	const blocks = [...rootElement.children].filter(
 		(child): child is HTMLElement => child instanceof HTMLElement

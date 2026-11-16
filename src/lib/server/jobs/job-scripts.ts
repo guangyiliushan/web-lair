@@ -122,7 +122,7 @@ async function fileInfo(path: string): Promise<ScriptSourceInfo | null> {
  * production build this module ships as a chunk under `.svelte-kit/output`,
  * where `./builtin/*.ts` does not exist - the editor would show an empty
  * buffer, the fork baseline would record `builtin_hash: undefined`, and the
- * update/revert comparisons would silently degrade (J-3 复核 batch-4 finding,
+ * update/revert comparisons would silently degrade (J-3 review, batch-4 finding,
  * surfaced by the first production-build builtin-editor test).
  */
 function builtinSourcePath(name: string): string {

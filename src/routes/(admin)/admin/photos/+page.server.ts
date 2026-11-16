@@ -29,9 +29,9 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Admin gallery (§6.2): grid + filters, batch ops (visibility / tags /
- * delete), the edit drawer and the upload entry (upload -> registry ->
- * gallery; the bulk importer stays on the CLI: `pnpm media:import`).
+ * Admin gallery: grid + filters, batch ops (visibility / tags / delete), the edit
+ * drawer and the upload entry (upload -> registry -> gallery; the bulk importer
+ * stays on the CLI: `pnpm media:import`).
  */
 
 const SINCE_DAYS = { '7d': 7, '30d': 30, '90d': 90 } as const;
@@ -114,7 +114,7 @@ function tagNamesFrom(form: FormData): string[] {
 export const actions: Actions = {
 	upload: async ({ request, locals, getClientAddress, setHeaders }) => {
 		await requireAdminRole();
-		// Same fail-CLOSED account + per-IP pair as /admin/files (W6.10).
+		// Same fail-CLOSED account + per-IP pair as /admin/files.
 		const address = clientAddressKey(requestAddress(getClientAddress));
 		const [accountRate, addressRate] = await Promise.all([
 			rateLimitStrict(
@@ -200,7 +200,7 @@ export const actions: Actions = {
 		} catch (error) {
 			if (error instanceof UploadRejected) {
 				// The migration freeze is temporary and retryable: 503, not 400
-				// (same contract as editor-uploads, review P2).
+				// (same contract as editor-uploads).
 				return fail(error.code === 'migration' ? 503 : 400, { message: error.message });
 			}
 			throw error;

@@ -14,15 +14,14 @@ export interface TimelineItem {
 	slug: string;
 	title: string;
 	date: string;
-	/** Password-gated notes keep their lock marker in the stream (N1). */
+	/** Password-gated notes keep their lock marker in the stream. */
 	locked: boolean;
 }
 
 /**
- * Timeline (P3-b + N1): one chronological stream over the content types.
- * `?type=post` / `?type=note` filter the stream; anything else (default,
- * `all`, the registered `memory`) shows everything currently wired. Notes
- * join the stream with N1 - gated rows carry their lock marker.
+ * Timeline: one chronological stream over the content types. `?type=post` /
+ * `?type=note` filter it; anything else (default, `all`, `memory`) shows
+ * everything currently wired. Gated notes carry their lock marker.
  */
 export const load: PageServerLoad = async ({ url }) => {
 	const lang = getLocale();
@@ -65,9 +64,9 @@ export const load: PageServerLoad = async ({ url }) => {
 			publishedAt: row.publishedAt
 		}))
 	]
-		// Deterministic across equal timestamps (review finding): notes before
-		// posts, then slug - the concatenation order must not leak into output.
-		// Mirror of the mega-menu tie-break (nav-data.ts loadTimelineMegaData).
+		// Deterministic across equal timestamps: notes before posts, then slug — the
+		// concatenation order must not leak into output. Mirrors the mega-menu
+		// tie-break in `loadTimelineMegaData`.
 		.sort(
 			(a, b) =>
 				b.publishedAt.getTime() - a.publishedAt.getTime() ||

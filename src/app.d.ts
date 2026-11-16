@@ -32,28 +32,28 @@ declare global {
 					avatarUrl: string | null;
 				} | null;
 			} | null;
-			/** admin-header 自动读取此字段作为页面标题 */
+			/** Page title rendered by the admin header. */
 			headerTitle?: string;
-			/** admin-header 自动读取此字段作为操作按钮 */
+			/** Action buttons rendered by the admin header. */
 			headerActions?: Array<{
 				label: string;
 				iconName: string;
 				variant?: 'default' | 'outline' | 'ghost';
 				size?: 'default' | 'sm' | 'lg' | 'icon';
 				href?: string;
-				/** 页面内注册的点击处理器 id（见 admin-header-actions.ts），用于打开对话框等页面内操作 */
+				/** Page-registered handler id (`admin-header-actions.ts`), e.g. to open a dialog. */
 				actionId?: string;
-				/** 提供时按钮改为下拉菜单，菜单项按声明顺序渲染 */
+				/** Turns the button into a dropdown; items render in declaration order. */
 				menu?: Array<{
 					label: string;
 					href?: string;
 					actionId?: string;
 				}>;
 			}>;
-			/** Public origin for absolute head URLs ((site) layout; null → request origin). */
+			/** Absolute-origin base for head URLs; null falls back to the request origin. */
 			siteOrigin?: string | null;
 		}
-		/** Custom error payload (P3-a): missing-language 404 hint data. */
+		/** Error payload: languages offered on a missing-translation 404. */
 		interface Error {
 			message: string;
 			available?: Array<{ lang: string; href: string }>;

@@ -12,17 +12,17 @@ import { m } from '$lib/paraglide/messages';
 const PAGE_SIZE = 20;
 
 /**
- * Admin moments CRUD (C3): content + kind (`life|tech|media|other`, app-validated
- * with the DB CHECK as backstop) + read-only up/down counters.
+ * Admin moments CRUD: content + kind (`life|tech|media|other`, app-validated with
+ * the DB CHECK as backstop) + read-only up/down counters.
  *
- * The list follows the same contract as the posts / notes admin lists — server
- * side keyword + kind filter + paging against the real `moments` table — so the
- * three share one table surface and one set of URL parameters.
+ * The list follows the same contract as the posts / notes admin lists - server side
+ * keyword + kind filter + paging against the real `moments` table - so the three
+ * share one table surface and one set of URL parameters.
  *
- * Writes live on `/admin/moments/edit` (B2a UI P0, P7): the body is authored in
- * the shared Markdown editor, so the create/update actions moved there. This
- * route keeps the list load and the row delete action; `content` rows carry a
- * markdown-stripped `excerpt` for the table preview.
+ * Writes live on `/admin/moments/edit`: the body is authored in the shared Markdown
+ * editor, so the create/update actions moved there. This route keeps the list load
+ * and the row delete action; `content` rows carry a markdown-stripped `excerpt` for
+ * the table preview.
  */
 export const load: PageServerLoad = async (event) => {
 	// The guard runs first - before the event is even read - so an

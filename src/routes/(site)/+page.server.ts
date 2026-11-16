@@ -6,10 +6,10 @@ import { resolveHeroCopy, type HeroCopy, type HeroDefaults } from '$lib/config/h
 import type { PageServerLoad } from './$types';
 
 /**
- * Homepage read path (D3/Q12/W4.5): one read of the `home_hero` singleton,
- * resolved for the request locale. Owner identity and social links come from
- * the site chrome via `parent()` — the homepage never re-queries the profile
- * and never writes (no lazy repair, no default-row creation).
+ * Homepage read path: one read of the `home_hero` singleton, resolved for the
+ * request locale. Owner identity and social links come from the site chrome via
+ * `parent()` — the page never re-queries the profile and never writes (no lazy
+ * repair, no default-row creation).
  */
 export const load: PageServerLoad = async ({ parent }) => {
 	const [{ siteOwner, ownerLinks }, home, siteDefaultLang] = await Promise.all([

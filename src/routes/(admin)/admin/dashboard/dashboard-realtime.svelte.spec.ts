@@ -4,11 +4,11 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 import AdminDashboard from './+page.svelte';
 
 /**
- * Browser specs for the dashboard realtime cards (realtime R4, register E1):
- * SSR values render as given, "—" covers disabled/unavailable, the admin
- * stream upgrades the three metrics and stamps the updated-at label, and no
- * stream is opened when presence is off. EventSource is stubbed; the
- * engine's own timing/watchdog logic lives in presence-client.test.ts.
+ * Browser specs for the dashboard realtime cards: SSR values render as given,
+ * "—" covers disabled/unavailable, the admin stream upgrades the three metrics
+ * and stamps the updated-at label, and no stream is opened when presence is off.
+ * EventSource is stubbed; the engine's own timing/watchdog logic lives in
+ * presence-client.test.ts.
  */
 
 overwriteGetLocale(() => 'en');

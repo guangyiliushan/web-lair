@@ -6,7 +6,7 @@ import { visit } from 'unist-util-visit';
  * remark-math-guard: inline math guardrails (spec 2 #2).
  *
  * micromark-extension-math puts no word-boundary constraint on the single
- * `$` delimiter, so `价格 $5,成本 $3` would be misparsed as one inline
+ * `$` delimiter, so `Price $5, cost $3` would be misparsed as one inline
  * formula. This plugin enforces the spec:
  * - the char before the opening `$` must not be a letter/digit/underscore
  *   (Unicode `\p{L}`/`\p{N}` plus `_`)

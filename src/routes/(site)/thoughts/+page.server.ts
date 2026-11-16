@@ -6,8 +6,8 @@ import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad } from './$types';
 
 /**
- * Public 思考 stream (C3): language-neutral rows, newest first. Streams as a
- * deferred promise (ui-ux plan C1 Skeleton); dates format inside the
+ * Public thoughts stream (`思考`): language-neutral rows, newest first. Streams as a
+ * deferred promise so the page can render a skeleton; dates format inside the
  * continuation so the request's locale context applies.
  */
 export const load: PageServerLoad = async () => {

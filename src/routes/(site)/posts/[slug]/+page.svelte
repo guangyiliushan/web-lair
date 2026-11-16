@@ -167,8 +167,8 @@
 		</div>
 	</header>
 
-	<!-- AI-adopted summaries only: pre-existing human summaries keep the
-	     pre-M2 page shape, so no legacy article gains new visible UI. -->
+	<!-- AI-adopted summaries only: pre-existing human summaries keep the legacy
+	     page shape, so no article gains new visible UI. -->
 	{#if data.post.summary && data.post.summaryAi}
 		<div class="mt-6 rounded-lg border border-border/60 bg-muted/20 px-4 py-3">
 			<p class="text-sm leading-relaxed text-muted-foreground">{data.post.summary}</p>

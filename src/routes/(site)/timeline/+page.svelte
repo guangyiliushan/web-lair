@@ -14,7 +14,7 @@
 	] as const;
 </script>
 
-<!-- Filtered views consolidate on the unfiltered canonical (P3-b). -->
+<!-- Filtered views canonicalise on the unfiltered path. -->
 <SeoHead path="/timeline" />
 
 <div class="mx-auto mt-14 max-w-3xl px-4 lg:mt-20 lg:px-0 2xl:max-w-4xl">

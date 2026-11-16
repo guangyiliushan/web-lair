@@ -21,9 +21,9 @@ function yaml(value: string): string {
 }
 
 /**
- * Clean Markdown mirror (llms.txt v2 proposal: the same URL with the extension
- * replaced by `.md`). It is rendered on demand, never added to the sitemap and
- * never bypasses the post visibility predicate.
+ * Clean Markdown mirror: the same URL with `.md` instead of the page. Rendered on
+ * demand, never added to the sitemap, and never bypassing the post visibility
+ * predicate.
  */
 export const GET: RequestHandler = async ({ url, params }) => {
 	const lang = localeFromPath(url.pathname);

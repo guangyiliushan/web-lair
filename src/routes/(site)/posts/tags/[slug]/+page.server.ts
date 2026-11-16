@@ -8,8 +8,8 @@ import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad } from './$types';
 
 /**
- * Tag detail (P3-b): visible posts carrying this tag in the URL locale,
- * newest first. The tag itself is language-neutral (§9.18.4), so only the
+ * Tag detail: visible posts carrying this tag in the URL locale,
+ * newest first. The tag itself is language-neutral, so only the
  * post filter is locale-scoped; an empty set renders the empty state.
  */
 export const load: PageServerLoad = async ({ params }) => {

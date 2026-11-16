@@ -187,7 +187,7 @@ describe('admin maintenance [name] actions', () => {
 			event: 'job.run',
 			payload: { name: 'my-task', via: 'save-and-run' }
 		});
-		// 跳台账 (plan §4.4) - redirect, not a stay-on-page result.
+		// Jump to the ledger (plan §4.4) - a redirect, not a stay-on-page result.
 		expect(thrown).toMatchObject({ status: 303, location: '/admin/maintenance' });
 	});
 

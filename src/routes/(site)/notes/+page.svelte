@@ -12,7 +12,7 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// Paginated views are self-canonical; filters consolidate on `/notes` (P3-b).
+	// Paginated views are self-canonical; filters consolidate on `/notes`.
 	const listPath = $derived(`/notes${data.page > 1 ? `?page=${data.page}` : ''}`);
 
 	const chipBase = 'rounded-full px-3 py-1 text-xs whitespace-nowrap transition-colors';

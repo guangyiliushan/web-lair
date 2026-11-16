@@ -1,13 +1,15 @@
 // scripts/verify-owner-uniqueness.ts
 //
-// 验收脚本：证明 owner 槽位在并发下不会被授予两次（READ COMMITTED 写偏斜回归）。
+// Acceptance script: proves the owner slot can never be granted twice under concurrency
+// (READ COMMITTED write-skew regression).
 //
-// 2026-09-24 实测：只用 `NOT EXISTS` 条件 UPDATE 时，两个并发认领都成功、两行都成
-// owner。本脚本用 app 侧同一套原语（src/lib/server/auth/owner-claim.ts）在临时库上
-// 重放该竞态，断言恰好 1 个 owner。
+// Measured 2026-09-24: with only a `NOT EXISTS` conditional UPDATE, two concurrent claims
+// both succeed and two rows become owner. This script replays that race on a temporary
+// database with the same app-side primitives (src/lib/server/auth/owner-claim.ts) and
+// asserts exactly 1 owner.
 //
-// 用法：pnpm db:verify-owner
-// 环境变量：DATABASE_URL（派生 <db>_owner_check 临时库，跑完删除）
+// Usage: pnpm db:verify-owner
+// Environment: DATABASE_URL (derives a temporary <db>_owner_check database, dropped afterwards)
 
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';

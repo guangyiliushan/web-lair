@@ -34,8 +34,9 @@ export const load: PageServerLoad = async ({ url }) => {
 	if (keyword) conditions.push(ilike(notes.title, `%${keyword}%`));
 	const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-	// 译文与原文合并成一行（UX-1020）：按 translation_group 分页，行内给出
-	// 每个语言的状态。先分页到组再取成员，家庭不会被页边界劈开。
+	// Translations merge into one row with their source: paginate by
+	// translation_group and show each language's state inline. Page to groups first,
+	// then fetch the members, so a family is never split across a page boundary.
 	const [groups, totals, allTopics] = await Promise.all([
 		db
 			.select({ group: notes.translationGroup })
@@ -177,7 +178,7 @@ export const actions: Actions = {
 	 * already in the trash, so the destructive path is two deliberate steps
 	 * (trash → purge) and a mis-click on the row button can never lose data.
 	 *
-	 * Mirrors the pages hard-delete (M1 / R2-3): drafts first, because
+	 * Mirrors the pages hard-delete: drafts first, because
 	 * `drafts.ref_id` is polymorphic and no FK can cascade for it; then the
 	 * row (comments cascade, the translation pointer is set null); then the
 	 * file-reference cleanup, in the same lock order publish and discard use.

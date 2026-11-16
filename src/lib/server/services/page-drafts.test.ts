@@ -759,7 +759,7 @@ describe('page draft flow', () => {
 		});
 		expect(result).toEqual({ kind: 'not-found' });
 		expect(state.inserts).toHaveLength(0);
-		// The attach tx locks the page row FIRST (R2-2; 三审 F1): dropping
+		// The attach tx locks the page row FIRST (R2-2; third review F1): dropping
 		// the .for('update') must fail the suite.
 		expect(state.forCalls).toEqual(['update']);
 	});
@@ -890,7 +890,7 @@ describe('page draft flow', () => {
 		];
 		const result = await publishPageDraft(DRAFT_ID);
 		expect(result).toEqual({ kind: 'not-found' });
-		// The guard must short-circuit BEFORE the transaction (三审 G1): a
+		// The guard must short-circuit BEFORE the transaction (third review G1): a
 		// mutation dropping it would otherwise reach the tx and answer the
 		// same not-found from the locked-row check, silently.
 		expect(state.forCalls).toHaveLength(0);

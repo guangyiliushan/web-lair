@@ -37,11 +37,11 @@ import { rehypeTranslateNo } from '$lib/components/markdown/plugins/rehype-trans
 import { buildSanitizeSchema } from '$lib/components/markdown/editor/markdown-config';
 
 /**
- * 管线 Processor 的精确类型。
+ * Exact type of the pipeline Processor.
  *
- * unified() 链的类型推断：
- *   remarkParse:      string → MdastRoot (mdast 语法树)
- *   remarkRehype:     MdastRoot (mdast) → HastRoot (hast HTML 树)
+ * Type inference through the unified() chain:
+ *   remarkParse:      string → MdastRoot (mdast syntax tree)
+ *   remarkRehype:     MdastRoot (mdast) → HastRoot (hast HTML tree)
  *   rehypeStringify:  HastRoot → string (HTML)
  *
  * Processor<ParserInput, ParserOutput, CompilerInput, CompilerOutput, Result>
@@ -49,11 +49,12 @@ import { buildSanitizeSchema } from '$lib/components/markdown/editor/markdown-co
 type MarkdownProcessor = Processor<MdastRoot, MdastRoot, HastRoot, HastRoot, string>;
 
 /**
- * Processor 单例。
+ * The processor singleton.
  *
- * Shiki 首次初始化需加载语法文件（~100-200ms），后续调用复用同一 processor。
- * Promise 包装：unified().use() 链是同步的，但 rehype-pretty-code 内部
- * 会异步初始化 Shiki highlighter。使用 once 模式确保只初始化一次。
+ * Shiki's first initialisation loads grammar files (~100-200ms); later calls reuse the
+ * same processor. Promise wrapper: the unified().use() chain is synchronous but
+ * rehype-pretty-code initialises the Shiki highlighter asynchronously inside, so the
+ * once pattern guarantees a single initialisation.
  */
 let processorCache: MarkdownProcessor | null = null;
 let processorInitPromise: Promise<MarkdownProcessor> | null = null;
@@ -79,7 +80,7 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			.use(remarkImageAttr)
 			.use(remarkCodeMeta)
 			.use(remarkImageEmbed)
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload 限制
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS overload limitations
 			.use(remarkRehype as any, { allowDangerousHtml: true, handlers: attentionHandlers })
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-katex Options vs boolean overload
 			.use(rehypeKatex as any, {
@@ -94,7 +95,7 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			// class, so it is registered before pretty-code (both pipelines
 			// register it at this position, spec 3.3)
 			.use(rehypeMermaid)
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-pretty-code Options 类型兼容
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- rehype-pretty-code Options type compatibility
 			.use(rehypePrettyCode as any, {
 				theme: {
 					dark: 'github-dark-default',
@@ -115,7 +116,7 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 			.use(rehypeHeadingAnchors)
 			.use(rehypeStringify);
 
-		// rehype-pretty-code 在首次 run 时异步初始化 Shiki
+		// rehype-pretty-code initialises Shiki asynchronously on the first run
 		await processor.process('');
 		processorCache = processor;
 		return processor;
@@ -133,13 +134,13 @@ async function getProcessor(): Promise<MarkdownProcessor> {
 }
 
 /**
- * 服务端渲染：Markdown → 安全 HTML（含 KaTeX + Shiki 高亮）。
+ * Server-side rendering: Markdown → safe HTML (with KaTeX + Shiki highlighting).
  *
- * 仅可在 server context 调用（+page.server.ts / +server.ts）。
- * SvelteKit 通过 $lib/server 路径约定确保此模块不会被打包到客户端。
+ * Callable only in a server context (+page.server.ts / +server.ts).
+ * SvelteKit's $lib/server path convention keeps this module out of the client bundle.
  *
- * @param markdown 原始 Markdown 字符串
- * @returns 已清洗的安全 HTML 字符串
+ * @param markdown raw Markdown string
+ * @returns sanitized, safe HTML string
  */
 export async function renderMarkdownToHtml(markdown: string): Promise<string> {
 	if (!markdown?.trim()) return '';
@@ -172,7 +173,7 @@ export async function stringifyMarkdownTree(tree: HastRoot): Promise<string> {
 	return processor.stringify(tree);
 }
 
-/** 清除 processor 缓存（主要用于测试和热重载场景） */
+/** Clear the processor cache (mainly for tests and hot reload) */
 export function clearServerProcessorCache(): void {
 	processorCache = null;
 	processorInitPromise = null;

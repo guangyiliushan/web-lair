@@ -19,7 +19,7 @@ import { DetailsNode } from '$lib/components/markdown/details/details-node';
 import { TabsNode } from '$lib/components/markdown/tabs/tabs-node';
 import { GridNode } from '$lib/components/markdown/grid/grid-node';
 
-/** 编辑器节点注册列表（自定义节点见 editor-shared.ts 的拆分说明） */
+/** Editor node registry (custom nodes: see the split rationale in editor-shared.ts) */
 export const EDITOR_NODES = [
 	HeadingNode,
 	ListNode,

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route tests for the presence heartbeat endpoint (realtime R2, ledger §23):
- * the JSON-only gate (415), the strict payload guards (400, checked BEFORE
- * the limiter so a junk token never spends a bucket), the per-token
- * fail-open rate bucket (429 + X-Retry-After) and the 204 contract with the
- * exact service arguments. The presence service and the limiter are mocked;
- * the constants the endpoint welds (bucket count) come from the real module.
+ * Route tests for the presence heartbeat endpoint: the JSON-only gate (415), the
+ * strict payload guards (400, checked BEFORE the limiter so a junk token never
+ * spends a bucket), the per-token fail-open rate bucket (429 + X-Retry-After) and
+ * the 204 contract with the exact service arguments. The presence service and the
+ * limiter are mocked; the constants the endpoint welds (bucket count) come from
+ * the real module.
  */
 const { state, rateLimitMock, touchMock, getOptionMock } = vi.hoisted(() => {
 	const state = {
@@ -34,7 +34,7 @@ vi.mock('$lib/server/cache', () => ({
 }));
 vi.mock('$lib/server/cache/store', () => ({ rateLimit: rateLimitMock }));
 // Pinned as a NOT-called spy: the endpoint is a dumb writer that never
-// reads options (register C1); a future enable-gate would fail this test.
+// reads options; a future enable-gate would fail this test.
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: getOptionMock }));
 vi.mock('$lib/server/services/presence', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/server/services/presence')>();
@@ -147,7 +147,7 @@ describe('presence heartbeat route', () => {
 		expect(state.touches).toHaveLength(0);
 	});
 
-	it('never reads options (a dumb writer, register C1)', async () => {
+	it('never reads options (a dumb writer)', async () => {
 		const response = await post(JSON.stringify({ token: TOKEN }));
 		expect(response.status).toBe(204);
 		expect(getOptionMock).not.toHaveBeenCalled();

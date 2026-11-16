@@ -8,9 +8,9 @@ import { requestIp } from '$lib/server/security/request-address';
 import type { RequestHandler } from './$types';
 
 /**
- * Readiness (M6 P4, F-10). `/api/health` answers liveness for the container
- * supervisor and deliberately never touches dependencies; this endpoint is
- * the opposite and is deliberately NOT public:
+ * Readiness. `/api/health` answers liveness for the container supervisor and
+ * deliberately never touches dependencies; this endpoint is the opposite and is
+ * deliberately NOT public:
  *
  *  - `READY_TOKEN` configured: a valid `Authorization: Bearer` is required
  *    from EVERY caller (the collector must inject the token; a missing or

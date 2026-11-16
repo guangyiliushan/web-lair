@@ -86,16 +86,16 @@
 	}
 
 	interface Props {
-		/** 显式标题，覆盖 page.data.headerTitle */
+		/** Explicit title, overriding page.data.headerTitle */
 		title?: string;
-		/** 显式操作按钮（含 Component icon），覆盖 page.data.headerActions */
+		/** Explicit action buttons (with a Component icon), overriding page.data.headerActions */
 		actions?: ResolvedAction[];
 		class?: string;
 	}
 
 	let { title, actions, class: className }: Props = $props();
 
-	// ── 优先使用显式 props，fallback 到 page.data（各页面 load 函数注入）──
+	// ── Prefer explicit props, fall back to page.data (injected by each page's load) ──
 	const pageTitle = $derived(title ?? page.data.headerTitle ?? m.admin_header_title());
 
 	const pageActions = $derived(actions ?? resolveFromPageData(page.data.headerActions));
@@ -108,7 +108,7 @@
 	}
 
 	function resolveFromPageData(raw: typeof page.data.headerActions): ResolvedAction[] {
-		// `undefined` = page didn't specify → use default "访问站点"
+		// `undefined` = page didn't specify → use the default "访问站点"
 		if (raw === undefined) {
 			return [
 				{

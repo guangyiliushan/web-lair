@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for /robots.txt (P3-b + M2): ORIGIN drives the Sitemap
- * line when set, the request origin is the dev fallback, and the two AI
- * policy groups are emitted as voluntary signals.
+ * `/robots.txt`: ORIGIN drives the Sitemap line when set, the request origin is
+ * the dev fallback, and the AI policy groups are emitted as voluntary signals.
  */
 const { envState } = vi.hoisted(() => ({
 	envState: { env: {} as Record<string, string | undefined> }

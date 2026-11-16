@@ -38,8 +38,8 @@ import {
 } from './markdown-transformers';
 
 /**
- * 编辑器 Markdown 往返辅助：markdown → Lexical 树 → markdown。
- * 使用与生产 lexicalEditor action 相同的节点注册与 transformer 列表。
+ * Editor Markdown round-trip helper: markdown → Lexical tree → markdown.
+ * Uses the same node registry and transformer list as the production lexicalEditor action.
  */
 function roundtrip(markdown: string): string {
 	const editor: LexicalEditor = createEditor({
@@ -367,7 +367,7 @@ describe('phase 1-6 新增能力 roundtrip', () => {
 
 	it('keeps inline image markdown as text (block-only policy)', () => {
 		const out = roundtrip('行内 ![图](https://example.com/a.png) 文本');
-		// 段落内的 ![...](...) 保持原样（渲染管线转为 <img>）
+		// ![...](...) inside a paragraph stays as-is (the render pipeline turns it into <img>)
 		expect(out).toContain('![图](https://example.com/a.png)');
 	});
 
@@ -425,10 +425,11 @@ describe('phase 1-6 新增能力 roundtrip', () => {
 		expect(out).toContain('- [ ] 待办事项');
 		expect(out).toContain('- [x] 已完成');
 
-		// 结构断言:导入必须产出 checklist 节点。核心 TRANSFORMERS 漏掉
-		// CHECK_LIST 时,`- [ ] x` 被 UNORDERED_LIST 抢先消费,退化为普通
-		// 列表 + 字面 "[ ]" 文本——导出结果恰好仍包含原字符串,上面的
-		// toContain 断言区分不了这两种情况,必须直接检查树结构。
+		// Structural assertion: import must produce a checklist node. With CHECK_LIST
+		// missing from the core TRANSFORMERS, `- [ ] x` is consumed by UNORDERED_LIST
+		// first and degrades to an ordinary list plus the literal text "[ ]" — the
+		// exported result still contains the original string, so the toContain assertion
+		// above cannot tell the two apart; the tree has to be inspected directly.
 		const editor: LexicalEditor = createEditor({
 			namespace: 'markdown-transformers-checklist-import',
 			nodes: EDITOR_NODES,

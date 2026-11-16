@@ -20,7 +20,7 @@ describe('toolbar insert buttons', () => {
 		await user.keyboard('{Shift>}{Home}{/Shift}');
 		await editorToolbar().getByRole('button', { name: '链接' }).click();
 
-		// 原位编辑浮层接管(批 3b:window.prompt 退役)
+		// The in-place editor pane takes over (batch 3b: window.prompt retired)
 		const pane = () => document.querySelector('[aria-label="链接"]') as HTMLElement | null;
 		await expect.poll(() => pane()?.querySelector('input') !== null, { timeout: 5000 }).toBe(true);
 		const input = pane()!.querySelector('input') as HTMLInputElement;
@@ -48,7 +48,7 @@ describe('toolbar insert buttons', () => {
 	it('inserts the chosen alert type through the callout menu', async () => {
 		const { screen } = await mountEditorFixture('前文');
 		// the Callout button is a dropdown trigger: open it, then pick a type.
-		// 警告 (warning) is deliberately NOT the default type, so a mutation
+		// The 警告 (warning) type is deliberately NOT the default, so a mutation
 		// that always inserts the default would fail this assertion.
 		await editorToolbar().getByRole('button', { name: 'Callout' }).click();
 		await page.getByRole('menuitem', { name: '警告' }).click();

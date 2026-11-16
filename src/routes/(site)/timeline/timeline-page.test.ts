@@ -2,11 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Route-level tests for the timeline page (P3-b + N1): the stream merges
- * visible posts and notes of the locale (newest first; notes carry their
- * lock marker); `?type=post` / `?type=note` filter the stream; unknown
- * params (e.g. `memory`) fall back to the full stream. The WHERE clauses
- * are inspected through drizzle's own dialect so the locale filter and the
+ * The timeline page: the stream merges visible posts and notes of the locale
+ * (newest first; notes carry their lock marker), `?type=post` / `?type=note`
+ * filter it, and unknown params (e.g. `memory`) fall back to the full stream. WHERE
+ * clauses are inspected through drizzle's own dialect so the locale filter and the
  * visibility predicates have teeth.
  */
 const { dbMock, state } = vi.hoisted(() => ({

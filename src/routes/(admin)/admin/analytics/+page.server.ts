@@ -15,16 +15,15 @@ function parseRange(value: string | null): TrafficRange {
 }
 
 /**
- * Admin analytics (M6 / P6). One cached Sentinel dashboard read per range
- * carries the overview, top paths, status breakdown and series. The client is
- * fail-open: `traffic` stays null when Sentinel is down or unconfigured, and
- * the page renders "—" instead of failing the request.
+ * Admin analytics: one cached Sentinel dashboard read per range carries the
+ * overview, top paths, status breakdown and series. The client is fail-open:
+ * `traffic` stays null when Sentinel is down or unconfigured, and the page renders
+ * "—" instead of failing the request.
  *
- * PV semantics (T6.4): `summary.pageRequests` is a filtered page-path count,
- * never Sentinel's raw `overview.requests` (which includes `/_app/`, `/i/`,
- * `/api/` and static files). The status breakdown still supplies the exact
- * 404 total; per-path rows only expose the 4xx class, which the UI labels as
- * such rather than pretending they are exact 404s.
+ * PV semantics: `summary.pageRequests` is a filtered page-path count, never
+ * Sentinel's raw `overview.requests` (which includes `/_app/`, `/i/`, `/api/` and
+ * static files). The status breakdown still supplies the exact 404 total; per-path
+ * rows only expose the 4xx class, which the UI labels as such.
  */
 export const load: PageServerLoad = async ({ url }) => {
 	await requireAdminRole();

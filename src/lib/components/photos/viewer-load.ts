@@ -72,7 +72,8 @@ export async function streamImageBytes(
 	return new Blob(chunks, { type: response.headers.get('content-type') ?? '' });
 }
 
-/** Data-saver on, or a 2G-class link → metered (plan §4.5 saveData/弱网). */
+/** Data-saver on, or a 2G-class link → metered (plan §4.5 saveData / weak
+ * network). */
 export function isMeteredConnection(connection: ConnectionLike | null | undefined): boolean {
 	if (!connection) return false;
 	if (connection.saveData === true) return true;

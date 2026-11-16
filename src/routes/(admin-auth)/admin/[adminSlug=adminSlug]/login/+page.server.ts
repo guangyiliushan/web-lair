@@ -12,7 +12,7 @@ import { rateLimitStrict } from '$lib/server/cache/store';
 import { credentialBucketKey, requestAddress } from '$lib/server/security/request-address';
 import { clientAddressKey } from '$lib/utils/cidr';
 
-/** Admin credentials endpoint budget (W6.10): 10 attempts / 15 min / IP. */
+/** Admin credentials endpoint budget: 10 attempts / 15 min / IP. */
 const ADMIN_LOGIN_RATE_LIMIT = { limit: 10, windowSeconds: 15 * 60 } as const;
 
 export const load: PageServerLoad = async (event) => {
@@ -37,8 +37,8 @@ export const actions: Actions = {
 		const config = assertAdminSlug(event.params.adminSlug);
 		const formData = await event.request.formData();
 		const email = formData.get('email')?.toString().trim().toLowerCase() ?? '';
-		// W6.10 / review P1: admin credentials bucket keyed on the /64 address
-		// AND a hash of the email, so an office NAT cannot lock out the owner.
+		// Bucket on the /64 address AND a hash of the email, so an office NAT
+		// cannot lock out the owner.
 		const address = clientAddressKey(requestAddress(event.getClientAddress));
 		const rate = await rateLimitStrict(
 			getCache(),
@@ -74,18 +74,17 @@ export const actions: Actions = {
 				}
 			});
 
-			// B3: a 2FA-enabled account gets no session here - the plugin deletes the
+			// A 2FA-enabled account gets no session here - the plugin deletes the
 			// session it just created and answers with a challenge instead, so the
 			// response carries no user/token. Admission is decided after verification
 			// on the two-factor page; the challenge cookie (10 min) does the routing.
 			twoFactorRequired = Boolean((result as { twoFactorRedirect?: boolean }).twoFactorRedirect);
 
 			if (!twoFactorRequired) {
-				// Roles replaced the email allowlist + the admin_account table (ledger
-				// Q13/§4.10). Organization members (reviewers, B2) are admitted by
-				// membership: the session this sign-in just created is not visible in
-				// the request headers yet, so the capability itself is re-checked with
-				// the real cookie by the /admin guard and the comment queue.
+				// Roles replaced the email allowlist and the admin_account table;
+				// organization members are admitted by membership. The session just
+				// created is not in the request headers yet, so the /admin guard and
+				// the comment queue re-check the capability with the real cookie.
 				const admitted =
 					getUserRole(result.user) !== null || (await isSiteOrganizationMember(result.user.id));
 				if (!admitted || !result.user.emailVerified) {
@@ -96,10 +95,9 @@ export const actions: Actions = {
 					return fail(500, { message: m.admin_auth_err_session_failed(), redirectTo });
 				}
 
-				// AC2 (settings-truth W8.2): email sign-in no longer prunes other
-				// sessions. Every admin-capable sign-in is listed on the account
-				// page and can be revoked there; a new sign-in must not silently
-				// sign out the owner's other browser.
+				// Email sign-in no longer prunes other sessions. Every admin-capable
+				// sign-in is listed on the account page and can be revoked there; a
+				// new sign-in must not silently sign out the owner's other browser.
 			}
 		} catch (caught) {
 			if (caught instanceof APIError) {

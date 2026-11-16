@@ -10,9 +10,9 @@ import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad } from './$types';
 
 /**
- * Public 微记 detail (C3): uuid-addressed, language-neutral; malformed and
+ * Public micro-post detail (`微记`): uuid-addressed, language-neutral; malformed and
  * missing ids both answer 404 (uuid guard first). Up/down counters render
- * read-only (voting interaction stays a registered item - no voter table).
+ * read-only — there is no voter table, so voting is not implemented.
  */
 export const load: PageServerLoad = async ({ params }) => {
 	if (!isUuid(params.id)) throw error(404, 'Not found');
@@ -31,8 +31,8 @@ export const load: PageServerLoad = async ({ params }) => {
 	if (!row) throw error(404, 'Not found');
 	const siteTz = await getOption('site.timezone');
 	const title = plainTextExcerpt(row.content, 48);
-	// Bodies are authored as Markdown in the admin editor (B2a UI P0, P7);
-	// rendering here keeps the plain-text rows working unchanged.
+	// Bodies are Markdown from the admin editor; rendering here keeps plain-text
+	// rows working unchanged.
 	const html = await renderMarkdownToHtml(row.content);
 	return {
 		row: { ...row, dateLabel: formatDate(row.createdAt, { timeZone: siteTz }) },

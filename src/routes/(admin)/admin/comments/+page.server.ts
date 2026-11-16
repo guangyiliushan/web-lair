@@ -22,14 +22,13 @@ function parseState(value: string | null): ReviewState {
 export const load: PageServerLoad = async (event) => {
 	const reviewer = await requireCommentReviewer();
 	// A reviewer may lack access to password-gated notes; the queue must not
-	// become a side channel into their body text (B2 review, angle 2).
+	// become a side channel into their body text.
 	const role = getUserRole(reviewer);
 	const canReadGatedNotes = role === 'owner' || role === 'admin';
 	const state = parseState(event.url.searchParams.get('state'));
 
-	// Comment P3a queue enhancement (spec §9): resolve the exclusive-arc
-	// target for all three kinds so note/page rows stop falling into
-	// "other targets"; quote/block context lands with P3b (anchors).
+	// Resolve the exclusive-arc target for all three kinds so note/page rows stop
+	// falling into "other targets"; the quote/block context comes from the anchor.
 	const rows = await db
 		.select({
 			id: comments.id,
@@ -63,14 +62,13 @@ export const load: PageServerLoad = async (event) => {
 		.leftJoin(pages, eq(comments.pageId, pages.id))
 		.where(and(eq(comments.state, state), eq(comments.isDeleted, false)))
 		// Edited rows float to the position of their last touch: an old
-		// comment pulled back into review must not sink below the fold
-		// (pre-release review 05-P3-2).
+		// comment pulled back into review must not sink below the fold.
 		.orderBy(sql`coalesce(${comments.editedAt}, ${comments.createdAt}) desc`)
 		.limit(200);
 
-	// Segment anchors (comment P3b): the queue shows the quoted text plus its
-	// prefix/suffix window. Deliberately no block snapshot and no re-render of
-	// the target body here - the context comes from the anchor itself.
+	// Segment anchors: the queue shows the quoted text plus its prefix/suffix
+	// window. Deliberately no block snapshot and no re-render of the target body
+	// here - the context comes from the anchor itself.
 	const entries = rows.map((row) => {
 		// Never ship the stored payload (hash/occ/ord/range/exact/prefix/suffix)
 		// to the browser: the queue renders only the excerpt and its context.
@@ -172,7 +170,7 @@ export const actions: Actions = {
 		}
 		// Same cap as the list query: one request must not flip the whole
 		// table. Non-uuid values are dropped before they reach the uuid
-		// column (PG would raise 22P02 → 500; P1.1 review); rows without a
+		// column (PG would raise 22P02 → 500); rows without a
 		// snapshot are not approvable at all.
 		const ids = form
 			.getAll('ids')

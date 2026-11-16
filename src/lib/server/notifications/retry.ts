@@ -1,5 +1,6 @@
 /**
- * Notification retry policy (M6 P5; plan §3.2 "重试 3 次（1m/5m/15m），终态 failed").
+ * Notification retry policy (M6 P5; plan §3.2 "three retries (1m/5m/15m), terminal
+ * state failed").
  *
  * One immediate attempt plus THREE retries, fixed backoff 1m / 5m / 15m; the
  * fourth failure is terminal. Fixed (not exponential-with-jitter) because the

@@ -3,10 +3,9 @@ import { loadSiteBranding } from '$lib/server/site-branding';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const { user, profile } = locals;
-	// Site-wide branding (W5.3): the root layout needs the site name for
-	// og:site_name and the favicon for the icon link/manifest. The helper
-	// falls back to the registry defaults on any settings/DB failure, so a
-	// blip cannot 500 login or the admin shell.
+	// Root layout needs the name for og:site_name and the icon for the icon
+	// link/manifest; the helper falls back to registry defaults on any settings or
+	// DB failure, so a blip cannot 500 the login page or the admin shell.
 	const branding = await loadSiteBranding();
 
 	if (!user) {

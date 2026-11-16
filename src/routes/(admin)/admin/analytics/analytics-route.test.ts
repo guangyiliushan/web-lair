@@ -54,7 +54,7 @@ beforeEach(() => {
 	state.requireAdminRole.mockResolvedValue(undefined);
 });
 
-describe('admin analytics load (P6)', () => {
+describe('admin analytics load', () => {
 	it('renders filtered page requests from the Sentinel dashboard', async () => {
 		state.fetch.mockResolvedValue(
 			new Response(JSON.stringify(FIXTURE), {

@@ -222,7 +222,7 @@ export interface ProjectCreateFields extends ProjectEditFields {
 }
 
 /**
- * Manual create (§4.4): rows land `published` (你手输的 = 你要的). Plain
+ * Manual create (§4.4): rows land `published` (hand-entered means intended). Plain
  * "new" is site/other; a four-platform row only arrives through the URL
  * import, which supplies the platform id (the dedup identity).
  */

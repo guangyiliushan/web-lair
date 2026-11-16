@@ -83,7 +83,7 @@ function warnLoopbackOnce() {
 	);
 }
 
-/** Dev-only escape hatch; the DEV guard is what ledger §4.27 洞③ asked for. */
+/** Dev-only escape hatch; the DEV guard is what ledger §4.27, hole ③ asked for. */
 function isDevAdminBypass(): boolean {
 	return import.meta.env.DEV && env.DEV_ADMIN_BYPASS === 'true';
 }

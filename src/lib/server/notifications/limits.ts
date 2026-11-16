@@ -1,6 +1,7 @@
 /**
  * Storm guards for the notification outbox (M6 P5; decision register §3E
- * "限流：comment 10/h、job 1/run、global 30/h；超限 suppressed + 日志/可见性").
+ * "Rate limits: comment 10/h, job 1/run, global 30/h; over-limit -> suppressed +
+ * logged/surfaced").
  *
  * The per-key window is enforced by the table's unique key (one comment, one
  * job run, one day's disk alert per channel). These counters bound the

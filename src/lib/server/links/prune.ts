@@ -4,7 +4,7 @@ import { linkPrechecks } from '../db/content/link-precheck.schema.ts';
 import { links } from '../db/content/link.schema.ts';
 
 /**
- * Outdated-link pruning (M3 / links plan §5.1 "删除后不再展示"): rows that
+ * Outdated-link pruning (M3 / links plan §5.1 "hidden once deleted"): rows that
  * lost their site stay in the public loss zone for `friends.checks.graceDays`
  * and are then deleted. The admin's `purgeOutdated` is the manual "clean now"
  * switch and keeps its all-outdated predicate; this module is the scheduled

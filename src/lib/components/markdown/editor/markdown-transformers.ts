@@ -1,15 +1,16 @@
 /**
- * 编辑器自定义 Markdown Transformer 集合。
+ * Custom Markdown transformer set for the editor.
  *
- * Lexical 的 markdown 往返（$convertToMarkdownString / $convertFromMarkdownString）
- * 只认识已注册 Transformer 的节点——缺少 Transformer 的自定义节点在往返中会丢失。
+ * Lexical's markdown round-trip ($convertToMarkdownString / $convertFromMarkdownString)
+ * only knows nodes with a registered transformer — a custom node without one is
+ * dropped by the round-trip.
  *
- * 本模块为 TagNode（`<tag>x</tag>`）与 AlertNode（`> [!NOTE] …`）提供：
- * - 导出（Lexical 树 → Markdown）
- * - 导入（Markdown → Lexical 树）
- * - Alert 嵌套内容的 editorState JSON ↔ Markdown 互转助手
+ * This module covers TagNode (`<tag>x</tag>`) and AlertNode (`> [!NOTE] …`):
+ * - export (Lexical tree → Markdown)
+ * - import (Markdown → Lexical tree)
+ * - helpers converting alert-nested content between editorState JSON and Markdown
  *
- * 参考：
+ * References:
  * - https://lexical.dev/docs/packages/lexical-markdown
  * - @lexical/markdown@0.46.0 MultilineElementTransformer（regExpStart/regExpEnd/linesInBetween）
  */
@@ -182,11 +183,12 @@ export const mentionTransformer: TextMatchTransformer = {
 // ── HR：`---` / `***` / `___` ↔ HorizontalRuleNode ──
 
 /**
- * 水平分割线 Transformer。
+ * Horizontal rule transformer.
  *
- * 0.46 的 @lexical/markdown 不再内置 HR transformer（HorizontalRuleNode 的
- * getTextContent() 返回 '\n'），缺失时 $convertToMarkdownString 会静默丢弃
- * 分割线，导致保存后 `---` 消失。仿上游 playground 的 HR transformer 实现。
+ * @lexical/markdown 0.46 no longer bundles an HR transformer (HorizontalRuleNode's
+ * getTextContent() returns '\n'); without one $convertToMarkdownString silently
+ * drops the rule, so `---` vanishes after saving. Mirrors the upstream
+ * playground's HR transformer.
  */
 export const hrTransformer: ElementTransformer = {
 	dependencies: [HorizontalRuleNode],
@@ -199,7 +201,8 @@ export const hrTransformer: ElementTransformer = {
 		void isImport;
 		const hr = $createHorizontalRuleNode();
 		parentNode.replace(hr);
-		// 打字路径且分割线位于文末时，补一个空段落承接光标
+		// Typing path with the rule at the end of the document: add an empty
+		// paragraph to hold the cursor
 		if (!isImport && !hr.getNextSibling()) {
 			const paragraph = $createParagraphNode();
 			hr.insertAfter(paragraph);
@@ -212,12 +215,13 @@ export const hrTransformer: ElementTransformer = {
 // ── Image：`![alt](src)` ↔ ImageNode ──
 
 /**
- * 图片 Transformer（整行独立图片 ↔ 块级 ImageNode）。
+ * Image transformer (a standalone full-line image ↔ block-level ImageNode).
  *
- * 已知限制（有意为之）：
- * - 仅支持块级独立图片（`![...](...)` 独占一行）；段落内联的
- *   `![...](...)` 文本保持原样（渲染管线会转为 <img>）
- * - alt 含 `]` 或 src 含 `)` 时往返会失真（罕见场景，不转义）
+ * Known limitations (deliberate):
+ * - Only block-level standalone images (`![...](...)` alone on a line); an inline
+ *   `![...](...)` inside a paragraph stays literal text (the render pipeline turns
+ *   it into an <img>)
+ * - alt text containing `]` or src containing `)` does not round-trip (rare, not escaped)
  */
 export const imageTransformer: ElementTransformer = {
 	dependencies: [ImageNode],
@@ -242,7 +246,8 @@ export const imageTransformer: ElementTransformer = {
 		}
 		const image = $createImageNode(src, alt, tail);
 		parentNode.replace(image);
-		// 打字路径且图片位于文末时，补一个空段落承接光标
+		// Typing path with the image at the end of the document: add an empty
+		// paragraph to hold the cursor
 		if (!isImport && !image.getNextSibling()) {
 			const paragraph = $createParagraphNode();
 			image.insertAfter(paragraph);
@@ -252,12 +257,12 @@ export const imageTransformer: ElementTransformer = {
 	type: 'element'
 };
 
-// ── Table：GFM pipe 表格 ↔ TableNode ──
+// ── Table: GFM pipe table ↔ TableNode ──
 
-/** 一行 pipe 表格（如 `| a | b |`） */
+/** A single pipe-table row (e.g. `| a | b |`) */
 const TABLE_ROW_REGEX = /^\s*\|.*\|\s*$/;
 
-/** 解析一行 pipe 表格为单元格文本数组，处理 `\|` 转义 */
+/** Parse one pipe-table row into cell texts, handling `\|` escapes */
 function parseTableRow(line: string): string[] {
 	const content = line.trim().replace(/^\|/, '').replace(/\|$/, '');
 	const cells: string[] = [];
@@ -278,7 +283,7 @@ function parseTableRow(line: string): string[] {
 	return cells;
 }
 
-/** 单元格 → 单行 markdown（保留行内格式，折叠换行，转义 `|`） */
+/** Cell → single-line markdown (keeps inline formatting, folds newlines, escapes `|`) */
 function tableCellToMarkdown(
 	cell: TableCellNode,
 	exportChildren: (node: TableCellNode) => string
@@ -287,12 +292,13 @@ function tableCellToMarkdown(
 }
 
 /**
- * 单元格行内 markdown → 节点规格树（temp editor 解析）。
+ * Cell inline markdown → node spec tree (parsed by the temp editor).
  *
- * 表格导入走 handleImportAfterStartMatch 自定义路径，不经过行内
- * transformer 管线；单元格文本若直接建纯文本节点，粗体/行内代码/链接
- * 等行内语法会保持字面。因此借 temp editor 完整解析，
- * 再按规格树在真实编辑器中重建（跨编辑器不传递节点实例）。
+ * Table import takes the custom handleImportAfterStartMatch path and never goes
+ * through the inline transformer pipeline; building plain text nodes from cell
+ * text would leave bold / inline code / links literal. So the temp editor parses
+ * the cell in full and the real editor rebuilds the nodes from the spec tree
+ * (node instances cannot be transferred across editors).
  */
 function inlineMarkdownToSpecs(markdown: string): SpecNode[] {
 	const editor = getNestedTempEditor();
@@ -323,29 +329,34 @@ function inlineMarkdownToSpecs(markdown: string): SpecNode[] {
 }
 
 /**
- * GFM pipe 表格 Transformer。
+ * GFM pipe table transformer.
  *
- * - 导入：0.46 新增的 handleImportAfterStartMatch 钩子——header 行起、
- *   连续 `|` 行止；必须有 `| --- |` 分隔行才视为表格（否则回落为普通文本）。
- *   单元格行内语法（粗体/斜体/行内代码/链接）经 temp editor 完整解析。
- * - 导出：遍历行列拼 pipe 表格，首行后补分隔行；单元格用 exportChildren
- *   保留行内格式（粗体/斜体/行内代码等），多段落折叠为单行。
+ * - Import: the 0.46 handleImportAfterStartMatch hook — starts at the header row
+ *   and stops at the last consecutive `|` row; a `| --- |` divider row is required
+ *   or the block falls back to plain text. Cell inline syntax (bold/italic/
+ *   inline code/links) is parsed in full by the temp editor.
+ * - Export: walk rows and columns into a pipe table, appending the divider after
+ *   the first row; cells use exportChildren to keep inline formatting
+ *   (bold/italic/inline code, …) and multiple paragraphs fold into one line.
  *
- * 已知限制：列对齐（`:---:`）、跨行/跨列合并不参与 markdown 往返；
- * 表头状态亦不持久——GFM pipe 语法必须首行后跟分隔行才能识别为表格，
- * 因此导出无条件补 `| --- |`、导入固定首行为表头，TableCellMenu 的
- * "切换表头"在保存/重载后会还原为首行表头（文本内容不受影响）。
+ * Known limitations: column alignment (`:---:`), rowspan/colspan merges take no
+ * part in the markdown round-trip; the header state is not persisted either —
+ * GFM pipe syntax needs a divider after the first row to be recognised, so export
+ * always appends `| --- |` and import always treats the first row as the header;
+ * TableCellMenu's "toggle header" reverts to a first-row header after
+ * save/reload (the text itself is unaffected).
  */
 export const tableTransformer: MultilineElementTransformer = {
 	dependencies: [TableNode, TableRowNode, TableCellNode],
 	regExpStart: TABLE_ROW_REGEX,
 	regExpEnd: { regExp: /^(?!\s*\|)/, optional: true },
 	handleImportAfterStartMatch({ lines, rootNode, startLineIndex }) {
-		// 第二行必须是分隔行，否则不是表格（返回 null 交给后续 transformer）
+		// The second line must be the divider row, otherwise this is not a table
+		// (return null, letting later transformers try)
 		const dividerLine = (lines[startLineIndex + 1] ?? '').trim();
 		if (!isTableRowDivider(dividerLine)) return null;
 
-		// 收集连续表格行（含 header 与分隔行）
+		// Collect the consecutive table rows (header and divider included)
 		const rawRows: string[] = [lines[startLineIndex], lines[startLineIndex + 1]];
 		let i = startLineIndex + 2;
 		while (i < lines.length && TABLE_ROW_REGEX.test(lines[i])) {
@@ -363,7 +374,7 @@ export const tableTransformer: MultilineElementTransformer = {
 				);
 				const paragraph = $createParagraphNode();
 				if (text) {
-					// 行内 markdown（粗体/斜体/行内代码/链接）完整解析
+					// Inline markdown (bold/italic/inline code/links) parsed in full
 					for (const spec of inlineMarkdownToSpecs(text)) {
 						paragraph.append(nodeFromSpecTree(spec));
 					}
@@ -374,11 +385,11 @@ export const tableTransformer: MultilineElementTransformer = {
 			table.append(row);
 		});
 		rootNode.append(table);
-		// 返回最后消费的行下标
+		// Return the index of the last consumed line
 		return [true, i - 1];
 	},
 	replace: () => {
-		// 导入由 handleImportAfterStartMatch 处理；打字快捷输入不转换表格
+		// Import is handled by handleImportAfterStartMatch; typed shortcut input never converts tables
 		return false;
 	},
 	export: (node, exportChildren) => {
@@ -409,11 +420,12 @@ const ALERT_END_REGEX = /^(?!>)/;
 const QUOTE_PREFIX_REGEX = /^>\s?/;
 
 /**
- * 嵌套编辑器内容使用的 transformer 子集。
+ * Transformer subset used by nested editor content.
  *
- * 嵌套编辑器不注册 TagNode/AlertNode（防无限嵌套），
- * 因此 alert 内部的 markdown 使用标准 transformer 解析。
- * HR 节点已注册（见 NESTED_EDITOR_NODES），补上其 transformer 保证 `---` 往返。
+ * Nested editors do not register TagNode/AlertNode (to prevent infinite nesting),
+ * so markdown inside an alert is parsed with the standard transformers.
+ * HR nodes are registered (see NESTED_EDITOR_NODES), so its transformer is
+ * included to keep `---` round-tripping.
  */
 /**
  * Counterpart of the core markdown export's safety escaping: the exporter
@@ -524,10 +536,11 @@ export function $unescapeImportedText(): void {
 }
 
 export const NESTED_EDITOR_TRANSFORMERS: Transformer[] = [
-	// 自定义 transformer 必须先于核心 TRANSFORMERS(导入逐个尝试,靠前者
-	// 优先):CHECK_LIST 排在 ...TRANSFORMERS 之后会被 UNORDERED_LIST 抢先
-	// 消费 `- [ ]`(等于没修);mermaidTransformer 同理会被核心 CODE 抢先,
-	// 容器正文内的 ```mermaid 会导入成普通代码块。
+	// Custom transformers must come before the core TRANSFORMERS (import tries them in
+	// order and the earlier one wins): CHECK_LIST placed after ...TRANSFORMERS gets
+	// consumed by UNORDERED_LIST first, which is the same as not fixing it;
+	// mermaidTransformer has the same problem with the core CODE transformer, so a
+	// ```mermaid block inside container content imports as a plain code block.
 	CHECK_LIST,
 	mermaidTransformer,
 	...TRANSFORMERS,
@@ -545,8 +558,9 @@ export const NESTED_EDITOR_TRANSFORMERS: Transformer[] = [
 	gridTransformer
 ];
 
-// 复用的临时嵌套编辑器（headless，无 DOM）。
-// 每次导出新建编辑器开销过大，这里模块级缓存一个实例（见设计文档 §8 升级点标注）。
+// Reused temporary nested editor (headless, no DOM).
+// Creating one per export is too expensive, so the module caches a single
+// instance (see design doc §8 upgrade note).
 let nestedTempEditor: LexicalEditor | null = null;
 
 function getNestedTempEditor(): LexicalEditor {
@@ -561,7 +575,8 @@ function getNestedTempEditor(): LexicalEditor {
 	return nestedTempEditor;
 }
 
-/** Markdown → Alert 嵌套编辑器 editorState JSON（解析失败时降级为纯文本段落） */
+/** Markdown → alert nested-editor editorState JSON (falls back to a plain-text
+ * paragraph when parsing fails) */
 /** Guards reentrancy: a container transformer runs this while the shared
  * temp editor is mid-update, which would swallow nested fences. */
 let nestedTempDepth = 0;
@@ -603,7 +618,7 @@ export function markdownToAlertJson(markdown: string): string {
 	}
 }
 
-/** Alert 嵌套编辑器 editorState JSON → Markdown（JSON 非法时返回空串） */
+/** Alert nested-editor editorState JSON → Markdown (empty string when the JSON is invalid) */
 export function alertJsonToMarkdown(json: string): string {
 	if (!json?.trim()) return '';
 	const editor = getNestedTempEditor();
@@ -620,18 +635,21 @@ export function alertJsonToMarkdown(json: string): string {
 }
 
 /**
- * Alert Transformer（多行块，spec §3.1 的 blockquote 载体）。
+ * Alert transformer (multiline block, the blockquote carrier of spec §3.1).
  *
- * - 导入走 handleImportAfterStartMatch：marker 行起、连续 `>` 行止；停止时
- *   **不消费**那条非 `>` 行，它在文档里保持为独立块。注意与渲染端的分歧：
- *   CommonMark 懒续行会把该行并入引用（成为告警正文），编辑器则留在块外——
- *   两侧都不丢内容，但归属不同。
- *   正文（剥 `> ` 前缀）经嵌套编辑器 JSON 往返；标题存 AlertNode.__title，
- *   导出时回到 marker 行。
- * - 导出：`> [!type] title` + 逐行 `> ` 前缀。
+ * - Import uses handleImportAfterStartMatch: starts at the marker line and stops
+ *   at the last consecutive `>` line; on stop the non-`>` line is **not
+ *   consumed** and stays a separate block. Note the divergence from the renderer:
+ *   CommonMark lazy continuation folds that line into the quote (as alert body)
+ *   while the editor keeps it outside — neither side loses content, but the
+ *   attribution differs.
+ *   The body (with the `> ` prefix stripped) round-trips through nested editor
+ *   JSON; the title lives in AlertNode.__title and returns to the marker line on
+ *   export.
+ * - Export: `> [!type] title` followed by `> `-prefixed lines.
  *
- * 已知限制：alert 内不再支持嵌套 alert（嵌套编辑器不注册本 transformer），
- * 与编辑器「防无限嵌套」约定一致。
+ * Known limitation: alerts do not nest (the nested editor does not register this
+ * transformer), matching the editor's "no infinite nesting" rule.
  */
 export const alertTransformer: MultilineElementTransformer = {
 	dependencies: [AlertNode],
@@ -676,10 +694,10 @@ export const alertTransformer: MultilineElementTransformer = {
 // ── Spec-tree transfer helpers (shared by the spec-based transformers) ──
 
 /**
- * 跨编辑器节点传输的中间表示（纯 JSON 数据）。
- * 节点实例不能跨编辑器复用，也无法在 read 上下文中创建——
- * 因此 temp editor 侧只采集 (class, json) 规格树，
- * 真实节点在目标编辑器的 update 上下文中按规格重建。
+ * Intermediate representation for moving nodes across editors (plain JSON data).
+ * Node instances cannot be reused across editors and cannot be created in a read
+ * context, so the temp editor only collects a (class, json) spec tree and the real
+ * nodes are rebuilt from it inside the target editor's update context.
  */
 interface SpecNode {
 	klass: typeof LexicalNode;
@@ -703,27 +721,28 @@ function nodeFromSpecTree(spec: SpecNode): LexicalNode {
 	return clone;
 }
 
-// ── Sup/Sub：`<sup>x</sup>` / `<sub>x</sub>` ↔ 上标/下标格式 ──
+// ── Sup/Sub: `<sup>x</sup>` / `<sub>x</sub>` ↔ superscript/subscript format ──
 
 /**
- * 上标/下标 Transformer（行内 HTML 语法往返）。
+ * Superscript/subscript transformer (inline-HTML syntax round-trip).
  *
- * markdown 无原生上下标语法（`~x~` 与 GFM 删除线冲突），采用行内 HTML：
- * 渲染管线 remarkRehype(allowDangerousHtml) + rehype-raw 已支持，
- * rehype-sanitize 默认放行 sup/sub 标签（服务端与客户端管线均已核实）。
+ * Markdown has no native sup/sub syntax (`~x~` collides with GFM strikethrough),
+ * so this uses inline HTML: the render pipeline's remarkRehype
+ * (allowDangerousHtml) + rehype-raw already support it, and rehype-sanitize
+ * allows sup/sub by default (verified on both the server and client pipelines).
  */
 export const superscriptTransformer: TextMatchTransformer = {
 	dependencies: [],
 	importRegExp: /<sup>(.+?)<\/sup>/,
 	regExp: /<sup>(.+?)<\/sup>$/,
 	replace: (textNode, match) => {
-		// importFoundTextMatchTransformer 已将 textNode 切分为精确匹配段
+		// importFoundTextMatchTransformer has already split the textNode at the exact match
 		textNode.setTextContent(match[1] ?? '');
 		textNode.setFormat('superscript');
 	},
 	export: (node, _exportChildren, exportFormat) => {
 		if (!$isTextNode(node) || !node.hasFormat('superscript')) return null;
-		// exportFormat 保留节点上其余行内格式（如 <sup>**x**</sup>）
+		// exportFormat keeps the node's other inline formats (e.g. <sup>**x**</sup>)
 		return `<sup>${exportFormat(node, node.getTextContent())}</sup>`;
 	},
 	trigger: '>',
@@ -751,14 +770,14 @@ export const subscriptTransformer: TextMatchTransformer = {
 // already ship the HIGHLIGHT text format (`==` ↔ highlight) — import, export and
 // flanking included; the render side uses remark-mark (micromark attention).
 
-// ── 聚合 ──
+// ── Aggregation ──
 
 /**
- * 编辑器完整 transformer 列表：核心语法 + Tag + Alert + HR + Image + Table
+ * Full editor transformer list: core syntax + Tag + Alert + HR + Image + Table
  * + Sup/Sub。
  *
- * 顺序约定：自定义 transformer 在前（multiline 导入逐 transformer 尝试，
- * text-match 导出逐 transformer 尝试，靠前者优先），核心 TRANSFORMERS 在后。
+ * Ordering rule: custom transformers first (multiline import tries them one by one
+ * and text-match export tries them in order, earlier wins), core TRANSFORMERS after.
  */
 export const EDITOR_TRANSFORMERS: Transformer[] = [
 	tagTransformer,
@@ -780,9 +799,10 @@ export const EDITOR_TRANSFORMERS: Transformer[] = [
 	detailsTransformer,
 	tabsTransformer,
 	gridTransformer,
-	// 0.46 核心导出了 CHECK_LIST 但没有把它放进 TRANSFORMERS——缺失时
-	// `- [ ] x` 会被 UNORDERED_LIST 抢先消费，复选框退化为字面 `[ ]` 文本。
-	// 须先于 UNORDERED_LIST 尝试，故置于 ...TRANSFORMERS 之前。
+	// 0.46's core exports CHECK_LIST but leaves it out of TRANSFORMERS — without it
+	// `- [ ] x` is consumed by UNORDERED_LIST first and the checkbox degrades to the
+	// literal text `[ ]`. It must be tried before UNORDERED_LIST, hence ahead of
+	// ...TRANSFORMERS.
 	CHECK_LIST,
 	...TRANSFORMERS
 ];

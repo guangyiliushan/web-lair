@@ -1,7 +1,7 @@
 import { sanitizeErrorText } from '../jobs/error-text.ts';
 
 /**
- * Notification payload shaping (M6 P5, plan §3.2 "payload ≤200 字、无 PII").
+ * Notification payload shaping (M6 P5, plan §3.2 "payload ≤200 chars, no PII").
  *
  * One shape serves both adapters: `{ title, body, url? }`. The producers build
  * it (`comment.pending` from the comment service, `job.failed` from the drain,

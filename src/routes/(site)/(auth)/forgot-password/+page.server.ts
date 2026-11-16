@@ -18,17 +18,11 @@ function logDetail(error: unknown): string {
 }
 
 /**
- * W1.4 (settings-truth plan, P0-4): a real reset request.
- *
- * better-auth owns the token (verification row `reset-password:<token>`, one
- * hour) and the mail body; this action only hands the request to
- * `requestPasswordReset`, which resolves the address and calls the
- * `sendResetPassword` callback configured in `auth.ts`.
- *
- * The answer is identical for known and unknown addresses (better-auth fakes
- * the lookup, so the database path is symmetric). The sent-mail round trip can
- * still make a known address slower; that residual timing channel is accepted
- * under the per-address rate limit and registered in the line note.
+ * Password reset request. better-auth owns the token (verification row
+ * `reset-password:<token>`, one hour) and the mail body; this action only calls
+ * `requestPasswordReset`, which resolves the address and runs `sendResetPassword`
+ * (`auth.ts`). Known and unknown addresses get the same answer; the sent-mail round
+ * trip can still make a known address slower, which the per-address limit covers.
  */
 export const load: PageServerLoad = () => {
 	return { mailConfigured: isMailDeliveryAvailable() };
@@ -36,7 +30,7 @@ export const load: PageServerLoad = () => {
 
 export const actions: Actions = {
 	sendReset: async (event) => {
-		// W6.10: fail-closed per-IP bucket (IPv6 aggregated on /64).
+		// Fail-closed per-IP bucket (IPv6 aggregated on /64).
 		const address = clientAddressKey(requestAddress(event.getClientAddress));
 		const rate = await rateLimitStrict(getCache(), `limits:password-reset:${address}`, 5, 60 * 60);
 		if (!rate.allowed) {
@@ -65,11 +59,9 @@ export const actions: Actions = {
 				headers: event.request.headers
 			});
 		} catch (error) {
-			// Anti-enumeration: the transport may fail, the account lookup may be
-			// rejected, but the answer stays "check your inbox". better-auth logs
-			// transport failures inside its own runner, so this catch mostly sees
-			// pre-send rejections; keep the cause traceable without leaking the
-			// address an SMTP error can embed.
+			// Anti-enumeration: the transport or the lookup may fail, but the answer
+			// stays "check your inbox". better-auth logs transport failures itself, so
+			// this mostly sees pre-send rejections; keep the cause, never the address.
 			if (error instanceof APIError) {
 				console.warn('[forgot-password] reset request rejected', logDetail(error.message));
 			} else {

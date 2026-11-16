@@ -13,7 +13,7 @@ import type { ListColumn } from '$lib/components/admin/list-table';
  * columns, it never reorders them. Identity first (name + host + description
  * subtitle), then the two signals a review actually reads (backlink, health),
  * then contact/time, then actions. `type` is gone: the table never had such a
- * column (plan §2.1), only the mock did.
+ * column, only the mock did.
  */
 export const cols: Record<
 	'name' | 'backlink' | 'health' | 'email' | 'time' | 'actions',

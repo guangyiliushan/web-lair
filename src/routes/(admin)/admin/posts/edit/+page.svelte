@@ -262,7 +262,8 @@
 		const draft = data.draft;
 		const post = data.post;
 		title = draft?.title ?? post?.title ?? '';
-		// 译文与源共用一份 slug：编辑器展示源的地址（存量草稿可能还是空的）。
+		// Translations share one slug with the source: the editor shows the source address
+		// (legacy drafts may still be empty).
 		const loadedSlug =
 			(draft ? (draft.slug ?? '') : post && !post.placeholder ? post.slug : '') ||
 			data.source?.slug ||
@@ -934,7 +935,7 @@
 	function onTitleInput(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		title = input.value;
-		// 译文不自己造 slug：地址由源文章决定。
+		// A translation never mints its own slug: the address is decided by the source post.
 		if (!slugTouched && !isTranslation) slug = normalizeSlug(title.replace(/[^a-z0-9]+/g, '-'));
 	}
 

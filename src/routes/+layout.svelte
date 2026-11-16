@@ -11,17 +11,15 @@
 
 	let { children, data }: LayoutProps = $props();
 
-	// `site.icon` (Settings → Site) wins when set; otherwise the bundled asset
-	// is the fallback. `?v=` busts the very sticky favicon cache (S3).
+	// `site.icon` (Settings → Site) wins when set, else the bundled asset;
+	// `?v=` busts the very sticky favicon cache.
 	const iconHref = $derived(siteIconHref(data.siteIcon, favicon));
 
-	// Mirror the server-side URL canonicalisation on the client (the official
-	// SvelteKit recipe): the server middleware only redirects document
-	// requests, so a client-side navigation to an unprefixed URL has to
-	// re-sync itself here. Locale-changing redirects are full document
-	// navigations by design — never goto() — so <html lang>/dir, the
-	// server-rendered tree and client state all match the new locale. The
-	// decision is false for canonical and exempt routes, so this cannot loop.
+	// Mirror the server-side URL canonicalisation on the client (SvelteKit's
+	// documented recipe): the middleware only sees document requests, so a client
+	// navigation to an unprefixed URL re-syncs itself here. Locale changes are full
+	// document loads on purpose — never `goto()` — so `lang`/`dir` and the rendered
+	// tree match; canonical and exempt routes never redirect, so this cannot loop.
 	afterNavigate(async () => {
 		const decision = await shouldRedirect({ url: window.location.href });
 		if (decision.shouldRedirect && decision.redirectUrl) {
@@ -31,10 +29,9 @@
 
 	onMount(() => {
 		themeStore.init();
-		// The server writes lang/dir from the request's locale; re-assert them
-		// from the resolved client locale so the attributes cannot drift if the
-		// cookie changed between the SSR response and hydration - that mismatch
-		// has no console signal to catch it otherwise.
+		// The server writes lang/dir from the request locale; re-assert them from the
+		// resolved client locale so a cookie change between SSR and hydration cannot
+		// drift the attributes — that mismatch has no console signal.
 		document.documentElement.lang = getLocale();
 		document.documentElement.dir = getTextDirection();
 	});

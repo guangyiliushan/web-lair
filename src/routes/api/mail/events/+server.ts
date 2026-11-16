@@ -6,7 +6,7 @@ import { suppress } from '$lib/server/services/suppressions';
 import type { RequestHandler } from './$types';
 
 /**
- * Provider-agnostic bounce / complaint intake (E2-4).
+ * Provider-agnostic bounce / complaint intake.
  *
  * A relay or MTA adapter POSTs `{ email, reason }` with an HMAC signature over
  * `<timestamp>.<raw-body>`:

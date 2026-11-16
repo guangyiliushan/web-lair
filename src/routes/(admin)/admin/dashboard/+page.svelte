@@ -74,8 +74,8 @@
 		}
 	]);
 
-	// Traffic (P6): SSR values from Sentinel's cached 24 h dashboard. Null
-	// means Sentinel is down or unconfigured; the values render "—".
+	// Traffic: SSR values from Sentinel's cached 24 h dashboard. Null means
+	// Sentinel is down or unconfigured; the values render "—".
 	const trafficStats = $derived([
 		{
 			metric: 'traffic-pages',
@@ -94,8 +94,8 @@
 		}
 	]);
 
-	// Quick actions (counts made real: C3; the "Write" deep links on the three
-	// micro-content rows auto-open the add dialog via ?add=1)
+	// Quick actions: the "Write" deep links on the three micro-content rows
+	// auto-open the add dialog via ?add=1
 	const quickActions = $derived([
 		{
 			title: m.admin_nav_posts(),
@@ -212,9 +212,9 @@
 		</Card.Root>
 	</section>
 
-	<!-- Traffic (P6): three numbers from Sentinel's 24 h dashboard, same
-	     fail-open cache as /admin/analytics. Values are page requests (PV
-	     filter applied), unique visitors and exact 404s. -->
+	<!-- Traffic: three numbers from Sentinel's 24 h dashboard, same fail-open
+	     cache as /admin/analytics. Values are page requests (PV filter applied),
+	     unique visitors and exact 404s. -->
 	<section class="flex flex-col gap-2">
 		<div class="flex items-center justify-between gap-3">
 			<h2

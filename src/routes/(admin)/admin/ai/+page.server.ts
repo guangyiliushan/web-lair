@@ -84,7 +84,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		.groupBy(sql`to_char(${aiUsage.createdAt}, 'YYYY-MM')`, aiUsage.task, aiUsage.provider)
 		.orderBy(sql`to_char(${aiUsage.createdAt}, 'YYYY-MM') desc`, aiUsage.task);
 
-	// Cost attribution (v3 Q1/Q8): the same range, grouped by actor. `null`
+	// Cost attribution: the same range, grouped by actor. `null`
 	// means an unattended job; the label is resolved here so the page does not
 	// need a second lookup per row.
 	const byActor = await db
@@ -218,8 +218,8 @@ export const actions: Actions = {
 	 * Clear the whole ledger. Destructive on purpose: the monthly spend meter is
 	 * derived from these rows, so wiping them also resets the budget guard (a
 	 * paused automatic task starts again). The dialog says so; the activities
-	 * row is the durable "who and when" record (§26 consumer surface is
-	 * `/admin/maintenance`, which lists the job/schedule families only).
+	 * row is the durable "who and when" record (the `/admin/maintenance` surface
+	 * lists the job/schedule families only).
 	 */
 	purgeUsage: async ({ locals }) => {
 		await requireOwnerRole();

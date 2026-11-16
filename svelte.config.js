@@ -4,19 +4,18 @@ import adapter from '@sveltejs/adapter-node';
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	compilerOptions: {
-		// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
+		// Every first-party component is runes; node_modules keep their own mode
+		// (`undefined` = infer). Removable once Svelte 6 defaults `runes: true`.
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		// Deployment target: a single self-hosted Node process behind Caddy
-		// (ledger §25 / platform plan §C). adapter-node emits `build/` and is
-		// what the Dockerfile runs; see deploy/RUNBOOK.md.
+		// Single self-hosted Node process behind Caddy: adapter-node emits `build/`,
+		// which the Dockerfile runs (`node build`). See deploy/RUNBOOK.md.
 		adapter: adapter(),
 
-		// The framework CSRF check runs before hooks, so it cannot exempt the
-		// RFC 8058 one-click unsubscribe POST (no Origin, no cookies). The first
-		// hook (`handleCsrf`) reproduces the exact framework predicate and owns
-		// the single exemption; see src/lib/server/security/csrf.ts.
+		// `'*'` trusts every origin, switching SvelteKit's CSRF check off. That check runs
+		// before any hook, so only `handleCsrf` (`src/hooks.server.ts`) can exempt the RFC 8058
+		// one-click unsubscribe POST (no Origin, no cookies) — it re-implements the predicate.
 		csrf: {
 			trustedOrigins: ['*']
 		},

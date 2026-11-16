@@ -18,7 +18,7 @@
 
 	// better-auth collapses its 2FA failures into messages that 1.7.5 does not
 	// even carry (APIError.from(status, string) -> message === ''), so the action
-	// classifies them and the page owns the localized copy (B3.1 review).
+	// classifies them and the page owns the localized copy.
 	const ERROR_MESSAGES: Record<string, () => string> = {
 		invalid_code: m.auth_2fa_error_invalid_code,
 		expired: m.auth_2fa_error_expired,

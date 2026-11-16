@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the public note detail page (N1): open rows render
+ * Route-level tests for the public note detail page: open rows render
  * and load their threads, gated rows ship the public shell only (body and
  * metadata withheld, no discussion) until the unlock cookie verifies, the
  * slug fallback 301s exactly once, missing languages 404 with an ordered
@@ -69,7 +69,7 @@ vi.mock('$lib/server/config/options-registry', () => ({
 vi.mock('$lib/server/markdown', () => ({
 	renderMarkdownToHtml: service.renderMarkdownToHtml
 }));
-// The route renders through the comment read entry (comment P3b); pass the
+// The route renders through the comment read entry; pass the
 // input through so the existing `loadThreads` / renderer assertions stay the
 // contract under test.
 vi.mock('$lib/server/services/comment-render', () => ({
@@ -269,8 +269,8 @@ describe('note detail load', () => {
 		expect(service.getNoteMeta).toHaveBeenCalledWith(NOTE_ID);
 		expect(data.html).toBe('rendered:Diary **body**');
 		expect(data.discussion).toEqual(threads);
-		// The diary metadata returns with the unlock (review finding: it used
-		// to stay null forever while only the body was re-read).
+		// The diary metadata returns with the unlock; re-reading only the body would
+		// leave it null forever.
 		expect(data.note).toMatchObject({
 			mood: 'calm',
 			emotions: ['happy'],
@@ -417,7 +417,7 @@ describe('note comment actions', () => {
 		expect(service.submitComment).not.toHaveBeenCalled();
 	});
 
-	it('lets a verified unlock session comment on the gated note (spec §7)', async () => {
+	it('lets a verified unlock session comment on the gated note', async () => {
 		service.findVisibleNote.mockResolvedValue(lockedNote);
 		service.verifyNoteUnlockToken.mockReturnValue(true);
 		const result = await actions.comment(
@@ -511,7 +511,7 @@ describe('note comment actions', () => {
 		expect(service.deleteComment).not.toHaveBeenCalled();
 	});
 
-	it('lets a verified unlock session edit on the gated note (spec §7)', async () => {
+	it('lets a verified unlock session edit on the gated note', async () => {
 		service.findVisibleNote.mockResolvedValue(lockedNote);
 		service.verifyNoteUnlockToken.mockReturnValue(true);
 		const fd = new FormData();
@@ -542,7 +542,7 @@ describe('note comment actions', () => {
 		expect(service.editComment).not.toHaveBeenCalled();
 	});
 
-	it('lets a verified unlock session delete on the gated note (spec §7)', async () => {
+	it('lets a verified unlock session delete on the gated note', async () => {
 		service.findVisibleNote.mockResolvedValue(lockedNote);
 		service.verifyNoteUnlockToken.mockReturnValue(true);
 		const fd = new FormData();

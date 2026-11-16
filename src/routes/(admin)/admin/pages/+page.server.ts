@@ -18,14 +18,12 @@ const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const LOCALES = ['en', 'zh-cn', 'ja'] as const;
 
 /**
- * Pages admin v1 (P2, plan §4): the registry list with ▲/▼ reordering,
- * visible/hidden toggling and confirmed deletion. 「New」 was withheld for P5
- * and lands here as P5-3: the md type starts in the draft editor
- * (`/admin/pages/edit` without an id - the editor materializes the placeholder
- * row on its first save), the external entry inserts DIRECTLY from the list
- * dialog (`?/create`, no draft - ledger §19.10). `is_default` rows stay
- * protected (no delete) and keep a read-only slug in the editor
- * (db:ensure-pages anchors on the slug).
+ * Pages admin: the registry list with ▲/▼ reordering, visible/hidden toggling and
+ * confirmed deletion. Markdown pages are created in the draft editor
+ * (`/admin/pages/edit` without an id - the editor materializes the placeholder row
+ * on its first save), the external entry inserts DIRECTLY from the list dialog.
+ * `is_default` rows stay protected (no delete) and keep a read-only slug in the
+ * editor, because `db:ensure-pages` anchors on the slug.
  */
 export const load: PageServerLoad = async () => {
 	await requireAdminRole();
@@ -46,10 +44,10 @@ export const load: PageServerLoad = async () => {
 		.from(pages)
 		.orderBy(desc(pages.isDefault), asc(pages.sortOrder), asc(pages.createdAt));
 
-	// Rows with a pending draft ride the list as「未发布改动」(T11 review);
-	// the same set feeds the delete dialog's draft hint (R2-8). Advisory
-	// signal only - a drafts read failure must not take the whole list down
-	// (four-review #6); the delete path cascades regardless of the hint.
+	// Rows with a pending draft ride the list as「未发布改动」; the same set feeds the
+	// delete dialog's draft hint. Advisory signal only - a drafts read failure must
+	// not take the whole list down, and the delete path cascades regardless of the
+	// hint.
 	let draftSet: ReadonlySet<string> = new Set();
 	try {
 		draftSet = await draftsForPages(rows.map((row) => row.id));
@@ -73,8 +71,8 @@ export const load: PageServerLoad = async () => {
 		],
 		pages: rows.map((row) => ({
 			...row,
-			// Placeholder rows get their own delete-dialog copy (R2-8): the
-			// hard delete takes the draft and its file references with it.
+			// Placeholder rows get their own delete-dialog copy: the hard delete
+			// takes the draft and its file references with it.
 			placeholder: isPagePlaceholderSlug(row.slug),
 			hasDraft: draftSet.has(row.id),
 			title: resolveLocalized(row.title, locale) ?? row.slug
@@ -97,10 +95,9 @@ function localizedFrom(form: FormData, prefix: string): Record<string, string> {
 
 export const actions: Actions = {
 	/**
-	 * 「新增」外链条目 (P5-3): direct insert, no draft - the row IS the content
-	 * registry entry (external_url + optionally a code-route registration on
-	 * the site side). The md type never reaches this action: it starts in the
-	 * draft editor instead.
+	 * 「新增」外链条目: direct insert, no draft - the row IS the content registry
+	 * entry (external_url + optionally a code-route registration on the site side).
+	 * The md type never reaches this action: it starts in the draft editor instead.
 	 */
 	create: async ({ request }) => {
 		await requireAdminRole();
@@ -154,11 +151,10 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * ▲/▼: full-list renumber inside one transaction. The locking read
-	 * serializes concurrent moves (P2 review); cross-group targets - the
-	 * first extra's ▲ / the last default's ▼ - are a no-op success, since
-	 * display order pins defaults first and writing there would only invert
-	 * invisible sort values.
+	 * ▲/▼: full-list renumber inside one transaction. The locking read serializes
+	 * concurrent moves; cross-group targets - the first extra's ▲ / the last
+	 * default's ▼ - are a no-op success, since display order pins defaults first and
+	 * writing there would only invert invisible sort values.
 	 */
 	move: async ({ request }) => {
 		await requireAdminRole();
@@ -188,9 +184,9 @@ export const actions: Actions = {
 				[swapped[index], swapped[target]] = [swapped[target], swapped[index]];
 				for (let position = 0; position < swapped.length; position += 1) {
 					// Raw SQL on purpose: the builder would merge the column's
-					// `$onUpdate` into SET and bump every row's updated_at,
-					// rotating the pages' sitemap lastmod on a pure reorder
-					// (sorting is not a content change; P2 review).
+					// `$onUpdate` into SET and bump every row's updated_at, rotating
+					// the pages' sitemap lastmod on a pure reorder (sorting is not a
+					// content change).
 					await tx.execute(
 						sql`update pages set sort_order = ${position} where id = ${swapped[position].id}`
 					);
@@ -240,13 +236,12 @@ export const actions: Actions = {
 					.for('update');
 				if (!row) return { kind: 'not-found' as const };
 				if (row.isDefault) return { kind: 'protected' as const };
-				// The draft rows go with the page (M1 review): ref_id is
-				// polymorphic so no FK can cascade, and a surviving draft keeps
-				// its file_references (and the files) forever attached. Drafts
-				// are deleted FIRST (R2-3 review): drafts → files is the lock
-				// order publish / discard / save all follow, so the reference
-				// syncs below can neither deadlock against a concurrent save nor
-				// let its hidden updates slip past the cleanup.
+				// The draft rows go with the page: ref_id is polymorphic so no FK can
+				// cascade, and a surviving draft keeps its file_references (and the
+				// files) forever attached. Drafts are deleted FIRST: drafts → files is
+				// the lock order publish / discard / save all follow, so the reference
+				// syncs below can neither deadlock against a concurrent save nor let
+				// its hidden updates slip past the cleanup.
 				const draftRows = await tx
 					.delete(drafts)
 					.where(and(eq(drafts.refType, 'page'), eq(drafts.refId, pageId)))
@@ -255,15 +250,15 @@ export const actions: Actions = {
 				for (const draft of draftRows) {
 					await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
 				}
-				// A hard-deleted page leaves no content behind: clear its
-				// references in the same transaction (Q15 deletion hook) so the
-				// images it mentioned become detachable again.
+				// A hard-deleted page leaves no content behind: clear its references
+				// in the same transaction so the images it mentioned become
+				// detachable again.
 				await syncFileReferences(tx, { type: 'page', id: pageId }, []);
 				return { kind: 'deleted' as const };
 			})
 			.catch((caught) => {
-				// Deadlock / serialization failures are retryable admin
-				// conflicts (same mapping as publish / discard; R2-3 review).
+				// Deadlock / serialization failures are retryable admin conflicts
+				// (same mapping as publish / discard).
 				const code = pgErrorCode(caught);
 				if (code === '40P01' || code === '40001') return { kind: 'busy' as const };
 				throw caught;

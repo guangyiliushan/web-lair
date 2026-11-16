@@ -24,16 +24,15 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Content assets admin (storage line §6.1): registry list with filters, batch
- * upload, reference-guarded delete, plus the three-check audit and the purge
- * dry-run — both read-only; the actual purge stays on the CLI (`media:purge
- * --yes`). Uploads keep the ST-1 contract: whitelist + magic sniffing + size
- * caps live in the service, never in the form.
+ * Content assets admin: registry list with filters, batch upload, reference-guarded
+ * delete, plus the three-check audit and the purge dry-run - both read-only; the
+ * actual purge stays on the CLI (`media:purge --yes`). Uploads keep the whitelist +
+ * magic sniffing + size caps in the service, never in the form.
  */
 
 const KINDS = ['image', 'file'] as const;
 const STATUSES = ['pending', 'attached', 'detached'] as const;
-/** §6.1 time filter presets (URL state). */
+/** Time filter presets (URL state). */
 const SINCE_DAYS = { '7d': 7, '30d': 30, '90d': 90 } as const;
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -78,7 +77,7 @@ export const load: PageServerLoad = async ({ url }) => {
 export const actions: Actions = {
 	upload: async ({ request, locals, getClientAddress, setHeaders }) => {
 		await requireAdminRole();
-		// Security endpoint (W6.10): fail CLOSED on a dead cache, with the
+		// Security endpoint: fail CLOSED on a dead cache, with the
 		// account bucket and a per-IP companion (IPv6 aggregated on /64).
 		const address = clientAddressKey(requestAddress(getClientAddress));
 		const [accountRate, addressRate] = await Promise.all([
@@ -112,12 +111,12 @@ export const actions: Actions = {
 			.filter((entry): entry is File => entry instanceof File && entry.size > 0);
 		if (uploads.length === 0) return fail(400, { message: m.admin_files_err_no_files() });
 		// Reject oversized batches before copying bodies; the service keeps its
-		// own cap as the authoritative contract (batch-too-large, plan §4.2).
+		// own cap as the authoritative contract (batch-too-large).
 		if (uploads.length > MAX_BATCH_COUNT) {
 			return fail(400, { message: m.admin_media_err_too_many({ count: MAX_BATCH_COUNT }) });
 		}
 		// Early reject oversized files before copying bodies; the service keeps
-		// the authoritative check (plan §4.2).
+		// the authoritative check.
 		const oversized = uploads.find((file) => file.size > MAX_UPLOAD_BYTES);
 		if (oversized) {
 			return fail(400, { message: m.admin_media_err_too_big({ name: oversized.name }) });
@@ -153,8 +152,8 @@ export const actions: Actions = {
 		const result = await deleteFile(id);
 		if (result.kind === 'not-found') return fail(404, { message: m.admin_files_err_not_found() });
 		if (result.kind === 'mentioned') {
-			// A truncated scan is fail-closed, not a content hit (round-2
-			// confirm P3): surface the real reason instead of a false claim.
+			// A truncated scan is fail-closed, not a content hit: surface the real
+			// reason instead of a false claim.
 			return fail(409, {
 				message: result.scanTruncated
 					? m.admin_files_err_scan_cap()
@@ -170,7 +169,7 @@ export const actions: Actions = {
 			});
 		}
 		if (result.kind === 'blocked') {
-			// W7.5: the bucket cannot hard-delete and logical mode was not chosen.
+			// The bucket cannot hard-delete and logical mode was not chosen.
 			// 503 because it is a provider-configuration problem, not a bad request.
 			return fail(503, {
 				message:

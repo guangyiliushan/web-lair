@@ -6,13 +6,13 @@ import {
 	type SerializedTextNode
 } from 'lexical';
 
-/** 为 tag 文本生成稳定的背景色 */
+/** Generate a stable background colour for the tag text */
 function tagBgColor(text: string): string {
 	let hash = 0;
 	for (let i = 0; i < text.length; i++) {
 		hash = text.charCodeAt(i) + ((hash << 5) - hash);
 	}
-	// 使用柔和的色调范围（绿色系/蓝色系/紫色系）
+	// Soft tone ranges (green / blue / purple)
 	const palettes = [
 		[171, 214, 158], // 绿
 		[158, 190, 214], // 蓝
@@ -47,7 +47,7 @@ export class TagNode extends TextNode {
 	}
 
 	updateDOM(prev: TagNode, dom: HTMLElement): boolean {
-		// TagNode 文本可变，颜色随文本更新
+		// The TagNode text is mutable, so the colour follows text updates
 		dom.style.backgroundColor = tagBgColor(this.__text);
 		return false; // false = Lexical 不替我们更新 DOM，我们已处理
 	}
@@ -65,7 +65,7 @@ export class TagNode extends TextNode {
 					priority: 1
 				};
 			},
-			// 兼容旧导出的编辑器内部形态 span.rich-editor-tag
+			// Compatible with the legacy exported internal editor shape span.rich-editor-tag
 			span: (node) => {
 				const el = node as HTMLElement;
 				if (el.classList.contains('rich-editor-tag')) {
@@ -94,18 +94,18 @@ export class TagNode extends TextNode {
 		return $createTagNode(serialized.text ?? '');
 	}
 
-	// Tag 不可拆分（光标不能进入 tag 中间修改单个字符）
+	// A tag is not splittable (the cursor cannot enter it to edit a single character)
 	isToken(): boolean {
 		return true;
 	}
 }
 
-/** 创建 TagNode 的 $ 前缀工厂函数 */
+/** $-prefixed factory for TagNode */
 export function $createTagNode(text: string): TagNode {
 	return new TagNode(text);
 }
 
-/** 判断节点是否为 TagNode */
+/** Whether the node is a TagNode */
 export function $isTagNode(node: unknown): node is TagNode {
 	return node instanceof TagNode;
 }

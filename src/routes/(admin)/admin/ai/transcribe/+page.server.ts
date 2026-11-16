@@ -12,7 +12,7 @@ import { requestAddress } from '$lib/server/security/request-address';
 import { clientAddressKey } from '$lib/utils/cidr';
 import type { Actions, PageServerLoad } from './$types';
 
-/** Cost-bearing endpoint (W6.10): 20 transcriptions/hour, 40 per IP. */
+/** Cost-bearing endpoint: 20 transcriptions/hour, 40 per IP. */
 const TRANSCRIBE_RATE_LIMIT = { limit: 20, windowSeconds: 60 * 60 } as const;
 const TRANSCRIBE_IP_RATE_LIMIT = { limit: 40, windowSeconds: 60 * 60 } as const;
 
@@ -35,7 +35,7 @@ export const load: PageServerLoad = async () => {
 export const actions: Actions = {
 	transcribe: async ({ request, locals, getClientAddress, setHeaders }) => {
 		await requireAiUse();
-		// W6.10: fail-closed budget before reading or shipping the audio.
+		// Fail-closed budget before reading or shipping the audio.
 		const userId = locals.user?.id;
 		const address = clientAddressKey(requestAddress(getClientAddress));
 		const [accountRate, addressRate] = await Promise.all([

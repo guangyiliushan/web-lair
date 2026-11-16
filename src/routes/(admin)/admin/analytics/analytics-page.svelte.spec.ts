@@ -60,7 +60,7 @@ afterEach(() => {
 	overwriteGetLocale(() => 'en');
 });
 
-describe('admin analytics page (P6)', () => {
+describe('admin analytics page', () => {
 	it('renders page requests, exact 404s and the filtered page tables', async () => {
 		await mount(TRAFFIC);
 		const text = document.body.textContent ?? '';

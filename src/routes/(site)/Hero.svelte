@@ -9,10 +9,9 @@
 	import type { HeroField } from '$lib/config/home-hero';
 
 	/**
-	 * Hero view (W4.3/W4.5): copy resolved server-side from `home_hero` with
-	 * the locale -> site default -> messages fallback chain. The owner avatar
-	 * replaces the old dicebear placeholder; the social rail and the default
-	 * `hero_title` are single-source, so changing the owner name updates both.
+	 * Hero view: copy is resolved server-side from `home_hero` through the
+	 * locale → site default → messages chain. The social rail and the default
+	 * `hero_title` share one owner source, so renaming the owner updates both.
 	 */
 	let {
 		owner,
@@ -33,7 +32,7 @@
 	<div
 		class="z-10 container flex w-full max-w-5xl flex-1 flex-col-reverse items-center justify-center gap-8 sm:gap-10 lg:flex-row lg:gap-16"
 	>
-		<!-- 文字区域：左滑入 -->
+		<!-- Text area -->
 		<motion.div
 			class="flex min-w-0 flex-1 flex-col items-start"
 			initial={{ opacity: 0, x: -30 }}
@@ -56,7 +55,7 @@
 			<SocialRail {links} variant="hero" />
 		</motion.div>
 
-		<!-- 头像区域：弹性缩放入 -->
+		<!-- Avatar area -->
 		<motion.div
 			class="relative size-56 shrink-0 sm:size-72 md:size-80 lg:size-96"
 			initial={{ opacity: 0, scale: 0.6 }}
@@ -72,8 +71,7 @@
 		</motion.div>
 	</div>
 
-	<!-- 底部欢迎语：多断点响应式，shrink-0 固定于首屏底。D3=B 删除了
-	     指向 `#content` 的滚动指示器与占位正文。 -->
+	<!-- Bottom greeting: shrink-0 pins it to the bottom of the first screen. -->
 	<div
 		class="z-10 flex shrink-0 flex-col items-center gap-2 pt-2 pb-4 sm:gap-2.5 sm:pt-3 sm:pb-6 md:gap-3 md:pt-4 md:pb-8 lg:pt-6 lg:pb-10"
 	>

@@ -19,14 +19,14 @@ import {
 import type { Actions } from './$types';
 
 /**
- * Public subscription form (deploy batch D-2, §F #9). Double opt-in: the row
- * starts `pending` and only becomes `subscribed` after the confirm page POSTs
- * the token from the email (email scanners prefetch GET links, so confirmation
- * is deliberately not a GET side effect).
+ * Public subscription form. Double opt-in: the row starts `pending` and only
+ * becomes `subscribed` after the confirm page POSTs the token from the email
+ * (email scanners prefetch GET links, so confirmation is deliberately not a GET
+ * side effect).
  *
  * Anti-abuse: honeypot field, 10 attempts/hour per client address (fail-open),
- * and an identical success message for pending / already-subscribed so the
- * form cannot be used to enumerate subscribers.
+ * and an identical success message for pending / already-subscribed so the form
+ * cannot be used to enumerate subscribers.
  */
 const SUBSCRIBE_RATE_LIMIT = { limit: 10, windowSeconds: 60 * 60 } as const;
 const SUBSCRIBE_ADDRESS_LIMIT = { limit: 5, windowSeconds: 24 * 60 * 60 } as const;

@@ -12,7 +12,7 @@
 		tableToggleHeader
 	} from '$lib/components/markdown/editor/table-helpers';
 
-	// ── 图标 ──
+	// ── Icons ──
 	import IconRowInsertTop from '@tabler/icons-svelte-runes/icons/row-insert-top';
 	import IconRowInsertBottom from '@tabler/icons-svelte-runes/icons/row-insert-bottom';
 	import IconColumnInsertLeft from '@tabler/icons-svelte-runes/icons/column-insert-left';
@@ -26,14 +26,14 @@
 
 	let { editor }: Props = $props();
 
-	// ── 可见性与位置 ──
+	// ── Visibility and position ──
 	let visible = $state(false);
 	let top = $state(0);
 	let left = $state(0);
 
 	const MENU_HEIGHT = 36;
 
-	// ── 监听选区：光标进入表格单元格时显示菜单 ──
+	// ── Track the selection: show the menu when the cursor enters a table cell ──
 	$effect(() => {
 		if (!editor) return;
 
@@ -52,7 +52,7 @@
 				visible = false;
 				return;
 			}
-			// 定位在当前单元格上方居中；顶部空间不足时放到下方
+			// Anchor centred above the current cell; flip below when there is no room above
 			top = rect.top - MENU_HEIGHT - 6;
 			if (top < 8) {
 				top = rect.bottom + 6;

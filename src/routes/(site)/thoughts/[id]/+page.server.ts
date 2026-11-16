@@ -9,8 +9,8 @@ import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad } from './$types';
 
 /**
- * Public 思考 detail (C3): uuid-addressed, language-neutral; malformed and
- * missing ids both answer 404 (uuid guard first - never query the column).
+ * Public thought detail (`思考`): uuid-addressed, language-neutral; malformed and
+ * missing ids both answer 404 (uuid guard first — never query the column).
  */
 export const load: PageServerLoad = async ({ params }) => {
 	if (!isUuid(params.id)) throw error(404, 'Not found');

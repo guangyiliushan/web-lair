@@ -6,10 +6,10 @@ import { formatDate } from '$lib/utils/i18n';
 import type { PageServerLoad } from './$types';
 
 /**
- * Public 摘录 waterfall (C3): language-neutral rows, newest first. Streams as
- * a deferred promise so the page can show the ui-ux plan C1 Skeleton; dates
- * are formatted inside the continuation (the request's locale context is
- * still active there).
+ * Public quotes waterfall (`摘录`): language-neutral rows, newest first. Streams as
+ * a deferred promise so the page can render a skeleton immediately; dates are
+ * formatted inside the continuation, where the request's locale context is still
+ * active.
  */
 export const load: PageServerLoad = async () => {
 	const siteTz = await getOption('site.timezone');

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * W6 review P0: AI transcription is cost-bearing. The strict account + /64
+ * AI transcription is cost-bearing. The strict account + /64
  * buckets must reject before the audio is read or shipped to whisper.
  */
 const mocks = vi.hoisted(() => ({

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the admin 摘录 actions (C3): the P2 contract holds -
+ * Route-level tests for the admin 摘录 (quotes) actions: the contract holds -
  * requireAdminRole runs first for all three, malformed ids never reach the
  * uuid column, unknown ids answer 404 through the `returning` probe, and the
  * create payload trims + nulls empty optional fields. The db module is

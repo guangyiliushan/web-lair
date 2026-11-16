@@ -14,14 +14,10 @@ import type { Actions, PageServerLoad } from './$types';
 const POLICY_JOBS = ['links.check', 'links.prune'] as const;
 
 /**
- * Public friends page (M3 / links plan §5.1-5.2): the three zones read from
- * the real registry, the application form posts to this route, and the
- * "our link info" block reads `site.info`. `/admin/friends` is owned by M1
- * and is not touched here.
- *
- * The policy has to load before the query because `publicBannedList` decides
- * whether the ban wall is published at all; everything else runs in parallel.
- * The policy text may only promise scheduled checks/pruning that actually
+ * Public friends page. Three zones read from the real registry, the application
+ * form posts here, and the "our link info" block reads `site.info`. The policy
+ * loads before the friend query because `publicBannedList` decides whether the ban
+ * wall is published; the policy text may only promise checks and pruning that
  * exist, so the live `job_schedules` rows are part of the payload.
  */
 export const load: PageServerLoad = async () => {

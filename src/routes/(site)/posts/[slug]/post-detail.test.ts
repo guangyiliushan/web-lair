@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Route-level tests for the posts/[slug] load (P3-b): the slug fallback
+ * The posts/[slug] load: the slug fallback
  * chain. A retired slug resolves through slug_trackers to the single 301
  * redirect (one hop — trackers point at the row id); an invisible, missing
  * or self-referencing target is a plain 404, and the missing-language hint
  * keeps its behaviour when no tracker matches. The db module is mocked with
- * a queue of select results (P1.1 route-test pattern).
+ * a queue of select results.
  */
 const { dbMock, state, optionState } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -52,7 +52,7 @@ vi.mock('$lib/server/config/options-registry', () => ({
 }));
 vi.mock('$lib/server/services/comment-render', () => ({
 	// Slug-fallback tests do not exercise the thread read path; the route only
-	// needs the rendered pair (comment P3b entry).
+	// needs the rendered pair.
 	renderDiscussion: vi.fn(async () => ({
 		html: '',
 		discussion: { roots: [], orphans: [], visibleCount: 0, orphanCount: 0, truncated: false }
@@ -158,7 +158,7 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		]);
 	});
 
-	it('closes the composer but keeps existing approved comments when comments are off (W6.1)', async () => {
+	it('closes the composer but keeps existing approved comments when comments are off', async () => {
 		optionState.commentsEnabled = false;
 		state.selectResults = [
 			[{ ...postRow, allowComment: true }],
@@ -178,11 +178,11 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		};
 		expect(data.viewer.canComment).toBe(false);
 		expect(data.viewer.commentsClosed).toBe(true);
-		// Existing approved rows stay readable after the switch-off (C1).
+		// Existing approved rows stay readable after the switch-off.
 		expect(data.discussion).toEqual(threads);
 	});
 
-	it('closes the composer and the empty thread when comments are off site-wide (W6.1)', async () => {
+	it('closes the composer and the empty thread when comments are off site-wide', async () => {
 		optionState.commentsEnabled = false;
 		state.selectResults = [
 			[{ ...postRow, allowComment: true }],
@@ -197,7 +197,7 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		expect(data.discussion).toBeNull();
 	});
 
-	it('keeps the composer when the site and the post both allow comments (W6.1)', async () => {
+	it('keeps the composer when the site and the post both allow comments', async () => {
 		state.selectResults = [
 			[{ ...postRow, allowComment: true }],
 			[{ lang: 'en', slug: 'current-slug' }]
@@ -208,7 +208,7 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		expect(data.viewer.canComment).toBe(true);
 	});
 
-	it('lets the per-post switch close comments under a global on (W6.1)', async () => {
+	it('lets the per-post switch close comments under a global on', async () => {
 		state.selectResults = [
 			[{ ...postRow, allowComment: false }],
 			[{ lang: 'en', slug: 'current-slug' }]
@@ -381,7 +381,7 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		expect(selectMock).toHaveBeenCalledTimes(3);
 	});
 
-	it('preserves the query string on the 301 (review finding)', async () => {
+	it('preserves the query string on the 301', async () => {
 		state.selectResults = [[], [{ targetId: 'post-1' }], [{ slug: 'current-slug' }]];
 
 		await expect(load(makeEvent('old-slug', '?utm_source=newsletter'))).rejects.toMatchObject({
@@ -411,7 +411,7 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		});
 	});
 
-	it('sorts and dedupes the available-languages hint (review finding)', async () => {
+	it('sorts and dedupes the available-languages hint', async () => {
 		state.selectResults = [
 			[],
 			[],
@@ -439,7 +439,7 @@ describe('posts/[slug] load — slug fallback chain', () => {
 		});
 	});
 
-	it('pins the SQL guards on every query of the fallback chain (review finding)', async () => {
+	it('pins the SQL guards on every query of the fallback chain', async () => {
 		// Direct hit: main query + siblings both carry locale + visibility guards.
 		state.selectResults = [[postRow], [{ lang: 'en', slug: 'current-slug' }]];
 		await load(makeEvent('current-slug'));

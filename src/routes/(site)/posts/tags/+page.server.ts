@@ -6,7 +6,7 @@ import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import type { PageServerLoad } from './$types';
 
 /**
- * Tags index (P3-b): tags that carry at least one visible post in the URL
+ * Tags index: tags that carry at least one visible post in the URL
  * locale, most used first. Empty tags are not linked (an index of reachable
  * content — the tag page stays reachable by its own URL).
  */

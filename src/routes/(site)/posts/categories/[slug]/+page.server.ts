@@ -38,8 +38,7 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	if (!cat) throw error(404, 'Category not found');
 
-	// ── Fetch visible posts for this locale (P3-b: locale filter + the ──
-	// shared visibility predicate replace the published-only filter).
+	// ── Fetch visible posts for this locale (locale filter + visibility predicate) ──
 	const postRows = await db
 		.select({
 			id: posts.id,
@@ -51,7 +50,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		.where(and(eq(posts.categoryId, cat.id), eq(posts.lang, lang), visiblePostCondition(now)))
 		.orderBy(desc(posts.createdAt));
 
-	// ── Tags per post (post_tags replaced the posts.tags array in P1) ──
+	// ── Tags per post (via the post_tags join table) ──
 	const postIds = postRows.map((p) => p.id);
 	const tagRows = postIds.length
 		? await db
@@ -60,9 +59,8 @@ export const load: PageServerLoad = async ({ params }) => {
 				.innerJoin(tags, eq(postTags.tagId, tags.id))
 				.where(inArray(postTags.postId, postIds))
 		: [];
-	// Keyed by tag id: same-name tags with different slugs are distinct rows
-	// and must stay distinct chips (P3-b review finding). The stored slug is
-	// the link identity (§9.4 allows hand-edited slugs).
+	// Keyed by tag id: same-name tags with different slugs are distinct rows and
+	// must stay distinct chips. The stored slug is the link identity (hand-editable).
 	const tagMeta = new Map<string, { name: string; slug: string }>();
 	const tagIdsByPost = new Map<string, string[]>();
 	for (const row of tagRows) {
@@ -82,7 +80,7 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	// ── Group by year ──
 	// Year comes from the raw createdAt, not the display string: `new Date('Mar 1')`
-	// silently resolves to 2001 (P1.1 review - every group showed as 2001).
+	// silently resolves to 2001, collapsing every group into one year.
 	const byYear = new Map<number, CategoryPostItem[]>();
 	assembled.forEach((item, index) => {
 		const createdAt = postRows[index].createdAt;

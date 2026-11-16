@@ -13,7 +13,7 @@ import { warnOnce } from './plugin-warnings';
  * sanitized tree and validated locally, so running last does not reopen an
  * injection path.
  *
- * - `## 标题 {#custom-id}` (ATX tail, whitespace before `{`, valid id chars)
+ * - `## Some heading {#custom-id}` (ATX tail, whitespace before `{`, valid id chars)
  *   sets the custom id and keeps the heading text clean
  * - otherwise the id is the auto slug: NFKC → strip punctuation (Unicode P,
  *   per spec wording) → whitespace runs to `-`; duplicates get `-2`, `-3`, …

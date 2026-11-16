@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Route-level tests for the tags index (P3-b). The db module is mocked with
+ * The tags index. The db module is mocked with
  * a queue of select results; the posts JOIN condition is inspected through
  * drizzle's own dialect so the locale filter and the shared visibility
  * predicate cannot silently change.
@@ -64,7 +64,7 @@ describe('tags index', () => {
 		]);
 
 		// The visibility predicate lives in the posts JOIN condition; find it
-		// by content so a join reorder cannot fake a failure (review finding).
+		// by content so a join reorder cannot fake a failure.
 		const postsJoin = state.joinArgs
 			.map((args) => dialect.sqlToQuery(args[1] as never))
 			.find((query) => query.sql.includes('"posts"."lang"'));

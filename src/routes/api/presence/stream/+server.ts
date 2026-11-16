@@ -9,28 +9,19 @@ import { clientAddressKey } from '$lib/utils/cidr';
 import { PRESENCE_KEEPALIVE_TICKS, PRESENCE_SNAPSHOT_MS, snapshotFor } from './snapshot';
 
 /**
- * Presence SSE stream (realtime batch R2, ledger §23 / plan §B): one
- * `text/event-stream` per tab — a snapshot every 5s plus a 15s comment
- * keepalive — feeding the reader badge / density strip and the admin
- * dashboard. Hand-rolled streaming Response; the SvelteKit routing docs name
- * server-sent events as the canonical `ReadableStream` use case.
- *
- * Status discipline (WHATWG §9.2): while streaming the response is ALWAYS
- * 200 — the spec makes any non-200 (or non-`text/event-stream`) a permanent
- * failure the browser never retries, so a dead cache degrades fields to null
- * inside the payload instead. The only deliberate non-200s are the 204s and
- * the two pre-stream rejects: `presence.enabled === false` → 204 (the
- * spec's stop-reconnecting signal) and HEAD → 204 (a bodyless probe must not
- * spin up a stream; kit 2.70 runs GET for HEAD unless a HEAD export exists).
- *
- * Scoping (register R-5/R-6): `?c=<uuid>` streams the content slice for
- * readers; the anonymous position dots go to admins always and to readers
- * only when `presence.readerDots` is on (default off) — a connect-time
- * option read, never per tick. Without `c` the stream is admin-only
- * (site/day/peak for the dashboard) — site-wide numbers are never public,
- * and a reader asking for them gets a 400. `locals.admin` comes from the
- * hooks (single source for the role check); bodies never leave the server
- * (dots are bucket indices, not tokens).
+ * Presence SSE stream: one `text/event-stream` per tab - a 5s snapshot plus a 15s
+ * comment keepalive - feeding the reader badge / density strip and the admin
+ * dashboard. Hand-rolled `ReadableStream`, which the SvelteKit routing docs name as
+ * the canonical SSE use case.
+ * Status discipline: while streaming the status is ALWAYS 200 - the Fetch standard
+ * makes any other status (or a different content type) a permanent failure the
+ * browser never retries, so a dead cache nulls fields inside the payload instead.
+ * The only deliberate 204s are `presence.enabled === false` (the stop-reconnecting
+ * signal) and HEAD, because kit 2.70 runs GET for HEAD unless a HEAD export exists.
+ * Scoping: `?c=<uuid>` streams the content slice for readers; position dots go to
+ * admins always and to readers only with `presence.readerDots` on - a connect-time
+ * read, never per tick. Without `c` the stream is admin-only (400 for a reader, as
+ * site-wide numbers are never public), and bodies never leave the server.
  */
 
 export const prerender = false;
@@ -39,7 +30,7 @@ export const prerender = false;
 export const HEAD: RequestHandler = () =>
 	new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
 
-/** Pre-stream connect budget (W6.10): 30 streams/min per IPv6-/64 address. */
+/** Pre-stream connect budget: 30 streams/min per IPv6-/64 address. */
 const PRESENCE_CONNECT_RATE_LIMIT = { limit: 30, windowSeconds: 60 } as const;
 
 export const GET: RequestHandler = async ({ url, request, locals, getClientAddress }) => {
@@ -84,8 +75,8 @@ export const GET: RequestHandler = async ({ url, request, locals, getClientAddre
 	if (candidate === null && !admin) return new Response(null, { status: 400 });
 
 	// Dots ride the admin view always; readers receive them only when the
-	// site turned `presence.readerDots` on (register F1/R-4). Connect-time
-	// read: one settings lookup per connection, never per tick.
+	// site turned `presence.readerDots` on. Connect-time read: one settings
+	// lookup per connection, never per tick.
 	let dots = admin;
 	if (!dots) {
 		let readerDotsOption = false;
@@ -138,9 +129,8 @@ export const GET: RequestHandler = async ({ url, request, locals, getClientAddre
 					// Defense layer, currently unreachable: the service swallows
 					// its own construction/store failures, so snapshotFor only
 					// rejects if a future change adds a bare await here. If it
-					// ever does, degrade THIS frame and keep the stream at 200
-					// — a 5xx-class failure would kill SSE for good (WHATWG
-					// §9.2 never retries a non-200).
+					// ever does, degrade THIS frame and keep the stream at 200 -
+					// a non-200 kills SSE for good, the browser never retries it.
 					if (!finished) {
 						const degraded =
 							candidate !== null ? { content: null } : { site: null, day: null, peak: null };

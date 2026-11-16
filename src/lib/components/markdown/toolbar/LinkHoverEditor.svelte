@@ -90,7 +90,7 @@
 		visible = true;
 	}
 
-	/** 创建模式(工具栏入口):光标/选区处浮出编辑态。 */
+	/** Create mode (toolbar entry): open the edit state at the cursor/selection. */
 	function openCreate(): void {
 		if (!editor) return;
 		const selection = window.getSelection();
@@ -99,7 +99,7 @@
 				? selection.getRangeAt(0).getBoundingClientRect()
 				: null;
 		if (!rect || (rect.width === 0 && rect.height === 0)) {
-			// 无可定位选区(如空文档):浮在编辑器顶部
+			// No positionable selection (e.g. an empty document): float at the top of the editor
 			const rootRect = editor.getRootElement()?.getBoundingClientRect();
 			if (!rootRect) return;
 			placeAbove(new DOMRect(rootRect.left + rootRect.width / 2, rootRect.top, 0, 0));

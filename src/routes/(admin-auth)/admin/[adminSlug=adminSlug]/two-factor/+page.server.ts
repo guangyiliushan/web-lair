@@ -20,7 +20,7 @@ type TwoFactorErrorCode = 'invalid_code' | 'expired' | 'locked' | 'generic';
  * better-auth 1.7.5 keeps neither message nor body for that call shape (probed:
  * `message === ''`, `body === {}`). Classification therefore keys off the
  * status string alone; invalid-code vs expired-challenge BOTH surface as
- * UNAUTHORIZED, so the presence of the challenge cookie decides (B3.1 review).
+ * UNAUTHORIZED, so the presence of the challenge cookie decides.
  */
 function classifyFailure(caught: APIError, hasChallengeCookie: boolean): TwoFactorErrorCode {
 	const status = String((caught as { status?: unknown }).status ?? '');

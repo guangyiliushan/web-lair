@@ -17,11 +17,10 @@ import { rateLimit } from '$lib/server/cache/store';
 import { requestAddress } from '$lib/server/security/request-address';
 
 /**
- * One-time bootstrap marker (W2.12 / decision T5-A). The `setup token must be
- * invalidated after first use` rule cannot be satisfied by an
- * `if (an admin exists) reject` guard alone: emptying the user table would make
- * the token valid again. A durable audit row survives that and is the receipt
- * of which token was consumed.
+ * One-time bootstrap marker. A `an admin already exists, so reject` guard alone
+ * cannot invalidate the token after first use: emptying the user table makes the
+ * token valid again. A durable audit row survives that and records which token
+ * was consumed.
  */
 async function setupAlreadyConsumed(): Promise<boolean> {
 	const [row] = await db
@@ -64,8 +63,8 @@ export const load: PageServerLoad = async () => {
 
 	return {
 		setupTokenConfigured: config.setupToken.length > 0,
-		// The token is one-time (W2.12): a completed bootstrap keeps the form
-		// closed even if the user table was emptied afterwards.
+		// A completed bootstrap keeps the form closed even if the user table was
+		// emptied afterwards.
 		setupConsumed: await setupAlreadyConsumed()
 	};
 };
@@ -128,9 +127,9 @@ export const actions: Actions = {
 
 		// signUpEmail returns { token: null } while requireEmailVerification is on.
 		// The session cookie itself comes from the sveltekitCookies plugin.
-		// B2 (ledger §4.22): create the site organization and make the owner its
-		// owner-member. Idempotent; failure is reported instead of continuing -
-		// without it every org-scoped permission check would deny the owner.
+		// Create the site organization and make the owner its owner-member.
+		// Idempotent; failure is reported instead of continuing - without it every
+		// org-scoped permission check would deny the owner.
 		try {
 			await ensureSiteOrganization(result.user.id);
 		} catch (caught) {
@@ -153,7 +152,7 @@ export const actions: Actions = {
 					tokenFingerprint: setupTokenFingerprint(formSetupToken),
 					ownerEmail: email
 				},
-				// Bootstrap metadata stays local (decision A2).
+				// Bootstrap metadata never leaves the server.
 				deliver: false
 			});
 		} catch (caught) {

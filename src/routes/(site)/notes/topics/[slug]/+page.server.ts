@@ -5,7 +5,7 @@ import { findTopicBySlug, listNotes, toNoteRow } from '$lib/server/services/note
 import { resolveTaxonomyDescription, resolveTaxonomyName } from '$lib/server/services/taxonomy';
 import type { PageServerLoad } from './$types';
 
-/** Topic page (N1): one curated topic's visible notes for this locale. */
+/** Topic page: one curated topic's visible notes for this locale. */
 export const load: PageServerLoad = async ({ params, url }) => {
 	const lang = getLocale();
 	const now = new Date();

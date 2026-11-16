@@ -40,12 +40,12 @@
 	} = $props();
 
 	/**
-	 * Pages editor (P5-2). md rows run the draft editor - the md editor is the
-	 * single source for title / description / content / slug, one `drafts`
-	 * payload per row; code / external rows keep the P2 metadata form.
-	 * Locale assembly contract (W1 Q3): the editor edits ONE locale at a time -
-	 * a switch flushes the live buffer into the map and remounts via
-	 * `editorEpoch`; saves merge the maps (active locale included).
+	 * Pages editor. md rows run the draft editor - the md editor is the single
+	 * source for title / description / content / slug, one `drafts` payload per row;
+	 * code / external rows keep the metadata form.
+	 * Locale assembly contract: the editor edits ONE locale at a time - a switch
+	 * flushes the live buffer into the map and remounts via `editorEpoch`; saves
+	 * merge the maps (active locale included).
 	 */
 
 	const AUTOSAVE_DEBOUNCE_MS = 2500;
@@ -53,7 +53,7 @@
 
 	/** Locale list for the draft editor's switcher (runtime order). */
 	const LOCALE_CODES = locales;
-	/** Locale list for the P2 metadata form (label objects). */
+	/** Locale list for the metadata form (label objects). */
 	const LOCALES = locales.map((code) => ({ code, label: localeLabels[code] }));
 
 	const editMode = $derived(data.page.editorMode);
@@ -95,7 +95,7 @@
 	let reauthUrl = $state<string | null>(null);
 	let flashTimer: ReturnType<typeof setTimeout> | null = null;
 
-	// P2 metadata form state (code / external rows).
+	// Metadata form state (code / external rows).
 	let saved = $state(false);
 
 	/**
@@ -190,9 +190,9 @@
 		titleMap = seedMap(draft?.title ?? row.title);
 		descMap = seedMap(draft?.description ?? row.description);
 		// Seed the working copy from the DRAFT when one exists, else from the
-		// PUBLISHED body (P5 e2e finding): an existing page opened for its
-		// first edit must carry its body - seeding only from the draft left
-		// the editor blank and the publish failed the content gate.
+		// PUBLISHED body: an existing page opened for its first edit must carry its
+		// body - seeding only from the draft left the editor blank and the publish
+		// failed the content gate.
 		contentMap = { ...(draft?.content ?? row.content ?? {}) };
 		slug = typeof draft?.slug === 'string' ? draft.slug : row.placeholder ? '' : row.slug;
 		activeLocale = chooseLocale();
@@ -211,8 +211,8 @@
 		lastSeen = snapshot;
 	}
 
-	// Initialize from the load data (intentional first apply; code rows keep
-	// the P2 form and never enter the draft state).
+	// Initialize from the load data (intentional first apply; code rows keep the
+	// metadata form and never enter the draft state).
 	if (untrack(() => editMode)) applyAll();
 
 	// Background refreshes (row-property saves, the first-save URL anchor)
@@ -233,14 +233,14 @@
 			draftId = null;
 			draftVersion = null;
 		}
-		// untrack (T16): the dirty test stringifies the whole payload - the
-		// effect must not re-run on every keystroke through that read.
+		// untrack: the dirty test stringifies the whole payload - the effect must
+		// not re-run on every keystroke through that read.
 		if (untrack(isDirty)) return; // keep the working copy; id state already tracks the save
-		// Non-dirty refresh path: kill any debounce armed against the vanished
-		// draft before re-seeding, else it would re-attach a phantom draft
-		// against the just-published row (P5 e2e finding). The DIRTY branch
-		// keeps its timer on purpose - re-saving the kept working copy as a
-		// fresh draft is exactly what it is for (four-review #2 refinement).
+		// Non-dirty refresh path: kill any debounce armed against the vanished draft
+		// before re-seeding, else it would re-attach a phantom draft against the
+		// just-published row. The DIRTY branch keeps its timer on purpose -
+		// re-saving the kept working copy as a fresh draft is exactly what it is
+		// for.
 		if (autosaveTimer) {
 			clearTimeout(autosaveTimer);
 			autosaveTimer = null;
@@ -409,10 +409,9 @@
 	async function onPublish() {
 		if (saveState === 'conflict' || publishing) return;
 		publishing = true;
-		// Kill the pending debounce (P5 e2e finding): a stale autosave that
-		// fires after the publish transaction deleted the draft would
-		// re-attach a fresh draft against the just-published row (phantom
-		// "unpublished changes").
+		// Kill the pending debounce: a stale autosave that fires after the publish
+		// transaction deleted the draft would re-attach a fresh draft against the
+		// just-published row (phantom "unpublished changes").
 		if (autosaveTimer) {
 			clearTimeout(autosaveTimer);
 			autosaveTimer = null;
@@ -432,7 +431,7 @@
 		}
 	}
 
-	/** Locale switch contract (W1 Q3): flush the live buffer, then remount. */
+	/** Locale switch contract: flush the live buffer, then remount. */
 	function switchLocale(next: string) {
 		if (next === activeLocale) return;
 		if (markdown !== '') contentMap[activeLocale] = markdown;
@@ -442,10 +441,9 @@
 		editorEpoch += 1;
 	}
 
-	/** Slug input canonicalization (T15): the ruled exact replacement -
-	 * lowercase, non-alphanumerics to hyphens, then the shared `normalizeSlug`
-	 * (hyphen collapse + edge trim). 17/17 vector parity with the retired
-	 * local implementation (E2 experiment, P5-5 rulings). */
+	/** Slug input canonicalization: lowercase, non-alphanumerics to hyphens, then
+	 * the shared `normalizeSlug` (hyphen collapse + edge trim) - the same vectors
+	 * the retired local implementation was probed with. */
 	function onSlugInput(e: Event) {
 		const raw = (e.currentTarget as HTMLInputElement).value;
 		slug = normalizeSlug(raw.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
@@ -843,9 +841,9 @@
 						use:enhance={propsHandler}
 						class="flex flex-col gap-5"
 					>
-						<!-- Live pageId (M4): new-mode state starts as '' (never
-						     null) - the `??` fallback only guards null, and an
-						     empty id is rejected server-side with a clean 400. -->
+						<!-- Live pageId: new-mode state starts as '' (never null) - the
+						     `??` fallback only guards null, and an empty id is rejected
+						     server-side with a clean 400. -->
 						<input type="hidden" name="id" value={pageId ?? data.page.id} />
 						<div class="flex flex-col gap-1.5">
 							<label for="props-icon" class="text-sm font-medium">{m.admin_pages_edit_icon()}</label
@@ -917,7 +915,7 @@
 		</Sheet.Portal>
 	</Sheet.Root>
 {:else}
-	<!-- code / external rows keep the P2 metadata form (unchanged shape) -->
+	<!-- code / external rows keep the metadata form (unchanged shape) -->
 	<div class="mx-auto flex w-full max-w-2xl flex-col gap-6">
 		{#if form?.error}
 			<div

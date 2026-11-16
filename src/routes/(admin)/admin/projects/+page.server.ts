@@ -25,13 +25,12 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Admin projects surface (plan §4, batch A): the real review queue replacing
- * the mockup. Load = tabs + counts + target list + the latest sync run +
- * streamed rows; actions cover the four-value state machine (single + bulk),
- * field edits (write-side URL scheme guard in the service), transactional
- * reordering, create, delete, the URL-import prefill and the target editor.
- * Same contract as the C3 admin pages: requireAdminRole first, uuid entry
- * guards, explicit 400s, unknown ids answer 404 through the service probe.
+ * Admin projects surface: the review queue. Load = tabs + counts + target list +
+ * the latest sync run + streamed rows; actions cover the four-value state machine
+ * (single + bulk), field edits (write-side URL scheme guard in the service),
+ * transactional reordering, create, delete, the URL-import prefill and the target
+ * editor. Same contract as the other admin pages: requireAdminRole first, uuid
+ * entry guards, explicit 400s, unknown ids answer 404 through the service probe.
  */
 export const load: PageServerLoad = async ({ url }) => {
 	await requireAdminRole();
@@ -157,8 +156,8 @@ function idsFrom(form: FormData): string[] {
 export const actions: Actions = {
 	sync: async () => {
 		await requireAdminRole();
-		// Scenario #1 (§0.1): no targets configured -> steer the admin to the
-		// target editor instead of queueing a guaranteed-empty run.
+		// No targets configured -> steer the admin to the target editor instead of
+		// queueing a guaranteed-empty run.
 		const targets = await getSyncTargets();
 		if (targets.length === 0) {
 			return fail(400, { error: m.admin_projects_err_no_targets() });

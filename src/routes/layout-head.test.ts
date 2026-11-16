@@ -2,15 +2,14 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * W5.3 acceptance on the root head: every page (home included - the home
- * route has no SeoHead) must carry the icon link with the version bust, the
- * manifest link, and og:site_name. The home page's `<head>` is the concrete
- * curl target in G5, so this lives in the root layout rather than SeoHead;
- * the source guard keeps the three tags together.
+ * Guards the root `<head>`: every page (home included — it has no `SeoHead`)
+ * carries the icon link with its version bust, the manifest link and
+ * `og:site_name`. All three live in the root layout so they cannot drift apart
+ * between routes.
  */
 const LAYOUT = readFileSync(new URL('./+layout.svelte', import.meta.url), 'utf8');
 
-describe('root layout head (W5.3)', () => {
+describe('root layout head', () => {
 	it('derives the icon href from site.icon with the bundled fallback', () => {
 		expect(LAYOUT).toContain('siteIconHref(data.siteIcon, favicon)');
 		expect(LAYOUT).toContain('<link rel="icon" href={iconHref} />');

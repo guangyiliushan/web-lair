@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Route-level tests for the notes list page (N1 + review round 1): the
+ * The notes list page: the
  * locale + visibility predicates have teeth, locked rows never ship derived
  * content, ordering/limit/offset are observed (not just the WHERE text),
  * the years facet orders by its output alias (the real-PG DISTINCT trap),
@@ -164,12 +164,12 @@ describe('notes list page', () => {
 		expect(yearsOrder).toHaveLength(1);
 		const yearsSql = dialect.sqlToQuery(yearsOrder[0] as never).sql;
 		expect(yearsSql).toBe('"year" desc');
-		// The re-rendered parameterized expression would bind $site twice and
-		// make PostgreSQL reject the whole query (real-PG review finding).
+		// The re-rendered parameterized expression would bind $site twice, and
+		// PostgreSQL then rejects the whole query.
 		expect(yearsSql).not.toContain('coalesce');
 		// The alias itself is load-bearing: drizzle only emits ` as "year"`
 		// for SQL.Aliased, and without it ORDER BY references a column that
-		// does not exist in the select list (real-PG 42703, review round 2).
+		// does not exist in the select list (PostgreSQL 42703).
 		const projection = state.selectDistinctArgs[0]?.[0] as { year?: { fieldAlias?: string } };
 		expect(projection.year?.fieldAlias).toBe('year');
 	});

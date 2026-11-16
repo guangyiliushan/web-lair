@@ -151,7 +151,8 @@ function noteDraftUpdateSet(payload: NormalizedNoteDraft) {
 	};
 }
 
-/** The "hash 不变不写" comparison basis (§9.10) - payload vs stored row. */
+/** The "don't write when the hash is unchanged" comparison basis (§9.10) - payload vs
+ * stored row. */
 export function noteDraftHash(payload: NoteDraftPayload): string {
 	return hashNormalized(normalizeNotePayload(payload));
 }
@@ -374,7 +375,7 @@ async function updateExistingNoteDraft(
 ): Promise<SaveNoteDraftResult> {
 	const noteId = draft.refId ?? '';
 
-	// "hash 不变不写" - identical payloads never bump the version.
+	// "don't write when the hash is unchanged" - identical payloads never bump the version.
 	if (hashRow(draft) === hashNormalized(payload)) {
 		return { kind: 'unchanged', draftId: draft.id, version: draft.version, noteId };
 	}
@@ -682,7 +683,8 @@ export type NoteRowActionResult =
 	{ kind: 'ok' } | { kind: 'not-found' } | { kind: 'invalid'; message: string };
 
 /**
- * Status actions: 转 private / 入 trash / trash 恢复. Restore returns the
+ * Status actions: move to private / send to trash / restore from trash. Restore returns
+ * the
  * row to `published` when it had been public before (publishedAt is the only
  * durable trace of "was public"), otherwise to `draft` - notes keep no
  * status history (N1 decision).

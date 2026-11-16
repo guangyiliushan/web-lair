@@ -12,29 +12,11 @@ import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import type { RequestHandler } from './$types';
 
 /**
- * Single-file sitemap (P3-b, ledger §22; notes + topics joined in the N1
- * seam): `/` + every visible post + every feedable note (visible AND not
- * password-gated - notes plan §3.3 exclusion face) + every topic page, each
- * language as its own <url>. Post/note alternates come from the published
- * versions of their translation group (self included, slugs per language);
- * topic pages are entity pages, so their alternates mirror SeoHead's
- * same-path-per-locale default. No changefreq/priority; lastmod only from a
- * real updated_at (topics carry no timestamp column). Tags/categories stay
- * out (thin pages) and /posts + /timeline wait on a follow-up decision
- * (registered); the micro-content source plugs in here in its own batch (the
- * pages source joined in P1b, 2026-10-03).
- *
- * Ordering is pinned (posts by lang/slug, then notes by lang/slug, then
- * topics by slug with locales in a fixed order, then pages by slug with their
- * content locales in fixed order) so the body - and therefore
- * the strong ETag - is byte-stable across requests (review finding).
- *
- * Caching (R1-Q2): strong ETag = representation hash, Last-Modified = the
- * newest included updated_at, 304 on a matching strong If-None-Match
- * (list/weak comparison per RFC 9110 §13.1.2). If-Modified-Since is
- * intentionally not evaluated - Last-Modified is informational
- * (max(updated_at) is not consistent under lazy visibility; second review
- * round 2026-10-02).
+ * Single-file sitemap: home + visible posts + feedable notes (visible, not
+ * password-gated) + topic and page entities, one `<url>` per language. No
+ * changefreq/priority; `lastmod` only from a real `updated_at`. Pinned ordering
+ * keeps the body and its strong ETag byte-stable; only If-None-Match is
+ * evaluated — `Last-Modified` is informational.
  */
 export const GET: RequestHandler = async ({ request, url }) => {
 	const origin = getPublicOrigin() ?? url.origin;
@@ -67,7 +49,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
 	const localeOrder = locales as readonly string[];
 
-	/** Published versions per translation group drive the alternates sets. */
+	/** Published versions per translation group drive the alternates sets (self included). */
 	function alternatesOf(
 		rows: { lang: string; slug: string; translationGroup: string }[],
 		pathFor: (slug: string) => string
@@ -103,8 +85,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
 	let latest: Date | null = null;
 
 	for (const row of postRows) {
-		// Unknown locales are skipped, mirroring the alternates filter above -
-		// only the DB CHECK protects this otherwise (second review round).
+		// Unknown locales are skipped, mirroring the alternates filter; only the DB
+		// CHECK guards this otherwise.
 		if (!localeOrder.includes(row.lang)) continue;
 		urls.push({
 			loc: `${origin}${localizeHref(`/posts/${row.slug}`, { locale: row.lang as (typeof locales)[number] })}`,
@@ -126,8 +108,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
 	for (const topic of topicRows) {
 		const topicPath = `/notes/topics/${topic.slug}`;
-		// Entity pages: SeoHead defaults every locale to the same path, so the
-		// sitemap mirrors that with a same-path alternate set per locale.
+		// Entity pages: SeoHead gives every locale the same path, so the sitemap
+		// mirrors that with a same-path alternate set per locale.
 		const alternates = localeOrder.map((lang) => ({
 			hreflang: lang,
 			href: `${origin}${localizeHref(topicPath, { locale: lang as (typeof locales)[number] })}`
@@ -140,9 +122,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		}
 	}
 
-	// Pages source (P1b, 2026-10-03 ruling): one <loc> per content locale with
-	// a same-path alternate set (self included) - mirrors the route's hreflang
-	// exactly. Slug order + fixed locale order keep the body byte-stable.
+	// Pages: one `<loc>` per content locale with a same-path alternate set (self
+	// included), mirroring the route's hreflang. Query order keeps the body stable.
 	for (const row of pageRows) {
 		const pagePath = `/${row.slug}`;
 		const pageLocales = contentLocales(row.content);

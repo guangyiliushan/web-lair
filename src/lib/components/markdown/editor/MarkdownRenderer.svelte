@@ -23,8 +23,8 @@
 		children
 	}: MarkdownRendererProps = $props();
 
-	// 优先使用预渲染 HTML（SSR 场景由 +page.server.ts 传入）
-	// 否则客户端同步渲染（无 Shiki 高亮）
+	// Prefer the pre-rendered HTML (passed in by +page.server.ts on SSR)
+	// otherwise render synchronously on the client (no Shiki highlighting)
 	const renderedHtml = $derived(htmlProp ?? (source ? renderMarkdownToHtmlSync(source) : ''));
 	const isEmpty = $derived(!renderedHtml);
 

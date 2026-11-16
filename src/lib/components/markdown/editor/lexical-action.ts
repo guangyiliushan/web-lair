@@ -48,31 +48,31 @@ import {
 } from '$lib/components/markdown/editor/markdown-transformers';
 
 export interface LexicalActionOptions {
-	/** 初始 markdown（当无 editorState 时使用） */
+	/** Initial markdown (used when there is no editorState) */
 	initialMarkdown?: string;
-	/** 是否可编辑 */
+	/** Whether the editor is editable */
 	editable: boolean;
-	/** 占位文本 */
+	/** Placeholder text */
 	placeholder: string;
-	/** 自动聚焦 */
+	/** Focus the editor on mount */
 	autofocus: boolean;
-	/** 自定义 transformer（覆盖默认 EDITOR_TRANSFORMERS） */
+	/** Custom transformers (override the default EDITOR_TRANSFORMERS) */
 	transformers?: Transformer[];
-	/** 内容变化回调 */
+	/** Content-change callback */
 	onChange?: (detail: {
 		editorStateJson: string;
 		markdown: string;
 		plainText: string;
 		isEmpty: boolean;
 	}) => void;
-	/** 将 editor 实例抛出给 Svelte $state */
+	/** Exposes the editor instance to a Svelte $state */
 	onEditorReady?: (editor: LexicalEditor) => void;
 	/** Paste/drop image uploads (3a3): status for the editor chrome. */
 	onUploadStatus?: (status: EditorUploadStatus) => void;
 }
 
 /**
- * Svelte 5 Action：将 HTMLElement 绑定为 Lexical 编辑器。
+ * Svelte 5 action: binds an HTMLElement as a Lexical editor.
  *
  * @example
  * ```svelte
@@ -80,11 +80,11 @@ export interface LexicalActionOptions {
  * ```
  */
 export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOptions) {
-	// 可变引用容器：闭包始终读取 current，update 时只更新 current
+	// Mutable reference container: closures always read `current`, update only swaps it
 	const optionsRef = { current: initialOptions };
 
-	// 注意：不要在 createEditor 中设置 editable，否则后续 setEditable(true) 会是 no-op，
-	// 导致 contenteditable 属性不会被写入 DOM，编辑器无法输入。
+	// Do not set editable inside createEditor: a later setEditable(true) then becomes a
+	// no-op, the contenteditable attribute never reaches the DOM and the editor cannot be typed into.
 	const editor: LexicalEditor = createEditor({
 		namespace: 'markdown-editor',
 		nodes: EDITOR_NODES,
@@ -92,44 +92,45 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 		onError: (error: Error) => console.error('Lexical editor error:', error)
 	});
 
-	// 挂载 DOM
+	// Attach the DOM
 	editor.setRootElement(node);
 
-	// 必须在 registerRichText 之前调用 setEditable，否则 RichTextPlugin
-	// 初始化时看不到 editable=true，不会设置 contenteditable 属性。
+	// setEditable must run before registerRichText, otherwise RichTextPlugin initialises
+	// without seeing editable=true and never sets the contenteditable attribute.
 	editor.setEditable(optionsRef.current.editable);
 
-	// 注册插件并保存清理函数
+	// Register the plugins and keep their cleanup functions
 	const unregisterRichText = registerRichText(editor);
 
-	// 安全网：确保 contenteditable 属性已写入 DOM。
-	// 某些 Lexical 版本中 setEditable 不会触发 DOM 属性更新，
-	// 因此手动设置作为后备方案。
+	// Safety net: make sure the contenteditable attribute reached the DOM.
+	// Some Lexical versions do not update it from setEditable, so set it manually as a fallback.
 	if (optionsRef.current.editable && !node.hasAttribute('contenteditable')) {
 		node.setAttribute('contenteditable', 'true');
 	}
 
-	// 注册 Markdown 快捷输入（# / > / - / ``` / 1. / <tag> 等自动转换）
+	// Register markdown shortcut input (#, >, -, ```, 1., <tag> … auto-convert)
 	const transformers = optionsRef.current.transformers ?? EDITOR_TRANSFORMERS;
 	const unregisterMarkdownShortcuts = registerMarkdownShortcuts(editor, transformers);
 
-	// 注册历史
+	// Register history
 	const unregisterHistory = registerHistory(editor, createEmptyHistoryState(), 300);
 
-	// 注册列表命令（无序/有序/待办）。缺失时工具栏列表按钮是 no-op，
-	// 列表无法创建。registerCheckList 额外注册待办勾选/点击切换。
+	// Register the list commands (unordered/ordered/checklist). Without them the toolbar
+	// list buttons are no-ops and no list can be created. registerCheckList additionally
+	// wires checklist ticking and click toggling.
 	const unregisterList = registerList(editor);
 	const unregisterCheckList = registerCheckList(editor);
 
-	// 注册表格命令监听（INSERT_TABLE_COMMAND 等）与完整性 transform，
-	// 再单独注册表格选区观察器（单元格选区/Tab 导航/方向键移动）。
-	// 顺序要求：selection observer 必须在 registerTablePlugin 之后（见其文档注释）。
+	// Register the table command listeners (INSERT_TABLE_COMMAND and friends) and the
+	// integrity transform, then the table selection observer separately (cell selection,
+	// Tab navigation, arrow-key movement). Order matters: the selection observer must be
+	// registered after registerTablePlugin (see its doc comment).
 	const unregisterTablePlugin = registerTablePlugin(editor);
 	const unregisterTableSelection = registerTableSelectionObserver(editor);
 
-	// 注册水平分割线命令。Lexical 0.46 将该命令监听器移入 HorizontalRuleExtension，
-	// 经典 nodes 模式（createEditor({nodes})）不会自动执行 extension.register，
-	// 需手动注册，否则分割线按钮是 no-op。
+	// Register the horizontal-rule command. Lexical 0.46 moved this listener into
+	// HorizontalRuleExtension, and the classic nodes mode (createEditor({nodes})) does not
+	// run extension.register, so register it by hand or the rule button is a no-op.
 	const unregisterHorizontalRule = editor.registerCommand(
 		INSERT_HORIZONTAL_RULE_COMMAND,
 		() => {
@@ -141,8 +142,8 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 		COMMAND_PRIORITY_EDITOR
 	);
 
-	// 键盘可选中节点（ImageNode 等 DecoratorNode）的选中态视觉反馈：
-	// 核心不为 NodeSelection 加 CSS 类，这里标记 data-selected 供样式呈现。
+	// Selection feedback for keyboard-selectable nodes (ImageNode and other DecoratorNodes):
+	// the core adds no CSS class for NodeSelection, so mark data-selected for the styles.
 	let markedSelectionEls: HTMLElement[] = [];
 	const unregisterSelectionVisual = editor.registerUpdateListener(({ editorState }) => {
 		const selectedKeys = new Set<string>();
@@ -172,7 +173,7 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 		optionsRef.current.onUploadStatus?.(status)
 	);
 
-	// 加载初始内容
+	// Load the initial content
 	editor.update(
 		() => {
 			const root = $getRoot();
@@ -202,7 +203,7 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 		{ discrete: true }
 	);
 
-	// 注册更新监听——闭包通过 optionsRef.current 读取最新 options
+	// Register the update listener — closures read the latest options via optionsRef.current
 	const unregisterUpdate = editor.registerUpdateListener(({ editorState }) => {
 		let markdown = '';
 		let plainText = '';
@@ -216,7 +217,7 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 				children[0].getType() === 'paragraph' &&
 				children[0].getTextContent().trim() === '';
 		});
-		// 始终读取最新的 onChange 回调
+		// Always read the latest onChange callback
 		optionsRef.current.onChange?.({
 			editorStateJson: JSON.stringify(editorState.toJSON()),
 			markdown,
@@ -225,15 +226,15 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 		});
 	});
 
-	// 抛出 editor 实例
+	// Hand the editor instance out
 	optionsRef.current.onEditorReady?.(editor);
 
-	// 自动聚焦
+	// Autofocus
 	if (optionsRef.current.autofocus) {
 		setTimeout(() => node.focus(), 0);
 	}
 
-	// 焦点事件代理
+	// Focus event proxy
 	const focusListener = () => node.dispatchEvent(new CustomEvent('lexfocus'));
 	const blurListener = () => node.dispatchEvent(new CustomEvent('lexblur'));
 	node.addEventListener('focus', focusListener, true);
@@ -241,12 +242,12 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 
 	return {
 		update(newOptions: LexicalActionOptions) {
-			// 更新引用容器——闭包自动读取最新值
+			// Swap the reference container — closures pick the new value up automatically
 			optionsRef.current = newOptions;
-			// 同步 editable 状态（不重建 editor）
+			// Sync the editable state (without recreating the editor)
 			if (editor.isEditable() !== newOptions.editable) {
 				editor.setEditable(newOptions.editable);
-				// 同步 contenteditable DOM 属性
+				// Sync the contenteditable DOM attribute
 				if (newOptions.editable) {
 					node.setAttribute('contenteditable', 'true');
 				} else {
@@ -274,7 +275,7 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 	};
 }
 
-// ── 导出供 toolbar 使用 ──
+// ── Re-exports for the toolbar ──
 export {
 	SELECTION_CHANGE_COMMAND,
 	CLEAR_EDITOR_COMMAND,
@@ -287,9 +288,9 @@ export {
 };
 export type { LexicalEditor, TextFormatType, LexicalCommand, HeadingTagType };
 
-// ── 重导出 $ 前缀函数（供嵌套编辑器 .svelte 文件使用）──
-// Svelte 5 不允许 .svelte 文件中直接 import $ 前缀的函数
-// 通过别名重导出，使嵌套编辑器组件可以安全引用
+// ── Re-export the $-prefixed helpers (for nested-editor .svelte files) ──
+// Svelte 5 forbids importing $-prefixed functions inside .svelte files, so they are
+// re-exported under aliases that nested editor components can safely reference
 export {
 	$getRoot as getLexicalRoot,
 	$createParagraphNode as createLexicalParagraph,
@@ -299,8 +300,8 @@ export {
 	$getNearestNodeFromDOMNode as getLexicalNearestNodeFromDOM
 } from 'lexical';
 
-// 来自 alert-node.ts 的 $ 前缀函数也需要别名
+// $-prefixed helpers from alert-node.ts need aliases here as well
 export { $isAlertNode as isAlertNode };
 
-// 编辑器完整 transformer 列表（含 Tag/Alert），供 MarkdownEditor 等使用
+// Full editor transformer list (Tag/Alert included) for MarkdownEditor and friends
 export { EDITOR_TRANSFORMERS };

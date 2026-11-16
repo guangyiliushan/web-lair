@@ -37,9 +37,9 @@
 		<p class="py-10 text-sm text-muted-foreground">{m.photos_map_empty()}</p>
 	{:else}
 		<div role="region" aria-labelledby="photos-map-heading">
-			<!-- A WebGL-less browser throws while the map mounts (review round
-			     1): the boundary swaps in a plain link list instead of taking
-			     the whole route down. -->
+			<!-- A WebGL-less browser throws while the map mounts: the boundary
+			     swaps in a plain link list instead of taking the whole route
+			     down. -->
 			<svelte:boundary>
 				<PhotosMap photos={data.photos} />
 				{#snippet failed()}

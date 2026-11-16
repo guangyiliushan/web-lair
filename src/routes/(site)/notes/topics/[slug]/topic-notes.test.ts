@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the notes topic page (N1 + review round 1): unknown
+ * The notes topic page: unknown
  * topics 404, known ones render their visible notes - with the topic passed
  * pre-resolved (no duplicate slug lookup) and facets skipped (three queries
  * total).
@@ -104,12 +104,11 @@ describe('notes topic page', () => {
 		});
 		expect(data.notes).toHaveLength(1);
 		expect(data.total).toBe(1);
-		// Topic lookup + count + rows only: facets are skipped and the slug is
-		// not resolved a second time inside listNotes (review finding).
+		// Topic lookup + count + rows only: facets are skipped and the slug is not
+		// resolved a second time inside listNotes.
 		expect((dbMock.select as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(3);
-		// Facets are skipped entirely: the years query (selectDistinct) must
-		// never fire on a topic page (review round 2 - the mutation used to
-		// crash with a missing mock instead of failing this assertion).
+		// Facets are skipped entirely: the years query (selectDistinct) must never
+		// fire on a topic page.
 		expect((dbMock.selectDistinct as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
 	});
 });
