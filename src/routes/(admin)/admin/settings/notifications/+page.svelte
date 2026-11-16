@@ -118,6 +118,19 @@
 	// deriving it from the page-wide form slot meant any unrelated submission
 	// (a toggle, a retry) replaced page.form and silently wiped it mid-copy.
 	let revealedSecret = $state<string | null>(null);
+	// M6 P5: channel preferences, Bark status and the notification log are
+	// independent surfaces with their own pending/notice state, so a resend
+	// cannot overwrite a preferences message.
+	let prefsPending = $state(false);
+	let prefsNotice = $state<{ kind: 'ok' | 'error'; text: string } | null>(null);
+	let resendPendingId = $state<string | null>(null);
+	let logNotice = $state<{ kind: 'ok' | 'error'; text: string } | null>(null);
+	// Preference groups in display order; `key` matches the option's JSON keys.
+	const preferenceGroups = [
+		{ key: 'comment' as const, label: m.admin_settings_notification_group_comment() },
+		{ key: 'job' as const, label: m.admin_settings_notification_group_job() },
+		{ key: 'ops' as const, label: m.admin_settings_notification_group_ops() }
+	];
 	let copyState = $state<'idle' | 'ok' | 'failed'>('idle');
 	// A failure whose dialog session moved on is surfaced here instead of
 	// being dropped silently (review round-2 SY-UI-06).
@@ -573,15 +586,202 @@
 				</div>
 			</section>
 
-			<!-- M6 human channels: static capability note, deliberately no controls
-			     (N1/N11) - the page must not claim Bark or admin email exists yet. -->
+			<!-- M6 P5: human channels. Preferences are owner-only (decision N8);
+			     Bark credentials stay env-only in this release (P5-WAITING). -->
 			<section>
-				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_m6_title()}</h3>
-				<div class="space-y-2 rounded-lg border p-4 text-xs text-muted-foreground">
-					<p>{m.admin_settings_notification_m6_desc()}</p>
-					<p>{m.admin_settings_notification_m6_email()}</p>
-					<p>{m.admin_settings_notification_m6_bark()}</p>
-					<p>{m.admin_settings_notification_m6_note()}</p>
+				<h3 class="mb-4 text-sm font-semibold">
+					{m.admin_settings_notification_prefs_title()}
+				</h3>
+				{#if !data.notificationPreferencesEditable}
+					<p class="-mt-3 mb-3 text-xs text-muted-foreground">
+						{m.admin_settings_common_owner_only()}
+					</p>
+				{/if}
+				<form
+					method="POST"
+					action="?/saveNotificationPreferences"
+					class="space-y-4 rounded-lg border p-4"
+					use:enhance={() => {
+						prefsPending = true;
+						prefsNotice = null;
+						return async ({ result, update }) => {
+							await update();
+							prefsPending = false;
+							if (result.type === 'success') {
+								const message = (result.data as { message?: unknown } | undefined)?.message;
+								prefsNotice = {
+									kind: 'ok',
+									text: typeof message === 'string' ? message : ''
+								};
+							} else if (result.type === 'failure') {
+								prefsNotice = {
+									kind: 'error',
+									text: failureMessage(result.data) ?? ''
+								};
+							}
+						};
+					}}
+				>
+					<p class="text-xs text-muted-foreground">
+						{m.admin_settings_notification_prefs_desc()}
+					</p>
+					<div class="space-y-3">
+						{#each preferenceGroups as group (group.key)}
+							<div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+								<span class="w-32 shrink-0 text-xs font-medium">{group.label}</span>
+								<label class="flex items-center gap-2 text-xs">
+									<input
+										type="checkbox"
+										name="{group.key}_email"
+										checked={data.notificationPreferences[group.key].email}
+										disabled={!data.notificationPreferencesEditable}
+										class="size-4 accent-foreground"
+									/>
+									{m.admin_settings_notification_channel_email()}
+								</label>
+								<label class="flex items-center gap-2 text-xs">
+									<input
+										type="checkbox"
+										name="{group.key}_bark"
+										checked={data.notificationPreferences[group.key].bark}
+										disabled={!data.notificationPreferencesEditable}
+										class="size-4 accent-foreground"
+									/>
+									{m.admin_settings_notification_channel_bark()}
+								</label>
+							</div>
+						{/each}
+					</div>
+					<div class="flex flex-wrap items-center gap-2">
+						{#if data.notificationPreferencesEditable}
+							<Button type="submit" variant="outline" size="sm" disabled={prefsPending}>
+								{m.admin_common_save()}
+							</Button>
+						{/if}
+						{#if prefsNotice?.kind === 'ok' && prefsNotice.text}
+							<p role="status" class="text-xs text-muted-foreground">{prefsNotice.text}</p>
+						{:else if prefsNotice?.kind === 'error' && prefsNotice.text}
+							<p role="alert" class="text-xs text-destructive">{prefsNotice.text}</p>
+						{/if}
+					</div>
+				</form>
+			</section>
+
+			<section>
+				<h3 class="mb-4 text-sm font-semibold">
+					{m.admin_settings_notification_bark_title()}
+				</h3>
+				<div class="rounded-lg border">
+					<SettingsProviderStatus
+						name={m.admin_settings_notification_bark_title()}
+						state={data.bark.configured ? 'configured' : 'not_configured'}
+						detail={data.bark.configured
+							? m.admin_settings_notification_bark_configured({ server: data.bark.serverUrl })
+							: m.admin_settings_notification_bark_not_configured()}
+					/>
+					<p class="border-t p-4 text-xs text-muted-foreground">
+						{m.admin_settings_notification_bark_env_hint()}
+					</p>
+				</div>
+			</section>
+
+			<!-- Delivery log: every outbox attempt, owner-only, resend re-queues
+			     the SAME row (no copy). -->
+			<section>
+				<h3 class="mb-4 text-sm font-semibold">
+					{m.admin_settings_notification_alerts_title()}
+				</h3>
+				{#if !data.notificationLogEditable}
+					<p class="-mt-3 mb-3 text-xs text-muted-foreground">
+						{m.admin_settings_common_owner_only()}
+					</p>
+				{/if}
+				<div class="space-y-2 rounded-lg border p-4">
+					<p class="text-xs text-muted-foreground">
+						{m.admin_settings_notification_alerts_desc()}
+					</p>
+					{#if data.notifications.length === 0}
+						<p class="text-xs text-muted-foreground">
+							{m.admin_settings_notification_alerts_empty()}
+						</p>
+					{:else}
+						<div class="overflow-hidden rounded-md border">
+							{#each data.notifications as row (row.id)}
+								<div
+									class="flex flex-wrap items-center gap-2 border-b px-2 py-1.5 text-xs last:border-b-0"
+									data-slot="notification-row"
+								>
+									<span class="w-40 shrink-0 text-muted-foreground">{row.createdLabel}</span>
+									<span class="font-mono">{row.eventType}</span>
+									<Badge variant="outline" class="w-fit">
+										{row.channel === 'email'
+											? m.admin_settings_notification_channel_email()
+											: m.admin_settings_notification_channel_bark()}
+									</Badge>
+									<span class="min-w-0 flex-1 truncate text-muted-foreground">
+										{row.title}
+										{#if row.error}· {row.error}{/if}
+									</span>
+									<span class="text-muted-foreground">
+										{m.admin_settings_notification_attempt_count({ count: row.attempts })}
+									</span>
+									<Badge
+										variant={row.status === 'failed'
+											? 'destructive'
+											: row.status === 'sent'
+												? 'default'
+												: 'outline'}
+										class="w-fit"
+									>
+										{row.status === 'failed'
+											? m.admin_settings_notification_status_failed()
+											: row.status === 'sent'
+												? m.admin_settings_notification_status_sent()
+												: m.admin_settings_notification_status_queued()}
+									</Badge>
+									{#if data.notificationLogEditable && (row.status === 'failed' || row.status === 'sent')}
+										<form
+											method="POST"
+											action="?/resendNotification"
+											use:enhance={() => {
+												resendPendingId = row.id;
+												logNotice = null;
+												return async ({ result, update }) => {
+													await update();
+													if (resendPendingId === row.id) resendPendingId = null;
+													if (result.type === 'success') {
+														logNotice = {
+															kind: 'ok',
+															text: m.admin_settings_notification_resend_ok()
+														};
+													} else if (result.type === 'failure') {
+														logNotice = {
+															kind: 'error',
+															text: failureMessage(result.data) ?? ''
+														};
+													}
+												};
+											}}
+										>
+											<input type="hidden" name="id" value={row.id} />
+											<Button
+												type="submit"
+												variant="outline"
+												size="sm"
+												disabled={resendPendingId === row.id}
+												>{m.admin_settings_notification_resend()}</Button
+											>
+										</form>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
+					{#if logNotice?.kind === 'ok' && logNotice.text}
+						<p role="status" class="text-xs text-muted-foreground">{logNotice.text}</p>
+					{:else if logNotice?.kind === 'error' && logNotice.text}
+						<p role="alert" class="text-xs text-destructive">{logNotice.text}</p>
+					{/if}
 				</div>
 			</section>
 		</div>

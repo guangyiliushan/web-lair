@@ -20,12 +20,16 @@ import { isSecretError } from '../secrets/errors.ts';
 import { reportSecretFailure } from '../secrets/report.ts';
 import { recordWebhookAutoDisable } from '../audit.ts';
 import { resolveWebhookSigningSecrets } from '../secrets/webhook-secrets.ts';
+import { deliverNotification } from '../notifications/delivery.ts';
+import type { NotificationDeliveryOutcome } from '../notifications/delivery.ts';
+import { notify as defaultNotify } from '../notifications/notify.ts';
+import { shouldAlertJobFailure } from '../notifications/events.ts';
 import type { SecretDb } from '../secrets/resolver.ts';
 import type { JobResult, JobTrigger } from '../db/system/job-run.schema.ts';
 import type { JobContext, JobLogger, JobsDb, LoadedJob } from './types.ts';
 
 /**
- * Drain core (jobs-line plan §2/§4): one tick = three segments run in order,
+ * Drain core (jobs-line plan §2/§4): one tick = FOUR segments run in order,
  * each processing to empty, each isolated - a failing segment never blocks
  * the segments after it.
  *
@@ -39,6 +43,9 @@ import type { JobContext, JobLogger, JobsDb, LoadedJob } from './types.ts';
  *                   now())` signed with Standard Webhooks headers and POSTed;
  *                   retryable failures stay queued with exponential backoff,
  *                   permanent ones turn terminal, 410 disables the endpoint.
+ *   4. notifications - `notification_deliveries` (M6 P5) claimed the same way
+ *                   and handed to the email/Bark adapters; 1m/5m/15m retries
+ *                   then terminal `failed`.
  *
  * All imports must stay Node-type-strippable (explicit `.ts` extensions, no
  * aliases, no SvelteKit virtual modules) because `jobs/drain.ts` runs under
@@ -102,6 +109,14 @@ export interface DrainSummary {
 		skippedDisabled: number;
 		errors: number;
 	};
+	/** M6 P5: notification outbox segment (email / Bark). */
+	notifications: {
+		sent: number;
+		failed: number;
+		retried: number;
+		skipped: number;
+		errors: number;
+	};
 	/** Segment-level failures; the entry process exits non-zero when non-empty. */
 	segmentErrors: string[];
 	/** Set when a job timeout aborted the tick (the entry exits hard). */
@@ -142,6 +157,7 @@ export async function runDrain(deps: DrainDeps): Promise<DrainSummary> {
 		},
 		queue: { claimed: 0, busy: 0, errors: 0 },
 		deliveries: { sent: 0, failed: 0, retried: 0, skippedDisabled: 0, errors: 0 },
+		notifications: { sent: 0, failed: 0, retried: 0, skipped: 0, errors: 0 },
 		segmentErrors: [],
 		aborted: false,
 		heartbeat: 'skipped'
@@ -150,7 +166,8 @@ export async function runDrain(deps: DrainDeps): Promise<DrainSummary> {
 	const segments: Array<[string, (d: ResolvedDeps, s: DrainSummary) => Promise<void>]> = [
 		['schedules', runScheduleSegment],
 		['queue', runQueueSegment],
-		['deliveries', runDeliverySegment]
+		['deliveries', runDeliverySegment],
+		['notifications', runNotificationSegment]
 	];
 	for (const [name, run] of segments) {
 		try {
@@ -198,6 +215,10 @@ export async function runDrain(deps: DrainDeps): Promise<DrainSummary> {
 				? ` / ${stats.deliveries.skippedDisabled} disabled`
 				: '') +
 			(stats.deliveries.errors > 0 ? ` / ${stats.deliveries.errors} errored` : '') +
+			` | notifications ${stats.notifications.sent} sent / ${stats.notifications.failed} failed` +
+			(stats.notifications.retried > 0 ? ` / ${stats.notifications.retried} retried` : '') +
+			(stats.notifications.skipped > 0 ? ` / ${stats.notifications.skipped} skipped` : '') +
+			(stats.notifications.errors > 0 ? ` / ${stats.notifications.errors} errored` : '') +
 			(stats.segmentErrors.length > 0 ? ` | segment errors: ${stats.segmentErrors.length}` : '')
 	);
 	return stats;
@@ -213,7 +234,11 @@ function tickDegraded(stats: DrainSummary): boolean {
 		// A failed delivery (missing/undecryptable signing secret) means an
 		// event was dropped: the heartbeat must not stay green.
 		stats.deliveries.errors > 0 ||
-		stats.deliveries.failed > 0
+		stats.deliveries.failed > 0 ||
+		// Same rule for a notification that reached its terminal failure: the
+		// operator's inbox missed an event, and the tick is not healthy.
+		stats.notifications.errors > 0 ||
+		stats.notifications.failed > 0
 	);
 }
 
@@ -464,6 +489,16 @@ async function reclaimStaleRuns(deps: ResolvedDeps, job: string): Promise<number
 		.set({ status: 'failed', error: STALE_ERROR })
 		.where(and(eq(jobRuns.job, job), eq(jobRuns.status, 'running')))
 		.returning({ id: jobRuns.id });
+	// A reclaimed run is a TERMINAL failure like any other: the whitelist gets
+	// the same one-alert-per-run treatment (otherwise a job that crashes the
+	// process - the case the alert matters most for - would be silent).
+	for (const row of rows) {
+		await raiseJobFailureAlert(deps, {
+			runId: row.id,
+			job,
+			error: 'stale (the run was reclaimed after its process died)'
+		});
+	}
 	return rows.length;
 }
 
@@ -472,7 +507,15 @@ async function executeRun(deps: ResolvedDeps, target: RunTarget): Promise<void> 
 	if (!definition) {
 		// The name can vanish between enqueue and claim (e.g. a user job was
 		// deleted); record the failure instead of crashing on undefined.
-		await finalizeRun(deps, target.id, 'failed', null, {}, `unknown job "${target.job}"`);
+		await finalizeRun(
+			deps,
+			target.id,
+			target.job,
+			'failed',
+			null,
+			{},
+			`unknown job "${target.job}"`
+		);
 		deps.log(`[drain] ${target.job} run ${target.id}: failed - unknown job`);
 		return;
 	}
@@ -499,10 +542,18 @@ async function executeRun(deps: ResolvedDeps, target: RunTarget): Promise<void> 
 		} finally {
 			bindJobDb(null);
 		}
-		await finalizeRun(deps, target.id, 'succeeded', target.catchup, summaryData, null);
+		await finalizeRun(deps, target.id, target.job, 'succeeded', target.catchup, summaryData, null);
 		deps.log(`[drain] ${target.job} run ${target.id}: succeeded`);
 	} catch (err) {
-		await finalizeRun(deps, target.id, 'failed', target.catchup, summaryData, errorText(err));
+		await finalizeRun(
+			deps,
+			target.id,
+			target.job,
+			'failed',
+			target.catchup,
+			summaryData,
+			errorText(err)
+		);
 		deps.log(`[drain] ${target.job} run ${target.id}: failed - ${errorText(err)}`);
 		if (err instanceof JobTimeoutError) {
 			// The timed-out job is still running inside this process (Promise
@@ -517,6 +568,7 @@ async function executeRun(deps: ResolvedDeps, target: RunTarget): Promise<void> 
 async function finalizeRun(
 	deps: ResolvedDeps,
 	runId: string,
+	job: string,
 	status: 'succeeded' | 'failed',
 	catchup: RunTarget['catchup'],
 	summaryData: JobResult,
@@ -536,6 +588,44 @@ async function finalizeRun(
 			finishedAt: deps.now()
 		})
 		.where(eq(jobRuns.id, runId));
+	if (status === 'failed') await raiseJobFailureAlert(deps, { runId, job, error });
+}
+
+/**
+ * `job.failed` producer (M6 P5 T5.6; decision register §3E N7).
+ *
+ * Fires ONCE per terminal run (the outbox key `job_run:<id>` absorbs retries
+ * and a re-finalized row), and only for the whitelist: a nightly maintenance
+ * job going red is already visible in the run ledger and on the drain
+ * heartbeat, and mailing every day would train the operator to ignore the
+ * channel. Routing goes through the `notify()` seam so the outbox writer
+ * installed by the entry is the single delivery path; without a sink (unit
+ * tests, a CLI run) it degrades to the seam's log line.
+ *
+ * Never throws: the run ledger row is already committed, and a notification
+ * failure must not turn a recorded failure into a tick-level error.
+ */
+async function raiseJobFailureAlert(
+	deps: ResolvedDeps,
+	input: { runId: string; job: string; error: string | null }
+): Promise<void> {
+	if (!shouldAlertJobFailure(input.job)) return;
+	try {
+		const origin = process.env.ORIGIN?.trim();
+		const delivered = await defaultNotify({
+			eventType: 'job.failed',
+			eventKey: `job_run:${input.runId}`,
+			title: `Job ${input.job} failed`,
+			body: input.error ?? 'the run failed without an error message',
+			url: origin ? `${origin.replace(/\/$/, '')}/admin/jobs` : null
+		});
+		if (delivered !== 'delivered') {
+			deps.log(`[drain] job.failed alert for ${input.job} run ${input.runId}: ${delivered}`);
+		}
+	} catch (err) {
+		// notify() already swallows sink errors; this guards a future change.
+		deps.log(`[drain] job.failed alert failed: ${errorText(err)}`);
+	}
 }
 
 /**
@@ -897,6 +987,50 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 			return outcome;
 		}
 	});
+}
+
+// ---------------------------------------------------------------------------
+// Segment 4: notification deliveries (M6 P5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wall-clock budget for the notification segment. Same shape as the webhook
+ * segment: at most QUEUE_BATCH rows AND at most ~45s, so one black-holed SMTP
+ * handshake cannot stretch a tick past its interval. Leftovers are picked up
+ * by the next tick (FOR UPDATE SKIP LOCKED keeps concurrent ticks safe).
+ */
+const NOTIFICATION_SEGMENT_BUDGET_MS = 45_000;
+
+async function runNotificationSegment(deps: ResolvedDeps, stats: DrainSummary): Promise<void> {
+	const deadline = deps.now().getTime() + NOTIFICATION_SEGMENT_BUDGET_MS;
+	let processed = 0;
+	for (;;) {
+		if (processed >= QUEUE_BATCH || deps.now().getTime() >= deadline) break;
+		let outcome: NotificationDeliveryOutcome | null;
+		try {
+			outcome = await deliverNotification(deps.db, {
+				now: deps.now,
+				log: deps.log,
+				getEnv: (name) => process.env[name],
+				fetch: deps.fetch
+			});
+		} catch (err) {
+			// A failing claim is a BROKEN segment, not a per-delivery outcome:
+			// record it at segment level so the entry exits non-zero and the
+			// heartbeat stays quiet.
+			stats.notifications.errors += 1;
+			stats.segmentErrors.push(`notifications: ${errorText(err)}`);
+			deps.log(`[notify] segment error: ${errorText(err)}`);
+			break; // do not spin on a failing claim; the next tick retries
+		}
+		if (outcome === null) break;
+		// Counters move only after the transaction COMMITTED.
+		if (outcome === 'sent') stats.notifications.sent += 1;
+		else if (outcome === 'retried') stats.notifications.retried += 1;
+		else if (outcome === 'failed') stats.notifications.failed += 1;
+		else stats.notifications.skipped += 1;
+		processed += 1;
+	}
 }
 
 // ---------------------------------------------------------------------------

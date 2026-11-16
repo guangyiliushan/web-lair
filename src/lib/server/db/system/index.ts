@@ -4,6 +4,7 @@ export * from './enrichment-capture.schema.ts';
 export * from './file-reference.schema.ts';
 export * from './job-run.schema.ts';
 export * from './job-schedule.schema.ts';
+export * from './notification-delivery.schema.ts';
 export * from './slug-tracker.schema.ts';
 export * from './storage-secret.schema.ts';
 export * from './subscription.schema.ts';

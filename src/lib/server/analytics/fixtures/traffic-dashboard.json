@@ -1,0 +1,500 @@
+{
+	"overview": {
+		"requests": 11,
+		"bytes_in": 0,
+		"bytes_out": 148012,
+		"status": {
+			"s2xx": 9,
+			"s3xx": 0,
+			"s4xx": 2,
+			"s5xx": 0
+		},
+		"latency": {
+			"p50": 3.0,
+			"p95": 11.5,
+			"p99": 11.9
+		},
+		"unique_visitors": 8
+	},
+	"paths": [
+		{
+			"path": "/posts/missing-page",
+			"app": "lair.example",
+			"requests": 2,
+			"bytes_out": 1600,
+			"s4xx": 2,
+			"s5xx": 0,
+			"p50": 3.5,
+			"p95": 3.95
+		},
+		{
+			"path": "/_app/immutable/chunk-abc.js",
+			"app": "lair.example",
+			"requests": 1,
+			"bytes_out": 90000,
+			"s4xx": 0,
+			"s5xx": 0,
+			"p50": 3.0,
+			"p95": 3.0
+		},
+		{
+			"path": "/about",
+			"app": "lair.example",
+			"requests": 1,
+			"bytes_out": 900,
+			"s4xx": 0,
+			"s5xx": 0,
+			"p50": 10.0,
+			"p95": 10.0
+		},
+		{
+			"path": "/api/health",
+			"app": "lair.example",
+			"requests": 1,
+			"bytes_out": 12,
+			"s4xx": 0,
+			"s5xx": 0,
+			"p50": 1.0,
+			"p95": 1.0
+		},
+		{
+			"path": "/feed.xml",
+			"app": "lair.example",
+			"requests": 1,
+			"bytes_out": 5000,
+			"s4xx": 0,
+			"s5xx": 0,
+			"p50": 2.0,
+			"p95": 2.0
+		},
+		{
+			"path": "/i/photo-1.webp",
+			"app": "lair.example",
+			"requests": 1,
+			"bytes_out": 45000,
+			"s4xx": 0,
+			"s5xx": 0,
+			"p50": 2.0,
+			"p95": 2.0
+		},
+		{
+			"path": "/posts/hello",
+			"app": "lair.example",
+			"requests": 1,
+			"bytes_out": 1200,
+			"s4xx": 0,
+			"s5xx": 0,
+			"p50": 12.0,
+			"p95": 12.0
+		},
+		{
+			"path": "/style.css",
+			"app": "lair.example",
+			"requests": 1,
+			"bytes_out": 3400,
+			"s4xx": 0,
+			"s5xx": 0,
+			"p50": 1.0,
+			"p95": 1.0
+		},
+		{
+			"path": "/volume-append",
+			"app": "lair.example",
+			"requests": 1,
+			"bytes_out": 100,
+			"s4xx": 0,
+			"s5xx": 0,
+			"p50": 10.0,
+			"p95": 10.0
+		},
+		{
+			"path": "/zh-cn/posts",
+			"app": "lair.example",
+			"requests": 1,
+			"bytes_out": 800,
+			"s4xx": 0,
+			"s5xx": 0,
+			"p50": 11.0,
+			"p95": 11.0
+		}
+	],
+	"breakdowns": {
+		"country": [],
+		"city": [],
+		"referer": [
+			{
+				"value": "https://ref.example/",
+				"requests": 10,
+				"bytes_out": 147912
+			}
+		],
+		"browser": [
+			{
+				"value": "UNKNOWN",
+				"requests": 10,
+				"bytes_out": 147912
+			}
+		],
+		"os": [
+			{
+				"value": "Linux",
+				"requests": 10,
+				"bytes_out": 147912
+			}
+		],
+		"device": [
+			{
+				"value": "pc",
+				"requests": 10,
+				"bytes_out": 147912
+			}
+		],
+		"protocol": [
+			{
+				"value": "HTTP/2.0",
+				"requests": 11,
+				"bytes_out": 148012
+			}
+		],
+		"cache": [],
+		"status": [
+			{
+				"value": "200",
+				"requests": 9,
+				"bytes_out": 146412
+			},
+			{
+				"value": "404",
+				"requests": 2,
+				"bytes_out": 1600
+			}
+		],
+		"agent": [],
+		"ip": [],
+		"useragent": [
+			{
+				"value": "Mozilla/5.0 (X11; Linux x86_64)",
+				"requests": 10,
+				"bytes_out": 147912
+			},
+			{
+				"value": "Mozilla/5.0",
+				"requests": 1,
+				"bytes_out": 100
+			}
+		]
+	},
+	"series": [
+		{
+			"bucket": 1794711600000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794715200000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794718800000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794722400000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794726000000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794729600000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794733200000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794736800000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794740400000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794744000000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794747600000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794751200000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794754800000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794758400000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794762000000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794765600000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794769200000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794772800000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794776400000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794780000000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794783600000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794787200000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		},
+		{
+			"bucket": 1794790800000,
+			"requests": 11,
+			"bytes_in": 0,
+			"bytes_out": 148012,
+			"s2xx": 9,
+			"s3xx": 0,
+			"s4xx": 2,
+			"s5xx": 0,
+			"unique_visitors": 8,
+			"p95": 11.5
+		},
+		{
+			"bucket": 1794794400000,
+			"requests": 0,
+			"bytes_in": 0,
+			"bytes_out": 0,
+			"s2xx": 0,
+			"s3xx": 0,
+			"s4xx": 0,
+			"s5xx": 0,
+			"unique_visitors": 0,
+			"p95": 0.0
+		}
+	],
+	"attribution": null,
+	"apps": [
+		{
+			"uuid": "lair.example",
+			"overview": {
+				"requests": 11,
+				"bytes_in": 0,
+				"bytes_out": 148012,
+				"status": {
+					"s2xx": 9,
+					"s3xx": 0,
+					"s4xx": 2,
+					"s5xx": 0
+				},
+				"latency": {
+					"p50": 3.0,
+					"p95": 11.5,
+					"p99": 11.9
+				},
+				"unique_visitors": 8
+			}
+		}
+	]
+}

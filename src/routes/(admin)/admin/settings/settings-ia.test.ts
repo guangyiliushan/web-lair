@@ -67,7 +67,9 @@ describe('final eight-page IA (W10.4)', () => {
 		const [en] = MESSAGES;
 		expect(en.messages.admin_settings_site_desc).toMatch(/SEO/i);
 		expect(en.messages.admin_settings_site_desc).toMatch(/deployment/i);
-		expect(en.messages.admin_settings_notification_desc).toMatch(/planned/i);
+		// M6 P5 shipped the outbox: the notifications page is no longer "planned".
+		expect(en.messages.admin_settings_notification_desc).toMatch(/webhooks/i);
+		expect(en.messages.admin_settings_notification_desc).toMatch(/Bark/i);
 		expect(en.messages.admin_settings_storage_desc).toMatch(/backup/i);
 		expect(en.messages.admin_settings_integrations_desc).toMatch(/planned/i);
 		expect(en.messages.admin_settings_account_desc).toMatch(/passkey/i);

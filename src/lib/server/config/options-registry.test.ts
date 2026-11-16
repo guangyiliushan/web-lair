@@ -64,7 +64,7 @@ describe('options registry (AI-1.1)', () => {
 		});
 	});
 
-	it('ships exactly the planned keys (storage: media.purge + provider control plane; links: friends.* / site.info; micro: ai.translation; projects: projects.sync_targets; realtime: presence.*)', () => {
+	it('ships exactly the planned keys (storage: media.purge + provider control plane; links: friends.* / site.info; micro: ai.translation; projects: projects.sync_targets; realtime: presence.*; M6 P5: notifications.preferences)', () => {
 		expect([...optionKeys].sort()).toEqual(
 			[
 				'ai.assignments',
@@ -83,6 +83,7 @@ describe('options registry (AI-1.1)', () => {
 				'friends.policy',
 				'media.purge',
 				'notes.gate',
+				'notifications.preferences',
 				'payments.enabled',
 				'presence.enabled',
 				'presence.readerDots',

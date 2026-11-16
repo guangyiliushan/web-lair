@@ -1,0 +1,34 @@
+# 可选片段：依赖健康 /api/ready（仅当 READY_TOKEN 非空时渲染）。
+#
+# 为什么是片段而不是核心配置：P3 与 P4 是并行线，P3 写 Gatus 时 /api/ready 还不
+# 存在，所以核心 gatus.yaml 只能放一个 `enabled: false` 的端点。P4 合入后路由存在，
+# 但它只对「带 READY_TOKEN 的调用方」应答（生产无 token → 对所有来源 404，Gatus
+# 在 compose 私网里不是 loopback）。把端点放进核心并直接启用会让未配 token 的部署
+# 永久红，与 domain 片段同一个理由：无法用空值安全表达的端点，就用渲染与否表达。
+#
+# 语义：/api/ready 只证明 DB `select 1` + Valkey PING（2s 超时、10s 缓存），
+# 与 /api/health（liveness，不查依赖）互补。
+#
+# 验收：
+#   - 配置 READY_TOKEN → zz-app-ready.yaml 渲染，Gatus 日志出现 `endpoint=app-ready;`
+#   - READY_TOKEN 为空  → 片段不渲染，核心配置里也没有该端点（verify-config.sh 双向断言）
+endpoints:
+  - name: app-ready
+    group: web-lair
+    url: 'http://${MONITOR_APP_ADDR}/api/ready'
+    interval: ${MONITOR_INTERVAL}
+    client:
+      timeout: 5s
+    # endpoint 级 `headers`（不是 client 级：Gatus 的 client.Config 没有 Headers
+    # 字段，写在 client 下会被静默丢弃）。
+    headers:
+      Authorization: 'Bearer ${READY_TOKEN}'
+    conditions:
+      - '[STATUS] == 200'
+      - '[BODY].status == ready'
+    alerts:
+      - type: custom
+        description: '应用依赖（DB/Valkey）不 ready'
+        failure-threshold: ${MONITOR_FAILURE_THRESHOLD}
+        success-threshold: ${MONITOR_SUCCESS_THRESHOLD}
+        send-on-resolved: true

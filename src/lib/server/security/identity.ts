@@ -55,6 +55,43 @@ export function isLoopbackAddress(address: string | null | undefined): boolean {
 	return ip === '127.0.0.1' || ip === '::1';
 }
 
+/**
+ * True for RFC 1918 / loopback / IPv6 ULA + link-local peers.
+ *
+ * Called ONLY by the `/api/ready` no-token, non-production fallback: in token
+ * mode the route never consults it and every peer, private included, must
+ * present the bearer; in production without a token the route answers 404 to
+ * everyone. Docker bridge networks (172.16/12) qualify, which is how Caddy
+ * reaches the app - Caddy also 404s the path at the edge.
+ *
+ * Named `isInternalPeer`, not `isPrivateAddress`: `ssrf-guard.ts` exports a
+ * same-named helper whose unparsable input answers TRUE (fail closed for SSRF)
+ * while this one answers false - importing the wrong one in a security path
+ * would invert the decision. Unparsable input here answers false (deny).
+ */
+export function isInternalPeer(address: string | null | undefined): boolean {
+	const ip = normalizeAddress(address);
+	if (!ip) return false;
+	if (isLoopbackAddress(ip)) return true;
+	// Strip an IPv6 zone id (`fe80::1%eth0`) before matching.
+	const bare = ip.split('%')[0] ?? '';
+	if (bare.includes(':')) {
+		return (
+			bare === '::1' ||
+			/^f[cd][0-9a-f]{2}:/.test(bare) || // fc00::/7 unique local
+			/^fe[89ab][0-9a-f]:/.test(bare) // fe80::/10 link local
+		);
+	}
+	const value = ip4ToInt(bare);
+	if (!Number.isFinite(value)) return false;
+	return (
+		(value >= ip4ToInt('10.0.0.0') && value <= ip4ToInt('10.255.255.255')) ||
+		(value >= ip4ToInt('172.16.0.0') && value <= ip4ToInt('172.31.255.255')) ||
+		(value >= ip4ToInt('192.168.0.0') && value <= ip4ToInt('192.168.255.255')) ||
+		(value >= ip4ToInt('127.0.0.0') && value <= ip4ToInt('127.255.255.255'))
+	);
+}
+
 export function isTailscaleAddress(address: string | null | undefined): boolean {
 	const ip = normalizeAddress(address);
 	if (!ip) return false;

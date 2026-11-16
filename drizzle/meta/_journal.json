@@ -57,6 +57,13 @@
       "when": 1794678658243,
       "tag": "0007_storage_secrets",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794794236178,
+      "tag": "0008_notification_deliveries",
+      "breakpoints": true
     }
   ]
 }

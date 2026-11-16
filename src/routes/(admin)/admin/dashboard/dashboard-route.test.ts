@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// The route imports the Sentinel client, which reads $env; no config means
+// the traffic card fails open to nulls in these unit tests.
+vi.mock('$env/dynamic/private', () => ({ env: {} }));
+
 /**
  * Route-level tests for the admin dashboard load (realtime R4 + dashboard
  * data statistics, 2026-10-21): the guard runs first, the quick-action
@@ -11,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * The load uses three db reads (one aggregate execute + posts + notes) and
  * one session read; the queue below keeps that order explicit.
  */
-const { dbMock, state, service, presenceService } = vi.hoisted(() => ({
+const { dbMock, state, service, presenceService, analyticsService } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
 	state: {
 		selectQueue: [] as unknown[][],
@@ -23,7 +27,8 @@ const { dbMock, state, service, presenceService } = vi.hoisted(() => ({
 		enabledThrows: false
 	},
 	service: { requireAdminRole: vi.fn() },
-	presenceService: { readSitePresence: vi.fn() }
+	presenceService: { readSitePresence: vi.fn() },
+	analyticsService: { readTrafficSnapshot: vi.fn() }
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
@@ -31,6 +36,10 @@ vi.mock('$lib/server/authz', () => ({ requireAdminRole: service.requireAdminRole
 vi.mock('$lib/server/services/presence', () => ({
 	readSitePresence: presenceService.readSitePresence
 }));
+vi.mock('$lib/server/analytics/sentinel', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/server/analytics/sentinel')>();
+	return { ...actual, readTrafficSnapshot: analyticsService.readTrafficSnapshot };
+});
 vi.mock('$lib/server/config/options-registry', () => ({
 	getOption: vi.fn(async (key: string) => {
 		if (key === 'site.timezone') return 'UTC';
@@ -109,6 +118,8 @@ beforeEach(() => {
 	service.requireAdminRole.mockClear();
 	presenceService.readSitePresence.mockReset();
 	presenceService.readSitePresence.mockResolvedValue(null);
+	analyticsService.readTrafficSnapshot.mockReset();
+	analyticsService.readTrafficSnapshot.mockResolvedValue(null);
 	Object.assign(dbMock, {
 		execute: vi.fn(async () => [state.globalRow]),
 		select: vi.fn(() => selectChain())
@@ -224,6 +235,86 @@ describe('admin dashboard load', () => {
 			presence: { enabled: boolean; site: number | null; day: number | null; peak: number | null };
 		};
 		expect(data.presence).toEqual({ enabled: true, site: null, day: null, peak: null });
+	});
+
+	it('wires the traffic card from the Sentinel snapshot without swapping fields', async () => {
+		analyticsService.readTrafficSnapshot.mockResolvedValue({
+			range: '24h',
+			from: '2026-11-15T00:00:00.000Z',
+			to: '2026-11-16T00:00:00.000Z',
+			fetchedAt: Date.parse('2026-11-16T00:00:00.000Z'),
+			overview: {
+				requests: 11,
+				bytes_in: 0,
+				bytes_out: 1000,
+				status: { s2xx: 9, s3xx: 0, s4xx: 2, s5xx: 0 },
+				latency: { p50: 2, p95: 3, p99: 4 },
+				unique_visitors: 8
+			},
+			paths: [
+				{
+					path: '/posts/hello',
+					app: 'lair.example',
+					requests: 3,
+					bytes_out: 10,
+					s4xx: 0,
+					s5xx: 0,
+					p50: 1,
+					p95: 2
+				},
+				{
+					path: '/style.css',
+					app: 'lair.example',
+					requests: 4,
+					bytes_out: 10,
+					s4xx: 0,
+					s5xx: 0,
+					p50: 1,
+					p95: 2
+				},
+				{
+					path: '/posts/missing',
+					app: 'lair.example',
+					requests: 2,
+					bytes_out: 10,
+					s4xx: 2,
+					s5xx: 0,
+					p50: 1,
+					p95: 2
+				}
+			],
+			series: [],
+			breakdowns: {
+				status: [{ value: '404', requests: 2, bytes_out: 10 }],
+				referer: [],
+				browser: [],
+				os: [],
+				device: [],
+				country: []
+			},
+			attribution: null,
+			pathsTruncated: true
+		});
+
+		const data = (await load(event())) as {
+			traffic: {
+				available: boolean;
+				pageRequests: number | null;
+				visitors: number | null;
+				notFound: number | null;
+			};
+		};
+
+		expect(analyticsService.readTrafficSnapshot).toHaveBeenCalledWith({ range: '24h' });
+		// 3 page requests on /posts/hello + 2 on /posts/missing; style.css is
+		// filtered. Visitors and 404 come from the overview/status breakdown.
+		expect(data.traffic).toEqual({
+			available: true,
+			pageRequests: 5,
+			pageRequestsLowerBound: true,
+			visitors: 8,
+			notFound: 2
+		});
 	});
 
 	it('skips the presence read entirely when presence is disabled', async () => {

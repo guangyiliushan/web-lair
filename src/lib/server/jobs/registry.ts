@@ -52,10 +52,20 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 	'system.resources': {
 		name: 'system.resources',
 		description:
-			'Record host disk / memory / load / uptime readings into the run result (disk thresholds stay with the §25 monitoring line).',
+			'Measure the DATA_DIR and / mounts plus cgroup v2 memory; latch 85%/75% threshold alerts (one per metric per day), record every mount in the run result and ping the external healthchecks check.',
 		manual: true,
 		scheduleHint: '*/15 * * * *',
-		timeoutMs: 30_000
+		// 30s was too tight once the run includes a 10s healthchecks ping plus one
+		// awaited notify per metric; a timeout here aborts the whole drain tick.
+		timeoutMs: 45_000
+	},
+	'mail.probe': {
+		name: 'mail.probe',
+		description:
+			'Verify the SMTP transport daily and send one real probe mail to the owner on Sundays (unique subject, message id in the run result); failures alert through the notification seam and healthchecks.',
+		manual: true,
+		scheduleHint: '10 5 * * *',
+		timeoutMs: 120_000
 	},
 	'subscriptions.sweep': {
 		name: 'subscriptions.sweep',

@@ -1,0 +1,82 @@
+# Sentinel traffic analytics overlay (P6 / plan §3.1).
+#
+# Loaded by deploy/compose-prod.sh together with compose.yaml and
+# compose.prod.yaml. It is an overlay, not a standalone model: `internal`,
+# `caddy_logs` and the `web-lair` project name come from those files.
+#
+# Traffic-only: no metrics collection, no Docker API, no push, no GeoIP, no
+# host port. The Caddy JSON access log is mounted read-only at the path the
+# service is configured to tail.
+#
+# Why the dummy socket: Sentinel 1.1.5 constructs its Docker client even with
+# COLLECTOR_ENABLED and STORAGE_ENABLED false, and exits when
+# /var/run/docker.sock is absent. The entrypoint creates a zero-byte file and
+# points DOCKER_HOST at it, so the constructor finds a path but the container
+# never has access to the host Docker socket.
+services:
+  sentinel:
+    # pinned digest for ghcr.io/coollabsio/sentinel:1.1.5 (linux/amd64+arm64
+    # index, published 2026-11-06). Digest-only on purpose: a tag re-push must
+    # not change what production runs.
+    image: ghcr.io/coollabsio/sentinel@sha256:b3ee40d4d00b508c1018e67dc6a9e5693d0027b117f560c9fb003f464879243e
+    restart: always
+    security_opt:
+      - 'no-new-privileges:true'
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'touch /tmp/not-a-docker.sock && exec /app/sentinel'
+    environment:
+      TOKEN: ${SENTINEL_TOKEN:-}
+      BIND_ADDRESS: '::'
+      PORT: '8888'
+      # Sentinel 1.1.5 hardcodes its SQLite files under /app/db (DATA_DIR is
+      # only in unreleased main), so the volume mounts there. Derived data.
+      # Required by the config parser even when push is off (MissingEndpoint).
+      PUSH_ENDPOINT: http://127.0.0.1:1
+      PUSH_ENABLED: 'false'
+      COLLECTOR_ENABLED: 'false'
+      # Constructed unconditionally in 1.1.5; see the dummy socket above.
+      STORAGE_ENABLED: 'false'
+      CONTROL_PLANE_ENABLED: 'false'
+      # The dummy path satisfies the client constructor without a real socket.
+      DOCKER_HOST: /tmp/not-a-docker.sock
+      TRAFFIC_ENABLED: 'true'
+      TRAFFIC_PROXY_TYPE: caddy
+      TRAFFIC_ACCESS_LOG_PATH: /var/log/caddy/access.log
+      # Keep the 1.1.5 default. TRAFFIC_TOPN caps every top-N (paths and all
+      # 12 breakdown dimensions) per window; raising it multiplies 1m-tier
+      # rows/disk. Anything outside the cap folds into "__other__" and the UI
+      # marks the page-request total as a lower bound.
+      TRAFFIC_TOPN: '50'
+      # no IPs at rest: the privacy promise in deploy/PRIVACY.md
+      TRAFFIC_IP_MODE: 'off'
+      GEOIP_ENABLED: 'false'
+      # Explicit tier retention: the verify script probes these values.
+      TRAFFIC_RETENTION_1M_HOURS: '48'
+      TRAFFIC_RETENTION_1H_DAYS: '30'
+      TRAFFIC_RETENTION_1D_DAYS: '395'
+      RUST_LOG: info
+    volumes:
+      - caddy_logs:/var/log/caddy:ro
+      # Derived data (rebuildable); deliberately not part of the backup set.
+      # 1.1.5 writes metrics.sqlite + analytics.sqlite here (hardcoded path).
+      - sentinel_data:/app/db
+    expose:
+      - '8888'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:8888/api/health || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    mem_limit: 256m
+    networks: [internal]
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+volumes:
+  sentinel_data:

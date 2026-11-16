@@ -26,6 +26,8 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { runDrain, sanitizeErrorText } from '../src/lib/server/jobs/drain.ts';
+import { createNotificationSink } from '../src/lib/server/notifications/outbox.ts';
+import { setNotificationSink } from '../src/lib/server/notifications/notify.ts';
 import { resolveDataDir } from '../src/lib/server/jobs/data-dir.ts';
 import { ensureJobsScaffold } from '../src/lib/server/jobs/scaffold.ts';
 import { jobLockKey } from '../src/lib/server/jobs/registry.ts';
@@ -56,6 +58,12 @@ if (
 
 const client = postgres(databaseUrl, { max: 5, onnotice: () => {} });
 const db = drizzle(client);
+
+// M6 P5: install the outbox sink for P4's `notify()` seam. Without it every
+// probe alert degrades to a log line; with it, alerts land in
+// `notification_deliveries` and the fourth segment below delivers them.
+// Installed once per process (the entry runs one tick and exits).
+setNotificationSink(createNotificationSink(db));
 
 async function tick(): Promise<DrainSummary> {
 	// Session-level advisory locks must live on ONE connection for the whole

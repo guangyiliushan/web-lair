@@ -52,8 +52,16 @@
 	# JSON access log for Sentinel (L2 analytics) — ledger §25 / plan §C.3.
 	# Confirm/unsubscribe carry a permanent bearer token in the query string;
 	# logging their URIs would hand every log reader control of any subscriber.
-	@logged not path */subscribe/confirm* */unsubscribe* */reset-password* /api/auth/*
-	log @logged {
+	# `/api/ready` is skipped too: its caller sends a bearer token and the route
+	# answers 404 at the edge. Caddy already redacts Authorization/Cookie header
+	# VALUES, but the URI itself is logged verbatim — that is what must stay out.
+	#
+	# `log` does NOT accept a matcher: `log @x { ... }` defines a logger NAMED
+	# `@x` that still logs EVERY request (Caddy docs: "to skip requests, use
+	# log_skip"). The old `@logged` form therefore logged the token URIs.
+	@quiet path */subscribe/confirm* */unsubscribe* */reset-password* /api/auth/* /api/ready*
+	log_skip @quiet
+	log {
 		output file /var/log/caddy/access.log {
 			roll_size 100mb
 			roll_keep 10
@@ -63,6 +71,13 @@
 		}
 		format json
 	}
+
+	# Readiness is internal (M6 P4): the box calls app:3000 directly with the
+	# READY_TOKEN bearer (production refuses the route without one). The public
+	# edge answers 404 so the token gate is never the only fence. Caddy applies
+	# directives in its documented order (respond before reverse_proxy), so this
+	# line's position in the file does not matter.
+	respond /api/ready* 404
 
 	# `flush_interval -1` disables response buffering so the presence SSE
 	# stream is not held back by the proxy (plan §B.3).

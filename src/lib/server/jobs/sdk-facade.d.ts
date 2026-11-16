@@ -91,6 +91,8 @@ export declare function asc(column: any): any;
 export declare const jobRuns: any;
 export declare const activities: any;
 export declare const webhookDeliveries: any;
+/** M6 P5 notification outbox (the `jobs.prune` 30-day window). */
+export declare const notificationDeliveries: any;
 /** Admin assistant conversations (the `jobs.prune` retention window). */
 export declare const aiAgentConversations: any;
 /** AI call ledger (the `jobs.prune` 24-month window). */
@@ -141,3 +143,8 @@ export declare function runTranslationJob(ctx: JobContext): Promise<void>;
 export declare function runSummaryJob(ctx: JobContext): Promise<void>;
 export declare function runCommentReviewJob(ctx: JobContext): Promise<void>;
 export declare function runTranslationsPrune(ctx: JobContext, now?: Date): Promise<number>;
+
+/** Ops probes (M6 P4): resource thresholds and the SMTP probe. Their cores
+ * load lazily inside the run (the mail probe pulls nodemailer). */
+export declare function runSystemResources(ctx: JobContext): Promise<void>;
+export declare function runMailProbe(ctx: JobContext): Promise<void>;

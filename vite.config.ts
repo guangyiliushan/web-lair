@@ -212,7 +212,20 @@ export default defineConfig({
 						'@tabler/icons-svelte-runes/icons/file',
 						'@tabler/icons-svelte-runes/icons/photo',
 						'@tabler/icons-svelte-runes/icons/upload',
-						'@tabler/icons-svelte-runes/icons/x'
+						'@tabler/icons-svelte-runes/icons/x',
+						// Admin dashboard / analytics specs: a cold optimizer run used
+						// to reload mid-test on these (P6).
+						'@tabler/icons-svelte-runes/icons/activity',
+						'@tabler/icons-svelte-runes/icons/arrow-right',
+						'@tabler/icons-svelte-runes/icons/article',
+						'@tabler/icons-svelte-runes/icons/bulb',
+						'@tabler/icons-svelte-runes/icons/notebook',
+						'@tabler/icons-svelte-runes/icons/quote',
+						'@tabler/icons-svelte-runes/icons/refresh',
+						'@tabler/icons-svelte-runes/icons/tool',
+						'@tabler/icons-svelte-runes/icons/trending-up',
+						'@tabler/icons-svelte-runes/icons/users',
+						'@tabler/icons-svelte-runes/icons/writing'
 					]
 				}
 			},

@@ -5,9 +5,11 @@
  * credentials themselves stay in `.env`: `MAIL_SMTP_USER`/`MAIL_SMTP_PASS`
  * are never read here, so no code path can echo them into page data.
  *
- * The TLS derivation mirrors `mail/transport.ts` (implicit on 465/secure,
- * STARTTLS required for an external submission port, opportunistic for a
- * local MTA). Keep the two in sync when the transport gains a mode.
+ * The TLS derivation below is a pre-P4 copy: the transport's single source is
+ * now `mail/smtp.ts` (`createSmtpTransport`). This read-only surface is kept
+ * for the admin page and is known to drift (`MAIL_ENABLED` trim, port guards);
+ * unifying it is a registered P7 item (M6 P4 report) - do not treat the page
+ * as proof of what the sender will do.
  */
 export interface MailStatus {
 	enabled: boolean;
@@ -86,13 +88,14 @@ export function maskEmailAddress(email: string): string {
 
 /**
  * SMTP/nodemailer errors routinely echo the recipient ("550 5.1.1
- * <user@example.com>: ...") and server banners. Audit rows and flash text must
- * not undo the masked `to` field, so every address-shaped token is redacted
- * before the message is stored or shown.
+ * <user@example.com>: ...") and server banners. The implementation moved to
+ * `smtp.ts` so the plain-Node mail probe redacts with the exact same rules;
+ * re-exported here for the admin surface's existing imports.
+ *
+ * NOTE: `readMailStatus` below still derives the TLS mode independently (the
+ * pre-P4 code); after P4 the transport owner is `smtp.ts`, not
+ * `mail/transport.ts`. Aligning the two is a P7 item (registered in the M6 P4
+ * report) - do not assume this status surface and the sender agree when either
+ * derivation changes.
  */
-export function redactMailError(error: unknown): string {
-	const raw = error instanceof Error ? error.message || error.name : 'unknown error';
-	return raw
-		.replace(/[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g, '[redacted]')
-		.slice(0, 200);
-}
+export { redactMailError } from './smtp';

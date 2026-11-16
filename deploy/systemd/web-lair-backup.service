@@ -1,5 +1,5 @@
 [Unit]
-Description=web-lair nightly restic backup
+Description=web-lair nightly restic backup (manual / fallback entry; Backrest owns the schedule)
 Documentation=deploy/RUNBOOK.md
 After=docker.service network-online.target
 Wants=network-online.target

@@ -1,0 +1,30 @@
+{
+	"recorded_at": "2026-11-15",
+	"image": "web-lair-app (Dockerfile runtime stage; pnpm 12.16.1; curated prune)",
+	"metric": "docker image inspect --format '{{.Size}}'",
+	"bytes": 251306841,
+	"regression_ratio": 0.1,
+	"app_tree": {
+		"metric": "du -sb /app inside the running image",
+		"bytes": 640445942,
+		"node_modules_bytes": 571375170,
+		"build_bytes": 53659981,
+		"src_bytes": 13336625
+	},
+	"history": [
+		{
+			"at": "2026-11-15",
+			"label": "pre-P1 baseline (pnpm 11.6.0, no prune)",
+			"image_bytes": 386797253,
+			"app_tree_bytes": 1134850720,
+			"node_modules_bytes": 1065776221
+		},
+		{
+			"at": "2026-11-15",
+			"label": "P1: pnpm pinned to 12.16.1 + paraglide compiler chain pruned",
+			"image_bytes": 251306841,
+			"app_tree_bytes": 640445942
+		}
+	],
+	"calibration": "`.Size` is the compressed image size Docker reports for pulls; `docker images` on this Docker Desktop prints a much larger number for the same image (node:24-bookworm-slim: 81 MB via inspect vs 333 MB via `docker images`), so never compare the two. `app_tree` is a different metric (uncompressed tree inside the container) and is ~2.5x larger - documentation only. Update `bytes` deliberately in the PR that changes the image; the workflow fails at baseline x (1 + regression_ratio)."
+}

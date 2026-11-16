@@ -61,6 +61,13 @@ function mount(
 			siteTimezone: 'UTC',
 			auth: null,
 			presence,
+			traffic: {
+				available: true,
+				pageRequests: 12,
+				pageRequestsLowerBound: false,
+				visitors: 3,
+				notFound: 1
+			},
 			...extra
 		} as never
 	});

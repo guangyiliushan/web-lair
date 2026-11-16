@@ -1,11 +1,22 @@
+# M6 P2 (T2.6): the schedule moved to Backrest (compose.prod.yaml `backrest`).
+#
+# This file is kept for history and is deliberately NOT a working timer: it has
+# no [Timer] directives and no [Install] section, so it can neither be started
+# nor enabled. Enabling it on a host that already runs Backrest would produce
+# two backups of the same repository per night (repo-lock contention, and the
+# later dump overwriting the earlier staging file).
+#
+# `web-lair-backup.service` is still valid and is the manual/fallback entry
+# point: `sudo systemctl start web-lair-backup.service`, or run
+# deploy/backup/backup.sh directly. See RUNBOOK §4 (switch) and §6 (install).
+#
+# Previous contents, for reference:
+#   OnCalendar=*-*-* 03:30
+#   RandomizedDelaySec=15m
+#   Persistent=true
+#   Unit=web-lair-backup.service
 [Unit]
-Description=Run the web-lair backup nightly
+Description=web-lair nightly restic backup (schedule removed — Backrest owns it)
 
 [Timer]
-OnCalendar=*-*-* 03:30
-RandomizedDelaySec=15m
-Persistent=true
 Unit=web-lair-backup.service
-
-[Install]
-WantedBy=timers.target

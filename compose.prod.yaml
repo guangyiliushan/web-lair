@@ -44,6 +44,10 @@ services:
       RUSTFS_ENDPOINT: http://rustfs:9000
       VALKEY_URL: redis://valkey:6379
       WHISPER_URL: http://whisper:9000
+      # P6 analytics: service DNS overrides any development URL in .env.
+      # Empty token disables the page (fail-open to "—"), it never fails boot.
+      SENTINEL_URL: http://sentinel:8888
+      SENTINEL_TOKEN: ${SENTINEL_TOKEN:-}
       DATA_DIR: /data
     volumes:
       # Host absolute path in production (backup set ②); relative default for a
@@ -112,8 +116,112 @@ services:
     networks: [internal, edge]
     logging: *default-logging
 
+  backrest:
+    # M6 P2 (T2.1): Backrest owns the backup schedule; `deploy/backup/backup.sh`
+    # stays the manual/fallback entry point (RUNBOOK §4). The image is derived
+    # from upstream Backrest (pinned by tag+digest in deploy/backrest/Dockerfile)
+    # plus postgresql18-client, because the CONDITION_SNAPSHOT_START hook runs
+    # pg_dump inside this container.
+    build:
+      context: ./deploy/backrest
+      args:
+        HTTP_PROXY: ${BACKREST_BUILD_PROXY:-}
+        HTTPS_PROXY: ${BACKREST_BUILD_PROXY:-}
+    image: ${BACKREST_IMAGE:-web-lair-backrest:local}
+    restart: always
+    security_opt:
+      - 'no-new-privileges:true'
+    # Review P2 hardening, measured: `cap_drop: ALL` alone makes the rustfs volume
+    # unreadable (its files belong to the rustfs uid, the tree is 0750), so the
+    # nightly run goes red with "some files could not be read" — correctly red,
+    # but useless. DAC_OVERRIDE is the one capability a root-run restic needs to
+    # read another uid's files; everything else stays dropped.
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+    pids_limit: 256
+    init: true
+    mem_limit: 2g
+    env_file:
+      # Backup credentials live outside .env (RUNBOOK §4): the app container must
+      # not be able to read the keys that delete or encrypt the repositories.
+      # `required: false` keeps `config` usable on a host that has not filled the
+      # file in yet; deploy/compose-prod.sh refuses `up` without it.
+      - path: deploy/backup.env
+        required: false
+    environment:
+      # Schedules are cron expressions (6 fields, seconds first) in container
+      # time; TZ pins that so "03:30" does not drift with the host.
+      TZ: ${BACKREST_TZ:-UTC}
+      BACKREST_INSTANCE: ${BACKREST_INSTANCE:-web-lair}
+      BACKREST_DATA_CRON: ${BACKREST_DATA_CRON:-0 30 3 * * *}
+      BACKREST_CONFIG_CRON: ${BACKREST_CONFIG_CRON:-0 40 3 * * *}
+      BACKREST_CHECK_CRON: ${BACKREST_CHECK_CRON:-0 30 4 * * 0}
+      BACKREST_CONFIG_CHECK_CRON: ${BACKREST_CONFIG_CHECK_CRON:-0 0 6 1 * *}
+      BACKREST_PRUNE_CRON: ${BACKREST_PRUNE_CRON:-0 0 5 * * 0}
+      BACKREST_RENDER_CONFIG: ${BACKREST_RENDER_CONFIG:-}
+      # The dump gates run here, against db:5432 — no Docker socket.
+      BACKUP_PG_MODE: local
+      PGHOST: db
+      PGPORT: '5432'
+      BACKUP_DIR: /staging
+      TMPDIR: /tmp
+      XDG_CACHE_HOME: /cache
+    ports:
+      # Loopback only: the UI is reached through an SSH tunnel (RUNBOOK §4.3).
+      - '127.0.0.1:9898:9898'
+    volumes:
+      - backrest_config:/config
+      - backrest_data:/data
+      - backrest_cache:/cache
+      - backrest_tmp:/tmp
+      # Staging = the same directory backup.sh writes pg.dump into. It serves the
+      # DRILL and same-generation recovery only: RUNBOOK §2/§4 restore from
+      # /srv/web-lair/pre-migrate dumps that match APP_IMAGE, and the nightly
+      # staging dump carries no generation marker — never mix the two.
+      # Keep BACKUP_DIR identical in .env (this mount) and deploy/backup.env.
+      - ${BACKUP_DIR:-/srv/web-lair/backup}:/staging
+      - ${DATA_DIR:-./data}:/lair-data:ro
+      - rustfsdata:/lair-rustfs:ro
+      - ./.env:/lair-env/.env:ro
+      # Hook scripts come from the checkout (one source of truth with the host
+      # path); the image only carries the PostgreSQL client.
+      - ./deploy/backup:/hooks:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:9898/']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    # M6 P2 review (P0): Backrest listens on 0.0.0.0:9898 with auth disabled, and
+    # its hooks are plain shell commands — so any container that can route to it
+    # can execute commands inside the container that holds both restic passwords
+    # and the .env. It therefore gets its own networks and shares one with NOBODY
+    # except db: `backup` (db) and `backrest_egress` (outbound only). Sharing the
+    # shared `egress` bridge would have left whisper — which also sits on
+    # `internal`, i.e. reachable from app — one hop away from the control plane.
+    networks: [backup, backrest_egress]
+    logging: *default-logging
+
+  db:
+    # Only the network list changes here: db serves the app on `internal` and the
+    # backup container on `backup`, so the app cannot resolve `backrest`.
+    networks: [internal, backup]
+
 networks:
   edge:
+    driver: bridge
+  # Internal on purpose: no egress, and no member other than db/backrest.
+  backup:
+    internal: true
+  # Outbound-only bridge for Backrest (S3/B2 uploads, healthchecks pings). It is
+  # separate from `egress` so no other service (whisper) shares a network with the
+  # backup control plane.
+  backrest_egress:
     driver: bridge
 
 volumes:
@@ -121,3 +229,7 @@ volumes:
   caddy_config:
   caddy_logs:
   kuma_data:
+  backrest_config:
+  backrest_data:
+  backrest_cache:
+  backrest_tmp:

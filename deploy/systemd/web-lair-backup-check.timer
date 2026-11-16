@@ -1,11 +1,23 @@
+# M6 P2 (T2.6): the weekly `restic check` also moved to Backrest — the data and
+# config repositories declare a `checkPolicy` schedule in the rendered
+# config.json (deploy/backrest/entrypoint.sh), and the check result pings
+# CHECK_PING_URL through deploy/backup/hook-check-end.sh.
+#
+# Kept for history; like web-lair-backup.timer it has no [Timer] directives and
+# no [Install] section. Running it *and* Backrest's check would read the repo
+# twice a week and could fight over the repository lock (Backrest's autoUnlock
+# removes stale locks, and a long read-data check can look stale to it).
+#
+# `web-lair-backup-check.service` still works as a manual entry:
+#   sudo systemctl start web-lair-backup-check.service
+#
+# Previous contents, for reference:
+#   OnCalendar=Sun *-*-* 04:30
+#   RandomizedDelaySec=30m
+#   Persistent=true
+#   Unit=web-lair-backup-check.service
 [Unit]
-Description=Run the web-lair restic check weekly
+Description=web-lair weekly restic repository check (schedule removed — Backrest owns it)
 
 [Timer]
-OnCalendar=Sun *-*-* 04:30
-RandomizedDelaySec=30m
-Persistent=true
 Unit=web-lair-backup-check.service
-
-[Install]
-WantedBy=timers.target

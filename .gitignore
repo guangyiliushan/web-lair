@@ -48,5 +48,8 @@ project.inlang/cache/
 /data/
 deploy/backup.env
 
+# Gatus config rendered by deploy/monitoring/render-config.sh (M6 P3)
+deploy/monitoring/conf.d/
+
 # Subagent-driven development scratch (plans, ledgers, review packages)
 .superpowers/

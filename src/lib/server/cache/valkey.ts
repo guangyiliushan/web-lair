@@ -165,6 +165,22 @@ export class ValkeyCacheStore implements CacheStore {
 		}
 	}
 
+	/**
+	 * Readiness probe (M6 P4): the same connection, one real round trip.
+	 * Deliberately rethrows - `/api/ready` must see the failure, unlike the
+	 * fail-open KV/presence writes above.
+	 */
+	async ping(): Promise<void> {
+		try {
+			await this.#ready();
+			await this.#client.ping();
+			this.#noteSuccess();
+		} catch (error) {
+			this.#warn(error);
+			throw error;
+		}
+	}
+
 	/** Lifecycle hook for scripts/tests: close the connection. */
 	async quit(): Promise<void> {
 		await this.#client.quit().catch(() => {});

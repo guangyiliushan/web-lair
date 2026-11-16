@@ -9,6 +9,7 @@ import {
 	isNotNull,
 	jobRuns,
 	lt,
+	notificationDeliveries,
 	or,
 	runTranslationsPrune,
 	sql,
@@ -35,6 +36,10 @@ const JOB_RUNS_CUTOFF = sql`now() - interval '24 months'`;
 const ACTIVITIES_CUTOFF = sql`now() - interval '24 months'`;
 const AI_USAGE_CUTOFF = sql`now() - interval '24 months'`;
 const WEBHOOK_DELIVERIES_CUTOFF = sql`now() - interval '30 days'`;
+// M6 P5: the notification delivery log keeps 30 days (decision register §3E
+// "Delivery log: 30 天"). Only terminal rows age out; a `queued` row is still
+// the drain's work item.
+const NOTIFICATION_DELIVERIES_CUTOFF = sql`now() - interval '30 days'`;
 
 export default {
 	async run(ctx: JobContext): Promise<void> {
@@ -56,6 +61,15 @@ export default {
 				)
 			)
 			.returning({ id: webhookDeliveries.id });
+		const prunedNotifications = await ctx.db
+			.delete(notificationDeliveries)
+			.where(
+				and(
+					lt(notificationDeliveries.createdAt, NOTIFICATION_DELIVERIES_CUTOFF),
+					inArray(notificationDeliveries.status, ['sent', 'failed'])
+				)
+			)
+			.returning({ id: notificationDeliveries.id });
 		const prunedActivities = await ctx.db
 			.delete(activities)
 			.where(lt(activities.createdAt, ACTIVITIES_CUTOFF))
@@ -116,6 +130,7 @@ export default {
 		ctx.summary({
 			jobRuns: prunedRuns.length,
 			webhookDeliveries: prunedDeliveries.length,
+			notificationDeliveries: prunedNotifications.length,
 			activities: prunedActivities.length,
 			aiUsage: prunedUsage.length,
 			discardedTranslations: prunedTranslations,
@@ -123,7 +138,7 @@ export default {
 			commentGeo: prunedCommentGeo.length
 		});
 		ctx.logger.info(
-			`pruned job_runs=${prunedRuns.length} webhook_deliveries=${prunedDeliveries.length} activities=${prunedActivities.length} ai_usage=${prunedUsage.length} discarded_translations=${prunedTranslations} chats=${prunedChats.length} comment_geo=${prunedCommentGeo.length}`
+			`pruned job_runs=${prunedRuns.length} webhook_deliveries=${prunedDeliveries.length} notification_deliveries=${prunedNotifications.length} activities=${prunedActivities.length} ai_usage=${prunedUsage.length} discarded_translations=${prunedTranslations} chats=${prunedChats.length} comment_geo=${prunedCommentGeo.length}`
 		);
 	}
 };

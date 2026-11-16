@@ -1,5 +1,15 @@
-import nodemailer, { type Transporter } from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 import { env } from '$env/dynamic/private';
+import {
+	MailNotConfiguredError,
+	createSmtpTransport,
+	devLogAllowedFrom,
+	isMailConfiguredFrom,
+	redactMailError,
+	type MailEnvReader
+} from './smtp';
+import { resetMailProbeCache, verifyMailbox } from './probe';
+import { sanitizeErrorText } from '../jobs/error-text.ts';
 
 /**
  * SMTP transport (deploy batch D-2, Q7 ruling).
@@ -13,14 +23,13 @@ import { env } from '$env/dynamic/private';
  * keeps local development usable (verification links print to the console,
  * the `devLogMail` precedent) and throws in production so a misconfigured
  * deployment cannot silently swallow registration email.
+ *
+ * The settings derivation and the verify cache live in `smtp.ts` / `probe.ts`
+ * so the plain-Node mail probe uses the exact same rules (M6 P4).
  */
 
-export class MailNotConfiguredError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = 'MailNotConfiguredError';
-	}
-}
+export { MailNotConfiguredError } from './smtp';
+export { DKIM_HEADER_FIELDS, devLogPermitted } from './smtp';
 
 export interface OutgoingMail {
 	to: string;
@@ -34,54 +43,14 @@ export interface OutgoingMail {
 	headers?: Record<string, string>;
 }
 
-/**
- * RFC 4871 defaults (nodemailer 10's `defaultFieldNames`) plus
- * `List-Unsubscribe-Post`. RFC 8058 §4 requires DKIM to cover **both**
- * List-Unsubscribe headers; nodemailer's default list already includes
- * `List-Unsubscribe` but not the `-Post` variant, and setting
- * `headerFieldNames` replaces the default list wholesale.
- */
-export const DKIM_HEADER_FIELDS =
-	'From:Sender:Reply-To:Subject:Date:Message-ID:To:Cc:MIME-Version:Content-Type:' +
-	'Content-Transfer-Encoding:Content-ID:Content-Description:Resent-Date:Resent-From:' +
-	'Resent-Sender:Resent-To:Resent-Cc:Resent-Message-ID:In-Reply-To:References:' +
-	'List-Id:List-Help:List-Unsubscribe:List-Unsubscribe-Post:List-Subscribe:List-Post:' +
-	'List-Owner:List-Archive';
+const getEnv: MailEnvReader = (name) => env[name] as string | undefined;
 
 export function isMailConfigured(): boolean {
-	// MAIL_FROM is not optional: sendMail throws without it, and a gate that
-	// ignored it would let sign-up succeed while the verification mail fails.
-	return env.MAIL_ENABLED === 'true' && Boolean(env.MAIL_SMTP_HOST) && Boolean(env.MAIL_FROM);
-}
-
-/**
- * Dev-logging is allowed in development, or outside production with
- * MAIL_DEV_LOG=true, or in production only with the second explicit switch
- * MAIL_DEV_LOG_OK=true (the e2e preview). A stray MAIL_DEV_LOG in production
- * therefore falls through to sendMail and fails loudly instead of printing
- * verification/reset tokens to the container log.
- */
-export function devLogPermitted(input: {
-	dev: boolean;
-	nodeEnv?: string;
-	mailDevLog?: string;
-	mailDevLogOk?: string;
-}): boolean {
-	// Production wins over the build flag: a production deployment must never
-	// print tokens just because the bundle was built with DEV semantics.
-	if (input.nodeEnv === 'production') {
-		return input.mailDevLog === 'true' && input.mailDevLogOk === 'true';
-	}
-	return input.dev || input.mailDevLog === 'true';
+	return isMailConfiguredFrom(getEnv);
 }
 
 function devLogAllowed(): boolean {
-	return devLogPermitted({
-		dev: import.meta.env.DEV,
-		nodeEnv: env.NODE_ENV,
-		mailDevLog: env.MAIL_DEV_LOG,
-		mailDevLogOk: env.MAIL_DEV_LOG_OK
-	});
+	return devLogAllowedFrom(getEnv, import.meta.env.DEV);
 }
 
 /**
@@ -94,89 +63,46 @@ export function isMailDeliveryAvailable(): boolean {
 
 /** Better-auth swallows this error in its background runner; log it here. */
 export function sendVerificationFailure(email: string, error: unknown): void {
-	// Keep the address out of the log; the domain is enough to spot a bad sender.
-	console.error('[mail] verification send failed', { domain: email.split('@')[1] ?? '?', error });
+	// Keep the address and any SMTP banner address out of the log; the domain is
+	// enough to spot a bad sender (review P2-7).
+	console.error('[mail] verification send failed', {
+		domain: email.split('@')[1] ?? '?',
+		error: sanitizeErrorText(redactMailError(error))
+	});
 }
-
-let verifyCache: { at: number; ok: boolean } | null = null;
-const VERIFY_TTL_MS = 60_000;
 
 /**
  * Sign-up is the one path where a silently swallowed transport error creates an
  * account that can never be verified. Verify the SMTP handshake first (cached
- * for a minute); dev-log mode needs no verification.
+ * for a minute); dev-log mode needs no verification. Shares the cache and the
+ * settings derivation with the `mail.probe` job.
  */
 export async function isMailDeliveryAvailableLive(): Promise<boolean> {
 	if (!isMailConfigured()) return devLogAllowed();
-	if (verifyCache && Date.now() - verifyCache.at < VERIFY_TTL_MS) return verifyCache.ok;
 	try {
-		await transporter().verify();
-		verifyCache = { at: Date.now(), ok: true };
+		const result = await verifyMailbox(getEnv, { transport: transporter() });
+		return result.ok;
 	} catch (error) {
-		console.warn('[mail] SMTP verification failed; refusing sign-up', error);
-		verifyCache = { at: Date.now(), ok: false };
+		// `transporter()` builds the transport synchronously and reads env, so a
+		// malformed host/port throws HERE, not inside the probe's try block. A
+		// throw must read as "not available" (the register page shows its banner)
+		// rather than a 500 (review P1-5).
+		console.warn('[mail] live availability probe threw', sanitizeErrorText(redactMailError(error)));
+		return false;
 	}
-	return verifyCache.ok;
-}
-
-function dkimOptions():
-	| {
-			domainName: string;
-			keySelector: string;
-			privateKey: string;
-			headerFieldNames: string;
-	  }
-	| undefined {
-	const domainName = env.MAIL_DKIM_DOMAIN;
-	const keySelector = env.MAIL_DKIM_SELECTOR;
-	const key = env.MAIL_DKIM_PRIVATE_KEY;
-	if (!domainName || !keySelector || !key) return undefined;
-	// `.env` cannot carry literal newlines portably; accept \n escapes.
-	return {
-		domainName,
-		keySelector,
-		privateKey: key.replace(/\\n/g, '\n'),
-		headerFieldNames: DKIM_HEADER_FIELDS
-	};
 }
 
 let cached: Transporter | null = null;
-let warnedUnsigned = false;
 
 function transporter(): Transporter {
-	if (cached) return cached;
-	const host = env.MAIL_SMTP_HOST ?? '';
-	const port = Number(env.MAIL_SMTP_PORT || 587);
-	const loopback = host === '127.0.0.1' || host === 'localhost' || host === '::1';
-	// A local MTA on loopback rarely offers STARTTLS; external submission
-	// ports (587/2525) get mandatory TLS unless explicitly disabled.
-	const requireTls = env.MAIL_SMTP_REQUIRE_TLS
-		? env.MAIL_SMTP_REQUIRE_TLS === 'true'
-		: port !== 465 && !loopback;
-	if (!dkimOptions() && !warnedUnsigned) {
-		warnedUnsigned = true;
-		console.warn('[mail] DKIM is not configured; outbound mail will be unsigned');
-	}
-	cached = nodemailer.createTransport({
-		host,
-		port,
-		secure: env.MAIL_SMTP_SECURE === 'true' || port === 465,
-		auth: env.MAIL_SMTP_USER
-			? { user: env.MAIL_SMTP_USER, pass: env.MAIL_SMTP_PASS ?? '' }
-			: undefined,
-		requireTLS: requireTls,
-		connectionTimeout: 10_000,
-		greetingTimeout: 10_000,
-		socketTimeout: 20_000,
-		dkim: dkimOptions()
-	});
+	cached ??= createSmtpTransport(getEnv);
 	return cached;
 }
 
 /** Test hook: drop the memoised transport after env changes. */
 export function resetMailTransport(): void {
 	cached = null;
-	verifyCache = null;
+	resetMailProbeCache();
 }
 
 export async function sendMail(mail: OutgoingMail): Promise<void> {

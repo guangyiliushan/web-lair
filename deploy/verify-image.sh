@@ -10,7 +10,6 @@
 set -euo pipefail
 
 IMAGE="${1:?usage: deploy/verify-image.sh <image>}"
-[ -n "$IMAGE" ] || { echo "image tag is empty" >&2; exit 1; }
 
 echo "-> drain entry in $IMAGE"
 set +e
@@ -57,18 +56,65 @@ fi
 
 echo "OK: all builtin job modules load"
 
+# Native runtime dependencies (review P1-3). `sharp` and `exiftool-vendored`
+# are module-scope imports in the media routes; `/api/health` never loads those
+# chunks, so a broken native build (glibc, missing `perl`) would pass every
+# other gate and only fail on the first upload. Importing them here costs ~5s.
+echo "-> native media dependencies (sharp, exiftool-vendored)"
+set +e
+out="$(timeout 90 docker run --rm --entrypoint node "$IMAGE" --input-type=module -e "
+await import('sharp');
+const { ExifTool } = await import('exiftool-vendored');
+const tool = new ExifTool();
+console.log('exiftool ' + (await tool.version()));
+await tool.end();
+" 2>&1)"
+status=$?
+set -e
+if [ "$status" -ne 0 ] || ! printf '%s' "$out" | grep -q 'exiftool'; then
+	echo "FAIL: native media dependencies do not load (sharp / exiftool-vendored)" >&2
+	printf '%s\n' "$out" >&2
+	exit 1
+fi
+
+echo "OK: sharp + exiftool-vendored load"
+
 # Release gate for the app itself: the image must start with production deps
 # (a build-server import missing from dependencies only fails here).
+#
+# The two boot guards in `src/hooks.server.ts` run in production builds:
+# `SUPPRESSION_HMAC_KEY` and `SUBSCRIBE_TOKEN_SECRET` (F-13). Both are throwaway
+# values generated per run - never deployment credentials. They go through a
+# 0600 env-file instead of `-e`: `docker run -e` leaves the value in the host
+# argv (visible to `ps`) and in the container's Config.Env (`docker inspect`)
+# (review P2-4).
 echo "-> server startup"
 app="web-lair-verify-$$"
-cleanup() { docker rm -f "$app" >/dev/null 2>&1 || true; }
+envfile="$(mktemp)"
+chmod 600 "$envfile"
+# `docker` is a native binary: under MSYS/Git Bash a `/tmp/...` path is not
+# resolvable, so convert it when cygpath exists (Linux CI keeps the POSIX path).
+if command -v cygpath >/dev/null 2>&1; then
+	docker_envfile="$(cygpath -w "$envfile")"
+else
+	docker_envfile="$envfile"
+fi
+cleanup() {
+	docker rm -f "$app" >/dev/null 2>&1 || true
+	rm -f "$envfile"
+}
 trap cleanup EXIT
 cleanup
-docker run -d --name "$app" \
-	-e ORIGIN=http://localhost -e PORT=3000 -e HOST=0.0.0.0 \
-	-e DATABASE_URL='postgres://x:unused@127.0.0.1:1/x' \
-	-e BETTER_AUTH_SECRET='0123456789abcdef0123456789abcdef' \
-	-e SUPPRESSION_HMAC_KEY='BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=' \
+{
+	printf 'ORIGIN=http://localhost\n'
+	printf 'PORT=3000\n'
+	printf 'HOST=0.0.0.0\n'
+	printf 'DATABASE_URL=postgres://x:unused@127.0.0.1:1/x\n'
+	printf 'BETTER_AUTH_SECRET=0123456789abcdef0123456789abcdef\n'
+	printf 'SUPPRESSION_HMAC_KEY=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\n'
+	printf 'SUBSCRIBE_TOKEN_SECRET=%s\n' "$(head -c 32 /dev/urandom | base64)"
+} > "$envfile"
+docker run -d --rm --name "$app" --env-file "$docker_envfile" \
 	-p 127.0.0.1::3000 "$IMAGE" >/dev/null
 port="$(docker port "$app" 3000/tcp | head -n1 | sed 's/.*://')"
 code=""

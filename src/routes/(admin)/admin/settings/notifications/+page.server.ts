@@ -1,10 +1,13 @@
 import { fail } from '@sveltejs/kit';
+import { ZodError } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { pgErrorCode } from '$lib/server/db/pg-error';
 import { activities, webhookDeliveries, webhookSecrets, webhooks } from '$lib/server/db/system';
+import { notificationDeliveries } from '$lib/server/db/system/notification-delivery.schema';
+import { readBarkConfig } from '$lib/server/notifications/adapters/bark';
 import { requireAdminRole } from '$lib/server/authz';
 import { assertSettingWrite, settingAccess } from '$lib/server/settings/tiers';
 import { recordActivity } from '$lib/server/audit';
@@ -21,7 +24,7 @@ import {
 	readWebhookSecretStatuses,
 	WEBHOOK_SECRET_GRACE_MS
 } from '$lib/server/secrets/webhook-secrets';
-import { getOption } from '$lib/server/config/options-registry';
+import { getOption, setOption } from '$lib/server/config/options-registry';
 import { isUuid } from '$lib/utils/uuid';
 import { formatDateTime } from '$lib/utils/i18n';
 import { WEBHOOK_EVENT_ROSTER, isWebhookEventName } from '$lib/server/webhooks/events';
@@ -213,6 +216,29 @@ export const load: PageServerLoad = async (event) => {
 		};
 	});
 	const byId = new Map(webhookEndpoints.map((row) => [row.id, row]));
+	// M6 P5: preferences, delivery log and the Bark channel status. The device
+	// key never leaves the server - `readBarkConfig` returns the origin only.
+	const notificationPreferences = await getOption('notifications.preferences', db);
+	const bark = readBarkConfig((name) => env[name]);
+	// Delivery log DTO: only the columns the page renders. `payload` never leaves
+	// the server - it carries the notification body (a comment excerpt is reader
+	// content, not log material), which is why the log shows the title alone
+	// (review P1: the previous `...row` spread shipped the whole payload to
+	// `__data.json` while the copy promised "bodies are never logged").
+	const notificationRows = await db
+		.select({
+			id: notificationDeliveries.id,
+			eventType: notificationDeliveries.eventType,
+			channel: notificationDeliveries.channel,
+			status: notificationDeliveries.status,
+			attempts: notificationDeliveries.attempts,
+			error: notificationDeliveries.error,
+			createdAt: notificationDeliveries.createdAt,
+			title: sql<string>`coalesce(${notificationDeliveries.payload}->>'title', '')`
+		})
+		.from(notificationDeliveries)
+		.orderBy(desc(notificationDeliveries.createdAt))
+		.limit(50);
 	return {
 		webhookEndpoints,
 		webhookEventRoster: [...WEBHOOK_EVENT_ROSTER],
@@ -223,6 +249,30 @@ export const load: PageServerLoad = async (event) => {
 		mailEditable: settingAccess(event.locals.admin?.role, 'notifications', 'notifications.mail')
 			.editable,
 		mail: readMailStatus((name) => env[name]),
+		// M6 P5: preferences and the alert log are owner-only (decision N8);
+		// Bark credentials stay env-only for now (P5-WAITING).
+		notificationPreferences,
+		notificationPreferencesEditable: settingAccess(
+			event.locals.admin?.role,
+			'notifications',
+			'notifications.preferences'
+		).editable,
+		notificationLogEditable: settingAccess(
+			event.locals.admin?.role,
+			'notifications',
+			'notifications.deliveries'
+		).editable,
+		bark: { configured: bark.configured, serverUrl: bark.serverUrl, reason: bark.reason },
+		notifications: notificationRows.map((row) => ({
+			id: row.id,
+			eventType: row.eventType,
+			channel: row.channel,
+			status: row.status,
+			attempts: row.attempts,
+			error: row.error,
+			title: row.title,
+			createdLabel: formatDateTime(row.createdAt, { timeZone: siteTz })
+		})),
 		webhookDeliveries: deliveryRows.map((row) => {
 			// The FK cascade removes a deleted endpoint's deliveries, so this
 			// lookup is total by construction (nine-dimension DB-04: the dead
@@ -386,6 +436,129 @@ export const actions: Actions = {
 		});
 		if (!replayed) return fail(400, { message: m.admin_settings_notification_err_not_failed() });
 		return { retried: true, id: replayed.id };
+	},
+
+	/**
+	 * M6 P5: per-group channel switches (owner-only, decision N8). Form fields
+	 * are checkboxes, so absence means "off" - the handler derives the object
+	 * from the form instead of trusting a hidden JSON blob.
+	 */
+	saveNotificationPreferences: async ({ request, locals }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'notifications', 'notifications.preferences');
+		const form = await request.formData();
+		const checked = (name: string) => form.get(name) === 'on';
+		const value = {
+			comment: { email: checked('comment_email'), bark: checked('comment_bark') },
+			job: { email: checked('job_email'), bark: checked('job_bark') },
+			ops: { email: checked('ops_email'), bark: checked('ops_bark') }
+		};
+		try {
+			// Validation + persistence + audit commit together: a rejected write
+			// leaves no audit row, and the audit event name must satisfy the
+			// activities CHECK (`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$` - ONE dot).
+			await db.transaction(async (tx) => {
+				await setOption('notifications.preferences', value, tx);
+				await recordActivity(tx, {
+					event: 'notification.preferences',
+					actorId: locals.user?.id ?? null,
+					payload: value,
+					deliver: false
+				});
+			});
+		} catch (error) {
+			// Only an invalid payload is a 400. A database/audit failure is an
+			// infrastructure error: rethrowing lets SvelteKit answer 500 (and the
+			// logs see the cause) instead of telling the operator "bad request"
+			// (review P2).
+			if (error instanceof ZodError) {
+				return fail(400, {
+					op: 'saveNotificationPreferences',
+					message: m.admin_settings_notification_err_bad_request()
+				});
+			}
+			throw error;
+		}
+		return {
+			op: 'saveNotificationPreferences',
+			saved: true,
+			message: m.admin_settings_notification_prefs_saved()
+		};
+	},
+
+	/**
+	 * M6 P5: manual resend re-queues the SAME row (never a copy), so the
+	 * unique key `(event_type, event_key, channel)` still describes exactly
+	 * one notification and the delivery log keeps one history. Only a row
+	 * that already reached a terminal state can be requeued; the status
+	 * predicate makes two simultaneous clicks idempotent.
+	 */
+	resendNotification: async ({ request, locals }) => {
+		await requireAdminRole();
+		assertSettingWrite(locals.admin?.role, 'notifications', 'notifications.deliveries');
+		const form = await request.formData();
+		const id = (form.get('id') ?? '').toString();
+		if (!id || !isUuid(id)) {
+			return fail(400, {
+				op: 'resendNotification',
+				message: m.admin_settings_notification_err_bad_id()
+			});
+		}
+		const requeued = await db.transaction(async (tx) => {
+			const rows = await tx
+				.update(notificationDeliveries)
+				.set({
+					status: 'queued',
+					// A manual resend starts a fresh delivery campaign: the attempt
+					// budget is reset so the operator gets the full 1m/5m/15m schedule
+					// again (and a row that already spent its budget is not
+					// immediately terminal). The history stays visible in `activities`
+					// (`notification.resend`), not in this counter.
+					attempts: 0,
+					nextAttemptAt: new Date(),
+					responseCode: null,
+					error: null,
+					sentAt: null
+				})
+				.where(
+					and(
+						eq(notificationDeliveries.id, id),
+						inArray(notificationDeliveries.status, ['failed', 'sent'])
+					)
+				)
+				.returning({
+					id: notificationDeliveries.id,
+					eventType: notificationDeliveries.eventType,
+					eventKey: notificationDeliveries.eventKey,
+					channel: notificationDeliveries.channel
+				});
+			const row = rows[0];
+			if (!row) return null;
+			await recordActivity(tx, {
+				event: 'notification.resend',
+				actorId: locals.user?.id ?? null,
+				payload: {
+					deliveryId: row.id,
+					eventType: row.eventType,
+					eventKey: row.eventKey,
+					channel: row.channel
+				},
+				deliver: false
+			});
+			return row;
+		});
+		if (!requeued) {
+			return fail(400, {
+				op: 'resendNotification',
+				message: m.admin_settings_notification_err_not_requeueable()
+			});
+		}
+		return {
+			op: 'resendNotification',
+			resent: true,
+			id: requeued.id,
+			message: m.admin_settings_notification_resend_ok()
+		};
 	},
 
 	create: async ({ request, locals }) => {

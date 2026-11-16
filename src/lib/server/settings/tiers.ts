@@ -62,6 +62,12 @@ export const SETTING_FIELD_TIERS: Record<string, SettingTier> = {
 	'notes.gate': 'admin',
 	'notifications.mail': 'admin',
 	'notifications.webhooks': 'owner',
+	// M6 P5: delivery preferences and the alert log are owner-only (decision
+	// N8); the log names comment/job ids, and a resend spends the owner's
+	// mail/Bark budget. Bark credentials stay env-only (P5-WAITING).
+	'notifications.preferences': 'owner',
+	'notifications.deliveries': 'owner',
+	'notifications.bark': 'owner',
 	'storage.provider': 'owner',
 	'storage.credentials': 'owner',
 	'storage.purge': 'owner',

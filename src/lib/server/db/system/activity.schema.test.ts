@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { NOTIFICATION_EVENT_TYPES } from '../../notifications/events';
 
 /**
  * Producer teeth for `activities_event_check` (W1.3 / P0-3).
@@ -48,6 +49,18 @@ const THREE_SEGMENT_LITERAL =
 const SOURCE_ROOTS = ['src', 'scripts'];
 const SKIP_DIRS = new Set(['node_modules']);
 
+/**
+ * M6 P5/P6: `notification_deliveries` is a legitimately multi-dot namespace
+ * (`mail.probe.failed`), and the scripts that mention `activities` also write
+ * that table (`scripts/verify-jobs-drain.ts` asserts the notification CHECK on
+ * real PG). Those literals are notification events, not activity events, so the
+ * three-segment scan skips them **by name** — never by file, which would blind
+ * the scan to an activity event that happens to live next to one. The roster is
+ * pinned in the first test so an emptied exclusion list cannot silently make
+ * this scan pass.
+ */
+const NOTIFICATION_EVENT_NAMES = new Set<string>(NOTIFICATION_EVENT_TYPES);
+
 function sourceFiles(dir: string, files: string[] = []): string[] {
 	for (const entry of readdirSync(dir, { withFileTypes: true })) {
 		const path = join(dir, entry.name);
@@ -71,14 +84,26 @@ describe('activities event name contract', () => {
 		expect(pattern.test('ai.usage.purge')).toBe(false);
 		expect(pattern.test('Job.Run')).toBe(false);
 		expect(pattern.test('ai.')).toBe(false);
+		// M6 P5: the multi-dot exclusion set in the scan below must be real - an
+		// emptied roster would make the scan quietly weaker, not red.
+		expect(NOTIFICATION_EVENT_NAMES.has('mail.probe.failed')).toBe(true);
+		expect(NOTIFICATION_EVENT_NAMES.size).toBeGreaterThan(0);
 	});
 
-	// The scan reads the whole `src` + `scripts` tree; on a loaded checkout it
-	// has exceeded the 5 s default, so it gets headroom.
+	// The scan reads the whole `src` + `scripts` tree. A full-suite run on a
+	// loaded host has been observed at ~37 s (vitest runs the 373 files in
+	// parallel), so the budget is 60 s: this asserts a file scan, not a timing
+	// property, and a 30 s ceiling made the full suite flake on wall clock.
 	it('every recordActivity event literal satisfies the CHECK (source scan)', () => {
 		const pattern = eventCheckPattern();
 		const offenders: string[] = [];
-		for (const file of SOURCE_ROOTS.flatMap((root) => sourceFiles(root))) {
+		const files = SOURCE_ROOTS.flatMap((root) => sourceFiles(root));
+		// Denominator guard: a broken walk (wrong root, renamed extension, a
+		// SKIP_DIRS mistake) would scan nothing and report a clean scan. The
+		// tree is ~1.2k files today; a floor keeps that failure loud without
+		// pinning an exact count that every new file would invalidate.
+		expect(files.length).toBeGreaterThan(800);
+		for (const file of files) {
 			const text = readFileSync(file, 'utf8');
 			// Only files on the audit write path can produce these literals: the
 			// audit writer, and the few direct `activities` writers (the budget
@@ -90,11 +115,19 @@ describe('activities event name contract', () => {
 			}
 			// A name held in a ternary or a constant is out of `event:` position,
 			// so the literal itself is the signal: three segments always violates
-			// this CHECK.
+			// this CHECK — unless the literal is a registered notification event,
+			// which is a different namespace with its own (multi-dot) CHECK.
 			for (const match of text.matchAll(THREE_SEGMENT_LITERAL)) {
+				if (NOTIFICATION_EVENT_NAMES.has(match[2])) continue;
 				offenders.push(`${file}: ${match[2]}`);
 			}
 		}
 		expect(offenders).toEqual([]);
-	}, 30_000);
+		// The multi-dot exclusion is scoped to the notification roster. If a
+		// future notification event adds a third segment, the blind spot grows
+		// with it - so the size of the excluded set is pinned here.
+		expect([...NOTIFICATION_EVENT_NAMES].filter((name) => name.split('.').length >= 3)).toEqual([
+			'mail.probe.failed'
+		]);
+	}, 60_000);
 });

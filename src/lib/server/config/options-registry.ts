@@ -9,6 +9,10 @@ import { isPgAcceptableTimeZone, type PgTimeZoneExecutor } from '../pg-timezone.
 import { m } from '../../paraglide/messages.js';
 import { OWNER_STATUS_DEFAULT, OWNER_STATUS_KINDS } from '../../config/owner-status.ts';
 import {
+	DEFAULT_NOTIFICATION_PREFERENCES,
+	notificationPreferencesSchema
+} from '../notifications/preferences.ts';
+import {
 	DEFAULT_PROVIDER_CONFIG,
 	DEFAULT_STORAGE_ACTIVE,
 	DEFAULT_STORAGE_MIGRATION,
@@ -550,6 +554,15 @@ export const optionRegistry = {
 				{ error: () => m.admin_option_err_account_dup() }
 			),
 		default: []
+	},
+	'notifications.preferences': {
+		// M6 P5 (decision register §3E N8): per-group channel switches for the
+		// notification outbox. The schema and the default object live in
+		// `notifications/preferences.ts` so the drain (plain Node) parses the
+		// SAME contract without importing this registry (which pulls paraglide
+		// messages). Defaults: email on for comment/job/ops, Bark off.
+		schema: notificationPreferencesSchema,
+		default: DEFAULT_NOTIFICATION_PREFERENCES
 	}
 } as const satisfies Record<string, RegistryEntry>;
 

@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
+import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { comments, notes, pages, posts } from '$lib/server/db/content';
 import { pgErrorCode } from '$lib/server/db/pg-error';
@@ -8,6 +9,7 @@ import { evaluateCommentModeration, recordModerationEvents } from './comment-mod
 import { getCache } from '$lib/server/cache';
 import { rateLimit, rateLimitStrict, type CacheStore } from '$lib/server/cache/store';
 import { getOption } from '$lib/server/config/options-registry';
+import { enqueueNotification, type NotificationOutboxDb } from '$lib/server/notifications/outbox';
 import { normalizeCountry, normalizeRegion } from '$lib/server/security/geoip';
 import { clientAddressKey, ipMatchesCidrs } from '$lib/utils/cidr';
 import { locales } from '$lib/paraglide/runtime';
@@ -791,29 +793,60 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	const regionCode = collectGeo ? normalizeRegion(input.geo?.region) : null;
 	const privacyMeta =
 		countryCode && privacy.showCountry && input.showCountry ? { showCountry: true } : null;
+	const authorName = normalizeCommentAuthor(input.author);
 	try {
-		const [created] = await db
-			.insert(comments)
-			.values({
-				...arc,
-				readerId: input.user.id,
-				author: normalizeCommentAuthor(input.author),
-				avatar: normalizeCommentAvatar(input.avatar),
-				text,
-				state,
-				isOwnerReply: autoApprove,
-				parentCommentId,
-				rootCommentId,
-				anchor: anchorValue,
-				countryCode,
-				regionCode,
-				meta: privacyMeta,
-				reviewedBy: autoApprove ? input.user.id : null,
-				// reviewed_at/by are human-decision columns: machine rule outcomes keep
-				// them null so the audit trail cannot read as a human review.
-				reviewedAt: autoApprove ? now : null
-			})
-			.returning({ id: comments.id, state: comments.state });
+		// M6 P5 (T5.6): the comment insert and the `comment.pending` outbox row
+		// share ONE transaction. The enqueue creates its own savepoint and
+		// swallows its failures, so a broken notification path can never roll
+		// back the reader's comment - the alert is best-effort, the comment is
+		// not ("评论事务内写 outbox，失败不阻塞业务").
+		const [created] = await db.transaction(async (tx) => {
+			const inserted = await tx
+				.insert(comments)
+				.values({
+					...arc,
+					readerId: input.user.id,
+					author: authorName,
+					avatar: normalizeCommentAvatar(input.avatar),
+					text,
+					state,
+					isOwnerReply: autoApprove,
+					parentCommentId,
+					rootCommentId,
+					anchor: anchorValue,
+					countryCode,
+					regionCode,
+					meta: privacyMeta,
+					reviewedBy: autoApprove ? input.user.id : null,
+					// reviewed_at/by are human-decision columns: machine rule outcomes
+					// keep them null so the audit trail cannot read as a human review.
+					reviewedAt: autoApprove ? now : null
+				})
+				.returning({ id: comments.id, state: comments.state });
+			const row = inserted[0];
+			// Only a queue entry is worth an alert: an auto-approved owner reply
+			// or a machine-rejected row has nothing to moderate (decision N7).
+			if (row?.state === 'pending') {
+				try {
+					await enqueueNotification(tx as unknown as NotificationOutboxDb, {
+						eventType: 'comment.pending',
+						eventKey: `comment:${row.id}`,
+						title: 'New comment awaiting review',
+						body: `${authorName}: ${text}`,
+						url: env.ORIGIN ? `${env.ORIGIN.replace(/\/$/, '')}/admin/comments` : null
+					});
+				} catch (error) {
+					// Belt over the outbox's own savepoint: even a thrown enqueue
+					// must not roll back the reader's comment (the alert is
+					// best-effort; the comment is the business write).
+					console.warn(
+						'[comments] pending notification enqueue failed',
+						error instanceof Error ? error.name : 'unknown'
+					);
+				}
+			}
+			return inserted;
+		});
 		await recordModerationEvents(created.id, moderation);
 		return {
 			kind: 'created',

@@ -74,6 +74,26 @@
 		}
 	]);
 
+	// Traffic (P6): SSR values from Sentinel's cached 24 h dashboard. Null
+	// means Sentinel is down or unconfigured; the values render "—".
+	const trafficStats = $derived([
+		{
+			metric: 'traffic-pages',
+			label: m.admin_dashboard_traffic_page_requests(),
+			value: data.traffic.pageRequests
+		},
+		{
+			metric: 'traffic-visitors',
+			label: m.admin_dashboard_traffic_visitors(),
+			value: data.traffic.visitors
+		},
+		{
+			metric: 'traffic-404',
+			label: m.admin_dashboard_traffic_not_found(),
+			value: data.traffic.notFound
+		}
+	]);
+
 	// Quick actions (counts made real: C3; the "Write" deep links on the three
 	// micro-content rows auto-open the add dialog via ?add=1)
 	const quickActions = $derived([
@@ -186,6 +206,51 @@
 							</p>
 							<p class="truncate text-[11px] text-muted-foreground">{stat.label}</p>
 						</div>
+					</div>
+				{/each}
+			</div>
+		</Card.Root>
+	</section>
+
+	<!-- Traffic (P6): three numbers from Sentinel's 24 h dashboard, same
+	     fail-open cache as /admin/analytics. Values are page requests (PV
+	     filter applied), unique visitors and exact 404s. -->
+	<section class="flex flex-col gap-2">
+		<div class="flex items-center justify-between gap-3">
+			<h2
+				class="flex items-baseline gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase"
+			>
+				{m.admin_dashboard_traffic_title()}
+				<span class="text-[10px] font-normal normal-case">· {m.admin_dashboard_traffic_24h()}</span>
+				{#if !data.traffic.available}
+					<span class="text-[10px] font-normal text-muted-foreground normal-case">
+						· {m.admin_dashboard_traffic_unavailable()}
+					</span>
+				{/if}
+			</h2>
+			<a
+				class="flex items-center gap-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+				href={resolve('/admin/analytics')}
+			>
+				{m.admin_dashboard_traffic_open()}
+				<IconArrowRight class="size-3" aria-hidden="true" />
+			</a>
+		</div>
+		<Card.Root class="py-0">
+			<div class="grid grid-cols-3 divide-x divide-border">
+				{#each trafficStats as stat (stat.metric)}
+					<div class="px-4 py-3">
+						<p class="text-lg leading-tight font-semibold" data-metric={stat.metric}>
+							{stat.value === null
+								? '—'
+								: formatNumber(
+										stat.value
+									)}{#if stat.metric === 'traffic-pages' && data.traffic.pageRequestsLowerBound}<span
+									class="text-muted-foreground"
+									title={m.admin_dashboard_traffic_lower_bound()}>*</span
+								>{/if}
+						</p>
+						<p class="truncate text-[11px] text-muted-foreground">{stat.label}</p>
 					</div>
 				{/each}
 			</div>

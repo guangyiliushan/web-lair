@@ -60,6 +60,13 @@ function mount(extra: Record<string, unknown> = {}) {
 			siteTimezone: 'UTC',
 			auth: null,
 			presence: { enabled: false, site: null, day: null, peak: null },
+			traffic: {
+				available: true,
+				pageRequests: 42,
+				pageRequestsLowerBound: false,
+				visitors: 7,
+				notFound: 2
+			},
 			...extra
 		} as never
 	});
@@ -146,5 +153,42 @@ describe('admin dashboard page shape', () => {
 		expect(hrefs).toContain('/admin/posts/edit');
 		expect(hrefs).toContain('/admin/quotes?add=1');
 		expect(hrefs).toContain('/admin/moments');
+	});
+
+	it('renders the traffic card from SSR values and links to analytics', async () => {
+		await mount();
+		expect(document.querySelector('[data-metric="traffic-pages"]')?.textContent?.trim()).toBe('42');
+		expect(document.querySelector('[data-metric="traffic-visitors"]')?.textContent?.trim()).toBe(
+			'7'
+		);
+		expect(document.querySelector('[data-metric="traffic-404"]')?.textContent?.trim()).toBe('2');
+		expect(document.querySelector('a[href="/admin/analytics"]')).not.toBeNull();
+	});
+
+	it('marks a lower-bound page-request total with an asterisk', async () => {
+		await mount({
+			traffic: {
+				available: true,
+				pageRequests: 42,
+				pageRequestsLowerBound: true,
+				visitors: 7,
+				notFound: 2
+			}
+		});
+		expect(document.querySelector('[data-metric="traffic-pages"]')?.textContent).toContain('*');
+	});
+
+	it('renders — for the traffic card when Sentinel is unavailable', async () => {
+		await mount({
+			traffic: {
+				available: false,
+				pageRequests: null,
+				pageRequestsLowerBound: false,
+				visitors: null,
+				notFound: null
+			}
+		});
+		expect(document.querySelector('[data-metric="traffic-pages"]')?.textContent?.trim()).toBe('—');
+		expect(document.body.textContent).toContain('Sentinel unavailable');
 	});
 });

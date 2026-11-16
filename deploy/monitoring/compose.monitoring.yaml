@@ -1,0 +1,59 @@
+# Production overlay: Gatus (C.5 监控，M6 P3)。
+#
+# Loaded only by deploy/compose-prod.sh, as the third -f file. Keeping it out of
+# compose.prod.yaml means dev stacks and image builds never pull it, and the
+# Kuma→Gatus cutover can happen without touching the app overlay.
+#
+# 没有 depends_on: app：监控不能因为被监控对象 unhealthy 而起不来。
+# 配置目录由 render-config.sh 生成（compose-prod.sh 只在 up/create 前调用；
+# restart/start 不重建容器，run 被 drain 定时器每分钟调用，因此都不渲染）。
+#
+# 端口只绑 127.0.0.1：UI 无鉴权，经 tailnet/SSH 隧道访问，不暴露公网。
+# edge 网络是出站通道（Bark、RDAP/WHOIS、域名解析）；internal 用于直连 app/db/rustfs。
+#
+# YAML anchors 不跨文件，x-logging 与 compose.prod.yaml 保持一致。
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
+services:
+  gatus:
+    # pinned: Gatus v5.38.0 (2026-10-28) — 与 README 配置表对应的配置格式。
+    image: ghcr.io/twin/gatus:v5.38.0
+    restart: always
+    security_opt:
+      - 'no-new-privileges:true'
+    # 镜像基于 scratch、只跑一个静态二进制：不需要可写根文件系统，也不需要任何
+    # capability。storage 是 memory，配置以 :ro 挂载，所以 read_only 无额外代价。
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    # 没有 healthcheck：scratch 镜像里没有 curl/wget/sh，Docker 无法在容器内探活。
+    # 进程活着由 restart: always 兜底；"Gatus 自己挂了" 只能靠箱外 healthchecks
+    # 的 deadman（HC_DEADMAN_URL，见 README §7）发现。
+    ports:
+      - '127.0.0.1:8080:8080'
+    environment:
+      GATUS_CONFIG_PATH: /config
+      GATUS_LOG_LEVEL: ${GATUS_LOG_LEVEL:-INFO}
+      # 监控目标（都可 env 覆盖；生产默认走 compose 服务名）
+      MONITOR_APP_ADDR: ${MONITOR_APP_ADDR:-app:3000}
+      MONITOR_PG_ADDR: ${MONITOR_PG_ADDR:-db:5432}
+      MONITOR_RUSTFS_ADDR: ${MONITOR_RUSTFS_ADDR:-rustfs:9000}
+      MONITOR_INTERVAL: ${MONITOR_INTERVAL:-30s}
+      MONITOR_FAILURE_THRESHOLD: ${MONITOR_FAILURE_THRESHOLD:-3}
+      MONITOR_SUCCESS_THRESHOLD: ${MONITOR_SUCCESS_THRESHOLD:-2}
+      # 可选功能开关：空 = 对应片段不渲染（只记日志 / 跳过检查）
+      BARK_URL: ${BARK_URL:-}
+      SITE_DOMAIN: ${SITE_DOMAIN:-}
+      DRAIN_HEARTBEAT_TOKEN: ${DRAIN_HEARTBEAT_TOKEN:-}
+      READY_TOKEN: ${READY_TOKEN:-}
+    volumes:
+      - ./deploy/monitoring/conf.d:/config:ro
+    networks: [internal, edge]
+    logging: *default-logging

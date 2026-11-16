@@ -31,7 +31,7 @@
 // shape). T8 (Kuma wiring) to §25.
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -39,13 +39,15 @@ import { connect as netConnect, createServer as createNetServer } from 'node:net
 import { setTimeout as delay } from 'node:timers/promises';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import postgres, { type ReservedSql } from 'postgres';
 import { activities } from '../src/lib/server/db/system/activity.schema';
 import { recordActivity } from '../src/lib/server/audit';
 import { jobRuns } from '../src/lib/server/db/system/job-run.schema';
 import { jobSchedules } from '../src/lib/server/db/system/job-schedule.schema';
 import { webhookDeliveries } from '../src/lib/server/db/system/webhook-delivery.schema';
+import { notificationDeliveries } from '../src/lib/server/db/system/notification-delivery.schema';
+import { enqueueNotification } from '../src/lib/server/notifications/outbox';
 import { webhooks } from '../src/lib/server/db/system/webhook.schema';
 import { enqueueJob } from '../src/lib/server/jobs/queue';
 import { deleteUserJob } from '../src/lib/server/jobs/job-scripts';
@@ -76,10 +78,12 @@ const fixtureDataDir = await mkdtemp(join(tmpdir(), 'wl-jobs-verify-data-'));
 let checks = 0;
 let failures = 0;
 // Denominator guard (round-2 SYT-9): a silently skipped scenario/check must
-// turn the harness red instead of printing a green total. 168 = the real
-// checks (163 baseline + 5 net W9.4 retry/audit checks); this self-check's own
-// increment makes the ALL summary print 169.
-const EXPECTED_CHECKS = 168;
+// turn the harness red instead of printing a green total. 193 = the real
+// checks (163 baseline + 5 net W9.4 retry/audit + 25 M6 P5 notification
+// checks: both storm windows - per-event and global - plus the 15m retry step
+// and the fourth terminal attempt); this self-check's own increment makes the
+// ALL summary print 192.
+const EXPECTED_CHECKS = 193;
 
 function check(name: string, ok: boolean, detail = ''): void {
 	checks += 1;
@@ -464,8 +468,8 @@ async function t4CatchUpAndSourceHash(): Promise<void> {
 		JSON.stringify(run?.result)
 	);
 	check(
-		'job summary present (disk reading)',
-		typeof (run?.result as Record<string, unknown>)?.disk === 'object'
+		'job summary present (mount readings)',
+		Array.isArray((run?.result as Record<string, unknown>)?.mounts)
 	);
 
 	const schedule = await scheduleById(scheduleId);
@@ -922,6 +926,57 @@ async function jobsPruneRetention(): Promise<void> {
 		.values({ event: 'job.prune', createdAt: new Date() })
 		.returning({ id: activities.id });
 
+	// M6 P5: the notification delivery log follows the same 30-day window;
+	// only terminal rows age out. (No queued fixture here on purpose - the
+	// same tick's notification segment would try to deliver it.)
+	const [oldSentNotification] = await db
+		.insert(notificationDeliveries)
+		.values({
+			eventType: 'job.failed',
+			eventKey: `job_run:prune-old-sent-${randomUUID()}`,
+			channel: 'email',
+			status: 'sent',
+			createdAt: months(1),
+			sentAt: months(1)
+		})
+		.returning({ id: notificationDeliveries.id });
+	const [oldFailedNotification] = await db
+		.insert(notificationDeliveries)
+		.values({
+			eventType: 'job.failed',
+			eventKey: `job_run:prune-old-failed-${randomUUID()}`,
+			channel: 'email',
+			status: 'failed',
+			createdAt: months(1)
+		})
+		.returning({ id: notificationDeliveries.id });
+	const [recentNotification] = await db
+		.insert(notificationDeliveries)
+		.values({
+			eventType: 'job.failed',
+			eventKey: `job_run:prune-recent-${randomUUID()}`,
+			channel: 'email',
+			status: 'failed',
+			createdAt: new Date()
+		})
+		.returning({ id: notificationDeliveries.id });
+	// A 30-day-old QUEUED row must survive: `queued` is the drain's work item,
+	// not garbage. `next_attempt_at` is pushed a year out so this tick's
+	// notification segment cannot claim (and therefore cannot deliver) it, which
+	// keeps the fixture in the `queued` state the assertion needs.
+	const [oldQueuedNotification] = await db
+		.insert(notificationDeliveries)
+		.values({
+			eventType: 'job.failed',
+			eventKey: `job_run:prune-old-queued-${randomUUID()}`,
+			channel: 'email',
+			status: 'queued',
+			attempts: 0,
+			createdAt: months(1),
+			nextAttemptAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+		})
+		.returning({ id: notificationDeliveries.id });
+
 	await enqueueJob(db, 'jobs.prune', 'cli');
 	const result = await runDrainOnce();
 	check('drain exits 0', result.code === 0);
@@ -942,6 +997,22 @@ async function jobsPruneRetention(): Promise<void> {
 		'prune result reports one activity deletion',
 		pruneResult?.activities === 1,
 		JSON.stringify(pruneResult)
+	);
+	check(
+		'prune result reports two notification deletions (terminal, 30 days)',
+		pruneResult?.notificationDeliveries === 2,
+		JSON.stringify(pruneResult)
+	);
+	const queuedNotificationRow = (
+		await db
+			.select()
+			.from(notificationDeliveries)
+			.where(eq(notificationDeliveries.id, oldQueuedNotification.id))
+	)[0];
+	check(
+		'old queued notification NOT pruned (queued is a signal, not garbage)',
+		queuedNotificationRow?.status === 'queued',
+		JSON.stringify({ status: queuedNotificationRow?.status })
 	);
 
 	const runIds = (await runsFor('system.resources')).map((run) => run.id);
@@ -965,6 +1036,17 @@ async function jobsPruneRetention(): Promise<void> {
 		'recent activity kept',
 		(await db.select().from(activities).where(eq(activities.id, recentActivity.id))).length === 1
 	);
+	const notificationIds = async () =>
+		(await db.select({ id: notificationDeliveries.id }).from(notificationDeliveries)).map(
+			(row) => row.id
+		);
+	const keptNotifications = await notificationIds();
+	check(
+		'30-day-old notification rows deleted',
+		!keptNotifications.includes(oldSentNotification.id) &&
+			!keptNotifications.includes(oldFailedNotification.id)
+	);
+	check('recent notification row kept', keptNotifications.includes(recentNotification.id));
 }
 
 async function unknownScheduleJob(): Promise<void> {
@@ -1681,6 +1763,332 @@ async function scaffoldFailureDegrades(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// M6 P5: notification outbox (unique key, storm window, mock Bark, terminal)
+// ---------------------------------------------------------------------------
+
+async function notificationOutcomes(): Promise<void> {
+	section('notifications (M6 P5): unique key, storm window, mock Bark, terminal failure');
+	const barkEnv = {
+		BARK_SERVER_URL: httpBase,
+		BARK_DEVICE_KEY: 'fixture-device-key',
+		MAIL_ENABLED: 'false'
+	};
+
+	// 1) Idempotency on the REAL unique index: two enqueues, one row.
+	const commentKey = `comment:${randomUUID()}`;
+	const firstOutcome = await enqueueNotification(db as never, {
+		eventType: 'comment.pending',
+		eventKey: commentKey,
+		title: 'Comment pending',
+		body: 'Alice: hello there'
+	});
+	const secondOutcome = await enqueueNotification(db as never, {
+		eventType: 'comment.pending',
+		eventKey: commentKey,
+		title: 'Comment pending',
+		body: 'Alice: hello there'
+	});
+	const commentRows = await db
+		.select()
+		.from(notificationDeliveries)
+		.where(eq(notificationDeliveries.eventKey, commentKey));
+	check(
+		'same (event_type,event_key,channel) stored once',
+		firstOutcome === 'enqueued' && secondOutcome === 'duplicate' && commentRows.length === 1,
+		`first=${firstOutcome} second=${secondOutcome} rows=${commentRows.length}`
+	);
+	check(
+		'the duplicate kept the original queued row (no copy, attempts intact)',
+		commentRows[0]?.status === 'queued' && commentRows[0]?.attempts === 0
+	);
+
+	// 2) Storm windows on the real table. The register (§3E) gives comment a
+	//    10/h per-event window and a global 30/h ceiling; `job.failed` has NO
+	//    per-event window (only the per-run unique key) - the P5 review removed
+	//    the extra 10/h cap because it could drop legitimate incident alerts.
+	//    Both windows are asserted below, so neither can silently regress.
+	// Clear the table first: earlier scenarios leave rows inside the same hour,
+	// and the global window counts every type.
+	await db.delete(notificationDeliveries);
+	// Window-length teeth: 30 rows older than an hour must NOT count. If the
+	// 60-minute window ever became 24h (or lost its lower bound), these rows
+	// would fill the per-event and global budgets and the storm below would
+	// enqueue ~0 instead of 10 - so this fixture turns that regression red.
+	await db.execute(
+		sql`insert into notification_deliveries (event_type, event_key, channel, status, created_at)
+		    select 'comment.pending', 'comment:window-' || g, 'email', 'sent', now() - interval '90 minutes'
+		    from generate_series(1, 30) as g`
+	);
+	const commentStorm: string[] = [];
+	for (let index = 0; index < 100; index += 1) {
+		commentStorm.push(
+			await enqueueNotification(db as never, {
+				eventType: 'comment.pending',
+				eventKey: `comment:storm-${index}`,
+				title: 'storm',
+				body: 'storm'
+			})
+		);
+	}
+	const commentStormRows = await db
+		.select()
+		.from(notificationDeliveries)
+		.where(eq(notificationDeliveries.eventType, 'comment.pending'));
+	const commentStormRowsOnly = commentStormRows.filter((row) =>
+		row.eventKey.startsWith('comment:storm-')
+	);
+	check(
+		'100 comment events -> 10 rows (per-event 10/h window)',
+		commentStorm.filter((outcome) => outcome === 'enqueued').length === 10 &&
+			commentStormRowsOnly.length === 10,
+		`enqueued=${commentStorm.filter((outcome) => outcome === 'enqueued').length} rows=${commentStormRowsOnly.length}`
+	);
+	// The 30 rows seeded 90 minutes ago must still be there and must not have
+	// consumed the window - that is what proves the window is an hour, not a day.
+	check(
+		'the 30 rows older than an hour neither counted nor disappeared',
+		commentStormRows.length === 40,
+		`rows=${commentStormRows.length}`
+	);
+	check(
+		'the other 90 were suppressed, not silently dropped',
+		commentStorm.filter((outcome) => outcome === 'suppressed').length === 90
+	);
+
+	// job.failed has no per-event cap, so the GLOBAL ceiling is what stops the
+	// flood: the 10 comment rows above already occupy the hour, leaving room
+	// for exactly 20 more before the 30/h ceiling closes the window.
+	const jobStorm: string[] = [];
+	for (let index = 0; index < 100; index += 1) {
+		jobStorm.push(
+			await enqueueNotification(db as never, {
+				eventType: 'job.failed',
+				eventKey: `job_run:storm-${index}`,
+				title: 'storm',
+				body: 'storm'
+			})
+		);
+	}
+	const jobStormRows = await db
+		.select()
+		.from(notificationDeliveries)
+		.where(eq(notificationDeliveries.eventType, 'job.failed'));
+	check(
+		'100 job events -> 20 more rows (global 30/h ceiling, no per-event window)',
+		jobStorm.filter((outcome) => outcome === 'enqueued').length === 20 &&
+			jobStormRows.length === 20,
+		`enqueued=${jobStorm.filter((outcome) => outcome === 'enqueued').length} rows=${jobStormRows.length}`
+	);
+	check(
+		'the remaining 80 were suppressed by the global window',
+		jobStorm.filter((outcome) => outcome === 'suppressed').length === 80
+	);
+	// Free the hourly window again: these rows are fixtures, and the checks
+	// below must not be starved by them.
+	await db.delete(notificationDeliveries).where(eq(notificationDeliveries.eventType, 'job.failed'));
+	await db
+		.delete(notificationDeliveries)
+		.where(eq(notificationDeliveries.eventType, 'comment.pending'));
+
+	// 3) Mock Bark delivery through a real drain tick: the fixture server
+	// records the request; the row lands `sent`.
+	const barkKey = `comment:${randomUUID()}`;
+	await enqueueNotification(
+		db as never,
+		{ eventType: 'comment.pending', eventKey: barkKey, title: 'Bark fixture', body: 'push me' },
+		{
+			preferences: {
+				comment: { email: false, bark: true },
+				job: { email: true, bark: false },
+				ops: { email: true, bark: false }
+			}
+		}
+	);
+	const capturedBefore = captured.length;
+	const barkDrain = await runDrainOnce(barkEnv);
+	const pushes = captured.slice(capturedBefore).filter((request) => request.path === '/push');
+	const barkRow = (
+		await db
+			.select()
+			.from(notificationDeliveries)
+			.where(eq(notificationDeliveries.eventKey, barkKey))
+	)[0];
+	check('Bark push reached the fixture server', pushes.length === 1, `pushes=${pushes.length}`);
+	check(
+		'the device key travels in the body, never in the URL',
+		Boolean(pushes[0]?.body.includes('fixture-device-key')) &&
+			!pushes[0]?.path.includes('fixture-device-key'),
+		pushes[0]?.path
+	);
+	check(
+		'the row is `sent` with attempts=1 and sent_at stamped',
+		barkRow?.status === 'sent' && barkRow?.attempts === 1 && barkRow?.sentAt !== null,
+		JSON.stringify({ status: barkRow?.status, attempts: barkRow?.attempts })
+	);
+	check('the delivering tick exits 0', barkDrain.code === 0, barkDrain.stdout + barkDrain.stderr);
+
+	// 4) Unconfigured email is a PERMANENT failure: no SMTP attempt is made
+	// (MAIL_ENABLED=false), the row turns failed on the first attempt, and the
+	// tick still exits 0 (a dropped notification degrades the heartbeat, not
+	// the process contract).
+	const emailKey = `comment:${randomUUID()}`;
+	await enqueueNotification(
+		db as never,
+		{
+			eventType: 'comment.pending',
+			eventKey: emailKey,
+			title: 'Mail fixture',
+			body: 'mail me'
+		},
+		{
+			preferences: {
+				comment: { email: true, bark: false },
+				job: { email: true, bark: false },
+				ops: { email: true, bark: false }
+			}
+		}
+	);
+	const mailDrain = await runDrainOnce(barkEnv);
+	const emailRow = (
+		await db
+			.select()
+			.from(notificationDeliveries)
+			.where(eq(notificationDeliveries.eventKey, emailKey))
+	)[0];
+	check(
+		'unconfigured mail fails permanently on the first attempt',
+		emailRow?.status === 'failed' && emailRow?.attempts === 1,
+		JSON.stringify({ status: emailRow?.status, attempts: emailRow?.attempts })
+	);
+	// The scratch database has no owner account, so the adapter refuses before
+	// touching SMTP ("no owner"); either way the text names the reason and no
+	// message was sent.
+	check(
+		'the failure text explains why (no owner / mail not configured)',
+		/no owner|not configured/i.test(emailRow?.error ?? ''),
+		emailRow?.error ?? undefined
+	);
+	check('a failed notification does not change the exit contract', mailDrain.code === 0);
+
+	// 5) Retry schedule to terminal: a closed port is retryable, each tick
+	// advances attempts; the plan is 1m/5m/15m and the FOURTH failure is
+	// terminal (one send + three retries).
+	const retryKey = `comment:${randomUUID()}`;
+	const closedPort = await reserveDefinitelyClosedPort();
+	const retryEnv = {
+		BARK_SERVER_URL: `http://127.0.0.1:${closedPort}`,
+		BARK_DEVICE_KEY: 'fixture-device-key',
+		MAIL_ENABLED: 'false'
+	};
+	await enqueueNotification(
+		db as never,
+		{ eventType: 'comment.pending', eventKey: retryKey, title: 'Retry fixture', body: 'retry me' },
+		{
+			preferences: {
+				comment: { email: false, bark: true },
+				job: { email: true, bark: false },
+				ops: { email: true, bark: false }
+			}
+		}
+	);
+	const readRetryRow = async () =>
+		(
+			await db
+				.select()
+				.from(notificationDeliveries)
+				.where(eq(notificationDeliveries.eventKey, retryKey))
+		)[0];
+	const due = async () => {
+		await db.execute(
+			sql`update notification_deliveries set next_attempt_at = now() where event_key = ${retryKey}`
+		);
+	};
+	await runDrainOnce(retryEnv);
+	const afterFirst = await readRetryRow();
+	check(
+		'attempt 1 fails retryably and stays queued with attempts=1',
+		afterFirst?.status === 'queued' && afterFirst?.attempts === 1,
+		JSON.stringify({ status: afterFirst?.status, attempts: afterFirst?.attempts })
+	);
+	await due();
+	await runDrainOnce(retryEnv);
+	const afterSecond = await readRetryRow();
+	check(
+		'attempt 2 stays queued with attempts=2 (5m step)',
+		afterSecond?.status === 'queued' && afterSecond?.attempts === 2,
+		JSON.stringify({ status: afterSecond?.status, attempts: afterSecond?.attempts })
+	);
+	await due();
+	await runDrainOnce(retryEnv);
+	const afterThird = await readRetryRow();
+	check(
+		'attempt 3 stays queued on the 15m step (attempts=3, next_attempt_at >= +14m)',
+		afterThird?.status === 'queued' &&
+			afterThird?.attempts === 3 &&
+			afterThird !== undefined &&
+			afterThird.nextAttemptAt.getTime() - Date.now() >= 14 * 60 * 1000,
+		JSON.stringify({
+			status: afterThird?.status,
+			attempts: afterThird?.attempts,
+			inMinutes: afterThird
+				? Math.round((afterThird.nextAttemptAt.getTime() - Date.now()) / 60000)
+				: null
+		})
+	);
+	await due();
+	await runDrainOnce(retryEnv);
+	const afterFourth = await readRetryRow();
+	check(
+		'attempt 4 is terminal: status=failed, attempts=4',
+		afterFourth?.status === 'failed' && afterFourth?.attempts === 4,
+		JSON.stringify({ status: afterFourth?.status, attempts: afterFourth?.attempts })
+	);
+
+	// 6) `job.failed` producer: a whitelisted job whose run fails terminally
+	// lands in the outbox exactly once (the P4 seam installed by the entry).
+	const [run] = (await db.execute(
+		sql`insert into job_runs (job, trigger, status) values ('media.audit', 'cli', 'queued') returning id`
+	)) as unknown as Array<{ id: string }>;
+	await runDrainOnce(barkEnv);
+	const alertRows = await db
+		.select()
+		.from(notificationDeliveries)
+		.where(eq(notificationDeliveries.eventKey, `job_run:${run.id}`));
+	check(
+		'job.failed alert enqueued once for the whitelisted failing run',
+		alertRows.length === 1 && alertRows[0]?.eventType === 'job.failed',
+		`rows=${alertRows.length}`
+	);
+
+	// 7) Event-name CHECK teeth. The custom multi-dot regex exists because the
+	// P4 probe event `mail.probe.failed` has TWO dots (the activities CHECK
+	// allows one); prove on real PG that it is accepted and that a malformed
+	// name is rejected - otherwise the schema test and the DDL can drift.
+	const [multiDot] = await db
+		.insert(notificationDeliveries)
+		.values({
+			eventType: 'mail.probe.failed',
+			eventKey: `mail:verify:${randomUUID()}`,
+			channel: 'email',
+			payload: { title: 'probe', body: 'probe' }
+		})
+		.returning({ id: notificationDeliveries.id });
+	check('multi-dot event name (mail.probe.failed) is accepted by the CHECK', Boolean(multiDot?.id));
+	let malformedRejected = false;
+	try {
+		await db.insert(notificationDeliveries).values({
+			eventType: 'Not An Event',
+			eventKey: `bad:${randomUUID()}`,
+			channel: 'email',
+			payload: {}
+		});
+	} catch {
+		malformedRejected = true;
+	}
+	check('malformed event name is rejected by the CHECK', malformedRejected);
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -1749,6 +2157,7 @@ async function main(): Promise<void> {
 	await scaffoldFailureDegrades();
 	await s1ProducerOutbox();
 	await s3PipelineDelivery();
+	await notificationOutcomes();
 
 	check(
 		'harness self-check: every expected check ran (a silent skip turns red)',

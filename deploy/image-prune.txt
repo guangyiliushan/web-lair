@@ -1,0 +1,20 @@
+# Curated prune manifest (P1 / T1.4 fallback, plan §3.5 route 3).
+#
+# Each non-comment line is a glob (relative to /app inside the prod-deps stage).
+# The prune runs AFTER `pnpm install --prod`, inside the image build only; the
+# repository's own node_modules is never touched.
+#
+# Rule for adding a line: the package must be provably build-time-only. The
+# proof is `deploy/verify-image.sh` (drain entry + every builtin module + server
+# /api/health) running green on the pruned image — plus `pnpm why <pkg>` showing
+# the chain ends in a CLI/build tool, never in an import the app makes at
+# runtime. Do not prune a package because nothing *seems* to use it.
+#
+# Why @lix-js: `@inlang/paraglide-js` (dependencies) -> `@inlang/sdk` ->
+# `@lix-js/sdk` -> `@lix-js/sdk-linux-x64` (106 MB compressed, ~360 MB unpacked).
+# The whole chain is the paraglide *compiler*; at runtime the app only imports
+# the package's `./urlpattern-polyfill` subpath (a one-line re-export of
+# `urlpattern-polyfill`, which stays installed).
+
+node_modules/.pnpm/@lix-js+*
+node_modules/@lix-js

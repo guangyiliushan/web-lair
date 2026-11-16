@@ -19,6 +19,8 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { runDrain } from './drain.ts';
+import { createNotificationSink } from '../notifications/outbox.ts';
+import { setNotificationSink } from '../notifications/notify.ts';
 import { createIntervalLoop } from './drain-loop.ts';
 import type { IntervalLoop } from './drain-loop.ts';
 import { resolveDataDir } from './data-dir.ts';
@@ -55,6 +57,9 @@ export function startDevDrain(options: {
 	}
 	const client = postgres(databaseUrl, { max: 3, onnotice: () => {} });
 	const db = drizzle(client);
+	// M6 P5: P4's probes alert through `notify()`; in development this process
+	// is the only drain, so it installs the outbox sink (one per process).
+	setNotificationSink(createNotificationSink(db));
 	const dataDir = resolveDataDir();
 
 	async function tick(): Promise<void> {

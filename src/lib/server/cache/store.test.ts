@@ -17,11 +17,16 @@ function throwingStore(): CacheStore {
 		zrangeAbove: vi.fn(boom),
 		sadd: vi.fn(boom),
 		scard: vi.fn(boom),
-		expire: vi.fn(boom)
+		expire: vi.fn(boom),
+		ping: vi.fn(boom)
 	};
 }
 
 describe('MemoryCacheStore', () => {
+	it('ping resolves (the store lives in this process)', async () => {
+		await expect(new MemoryCacheStore().ping()).resolves.toBeUndefined();
+	});
+
 	it('expires entries on the injected clock', async () => {
 		let now = 1_000;
 		const store = new MemoryCacheStore({ clock: () => now });
@@ -174,7 +179,8 @@ describe('cached()', () => {
 			zrangeAbove: (key, minScore) => inner.zrangeAbove(key, minScore),
 			sadd: (key, member) => inner.sadd(key, member),
 			scard: (key) => inner.scard(key),
-			expire: (key, ttl) => inner.expire(key, ttl)
+			expire: (key, ttl) => inner.expire(key, ttl),
+			ping: () => inner.ping()
 		};
 		const loader = vi.fn(async () => null);
 		await cached(store, 'a', 60, loader);

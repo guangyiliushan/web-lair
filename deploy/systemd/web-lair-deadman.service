@@ -8,8 +8,16 @@ Wants=network-online.target
 OnFailure=web-lair-alert@%n.service
 Type=oneshot
 EnvironmentFile=/srv/web-lair/app/.env
-# An unset URL is a configuration gap, not a failed check (exit 2 would page).
-ExecCondition=/bin/sh -c 'test -n "${DEADMAN_PING_URL}"'
-# healthchecks.io style URL. The point is that a missing ping (box dead,
-# network down, timer broken) raises the alarm — silence is the signal.
-ExecStart=/usr/bin/curl -fsS --max-time 10 "${DEADMAN_PING_URL}"
+# No ExecCondition: the script itself exits 0 when no URL is configured (a
+# configuration gap is not a failed check). An `ExecCondition` here duplicated
+# that logic and re-introduced a systemd-vs-shell expansion question (review).
+# The URL is read inside the script, never placed in this unit: systemd would
+# expand ${...} here before /bin/sh sees it (double evaluation).
+ExecStart=/bin/sh /srv/web-lair/app/deploy/systemd/web-lair-deadman.sh
+# The unit needs a network round-trip and read access to its script; nothing
+# else. Hardening mirrors the drain/backup units.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=

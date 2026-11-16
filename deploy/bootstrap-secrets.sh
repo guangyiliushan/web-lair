@@ -65,6 +65,8 @@ INVENTORY=(
 	"SUBSCRIBE_TOKEN_SECRET|base64-32|env"
 	"SUPPRESSION_HMAC_KEY|base64-32|env"
 	"MAIL_EVENTS_HMAC_KEY|base64-32|env"
+	"READY_TOKEN|base64-32|env"
+	"SENTINEL_TOKEN|hex-32|env"
 	"RESTIC_PASSWORD|base64-32|backup"
 	"RESTIC_CONFIG_PASSWORD|base64-32|backup"
 )
@@ -104,19 +106,25 @@ file_has_value() {
 }
 
 # Atomic single-key upsert; creates the file when absent.
+# The value never appears in argv (world-readable via `ps` / /proc): it is staged
+# in a 0600 file and read back by awk (review P1-1).
 set_value() {
 	local file=$1 key=$2 value=$3
 	if [ ! -f "$file" ]; then
 		: >"$file"
 	fi
-	local tmp
+	local tmp vtmp
 	tmp=$(mktemp "${file}.tmp.XXXXXX")
-	awk -v k="$key" -v v="$value" '
-		BEGIN { done = 0 }
+	vtmp=$(mktemp "${file}.val.XXXXXX")
+	chmod 600 "$vtmp"
+	printf '%s' "$value" >"$vtmp"
+	awk -v k="$key" -v vfile="$vtmp" '
+		BEGIN { v = ""; if ((getline line < vfile) > 0) v = line }
 		$0 ~ "^" k "=" { if (!done) { print k "=\"" v "\""; done = 1 } next }
 		{ print }
 		END { if (!done) print k "=\"" v "\"" }
 	' "$file" >"$tmp"
+	rm -f "$vtmp"
 	mv "$tmp" "$file"
 }
 

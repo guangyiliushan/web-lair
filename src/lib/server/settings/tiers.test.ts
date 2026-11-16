@@ -15,6 +15,22 @@ describe('settings permission matrix', () => {
 			tier: 'owner',
 			editable: false
 		});
+		// M6 P5: the delivery switches and the alert log are owner-only as well -
+		// an admin must not be able to silence comment/job/ops alerts, and a
+		// resend spends the owner's mail/Bark budget.
+		for (const field of [
+			'notifications.preferences',
+			'notifications.deliveries',
+			'notifications.bark'
+		]) {
+			expect(settingAccess('admin', 'notifications', field), field).toEqual({
+				tier: 'owner',
+				editable: false
+			});
+		}
+		expect(settingAccess('owner', 'notifications', 'notifications.preferences').editable).toBe(
+			true
+		);
 		expect(settingAccess('admin', 'site', 'site.languages')).toEqual({
 			tier: 'owner',
 			editable: false

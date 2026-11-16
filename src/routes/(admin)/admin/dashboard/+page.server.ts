@@ -5,6 +5,7 @@ import { session as authSession } from '$lib/server/db/auth.schema';
 import { requireAdminRole } from '$lib/server/authz';
 import { getOption } from '$lib/server/config/options-registry';
 import { readSitePresence } from '$lib/server/services/presence';
+import { readTrafficSnapshot, summarizePageTraffic } from '$lib/server/analytics/sentinel';
 import { visiblePostCondition } from '$lib/server/services/post-visibility';
 import { visibleNoteCondition } from '$lib/server/services/note-visibility';
 import { m } from '$lib/paraglide/messages';
@@ -60,12 +61,19 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const userId = locals.user?.id ?? '';
 	const currentSessionId = locals.session?.id ?? '';
 
-	const [globalRows, [postRow], [noteRow], recentSessions, siteTimezone, presenceEnabled] =
-		await Promise.all([
-			// One round trip for the count-only metrics and the micro-content
-			// character totals. Pages keep localized markdown in JSONB, so every
-			// locale value counts toward the site's written output.
-			db.execute(sql`
+	const [
+		globalRows,
+		[postRow],
+		[noteRow],
+		recentSessions,
+		siteTimezone,
+		presenceEnabled,
+		trafficSnapshot
+	] = await Promise.all([
+		// One round trip for the count-only metrics and the micro-content
+		// character totals. Pages keep localized markdown in JSONB, so every
+		// locale value counts toward the site's written output.
+		db.execute(sql`
 				select
 					(select count(*)::int from pages) as pages,
 					(select count(*)::int from categories) as categories,
@@ -133,37 +141,40 @@ export const load: PageServerLoad = async ({ locals }) => {
 					      group by 1
 					   ) s) as comment_series
 			`),
-			db
-				.select({
-					total: sql<number>`(count(*) filter (where ${posts.status} <> 'trash'))::int`,
-					chars: sql<number>`coalesce(sum(char_length(coalesce(${posts.content}, ''))) filter (where ${postVisibility}), 0)::int`,
-					reads: sql<number>`coalesce(sum(${posts.readCount}) filter (where ${postVisibility}), 0)::int`,
-					likes: sql<number>`coalesce(sum(${posts.likeCount}) filter (where ${postVisibility}), 0)::int`
-				})
-				.from(posts),
-			db
-				.select({
-					total: sql<number>`count(*)::int`,
-					chars: sql<number>`coalesce(sum(char_length(coalesce(${notes.content}, ''))) filter (where ${noteVisibility}), 0)::int`,
-					reads: sql<number>`coalesce(sum(${notes.readCount}) filter (where ${noteVisibility}), 0)::int`,
-					likes: sql<number>`coalesce(sum(${notes.likeCount}) filter (where ${noteVisibility}), 0)::int`
-				})
-				.from(notes),
-			userId
-				? db
-						.select({
-							id: authSession.id,
-							createdAt: authSession.createdAt,
-							ipAddress: authSession.ipAddress
-						})
-						.from(authSession)
-						.where(eq(authSession.userId, userId))
-						.orderBy(desc(authSession.createdAt))
-						.limit(2)
-				: Promise.resolve([] as Array<{ id: string; createdAt: Date; ipAddress: string | null }>),
-			readSiteTimezone(),
-			readPresenceEnabled()
-		]);
+		db
+			.select({
+				total: sql<number>`(count(*) filter (where ${posts.status} <> 'trash'))::int`,
+				chars: sql<number>`coalesce(sum(char_length(coalesce(${posts.content}, ''))) filter (where ${postVisibility}), 0)::int`,
+				reads: sql<number>`coalesce(sum(${posts.readCount}) filter (where ${postVisibility}), 0)::int`,
+				likes: sql<number>`coalesce(sum(${posts.likeCount}) filter (where ${postVisibility}), 0)::int`
+			})
+			.from(posts),
+		db
+			.select({
+				total: sql<number>`count(*)::int`,
+				chars: sql<number>`coalesce(sum(char_length(coalesce(${notes.content}, ''))) filter (where ${noteVisibility}), 0)::int`,
+				reads: sql<number>`coalesce(sum(${notes.readCount}) filter (where ${noteVisibility}), 0)::int`,
+				likes: sql<number>`coalesce(sum(${notes.likeCount}) filter (where ${noteVisibility}), 0)::int`
+			})
+			.from(notes),
+		userId
+			? db
+					.select({
+						id: authSession.id,
+						createdAt: authSession.createdAt,
+						ipAddress: authSession.ipAddress
+					})
+					.from(authSession)
+					.where(eq(authSession.userId, userId))
+					.orderBy(desc(authSession.createdAt))
+					.limit(2)
+			: Promise.resolve([] as Array<{ id: string; createdAt: Date; ipAddress: string | null }>),
+		readSiteTimezone(),
+		readPresenceEnabled(),
+		// Fail-open traffic card (P6): the same 60 s cache the analytics
+		// page uses; null means Sentinel is down or unconfigured.
+		readTrafficSnapshot({ range: '24h' })
+	]);
 
 	const global = (
 		globalRows as unknown as Array<{
@@ -211,6 +222,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const shownSession = previousSession ?? recentSessions[0] ?? null;
 
 	const realtime = presenceEnabled ? await readSitePresence() : null;
+	const trafficSummary = trafficSnapshot ? summarizePageTraffic(trafficSnapshot) : null;
 
 	return {
 		headerTitle: m.admin_nav_dashboard(),
@@ -251,6 +263,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 				}
 			: null,
 		siteTimezone,
+		traffic: {
+			available: trafficSnapshot !== null,
+			pageRequests: trafficSummary?.pageRequests ?? null,
+			pageRequestsLowerBound: trafficSummary?.pathsTruncated ?? false,
+			visitors: trafficSnapshot?.overview.unique_visitors ?? null,
+			notFound: trafficSummary?.notFoundRequests ?? null
+		},
 		presence: {
 			enabled: presenceEnabled,
 			site: realtime?.site ?? null,

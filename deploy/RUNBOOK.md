@@ -8,22 +8,35 @@
 > **Production commands go through `deploy/compose-prod.sh`.**
 > A bare `docker compose` auto-loads `compose.override.yaml`, which publishes the
 > dev loopback ports and attaches the `devhost` network. The wrapper loads
-> `compose.yaml` + `compose.prod.yaml` only and never the dev overlay.
-> `deploy/compose-prod.sh <args>` is equivalent to
-> `docker compose -f compose.yaml -f compose.prod.yaml <args>`.
-> Run every block from `/srv/web-lair/app` unless the block changes directory.
+> `compose.yaml` + `compose.prod.yaml` + `deploy/monitoring/compose.monitoring.yaml`
+>
+> - `deploy/monitoring/compose.sentinel.yaml` and never the dev overlay.
+>   `deploy/compose-prod.sh <args>` is equivalent to
+>   `docker compose --project-directory . -f compose.yaml -f compose.prod.yaml -f deploy/monitoring/compose.monitoring.yaml -f deploy/monitoring/compose.sentinel.yaml <args>`,
+>   plus the guards (`.env` / suppression key / Postgres password / Bark URL scheme /
+>   `SENTINEL_TOKEN` for a whole-stack `up`) and, for `up`/`create` only, a render of
+>   `deploy/monitoring/conf.d` (see `deploy/monitoring/README.md`).
+>   Run every block from `/srv/web-lair/app` unless the block changes directory.
 
 ## 0. Host prerequisites
 
-| Item                                                     | Check                                                                                 |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Docker Engine + compose plugin                           | `docker version && docker compose version`                                            |
-| Tailscale up (SSH / Kuma only via tailnet)               | `tailscale status`                                                                    |
-| Time sync (TLS, TOTP, DB timestamps)                     | `timedatectl` → `System clock synchronized: yes`                                      |
-| Only 80/443 public                                       | `ss -lntp \| grep -E ':(80\|443)\b'`; everything else bound to `127.0.0.1` or tailnet |
-| Deploy user uid/gid 1000 (matches the image `node` user) | `id -u`                                                                               |
+| Item                                                                                | Check                                                                                 |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Docker Engine + compose plugin                                                      | `docker version && docker compose version`                                            |
+| Tailscale up (SSH / Kuma 3001 / Gatus 8080 via SSH tunnel; Gatus is loopback-bound) | `tailscale status`                                                                    |
+| Time sync (TLS, TOTP, DB timestamps)                                                | `timedatectl` → `System clock synchronized: yes`                                      |
+| Only 80/443 public                                                                  | `ss -lntp \| grep -E ':(80\|443)\b'`; everything else bound to `127.0.0.1` or tailnet |
+| Deploy user uid/gid 1000 (matches the image `node` user)                            | `id -u`                                                                               |
 
 ## 1. First deploy
+
+Monitoring needs one extra image. Pull it before `up` (a failed pull would abort
+the whole deploy); if the registry is unreachable, deploy without Gatus first
+(`deploy/compose-prod.sh up -d app db caddy`) and add it later:
+
+```bash
+docker pull ghcr.io/twin/gatus:v5.38.0   # or: deploy/compose-prod.sh pull gatus
+```
 
 ```bash
 git clone <repo> /srv/web-lair/app && cd /srv/web-lair/app
@@ -50,26 +63,30 @@ the app refuses a second use through its `admin.setup_complete` marker.
 
 ### 1.1 Required `.env` keys
 
-| Key                                                   | Value                                                                                                             |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | strong, unique, **URL-safe** (`openssl rand -hex 32`) — the password is interpolated into `DATABASE_URL` verbatim |
-| `BETTER_AUTH_SECRET`                                  | ≥32 chars, high entropy                                                                                           |
-| `SECRETS_KEYS` / `SECRETS_KEY_ACTIVE`                 | runtime secret keyring (W2); see §4.2 — required once an encrypted key exists                                     |
-| `ORIGIN`                                              | `https://<domain>` (no trailing slash)                                                                            |
-| `DOMAIN`                                              | same host, used by Caddy                                                                                          |
-| `ACME_EMAIL`                                          | Let's Encrypt expiry notices                                                                                      |
-| `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`             | object-store credentials                                                                                          |
-| `DATA_DIR`                                            | absolute host path, e.g. `/srv/web-lair/data`                                                                     |
-| `MAIL_*`                                              | see §1.2                                                                                                          |
-| `SUBSCRIBE_TOKEN_TTL_DAYS` / `SUBSCRIBE_HMAC_KEY`     | see §1.2 (confirmation-link lifetime + per-address cap key)                                                       |
-| `SUBSCRIBE_TOKEN_SECRET`                              | see §1.2 (derives the mailed confirmation token; required before the first start)                                 |
-| `SUPPRESSION_HMAC_KEY` / `MAIL_EVENTS_HMAC_KEY`       | see §8 (suppression list hash master key + bounce/complaint webhook key)                                          |
-| `SUPPRESSION_HMAC_KEY_VERSION`                        | see §8 (active suppression key version; default 1, gated by `db:verify-suppression-version`)                      |
-| `OWNER_EMAIL` / `OWNER_PASSWORD`                      | first owner seed (`pnpm db:seed-owner` from the host, dev only)                                                   |
-| `DEADMAN_PING_URL`                                    | healthchecks.io **liveness** check (5 min); unset ⇒ the dead-man timer skips (no alarm)                           |
-| `JOBS_HEARTBEAT_URL`                                  | per-tick drain ping (Kuma push or a second healthchecks check)                                                    |
-| `ALERT_WEBHOOK_URL`                                   | systemd `OnFailure` target; leave empty to disable the alert unit                                                 |
-| `MAIL_DEV_LOG` / `MAIL_DEV_LOG_OK`                    | dev/e2e only; production ignores dev logging unless BOTH are set                                                  |
+| Key                                                    | Value                                                                                                                                                                     |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`  | strong, unique, **URL-safe** (`openssl rand -hex 32`) — the password is interpolated into `DATABASE_URL` verbatim                                                         |
+| `BETTER_AUTH_SECRET`                                   | ≥32 chars, high entropy                                                                                                                                                   |
+| `SECRETS_KEYS` / `SECRETS_KEY_ACTIVE`                  | runtime secret keyring (W2); see §4.2 — required once an encrypted key exists                                                                                             |
+| `ORIGIN`                                               | `https://<domain>` (no trailing slash)                                                                                                                                    |
+| `DOMAIN`                                               | same host, used by Caddy                                                                                                                                                  |
+| `ACME_EMAIL`                                           | Let's Encrypt expiry notices                                                                                                                                              |
+| `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`              | object-store credentials                                                                                                                                                  |
+| `DATA_DIR`                                             | absolute host path, e.g. `/srv/web-lair/data`                                                                                                                             |
+| `MAIL_*`                                               | see §1.2                                                                                                                                                                  |
+| `SUBSCRIBE_TOKEN_TTL_DAYS` / `SUBSCRIBE_HMAC_KEY`      | see §1.2 (confirmation-link lifetime + per-address cap key)                                                                                                               |
+| `SUBSCRIBE_TOKEN_SECRET`                               | see §1.2 (derives the mailed confirmation token; required before the first start)                                                                                         |
+| `SUPPRESSION_HMAC_KEY` / `MAIL_EVENTS_HMAC_KEY`        | see §8 (suppression list hash master key + bounce/complaint webhook key)                                                                                                  |
+| `SUPPRESSION_HMAC_KEY_VERSION`                         | see §8 (active suppression key version; default 1, gated by `db:verify-suppression-version`)                                                                              |
+| `OWNER_EMAIL` / `OWNER_PASSWORD`                       | first owner seed (`pnpm db:seed-owner` from the host, dev only)                                                                                                           |
+| `DEADMAN_PING_URL` / `HC_DEADMAN_URL`                  | healthchecks.io **liveness** check (5 min); the timer prefers `HC_DEADMAN_URL` and falls back to `DEADMAN_PING_URL`; both unset ⇒ skip (no alarm)                         |
+| `READY_TOKEN`                                          | Bearer for `GET /api/ready` (bootstrap generates it). Production answers 404 to everyone without it; Gatus must send the same value.                                      |
+| `HEALTHCHECKS_RESOURCES_URL` / `HEALTHCHECKS_MAIL_URL` | healthchecks.io checks for the two probes (one check each; base ping URL). Empty ⇒ ping skipped.                                                                          |
+| `SENTINEL_TOKEN`                                       | bearer token for the internal Sentinel traffic service (`bootstrap-secrets.sh` generates hex-32); empty ⇒ page renders “—”, and a full-stack `up` refuses until it is set |
+| Monitoring (Gatus)                                     | see `deploy/monitoring/README.md` §5 (`BARK_URL`, `SITE_DOMAIN`, `DRAIN_HEARTBEAT_TOKEN`, `READY_TOKEN`, `MONITOR_*`, `HC_*`)                                             |
+| `JOBS_HEARTBEAT_URL`                                   | per-tick drain ping (Kuma push; Gatus drain heartbeat is not wired yet — see `deploy/monitoring/README.md` §8)                                                            |
+| `ALERT_WEBHOOK_URL`                                    | systemd `OnFailure` target; leave empty to disable the alert unit                                                                                                         |
+| `MAIL_DEV_LOG` / `MAIL_DEV_LOG_OK`                     | dev/e2e only; production ignores dev logging unless BOTH are set                                                                                                          |
 
 `POSTGRES_PASSWORD` is required too: `compose.prod.yaml` builds the app's
 `DATABASE_URL` from it at parse time, and `deploy/compose-prod.sh` refuses to
@@ -94,7 +111,12 @@ Backup credentials go in their own file (not `.env`), so the app container
 never sees the credential that can delete the offsite repository:
 
 ```bash
-cp deploy/backup.env.example deploy/backup.env
+# `deploy/bootstrap-secrets.sh` (above) already creates this file and writes
+# RESTIC_PASSWORD / RESTIC_CONFIG_PASSWORD into it. `cp -n` keeps those; a plain
+# `cp` would overwrite the only copy of a key that is already bound to an
+# offsite repository. Fill in the rest by hand (or re-run bootstrap with
+# --rotate NAME for a key you have NOT used yet).
+cp -n deploy/backup.env.example deploy/backup.env
 chmod 600 deploy/backup.env
 $EDITOR deploy/backup.env      # + POSTGRES_USER / POSTGRES_DB / DATA_DIR (same values as .env),
                                #   RESTIC_* + RESTIC_CONFIG_* (second repository, own password)
@@ -219,7 +241,20 @@ curl -fsS https://$DOMAIN/api/health
 curl -sI https://$DOMAIN | head -1                    # 200
 curl -sI http://$DOMAIN | head -1                     # 308 → https
 deploy/compose-prod.sh exec app node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>console.log(r.status))"
+
+# M6: readiness (needs READY_TOKEN) and the ops surfaces that must be reachable
+deploy/compose-prod.sh exec app sh -lc \
+  'wget -qO- --header="Authorization: Bearer $READY_TOKEN" http://127.0.0.1:3000/api/ready'
+deploy/compose-prod.sh ps gatus sentinel backrest     # sentinel/backrest "(healthy)"; gatus "Up" (no healthcheck: scratch image)
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health   # Gatus, via SSH tunnel
+curl -s -o /dev/null -w '%{http_code}\n' https://$DOMAIN/admin/analytics # 303 (login) — page is admin-only
 ```
+
+Readiness must answer `{"status":"ready","db":"ok","valkey":"ok"}`; a `404`
+means `READY_TOKEN` is missing (fail closed) and a `503` prints the failing
+dependency. `ps` showing `(healthy)` for `gatus`/`sentinel`/`backrest` proves
+the three new services loaded their config; run
+`bash deploy/monitoring/verify-config.sh` for the full Gatus assertion set.
 
 Then: register a test account (verification mail must arrive), subscribe a test
 address (confirmation link must land on `/subscribe/confirm`), upload one photo
@@ -290,8 +325,11 @@ docker run --rm --entrypoint node "$APP_IMAGE" -e \
 STAMP=$(date +%F_%H%M%S)
 BK=/srv/web-lair/pre-migrate
 mkdir -p "$BK"
-sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
-sudo systemctl stop web-lair-drain.service web-lair-backup.service || true
+sudo systemctl stop web-lair-drain.timer || true
+sudo systemctl stop web-lair-drain.service || true
+# M6 P2: the backup schedule lives in Backrest (RUNBOOK §4); pause it around the
+# rebuild so a snapshot cannot capture a dropped or half-restored database.
+deploy/compose-prod.sh stop backrest || true
 docker rm -f web-lair-drain >/dev/null 2>&1 || true
 deploy/compose-prod.sh stop app
 deploy/compose-prod.sh up -d db
@@ -349,11 +387,16 @@ deploy/compose-prod.sh run --rm app node scripts/verify-suppression-version.ts
 deploy/compose-prod.sh run --rm app node scripts/ensure-job-schedules.ts
 deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
 deploy/compose-prod.sh up -d
-sudo systemctl start web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer
+sudo systemctl start web-lair-drain.timer
+deploy/compose-prod.sh start backrest || true
 ```
 
 Requirements/notes:
 
+- The backrest image must exist locally: `deploy/compose-prod.sh up` builds it
+  implicitly when missing (registry + Alpine repo access), which is a new
+  dependency for an outage-window rebuild. Keep it present — build it after every
+  deploy and after any `docker image prune`: `deploy/compose-prod.sh build backrest`.
 - `SUPPRESSION_HMAC_KEY` must be present in `.env` before the backfills (the
   suppression script refuses to write unkeyed hashes; production boot also
   checks it). Generate it with `openssl rand -base64 32` once, back it up.
@@ -435,8 +478,10 @@ DUMP_USERS=$(deploy/compose-prod.sh exec -T db pg_restore -a -f - < "$DUMP" 2>/d
   bash deploy/backup/count-user-rows.sh)
 [ "$DUMP_USERS" = "$USERS" ] || { echo "dump has $DUMP_USERS user rows, expected $USERS; aborting" >&2; exit 1; }
 # IMAGE must point at the tag that matches the dump.
-sudo systemctl stop web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
-sudo systemctl stop web-lair-drain.service web-lair-backup.service || true
+sudo systemctl stop web-lair-drain.timer || true
+sudo systemctl stop web-lair-drain.service || true
+# M6 P2: pause Backrest for the whole restore window (RUNBOOK §4).
+deploy/compose-prod.sh stop backrest || true
 docker rm -f web-lair-drain >/dev/null 2>&1 || true
 deploy/compose-prod.sh stop app
 deploy/compose-prod.sh exec -T db sh -c \
@@ -472,7 +517,8 @@ else
   exit 1
 fi
 deploy/compose-prod.sh up -d
-sudo systemctl start web-lair-drain.timer web-lair-backup.timer web-lair-backup-check.timer || true
+sudo systemctl start web-lair-drain.timer
+deploy/compose-prod.sh start backrest
 ```
 
 If §2.1 failed after the schema drop, **do not re-run it**; restore the
@@ -596,6 +642,16 @@ state. Node 24+ is required because Argon2id uses `node:crypto` `argon2`
 
 Two repositories with two passwords (T3-A, secrets register §0.1).
 
+**Who runs what (M6 P2).** The schedule belongs to Backrest (the `backrest`
+service in `compose.prod.yaml`, UI on `127.0.0.1:9898`); the systemd backup
+timers no longer carry a schedule. The dump still comes from
+`deploy/backup/backup.sh --dump-only`, which Backrest runs as its
+`CONDITION_SNAPSHOT_START` hook — so the gates described below run on every
+scheduled night, and a dump that fails them cancels the operation instead of
+being snapshotted. Running `deploy/backup/backup.sh` itself (full mode) is the
+manual/fallback path; do not run it while Backrest is up: two writers on one
+repository only fight over the lock.
+
 **Data repository** — `RESTIC_REPOSITORY`:
 
 1. `pg_dump -Fc` → staging dir on the host (logical backup; never file-copy a
@@ -613,10 +669,20 @@ Two repositories with two passwords (T3-A, secrets register §0.1).
    **offline** copy (losing one makes its repository unreadable).
 
 ```bash
-# what the nightly unit runs (deploy/systemd/web-lair-backup.timer)
-/srv/web-lair/app/deploy/backup/backup.sh
+# manual / fallback run (the scheduled path is Backrest, §4.4). The unit is
+# still valid; its timer is not.
+sudo deploy/compose-prod.sh stop backrest          # never two writers on one repo
+sudo systemctl start web-lair-backup.service       # EnvironmentFile = deploy/backup.env
+# or, without systemd:
+# set -a; . deploy/backup.env; set +a; sudo deploy/backup/backup.sh
+sudo deploy/compose-prod.sh start backrest
+# sudo: the scheduled hook runs as root inside the container and writes
+# root-owned pg.dump into $BACKUP_DIR, so an unprivileged run cannot replace it
+# (and a `Permission denied` here is that, not a broken script).
 
-# one-time: create both repositories, each with its own password
+# one-time: create both repositories, each with its own password.
+# Backrest also initialises them by itself (autoInitialize), so this step is the
+# way to validate the credentials BEFORE the first scheduled night.
 set -a; . deploy/backup.env; set +a
 # `-e VAR` (no value) forwards the loaded value. Never `-e VAR=$VALUE`: that puts
 # the repository password in argv (visible to `ps`) and in ~/.bash_history.
@@ -660,9 +726,10 @@ the RustFS volume from the running container, then runs restic with
 `/srv/web-lair/pre-migrate` — **outside** the restic source paths, pruned by
 age, so deploy count does not grow the backup repo.
 
-- Weekly: `web-lair-backup-check.timer` runs
-  `restic --retry-lock 30m check --read-data-subset=5%` on the data repository
-  (the nightly job only backs up) and pings `CHECK_PING_URL` only on success.
+- Periodic integrity: the repositories' `checkPolicy` (rendered config) runs
+  `restic check` — data repo weekly with `--read-data-subset 5%`, config repo
+  monthly with a full read — and pings `CHECK_PING_URL` / `CHECK_PING_URL_CONFIG`
+  only on success. The systemd check timer no longer carries a schedule (§6).
 - Monthly drill: restore to a **separate** directory and, for PG, into a
   **scratch** database on a different port; compare row counts and sample media
   hashes. The drill never touches the production database. It also proves the
@@ -785,7 +852,140 @@ Record the dump name next to the rollback table above. The script is run with
 alias is for a dev checkout only. A non-zero exit now means "rolled back, still
 safe" — there is no partial state.
 
-### 4.4 External media provider (W7) and the restore drill
+### 4.4 Backrest: UI, schedules, failure semantics
+
+The `backrest` service renders `/config/config.json` on first start from the
+environment (`deploy/backrest/entrypoint.sh`), which is why the hooks and the
+maintenance schedules are reviewable in git instead of living only inside a
+volume.
+
+| Knob — set in `.env` (compose interpolation), **not** `deploy/backup.env` | Default                   |
+| ------------------------------------------------------------------------- | ------------------------- |
+| `BACKREST_DATA_CRON` (nightly data snapshot)                              | `0 30 3 * * *`            |
+| `BACKREST_CONFIG_CRON` (`.env` → config repository)                       | `0 40 3 * * *`            |
+| `BACKREST_CHECK_CRON` (data repo `check --read-data-subset`)              | `0 30 4 * * 0` (Sunday)   |
+| `BACKREST_CONFIG_CHECK_CRON` (config repo, full read)                     | `0 0 6 1 * *` (monthly)   |
+| `BACKREST_PRUNE_CRON`                                                     | `0 0 5 * * 0` (Sunday)    |
+| `BACKREST_TZ`                                                             | `UTC`                     |
+| `BACKREST_RENDER_CONFIG`                                                  | unset; `force` re-renders |
+
+- Cron is Backrest's 6-field format (seconds first) evaluated in `BACKREST_TZ`.
+  `03:30` therefore means 03:30 **UTC** unless TZ is changed — deliberate: a host
+  timezone change must not silently move the backup. A 5-field (systemd-style)
+  value is rejected at render time instead of being accepted as "never fires".
+- The rendered file wins after the first start, so UI edits survive a restart.
+  A `*_CRON` change in `.env` needs `BACKREST_RENDER_CONFIG=force` once
+  (`deploy/compose-prod.sh up -d backrest`) before it takes effect.
+- **Network isolation (review P0).** Backrest listens on `0.0.0.0:9898` inside
+  the container with `auth.disabled`, and its hooks are shell commands — so any
+  container that can route to it can execute commands in the container that holds
+  both restic passwords. It therefore has two networks and shares neither with
+  anything but `db`: `backup` (members: db, backrest) and `backrest_egress`
+  (backrest only, outbound). The shared `egress` bridge is deliberately **not**
+  used — whisper sits on it and on `internal`, which the app can reach.
+
+  Verify (the first must fail _because the name does not resolve_; an absent
+  `curl` would also exit non-zero and prove nothing, hence `getent`):
+
+  ```bash
+  deploy/compose-prod.sh exec -T app sh -c 'getent hosts backrest || echo unreachable'
+  deploy/compose-prod.sh exec -T whisper sh -c 'getent hosts backrest || echo unreachable'
+  deploy/compose-prod.sh exec -T backrest pg_isready -h db    # positive control
+  ```
+
+- UI access is the **host-side loopback publish** (`127.0.0.1:9898`) through an SSH
+  tunnel: `ssh -L 9898:127.0.0.1:9898 <host>` then <http://127.0.0.1:9898>.
+  Whoever can forward that port is root-equivalent over the backups (no auth);
+  before exposing it anywhere else, add a bcrypt user
+  (`htpasswd -nbBC 10 admin '<password>'`) to `auth.users` in
+  `deploy/backrest/entrypoint.sh` and re-render.
+- **`.env` is a single-file bind mount, so it is inode-bound**: after any edit
+  (`sed -i`, editor atomic write, `mv`) the container keeps reading the OLD file
+  until it is recreated. Rotation therefore ends with
+  `deploy/compose-prod.sh up -d --force-recreate backrest`, otherwise the config
+  repository keeps snapshotting the pre-rotation secrets while everything stays
+  green. `DATA_DIR` must be an absolute path (the same mount), and a
+  `POSTGRES_PASSWORD` that differs between `.env` and `deploy/backup.env` makes
+  `up` refuse to start (`deploy/compose-prod.sh`).
+- The rendered `config.json` holds both repository passwords in plaintext
+  (Backrest's storage model): the file is written mode 0600 into the
+  `backrest_config` volume, it is never in git and never inside either
+  repository.
+- Logs: `deploy/compose-prod.sh logs backrest`; per-run hook output is in the UI
+  and prefixed `[script]` / `[output]`. A malformed rendered config is loud and
+  fail-closed: the container exits with `FATAL error loading config … unexpected
+token` naming the line, so a bad edit in `entrypoint.sh` cannot silently become
+  "no backups".
+
+**Switch procedure (one-off, on the target host):**
+
+```bash
+cd /srv/web-lair/app
+# The derived image is built locally (see §4.4); a bare `up` would build it too,
+# which needs registry + Alpine repo access. Do it explicitly while the old
+# schedule is still running, so a failed build changes nothing.
+deploy/compose-prod.sh build backrest
+sudo systemctl disable --now web-lair-backup.timer web-lair-backup-check.timer
+# the unit files stay in /etc/systemd/system (history); their [Timer] sections
+# are gone in the repo, so re-copying them cannot re-arm a second schedule
+deploy/compose-prod.sh up -d backrest
+deploy/compose-prod.sh logs --tail 30 backrest      # expect "rendered /config/config.json"
+curl -fsS http://127.0.0.1:9898/ > /dev/null && echo ui-ok
+# one real run, then confirm the dedicated check went green:
+curl -fsS -X POST 127.0.0.1:9898/v1.Backrest/Backup \
+  -H 'Content-Type: application/json' --data '{"value":"lair-nightly"}'
+```
+
+**Failure semantics (why a green check means something).**
+`CONDITION_SNAPSHOT_START` is wired `ON_ERROR_CANCEL`: a dump that fails any gate
+(truncated archive, empty `user` block, unwritable `$BACKUP_DIR`), or a data tree
+that did not mount at all (`/lair-data`, `/lair-rustfs`), cancels the operation
+and no snapshot is written. `CONDITION_SNAPSHOT_END` withholds the success ping
+unless **all** of these hold: the run reported no error, Backrest handed over a
+snapshot id (a production-only run proves nothing about an uploaded snapshot),
+the staging dump is newer than the run marker the start hook wrote, it is under
+`BACKUP_PING_MAX_AGE_MIN` (default 24 h), and `pg_restore -l` can read it. It
+sends `<BACKUP_PING_URL>/fail` instead. The config plan's start hook is
+`ON_ERROR_FATAL` (a missing or _empty_ `.env` value must fail loudly, not cancel
+quietly) and its END hook reports on `CONFIG_PING_URL`, a second check on
+purpose: one URL for both repositories would let a green data run mask a red
+config run. The repository `checkPolicy` keeps the periodic `CHECK_PING_URL` /
+`CHECK_PING_URL_CONFIG` alive through `deploy/backup/hook-check-end.sh`.
+
+### 4.5 Restore drill script (quarterly, and after any backup change)
+
+`deploy/restore-drill.sh` replaces the hand-run part of the drill above:
+
+```bash
+cd /srv/web-lair/app
+set -a; . deploy/backup.env; set +a
+deploy/restore-drill.sh --receipt /srv/web-lair/drills/$(date +%F).txt
+```
+
+It restores the newest snapshot of both repositories into a scratch directory,
+starts a `postgres:18` container (no published port, removed on exit),
+`pg_restore`s the staging dump into it, compares row counts with the live
+database (read-only), runs `deploy/backup/orphan-check.sql` over every foreign
+key (F-22: the restore path disables FK triggers, so "exit 0" proves nothing),
+compares N media objects byte-for-byte against the live RustFS volume and prints
+`rto_seconds` / `rpo_seconds` plus the snapshot ids.
+
+- `--compare-live` turns "restored fewer rows than live" into a failure. It is
+  only meaningful with writes frozen (a maintenance window right after a backup):
+  any signup or comment since the snapshot makes live bigger than restored, and
+  that is drift, not a bad backup. Without the flag the difference is a warning.
+- `--sample N` changes the media sample size (default 5), `--keep` leaves the
+  scratch tree and the drill database for inspection.
+- Local-repository rehearsal (no offsite credentials — what the M6 P2 rehearsal
+  used):
+
+```bash
+DRILL_LOCAL_REPO_DIR=/srv/drill/repos \
+RESTIC_REPOSITORY=/repos/lair-data RESTIC_CONFIG_REPOSITORY=/repos/lair-config \
+deploy/restore-drill.sh
+```
+
+### 4.6 External media provider (W7) and the restore drill
 
 **What backs up what.** Database and config stay restic repositories (§4); the
 media objects follow the provider:
@@ -836,7 +1036,10 @@ pnpm maps:publish           # against the now-active provider
 ```
 
 **Restore drill** (quarterly, and before trusting a new repository). Record the
-result in the evidence folder; an untested backup is a guess.
+result in the evidence folder; an untested backup is a guess. Steps 1–3 below are
+automated by `deploy/restore-drill.sh` (§4.5) — run it first — and the manual
+pass stays for steps 4–5 (credential decryption, `media:audit`), which need the
+app running against the scratch copy.
 
 ```bash
 # 1) Restore the newest data snapshot into a scratch directory.
@@ -864,41 +1067,249 @@ the mode, masked host and applied-migration count after the restore.
 
 ## 5. Monitoring
 
-| What                                       | Where                                                        |
-| ------------------------------------------ | ------------------------------------------------------------ |
-| HTTPS homepage / admin login / cert expiry | Uptime Kuma (`127.0.0.1:3001`, tailnet)                      |
-| Postgres TCP, RustFS health, drain push    | Uptime Kuma (internal network)                               |
-| Box-external HTTP + dead-man               | healthchecks.io + UptimeRobot                                |
-| Disk / memory readings                     | `system.resources` job (record-only; threshold alerts = F-7) |
+| What                                       | Where                                                                                                                                                                                                                                        |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTPS homepage / hostname / cert expiry    | Gatus `site-tls` — **requires `SITE_DOMAIN`** (unset ⇒ not rendered). Admin **login page over HTTPS is not monitored**; only the internal `/admin` 303 guard is.                                                                             |
+| Postgres TCP / RustFS TCP                  | Gatus (internal network; TCP accept only, not a health check)                                                                                                                                                                                |
+| App routes / `/admin` guard / `/api/ready` | Gatus (internal, direct to `app:3000`); `/api/ready` answers 200 only with `READY_TOKEN`, 404 otherwise                                                                                                                                      |
+| Drain heartbeat                            | Gatus external endpoint — **not wired yet** (requires the POST+Bearer change, README §8)                                                                                                                                                     |
+| Box-external HTTP + dead-man               | healthchecks.io + UptimeRobot (`HC_DEADMAN_URL` wired; backup/config/check pings are owned by the backup stack — §5.1)                                                                                                                       |
+| Disk / memory thresholds                   | `system.resources` job: 85% warn / 75% clear per mount + cgroup memory, one alert per metric per day via `notify()`; pings `HEALTHCHECKS_RESOURCES_URL` (`/fail` while latched, on a collection error, or when the latch file is unwritable) |
+| SMTP transport                             | `mail.probe` job: daily `verify()`, one real Sunday mail to the owner; pings `HEALTHCHECKS_MAIL_URL` on failure                                                                                                                              |
+
+M6 P3 moved in-box monitoring to Gatus (config-as-code). Setup and the full env
+list live in `deploy/monitoring/README.md`; Bark alerts are off until `BARK_URL`
+is set, and `SITE_DOMAIN` gates the TLS/domain checks. Gatus UI is
+`127.0.0.1:8080` (SSH tunnel only; loopback-bound). **Uptime Kuma is still defined
+in `compose.prod.yaml`** (plus its `kuma_data` volume) until the cutover window.
+Cutover order — do not reverse it: (1) with Kuma notifications still ON, set
+`BARK_URL` and make one real failure happen; confirm the device receives
+`TRIGGERED` and `RESOLVED` (duplicates are expected); (2) disable every Kuma
+notification in its UI; (3) stop Kuma and soak 24h; (4) delete the service and
+volume. The old Kuma recipe below is kept for that transition:
+
+**What is _not_ monitored yet (read this before trusting a green dashboard):**
+the drain heartbeat endpoint (`jobs-drain`) exists in Gatus but is only rendered
+when `DRAIN_HEARTBEAT_TOKEN` is set, and the drain still sends a plain GET to
+`JOBS_HEARTBEAT_URL` (Kuma shape) — see `deploy/monitoring/README.md` §8. Until
+that changes, **do not set `DRAIN_HEARTBEAT_TOKEN`** (an un-pinged external
+endpoint alerts by design) and keep the Kuma/healthchecks drain check as the
+liveness signal. Admin **login over HTTPS** is likewise not watched: only the
+internal `/admin` 303 guard is.
+
+### 5.1 healthchecks checks owned by the backup stack (M6 P2)
+
+| Variable                | Fires on                                                  | Check period    |
+| ----------------------- | --------------------------------------------------------- | --------------- |
+| `BACKUP_PING_URL`       | data plan END, only when a validated dump was snapshotted | 1 day + grace   |
+| `CONFIG_PING_URL`       | config plan END (the `.env` copy)                         | 1 day + grace   |
+| `CHECK_PING_URL`        | data repo `checkPolicy` (weekly, `--read-data-subset 5%`) | 7 days + grace  |
+| `CHECK_PING_URL_CONFIG` | config repo `checkPolicy` (monthly, full read)            | 31 days + grace |
+| `DEADMAN_PING_URL`      | `web-lair-deadman.timer` (5-minute liveness)              | 5 minutes       |
+
+All five are unset-tolerant (the hook logs and skips), so a fresh install without
+healthchecks does not fail every run.
+
+**P3 handoff:** the P3 task list says "deadman (5m), backup, optional external
+HTTP" — the backup stack alone now owns four of these, and `CHECK_PING_URL`
+changed owner (systemd weekly unit → Backrest `checkPolicy`). Do not copy the
+old timer's period; use the table above.
 
 Kuma setup: create monitors, then paste the push URL into `JOBS_HEARTBEAT_URL`
 (Kuma expects `.../api/push/<key>?status=up&msg=OK`).
 
+### 5.2 Traffic analytics (Sentinel)
+
+`deploy/monitoring/compose.sentinel.yaml` adds a traffic-only Sentinel
+container. It is on the `internal` network, publishes no host port, mounts the
+Caddy JSON log read-only, keeps no IPs (`TRAFFIC_IP_MODE=off`), and stores its
+derived SQLite data in the `sentinel_data` volume. `SENTINEL_TOKEN` is generated
+by `bootstrap-secrets.sh`; the app reads it with `SENTINEL_URL=http://sentinel:8888`.
+Sentinel 1.1.5 constructs a Docker client even with collectors disabled, so the
+entrypoint creates a zero-byte `/tmp/not-a-docker.sock` and points `DOCKER_HOST`
+at it; the host Docker socket is never mounted.
+
+```bash
+deploy/compose-prod.sh ps sentinel                 # expect (healthy)
+deploy/compose-prod.sh logs --tail=50 sentinel     # traffic service ready...
+bash deploy/verify-observability.sh --receipt /tmp/obs-receipt.json
+```
+
+The verify script runs four probes: health, log parsing (a synthetic path must
+rise in `/api/traffic/paths`), retention (48 h/30 d/395 d tiers + a 30-bucket
+series), and reconciliation (one closed minute of Sentinel requests vs Caddy
+log lines, default ≤10% deviation). It reads `SENTINEL_TOKEN` from `.env` and
+never prints it. The default probe path is `/robots.txt` (2xx, static, excluded
+from the PV filter); override with `OBS_PROBE_PATH` if the site serves a
+different static file. Probe traffic appears in the all-request totals for its
+run, but it creates no page requests or 404s.
+
+Sentinel tails the log from EOF: lines written while it was stopped (restart,
+deploy, crash) are not ingested later, and there is no backfill. Plan changes
+that matter for traffic during a quiet window.
+
+`/admin/analytics` labels the filtered count **page requests**: paths under
+`/_app/`, `/i/`, `/api/` and static extensions are excluded. Sentinel caps its
+per-window top-N (`TRAFFIC_TOPN`, the 1.1.5 default 50 here); paths outside the cap fold into
+`__other__`, so the page-request total is a lower bound and the UI says so.
+The exact 404 count comes from the status breakdown; per-path rows expose only
+the 4xx class.
+
+### 5.3 Readiness probe (`/api/ready`, M6 P4 / F-10)
+
+`/api/health` is **liveness** (never touches dependencies, used by the container
+supervisor). `/api/ready` is **readiness**: `select 1` on PG plus a Valkey `PING`
+when `VALKEY_URL` is set, 2 s timeout, 10 s per-process cache.
+
+| Caller                   | Behaviour                                                                                                                                                               |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| With `READY_TOKEN` set   | `Authorization: Bearer <token>` is required from **every** caller; wrong/missing → `401 {"status":"unauthorized"}`. The private-peer shortcut is disabled in this mode. |
+| Production, no token     | 404 to every caller (fail closed). `X-Forwarded-For` is caller-forgeable, so "private peer" is not a credential.                                                        |
+| Non-production, no token | loopback/RFC 1918/ULA/link-local only; everyone else 404.                                                                                                               |
+| At the public edge       | `deploy/Caddyfile` answers 404 for `/api/ready` regardless — the token is the second fence, not the only one.                                                           |
+
+Response: `200 {status:'ready', db:'ok', valkey:'ok'|'disabled'}` or
+`503 {status:'not_ready', …}` with per-check `ok`/`fail`/`timeout`/`disabled`.
+
+```bash
+# from the box (container-internal address; the token never goes to the public edge)
+deploy/compose-prod.sh exec app sh -lc \
+  'wget -qO- --header="Authorization: Bearer $READY_TOKEN" http://127.0.0.1:3000/api/ready'
+```
+
+Gatus covers it as `app-ready` — but only when `READY_TOKEN` is set:
+`render-config.sh` renders `zz-app-ready.yaml` from
+`deploy/monitoring/fragments/app-ready.yaml` when the token is non-empty and
+removes it otherwise (an unconditional endpoint would be permanently red on an
+install that never configured the token). Verify both directions with
+`bash deploy/monitoring/verify-config.sh`.
+
+### 5.4 Resource thresholds (F-7) and the mail probe (F-10)
+
+`system.resources` (every 15 min) reads **the real data volume and the
+container's cgroup limit**, not `process.cwd()` / host `os.freemem()`:
+
+| Metric                                     | Source                                                                                                                                                                                     | Warn at    | Clear at   |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ---------- |
+| `disk` per mount (`DATA_DIR`, `/`, others) | `statfs` on the mounted path                                                                                                                                                               | **≥ 85 %** | **≤ 75 %** |
+| `memory`                                   | cgroup v2 `memory.current` / `memory.max`; missing files (v1 host, dev, no limit) report **not observable** instead of a host number; `max` = unlimited reports usage with `percent: null` | **≥ 85 %** | **≤ 75 %** |
+
+- Hysteresis: a metric between 75 % and 85 % keeps its latch — it neither
+  re-alerts nor clears. One alert per metric per **UTC day** (`alertDay` survives
+  a clear on purpose).
+- Alert path: `notify()` seam → outbox (`system.disk_high` / `system.memory_high`
+  in the `ops` preference group) **and** `HEALTHCHECKS_RESOURCES_URL` (`/fail`
+  while latched, on a collection error, or when the latch file is unwritable).
+  A probe that cannot write its own state counts as a failure — silently losing
+  the latch is exactly the failure mode F-7 exists to prevent.
+- State file: `$DATA_DIR/system-resources-state.json` (uid 1000 must be able to
+  write it; a missing or corrupt file resets the latch rather than throwing).
+
+`mail.probe` (05:10 daily) runs an SMTP `verify()`; on Sundays it sends **one
+real mail** to the owner. Failure → `mail.probe.failed` in the outbox +
+`HEALTHCHECKS_MAIL_URL` `/fail`. `MAIL_ENABLED=false` and a broken relay are
+reported separately (a disabled feature is not an alarm).
+
+### 5.5 Notification delivery (M6 P5: outbox → email / Bark)
+
+Business events are written to `notification_deliveries` **inside the producing
+transaction** (savepoint), then delivered by the drain's fourth segment.
+
+| Aspect       | Behaviour                                                                                                                                                                                                   |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dedupe       | unique `(event_type, event_key, channel)` — one comment / one job run delivers once, per channel                                                                                                            |
+| Retry        | attempt 1 immediately, then **+1 min, +5 min, +15 min**; the 4th failure is terminal `failed`                                                                                                               |
+| Re-send      | the admin delivery log re-queues the **same row** and restarts its attempt budget (a manual resend is a new campaign); it never creates a duplicate; the re-send itself is audited as `notification.resend` |
+| Rate limits  | `comment.pending` 10/h, `job.failed` 1/run, global 30/h; over the window the enqueue is **suppressed** (logged, no row) — suppression is not a delivery, so callers treat it as a failure and retry later   |
+| Preferences  | `/admin/settings/notifications`, owner-only, per **group** (`comment`, `job`, `ops`), stored in `options['notifications.preferences']`; defaults: email on for comment/job/ops, Bark off                    |
+| Delivery log | owner-editable page; the server sends only id/event/channel/status/attempts/created-at/**title** and the sanitized error — the stored `payload` (which carries the body) never reaches the browser          |
+| Retention    | `jobs.prune` deletes `sent`/`failed` rows older than **30 days**; `queued` rows are never pruned                                                                                                            |
+| Channels     | `email` reuses `MAIL_*`; `bark` uses `BARK_SERVER_URL` + `BARK_DEVICE_KEY` (https only, SSRF-guarded, key never in the URL, payload ≤200 chars)                                                             |
+
+Registered events: `comment.pending`, `job.failed` (whitelist: `media.audit`),
+`system.disk_high`, `system.memory_high`, `mail.probe.failed`. Adding an event is
+code-only (roster in `src/lib/server/notifications/events.ts`) — no schema change.
+
+Unconfigured Bark is a **permanent failure**, not a queue: the log row says
+"not configured" and nothing is attempted (so a later key does not replay a
+backlog of stale alerts).
+
+### 5.6 Alert handling
+
+Per-alert runbooks (meaning / first five minutes / recovery / escalation) live
+in `notes/coordination/m6/p7/alert-runbooks.md`. Escalation ladder: L1 single
+endpoint red → L2 two core endpoints red or two failed backup nights (freeze
+releases, run a restore drill) → L3 admin exposure, corrupt repo/volume, or a
+box unreachable for 15 minutes (stop the bleeding first).
+
+### 5.7 Game day (`deploy/game-day.sh`)
+
+The runbook answers "what do I do when it fires"; the game day answers "would we
+be told, and how fast". It drives one controlled fault at a time and records
+detection and recovery as wall-clock deltas in a JSON receipt.
+
+```bash
+bash deploy/game-day.sh                              # dry-run: print every drill
+ALLOW_GAME_DAY=1 bash deploy/game-day.sh --drill pg        # disposable PG loses its listener
+ALLOW_GAME_DAY=1 bash deploy/game-day.sh --drill container # disposable HTTP container is killed
+ALLOW_GAME_DAY=1 bash deploy/game-day.sh --drill all --receipt /srv/web-lair/drills/gd.json
+```
+
+- `pg` / `container` are **self-contained**: the script creates the target
+  container and a Gatus monitor on a scratch network, publishes the monitor on
+  `127.0.0.1:18099` only, and removes everything on exit. No real service, data
+  or credential is touched.
+- `drain` / `disk` are **dry-run only**: they need the box (systemd) or write to
+  a real mount. The script prints the exact recipe and the assertions to check.
+- The drill config uses `interval: 5s` and **no alerts block**, so it measures
+  Gatus' default evaluation (three failures to trigger, two successes to
+  resolve). That is why a `postgres` stop is typically noticed in ~10 s and
+  recovery in ~10 s: it measures the detection path, not production noise
+  thresholds.
+
+Local receipt (2026-11-16, `notes/coordination/m6/p7/logs/game-day-20261116.json`):
+**pg detected 10 s / recovered 10 s · container detected 10 s / recovered 11 s**
+(gatus v5.38.0, `postgres:18`, `nginx:alpine`).
+
 ## 6. Background timers (drain)
 
 ```bash
-sudo cp deploy/systemd/*.service deploy/systemd/*.timer /etc/systemd/system/
+# Services are all still installed; only these two timers carry a schedule.
+# `web-lair-backup*.timer` are kept for history: their [Timer] section survives
+# but has no OnCalendar and there is no [Install], so neither `start` nor
+# `enable` can arm them (`enable` fails with "no installation config"). Copying
+# them would only put a dead unit in /etc/systemd/system — that is why the cp
+# below names the two live timers instead of using the `*.timer` glob.
+sudo cp deploy/systemd/*.service /etc/systemd/system/
+sudo cp deploy/systemd/web-lair-drain.timer deploy/systemd/web-lair-deadman.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now web-lair-drain.timer web-lair-deadman.timer web-lair-backup.timer web-lair-backup-check.timer
+sudo systemctl enable --now web-lair-drain.timer web-lair-deadman.timer
+# M6 P2: no backup timers. Backrest owns that schedule (RUNBOOK §4.4); the
+# web-lair-backup*.timer files are kept for history with an empty [Timer] (no
+# OnCalendar) and no [Install] — do not start or enable them. The matching
+# .service units still work as manual entries (`systemctl start`).
 systemctl list-timers --all | grep web-lair      # verification
 ```
 
-| Unit                          | Cadence                         | Job                                                                                      |
-| ----------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------- |
-| `web-lair-drain.timer`        | 1 min                           | `deploy/compose-prod.sh run --rm --no-deps --name web-lair-drain app node jobs/drain.ts` |
-| `web-lair-deadman.timer`      | 5 min                           | liveness ping (`DEADMAN_PING_URL`), skipped when unset                                   |
-| `web-lair-backup.timer`       | 03:30 daily (`Persistent=true`) | `deploy/backup/backup.sh`                                                                |
-| `web-lair-backup-check.timer` | Sundays 04:30                   | `restic check --read-data-subset=5%`                                                     |
+| Unit                          | Cadence                    | Job                                                                                                                                                    |
+| ----------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `web-lair-drain.timer`        | 1 min                      | `deploy/compose-prod.sh run --rm --no-deps --name web-lair-drain app node jobs/drain.ts`                                                               |
+| `web-lair-deadman.timer`      | 5 min                      | liveness ping (`HC_DEADMAN_URL`, falls back to `DEADMAN_PING_URL`), skipped when both are unset; reports `/fail` when Gatus' `/health` is down (M6 P3) |
+| `web-lair-backup.timer`       | **none — removed (M6 P2)** | schedule moved to the `backrest` service (RUNBOOK §4.4)                                                                                                |
+| `web-lair-backup-check.timer` | **none — removed (M6 P2)** | `checkPolicy` in the rendered Backrest config (§4.4)                                                                                                   |
 
 `run --rm` (not `exec`) so each tick is an independent container and a dead app
 container cannot masquerade as a running timer. Exit codes: 0 tick done,
 1 infrastructure failure (alert on it), 2 config missing.
 
 The timer only provides process liveness; actual work comes from rows in
-`job_schedules`. `scripts/ensure-job-schedules.ts` seeds the three maintenance
-jobs (§1.4): `jobs.prune` (03:00), `system.resources` (every 15 min) and
-`subscriptions.sweep` (04:30, deletes pending subscriptions after 30 days);
-add or edit others in the admin surface.
+`job_schedules`. `scripts/ensure-job-schedules.ts` seeds the default maintenance
+schedules (§1.4): `jobs.prune` (03:00), `system.resources` (every 15 min),
+`subscriptions.sweep` (04:30, deletes pending subscriptions after 30 days),
+`mail.probe` (05:10 daily; the job decides the weekly real send), the AI
+scanners and the links/revisions maintenance rows; add or edit others in the
+admin surface. An existing install that predates a job must re-run the script
+(or add the schedule in `/admin/maintenance`) or the job never fires.
 
 ### 6.1 One-click unsubscribe acceptance
 
@@ -927,14 +1338,22 @@ endpoints must keep rejecting Origin-less POSTs with `403` — see
 
 ## 7. Troubleshooting
 
-| Symptom                                  | Likely cause                                                                                                          |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `app` unhealthy                          | `deploy/compose-prod.sh logs app`; `/api/health` must answer 200                                                      |
-| 413 on upload                            | `BODY_SIZE_LIMIT` too low (default 26M; one file per request)                                                         |
-| Registration 503                         | mail unconfigured or SMTP verify failed (`MAIL_ENABLED`/`MAIL_SMTP_HOST`/`MAIL_FROM`) — form and API refuse by design |
-| All visitors share one rate-limit bucket | Caddy not setting `X-Forwarded-For`, or `ADDRESS_HEADER`/`XFF_DEPTH` wrong                                            |
-| SSE stalls                               | Caddy buffering — `flush_interval -1` must be present                                                                 |
-| Certs fail under orange cloud            | HTTP-01 blocked at the edge — switch to DNS-01 (xcaddy + CF plugin) or grey-cloud DNS                                 |
+| Symptom                                  | Likely cause                                                                                                                                  |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app` unhealthy                          | `deploy/compose-prod.sh logs app`; `/api/health` must answer 200                                                                              |
+| 413 on upload                            | `BODY_SIZE_LIMIT` too low (default 26M; one file per request)                                                                                 |
+| Registration 503                         | mail unconfigured or SMTP verify failed (`MAIL_ENABLED`/`MAIL_SMTP_HOST`/`MAIL_FROM`) — form and API refuse by design                         |
+| All visitors share one rate-limit bucket | Caddy not setting `X-Forwarded-For`, or `ADDRESS_HEADER`/`XFF_DEPTH` wrong                                                                    |
+| SSE stalls                               | Caddy buffering — `flush_interval -1` must be present                                                                                         |
+| Certs fail under orange cloud            | HTTP-01 blocked at the edge — switch to DNS-01 (xcaddy + CF plugin) or grey-cloud DNS                                                         |
+| Analytics page shows only `—`            | Sentinel not configured (`SENTINEL_URL`/`SENTINEL_TOKEN`), not healthy, or the 2 s read timed out (fail-open by design)                       |
+| `/api/ready` answers 404                 | No `READY_TOKEN` in production (fail closed) or the caller is public with no token                                                            |
+| A notification never arrived             | `/admin/settings/notifications` delivery log: `failed` + `response_code`/error, or the group/channel is off in preferences                    |
+| Alert arrives but no recovery            | Gatus sends RESOLVED after `success-threshold`; if the endpoint was deleted instead of fixed the fragment was re-rendered (touch `zz-*.yaml`) |
+
+Per-alert detail (meaning / first five minutes / recovery / escalation) lives in
+`notes/coordination/m6/p7/alert-runbooks.md`. In-repo config truth:
+`deploy/monitoring/` (Gatus) and `deploy/systemd/` (host timers).
 
 ## 8. Email retention and suppression (E2)
 

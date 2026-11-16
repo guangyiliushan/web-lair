@@ -18,6 +18,7 @@ both files change in the same batch.
 | AI usage / chat                                                   | `ai_usage`, `ai_agent_conversations`            | 24 months / `ai.chat.retentionDays` (archived only) |                                                                                                                                |
 | Uploaded media                                                    | storage provider + `files` rows                 | until purge / delete                                |                                                                                                                                |
 | HTTP access log                                                   | Caddy `caddy_logs` volume                       | 30 days (`roll_keep_for 720h`)                      | the only place an IP appears; token paths excluded                                                                             |
+| Traffic analytics aggregates                                      | `sentinel_data` volume (Sentinel SQLite)        | 48 h (1m) / 30 d (1h) / 395 d (1d) tiers            | derived from the access log; `TRAFFIC_IP_MODE=off` stores no IP; referer/UA/device/status breakdowns; rebuildable              |
 
 The raw commenter IP is **never** written to a business table. It is read from
 the adapter, used in-request for the per-IP rate bucket and optional CIDR
@@ -34,6 +35,15 @@ check, and dropped.
   are never logged (bearer tokens live in those URLs).
 - On-demand deletion: remove the volume contents or the whole volume; nothing
   else references the files.
+- Sentinel tails this file read-only (no copy leaves the box) and writes
+  aggregate rows to `sentinel_data`: hourly/daily request counts, status
+  classes, latency quantiles, and referer/browser/OS/device breakdowns. With
+  `TRAFFIC_IP_MODE=off` the analytics DB stores no IP addresses; unique-visitor
+  counts are HyperLogLog sketches over fixed-key SipHash hashes of the client
+  IP (the sketch stores counts, not addresses). Query paths are capped at
+  `TRAFFIC_TOPN`, with the remainder folded into `__other__`. To erase the
+  aggregates, stop `sentinel` and delete the `sentinel_data` volume; the data
+  is derived and rebuilds from future log lines.
 
 ## 3. Data-subject requests (DSR)
 

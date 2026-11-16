@@ -42,7 +42,10 @@ const SCHEDULES = [
 	// trash/orphans are registered but seeded separately (single-operator rule:
 	// `trash.purge` gets no schedule by default).
 	{ job: 'revisions.prune', cron: '10 3 * * *' },
-	{ job: 'orphans.purge', cron: '40 3 * * 0' }
+	{ job: 'orphans.purge', cron: '40 3 * * 0' },
+	// M6 P4 mail probe (F-10): 05:10 daily; the job itself decides whether the
+	// site-local Sunday real send is due.
+	{ job: 'mail.probe', cron: '10 5 * * *' }
 ] as const;
 
 async function main(): Promise<void> {

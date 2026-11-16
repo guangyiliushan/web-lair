@@ -79,13 +79,16 @@ describe('runDrain', () => {
 			loadJob: unusedLoader,
 			now: fixedNow
 		});
-		expect(summary.segmentErrors).toHaveLength(3);
+		expect(summary.segmentErrors).toHaveLength(4);
 		expect(summary.segmentErrors[0]).toContain('schedules');
 		expect(summary.segmentErrors[1]).toContain('queue');
 		// Delivery-segment failures are segment-level too (exit != 0, quiet
 		// heartbeat) and counted separately.
 		expect(summary.segmentErrors[2]).toContain('deliveries');
 		expect(summary.deliveries.errors).toBe(1);
+		// M6 P5: the notification segment is the fourth, isolated the same way.
+		expect(summary.segmentErrors[3]).toContain('notifications');
+		expect(summary.notifications.errors).toBe(1);
 	});
 
 	it('aborts the tick when a job times out (a stuck job can only die with the process)', async () => {
@@ -117,7 +120,7 @@ describe('runDrain', () => {
 				loadJob: async () => ({ run: () => stuck, sourceHash: 'hash' }),
 				now: fixedNow
 			});
-			await vi.advanceTimersByTimeAsync(30_001);
+			await vi.advanceTimersByTimeAsync(45_001);
 			const summary = await drainPromise;
 			expect(summary.aborted).toBe(true);
 			expect(summary.segmentErrors.some((entry) => entry.includes('timed out'))).toBe(true);

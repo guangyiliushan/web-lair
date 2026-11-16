@@ -51,6 +51,12 @@ export interface CacheStore {
 	 * (2026-10-16 review, R-1).
 	 */
 	expire(key: string, ttlSeconds: number): Promise<void>;
+	/**
+	 * Liveness probe for readiness checks (M6 P4): resolves when the backend
+	 * answers, throws when it does not. Unlike the get/set family this NEVER
+	 * swallows infrastructure failures - `/api/ready` is what needs the truth.
+	 */
+	ping(): Promise<void>;
 }
 
 /** Key namespace (plan §7): everything the app puts in Valkey sits under it. */

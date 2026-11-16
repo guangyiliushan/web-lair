@@ -86,6 +86,7 @@ export { aiUsage } from '../db/ai/ai-usage.schema.ts';
 export { jobRuns } from '../db/system/job-run.schema.ts';
 export { subscriptions } from '../db/system/subscription.schema.ts';
 export { webhookDeliveries } from '../db/system/webhook-delivery.schema.ts';
+export { notificationDeliveries } from '../db/system/notification-delivery.schema.ts';
 export { deriveAcceptedHosts, publicOrigin, runLinkCheck } from '../links/job.ts';
 export { EMAIL_RETENTION_DAYS, pruneOutdated, prunePrecheckRuns } from '../links/prune.ts';
 export { REVISION_KEEP_PER_POST, pruneRevisions } from '../maintenance/revisions.ts';
@@ -116,6 +117,22 @@ export async function runSummaryJob(ctx: JobContext): Promise<void> {
 export async function runCommentReviewJob(ctx: JobContext): Promise<void> {
 	const mod = await import('../ai/comment-review-job.ts');
 	await mod.runCommentReviewJob(ctx);
+}
+
+/**
+ * Ops probe cores (M6 P4): `system.resources` (F-7 thresholds/mounts) and
+ * `mail.probe` (F-10 verify + weekly real send). Lazy for the same reason as
+ * the AI cores - the mail probe pulls nodemailer and both cores are only
+ * needed when their job actually runs.
+ */
+export async function runSystemResources(ctx: JobContext): Promise<void> {
+	const mod = await import('../monitoring/system-resources-job.ts');
+	await mod.runSystemResources(ctx);
+}
+
+export async function runMailProbe(ctx: JobContext): Promise<void> {
+	const mod = await import('../mail/probe-job.ts');
+	await mod.runMailProbe(ctx);
 }
 
 /**

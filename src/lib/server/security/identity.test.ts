@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	SERVE_LOGIN_HEADER,
+	isInternalPeer,
 	isLoopbackAddress,
 	isTailscaleAddress,
 	isTrustedLogin,
@@ -37,6 +38,29 @@ describe('address classification', () => {
 		for (const ip of ['100.117.179.110', '203.0.113.7', '10.0.0.1']) {
 			expect(isLoopbackAddress(ip)).toBe(false);
 		}
+	});
+
+	it('treats RFC1918 and IPv6 ULA/link-local as private (ready gate)', () => {
+		for (const ip of [
+			'10.1.2.3',
+			'172.16.0.1',
+			'172.31.255.254',
+			'192.168.1.10',
+			'127.0.0.5',
+			'::1',
+			'::ffff:172.17.0.2',
+			'fd00::1',
+			'fc00::abcd',
+			'fe80::1%eth0'
+		]) {
+			expect(isInternalPeer(ip)).toBe(true);
+		}
+		// `fc::1` is NOT ULA: IPv6 groups are 16-bit, so it expands to 00fc::1,
+		// outside fc00::/7. Only full `fc00`-`fdff` first groups qualify.
+		for (const ip of ['8.8.8.8', '203.0.113.7', '172.32.0.1', '100.64.0.1', 'fc::1', '']) {
+			expect(isInternalPeer(ip)).toBe(false);
+		}
+		expect(isInternalPeer(null)).toBe(false);
 	});
 
 	it('recognises the tailscale CGNAT range 100.64.0.0/10 only', () => {

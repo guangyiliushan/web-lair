@@ -131,4 +131,8 @@ export class MemoryCacheStore implements CacheStore {
 		if (!entry) return; // EXPIRE on a missing key is a no-op in Valkey too
 		entry.expiresAt = this.#clock() + ttlSeconds * 1000;
 	}
+
+	async ping(): Promise<void> {
+		// The in-memory store lives in this process; answering proves it is up.
+	}
 }

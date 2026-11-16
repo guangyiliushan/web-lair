@@ -105,29 +105,60 @@ test('content renders the real W6 forms and no dead control', async ({ page }) =
 	).toHaveCount(0);
 });
 
-test('notifications shows Mail status, Webhooks and the static M6 note', async ({ page }) => {
+test('notifications shows Mail, Webhooks, channel preferences, Bark and the delivery log', async ({
+	page
+}) => {
 	const response = await page.goto('/admin/settings/notifications');
 	expect(response?.status()).toBe(200);
 	await expect(page.getByRole('heading', { name: 'Mail', exact: true }).first()).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Webhooks', exact: true }).first()).toBeVisible();
+	// M6 P5 replaced the static "Human channels (planned)" note with real
+	// surfaces: per-group channel preferences, the Bark status card and the
+	// delivery log (owner-only). The old placeholder must not come back.
+	await expect(page.getByRole('heading', { name: 'Channels', exact: true }).first()).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Bark push', exact: true }).first()).toBeVisible();
 	await expect(
-		page.getByRole('heading', { name: 'Human channels (planned)', exact: true }).first()
+		page.getByRole('heading', { name: 'Notification log', exact: true }).first()
 	).toBeVisible();
+	await expect(page.getByText(/human channels \(planned\)/i)).toHaveCount(0);
+	// Preferences are real controls: three groups × two channels, exactly once
+	// each (a duplicated name would post twice and hide a copy/paste bug).
+	for (const group of ['comment', 'job', 'ops']) {
+		await expect(page.locator(`input[name="${group}_email"]`)).toHaveCount(1);
+		await expect(page.locator(`input[name="${group}_bark"]`)).toHaveCount(1);
+	}
+	// ...and the form is WIRED, not just present: the old spec's page-wide
+	// "there is no Save button" guard is gone (the preference form legitimately
+	// has one), so the replacement has to prove the button submits the action
+	// that persists the switches. A `type="button"` impostor or a form without
+	// an action would render identically and would have passed the count-only
+	// assertions above.
+	const prefsForm = page.locator('form[action="?/saveNotificationPreferences"]').first();
+	await expect(prefsForm).toBeVisible();
+	await expect(prefsForm.locator('button[type="submit"]')).toHaveCount(1);
+	// The delivery log re-queues the SAME row through its own action, so its
+	// Resend control must be a submit inside that action (rows only appear once
+	// something was delivered; the assertion is conditional for a fresh DB).
+	const resendForms = page.locator('form[action="?/resendNotification"]');
+	for (const form of await resendForms.all()) {
+		await expect(form.locator('input[name="id"]')).toHaveCount(1);
+		await expect(form.locator('button[type="submit"]')).toHaveCount(1);
+	}
 	// SMTP credentials are env-only: the page renders status values, never a
 	// password input (W9.2 deleted the mock credential fields).
 	await expect(page.locator('input[type="password"]')).toHaveCount(0);
-	// The mock Save is gone. The only mail control is the real test send, and
-	// it is disabled while MAIL_ENABLED is not set (e2e runs dev-log mail).
+	// The mock MAIL save is gone (the only Save on the page is the preference
+	// form asserted above). The mail control is the real test send, and it is
+	// disabled while MAIL_ENABLED is not set (e2e runs dev-log mail).
 	const send = page.getByRole('button', { name: 'Send test email' }).first();
 	await expect(send).toBeVisible();
 	await expect(send).toBeDisabled();
-	// The M6 block is a static note: a fake Bark/email toggle added there would
-	// pass every page-wide assertion, so scope the zero-control check to it.
-	const m6 = page
+	// Bark credentials stay env-only in this release (P5-WAITING W2): the block
+	// is a status card, so any credential input there would be a lie.
+	const bark = page
 		.locator('section')
-		.filter({ has: page.getByRole('heading', { name: 'Human channels (planned)' }) });
-	await expect(m6.locator('input, textarea, select, button')).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+		.filter({ has: page.getByRole('heading', { name: 'Bark push' }) });
+	await expect(bark.locator('input, textarea, select')).toHaveCount(0);
 });
 
 test('the old user/notification routes permanently redirect', async ({ page }) => {

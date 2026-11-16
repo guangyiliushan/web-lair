@@ -104,7 +104,9 @@ const MIGRATION_TABLE_NAMES = [
 	'webhook_secrets',
 	'home_hero',
 	'site_identity',
-	'storage_secrets'
+	'storage_secrets',
+	// M6 P5 (approved schema exception): notification outbox, additive only.
+	'notification_deliveries'
 ] as const;
 
 const MIGRATION_TABLE_COLUMNS = new Map<string, string[]>([
@@ -156,6 +158,23 @@ const MIGRATION_TABLE_COLUMNS = new Map<string, string[]>([
 			'updated_at',
 			'updated_by'
 		]
+	],
+	[
+		'notification_deliveries',
+		[
+			'id',
+			'event_type',
+			'event_key',
+			'channel',
+			'status',
+			'attempts',
+			'next_attempt_at',
+			'response_code',
+			'error',
+			'payload',
+			'created_at',
+			'sent_at'
+		]
 	]
 ]);
 
@@ -174,7 +193,16 @@ const MIGRATION_INDEXES = new Map<string, string[]>([
 	['home_hero', ['home_hero_pkey']],
 	['site_identity', ['site_identity_pkey', 'site_identity_owner_user_id_idx']],
 	['webhook_deliveries', ['webhook_deliveries_due_idx']],
-	['storage_secrets', ['storage_secrets_pkey']]
+	['storage_secrets', ['storage_secrets_pkey']],
+	[
+		'notification_deliveries',
+		[
+			'notification_deliveries_pkey',
+			'notification_deliveries_event_channel_uniq',
+			'notification_deliveries_due_idx',
+			'notification_deliveries_created_at_idx'
+		]
+	]
 ]);
 
 const MIGRATION_CHECKS = new Map<string, string[]>([
@@ -216,6 +244,16 @@ const MIGRATION_CHECKS = new Map<string, string[]>([
 			'storage_secrets_secret_key_version_check',
 			'storage_secrets_ciphertext_check',
 			'storage_secrets_hint_check'
+		]
+	],
+	[
+		'notification_deliveries',
+		[
+			'notification_deliveries_channel_check',
+			'notification_deliveries_status_check',
+			'notification_deliveries_attempts_check',
+			'notification_deliveries_event_type_check',
+			'notification_deliveries_event_key_check'
 		]
 	],
 	// Appended column checks override the baseline map for this table, so the

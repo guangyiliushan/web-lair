@@ -1,0 +1,101 @@
+name: ci
+
+# P1/T1.1 — the merge gate. One job, ordered so every gate sees the SAME
+# Paraglide artifact the app ships:
+#   install → build → check → lint → unit (server) → unit (client)
+#
+# Why `build` precedes `check`: `src/lib/paraglide` is generated and gitignored,
+# and the generator that matters is the **Vite plugin** (it owns urlPatterns and
+# the per-surface routeStrategies). A bare `paraglide-js compile` cannot express
+# those options, so a CLI-generated tree is a different runtime, not an
+# equivalent one — type-checking it would validate code that never ships
+# (review P1-1; Paraglide docs "Compiling Messages": bundler plugins are the
+# recommended path, the CLI is for projects without a bundler).
+#
+# Why one job: the four heavy steps share one warm `node_modules`; splitting
+# them into jobs would pay the install three times for ~2 minutes of saved wall
+# time, and the required status check stays a single name (`ci / verify`).
+# Splitting later is additive for branch protection (a new name must be added
+# to the required list at the same time).
+#
+# Two things deliberately NOT here:
+#   - e2e: `e2e/support.ts` shells `docker exec web-lair-db-1`, so the suite
+#     needs a database container the runner does not have (F-18 residual).
+#   - `auth:check`: `.github/workflows/auth-schema.yml` already owns it.
+
+on:
+  push:
+    branches: [main, dev, 'dev/**']
+  pull_request:
+  workflow_dispatch:
+
+# Same ref → the newest run wins. `github.ref` is `refs/pull/<n>/merge` on pull
+# requests, so a force-push to a PR cancels the stale run too.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Build-time placeholders, mirroring the Dockerfile's build stage: SvelteKit's
+  # route analysis imports server modules whose import-time guards need them.
+  # They are NOT credentials and grant access to nothing (no secret is
+  # referenced anywhere in this workflow). The URL carries no user/password on
+  # purpose: postgres.js is lazy, so nothing ever dials this address.
+  DATABASE_URL: postgres://localhost:5432/build
+  ORIGIN: http://localhost:3000
+  BETTER_AUTH_SECRET: build-time-placeholder-secret-000000
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    # Cold install + check (~3m) + lint (~1m) + both unit projects (~8m) +
+    # build (~3m) fits comfortably; the cap exists so a hung browser test
+    # cannot burn the 6-hour default.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Nothing after checkout needs the workflow token as a git credential;
+          # keeping it out of `.git/config` shrinks the blast radius of any
+          # compromised install/build script (review P2-3).
+          persist-credentials: false
+
+      # `version` is omitted on purpose: the action reads `packageManager` from
+      # package.json (single source of truth), so Docker and CI cannot drift
+      # again (pnpm/action-setup README).
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      # Generates `src/lib/paraglide` with the Vite plugin's real options. Every
+      # later gate (check, vitest, and the production build already on disk)
+      # then reads one consistent artifact.
+      - name: build (also generates the Paraglide runtime)
+        run: pnpm build
+
+      - name: check
+        run: pnpm check
+
+      - name: lint
+        run: pnpm lint
+
+      - name: unit (server)
+        run: pnpm exec vitest run --project server
+
+      # The client project runs in a real Chromium via @vitest/browser-playwright;
+      # `--with-deps` installs the shared libraries the runner image lacks.
+      - name: browser (chromium)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: unit (client)
+        run: pnpm exec vitest run --project client

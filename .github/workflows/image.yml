@@ -1,0 +1,90 @@
+name: image
+
+# P1/T1.5 — build the deployment image and prove it works before it can merge.
+# Three gates, in order (each is a real execution, not a lint):
+#   1. `deploy/verify-image.sh`  - drain entry reaches its config guard, every
+#      registered builtin module loads, server answers /api/health;
+#   2. `deploy/image-size-check.sh` - absolute target + +10% regression budget
+#      against `deploy/image-size-baseline.json`;
+#   3. (implicit) the build itself - a lockfile/pnpm-version drift fails here.
+#
+# Runs only when image inputs change. A documentation-only PR should not pay
+# eight minutes of build time.
+#
+# ADVISORY, not a required check: GitHub keeps a path-filtered workflow's check
+# in "Pending" forever, which blocks any PR that does not touch these paths
+# (official: "Handling skipped but required checks"). Required status checks are
+# `ci / verify` and `auth-schema / guard` only - see
+# notes/coordination/m6/p1/branch-protection.md.
+
+on:
+  push:
+    branches: [main, dev, 'dev/**']
+  pull_request:
+    paths:
+      # Everything that can change the image bytes. `messages/**` and
+      # `project.inlang/**` are image inputs too: the Paraglide runtime is
+      # compiled into `build/` (review P1-2).
+      - Dockerfile
+      - .dockerignore
+      - .npmrc
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - vite.config.ts
+      - svelte.config.js
+      - tsconfig.json
+      - tsconfig.*.json
+      - messages/**
+      - project.inlang/api/**
+      - project.inlang/settings.json
+      - static/**
+      - deploy/**
+      - drizzle/**
+      - jobs/**
+      - scripts/**
+      - src/**
+      - .github/workflows/image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: image-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    # Cold build ~8 min on the deployment host; a runner with a warm GHA layer
+    # cache is faster, a cold cache slower. The cap is for a hung install.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      # `deploy/image-size-check.sh` parses the baseline with `node -e`; pin the
+      # runtime instead of trusting whatever the runner image ships.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: web-lair-app:ci
+          # Layer cache across runs: the pnpm install layers are the expensive
+          # part and only invalidate when the lockfile changes.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: verify image (three gates)
+        run: bash deploy/verify-image.sh web-lair-app:ci
+
+      - name: size gate
+        run: bash deploy/image-size-check.sh web-lair-app:ci

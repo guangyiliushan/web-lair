@@ -50,6 +50,9 @@ function brokenStore(): CacheStore {
 		}),
 		expire: vi.fn(async (): Promise<void> => {
 			throw new Error('cache down');
+		}),
+		ping: vi.fn(async (): Promise<void> => {
+			throw new Error('cache down');
 		})
 	};
 }

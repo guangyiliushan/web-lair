@@ -47,7 +47,8 @@ function throwingStore(): CacheStore {
 		zrangeAbove: vi.fn(boom),
 		sadd: vi.fn(boom),
 		scard: vi.fn(boom),
-		expire: vi.fn(boom)
+		expire: vi.fn(boom),
+		ping: vi.fn(boom)
 	};
 }
 

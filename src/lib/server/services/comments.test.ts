@@ -76,6 +76,14 @@ vi.mock('$lib/server/cache', () => ({
 		throw new Error('tests must pass an explicit cache store');
 	}
 }));
+// M6 P5: the comment insert now rides a transaction that also enqueues the
+// `comment.pending` outbox row. The outbox is mocked so the recording
+// executor's query queues stay about the comment path, and the producer
+// contract itself is asserted here.
+const { enqueueMock } = vi.hoisted(() => ({
+	enqueueMock: vi.fn(async () => 'enqueued' as const)
+}));
+vi.mock('$lib/server/notifications/outbox', () => ({ enqueueNotification: enqueueMock }));
 
 import {
 	assembleThreads,
@@ -156,7 +164,14 @@ const updateMock = vi.fn((table: unknown) => ({
 		};
 	}
 }));
-Object.assign(dbMock, { select: selectMock, insert: insertMock, update: updateMock });
+// A DISTINCT transaction handle (M6 P5): "the outbox ran inside the comment
+// transaction" is only a meaningful assertion when the transaction is not the
+// root db handle.
+const txMock = { select: selectMock, insert: insertMock, update: updateMock };
+Object.assign(dbMock, {
+	...txMock,
+	transaction: async (fn: (client: unknown) => Promise<unknown>) => fn(txMock)
+});
 
 beforeEach(() => {
 	state.selectQueue = [];
@@ -181,6 +196,8 @@ beforeEach(() => {
 	selectMock.mockClear();
 	insertMock.mockClear();
 	updateMock.mockClear();
+	enqueueMock.mockClear();
+	enqueueMock.mockImplementation(async () => 'enqueued');
 });
 
 function row(overrides: Partial<CommentRow> = {}): CommentRow {
@@ -213,7 +230,8 @@ function fakeStore(incr: (key: string, windowSeconds: number) => Promise<number>
 		zrangeAbove: async () => [],
 		sadd: async () => undefined,
 		scard: async () => 0,
-		expire: async () => undefined
+		expire: async () => undefined,
+		ping: async () => undefined
 	};
 }
 
@@ -619,6 +637,43 @@ describe('submitComment', () => {
 		expect(values.countryCode).toBeNull();
 		expect(values.regionCode).toBeNull();
 		expect(values.meta).toBeNull();
+	});
+
+	it('enqueues one comment.pending event inside the comment transaction (M6 P5)', async () => {
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'new-pending', state: 'pending' }]];
+		await submitComment(input());
+		expect(enqueueMock).toHaveBeenCalledTimes(1);
+		const [executor, event] = enqueueMock.mock.calls[0] as unknown as [
+			unknown,
+			Record<string, unknown>
+		];
+		// The outbox rides the TRANSACTION the insert ran on, not the root db.
+		expect(executor).toBe(txMock);
+		expect(event).toMatchObject({
+			eventType: 'comment.pending',
+			eventKey: 'comment:new-pending',
+			title: 'New comment awaiting review'
+		});
+		expect(String(event.body)).toContain('Alice');
+		expect(String(event.body)).toContain('hello world');
+	});
+
+	it('does not enqueue for an owner auto-approved comment (no moderation needed)', async () => {
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'new-approved', state: 'approved' }]];
+		await submitComment(input({ user: { id: 'o1', role: 'owner', emailVerified: true } }));
+		expect(enqueueMock).not.toHaveBeenCalled();
+	});
+
+	it('keeps the comment when the outbox throws (the alert is best-effort)', async () => {
+		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
+		state.insertResults = [[{ id: 'new-kept', state: 'pending' }]];
+		enqueueMock.mockImplementation(async () => {
+			throw new Error('outbox down');
+		});
+		const result = await submitComment(input());
+		expect(result).toEqual({ kind: 'created', id: 'new-kept', state: 'pending' });
 	});
 
 	it('stores country/region only with privacy + collectCountry on (W6.2)', async () => {

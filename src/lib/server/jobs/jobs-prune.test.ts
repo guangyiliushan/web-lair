@@ -32,6 +32,13 @@ vi.mock('#jobs-sdk', () => ({
 	},
 	jobRuns: 'runs',
 	webhookDeliveries: 'deliveries',
+	// M6 P5: the notification delivery log prune runs in the same tick; the mock
+	// needs the table so the builtin's `delete(notificationDeliveries)` resolves.
+	notificationDeliveries: {
+		createdAt: 'notificationDeliveries.createdAt',
+		status: 'notificationDeliveries.status',
+		id: 'notificationDeliveries.id'
+	},
 	and: (...conditions: unknown[]) => ({ and: conditions }),
 	or: (...conditions: unknown[]) => ({ or: conditions }),
 	lt: (left: unknown, right: unknown) => ({ lt: [left, right] }),

@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 #
-# Nightly backup (deploy batch D-4, platform plan §C.6; split per T3-A).
+# Backup entry point (deploy batch D-4, platform plan §C.6; split per T3-A;
+# M6 P2 moved the schedule to Backrest).
+#
+# Modes:
+#   backup.sh               full backup: dump → data repository → config
+#                           repository → retention → backup ping. This stays the
+#                           manual / fallback entry point; the systemd timer was
+#                           removed (deploy/systemd/web-lair-backup.timer,
+#                           RUNBOOK §4).
+#   backup.sh --dump-only   dump + gates only: no restic, no ping. Backrest's
+#                           CONDITION_SNAPSHOT_START hook runs this and then
+#                           snapshots $BACKUP_DIR, so a dump that fails a gate
+#                           cancels the operation instead of being backed up.
 #
 # Backup set (data repository):
 #   1. pg_dump -Fc           (logical dump; never file-copy a running PG dir)
@@ -17,48 +29,195 @@
 # Both repositories are offsite targets (R2/B2). There is deliberately no
 # local repository on the same disk: that is a snapshot, not a backup.
 #
-# Env (systemd EnvironmentFile=/srv/web-lair/app/deploy/backup.env):
-#   POSTGRES_USER, POSTGRES_DB, DATA_DIR
+# Env (systemd EnvironmentFile=/srv/web-lair/app/deploy/backup.env, or the
+# compose `env_file` of the backrest service — one file either way):
+#   POSTGRES_USER, POSTGRES_DB
+#   POSTGRES_PASSWORD   (only with BACKUP_PG_MODE=local)
+#   DATA_DIR            (full mode only)
 #   RESTIC_REPOSITORY, RESTIC_PASSWORD, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 #   RESTIC_CONFIG_REPOSITORY, RESTIC_CONFIG_PASSWORD   (second repo, own key)
 #   BACKUP_PING_URL (optional, dedicated check — never the liveness one)
+#
+# DB access (BACKUP_PG_MODE):
+#   docker   (default, host/systemd) — `compose-prod.sh exec -T db <client>`, so
+#            neither a client nor the password is needed on the host.
+#   local    (inside the backrest container) — pg_dump/psql/pg_restore from
+#            $PATH against $PGHOST:$PGPORT using $POSTGRES_PASSWORD. The backup
+#            container deliberately has no Docker socket: a container that can
+#            drive Docker can delete the backups it is meant to protect.
 #
 # Failures are loud: set -e aborts before the backup ping, so a missing ping
 # raises the alarm.
 set -euo pipefail
 umask 077
 
+# Resolve through symlinks: a /usr/local/bin/backup.sh -> checkout link, or a
+# call via PATH, otherwise makes dirname point somewhere count-user-rows.sh is
+# not (readlink -f is GNU/busybox; realpath is the fallback).
+_self=${BASH_SOURCE[0]}
+if command -v readlink >/dev/null 2>&1 && readlink -f -- "$_self" >/dev/null 2>&1; then
+	_self=$(readlink -f -- "$_self")
+elif command -v realpath >/dev/null 2>&1; then
+	_self=$(realpath -- "$_self")
+fi
+SCRIPT_DIR=$(cd -- "$(dirname -- "$_self")" && pwd)
 APP_DIR=${APP_DIR:-/srv/web-lair/app}
 BACKUP_DIR=${BACKUP_DIR:-/srv/web-lair/backup}
 DC="${APP_DIR}/deploy/compose-prod.sh"
 RESTIC_IMAGE=${RESTIC_IMAGE:-restic/restic:0.19.1}
+PG_MODE=${BACKUP_PG_MODE:-docker}
 
-: "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is not set}"
-: "${RESTIC_PASSWORD:?RESTIC_PASSWORD is not set}"
-: "${RESTIC_CONFIG_REPOSITORY:?RESTIC_CONFIG_REPOSITORY is not set}"
-: "${RESTIC_CONFIG_PASSWORD:?RESTIC_CONFIG_PASSWORD is not set}"
-: "${DATA_DIR:?DATA_DIR is not set}"
+mode=full
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--dump-only) mode=dump-only ;;
+		*)
+			echo "[backup] unknown argument: $1 (usage: backup.sh [--dump-only])" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
 
-mkdir -p "$BACKUP_DIR"
-cd "$APP_DIR"
+# --- DB access --------------------------------------------------------------
+
+require_pg_env() {
+	: "${POSTGRES_USER:?POSTGRES_USER is not set}"
+	: "${POSTGRES_DB:?POSTGRES_DB is not set}"
+	case "$PG_MODE" in
+		docker)
+			[ -d "$APP_DIR" ] || {
+				echo "[backup] APP_DIR=$APP_DIR does not exist (BACKUP_PG_MODE=docker)" >&2
+				exit 1
+			}
+			[ -x "$DC" ] || {
+				echo "[backup] $DC is missing or not executable (BACKUP_PG_MODE=docker)" >&2
+				exit 1
+			}
+			# The backrest container has no docker CLI and no socket: hitting that
+			# through `compose-prod.sh exec docker …` says only "command not found".
+			command -v docker >/dev/null 2>&1 || {
+				echo "[backup] BACKUP_PG_MODE=docker needs the docker CLI; inside the backrest container use BACKUP_PG_MODE=local" >&2
+				exit 1
+			}
+			;;
+		local)
+			# Only this mode needs the password: in docker mode the client runs in
+			# the db container and authenticates over the container network.
+			: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required when BACKUP_PG_MODE=local (RUNBOOK §4)}"
+			export PGPASSWORD="$POSTGRES_PASSWORD"
+			export PGHOST="${PGHOST:-db}" PGPORT="${PGPORT:-5432}"
+			;;
+		*)
+			echo "[backup] BACKUP_PG_MODE must be docker or local, got '$PG_MODE'" >&2
+			exit 2
+			;;
+	esac
+}
+
+# The helpers below read and write the same streams as the original compose
+# calls, so the gates stay byte-for-byte the ones that ran before M6 P2.
+pg_dump_db() { # → archive on stdout
+	if [ "$PG_MODE" = local ]; then
+		pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"
+	else
+		( cd "$APP_DIR" && "${DC}" exec -T db pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB" )
+	fi
+}
+
+pg_restore_toc() { # archive on stdin → TOC validation only
+	if [ "$PG_MODE" = local ]; then
+		pg_restore -l > /dev/null
+	else
+		( cd "$APP_DIR" && "${DC}" exec -T db pg_restore -l ) > /dev/null
+	fi
+}
+
+pg_restore_data() { # archive on stdin → SQL on stdout
+	if [ "$PG_MODE" = local ]; then
+		pg_restore -a -f -
+	else
+		( cd "$APP_DIR" && "${DC}" exec -T db pg_restore -a -f - 2>/dev/null )
+	fi
+}
+
+pg_user_count() { # live count of public."user"
+	if [ "$PG_MODE" = local ]; then
+		psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'select count(*) from "user"'
+	else
+		( cd "$APP_DIR" &&
+			"${DC}" exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'select count(*) from "user"' )
+	fi
+}
 
 # 1) Logical dump to a temp file, validate, then swap: a failed dump must not
 #    truncate yesterday's good staging copy.
-"${DC}" exec -T db pg_dump -Fc -U "${POSTGRES_USER:?}" "${POSTGRES_DB:?}" \
-	> "$BACKUP_DIR/pg.dump.tmp"
-"${DC}" exec -T db pg_restore -l < "$BACKUP_DIR/pg.dump.tmp" > /dev/null
-# TOC presence is not data. Compare the user-row count in the archive with the
-# live table so an empty/partial dump never replaces yesterday's good copy.
-# The counter lives in count-user-rows.sh: it must drain stdin (an early exit
-# SIGPIPEs pg_restore and, under pipefail, kills the whole run).
-EXPECTED_USERS=$("${DC}" exec -T db psql -U "${POSTGRES_USER:?}" -d "${POSTGRES_DB:?}" -tAc 'select count(*) from "user"')
-DUMP_USERS=$("${DC}" exec -T db pg_restore -a -f - < "$BACKUP_DIR/pg.dump.tmp" 2>/dev/null |
-	bash "${APP_DIR}/deploy/backup/count-user-rows.sh")
-[ "$DUMP_USERS" = "$EXPECTED_USERS" ] || {
-	echo "[backup] dump has $DUMP_USERS user rows, expected $EXPECTED_USERS; refusing to replace pg.dump" >&2
-	exit 1
+dump_pg() {
+	require_pg_env
+	mkdir -p "$BACKUP_DIR"
+	# Not `local`: the EXIT trap runs after this function returns, so the names
+	# must still be in scope there (a local would expand to empty and leave the
+	# half dump and the lock behind).
+	DUMP_LOCK="$BACKUP_DIR/.pg-dump.lock"
+	DUMP_TMP=""
+	# Two producers exist — Backrest's hook and this script run by hand — and both
+	# would otherwise write the same pg.dump.tmp. The second writer truncates the
+	# file the first one is validating, and the first then renames that half file
+	# into place as pg.dump (which is the file the restore drill trusts).
+	# mkdir is the lock: portable, no util-linux dependency, and a stale one ages
+	# out instead of blocking the nightly run forever.
+	if ! mkdir "$DUMP_LOCK" 2>/dev/null; then
+		if [ -n "$(find "$DUMP_LOCK" -maxdepth 0 -mmin +"${BACKUP_LOCK_STALE_MIN:-360}" 2>/dev/null)" ]; then
+			echo "[backup] removing stale dump lock $DUMP_LOCK" >&2
+			rm -rf "$DUMP_LOCK"
+		fi
+		mkdir "$DUMP_LOCK" 2>/dev/null || {
+			echo "[backup] another backup is already writing $BACKUP_DIR; refusing to interleave" >&2
+			exit 1
+		}
+	fi
+	DUMP_TMP=$(mktemp "$BACKUP_DIR/.pg.dump.XXXXXX")
+	# A failed gate must not leave a half dump behind for the next snapshot, and
+	# must not keep the lock.
+	trap 'rm -f "$DUMP_TMP"; rmdir "$DUMP_LOCK" 2>/dev/null || true' EXIT
+	echo "[backup] pg_dump ${POSTGRES_DB} (${PG_MODE} client) → $DUMP_TMP"
+	pg_dump_db > "$DUMP_TMP"
+	pg_restore_toc < "$DUMP_TMP"
+	# TOC presence is not data. Compare the user-row count in the archive with
+	# the live table so an empty/partial dump never replaces yesterday's good
+	# copy. The counter lives in count-user-rows.sh: it must drain stdin (an
+	# early exit SIGPIPEs pg_restore and, under pipefail, kills the whole run).
+	EXPECTED_USERS=$(pg_user_count)
+	DUMP_USERS=$(pg_restore_data < "$DUMP_TMP" | bash "${SCRIPT_DIR}/count-user-rows.sh")
+	[ "$DUMP_USERS" = "$EXPECTED_USERS" ] || {
+		echo "[backup] dump has $DUMP_USERS user rows, expected $EXPECTED_USERS; refusing to replace pg.dump" >&2
+		exit 1
+	}
+	mv "$DUMP_TMP" "$BACKUP_DIR/pg.dump"
+	DUMP_TMP=""
+	rmdir "$DUMP_LOCK" 2>/dev/null || true
+	trap - EXIT
+	# The receipt line the Backrest hook log keeps: without it, a nightly run
+	# that produced a truncated-but-parseable dump looks exactly like a good one.
+	echo "[backup] dump ok: $(wc -c < "$BACKUP_DIR/pg.dump") bytes, ${DUMP_USERS} user rows"
 }
-mv "$BACKUP_DIR/pg.dump.tmp" "$BACKUP_DIR/pg.dump"
+
+if [ "$mode" = full ]; then
+	# Fail before the dump when the restic side is obviously unconfigured: a
+	# half-run leaves a fresh dump but no snapshot, which reads as success.
+	: "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is not set}"
+	: "${RESTIC_PASSWORD:?RESTIC_PASSWORD is not set}"
+	: "${RESTIC_CONFIG_REPOSITORY:?RESTIC_CONFIG_REPOSITORY is not set}"
+	: "${RESTIC_CONFIG_PASSWORD:?RESTIC_CONFIG_PASSWORD is not set}"
+	: "${DATA_DIR:?DATA_DIR is not set}"
+fi
+
+dump_pg
+
+if [ "$mode" = dump-only ]; then
+	echo "[backup] --dump-only: ${BACKUP_DIR}/pg.dump is ready; restic is Backrest's job"
+	exit 0
+fi
 
 # 3) Resolve the media volume from the running service (project-scoped).
 RUSTFS_CONTAINER=$("${DC}" ps -q rustfs)

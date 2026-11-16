@@ -12,8 +12,10 @@ ENV PATH=$PNPM_HOME:$PATH
 # placeholders satisfy import-time guards. They are passed per-command (not
 # ENV) so no secret-looking value lands in image metadata, and they never
 # reach the runtime stage.
-# Locked to the packageManager field so the lockfile stays authoritative.
-RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
+# Pinned to `package.json` `packageManager` (pnpm@12.16.1): a different pnpm
+# interprets the lockfile with its own settings and can silently re-resolve
+# the tree (P1/T1.3).
+RUN corepack enable && corepack prepare pnpm@12.16.1 --activate
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
@@ -27,10 +29,19 @@ RUN DATABASE_URL=postgres://build:build@127.0.0.1:5432/build \
 FROM node:24-bookworm-slim AS prod-deps
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
+RUN corepack enable && corepack prepare pnpm@12.16.1 --activate
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile
+# Curated prune (P1/T1.4 fallback; plan §3.5 route 3). The manifest removes the
+# paraglide COMPILER chain (~480 MB unpacked: @lix-js/sdk-linux-x64 alone is
+# ~360 MB) that only the build stage uses; the runtime imports nothing from it
+# (`build/server` references exactly one paraglide subpath,
+# `@inlang/paraglide-js/urlpattern-polyfill`). The script also asserts the
+# packages the runtime does import are still present - a wrong prune fails the
+# build here instead of at 03:00.
+COPY deploy/prune-prod-modules.sh deploy/image-prune.txt ./
+RUN bash prune-prod-modules.sh image-prune.txt /app
 
 # --- runtime: glibc + perl (exiftool-vendored.pl shebang), non-root ----------
 FROM node:24-bookworm-slim AS runtime
