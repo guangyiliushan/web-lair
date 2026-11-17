@@ -664,7 +664,7 @@
 		{#if alt && alt !== title}
 			<Dialog.Description class="sr-only">{alt}</Dialog.Description>
 		{/if}
-		<div class="absolute inset-0 bg-black/[0.92]" aria-hidden="true"></div>
+		<div class="absolute inset-0 bg-black/92" aria-hidden="true"></div>
 
 		<div
 			bind:this={stageEl}

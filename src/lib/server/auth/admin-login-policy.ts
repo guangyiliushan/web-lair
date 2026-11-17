@@ -1,7 +1,7 @@
 import { isAdminRole } from '$lib/server/auth/owner';
 
 /**
- * W1.6 (settings-truth plan, S3-B): GitHub is a reader-only sign-in method.
+ * GitHub is a reader-only sign-in method.
  *
  * GitHub must never mint an admin/owner session; those accounts keep two
  * credential paths - email + TOTP, or a passkey. The tailnet owner hand-off is

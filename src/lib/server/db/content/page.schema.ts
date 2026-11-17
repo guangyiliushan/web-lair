@@ -16,7 +16,7 @@ import type { LocalizedMarkdown, LocalizedText } from './localized.ts';
 export type { LocalizedMarkdown, LocalizedText, PageLocale } from './localized.ts';
 
 /**
- * Page registry (pages line P0): md rows drive `(site)/[slug]`; rows without
+ * Page registry: md rows drive `(site)/[slug]`; rows without
  * content are explicit code-route registrations. The title/content fall back
  * current -> en -> any locale in the service layer.
  */

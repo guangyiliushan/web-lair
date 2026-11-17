@@ -10,7 +10,7 @@ import type { SiteOwner } from '$lib/config/owner-status';
 import { SOCIAL_PRESETS, isSafeSocialHref, type SocialUserPlatform } from '$lib/config/social';
 
 /**
- * Owner profile + home hero service (M4 foundation, W3.3).
+ * Owner profile + home hero service.
  *
  * `site_identity` is a one-row pointer; `user_profiles` remains the single
  * source for the public persona and `home_hero` is the one-row localized copy

@@ -1,11 +1,11 @@
 import type { NotificationChannel } from '../db/system/notification-delivery.schema.ts';
 
 /**
- * Notification event roster (M6 P5; decision register §3E N7, plan §3.2).
+ * Notification event roster.
  *
  * The roster is the single place an event type, its preference group and the
  * channels it may ever use are declared. Producers (`comment.pending` in the
- * comment service, `job.failed` in the drain, the P4 probes through the
+ * comment service, `job.failed` in the drain, the builtin probes through the
  * `notify()` seam) name an event; `notifications/outbox.ts` refuses a type
  * that is not registered here, so a typo cannot create a row nothing will
  * ever deliver.
@@ -19,8 +19,9 @@ import type { NotificationChannel } from '../db/system/notification-delivery.sch
  *  - `comment.pending`   - a reader's comment entered the moderation queue.
  *  - `job.failed`        - a job run reached the terminal `failed` state and
  *                          its name is on `JOB_FAILURE_ALERT_WHITELIST`.
- *  - `system.disk_high` / `system.memory_high` - F-7 threshold alerts (P4).
- *  - `mail.probe.failed` - the F-10 mail probe failed (P4).
+ *  - `system.disk_high` / `system.memory_high` - threshold alerts from the
+ *    resource-monitoring job.
+ *  - `mail.probe.failed` - the SMTP probe failed.
  *
  * Node-strip-loadable (type-only import), because the drain imports this.
  */
@@ -70,13 +71,12 @@ export const NOTIFICATION_EVENT_TYPES = Object.keys(
 ) as readonly NotificationEventType[];
 
 /**
- * Jobs whose terminal failure is worth a human alert (decision register §3E
- * N7: whitelist `media.audit`). Builtin maintenance jobs stay OFF the list on
- * purpose: their failures are already recorded in `job_runs` and surfaced by
- * the drain heartbeat, and a nightly red run would otherwise mail every day -
- * the noise the register's rate-limit section warns about. `media.audit` is
- * the data-integrity job (media vs. files table); a red run there means the
- * archive is no longer verifiable.
+ * Jobs whose terminal failure is worth a human alert: `media.audit` is the
+ * only entry. Builtin maintenance jobs stay OFF the list on purpose: their
+ * failures are already recorded in `job_runs` and surfaced by the drain
+ * heartbeat, and a nightly red run would otherwise mail every day - pure
+ * noise. `media.audit` is the data-integrity job (media vs. files table); a
+ * red run there means the archive is no longer verifiable.
  */
 export const JOB_FAILURE_ALERT_WHITELIST: readonly string[] = ['media.audit'];
 

@@ -1,6 +1,6 @@
 // scripts/verify-review-idempotency.ts
 //
-// Acceptance for the comment-review state machine (B2.1 review fix, T3):
+// Acceptance for the comment-review state machine:
 //   pnpm db:verify-review
 //
 // Runs on a scratch database and proves the review UPDATE is pending-only:

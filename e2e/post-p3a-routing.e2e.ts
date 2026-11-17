@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
 
 /**
- * P3-a routing nails (roadmap W1 #1, ledger §9.20.2) against the built site:
+ * Routing nails against the built site:
  *
  *   /              -> 200                (cookie-driven homepage, exempt)
  *   /account       -> 200                (tool page, exempt)
@@ -16,7 +16,7 @@ import { psql } from './support';
  * visible languages only), scheduled-in-future invisibility, a language
  * switch on a content page (exactly one document navigation) and the
  * canonical chrome links (the SPA canonicalisation path now lives in the
- * P3-b pages spec, exercised through an in-content relative link).
+ * post-p3b-pages spec, exercised through an in-content relative link).
  * Fixtures live on the shared dev database under the `e2e-p3a%` slug prefix
  * and are cleaned in beforeAll/afterAll.
  */
@@ -254,7 +254,7 @@ test.describe('P3-a routing nails', () => {
 		await expect(trigger).toBeVisible();
 		await trigger.hover();
 		await expect(page.getByTestId('post-ai-card')).toContainText('Mostly AI');
-		// The visual axis was removed (ledger §30): the card shows the writing
+		// The visual axis was removed: the card shows the writing
 		// claim and the help detail only — asserting a visuals row would pin a
 		// retired field.
 		await expect(page.getByTestId('post-ai-card')).not.toContainText('visuals');
@@ -391,10 +391,10 @@ test.describe('P3-a read side', () => {
 	test('the chrome Posts link is canonical: SPA navigation without a document load', async ({
 		page
 	}) => {
-		// P3-b unified the chrome links through siteHref: the header link now
+		// The chrome links were unified through siteHref: the header link now
 		// carries the locale, so clicking it is a plain SPA navigation. The
 		// remaining canonicalisation trigger (relative links inside article
-		// markdown) is covered by the P3-b pages spec.
+		// markdown) is covered by the post-p3b-pages spec.
 		await page.goto(`/en/posts/${SLUG_MAIN}`);
 		// Hydration probe (review finding: a fixed sleep raced hydration under
 		// load): the language switcher only opens once handlers are live, so a

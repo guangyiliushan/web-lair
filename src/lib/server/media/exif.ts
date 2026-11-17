@@ -1,9 +1,9 @@
 import exifr from '@laosb/exifr';
 
 /**
- * Photo EXIF extraction (storage line §3.3 / §4.3): `@laosb/exifr` for the
+ * Photo EXIF extraction: `@laosb/exifr` for the
  * general parse, the structured columns and the stored `exif` blob. Brand
- * maker notes moved to `./exif-makernotes` (multi-brand batch, 2026-10-10):
+ * maker notes moved to `./exif-makernotes`:
  * one ExifTool decoder produces `exif.makerNotes.<brand>` for every brand —
  * fuji-recipes is retired (its 15 recipe fields are a strict subset of the
  * FujiFilm group dump). Pure and storage-agnostic — the caller hands in the
@@ -116,8 +116,8 @@ export function composeTakenAt(
  * Deep-copy into JSON-safe values; binary views (maker note bytes, ICC) drop
  * out and NUL (U+0000) is stripped from strings — PostgreSQL jsonb cannot
  * carry U+0000 at all (`unsupported Unicode escape sequence`), and real
- * Fujifilm files ship NUL-padded fields (e.g. Copyright), caught by the T13
- * live import.
+ * Fujifilm files ship NUL-padded fields (e.g. Copyright); a live import
+ * surfaced them.
  */
 export function toJsonSafe(value: unknown, depth = 0): unknown {
 	if (value === null || value === undefined) return null;
@@ -138,8 +138,8 @@ export function toJsonSafe(value: unknown, depth = 0): unknown {
 		const result: Record<string, unknown> = {};
 		for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
 			if (DROP_KEYS.has(key)) continue;
-			// jsonb rejects U+0000 in KEYS exactly like in values (review
-			// round 1: only the value side was stripped before).
+			// jsonb rejects U+0000 in KEYS exactly like in values (only the value
+			// side was stripped before).
 			const cleanKey = key.includes('\u0000') ? key.replaceAll('\u0000', '') : key;
 			const safe = toJsonSafe(entry, depth + 1);
 			if (safe !== undefined) result[cleanKey] = safe;
@@ -224,7 +224,7 @@ export async function extractPhotoMetadata(
 ): Promise<PhotoExif> {
 	let parsed: ParsedExif | null = null;
 	try {
-		// `makerNote: true` was removed in round-2 review: exifr parsed the
+		// `makerNote: true` was removed: exifr parsed the
 		// maker-note block only for `toJsonSafe` to drop it (DROP_KEYS),
 		// while the real maker-note source is exiftool (./exif-makernotes).
 		// Standard fields are unaffected.

@@ -5,7 +5,7 @@ import { SecretError } from './errors.ts';
 import { loadKeyring, providerKeyHint, type SecretDb, type ResolveDeps } from './resolver.ts';
 
 /**
- * External storage credentials (W7.6, decisions Q3/Q15).
+ * External storage credentials.
  *
  * Read order, evaluated at call time (no cache — a cache needs invalidation,
  * and multi-replica invalidation is where the bugs live):

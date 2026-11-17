@@ -63,16 +63,16 @@
 >
 	<ul class="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
 		<li class="flex items-center gap-1.5">
-			<span class="size-2 shrink-0 rounded-[2px] bg-chart-1" aria-hidden="true"></span>
+			<span class="size-2 shrink-0 rounded-xs bg-chart-1" aria-hidden="true"></span>
 			<span>{m.admin_dashboard_legend_approved()}</span>
 		</li>
 		<li class="flex items-center gap-1.5">
-			<span class="size-2 shrink-0 rounded-[2px] bg-chart-2" aria-hidden="true"></span>
+			<span class="size-2 shrink-0 rounded-xs bg-chart-2" aria-hidden="true"></span>
 			<span>{m.admin_dashboard_legend_pending()}</span>
 		</li>
 	</ul>
 
-	<ChartContainer {config} class="aspect-auto h-[180px] w-full">
+	<ChartContainer {config} class="aspect-auto h-45 w-full">
 		<BarChart data={rows} {series} seriesLayout="stack" x="bucket" />
 	</ChartContainer>
 

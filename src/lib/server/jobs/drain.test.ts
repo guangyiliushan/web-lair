@@ -3,7 +3,7 @@ import { runDrain, sanitizeErrorText } from './drain';
 import type { JobsDb } from './types';
 
 /**
- * Tick-level guarantees that need no database (plan §2): the drain resolves
+ * Tick-level guarantees that need no database: the drain resolves
  * even when whole segments blow up (segment isolation - the later segments
  * still run), a tick with nothing to do reports zeros, heartbeat failures
  * never fail the tick, and a job timeout aborts the tick (the stuck job dies
@@ -86,7 +86,7 @@ describe('runDrain', () => {
 		// heartbeat) and counted separately.
 		expect(summary.segmentErrors[2]).toContain('deliveries');
 		expect(summary.deliveries.errors).toBe(1);
-		// M6 P5: the notification segment is the fourth, isolated the same way.
+		// The notification segment is the fourth, isolated the same way.
 		expect(summary.segmentErrors[3]).toContain('notifications');
 		expect(summary.notifications.errors).toBe(1);
 	});
@@ -274,6 +274,6 @@ describe('run-scoped binding through the drain (J-2 review: unbind arm)', () => 
 		expect(() => requireBoundDb()).toThrowError(/no database is bound/);
 		// The same loadJob contract also works with the real loader shape:
 		// resolving a user name the registry does not know still runs it when
-		// a registry name is used (covered by the harness T10 end-to-end).
+		// a registry name is used (covered by the end-to-end harness).
 	});
 });

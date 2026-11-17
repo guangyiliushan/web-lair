@@ -124,7 +124,7 @@ describe('assembleDiscussion (comment P3b read side)', () => {
 		expect(threads.roots[0].isDeleted).toBe(true);
 		expect(threads.roots[0].text).toBe('');
 		// The passage text stays in the article; the placeholder no longer ships
-		// its historical quote (payload hygiene, B1 review angle 4).
+		// its historical quote (payload hygiene).
 		expect(threads.roots[0].anchor).toBeNull();
 		expect(marks).toHaveLength(1);
 	});
@@ -152,7 +152,7 @@ describe('assembleDiscussion (comment P3b read side)', () => {
 		const anchor = anchorFor(blocks, 'First');
 		const { threads } = assembleDiscussion([row({ anchor })], [], { blocks });
 		const serialized = JSON.stringify(threads);
-		// Spec §7: hash/occ/ord/range/prefix/suffix stay server-side; the page only
+		// Contract: hash/occ/ord/range/prefix/suffix stay server-side; the page only
 		// gets the display quote and the rendered target id.
 		expect(serialized).not.toContain('"hash"');
 		expect(serialized).not.toContain('"occ"');

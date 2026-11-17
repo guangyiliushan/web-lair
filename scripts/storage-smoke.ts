@@ -2,7 +2,7 @@ import { storageConfigFromEnv } from '../src/lib/server/storage/config';
 import { S3Storage } from '../src/lib/server/storage/s3';
 
 /**
- * ST-1 infra smoke (ledger §21): ensures the bucket exists and exercises the
+ * Infra smoke: ensures the bucket exists and exercises the
  * tested S3 subset — PUT / GET / HEAD / DELETE — against the local RustFS
  * container. Run with: `pnpm storage:smoke` (tsx --env-file=.env).
  */

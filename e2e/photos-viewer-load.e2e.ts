@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
 
 /**
- * T10/T16 acceptance (plan §4.5, C batch): the loading-strategy branches on
+ * C batch acceptance: the loading-strategy branches on
  * the page viewer — ≤8MB auto-loads the full variant without a click,
  * over-threshold sources show a load button and stay idle until clicked,
  * and a saveData signal forces the same on-demand path for small files.
@@ -12,7 +12,7 @@ import { psql } from './support';
  * assertion), and specs share the live database across parallel workers.
  * The fixtures' object bytes are intentionally absent (registry-only rows),
  * so the full fetch terminates in the visible retry card — that is the
- * terminal-failure branch of T10 asserted for free. A separate client spec
+ * terminal-failure branch asserted for free. A separate client spec
  * covers the streamed success path with a stubbed fetch.
  */
 const FIX = 'e2e-vload';
@@ -75,7 +75,7 @@ test.describe('photos viewer loading strategy', () => {
 		await expect(image).toBeVisible({ timeout: 20_000 });
 		// Auto path: the full fetch fires without any interaction.
 		await expect.poll(() => hits.length, { timeout: 15_000 }).toBeGreaterThan(0);
-		// The fixture's bytes are absent → terminal failure with retry (T10).
+		// The fixture's bytes are absent → terminal failure with retry.
 		await expect(page.locator('.photos-viewer-retry')).toBeVisible({ timeout: 15_000 });
 		await expect(page.locator('.photos-viewer-progress')).toContainText('原图加载失败');
 	});

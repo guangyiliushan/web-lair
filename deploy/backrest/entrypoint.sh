@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Backrest entrypoint (M6 P2, T2.1/T2.3).
+# Backrest entrypoint.
 #
 # Renders /config/config.json from the environment on first start, then hands
 # over to upstream's /docker-entrypoint (which only fills in BACKREST_* defaults
@@ -85,8 +85,8 @@ validate_schedule() { # name value
 	return 0
 }
 
-# Extra restic environment (S3 credentials for R2/B2). Empty for a local
-# filesystem repository, which is what the drill uses.
+# Extra restic environment (S3 credentials for Cloudflare and Backblaze).
+# Empty for a local filesystem repository, which is what the drill uses.
 repo_env=""
 add_repo_env() {
 	value=$(eval "printf '%s' \"\${$1:-}\"")

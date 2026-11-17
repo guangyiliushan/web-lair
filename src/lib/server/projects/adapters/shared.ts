@@ -1,5 +1,5 @@
 /**
- * Small mapping helpers shared by the four adapters (plan §3.2): raw API
+ * Small mapping helpers shared by the four adapters: raw API
  * payloads are untrusted - every field is narrowed here so a platform-side
  * shape change surfaces as a `parse` failure instead of silent nulls.
  */

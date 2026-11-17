@@ -10,14 +10,12 @@ import { resolveJobDefinition } from './user-layer.ts';
 import { m } from '../../paraglide/messages.js';
 
 /**
- * Schedule management (J-3, plan §3.2/§5.7): the admin surface's cron CRUD.
- * Every mutation joins one transaction with its audit row (ledger §26 roster:
- * `schedule.create/update/delete/toggle`). Watermark rules follow §3.2 -
- * creating and re-enabling reset `last_due_at` to now (enabling is "start
- * from the next due point", never a catch-up over the disabled window), and
- * editing the cron or tz resets it too: the due grid moved, so a stale
- * watermark could otherwise fire an unintended catch-up under the new
- * expression.
+ * Schedule management: the admin surface's cron CRUD. Every mutation joins
+ * one transaction with its audit row. Creating and re-enabling reset
+ * `last_due_at` to now (enabling is "start from the next due point", never a
+ * catch-up over the disabled window), and editing the cron or tz resets it
+ * too: the due grid moved, so a stale watermark could otherwise fire an
+ * unintended catch-up under the new expression.
  */
 
 type ScheduleDb = Pick<
@@ -57,11 +55,10 @@ export type ScheduleValidation =
 	{ ok: true; cronExpr: string; tz: string } | { ok: false; message: string };
 
 /**
- * Cron + timezone gate (plan §4.9; timezone closure = ledger §13.9): exactly
- * five fields via the same checker the drain applies, an Intl probe, PG
- * `pg_timezone_names` membership, and a cron-parser trial parse with the tz
- * (cron-parser is what actually computes the due points, so it gets the last
- * word).
+ * Cron + timezone gate: exactly five fields via the same checker the drain
+ * applies, an Intl probe, PG `pg_timezone_names` membership, and a
+ * cron-parser trial parse with the tz (cron-parser is what actually computes
+ * the due points, so it gets the last word).
  */
 export async function validateScheduleInput(
 	input: { cronExpr: string; tz: string },
@@ -120,7 +117,7 @@ export async function createSchedule(input: {
 	if (!definition)
 		return { kind: 'unknown-job', message: m.admin_maintenance_err_unknown({ name: job }) };
 	// The membership check rides on `execute`, which the ScheduleDb surface
-	// does not name - same cast the options registry uses (ledger §13.9).
+	// does not name - same cast the options registry uses.
 	const validation = await validateScheduleInput(input, input.db as unknown as PgTimeZoneExecutor);
 	if (!validation.ok) return { kind: 'invalid', message: validation.message };
 	// Advisory read, not a constraint: the multi-cadence case stays legal.
@@ -178,9 +175,9 @@ export async function updateSchedule(input: {
 	const watermarkReset = existing.cronExpr !== validation.cronExpr || existing.tz !== validation.tz;
 	try {
 		const outcome = await input.db.transaction(async (tx) => {
-			// `.returning` as the existence probe (J-3 review J3-2): a row
-			// deleted between the read above and this write must answer
-			// not-found, not a phantom success plus a stray audit row.
+			// `.returning` as the existence probe: a row deleted between
+			// the read above and this write must answer not-found, not a
+			// phantom success plus a stray audit row.
 			const updated = await tx
 				.update(jobSchedules)
 				.set(
@@ -218,9 +215,9 @@ export type ToggleScheduleResult =
 /**
  * Set `is_enabled` to an EXPLICIT target state (never a blind flip): the UI
  * submits the desired end state, so a double-click / replayed POST is an
- * idempotent no-op instead of flipping the row back (J-3 review F2).
- * Enabling resets the watermark (plan §3.2); a concurrent writer that moved
- * the state in between answers `stale` (conditional write, no lost update).
+ * idempotent no-op instead of flipping the row back. Enabling resets the
+ * watermark; a concurrent writer that moved the state in between answers
+ * `stale` (conditional write, no lost update).
  */
 export async function toggleSchedule(input: {
 	db: ScheduleDb;

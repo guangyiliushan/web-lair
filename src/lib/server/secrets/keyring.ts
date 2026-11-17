@@ -1,7 +1,7 @@
 import { SECRET_KEY_BYTES } from './crypto.ts';
 
 /**
- * Master-key keyring (W2.2, decision T2-A).
+ * Master-key keyring.
  *
  *     SECRETS_KEYS="2:<base64 32B>,1:<base64 32B>"   # any order; ACTIVE decides
  *     SECRETS_KEY_ACTIVE="2"                          # must name a listed version

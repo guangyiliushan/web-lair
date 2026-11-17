@@ -1,5 +1,5 @@
 /**
- * Secret-failure alert timer (W2.5 / decision A3).
+ * Secret-failure alert timer.
  *
  * Reads the audit rows the app writes on key failures, applies the three
  * decided rules, and POSTs one message per firing rule to `ALERT_WEBHOOK_URL`

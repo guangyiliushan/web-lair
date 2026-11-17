@@ -5,8 +5,8 @@ import * as schema from '$lib/server/db/schema';
 import { syncFileReferences } from './file-references';
 
 /**
- * Service-level reference lifecycle on a REAL scratch database (ST-3 3b2;
- * register: "two-connection integration teeth - run the window on a scratch
+ * Service-level reference lifecycle on a REAL scratch database
+ * (register: "two-connection integration teeth - run the window on a scratch
  * container"). Skipped unless REFS_SCRATCH_URL points at a migrated scratch
  * database (the single baseline applied; the ref_type check already includes
  * 'draft'), so the default suite stays offline. Run it explicitly with:
@@ -21,8 +21,8 @@ import { syncFileReferences } from './file-references';
  * interleave cases are probabilistic by nature (Promise.all may serialize
  * either way and both orders end in the same state); each round re-clears
  * the survivor first so its attach arm really inserts again (a bare repeat
- * would degenerate into a no-op replay - 01/03 review round 2), and the
- * end-state assertions are the deterministic half of the contract.
+ * would degenerate into a no-op replay), and the end-state assertions are
+ * the deterministic half of the contract.
  */
 const url = process.env.REFS_SCRATCH_URL;
 const K1 = `55/55${'a'.repeat(62)}.png`;
@@ -32,7 +32,7 @@ const K4 = `55/55${'d'.repeat(62)}.png`;
 
 describe.skipIf(!url)('reference lifecycle on a scratch database (3b2)', () => {
 	// Pools are constructed inside beforeAll so a skipped suite never builds
-	// a connection at all (02 review: the factory-time build silently fell
+	// a connection at all (the factory-time build silently fell
 	// back to localhost when the env var was missing).
 	let sqlA: ReturnType<typeof postgres>;
 	let sqlB: ReturnType<typeof postgres>;
@@ -110,7 +110,7 @@ describe.skipIf(!url)('reference lifecycle on a scratch database (3b2)', () => {
 	});
 
 	it('a shared file stays attached while any reference remains', async () => {
-		// Self-sufficient (03 review): build a second reference here instead
+		// Self-sufficient: build a second reference here instead
 		// of leaning on the first case's leftover post ref.
 		await syncFileReferences(dbA, { type: 'page', id: 'e3000000-0000-4000-8000-000000000003' }, [
 			K1

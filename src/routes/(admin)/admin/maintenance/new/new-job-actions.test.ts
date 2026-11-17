@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for /admin/maintenance/new (J-3): guard first, the name
+ * Route-level tests for /admin/maintenance/new: guard first, the name
  * requirement, gate-error passthrough, the conflict passthrough, and the
  * redirect contracts - plain save lands on the [name] page, save-and-run
  * queues and lands on the list (ledger visible).
@@ -99,8 +99,8 @@ describe('admin maintenance new actions', () => {
 		expect(state.saveCalls[0]).toMatchObject({ name: 'my-task', code: 'x', baseHash: null });
 		expect(thrown).toMatchObject({ status: 303, location: '/admin/maintenance/my-task' });
 
-		// CRLF parity with the [name] route (J-3 review E1: the mutant only
-		// died on [name]'s test - this file pins the ingress fold too).
+		// CRLF parity with the [name] route: the mutant only
+		// died on [name]'s test - this file pins the ingress fold too.
 		await callAction('save', { name: 'my-task', code: 'a\r\nb\r', baseHash: '' });
 		expect(state.saveCalls.at(-1)).toMatchObject({ code: 'a\nb\n' });
 	});

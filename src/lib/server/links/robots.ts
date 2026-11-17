@@ -230,7 +230,7 @@ function specificity(pattern: string): number {
 	return body.replace(/\*+$/, '').length;
 }
 
-/** Raw non-ASCII characters are canonicalized to %XX UTF-8 form (§2.2.2). */
+/** Raw non-ASCII characters are canonicalized to %XX UTF-8 form (RFC 9309 §2.2.2). */
 function encodeNonAscii(pattern: string): string {
 	return pattern.replace(/[^\x21-\x7e]/g, (ch) => {
 		let encoded = '';
@@ -255,7 +255,7 @@ function canonicalPath(value: string): string {
 	);
 }
 
-/** Percent-encoded unreserved characters are decoded before comparison (§2.2.2). */
+/** Percent-encoded unreserved characters are decoded before comparison (RFC 9309 §2.2.2). */
 function decodeUnreservedPercent(uri: string): string {
 	return uri.replace(/%([0-9A-Fa-f]{2})/g, (match, hex: string) => {
 		const ch = String.fromCharCode(Number.parseInt(hex, 16));
@@ -317,7 +317,7 @@ export function createRobotsOracle(options: RobotsOracleOptions): RobotsOracle {
 		// Transport failures are NOT a skip: a network-dead site is the hard
 		// failure the checker exists to detect, so fall through to the normal page
 		// fetch (which classifies it; no extra requests). Redirect overflow is the
-		// §2.3.1.2/§2.3.1.3 "unavailable" -> no restrictions path.
+		// RFC 9309 §2.3.1.2/§2.3.1.3 "unavailable" -> no restrictions path.
 		if (outcome.outcome === 'redirect-loop') {
 			return { kind: 'allow-all', reason: 'redirect overflow (treated as unavailable)' };
 		}

@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { AdminRole } from '$lib/server/auth/owner';
 
 /**
- * Settings permission matrix (M4 foundation, W3.6a; decision register §3K).
+ * Settings permission matrix.
  *
  * Two levels:
  *   - section tier  - what the page itself is for (profile/storage are owner
@@ -62,9 +62,9 @@ export const SETTING_FIELD_TIERS: Record<string, SettingTier> = {
 	'notes.gate': 'admin',
 	'notifications.mail': 'admin',
 	'notifications.webhooks': 'owner',
-	// M6 P5: delivery preferences and the alert log are owner-only (decision
-	// N8); the log names comment/job ids, and a resend spends the owner's
-	// mail/Bark budget. Bark credentials stay env-only (P5-WAITING).
+	// Delivery preferences and the alert log are owner-only: the log names
+	// comment/job ids, and a resend spends the owner's mail/Bark budget.
+	// Bark credentials stay env-only.
 	'notifications.preferences': 'owner',
 	'notifications.deliveries': 'owner',
 	'notifications.bark': 'owner',

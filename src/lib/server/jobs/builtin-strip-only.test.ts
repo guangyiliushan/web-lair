@@ -14,7 +14,7 @@ const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
  * drain executes them via `node jobs/drain.ts`). This guard catches
  * strip-only landmines that Vite/vitest transforms would hide: extensionless
  * relative imports and constructor parameter properties both shipped past
- * the unit suite on 2026-10-06, and since J-2 the builtins import `#jobs-sdk`
+ * the unit suite on 2026-10-06, and the builtins import `#jobs-sdk`
  * - resolved by Node's package `imports` map, a layer vitest does not
  * exercise the same way. The loop is registry-driven, so a new builtin is
  * covered the moment it is registered.
@@ -35,7 +35,7 @@ describe('every builtin loads under plain Node', () => {
 			).resolves.toBeDefined();
 			// Spawns a real Node child: under full-suite load the 5 s default
 			// can cut it off (observed 5012 ms); the child itself stays bounded
-			// by the 30 s execFile timeout (review round 2026-10-06).
+			// by the 30 s execFile timeout.
 		}, 20_000);
 	}
 });

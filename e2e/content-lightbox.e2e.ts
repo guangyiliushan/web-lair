@@ -4,7 +4,7 @@ import { OVERLAY_FIXTURE_KEYS } from './overlay-fixture-keys';
 import { expectNoCriticalAxe, ORIGIN, psql } from './support';
 
 /**
- * CONTENT LIGHTBOX (3d, Q4/Q14 teeth): article images inside a rendered
+ * CONTENT LIGHTBOX: article images inside a rendered
  * markdown page become interactive controls - click opens the shared overlay
  * viewer, Esc closes it and focus returns to the image; an absolute-URL
  * (external) image opens WITHOUT any feed chrome; images inside links keep
@@ -162,9 +162,9 @@ test.describe('content lightbox (3d)', () => {
 		const html = await response.text();
 		// Element-shaped, not substring: the bare URL also ships inside the
 		// hydration payload, so `toContain` alone would stay green even if
-		// the <img> element were dropped (review 3d, 03 P2-6). The generic
+		// the <img> element were dropped. The generic
 		// escape keeps the pattern safe if a fixture key ever carries other
-		// metacharacters (review 3d round 2, 02 P3-1).
+		// metacharacters.
 		const escaped = KEY_INTERNAL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 		expect(html).toMatch(new RegExp(`<img[^>]+src="/i/${escaped}"`));
 		expect(html).not.toContain('data-content-lightbox');

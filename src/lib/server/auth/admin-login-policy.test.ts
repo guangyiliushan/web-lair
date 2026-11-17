@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * W1.6/S3-B: GitHub is reader-only. These tests pin the decision table, the
+ * GitHub is reader-only. These tests pin the decision table, the
  * lookup source (the local row, by user id) and the fail-closed behaviour.
  */
 const { findUserByIdMock } = vi.hoisted(() => ({ findUserByIdMock: vi.fn() }));

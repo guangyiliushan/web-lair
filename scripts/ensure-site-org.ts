@@ -1,6 +1,6 @@
 // scripts/ensure-site-org.ts
 //
-// Repair + acceptance entry for the site organization (B2, ledger §4.22):
+// Repair + acceptance entry for the site organization:
 //   pnpm db:ensure-org
 //
 // Creates the `web-lair` organization and the owner's member row when they are
@@ -14,7 +14,7 @@
 // app's `$env`-dependent modules cannot load in a plain tsx process). If the
 // plugin's organization/member tables gain columns, revisit this script.
 //
-// Acceptance (§12-1): running it twice must leave exactly one organization row
+// Acceptance: running it twice must leave exactly one organization row
 // AND exactly one owner membership - the trailing assertions enforce both.
 
 import { randomUUID } from 'node:crypto';

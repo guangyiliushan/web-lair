@@ -7,7 +7,7 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 /**
- * Unit tests for the options registry (AI-1.1): defaults, validation on both
+ * Unit tests for the options registry: defaults, validation on both
  * paths, unknown-key rejection and the defensive default clone. The db module
  * is mocked; the options table object is real so the fake executor can verify
  * the target table.
@@ -111,7 +111,7 @@ describe('options registry (AI-1.1)', () => {
 		await expect(getOption('site.languages')).resolves.toEqual({
 			enabled: ['en', 'zh-cn', 'ja']
 		});
-		// W6.1/W6.2: the shipped defaults are part of the contract (comments
+		// The shipped defaults are part of the contract (comments
 		// open by default; privacy collection off until the owner opts in).
 		await expect(getOption('comments.enabled')).resolves.toBe(true);
 		await expect(getOption('comments.privacy')).resolves.toMatchObject({

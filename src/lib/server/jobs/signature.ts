@@ -1,12 +1,12 @@
 import { createHmac } from 'node:crypto';
 
 /**
- * Standard Webhooks signing (platform plan §D.3; jobs plan §2 third segment).
+ * Standard Webhooks signing.
  *
  * Content signed: `{webhook-id}.{webhook-timestamp}.{body}` delimited by full
  * stops; the HMAC-SHA256 digest is base64-encoded and prefixed `v1,`. Secrets
  * serialized as `whsec_<base64>` are decoded per spec; any other value is used
- * as raw UTF-8 bytes (ledger §26 keeps `secret` plaintext for now - registered).
+ * as raw UTF-8 bytes.
  */
 const SIGNATURE_VERSION = 'v1';
 
@@ -39,7 +39,7 @@ export function webhookHeaders(
 	body: string,
 	previousSecrets: readonly string[] = []
 ): WebhookSignatureHeaders {
-	// Rotation grace window (W2.6): every still-valid secret contributes one
+	// Rotation grace window: every still-valid secret contributes one
 	// `v1,<digest>` entry. The spec allows a space-delimited list, so a
 	// receiver holding the old value keeps verifying while the new one is
 	// already in use.

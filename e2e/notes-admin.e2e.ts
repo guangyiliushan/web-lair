@@ -163,7 +163,7 @@ test('autosaves a new note and restores it after a reload', async ({ page }) => 
 		)
 	).toBe('en/draft');
 	// Metadata (topic / mood / weather...) lives on the draft row until the
-	// publish transaction copies it onto the note (editor model, §9.10).
+	// publish transaction copies it onto the note (the editor model).
 	expect(psql(`select topic_id = '${TOPIC}' from drafts where slug = '${SLUG}'`)).toBe('t');
 
 	await expect.poll(() => page.url()).toContain('id=');
@@ -182,13 +182,13 @@ test('publishes the draft: notes row, front page and admin list', async ({ page 
 	// Hydration gate: the Lexical body renders its markdown only after the
 	// client mounts, so waiting on the text proves the click handlers are
 	// attached. A click before that is a silent no-op (the state bar still
-	// read 草稿 with no error banner).
+	// read "草稿" with no error banner).
 	await expect(page.getByRole('textbox', { name: '输入正文...' })).toContainText(
 		'Hello notes body',
 		{ timeout: 15000 }
 	);
 
-	// UX-1020-04: publish is ONE request (save->publish in the same action).
+	// Publish is ONE request (save->publish in the same action).
 	// Click once and assert the outcome - the old `toPass` around the click
 	// is what let a first click that only ever saved slip through.
 	await page.getByRole('button', { name: '发布' }).click();

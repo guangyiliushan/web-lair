@@ -4,8 +4,7 @@ import { getOption } from '$lib/server/config/options-registry';
 import { hashArgon2id, verifyArgon2id } from '$lib/server/security/argon2';
 
 /**
- * Password gate for notes (N1 detail page; notes plan v0.4 §2.5, ledger
- * §13.9). The KDF is the shared Argon2id implementation in
+ * Password gate for notes. The KDF is the shared Argon2id implementation in
  * `$lib/server/security/argon2` (OWASP minimum profile, async on the libuv
  * thread pool). Unlock tokens are HMAC-signed with a key derived from
  * BETTER_AUTH_SECRET via HKDF (zero new env vars) and bind the CURRENT note
@@ -41,7 +40,7 @@ export const verifyNotePassword = verifyArgon2id;
 const GATE_KEY_INFO = 'web-lair:notes-gate';
 
 /**
- * The secret better-auth currently signs with (W2.11 / decision T4-B).
+ * The secret better-auth currently signs with.
  *
  * `BETTER_AUTH_SECRETS` is the official keyring: `"<version>:<secret>,..."`,
  * newest first, and better-auth's `secretConfig.current` is the FIRST entry
@@ -93,8 +92,8 @@ export function currentAuthSecret(getEnv: (name: string) => string | undefined):
 /**
  * HKDF-derived signing key (RFC 5869; domain-separated from every other
  * consumer of the current auth secret). Rotating the auth keyring invalidates
- * all outstanding unlocks - acceptable inside the 30-day TTL and required by
- * W2.11: one current version, no second key to keep in sync.
+ * all outstanding unlocks - acceptable inside the 30-day TTL and required
+ * by the one-current-version rule: no second key to keep in sync.
  */
 function gateSigningKey(): Buffer {
 	const secret = currentAuthSecret((name) => env[name]);

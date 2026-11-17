@@ -17,7 +17,7 @@ export const userProfiles = pgTable(
 			.references(() => user.id, { onDelete: 'cascade' }),
 		displayName: text('display_name').notNull(),
 		/**
-		 * Optional compact header label (M4 foundation, OP-2). App-level rule:
+		 * Optional compact header label. App-level rule:
 		 * 1-6 graphemes, NULL/empty = full display name. The DB bound is a
 		 * loose sanity check only (graphemes are counted with Intl.Segmenter
 		 * at the service layer); the label never replaces the full name in
@@ -32,7 +32,7 @@ export const userProfiles = pgTable(
 		emailNotificationsEnabled: boolean('email_notifications_enabled').default(true).notNull(),
 		profilePublic: boolean('profile_public').default(false).notNull(),
 		onlineStatusPublic: boolean('online_status_public').default(false).notNull(),
-		/** Soft delete (ledger §4.13/§4.21): `deleted_at` is kept in sync by a CHECK. */
+		/** Soft delete: `deleted_at` is kept in sync by a CHECK. */
 		status: text('status', { enum: ['active', 'deleted'] })
 			.default('active')
 			.notNull(),

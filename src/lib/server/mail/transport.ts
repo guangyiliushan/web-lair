@@ -12,20 +12,20 @@ import { resetMailProbeCache, verifyMailbox } from './probe';
 import { sanitizeErrorText } from '../jobs/error-text.ts';
 
 /**
- * SMTP transport (deploy batch D-2, Q7 ruling).
+ * SMTP transport.
  *
  * The production endpoint is whatever SMTP host `.env` points at — a
  * self-hosted MTA on the box (default) or a relay if the 25/PBL/PTR probes
  * fail (deploy/RUNBOOK.md). DKIM is signed **in process** by nodemailer, so a
  * dumb relay/MTA needs no milter configuration.
  *
- * Failure semantics (Q8): `sendMail` throws when unconfigured. `sendMailOrDevLog`
+ * Failure semantics: `sendMail` throws when unconfigured. `sendMailOrDevLog`
  * keeps local development usable (verification links print to the console,
  * the `devLogMail` precedent) and throws in production so a misconfigured
  * deployment cannot silently swallow registration email.
  *
  * The settings derivation and the verify cache live in `smtp.ts` / `probe.ts`
- * so the plain-Node mail probe uses the exact same rules (M6 P4).
+ * so the plain-Node mail probe uses the exact same rules.
  */
 
 export { MailNotConfiguredError } from './smtp';
@@ -64,7 +64,7 @@ export function isMailDeliveryAvailable(): boolean {
 /** Better-auth swallows this error in its background runner; log it here. */
 export function sendVerificationFailure(email: string, error: unknown): void {
 	// Keep the address and any SMTP banner address out of the log; the domain is
-	// enough to spot a bad sender (review P2-7).
+	// enough to spot a bad sender.
 	console.error('[mail] verification send failed', {
 		domain: email.split('@')[1] ?? '?',
 		error: sanitizeErrorText(redactMailError(error))
@@ -86,7 +86,7 @@ export async function isMailDeliveryAvailableLive(): Promise<boolean> {
 		// `transporter()` builds the transport synchronously and reads env, so a
 		// malformed host/port throws HERE, not inside the probe's try block. A
 		// throw must read as "not available" (the register page shows its banner)
-		// rather than a 500 (review P1-5).
+		// rather than a 500.
 		console.warn('[mail] live availability probe threw', sanitizeErrorText(redactMailError(error)));
 		return false;
 	}

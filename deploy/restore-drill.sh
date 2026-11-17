@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Restore drill (M6 P2, T2.5): prove that the newest snapshot actually restores.
+# Restore drill: prove that the newest snapshot actually restores.
 #
 # What it does, in order:
-#   1. lists the newest snapshot in the data repository and asserts the T3-A
-#      split still holds: no `.env` may live in ANY data snapshot;
+#   1. lists the newest snapshot in the data repository and asserts the
+#      data/config split still holds: no `.env` may live in ANY data snapshot;
 #   2. restores that snapshot into a scratch directory (staging dump, DATA_DIR
 #      tree, media tree);
 #   3. restores the newest snapshot of the CONFIG repository and asserts the
@@ -24,7 +24,7 @@
 #   set -a; . deploy/backup.env; set +a     # RESTIC_* / POSTGRES_* / AWS_*
 #   deploy/restore-drill.sh [--receipt FILE] [--sample N] [--compare-live] [--keep]
 #
-# Local-repository mode (what the M6 rehearsal uses): set DRILL_LOCAL_REPO_DIR to
+# Local-repository mode: set DRILL_LOCAL_REPO_DIR to
 # the host directory that holds the repositories and point RESTIC_REPOSITORY at
 # the in-container path, e.g.
 #   RESTIC_REPOSITORY=/repos/lair-data DRILL_LOCAL_REPO_DIR=/srv/drill/repos
@@ -191,7 +191,7 @@ receipt "drill.started=$(date -Is)"
 receipt "drill.repo.data=$RESTIC_REPOSITORY"
 receipt "drill.repo.config=$RESTIC_CONFIG_REPOSITORY"
 
-# --- 1. newest data snapshot + T3-A isolation -------------------------------
+# --- 1. newest data snapshot + data/config isolation ------------------------
 
 echo "[drill] listing the data repository"
 restic_data snapshots --latest 1 > "$WORK/data-snapshots.txt" ||

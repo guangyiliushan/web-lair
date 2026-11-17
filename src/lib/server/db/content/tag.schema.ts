@@ -12,11 +12,11 @@ import {
 import { posts } from './post.schema.ts';
 
 /**
- * Tags are a real entity since P1 (ledger §9.12): the posts.tags array
- * retired, `post_tags` is the single source of truth for the relation.
+ * Tags are a real entity: the posts.tags array retired, `post_tags` is
+ * the single source of truth for the relation.
  *
- * Tags are language-neutral by ruling (§9.18.4) and deliberately ASCII-only
- * (2026-10-23): they are created from free text on three write paths
+ * Tags are language-neutral and deliberately ASCII-only: they are created
+ * from free text on three write paths
  * (post publish, media library, seed), so the DB constraint — not the
  * callers — has to be the guarantee. `slug` stays URL-safe: the old
  * `tagSlug` kept `/`, which produced unroutable `/posts/tags/ui/ux`.

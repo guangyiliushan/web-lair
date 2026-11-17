@@ -14,8 +14,8 @@ vi.mock('iovalkey', () => ({
 import { ValkeyCacheStore } from './valkey';
 
 /**
- * `/api/ready` trusts `CacheStore.ping()` to tell it whether Valkey is up
- * (M6 P4). The route tests mock the cache away, so this is the only place the
+ * `/api/ready` trusts `CacheStore.ping()` to tell it whether Valkey is up.
+ * The route tests mock the cache away, so this is the only place the
  * real implementation runs: a stub `async ping() {}` in `ValkeyCacheStore`
  * would make readiness green with a dead Valkey and nothing else would notice.
  */

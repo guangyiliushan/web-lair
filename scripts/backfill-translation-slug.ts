@@ -6,7 +6,7 @@ import { notes, posts } from '../src/lib/server/db/content';
 import { slugTrackers } from '../src/lib/server/db/system';
 
 /**
- * Translation-slug convergence (UX-1020): the translation family shares ONE
+ * Translation-slug convergence : the translation family shares ONE
  * address - the source decides it, translations inherit it. Rows written before
  * that rule existed carry their own slugs (the old flow seeded a translation
  * draft with `slug: null` and let the author type one at publish), so this
@@ -188,7 +188,7 @@ async function applyPlan(plan: Plan): Promise<void> {
 			.for('update');
 		if (!current) return;
 		if (current.slug === plan.to) return;
-		// Old address stays resolvable (P3-b resolver: one 301 hop).
+		// Old address stays resolvable (one 301 hop).
 		if (!isPlaceholderSlug(current.slug)) {
 			await tx.insert(slugTrackers).values({
 				slug: current.slug,

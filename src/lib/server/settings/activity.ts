@@ -4,7 +4,7 @@ import { activities } from '$lib/server/db/system';
 import { user } from '$lib/server/db/auth.schema';
 
 /**
- * Settings change history (W3.6d).
+ * Settings change history.
  *
  * One read over `activities` for the settings event families. Payloads are
  * redacted before they leave the server: a future provider test may include a

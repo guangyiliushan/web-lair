@@ -12,7 +12,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 /**
- * Notification delivery outbox (M6 P5, decision register §3E N8; plan §3.2).
+ * Notification delivery outbox.
  *
  * One row per (event, dedupe key, channel). Business transactions insert the
  * row (`comment.pending` rides the comment insert's transaction; job/ops
@@ -29,7 +29,7 @@ import {
  *
  * Status is deliberately three-valued (`queued | sent | failed`): a retry
  * stays `queued` with `attempts` incremented and `next_attempt_at` pushed
- * forward, exactly like `webhook_deliveries` (decision N5/T2b), so "is this
+ * forward, exactly like `webhook_deliveries`, so "is this
  * row still going to be tried?" is readable from status alone.
  *
  * `payload` carries only what the adapters render - `{ title, body, url? }`,
@@ -93,7 +93,7 @@ export const notificationDeliveries = pgTable(
 		),
 		check('notification_deliveries_attempts_check', sql`${table.attempts} >= 0`),
 		// Event names follow the activities vocabulary (one or more dotted
-		// lowercase segments), with room for the P4 probe names
+		// lowercase segments), with room for the probe event names
 		// (`mail.probe.failed`) that the single-dot activities CHECK rejects.
 		check(
 			'notification_deliveries_event_type_check',

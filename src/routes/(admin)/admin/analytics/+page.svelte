@@ -182,10 +182,7 @@
 							<tbody>
 								{#each data.traffic.summary.topPages as row (row.path)}
 									<tr class="border-b border-border/60 last:border-0">
-										<td
-											class="max-w-[22rem] truncate py-1.5 pr-2 font-mono text-xs"
-											title={row.path}
-										>
+										<td class="max-w-88 truncate py-1.5 pr-2 font-mono text-xs" title={row.path}>
 											{row.path}
 										</td>
 										<td class="py-1.5 pr-2 text-right">{formatNumber(row.requests)}</td>
@@ -228,10 +225,7 @@
 							<tbody>
 								{#each data.traffic.summary.topErrorPaths as row (row.path)}
 									<tr class="border-b border-border/60 last:border-0">
-										<td
-											class="max-w-[22rem] truncate py-1.5 pr-2 font-mono text-xs"
-											title={row.path}
-										>
+										<td class="max-w-88 truncate py-1.5 pr-2 font-mono text-xs" title={row.path}>
 											{row.path}
 										</td>
 										<td class="py-1.5 pr-2 text-right">{formatNumber(row.s4xx)}</td>

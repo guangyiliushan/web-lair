@@ -16,31 +16,31 @@ import {
 } from 'drizzle-orm/pg-core';
 import { topics } from './topic.schema.ts';
 
-/** Notes meta contract (micro-content line §17): per-note translation / AI settings. */
+/** Notes meta contract: per-note translation / AI settings. */
 export interface NotesMeta {
 	translate?: { mode?: 'auto' | 'review' | 'manual'; targets?: string[] };
 	aiGen?: { level: 'none' | 'assist' | 'generated' };
-	/** Fine-grained emotion tokens (Apple HealthKit label set; i18n-rendered, N1). */
+	/** Fine-grained emotion tokens (Apple HealthKit label set; i18n-rendered). */
 	emotions?: string[];
 	[key: string]: unknown;
 }
 
-/** Notes status machine (notes plan v0.3 §7.1). */
+/** Notes status machine. */
 export const NOTES_STATUSES = ['draft', 'private', 'scheduled', 'published', 'trash'] as const;
 
-/** Coarse daily valence (notes plan v0.3 §7.1; the Apple 5–7 level family). */
+/** Coarse daily valence (the Apple 5–7 level family). */
 export const NOTE_MOODS = ['very_bad', 'bad', 'neutral', 'good', 'very_good'] as const;
 
 /**
- * Notes are multi-language like posts (micro-content line §17): `lang` +
+ * Notes are multi-language like posts: `lang` +
  * `translation_group` + `(lang, slug)` unique; translations are separate rows
  * sharing the source `nid` and pointing at the group source via
- * `translated_from_note_id`. Deleting a group source is a group-level flow
- * (ledger §14.4/§17): while translations exist the DB refuses the delete
- * outright (the SET NULL pass would collide with notes_group_source_uniq),
- * so group cleanup happens in application code. v0.3 reshaped the legacy
- * diary columns into the status machine + metadata set (title/slug NOT NULL;
- * mood/weather/coords CHECKs; encryption via `password_hash`).
+ * `translated_from_note_id`. Deleting a group source is a group-level flow:
+ * while translations exist the DB refuses the delete outright (the SET NULL
+ * pass would collide with notes_group_source_uniq), so group cleanup happens
+ * in application code. v0.3 reshaped the legacy diary columns into the status
+ * machine + metadata set (title/slug NOT NULL; mood/weather/coords CHECKs;
+ * encryption via `password_hash`).
  */
 export const notes = pgTable(
 	'notes',
@@ -116,7 +116,7 @@ export const notes = pgTable(
 			'notes_coordinates_check',
 			sql`${table.coordinates} is null or (jsonb_typeof(${table.coordinates}) = 'object' and case when jsonb_typeof(${table.coordinates} -> 'latitude') = 'number' and jsonb_typeof(${table.coordinates} -> 'longitude') = 'number' then ((${table.coordinates} ->> 'latitude')::numeric between -90 and 90 and (${table.coordinates} ->> 'longitude')::numeric between -180 and 180) else false end)`
 		),
-		// Source rows own the display number; translation rows copy it (§17).
+		// Source rows own the display number; translation rows copy it.
 		uniqueIndex('notes_nid_uniq')
 			.on(table.nid)
 			.where(sql`${table.translatedFromNoteId} is null`),
@@ -130,8 +130,8 @@ export const notes = pgTable(
 		index('notes_translated_from_idx')
 			.on(table.translatedFromNoteId)
 			.where(sql`${table.translatedFromNoteId} is not null`),
-		// §11-A1 shape: language-filtered front lists; topic_id leads the second
-		// index, which also covers the topic_id FK leading-index rule (§11-A2).
+		// Language-filtered front lists; topic_id leads the second index, which
+		// also covers the topic_id FK leading-index rule.
 		index('notes_status_pin_published_idx').on(
 			table.status,
 			table.pinAt.desc().nullsLast(),

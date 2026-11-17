@@ -38,7 +38,7 @@ type Adapter = (
 ) => Promise<AdapterResult>;
 
 /**
- * Read one provider key at call time (W2.4). With `resolveKey` wired, the
+ * Read one provider key at call time. With `resolveKey` wired, the
  * encrypted row is the primary source and `apiKeyEnv` is only its fallback;
  * without it (tests, env-only callers) the environment name is the whole
  * answer. Secret-store failures become typed `AiError`s here so no adapter has

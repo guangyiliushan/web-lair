@@ -341,7 +341,7 @@
 				</div>
 			</section>
 
-			<!-- Webhooks (J-3: read-only endpoint list + delivery log + re-queue) -->
+			<!-- Webhooks (read-only endpoint list + delivery log + re-queue) -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notification_webhooks()}</h3>
 				{#if !data.editable}

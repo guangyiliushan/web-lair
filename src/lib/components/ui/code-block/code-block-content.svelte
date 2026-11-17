@@ -45,7 +45,7 @@
 {/snippet}
 
 <!-- Whitespace inside a <pre> is rendered, so its content is a snippet defined outside it, where Svelte trims whitespace as usual. -->
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex (scrollable region needs keyboard focus) -->
 <pre
 	bind:this={ref}
 	data-slot="code-block-content"

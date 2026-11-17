@@ -1,11 +1,11 @@
 // scripts/jobs/revisions-prune.ts
 //
-// Manual publish-revision prune (M5):
+// Manual publish-revision prune:
 //
 //   pnpm jobs:revisions-prune [--dry-run] [--keep N]
 //
-// Deletes `post_revisions` rows beyond the newest N per post (default 20,
-// ledger §9.3). `--dry-run` only counts. Unknown flags exit 2 so a typo can
+// Deletes `post_revisions` rows beyond the newest N per post (default 20)
+// `--dry-run` only counts. Unknown flags exit 2 so a typo can
 // never delete rows.
 //
 // Exit codes: 0 = run finished, 1 = the run broke, 2 = configuration error.

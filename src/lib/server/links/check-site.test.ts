@@ -462,7 +462,7 @@ describe('checkSite (§4.1/§4.8)', () => {
 			deps
 		);
 		// Gate open before the sleep, closed after: exactly one fetch, one
-		// sleep, and the first failure stands (review round 4).
+		// sleep, and the first failure stands.
 		expect(partnerCalls).toBe(1);
 		expect(sleep).toHaveBeenCalledTimes(1);
 		expect(outcome.backlink).toBe('missing');

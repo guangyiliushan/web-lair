@@ -3,7 +3,7 @@ import { resolveLocalized } from '$lib/server/services/pages';
 import { SLUG_RE } from './posts';
 
 /**
- * Taxonomy label resolution (ledger §9.18.4, amended 2026-10-23).
+ * Taxonomy label resolution.
  *
  * `name` IS the source-language label; `name_i18n` holds the other locales
  * and (by DB CHECK) never the source one. The order matters: reusing

@@ -12,9 +12,9 @@ import {
  *
  *  - the admin plugin (site governance: owner / admin / user) checks the
  *    `user` / `session` resources;
- *  - the organization plugin (content collaboration, B2) checks the
+ *  - the organization plugin (content collaboration) checks the
  *    `organization` / `member` / `invitation` resources plus the site-defined
- *    `comment` resource (ledger §4.15).
+ *    `comment` resource.
  *
  * Sharing one `ac` keeps the two role maps from drifting apart; role inputs are
  * partial, so each side only declares the statements it actually needs.
@@ -23,7 +23,7 @@ export const statement = {
 	...adminStatements,
 	...orgStatements,
 	comment: ['review', 'approve', 'reject', 'delete'],
-	// AI v3 Q8: `use` = trigger model calls; `manage` = provider endpoints,
+	// `use` = trigger model calls; `manage` = provider endpoints,
 	// budget and the price table. Site-level roles only; org roles do not grant
 	// AI control.
 	ai: ['use', 'manage']
@@ -55,7 +55,7 @@ export const userRole = ac.newRole({
  * Organization owner (site-org creator): org defaults + full comment control.
  * The destructive `organization` statements are stripped: a single-org site
  * cannot recreate the organization, so update/delete stay closed even though
- * `disableOrganizationDeletion` already guards the delete endpoint (B2.1 fix).
+ * `disableOrganizationDeletion` already guards the delete endpoint.
  */
 export const orgOwnerRole = ac.newRole({
 	...orgOwnerAc.statements,
@@ -80,7 +80,7 @@ export const reviewerRole = ac.newRole({
 	comment: ['review', 'approve', 'reject']
 });
 
-/** Comment moderator: reviewer plus comment deletion (ledger §4.15). */
+/** Comment moderator: reviewer plus comment deletion. */
 export const moderatorRole = ac.newRole({
 	comment: ['review', 'approve', 'reject', 'delete']
 });

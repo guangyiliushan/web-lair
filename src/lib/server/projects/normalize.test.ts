@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeRepoUrl } from './normalize';
 
 /**
- * T7 (plan §7): the four platforms' URL shapes - `.git` suffix, trailing
+ * The four platforms' URL shapes - `.git` suffix, trailing
  * slash, mixed case, sub-paths, query strings - resolve to the same
  * identity; unknown domains and non-repository paths resolve to null.
  */

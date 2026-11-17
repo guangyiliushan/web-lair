@@ -15,7 +15,7 @@ import {
 import { categories } from './category.schema.ts';
 import { user } from '../auth.schema.ts';
 
-/** AI-line meta contract (AI-1, ledger §14.3): per-post translation / AI settings. */
+/** AI-line meta contract: per-post translation / AI settings. */
 export interface PostsMeta {
 	translate?: { mode?: 'auto' | 'review' | 'manual'; targets?: string[] };
 	aiGen?: { level: 'none' | 'assist' | 'generated' };
@@ -23,10 +23,10 @@ export interface PostsMeta {
 }
 
 /**
- * Posts are multi-language (ledger §9.16): `lang` + `translation_group` +
- * `unique(lang, slug)` + `unique(translation_group, lang)`; the default
- * language is `en`. Visibility is a status machine (`§9.1`) with a single
- * `published_at` (scheduling = future value, read side judges lazily).
+ * Posts are multi-language: `lang` + `translation_group` + `unique(lang,
+ * slug)` + `unique(translation_group, lang)`; the default language is `en`.
+ * Visibility is a status machine with a single `published_at` (scheduling =
+ * future value, read side judges lazily).
  */
 export const posts = pgTable(
 	'posts',
@@ -103,7 +103,7 @@ export const posts = pgTable(
 		index('posts_updated_at_idx').on(table.updatedAt),
 		index('posts_created_at_idx').on(table.createdAt),
 		index('posts_category_id_idx').on(table.categoryId),
-		// §11-A1: front-end lists filter by language first.
+		// Front-end lists filter by language first.
 		index('posts_status_pin_published_idx').on(
 			table.lang,
 			table.status,
@@ -117,16 +117,16 @@ export const posts = pgTable(
 			table.pinAt.desc().nullsLast(),
 			table.publishedAt.desc()
 		),
-		// §11-A2: a SET NULL FK needs a leading (partial) index (P1.1 review).
+		// A SET NULL FK needs a leading (partial) index.
 		index('posts_translated_from_idx')
 			.on(table.translatedFromPostId)
 			.where(sql`${table.translatedFromPostId} is not null`),
 		index('posts_provenance_updated_by_idx')
 			.on(table.provenanceUpdatedBy)
 			.where(sql`${table.provenanceUpdatedBy} is not null`),
-		// AI-1 §14.4 R7: exactly one source row per translation group
-		// (fail-closed DB backstop); "at least one source" and "no chained
-		// translations" stay application-level checks + test nails.
+		// Exactly one source row per translation group (fail-closed DB
+		// backstop); "at least one source" and "no chained translations" stay
+		// application-level checks + test nails.
 		uniqueIndex('posts_group_source_uniq')
 			.on(table.translationGroup)
 			.where(sql`${table.translatedFromPostId} is null`)

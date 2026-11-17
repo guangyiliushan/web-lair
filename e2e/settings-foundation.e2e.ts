@@ -1,13 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import { apiPost, psql } from './support';
 
-/**
- * W3 foundation acceptance, extended by W10.5: the 8-page IA, the two
+/** Foundation acceptance: the 8-page IA, the two
  * permanent redirects, the deletion of the old system/search routes, the
  * structural promise that the still-read-only page ships zero controls, a
  * dead-link walk over all eight pages, and the permission split that keeps
- * owner-only sections read-only for a non-owner admin. Content is editable
- * since W6, so it is audited for the opposite: every section renders a real
+ * owner-only sections read-only for a non-owner admin. Content is editable,
+ * so it is audited for the opposite: every section renders a real
  * form whose buttons submit.
  *
  * The loopback origin auto-authenticates as the site owner in the preview
@@ -61,7 +60,7 @@ test('all eight pages answer 200 with their section heading', async ({ page }) =
 });
 
 test('planned/read-only pages render zero form controls', async ({ page }) => {
-	// Integrations is the last read-only section (W10.1): a capability map with
+	// Integrations is the last read-only section : a capability map with
 	// no action, so it must render zero inputs, selects or buttons.
 	const response = await page.goto('/admin/settings/integrations');
 	expect(response?.status()).toBe(200);
@@ -97,7 +96,7 @@ test('content renders the real W6 forms and no dead control', async ({ page }) =
 		expect(await form.locator('button[type="submit"]').count()).toBeGreaterThan(0);
 	}
 	// The removed pseudo controls never come back (case-insensitive: the old
-	// labels were sentence-case and the section copy changed in W6).
+	// labels were sentence-case and the section copy has changed).
 	await expect(
 		page.getByText(
 			/anti-spam|blocked ips|blocked words|chinese only|disable comments|approved comments only|ai review|localize avatars/i
@@ -112,7 +111,7 @@ test('notifications shows Mail, Webhooks, channel preferences, Bark and the deli
 	expect(response?.status()).toBe(200);
 	await expect(page.getByRole('heading', { name: 'Mail', exact: true }).first()).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Webhooks', exact: true }).first()).toBeVisible();
-	// M6 P5 replaced the static "Human channels (planned)" note with real
+	// The static "Human channels (planned)" note was replaced with real
 	// surfaces: per-group channel preferences, the Bark status card and the
 	// delivery log (owner-only). The old placeholder must not come back.
 	await expect(page.getByRole('heading', { name: 'Channels', exact: true }).first()).toBeVisible();
@@ -145,7 +144,7 @@ test('notifications shows Mail, Webhooks, channel preferences, Bark and the deli
 		await expect(form.locator('button[type="submit"]')).toHaveCount(1);
 	}
 	// SMTP credentials are env-only: the page renders status values, never a
-	// password input (W9.2 deleted the mock credential fields).
+	// password input (the mock credential fields were deleted).
 	await expect(page.locator('input[type="password"]')).toHaveCount(0);
 	// The mock MAIL save is gone (the only Save on the page is the preference
 	// form asserted above). The mail control is the real test send, and it is
@@ -153,7 +152,7 @@ test('notifications shows Mail, Webhooks, channel preferences, Bark and the deli
 	const send = page.getByRole('button', { name: 'Send test email' }).first();
 	await expect(send).toBeVisible();
 	await expect(send).toBeDisabled();
-	// Bark credentials stay env-only in this release (P5-WAITING W2): the block
+	// Bark credentials stay env-only in this release : the block
 	// is a status card, so any credential input there would be a lie.
 	const bark = page
 		.locator('section')

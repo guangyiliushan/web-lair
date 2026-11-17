@@ -8,14 +8,14 @@ import { listUserJobFiles } from './user-layer.ts';
 const execFileAsync = promisify(execFile);
 
 /**
- * `jobs.typecheck` service (J-2, plan §4.11): runs `tsc --noEmit` against the
+ * `jobs.typecheck` service: runs `tsc --noEmit` against the
  * generated tsconfig for `$DATA_DIR/jobs` and returns a bounded diagnostic
- * summary for the run ledger. The save gate deliberately does NOT type-check
- * (plan §5.4) - this is where types get verified: on demand via the queued
+ * summary for the run ledger. The save gate deliberately does NOT type-check -
+ * this is where types get verified: on demand via the queued
  * job, never on the save path.
  *
  * The tsc binary comes from the repository's own typescript install
- * (deployment must keep typescript installed; plan §5.4) and is spawned with
+ * (deployment must keep typescript installed) and is spawned with
  * this Node binary, so no PATH assumptions.
  */
 

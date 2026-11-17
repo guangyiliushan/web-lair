@@ -1,13 +1,13 @@
 #!/bin/sh
 #
-# Backrest CONDITION_SNAPSHOT_START command hook (M6 P2, T2.3).
+# Backrest CONDITION_SNAPSHOT_START command hook.
 #
 # Data plan (no argument): runs `backup.sh --dump-only`, which keeps every gate
 # of the nightly path (.tmp → `pg_restore -l` → live user-row comparison →
 # atomic mv, umask 077) and stops before restic. Backrest then snapshots
 # $BACKUP_DIR, so the snapshot can only ever contain a dump that passed.
 # Wired with ON_ERROR_CANCEL: a non-zero exit cancels the operation and no
-# snapshot is written (T2.4).
+# snapshot is written.
 #
 # Config plan (--config): the data repository's `.env` copy lives in the SECOND
 # repository; an empty or incomplete .env there is worthless, so refuse the

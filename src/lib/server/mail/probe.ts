@@ -1,5 +1,5 @@
 /**
- * Mail probe primitives (M6 P4, F-10): the SMTP handshake check and the
+ * Mail probe primitives: the SMTP handshake check and the
  * weekly real delivery, both runnable under plain Node (the drain's
  * `node jobs/drain.ts` process cannot load `$env/dynamic/private`).
  *

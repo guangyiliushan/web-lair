@@ -8,7 +8,7 @@ import {
 import { assessDeletion, type BucketCapabilities } from './port.ts';
 
 /**
- * Provider activation + rollback (W7.4/W7.5, decisions Q4/Q8/Q13).
+ * Provider activation + rollback.
  *
  * Activation is deliberately NOT reachable from a form: `storage.provider` is
  * the candidate, and this module is the only writer of `storage.active` (the

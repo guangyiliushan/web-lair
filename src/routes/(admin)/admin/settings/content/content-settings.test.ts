@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 /**
  * The Content actions re-check their tier (comments/friends/
  * presence/notes = admin, privacy = owner), write through setOption, and
- * record exactly one audit row with `deliver: false` (register R-7: settings
- * events never fan out to webhooks).
+ * record exactly one audit row with `deliver: false` (settings events never
+ * fan out to webhooks).
  */
 const mocks = vi.hoisted(() => ({
 	setOption: vi.fn(),

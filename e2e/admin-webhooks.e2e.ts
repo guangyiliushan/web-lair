@@ -4,7 +4,7 @@ import { decryptedWebhookSecret, psql } from './support';
 
 /**
  * SY acceptance: the Webhooks endpoint CRUD on the real database plus the
- * event-to-queue smoke. No drain process runs here (J-3 precedent: a row
+ * event-to-queue smoke. No drain process runs here (a row
  * staying queued IS the observable evidence; tick delivery semantics live in
  * `pnpm db:verify-jobs`). Everything is marker-prefixed - endpoints are
  * removed by name (their deliveries cascade via the FK), the schedule
@@ -44,7 +44,7 @@ test.afterAll(async () => {
 test.describe('SY webhooks (admin)', () => {
 	// The settings shell renders a mobile and a desktop branch (one is
 	// display:none): role queries skip hidden nodes, CSS/text ones must
-	// filter to the visible copy (J-3 precedent).
+	// filter to the visible copy.
 	const endpointRow = (page: Page, name: string) =>
 		page
 			.locator('[data-slot="endpoint-row"]')

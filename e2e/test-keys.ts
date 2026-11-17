@@ -16,7 +16,7 @@ export const TEST_SUBSCRIBE_TOKEN_SECRET = 'DQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0N
 export const TEST_SUPPRESSION_HMAC_KEY = 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=';
 export const TEST_MAIL_EVENTS_HMAC_KEY = 'CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws=';
 /**
- * W2 runtime keyring. The webhook create/rotate actions encrypt the signing
+ * Runtime keyring. The webhook create/rotate actions encrypt the signing
  * secret before storing it, so the preview needs a keyring; without it the
  * dialog answers 503 and never closes. One fixed version for the whole run.
  */

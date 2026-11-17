@@ -171,7 +171,7 @@ export const navigationConfig: NavItem[] = [
 				{
 					titleKey: 'nav_home_quick_links',
 					// Personal socials and RSS are not navigation data: the
-					// single rail comes from `user_profiles.links` (R-1/R-2).
+					// single rail comes from `user_profiles.links`.
 					items: []
 				}
 			]

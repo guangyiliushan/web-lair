@@ -240,7 +240,7 @@ test('db:reset-2fa disables the factor, revokes sessions, and is idempotent', as
 	// Two pnpm invocations (tsx cold start each) blow past the 30s default.
 	test.setTimeout(180_000);
 
-	// Contract change (W8.2 -> commit 14f3033 "keep multi-session for email plus
+	// Contract change (commit 14f3033 "keep multi-session for email plus
 	// TOTP sign-in"): the 2FA challenge is a sign-in method, not a single-session
 	// policy, so verify-totp no longer prunes the account's other sessions.
 	//   old contract: a fresh email+TOTP sign-in left exactly one session row,

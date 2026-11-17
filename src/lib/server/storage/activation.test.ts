@@ -16,7 +16,7 @@ import {
 } from './provider';
 
 /**
- * Activation guards (W7.4/Q13 + W7.5/Q8): a cutover needs a COMPLETE copy of a
+ * Activation guards: a cutover needs a COMPLETE copy of a
  * NEW addressing target, the bucket must answer HEAD and a provable
  * versioning/object-lock verdict, a deleteMode-only change is a legal
  * activation without a copy, and rollback refuses when post-cutover objects

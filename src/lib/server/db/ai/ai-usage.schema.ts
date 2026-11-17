@@ -14,15 +14,15 @@ import {
 import { user } from '../auth.schema.ts';
 
 /**
- * AI call ledger (AI-1, ledger §14.3): one row per model call, named after
- * the OTel GenAI conventions. `provider` / `model` are snapshot strings (no
- * FK) - history must stay true even after a provider is renamed or removed.
- * Usage details are kept for 24 months (retention ledger §14.3).
+ * AI call ledger: one row per model call, named after the OTel GenAI
+ * conventions. `provider` / `model` are snapshot strings (no FK) - history
+ * must stay true even after a provider is renamed or removed.
+ * Usage details are kept for 24 months.
  *
- * `actor_id` / `trigger` are the cost-attribution pair (AI-v3 Q1/Q8): who
- * caused the call, and whether it came from a manual action, a job, the
- * agent or an API token. The action-level audit stays in `activities`; this
- * table answers "how much did this actor spend".
+ * `actor_id` / `trigger` are the cost-attribution pair: who caused the
+ * call, and whether it came from a manual action, a job, the agent or an
+ * API token. The action-level audit stays in `activities`; this table
+ * answers "how much did this actor spend".
  */
 export const aiUsage = pgTable(
 	'ai_usage',

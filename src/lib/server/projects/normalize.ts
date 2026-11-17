@@ -1,7 +1,7 @@
 import type { RepoIdentity } from './types.ts';
 
 /**
- * URL -> repository identity for the four synced platforms (plan §T7):
+ * URL -> repository identity for the four synced platforms:
  * `.git` suffixes, trailing slashes, case, sub-paths and query strings all
  * resolve to the same identity; unknown domains resolve to null. Pure and
  * standalone - no fetch, no throw.

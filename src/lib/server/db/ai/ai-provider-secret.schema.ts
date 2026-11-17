@@ -4,7 +4,7 @@ import { user } from '../auth.schema.ts';
 import { aiProviders } from './ai-provider.schema.ts';
 
 /**
- * Runtime AI provider credentials (W2.3, decisions D0-C / T1-A).
+ * Runtime AI provider credentials.
  *
  * One row per provider that has an app-managed key. `ciphertext` is the
  * `v1:<keyVersion>:<iv>:<tag>:<ct>` envelope from

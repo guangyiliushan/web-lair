@@ -1,5 +1,5 @@
 /**
- * Production migration entry point (D-1, Q3).
+ * Production migration entry point.
  *
  * Why not `drizzle-kit migrate`: drizzle-kit is a devDependency and the
  * runtime image ships production dependencies only. `drizzle-orm`'s migrator

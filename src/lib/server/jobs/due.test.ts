@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { CronExprError, dueWindow } from './due';
 
 /**
- * Cron math for the drain (plan §4.1 / §4.8 / §4.9). The probe that fixed the
- * boundary semantics: cron-parser's `prev()` is exclusive of currentDate, so
- * the drain nudges +1ms to keep the window right-closed - the test pinning
- * "a due exactly at now counts" is the one that guards it.
+ * Cron math for the drain. The probe that fixed the boundary semantics:
+ * cron-parser's `prev()` is exclusive of currentDate, so the drain nudges
+ * +1ms to keep the window right-closed - the test pinning "a due exactly at
+ * now counts" is the one that guards it.
  */
 describe('dueWindow cron validation', () => {
 	it('rejects 6-field (seconds) expressions', () => {

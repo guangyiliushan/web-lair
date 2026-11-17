@@ -32,11 +32,11 @@ export function psql(sql: string): string {
 	).trim();
 }
 
-/** The W2 preview keyring (same fixed key the playwright webServer gets). */
+/** The preview keyring (same fixed key the playwright webServer gets). */
 const E2E_KEYRING = parseKeyring({ keys: `1:${TEST_SECRETS_KEY}`, active: '1' });
 
 /**
- * Decrypt one webhook-signing envelope from the test DB (W2.6).
+ * Decrypt one webhook-signing envelope from the test DB.
  *
  * The legacy `webhooks.secret` column is NULL after create/rotate; the DB
  * truth now lives in `webhook_secrets`, bound to the row id and slot via AAD.
@@ -57,7 +57,7 @@ export function decryptedWebhookSecret(
 }
 
 /**
- * Visible-only text locator (P5-5 T15): this helper had grown a sixth copy
+ * Visible-only text locator : this helper had grown a sixth copy
  * inside e2e/pages-admin.e2e.ts - one home now, next to psql.
  */
 export function byText(page: Page, text: string | RegExp) {
@@ -67,7 +67,7 @@ export function byText(page: Page, text: string | RegExp) {
 /**
  * Manual draft save through the editor toolbar: click and wait for the
  * "已保存" banner (the pages/refs specs carried verbatim copies that had
- * already drifted on the timeout notation; P5-5 T15).
+ * already drifted on the timeout notation).
  */
 export async function manualSave(page: Page) {
 	await page.getByRole('button', { name: '保存草稿' }).click({ timeout: 5000 });
@@ -199,11 +199,9 @@ export async function approveQueueRow(
 	}).toPass({ timeout: 90_000 });
 }
 
-/**
- * Sign-up + SQL-verify + explicit sign-in (spec §1 "verified reader"), shared by
- * the comment specs (the two local copies were verbatim - pre-release review
- * 04-F4). The password stays a caller parameter: each spec owns its fixture
- * namespace.
+/** Sign-up + SQL-verify + explicit sign-in ("verified reader"), shared by
+ * the comment specs (the two local copies were verbatim). The password stays
+ * a caller parameter: each spec owns its fixture namespace.
  */
 export async function bootstrapReader(context: BrowserContext, email: string, password: string) {
 	const page = await context.newPage();
@@ -228,12 +226,12 @@ export async function bootstrapReader(context: BrowserContext, email: string, pa
 /**
  * Axe gate for the content/overlay specs: zero critical violations, with the
  * impact summary logged so a serious/moderate drift stays visible. One home
- * for the filter copy (review 3d, 03 P3-7 - the two specs carried verbatim
+ * for the filter copy (the two specs carried verbatim
  * copies).
  */
 export async function expectNoCriticalAxe(page: Page, label: string): Promise<void> {
 	// Lazy import: 27 specs import this module; only three call the gate, so
-	// axe-core's parse cost stays off their workers (review 3d round 2, 01 P3-1).
+	// axe-core's parse cost stays off their workers.
 	const { default: AxeBuilder } = await import('@axe-core/playwright');
 	const results = await new AxeBuilder({ page }).analyze();
 	// Include the offending selectors: an impact-only summary says something is

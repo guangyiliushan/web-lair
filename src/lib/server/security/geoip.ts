@@ -1,7 +1,7 @@
 import { env } from '$env/dynamic/private';
 
 /**
- * Deployment-header GeoIP (W6.2 / C2/C4). The site deliberately does not call
+ * Deployment-header GeoIP. The site deliberately does not call
  * a third-party lookup API: when the edge (Cloudflare today) knows the country
  * it forwards a header, and the deployment names which headers to trust via
  * `GEOIP_COUNTRY_HEADER` / `GEOIP_REGION_HEADER`. Unset = no provider, and

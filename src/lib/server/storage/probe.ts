@@ -8,11 +8,11 @@ import {
 import { sanitizeProviderError } from '../settings/provider-status.ts';
 
 /**
- * Storage connection probe (W7.3, decision Q19: "test connection = SSRF probe").
+ * Storage connection probe: a "test connection" is itself an SSRF probe.
  *
  * Four checks, in order, all with the configured credentials:
  *   1. HeadBucket — the bucket exists and the key can see it;
- *   2. bucket capabilities — versioning / object lock (the W7.5 guard input);
+ *   2. bucket capabilities — versioning / object lock (inputs to the deletion policy);
  *   3. PutObject — writing is actually allowed (a read-only key would pass 1);
  *   4. GetObject + byte compare, then DeleteObject of the probe object.
  *

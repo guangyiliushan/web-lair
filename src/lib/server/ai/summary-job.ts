@@ -90,7 +90,7 @@ export async function runSummaryJob(ctx: JobContext): Promise<void> {
 			// Retention: keep the latest 5 unadopted candidates per (post, lang).
 			// The DELETE re-asserts adopted_at is null: an adopt landing between
 			// the select and the delete would otherwise silently delete the
-			// adopted ledger row (P0-3).
+			// adopted summary row.
 			const old = await ctx.db
 				.select({ id: summaries.id })
 				.from(summaries)

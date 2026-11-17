@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Backrest CONDITION_CHECK_SUCCESS / CONDITION_CHECK_ERROR hook (M6 P2, T2.6).
+# Backrest CONDITION_CHECK_SUCCESS / CONDITION_CHECK_ERROR hook.
 #
 # Replaces the ping that `web-lair-backup-check.service` used to send after the
 # weekly `restic check`: the timer is gone (Backrest's `checkPolicy` owns the

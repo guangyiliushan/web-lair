@@ -1,5 +1,5 @@
 /**
- * Typed failures for the runtime secret store (W2.1/W2.4).
+ * Typed failures for the runtime secret store.
  *
  * The codes are deliberate: only `missing` may fall back to an environment
  * variable. Every other code is terminal, so a wrong master key or a missing

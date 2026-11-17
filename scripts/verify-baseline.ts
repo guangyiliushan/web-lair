@@ -105,7 +105,7 @@ const MIGRATION_TABLE_NAMES = [
 	'home_hero',
 	'site_identity',
 	'storage_secrets',
-	// M6 P5 (approved schema exception): notification outbox, additive only.
+	// Approved schema exception: notification outbox, additive only.
 	'notification_deliveries'
 ] as const;
 
@@ -181,7 +181,7 @@ const MIGRATION_TABLE_COLUMNS = new Map<string, string[]>([
 /** Columns appended to a baseline table (A3 unions these into the expected set). */
 const MIGRATION_COLUMN_ADDITIONS = new Map<string, string[]>([
 	['user_profiles', ['header_label']],
-	// W6.2 (approved schema exception): comments.privacy stores the edge
+	// Approved schema exception: comments.privacy stores the edge
 	// region next to country_code; nullable and additive.
 	['comments', ['region_code']],
 	['webhook_deliveries', ['attempt_count', 'next_attempt_at']]
@@ -684,7 +684,7 @@ async function fileChecks(): Promise<void> {
 	for (const name of RETIRED_INDEX_NAMES)
 		expect(!indexByName.has(name), `retired index still present: ${name}`);
 
-	// notes v0.3 reshape pins (plan §7.1): retired / added columns + NOT NULL.
+	// notes v0.3 reshape pins: retired / added columns + NOT NULL.
 	const notesBlock = tableBlocks.find((m) => m[1] === 'notes');
 	expect(notesBlock !== undefined, 'notes block missing from baseline');
 	const notesCols = tableColumns.get('notes') ?? [];
@@ -712,7 +712,7 @@ async function fileChecks(): Promise<void> {
 	expect(/"title" text NOT NULL/.test(notesBlock![2]), 'notes.title must be NOT NULL');
 	expect(/"slug" text NOT NULL/.test(notesBlock![2]), 'notes.slug must be NOT NULL');
 
-	// projects reshape pins (projects plan §2.1 / §7 T1): retired columns and
+	// projects reshape pins: retired columns and
 	// the column count - closes the negative faces flagged in the S-batch
 	// review (images/text gone; 21 columns total).
 	const projectsCols = tableColumns.get('projects') ?? [];
@@ -954,7 +954,7 @@ async function dbChecks(): Promise<void> {
 			await sql`insert into projects (name, project_url, provider, external_id) values ('c1v-p', 'https://p.example', 'github', 'c1v/g')`;
 			await sql`insert into projects (name, project_url, provider) values ('c1v-s', 'https://s.example', 'site')`;
 			await sql`insert into links (name, url, host, backlink_url) values ('c1v-ok-link', 'https://ok.example/', 'ok.example', 'https://ok.example/link')`;
-			// Positive control (review round 4): a full 10-element ring is
+			// Positive control: a full 10-element ring is
 			// legal - proves links_ring_check is not over-strict. NOTE:
 			// postgres.js infers the parameter type from the ::jsonb cast and
 			// would JSON-encode a plain string parameter into a jsonb STRING
@@ -1096,7 +1096,7 @@ begin
 		if c <> 'translations_draft_post_uniq' then raise exception 'FAIL post draft: wrong constraint %', c; end if;
 	end;
 
-	-- Junction PK (P0 repair): duplicate (photo_id, tag_id) must be rejected.
+	-- Junction PK: duplicate (photo_id, tag_id) must be rejected.
 	begin
 		insert into photo_tags (photo_id, tag_id) values (ph, tg);
 		raise exception 'FAIL photo_tags accepted a duplicate (photo_id, tag_id)';
@@ -1105,7 +1105,7 @@ begin
 		if c <> 'photo_tags_photo_id_tag_id_pk' then raise exception 'FAIL photo_tags pk: wrong constraint %', c; end if;
 	end;
 
-	-- Projects uniqueness (P0 repair).
+	-- Projects uniqueness.
 	begin
 		insert into projects (name, project_url, provider, external_id) values ('c1v-p2', 'https://p2.example', 'github', 'c1v/g');
 		raise exception 'FAIL projects_extid_uniq accepted a duplicate (provider, external_id)';
@@ -1162,7 +1162,7 @@ begin
 	-- pass - projects_extid_uniq is keyed on (provider, external_id).
 	insert into projects (name, project_url, provider, external_id) values ('c1v-p3', 'https://p3.example', 'gitlab', 'c1v/g');
 
-	-- Subscriptions state machine (P1 repair): pending must not carry verified_at;
+	-- Subscriptions state machine: pending must not carry verified_at;
 	-- unsubscribed must carry unsubscribed_at; verified history is retained.
 	begin
 		insert into subscriptions (email, token_nonce, token_hash, status, verified_at) values ('c1v-1@example.com', repeat('a', 43), repeat('f', 64), 'pending', now());
@@ -1232,7 +1232,7 @@ begin
 		if c <> 'photos_coords_check' then raise exception 'FAIL photos coords: wrong constraint %', c; end if;
 	end;
 
-	-- ST-2/A2 teeth (single-baseline regen, 2026-10-09): file_references is
+	-- FK teeth (single-baseline regen, 2026-10-09): file_references is
 	-- NO ACTION - deleting a referenced file must fail loudly (never silently
 	-- cascade the reference away), and must succeed once the ref is gone.
 	insert into files (object_key, content_hash, file_name, mime_type, byte_size)
@@ -1261,7 +1261,7 @@ begin
 		if c <> 'links_ring_check' then raise exception 'FAIL links ring: wrong constraint %', c; end if;
 	end;
 
-	-- L1 acceptance teeth (links plan §2.2; 2026-10-06): the remaining seven
+	-- Acceptance teeth (2026-10-06): the remaining seven
 	-- negatives - banned without reason, lost_since both directions, plain
 	-- http, approved without backlink, an 11-element ring, duplicate url.
 	begin
@@ -1377,7 +1377,7 @@ begin
 		end if;
 	end;
 
-	-- notes v0.3 reshape teeth (plan §7.5)
+	-- notes v0.3 reshape teeth
 	begin
 		insert into notes (content_format, lang, title, slug, status)
 			values ('markdown', 'en', 'c1v-st', 'c1v-st', 'x');
@@ -1465,7 +1465,7 @@ begin
 		if c <> 'slug_trackers_type_check' then raise exception 'FAIL tracker type: wrong constraint %', c; end if;
 	end;
 
-	-- Source-deletion trap (ledger §17): with >=2 translated rows in the group
+	-- Source-deletion trap: with >=2 translated rows in the group
 	-- the DB refuses deleting the source (SET NULL would collide with
 	-- notes_group_source_uniq). With exactly one translated row the delete
 	-- currently succeeds and that row silently becomes the group source -

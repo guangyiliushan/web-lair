@@ -106,7 +106,7 @@ describe('comment moderation rules', () => {
 	it('skips catastrophic regex shapes', () => {
 		expect(isSafeRegexPattern('(a+)+$')).toBe(false);
 		expect(isSafeRegexPattern('(a|aa)+$')).toBe(false);
-		// Known-bypass shapes (M2 review P0-4): nested quantifier behind a
+		// Known-bypass shapes: nested quantifier behind a
 		// bounded repeat, stacked unbounded quantifiers, unbounded {n,}.
 		expect(isSafeRegexPattern('(a+){25}$')).toBe(false);
 		expect(isSafeRegexPattern('.*.*.*!')).toBe(false);

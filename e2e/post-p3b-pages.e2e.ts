@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { psql } from './support';
 
 /**
- * P3-b page family acceptance (roadmap W2 #4): categories / tags / timeline
+ * Page family acceptance: categories / tags / timeline
  * on real data with the locale + visibility filters, the slug fallback 301,
  * the detail SEO head and the in-content canonicalisation path (a relative
  * link inside article markdown still routes through the client sync).
@@ -170,7 +170,7 @@ test.describe('P3-b pages', () => {
 		await expect(postsNav).toHaveClass(active);
 
 		// zh-cn: labels are localised — locate by href, and pin both directions
-		// (Pre-P3-b the header lit nothing here, or lit Home on every page).
+		// (before that the header lit nothing here, or lit Home on every page).
 		await page.goto(`/zh-cn/posts/${SLUG1_ZH}`);
 		const zhNav = page.getByRole('navigation', { name: 'Main navigation' });
 		await expect(zhNav.locator('a[href="/zh-cn/posts"]').first()).toHaveClass(active);

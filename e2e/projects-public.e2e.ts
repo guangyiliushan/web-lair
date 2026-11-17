@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
 
 /**
- * Projects P acceptance (plan §7 T14): the public grid renders only
+ * Public projects acceptance: the public grid renders only
  * `published` rows; the card trio (provider badge, direct link rel/target,
  * secondary exits), the empty state, the unpublished negative set and the
  * unsafe-URL rendering rule. Fixtures share the `e2e-p` marker prefix

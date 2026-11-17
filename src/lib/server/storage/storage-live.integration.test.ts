@@ -6,7 +6,7 @@ import type { S3StorageConfig } from './config';
 import { policyAllowsDelete } from '../services/files';
 
 /**
- * Live S3-dialect proof (W7.8) against the bundled RustFS, addressed exactly
+ * Live S3-dialect proof against the bundled RustFS, addressed exactly
  * the way an EXTERNAL provider is addressed (driver=s3 shape: path style,
  * explicit bucket, SigV4 credentials). Everything here is real HTTP against a
  * real S3 implementation — no fetch fakes.
@@ -144,7 +144,7 @@ describe.skipIf(!LIVE)('live S3 dialect against the bundled RustFS', () => {
 
 		const capabilities = await storage.bucketCapabilities();
 		expect(capabilities.versioning).toBe('enabled');
-		// The deletion contract now refuses a hard delete (W7.5):
+		// The deletion contract now refuses a hard delete:
 		expect(policyAllowsDelete({ ...capabilities, deleteMode: 'hard' })).toBe(false);
 		expect(policyAllowsDelete({ ...capabilities, deleteMode: 'logical' })).toBe(true);
 	});

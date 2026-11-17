@@ -57,8 +57,8 @@ export function startDevDrain(options: {
 	}
 	const client = postgres(databaseUrl, { max: 3, onnotice: () => {} });
 	const db = drizzle(client);
-	// M6 P5: P4's probes alert through `notify()`; in development this process
-	// is the only drain, so it installs the outbox sink (one per process).
+	// Probes alert through `notify()`; in development this process is the only
+	// drain, so it installs the outbox sink (one per process).
 	setNotificationSink(createNotificationSink(db));
 	const dataDir = resolveDataDir();
 

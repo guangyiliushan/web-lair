@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Installer contract (W2.12 / T5-A).
+ * Installer contract.
  *
  * The JSON inventory is the documented contract and the bash script is the
  * shipped implementation. They must agree on names and generators, or an

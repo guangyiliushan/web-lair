@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * W6.3: the public privacy notice is a real page, linked from registration and
+ * The public privacy notice is a real page, linked from registration and
  * comment forms. This is a route-existence + content smoke check (the copy is
  * i18n-reviewed separately).
  */

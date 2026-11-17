@@ -2,7 +2,7 @@ import { createHash, createHmac } from 'node:crypto';
 
 /**
  * Hand-rolled AWS Signature Version 4 signer, scoped to the S3 subset this
- * project uses (ledger §21): PUT/GET/DELETE/HEAD via the app proxy against
+ * project uses: PUT/GET/DELETE/HEAD via the app proxy against
  * RustFS over loopback. No SDK dependency by design — the surface is small,
  * fixed, and locked by the official aws-sig-v4 test-suite vectors in
  * `signature.test.ts`.

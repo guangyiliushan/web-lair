@@ -9,7 +9,7 @@ import { sendNotificationEmail, type EmailAdapterDeps } from './adapters/email.t
 import type { AdapterResult } from './adapters/types.ts';
 
 /**
- * One notification delivery attempt (M6 P5, T5.3).
+ * One notification delivery attempt.
  *
  * Claim: `select ... where status='queued' and next_attempt_at <= now()
  * order by created_at for update skip locked` - the same claim discipline as
@@ -120,7 +120,7 @@ export async function deliverNotification(
 				if (!lookup.ok) {
 					// The lookup failed INSIDE a savepoint: the claim transaction is
 					// still usable, so record a retryable attempt instead of letting
-					// the error abort the row lock (review P1-1).
+					// the error abort the row lock.
 					result = {
 						ok: false,
 						permanent: false,

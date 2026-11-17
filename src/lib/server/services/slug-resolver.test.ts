@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Unit tests for the slug fallback resolver (P3-b grill Q1): a single
+ * Unit tests for the slug fallback resolver: a single
  * tracker hop — `slug_trackers` points at the target row id, so chains
  * cannot form (the "≤3 hops" guidance holds by construction). The db module
  * is mocked with a queue of select results; the WHERE/ORDER BY clauses are
@@ -70,7 +70,7 @@ describe('findSlugTargetId', () => {
 		expect(params).toEqual(expect.arrayContaining(['post', 'en', 'old-slug']));
 
 		// Deterministic when several rows share a slug: newest tracker wins,
-		// with the uuidv7 id as tiebreak (review finding).
+		// with the uuidv7 id as tiebreak.
 		expect(state.orderArgs[0]).toHaveLength(2);
 		const primary = dialect.sqlToQuery(state.orderArgs[0]?.[0] as never);
 		expect(primary.sql).toContain('"slug_trackers"."created_at"');

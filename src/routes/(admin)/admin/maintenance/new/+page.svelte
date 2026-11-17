@@ -11,23 +11,23 @@
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
 
 	/**
-	 * New user job (J-3): name + template + the same lazy CodeMirror editor.
-	 * Saving goes through the J-2 gate with `baseHash: null`; a valid name
+	 * New user job: name + template + the same lazy CodeMirror editor.
+	 * Saving goes through the save gate with `baseHash: null`; a valid name
 	 * creates `$DATA_DIR/jobs/<name>.ts` and the page redirects to the
 	 * [name] editor (or the list, for save-and-run).
 	 */
 
 	let { data }: PageProps = $props();
 
-	// enhance keeps the editor buffer alive across rejected saves (J-3 review
-	// F1): a plain native POST reloads the page and adopts the file on disk,
-	// silently discarding the user's edits. applyAction renders the result in
-	// place and still navigates on redirects - and this page's successful
-	// saves ALWAYS redirect, so the invalidation branch below is inert here
+	// enhance keeps the editor buffer alive across rejected saves: a plain
+	// native POST reloads the page and adopts the file on disk, silently
+	// discarding the user's edits. applyAction renders the result in place
+	// and still navigates on redirects - and this page's successful saves
+	// ALWAYS redirect, so the invalidation branch below is inert here
 	// (kept for parity with the [name] page). The optimistic-lock token
 	// advances only when the response belongs to the name currently in the
 	// input: a rename while the POST is in flight must not adopt the old
-	// target's hash (J-3 review v2 #4).
+	// target's hash.
 	const enhanceKeepBuffer: SubmitFunction =
 		({ formData }) =>
 		async ({ result }) => {
@@ -169,7 +169,7 @@
 		</div>
 		<input type="hidden" name="code" value={code} />
 		<input type="hidden" name="baseHash" value={baseHash} />
-		<div class="h-[26rem] min-h-0 overflow-hidden rounded-lg border" data-slot="editor-host">
+		<div class="h-104 min-h-0 overflow-hidden rounded-lg border" data-slot="editor-host">
 			{#await editorPromise then JobEditor}
 				<JobEditor
 					value={code}

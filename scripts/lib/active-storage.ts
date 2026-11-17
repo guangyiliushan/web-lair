@@ -5,7 +5,7 @@ import { S3Storage } from '../../src/lib/server/storage/s3';
 
 /**
  * Builds the storage handle for a CLI script from the ACTIVE provider
- * (`storage.active`) instead of assuming the bundled RustFS (W7.5/W7.6).
+ * (`storage.active`) instead of assuming the bundled RustFS.
  *
  * Every destructive or media-touching script must read the same target the app
  * reads, or a purge/audit after a cutover would inspect the wrong bucket. The

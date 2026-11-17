@@ -4,7 +4,7 @@ import { DEFAULT_STORAGE_ACTIVE, DEFAULT_PROVIDER_CONFIG } from './provider';
 import { StorageError } from './port';
 
 /**
- * Strict live-provider read (W7 review P1): a MISSING row is the bootstrap
+ * Strict live-provider read: a MISSING row is the bootstrap
  * default, a VALID row is used as-is, and a row that fails the schema must
  * fail closed instead of silently serving the bundled RustFS (the generic
  * option reader's default would do exactly that).

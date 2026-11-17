@@ -1,5 +1,5 @@
 /**
- * healthchecks.io pings (M6 P4): the external backstop for the two probes.
+ * healthchecks.io pings: the external backstop for the two probes.
  *
  * The box can die with its own alert path (disk full blocks the outbox/DB;
  * a dead SMTP host is exactly what the mail probe reports), so each probe
@@ -13,7 +13,7 @@
  * check (`https://hc-ping.com/<uuid>`); the UUID is a bearer-ish capability,
  * so it never reaches a log line - only the probe name and the outcome do.
  *
- * Pings are best-effort: a missing URL (dev, or P3 not yet wired) is
+ * Pings are best-effort: a missing URL (dev, or a probe without one) is
  * `skipped`, and any transport failure is logged and swallowed. The probe's
  * own run ledger stays the primary record.
  */
@@ -53,7 +53,7 @@ export interface PingHealthcheckOptions {
 /**
  * Warn once per probe when production runs without a healthchecks URL: the
  * out-of-box channel is then absent, and a silent `skipped` would leave the
- * operator believing the external backstop exists (review P1-2).
+ * operator believing the external backstop exists.
  */
 const warnedMissingUrl = new Set<string>();
 

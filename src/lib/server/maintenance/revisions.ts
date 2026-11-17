@@ -3,7 +3,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { postRevisions } from '../db/content/post-revision.schema.ts';
 
 /**
- * Publish-time snapshots are capped per post (ledger §9.3): every publish
+ * Publish-time snapshots are capped per post: every publish
  * appends one revision, so an often-republished article would otherwise grow
  * without bound. The newest {@link REVISION_KEEP_PER_POST} stay; older rows are
  * deleted by the `revisions.prune` job (or the CLI with `--dry-run`).

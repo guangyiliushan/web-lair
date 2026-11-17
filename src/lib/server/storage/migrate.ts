@@ -3,7 +3,7 @@ import type { ObjectStoragePort } from './port.ts';
 import { VARIANT_NAMES, variantKeyFor } from '../../media/keys.ts';
 
 /**
- * Provider migration engine (W7.4, decision Q13).
+ * Provider migration engine.
  *
  * The unit of work is the `files` registry, never a bucket listing: every
  * canonical object is content-addressed (`<sha[0:2]>/<sha256>.<ext>`) so its
@@ -16,7 +16,7 @@ import { VARIANT_NAMES, variantKeyFor } from '../../media/keys.ts';
  * Re-running is the resume mechanism: an object already on the target with the
  * right bytes is verified, not copied again. Nothing here deletes from the
  * source — the old provider stays readable until an operator removes it
- * explicitly (Q13).
+ * explicitly.
  *
  * Not covered, deliberately (registered): `maps/*.pmtiles` objects are not in
  * `files` (published by `pnpm maps:publish`), so a provider switch needs that

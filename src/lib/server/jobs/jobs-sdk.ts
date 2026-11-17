@@ -7,7 +7,7 @@ import type { OptionKey, OptionValue } from '../config/options-registry.ts';
 import type { JobsDb, JobContext } from './types.ts';
 
 /**
- * Repository jobs SDK (J-2, plan §5.5): the single non-`node:*` module builtin
+ * Repository jobs SDK: the single non-`node:*` module builtin
  * and user job files may import. On the repository side `#jobs-sdk` maps to
  * this file (root package.json `imports`); inside `$DATA_DIR/jobs` the
  * scaffold-generated `_sdk.runtime.ts` re-exports it, so forked jobs keep
@@ -60,7 +60,7 @@ export const db: JobsDb = new Proxy({} as unknown as JobsDb, {
 });
 
 // ---------------------------------------------------------------------------
-// Re-exports (grill R1-3: curated surface - widen deliberately, one line each)
+// Re-exports (curated surface - widen deliberately, one line each)
 // ---------------------------------------------------------------------------
 
 export {
@@ -120,7 +120,7 @@ export async function runCommentReviewJob(ctx: JobContext): Promise<void> {
 }
 
 /**
- * Ops probe cores (M6 P4): `system.resources` (F-7 thresholds/mounts) and
+ * Ops probe cores: `system.resources` (F-7 thresholds/mounts) and
  * `mail.probe` (F-10 verify + weekly real send). Lazy for the same reason as
  * the AI cores - the mail probe pulls nodemailer and both cores are only
  * needed when their job actually runs.

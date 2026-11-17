@@ -28,7 +28,7 @@ import type { GateError } from './save-gate.ts';
  * builtin-update dismissal. File writes are atomic (tmp + rename); every
  * mutation writes its audit row on the same call path.
  *
- * All user-file mutations run through one in-process queue (J-2 review fix):
+ * All user-file mutations run through one in-process queue:
  * the web process is the only writer of user job FILES in `$DATA_DIR/jobs`
  * (the drain also refreshes the generated scaffold there, but never user
  * scripts), so the queue makes each check-then-act sequence (save's
@@ -62,10 +62,9 @@ export interface ScriptInfo {
 	timeoutMs: number;
 	/**
 	 * Hash of the code that actually runs: the user file when present, else
-	 * the builtin source. NOT the value for `saveScript.baseHash` (J-2 review
-	 * round 2, dimension 7) - the optimistic-lock token is the hash of the
-	 * USER file only (`bundle.user?.hash ?? null`, null when no user file
-	 * exists yet).
+	 * the builtin source. NOT the value for `saveScript.baseHash` - the
+	 * optimistic-lock token is the hash of the USER file only
+	 * (`bundle.user?.hash ?? null`, null when no user file exists yet).
 	 */
 	sourceHash: string;
 	builtinHash: string | null;
@@ -108,7 +107,7 @@ async function fileInfo(path: string): Promise<ScriptSourceInfo | null> {
 		};
 	} catch (error) {
 		// Only a genuinely missing file reads as null; a transient read
-		// failure must not masquerade as "absent" (J-2 review F7) - that
+		// failure must not masquerade as "absent" - that
 		// turned permission/blip errors into bogus `created:true` saves and
 		// silent fallbacks to builtin code.
 		if (isNotFoundError(error)) return null;
@@ -122,8 +121,8 @@ async function fileInfo(path: string): Promise<ScriptSourceInfo | null> {
  * production build this module ships as a chunk under `.svelte-kit/output`,
  * where `./builtin/*.ts` does not exist - the editor would show an empty
  * buffer, the fork baseline would record `builtin_hash: undefined`, and the
- * update/revert comparisons would silently degrade (J-3 review, batch-4 finding,
- * surfaced by the first production-build builtin-editor test).
+ * update/revert comparisons would silently degrade (surfaced by the first
+ * production-build builtin-editor test).
  */
 function builtinSourcePath(name: string): string {
 	return join(repoRoot, 'src', 'lib', 'server', 'jobs', 'builtin', builtinModuleFile(name));

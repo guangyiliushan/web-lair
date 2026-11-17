@@ -10,7 +10,7 @@ import {
 } from './site-organization.shared';
 
 /**
- * Idempotently bootstrap the single site organization (ledger §4.22, B2).
+ * Idempotently bootstrap the single site organization.
  *
  * Runs inside /admin/setup right after the owner is claimed. Uses the official
  * system path of `POST /organization/create`: called without a session but with
@@ -22,7 +22,7 @@ import {
  *
  * Failure is thrown to the caller: without the organization every
  * `hasPermission()` call would deny the owner, so the wizard must show an
- * explicit error instead of silently continuing (ledger §4.22).
+ * explicit error instead of silently continuing.
  */
 export async function ensureSiteOrganization(ownerUserId: string): Promise<string> {
 	const existing = await getSiteOrganizationId();
@@ -45,9 +45,9 @@ export async function ensureSiteOrganization(ownerUserId: string): Promise<strin
  * another server-only endpoint (registered without an HTTP path), so this
  * cannot be driven from outside the process.
  *
- * The generated `member` table cannot carry our unique index (ledger §4.7),
- * so "exactly one owner membership" is enforced at the explicit-lock tier of
- * §12-1: the same advisory lock the repair script takes (B2.1 review fix).
+ * The generated `member` table cannot carry our unique index,
+ * so "exactly one owner membership" is enforced by the same advisory lock
+ * that the repair script takes.
  */
 async function ensureOwnerMembership(organizationId: string, userId: string) {
 	await db.transaction(async (tx) => {

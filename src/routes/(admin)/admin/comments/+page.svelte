@@ -164,7 +164,7 @@
 									<!-- Border instead of CJK quote marks: the admin i18n guard
 									     forbids hardcoded CJK, and a rule reads better anyway. -->
 									<p
-										class="line-clamp-3 border-l-2 border-border pl-2 break-words text-foreground/80"
+										class="line-clamp-3 border-l-2 border-border pl-2 wrap-break-word text-foreground/80"
 									>
 										{entry.anchorQuote}
 									</p>

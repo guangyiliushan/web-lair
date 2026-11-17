@@ -12,7 +12,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * /admin/maintenance/new (J-3): create a user-only job - the missing half of
+ * /admin/maintenance/new: create a user-only job - the missing half of
  * "free create / delete / edit" (the editor page handles existing names; a fresh name has no
  * file, so saving here is exactly the `baseHash: null` creation path). The
  * save gate validates the name (alias/device/length rules); on success both

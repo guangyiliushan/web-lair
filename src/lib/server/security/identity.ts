@@ -4,7 +4,7 @@
  * Deliberately dependency-free: the same module is used by the SvelteKit
  * runtime and by the unit tests that exercise the *untrusted* branches, which
  * the e2e suite can no longer reach (a spoofed `x-real-ip` header no longer
- * resolves to a trusted identity — ledger §4.27, hole ①).
+ * resolves to a trusted identity).
  */
 
 /** Tailscale hands out addresses from the CGNAT range 100.64.0.0/10. */

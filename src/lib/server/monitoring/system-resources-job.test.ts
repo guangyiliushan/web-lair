@@ -144,7 +144,7 @@ describe('system.resources job (M6 P4)', () => {
 		expect(logs.warn.join('\n')).toContain('95%');
 		// Ordering is load-bearing: the out-of-box ping must go out before a
 		// (possibly hanging) notification sink, or the drain's timeout can kill
-		// the tick between the condition and its external backstop (review P1-1).
+		// the tick between the condition and its external backstop.
 		const pingOrder = (injected.ping as unknown as { mock: { invocationCallOrder: number[] } }).mock
 			.invocationCallOrder[0]!;
 		const notifyOrder = (injected.notify as unknown as { mock: { invocationCallOrder: number[] } })

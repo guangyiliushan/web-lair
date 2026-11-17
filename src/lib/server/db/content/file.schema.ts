@@ -16,7 +16,7 @@ import { user } from '../auth.schema.ts';
 export type FileStatus = 'pending' | 'attached' | 'detached';
 
 /**
- * Blob registry (storage line §3.1): content-addressed object store entries.
+ * Blob registry: content-addressed object store entries.
  * Original bytes are private; public variants are derived by key convention.
  */
 export const files = pgTable(

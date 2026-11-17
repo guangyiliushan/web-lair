@@ -13,9 +13,9 @@ import { user } from '../auth.schema.ts';
 import { posts } from './post.schema.ts';
 
 /**
- * Publish-time snapshots only (ledger §9.3): every publish appends one
- * revision; the prune job keeps the newest 20 per post. `author` points at
- * the auth table and remains text (§9.6 exception).
+ * Publish-time snapshots only: every publish appends one revision; the
+ * prune job keeps the newest 20 per post. `author` points at the auth
+ * table and remains text.
  */
 export const postRevisions = pgTable(
 	'post_revisions',
@@ -38,7 +38,7 @@ export const postRevisions = pgTable(
 	(table) => [
 		uniqueIndex('post_revisions_post_version_uniq').on(table.postId, table.version),
 		check('post_revisions_source_check', sql`${table.source} in ('publish')`),
-		// §11-A2: SET NULL FK on the auth table (P1.1 review).
+		// Leading (partial) index for the SET NULL FK on the auth table.
 		index('post_revisions_author_idx')
 			.on(table.author)
 			.where(sql`${table.author} is not null`)

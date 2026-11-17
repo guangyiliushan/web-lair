@@ -17,7 +17,7 @@ const MEGA_RECENT_LIMIT = 4;
 const MEGA_TOPIC_LIMIT = 4;
 
 /**
- * Load data for the Posts mega menu (P3-b): the locale's categories that
+ * Load data for the Posts mega menu: the locale's categories that
  * carry visible posts (curated order) plus the latest visible posts. Hrefs
  * stay neutral - the chrome renders them through `siteHref`.
  */
@@ -25,7 +25,7 @@ export async function loadPostsMegaData(): Promise<NavMenuData> {
 	const lang = getLocale();
 	const now = new Date();
 
-	// Two queries (second review round): the unfiltered category aggregate
+	// Two queries: the unfiltered category aggregate
 	// doubles as the locale total - every visible post has exactly one
 	// category (`category_id NOT NULL`, FK-restricted), so the dedicated
 	// COUNT query was redundant.
@@ -85,7 +85,7 @@ export async function loadPostsMegaData(): Promise<NavMenuData> {
 }
 
 /**
- * Load data for the Notes mega menu (N1): the locale's topics that carry
+ * Load data for the Notes mega menu: the locale's topics that carry
  * visible notes (curated order, icon names resolved client-side) plus the
  * latest visible notes - gated rows included, flagged with `locked` (the
  * list contract shows title + lock).
@@ -127,7 +127,7 @@ export async function loadNotesMegaData(): Promise<NavMenuData> {
 }
 
 /**
- * Load data for the Timeline mega menu (P3-b + N1): the latest visible
+ * Load data for the Timeline mega menu: the latest visible
  * entries across posts and notes merged into one stream, newest first.
  */
 export async function loadTimelineMegaData(): Promise<NavMenuData> {
@@ -169,7 +169,7 @@ export async function loadTimelineMegaData(): Promise<NavMenuData> {
 			publishedAt: row.publishedAt
 		}))
 	]
-		// Deterministic across equal timestamps (review finding): notes first,
+		// Deterministic across equal timestamps: notes first,
 		// then href - the concatenation order must not leak into the output.
 		// Mirror of the timeline page tie-break ((site)/timeline/+page.server.ts).
 		.sort(
@@ -204,7 +204,7 @@ export async function loadTimelineMegaData(): Promise<NavMenuData> {
 }
 
 /**
- * Load data for the pages chrome (P1b): every visible row in chrome order
+ * Load data for the pages chrome: every visible row in chrome order
  * (`is_default` first → `sort_order` → `created_at`). Item titles resolve
  * through the display fallback chain, hrefs stay neutral for `siteHref`, and
  * the footer defaults ride along from the same single query (no extra

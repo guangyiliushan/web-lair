@@ -9,7 +9,7 @@ const envNamePattern = /^AI_[A-Z0-9_]+$/;
 /**
  * Raw form contract for the provider dialog. The transform strips empty
  * strings to null and parses the models textarea into a clean list, so the
- * route action only persists the parsed value (ai-line plan §5.2).
+ * route action only persists the parsed value.
  */
 export const providerInputSchema = z
 	.object({
@@ -24,7 +24,7 @@ export const providerInputSchema = z
 			.trim()
 			.max(300, { error: () => m.admin_settings_ai_err_url_too_long() })
 			// http(s) only: the schema is the first gate against file:/javascript:
-			// and other schemes (AI-2.1 review - the probe fetches this URL).
+			// and other schemes (the probe fetches this URL).
 			.refine((v) => v === '' || (URL.canParse(v) && /^https?:\/\//i.test(v)), {
 				error: () => m.admin_settings_ai_err_base_url_format()
 			}),
@@ -34,7 +34,7 @@ export const providerInputSchema = z
 			.max(80, { error: () => m.admin_settings_ai_err_env_too_long() })
 			// Namespaced allowlist: AI keys must live under AI_*, so the probe
 			// can never be pointed at BETTER_AUTH_SECRET / POSTGRES_PASSWORD
-			// and ship their values to an arbitrary endpoint (AI-2.1 review).
+			// and ship their values to an arbitrary endpoint.
 			.refine((v) => v === '' || envNamePattern.test(v), {
 				error: () => m.admin_settings_ai_err_env_prefix()
 			}),
@@ -103,7 +103,7 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 const TEST_TIMEOUT_MS = 5000;
 
 /**
- * Lightweight connectivity check (§5.2): openai-compatible hits /models,
+ * Lightweight connectivity check: openai-compatible hits /models,
  * deepl hits /usage, custom hits the configured base URL. Never throws -
  * network failures and timeouts come back as `{ ok: false }` with a readable
  * message. The API key is read from the caller (env), never stored here.

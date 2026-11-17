@@ -6,7 +6,7 @@ import { auditChanges, listSettingsActivity } from '$lib/server/settings/activit
 import { OwnerProfileError, saveHomeHero, saveOwnerProfile } from './owner-profile';
 
 /**
- * Owner pointer + audit contract on a real scratch database (W3.3). Skipped
+ * Owner pointer + audit contract on a real scratch database. Skipped
  * unless OWNER_PROFILE_SCRATCH_URL points at a migrated scratch database:
  *
  *   OWNER_PROFILE_SCRATCH_URL=... pnpm exec vitest run --project server \

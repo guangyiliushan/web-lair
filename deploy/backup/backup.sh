@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Backup entry point (deploy batch D-4, platform plan §C.6; split per T3-A;
-# M6 P2 moved the schedule to Backrest).
+# Backup entry point: the data and config repositories stay separate, and the
+# nightly schedule itself lives in Backrest.
 #
 # Modes:
 #   backup.sh               full backup: dump → data repository → config
@@ -22,11 +22,11 @@
 # `.env` is deliberately NOT in that set. It goes to a SECOND repository with a
 # DIFFERENT password, because it holds BETTER_AUTH_SECRET, SUPPRESSION_HMAC_KEY
 # and the DB password: a leaked data repository plus its password must not
-# decrypt the application secrets (T3-A, secrets register §0.1).
+# decrypt the application secrets.
 # deploy/backup.env is backed up nowhere — it holds both repository passwords,
 # which live in the password manager with an offline copy (RUNBOOK §4).
 #
-# Both repositories are offsite targets (R2/B2). There is deliberately no
+# Both repositories are offsite targets (Cloudflare and Backblaze). There is
 # local repository on the same disk: that is a snapshot, not a backup.
 #
 # Env (systemd EnvironmentFile=/srv/web-lair/app/deploy/backup.env, or the
@@ -116,7 +116,8 @@ require_pg_env() {
 }
 
 # The helpers below read and write the same streams as the original compose
-# calls, so the gates stay byte-for-byte the ones that ran before M6 P2.
+# calls, so the gates stay byte-for-byte the ones that ran before Backrest
+# took over the schedule.
 pg_dump_db() { # → archive on stdout
 	if [ "$PG_MODE" = local ]; then
 		pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"
@@ -243,7 +244,7 @@ fi
 # The repository is a CLI flag, not an env var: a flag cannot be shadowed by
 # whatever the env file happens to contain, so the config run below can never
 # land in the data repository — a silent failure that would look like a green
-# night (T3-A).
+# night.
 RESTIC_ENV=(-e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
 
 docker run --rm --env-file "$APP_DIR/deploy/backup.env" "${RESTIC_ENV[@]}" \

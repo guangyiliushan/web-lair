@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
 
 /**
- * Storage ST-2 (2b) public gallery acceptance: the masonry grid renders the
+ * Public gallery acceptance: the masonry grid renders the
  * visible feed in keyset order (hidden rows absent), the filter chips drill
  * by camera, the viewer ships the EXIF floater with neighbour navigation
  * (link + ArrowLeft/ArrowRight), a retired slug 301s exactly once through
@@ -84,7 +84,7 @@ async function expectPageCount(grid: import('@playwright/test').Locator, pageSiz
 				} catch {
 					// Playwright fails a poll outright on a throwing callback
 					// (no retry) — a transient docker/exec hiccup must keep
-					// sampling instead (round-2 confirm P3).
+					// sampling instead.
 					return false;
 				}
 			},

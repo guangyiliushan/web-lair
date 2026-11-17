@@ -25,7 +25,7 @@ export type ProjectProvider = (typeof PROJECT_PROVIDERS)[number];
 export const PROJECT_STATUSES = ['pending', 'published', 'hidden', 'rejected'] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
-/** Project registry (projects line §2): four-platform sync + manual entries. */
+/** Project registry: four-platform sync + manual entries. */
 export const projects = pgTable(
 	'projects',
 	{

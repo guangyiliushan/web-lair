@@ -1,5 +1,5 @@
 /**
- * Deployment gate for OAuth token encryption (W1.5 / P0-5).
+ * Deployment gate for OAuth token encryption.
  *
  * `account.encryptOAuthTokens` stores OAuth access/refresh tokens as
  * `$ba$<key-version>$<hex>` envelopes (XChaCha20-Poly1305); with no keyring

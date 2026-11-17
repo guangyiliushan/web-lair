@@ -21,7 +21,7 @@
 			<p class="mt-0.5 text-xs text-muted-foreground">{hint}</p>
 		{/if}
 	</div>
-	<dd class="min-w-0 text-sm break-words text-muted-foreground sm:text-right">
+	<dd class="min-w-0 text-sm wrap-break-word text-muted-foreground sm:text-right">
 		{#if badge}
 			<Badge variant="secondary">{badge}</Badge>
 		{:else}

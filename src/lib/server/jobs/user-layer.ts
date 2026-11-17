@@ -74,12 +74,12 @@ export function jobNameForUserFile(fileName: string): string | null {
 }
 
 /**
- * Canonical-name invariant (J-2 review F1/D1/D2): a name is usable only when
- * its file mapping points back to itself - a registered name, or a dot-free
- * user name. Aliases (`my.job` maps to `my-job.ts`; `jobs-prune` is the
- * module file of the `jobs.prune` fork) are refused at every entry point
- * (save gate, resolver, loader, delete) so one file can never carry two
- * identities - without this, deleting `my.job` removed another job's file.
+ * Canonical-name invariant: a name is usable only when its file mapping
+ * points back to itself - a registered name, or a dot-free user name. Aliases
+ * (`my.job` maps to `my-job.ts`; `jobs-prune` is the module file of the
+ * `jobs.prune` fork) are refused at every entry point (save gate, resolver,
+ * loader, delete) so one file can never carry two identities - without this,
+ * deleting `my.job` removed another job's file.
  */
 export function isCanonicalJobName(name: string): boolean {
 	if (Object.hasOwn(JOBS, name)) return true;
@@ -158,7 +158,7 @@ export interface ResolvedJobInfo {
 	source: 'builtin' | 'user';
 }
 
-/** Merged listing (registry ∪ user files) - the J-3 surface reads this. */
+/** Merged listing (registry ∪ user files) - the admin surface reads this. */
 export async function listJobs(dataDir: string): Promise<ResolvedJobInfo[]> {
 	const userNames = new Set((await listUserJobFiles(dataDir)).map((entry) => entry.name));
 	const merged: ResolvedJobInfo[] = [];
@@ -228,9 +228,9 @@ export function createJobLoader(options: {
 		try {
 			bytes = await readFile(filePath);
 		} catch (error) {
-			// Only a genuinely missing file falls back to the builtin (J-2
-			// review F7): a transient read failure must not silently run
-			// different code than the user layer holds.
+			// Only a genuinely missing file falls back to the builtin: a
+			// transient read failure must not silently run different code than
+			// the user layer holds.
 			if (!isNotFoundError(error)) throw error;
 			const fallback = await loadBuiltin(name);
 			cache.set(name, fallback);

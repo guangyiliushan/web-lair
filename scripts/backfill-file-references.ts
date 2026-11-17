@@ -13,7 +13,7 @@ import {
 } from '../src/lib/server/services/file-references';
 
 /**
- * Reference backfill (ST-3 3b2; Q17): reconciles `file_references` with the
+ * Reference backfill: reconciles `file_references` with the
  * `/i/<key>` keys mentioned by the four content sources. Dry-run by default -
  * it reports the per-entity diff and writes NOTHING; `--apply` runs each
  * entity's diff through `syncFileReferences` in its own transaction, so the

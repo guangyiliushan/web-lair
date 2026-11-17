@@ -20,7 +20,7 @@ import { m } from '$lib/paraglide/messages';
 /**
  * /admin/maintenance/[name]: the script editor page -
  * CodeMirror mounts client-side behind a route-level dynamic import, saves
- * ride the J-2 optimistic lock (`baseHash` = the hash the editor loaded,
+ * ride the optimistic lock (`baseHash` = the hash the editor loaded,
  * `bundle.user?.hash ?? null` - see the saveScript JSDoc), and the fork
  * lifecycle (first save forks / restore built-in / ignore update / hard delete) hangs off the
  * same page. The editor NEVER auto-adopts a server value after an action:
@@ -92,7 +92,7 @@ export const actions: Actions = {
 		}
 		// Re-resolve AFTER the save: a first save of a builtin name just
 		// created the fork, and non-registry names need the user-layer
-		// definition for enqueueJob (J-2 review D2 note).
+		// definition for enqueueJob.
 		// The manifest already landed: every failure below carries the fresh
 		// hash so the editor can advance its optimistic-lock token instead of
 		// re-saving against a stale one.

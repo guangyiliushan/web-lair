@@ -15,10 +15,10 @@ export const SITE_ORGANIZATION_NAME = 'Web Lair';
  * Stable advisory-lock namespace for the site-organization membership slot.
  *
  * The generated `member` table cannot carry a unique index on
- * (organization_id, user_id) - better-auth's tables are never hand-edited
- * (ledger §4.7) - so "exactly one owner membership" is an application-layer
+ * (organization_id, user_id) - better-auth's tables are never hand-edited,
+ * so "exactly one owner membership" is an application-layer
  * invariant. Both writers (the setup bootstrap and the repair script) must
- * serialise through this transaction-scoped lock: tier ② of ledger §12-1.
+ * serialise through this transaction-scoped lock.
  */
 export const SITE_ORG_MEMBER_LOCK_KEY = 'web_lair.site_org_member';
 

@@ -1,5 +1,5 @@
 /**
- * `system.resources` job core (M6 P4, F-7).
+ * `system.resources` job core.
  *
  * The builtin stays a two-line shell (`#jobs-sdk` runner) and the logic lives
  * here so it can be unit-tested with injected readings and sinks. Three
@@ -7,8 +7,8 @@
  *
  *  1. `ctx.summary` - every mount, the cgroup memory reading and the host
  *     memory reference; the admin surface reads this from the run ledger.
- *  2. `notify()` - a threshold alert through the notification seam (P5 wires
- *     the outbox). Deduped per metric per UTC day by the latched state file.
+ *  2. `notify()` - a threshold alert through the notification seam; deduped
+ *     per metric per UTC day by the latched state file.
  *  3. healthchecks ping - fail while any metric is latched in warn (including
  *     the 75-85 band), a collection failed, or the daily latch could not be
  *     persisted; ok otherwise. This is the external backstop: when the disk is
@@ -99,7 +99,7 @@ export async function runSystemResources(
 	// The state file lives on the volume the probe is watching: a full disk makes
 	// this write fail. Ordering matters - the alert outlets below must run
 	// regardless, otherwise the one condition that needs to page is the one that
-	// throws before paging (review P0).
+	// throws before paging.
 	let stateFile: 'ok' | 'failed' = 'ok';
 	if (!sameResourceState(state, nextState)) {
 		try {
@@ -119,7 +119,7 @@ export async function runSystemResources(
 		.map(([key, metric]) => ({ key, alertDay: metric.alertDay }));
 	const failing = latched.length > 0 || snapshot.errors.length > 0 || stateFile === 'failed';
 	const healthcheckStatus = failing ? 'fail' : 'ok';
-	// External record FIRST: a hung P5 outbox sink must not sit between the
+	// External record FIRST: a hung outbox sink must not sit between the
 	// condition and its out-of-box backstop (the drain hard-exits on timeout).
 	const healthcheckPing = await ping('resources', healthcheckStatus);
 	for (const entry of latched) {
@@ -135,7 +135,7 @@ export async function runSystemResources(
 		const title = alertTitle(alert.kind, alert.mount, alert.usedPercent);
 		const delivered = await notify({
 			eventType,
-			// Day-scoped: P5's (event_type,event_key,channel) unique key must not
+			// Day-scoped: the (event_type,event_key,channel) unique key must not
 			// silence tomorrow's alert for the same mount.
 			eventKey: `${alert.key}:${day}`,
 			title,
@@ -146,9 +146,9 @@ export async function runSystemResources(
 	}
 
 	// A failed delivery must not keep the day's latch: the dedupe key is
-	// day-scoped, so a latched failure would silence the alert until tomorrow
-	// (review P1-1). Clearing `alertDay` makes the next tick retry; P5's unique
-	// key absorbs a duplicate if both the retry and a late delivery land.
+	// day-scoped, so a latched failure would silence the alert until tomorrow.
+	// Clearing `alertDay` makes the next tick retry; the unique key absorbs a
+	// duplicate if both the retry and a late delivery land.
 	const failedAlertKeys = notified
 		.filter((entry) => entry.delivered === 'failed')
 		.map((entry) => entry.key);
@@ -200,7 +200,7 @@ export async function runSystemResources(
 		/** `failed` means the daily latch could not be persisted this run. */
 		stateFile,
 		// Reference only: the HOST's memory, which is not what the container is
-		// limited by (F-7 moved the alerting metric to the cgroup reading).
+		// limited by; the alerting metric is the cgroup reading.
 		hostMemory: {
 			totalBytes: totalMemory,
 			freeBytes: freeMemory,

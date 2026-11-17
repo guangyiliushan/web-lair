@@ -1,6 +1,6 @@
 // scripts/jobs/trash-purge.ts
 //
-// Manual trash purge (M5):
+// Manual trash purge:
 //
 //   pnpm jobs:trash-purge [--dry-run] [--grace-days N]
 //
@@ -9,7 +9,7 @@
 // trashed - a mixed family could hide a still-published translation. `--dry-run`
 // only counts. Unknown flags exit 2 so a typo can never delete rows.
 //
-// No schedule is installed by default (single-operator ruling Q5).
+// No schedule is installed by default (single-operator ruling).
 //
 // Exit codes: 0 = run finished, 1 = the run broke, 2 = configuration error.
 

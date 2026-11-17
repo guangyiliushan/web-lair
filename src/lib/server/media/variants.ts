@@ -3,14 +3,14 @@ import { rgbaToThumbHash } from 'thumbhash';
 import { decodeHeic, isHeic } from './heic';
 
 /**
- * Decode bound (review round 1): sharp's default limit (~268MP ≈ 1GB RGBA)
+ * Decode bound: sharp's default limit (~268MP ≈ 1GB RGBA)
  * let a 25MB upload expand unboundedly inside the pipeline; 100MP covers
  * every real camera (a 100MP Fuji GFX frame is 11648×8736) with headroom
  * while keeping the worst-case decode allocation bounded.
  */
 const MAX_DECODE_PIXELS = 100_000_000;
 
-/** Long-edge boxes for the derived variants (ledger §21 / plan §4.3). */
+/** Long-edge boxes for the derived variants. */
 const THUMB_BOX = 480;
 /** Gallery tile box: sharp on 2× screens without paying the preview price. */
 export const GRID_BOX = 720;
@@ -43,9 +43,9 @@ export interface ProcessedImage {
 }
 
 /**
- * Header-only dimensions for pass-through formats (plan §4.3: GIF is stored
- * and served as-is, so it never goes through `processImage`). Reads metadata
- * only — no pixel decode.
+ * Header-only dimensions for pass-through formats: GIF is stored and served
+ * as-is, so it never goes through `processImage`. Reads metadata only — no
+ * pixel decode.
  */
 export async function readImageSize(
 	input: Uint8Array
@@ -60,7 +60,7 @@ export async function readImageSize(
 }
 
 /**
- * Image pipeline for ST-1 (ledger §21): HEIC (WASM) and regular inputs are
+ * Image pipeline: HEIC (WASM) and regular inputs are
  * normalised through one sharp chain that
  * - bakes EXIF Orientation into the pixels (`rotate()`), then
  * - derives thumb / preview / full webp variants (fit-within-box, long-edge
@@ -68,7 +68,7 @@ export async function readImageSize(
  * - thumbhash and dominant colour for placeholders.
  *
  * The original bytes are not touched here — the caller archives them as the
- * private original (plan §4.3).
+ * private original.
  */
 export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
 	const heic = isHeic(input);

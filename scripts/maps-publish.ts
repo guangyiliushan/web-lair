@@ -6,7 +6,7 @@ import * as schema from '../src/lib/server/db/schema';
 import { activeStorage } from './lib/active-storage';
 
 /**
- * Publish a local PMTiles archive into the `maps/` prefix (plan §8): the
+ * Publish a local PMTiles archive into the `maps/` prefix: the
  * serve route `/maps/<file>.pmtiles` reads exactly this key space and the
  * extract is built with the pinned go-pmtiles CLI (v1.31.2), never the
  * rotating public builds. Usage: `pnpm maps:publish <local-file>
@@ -32,7 +32,7 @@ if (!DATABASE_URL) {
 }
 const sql = postgres(DATABASE_URL, { max: 1 });
 const db = drizzle(sql, { schema });
-// Tiles follow the ACTIVE provider, the same one /maps reads (W7.5).
+// Tiles follow the ACTIVE provider, the same one /maps reads.
 const storage = await activeStorage(db);
 await storage.ensureBucket();
 const { etag } = await storage.put(`maps/${name}`, new Uint8Array(bytes), {

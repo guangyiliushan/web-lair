@@ -14,7 +14,7 @@ export interface JobDefinition {
 	description: string;
 	/** Manual (queued) runs allowed. */
 	manual: boolean;
-	/** Suggested cron for the admin surface (J-3); informational only. */
+	/** Suggested cron for the admin surface; informational only. */
 	scheduleHint: string | null;
 	/** Cooperative in-process timeout; the job promise is raced. */
 	timeoutMs: number;
@@ -31,14 +31,14 @@ export function builtinModuleFile(name: string): string {
 }
 
 /**
- * J-1 roster. The full planned roster (links.check / projects.sync /
+ * The full planned roster (links.check / projects.sync /
  * revisions.prune / media.* / search.rebuild / ai.* / jobs.typecheck /
  * webhooks.deliver) is registered line by line as each
  * implementation lands - never ahead of it, so a schedule or manual trigger
  * can never point at code that does not exist.
  *
  * Frozen (shallow) against accidental key writes; the definition objects stay
- * mutable so tests and the J-3 surface can probe them.
+ * mutable so tests and the admin surface can probe them.
  */
 export const JOBS: Record<string, JobDefinition> = Object.freeze({
 	'jobs.prune': {

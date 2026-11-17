@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * W5 Site acceptance (goal: W5.2/W5.4/W5.5 arcs): the page is a real editor
+ * Site acceptance: the page is a real editor
  * for the owner (identity + favicon + owner-only language pair), saves
  * round-trip through the database, and the deployment block remains read-only.
  * The scratch `local_e2e` database is mutated by the round-trips and restored
@@ -83,7 +83,7 @@ test('Site identity/favicon save and read back; owner controls render', async ({
 		}
 	}
 
-	// Root head: manifest + og:site_name reach the home page (W5.3).
+	// Root head: manifest + og:site_name reach the home page.
 	await page.goto('/');
 	await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
 		'href',

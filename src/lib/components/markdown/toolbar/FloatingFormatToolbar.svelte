@@ -56,7 +56,7 @@
 				return;
 			}
 			// Position: centred above the selection with a 10px gap
-			const toolbarH = 36; // 预估工具栏高度
+			const toolbarH = 36; // estimated toolbar height
 			top = rect.top - toolbarH - 10;
 			left = rect.left + rect.width / 2;
 			// If there is not enough room above, or it would cover area outside the editor's

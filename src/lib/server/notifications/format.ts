@@ -1,11 +1,11 @@
 import { sanitizeErrorText } from '../jobs/error-text.ts';
 
 /**
- * Notification payload shaping (M6 P5, plan §3.2 "payload ≤200 chars, no PII").
+ * Notification payload shaping (payload ≤200 chars, no PII).
  *
  * One shape serves both adapters: `{ title, body, url? }`. The producers build
  * it (`comment.pending` from the comment service, `job.failed` from the drain,
- * the P4 probes through `notify()`), the outbox stores it verbatim, and the
+ * the builtin probes through `notify()`), the outbox stores it verbatim, and the
  * adapters re-shape it (Bark: title/body; email: subject/text). Bounding and
  * redaction live HERE, once, so a producer cannot widen what leaves the box.
  *
@@ -30,7 +30,7 @@ export const NOTIFICATION_BODY_MAX = 200;
 export const NOTIFICATION_URL_MAX = 500;
 
 const EMAIL_PATTERN = /[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
-// eslint-disable-next-line no-control-regex -- deliberate: strip C0/C1 controls
+// eslint-disable-next-line no-control-regex -- deliberate: strip control characters
 const CONTROL_PATTERN = /[\u0000-\u001f\u007f-\u009f]/g;
 
 export interface NotificationPayload {
@@ -45,8 +45,8 @@ export function sanitizeNotificationText(value: string, max: number): string {
 	const redacted = collapsed.replace(EMAIL_PATTERN, '[address]');
 	// Slice by CODE POINT: a UTF-16 slice can split a surrogate pair and leave
 	// a lone surrogate, which `JSON.stringify` escapes as `\ud83d` and jsonb
-	// rejects - the insert would fail and the alert would be lost (review
-	// P2). `Array.from` keeps astral characters (emoji, rare CJK) intact.
+	// rejects - the insert would fail and the alert would be lost.
+	// `Array.from` keeps astral characters (emoji, rare CJK) intact.
 	const points = Array.from(redacted);
 	if (points.length <= max) return redacted;
 	// Reserve one character for the ellipsis so the cap is exact.

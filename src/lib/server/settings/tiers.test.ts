@@ -15,7 +15,7 @@ describe('settings permission matrix', () => {
 			tier: 'owner',
 			editable: false
 		});
-		// M6 P5: the delivery switches and the alert log are owner-only as well -
+		// The delivery switches and the alert log are owner-only as well -
 		// an admin must not be able to silence comment/job/ops alerts, and a
 		// resend spends the owner's mail/Bark budget.
 		for (const field of [
@@ -44,7 +44,7 @@ describe('settings permission matrix', () => {
 	it('lets an admin edit admin-tier sections and fields', () => {
 		expect(settingAccess('admin', 'site', 'site.info').editable).toBe(true);
 		expect(settingAccess('admin', 'content', 'comments.enabled').editable).toBe(true);
-		// W6.9: friends, reading presence and the notes gate are admin writes;
+		// Friends, reading presence and the notes gate are admin writes;
 		// comment privacy stays owner-only (asserted above).
 		expect(settingAccess('admin', 'content', 'friends.apply').editable).toBe(true);
 		expect(settingAccess('admin', 'content', 'friends.checks').editable).toBe(true);

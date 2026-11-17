@@ -1,5 +1,5 @@
 /**
- * Webhook retry policy (W9.4 / decision N5, T2b).
+ * Webhook retry policy.
  *
  * Classification follows the Standard Webhooks delivery contract and the
  * Stripe/GitHub behaviour: 2xx is success, 3xx is a permanent failure (the
@@ -17,7 +17,7 @@
  * which is what lets receivers deduplicate.
  */
 /**
- * Retry budget: the decision register (N5/T2b) asks for up to three days of
+ * Retry budget: up to three days of
  * exponential backoff. Fourteen attempts with a 12-hour cap cover that window
  * (1m · 2m · … · 12h ≈ 65h) without keeping a poison row alive forever.
  */

@@ -1,4 +1,4 @@
-# Sentinel traffic analytics overlay (P6 / plan §3.1).
+# Sentinel traffic analytics overlay.
 #
 # Loaded by deploy/compose-prod.sh together with compose.yaml and
 # compose.prod.yaml. It is an overlay, not a standalone model: `internal`,

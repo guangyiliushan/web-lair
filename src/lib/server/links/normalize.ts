@@ -1,6 +1,6 @@
 /**
- * URL / host normalization for the links line (plan §2.1: the stored `url`
- * and `host` are canonical; matching happens on `host`).
+ * URL / host normalization for the links line: the stored `url` and `host`
+ * are canonical; matching happens on `host`.
  *
  * Pure functions, no dependencies: shared by the checker (plain-Node side)
  * and, later, the apply/admin surfaces.
@@ -29,9 +29,9 @@ export function normalizeHost(input: string): string | null {
 }
 
 /**
- * Same-site test for the offsite signal (plan §4.8, coarse on purpose —
- * PSL is a registered future item): equal hosts, or either one a dotted
- * suffix of the other (`blog.example.com` ~ `example.com`).
+ * Same-site test for the offsite signal (coarse on purpose — PSL is a
+ * registered future item): equal hosts, or either one a dotted suffix of
+ * the other (`blog.example.com` ~ `example.com`).
  */
 export function isSameSite(a: string, b: string): boolean {
 	const x = normalizeHost(a);
@@ -43,7 +43,7 @@ export function isSameSite(a: string, b: string): boolean {
 /**
  * Strip URL userinfo (`://user:pass@`) from free text before it reaches a
  * log line or the evidence ring (undici embeds the full URL in some
- * TypeError messages; review round 4).
+ * TypeError messages).
  */
 export function redactCredentials(text: string): string {
 	return text.replace(/:\/\/[^\s/@]+@/g, '://[redacted]@');
@@ -61,7 +61,7 @@ export function urlKey(input: string): string | null {
 }
 
 /**
- * Why the stored URL cannot be canonicalised (links plan §2.1). The admin
+ * Why the stored URL cannot be canonicalised. The admin
  * surface maps every non-`subpath` reason to one "must be an https homepage"
  * message; `subpath` gets its own because the policy option can lift it.
  */
@@ -72,7 +72,7 @@ export type NormalizeLinkUrlResult =
 	{ ok: true; url: string; host: string } | { ok: false; reason: LinkUrlFailure };
 
 /**
- * Canonical write form for `links.url` (plan §2.1): https only, no userinfo,
+ * Canonical write form for `links.url`: https only, no userinfo,
  * no query/fragment, trailing slashes dropped, default ports dropped by
  * `URL`, host lowercased + punycoded + `www.`-stripped for matching. The
  * stored URL keeps the host as entered (`www.` preserved) - visitors click

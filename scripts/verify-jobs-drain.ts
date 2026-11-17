@@ -1,6 +1,6 @@
 // scripts/verify-jobs-drain.ts
 //
-// Acceptance harness for the J-1 drain kernel (jobs-line plan §7 assertions).
+// Acceptance harness for the jobs drain kernel.
 //
 //   pnpm db:verify-jobs
 //
@@ -10,25 +10,24 @@
 // SIGKILLed mid-flight), and drops the database afterwards. The live database
 // is never written to.
 //
-// Covered: T1 (concurrent double drain -> CAS exactly-one), T2 (queued unique,
-// 23505 idempotent), T3 (stale reclamation + its order contract, queue AND
-// schedule paths), T4 (catch-up runs the most recent due only), T5 (lock held
-// -> no watermark move, no reclaim, next tick catches up), T9 (kill a
-// lock-holding process -> reclaim + queued rows survive; kill a real drain
-// mid-delivery -> the delivery row stays queued), webhook signing/410
-// semantics, 3xx-is-failure (redirect never followed), unreachable-endpoint
-// network failures, jobs.prune retention, source_hash records the executing
-// file, bootstrap of a NULL watermark, a microsecond-precision watermark
-// written by SQL (monotonic CAS), the executeRun failure branch (poisoned
-// table), concurrent delivery and queue claims, the entry exit-code contract
-// (2 / 1), heartbeat ping; since J-2: T6 (SDK dual resolution), T7 (save
-// gate negatives) and T10 (user jobs end-to-end: hot update, fork override,
-// run-scoped SDK binding), T11 (delete lifecycle on a real database), T12
-// (admin edit mid-tick -> config-snapshot CAS; toggle race on a real DB) and
-// the scaffold-degradation guard; SY S1 adds the audit-path outbox
+// Covered: concurrent double drain -> CAS exactly-one; queued unique, 23505
+// idempotent; stale reclamation + its order contract, queue AND schedule
+// paths; catch-up runs the most recent due only; lock held -> no watermark
+// move, no reclaim, next tick catches up; kill a lock-holding process ->
+// reclaim + queued rows survive; kill a real drain mid-delivery -> the
+// delivery row stays queued; webhook signing/410 semantics, 3xx-is-failure
+// (redirect never followed), unreachable-endpoint network failures,
+// jobs.prune retention, source_hash records the executing file, bootstrap of
+// a NULL watermark, a microsecond-precision watermark written by SQL
+// (monotonic CAS), the executeRun failure branch (poisoned table), concurrent
+// delivery and queue claims, the entry exit-code contract (2 / 1), heartbeat
+// ping; SDK dual resolution, save gate negatives, user jobs end-to-end (hot
+// update, fork override, run-scoped SDK binding), delete lifecycle on a real
+// database, admin edit mid-tick -> config-snapshot CAS and toggle race on a
+// real DB, the scaffold-degradation guard; the audit-path outbox
 // (`recordActivity` fans out one `queued` delivery per subscribed endpoint -
 // single insert-select, `@>` matching, Standard Webhooks recommended payload
-// shape). T8 (Kuma wiring) to §25.
+// shape); Kuma push wiring (JOBS_HEARTBEAT_URL) lives in jobs/drain.ts.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -65,7 +64,7 @@ import { resolveJobDefinition } from '../src/lib/server/jobs/user-layer';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 /**
- * Throwaway DATA_DIR for every drain spawn (J-2): the entry scaffolds and
+ * Throwaway DATA_DIR for every drain spawn: the entry scaffolds and
  * loads user jobs from `$DATA_DIR/jobs`, so the harness pins it here instead
  * of the repo's `data/`, and removes it in the teardown.
  */
@@ -77,12 +76,11 @@ const fixtureDataDir = await mkdtemp(join(tmpdir(), 'wl-jobs-verify-data-'));
 
 let checks = 0;
 let failures = 0;
-// Denominator guard (round-2 SYT-9): a silently skipped scenario/check must
-// turn the harness red instead of printing a green total. 193 = the real
-// checks (163 baseline + 5 net W9.4 retry/audit + 25 M6 P5 notification
-// checks: both storm windows - per-event and global - plus the 15m retry step
-// and the fourth terminal attempt); this self-check's own increment makes the
-// ALL summary print 192.
+// Denominator guard: a silently skipped scenario/check must turn the harness
+// red instead of printing a green total. 193 = the real checks (163 baseline
+// + 5 net retry/audit + 25 notification checks: both storm windows - per-event
+// and global - plus the 15m retry step and the fourth terminal attempt); this
+// self-check's own increment makes the ALL summary print 192.
 const EXPECTED_CHECKS = 193;
 
 function check(name: string, ok: boolean, detail = ''): void {
@@ -144,8 +142,8 @@ const db = drizzle(client);
 
 async function resetLedger(): Promise<void> {
 	// webhook_secrets references webhooks: every referencing table must be in
-	// the list or Postgres refuses the TRUNCATE outright (W9.4 added the
-	// retry columns; the W2 secret table was already missing here).
+	// the list or Postgres refuses the TRUNCATE outright (the retry columns
+	// came later; the secret table was missing from the start).
 	await client.unsafe(
 		'truncate table job_runs, job_schedules, webhook_deliveries, webhook_secrets, webhooks, activities'
 	);
@@ -187,7 +185,7 @@ function spawnDrain(extraEnv: Record<string, string> = {}): {
 	delete env.all_proxy;
 	delete env.NODE_USE_ENV_PROXY;
 	env.NO_PROXY = '*';
-	// W9.3 delivery guard: the fixture receiver is plain HTTP on 127.0.0.1.
+	// Delivery guard: the fixture receiver is plain HTTP on 127.0.0.1.
 	// This escape hatch is explicit, test-only, and ignored in production.
 	env.WEBHOOK_ALLOW_INSECURE_LOOPBACK = 'true';
 	env.NODE_ENV = 'test';
@@ -441,7 +439,7 @@ function signatureOf(capturedRequest: CapturedRequest, secret: string): boolean 
 }
 
 // ---------------------------------------------------------------------------
-// Scenarios (plan §7 assertion mapping)
+// Scenarios
 // ---------------------------------------------------------------------------
 
 async function t4CatchUpAndSourceHash(): Promise<void> {
@@ -926,7 +924,7 @@ async function jobsPruneRetention(): Promise<void> {
 		.values({ event: 'job.prune', createdAt: new Date() })
 		.returning({ id: activities.id });
 
-	// M6 P5: the notification delivery log follows the same 30-day window;
+	// The notification delivery log follows the same 30-day window;
 	// only terminal rows age out. (No queued fixture here on purpose - the
 	// same tick's notification segment would try to deliver it.)
 	const [oldSentNotification] = await db
@@ -1350,7 +1348,7 @@ async function heartbeatPing(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// J-2 scenarios: SDK resolution, save gate, user jobs end-to-end (T6/T7/T10)
+// Scenarios: SDK resolution, save gate, user jobs end-to-end
 // ---------------------------------------------------------------------------
 
 function sha256Of(bytes: Buffer): string {
@@ -1481,7 +1479,7 @@ export default {
 		(await readFile(heatLog, 'utf8')).includes('v1')
 	);
 
-	// Hot update (plan §2 "each tick is a fresh process"): the next tick must
+	// Hot update: each tick is a fresh process, so the next tick must
 	// execute the NEW bytes - source_hash is the proof.
 	await writeUserJob(dataDir, 'heat-task.ts', jobSource('v2'));
 	await enqueueJob(db, 'heat-task', 'cli', definition!);
@@ -1496,7 +1494,7 @@ export default {
 	);
 	check('T10 v2 marker appended', (await readFile(heatLog, 'utf8')).includes('v2'));
 
-	// Run-scoped SDK binding (R2-3): a bare getOption() has no executor and
+	// Run-scoped SDK binding: a bare getOption() has no executor and
 	// must resolve through the client the drain bound for this run.
 	await writeUserJob(
 		dataDir,
@@ -1707,7 +1705,7 @@ async function t11DeleteLifecycle(): Promise<void> {
 	);
 	check('T11 user file removed after the commit', fileGone);
 
-	// Alias names must be refused by delete too (J-2 review round 2, D1):
+	// Alias names must be refused by delete too:
 	// `system-resources` is the module file of the system.resources fork, and
 	// `my.task` maps onto another job's `my-task.ts` - both would otherwise
 	// remove the WRONG file.
@@ -1763,7 +1761,7 @@ async function scaffoldFailureDegrades(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// M6 P5: notification outbox (unique key, storm window, mock Bark, terminal)
+// Notification outbox (unique key, storm window, mock Bark, terminal)
 // ---------------------------------------------------------------------------
 
 async function notificationOutcomes(): Promise<void> {
@@ -1802,10 +1800,10 @@ async function notificationOutcomes(): Promise<void> {
 		commentRows[0]?.status === 'queued' && commentRows[0]?.attempts === 0
 	);
 
-	// 2) Storm windows on the real table. The register (§3E) gives comment a
-	//    10/h per-event window and a global 30/h ceiling; `job.failed` has NO
-	//    per-event window (only the per-run unique key) - the P5 review removed
-	//    the extra 10/h cap because it could drop legitimate incident alerts.
+	// 2) Storm windows on the real table. Comment events get a 10/h
+	//    per-event window and a global 30/h ceiling; `job.failed` has NO
+	//    per-event window (only the per-run unique key) - the extra 10/h cap
+	//    was removed because it could drop legitimate incident alerts.
 	//    Both windows are asserted below, so neither can silently regress.
 	// Clear the table first: earlier scenarios leave rows inside the same hour,
 	// and the global window counts every type.
@@ -2045,7 +2043,7 @@ async function notificationOutcomes(): Promise<void> {
 	);
 
 	// 6) `job.failed` producer: a whitelisted job whose run fails terminally
-	// lands in the outbox exactly once (the P4 seam installed by the entry).
+	// lands in the outbox exactly once (the seam installed by the entry).
 	const [run] = (await db.execute(
 		sql`insert into job_runs (job, trigger, status) values ('media.audit', 'cli', 'queued') returning id`
 	)) as unknown as Array<{ id: string }>;
@@ -2061,7 +2059,7 @@ async function notificationOutcomes(): Promise<void> {
 	);
 
 	// 7) Event-name CHECK teeth. The custom multi-dot regex exists because the
-	// P4 probe event `mail.probe.failed` has TWO dots (the activities CHECK
+	// probe event `mail.probe.failed` has TWO dots (the activities CHECK
 	// allows one); prove on real PG that it is accepted and that a malformed
 	// name is rejected - otherwise the schema test and the DDL can drift.
 	const [multiDot] = await db
@@ -2247,7 +2245,7 @@ async function s1ProducerOutbox(): Promise<void> {
 		.where(eq(webhookDeliveries.event, 'probe.other'));
 	check('unsubscribed event enqueues nothing', unmatched.length === 0, `got ${unmatched.length}`);
 
-	// Same-call-path contract (S1 grill; review round-1 SY-T1): the outbox
+	// Same-call-path contract: the outbox
 	// fan-out rides the CALLER'S transaction - a rolled-back audit row must
 	// leave no delivery behind. This is the real-PG proof the unit fakes
 	// cannot give (swapping the executor for a pool connection turns red).
@@ -2417,7 +2415,7 @@ async function s3PipelineDelivery(): Promise<void> {
 		`rows=${goneAfter.length}`
 	);
 
-	// (3) Manual-replay arc (mirrors the W9.4 action): the SAME failed row is
+	// (3) Manual-replay arc: the SAME failed row is
 	// re-queued; one tick later it is delivered with the same webhook-id.
 	const flakyId = await createEndpoint('s3-flaky', '/flaky-s3', secret, true, ['probe.retry']);
 	flakyRemaining = 1;
@@ -2464,8 +2462,8 @@ async function s3PipelineDelivery(): Promise<void> {
 				.length === 1
 	);
 
-	// C3 hardening (review round-1): a NULL payload row must be recorded
-	// loudly, never degraded into a silent bare-`{}` POST.
+	// Hardening: a NULL payload row must be recorded loudly, never degraded
+	// into a silent bare-`{}` POST.
 	const postsBeforeNull = captured.filter((r) => r.path.startsWith('/flaky-s3')).length;
 	const [nullDelivery] = await db
 		.insert(webhookDeliveries)

@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 /**
- * "Quotes" (excerpts) waterfall (micro-content line §17): passages collected
+ * "Quotes" (excerpts) waterfall: passages collected
  * from books, films and poems. Body column renamed `text` → `content`;
  * `updated_at` added for convention parity.
  */

@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { jobsDir, repoRoot } from './data-dir.ts';
 
 /**
- * User jobs scaffold (J-2, plan §5.2/§5.5; grill R2-2): keeps the four
+ * User jobs scaffold: keeps the four
  * platform-owned artifacts inside `$DATA_DIR/jobs` in sync with the
  * repository. Every write is idempotent and content-guarded - bytes that
  * differ from the expected content are rewritten (self-healing), so a moved
@@ -49,7 +49,7 @@ function packageJsonContent(): string {
 }
 
 export function runtimeContent(specifier: string): string {
-	// JSON.stringify quoting (J-2 review round 2, D5): pathToFileURL does NOT
+	// JSON.stringify quoting: pathToFileURL does NOT
 	// percent-encode quotes, so a repo path containing `'` used to produce a
 	// broken single-quoted re-export; stringify escapes every character that
 	// matters. Exported for the escaping test.
@@ -97,7 +97,7 @@ async function writeIfChanged(path: string, content: string, changed: string[]):
 		// Missing file: the write below creates it.
 	}
 	if (current === content) return;
-	// tmp + rename (J-2 review R09): a concurrent reader - another drain
+	// tmp + rename: a concurrent reader - another drain
 	// tick, a web save, or the typecheck's tsc reading tsconfig.json - must
 	// never observe a torn artifact while this process refreshes it.
 	const tmp = `${path}.${process.pid}.tmp`;

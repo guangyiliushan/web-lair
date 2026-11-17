@@ -1,19 +1,25 @@
-# 可选片段：drain 心跳 deadman（仅当 DRAIN_HEARTBEAT_TOKEN 非空时渲染）。
+# Optional fragment: drain heartbeat deadman (rendered only when
+# DRAIN_HEARTBEAT_TOKEN is non-empty).
 #
-# 语义：drain 定时任务每轮成功后向 Gatus 推一次“我还在跑”：
+# Semantics: after every successful round the drain timer pushes "I am still
+# running" to Gatus:
 #   POST http://<gatus>/api/v1/endpoints/web-lair_jobs-drain/external?success=true
 #   Authorization: Bearer ${DRAIN_HEARTBEAT_TOKEN}
-# 地址按场景：
-#   - app 容器内（drain 由 `compose run --rm app` 执行）→ http://gatus:8080
-#   - 宿主 curl（systemd 备选）→ http://127.0.0.1:8080
-# 用 127.0.0.1 在容器里指向容器自身，会永远失败（review P1-4）。
+# Address by scenario:
+#   - inside the app container (drain runs via `compose run --rm app`)
+#     → http://gatus:8080
+#   - host curl (systemd fallback) → http://127.0.0.1:8080
+# 127.0.0.1 inside a container points at the container itself and would fail
+# forever.
 #
-# interval 必须覆盖最长 tick：drain 单元 TimeoutStartSec=960，job 自身
-# timeoutMs=900000（15m），5m 会在健康的慢 tick 上误报（review P1-3）→ 30m。
+# The interval must cover the longest tick: the drain unit has
+# TimeoutStartSec=960 and the job itself timeoutMs=900000 (15m); 5m would
+# false-alarm on a healthy slow tick, so 30m.
 #
-# 现在仓库里的 drain（jobs/drain.ts）仍然是对 JOBS_HEARTBEAT_URL 发普通 GET
-# （Kuma push 形态），切换动作见 README §8 与 P3-WAITING W5：在接线之前不要设置
-# DRAIN_HEARTBEAT_TOKEN，否则这个端点会一直红。
+# The drain in this repo (jobs/drain.ts) still sends a plain GET to
+# JOBS_HEARTBEAT_URL (Kuma push shape); the cutover is described in README §8:
+# do not set DRAIN_HEARTBEAT_TOKEN before that wiring, or this endpoint stays
+# permanently red.
 external-endpoints:
   - name: jobs-drain
     group: web-lair

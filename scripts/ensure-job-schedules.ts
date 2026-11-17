@@ -29,7 +29,7 @@ const SCHEDULES = [
 	{ job: 'jobs.prune', cron: '0 3 * * *' },
 	{ job: 'system.resources', cron: '*/15 * * * *' },
 	{ job: 'subscriptions.sweep', cron: '30 4 * * *' },
-	// M2 AI scanners: cheap no-ops when there is no work (pending translation
+	// AI scanners: cheap no-ops when there is no work (pending translation
 	// rows, auto-summary off, or no pending comments).
 	{ job: 'ai.translate', cron: '*/10 * * * *' },
 	{ job: 'ai.summarize', cron: '0 4 * * *' },
@@ -38,12 +38,12 @@ const SCHEDULES = [
 	// prune, so both rows must exist on a fresh install (prune runs after check).
 	{ job: 'links.check', cron: '0 5 * * *' },
 	{ job: 'links.prune', cron: '30 5 * * *' },
-	// M5 content maintenance: revisions keep a per-post cap (cheap, daily);
+	// Content maintenance: revisions keep a per-post cap (cheap, daily);
 	// trash/orphans are registered but seeded separately (single-operator rule:
 	// `trash.purge` gets no schedule by default).
 	{ job: 'revisions.prune', cron: '10 3 * * *' },
 	{ job: 'orphans.purge', cron: '40 3 * * 0' },
-	// M6 P4 mail probe (F-10): 05:10 daily; the job itself decides whether the
+	// Mail probe: 05:10 daily; the job itself decides whether the
 	// site-local Sunday real send is due.
 	{ job: 'mail.probe', cron: '10 5 * * *' }
 ] as const;

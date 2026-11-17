@@ -9,10 +9,10 @@ import { visibleNoteCondition } from './note-visibility';
 import { resolveTaxonomyName } from './taxonomy';
 
 /**
- * Public notes read side (N1). Notes are diary entries: list cards derive
+ * Public notes read side. Notes are diary entries: list cards derive
  * their summary and cover from the body, gated rows only ever expose the
  * title + lock, and the belongs-to date is derived per note (`tz`, falling
- * back to `site.timezone`). Decisions: ledger §13.9 / notes plan §8.
+ * back to `site.timezone`).
  */
 
 /** Belongs-to date: `(published_at at time zone coalesce(tz, $site))::date`. */
@@ -145,7 +145,7 @@ export async function listNotes(query: NotesListQuery): Promise<NotesListResult>
 		) as SQL<unknown>;
 
 	// Facets are independent of the count/cards chain: kick them off first and
-	// await at the end (review finding: four fully serial round trips).
+	// await at the end (four fully serial round trips).
 	const facetsEnabled = query.facets !== false;
 	const yearsPromise: Promise<Awaited<ReturnType<typeof listNoteYears>>> = facetsEnabled
 		? listNoteYears(query.lang, now, siteTz)
@@ -207,8 +207,8 @@ export async function listNotes(query: NotesListQuery): Promise<NotesListResult>
 export async function listNoteYears(lang: string, now: Date, siteTz: string): Promise<number[]> {
 	// `.as('year')` is load-bearing: drizzle emits ` as "name"` only for
 	// SQL.Aliased, and a plain sql field leaves `order by "year"` referencing
-	// a select-list column that does not exist (42703 on real PG - review
-	// round 2; the earlier mock tests could not see the render-level bug).
+	// a select-list column that does not exist (42703 on real PG; the
+	// earlier mock tests could not see the render-level bug).
 	const yearExpr = sql<number>`date_part('year', ${belongsToExpr(siteTz)})::int`.as('year');
 	const rows = await db
 		.selectDistinct({ year: yearExpr })
@@ -217,7 +217,7 @@ export async function listNoteYears(lang: string, now: Date, siteTz: string): Pr
 		// Order by the OUTPUT alias: a SELECT DISTINCT requires ORDER BY
 		// expressions to appear in the select list (hence the `.as('year')`
 		// above), and re-rendering the parameterized expression instead would
-		// bind `$site` twice (review rounds 1-2, real-PG findings).
+		// bind `$site` twice.
 		.orderBy(sql`"year" desc`);
 	return rows.map((row) => row.year);
 }
@@ -302,7 +302,7 @@ export interface NoteDetailRow {
 	 * Body markdown, shipped ONLY for open rows. A password-gated row keeps
 	 * `null` here even before the unlock check, so a forgotten gate cannot
 	 * leak the diary into SSR data - the gate renders the body through
-	 * `getNoteBody` after a verified unlock (review finding).
+	 * `getNoteBody` after a verified unlock.
 	 */
 	content: string | null;
 	lang: string;

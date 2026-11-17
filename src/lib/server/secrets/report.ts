@@ -1,7 +1,7 @@
 import { recordActivity } from '../audit.ts';
 
 /**
- * Secret-failure audit from the call path (W2.5, decisions A1/A2/A3).
+ * Secret-failure audit from the call path.
  *
  * The audit row is the durable record the alert timer reads; the value and the
  * ciphertext never enter the payload. Writes are throttled per
@@ -11,7 +11,7 @@ import { recordActivity } from '../audit.ts';
  *
  * In-process only - multi-replica deployments may write once per replica per
  * minute. That is acceptable for an audit signal; a durable per-minute
- * aggregation belongs to the M6 outbox, not here.
+ * aggregation belongs to a durable outbox, not here.
  */
 export type SecretFailureEvent =
 	| 'ai.key_missing'

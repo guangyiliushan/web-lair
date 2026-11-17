@@ -15,7 +15,7 @@ export type JobResult = Record<string, unknown>;
 export type JobTrigger = 'schedule' | 'manual' | 'event' | 'cli';
 export type JobRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped';
 
-/** Run ledger (jobs line §3.1): one row per execution attempt. */
+/** Run ledger: one row per execution attempt. */
 export const jobRuns = pgTable(
 	'job_runs',
 	{
@@ -36,7 +36,7 @@ export const jobRuns = pgTable(
 	(table) => [
 		index('job_runs_job_started_at_idx').on(table.job, table.startedAt),
 		index('job_runs_status_created_at_idx').on(table.status, table.createdAt),
-		// Partial unique: prevent duplicate queued rows per job (T2).
+		// Partial unique: prevent duplicate queued rows per job.
 		uniqueIndex('job_runs_job_queued_uniq')
 			.on(table.job)
 			.where(sql`${table.status} = 'queued'`),

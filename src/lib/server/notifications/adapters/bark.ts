@@ -7,7 +7,7 @@ import {
 import type { AdapterResult } from './types.ts';
 
 /**
- * Bark push adapter (M6 P5, T5.4; decision register §3E N6/N8).
+ * Bark push adapter.
  *
  * Bark is the phone channel: `POST <server>/push` with a JSON body carrying
  * `device_key`, `title`, `body` and an optional `url`, per the official
@@ -25,10 +25,10 @@ import type { AdapterResult } from './types.ts';
  *  - the payload is re-shaped from the stored jsonb (`format.ts`): <= 120
  *    title / <= 200 body characters, one line, addresses redacted.
  *
- * Credentials: P5 reads `BARK_SERVER_URL` + `BARK_DEVICE_KEY` from the
+ * Credentials: `BARK_SERVER_URL` + `BARK_DEVICE_KEY` come from the
  * environment. An encrypted at-rest store needs a `notification_secrets`
- * table, which the P5 schema window did not approve; that item is registered
- * in `notes/coordination/m6/p5/P5-WAITING.md` (see gate.md) instead of being
+ * table, which was not approved with this migration; that item is
+ * tracked elsewhere instead of being
  * silently widened into this migration.
  *
  * Node-strip-loadable.

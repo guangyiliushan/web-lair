@@ -1,10 +1,10 @@
 // scripts/jobs-enqueue.ts
 //
-// Manual trigger CLI (jobs-line plan §4.4): queues a run and returns
+// Manual trigger CLI : queues a run and returns
 // immediately; the next drain tick (<= 60s with the platform timer) executes
-// it. This is the operator surface for manual runs until the J-3 admin page
+// it. This is the operator surface for manual runs until the admin page
 // lands. It records `trigger='cli'` to tell the two apart in the ledger.
-// Since J-2 the name set is registry ∪ user layer, so user job scripts can be
+// The name set is registry ∪ user layer, so user job scripts can be
 // queued the same way.
 //
 //   pnpm jobs:enqueue <job-name>

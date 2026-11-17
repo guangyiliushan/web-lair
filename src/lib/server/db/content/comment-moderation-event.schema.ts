@@ -13,10 +13,10 @@ import {
 import { comments } from './comment.schema.ts';
 
 /**
- * Comment moderation trail (AI-1, ledger §14.3): one row per rule/AI verdict
- * on a comment. `applied = false` marks shadow-mode decisions (recorded but
- * not enforced); the human axis stays on `comments` alone (§14.4). Rows
- * follow the comment lifecycle via CASCADE.
+ * Comment moderation trail: one row per rule/AI verdict on a comment.
+ * `applied = false` marks shadow-mode decisions (recorded but not enforced);
+ * the human axis stays on `comments` alone. Rows follow the comment
+ * lifecycle via CASCADE.
  */
 export const commentModerationEvents = pgTable(
 	'comment_moderation_events',

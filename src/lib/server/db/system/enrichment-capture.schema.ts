@@ -15,7 +15,7 @@ export interface EnrichmentImagePalette {
 	swatches?: string[];
 }
 
-/** Enrichment capture blobs (storage line §3.5): decoupled from cache, LRU. */
+/** Enrichment capture blobs: decoupled from cache, LRU. */
 export const enrichmentCaptures = pgTable(
 	'enrichment_captures',
 	{

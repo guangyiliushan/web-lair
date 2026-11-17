@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Bootstrap the installer-owned secrets (W2.12 / decision T5-A).
+# Bootstrap the installer-owned secrets.
 #
 # Contract: deploy/secret-inventory.json. This script keeps the same list in
 # bash (a unit test asserts every inventory name appears here). It writes env
@@ -107,7 +107,7 @@ file_has_value() {
 
 # Atomic single-key upsert; creates the file when absent.
 # The value never appears in argv (world-readable via `ps` / /proc): it is staged
-# in a 0600 file and read back by awk (review P1-1).
+# in a 0600 file and read back by awk.
 set_value() {
 	local file=$1 key=$2 value=$3
 	if [ ! -f "$file" ]; then

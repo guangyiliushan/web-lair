@@ -1,9 +1,9 @@
 /**
- * Host resource probe (M6 P4, F-7): multi-mount disk usage + cgroup v2 memory,
+ * Host resource probe: multi-mount disk usage + cgroup v2 memory,
  * threshold evaluation with hysteresis, and the small state file that makes
  * "one alert per metric per day" survive the 15-minute schedule.
  *
- * Why the readings changed (plan §3.7):
+ * Why both mounts and both memory readings are sampled:
  *  - `process.cwd()` in the container is `/app` (the overlay root), while the
  *    data that actually fills the disk lives on `$DATA_DIR` (`/data` in the
  *    production compose). Both mounts are measured now - the root filesystem
@@ -232,7 +232,7 @@ export async function collectResourceSnapshot(
 }
 
 /**
- * The two mounts F-7 cares about. `collectResourceSnapshot` drops the second
+ * The two mounts this probe cares about. `collectResourceSnapshot` drops the second
  * one when both paths live on the same filesystem (device id), so a single
  * volume cannot produce two alerts for one condition.
  */

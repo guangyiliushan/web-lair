@@ -6,7 +6,7 @@ import type { StorageMigrationState } from './provider';
 import { sha256Hex } from './signature';
 
 /**
- * Copy-phase orchestration (W7.4): the heartbeat must read mutable counters
+ * Copy-phase orchestration: the heartbeat must read mutable counters
  * declared OUTSIDE the copy call (reading the call's own result is a
  * temporal-dead-zone error that froze uploads with nothing copied), missing
  * variants must not fail the run, and a missing canonical object must.

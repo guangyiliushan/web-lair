@@ -16,13 +16,12 @@ import { jobLockKey } from '../jobs/registry.ts';
 import { sanitizeErrorText } from '../jobs/error-text.ts';
 
 /**
- * The links check job core (plan §4.5/§4.6; 2026-10-06 rulings): due
- * selection with the derived "self-healing" cadence (outdated runs at 3x the
- * cadence), an 8-minute soft budget per run with batched passes, global
- * concurrency from `friends.checks` with per-host serialisation, one
- * evidence-ring + streak UPDATE per site, and a structured log line per
- * site. Shared by the `links.check` builtin (drain) and
- * `scripts/jobs/check-links.ts` (manual / dry-run).
+ * The links check job core: due selection with the derived "self-healing"
+ * cadence (outdated runs at 3x the cadence), an 8-minute soft budget per run
+ * with batched passes, global concurrency from `friends.checks` with
+ * per-host serialisation, one evidence-ring + streak UPDATE per site, and a
+ * structured log line per site. Shared by the `links.check` builtin (drain)
+ * and `scripts/jobs/check-links.ts` (manual / dry-run).
  *
  * The single-flight lock lives with the callers (`web_lair.job.links.check`,
  * same key the drain job lock derives); this module assumes it is held.
@@ -35,13 +34,13 @@ import { sanitizeErrorText } from '../jobs/error-text.ts';
  */
 export const LINK_LOCK_KEY = jobLockKey('links.check');
 
-/** Plan §4.7 floor: parse at least 500 KiB of robots.txt (cap: 512 KiB). */
+/** Parse cap for robots.txt bodies: 512 KiB. */
 export const ROBOTS_BODY_BYTES = 512 * 1024;
 
-/** Plan §4.5: batch 50 per pass, loop within the budget. */
+/** Batch 50 sites per pass; the run loops within its budget. */
 export const DEFAULT_LIMIT_PER_PASS = 50;
 
-/** Plan §4.5: soft budget per run - never race the 900 s cooperative timeout. */
+/** Soft budget per run: never race the 900 s cooperative timeout. */
 export const DEFAULT_BUDGET_MS = 8 * 60 * 1000;
 
 export type LinkRunDb = Pick<PostgresJsDatabase<Record<string, never>>, 'select' | 'update'>;
@@ -118,7 +117,7 @@ export interface LinkRowSnapshot {
 	backlinkOk: boolean | null;
 	backlinkCheckedAt: Date | null;
 	lastErrorKind: string | null;
-	/** Snapshot of the write water-mark (CAS pin; review round 4). */
+	/** Snapshot of the write water-mark (CAS pin). */
 	lastCheckedAt: Date | null;
 	/** Pinned on write: a machine check must not look like an edit. */
 	updatedAt: Date;
@@ -137,9 +136,9 @@ export interface RowUpdatePlan {
 }
 
 /**
- * Plan §3 state-machine subset for L2 (pure, unit-tested): automatic
- * transitions only - `approved -> outdated` on the fail streak, recovery to
- * `approved` when reachable AND the backlink is present; `robots` and other
+ * State-machine subset for L2 (pure, unit-tested): automatic transitions
+ * only - `approved -> outdated` on the fail streak, recovery to `approved`
+ * when reachable AND the backlink is present; `robots` and other
  * not-counted outcomes move nothing. Ban/prune stay manual/L4.
  */
 export function deriveRowUpdate(
@@ -235,7 +234,7 @@ export function publicOrigin(): string | null {
 /**
  * Accepted backlink hosts = ORIGIN's host (+ extra hosts; normalization
  * strips `www.`, so the www variant folds in automatically). Empty result =
- * the backlink axis is skipped for the whole run (plan §4.5 "ORIGIN is mandatory").
+ * the backlink axis is skipped for the whole run.
  */
 export function deriveAcceptedHosts(origin: string | null, extra: string[]): string[] {
 	const hosts = new Set<string>();
@@ -314,9 +313,8 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 			'[links] backlink axis disabled: ORIGIN is unset and acceptedBacklinkHosts is empty (see plan §4.5)'
 		);
 	} else if (!options.origin) {
-		// Running on extras alone is allowed, but it must be observable
-		// (review finding 2026-10-06 - plan §4.5 requires the missing ORIGIN
-		// to be called out, not silent).
+		// Running on extras alone is allowed, but a missing ORIGIN must be
+		// called out rather than pass silently.
 		options.logger.error(
 			'[links] ORIGIN is unset: backlink acceptance relies on acceptedBacklinkHosts only (plan §4.5)'
 		);
@@ -357,8 +355,8 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 		if (rows.length === 0) return 0;
 		// Rows whose write did not land this run (CAS mismatch or an
 		// internal error) are not re-fetched: the failure is deterministic
-		// or the snapshot is stale - the next run heals (review round 4;
-		// also what bounds the pass loop below).
+		// or the snapshot is stale - the next run heals; that is also what
+		// bounds the pass loop below.
 		const pending = failedIds.size > 0 ? rows.filter((row) => !failedIds.has(row.id)) : rows;
 
 		const hostQueues = new Map<string, Promise<unknown>>();
@@ -377,8 +375,8 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 		// Rows actually STARTED (the deadline gate passed) - the pass
 		// reports this, not the batch size, so a batch that cannot start
 		// anything (deadline hit, or every remaining row already failed
-		// this run) terminates the run instead of spinning (review round 4
-		// - the 6892b25 regression fix).
+		// this run) terminates the run instead of spinning (regression
+		// fixed in 6892b25).
 		let started = 0;
 		const lane = async () => {
 			for (;;) {
@@ -460,7 +458,7 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 				lastErrorKind: plan.lastErrorKind,
 				recentChecks: ringSqlFragment(outcome.entries),
 				// Pinned so a machine check never reads as a human edit
-				// (mirrors the drain's watermark discipline; review round 4).
+				// (mirrors the drain's watermark discipline).
 				updatedAt: row.updatedAt
 			})
 			.where(
@@ -492,8 +490,7 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 		// Passes continue until the batch comes back short/empty OR
 		// nothing could START (deadline hit with rows left, or every
 		// remaining row already failed to persist this run). A full batch
-		// alone must never spin - the lanes report what they started
-		// (review rounds 3-4, 2026-10-06; the 6892b25 regression fix).
+		// alone must never spin - the lanes report what they started.
 		const started = await perPass();
 		if (started === 0) {
 			// Only a FIRST, provably empty pass may claim there was
@@ -512,10 +509,10 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 }
 
 /**
- * Due predicate (plan §4.5): approved rows at 1x cadence, `outdated` at 3x,
+ * Due predicate: approved rows at 1x cadence, `outdated` at 3x,
  * `last_checked_at` nulls always due; exposed for SQL-level teeth (the
  * `::int` casts are load-bearing - PG cannot infer the parameter types
- * through the CASE inside `make_interval`, review fix 1eabcbd).
+ * through the CASE inside `make_interval`).
  */
 export function dueWhereSql(cadenceHours: number) {
 	return sql`${links.status} in ('approved', 'outdated')
@@ -528,8 +525,8 @@ export function dueWhereSql(cadenceHours: number) {
 }
 
 /**
- * Ring append + trim (plan §2.4): merge the run's entries after the existing
- * array (ordinal 100000+ keeps them newest), keep the newest 10, re-emit
+ * Ring append + trim: merge the run's entries after the existing array
+ * (ordinal 100000+ keeps them newest), keep the newest 10, re-emit
  * oldest-first. Exposed for SQL-level teeth.
  */
 export function ringSqlFragment(entries: LinkCheck[]) {

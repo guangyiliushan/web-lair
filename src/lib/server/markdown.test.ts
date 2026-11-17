@@ -4,7 +4,7 @@ import { applyAnchorMarks, collectAnchorBlocks } from './comment-anchor';
 import { renderMarkdownToHtml, renderMarkdownTree, stringifyMarkdownTree } from './markdown';
 
 /**
- * Tree-mode rendering must not become a second pipeline (comment P3b, spec §7).
+ * Tree-mode rendering must not become a second pipeline.
  * Without marks, `run()` + `stringify()` has to produce exactly the bytes the
  * existing `renderMarkdownToHtml` produces — otherwise RSS, the editor preview
  * and the comment read path would drift apart.
@@ -105,7 +105,7 @@ describe('tree-mode rendering (spec §7: same compiler, no second pipeline)', ()
 });
 
 /**
- * Spec §12.6: the cut-and-wrap pass must never change the block text. Runs over
+ * The cut-and-wrap pass must never change the block text. Runs over
  * the whole shared conformance corpus (the same fixtures the markdown pipeline
  * is pinned to), not a couple of hand-written snippets.
  */

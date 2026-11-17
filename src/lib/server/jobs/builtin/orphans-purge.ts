@@ -1,10 +1,10 @@
 import { purgeOrphans, type JobContext } from '#jobs-sdk';
 
 /**
- * orphans.purge (M5): clean file references whose polymorphic target is gone
+ * orphans.purge: clean file references whose polymorphic target is gone
  * (through `syncFileReferences`, so `files.status` stays correct) and delete
- * orphan drafts older than the grace window. `moments` stay out of scope by
- * decision D4 - nothing writes their ref columns yet.
+ * orphan drafts older than the grace window. `moments` stay out of scope -
+ * nothing writes their ref columns yet.
  *
  * Weekly: orphan accumulation is slow and the file-reference sweep is the only
  * part that touches media state.

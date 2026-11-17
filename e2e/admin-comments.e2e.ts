@@ -13,7 +13,7 @@ test.use(zhCnLocale);
  * The localhost origin auto-authenticates as the site owner (see auth.e2e.ts /
  * TAILSCALE_ALLOW_LOOPBACK in the playwright webServer env).
  *
- * P1 note: business ids are uuid now (uuidv7), so the fixtures use fixed
+ * Note: business ids are uuid now (uuidv7), so the fixtures use fixed
  * well-formed uuids instead of the old text ids.
  */
 const CATEGORY = '00000000-0000-7000-8000-000000000010';
@@ -26,7 +26,7 @@ test.describe.configure({ mode: 'serial' });
 test.beforeAll(() => {
 	psql(`delete from comments where id in ('${ACTIVE}', '${EXTRA}')`);
 	// Clean by natural keys as well: posts now carry unique(lang, slug), so a
-	// leftover row with the same slug would collide on insert (P1.1 review).
+	// leftover row with the same slug would collide on insert.
 	psql(`delete from posts where slug = 'e2e-review-post'`);
 	psql(`delete from categories where slug = 'e2e-review-cat'`);
 	psql(

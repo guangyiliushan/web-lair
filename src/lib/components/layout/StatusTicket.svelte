@@ -25,17 +25,17 @@
 >
 	{#if presence.state === 'online'}
 		{#if presence.activity === 'listening'}
-			<span class="flex h-3 shrink-0 items-end gap-[2px]" aria-hidden="true">
+			<span class="flex h-3 shrink-0 items-end gap-0.5" aria-hidden="true">
 				<span
-					class="w-[2px] animate-pulse rounded-full bg-primary motion-reduce:animate-none"
+					class="w-0.5 animate-pulse rounded-full bg-primary motion-reduce:animate-none"
 					style="height: 55%; animation-delay: 0ms"
 				></span>
 				<span
-					class="w-[2px] animate-pulse rounded-full bg-primary motion-reduce:animate-none"
+					class="w-0.5 animate-pulse rounded-full bg-primary motion-reduce:animate-none"
 					style="height: 100%; animation-delay: 160ms"
 				></span>
 				<span
-					class="w-[2px] animate-pulse rounded-full bg-primary motion-reduce:animate-none"
+					class="w-0.5 animate-pulse rounded-full bg-primary motion-reduce:animate-none"
 					style="height: 70%; animation-delay: 320ms"
 				></span>
 			</span>

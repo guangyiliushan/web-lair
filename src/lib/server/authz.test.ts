@@ -8,9 +8,9 @@ import {
 } from './authz';
 
 /**
- * Guard / capability boundary tests for the B2 admin surface (B2.1 review fix,
- * T1 + T6). Everything runs in-process: the request event and the auth API are
- * mocked, no database is involved.
+ * Guard / capability boundary tests for the /admin surface. Everything
+ * runs in-process: the request event and the auth API are mocked, no
+ * database is involved.
  */
 
 const { getRequestEventMock, hasPermissionMock } = vi.hoisted(() => ({

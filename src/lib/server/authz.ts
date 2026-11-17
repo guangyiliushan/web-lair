@@ -28,13 +28,12 @@ export function adminContextFor(user: SessionUser | null | undefined): AdminCont
 }
 
 /**
- * B2 (ledger §4.21): entering the /admin shell needs a site role or any
- * backend capability inside the site organization. Which pages a capability
- * holder without a site role may open is decided per page - see
- * `requireAdminWorkspace`.
+ * Entering the /admin shell needs a site role or any backend capability
+ * inside the site organization. Which pages a capability holder without a
+ * site role may open is decided per page - see `requireAdminWorkspace`.
  *
  * NOTE: this is async - always `await` it. The promise object itself is
- * truthy, so a forgotten await fails open (B2.1 review fix, F5).
+ * truthy, so a forgotten await fails open.
  */
 export async function hasAnyAdminCapability(
 	user: SessionUser | null | undefined
@@ -44,7 +43,7 @@ export async function hasAnyAdminCapability(
 }
 
 /**
- * Per-request memo for capability checks (B2.1 review fix): the layout guard,
+ * Per-request memo for capability checks: the layout guard,
  * the page load and the action all ask the same question, and every
  * `hasPermission` call costs a session lookup + member lookup. Keyed by the
  * request event object, so the map dies with the request.
@@ -74,7 +73,7 @@ async function commentCapability(actions: readonly CommentAction[]): Promise<boo
 		} catch (error) {
 			// Fail closed, but leave the reason in the log: "no session", "not a
 			// member", "no active organization" and plugin errors all land here
-			// and the 403 alone cannot tell them apart (B2.1 review fix).
+			// and the 403 alone cannot tell them apart.
 			console.warn(
 				'[authz] comment permission check failed; denying',
 				key,
@@ -88,8 +87,8 @@ async function commentCapability(actions: readonly CommentAction[]): Promise<boo
 }
 
 /**
- * The single entry point for comment permissions (ledger §4.15): wraps the
- * organization plugin's `hasPermission` endpoint. Fails closed - no session,
+ * The single entry point for comment permissions: it wraps the organization
+ * plugin's `hasPermission` endpoint. Fails closed - no session,
  * not a member, no active organization, or a plugin error all resolve to
  * `false` (with the reason logged).
  */
@@ -113,10 +112,10 @@ export function requireUser() {
 }
 
 /**
- * Guard for the /admin workspace. B2 (ledger §4.21): the shell admits any
- * capability holder, but only onto the pages their capability covers - the
- * comment queue - while every other page stays owner/admin. Page and action
- * guards re-check the specific permission; see `requireCommentReviewer`.
+ * Guard for the /admin workspace: the shell admits any capability holder,
+ * but only onto the pages their capability covers - the comment queue -
+ * while every other page stays owner/admin. Page and action guards re-check
+ * the specific permission; see `requireCommentReviewer`.
  */
 export async function requireAdminWorkspace(): Promise<void> {
 	const { url } = getRequestEvent();
@@ -165,14 +164,14 @@ export async function requireOwnerRole(): Promise<void> {
 }
 
 /**
- * AI use guard (v3 Q8). Today this is owner/admin; the named seam exists so a
+ * AI use guard. Today this is owner/admin; the named seam exists so a
  * per-user `ai.use` grant can replace the role check without touching callers.
  */
 export async function requireAiUse(): Promise<void> {
 	await requireAdminRole();
 }
 
-/** Comment queue guard: `comment: ['review']` capability (B2, ledger §4.15). */
+/** Comment queue guard: `comment: ['review']` capability. */
 export async function requireCommentReviewer() {
 	const { locals, url } = getRequestEvent();
 	if (!locals.session || !locals.user) {

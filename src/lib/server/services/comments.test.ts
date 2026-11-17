@@ -6,13 +6,13 @@ import { COMMENT_MAX_LENGTH } from '$lib/components/comments/types';
 import type { CacheStore } from '$lib/server/cache/store';
 
 /**
- * Service tests for the comment P3a read/write paths (ledger §27): the SQL
- * visibility predicate, the pure thread assembly (placeholder/floor rules,
- * chip resolution, truncation probe) and the submit pipeline (verification
- * gate, throttle + fail-open contract, owner auto-approve, parent
- * validation, snapshot sanitising, FK-race mapping). The db module is mocked
- * with the P2-style recording executor: `where`/`orderBy`/`limit` clauses are
- * captured so guard conditions, ordering and caps have teeth.
+ * Service tests for the comment read/write paths: the SQL visibility
+ * predicate, the pure thread assembly (placeholder/floor rules, chip
+ * resolution, truncation probe) and the submit pipeline (verification gate,
+ * throttle + fail-open contract, owner auto-approve, parent validation,
+ * snapshot sanitising, FK-race mapping). The db module is mocked with a
+ * recording executor: `where`/`orderBy`/`limit` clauses are captured so
+ * guard conditions, ordering and caps have teeth.
  */
 const { dbMock, state } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -32,7 +32,7 @@ const { dbMock, state } = vi.hoisted(() => ({
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
-// W6.1: the service reads the site-wide switch before any target work. The
+// The service reads the site-wide switch before any target work. The
 // options registry is mocked so the recording executor's query queue stays
 // about the comments path itself; tests flip `commentsEnabled` to cover the
 // closed door.
@@ -76,7 +76,7 @@ vi.mock('$lib/server/cache', () => ({
 		throw new Error('tests must pass an explicit cache store');
 	}
 }));
-// M6 P5: the comment insert now rides a transaction that also enqueues the
+// The comment insert rides a transaction that also enqueues the
 // `comment.pending` outbox row. The outbox is mocked so the recording
 // executor's query queues stay about the comment path, and the producer
 // contract itself is asserted here.
@@ -164,7 +164,7 @@ const updateMock = vi.fn((table: unknown) => ({
 		};
 	}
 }));
-// A DISTINCT transaction handle (M6 P5): "the outbox ran inside the comment
+// A DISTINCT transaction handle: "the outbox ran inside the comment
 // transaction" is only a meaningful assertion when the transaction is not the
 // root db handle.
 const txMock = { select: selectMock, insert: insertMock, update: updateMock };
@@ -284,7 +284,7 @@ describe('assembleThreads', () => {
 		const shown = assembleThreads([root], [reply], { showCountry: true });
 		expect(shown.roots[0].country).toBe('US');
 		// Replies never collect a country (no per-reply opt-in), so the view
-		// model must not carry one either (W6 review: dead data path removed).
+		// model must not carry one either; the dead data path was removed.
 		expect(shown.roots[0].replies[0].country).toBeUndefined();
 		// Site switch off: stored country never reaches the view.
 		expect(assembleThreads([root], [reply]).roots[0].country).toBeNull();
@@ -317,7 +317,7 @@ describe('assembleThreads', () => {
 		expect(page.roots[0].isDeleted).toBe(true);
 		expect(page.roots[0].author).toBeNull();
 		expect(page.roots[0].text).toBe('');
-		// The floor keeps the replies too (spec §7).
+		// The floor keeps the replies too.
 		expect(page.roots[0].replies).toHaveLength(1);
 	});
 
@@ -628,9 +628,9 @@ describe('submitComment', () => {
 			reviewedBy: null,
 			reviewedAt: null
 		});
-		// Spec §1 / W6.2: the raw request fields must never be written. The
-		// privacy columns are written as explicit nulls (the insert names them),
-		// which is the same nothing on disk and easier to audit.
+		// The raw request fields must never be written. The privacy columns are
+		// written as explicit nulls (the insert names them), which is the same
+		// nothing on disk and easier to audit.
 		for (const key of ['ip', 'agent', 'location', 'mail', 'url']) {
 			expect(values).not.toHaveProperty(key);
 		}
@@ -792,8 +792,7 @@ describe('submitComment', () => {
 		// The per-IP guard runs first, then the shared per-reader window.
 		expect(incr).toHaveBeenCalledTimes(2);
 		expect(incr).toHaveBeenCalledWith('limits:comment-ip:unknown', 600);
-		// The shared window key (pre-release review 03-P3-1): submit and edit
-		// charge one and the same bucket per reader.
+		// The shared window key: submit and edit charge one and the same bucket per reader.
 		expect(incr).toHaveBeenCalledWith('limits:comment:' + VIEWER, 60);
 		expect(state.inserts).toHaveLength(0); // nothing was written
 	});
@@ -863,7 +862,7 @@ describe('submitComment', () => {
 		// An invisible-only "comment" must not pass the empty gate.
 		expect(await submitComment(input({ text: '\u200b\u200b\u200b' }))).toEqual({ kind: 'empty' });
 		// The gate also catches format chars outside FORMAT_CHARS: a
-		// ZWJ-only payload renders as nothing too (pre-release review 02-F1).
+		// ZWJ-only payload renders as nothing too.
 		expect(await submitComment(input({ text: '\u200d\u200d' }))).toEqual({ kind: 'empty' });
 		expect(await submitComment(input({ text: '\u061c' }))).toEqual({ kind: 'empty' });
 		state.selectQueue = [[{ id: TARGET, allowComment: true }]];
@@ -947,7 +946,7 @@ describe('submitComment', () => {
 		state.failWith = { cause: { code: '23503' } };
 		expect(await submitComment(input())).toEqual({ kind: 'target-unavailable' });
 
-		// A reply's FK loser is the parent row (review P3-5).
+		// A reply's FK loser is the parent row.
 		state.selectQueue = [
 			[{ id: TARGET, allowComment: true }],
 			[{ id: PARENT, postId: TARGET, state: 'approved', isDeleted: false }]
@@ -1210,13 +1209,12 @@ describe('editComment', () => {
 		expect(query.sql).toContain('"comments"."id" = ');
 		expect(query.sql).toContain('"comments"."reader_id" = ');
 		expect(query.sql).toContain('"comments"."is_deleted" = ');
-		// A concurrently rejected row must not be revived (review P2-1).
+		// A concurrently rejected row must not be revived.
 		expect(query.sql).toContain('"comments"."state" in ');
 		expect(query.params).toContain(VIEWER);
-		// The edit set never touches pin - a moderator signal survives
-		// (pre-release review 03-P3-3).
+		// The edit set never touches pin - a moderator signal survives.
 		expect(state.updates[0].values).not.toHaveProperty('pin');
-		// The shared 60s<=2 window key (ruling 5): one bucket per reader.
+		// The shared 60s<=2 window key: one bucket per reader.
 		expect(incr).toHaveBeenCalledWith('limits:comment:' + VIEWER, 60);
 	});
 
@@ -1297,7 +1295,7 @@ describe('editComment', () => {
 		});
 		expect(state.updates).toHaveLength(0);
 
-		// A pending row echoes its own state back (pre-release review 03-P3-4).
+		// A pending row echoes its own state back.
 		state.selectQueue = [[{ ...ROW, text: 'new text', state: 'pending' }]];
 		expect(await editComment(input({ text: 'new text' }))).toEqual({
 			kind: 'updated',
@@ -1368,10 +1366,9 @@ describe('deleteComment', () => {
 		expect(query.sql).toContain('"comments"."id" = ');
 		expect(query.sql).toContain('"comments"."reader_id" = ');
 		expect(query.sql).toContain('"comments"."is_deleted" = ');
-		// Aligned with the edit CAS (review P3-8).
+		// Aligned with the edit CAS.
 		expect(query.sql).toContain('"comments"."state" in ');
-		// The CAS runs on the id from the request itself (pre-release review
-		// 04-F1: the former pre-read is gone).
+		// The CAS runs on the id from the request itself (the former pre-read is gone).
 		expect(query.params).toContain(ROW_ID);
 		expect(query.params).toContain(VIEWER);
 	});
@@ -1395,9 +1392,9 @@ describe('deleteComment', () => {
 	});
 
 	it('fails closed when the row is foreign, missing, deleted or rejected', async () => {
-		// The former pre-read enumerated these cases; the single-statement
-		// CAS renders them one zero-row outcome (pre-release review 04-F1) -
-		// the four WHERE axes are pinned in the soft-delete test above.
+		// The former pre-read enumerated these cases; the single-statement CAS
+		// renders them one zero-row outcome - the four WHERE axes are pinned in
+		// the soft-delete test above.
 		state.updateResults = [[]];
 		expect(
 			await deleteComment({ commentId: ROW_ID, user: { id: VIEWER, emailVerified: true } })

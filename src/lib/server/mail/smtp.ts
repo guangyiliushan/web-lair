@@ -1,5 +1,5 @@
 /**
- * SMTP settings shared by the web transport and the mail probe (M6 P4).
+ * SMTP settings shared by the web transport and the mail probe.
  *
  * The web path reads `$env/dynamic/private` (a SvelteKit virtual module); the
  * drain path runs under plain Node and can only read `process.env`. Both feed

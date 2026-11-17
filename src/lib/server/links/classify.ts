@@ -2,9 +2,9 @@ import type { LinkErrorKind } from '../../utils/link-meta.ts';
 import { redactCredentials } from './normalize.ts';
 
 /**
- * Error / status classification for the link checker (plan §4.3, calibrated
- * against the Node v24 fetch probes recorded in the plan §7.2). Pure
- * functions: callers pass real or synthetic errors, tests pass both.
+ * Error / status classification for the link checker, calibrated against
+ * the Node v24 fetch probes. Pure functions: callers pass real or
+ * synthetic errors, tests pass both.
  */
 const TLS_CODES = new Set([
 	'DEPTH_ZERO_SELF_SIGNED_CERT',
@@ -64,7 +64,7 @@ function stringsOf(error: unknown, key: 'code' | 'name' | 'message'): string[] {
 }
 
 /**
- * Map a fetch-layer failure to the plan §4.3 vocabulary. Precedence mirrors
+ * Map a fetch-layer failure to the checker vocabulary. Precedence mirrors
  * the probe record: timeout > tls > dns > fetch-layer refusal > connect; the
  * AggregateError traversal covers multi-address hosts (v4 + v6).
  */
@@ -104,7 +104,7 @@ export function classifyFetchFailure(error: unknown): FailureClass {
 	};
 }
 
-/** Map a final HTTP status to the plan §4.3 vocabulary. */
+/** Map a final HTTP status to the checker vocabulary. */
 export function classifyHttpStatus(status: number): { ok: boolean; failure: FailureClass | null } {
 	if (status >= 200 && status < 300) return { ok: true, failure: null };
 	if (status === 404 || status === 410) {

@@ -1,7 +1,7 @@
 import decode from 'heic-decode';
 
 /**
- * HEIC/HEIF detection and decoding (ledger §21). sharp's prebuilt libvips
+ * HEIC/HEIF detection and decoding. sharp's prebuilt libvips
  * cannot decode HEVC-coded HEIC (issue #4050), so HEIC goes through the
  * libheif WASM build that ships with `heic-decode` (libheif-js ≥1.22 — the
  * CVE-2026-32740/32739 fix line — pinned as a direct dependency).

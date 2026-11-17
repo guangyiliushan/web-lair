@@ -14,7 +14,7 @@ import {
 } from './storage-credentials';
 
 /**
- * Storage credential store (W7.6): db-first, env fallback only when no row
+ * Storage credential store: db-first, env fallback only when no row
  * exists, terminal failure on a bad envelope, write-only in practice (the
  * plaintext never round-trips through any read helper the UI uses).
  */

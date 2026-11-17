@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
 
 /**
- * micro C3 acceptance: the admin CRUD round trips against the real database
+ * micro-c3 acceptance: the admin CRUD round trips against the real database
  * (quotes / thoughts / moments, including the ?add=1 deep link and the kind
  * badge), the dashboard's five real counters, and the public six routes
  * (lists + uuid details + 404 semantics + the moments kind filter).
@@ -102,7 +102,7 @@ test.describe('micro C3 admin', () => {
 
 	test('moments: the editor route creates a row with a kind chip', async ({ page }) => {
 		// The dashboard write deep link now forwards to the editor route (the
-		// dialog was retired with the Markdown editor, B2a UI P0 / P7).
+		// dialog was retired with the Markdown editor).
 		await page.goto('/admin/moments?add=1');
 		await expect(page).toHaveURL(/\/admin\/moments\/edit/, { timeout: 20_000 });
 

@@ -1,6 +1,6 @@
 // jobs/drain.ts
 //
-// One-shot drain entry (jobs-line plan §2): the platform timer runs
+// One-shot drain entry: the platform timer runs
 //     node --env-file=.env jobs/drain.ts
 // once per minute. One tick = schedule segment -> queued segment -> webhook
 // delivery segment; the process exits after the tick, so every tick picks up
@@ -10,12 +10,12 @@
 //   DATABASE_URL        required - the drain builds its own postgres.js client
 //                       (the app's `$lib/server/db` reads `$env/dynamic/private`
 //                       and cannot load under plain Node).
-//   DATA_DIR            optional - jobs data dir (J-2; default <repo>/data).
+//   DATA_DIR            optional - jobs data dir (default <repo>/data).
 //                       User job scripts and the generated SDK scaffold live
 //                       in `$DATA_DIR/jobs`; the scaffold is refreshed on
 //                       every tick (hash-guarded, a no-op when unchanged).
 //   JOBS_HEARTBEAT_URL  optional - one GET after each tick (Uptime Kuma push
-//                       style; the §25 monitoring line wires the actual probe).
+//                       style; the monitoring setup wires the actual probe).
 //
 // Exit codes: 0 = tick completed (individual job failures are recorded in
 // `job_runs`, not in the exit code); 1 = the tick itself broke (segment
@@ -42,10 +42,10 @@ if (!databaseUrl) {
 
 // A webhook POST through an ambient HTTP proxy is a known-misdiagnosis trap:
 // the proxy answers 502/504 for an unreachable receiver, and the delivery
-// segment would record that as a RECEIVER failure (nine-dimension Q3 / the S4
-// incident; see the jobs-drain runbook §7). We do NOT scrub the environment
-// (an operator may genuinely need an egress proxy) - warn when the proxy trio
-// is ambient without any NO_PROXY coverage.
+// segment would record that as a RECEIVER failure (see the jobs-drain
+// runbook §7). We do NOT scrub the environment (an operator may genuinely
+// need an egress proxy) - warn when the proxy trio is ambient without any
+// NO_PROXY coverage.
 if (
 	process.env.NODE_USE_ENV_PROXY &&
 	(process.env.HTTP_PROXY || process.env.HTTPS_PROXY) &&
@@ -59,7 +59,7 @@ if (
 const client = postgres(databaseUrl, { max: 5, onnotice: () => {} });
 const db = drizzle(client);
 
-// M6 P5: install the outbox sink for P4's `notify()` seam. Without it every
+// Install the outbox sink for the `notify()` seam. Without it every
 // probe alert degrades to a log line; with it, alerts land in
 // `notification_deliveries` and the fourth segment below delivers them.
 // Installed once per process (the entry runs one tick and exits).
@@ -67,7 +67,7 @@ setNotificationSink(createNotificationSink(db));
 
 async function tick(): Promise<DrainSummary> {
 	// Session-level advisory locks must live on ONE connection for the whole
-	// tick (plan §4.3) - reserve a connection instead of racing the pool.
+	// tick - reserve a connection instead of racing the pool.
 	const lockConnection = await client.reserve();
 	const acquireLock = async (job: string) => {
 		const key = jobLockKey(job);
@@ -77,14 +77,14 @@ async function tick(): Promise<DrainSummary> {
 			await lockConnection`select pg_advisory_unlock(hashtext(${key}))`;
 		};
 	};
-	// Keep $DATA_DIR/jobs fresh before loading anything from it (J-2): the
+	// Keep $DATA_DIR/jobs fresh before loading anything from it: the
 	// scaffold is idempotent and self-healing, so a missing or stale data dir
 	// is repaired here instead of failing the tick.
 	const dataDir = resolveDataDir();
 	try {
-		// Scaffold failures degrade instead of killing the tick (J-2 review
-		// F5): builtin schedules and webhook deliveries do not need the user
-		// layer, and any user job that cannot load is recorded per run.
+		// Scaffold failures degrade instead of killing the tick: builtin
+		// schedules and webhook deliveries do not need the user layer, and any
+		// user job that cannot load is recorded per run.
 		try {
 			await ensureJobsScaffold(dataDir);
 		} catch (error) {

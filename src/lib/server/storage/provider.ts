@@ -30,7 +30,7 @@ export const STORAGE_PROVIDER_TYPES = [
 ] as const;
 export type StorageProviderType = (typeof STORAGE_PROVIDER_TYPES)[number];
 
-/** R2 signs with `region=auto` and rejects anything else. */
+/** The `r2` provider signs with `region=auto` and rejects anything else. */
 export const R2_REGION = 'auto';
 export const DEFAULT_S3_REGION = 'us-east-1';
 

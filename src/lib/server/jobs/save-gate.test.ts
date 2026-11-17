@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { checkJobName, runSaveGate } from './save-gate';
 
 /**
- * Save-gate unit teeth (grill R2-1, plan T7 at unit level; the drain-side
+ * Save-gate unit teeth (the drain-side
  * end-to-end probes live in the verify harness). The three plan negatives -
  * enum / bad import specifier shapes / forbidden module - plus the probes
  * that shaped the pipeline: TS carries positions for strip-only rejections,
@@ -129,9 +129,9 @@ describe('canonical name mapping (J-2 review F1)', { timeout: 60_000 }, () => {
 		expect(checkJobName('jobs-prune')).not.toEqual([]);
 		expect(checkJobName('jobs.prune')).toEqual([]);
 		expect(checkJobName('my-task')).toEqual([]);
-		// `new` is reserved by the admin create route (J-3).
+		// `new` is reserved by the admin create route.
 		expect(checkJobName('new')).not.toEqual([]);
-		// The length boundary is inclusive (review round 2, P2-4): 65 fails,
+		// The length boundary is inclusive: 65 fails,
 		// 64 passes - an off-by-one here would silently move the limit.
 		expect(checkJobName('a'.repeat(64))).toEqual([]);
 	});
@@ -234,8 +234,8 @@ describe('dynamic imports and CJS residue (J-2 review F3/F6)', { timeout: 60_000
 			)
 		).toBe(true);
 
-		// Callee position stays flagged for the other residue names (round 3,
-		// P3-1): only `require` is owned by the call arm.
+		// Callee position stays flagged for the other residue names: only
+		// `require` is owned by the call arm.
 		const callShapes = await runSaveGate({
 			name: 'residue-calls2',
 			code: "exports('x');\nexport default { run() {} };\n"

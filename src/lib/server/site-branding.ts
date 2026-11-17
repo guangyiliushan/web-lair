@@ -1,7 +1,7 @@
 import { getOption } from '$lib/server/config/options-registry';
 
 /**
- * Site-wide branding for the root layout and the web manifest (W5.3).
+ * Site-wide branding for the root layout and the web manifest.
  *
  * The root layout renders on every page, including login and the admin shell,
  * so a settings/DB blip must never turn a page into a 500: both reads are

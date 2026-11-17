@@ -1,5 +1,5 @@
 /**
- * Object storage port (ledger §21): the app talks to RustFS only through
+ * Object storage port: the app talks to RustFS only through
  * this narrow interface — PUT/GET/DELETE/HEAD plus one idempotent bucket
  * guard. Presigned URLs are intentionally out of scope for v1; the write
  * path goes through the app proxy.
@@ -37,7 +37,7 @@ export interface GetOptions {
 }
 
 /**
- * Bucket versioning state (W7.5, decisions ST10/Q8/Q16).
+ * Bucket versioning state.
  *
  * `off` covers both an explicitly "never enabled" bucket and a provider whose
  * dialect has no versioning at all (HTTP 501/NotImplemented): in both cases a
@@ -53,7 +53,7 @@ export interface BucketCapabilities {
 }
 
 /**
- * One reading of "what can this bucket do with a DELETE" (W7.5). Every guard —
+ * One reading of "what can this bucket do with a DELETE". Every guard —
  * probe, activation, purge, single-file delete — must reach the same verdict,
  * so the rule lives here once:
  *
@@ -73,7 +73,7 @@ export function assessDeletion(capabilities: BucketCapabilities): DeletionAssess
 }
 
 /**
- * True when the provider is reachable-but-failing or unreachable (W7.5/Q14):
+ * True when the provider is reachable-but-failing or unreachable:
  * the request cannot be served from this provider, and the app must NOT fall
  * back to another one — 503 is the honest answer.
  */
@@ -83,8 +83,7 @@ export function isStorageUnavailable(error: unknown): boolean {
 
 /**
  * The one 503 wire contract for "active provider unavailable" — same status,
- * Retry-After and no-store on every route that serves bytes (W7 review P2: it
- * was written inline twice).
+ * Retry-After and no-store on every route that serves bytes (it was written inline twice).
  */
 export function storageUnavailableResponse(): Response {
 	return new Response(null, {

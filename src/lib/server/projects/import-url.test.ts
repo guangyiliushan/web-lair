@@ -4,7 +4,7 @@ import { ProjectsFetchError, type FetchJson } from './fetch';
 import { extractOpenGraph, resolveImportMetadata } from './import-url';
 
 /**
- * Import prefill (plan §4.4): platform URLs resolve through their adapter;
+ * Import prefill: platform URLs resolve through their adapter;
  * everything else https falls back to a guarded OG scrape; private hosts are
  * refused before any request; failures reuse the sync's five kinds.
  */
@@ -273,8 +273,7 @@ describe('import-url hardening (review 2026-10-08)', () => {
 		});
 		if (!result.ok || result.kind !== 'og') throw new Error('expected og result');
 		expect(result.og.title).toHaveLength(300);
-		// C0 control and LRM both reduce to spaces, then collapse (review
-		// 2026-10-08).
+		// U+0001 and LRM both reduce to spaces, then collapse.
 		expect(result.og.description).toBe('line break');
 		expect(result.og.icon).toBe('https://lair.example/img/pic.png');
 

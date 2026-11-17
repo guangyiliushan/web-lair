@@ -9,7 +9,7 @@ if (!DB_URL) {
 const DRY_RUN = process.argv.includes('--dry-run');
 
 /**
- * Ensures the fallback category (ledger §9.18.5) exists.
+ * Ensures the fallback category exists.
  *
  * `posts.category_id` is NOT NULL with `on delete restrict`, so a category
  * that still owns posts cannot be deleted and there is no "no category" state

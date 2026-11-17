@@ -46,7 +46,7 @@ export interface AgentChatResult {
 const MAX_STEPS = 6;
 const TIMEOUT_MS = 60_000;
 
-/** Read one provider key through the encrypted store when it is wired (W2.4). */
+/** Read one provider key through the encrypted store when it is wired. */
 async function readAgentProviderKey(
 	provider: AiProviderRow,
 	input: {

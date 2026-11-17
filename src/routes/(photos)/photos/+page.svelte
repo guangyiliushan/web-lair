@@ -40,7 +40,7 @@
 {#await data.feed}
 	<div class="grid grid-cols-2 gap-1 px-1 md:grid-cols-4" aria-hidden="true">
 		{#each [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as cell (cell)}
-			<Skeleton class="aspect-[4/3] w-full rounded-none" />
+			<Skeleton class="aspect-4/3 w-full rounded-none" />
 		{/each}
 	</div>
 {:then feed}

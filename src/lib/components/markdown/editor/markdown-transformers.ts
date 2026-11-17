@@ -366,7 +366,7 @@ export const tableTransformer: MultilineElementTransformer = {
 
 		const table = $createTableNode();
 		rawRows.forEach((line, rowIndex) => {
-			if (rowIndex === 1) return; // 分隔行不生成数据行
+			if (rowIndex === 1) return; // the separator row yields no data row
 			const row = $createTableRowNode();
 			for (const text of parseTableRow(line)) {
 				const cell = $createTableCellNode(

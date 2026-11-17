@@ -26,7 +26,7 @@ import {
 } from '../src/lib/server/storage/provider';
 
 /**
- * Provider migration CLI (W7.4, decision Q13).
+ * Provider migration CLI.
  *
  *   pnpm storage:migrate --dry-run   enumerate + HEAD both buckets (default)
  *   pnpm storage:migrate --yes       freeze uploads, copy + verify, persist state
@@ -71,7 +71,7 @@ const db = drizzle(sql, { schema });
 
 /**
  * Credentials come from the encrypted store first, the environment second
- * (W7.6). The local driver needs none, so it never touches the secret table.
+ * The local driver needs none, so it never touches the secret table.
  */
 async function buildStorage(provider: StorageProviderConfig): Promise<S3Storage> {
 	const credentials =
@@ -103,7 +103,7 @@ function activationStore(target: S3Storage): ActivationStore {
 		getProvider: () => getOption('storage.provider', db),
 		getMigration: () => getOption('storage.migration', db),
 		// One transaction: a cutover must never leave the live provider and the
-		// migration row disagreeing (review P2 — partial switch recovery).
+		// migration row disagreeing (partial switch recovery).
 		applyActivation: (active, migration) =>
 			db.transaction(async (tx) => {
 				await setOption('storage.active', active, tx);

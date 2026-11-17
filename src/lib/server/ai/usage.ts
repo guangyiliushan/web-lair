@@ -2,7 +2,7 @@ import { aiUsage } from '../db/ai/ai-usage.schema.ts';
 import type { AiDb, AiUsageRecord } from './types.ts';
 
 /**
- * One row per model call (OTel GenAI naming, ledger §14.3). `provider` /
+ * One row per model call (OTel GenAI naming). `provider` /
  * `model` are snapshots; a later rename must not rewrite history.
  */
 export async function recordAiUsage(db: AiDb, record: AiUsageRecord): Promise<void> {

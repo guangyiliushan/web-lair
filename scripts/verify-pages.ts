@@ -119,7 +119,7 @@ async function main(): Promise<void> {
 			if (row.content_format !== 'markdown') fail(`invalid content_format for ${slug}`);
 			// Placeholder rows are editor working state, not registry entries:
 			// the title may legitimately be empty until the first publish
-			// (W1 ruling). The exemption is bounded (R2-6 review): the
+			// per the ruling. The exemption is bounded: the
 			// placeholder identity REQUIRES content to stay null, the title
 			// gate degrades to a warning, and every other check below still
 			// runs for these rows (no early continue).

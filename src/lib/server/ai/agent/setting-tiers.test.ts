@@ -7,7 +7,7 @@ import {
 } from './setting-tiers';
 
 /**
- * Agent setting tiers (W5.4 / decision §3A.4). The language pair is
+ * Agent setting tiers. The language pair is
  * read-only for the agent because `default_lang ∈ enabled` is a two-key
  * invariant only the Site page's transaction can hold; a single-key proposal
  * would be able to break it.

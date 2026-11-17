@@ -3,10 +3,10 @@ import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { user } from '../auth.schema.ts';
 
 /**
- * Admin-only assistant conversations (reshaped in AI-1, ledger §14.3):
- * session/model/messages moved out - messages are row-level now
- * (ai_agent_messages), closing threads leave a `summary`, and `archived_at`
- * marks manual archives. Owner/managers only; full history retained.
+ * Admin-only assistant conversations: session/model/messages moved out -
+ * messages are row-level now (ai_agent_messages), closing threads leave a
+ * `summary`, and `archived_at` marks manual archives. Owner/managers only;
+ * full history retained.
  */
 export const aiAgentConversations = pgTable(
 	'ai_agent_conversations',

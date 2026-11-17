@@ -1,10 +1,10 @@
 import { pruneRevisions, type JobContext } from '#jobs-sdk';
 
 /**
- * revisions.prune (M5): keep the newest `REVISION_KEEP_PER_POST` publish
- * snapshots per post and delete the rest (ledger §9.3). The cap is a code
- * constant, not a setting: a single-operator blog has no capacity pressure and
- * a configurable value without a UI would be a dead knob.
+ * revisions.prune: keep the newest `REVISION_KEEP_PER_POST` publish
+ * snapshots per post and delete the rest. The cap is a code constant, not a
+ * setting: a single-operator blog has no capacity pressure and a configurable
+ * value without a UI would be a dead knob.
  *
  * The summary carries the three numbers the receipt needs: the cap in force,
  * the candidates found, and what was actually deleted. A second run reports

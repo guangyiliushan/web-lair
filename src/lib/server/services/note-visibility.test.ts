@@ -85,7 +85,7 @@ describe('visibleNoteCondition', () => {
 		const query = new PgDialect().sqlToQuery(visibleNoteCondition(NOW));
 		expect(query.sql).toContain('"notes"."status" in');
 		expect(query.sql).toContain('"notes"."published_at" <=');
-		// Boolean-structure teeth (review finding): flipping the AND to OR
+		// Boolean-structure teeth: flipping the AND to OR
 		// must fail here, not only in the substring checks.
 		expect(query.sql).toContain(' and ');
 		expect(query.sql).not.toContain(' or ');
@@ -95,8 +95,8 @@ describe('visibleNoteCondition', () => {
 
 describe('feedableNoteCondition', () => {
 	it('adds the password gate exclusion on top of visibility', () => {
-		// Teeth: dropping the is-null half would leak gated diary rows into
-		// the RSS feed / sitemap (notes plan §3.3).
+		// Teeth: dropping the is-null half would leak gated diary rows into the
+		// RSS feed / sitemap.
 		const query = new PgDialect().sqlToQuery(feedableNoteCondition(NOW));
 		expect(query.sql).toContain('"notes"."status" in');
 		expect(query.sql).toContain('"notes"."published_at" <=');

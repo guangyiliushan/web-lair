@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { approveQueueRow, bootstrapReader, psql, valkeyAlive, valkeyDel } from './support';
 
 /**
- * Comment P3a acceptance (pages plan T7): guest guidance, submit -> pending,
+ * Comment P3a acceptance: guest guidance, submit -> pending,
  * approved-only reading surface, two-level render, pin/owner badges, owner
  * auto-approve, the throttle window, the queue's post/note target display,
  * the no-JS submit path and keyboard reachability.
@@ -147,7 +147,7 @@ async function guestContext(browser: Browser) {
 	return browser.newContext({ storageState: zhCnLocale.storageState });
 }
 
-/* ── T7 acceptance ──────────────────────────────────────────────────────── */
+/* ── acceptance ──────────────────────────────────────────────────────── */
 
 test('guest: approved only, two-level render, pin/owner badges, login prompt', async ({ page }) => {
 	await page.goto(POST_PATH);

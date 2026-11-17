@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { apiPost, bootstrapReader, psql, valkey } from './support';
 
 /**
- * W1.4 acceptance: forgot password → mailed token → reset → sign in, with
+ * Password-reset acceptance: forgot password → mailed token → reset → sign in, with
  * every pre-reset session revoked. The preview has no SMTP host, so the mail
  * is dev-logged; the token read from `verification` is exactly the one the
  * link carries, and the callback URL below is the one `sendResetPassword`

@@ -2,8 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
 
-/**
- * Projects A acceptance (plan §7 T11-T13): the real admin surface against
+/** Projects A acceptance: the real admin surface against
  * the real database - create (with the write-side URL normalization pinned),
  * the four-value state machine through the bulk bar, transactional reorder
  * (top/up/down) with the public grid staying in order, the edit dialog
@@ -13,8 +12,8 @@ import { psql } from './support';
  * delete cancel + confirm paths and the skipped-count flash.
  * Fixtures share the `e2e-adminproj-` marker (deliberately outside the
  * public spec's `e2e-p%` cleanup net). The spec snapshots the live
- * `projects.sync_targets` option and restores it afterwards (review P1: a
- * bare delete would wipe a real configuration).
+ * `projects.sync_targets` option and restores it afterwards, since a bare
+ * delete would wipe a real configuration.
  */
 
 const FIX = 'e2e-adminproj-';
@@ -108,7 +107,7 @@ test.describe('projects admin', () => {
 		await expect(dialog).toBeHidden({ timeout: 20_000 });
 		await expect(page.getByText('项目已创建。')).toBeVisible({ timeout: 20_000 });
 		expect(statusOf(ROW_C)).toBe('published');
-		// Write-side normalization (§2.8-4): host lowercased, trailing slash
+		// Write-side normalization: host lowercased, trailing slash
 		// dropped - the variant form below must therefore collide.
 		expect(psql(`select project_url from projects where name = '${ROW_C}'`)).toBe(
 			'https://gamma.example'
@@ -152,7 +151,7 @@ test.describe('projects admin', () => {
 		await page.goto('/admin/projects?status=published');
 		await expect(rowByName(page, ROW_A)).toHaveCount(0, { timeout: 20_000 });
 
-		// pending -> published (T11: visible on the public grid).
+		// pending -> published (visible on the public grid).
 		await page.goto('/admin/projects?status=pending');
 		await expect(rowByName(page, ROW_A)).toBeVisible({ timeout: 20_000 });
 		await toggleRow(page, ROW_A);
@@ -242,7 +241,7 @@ test.describe('projects admin', () => {
 		expect(adminOrder[0]).toBeGreaterThanOrEqual(0);
 		expect(adminOrder[1]).toBeGreaterThan(adminOrder[0]);
 
-		// Public grid shows beta before alpha (T12).
+		// Public grid shows beta before alpha.
 		await page.goto('/zh-cn/projects');
 		const publicOrder = await page
 			.locator('[role="listitem"]')
@@ -275,7 +274,7 @@ test.describe('projects admin', () => {
 		await expect(page.getByText('项目已更新。')).toBeVisible({ timeout: 20_000 });
 		expect(psql(`select description from projects where name = '${ROW_A}'`)).toBe('e2e 描述 v2');
 
-		// Duplicate URL on the update path: 400, not a 500 (review P2).
+		// Duplicate URL on the update path: 400, not a 500.
 		await expect(async () => {
 			await row.getByRole('button', { name: '编辑项目' }).click({ timeout: 5000 });
 			await expect(page.getByRole('dialog', { name: '编辑项目' })).toBeVisible({ timeout: 5000 });
@@ -291,7 +290,7 @@ test.describe('projects admin', () => {
 	}) => {
 		await page.goto('/admin/projects');
 
-		// Scenario #1 (§0.1): with no targets the guard steers to the editor.
+		// With no targets the guard steers to the editor.
 		await expect(async () => {
 			await page.getByRole('button', { name: '同步', exact: true }).click({ timeout: 5000 });
 			await expect(page.getByText('请先在「同步目标」中添加至少一个账号')).toBeVisible({
@@ -335,7 +334,7 @@ test.describe('projects admin', () => {
 			await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
 		}).toPass({ timeout: 20_000 });
 		const dialog = page.getByRole('dialog');
-		// The §4.3 removal semantics copy is rendered in the dialog.
+		// The removal semantics copy is rendered in the dialog.
 		await expect(dialog.getByText('移除账号只会停止后续拉取；已入库的行不受影响。')).toBeVisible();
 		await dialog.getByRole('button', { name: '添加账号' }).click({ timeout: 5000 });
 		await dialog.getByLabel('账号').nth(1).fill('e2e-account-2');
@@ -348,7 +347,7 @@ test.describe('projects admin', () => {
 			)
 		).toContain('e2e-account-2');
 
-		// A case-variant of an existing account is refused (review P2).
+		// A case-variant of an existing account is refused.
 		await expect(async () => {
 			await page.getByRole('button', { name: '同步目标' }).click({ timeout: 5000 });
 			await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
@@ -396,8 +395,8 @@ test.describe('projects admin', () => {
 		await expect(page).toHaveURL(/status=published/);
 		await expect(page.getByText('已选', { exact: false })).toHaveCount(0);
 
-		// Cancel inside the bulk-delete confirm must NOT delete (review P1:
-		// a cancel button inside the destructive form used to submit).
+		// Cancel inside the bulk-delete confirm must NOT delete (a cancel
+		// button inside the destructive form used to submit).
 		await toggleRow(page, ROW_A);
 		await toggleRow(page, ROW_B);
 		await page.getByRole('button', { name: '删除', exact: true }).first().click({

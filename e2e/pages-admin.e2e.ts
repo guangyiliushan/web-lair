@@ -4,11 +4,10 @@ import { zhCnLocale } from './locale-fixture';
 
 test.use(zhCnLocale);
 
-/**
- * pages-line acceptance: P2 registry (T6) + P5 md editor draft flow (T10) +
- * route resolution (T11), against the real page and the real database. The
- * localhost origin auto-authenticates as the site owner (same as
- * auth.e2e.ts / TAILSCALE_ALLOW_LOOPBACK in the playwright webServer env).
+/** Pages-line acceptance: the registry, the md editor draft flow and route
+ * resolution, against the real page and the real database. The localhost
+ * origin auto-authenticates as the site owner (same as auth.e2e.ts /
+ * TAILSCALE_ALLOW_LOOPBACK in the playwright webServer env).
  *
  * Fixtures live under `e2e-admin-%`; the editor-created pages additionally
  * carry `E2E Admin` titles (their placeholder slugs are `draft-…` until the
@@ -34,7 +33,7 @@ function cleanup(): void {
 	// Order matters: draft-identity refs first, then the editor-created
 	// placeholder rows (found through the draft payloads while those rows
 	// exist), then the fixture rows themselves. Draft matching is by raw
-	// payload text (R2-7): locale-agnostic, so an env whose default_lang is
+	// payload text: locale-agnostic, so an env whose default_lang is
 	// not `en` cannot leak fixtures behind the `->>'en'` slot.
 	psql(
 		`delete from file_references where ref_type = 'draft' and ref_id in (select id from drafts where ref_type = 'page' and payload::text like '%E2E Admin%')`
@@ -133,8 +132,8 @@ test('the registry lists defaults first, tags the fixtures, and opens the dual-t
 	await expect(row(page, TITLE_A_ZH).getByText('默认')).toHaveCount(0);
 	// The defaults pin outranks sort_order: A sorts at 0 yet stays below.
 	expect(await rowIndex(page, '关于我')).toBeLessThan(await rowIndex(page, TITLE_A_ZH));
-	// 「新增」双类型 (P5-3): the toolbar menu offers the md editor target and
-	// the direct external-entry dialog.
+	// The 「新增」 toolbar entry offers two types: the md editor target and the
+	// direct external-entry dialog.
 	await expect(async () => {
 		await page.getByRole('button', { name: '新建' }).click();
 		await expect(page.getByRole('menuitem', { name: 'md 页面' })).toBeVisible({
@@ -238,7 +237,7 @@ test('the editor publishes a draft with a localized title and blocks reserved sl
 	// Fix the slug, edit the zh-cn title through the locale switcher, then
 	// publish: the draft merges per language and the row lands renamed.
 	await expect(async () => {
-		// Idempotent retry (P5-5 T7): an attempt that already landed must not
+		// Idempotent retry: an attempt that already landed must not
 		// re-run against the post-publish state.
 		if (psql(`select slug from pages where id = '${idA}'`) === SLUG_A2) return;
 		await page.goto(`/admin/pages/edit?id=${idA}`);
@@ -334,7 +333,7 @@ test('creating an md page end-to-end: dual locale, save, publish, render', async
 	}).toPass({ timeout: 30_000 });
 	await typeIntoPageEditor(page, 'e2e-new-body-marker en body');
 
-	// Locale switch contract (W1 Q3): flush the en working copy, remount on
+	// Locale switch contract: flush the en working copy, remount on
 	// the empty zh body, then fill the zh title + body - the mount signal is
 	// the title input swapping from the en value to ''.
 	await expect(async () => {
@@ -366,7 +365,7 @@ test('creating an md page end-to-end: dual locale, save, publish, render', async
 	);
 
 	await expect(async () => {
-		// Idempotent retry (P5-5 T7): treat an already-published row as done.
+		// Idempotent retry: treat an already-published row as done.
 		if (psql(`select slug from pages where id = '${pageId}'`) === NEW_SLUG) return;
 		await page.getByRole('button', { name: '发布' }).click();
 		await page.waitForURL(/published=1/, { timeout: 20_000 });
@@ -428,8 +427,8 @@ test('a never-published placeholder reopens in the draft editor (B1)', async ({ 
 	});
 	await expect(titleInput).toHaveValue('E2E Admin Reload', { timeout: 15_000 });
 	await expect(page.getByRole('button', { name: '发布' })).toBeVisible();
-	// The P2 metadata form must not render for this row: its (unreached)
-	// title field is the structural probe (third review F3) - copy-free, unlike the
+	// The metadata form must not render for this row: its (unreached)
+	// title field is the structural probe - copy-free, unlike the
 	// "保存" button that stays hidden only behind the closed Sheet.
 	await expect(page.locator('input[name="title_en"]')).toHaveCount(0);
 
@@ -446,7 +445,7 @@ test('deleting a fixture row works through the confirmation', async ({ page }) =
 	await expect(rowB).toBeVisible();
 
 	// Give row B a pending draft so the cascade assertion below has teeth
-	// (R2-7: without a draft the same assertion passes vacuously).
+	// (without a draft the same assertion passes vacuously).
 	psql(
 		`insert into drafts (ref_type, ref_id, payload, version) values ('page', '${idB}', '{"title":{"en":"E2E Admin B draft"}}'::jsonb, 1)`
 	);
@@ -465,7 +464,7 @@ test('deleting a fixture row works through the confirmation', async ({ page }) =
 		timeout: 15_000
 	});
 	expect(psql(`select count(*) from pages where slug = '${SLUG_B}'`)).toBe('0');
-	// The cascade leaves no dangling draft rows for the deleted page (M1).
+	// The cascade leaves no dangling draft rows for the deleted page.
 	expect(psql(`select count(*) from drafts where ref_id = '${idB}'`)).toBe('0');
 });
 
@@ -489,7 +488,7 @@ test('T11 · a page row colliding with a code route never shadows it', async ({ 
 	// The row is injected through raw SQL on purpose: the reserved list keeps
 	// `photos` out of reach for every editor path, and the read-side order
 	// (file routes above the dynamic [slug]) is exactly what this pins.
-	// Premise guard (P5-5 T7): never blow away a row that already exists.
+	// Premise guard: never blow away a row that already exists.
 	expect(psql(`select count(*) from pages where slug = 'photos'`)).toBe('0');
 	psql(
 		`insert into pages (slug, title, content, content_format) values ('photos', '{"en":"E2E Admin Collide"}'::jsonb, '{"en":"collision body"}'::jsonb, 'markdown')`

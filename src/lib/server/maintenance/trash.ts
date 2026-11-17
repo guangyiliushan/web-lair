@@ -3,7 +3,7 @@ import type { db as appDb } from '../db/index.ts';
 import { purgePostFamily } from './post-purge.ts';
 
 /**
- * Trash retention (M5 / ledger §9.1): the admin list's trash is the first of
+ * Trash retention: the admin list's trash is the first of
  * the two deliberate delete steps, and the row carries no `trashed_at` column.
  * The age proxy is `updated_at` — the status action writes it, and today no
  * other code path writes a trashed post's row (edits go to `drafts`).
@@ -13,7 +13,7 @@ import { purgePostFamily } from './post-purge.ts';
  * drop a published language, so this sweep deletes a family only when **every**
  * member is in the trash; mixed families are counted and skipped.
  *
- * No schedule by default (single-operator ruling Q5): the service is exposed as
+ * No schedule by default: the service is exposed as
  * a CLI and a manual job. `ensure-job-schedules` deliberately does not seed it.
  */
 export const TRASH_GRACE_DAYS = 30;

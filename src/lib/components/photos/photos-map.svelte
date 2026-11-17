@@ -153,7 +153,7 @@
 		zoom={single ? 10 : 1}
 		{bounds}
 		fitBoundsOptions={{ padding: 64, maxZoom: 12 }}
-		class="h-[70vh] min-h-[320px] w-full overflow-hidden rounded-lg border"
+		class="h-[70vh] min-h-80 w-full overflow-hidden rounded-lg border"
 		autoloadGlobalCss={false}
 		onload={() => {
 			mapReady = true;
@@ -176,7 +176,7 @@
 	</MapLibre>
 {:else}
 	<!-- Same footprint while the probe runs: no layout jump on success. -->
-	<div class="h-[70vh] min-h-[320px] w-full rounded-lg border" aria-hidden="true"></div>
+	<div class="h-[70vh] min-h-80 w-full rounded-lg border" aria-hidden="true"></div>
 {/if}
 
 <style>

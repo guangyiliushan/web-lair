@@ -5,7 +5,7 @@ import { SecretError } from './errors.ts';
 import { KeyringConfigError, keyringFromEnv, type SecretKeyring } from './keyring.ts';
 
 /**
- * Call-time resolver for runtime AI provider keys (W2.4, decision D0-C).
+ * Call-time resolver for runtime AI provider keys.
  *
  * Read order, evaluated on EVERY call (no process cache: a cache would need
  * invalidation, and multi-replica invalidation is where the bugs live):

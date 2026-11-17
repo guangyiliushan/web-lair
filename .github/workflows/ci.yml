@@ -1,6 +1,6 @@
 name: ci
 
-# P1/T1.1 — the merge gate. One job, ordered so every gate sees the SAME
+# The merge gate. One job, ordered so every gate sees the SAME
 # Paraglide artifact the app ships:
 #   install → build → check → lint → unit (server) → unit (client)
 #
@@ -9,7 +9,7 @@ name: ci
 # the per-surface routeStrategies). A bare `paraglide-js compile` cannot express
 # those options, so a CLI-generated tree is a different runtime, not an
 # equivalent one — type-checking it would validate code that never ships
-# (review P1-1; Paraglide docs "Compiling Messages": bundler plugins are the
+# (Paraglide docs "Compiling Messages": bundler plugins are the
 # recommended path, the CLI is for projects without a bundler).
 #
 # Why one job: the four heavy steps share one warm `node_modules`; splitting
@@ -61,7 +61,7 @@ jobs:
         with:
           # Nothing after checkout needs the workflow token as a git credential;
           # keeping it out of `.git/config` shrinks the blast radius of any
-          # compromised install/build script (review P2-3).
+          # compromised install/build script.
           persist-credentials: false
 
       # `version` is omitted on purpose: the action reads `packageManager` from

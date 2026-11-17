@@ -5,7 +5,7 @@ import {
 	planNotificationRetry
 } from './retry';
 
-/** M6 P5 retry schedule (plan §3.2): 1m / 5m / 15m; one send + three retries. */
+/** Retry schedule: 1m / 5m / 15m; one send + three retries. */
 describe('planNotificationRetry', () => {
 	it('uses the documented 1m/5m/15m delays', () => {
 		expect(NOTIFICATION_RETRY_DELAYS_MS).toEqual([60_000, 300_000, 900_000]);

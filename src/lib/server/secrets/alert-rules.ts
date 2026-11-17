@@ -1,11 +1,11 @@
 /**
- * Alert rules for secret failures (W2.5 / decision A3).
+ * Alert rules for secret failures.
  *
  * Pure functions over audit rows so the timer script and the tests agree on
  * what "fires" means. The script (`scripts/secret-alerts.ts`) owns the queries,
  * the dedupe file and the POST to `ALERT_WEBHOOK_URL`.
  *
- * Three rules, exactly as decided:
+ * Three rules:
  *   1. `ai.key_decrypt_failed` - any occurrence in the last 5 minutes.
  *   2. `ai.key_missing` - >= 3 for one provider in 10 minutes AND zero
  *      successful AI calls for that provider in the same window (a provider

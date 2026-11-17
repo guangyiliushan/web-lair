@@ -73,7 +73,7 @@ export async function loadSiteChrome({
 			}
 		},
 		siteOwner: ownerIdentity.owner,
-		/** Single social source (R-1): Hero, nav panel and mobile menu. */
+		/** Single social source: Hero, nav panel and mobile menu. */
 		ownerLinks: ownerIdentity.links,
 		ownerStatus,
 		presence: {

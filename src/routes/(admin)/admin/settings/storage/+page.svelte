@@ -52,8 +52,8 @@
 			deleteMode
 		}) !== savedProvider
 	);
-	// R2 only accepts region "auto"; the hint keeps the form honest before the
-	// server rejects it.
+	// The `r2` provider only accepts region "auto"; the hint keeps the form
+	// honest before the server rejects it.
 	const regionHint = $derived(providerType === 'r2' ? m.admin_settings_storage_ph_auto() : '');
 
 	function resetProvider() {

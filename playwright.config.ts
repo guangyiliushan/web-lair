@@ -50,7 +50,7 @@ export default defineConfig({
 			SUBSCRIBE_TOKEN_SECRET: TEST_SUBSCRIBE_TOKEN_SECRET,
 			SUPPRESSION_HMAC_KEY: TEST_SUPPRESSION_HMAC_KEY,
 			MAIL_EVENTS_HMAC_KEY: TEST_MAIL_EVENTS_HMAC_KEY,
-			// W2: webhook signing secrets are encrypted before insert, so the
+			// Webhook signing secrets are encrypted before insert, so the
 			// preview needs a usable keyring for the create/rotate actions.
 			SECRETS_KEYS: `1:${TEST_SECRETS_KEY}`,
 			SECRETS_KEY_ACTIVE: '1'

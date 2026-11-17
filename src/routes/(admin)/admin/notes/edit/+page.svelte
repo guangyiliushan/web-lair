@@ -849,7 +849,7 @@
 								class="w-full">{lang}</Select.Trigger
 							>
 							<Select.Content
-								class="z-[60]"
+								class="z-60"
 								portalProps={settingsSheetEl ? { to: settingsSheetEl } : undefined}
 							>
 								{#each data.langs as l (l)}
@@ -878,7 +878,7 @@
 								: m.admin_notes_edit_none()}
 						</Select.Trigger>
 						<Select.Content
-							class="z-[60]"
+							class="z-60"
 							portalProps={settingsSheetEl ? { to: settingsSheetEl } : undefined}
 						>
 							<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
@@ -909,7 +909,7 @@
 								: m.admin_notes_edit_none()}
 						</Select.Trigger>
 						<Select.Content
-							class="z-[60]"
+							class="z-60"
 							portalProps={settingsSheetEl ? { to: settingsSheetEl } : undefined}
 						>
 							<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>
@@ -970,7 +970,7 @@
 								: m.admin_notes_edit_none()}
 						</Select.Trigger>
 						<Select.Content
-							class="z-[60]"
+							class="z-60"
 							portalProps={settingsSheetEl ? { to: settingsSheetEl } : undefined}
 						>
 							<Select.Item value={NONE}>{m.admin_notes_edit_none()}</Select.Item>

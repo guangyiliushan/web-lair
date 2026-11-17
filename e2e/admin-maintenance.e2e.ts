@@ -5,7 +5,7 @@ import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
 
 /**
- * J-3 acceptance: the maintenance surface against the real database - list
+ * Acceptance: the maintenance surface against the real database - list
  * render (registry ∪ user layer), the create → editor → delete lifecycle of a
  * user-only job, the save gate's line-numbered rejection, schedule CRUD, the
  * save-and-run enqueue, and the webhook retry button. No drain process runs
@@ -19,7 +19,7 @@ import { psql } from './support';
 const JOB = 'e2e-jobs-task';
 const CRON = '*/30 * * * *';
 const HOOK = 'e2e-jobs-hook';
-// Same resolver contract as the app (J-3 review J3-9): an explicit DATA_DIR
+// Same resolver contract as the app : an explicit DATA_DIR
 // wins (absolute or cwd-relative), otherwise the dev default <repo>/data.
 const DATA_DIR = process.env.DATA_DIR?.trim()
 	? resolve(process.cwd(), process.env.DATA_DIR.trim())
@@ -135,7 +135,7 @@ test.describe('J-3 maintenance (admin)', () => {
 		}).toPass({ timeout: 30_000 });
 		await expect(page.locator('[data-slot="gate-errors"]')).toContainText('1:6');
 		// The rejected save wrote nothing: the file still holds the template
-		// (content, not just existence - J-3 review J3-9).
+		// (content, not just existence).
 		expect(readFileSync(jobFilePath(), 'utf8')).toContain('hello from a new job');
 	});
 
@@ -152,8 +152,8 @@ test.describe('J-3 maintenance (admin)', () => {
 		}).toPass({ timeout: 30_000 });
 		expect(psql(`select count(*) from job_schedules where job = '${JOB}'`)).toBe('1');
 
-		// A duplicate create answers 409 and the flash SHOWS it (J-3 review
-		// R4-1: failures must be visible, not just returned).
+		// A duplicate create answers 409 and the flash SHOWS it (failures
+		// must be visible, not just returned).
 		await expect(async () => {
 			await card.locator('summary', { hasText: '添加调度…' }).click({ timeout: 5000 });
 			await card.getByPlaceholder('0 4 * * *').fill(CRON);
@@ -168,7 +168,7 @@ test.describe('J-3 maintenance (admin)', () => {
 		const row = card.locator('[data-slot="schedule-row"]').filter({ hasText: CRON });
 		await expect(async () => {
 			await row.getByRole('button', { name: '停用' }).click({ timeout: 5000 });
-			// The toggle button flips to 启用 only once is_enabled=false; the
+			// The toggle button flips to the "启用" label only once is_enabled=false; the
 			// badge alone would also match the pre-click button text.
 			await expect(row.getByRole('button', { name: '启用' })).toBeVisible({ timeout: 5000 });
 		}).toPass({ timeout: 30_000 });
@@ -274,7 +274,7 @@ test.describe('J-3 maintenance (admin)', () => {
 		// Fixture: the file exists as server-v1; the editor loads its hash. An
 		// external write moves the file to server-v2 - the editor's save must
 		// 409, freeze (no silent overwrite), and recover only through the
-		// explicit reload (J-3 review F1 activation: with use:enhance the
+		// explicit reload (with use:enhance the
 		// buffer survives the rejected save instead of a page reload adopting
 		// the disk file).
 		mkdirSync(JOBS_DIR, { recursive: true });
@@ -289,7 +289,7 @@ test.describe('J-3 maintenance (admin)', () => {
 		await expect(page.locator('[data-slot="maintenance-flash"]')).toContainText('保存已暂停', {
 			timeout: 10_000
 		});
-		// The freeze disables both save buttons (J-3 review F3).
+		// The freeze disables both save buttons.
 		await expect(page.getByRole('button', { name: '保存', exact: true })).toBeDisabled();
 		// The buffer must NOT adopt the disk file - that retention is the F1
 		// delta versus the old native POST (which reloaded and showed v2).

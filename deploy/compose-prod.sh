@@ -52,7 +52,7 @@ require_suppression_key() {
 	fi
 }
 
-# P0-1 / RUNBOOK §1.1: compose.prod.yaml builds DATABASE_URL from
+# RUNBOOK §1.1: compose.prod.yaml builds DATABASE_URL from
 # ${POSTGRES_PASSWORD} at parse time. A missing or non-URL-safe value produces
 # an unparseable DSN and an opaque auth failure inside the app, so refuse to
 # start instead of shipping the mistake to the container.
@@ -75,7 +75,7 @@ require_postgres_password() {
 	esac
 }
 
-# M6 P2 (T2.1): backrest is part of the production model now. Without its
+# Backrest is part of the production model now. Without its
 # credentials the container comes up healthy and then silently never backs
 # anything up, so refuse the deploy instead of shipping that. `run` is
 # deliberately excluded: the drain timer calls it every minute and must not
@@ -127,7 +127,7 @@ require_backup_env() {
 	fi
 }
 
-# M6 P3: Gatus reads a merged config directory (GATUS_CONFIG_PATH). Only the
+# Gatus reads a merged config directory (GATUS_CONFIG_PATH). Only the
 # optional fragments that CANNOT be expressed by an empty value are rendered
 # (domain: "https://" would be a permanently red endpoint; drain: Gatus
 # rejects an external endpoint without a token). Bark lives in gatus.yaml and
@@ -148,7 +148,7 @@ render_monitoring() {
 	if [ -z "$site_domain" ] && [ -n "$domain" ]; then
 		# Single source: DOMAIN is the deploy-wide value; SITE_DOMAIN only
 		# overrides it. Silently keeping the monitors on an old domain while
-		# the site moved is worse than inheriting (review P1-5).
+		# the site moved is worse than inheriting.
 		site_domain="$domain"
 		echo "[compose-prod] SITE_DOMAIN is unset; inheriting DOMAIN ($domain) for the TLS/domain monitors" >&2
 	elif [ -n "$site_domain" ] && [ -n "$domain" ] && [ "$site_domain" != "$domain" ]; then
@@ -164,7 +164,7 @@ render_monitoring() {
 			echo "[compose-prod] failed to render deploy/monitoring/conf.d" >&2
 			exit 1
 		}
-	# P0: the fragment keeps the literal `${SITE_DOMAIN}` and Gatus expands it
+	# The fragment keeps the literal `${SITE_DOMAIN}` and Gatus expands it
 	# from ITS OWN environment, so the value the renderer just resolved must also
 	# reach compose - otherwise an install that sets only DOMAIN renders the TLS
 	# monitors and then expands them to "https:///", which makes Gatus exit 2 in a
@@ -175,7 +175,7 @@ render_monitoring() {
 	fi
 }
 
-# P6 / T6.1: the Sentinel overlay is part of every production command once it
+# The Sentinel overlay is part of every production command once it
 # exists. Up-like commands need a bearer token: without one Sentinel would
 # crash-loop and the analytics page would silently degrade to "—".
 require_sentinel_token() {
@@ -196,8 +196,8 @@ require_sentinel_token() {
 # KEEP IN SYNC with `deploy/compose-prod.sh config --services`:
 # app db caddy whisper rustfs valkey sentinel gatus backrest kuma.
 # A service missing from this list is read as "whole stack" and inherits the
-# token requirement - the exact failure that shipped with the P6 guard when the
-# list only knew the pre-M6 services.
+# token requirement - so a service added later must join this list too, or its
+# targeted commands demand the analytics token.
 sentinel_guard_needed() {
 	local seen_cmd=0 seen_service=0 arg
 	for arg in "$@"; do
@@ -251,7 +251,7 @@ if [ "$need_render" = 1 ]; then
 	render_monitoring
 fi
 
-# M6 P6: a whole-stack `up` (or an explicit `sentinel`) needs the bearer token,
+# A whole-stack `up` (or an explicit `sentinel`) needs the bearer token,
 # because Sentinel crash-loops without one and analytics degrades silently.
 # Targeted commands (`up app`, `restart caddy`) stay usable on installs that
 # have not enabled analytics yet.
@@ -259,7 +259,7 @@ if sentinel_guard_needed "$@"; then
 	require_sentinel_token
 fi
 
-# Overlay list (M6 P3 monitoring + M6 P6 sentinel). Both are committed, so the
+# Overlay list (monitoring + sentinel). Both are committed, so the
 # `-f` list is stable in practice; the existence checks only keep a partially
 # synced checkout from failing every command.
 COMPOSE_FILES=(

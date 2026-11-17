@@ -11,7 +11,7 @@ export function isAdminRole(value: unknown): value is AdminRole {
 
 /**
  * The site owner. There is exactly one by application-layer convention
- * (ledger §4.14): better-auth's admin plugin has no uniqueness constraint and
+ * because better-auth's admin plugin has no uniqueness constraint and
  * the generated `user` table must not carry a partial unique index.
  */
 export async function findSiteOwner() {

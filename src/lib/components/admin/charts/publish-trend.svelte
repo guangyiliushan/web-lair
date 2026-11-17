@@ -73,12 +73,12 @@
 >
 	<ul class="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
 		<li class="flex items-center gap-1.5">
-			<span class="size-2 shrink-0 rounded-[2px] bg-chart-1" aria-hidden="true"></span>
+			<span class="size-2 shrink-0 rounded-xs bg-chart-1" aria-hidden="true"></span>
 			<span>{m.admin_dashboard_legend_posts()}</span>
 			{#if latest}<span class="font-medium text-foreground">{formatNumber(latest.posts)}</span>{/if}
 		</li>
 		<li class="flex items-center gap-1.5">
-			<span class="size-2 shrink-0 rounded-[2px] bg-chart-2" aria-hidden="true"></span>
+			<span class="size-2 shrink-0 rounded-xs bg-chart-2" aria-hidden="true"></span>
 			<span>{m.admin_dashboard_legend_notes()}</span>
 			{#if latest}<span class="font-medium text-foreground">{formatNumber(latest.notes)}</span>{/if}
 		</li>
@@ -89,7 +89,7 @@
 	     axis costs a tall band under the plot for no gain. A comfortable
 	     tickSpacing sets how many survive; tickOcclusion is the safety net for
 	     a locale whose month names are longer than the spacing allows. -->
-	<ChartContainer {config} class="aspect-auto h-[180px] w-full">
+	<ChartContainer {config} class="aspect-auto h-45 w-full">
 		<LineChart
 			{data}
 			{series}

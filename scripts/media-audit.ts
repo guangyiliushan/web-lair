@@ -5,7 +5,7 @@ import { activeStorage } from './lib/active-storage';
 import { runMediaAudit } from '../src/lib/server/services/files';
 
 /**
- * Read-only media audit (storage line §4.6 three checks, T6): orphans /
+ * Read-only media audit (three checks): orphans /
  * broken links / missing objects. Idempotent — touches nothing. `--strict`
  * exits non-zero when findings exist (for later cron/monitoring wiring).
  *
@@ -23,7 +23,7 @@ const strict = process.argv.includes('--strict');
 
 const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
-// Audit the provider the app actually serves from (W7.5).
+// Audit the provider the app actually serves from.
 const storage = await activeStorage(db);
 
 const report = await runMediaAudit({ db, storage });

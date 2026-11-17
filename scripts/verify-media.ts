@@ -29,7 +29,7 @@ import {
 import { extractMakerNotes } from '../src/lib/server/media/exif-makernotes';
 
 /**
- * One-time media verification (storage line §4.6 / T5 / T6) against the dev
+ * One-time media verification against the dev
  * stack — real Postgres + real RustFS. Constructs the three audit cases
  * (orphan / broken link / missing object), exercises the upload pipeline,
  * dedupe, reference guards and the dry-run contract, then removes every probe
@@ -88,7 +88,7 @@ let raceSql: ReturnType<typeof postgres> | null = null;
 let photoProbe: { id: string; slug: string } | null = null;
 let photoProbeFileId: string | null = null;
 let photoProbeKey: string | null = null;
-/** keyset-precision probes (review round 1): files + photo ids for cleanup. */
+/** keyset-precision probes: files + photo ids for cleanup. */
 const msFiles: Array<{ id: string; key: string }> = [];
 const msPhotoIds: string[] = [];
 let photoProbeTagSlug: string | null = null;
@@ -167,7 +167,7 @@ async function cleanup(): Promise<void> {
 	}
 }
 
-/** Poll a live-database predicate; the T15 probe no longer sleeps blindly. */
+/** Poll a live-database predicate; the probe no longer sleeps blindly. */
 async function pollUntil(
 	predicate: () => Promise<boolean>,
 	timeoutMs: number,
@@ -183,7 +183,7 @@ async function pollUntil(
 }
 
 async function main(): Promise<void> {
-	// -- T5: purge dry-run is read-only --------------------------------------
+	// -- purge dry-run is read-only ------------------------------------------
 	const dryRun = await purgeMedia({ dryRun: true }, deps);
 	check(
 		'purge dry-run deletes nothing',
@@ -244,7 +244,7 @@ async function main(): Promise<void> {
 	check('unreferenced file deletes cleanly', deleted.kind === 'ok');
 	check('objects removed with the row', (await storage.head(uploaded.objectKey)) === null);
 
-	// -- T4 discriminator (review round 1): assert the FK ACTION itself, ------
+	// -- discriminator: assert the FK ACTION itself, --------------------------
 	// not just a 23503 that CASCADE would raise the same way for this
 	// direction; verify-baseline Phase B holds the negative-direction teeth.
 	const [fkRow] = await sql`
@@ -257,7 +257,7 @@ async function main(): Promise<void> {
 		`confdeltype=${fkRow?.confdeltype}`
 	);
 
-	// -- T15 race (ST-2): deleteFile serializes with a live reference INSERT --
+	// -- race: deleteFile serializes with a live reference INSERT -------------
 	const [raceRow] = await db
 		.insert(schema.files)
 		.values({
@@ -278,8 +278,8 @@ async function main(): Promise<void> {
 		.begin(async (tx) => {
 			await tx`insert into file_references (file_id, ref_type, ref_id) values (${raceRow.id}, 'post', ${raceRefId})`;
 			// Session marker so the probe can WAIT for the insert to actually
-			// land (review round 1: a fixed 150ms sleep could fire too early
-			// under load and pass a race it never exercised).
+			// land: a fixed 150ms sleep could fire too early under load and
+			// pass a race it never exercised.
 			await tx.unsafe("set application_name = 'wm-verify-blocker'");
 			await blockerHold;
 		})
@@ -337,7 +337,7 @@ async function main(): Promise<void> {
 	}
 	check('T15 a late reference INSERT fails 23503 (row gone)', lateInsertFailed);
 
-	// -- photos gallery (ST-2/T15): create -> rename+tracker -> guarded -> remove
+	// -- photos gallery : create -> rename+tracker -> guarded -> remove
 	const photoPng = await sharp({
 		create: { width: 8, height: 6, channels: 3, background: { r: 10, g: 20, b: 30 } }
 	})
@@ -400,7 +400,7 @@ async function main(): Promise<void> {
 	check('file deletes after the photo is removed', afterRemoval.kind === 'ok');
 
 	// -- maker-notes three-brand probes (multi-brand batch, 2026-10-10) -------
-	// Official exiftool test images + the live X-T5 sample live in the
+	// Official exiftool test images + a live camera sample live in the
 	// repo-external evidence dir (licence-clean); a missing sample SKIPS its
 	// probe explicitly instead of failing the run.
 	const evidenceDir =
@@ -483,7 +483,7 @@ async function main(): Promise<void> {
 		);
 	}
 
-	// -- keyset precision (review round 1): rows sharing one millisecond ------
+	// -- keyset precision: rows sharing one millisecond -----------------------
 	// (µs-differing values) must survive BOTH pagination and neighbour lookup;
 	// the old ms round-trip of the sort key could silently skip them.
 	const msCreate = async (suffix: string, takenAt: string, blue: number) => {
@@ -598,7 +598,7 @@ async function main(): Promise<void> {
 		(await probeRowCount([orphanKey, missingKey])) === 2
 	);
 
-	// -- §6.1 "orphan" filter (admin list view) ------------------------------
+	// -- "orphan" filter (admin list view) -----------------------------------
 	const orphanView = await listFiles({ orphan: true }, deps);
 	check(
 		'listFiles({ orphan }) surfaces the constructed orphan',
@@ -609,7 +609,7 @@ async function main(): Promise<void> {
 		!orphanView.some((row) => row.objectKey === missingKey)
 	);
 
-	// -- §4.6/§6.1 photos exemption (query-layer guard) ----------------------
+	// -- photos exemption (query-layer guard) --------------------------------
 	await db.insert(schema.files).values({
 		objectKey: galleryKey,
 		contentHash: galleryHash,
@@ -637,7 +637,7 @@ async function main(): Promise<void> {
 	);
 	check('purge dry-run never touches objects', (await storage.head(orphanKey)) !== null);
 
-	// -- purge mention guard (§11 hold: refs backfill lands with ST-3) -------
+	// -- purge mention guard (hold: pending the refs backfill) ---------------
 	await storage.put(guardKey, Buffer.from('guard-probe'), { contentType: 'image/jpeg' });
 	await db.insert(schema.files).values({
 		objectKey: guardKey,
@@ -670,7 +670,7 @@ async function main(): Promise<void> {
 			(await storage.head(variantKeyFor(orphanKey, 'thumb'))) === null
 	);
 
-	// -- §8 map service probe (T12): Range semantics through the adapter ----
+	// -- map service probe: Range semantics through the adapter -------------
 	// Pins the behaviours the /maps route forwards: 200 full, 206 + exact
 	// Content-Range on a ranged read, 416 (as StorageError) past the end.
 	const mapProbeKey = `maps/verify-range-${stamp}.bin`;

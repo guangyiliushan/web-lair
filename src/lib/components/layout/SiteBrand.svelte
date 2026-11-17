@@ -31,12 +31,12 @@
 		</Avatar.Root>
 		<span
 			data-slot="site-brand-name"
-			class="hidden max-w-[7.5rem] truncate text-[17px] font-bold tracking-tight @min-[20rem]:inline-block"
+			class="hidden max-w-30 truncate text-[17px] font-bold tracking-tight @min-[20rem]:inline-block"
 		>
 			{visibleName}
 		</span>
 	</a>
-	<!-- D4/R-4: without live presence the ticket must not render at all. -->
+	<!-- Without live presence the ticket must not render at all. -->
 	{#if presence.state !== 'unknown'}
 		<OwnerStatusHoverCard ownerName={owner.name} {presence} />
 	{/if}

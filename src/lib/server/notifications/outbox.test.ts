@@ -4,7 +4,7 @@ import type { NotificationOutboxDb } from './outbox';
 import type { NotificationPreferences } from './preferences';
 
 /**
- * Outbox teeth (M6 P5, T5.2): the unique key makes a replayed producer a
+ * Outbox teeth: the unique key makes a replayed producer a
  * no-op, the hourly windows turn a flood into at most N rows plus log lines,
  * a disabled group stores nothing, and NO failure escapes to the caller -
  * the comment transaction (and the drain tick) must survive a broken outbox.
@@ -349,7 +349,7 @@ describe('createNotificationSink', () => {
 
 	it('throws when the hourly window suppresses the alert (suppressed is not delivered)', async () => {
 		// A full global window: the probe must see a failure, keep retrying and
-		// NOT drop its daily latch (review P1-2). Returning "delivered" here would
+		// NOT drop its daily latch. Returning "delivered" here would
 		// silence the alert for the rest of the day.
 		const now = new Date('2026-11-16T10:00:00.000Z');
 		const rows: FakeRow[] = Array.from({ length: 30 }, (_, index) => ({

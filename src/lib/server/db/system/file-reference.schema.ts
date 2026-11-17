@@ -2,12 +2,12 @@ import { sql } from 'drizzle-orm';
 import { check, index, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { files } from '../content/file.schema.ts';
 
-/** ref_type whitelist; `'draft'` is part of the single baseline's CHECK (regenerated, ST-3 3b2). */
+/** ref_type whitelist; `'draft'` is part of the single baseline's CHECK. */
 export const FILE_REF_TYPES = ['post', 'note', 'page', 'comment', 'draft'] as const;
 
 export type FileRefType = (typeof FILE_REF_TYPES)[number];
 
-/** Pure junction table (storage line §3.2): file ↔ content references. */
+/** Pure junction table: file ↔ content references. */
 export const fileReferences = pgTable(
 	'file_references',
 	{

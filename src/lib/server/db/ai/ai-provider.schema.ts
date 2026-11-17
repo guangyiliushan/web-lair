@@ -12,11 +12,11 @@ import {
 import type { AiModelEntry } from '../../../utils/ai-meta.ts';
 
 /**
- * AI provider metadata (AI-1, ledger §14.3). `api_key_env` stores the NAME
- * of the environment variable holding the key - secrets never enter the DB.
- * The row's `models` list feeds the AI-2 provider settings; runtime calls
+ * AI provider metadata. `api_key_env` stores the NAME of the environment
+ * variable holding the key - secrets never enter the DB.
+ * The row's `models` list feeds the provider settings; runtime calls
  * snapshot provider/model strings into `ai_usage`. Each entry carries its own
- * `enabled` flag and discovery timestamp (AI-v3 Q6); cost stays in `ai.pricing`.
+ * `enabled` flag and discovery timestamp; cost stays in `ai.pricing`.
  */
 export const aiProviders = pgTable(
 	'ai_providers',

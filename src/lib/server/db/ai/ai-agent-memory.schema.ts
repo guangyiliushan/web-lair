@@ -2,9 +2,8 @@ import { sql } from 'drizzle-orm';
 import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 /**
- * Long-term memory cards (AI-1, ledger §14.3): owner-editable notes the
- * assistant carries across conversations; capped at 50 rows (application
- * rule, AI-2).
+ * Long-term memory cards: owner-editable notes the assistant carries across
+ * conversations; capped at 50 rows (application rule).
  */
 export const aiAgentMemories = pgTable('ai_agent_memories', {
 	id: uuid('id')

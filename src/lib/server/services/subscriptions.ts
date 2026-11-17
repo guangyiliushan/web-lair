@@ -16,7 +16,7 @@ export { isSubscriptionToken } from './subscription-token';
 export { normalizeEmail } from './email-normalize';
 
 /**
- * Double opt-in subscriptions (deploy batch D-2; schema from ledger §26).
+ * Double opt-in subscriptions.
  *
  * State machine: pending → subscribed → unsubscribed. Resubmitting the form
  * for an already-subscribed address is a **no-op** — otherwise anyone could
@@ -25,14 +25,14 @@ export { normalizeEmail } from './email-normalize';
  * unsubscribe link keeps working (it is not a single-use nonce).
  *
  * No IP/UA is stored (schema and privacy line). Pending rows whose link has
- * been dead for 30 days are removed by the `subscriptions.sweep` job (E1-2).
+ * been dead for 30 days are removed by the `subscriptions.sweep` job.
  */
 
 export type SubscriptionLang = 'en' | 'zh-cn' | 'ja';
 export type SubscriptionStatus = 'pending' | 'subscribed' | 'unsubscribed';
 
 /**
- * Version of the consent text shown on the public form (E2-2). Bump when the
+ * Version of the consent text shown on the public form. Bump when the
  * wording or the purposes change; rows keep the version they were collected
  * under so an export can answer "which text did this reader agree to".
  */
@@ -42,8 +42,8 @@ export const CONSENT_VERSION = '2026-10-v1';
 const RESEND_COOLDOWN_MS = 15 * 60 * 1000;
 /**
  * Confirmation-link lifetime (OWASP: single-purpose tokens must expire). The
- * 24h default borrows NIST SP 800-63B-4 §4.2.1.2's bound for emailed recovery
- * codes (that section governs account recovery, not list subscriptions).
+ * 24h default borrows the NIST SP 800-63B-4 bound for emailed recovery codes
+ * (that standard governs account recovery, not list subscriptions).
  * Default 24h; `SUBSCRIBE_TOKEN_TTL_DAYS` may raise it to at most 72h and any
  * larger value is clamped with a warning. `updated_at` is the current token's
  * issue time because every rotation writes the row; a resend therefore starts
@@ -86,7 +86,7 @@ export function subscribeAddressKey(email: string): string | null {
 }
 
 /**
- * Token derivation secret (F-13). Required in every non-dev boot: without it no
+ * Token derivation secret. Required in every non-dev boot: without it no
  * confirmation link can be minted, and silently falling back to a random token
  * that the service cannot re-derive would resurrect the plaintext column's job.
  * Mirrors `assertSuppressionKey` (see `hooks.server.ts`).
@@ -149,7 +149,7 @@ export async function requestSubscription(input: {
 }): Promise<RequestSubscriptionResult> {
 	// Hard bounces and complaints block every send, including a fresh form
 	// submission: the address is not deliverable or the recipient reported it.
-	// A soft `unsubscribed` record does NOT block a self-submitted form (D-1);
+	// A soft `unsubscribed` record does NOT block a self-submitted form;
 	// the confirmation step is the new consent, and a successful confirm lifts
 	// the soft suppression (bulk senders must still filter the table).
 	const suppression = await suppressionReason(input.email);
@@ -269,7 +269,7 @@ export async function subscriptionByToken(token: string): Promise<SubscriptionLo
 		return null;
 	}
 	const tokenHash = hashSubscriptionToken(token);
-	// Hash-only lookup (F-13): the plaintext column is gone, and the derived
+	// Hash-only lookup: the plaintext column is gone, and the derived
 	// token means every live link has a hash row. No legacy fallback remains.
 	const [row] = await db
 		.select()
@@ -306,7 +306,7 @@ export async function confirmSubscription(token: string): Promise<ConfirmResult>
 	// status predicate miss (so we never delete a fresh opt-out).
 	// Deliberately no suppression check here: the form already blocks hard
 	// bounces/complaints, and a late pending link may still confirm. Bulk senders
-	// must filter email_suppressions; see F-17 in deploy-followups.
+	// must filter email_suppressions.
 	const cutoff = new Date(Date.now() - subscriptionTokenTtlMs(env.SUBSCRIBE_TOKEN_TTL_DAYS));
 	const tokenHash = hashSubscriptionToken(token);
 	const confirmed = await db.transaction(async (tx) => {
@@ -344,7 +344,7 @@ export async function unsubscribe(
 	// verified_at on non-pending rows), so an opt-out from a never-confirmed
 	// address deletes the row. The delete/update and the suppression write are
 	// one transaction: an opt-out that is not remembered is a compliance bug.
-	// The credential predicate is the token hash alone (F-13: the retained
+	// The credential predicate is the token hash alone (the retained
 	// plaintext column is gone), and stays status-guarded so a concurrent
 	// confirm wins.
 	const tokenHash = hashSubscriptionToken(token);

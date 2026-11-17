@@ -387,7 +387,7 @@
 						<dl class="grid gap-x-6 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-2">
 							<div class="flex gap-1">
 								<dt>{m.admin_settings_account_session_ip()}:</dt>
-								<dd class="min-w-0 break-words">
+								<dd class="min-w-0 wrap-break-word">
 									{session.ipAddress ?? m.admin_settings_account_session_unknown()}
 								</dd>
 							</div>

@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { psql, valkey, valkeyAlive, valkeyDel } from './support';
 
 /**
- * Realtime presence acceptance (platform plan §B; realtime batch R4): the
+ * Realtime presence acceptance: the
  * heartbeat -> window -> SSE chain on a fixture post — the stream header
  * contract, the window-vs-cardinality probe over a live ghost member (no
  * page-mount interference: a load-bearing rewrite after the review found
@@ -15,7 +15,7 @@ import { psql, valkey, valkeyAlive, valkeyDel } from './support';
  * production preview and the live Valkey.
  *
  * Isolation (review note): every assertion reads the fixture CONTENT key,
- * which only this spec writes — parallel workers cannot pollute it (R-2);
+ * which only this spec writes — parallel workers cannot pollute it;
  * `-w1` is the house gate convention, not a requirement of this file. The
  * only shared-key write is the best-effort site-key DEL in teardown.
  */

@@ -10,7 +10,7 @@ const CONFIG = storageConfigFromEnv({
 	RUSTFS_BUCKET: 'web-lair'
 });
 
-/** Virtual-host configuration (AWS S3 / R2): bucket in the hostname. */
+/** Virtual-host configuration (AWS S3 / `r2`): bucket in the hostname. */
 const VHOST_CONFIG: S3StorageConfig = {
 	...CONFIG,
 	endpoint: 'https://s3.us-east-1.amazonaws.com',

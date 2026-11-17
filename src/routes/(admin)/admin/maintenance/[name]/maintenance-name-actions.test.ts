@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the /admin/maintenance/[name] actions (J-3): guard
+ * Route-level tests for the /admin/maintenance/[name] actions: guard
  * first, the `baseHash` form-field contract (`''` = null = first save, which
  * forks a builtin), the 409 conflict passthrough with the fresh server hash,
  * save-and-run queuing through the re-resolved definition, and the lifecycle
  * actions (revert / delete redirect / ignore update). Services are mocked
- * wholesale; the editor itself is covered by its own browser spec (J-2).
+ * wholesale; the editor itself is covered by its own browser spec.
  */
 
 const { mocks, state } = vi.hoisted(() => {

@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { expectNoCriticalAxe, psql } from './support';
 
 /**
- * W4 acceptance arc on the isolated `local_e2e` database only. The spec
+ * Acceptance arc on the isolated `local_e2e` database only. The spec
  * refuses to run against any other database because it writes the owner
  * profile/home hero/content language and therefore must never touch `dev`.
  *
@@ -47,7 +47,7 @@ function resetOwner(displayName = 'guangyiliushan'): void {
 test.beforeAll(() => {
 	assertLocalE2e();
 	const id = ownerId();
-	// The W3/W0 scratch DB can carry the owner user without the pointer row.
+	// The scratch DB can carry the owner user without the pointer row.
 	// Profile editing needs the pointer (owner-only guard), so seed it here.
 	if (!psql('select owner_user_id from site_identity where id = 1')) {
 		psql(`insert into site_identity (id, owner_user_id) values (1, '${id}')`);
@@ -206,7 +206,7 @@ test('header_label enforces 1-6 graphemes and the empty fallback', async ({ page
 	).toBe(String([...sixEmoji].length));
 
 	// Clear => empty is stored as NULL and the header falls back to the full
-	// name (Q6).
+	// name.
 	await page.getByRole('button', { name: 'Clear', exact: true }).click();
 	await saveSection(page, 'Public identity', 'Profile saved.');
 	await page.reload();

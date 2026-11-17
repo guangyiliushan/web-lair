@@ -15,8 +15,7 @@ import { FILE_REF_TYPES } from '../system/file-reference.schema.ts';
 import { MOMENT_KINDS } from '$lib/utils/moment-meta';
 
 // Guards the reviewed "enum dual-source" risk: the TS constants consumed by
-// services and the literals baked into the single baseline must not drift
-// (the ST-3 3b2 widening was folded into the regenerated baseline).
+// services and the literals baked into the single baseline must not drift.
 const BASELINE = readFileSync('drizzle/0000_baseline.sql', 'utf8');
 
 function checkLiterals(constraint: string): string[] {

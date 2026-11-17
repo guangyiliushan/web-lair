@@ -11,13 +11,13 @@ import { drafts, pages } from '$lib/server/db/content';
 import type { PageDraftPayload } from '$lib/server/db/content';
 
 /**
- * Service-level tests for the pages draft flow (pages line P5-1; ledger
- * §19.10): autosave semantics (hash / throttle / optimistic lock), the
- * publish transaction (pages+drafts row locks, the conditional first-publish
- * status flip, draft removal - and the W1 divergence of NO slug tracker) and
- * the discard contract (placeholder removal by `content is null`). The db
- * module is mocked with the same executor recorder as note-drafts.test.ts -
- * removing a lock / transaction / condition turns the suite red.
+ * Service-level tests for the pages draft flow: autosave semantics
+ * (hash / throttle / optimistic lock), the publish transaction (pages+drafts
+ * row locks, the conditional first-publish status flip, draft removal - and
+ * pages write NO slug tracker, unlike posts) and the discard contract
+ * (placeholder removal by `content is null`). The db module is mocked with
+ * the same executor recorder as note-drafts.test.ts - removing a lock /
+ * transaction / condition turns the suite red.
  */
 const { dbMock, state, syncMock } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -43,7 +43,7 @@ vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 // The reference diff runs in the content transaction; its own teeth live in
 // file-references.test.ts. Here we pin WHERE it is called from and with which
-// target/keys (plus the Q6 no-op autosave short-circuit).
+// target/keys (plus the no-op autosave short-circuit).
 vi.mock('./file-references', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('./file-references')>();
 	return { ...actual, syncFileReferences: syncMock };
@@ -191,7 +191,7 @@ describe('page draft flow', () => {
 			transaction: vi.fn(async (callback: (tx: unknown) => unknown) => {
 				state.transactions += 1;
 				// Store the executor so tests can pin that sync ran on the
-				// TRANSACTION, not the bare db (Q15's strongest contract).
+				// TRANSACTION, not the bare db.
 				state.txExecutors = makeExecutors();
 				return callback(state.txExecutors);
 			})
@@ -259,7 +259,7 @@ describe('page draft flow', () => {
 		});
 		expect(result).toMatchObject({ kind: 'unchanged', version: 3, pageId: PAGE_ID });
 		expect(state.updates).toHaveLength(0);
-		// Q6 short-circuit: identical payloads never reach the reference scan.
+		// Short-circuit: identical payloads never reach the reference scan.
 		expect(syncMock).not.toHaveBeenCalled();
 	});
 
@@ -477,7 +477,7 @@ describe('page draft flow', () => {
 			status: 'visible'
 		});
 		expect(state.deletes.some((entry) => entry.table === drafts)).toBe(true);
-		// W1 divergence 4: pages write no slug tracker - zero inserts at all.
+		// Pages write no slug tracker - zero inserts at all.
 		expect(state.inserts).toHaveLength(0);
 		expect(syncMock).toHaveBeenCalledTimes(2);
 		expect(syncMock).toHaveBeenNthCalledWith(1, state.txExecutors, { type: 'page', id: PAGE_ID }, [
@@ -512,7 +512,7 @@ describe('page draft flow', () => {
 		expect(result).toMatchObject({ kind: 'published', pageId: PAGE_ID });
 		const pageUpdate = state.updates.find((entry) => entry.table === pages);
 		expect(pageUpdate?.values.slug).toBe('live-slug');
-		// No status key at all: the ruling preserves whatever the row carries
+		// No status key at all: publish preserves whatever the row carries
 		// (visible or deliberately hidden).
 		expect(pageUpdate?.values.status).toBeUndefined();
 	});
@@ -719,7 +719,7 @@ describe('page draft flow', () => {
 		expect(selectSpy).not.toHaveBeenCalled();
 	});
 
-	/* ── P5-5a review teeth (T1-T5 + M1/M3) ─────────────────────────────── */
+	/* ── Review teeth: each test below pins one contract ─────────────────── */
 
 	it('answers a null-draftId conflict when the draft row vanished (T1)', async () => {
 		state.selectQueue = [[]];
@@ -744,8 +744,8 @@ describe('page draft flow', () => {
 			autosave: false
 		});
 		expect(result).toEqual({ kind: 'not-found' });
-		// The not-found precedes any write (R2-7: the belt is pre-write by
-		// construction, pinned here instead of resting on the harness default).
+		// The not-found precedes any write: the belt is pre-write by
+		// construction, pinned here instead of resting on the harness default.
 		expect(state.updates).toHaveLength(0);
 	});
 
@@ -759,8 +759,8 @@ describe('page draft flow', () => {
 		});
 		expect(result).toEqual({ kind: 'not-found' });
 		expect(state.inserts).toHaveLength(0);
-		// The attach tx locks the page row FIRST (R2-2; third review F1): dropping
-		// the .for('update') must fail the suite.
+		// The attach tx locks the page row FIRST: dropping the .for('update')
+		// must fail the suite.
 		expect(state.forCalls).toEqual(['update']);
 	});
 
@@ -877,8 +877,8 @@ describe('page draft flow', () => {
 		];
 		const result = await publishPageDraft(DRAFT_ID);
 		expect(result.kind).toBe('invalid');
-		// The exact catalog copy, pinned (T10 review): the message flows
-		// from the shared slug gate and must not drift silently.
+		// The exact catalog copy, pinned: the message flows from the shared
+		// slug gate and must not drift silently.
 		if (result.kind === 'invalid')
 			expect(result.errors.slug).toBe(m.admin_editor_err_slug_invalid());
 	});
@@ -890,7 +890,7 @@ describe('page draft flow', () => {
 		];
 		const result = await publishPageDraft(DRAFT_ID);
 		expect(result).toEqual({ kind: 'not-found' });
-		// The guard must short-circuit BEFORE the transaction (third review G1): a
+		// The guard must short-circuit BEFORE the transaction: a
 		// mutation dropping it would otherwise reach the tx and answer the
 		// same not-found from the locked-row check, silently.
 		expect(state.forCalls).toHaveLength(0);

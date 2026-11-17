@@ -41,7 +41,7 @@
 		auth?: AuthData;
 		/** Public owner identity — identical for every visitor, never the session. */
 		owner: SiteOwner;
-		/** `user_profiles.links` — the single social rail source (R-1). */
+		/** `user_profiles.links` — the single social rail source. */
 		ownerLinks?: readonly SocialLinkLike[] | null;
 		ownerStatus: OwnerStatus;
 		/**

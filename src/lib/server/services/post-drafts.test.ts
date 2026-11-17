@@ -9,14 +9,13 @@ import { drafts, postRevisions, postTags, posts, tags } from '$lib/server/db/con
 import { slugTrackers } from '$lib/server/db/system';
 
 /**
- * Service-level tests for the P2 draft flow (ledger §9.10 / §9.14.2-3):
- * autosave semantics (hash / throttle / optimistic lock), the publish
- * transaction (posts+drafts row locks, revision + slug tracker + tags + draft
- * removal, base check) and discard/createTranslation. The db module is mocked
- * with a small in-memory executor that records the table of every write, the
- * lock clauses and transaction usage - the assertions deliberately pin those
- * so removing a lock/transaction turns the suite red (mutation teeth, P2
- * review finding).
+ * Service-level tests for the post draft flow: autosave semantics (hash /
+ * throttle / optimistic lock), the publish transaction (posts+drafts row
+ * locks, revision + slug tracker + tags + draft removal, base check) and
+ * discard/createTranslation. The db module is mocked with a small in-memory
+ * executor that records the table of every write, the lock clauses and
+ * transaction usage - the assertions deliberately pin those so removing a
+ * lock/transaction turns the suite red.
  */
 const { dbMock, state, syncMock } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -39,8 +38,8 @@ vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 // The reference diff runs in the content transaction; its own teeth live in
 // file-references.test.ts. Here we pin WHERE it is called from and with which
-// identity/keys (plus the Q6 no-op autosave short-circuit and the 3b2
-// sync-then-drop order on publish/discard).
+// identity/keys (plus the no-op autosave short-circuit and the sync-then-drop
+// order on publish/discard).
 vi.mock('./file-references', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('./file-references')>();
 	return { ...actual, syncFileReferences: syncMock };
@@ -175,7 +174,7 @@ function resetState(withTransaction = true) {
 	syncMock.mockClear();
 	const executors = makeExecutors();
 	// A distinct object so tests can prove sync ran on the TRANSACTION
-	// executor, not on the bare db (Q15's strongest contract).
+	// executor, not on the bare db.
 	state.txExecutors = makeExecutors();
 	Object.assign(dbMock, {
 		...executors,
@@ -300,8 +299,8 @@ describe('saveDraftWork', () => {
 			slug: 'new-slug',
 			tags: ['t1', 't2']
 		});
-		// Materialization carries the first reference diff too (Q15), under
-		// the draft identity the row just got (3b2).
+		// Materialization carries the first reference diff too, under the draft
+		// identity the row just got.
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: 'draft-9' }, []);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
@@ -419,8 +418,7 @@ describe('saveDraftWork', () => {
 		});
 		expect(result).toMatchObject({ kind: 'unchanged', version: 3 });
 		expect(state.updates).toHaveLength(0);
-		// The Q6 autosave short-circuit: identical payloads never reach the
-		// reference scan.
+		// The autosave short-circuit: identical payloads never reach the reference scan.
 		expect(syncMock).not.toHaveBeenCalled();
 	});
 
@@ -854,8 +852,7 @@ describe('discardDraft', () => {
 		expect(state.forCalls).toEqual(['update']);
 		expect(state.deletes.map((d) => d.table)).toEqual([drafts, posts]);
 		expect(state.selectQueue).toHaveLength(0);
-		// A removed placeholder leaves no content behind: its references go
-		// (Q15 deletion hook).
+		// A removed placeholder leaves no content behind: its references go.
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'post', id: 'post-1' }, []);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
@@ -983,7 +980,7 @@ describe('createTranslationDraft', () => {
 		const created = state.inserts.find((i) => i.table === posts);
 		expect(created?.values).toMatchObject({
 			lang: 'zh-cn',
-			// The translation family shares ONE slug (ledger 9.16.5): the source
+			// The translation family shares ONE slug: the source
 			// decides the address, translations inherit it.
 			slug: 'source-slug',
 			translationGroup: 'group-1',

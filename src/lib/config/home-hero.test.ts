@@ -9,7 +9,7 @@ import {
 } from './home-hero';
 
 /**
- * W4.2/W4.5 resolution contract: requested locale -> site default
+ * Resolution contract: requested locale -> site default
  * language -> built-in copy -> empty. Tokens render as plain text; an empty
  * string is "no override", never a blank hero.
  */

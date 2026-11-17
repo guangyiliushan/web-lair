@@ -2,7 +2,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 /**
- * Webhook URL guard (W9.3 / decision N4, T2a).
+ * Webhook URL guard.
  *
  * A webhook URL decides where the server sends data, so it is an SSRF sink:
  * without a guard, an admin (or a stolen admin session) could point an

@@ -21,18 +21,18 @@
 
 	let { data }: PageProps = $props();
 
-	// enhance keeps the editor buffer alive across rejected saves (J-3 review
-	// F1): a plain native POST reloads the page and adopts the file on disk,
-	// silently discarding the user's edits. applyAction renders the result in
-	// place (conflict freeze / gate errors / saved flash) and still navigates
-	// on redirects; nothing is auto-adopted into the buffer. When the load
-	// data flips (created, or `forked` - which reports "builtin-backed" and
+	// enhance keeps the editor buffer alive across rejected saves: a plain
+	// native POST reloads the page and adopts the file on disk, silently
+	// discarding the user's edits. applyAction renders the result in place
+	// (conflict freeze / gate errors / saved flash) and still navigates on
+	// redirects; nothing is auto-adopted into the buffer. When the load data
+	// flips (created, or `forked` - which reports "builtin-backed" and
 	// therefore re-flips on EVERY save of such a script), refresh it FIRST
 	// and re-apply the action afterwards: invalidateAll clears `page.form`
-	// (sveltejs/kit#13825), so applying before it would wipe the saved flash
-	// (J-3 review v2 #1). `pristine` is the SUBMITTED snapshot, not the live
-	// buffer: edits typed while the POST is in flight are not saved and must
-	// keep the unsaved-changes guard armed (J-3 review v2 #2).
+	// (sveltejs/kit#13825), so applying before it would wipe the saved flash.
+	// `pristine` is the SUBMITTED snapshot, not the live buffer: edits typed
+	// while the POST is in flight are not saved and must keep the
+	// unsaved-changes guard armed.
 	const enhanceKeepBuffer: SubmitFunction =
 		({ formData }) =>
 		async ({ result }) => {
@@ -64,7 +64,7 @@
 	let revertOpen = $state(false);
 	// Cold gate loads (first save in a fresh server process) run tsc+eslint
 	// module init, so the first POST can take ~10s - show a pending state
-	// (J-2 review suggestion) instead of a seemingly dead button.
+	// instead of a seemingly dead button.
 	let saving = $state(false);
 	// Conflict freeze (drafts precedent): after a 409 the
 	// editor keeps the buffer but saving is paused until the server state is
@@ -321,7 +321,7 @@
 	>
 		<input type="hidden" name="code" value={code} />
 		<input type="hidden" name="baseHash" value={baseHash ?? ''} />
-		<div class="h-[30rem] min-h-0 overflow-hidden rounded-lg border" data-slot="editor-host">
+		<div class="h-120 min-h-0 overflow-hidden rounded-lg border" data-slot="editor-host">
 			{#await editorPromise then JobEditor}
 				<JobEditor
 					value={code}
@@ -347,7 +347,7 @@
 						// While `saving` repeats are canceled here (a disabled
 						// flip would abort the native submit itself); the
 						// conflicted freeze uses disabled - no in-flight
-						// submit exists to interrupt (J-3 review F3).
+						// submit exists to interrupt.
 						if (saving || conflicted) {
 							event.preventDefault();
 							return;

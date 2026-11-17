@@ -21,7 +21,7 @@ import { loadNoteDraftByNoteId, saveNoteDraftWork } from '$lib/server/services/n
 import { AGENT_SETTING_KEYS, agentSettingTier, agentWriteDenial } from './setting-tiers';
 
 /**
- * Agent v1 tool surface (AI-v3 Q1/Q3): read-only site inspection plus a
+ * Agent v1 tool surface: read-only site inspection plus a
  * markdown validator. No publish, delete, settings write, upload, webhook,
  * email or provider configuration. Every tool returns plain JSON; the loop
  * treats it as untrusted data.

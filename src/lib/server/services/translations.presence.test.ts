@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * "Row exists" is not "translation exists" (P4 review): a target row left empty
+ * "Row exists" is not "translation exists": a target row left empty
  * by a failed generation must not answer `lang-exists` nor make the publish
  * hook skip that language. These tests pin the READER side of the shared
  * predicate: `requestTranslation` and `enqueueTranslationsAfterPublish` ask

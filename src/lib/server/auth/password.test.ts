@@ -6,7 +6,7 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 import { accountPasswordAlgorithm, hashAccountPassword, verifyAccountPassword } from './password';
 
 /**
- * W8.8 password-format tests: Argon2id is the default, the legacy better-auth
+ * Password-format tests: Argon2id is the default, the legacy better-auth
  * scrypt format still verifies, and the env switch only changes the write
  * format (never the read path).
  */

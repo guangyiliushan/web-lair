@@ -1,5 +1,5 @@
 /**
- * Minimal XML serialisation helpers for the feed endpoints (P3-b): the feeds
+ * Minimal XML serialisation helpers for the feed endpoints: the feeds
  * are hand-rolled on purpose — correctness is proven by unit tests and the
  * W3C Feed Validator gate, not by a runtime dependency.
  */
@@ -7,7 +7,7 @@
 /**
  * Characters XML 1.0 cannot represent (the Char production): control
  * characters other than \t \n \r, lone surrogates and U+FFFE/U+FFFF. They
- * are invalid in text, attributes AND CDATA alike (review finding: a single
+ * are invalid in text, attributes AND CDATA alike (a single
  * pasted form-feed used to make the whole feed non-well-formed), so every
  * writer path strips them before escaping.
  */

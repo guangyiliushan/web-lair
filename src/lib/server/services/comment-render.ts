@@ -5,7 +5,7 @@ import { finalizeAnchorTargets } from './comment-anchor-view';
 import { loadDiscussion } from './comments';
 
 /**
- * The single read entry for a commentable body (comment P3b, spec §7).
+ * The single read entry for a commentable body.
  *
  * Order matters: the tree is transformed first (sanitize + heading anchors),
  * the block directory is derived from that same tree, threads are resolved
@@ -23,7 +23,7 @@ export interface RenderDiscussionInput {
 	targetId: string;
 	/** Signed-in reader id; drives own-pending visibility. */
 	viewerId: string | null;
-	/** W6.2: render the per-comment country label (site + commenter opt-in). */
+	/** Render the per-comment country label (site + commenter opt-in). */
 	showCountry?: boolean;
 }
 
@@ -58,7 +58,7 @@ export async function renderDiscussion(input: RenderDiscussionInput): Promise<Re
 	} catch (caught) {
 		// A resolver invariant must never 500 the whole article: render the body
 		// without marks and let anchored roots land in the orphan fold, which is
-		// visible and recoverable (B1 review, angle 4). Log identity, never the
+		// visible and recoverable. Log identity, never the
 		// error object: drizzle errors embed SQL and bound params (comment text).
 		console.error('[comments] segment pipeline failed; rendering without marks', {
 			targetType: input.targetType,

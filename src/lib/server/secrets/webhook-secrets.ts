@@ -7,7 +7,7 @@ import { loadKeyring, type SecretDb, type ResolveDeps } from './resolver.ts';
 import { maskWebhookSecret } from '../webhooks/secret.ts';
 
 /**
- * Webhook signing-secret resolver and write helpers (W2.6, decisions T1-A/T2-A).
+ * Webhook signing-secret resolver and write helpers.
  *
  * Read order: `webhook_secrets` -> legacy `webhooks.secret` -> missing. The
  * legacy column is only a migration/rollback bridge: an un-migrated endpoint

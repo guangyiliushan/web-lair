@@ -4,7 +4,7 @@ import { DRAFT_ORPHAN_GRACE_DAYS, purgeOrphans } from './orphans.ts';
 /**
  * The SQL is a two-query sweep; these tests pin the contract around it
  * (defaults, dry-run zero-write, grace validation) with a stub transaction.
- * The real DB shape is exercised by the M5-6 scratch integration run.
+ * The real DB shape is exercised by a scratch integration run.
  */
 function fakeDb(
 	refGroups: { ref_type: string; ref_id: string; n: number }[],

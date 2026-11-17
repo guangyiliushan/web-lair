@@ -3,7 +3,7 @@ import type { ThreadRoot, ThreadsPage } from '$lib/components/comments/types';
 import { finalizeAnchorTargets } from './comment-anchor-view';
 
 /**
- * The "resolved but no span" state (comment P3b, grill G4): a chip must never
+ * The "resolved but no span" state: a chip must never
  * point nowhere. This is the only place that decides between "jump to source",
  * "orphaned" and "untouched".
  */
@@ -43,7 +43,7 @@ describe('finalizeAnchorTargets', () => {
 	});
 
 	it('degrades a resolved-but-unplaced anchor to article-level (never a dead chip)', () => {
-		// R-5(a): the text did not change - this is our mapping failing, so the
+		// The text did not change - this is our mapping failing, so the
 		// reader must not be told "original text changed", and must not get a chip
 		// that leads nowhere. Degrade + warn so the bug stays visible in logs.
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

@@ -4,7 +4,7 @@ import { pruneRevisions, REVISION_KEEP_PER_POST } from './revisions.ts';
 /**
  * The SQL is a ranked delete; these tests pin the contract around it (defaults,
  * dry-run zero-write, idempotent counting) with a stub `execute`. The real DB
- * shape is exercised by the M5-6 scratch integration run.
+ * shape is exercised by a scratch integration run.
  */
 function fakeDb(rows: unknown[]) {
 	return { execute: vi.fn(async () => rows) };

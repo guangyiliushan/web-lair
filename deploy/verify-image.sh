@@ -56,7 +56,7 @@ fi
 
 echo "OK: all builtin job modules load"
 
-# Native runtime dependencies (review P1-3). `sharp` and `exiftool-vendored`
+# Native runtime dependencies. `sharp` and `exiftool-vendored`
 # are module-scope imports in the media routes; `/api/health` never loads those
 # chunks, so a broken native build (glibc, missing `perl`) would pass every
 # other gate and only fail on the first upload. Importing them here costs ~5s.
@@ -86,8 +86,7 @@ echo "OK: sharp + exiftool-vendored load"
 # `SUPPRESSION_HMAC_KEY` and `SUBSCRIBE_TOKEN_SECRET` (F-13). Both are throwaway
 # values generated per run - never deployment credentials. They go through a
 # 0600 env-file instead of `-e`: `docker run -e` leaves the value in the host
-# argv (visible to `ps`) and in the container's Config.Env (`docker inspect`)
-# (review P2-4).
+# argv (visible to `ps`) and in the container's Config.Env (`docker inspect`).
 echo "-> server startup"
 app="web-lair-verify-$$"
 envfile="$(mktemp)"

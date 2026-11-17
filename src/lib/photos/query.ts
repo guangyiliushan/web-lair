@@ -1,6 +1,6 @@
 /**
  * Public gallery query grammar. Repeated keys carry multi-select filters:
- * `?year=2025&year=2026&camera=X-T5&tag=<uuid>&tagMode=all`.
+ * `?year=2025&year=2026&camera=<model>&tag=<uuid>&tagMode=all`.
  *
  * Pure and server-safe: the page load validates the same grammar the client
  * writes, so a hand-edited URL can never reach Postgres with a malformed year

@@ -76,7 +76,7 @@ export function firstGrapheme(name: string): string {
  *
  * The setting is a manual fallback, not a live signal. Until the ActivityWatch
  * pipeline lands there is no fresh heartbeat, so the honest state is
- * `unknown` — never `online`/`offline` and never a green dot (D4/R-4/R-11).
+ * `unknown` — never `online`/`offline` and never a green dot.
  * `kind`/`detail`/`icon`/`href` resume only with real presence data.
  */
 export function ownerPresenceFromStatus(status: OwnerStatus): OwnerPresence {

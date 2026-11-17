@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 /**
- * Short "thoughts" stream (micro-content line §17): atomic personal notes,
+ * Short "thoughts" stream: atomic personal notes,
  * language-neutral. Renamed from `memos`; the body column is `content`.
  */
 export const thoughts = pgTable(

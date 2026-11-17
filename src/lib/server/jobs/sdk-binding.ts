@@ -1,13 +1,13 @@
 import type { JobsDb } from './types.ts';
 
 /**
- * Run-scoped database binding (J-2, grill R2-3): the drain binds its
- * postgres.js client around each execution, so bare `getOption()` calls and
- * the `db` handle inside job code work without threading `ctx.db` through
- * every call. Outside a run the binding is null and the SDK helpers throw a
- * clear error instead of reaching for the web-only `$lib/server/db` default.
+ * Run-scoped database binding: the drain binds its postgres.js client around
+ * each execution, so bare `getOption()` calls and the `db` handle inside job
+ * code work without threading `ctx.db` through every call. Outside a run the
+ * binding is null and the SDK helpers throw a clear error instead of reaching
+ * for the web-only `$lib/server/db` default.
  *
- * The drain executes runs serially inside one process (plan §2), so a single
+ * The drain executes runs serially inside one process, so a single
  * module-level slot has no concurrent writers; the kernel clears it in a
  * finally block after every run.
  */

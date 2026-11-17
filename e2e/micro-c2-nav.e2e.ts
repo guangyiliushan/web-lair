@@ -9,11 +9,11 @@ import {
 import { expectNoCriticalAxe } from './support';
 
 /**
- * micro-content C2 acceptance (roadmap #7): the renamed / added public routes
+ * micro-content acceptance: the renamed / added public routes
  * (quotes / thoughts / moments), the retired ones (says / thinking → 404),
- * the header wiring (微记 in the old 思考 slot, 摘录 / 思考 inside the "more"
+ * the header wiring ("微记" in the old "思考" slot, "摘录" / "思考" inside the "more"
  * menu) and the admin sidebar trio. The content pages are empty placeholders
- * shipped by C2 — C3 fills their UI, so only reachability and the chrome
+ * shipped for now — their UI lands later, so only reachability and the chrome
  * links are pinned here.
  */
 

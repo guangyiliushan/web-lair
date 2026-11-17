@@ -1,7 +1,7 @@
 /**
  * owner:rebuild - repair the `site_identity` pointer and retire `site.owner`.
  *
- * M4 foundation (O-C2/OP-7): `user_profiles` is the single source for the
+ * Foundation: `user_profiles` is the single source for the
  * public owner persona and `site_identity` is the one-row pointer the header
  * joins through. This repair is idempotent and safe to run on every deploy:
  *

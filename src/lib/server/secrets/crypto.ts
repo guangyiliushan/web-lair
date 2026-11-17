@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { SecretError } from './errors.ts';
 
 /**
- * Envelope encryption for DB-stored runtime credentials (W2.1, decision D0-C).
+ * Envelope encryption for DB-stored runtime credentials.
  *
  * AES-256-GCM from `node:crypto` - zero dependencies, FIPS-available on every
  * Node build this app deploys on. A fresh 12-byte IV is generated per write;

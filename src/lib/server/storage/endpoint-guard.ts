@@ -3,7 +3,7 @@ import { isIP } from 'node:net';
 import { isPrivateAddress, type ResolvedAddress } from '../security/ssrf-guard.ts';
 
 /**
- * Endpoint policy for the external storage driver (W7.3, decision Q19).
+ * Endpoint policy for the external storage driver.
  *
  * The rule set:
  *   - https only, and never a URL carrying credentials;
@@ -15,7 +15,7 @@ import { isPrivateAddress, type ResolvedAddress } from '../security/ssrf-guard.t
  *     owner-scoped at the action layer.
  *
  * The local driver never comes through here: RustFS is loopback by design and
- * its endpoint is fixed by env, not by a form (ST1/Q2).
+ * its endpoint is fixed by env, not by a form.
  *
  * Residual window, registered: this validates the DNS answer, then the adapter
  * dials the hostname again (no connection pinning — the storage adapter is

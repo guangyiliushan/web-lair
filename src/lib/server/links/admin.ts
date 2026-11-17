@@ -20,7 +20,7 @@ import { normalizeLinkUrl } from './normalize';
 import { PrecheckError, executePrecheck, type PrecheckDeps } from './precheck';
 
 /**
- * Admin surface for the links line (L3, plan §5.3): the read side that feeds
+ * Admin surface for the links line (L3): the read side that feeds
  * the tabs/counts/drawer and the write side for the review matrix. The only
  * automatic transitions live in `deriveRowUpdate` (checker); manual ones are
  * declared here as `MANUAL_TRANSITIONS` so a route can never invent an edge.
@@ -31,7 +31,7 @@ import { PrecheckError, executePrecheck, type PrecheckDeps } from './precheck';
  * authority - the service only produces messages).
  */
 
-/** Plan §5.3: one page of rows is enough at this scale; counts carry the total. */
+/** One page of rows is enough at this scale; counts carry the total. */
 export const LIST_LIMIT = 200;
 
 /** G4: a second manual check on the same row inside a minute is a double-click. */
@@ -63,7 +63,7 @@ export class LinkAdminError extends Error {
 	}
 }
 
-// ── Manual state machine (plan §3, manual edges only) ──────────────────────
+// ── Manual state machine (manual edges only) ──────────────────────
 
 export const MANUAL_TRANSITIONS = [
 	['pending', 'approved'],
@@ -147,7 +147,7 @@ export function planManualTransition(
 				throw new LinkAdminError('bad-status');
 			}
 			if (!reason) throw new LinkAdminError('reason-required');
-			// Plan §3: ban also pauses checks and clears lost_since (CHECK 4).
+			// Ban also pauses checks and clears lost_since (CHECK 4).
 			return { status: 'banned', reason, lostSince: null, checkEnabled: false };
 		}
 		case 'restore': {
@@ -165,7 +165,7 @@ export function planManualTransition(
 	}
 }
 
-// ── Derived badges (plan §2.5) ─────────────────────────────────────────────
+// ── Derived badges  ─────────────────────────────────────────────
 
 const DAY_MS = 86_400_000;
 
@@ -292,7 +292,7 @@ export type LinkListRow = Awaited<ReturnType<typeof listLinks>>[number];
 export type LinkDetailRow = Awaited<ReturnType<typeof getLink>>;
 
 /**
- * Per-tab ordering, stable on purpose (plan §5.3 + list-view contract): every
+ * Per-tab ordering, stable on purpose (list-view contract): every
  * order ends with the id so LIMIT can never return an unstable subset.
  * `reviewed_at` is nullable in the baseline - DESC would put NULLs first in
  * Postgres, so it is written out as `nulls last`.
@@ -331,7 +331,7 @@ export interface LinkAdminCounts {
 	derived: { backlinkLost: number; blocked: number; purgeSoon: number };
 }
 
-/** One round trip: status counts and the three derived queues (plan §2.5). */
+/** One round trip: status counts and the three derived queues. */
 export async function linkCounts(graceDays: number): Promise<LinkAdminCounts> {
 	const [row] = await db
 		.select({
@@ -440,7 +440,7 @@ function mapWriteError(err: unknown): LinkAdminError | never {
 	throw err;
 }
 
-/** Manual add lands as `approved` (plan §5.3): no precheck, admin's call. */
+/** Manual add lands as `approved`: no precheck, admin's call. */
 export async function createLink(input: LinkCreateInput, actorId: string): Promise<{ id: string }> {
 	const name = (input.name ?? '').trim();
 	if (!name) throw new LinkAdminError('name-required');

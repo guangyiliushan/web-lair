@@ -4,7 +4,7 @@ import { collectAnchorBlocks } from './comment-anchor';
 import { renderMarkdownTree } from './markdown';
 
 /**
- * Server half of the two-pipeline conformance check (comment P3b, spec §3).
+ * Server half of the two-pipeline conformance check.
  * The browser spec (`segment-dom.svelte.spec.ts`) asserts the same expected
  * texts over the DOM walker; a divergence in either walker breaks a test here
  * before it can turn into a reader-side mis-anchor.

@@ -8,7 +8,7 @@ import type { AiDeps } from './types.ts';
  * importable (the job drain uses the same modules); only this wrapper reads
  * SvelteKit's dynamic env.
  *
- * `resolveKey` is the encrypted-store read path (W2.4): every call re-reads
+ * `resolveKey` is the encrypted-store read path: every call re-reads
  * `ai_provider_secrets` by primary key and falls back to the provider's
  * `api_key_env` only when no row exists. One indexed read per call is
  * negligible against the provider request, and it gives write-through

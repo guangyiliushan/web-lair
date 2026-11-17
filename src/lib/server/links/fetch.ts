@@ -6,8 +6,7 @@ import {
 } from '../security/ssrf-guard.ts';
 
 /**
- * The links checker's fetch unit (plan §4.2/§4.8; implementable clauses
- * decided 2026-10-06):
+ * The links checker's fetch unit (clauses as settled on 2026-10-06):
  * - GET only, https only, no cookies, no JS.
  * - Manual redirects: max 5 hops; every hop re-validated (https + public DNS)
  *   and re-gated by the caller's `beforeHop` hook (robots).
@@ -28,7 +27,7 @@ const VERSION = '0.0.1'; // keep in sync with package.json
 export const LINK_CHECK_PRODUCT_TOKEN = 'web-lair-link-check';
 const LINK_CHECK_UA_BASE = `${LINK_CHECK_PRODUCT_TOKEN}/${VERSION}`;
 
-/** UA per plan §4.2 / RFC 9110 §10.1.5: product token first, contact comment when ORIGIN is set. */
+/** UA per RFC 9110 §10.1.5: product token first, contact comment when ORIGIN is set. */
 export function buildUserAgent(origin: string | null): string {
 	return origin ? `${LINK_CHECK_UA_BASE} (+${origin}/friends)` : LINK_CHECK_UA_BASE;
 }
@@ -69,7 +68,7 @@ export interface FetchUnitResult {
 	finalUrl: string;
 	status: number;
 	contentType: string | null;
-	/** `Retry-After` of the final response when present (429 evidence, §4.3). */
+	/** `Retry-After` of the final response when present (429 evidence). */
 	retryAfter: string | null;
 	body: Uint8Array | null;
 	truncated: boolean;
@@ -208,7 +207,7 @@ function concat(chunks: Uint8Array[], total: number): Uint8Array {
 
 /**
  * Bound a non-abortable step (DNS resolution, the robots gate) by the unit's
- * deadline: the wall clock of `timeoutMs` must cover the WHOLE unit (§4.2),
+ * deadline: the wall clock of `timeoutMs` must cover the WHOLE unit,
  * not just the fetch calls (review finding, 2026-10-06). The rejection
  * carries the signal's reason (a TimeoutError DOMException), so the caller's
  * classification stays `timeout`.

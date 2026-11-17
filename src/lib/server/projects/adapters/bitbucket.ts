@@ -4,7 +4,7 @@ import { asArray, asRecord, dateOrNull, str } from './shared.ts';
 import type { UserReposResult } from './github.ts';
 
 /**
- * Bitbucket adapter (plan §3.2): anonymous 60 req/h per workspace; Basic
+ * Bitbucket adapter: anonymous 60 req/h per workspace; Basic
  * auth (email + API token) via `PROJECTS_BITBUCKET_USER` +
  * `PROJECTS_BITBUCKET_TOKEN`. Cursor pagination through the response's
  * `next` link. Known upstream gaps kept as nulls: no stars, no archived

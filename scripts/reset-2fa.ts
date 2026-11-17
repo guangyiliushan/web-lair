@@ -1,6 +1,6 @@
 // scripts/reset-2fa.ts
 //
-// Emergency recovery (ledger §4.24 / §4.35): when both the authenticator and
+// Emergency recovery: when both the authenticator and
 // the backup codes are lost, disable two-step verification for one account and
 // clear every trace of the factor:
 //   - flip `user.two_factor_enabled` to false and delete the `two_factor` row

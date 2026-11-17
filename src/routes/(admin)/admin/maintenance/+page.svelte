@@ -352,7 +352,7 @@
 			</Empty.Root>
 		{:else}
 			<div class="overflow-x-auto rounded-lg border">
-				<div class="min-w-[44rem]">
+				<div class="min-w-176">
 					{#each data.runs as run (run.id)}
 						<details class="group border-b last:border-b-0" data-slot="run-row">
 							<summary
@@ -413,7 +413,7 @@
 			</Empty.Root>
 		{:else}
 			<div class="overflow-x-auto rounded-lg border">
-				<div class="min-w-[34rem]">
+				<div class="min-w-136">
 					{#each data.activities as activity (activity.id)}
 						<div
 							class="grid grid-cols-[10rem_12rem_1fr] items-center gap-2 border-b px-3 py-2 text-xs last:border-b-0"

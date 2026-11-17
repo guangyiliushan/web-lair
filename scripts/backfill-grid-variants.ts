@@ -29,7 +29,7 @@ const limit = limitArg ? Math.max(1, Number(limitArg.slice('--limit='.length))) 
 
 const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
-// Variants are written to the ACTIVE provider (W7.5).
+// Variants are written to the ACTIVE provider.
 const storage = await activeStorage(db);
 
 const rows = await db

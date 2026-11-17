@@ -315,7 +315,7 @@ async function sourceTitleAndHash(
 }
 
 /**
- * Accept transaction T (ai-line plan §3.2-4): validate the group/language/
+ * The accept transaction: validate the group/language/
  * pointer against the candidate, create or reuse the target working copy,
  * write the candidate into its draft, stamp `translation_origin`, and mark
  * the record accepted. It never publishes.

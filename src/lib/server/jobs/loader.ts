@@ -7,7 +7,7 @@ import type { JobRunFn, LoadedJob } from './types.ts';
  * Job names become module file names, so they must never carry path
  * segments, and the mapped stem must not be a Windows device name (reserved
  * for every extension - "con.ts" is the console). Registry names are code
- * constants today; the J-2 user layer will feed this from files, which is why
+ * constants today; the user layer will feed this from files, which is why
  * the check is a named, tested gate.
  */
 export function isSafeJobName(name: string): boolean {
@@ -19,8 +19,8 @@ export function isSafeJobName(name: string): boolean {
 /**
  * Builtin job loader: resolves a registry name to `builtin/<name>.ts` and
  * loads it under plain Node type stripping. Split out of drain.ts because the
- * J-2 user layer (`$DATA_DIR/jobs`, user > builtin) layers on top of exactly
- * this resolution step.
+ * user layer (`$DATA_DIR/jobs`, user > builtin) layers on top of exactly this
+ * resolution step.
  */
 export function createBuiltinLoader(): (name: string) => Promise<LoadedJob> {
 	return async (name) => {
@@ -34,7 +34,7 @@ export function createBuiltinLoader(): (name: string) => Promise<LoadedJob> {
 		}
 		return {
 			run: run as JobRunFn,
-			// sha256 of the executing source file (plan §3.1 `source_hash`).
+			// sha256 of the executing source file.
 			sourceHash: createHash('sha256').update(bytes).digest('hex')
 		};
 	};

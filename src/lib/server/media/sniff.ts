@@ -1,6 +1,6 @@
 import { isHeic, isoMediaBrand } from './heic';
 
-/** Upload policy (plan §4.2): single file ≤ 25MB, at most 10 per batch. */
+/** Upload policy: single file ≤ 25MB, at most 10 per batch. */
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 export const MAX_BATCH_COUNT = 10;
 
@@ -46,11 +46,11 @@ function looksLikeText(bytes: Uint8Array): boolean {
 }
 
 /**
- * Whitelist (plan §4.2). Order matters: magic-bearing families come first so
+ * Whitelist. Order matters: magic-bearing families come first so
  * known binary magics are rejected by their own family before the magic-less
  * text family (txt/md) runs; unknown binaries rest on the NUL-heuristic in
  * `looksLikeText` — structure is not validated, only binary-ness.
- * `heic`/`heif` share the WASM decode path (plan §4.3).
+ * `heic`/`heif` share the WASM decode path.
  */
 const FAMILIES: Family[] = [
 	{
@@ -90,12 +90,12 @@ const FAMILIES: Family[] = [
 		kind: 'image',
 		exts: ['heic', 'heif'],
 		mimeFor: { heic: 'image/heic', heif: 'image/heif' },
-		// heic-decode handles both ISO-BMFF photo brands (plan §4.3).
+		// heic-decode handles both ISO-BMFF photo brands.
 		magic: isHeic
 	},
 	{
 		kind: 'image',
-		// Plan §4.3: TIFF rides the native sharp pipeline (no WASM decoder).
+		// TIFF rides the native sharp pipeline (no WASM decoder).
 		exts: ['tif', 'tiff'],
 		mimeType: 'image/tiff',
 		magic: (bytes) =>

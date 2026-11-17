@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * W6.2 GeoIP policy: the deployment header is the only provider, values are
+ * GeoIP policy: the deployment header is the only provider, values are
  * normalised hard, and an unset provider reads nothing (so a site without an
  * edge never collects a country by accident).
  */

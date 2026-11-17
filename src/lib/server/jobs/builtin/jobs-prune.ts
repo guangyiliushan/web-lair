@@ -18,11 +18,10 @@ import {
 } from '#jobs-sdk';
 
 /**
- * jobs.prune (J-1 builtin): trim the ledger tables per the decided retention
- * windows (ledger §24: job_runs 24 months; §26: activities 24 months,
- * webhook_deliveries 30 days; §14.3: ai_usage 24 months). Imports only
- * `#jobs-sdk` (J-2, plan §5.5) so the file stays fork-runnable from the user
- * layer.
+ * jobs.prune builtin: trim the ledger tables per the decided retention
+ * windows (job_runs 24 months; activities 24 months; webhook_deliveries 30
+ * days; ai_usage 24 months). Imports only `#jobs-sdk` so the file stays
+ * fork-runnable from the user layer.
  *
  * Only terminal rows are ever deleted (`succeeded`/`failed`/`skipped` for
  * runs, `succeeded`/`failed` for deliveries): a lingering `queued` row is a
@@ -36,9 +35,8 @@ const JOB_RUNS_CUTOFF = sql`now() - interval '24 months'`;
 const ACTIVITIES_CUTOFF = sql`now() - interval '24 months'`;
 const AI_USAGE_CUTOFF = sql`now() - interval '24 months'`;
 const WEBHOOK_DELIVERIES_CUTOFF = sql`now() - interval '30 days'`;
-// M6 P5: the notification delivery log keeps 30 days (decision register §3E
-// "Delivery log: 30 天"). Only terminal rows age out; a `queued` row is still
-// the drain's work item.
+// The notification delivery log keeps 30 days; only terminal rows age
+// out, and a `queued` row is still the drain's work item.
 const NOTIFICATION_DELIVERIES_CUTOFF = sql`now() - interval '30 days'`;
 
 export default {
@@ -105,7 +103,7 @@ export default {
 		// lazy because `translations` pulls the content schema graph.
 		const prunedTranslations = await runTranslationsPrune(ctx);
 
-		// W6.2 (C5): comment privacy retention. The sweep runs even when the
+		// Comment privacy retention. The sweep runs even when the
 		// privacy switch is currently off: values collected during an earlier
 		// on-period must still age out. Only rows that carry a privacy field
 		// match, so an unused feature costs one cheap no-op query; the raw IP

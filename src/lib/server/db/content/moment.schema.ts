@@ -2,11 +2,10 @@ import { sql } from 'drizzle-orm';
 import { check, index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 /**
- * "Moments" stream (micro-content line §17): micro life/tech/media check-ins.
+ * "Moments" stream: micro life/tech/media check-ins.
  * Renamed from `recent_items`; `type` is the kind, `metadata` / `ref_type` /
- * `ref_id` stay as extension slots (`ref_type` CHECK whitelist is still open
- * - ledger §9.5 / §17.8). Language-neutral; no comments (ledger §9.5) - the
- * up/down vote counters stay.
+ * `ref_id` stay as extension slots (`ref_type` CHECK whitelist is still
+ * open). Language-neutral; no comments - the up/down vote counters stay.
  */
 export const moments = pgTable(
 	'moments',

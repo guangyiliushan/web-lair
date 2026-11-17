@@ -17,7 +17,7 @@ import { files } from './file.schema.ts';
 import { tags } from './tag.schema.ts';
 import type { LocalizedText } from './localized.ts';
 
-/** Photo gallery entity (storage line §3.3): 1:1 with a files row. */
+/** Photo gallery entity: 1:1 with a files row. */
 export const photos = pgTable(
 	'photos',
 	{
@@ -69,7 +69,7 @@ export const photos = pgTable(
 	]
 );
 
-/** Tag cross-reference for photos (storage line §3.4). */
+/** Tag cross-reference for photos. */
 export const photoTags = pgTable(
 	'photo_tags',
 	{

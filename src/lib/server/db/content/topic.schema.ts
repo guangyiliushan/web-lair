@@ -12,7 +12,7 @@ import {
 import type { LocalizedText } from './localized.ts';
 
 /**
- * Same label model as `categories` (ledger §9.18.4 as amended 2026-10-23):
+ * Same label model as `categories`:
  * `name` / `description` are the source labels, the `*_i18n` columns hold the
  * other locales. `description_i18n` exists here (unlike categories) because
  * the topic page renders it - `topics/[slug]/+page.svelte` prints the

@@ -4,7 +4,7 @@ import { collectAnchorBlocks, resolveAnchor, type AnchorBlock } from './comment-
 import { renderMarkdownTree } from './markdown';
 
 /**
- * Spec §12.2 edit matrix: every edit class has one defined outcome, and a
+ * Edit matrix: every edit class has one defined outcome, and a
  * *unique* quote never lands on a different block. "Moved far out of the ±2
  * window" and "quote rewritten" are orphans by design (folded area), not
  * mis-anchors — the suite pins both so a future widening of the window cannot
@@ -115,7 +115,7 @@ describe('spec §12.2 edit matrix', () => {
 			'第一段：锚点句子在中间。尾巴。'
 		].join('\n');
 		// The paragraph text did not change, so the content hash finds it at its
-		// new ordinal — position is a hint, not the identity (spec §7).
+		// new ordinal — position is a hint, not the identity.
 		expect(await resolveIn(edited, anchor)).toMatchObject({ exact: '锚点句子' });
 	});
 
@@ -136,8 +136,8 @@ describe('spec §12.2 edit matrix', () => {
 		const blocks = await blocksOf(duplicated);
 		const second = blocks[1];
 		const anchor = anchorIn(second, '重复段落');
-		// Deleting the first leaves one identical block; spec §12.2 accepts
-		// resolving to it (same text is same target by definition).
+		// Deleting the first leaves one identical block; resolving to it is
+		// accepted (same text is same target by definition).
 		expect(await resolveIn('重复段落。', anchor)).toMatchObject({ exact: '重复段落' });
 	});
 

@@ -52,10 +52,10 @@ export default defineConfig(
 		}
 	},
 	{
-		// Jobs builtins must stay fork-runnable (jobs-line plan §5.5): only
+		// Jobs builtins must stay fork-runnable: only
 		// `node:*` modules and the SDK facade are importable, statically and
 		// dynamically. Both rule shapes are single-sourced with the save gate
-		// in src/lib/server/jobs/import-policy.ts (J-2 review F3: the dynamic
+		// in src/lib/server/jobs/import-policy.ts (the dynamic
 		// selectors close the `await import(...)` hole `no-restricted-imports`
 		// alone does not see).
 		files: ['src/lib/server/jobs/builtin/**/*.ts'],

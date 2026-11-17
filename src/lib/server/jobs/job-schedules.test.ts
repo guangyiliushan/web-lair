@@ -7,8 +7,8 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 /**
- * job-schedules service tests (J-3): the validation gate (5-field cron, Intl
- * probe, PG membership, cron-parser trial) and the watermark rules of §3.2 -
+ * job-schedules service tests: the validation gate (5-field cron, Intl
+ * probe, PG membership, cron-parser trial) and the watermark rules -
  * create/enable reset `last_due_at`, a cron/tz edit resets it, a no-op edit
  * does not. Audit rows must ride the same transaction path (fake db records
  * the captured sets/values; recordActivity is captured per call).
@@ -69,7 +69,7 @@ function makeDb(state: FakeState) {
 		}
 	});
 	const makeTx = () => ({
-		// The toggle/existence probes read back through the tx (J-3 review F2).
+		// The toggle/existence probes read back through the tx.
 		select: () => ({
 			from: () => ({
 				where: () => ({

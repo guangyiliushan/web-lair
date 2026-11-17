@@ -2,7 +2,7 @@ import { readNotificationPayload, redactNotificationError } from '../format.ts';
 import type { AdapterResult } from './types.ts';
 
 /**
- * Email adapter (M6 P5, T5.4): owner-facing notification mail over the SAME
+ * Email adapter: owner-facing notification mail over the SAME
  * SMTP derivation the rest of the app uses (`mail/smtp.ts` - one source for
  * host/port/TLS/AUTH/DKIM, so the notification path cannot disagree with
  * registration mail).

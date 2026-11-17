@@ -1,7 +1,7 @@
 import { env } from '$env/dynamic/private';
 
 /**
- * Sentinel traffic analytics client (M6 / P6, plan §3.1).
+ * Sentinel traffic analytics client.
  *
  * Contract (Sentinel 1.1.5, digest pinned in deploy/monitoring/
  * compose.sentinel.yaml): `GET /api/traffic/dashboard` with a Bearer token.
@@ -9,7 +9,7 @@ import { env } from '$env/dynamic/private';
  * failure mode here is **fail-open**: the caller gets `null` and the admin
  * renders "—" instead of turning a Sentinel outage into a 500.
  *
- * PV semantics (T6.4): Sentinel's `requests` counts every request, including
+ * PV semantics: Sentinel's `requests` counts every request, including
  * static assets and API calls. The admin labels a filtered number as
  * "page requests" and never calls it visits/views. {@link isPagePath} owns the
  * filter; {@link summarizePageTraffic} applies it to the top-paths rows.
@@ -410,7 +410,7 @@ export interface PageTrafficSummary {
 	/** Sum of page requests across the filtered paths (lower bound when truncated). */
 	pageRequests: number;
 	topPages: SentinelPath[];
-	/** Page paths with a 4xx count, ranked by that count (T6.4 "Top 404"). */
+	/** Page paths with a 4xx count, ranked by that count ("Top 404"). */
 	topErrorPaths: SentinelPath[];
 	/** Exact 404 total from Sentinel's status breakdown (all requests). */
 	notFoundRequests: number;
@@ -428,7 +428,7 @@ export function summarizePageTraffic(snapshot: TrafficSnapshot): PageTrafficSumm
 	// Sentinel folds every path outside TRAFFIC_TOPN into "__other__". It is a
 	// mix of page/static/API requests, so it cannot be added to the page total,
 	// but its presence means the sum above is a lower bound and the UI must say
-	// so (review finding: the 1,000-row check alone cannot see this row).
+	// so (the 1,000-row check alone cannot see this row).
 	const hasLongTail = snapshot.paths.some((row) => row.path === '__other__');
 	return {
 		pageRequests: pagePaths.reduce((sum, row) => sum + row.requests, 0),

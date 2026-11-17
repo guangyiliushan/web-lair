@@ -4,7 +4,7 @@ import { user } from '../auth.schema.ts';
 import { webhooks } from './webhook.schema.ts';
 
 /**
- * Webhook signing secrets, encrypted (W2.3/W2.6, decisions T1-A / T2-A).
+ * Webhook signing secrets, encrypted.
  *
  * The current value is used for every new delivery. During a rotation the
  * previous value stays verifiable until `previousExpiresAt` (the retry window

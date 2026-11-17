@@ -11,7 +11,7 @@ import { createPhotoFromFile } from '../src/lib/server/services/photos';
 import { tagSlug } from '../src/lib/utils/slug';
 
 /**
- * Bulk media import (plan §5.4, T13): `pnpm media:import <dir…>`.
+ * Bulk media import: `pnpm media:import <dir…>`.
  *
  * Whitelist scan → content-hash dedupe (files already in the library are
  * SKIPPED, so a second run is safe; changed bytes land as new rows — the

@@ -15,7 +15,7 @@ import { resolveTailscaleIdentity } from '$lib/server/security/tailscale-auth';
  * Tailnet sign-in that produces a *real* better-auth session.
  *
  * The previous flow inserted a `session` row by hand on every request and never
- * issued a cookie (ledger §4.27, hole ②). This endpoint uses the official API
+ * issued a cookie. This endpoint uses the official API
  * surface instead — `internalAdapter.createSession` + `setSessionCookie`, the
  * exact pair the bundled `anonymous` plugin uses, and the redirect idiom from
  * the callback routes (`throw ctx.redirect(url)`).

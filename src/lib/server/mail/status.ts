@@ -1,14 +1,14 @@
 /**
- * Read-only mail status (W9.1, decision N2).
+ * Read-only mail status.
  *
  * The Notifications page shows what the SMTP transport will actually do. The
  * credentials themselves stay in `.env`: `MAIL_SMTP_USER`/`MAIL_SMTP_PASS`
  * are never read here, so no code path can echo them into page data.
  *
- * The TLS derivation below is a pre-P4 copy: the transport's single source is
+ * The TLS derivation below is a legacy copy: the transport's single source is
  * now `mail/smtp.ts` (`createSmtpTransport`). This read-only surface is kept
  * for the admin page and is known to drift (`MAIL_ENABLED` trim, port guards);
- * unifying it is a registered P7 item (M6 P4 report) - do not treat the page
+ * unifying the two derivations is still outstanding - do not treat the page
  * as proof of what the sender will do.
  */
 export interface MailStatus {
@@ -92,10 +92,8 @@ export function maskEmailAddress(email: string): string {
  * `smtp.ts` so the plain-Node mail probe redacts with the exact same rules;
  * re-exported here for the admin surface's existing imports.
  *
- * NOTE: `readMailStatus` below still derives the TLS mode independently (the
- * pre-P4 code); after P4 the transport owner is `smtp.ts`, not
- * `mail/transport.ts`. Aligning the two is a P7 item (registered in the M6 P4
- * report) - do not assume this status surface and the sender agree when either
- * derivation changes.
+ * NOTE: `readMailStatus` below still derives the TLS mode independently;
+ * `smtp.ts` is the transport owner, not `mail/transport.ts`. Do not assume
+ * this status surface and the sender agree when either derivation changes.
  */
 export { redactMailError } from './smtp';

@@ -3,8 +3,8 @@ import { byText, manualSave, psql } from './support';
 import { zhCnLocale } from './locale-fixture';
 
 /**
- * Reference lifecycle, live teeth (ST-3 3b1 + 3b2 draft identity, Q15 "T4
- * four paths"): draft save, publish, discard and page hard-delete maintain
+ * Reference lifecycle, live teeth: draft save, publish, discard and
+ * page hard-delete maintain
  * `file_references` and the file status machine against the real database.
  * Since 3b2 the draft-phase refs are keyed `{draft, draftId}`: a save never
  * touches the published identity's set; publish re-keys the durable set and
@@ -53,7 +53,7 @@ function cleanup() {
 	);
 	// Match the same populations the row deletes below cover: placeholder
 	// rows carry a `draft-` slug, so title must join the predicate or a
-	// crashed run leaves orphan references behind (review round 2).
+	// crashed run leaves orphan references behind.
 	psql(
 		`delete from file_references where ref_type = 'post' and ref_id in (select id from posts where slug like 'e2e-refs%' or title ilike 'e2e refs lifecycle%')`
 	);
@@ -69,7 +69,7 @@ function cleanup() {
 	psql(`delete from pages where slug = '${PAGE_SLUG}'`);
 	// The files rows stay (content-addressed), but an attached row that just
 	// lost its last reference must leave the attached state or audit check
-	// (2) reports it after every run (ring-2 02-P3-3).
+	// (2) reports it after every run .
 	psql(
 		`update files set status = 'detached', detached_at = now(), updated_at = now() where file_name like 'e2e-refs%' and status = 'attached' and not exists (select 1 from file_references fr2 where fr2.file_id = files.id)`
 	);
@@ -359,7 +359,7 @@ test('a page draft keys the upload under its draft identity; publish re-keys it 
 }) => {
 	// A plain md row (no image) as the edit target; the upload below enters
 	// through the editor's picker, exactly like a writer's flow. The route
-	// and the draft chain are the P5 additions (the old direct form never
+	// and the draft chain were added later (the old direct form never
 	// had one).
 	psql(
 		`insert into pages (slug, title, content, content_format) values ('${PAGE_SLUG}', '{"en":"${PAGE_TITLE}"}'::jsonb, '{"en":"fixture page body"}'::jsonb, 'markdown')`
@@ -385,7 +385,7 @@ test('a page draft keys the upload under its draft identity; publish re-keys it 
 	// re-keys the durable reference set onto the page identity; the draft's
 	// own refs leave with its row.
 	await expect(async () => {
-		// Idempotent retry (R2-7): a landed publish must not be re-clicked -
+		// Idempotent retry: a landed publish must not be re-clicked -
 		// the draft row is gone by then and the retry would 404 forever.
 		if (psql(`select count(*) from drafts where ref_id = '${pageId}'`) === '0') return;
 		await page.getByRole('button', { name: '发布' }).click();

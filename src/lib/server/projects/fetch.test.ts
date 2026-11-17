@@ -8,7 +8,7 @@ import {
 } from './fetch';
 
 /**
- * T10 (plan §7): the five-class failure surface of the fetch unit - 404 ->
+ * The five-class failure surface of the fetch unit - 404 ->
  * not_found; 429 / exhausted-rate-limit 403 -> rate_limited; plain 401/403 ->
  * auth; timeout / persistent 5xx -> network; non-JSON body -> parse. Plus
  * the politeness rules: one in-run retry for 5xx, Retry-After honoured only

@@ -5,7 +5,7 @@ import { zhCnLocale } from './locale-fixture';
 test.use(zhCnLocale);
 
 /**
- * Translation workbench accept (M2 2a): a generated candidate is accepted into
+ * Translation workbench accept: a generated candidate is accepted into
  * the target working copy, but is NOT published. The accept transaction is the
  * assertion target: target post + draft + translation_origin + accepted row.
  */

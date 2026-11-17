@@ -1,39 +1,54 @@
-# Gatus — 箱内监控（config-as-code 的单一真源）。
+# Gatus — in-box monitoring (the single source of truth for config-as-code).
 #
-# 本文件永远加载；三个**无法用空值表达**的可选监控由 render-config.sh 追加为同目录片段：
-#   gatus.yaml        本文件（HTTP / TCP / Bark 告警）
-#   zz-domain.yaml    仅当 SITE_DOMAIN 非空（TLS 证书 + 域名到期）
-#   zz-drain.yaml     仅当 DRAIN_HEARTBEAT_TOKEN 非空（drain 心跳 external endpoint）
-#   zz-app-ready.yaml 仅当 READY_TOKEN 非空（/api/ready 就绪探针）
-# 为什么只有这三个需要片段：空 SITE_DOMAIN 会得到 "https:///" 永久红端点；external
-# endpoint 的 token 为空会被 Gatus 直接拒绝（panic）；无 READY_TOKEN 时 /api/ready
-# 对所有来源 404（端点会永久红）。而 alerting.custom 的 url 为空
-# 只会 Warn 并忽略 provider，所以 Bark 配置**常驻本文件**——这样"渲染门控"与
-# "容器 env" 不会分歧成"片段没渲染但容器有值"的静默失联。
+# This file is always loaded; three optional monitors that **cannot be
+# expressed as an empty value** are appended by render-config.sh as sibling
+# fragments:
+#   gatus.yaml        this file (HTTP / TCP / Bark alerts)
+#   zz-domain.yaml    only when SITE_DOMAIN is set (TLS certificate + domain
+#                     expiry)
+#   zz-drain.yaml     only when DRAIN_HEARTBEAT_TOKEN is set (drain heartbeat
+#                     external endpoint)
+#   zz-app-ready.yaml only when READY_TOKEN is set (/api/ready probe)
+# Why only these three need fragments: an empty SITE_DOMAIN yields a
+# permanently red "https:///" endpoint; an external endpoint with an empty
+# token is rejected outright by Gatus (panic); without READY_TOKEN, /api/ready
+# answers 404 to everyone (permanently red). An empty alerting.custom url, by
+# contrast, only logs a Warn and skips the provider, so the Bark config
+# **always lives in this file** — that way the "render gate" and the
+# "container env" cannot diverge into "fragment not rendered but the container
+# has the value" silent loss.
 #
-# GATUS_CONFIG_PATH 指向目录时，Gatus 会合并目录里所有 *.yaml（map 深合并、list 追加）。
-# 注意它每 30s 轮询**每个文件**的 mtime：渲染必须内容幂等（cmp 后才写），否则热重载会
-# 清空 memory 存储与已触发告警（状态丢失、重复告警、收不到 RESOLVED）；删除片段不会
-# 触发重载，所以 render 在撤销片段时主动 touch 主文件。
+# When GATUS_CONFIG_PATH points at a directory, Gatus merges every *.yaml in
+# it (deep map merge, list append). Note it polls the mtime of **every file**
+# every 30s: rendering must be content-idempotent (compare before writing),
+# otherwise the hot reload wipes the memory store and the already-fired alerts
+# (state lost, duplicate alerts, no RESOLVED); deleting a fragment does not
+# trigger a reload, so the renderer touches the main file when it revokes one.
 #
-# 目标地址全部来自环境变量（生产默认值在 compose.monitoring.yaml）。Gatus 在解析配置
-# 前对整份 YAML 做 os.ExpandEnv：变量缺失会展开成空串并让 URL/token 校验失败（panic，
-# exit 2），所以 MONITOR_* 必须始终有值——这也是 T3.5 校验要覆盖的错误路径。
+# All target addresses come from environment variables (production defaults
+# live in compose.monitoring.yaml). Gatus runs os.ExpandEnv over the whole
+# YAML before parsing: a missing variable expands to an empty string and makes
+# URL/token validation fail (panic, exit 2), so MONITOR_* must always hold a
+# value — the error path that config verification has to cover.
 #
-# 告警：BARK_URL 未设置时 provider 被忽略（启动日志一行 "Ignoring provider=custom"），
-# 端点照跑、状态照记，只是不发送（README §4）。
+# Alerts: with BARK_URL unset the provider is ignored (one startup log line
+# "Ignoring provider=custom"); endpoints keep running and keep recording
+# status, they just never send (README §4).
 
 storage:
-  # 历史不重要（箱内观察 + 告警）；memory 避免为监控再引一个卷/数据库。
+  # History does not matter (in-box observation + alerts); memory avoids
+  # adding another volume or database just for monitoring.
   type: memory
 
-# 注意：不要加 `skip-invalid-config-update: true`。Gatus v5.38 的热重载分支是
-# stop() → load()，失败时该 flag 只 log + continue，**不会重新 start()**：容器仍是
-# running，但 watchdog 与 HTTP（含 /health）都已停止 —— 静默僵尸态。不加该 flag 时
-# 坏配置会 panic → exit 2 → restart: always 可见地重启（verify-config.sh 的负例覆盖）。
+# Do not add `skip-invalid-config-update: true`. Gatus v5.38 hot-reloads via
+# stop() → load(); on failure that flag only logs and continues, **never
+# restarting** — the container still looks running while watchdog and HTTP
+# (incl. /health) are dead: a silent zombie. Without it, bad config panics →
+# exit 2 → a visible restart: always (verify-config.sh's negative cases cover it).
 
-# Bark 告警（custom provider）：payload 只有 title/body/group，不含 URL/堆栈/凭据。
-# url 为空时 Gatus 只记一行 Warn 并忽略该 provider，因此不需要片段门控。
+# Bark alerts (custom provider): the payload carries only title/body/group,
+# never URL/stack/credentials. An empty url only logs one Warn and skips the
+# provider, so it needs no fragment gate.
 alerting:
   custom:
     url: '${BARK_URL}'
@@ -45,14 +60,15 @@ alerting:
     client:
       timeout: 10s
 
-# 前端标题（1024 字符内），方便和 Caddy 站名对上。
+# Frontend title (within 1024 chars), to line up with the Caddy site name.
 ui:
   title: web-lair status
 
 endpoints:
-  # ── 站点 HTTP：走 internal 网络直连 app:3000，不经 Caddy/DNS ──────────────
-  # 直连的意义：Caddy/证书/DNS 的问题由 zz-domain.yaml 的 HTTPS 检查覆盖，
-  # 这里只回答“应用进程还能不能正确响应路由”。
+  # ── Site HTTP: direct to app:3000 on the internal network, no Caddy/DNS ───
+  # Direct because Caddy/certificate/DNS problems are covered by the HTTPS
+  # check in zz-domain.yaml; here we only ask whether the app process still
+  # answers routes correctly.
   - name: site-home
     group: web-lair
     url: 'http://${MONITOR_APP_ADDR}/'
@@ -99,8 +115,9 @@ endpoints:
         success-threshold: ${MONITOR_SUCCESS_THRESHOLD}
         send-on-resolved: true
 
-  # 未登录访问 /admin 必须 303 到登录页（src/lib/server/authz.ts redirectToLogin）。
-  # ignore-redirect 必须为 true：默认跟随重定向会看到登录页 200，反而掩盖坏掉的守卫。
+  # Unauthenticated /admin must 303 to the login page (src/lib/server/authz.ts
+  # redirectToLogin). ignore-redirect must be true: following redirects by
+  # default would see the login page's 200 and mask a broken guard.
   - name: site-admin-guard
     group: web-lair
     url: 'http://${MONITOR_APP_ADDR}/admin'
@@ -117,7 +134,7 @@ endpoints:
         success-threshold: ${MONITOR_SUCCESS_THRESHOLD}
         send-on-resolved: true
 
-  # ── TCP：数据面端口存活（只证明 accept，不证明可用）──────────────────────
+  # ── TCP: data-plane port liveness (accept only, not usability) ────────────
   - name: pg-tcp
     group: web-lair
     url: 'tcp://${MONITOR_PG_ADDR}'
@@ -148,6 +165,6 @@ endpoints:
         success-threshold: ${MONITOR_SUCCESS_THRESHOLD}
         send-on-resolved: true
 
-  # ── 依赖健康（/api/ready）────────────────────────────────────────────
-  # 见 fragments/app-ready.yaml：该端点按 READY_TOKEN 是否配置决定是否渲染
-  # （P3 的 `enabled: false` 占位在 P4 合入后已移出核心配置）。
+  # ── Dependency health (/api/ready) ────────────────────────────────────────
+  # See fragments/app-ready.yaml: rendered only when READY_TOKEN is set (the
+  # `enabled: false` placeholder has since been moved out of the core config).

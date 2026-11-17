@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 /**
- * Database status for the Storage page (W7.7, decision Q17).
+ * Database status for the Storage page.
  *
  * The page is READ-ONLY here on purpose: an external database is an
  * install/deploy decision (`DATABASE_URL` + `pg_dump`/`pg_restore`), not a

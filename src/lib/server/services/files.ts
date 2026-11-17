@@ -310,7 +310,7 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 			await Promise.allSettled(
 				putKeys.filter((key) => !winnerKeys.has(key)).map((key) => storage.delete(key))
 			);
-			// A lost race is still a USE (round-2 review): refresh the
+			// A lost race is still a USE: refresh the
 			// winner's TTL anchor like the happy dedupe path. Best-effort —
 			// the bytes are already live and the anchor is only purge input;
 			// failures are logged, never silent.
@@ -521,7 +521,7 @@ export type DeleteFileResult =
 	| { kind: 'referenced'; refCount: number; isInGallery: boolean }
 	/**
 	 * Still mentioned by stored content (`/i/<key>`) — the transition guard.
-	 * `scanTruncated` marks a fail-closed refusal (round-2 review): the scan
+	 * `scanTruncated` marks a fail-closed refusal: the scan
 	 * hit its row cap, so a clean sweep no longer proves the key is unused.
 	 */
 	| { kind: 'mentioned'; scanTruncated?: boolean }
@@ -621,7 +621,7 @@ export async function deleteFile(
 		if (!row) return { kind: 'not-found' };
 
 		if (options.requireUnusedSince) {
-			// Same anchor the candidate was judged by (round-2 review): a
+			// Same anchor the candidate was judged by: a
 			// detached row's TTL runs on detached_at; comparing updated_at
 			// alone could clear a row the purge had already ruled too fresh.
 			const anchor = row.status === 'detached' ? (row.detachedAt ?? row.updatedAt) : row.updatedAt;
@@ -679,8 +679,8 @@ export async function listPurgeCandidates(deps: FilesDeps = {}): Promise<PurgeCa
 			)
 		)
 		// Most-overdue-first by true expiry instant (anchor + its TTL): a
-		// created_at ordering starved long-detached rows behind newer ones
-		// (round-2 review). §11: page once the registry outgrows the cap.
+		// created_at ordering starved long-detached rows behind newer ones.
+		// Page once the registry outgrows the cap.
 		.orderBy(purgeExpiresAt(pendingDays, detachedDays))
 		.limit(500);
 
@@ -709,14 +709,14 @@ export interface PurgeFailure {
 	reason: string;
 }
 
-/** Why a candidate was kept — never a silent drop (round-2 review). */
+/** Why a candidate was kept — never a silent drop. */
 export type PurgeSkipReason =
 	| 'mentioned'
 	| 'reused'
 	| 'referenced'
 	| 'gone'
 	| 'scan-truncated'
-	/** The deletion contract changed mid-run (W7.5). */
+	/** The deletion contract changed mid-run. */
 	| 'blocked';
 
 export interface PurgeSkip {
@@ -728,11 +728,11 @@ export interface PurgeOutcome {
 	dryRun: boolean;
 	/**
 	 * Set when the run refused to do anything:
-	 *   `migration`  — a provider copy is in flight (W7.4);
+	 *   `migration`  — a provider copy is in flight;
 	 *   `capability` — the bucket's versioning/object lock could not be read,
-	 *                  so "frees space" cannot be proven (W7.5);
+	 *                  so "frees space" cannot be proven;
 	 *   `versioning` — versioning/object lock is on and the active provider is
-	 *                  not in logical-delete mode (W7.5).
+	 *                  not in logical-delete mode.
 	 */
 	blocked: PurgeBlocked | null;
 	/** True when this run deletes logically (delete markers; no space freed). */
@@ -743,7 +743,7 @@ export interface PurgeOutcome {
 	 * still references the key), `reused` (a dedupe use refreshed the anchor
 	 * after the snapshot), `referenced` (references appeared between listing
 	 * and delete), `gone` (row vanished — concurrent purge), `scan-truncated`
-	 * (the mention scan hit its cap: fail-closed, §6.3).
+	 * (the mention scan hit its cap: fail-closed).
 	 */
 	skipped: PurgeSkip[];
 	/** Deletions that failed (objects kept, row kept — retryable). */
@@ -753,15 +753,15 @@ export interface PurgeOutcome {
 	scanTruncated: boolean;
 }
 
-/** Why a purge run refused to start (W7.4/W7.5); null on a normal run. */
+/** Why a purge run refused to start; null on a normal run. */
 export type PurgeBlocked = 'migration' | 'capability' | 'versioning';
 
 /**
- * `purge-media` (§4.6): dry-run first by contract; deletion re-checks
- * references AND refuses keys still mentioned by stored content. Until the
- * ST-3 reference scan backfills `file_references` (registered §11 hold), an
- * md mention is the only signal a file is in use — dry-run output alone
- * would otherwise mark freshly referenced uploads as orphans.
+ * `purge-media`: dry-run first by contract; deletion re-checks references
+ * AND refuses keys still mentioned by stored content. Until the reference
+ * scan backfills `file_references`, an md mention is the only signal a file
+ * is in use — dry-run output alone would otherwise mark freshly referenced
+ * uploads as orphans.
  */
 export async function purgeMedia(
 	options: { dryRun: boolean },
@@ -779,14 +779,14 @@ export async function purgeMedia(
 		scanTruncated: false
 	});
 
-	// W7.4: a purge deletes from the ACTIVE bucket, which is exactly the object
+	// A purge deletes from the ACTIVE bucket, which is exactly the object
 	// set a running provider copy still needs. Refuse for the whole run —
 	// including dry-run, so the operator sees why nothing is listed.
 	if (await migrationFreezeActive(database)) return blockedOutcome('migration');
 
-	// W7.5: the deletion contract. `unknown` capabilities or a versioned bucket
-	// without the explicit logical mode means the run would leave bytes behind
-	// while reporting success — refuse instead.
+	// Deletion contract: `unknown` capabilities or a versioned bucket without
+	// the explicit logical mode means the run would leave bytes behind while
+	// reporting success — refuse instead.
 	const policy =
 		deps.policy === undefined ? await resolveStoragePolicy(storage, database) : deps.policy;
 	if (!policy) return blockedOutcome('capability');
@@ -803,8 +803,8 @@ export async function purgeMedia(
 		.filter((candidate) => mentioned.has(candidate.objectKey))
 		.map((candidate) => ({ objectKey: candidate.objectKey, reason: 'mentioned' as const }));
 
-	// Fail-closed (round-2 review, §6.3): a truncated scan cannot clear ANY
-	// candidate — the un-scanned tail may still mention it.
+	// Fail-closed: a truncated scan cannot clear ANY candidate — the
+	// un-scanned tail may still mention it.
 	if (truncated) {
 		for (const candidate of candidates) {
 			if (!mentioned.has(candidate.objectKey)) {
@@ -819,11 +819,10 @@ export async function purgeMedia(
 	if (!options.dryRun && !truncated) {
 		for (const candidate of candidates) {
 			if (mentioned.has(candidate.objectKey)) continue;
-			// Anchor re-verify (review rounds 1+2): a dedupe USE landing
-			// after the snapshot refreshes the row's TTL anchor (updated_at
-			// for pending, detached_at for detached); the recorded cutoff
-			// then fails the reuse check and the candidate is skipped as
-			// `reused` — never deleted.
+			// Anchor re-verify: a dedupe USE landing after the snapshot refreshes
+			// the row's TTL anchor (updated_at for pending, detached_at for
+			// detached); the recorded cutoff then fails the reuse check and the
+			// candidate is skipped as `reused` — never deleted.
 			const ttlDays = candidate.status === 'detached' ? detachedDays : pendingDays;
 			const cutoff = new Date(now - ttlDays * DAY_MS);
 			try {
@@ -863,7 +862,7 @@ export async function purgeMedia(
 }
 
 // ---------------------------------------------------------------------------
-// Three-check audit (§4.6: orphan / broken link / missing object)
+// Three-check audit (orphan / broken link / missing object)
 // ---------------------------------------------------------------------------
 
 export interface BrokenLink {
@@ -893,7 +892,7 @@ export interface MediaAuditReport {
 	truncated: boolean;
 }
 
-/** Check ④ (ST-3 3b2): the reference table must stay consistent with the flip
+/** Check ④: the reference table must stay consistent with the flip
  * matrix - flags states the write side cannot produce (a crashed or legacy
  * run) and rows whose target vanished without the deletion hook. */
 export interface ReferenceDrift {
@@ -955,9 +954,9 @@ async function scanMentions(database: FilesDb): Promise<MentionScan> {
 	collect('post', postRows);
 	collect('draft', draftRows);
 	// Page drafts stage their bodies in `payload.content` (per-locale jsonb;
-	// their row-level content column stays null - T13 review): scan every
-	// locale too, else a page draft's images stay invisible to the audit and
-	// to the purge guard's in-use check.
+	// their row-level content column stays null): scan every locale too, else
+	// a page draft's images stay invisible to the audit and to the purge
+	// guard's in-use check.
 	collect(
 		'draft',
 		draftRows.flatMap((row) =>
@@ -999,7 +998,7 @@ async function scanMentions(database: FilesDb): Promise<MentionScan> {
 }
 
 /**
- * Read-only sweep (T6). Broken-link detection reuses the shared mention scan
+ * Read-only sweep. Broken-link detection reuses the shared mention scan
  * within SCAN_LIMIT rows per source; `truncated` reports any cap hit.
  */
 export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditReport> {
@@ -1011,8 +1010,7 @@ export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditRep
 	let brokenLinks: BrokenLink[] = [];
 	if (keys.length > 0) {
 		// No LIMIT here: equality/IN against the unique object_key index. A cap
-		// used to silently turn existing keys into false broken links
-		// (round-2 review).
+		// used to silently turn existing keys into false broken links.
 		const known = await database
 			.select({ objectKey: files.objectKey })
 			.from(files)

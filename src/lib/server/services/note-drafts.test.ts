@@ -11,13 +11,13 @@ import { drafts, notes } from '$lib/server/db/content';
 import { slugTrackers } from '$lib/server/db/system';
 
 /**
- * Service-level tests for the notes draft flow (N1 admin; ledger §9.10 /
- * §13.4): autosave semantics (hash / throttle / optimistic lock), the publish
- * transaction (notes+drafts row locks, slug tracker, field copy, draft
- * removal) and the row-level settings that never enter drafts (§2.3). The db
- * module is mocked with a small executor that records the table of every
- * write, every lock clause and every WHERE condition (rendered with the real
- * dialect) - removing a lock/transaction/condition turns the suite red.
+ * Service-level tests for the notes draft flow: autosave semantics (hash /
+ * throttle / optimistic lock), the publish transaction (notes+drafts row
+ * locks, slug tracker, field copy, draft removal) and the row-level settings
+ * that never enter drafts. The db module is mocked with a small executor
+ * that records the table of every write, every lock clause and every WHERE
+ * condition (rendered with the real dialect); removing a lock, transaction
+ * or condition turns the suite red.
  */
 const { dbMock, state, syncMock } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,
@@ -43,7 +43,7 @@ vi.mock('$lib/server/db', () => ({ db: dbMock }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 // The reference diff runs in the content transaction; its own teeth live in
 // file-references.test.ts. Here we pin WHERE it is called from and with which
-// target/keys (plus the Q6 no-op autosave short-circuit).
+// target/keys (plus the no-op autosave short-circuit).
 vi.mock('./file-references', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('./file-references')>();
 	return { ...actual, syncFileReferences: syncMock };
@@ -209,7 +209,7 @@ describe('note draft flow', () => {
 			transaction: vi.fn(async (callback: (tx: unknown) => unknown) => {
 				state.transactions += 1;
 				// Store the executor so tests can pin that sync ran on the
-				// TRANSACTION, not the bare db (Q15's strongest contract).
+				// TRANSACTION, not the bare db.
 				state.txExecutors = makeExecutors();
 				return callback(state.txExecutors);
 			})
@@ -248,14 +248,14 @@ describe('note draft flow', () => {
 		});
 		expect(result).toMatchObject({ kind: 'unchanged', version: 3, noteId: NOTE_ID });
 		expect(state.updates).toHaveLength(0);
-		// Q6 short-circuit: identical payloads never reach the reference scan.
+		// Short-circuit: identical payloads never reach the reference scan.
 		expect(syncMock).not.toHaveBeenCalled();
 	});
 
 	it('canonicalises temperature to the numeric(4,1) scale so hashes round-trip', async () => {
-		// The form may send '7'; PG reads it back as '7.0'. Without the
-		// scale canonicalisation the hash never matched and every autosave
-		// rewrote the row (round-7 review finding).
+		// The form may send '7'; PG reads it back as '7.0'. Without the scale
+		// canonicalisation the hash never matched and every autosave rewrote
+		// the row.
 		state.selectQueue = [[{ ...BASE_DRAFT, temperatureC: '7.0', coordinates: null }]];
 		const result = await saveNoteDraftWork({
 			draftId: DRAFT_ID,
@@ -770,8 +770,7 @@ describe('note draft flow', () => {
 		expect(await setNotePassword(NOTE_ID, '12345')).toMatchObject({ kind: 'invalid' });
 		expect(state.updates).toHaveLength(3);
 
-		// The minimum is six characters; exactly six is accepted (owner
-		// decision 2026-10-03). '' still clears.
+		// The minimum is six characters; exactly six is accepted; '' still clears.
 		state.selectQueue = [[{ id: NOTE_ID, passwordHash: null }]];
 		state.updateResults = [[{ id: NOTE_ID }]];
 		expect(await setNotePassword(NOTE_ID, '123456')).toEqual({ kind: 'ok' });
@@ -840,8 +839,7 @@ describe('note draft flow', () => {
 		expect(state.updates[1].values.allowComment).toBe(false);
 		const commentWhere = render(state.updateWheres[1]);
 		expect(commentWhere.sql).toContain('"notes"."allow_comment"');
-		// Direction is pinned: flipping `ne` to `eq` must fail here
-		// (verify-round finding).
+		// Direction is pinned: flipping `ne` to `eq` must fail here.
 		expect(commentWhere.sql).toContain('"notes"."allow_comment" <>');
 
 		// Unpin writes null directly.

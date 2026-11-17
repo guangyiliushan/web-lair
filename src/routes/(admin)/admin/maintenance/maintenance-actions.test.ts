@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the /admin/maintenance actions (J-3): guard-first for
+ * Route-level tests for the /admin/maintenance actions: guard-first for
  * every action, uuid guards before the service layer, service results mapped
  * to the right status codes, and the manual-run path handing the resolved
- * definition to enqueueJob (the queue requires one for non-registry names -
- * J-2 review D2 note). The jobs services are mocked wholesale; the ledger
+ * definition to enqueueJob (the queue requires one for non-registry names).
+ * The jobs services are mocked wholesale; the ledger
  * queries inside `load` are exercised by e2e and the verify harness.
  */
 

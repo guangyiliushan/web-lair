@@ -42,7 +42,7 @@
 >
 	<span
 		aria-hidden="true"
-		class="absolute start-0 top-1/2 h-3.5 w-0.5 -translate-y-1/2 rounded-full bg-primary-text opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-visible/row:opacity-100"
+		class="absolute inset-s-0 top-1/2 h-3.5 w-0.5 -translate-y-1/2 rounded-full bg-primary-text opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-visible/row:opacity-100"
 	></span>
 	{#if imageUrl}
 		<img src={imageUrl} alt="" class="size-3.5 shrink-0 rounded-[3px] object-cover" />

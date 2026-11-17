@@ -4,7 +4,7 @@ import { copyObjects, enumerateMigrationObjects, planMigration } from './migrate
 import { sha256Hex } from './signature';
 
 /**
- * Migration engine (W7.4): enumeration adds variants, the plan reports what is
+ * Migration engine: enumeration adds variants, the plan reports what is
  * already on the target, and the copy proves itself by hashing both ends.
  * Resumption must never rewrite bytes that are already correct.
  */

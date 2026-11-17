@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { psql, valkeyAlive, valkeyDel } from './support';
 
 /**
- * N1 public-surface acceptance nails (notes plan §3.5 items 1-3 and 6)
+ * Public-surface acceptance nails
  * against the built site: the list/topic/detail pages on seeded rows, the
  * missing-language 404 hint, the retired-slug 301, and the full password
  * gate - locked shell (body and metadata absent from the DOM), wrong-password

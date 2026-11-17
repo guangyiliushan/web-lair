@@ -1,5 +1,5 @@
 /**
- * Test-email throttling (W9.1).
+ * Test-email throttling.
  *
  * A real send to the current admin's address is a live SMTP operation: it can
  * trigger provider rate limits, spam traps and delivery costs. One send per

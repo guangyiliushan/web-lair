@@ -7,7 +7,7 @@ const PAST = new Date('2026-09-01T00:00:00Z');
 const FUTURE = new Date('2026-10-15T00:00:00Z');
 
 /**
- * The state matrix (ledger §9.1): every (status, published_at) combination is
+ * The state matrix: every (status, published_at) combination is
  * spelled out — the SQL condition and the pure mirror both have to agree with
  * these expectations. `scheduled` with a past timestamp is the lazy-scheduling
  * case: visible without ever flipping the status.

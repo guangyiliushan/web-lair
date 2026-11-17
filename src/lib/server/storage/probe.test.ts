@@ -3,7 +3,7 @@ import { StorageError, type ObjectStoragePort, type StoredObjectBody } from './p
 import { PROBE_KEY_PREFIX, probeStorage } from './probe';
 
 /**
- * Connection probe (W7.3): HeadBucket → capabilities → Put/Get/Delete. Each
+ * Connection probe: HeadBucket → capabilities → Put/Get/Delete. Each
  * stage maps to a closed status code, the probe object never lingers, and no
  * failure message carries the endpoint or a credential.
  */

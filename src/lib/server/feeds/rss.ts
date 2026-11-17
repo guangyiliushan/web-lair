@@ -33,8 +33,8 @@ export interface RssFeedOptions {
 }
 
 /**
- * RSS 2.0 channel with atom:link self and content:encoded items (P3-b,
- * ledger §22). Hand-rolled on purpose: the W3C Feed Validator is the gate,
+ * RSS 2.0 channel with atom:link self and content:encoded items. Hand-rolled
+ * on purpose: the W3C Feed Validator is the gate,
  * not a runtime dependency.
  */
 export function buildRssFeed(options: RssFeedOptions): string {

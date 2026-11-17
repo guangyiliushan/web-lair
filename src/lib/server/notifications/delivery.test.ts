@@ -4,7 +4,7 @@ import type { JobsDb } from '../jobs/types';
 import type { AdapterResult } from './adapters/types';
 
 /**
- * Delivery loop teeth (M6 P5, T5.3): the claim hands back one due row, the
+ * Delivery loop teeth: the claim hands back one due row, the
  * outcome mapping is exact (sent / queued+delay / terminal failed), and the
  * retry schedule is the documented 1m/5m/15m.
  */
@@ -49,7 +49,7 @@ function fakeDeliveryDb(options: {
 			return chain(rows);
 		},
 		// Nested transaction = SAVEPOINT; the owner lookup runs inside one so a
-		// failing `user` read cannot poison the claim transaction (review P1-1).
+		// failing `user` read cannot poison the claim transaction.
 		transaction: async <T>(fn: (client: unknown) => Promise<T>): Promise<T> => fn(tx),
 		update: () => ({
 			set: (values: Record<string, unknown>) => {

@@ -1,6 +1,6 @@
 // scripts/jobs/check-links.ts
 //
-// Manual links-check entry (links line L2, plan §4.6):
+// Manual links-check entry:
 //
 //   pnpm jobs:check-links [--dry-run] [--limit N]
 //

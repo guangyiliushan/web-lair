@@ -7,7 +7,7 @@ import { executePrecheck, type PrecheckDeps } from './precheck.ts';
 import { normalizeLinkUrl } from './normalize.ts';
 
 /**
- * Public application flow (M3 / links plan §5.2): field validation, the
+ * Public application flow: field validation, the
  * hard gates (non-HTTPS is rejected before any write because CHECK 3 keeps
  * every row https; free hosts/TLDs and banned domains are written as
  * `rejected` for audit), same-host de-duplication under an advisory lock,
@@ -81,7 +81,7 @@ export const APPLY_LIMITS = {
 /** One datum each for the route error mapping and the docs. */
 export const APPLY_RATE_LIMIT = { limit: 5, windowSeconds: 24 * 60 * 60 } as const;
 
-/** Plan §5.2: ?? requests, 5 s each, ~15 s total budget (shared with the admin). */
+/** ?? requests, 5 s each, ~15 s total budget (shared with the admin). */
 export { PRECHECK_BUDGET_MS, PRECHECK_TIMEOUT_MS } from './precheck.ts';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

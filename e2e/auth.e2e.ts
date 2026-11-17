@@ -35,7 +35,7 @@ test.describe('Auth pages', () => {
 
 	test('reset-password shows a recovery state without a token', async ({ page }) => {
 		const response = await page.goto('/reset-password');
-		// W1.4: the reset URL never answers 404; a bare visit gets the same
+		// The reset URL never answers 404; a bare visit gets the same
 		// "link expired" card as an expired callback (?error=INVALID_TOKEN).
 		expect(response?.status()).toBe(200);
 		await expect(page.locator('[data-slot="card-title"]')).toHaveText('链接已失效');
@@ -53,7 +53,7 @@ test.describe('Route protection', () => {
 	// session (TAILSCALE_ALLOW_LOOPBACK=true in the playwright webServer env).
 	//
 	// The untrusted branch no longer needs a spoofed x-real-ip header - that
-	// header is not trusted at all any more (ledger §4.27, hole ①). It is covered
+	// header is not trusted at all any more. It is covered
 	// by unit tests in src/lib/server/security/identity.test.ts.
 	test('admin area auto-authenticates the trusted localhost origin', async ({ page }) => {
 		await page.goto('/admin');

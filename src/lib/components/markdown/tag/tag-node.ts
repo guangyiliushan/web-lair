@@ -14,11 +14,11 @@ function tagBgColor(text: string): string {
 	}
 	// Soft tone ranges (green / blue / purple)
 	const palettes = [
-		[171, 214, 158], // 绿
-		[158, 190, 214], // 蓝
-		[214, 158, 200], // 粉紫
-		[214, 200, 158], // 金
-		[158, 214, 200] // 青
+		[171, 214, 158], // green
+		[158, 190, 214], // blue
+		[214, 158, 200], // pink-purple
+		[214, 200, 158], // gold
+		[158, 214, 200] // cyan
 	];
 	const [r, g, b] = palettes[Math.abs(hash) % palettes.length];
 	return `rgba(${r},${g},${b},0.7)`;
@@ -49,7 +49,7 @@ export class TagNode extends TextNode {
 	updateDOM(prev: TagNode, dom: HTMLElement): boolean {
 		// The TagNode text is mutable, so the colour follows text updates
 		dom.style.backgroundColor = tagBgColor(this.__text);
-		return false; // false = Lexical 不替我们更新 DOM，我们已处理
+		return false; // false = Lexical does not refresh the DOM; we already handled it
 	}
 
 	static importDOM(): DOMConversionMap | null {

@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Unit tests for the real mega-menu data (P3-b): the posts loader maps the
+ * Unit tests for the real mega-menu data: the posts loader maps the
  * locale's categories (curated order, visible counts) and the latest visible
  * posts into neutral hrefs; the timeline loader builds the post activity
- * stream; the pages chrome loader (P1b) maps ordered rows with fallback
+ * stream; the pages chrome loader maps ordered rows with fallback
  * labels and footer defaults. The db module is mocked with a queue of
  * select results.
  */
@@ -25,7 +25,7 @@ vi.mock('$lib/paraglide/runtime', () => ({
 	getLocale: () => 'en',
 	locales: ['en', 'zh-cn', 'ja'],
 	// The generated messages module imports this; keep it present for the
-	// real nav_posts_count() call in the footer text (review finding).
+	// real nav_posts_count() call in the footer text.
 	experimentalStaticLocale: undefined
 }));
 vi.mock('$lib/server/config/options-registry', () => ({

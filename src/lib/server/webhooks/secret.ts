@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 /**
- * Webhook signing secrets (ledger §26 / 10-13 grill G5): generated only, in
+ * Webhook signing secrets: generated only, in
  * the Standard Webhooks shape - `whsec_` prefix + base64, with 24-64 bytes of
  * entropy (`SECRET_BYTES` below). Every endpoint carries its own secret;
  * rotation issues a fresh value, and the previous one stops verifying.
@@ -17,7 +17,7 @@ export function generateWebhookSecret(): string {
  * client. Keeps the recognizable prefix and the last four characters
  * (`whsec_…AbCd`); the full value is revealed exactly once, in the
  * create/rotate action result. The base64 padding (`=`) is dropped from the
- * mask so the tail shows four real characters (review round-1 C4).
+ * mask so the tail shows four real characters.
  */
 export function maskWebhookSecret(secret: string): string {
 	const body = secret.replace(/=+$/, '');

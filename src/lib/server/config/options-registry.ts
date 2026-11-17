@@ -236,7 +236,7 @@ export const optionRegistry = {
 		default: { answerEngine: true, training: true }
 	},
 	'comments.enabled': {
-		// W6.1 (C1): site-wide switch for NEW comments. Set false and the form
+		// Site-wide switch for NEW comments. Set false and the form
 		// disappears and every submit path rejects; existing approved rows stay
 		// visible (hiding them would be a separate `comments.visible`). A post
 		// / note `allow_comment` can only narrow this, never widen it.
@@ -244,20 +244,20 @@ export const optionRegistry = {
 		default: true
 	},
 	'payments.enabled': {
-		// W6.8 (C6): contract-only flag, deliberately without a consumer.
-		// Paid/member content is NOT implemented in M4: no table, no route, no
-		// settings UI reads or writes this key, and paid/member access modes do
-		// not exist. It is registered so the default is explicit and testable;
-		// flipping it on changes nothing until the trigger in the decision
-		// register §3C.4 (provider + tax/terms/refunds + entitlement model +
-		// SEO/leak-surface tests) opens a future schema window.
+		// Contract-only flag, deliberately without a consumer. Paid/member
+		// content is NOT implemented: no table, no route, no settings UI reads
+		// or writes this key, and paid/member access modes do not exist. It is
+		// registered so the default is explicit and testable; flipping it on
+		// changes nothing until the rest of the paid surface exists (provider,
+		// tax/terms/refunds, entitlement model, SEO/leak-surface tests) and a
+		// real schema window opens.
 		schema: z.boolean(),
 		default: false
 	},
 	'comments.privacy': {
-		// W6.2 (C2/C4/C5): request-time IP handling for comments. Off by
+		// Request-time IP handling for comments. Off by
 		// default; when off no GeoIP lookup, no CIDR match and no country storage
-		// happen (the per-IP rate bucket in W6.10 still runs). When
+		// happen (the per-IP rate bucket still runs). When
 		// on, the IP is matched against blockedCidrs and used for the per-IP
 		// limit only - the `comments.ip` column stays null. Country/region are
 		// stored only with collectCountry (edge header provider required) and
@@ -302,10 +302,10 @@ export const optionRegistry = {
 						.min(0, { error: () => m.admin_option_err_unit01() })
 						.max(1, { error: () => m.admin_option_err_unit01() })
 				})
-				// AI-2.1: cross-field order - "allow first, block above it".
+				// Cross-field order: "allow first, block above it".
 				.refine((t) => t.allow < t.block, { error: () => m.admin_option_err_threshold_order() })
 		}),
-		// Per §3.3: rules first, AI off until enabled, shadow mode on, the
+		// Rules first, AI off until enabled, shadow mode on, the
 		// WordPress-style link threshold, first comments held for review.
 		default: {
 			enabled: false,
@@ -319,8 +319,8 @@ export const optionRegistry = {
 		}
 	},
 	'storage.provider': {
-		// W7.2 (ST1/ST4/ST8): the SAVED candidate. Saving never changes the live
-		// target - activation runs through `storage:migrate --cutover` (Q4/Q13).
+		// The SAVED candidate. Saving never changes the live
+		// target - activation runs through `storage:migrate --cutover`.
 		schema: providerConfigSchema,
 		default: DEFAULT_PROVIDER_CONFIG
 	},
@@ -331,13 +331,13 @@ export const optionRegistry = {
 		default: DEFAULT_STORAGE_ACTIVE
 	},
 	'storage.status': {
-		// Last connection probe (W7.3) and the bucket capabilities the purge
-		// guard needs (W7.5). Sanitized: no URL, key or driver message.
+		// Last connection probe and the bucket capabilities the purge
+		// guard needs. Sanitized: no URL, key or driver message.
 		schema: storageStatusSchema,
 		default: DEFAULT_STORAGE_STATUS
 	},
 	'storage.migration': {
-		// W7.4: CLI migration bookkeeping. `copying` freezes uploads and makes
+		// CLI migration bookkeeping. `copying` freezes uploads and makes
 		// purge refuse; a stuck state needs `storage:migrate --reset`.
 		schema: storageMigrationSchema,
 		default: DEFAULT_STORAGE_MIGRATION
@@ -353,17 +353,17 @@ export const optionRegistry = {
 				.int({ error: () => m.admin_option_err_int() })
 				.positive({ error: () => m.admin_option_err_positive() })
 		}),
-		// Storage line §4.6: never-referenced `pending` blobs purge a week
+		// Never-referenced `pending` blobs purge a week
 		// after their LAST event (dedupe hits refresh updated_at), `detached`
 		// blobs a month after detaching. Photos-linked files are exempt from
 		// auto-purge entirely (gallery files are never cleaned silently).
-		// Floor is 1 day (round-3 ruling): a destructive knob must not reach
+		// Floor is 1 day: a destructive knob must not reach
 		// zero; an explicit instant-clean switch can be added if ever needed.
 		default: { pendingDays: 7, detachedDays: 30 }
 	},
 	'friends.apply': {
-		// W6.4 (C8): applications open; home-page URLs only (no sub paths).
-		// `internalizeAvatars` was removed - it had zero consumers (register).
+		// Applications open; home-page URLs only (no sub paths).
+		// `internalizeAvatars` was removed - it had zero consumers.
 		schema: z.object({
 			enabled: z.boolean(),
 			allowSubPath: z.boolean()
@@ -400,7 +400,7 @@ export const optionRegistry = {
 				.min(1, { error: () => m.admin_option_err_min1() })
 				.max(16, { error: () => m.admin_option_err_max16() })
 		}),
-		// Plan §2.6 defaults: daily cadence, 3-strike outage / 2-strike
+		// Defaults: daily cadence, 3-strike outage / 2-strike
 		// backlink loss before queueing, 30-day grace, 10s per fetch unit,
 		// global concurrency 2 (politeness; per-host serialisation on top).
 		default: {
@@ -420,7 +420,7 @@ export const optionRegistry = {
 			acceptedBacklinkHosts: z.array(z.string()),
 			publicBannedList: z.boolean()
 		}),
-		// Plan §2.6: public-host / free-domain suffixes, free TLDs, extra
+		// Public-host / free-domain suffixes, free TLDs, extra
 		// accepted backlink hosts (domain moves), public ban wall on.
 		default: {
 			blockedHostSuffixes: [
@@ -451,8 +451,8 @@ export const optionRegistry = {
 	},
 	'site.info': {
 		// `name` feeds friend cards, llms.txt, the web manifest and
-		// `og:site_name` (decision S4); `description` is the friend-card
-		// blurb; `avatar` is the optional card avatar (S5). All three are
+		// `og:site_name`; `description` is the friend-card
+		// blurb; `avatar` is the optional card avatar. All three are
 		// edited on Settings → Site.
 		schema: z.object({
 			name: z
@@ -473,11 +473,11 @@ export const optionRegistry = {
 					error: () => m.admin_option_err_avatar_url()
 				})
 		}),
-		// Public "our link info" block on /friends (plan §2.6).
+		// Public "our link info" block on /friends.
 		default: { name: 'Web Lair', description: '', avatar: '' }
 	},
 	'site.icon': {
-		// Favicon (decision S3): empty url = the bundled static asset; `version`
+		// Favicon: empty url = the bundled static asset; `version`
 		// is bumped by the Site page on every save so the root layout's
 		// `?v=` cache bust changes even when the URL does not.
 		schema: z.object({
@@ -490,7 +490,7 @@ export const optionRegistry = {
 		}),
 		default: { url: '', version: 0 }
 	},
-	// `site.owner` is retired (M4 foundation, O-C2): the header reads
+	// `site.owner` is retired: the header reads
 	// site_identity -> user_profiles -> user. Do not reintroduce a projection.
 	'site.ownerStatus': {
 		// Owner activity ticket next to the badge (static stage): one datum —
@@ -507,7 +507,7 @@ export const optionRegistry = {
 		default: OWNER_STATUS_DEFAULT
 	},
 	'presence.enabled': {
-		// Realtime batch (ledger §23): master switch for the presence feature
+		// Master switch for the presence feature
 		// (heartbeats, the SSE stream, the reader badge, the dashboard cards).
 		schema: z.boolean(),
 		default: true
@@ -522,17 +522,17 @@ export const optionRegistry = {
 		// effective flag for a viewer is this option OR an admin session
 		// (admins always see dots on content pages). The badge/histogram
 		// layer is gated by presence.readerView instead — the two switches
-		// are independent (review finding).
+		// are independent.
 		schema: z.boolean(),
 		default: false
 	},
 	'projects.sync_targets': {
-		// Projects line §2.5: the accounts the sync job pulls public
+		// The accounts the sync job pulls public
 		// repositories from; empty by default (the admin surface prompts for
 		// configuration). `.trim()` normalizes entry whitespace and duplicate
 		// (provider, account) pairs are rejected - a duplicate burns the same
 		// anonymous quota twice for zero benefit (validation lives in the
-		// registry per AI-1.1, not in route handlers).
+		// registry, not in route handlers).
 		schema: z
 			.array(
 				z.object({
@@ -555,7 +555,7 @@ export const optionRegistry = {
 		default: []
 	},
 	'notifications.preferences': {
-		// M6 P5 (decision register §3E N8): per-group channel switches for the
+		// Per-group channel switches for the
 		// notification outbox. The schema and the default object live in
 		// `notifications/preferences.ts` so the drain (plain Node) parses the
 		// SAME contract without importing this registry (which pulls paraglide
@@ -579,7 +579,7 @@ function entryFor(key: string): RegistryEntry {
 /**
  * Read a validated value. A missing row yields the default; a corrupt row
  * logs and falls back to the default too - the site must not break on a bad
- * settings row (AI is an extension layer, §14.1).
+ * settings row (AI is an extension layer).
  */
 export async function getOption<K extends OptionKey>(
 	key: K,
@@ -622,7 +622,7 @@ export async function setOption<K extends OptionKey>(
 ): Promise<void> {
 	const entry = entryFor(key);
 	const parsed = entry.schema.parse(value); // ZodError on invalid input
-	// Batch-5 tz closure (ledger §13.9): the Intl probe alone accepts names
+	// The Intl probe alone accepts names
 	// PostgreSQL rejects ('Japan', 'US/Pacific'...) - stored, they 500 every
 	// belongs-to query. Gate this write on pg_timezone_names too.
 	if (key === 'site.timezone') {

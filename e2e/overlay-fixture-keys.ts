@@ -1,5 +1,5 @@
 /**
- * Shared fixture contract for the overlay e2e (ST-3 3c): the three GIF object
+ * Shared fixture contract for the overlay e2e: the three GIF object
  * keys must stay in lockstep between the spec (registry rows + request
  * assertions) and scripts/e2e-overlay-fixtures.ts (byte publisher). Keys
  * satisfy KEY_PATTERN's directory backreference (`ab/ab…`).

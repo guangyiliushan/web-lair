@@ -9,7 +9,7 @@ const run = promisify(execFile);
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 
 /**
- * Probe cores strip-only guard (M6 P4): the builtin roster test only imports
+ * Probe cores strip-only guard: the builtin roster test only imports
  * the builtin wrappers, and a builtin reaches its core through the SDK's
  * dynamic import - so a strip-only landmine inside a core (`$lib`,
  * extensionless relative import, an unresolvable package) would pass that

@@ -1,5 +1,5 @@
 /**
- * `mail.probe` job core (M6 P4, F-10).
+ * `mail.probe` job core.
  *
  * Two checks with different questions:
  *  - daily `transporter().verify()`: does the SMTP handshake + AUTH still
@@ -9,8 +9,8 @@
  *    subject and the `messageId` recorded in the run ledger: verify() cannot
  *    see a spam foldered, DKIM-broken or From-mismatched message.
  *
- * Failure routing: `notify()` (P5 outbox) plus a healthchecks `/fail` ping.
- * The job does not throw - the run ledger records the outcome and P5's
+ * Failure routing: `notify()` (the outbox) plus a healthchecks `/fail` ping.
+ * The job does not throw - the run ledger records the outcome and the
  * `job.failed` producer is out of scope here; alerting is explicit instead of
  * inferred from a red status.
  */
@@ -169,7 +169,7 @@ export async function runMailProbe(ctx: JobContext, deps: MailProbeDeps = {}): P
 
 	const failing = !verification.ok || (delivery !== null && !delivery.ok);
 	const healthcheckStatus = failing ? 'fail' : 'ok';
-	// External record before the in-app seam: a hung P5 outbox sink must not
+	// External record before the in-app seam: a hung outbox sink must not
 	// delay the /fail past the job timeout (the drain hard-exits on timeout).
 	const healthcheckPing = await ping('mail', healthcheckStatus);
 	if (failing)

@@ -208,7 +208,7 @@ export async function handleEmbedMetaRequest(
 	if (requestUrl.searchParams.get('url') === null) throw error(400, 'missing url');
 	if (!target) throw error(403, 'not an enrichable github.com card url');
 
-	// Ledger §21 / plan §7: metadata cache lives in the cache layer (Valkey in
+	// Metadata cache lives in the cache layer (Valkey in
 	// production, in-process otherwise); failures are never cached.
 	const store = options.cache ?? (await import('$lib/server/cache')).getCache();
 	const cacheKey = `embed:${createHash('sha1').update(target.apiUrl).digest('hex')}`;

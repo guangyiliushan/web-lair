@@ -35,14 +35,14 @@ describe('sdkRuntimeSpecifier', () => {
 		'falls back to a file URL when path.relative cannot express the path',
 		() => {
 			// Pick the OTHER drive dynamically: a hard-coded C: made this test
-			// red on any checkout living on C: (review round 2, P2-5).
+			// red on any checkout that lives on the C: drive.
 			const other = /^c:/i.test(repoRoot) ? 'D:' : 'C:';
 			const spec = sdkRuntimeSpecifier(`${other}/elsewhere/jobs`, SDK_PATH);
 			expect(spec.startsWith('file:///')).toBe(true);
 			expect(fileURLToPath(spec).endsWith('jobs-sdk.ts')).toBe(true);
-			// Repo-independent fixed pairs (round 3, M14a): both branches pinned
-			// to concrete drives so discrimination does not depend on where the
-			// repository happens to live.
+			// Repo-independent fixed pairs: both branches pinned to concrete
+			// drives so discrimination does not depend on where the repository
+			// happens to live.
 			const crossDrive = sdkRuntimeSpecifier('D:/x/jobs', 'C:/y/src/lib/server/jobs/jobs-sdk.ts');
 			expect(crossDrive.startsWith('file:///')).toBe(true);
 			const sameDrive = sdkRuntimeSpecifier('C:/x/jobs', 'C:/x/src/lib/server/jobs/jobs-sdk.ts');
@@ -146,9 +146,9 @@ describe('ensureJobsScaffold', () => {
 			join(repoRoot, 'node_modules', '@types').replaceAll('\\', '/')
 		);
 		expect(config.exclude).toContain('_sdk.runtime.ts');
-		// Pinned after the J-2 review: the strictness keys are part of what
-		// makes jobs.typecheck meaningful - a silently dropped `strict` must
-		// fail here, not sail through.
+		// Pinned: the strictness keys are part of what makes jobs.typecheck
+		// meaningful - a silently dropped `strict` must fail here, not sail
+		// through.
 		expect(config.compilerOptions.strict).toBe(true);
 		expect(config.compilerOptions.skipLibCheck).toBe(true);
 		expect(config.compilerOptions.lib).toEqual(['esnext']);

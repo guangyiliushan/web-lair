@@ -24,8 +24,8 @@ const dbMock = vi.hoisted(() => {
 	return mock;
 });
 const updateChain = {
-	// The dedupe touch now CONFIRMS the row (review round 1): `.returning`
-	// resolves the touched id, or an empty list when a purge won the race.
+	// The dedupe touch now CONFIRMS the row: `.returning` resolves the
+	// touched id, or an empty list when a purge won the race.
 	set: vi.fn(() => ({
 		where: vi.fn(() => ({ returning: vi.fn(async () => [{ id: 'file-1' }]) }))
 	}))
@@ -145,7 +145,7 @@ const PROCESSED = {
 beforeEach(() => {
 	vi.clearAllMocks();
 	// Key-aware defaults: the services read media.purge, storage.migration and
-	// storage.active on the same call path (W7.4/W7.5).
+	// storage.active on the same call path.
 	getOptionMock.mockImplementation(async (key: string) => {
 		if (key === 'media.purge') return { pendingDays: 7, detachedDays: 30 };
 		if (key === 'storage.migration') return { state: 'idle' };
@@ -217,7 +217,7 @@ describe('uploadFile', () => {
 		expect(dbMock.insert).not.toHaveBeenCalled();
 		const chain = dbMock.select.mock.results[0].value as { from: ReturnType<typeof vi.fn> };
 		expect(chain.from.mock.calls[0][0]).toBe(filesTable);
-		// Round-3 ruling: the dedupe hit refreshes the last-event anchor.
+		// The dedupe hit refreshes the last-event anchor.
 		expect(dbMock.update).toHaveBeenCalledTimes(1);
 		expect(dbMock.update.mock.calls[0][0]).toBe(filesTable);
 		expect(updateChain.set).toHaveBeenCalledWith({ updatedAt: expect.any(Date) });
@@ -233,8 +233,7 @@ describe('uploadFile', () => {
 
 		expect(result).toEqual({ ...EXISTING_ROW, status: 'detached', deduplicated: true });
 		// A reuse landing in the re-upload -> first-save window must restart
-		// the detached TTL clock, or a purge deletes bytes just handed out
-		// (review round 2).
+		// the detached TTL clock, or a purge deletes bytes just handed out.
 		expect(updateChain.set).toHaveBeenCalledWith({
 			updatedAt: expect.any(Date),
 			detachedAt: expect.any(Date)
@@ -490,7 +489,7 @@ describe('deleteFile', () => {
 		// Guard queries must hit the right tables (refs vs photos).
 		expect(dbMock.$count.mock.calls[0][0]).toBe(fileReferences);
 		expect(dbMock.$count.mock.calls[1][0]).toBe(photosTable);
-		// §11 fix: the guard runs under the row lock, inside one transaction.
+		// The guard runs under the row lock, inside one transaction.
 		expect(dbMock.transaction).toHaveBeenCalledTimes(1);
 		const lockChain = dbMock.select.mock.results[0].value as { for: ReturnType<typeof vi.fn> };
 		expect(lockChain.for).toHaveBeenCalledWith('update');
@@ -542,7 +541,7 @@ describe('deleteFile', () => {
 		expect(dbMock.$count.mock.invocationCallOrder[1]).toBeLessThan(
 			storageMock.delete.mock.invocationCallOrder[0]
 		);
-		// Objects-first ordering is retryable: pin it (round-2 mutation m18).
+		// Objects-first ordering is retryable: pin it.
 		const lastObjectDelete = storageMock.delete.mock.invocationCallOrder.at(-1) ?? -1;
 		expect(lastObjectDelete).toBeGreaterThan(0);
 		expect(lastObjectDelete).toBeLessThan(dbMock.delete.mock.invocationCallOrder[0]);
@@ -668,7 +667,7 @@ describe('listPurgeCandidates', () => {
 						status: 'pending',
 						createdAt: new Date('2026-01-01T00:00:00Z'),
 						detachedAt: null,
-						// Anchor = LAST event (round-3): exactly 7 days, inclusive.
+						// Anchor = LAST event: exactly 7 days, inclusive.
 						updatedAt: new Date('2026-01-01T00:00:00Z')
 					}
 				])
@@ -689,7 +688,7 @@ describe('purgeMedia', () => {
 		status: 'pending',
 		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
 		detachedAt: null,
-		// pending anchors on the LAST event since the round-3 ruling.
+		// pending anchors on the LAST event.
 		updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
 	};
 

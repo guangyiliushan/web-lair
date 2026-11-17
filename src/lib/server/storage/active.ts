@@ -4,12 +4,12 @@ import { DEFAULT_STORAGE_ACTIVE, storageActiveSchema, type StorageActive } from 
 import { StorageError } from './port.ts';
 
 /**
- * Strict read of the live provider row (W7 review P1).
+ * Strict read of the live provider row.
  *
  * `getOption('storage.active')` falls back to the registry DEFAULT whenever the
  * stored value fails its schema — right for an informational option, wrong for
- * the live storage target: it silently swaps the provider (Q14 forbids exactly
- * that). This accessor distinguishes the three states the runtime cares about:
+ * the live storage target: it silently swaps the provider, which must not
+ * happen here. This accessor distinguishes the three states the runtime cares about:
  *
  *   no row        → the bootstrap default (bundled RustFS), legitimate;
  *   valid row     → that row;

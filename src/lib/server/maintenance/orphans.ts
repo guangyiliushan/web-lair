@@ -9,11 +9,11 @@ import { fileReferences } from '../db/system/file-reference.schema.ts';
 import { syncFileReferences } from '../services/file-references.ts';
 
 /**
- * Orphan sweep (M5 / ledger §9.1): `file_references` and `drafts` have a
+ * Orphan sweep: `file_references` and `drafts` have a
  * polymorphic `ref_id`, so no foreign key can cascade when the target row is
  * deleted out-of-band (a direct SQL delete, a failed publish, an old bug).
  *
- * Rules (M5 D4):
+ * Rules:
  *   - file references to a missing target go through `syncFileReferences` with
  *     an empty key list. A raw DELETE would bypass the lock order and leave
  *     `files.status` stale; the sync also detaches the file when it was the

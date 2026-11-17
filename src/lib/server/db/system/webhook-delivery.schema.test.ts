@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /**
- * W9.5 migration teeth: the retry columns must exist with the exact defaults
+ * Migration teeth: the retry columns must exist with the exact defaults
  * the drain relies on, and existing delivery rows must be backfilled to
  * `created_at` (not left at the migration-time `now()`, which would delay a
  * backlog by the age of the row).
@@ -48,8 +48,8 @@ describe('webhook delivery retry migration (W9.4/W9.5)', () => {
 		expect(entries.find((item) => item.tag === '0005_comments_region_code')).toBeDefined();
 		const entry = entries.find((item) => item.tag === '0006_webhook_delivery_retry');
 		expect(entry).toBeDefined();
-		// Drizzle diffs against the highest SNAPSHOT, not the journal: the W6
-		// 0005 snapshot is the base (integration order), so 0006 chains to it.
+		// Drizzle diffs against the highest SNAPSHOT, not the journal: the 0005
+		// snapshot is the base (integration order), so 0006 chains to it.
 		const snapshotPath = fileURLToPath(
 			new URL('../../../../../drizzle/meta/0006_snapshot.json', import.meta.url)
 		);
@@ -67,7 +67,7 @@ describe('webhook delivery retry migration (W9.4/W9.5)', () => {
 			)
 		) as { id: string };
 		expect(snapshot.prevId).toBe(prev.id);
-		// The merged snapshot keeps W6's comments column and adds W9's retry
+		// The merged snapshot keeps the comments column and adds the retry
 		// columns/index/check.
 		const comments = snapshot.tables['public.comments'];
 		expect(comments.columns).toHaveProperty('region_code');

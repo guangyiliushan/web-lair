@@ -20,10 +20,10 @@ import type {
 } from './types.ts';
 
 /**
- * The sync orchestrator (plan §3.5): target listing -> filter -> per-provider
- * upsert with the four write rules - new rows land `pending` with the
- * snapshot + prefill; existing rows get the snapshot ONLY (`status` and every
- * user field are never touched; rename refreshes `project_url`/`full_name`
+ * The sync orchestrator: target listing -> filter -> per-provider upsert
+ * with the four write rules - new rows land `pending` with the snapshot +
+ * prefill; existing rows get the snapshot ONLY (`status` and every user
+ * field are never touched; rename refreshes `project_url`/`full_name`
  * because the API response is the source of truth); `rejected` rows are
  * skipped forever; refresh failures stamp `last_error_kind` without changing
  * status. Single-flight is the caller's job (drain per-job lock /
@@ -91,7 +91,7 @@ function insertValues(provider: ProjectSyncProvider, repo: RawRepoMeta, now: Dat
 }
 
 /**
- * Snapshot-only update (§2.8): language / stars / pushed_at / archived /
+ * Snapshot-only update: language / stars / pushed_at / archived /
  * fork / last_synced_at / last_error_kind plus the rename pair. User fields
  * (name / description / preview_url / doc_url / avatar / sort_order /
  * status) must never appear here.
@@ -157,7 +157,7 @@ export async function runSync(options: RunSyncOptions): Promise<SyncSummary> {
 			continue;
 		}
 		if (listed.rateLimited) {
-			// Upsert what was fetched; the account is done for this run (§3.4).
+			// Upsert what was fetched; the account is done for this run.
 			addFailure({
 				provider: target.provider,
 				account: target.account,
@@ -212,7 +212,7 @@ export async function runSync(options: RunSyncOptions): Promise<SyncSummary> {
 			const existing = byExternalId.get(repo.externalId);
 			if (existing) {
 				if (existing.status === 'rejected') {
-					// Permanent memory: a rejected row is never resurrected (§3.5-3).
+					// Permanent memory: a rejected row is never resurrected.
 					summary.skipped += 1;
 					continue;
 				}
@@ -261,7 +261,7 @@ export async function runSync(options: RunSyncOptions): Promise<SyncSummary> {
 }
 
 /**
- * Refresh mode (§3.5-4): re-GET selected rows one by one; 404 stamps
+ * Refresh mode: re-GET selected rows one by one; 404 stamps
  * `not_found` without touching the review status; other kinds are stamped
  * the same way (this row was explicitly checked, so its ledger entry is the
  * point).
@@ -274,7 +274,7 @@ async function refreshByIds(
 	const { db, dryRun, now } = options;
 	// Duplicate ids collapse: one fetch per row (review 2026-10-08).
 	const ids = [...new Set(options.refreshIds ?? [])];
-	/** Accounts that hit a rate limit this run - remaining rows skip (plan §3.4). */
+	/** Accounts that hit a rate limit this run - remaining rows skip. */
 	const rateLimitedAccounts = new Set<string>();
 	const rows = await db
 		.select({
@@ -294,7 +294,7 @@ async function refreshByIds(
 		}
 		if (row.status === 'rejected') {
 			// Permanent memory: rejected rows are never touched by sync,
-			// refresh included (review 2026-10-08, §3.5).
+			// refresh included.
 			summary.skipped += 1;
 			continue;
 		}
@@ -311,8 +311,8 @@ async function refreshByIds(
 		// 2026-10-08).
 		const accountKey = `${identity.provider}/${identity.account.toLowerCase()}`;
 		if (rateLimitedAccounts.has(accountKey)) {
-			// Plan §3.4: after a rate limit, the rest of this run's requests
-			// for the account are abandoned (review 2026-10-08).
+			// After a rate limit, the rest of this run's requests for the
+			// account are abandoned.
 			summary.skipped += 1;
 			continue;
 		}

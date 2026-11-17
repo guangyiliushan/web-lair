@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
-/** Webhook endpoint registry (platform §D.2): T1 delivery targets. */
+/** Webhook endpoint registry: event delivery targets. */
 export const webhooks = pgTable(
 	'webhooks',
 	{
@@ -18,7 +18,7 @@ export const webhooks = pgTable(
 		payloadUrl: text('payload_url').notNull(),
 		events: text('events').array().notNull(),
 		/**
-		 * Legacy plaintext signing secret (W2.6). New rows write NULL and store
+		 * Legacy plaintext signing secret. New rows write NULL and store
 		 * the value encrypted in `webhook_secrets`; this column stays readable
 		 * only until the backfill has run, so an un-migrated endpoint keeps
 		 * verifying and a rollback is symmetric.

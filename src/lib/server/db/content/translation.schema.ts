@@ -57,15 +57,14 @@ export interface TranslationProgress {
 }
 
 /**
- * Translation workbench (AI-1 patch, ledger §14.3; post/note dual arc added
- * by the micro-content line §17): one row per generation attempt for a post
- * OR a note source. `accepted` = written into the target row; `discarded` =
+ * Translation workbench: one row per generation attempt for a post OR a
+ * note source. `accepted` = written into the target row; `discarded` =
  * kept for the record (unless the source group is deleted - source FKs
  * cascade). At most one in-flight draft per (source, target lang) - the
  * unique is split per arc because exactly one source column is set, and it
  * is scoped to `status = 'draft'` so a discard does not block
  * re-translation. Targets use SET NULL, so an accepted row can outlive its
- * target pointer (pending: accepted => target non-empty, ledger §17).
+ * target pointer (pending: accepted => target non-empty).
  */
 export const translations = pgTable(
 	'translations',
@@ -135,10 +134,10 @@ export const translations = pgTable(
 		progress: jsonb('progress').$type<TranslationProgress>()
 	},
 	(table) => [
-		// Exclusive source arc: exactly one of post / note (§17 C1); at most
-		// one target (empty until acceptance). Cross-arc rows (a note source
-		// with a post target) are prevented at the application layer - a
-		// DB-level implication CHECK is registered as pending (ledger §17).
+		// Exclusive source arc: exactly one of post / note; at most one target
+		// (empty until acceptance). Cross-arc rows (a note source with a post
+		// target) are prevented at the application layer - a DB-level
+		// implication CHECK is registered as pending.
 		check(
 			'translations_source_arc_check',
 			sql`num_nonnulls(${table.sourcePostId}, ${table.sourceNoteId}) = 1`
@@ -156,8 +155,8 @@ export const translations = pgTable(
 		uniqueIndex('translations_draft_note_uniq')
 			.on(table.sourceNoteId, table.targetLang)
 			.where(sql`${table.status} = 'draft' and ${table.sourceNoteId} is not null`),
-		// Partial leading indexes serve the FK referential checks (§11-A2):
-		// the arc column is non-null whenever a check runs.
+		// Partial leading indexes serve the FK referential checks: the arc
+		// column is non-null whenever a check runs.
 		index('translations_source_post_idx')
 			.on(table.sourcePostId)
 			.where(sql`${table.sourcePostId} is not null`),

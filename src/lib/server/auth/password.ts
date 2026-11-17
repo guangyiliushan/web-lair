@@ -4,7 +4,7 @@ import { env } from '$env/dynamic/private';
 import { hashArgon2id, isArgon2idPhc, verifyArgon2id } from '$lib/server/security/argon2';
 
 /**
- * Password hashing for the better-auth credential account (W8.8 / S1-D).
+ * Password hashing for the better-auth credential account.
  *
  * New hashes are Argon2id via the official `emailAndPassword.password`
  * hash/verify hooks - no auth-table change. Verification accepts both the
@@ -71,7 +71,7 @@ async function verifyScrypt(password: string, hash: string): Promise<boolean> {
 	const fromStringSalt = await scryptKey(password, saltHex);
 	if (timingSafeEqual(fromStringSalt, expected)) return true;
 
-	// Compatibility: hashes written by the first W8.8 cut decoded the hex
+	// Compatibility: an earlier cut of this hash decoded the hex
 	// salt to 16 raw bytes. Those rows exist only on this feature branch; the
 	// fallback keeps them verifiable until the next password change.
 	const fromRawSalt = await scryptKey(password, Buffer.from(saltHex, 'hex'));

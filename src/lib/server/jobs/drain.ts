@@ -81,8 +81,8 @@ export interface DrainDeps {
 	acquireLock(job: string): Promise<(() => Promise<void>) | null>;
 	loadJob(name: string): Promise<LoadedJob>;
 	/**
-	 * Merged job metadata (registry ∪ user layer, J-2). Defaults to the
-	 * registry-only lookup so non-drain callers keep the pre-J-2 contract.
+	 * Merged job metadata (registry ∪ user layer). Defaults to the
+	 * registry-only lookup so non-drain callers keep the earlier contract.
 	 */
 	resolveJob?(name: string): Promise<JobDefinition | null>;
 	now?: () => Date;
@@ -484,7 +484,7 @@ async function reclaimStaleRuns(deps: ResolvedDeps, job: string): Promise<number
 		.update(jobRuns)
 		// `finished_at` stays NULL on purpose: the run never completed and the
 		// reclaimer cannot know when it died - a fabricated `now` would turn
-		// into a fake duration on the J-3 dashboard. `error = 'stale'` is the
+		// into a fake duration on the admin dashboard. `error = 'stale'` is the
 		// marker that this row was reclaimed.
 		.set({ status: 'failed', error: STALE_ERROR })
 		.where(and(eq(jobRuns.job, job), eq(jobRuns.status, 'running')))

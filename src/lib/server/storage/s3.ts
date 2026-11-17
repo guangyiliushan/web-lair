@@ -12,11 +12,10 @@ import {
 } from './port';
 
 /**
- * Read timeouts split by stage (ST-1 follow-up, landed before the pmtiles
- * Range work): stage 1 covers request start → response headers, stage 2
- * guards the streamed body against idle gaps — a slow but ACTIVE download
- * (pmtiles extracts) is never killed by a wall-clock cap the way a single
- * `AbortSignal.timeout` would.
+ * Read timeouts split by stage: stage 1 covers request start → response
+ * headers, stage 2 guards the streamed body against idle gaps — a slow but
+ * ACTIVE download (pmtiles extracts) is never killed by a wall-clock cap
+ * the way a single `AbortSignal.timeout` would.
  */
 const DEFAULT_HEADERS_TIMEOUT_MS = 30_000;
 const DEFAULT_BODY_IDLE_TIMEOUT_MS = 30_000;
@@ -113,15 +112,15 @@ interface S3StorageOptions {
 }
 
 /**
- * S3-dialect adapter (W7.1, decision Q2): one implementation for the bundled
+ * S3-dialect adapter: one implementation for the bundled
  * RustFS (`driver=local`, path-style over loopback) and any external
- * S3-compatible provider (`driver=s3`: AWS S3 / R2 / MinIO / B2 / Wasabi /
+ * S3-compatible provider (`driver=s3`: AWS S3 / MinIO / B2 / Wasabi /
  * Spaces). Only the tested subset of verbs is implemented (PUT/GET/DELETE/
  * HEAD + bucket HEAD/PUT and the two capability reads the purge guards need);
  * reads and writes always flow through this adapter — v1 does not presign.
  *
  * Addressing follows `forcePathStyle`: `true` → `endpoint/bucket/key`
- * (RustFS, MinIO), `false` → `bucket.endpoint/key` (AWS S3, R2).
+ * (RustFS, MinIO), `false` → `bucket.endpoint/key` (AWS S3, virtual-hosted).
  */
 export class S3Storage implements ObjectStoragePort {
 	readonly #config: S3StorageConfig;
@@ -200,7 +199,7 @@ export class S3Storage implements ObjectStoragePort {
 
 	/**
 	 * Versioning and object lock are the two properties that decide whether a
-	 * DELETE actually frees bytes (W7.5). A provider that answers 501/
+	 * DELETE actually frees bytes. A provider that answers 501/
 	 * NotImplemented has no such feature, so the value cannot be "on"; any
 	 * other refusal resolves `unknown` and the caller fails closed.
 	 */

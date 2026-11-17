@@ -3,7 +3,7 @@ import { CACHE_PREFIX, type CacheStore, type ScoredMember } from './store';
 
 /**
  * Valkey-backed store (iovalkey — the valkey.io-listed client that ships pure
- * JS and therefore runs everywhere, including Windows dev; ledger §21).
+ * JS and therefore runs everywhere, including Windows dev).
  * Degradation contract: KV access and the presence writes (zadd/ztrim/sadd/
  * expire) swallow infrastructure errors; `incr` and the presence reads
  * (zcountAbove/zrangeAbove/scard) rethrow so their callers (`rateLimit()` /
@@ -166,7 +166,7 @@ export class ValkeyCacheStore implements CacheStore {
 	}
 
 	/**
-	 * Readiness probe (M6 P4): the same connection, one real round trip.
+	 * Readiness probe: the same connection, one real round trip.
 	 * Deliberately rethrows - `/api/ready` must see the failure, unlike the
 	 * fail-open KV/presence writes above.
 	 */
@@ -191,7 +191,7 @@ export class ValkeyCacheStore implements CacheStore {
  * Exclusive lower bound for the window reads: `(min` keeps the read boundary
  * consistent with the write-side trim (members at or below the cutoff are
  * dead). ±Infinity map to the infinities ZCOUNT/ZRANGEBYSCORE accept.
- * Exported for the syntax pins in store.test.ts (review finding).
+ * Exported for the syntax pins in store.test.ts.
  */
 export function exclusiveLowerBound(minScore: number): string {
 	if (minScore === -Infinity) return '-inf';

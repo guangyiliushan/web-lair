@@ -3,11 +3,11 @@ import { bootstrapReader, ORIGIN, psql } from './support';
 import { zhCnLocale } from './locale-fixture';
 
 /**
- * 3a batch tail (Q1/Q10/Q11/Q12): the editor image chain end to end against
+ * The editor image chain runs end to end against
  * the real build, the real upload pipeline (sniff -> sharp -> RustFS) and the
  * real database - picker inserts, paste/drop uploads, and the tooth that
  * matters: the URLs the editor writes are fetchable by an ANONYMOUS reader
- * (the P0 this batch fixed was exactly "the inserted link 404s for every
+ * (this batch fixed exactly "the inserted link 404s for every
  * reader on a source under the preview box").
  */
 test.use(zhCnLocale);
@@ -49,7 +49,7 @@ function cleanup() {
 	);
 	// Historical post-identity rows (3b1 era / crashed runs): this spec
 	// never publishes, so its placeholder posts keep the `draft-` slug -
-	// match by title too (review round 2: the slug-only predicate matched
+	// match by title too (the slug-only predicate matched
 	// zero rows).
 	psql(
 		`delete from file_references where ref_type = 'post' and ref_id in (select id from posts where slug like 'e2e-editor-uploads%' or title ilike 'e2e editor uploads%')`
@@ -60,7 +60,7 @@ function cleanup() {
 	);
 	// The files rows stay (content-addressed), but an attached row that just
 	// lost its last reference must leave the attached state or audit check
-	// (2) reports it after every run (ring-2 02-P3-3).
+	// (2) reports it after every run .
 	psql(
 		`update files set status = 'detached', detached_at = now(), updated_at = now() where (file_name like 'e2e-upload%' or file_name like 'e2e-drop%') and status = 'attached' and not exists (select 1 from file_references fr2 where fr2.file_id = files.id)`
 	);
@@ -259,7 +259,7 @@ test('uploads through the assets tab: @full level, dims in the markdown, anonymo
 
 	await manualSave(page);
 	const payload = draftPayload();
-	// Existence rule (the P0 fix): a 1x1 source embeds as @full, dims ride the
+	// Existence rule: a 1x1 source embeds as @full, dims ride the
 	// tail attrs.
 	expect(payload).toMatch(/\]\(\/i\/[A-Za-z0-9/._-]+\.png@full\) \{width=1 height=1\}/);
 	// GIF pass-through keeps the bare key.

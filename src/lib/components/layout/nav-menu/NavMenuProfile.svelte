@@ -33,7 +33,7 @@
 		class?: string;
 	} = $props();
 
-	// D4/R-4: the only green dot is a real live heartbeat; `unknown` (static
+	// The only green dot is a real live heartbeat; `unknown` (static
 	// fallback or no pipeline) never claims the owner is online.
 	const online = $derived(presence.state === 'online');
 	const onlineLabel = $derived(tLabel('nav_home_owner_online'));

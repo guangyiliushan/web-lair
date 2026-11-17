@@ -71,7 +71,7 @@ export const COMMENT_RATE_LIMIT = { limit: 2, windowSeconds: 60 } as const;
 export const COMMENT_IP_RATE_LIMIT = { limit: 30, windowSeconds: 10 * 60 } as const;
 
 /**
- * Segment-anchor validation budget (2026-10-17 grill G1). Anchor submissions
+ * Segment-anchor validation budget. Anchor submissions
  * render the whole body (Shiki/KaTeX) *before* the comment window is charged,
  * so without this second, coarse limit a verified reader could loop stale
  * anchors and burn CPU with no per-user bound. 10 attempts/min keeps honest
@@ -431,7 +431,7 @@ export function assembleDiscussion(
  * empty gate, and bidi controls must not survive into snapshots. ZWJ/ZWNJ are
  * deliberately kept - they are load-bearing inside emoji sequences and some
  * scripts. ALM (U+061C) and the invisible operators (U+2061-U+2064) join the
- * set (pre-release review 02-F1).
+ * set.
  */
 const FORMAT_CHARS =
 	/[\u00ad\u061c\u180e\u200b\u200e\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
@@ -441,7 +441,7 @@ export function normalizeCommentText(raw: string): string {
 }
 
 /**
- * The empty gate (pre-release review 02-F1): text that renders as nothing
+ * The empty gate: text that renders as nothing
  * must not pass, so the check strips every Unicode format char (\p{Cf} - a
  * superset of FORMAT_CHARS that also covers a ZWJ/ZWNJ-only payload) before
  * deciding. Stored text still keeps ZWJ/ZWNJ (emoji sequences).
@@ -450,8 +450,8 @@ function hasVisibleText(text: string): boolean {
 	return text.replace(/\p{Cf}/gu, '').trim().length > 0;
 }
 
-// \p{Cc} = C0/C1 controls; plus the bidi overrides, the Arabic letter
-// mark and the shortcut marks (pre-release review 02-F1).
+// \p{Cc} = control characters; plus the bidi overrides, the Arabic letter
+// mark and the shortcut marks.
 const AUTHOR_CONTROLS = /[\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
 export const COMMENT_AUTHOR_MAX = 64;
 
@@ -604,7 +604,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	// stale client or a crafted form; reject before any target or render work.
 	if (input.parentId && input.anchor) return { kind: 'stale-anchor' };
 
-	// All three arcs are served since the pages mount (notes since N1);
+	// All three arcs are served since the pages mount;
 	// each branch below keeps its own authoritative re-check.
 	if (!isUuid(input.targetId)) return { kind: 'target-unavailable' };
 	if (input.targetType === 'post') {
@@ -822,7 +822,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 				.returning({ id: comments.id, state: comments.state });
 			const row = inserted[0];
 			// Only a queue entry is worth an alert: an auto-approved owner reply
-			// or a machine-rejected row has nothing to moderate (decision N7).
+			// or a machine-rejected row has nothing to moderate.
 			if (row?.state === 'pending') {
 				try {
 					await enqueueNotification(tx as unknown as NotificationOutboxDb, {
@@ -939,7 +939,7 @@ export type EditCommentResult =
  * `pin` intentionally stays on an edit (a moderator signal on the row,
  * restored with the re-approval); delete clears it instead.
  * Concurrent same-reader edits are last-write-wins - no OCC token, accepted
- * and registered (pre-release review 08-F2).
+ * and registered.
  */
 export async function editComment(input: EditCommentInput): Promise<EditCommentResult> {
 	const now = input.now ?? new Date();
@@ -1048,9 +1048,8 @@ export type DeleteCommentResult =
  * an approved root with replies keeps its floor placeholder; `pin` drops -
  * a removed comment must not stay highlighted. Not
  * throttled: retraction is not a spam vector. One single-statement CAS:
- * the former pre-read was fully redundant with the UPDATE's predicate
- * (pre-release review 04-F1). A replay answers 404 - state-idempotent, the
- * response is not.
+ * the former pre-read was fully redundant with the UPDATE's predicate.
+ * A replay answers 404 - state-idempotent, the response is not.
  */
 export async function deleteComment(input: DeleteCommentInput): Promise<DeleteCommentResult> {
 	const now = input.now ?? new Date();

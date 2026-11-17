@@ -6,15 +6,14 @@ import { isSameSite, normalizeHost, redactCredentials, urlKey } from './normaliz
 import { RobotsDisallowedError, RobotsUnreachableError, type RobotsOracle } from './robots.ts';
 
 /**
- * One-site check orchestration (plan §4.1/§4.8): reachability +/- backlink
- * axes, both in the same round; robots gated per request URL; in-run retry
- * (x1, 30 s gap) for timeout/5xx; the declared backlink page falls back to
- * the homepage when it fails hard; inconclusive scans never touch streaks.
- * All verdicts come back as ring entries + axis flags; the job maps them to
- * rows and counters.
+ * One-site check orchestration: reachability +/- backlink axes, both in the
+ * same round; robots gated per request URL; in-run retry (x1, 30 s gap) for
+ * timeout/5xx; the declared backlink page falls back to the homepage when it
+ * fails hard; inconclusive scans never touch streaks. All verdicts come back
+ * as ring entries + axis flags; the job maps them to rows and counters.
  */
 
-/** Plan §4.2 body cap for scanned pages. */
+/** Body cap for scanned pages: 256 KiB. */
 export const SCAN_BODY_BYTES = 256 * 1024;
 
 export type ReachAxis = 'ok' | 'fail' | 'skipped';
@@ -31,7 +30,7 @@ export interface SiteCheckConfig {
 	timeoutMs: number;
 	/** Normalized accepted hosts; an empty list disables the backlink axis. */
 	acceptedBacklinkHosts: readonly string[];
-	/** Retry timeout/5xx once in-run (plan §4.4). Default true. */
+	/** Retry timeout/5xx once in-run. Default true. */
 	retryOnce?: boolean;
 	/**
 	 * Budget gate for the in-run retry: consulted before the 30 s sleep; a
@@ -53,7 +52,7 @@ export interface SiteCheckOutcome {
 export interface SiteCheckDeps {
 	oracle: RobotsOracle;
 	fetchDeps?: FetchUnitDeps;
-	/** Sleep for the retry gap (plan §4.4: 30 s); injectable for tests. */
+	/** Sleep for the retry gap (30 s); injectable for tests. */
 	sleepMs?: (ms: number) => Promise<void>;
 }
 
@@ -67,7 +66,7 @@ export async function checkSite(
 	deps: SiteCheckDeps
 ): Promise<SiteCheckOutcome> {
 	const now = config.now ?? (() => new Date());
-	// Single source for the axis switch (review round 4).
+	// Single source for the axis switch.
 	const backlinkEnabled = config.acceptedBacklinkHosts.length > 0;
 	const entries: LinkCheck[] = [];
 	const notes: string[] = [];
@@ -103,7 +102,7 @@ export async function checkSite(
 				if (retryable && (config.retryAllowed ? config.retryAllowed() : true)) {
 					await (deps.sleepMs ?? defaultSleep)(RETRY_GAP_MS);
 					// The budget may have died during the sleep: never fire
-					// a retry after the deadline (review round 4).
+					// a retry after the deadline .
 					if (!config.retryAllowed || config.retryAllowed()) continue;
 				}
 			}
@@ -113,7 +112,7 @@ export async function checkSite(
 		throw new Error('unreachable');
 	};
 
-	/** Thrown-error -> axis + ring vocabulary (plan §4.3/§4.8). */
+	/** Map a thrown error to the axis + ring vocabulary. */
 	const mapThrown = (err: unknown): { axis: ReachAxis; kind: LinkErrorKind; note: string } => {
 		if (err instanceof RobotsDisallowedError || err instanceof RobotsUnreachableError) {
 			return { axis: 'skipped', kind: 'robots', note: err.message };
@@ -309,7 +308,7 @@ export async function checkSite(
 		const started = Date.now();
 		let outcome: { axis: BacklinkAxis; entry: LinkCheck } | null;
 		if (sameTarget) {
-			// One fetch serves both axes (plan §4.1); a failed homepage fetch
+			// One fetch serves both axes; a failed homepage fetch
 			// already told us everything a re-fetch would.
 			outcome = homepageResult ? scan(homepageResult, started) : null;
 			if (!outcome) notes.push('backlink skipped: homepage fetch failed');
@@ -337,8 +336,7 @@ export async function checkSite(
 				const result = await fetchWithRetry(row.backlinkUrl, { wantBody: true });
 				outcome = scan(result, started);
 				// A declared page that failed hard (404/410/5xx final) falls
-				// back to the homepage for the link scan (plan §4.1
-				// "when the declaration page fails, fall back to the home page").
+				// back to the homepage for the link scan.
 				if (outcome.axis === 'missing' && outcome.entry.err === 'page_missing') {
 					outcome = (await homepageFallback()) ?? outcome;
 				}
@@ -389,7 +387,7 @@ function retryNoteSuffix(status: number, retryAfter: string | null): string {
 	return status === 429 && retryAfter ? `; retry-after ${retryAfter}` : '';
 }
 
-/** Timeout-class failures are retried in-run (plan §4.4); nothing else is. */
+/** Timeout-class failures are retried in-run; nothing else is. */
 function isRetryableFailure(err: unknown): boolean {
 	if (err instanceof LinkFetchError) return false;
 	if (err instanceof RobotsDisallowedError || err instanceof RobotsUnreachableError) return false;

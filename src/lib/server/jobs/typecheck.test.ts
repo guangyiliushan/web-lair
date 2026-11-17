@@ -107,8 +107,8 @@ describe('jobs.typecheck builtin wrapper (J-2 review: run-package coverage)', ()
 				summary: (data: Record<string, unknown>) =>
 					Object.assign(summaries[0] ?? (summaries[0] = {}), data)
 			} as never);
-			// One good file: `files` and `errors` must map distinctly (the
-			// all-zero fixture let a files<->errors swap survive round 2, P1-2).
+			// One good file: `files` and `errors` must map distinctly: the
+			// all-zero fixture alone would let a files<->errors swap pass.
 			expect(summaries[0]).toMatchObject({
 				ok: true,
 				files: 1,

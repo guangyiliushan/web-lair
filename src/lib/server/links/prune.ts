@@ -4,11 +4,11 @@ import { linkPrechecks } from '../db/content/link-precheck.schema.ts';
 import { links } from '../db/content/link.schema.ts';
 
 /**
- * Outdated-link pruning (M3 / links plan §5.1 "hidden once deleted"): rows that
+ * Outdated-link pruning: rows that
  * lost their site stay in the public loss zone for `friends.checks.graceDays`
  * and are then deleted. The admin's `purgeOutdated` is the manual "clean now"
  * switch and keeps its all-outdated predicate; this module is the scheduled
- * grace-period path (wired to a timer in M5, exposed as a CLI for now).
+ * grace-period path, exposed as a CLI for now.
  *
  * The db handle is injected (no `$lib/server/db` import) so the same module
  * loads under plain Node from `scripts/jobs/links-prune.ts`.

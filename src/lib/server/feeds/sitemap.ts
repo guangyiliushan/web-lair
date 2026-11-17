@@ -20,7 +20,7 @@ export interface SitemapOptions {
 }
 
 /**
- * sitemaps.org 0.9 urlset (single file — ledger §22): no changefreq/priority
+ * sitemaps.org 0.9 urlset (single file): no changefreq/priority
  * (Google ignores them), lastmod only from a real updated_at signal.
  */
 export function buildSitemap(options: SitemapOptions): string {

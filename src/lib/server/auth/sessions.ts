@@ -3,7 +3,7 @@ import { db } from '$lib/server/db';
 import { session as authSession } from '$lib/server/db/auth.schema';
 
 /**
- * Session revocation helpers (ledger §4.25, revised by settings-truth AC2).
+ * Session revocation helpers.
  *
  * Email sign-in no longer prunes other sessions: admins get a real device list
  * on /admin/settings/account and revoke sessions explicitly. Pruning remains
@@ -27,7 +27,7 @@ export async function pruneOtherSessions(userId: string, keepToken: string) {
  * on those endpoints (creates a new row + cookie, deletes the old row), so the
  * caller's request token is already dead and cannot act as the "keep" marker.
  * The rotated session is the row created during this request; `id desc` only
- * breaks a same-second tie (B3.1 review).
+ * breaks a same-second tie.
  */
 export async function pruneOtherSessionsKeepingNewest(userId: string) {
 	await db.execute(sql`
@@ -48,7 +48,7 @@ export async function revokeSessionByToken(token: string) {
 }
 
 /**
- * W8.8 account hardening: cap the number of active sessions per account.
+ * Cap the number of active sessions per account.
  * Sign-in is cheap and admins accumulate devices; an unbounded table is both a
  * privacy and a credential surface. The newest `limit` rows survive (the row
  * that just triggered the check is always kept). Oldest rows are deleted

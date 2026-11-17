@@ -3,10 +3,10 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 
 /**
- * Route-level tests for the notification Webhooks actions. J-3 covered the
- * retry action (guard first, uuid guard, only failed deliveries retry,
+ * Route-level tests for the notification Webhooks actions. The retry action
+ * is covered here: guard first, uuid guard, only failed deliveries retry,
  * disabled endpoints refused, a successful retry inserts a NEW queued row
- * copying webhookId/event/payload - the failed row stays for the record).
+ * copying webhookId/event/payload - the failed row stays for the record.
  *
  * SY S2 adds endpoint CRUD: every action runs `requireAdminRole` first, form
  * validation happens before any DB access, names are soft-rejected

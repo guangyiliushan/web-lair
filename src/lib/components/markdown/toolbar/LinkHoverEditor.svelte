@@ -64,7 +64,7 @@
 	}
 
 	function placeAbove(rect: DOMRect): void {
-		const paneH = 40; // 预估高度(与格式条同款口径)
+		const paneH = 40; // estimated height (same convention as the format bar)
 		top = rect.top - paneH - 8;
 		const editorTop = editor?.getRootElement()?.getBoundingClientRect().top ?? 8;
 		if (top < 8 || top < editorTop) top = rect.bottom + 8;
@@ -167,7 +167,7 @@
 	$effect(() => {
 		if (!editor) return;
 		const onSelectionChange = () => {
-			if (mode === 'edit') return; // 编辑输入期间不跟随选区
+			if (mode === 'edit') return; // do not track the selection while the input is being edited
 			openView();
 		};
 		const onOpenRequest = () => openCreate();

@@ -15,7 +15,7 @@ import type { ProjectProvider } from '../../utils/project-meta.ts';
 import type { RawRepoMeta, RepoIdentity, SyncFailureKind } from './types.ts';
 
 /**
- * Single-URL import (plan §4.4): four platform URLs go through their adapter
+ * Single-URL import: four platform URLs go through their adapter
  * (API response is the source of truth); any other https URL falls back to
  * an OpenGraph scrape. The OG path is the ONLY user-supplied outbound fetch
  * in this line, so it carries the full SSRF guard (resolution-time check +
@@ -56,7 +56,7 @@ const ADAPTERS: Record<
 /**
  * Resolve import metadata for an admin-entered URL: an adapter prefill for
  * the four platforms, an OG prefill for everything else. Failures are
- * classified with the same five kinds as the sync (plan §3.3) plus
+ * classified with the same five kinds as the sync plus
  * blocked for SSRF refusals; callers surface the "already exists (status X)"
  * check themselves
  * (that check needs the db - the A batch service owns it).
@@ -267,10 +267,10 @@ interface HtmlNode {
 }
 
 /**
- * Single-line display text for import prefill: strip C0 controls and bidi
- * formatting (house rule: \p{Cc} + explicit bidi ranges, never literal
+ * Single-line display text for import prefill: strip control characters and
+ * bidi formatting (house rule: \p{Cc} + explicit bidi ranges, never literal
  * control escapes), collapse whitespace, trim, and cap the length - OG
- * values are attacker-sized by default (review 2026-10-08).
+ * values are attacker-sized by default.
  */
 function cleanText(value: string | null, maxLen: number): string | null {
 	if (value === null) return null;

@@ -18,7 +18,7 @@ export const PRESENCE_POSITION_DELTA = 2;
 export const PRESENCE_TOKEN_KEY = 'wl.presence.token';
 
 /**
- * Site-heartbeat mount filter (register R-6): the cookie surfaces minus the
+ * Site-heartbeat mount filter: the cookie surfaces minus the
  * home page — /account and the five auth pages never heartbeat. The pathname
  * is canonicalised first (deLocalizeUrl, the official Paraglide reroute
  * recipe): SvelteKit's reroute keeps the address bar — and `page.url` — on
@@ -38,7 +38,7 @@ function randomUuid(): string {
 	}
 	// Non-secure contexts (LAN http) lack randomUUID; the fallbacks still
 	// emit the canonical v4 layout so the server's single uuid validator
-	// accepts them (register R-3, mirroring the rehype-whitelist precedent).
+	// accepts them (mirroring the rehype-whitelist precedent).
 	const bytes = new Uint8Array(16);
 	if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
 		crypto.getRandomValues(bytes);
@@ -69,7 +69,7 @@ export function getOrCreatePresenceToken(storage?: Pick<Storage, 'getItem' | 'se
 		try {
 			const existing = target.getItem(PRESENCE_TOKEN_KEY);
 			// A stale value that fails the server's isUuid gate is replaced
-			// (register R-3; the validator is shared, not a second regex).
+			// (the validator is shared, not a second regex).
 			if (existing && isUuid(existing)) return existing;
 			const token = randomUuid();
 			target.setItem(PRESENCE_TOKEN_KEY, token);

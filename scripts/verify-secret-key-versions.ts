@@ -1,5 +1,5 @@
 /**
- * Keyring coverage check (W2.2/W2.10).
+ * Keyring coverage check.
  *
  * A key version that a row still references must exist in `SECRETS_KEYS`;
  * otherwise that row can never be read again. Run this before retiring an old

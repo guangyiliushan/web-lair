@@ -1,11 +1,15 @@
-# 可选片段：公网入口的 TLS 证书与域名到期（仅当 SITE_DOMAIN 非空时渲染）。
+# Optional fragment: public-entry TLS certificate and domain expiry (rendered
+# only when SITE_DOMAIN is non-empty).
 #
-# 这一层是“箱外的样子”：走真实域名 + Caddy + Let's Encrypt，和箱内直连 app:3000
-# 的 HTTP 检查互补——后者在证书过期时仍然是绿的，前者在应用 500 时可能仍然绿
-# （如果错误页返回 200）。两者都保留。
+# This layer is "what it looks like from outside the box": a real domain +
+# Caddy + Let's Encrypt, complementing the in-box HTTP check that goes straight
+# to app:3000 — that one stays green when the certificate expires, this one
+# can stay green when the app returns 500 (if the error page answers 200).
+# Keep both.
 #
-# 未设置 SITE_DOMAIN（本地/无域名阶段）：整个片段不渲染，避免 Gatus 去解析
-# "https://" 这种非法 URL 而直接启动失败。
+# Without SITE_DOMAIN (local / no-domain stage): the whole fragment is not
+# rendered, so Gatus never has to parse an invalid URL like "https:///" and
+# fail to start.
 endpoints:
   - name: site-tls
     group: web-lair
@@ -15,8 +19,9 @@ endpoints:
       timeout: 10s
     conditions:
       - '[STATUS] == 200'
-      # 30 天：Let's Encrypt 证书 90 天有效、Caddy 自动续期；低于 30 天说明续期
-      # 已经连续失败，属于需要在过期前处理的问题。
+      # 30 days: Let's Encrypt certificates are valid for 90 days and Caddy
+      # renews automatically; under 30 days means renewal has been failing
+      # repeatedly and has to be handled before the certificate expires.
       - '[CERTIFICATE_EXPIRATION] > 720h'
     alerts:
       - type: custom
@@ -25,8 +30,9 @@ endpoints:
         success-threshold: 1
         send-on-resolved: true
 
-  # 域名注册到期（RDAP/WHOIS；Gatus 要求 interval ≥ 5m，否则拒绝启动）。
-  # 只断言到期时间，不重复断言 HTTP 状态：站点故障由 site-tls 负责。
+  # Domain registration expiry (RDAP/WHOIS; Gatus requires interval ≥ 5m or it
+  # refuses to start). Only the expiry time is asserted, not the HTTP status:
+  # site outages are site-tls' job.
   - name: domain-expiry
     group: web-lair
     url: 'https://${SITE_DOMAIN}/'

@@ -3,12 +3,12 @@ import { check, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/
 import { posts } from './post.schema.ts';
 
 /**
- * AI summary ledger (AI-1, ledger §14.3): one row per generated candidate =
- * (post, lang, source_hash). `posts.summary` stays the content source of
- * truth - this table is the generation record (record vs source-of-truth
- * separation, §14.4). Adoption writes posts.summary and stamps `adopted_at`; at most one adopted
- * row per (post, lang). Unadopted rows are pruned to the latest 5 per
- * (post, lang) by a maintenance task (AI-2/ops).
+ * AI summary ledger: one row per generated candidate = (post, lang,
+ * source_hash). `posts.summary` stays the content source of truth - this
+ * table is the generation record (record vs source-of-truth separation).
+ * Adoption writes posts.summary and stamps `adopted_at`; at most one
+ * adopted row per (post, lang). Unadopted rows are pruned to the latest 5
+ * per (post, lang) by a maintenance task.
  */
 export const summaries = pgTable(
 	'summaries',

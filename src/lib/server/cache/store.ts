@@ -1,12 +1,11 @@
 /**
- * Cache layer contract (storage line §7, ledger §21; presence surface added
- * with the realtime batch, ledger §23): a small port that fronts Valkey.
+ * Cache layer contract: a small port that fronts Valkey.
  * Consumers go through {@link cached} / {@link rateLimit} and the sorted-set
  * primitives behind `services/presence.ts`; PG stays the single source of
  * truth and the cache must be loseable at any moment (restart, outage)
  * without affecting correctness.
  *
- * Failure split (T14): the KV writes and the presence writes below are
+ * Failure split: the KV writes and the presence writes below are
  * best-effort (implementations swallow infrastructure failures), while
  * `incr` and the presence READS MAY throw — their callers (`rateLimit`, the
  * presence service) own the fail-open decision, because for them "zero" and
@@ -28,7 +27,7 @@ export interface CacheStore {
 	 */
 	incr(key: string, windowSeconds: number): Promise<number>;
 	/**
-	 * Sorted-set surface for presence (ledger §23): members scored by epoch
+	 * Sorted-set surface for presence: members scored by epoch
 	 * seconds and windowed by score comparison. `zadd` / `ztrim` / `sadd` /
 	 * `expire` are best-effort (swallow failures like `set`); `zcountAbove` /
 	 * `zrangeAbove` / `scard` MAY throw like `incr` — the presence service
@@ -47,19 +46,18 @@ export interface CacheStore {
 	scard(key: string): Promise<number>;
 	/**
 	 * (Re)set the key TTL (EXPIRE). Refresh semantics, deliberately NOT NX:
-	 * a presence key must never die while it is still being written
-	 * (2026-10-16 review, R-1).
+	 * a presence key must never die while it is still being written.
 	 */
 	expire(key: string, ttlSeconds: number): Promise<void>;
 	/**
-	 * Liveness probe for readiness checks (M6 P4): resolves when the backend
+	 * Liveness probe for readiness checks: resolves when the backend
 	 * answers, throws when it does not. Unlike the get/set family this NEVER
 	 * swallows infrastructure failures - `/api/ready` is what needs the truth.
 	 */
 	ping(): Promise<void>;
 }
 
-/** Key namespace (plan §7): everything the app puts in Valkey sits under it. */
+/** Key namespace: everything the app puts in Valkey sits under it. */
 export const CACHE_PREFIX = 'wl:';
 
 /**
@@ -96,7 +94,7 @@ export interface RateLimitResult {
 }
 
 /**
- * Fixed-window counter (plan §7: `wl:limits:<domain>:<key>`, TTL = window).
+ * Fixed-window counter (`wl:limits:<domain>:<key>`, TTL = window).
  * Fail-open: when the store is down every request is allowed — the limiter is
  * a seatbelt, not a gate (the whole site must stay functional without Valkey).
  */
@@ -120,7 +118,7 @@ export interface StrictRateLimitResult extends RateLimitResult {
 }
 
 /**
- * Fail-closed variant for security endpoints (W6.10 / register 3B.3): login,
+ * Fail-closed variant for security endpoints: login,
  * register, verify-email, comment/upload/AI writes. A dead cache must not be
  * a free pass — the caller answers 503 + Retry-After instead. Read paths keep
  * using `rateLimit` (availability wins there).

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Application-flow unit tests (M3 / links plan §5.2). The db seam is a tiny
+ * Application-flow unit tests. The db seam is a tiny
  * fake that records writes; options and the rate limiter are injected, and
  * `friends.checks.enabled=false` keeps the precheck offline (the network
  * checker has its own suite).

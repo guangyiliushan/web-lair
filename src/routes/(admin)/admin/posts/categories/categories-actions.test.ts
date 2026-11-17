@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * loads — Kit runs the action before its loads).
  *
  * Two guards are load-bearing:
- *   · `delete` refuses the fallback category (§9.18.5) and still counts posts,
+ *   · `delete` refuses the fallback category and still counts posts,
  *     pointing placeholder-only categories at the drafts page, with the FK as
  *     the backstop for the count-then-delete race.
  *   · `move` re-files posts; a blank `to` means "to the fallback category",

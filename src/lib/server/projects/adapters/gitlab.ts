@@ -4,8 +4,8 @@ import { asArray, asRecord, dateOrNull, num, requiredId, str } from './shared.ts
 import type { UserReposResult } from './github.ts';
 
 /**
- * GitLab adapter (plan §3.2): anonymous quota drops to 60 req/h per IP on
- * 2026-10-19 (ledger §18; `PROJECTS_GITLAB_TOKEN` = `PRIVATE-TOKEN` lifts to
+ * GitLab adapter: anonymous quota drops to 60 req/h per IP on
+ * 2026-10-19 (`PROJECTS_GITLAB_TOKEN` = `PRIVATE-TOKEN` lifts to
  * 5,000/h authenticated). Serial paging via the `x-next-page` header. The
  * list endpoint carries no `language` (left null - "call /languages later"
  * is a registered item); `visibility=public` is requested AND re-checked.

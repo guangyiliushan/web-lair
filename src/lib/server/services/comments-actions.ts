@@ -7,17 +7,16 @@ import type { CommentAnchorDraft } from '$lib/utils/comment-anchor';
 import { deleteComment, editComment, type SubmitCommentResult } from './comments';
 
 /**
- * Shared reader-action handlers (comment P4): the posts / notes / pages
- * routes wire their `edit` / `delete` actions straight onto these so the
- * three hosts cannot drift apart, and every host maps submit/reply results
- * through `commentSubmitResponse` below for the same reason. Per-host page
- * gates (the note unlock session) stay in the hosts as a page-level UX
- * layer; the authoritative gate is the ownership CAS in the service
- * (review 2026-10-12).
+ * Shared reader-action handlers: the posts / notes / pages routes wire their
+ * `edit` / `delete` actions straight onto these so the three hosts cannot
+ * drift apart, and every host maps submit/reply results through
+ * `commentSubmitResponse` below for the same reason. Per-host page gates (the
+ * note unlock session) stay in the hosts as a page-level UX layer; the
+ * authoritative gate is the ownership CAS in the service.
  *
  * A route adapter, not a service: it lives beside comments.ts because it
  * wraps exactly that service's write entry points - RequestEvent in,
- * ActionResult out (pre-release review 01-P3-1).
+ * ActionResult out.
  */
 
 /** Form fields shared by both actions; null when the id is malformed. */
@@ -31,7 +30,7 @@ async function readCommentActionForm(
 }
 
 /**
- * Segment-anchor fields carried by a `?/comment` submission (comment P3b):
+ * Segment-anchor fields carried by a `?/comment` submission:
  * ord/start/end/exact plus the block length and fingerprint the reader saw.
  * Absent fields = an article-level comment; present-but-partial or malformed is
  * rejected by the caller instead of silently degrading to an article comment.
@@ -41,8 +40,8 @@ export type AnchorDraftRead =
 
 export function readCommentAnchorDraft(form: FormData): AnchorDraftRead {
 	// Length and fingerprint are part of the contract now: a payload missing them
-	// would silently disable the stale-ord guard, which is exactly the class of
-	// drift this batch fixed.
+	// would silently disable the stale-ord guard - exactly the class of drift
+	// the current contract prevents.
 	const fields = [
 		'anchorOrd',
 		'anchorStart',
@@ -78,11 +77,11 @@ export function readCommentAnchorDraft(form: FormData): AnchorDraftRead {
 }
 
 /**
- * Shared submit/reply outcome mapping (pre-release review 01-P2-1/04-F2):
- * the three hosts carried this switch verbatim - a new SubmitCommentResult
- * arm must now land here once. The annotated return type keeps the switch
- * exhaustive at the type level: a grown union fails the build instead of
- * falling through to an undefined "success".
+ * Shared submit/reply outcome mapping: the three hosts carried this switch
+ * verbatim - a new SubmitCommentResult arm must now land here once. The
+ * annotated return type keeps the switch exhaustive at the type level: a
+ * grown union fails the build instead of falling through to an undefined
+ * "success".
  */
 export function commentSubmitResponse(
 	result: SubmitCommentResult,
@@ -98,8 +97,7 @@ export function commentSubmitResponse(
 			}
 			return { submitted: result.state };
 		case 'throttled':
-			// W6.10: rate answers carry Retry-After so a client can back off
-			// without guessing.
+			// Rate answers carry Retry-After so a client can back off without guessing.
 			event?.setHeaders?.({ 'retry-after': String(result.windowSeconds) });
 			return fail(429, { message: m.comment_throttled() });
 		case 'unavailable':
@@ -109,11 +107,11 @@ export function commentSubmitResponse(
 			return fail(403, { message: m.comment_verify_hint() });
 		case 'disabled':
 			// 403, not 404: the thread exists and stays readable, but new
-			// comments are closed site-wide (C1 asks for an explicit rejection).
+			// comments are closed site-wide - the rejection must be explicit.
 			return fail(403, { message: m.comment_disabled() });
 		case 'blocked':
-			// Request-time CIDR block (W6.2): same neutral copy as an
-			// unavailable target - the block list is not echoed back.
+			// Request-time CIDR block: same neutral copy as an unavailable target -
+			// the block list is not echoed back.
 			return fail(403, { message: m.comment_error_blocked() });
 		case 'empty':
 		case 'too-long':
@@ -129,8 +127,7 @@ export function commentSubmitResponse(
 
 export async function commentEditAction(event: RequestEvent) {
 	const user = requireUser();
-	// Edit-specific copy: the reader is not "posting a comment" here
-	// (pre-release review 07-P3-8).
+	// Edit-specific copy: the reader is not "posting a comment" here.
 	if (!user.emailVerified) return fail(403, { message: m.comment_action_unverified() });
 
 	const fields = await readCommentActionForm(event);

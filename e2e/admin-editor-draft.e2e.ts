@@ -4,8 +4,7 @@ import { zhCnLocale } from './locale-fixture';
 
 test.use(zhCnLocale);
 
-/**
- * P2 writing chain (ledger §9.2/§9.10) - owner flow against the real editor,
+/** Writing chain - owner flow against the real editor,
  * the real database and the real publish transaction:
  *
  *   autosave -> reload restore -> publish -> edit isolation v2 -> publish v2
@@ -43,7 +42,7 @@ test.describe.configure({ mode: 'serial', timeout: 300_000 });
 
 test.beforeAll(() => {
 	cleanup();
-	// Idempotent fixture (P2 review finding): a leftover row under either key
+	// Idempotent fixture: a leftover row under either key
 	// used to make the fixed-id insert fail with categories_pkey and turn the
 	// whole serial file red before a single test ran.
 	psql(`delete from categories where id = '${CATEGORY}' or slug = 'e2e-editor-cat'`);
@@ -76,7 +75,7 @@ async function expandMetaBar(page: Page) {
  *
  * SINGLE CLICK, no retry loop: the old helper clicked until the dropdown
  * happened to open, which is exactly what hid the nested-portal bug where the
- * first click never opened it at all (UX-1020-02). The assertions below fail
+ * first click never opened it at all. The assertions below fail
  * if the first click does not open the listbox.
  */
 async function pickCategory(page: Page) {
@@ -172,8 +171,8 @@ test('publishes the draft: posts gets content, revision and the draft is gone', 
 		timeout: 15000
 	});
 
-	// UX-1020-04: one request, one click. A retry loop here would happily
-	// accept a first click that only ever saved and publish on the second.
+	// One request, one click. A retry loop here would happily accept a first
+	// click that only ever saved and publish on the second.
 	await page.getByRole('button', { name: '发布', exact: true }).click();
 	await page.waitForURL(/published=1/, { timeout: 25000 });
 
@@ -209,8 +208,8 @@ test('edits a published article in isolation, then publishes v2 with a slug trac
 	expect(psql(`select count(*) from drafts where ref_id = '${id}'`)).toBe('1');
 	expect(psql(`select content from drafts where ref_id = '${id}'`)).toContain('v2 change');
 
-	// UX-1020-04: one request, one click. A retry loop here would happily
-	// accept a first click that only ever saved and publish on the second.
+	// One request, one click. A retry loop here would happily accept a first
+	// click that only ever saved and publish on the second.
 	await page.getByRole('button', { name: '发布', exact: true }).click();
 	await page.waitForURL(/published=1/, { timeout: 25000 });
 
@@ -254,8 +253,8 @@ test('a stale tab hits the 409 conflict banner and can reload the server state',
 });
 
 test('admin lists reflect pending changes', async ({ page }) => {
-	// Gate P2 names the admin list regression; the badge column is the only
-	// consumer of draftsForPosts - pin it here (review finding).
+	// Admin-list regression: the badge column is the only consumer of
+	// draftsForPosts - pin it here.
 	await page.goto('/admin/posts');
 	const row = page.getByRole('row').filter({ hasText: TITLE });
 	await expect(row.first()).toBeVisible({ timeout: 10000 });
@@ -322,7 +321,7 @@ test('creates a translation draft with the copy prefill (§9.20.4)', async ({ pa
 		psql(`select translation_group = '${group}' from posts where id = '${translatedId}'`)
 	).toBe('t');
 	expect(psql(`select status from posts where id = '${translatedId}'`)).toBe('draft');
-	// UX-1020: the translation family shares ONE slug - the source decides it
+	// The translation family shares ONE slug - the source decides it
 	// and the translation inherits it (this used to be `slug is null`, i.e. the
 	// translation forked its own address the moment it was published).
 	expect(
@@ -372,7 +371,7 @@ test('a first save needs no language or category click', async ({ page }) => {
 	expect(id).not.toBeNull();
 	expect(psql(`select count(*) from drafts where ref_id = '${id}'`)).toBe('1');
 
-	// Spec §6: the created row carries the defaults, not blanks - the same
+	// The created row carries the defaults, not blanks - the same
 	// fallback chain as `resolveWriterLang` (owner → site option → en), plus
 	// the flagged default category.
 	const ownerLang = psql(

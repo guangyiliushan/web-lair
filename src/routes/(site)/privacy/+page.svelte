@@ -2,7 +2,7 @@
 	import { m } from '$lib/paraglide/messages';
 
 	/**
-	 * W6.3 (C3): the public privacy notice. Every claim mirrors the code:
+	 * The public privacy notice. Every claim mirrors the code:
 	 * comments store no raw IP, country only with the site + commenter opt-in,
 	 * security logs are short-lived, and token-bearing paths stay out of them.
 	 * Sections are message pairs so the three locales stay in lockstep.

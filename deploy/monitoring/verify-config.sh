@@ -1,31 +1,36 @@
 #!/usr/bin/env bash
-# T3.5：Gatus 配置启动校验（CI 可直接调用）。
+# Gatus config startup validation (can be called directly from CI).
 #
-# 用法:
+# Usage:
 #   bash deploy/monitoring/verify-config.sh
 #   GATUS_VERIFY_PORT=18081 bash deploy/monitoring/verify-config.sh
-#   GATUS_IMAGE=ghcr.io/twin/gatus:<tag> bash ...   # 默认从 compose.monitoring.yaml 读取
+#   GATUS_IMAGE=ghcr.io/twin/gatus:<tag> bash ...   # defaults to compose.monitoring.yaml
 #
-# 断言五件事（每一条都能真正失败）：
-#   1. 核心配置（domain/drain/app-ready 片段全关）：/health 200、`Validated 6 endpoints /
-#      0 external endpoints`、`Ignoring provider=custom due to error=url not set`
-#      （空 BARK_URL = 只记日志），且日志里没有 `endpoint=app-ready`（无 READY_TOKEN
-#      时该端点不渲染，不能靠 enabled: false 挂在核心配置里）；
-#   2. 完整配置（domain + drain + app-ready 片段 + 非空 BARK_URL）：/health 200、
-#      `Validated 9 endpoints / 1 external endpoints`、`configuredProviders=[custom]`、
-#      且 `endpoint=app-ready;` 出现（P4 的 /api/ready 在配了 READY_TOKEN 后必须被监控）；
-#   3. 缺 `url` 的端点：exit code 2 且含 `you must specify an url`；
-#   4. drain 片段带空 token：exit code 2 且含 `must specify a token`；
-#   5. 以上两次正向启动都跑在与生产一致的硬化参数下
-#      （--read-only --cap-drop ALL --tmpfs /tmp），并用 INFO 日志级别。
+# Assert five things (each one can really fail):
+#   1. core config (domain/drain/app-ready fragments all off): /health 200,
+#      `Validated 6 endpoints / 0 external endpoints`,
+#      `Ignoring provider=custom due to error=url not set` (empty BARK_URL =
+#      log only), and no `endpoint=app-ready` in the log (without READY_TOKEN
+#      that endpoint is not rendered - it must not sit in the core config as
+#      an `enabled: false` placeholder);
+#   2. full config (domain + drain + app-ready fragments + non-empty BARK_URL):
+#      /health 200, `Validated 9 endpoints / 1 external endpoints`,
+#      `configuredProviders=[custom]`, and `endpoint=app-ready;` present (the
+#      /api/ready probe must be monitored once READY_TOKEN is set);
+#   3. endpoint missing `url`: exit code 2 and `you must specify an url`;
+#   4. drain fragment with an empty token: exit code 2 and `must specify a token`;
+#   5. both positive startups run under the same hardened flags as production
+#      (--read-only --cap-drop ALL --tmpfs /tmp) and at INFO log level.
 #
-# 失败时打印容器日志。任何断言失败 → exit 1。
-# 注意：本脚本会起临时容器（端口 127.0.0.1:$GATUS_VERIFY_PORT），重任务纪律下
-# 与 build/check/vitest 一样经 notes/coordination/m6/scripts/heavy.sh 串行执行。
+# On failure the container log is printed. Any failed assertion → exit 1.
+# Note: this script starts a temporary container (port 127.0.0.1:$GATUS_VERIFY_PORT)
+# and, under the heavy-task discipline, runs serially through
+# notes/coordination/m6/scripts/heavy.sh like build/check/vitest.
 set -uo pipefail
 
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-# 单一真源：镜像 tag 只写在 compose.monitoring.yaml；GATUS_IMAGE 可显式覆盖。
+# Single source of truth: the image tag lives only in compose.monitoring.yaml;
+# GATUS_IMAGE overrides it explicitly.
 IMAGE=${GATUS_IMAGE:-$(sed -n 's/^[[:space:]]*image:[[:space:]]*//p' "$HERE/compose.monitoring.yaml" | head -n 1)}
 PORT=${GATUS_VERIFY_PORT:-18081}
 NAME="gatus-verify-$$"
@@ -70,7 +75,8 @@ cleanup() {
 trap 'cleanup; exit 130' INT TERM
 trap cleanup EXIT
 
-# 目标地址：只用于解析，不追求连通（Gatus 的检查失败不影响 /health）。
+# Target addresses: for parsing only, no connectivity required (a failing
+# Gatus check does not affect /health).
 export MONITOR_APP_ADDR='127.0.0.1:9'
 export MONITOR_PG_ADDR='127.0.0.1:9'
 export MONITOR_RUSTFS_ADDR='127.0.0.1:9'
@@ -78,8 +84,10 @@ export MONITOR_INTERVAL='1h'
 export MONITOR_FAILURE_THRESHOLD='3'
 export MONITOR_SUCCESS_THRESHOLD='2'
 
-# 与生产一致的启动参数：scratch 镜像无 shell，但进程本身不需要可写根目录 /
-# capability；配置只读、storage=memory。这里跑一遍等于证明硬化不会挡住启动。
+# Production-equivalent startup flags: the scratch image has no shell, but
+# the process itself needs no writable root filesystem or capability; config
+# is read-only and storage=memory. Running this once proves the hardening
+# does not block startup.
 HARDEN=(--read-only --cap-drop ALL --tmpfs /tmp)
 
 docker_run_detached() {
@@ -141,7 +149,8 @@ run_config() {
 	fi
 
 	health=$(wait_exit_or_health "$CONTAINER" health)
-	# 给 Gatus 首轮检查一点时间，再收日志（app-ready 的“未被监控”断言依赖它）
+	# Give Gatus' first check round a moment before collecting logs (the
+	# app-ready "not monitored" assertion depends on it).
 	sleep 2
 	docker logs "$CONTAINER" >"$log_file" 2>&1
 	if ! docker rm -f "$CONTAINER" >/dev/null 2>&1; then
@@ -183,7 +192,7 @@ run_config() {
 	return 0
 }
 
-# 1) 核心配置：片段全关 + BARK_URL 空（生产默认形态）
+# 1) core config: all fragments off + BARK_URL empty (the production default shape)
 unset SITE_DOMAIN DRAIN_HEARTBEAT_TOKEN
 export BARK_URL=''
 export READY_TOKEN=''
@@ -198,8 +207,9 @@ else
 	fail 'core: expected "Ignoring provider=custom due to error=url not set"'
 fi
 
-# 2) 完整配置：两个片段 + 非空 BARK_URL（device-key 形状，与 README §4 一致）。
-#    SKIP_FULL=1 供断网环境使用（该用例会让 Gatus 对 example.com 发起一次真实 TLS/RDAP）。
+# 2) full config: both fragments + non-empty BARK_URL (device-key shape,
+#    matching README §4). SKIP_FULL=1 is for offline environments (this case
+#    makes Gatus perform one real TLS/RDAP request against example.com).
 if [ "${SKIP_FULL:-0}" = 1 ]; then
 	say 'SKIP: full (SKIP_FULL=1; outbound network not used)'
 else
@@ -218,7 +228,7 @@ else
 	fi
 fi
 
-# 3) 负例 A：缺 url 的端点必须 exit 2 且指出缺 url
+# 3) negative A: an endpoint missing `url` must exit 2 and report the missing url
 BAD_DIR="$TMP/bad"
 mkdir -p "$BAD_DIR"
 printf 'storage:\n  type: memory\nendpoints:\n  - name: broken\n' >"$BAD_DIR/gatus.yaml"
@@ -242,7 +252,7 @@ else
 	fi
 fi
 
-# 4) 负例 B：drain 片段存在但 token 为空 → exit 2 且指出缺 token
+# 4) negative B: drain fragment present but token empty → exit 2 and report the missing token
 BAD2_DIR="$TMP/bad-token"
 mkdir -p "$BAD2_DIR"
 cp "$HERE/gatus.yaml" "$BAD2_DIR/gatus.yaml"

@@ -2,11 +2,11 @@ import type { SigV4Credentials } from './signature';
 import type { StorageProviderConfig } from './provider';
 
 /**
- * S3-dialect connection settings (W7.1). One shape for both drivers: the
+ * S3-dialect connection settings. One shape for both drivers: the
  * bundled RustFS (`driver=local`) and any external S3-compatible provider
- * (`driver=s3`, decision Q2). `forcePathStyle` is the only addressing switch —
+ * (`driver=s3`). `forcePathStyle` is the only addressing switch —
  * `true` sends `endpoint/bucket/key` (RustFS, MinIO), `false` sends
- * `bucket.endpoint/key` (AWS S3, Cloudflare R2).
+ * `bucket.endpoint/key` (AWS S3 and other virtual-hosted providers).
  */
 export interface S3StorageConfig {
 	endpoint: string;
@@ -16,7 +16,7 @@ export interface S3StorageConfig {
 	forcePathStyle: boolean;
 }
 
-/** SigV4 region for the single-node RustFS deployment (ledger §21). */
+/** SigV4 region for the single-node RustFS deployment. */
 export const DEFAULT_RUSTFS_REGION = 'us-east-1';
 
 /**
@@ -48,7 +48,7 @@ export function assertStorageEndpoint(endpoint: string, source: string): string 
  * at the first storage call instead of as a signed-request 403.
  *
  * Name kept for the storage-line scripts and tests that predate the driver
- * split (W7.1); behaviour is unchanged.
+ * split; behaviour is unchanged.
  */
 export function storageConfigFromEnv(source: Record<string, string | undefined>): S3StorageConfig {
 	const rawEndpoint = source.RUSTFS_ENDPOINT?.trim();
@@ -82,7 +82,7 @@ export const S3_CREDENTIAL_ENV = {
 } as const;
 
 /**
- * External S3 credentials from the environment (W7.3 bootstrap path). Missing
+ * External S3 credentials from the environment. Missing
  * or partial pairs resolve null - the caller decides whether that is a
  * "not configured" state (the page) or a hard failure (the runtime). Values
  * are never logged, echoed into errors, or copied into an option row.
@@ -97,10 +97,10 @@ export function providerCredentialsFromEnv(
 }
 
 /**
- * Builds the adapter config for a provider shape (W7.2). The local driver
+ * Builds the adapter config for a provider shape. The local driver
  * keeps reading RUSTFS_*; the external driver takes its addressing from the
  * stored provider and its credentials from whatever the caller resolved
- * (env today, the encrypted store after W7.6).
+ * (env today, an encrypted store later).
  */
 export function storageConfigForProvider(
 	provider: StorageProviderConfig,

@@ -6,7 +6,7 @@ import * as gitlab from './gitlab';
 import type { FetchJson, FetchJsonResponse } from '../fetch';
 
 /**
- * T8 (plan §7): offline fixtures for the four adapters - list mapping,
+ * Offline fixtures for the four adapters - list mapping,
  * private / fork handling, pagination shapes (GitHub Link header, GitLab
  * x-next-page, Bitbucket cursor, Gitee page count) and the single-repo GET.
  */

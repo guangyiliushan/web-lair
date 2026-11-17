@@ -7,7 +7,7 @@ import {
 } from './preferences';
 import { NOTIFICATION_EVENTS, NOTIFICATION_EVENT_TYPES, shouldAlertJobFailure } from './events';
 
-/** M6 P5 preferences (decision N8): comment/job/ops email on, Bark off. */
+/** Preferences: comment/job/ops email on, Bark off. */
 describe('DEFAULT_NOTIFICATION_PREFERENCES', () => {
 	it('ships email on and Bark off for every group', () => {
 		for (const group of ['comment', 'job', 'ops'] as const) {

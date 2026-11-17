@@ -52,7 +52,7 @@ function countLinks(text: string): number {
 }
 
 /**
- * L0 hard rules + L1 trust heuristics (ai-line plan §6-3). The main path is
+ * L0 hard rules + L1 trust heuristics. The main path is
  * deliberately non-AI: keywords, link count, first-comment hold and the
  * trusted-user list. Returns null when moderation is disabled, so the caller
  * keeps the historical "admin auto-approves, everyone else pending" baseline.

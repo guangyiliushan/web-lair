@@ -10,7 +10,7 @@ import {
 } from './bark';
 
 /**
- * Bark adapter teeth (M6 P5, T5.4; decision register §3E "M6b"): the key
+ * Bark adapter teeth: the key
  * travels in the JSON body (never a URL segment), the SSRF guard runs before
  * the fetch, a body-level `code` decides permanence, and no failure string
  * carries the device key.

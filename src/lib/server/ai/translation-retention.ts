@@ -35,7 +35,7 @@ export async function pruneDiscardedTranslations(
 				// Bind the cutoff as an ISO string cast to timestamptz: the left
 				// side is a raw coalesce(), so the driver cannot infer the
 				// parameter type and rejects a JS Date with
-				// ERR_INVALID_ARG_TYPE (found by db:verify-jobs on W9.5).
+				// ERR_INVALID_ARG_TYPE (found by db:verify-jobs).
 				lt(
 					sql`coalesce(${translations.updatedAt}, ${translations.createdAt})`,
 					sql`${cutoff.toISOString()}::timestamptz`

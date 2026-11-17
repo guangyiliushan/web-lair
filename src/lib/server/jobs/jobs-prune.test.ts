@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * W6.11: `jobs.prune` clears the comment country/region snapshot after the
+ * `jobs.prune` clears the comment country/region snapshot after the
  * configured retention window. The ledger prunes are exercised incidentally
- * (they all run in the same tick); this test pins the privacy UPDATE: always (even after the switch is off),
- * only rows older than retentionDays, and
+ * (they all run in the same tick); this test pins the privacy UPDATE: always
+ * (even after the switch is off), only rows older than retentionDays, and
  * exactly the privacy columns - never text or authorship.
  */
 const mocks = vi.hoisted(() => ({
@@ -32,7 +32,7 @@ vi.mock('#jobs-sdk', () => ({
 	},
 	jobRuns: 'runs',
 	webhookDeliveries: 'deliveries',
-	// M6 P5: the notification delivery log prune runs in the same tick; the mock
+	// The notification delivery log prune runs in the same tick; the mock
 	// needs the table so the builtin's `delete(notificationDeliveries)` resolves.
 	notificationDeliveries: {
 		createdAt: 'notificationDeliveries.createdAt',

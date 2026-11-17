@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Apply the curated prune manifest to a production dependency tree
-# (P1 / T1.4 fallback). Runs INSIDE the image build's prod-deps stage; it only
-# ever deletes under the given root (default /app), never in the repository.
+# Apply the curated prune manifest to a production dependency tree. Runs
+# INSIDE the image build's prod-deps stage; it only ever deletes under the
+# given root (default /app), never in the repository.
 #
 # Usage: deploy/prune-prod-modules.sh <manifest> [root=/app]
 #

@@ -6,10 +6,10 @@ import { JOBS } from './registry';
 import { enqueueJob } from './queue';
 
 /**
- * Queue semantics (plan §4.4 / T2): insert a `queued` row; a 23505 from the
- * partial unique index means "an active row already exists" - the handler
- * must reuse it instead of surfacing the error. Mocks are plain fakes (the
- * service takes the db as an argument, so no module mocking is needed).
+ * Queue semantics: insert a `queued` row; a 23505 from the partial unique
+ * index means "an active row already exists" - the handler must reuse it
+ * instead of surfacing the error. Mocks are plain fakes (the service takes
+ * the db as an argument, so no module mocking is needed).
  */
 type QueueDb = PostgresJsDatabase<Record<string, never>>;
 
@@ -108,10 +108,10 @@ describe('enqueueJob', () => {
 	});
 });
 
-// Type-level bridge (J-3 readiness): the admin calls enqueueJob with
-// `drizzle(client, { schema })`, whose schema generic makes it NOT assignable
-// to the schema-less QueueDb. The generic parameter is what keeps that call
-// site cast-free - this function is never invoked, it only needs to compile.
+// Type-level bridge: the admin calls enqueueJob with `drizzle(client, { schema })`,
+// whose schema generic makes it NOT assignable to the schema-less QueueDb. The
+// generic parameter is what keeps that call site cast-free - this function is
+// never invoked, it only needs to compile.
 function typeBridge(schemaDb: PostgresJsDatabase<{ jobRuns: typeof jobRuns }>) {
 	return enqueueJob(schemaDb, 'system.resources');
 }

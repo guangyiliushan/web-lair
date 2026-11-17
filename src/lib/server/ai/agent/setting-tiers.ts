@@ -1,6 +1,5 @@
 /**
- * Agent setting allowlist and write tiers (AI-v3 Q3; revised by decision
- * register §3A.4, W5.4).
+ * Agent setting allowlist and write tiers.
  *
  * The agent may read every allowlisted value. Writes are split:
  *   - `tier1` - proposal allowed for any admin, human confirmation required

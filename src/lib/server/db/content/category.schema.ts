@@ -14,8 +14,8 @@ import {
 import type { LocalizedText } from './localized.ts';
 
 /**
- * Taxonomy labels are per language (SKOS prefLabel model, ledger §9.18.4 as
- * amended 2026-10-23): `name` is the source label (the one slug is derived
+ * Taxonomy labels are per language (SKOS prefLabel model): `name` is the
+ * source label (the one slug is derived
  * from), `name_i18n` holds the other locales. `source_lang` records which
  * language `name` is written in - it is locked after creation.
  *
@@ -24,7 +24,7 @@ import type { LocalizedText } from './localized.ts';
  * inside `name_i18n` (function form: `?` would collide with the driver's
  * placeholder syntax).
  *
- * `is_default` marks the fallback bucket (ledger §9.18.5). `posts.category_id`
+ * `is_default` marks the fallback bucket. `posts.category_id`
  * is NOT NULL with `on delete restrict`, so every post is filed somewhere and
  * a category with posts can never be dropped out from under them — the default
  * is where "clear out this category" moves them. Like `pages.is_default` it is

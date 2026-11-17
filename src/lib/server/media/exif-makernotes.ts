@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { ExifTool } from 'exiftool-vendored';
 
 /**
- * Brand maker-note extraction (multi-brand batch, rulings 2026-10-10):
+ * Brand maker-note extraction:
  * every brand's family-1 group from the bundled ExifTool lands in
  * `exif.makerNotes.<brand>` — ONE decoder stack (fuji-recipes retired; its
  * 15 recipe fields are a strict subset of the FujiFilm group's 65 keys,
@@ -15,12 +15,12 @@ import { ExifTool } from 'exiftool-vendored';
  * registered). Values stay ExifTool's PrintConv (human-readable) form;
  * numeric `-n` sidecars are registered for future filter axes.
  *
- * Security posture (§3.3): the ExifTool process only ever receives a temp
+ * Security posture: the ExifTool process only ever receives a temp
  * file with an OURS-OWNED safe name — user-controlled names never reach
  * argv (argument-injection face closed by construction; the official
  * '-'-prefix and newline guidance is satisfied structurally). readArgs
  * are constants, never user strings. Values are NUL-stripped before they
- * can reach a jsonb write (round-2 review; PostgreSQL cannot carry U+0000).
+ * can reach a jsonb write (PostgreSQL cannot carry U+0000).
  */
 
 export const MAKER_NOTES_SIZE_LIMIT = 256 * 1024;
@@ -102,9 +102,9 @@ export function tempExtForMime(mimeType: string): string {
 
 /**
  * Postgres jsonb cannot carry U+0000 in ANY string (`unsupported Unicode
- * escape sequence`); real files ship NUL-padded fields (the T13 live
- * import caught a Fujifilm Copyright). Round-2 review: the maker-note path
- * had its own sanitizer and missed this strip — that is the fix.
+ * escape sequence`); real files ship NUL-padded fields (a live import
+ * surfaced a Fujifilm Copyright). The maker-note path had its own sanitizer
+ * and missed this strip — that is the fix.
  */
 function stripNul(value: string): string {
 	return value.includes('\u0000') ? value.replaceAll('\u0000', '') : value;
@@ -128,8 +128,8 @@ function sanitizeValue(value: unknown): unknown {
 		}
 		const out: Record<string, unknown> = {};
 		for (const [key, entry] of Object.entries(record)) {
-			// jsonb rejects U+0000 in KEYS exactly as in values (parity with
-			// the exif.ts round-1 fix; round-2 confirm P3).
+			// jsonb rejects U+0000 in KEYS exactly as in values, so keys need
+			// the same strip before a jsonb write.
 			const cleanKey = stripNul(key);
 			if (cleanKey === '') continue;
 			const safe = sanitizeValue(entry);
@@ -180,7 +180,7 @@ export function groupBrandDump(tags: Record<string, unknown>): Record<string, un
 			// Wrapper/system keys (SourceFile / errors / warnings) arrive
 			// without a group prefix — exempt everything the exclusion table
 			// already names; any OTHER unqualified key would otherwise
-			// vanish silently (round-2 review) — count it visibly.
+			// vanish silently — count it visibly.
 			if (qualifiedKey !== '' && !EXCLUDED_GROUPS.has(qualifiedKey)) {
 				unqualified += 1;
 			}

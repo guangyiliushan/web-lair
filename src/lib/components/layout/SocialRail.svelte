@@ -5,7 +5,7 @@
 	import { SOCIAL_ICONS } from './social-icons';
 
 	/**
-	 * The single social rail (R-1/R-2): the owner's `user_profiles.links`
+	 * The single social rail: the owner's `user_profiles.links`
 	 * plus the fixed RSS item, rendered identically in the homepage hero, the
 	 * nav home panel and the mobile menu. `links` is the whole source — never
 	 * a second config list.

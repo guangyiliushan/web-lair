@@ -205,7 +205,7 @@
 					{row.status}
 				</Badge>
 				{#if row.model}
-					<div class="mt-1 max-w-[10rem] truncate text-[11px] text-muted-foreground">
+					<div class="mt-1 max-w-40 truncate text-[11px] text-muted-foreground">
 						{row.model}
 					</div>
 				{/if}
@@ -359,7 +359,7 @@
 						</p>
 						<MarkdownRenderer
 							source={preview.sourceContent ?? ''}
-							class="prose prose-sm max-w-[38rem]"
+							class="prose prose-sm max-w-152"
 						/>
 					</div>
 					{#if previewCandidate}
@@ -369,7 +369,7 @@
 									? m.admin_translations_preview_candidate()
 									: m.admin_translations_preview_streaming()}
 							</p>
-							<MarkdownRenderer source={previewCandidate} class="prose prose-sm max-w-[38rem]" />
+							<MarkdownRenderer source={previewCandidate} class="prose prose-sm max-w-152" />
 						</div>
 					{/if}
 				</div>

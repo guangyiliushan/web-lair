@@ -1,8 +1,8 @@
 /**
  * Log-text sanitizer shared by the drain and the `links.check` builtin core
- * (review round 2026-10-06: extracted from `drain.ts` so the strip-only
- * builtin chain - links-check.ts -> links/job.ts - does not have to load the
- * whole drain module graph; the drain re-exports for its existing consumers).
+ * extracted from `drain.ts` so the strip-only builtin chain -
+ * links-check.ts -> links/job.ts - does not have to load the whole drain
+ * module graph; the drain re-exports for its existing consumers.
  *
  * Two hazards are stripped:
  *  - drizzle's DrizzleQueryError message embeds the full SQL AND its bound

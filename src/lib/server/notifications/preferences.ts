@@ -5,13 +5,13 @@ import { NOTIFICATION_EVENTS, type NotificationEventType } from './events.ts';
 import type { NotificationChannel } from '../db/system/notification-delivery.schema.ts';
 
 /**
- * Notification preferences (M6 P5; decision register §3E N8/N11, plan §3.2).
+ * Notification preferences.
  *
  * One options row (`notifications.preferences`) holds three per-group channel
  * switches. Defaults are the register's: comment and job alerts go out by
  * email, Bark is OFF for every group until the operator turns it on (a phone
  * push is a louder, costlier channel - opt-in, never the default), and the
- * ops group (F-7 / mail probe) is email-on because a disk at 85% is exactly
+ * ops group (resource and mail probes) is email-on because a disk at 85% is exactly
  * the alert nobody should have to poll for.
  *
  * This module is the SINGLE definition: the options registry reuses the zod

@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { approveQueueRow, bootstrapReader, psql, valkeyDel } from './support';
 
 /**
- * Comment P4 acceptance (pages plan T8): the reader self-service - edit ->
+ * Comment acceptance: the reader self-service - edit ->
  * pending + edited_at + the public edited marker; soft delete -> floor
  * placeholder with the reply kept and pin dropped; author-only entries (a
  * guest and another verified reader get none); an edited root hides its
@@ -13,7 +13,7 @@ import { approveQueueRow, bootstrapReader, psql, valkeyDel } from './support';
  * Serial chain against the production preview and the live database;
  * fixtures are namespaced `e2e-p4` and removed in teardown. Reader writes
  * share the 60s<=2 comment window, which the chain clears between steps (the
- * window itself is P3a's case) so it cannot eat itself.
+ * window itself is comment-p3a's case) so it cannot eat itself.
  */
 const CATEGORY = '00000000-0000-7000-8000-0000000000f1';
 const POST = '00000000-0000-7000-8000-0000000000f2';
@@ -172,7 +172,7 @@ async function ownerApprove(browser: Browser, text: string) {
 	await owner.close();
 }
 
-/* ── T8 acceptance ──────────────────────────────────────────────────────── */
+/* ── acceptance ──────────────────────────────────────────────────────── */
 
 test('reader submits and edits: pending + edited_at, own row shows the marker', async ({
 	browser
@@ -228,8 +228,7 @@ test('reader replies; the owner approves the reply', async ({ browser }) => {
 	const page = await readerPage(browser);
 	await page.goto(POST_PATH);
 	const item = `[data-comment-id="${commentId}"]`;
-	// Item-scoped: a sibling item's reply form must not satisfy the locator
-	// (pre-release review 03-P3-7).
+	// Item-scoped: a sibling item's reply form must not satisfy the locator.
 	const replyForm = `${item} form[action="?/reply"]`;
 	await openSurface(page, item, /回复/, 'form[action="?/reply"]');
 	await expect(async () => {
@@ -281,7 +280,7 @@ test('reader soft-deletes the root: the placeholder keeps the reply, pin drops',
 	const page = await readerPage(browser);
 	await page.goto(POST_PATH);
 	const item = `[data-comment-id="${commentId}"]`;
-	// Item-scoped confirmation (pre-release review 03-P3-7).
+	// Item-scoped confirmation.
 	const confirm = page.locator(`${item} [data-slot="comment-delete-confirm"]`);
 	await openSurface(page, item, '删除', '[data-slot="comment-delete-confirm"]');
 	await expect(async () => {
@@ -293,8 +292,7 @@ test('reader soft-deletes the root: the placeholder keeps the reply, pin drops',
 			`select is_deleted || '|' || (deleted_at is not null)::text || '|' || pin::text from comments where id = '${commentId}'`
 		)
 	).toBe('true|true|false');
-	// The success callback parks focus on the section title (pre-release
-	// review 03-P3-5).
+	// The success callback parks focus on the section title.
 	await expect
 		.poll(() => page.evaluate(() => document.activeElement?.id ?? ''))
 		.toBe('comments-title');
@@ -337,8 +335,7 @@ test('the pages mount: a universal md page is commentable and the queue shows th
 	const owner = await guestContext(browser);
 	const ownerPage = await owner.newPage();
 	const row = ownerPage.locator('label').filter({ hasText: T_PAGE });
-	// Fresh-page retry: the single-shot wait bowed out under full load
-	// (pre-release review 03-P3-7).
+	// Fresh-page retry: the single-shot wait bowed out under full load.
 	await expect(async () => {
 		await ownerPage.goto('/admin/comments');
 		await expect(row).toBeVisible({ timeout: 8000 });

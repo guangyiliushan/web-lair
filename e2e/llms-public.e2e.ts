@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { psql } from './support';
 
 /**
- * llms.txt + Markdown mirror (M2 2d): the proposal's file lists link to clean
+ * llms.txt + Markdown mirror: the proposal's file lists link to clean
  * `.md` pages; both are rendered per language and the robots policy is emitted.
  */
 const SLUG = 'e2e-llms-source';

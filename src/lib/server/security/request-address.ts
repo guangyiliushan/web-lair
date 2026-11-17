@@ -10,7 +10,7 @@ export function requestAddress(getClientAddress: () => string): string {
 }
 
 /**
- * Request IP for privacy decisions (W6.2): null when the adapter cannot
+ * Request IP for privacy decisions: null when the adapter cannot
  * resolve one. Kept separate from `requestAddress` so a bucket key never
  * silently becomes a CIDR candidate.
  */
@@ -23,7 +23,7 @@ export function requestIp(getClientAddress: () => string): string | null {
 }
 
 /**
- * Credentials bucket key (W6 review P1): keying login only on the address
+ * Credentials bucket key: keying login only on the address
  * lets one NAT/office IP exhaust the budget for everybody. Mix in a truncated
  * SHA-256 of the submitted email so each account gets its own window; the
  * email itself never reaches Valkey.

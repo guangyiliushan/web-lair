@@ -24,14 +24,14 @@ export function parseLinksCliArgs(argv: readonly string[]): LinksCliArgsResult {
 		if (arg === '--limit') {
 			const raw = argv[index + 1];
 			// Strict decimal spelling: `Number()` would accept '0x10',
-			// '1e3' or padded whitespace (review round 3, 2026-10-06).
+			// '1e3' or padded whitespace.
 			if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
 				return { ok: false, error: '--limit expects a positive integer' };
 			}
 			const value = Number(raw);
 			if (value < 1) return { ok: false, error: '--limit expects a positive integer' };
 			// Upper bound: one select must not pull an unbounded set into
-			// memory (review round 4).
+			// memory.
 			if (value > 500) return { ok: false, error: '--limit must be at most 500' };
 			limitPerPass = value;
 			index += 1;

@@ -3,11 +3,11 @@ import type { CacheStore } from '$lib/server/cache/store';
 import { getOption } from '$lib/server/config/options-registry';
 
 /**
- * Presence service (ledger §23; platform plan §B, realtime batch R1).
+ * Presence service.
  *
  * Zero PG tables: the site online count, per-content reader count, position
  * histogram and admin dots, today's unique tabs and the daily peak all live
- * in the cache layer on four key families (README of the register, R-5):
+ * in the cache layer on four key families (listed in the register's README):
  *
  *   presence:site          ZSET token -> last_seen (epoch seconds)
  *   presence:c:<id>        ZSET "<bucket>:<token>" -> last_seen
@@ -16,7 +16,7 @@ import { getOption } from '$lib/server/config/options-registry';
  *
  * Window READS use ZCOUNT/ZRANGEBYSCORE with an exclusive cutoff and never raw
  * cardinality — a member whose score aged past the window must not count (the
- * ghost-count class the opening grill pinned with a live Valkey probe). Writes
+ * ghost-count class pinned with a live Valkey probe). Writes
  * are best-effort; reads degrade to `null` = "unavailable" (the UI renders
  * "—" / hides the badge). A dead cache must never break a page.
  *
@@ -31,9 +31,9 @@ export const PRESENCE_BUCKETS = 20;
 export const PRESENCE_DOTS_LIMIT = 5;
 
 /**
- * The single predicate for the effective dots permission (review finding):
+ * The single predicate for the effective dots permission:
  * the public option OR an admin viewer — admins always receive dots on
- * content pages (register E2). Used by the (site) layout AND the stream
+ * content pages. Used by the (site) layout AND the stream
  * endpoint so the two sides cannot drift.
  */
 export function effectiveReaderDots(optionValue: boolean, isAdmin: boolean): boolean {
@@ -126,8 +126,7 @@ function parseBucket(member: string): number | null {
  * re-inserts the token at the tail of the Map, which leaves the values in
  * latest-activity order for the dots cap. A scrolling reader leaves a trail
  * of `<bucket>:<token>` members inside the window — counting members would
- * inflate the badge (review finding M7), so every content read goes through
- * here.
+ * inflate the badge, so every content read goes through here.
  */
 function latestBuckets(members: { member: string }[]): Map<string, number> {
 	const latest = new Map<string, number>();
@@ -219,7 +218,7 @@ export async function readSitePresence(deps: PresenceDeps = {}): Promise<SitePre
 }
 
 /**
- * One content slice per read (review finding): count, histogram and the
+ * One content slice per read: count, histogram and the
  * capped dots all derive from a SINGLE zrangeAbove + collapse, so the stream
  * tick no longer pays two full key scans when dots are on.
  */

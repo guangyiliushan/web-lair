@@ -1,5 +1,5 @@
 /**
- * Webhook secret backfill (W2.6).
+ * Webhook secret backfill.
  *
  * Encrypts every legacy plaintext `webhooks.secret` into `webhook_secrets`.
  * Default is a dry run: it prints what would move and writes nothing. With

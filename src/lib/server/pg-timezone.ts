@@ -1,8 +1,8 @@
 import { sql, type SQL } from 'drizzle-orm';
 
 /**
- * PostgreSQL zoneinfo membership - the batch-5 closure of the timezone
- * registration (ledger §13.9 / notes plan §3.3).
+ * PostgreSQL zoneinfo membership - the write gate on timezone registration:
+ * names PostgreSQL rejects must not be stored.
  *
  * `isValidIanaTimeZone` probes ICU (Intl), and ICU and the PostgreSQL
  * zoneinfo set disagree in BOTH directions (real-PG probes): 'Japan' /

@@ -19,7 +19,7 @@ x-logging: &default-logging
 
 services:
   db:
-    # pinned: uuidv7() defaults require PostgreSQL 18 (ledger §9.6)
+    # pinned: uuidv7() defaults require PostgreSQL 18
     image: postgres:18
     restart: always
     env_file:
@@ -40,7 +40,7 @@ services:
     logging: *default-logging
 
   rustfs:
-    # pinned: RustFS 1.0.0 (GA 2026-09-16, ledger §21) — S3-compatible object storage.
+    # pinned: RustFS 1.0.0 (GA 2026-09-16) — S3-compatible object storage.
     image: rustfs/rustfs:1.0.0
     security_opt:
       - 'no-new-privileges:true'
@@ -65,7 +65,7 @@ services:
     logging: *default-logging
 
   valkey:
-    # pinned: Valkey 9.1.2 (2026-09-01, ledger §21) — fail-open cache layer
+    # pinned: Valkey 9.1.2 (2026-09-01) — fail-open cache layer
     # (embed-meta + rate-limit counters). No persistence on purpose: a restart may
     # reset counters — acceptable for a fail-open cache.
     image: valkey/valkey:9.1.2

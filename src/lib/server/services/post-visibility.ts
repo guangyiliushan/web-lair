@@ -2,7 +2,7 @@ import { and, inArray, lte, type SQL } from 'drizzle-orm';
 import { posts } from '$lib/server/db/content';
 
 /**
- * Publish visibility, in one place (ledger §9.1). The public read side shows
+ * Publish visibility, in one place. The public read side shows
  * `published` rows plus `scheduled` rows whose `published_at` has passed —
  * scheduling is judged lazily at read time, so no state flip is needed to
  * "go live". `draft`, `trash` and rows without a past `published_at` stay

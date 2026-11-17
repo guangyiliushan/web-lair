@@ -11,7 +11,7 @@ const DRY_RUN = process.argv.includes('--dry-run');
 
 /**
  * Seeds only the two protected defaults. Re-running never overwrites user
- * edits; editability is owned by the P5 admin/editor flow. `--dry-run` prints
+ * edits; editability is owned by the admin/editor flow. `--dry-run` prints
  * what would be ensured (and what is already present) without writing.
  */
 async function main(): Promise<void> {

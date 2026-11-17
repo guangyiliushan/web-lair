@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { expectNoCriticalAxe, psql } from './support';
 
 /**
- * W7 acceptance arc for the Storage control plane, against the isolated
+ * Acceptance arc for the Storage control plane, against the isolated
  * `local_e2e` database only (it writes `options` rows). The spec proves the
  * four behaviours the batch promises and a route test cannot fully show:
  *
@@ -56,7 +56,7 @@ test('renders the six storage sections with a real owner form', async ({ page })
 	}
 
 	// The owner control plane is really writable: a provider form, a test
-	// button and a purge form exist (the W3 placeholder had none).
+	// button and a purge form exist (the placeholder had none).
 	await expect(page.locator('form[action="?/saveProvider"]')).toBeVisible();
 	await expect(page.locator('form[action="?/testProvider"]')).toBeVisible();
 	await expect(page.locator('form[action="?/savePurge"]')).toBeVisible();

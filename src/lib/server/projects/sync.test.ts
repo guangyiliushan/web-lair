@@ -9,7 +9,7 @@ const dialect = new PgDialect();
 const renderCondition = (condition: unknown): string => dialect.sqlToQuery(condition as never).sql;
 
 /**
- * T9 (plan §7): the four write rules against a fake db + stubbed transport -
+ * The four write rules against a fake db + stubbed transport -
  * new -> pending insert with prefill; existing -> snapshot only (user fields
  * never written); rejected -> skipped forever; rename -> same row updated.
  * Plus: fork filter, dry-run silence, account failure isolation, partial

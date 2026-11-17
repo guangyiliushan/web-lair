@@ -8,7 +8,7 @@ import type { ObjectStoragePort } from './port.ts';
 import { DEFAULT_STORAGE_MIGRATION, type StorageMigrationState } from './provider.ts';
 
 /**
- * Copy phase orchestration (W7.4), extracted from the CLI so it can be tested
+ * Copy phase orchestration, extracted from the CLI so it can be tested
  * with fake ports (the CLI runs `main()` at import time, which vitest cannot
  * import).
  *

@@ -5,7 +5,7 @@ import { activeStorage } from './lib/active-storage';
 import { purgeMedia } from '../src/lib/server/services/files';
 
 /**
- * Media purge (storage line §4.6): DRY-RUN by default — pass `--yes` to
+ * Media purge: DRY-RUN by default — pass `--yes` to
  * actually delete. TTLs come from the `media.purge` option (pending 7d /
  * detached 30d). Candidates are re-checked for references at delete time.
  *
@@ -21,7 +21,7 @@ const execute = process.argv.includes('--yes');
 
 const sql = postgres(DATABASE_URL, { max: 2 });
 const db = drizzle(sql, { schema });
-// W7.5: purge runs against the ACTIVE provider, never an assumed local one.
+// Purge runs against the ACTIVE provider, never an assumed local one.
 const storage = await activeStorage(db);
 
 const outcome = await purgeMedia({ dryRun: !execute }, { db, storage });

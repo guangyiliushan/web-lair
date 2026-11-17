@@ -60,11 +60,11 @@ function makeDb(
 	} = {}
 ) {
 	const auditRows: Record<string, unknown>[] = [];
-	// Outbox-host spies, re-scoped for the savepoint wrapper (nine-dimension
-	// Q4): the fan-out now rides `executor.transaction()`, so the discriminator
-	// is WHICH executor's nested transaction is entered - the outer db for
-	// save/fork/revert, the caller's tx for delete. Entering the wrong one (or
-	// dropping the wrapper) turns these counts red.
+	// Outbox-host spies, re-scoped for the savepoint wrapper: the fan-out
+	// now rides `executor.transaction()`, so the discriminator is WHICH
+	// executor's nested transaction is entered - the outer db for
+	// save/fork/revert, the caller's tx for delete. Entering the wrong one
+	// (or dropping the wrapper) turns these counts red.
 	const outerTxCalls = vi.fn();
 	const txTxCalls = vi.fn();
 	const savepointExecute = vi.fn(async () => []);
@@ -181,7 +181,7 @@ describe('saveScript', { timeout: 30_000 }, () => {
 			actorId: 'admin-1',
 			payload: { name: 'my-task', created: true, forked: false }
 		});
-		// The save-path outbox fan-out rides the OUTER executor (SY-T1 tooth):
+		// The save-path outbox fan-out rides the OUTER executor:
 		// moving recordActivity(db, ...) to a tx or a module-level db turns red.
 		// The fan-out entered the OUTER db's transaction (a savepoint when the
 		// caller already holds one) and never the caller-tx one.
@@ -507,7 +507,7 @@ describe('deleteUserJob', () => {
 			payload: { name: 'my-task', schedules: 2, queued: 1, running: 2 }
 		});
 		// The delete-path outbox fan-out rides the TX executor; the outer
-		// executor stays untouched (SY-T1 tooth: recordActivity(tx, ...) can
+		// executor stays untouched (recordActivity(tx, ...) can
 		// no longer be quietly swapped for the plain db).
 		// Delete: the fan-out entered the CALLER's tx as a nested savepoint
 		// (exactly once) - never a fresh outer transaction of its own.

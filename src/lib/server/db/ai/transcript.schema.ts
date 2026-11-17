@@ -8,7 +8,7 @@ import { user } from '../auth.schema.ts';
  * Finished speech-to-text results. The audio itself is deliberately not
  * stored: Whisper receives the upload, returns text + segments, and the
  * temporary file is discarded. Keeping the transcript (not the recording)
- * is the privacy boundary from the v3 plan.
+ * is the privacy boundary.
  */
 export const transcripts = pgTable(
 	'transcripts',
@@ -30,7 +30,7 @@ export const transcripts = pgTable(
 	},
 	(table) => [
 		index('transcripts_created_idx').on(table.createdAt),
-		// Leading index for the SET NULL FK check (§11-A2): without it the
+		// Leading index for the SET NULL FK check: without it the
 		// referential check scans the whole table on every user delete.
 		index('transcripts_actor_idx')
 			.on(table.actorId)

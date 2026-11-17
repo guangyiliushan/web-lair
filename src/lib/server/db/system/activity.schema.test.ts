@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { NOTIFICATION_EVENT_TYPES } from '../../notifications/events';
 
 /**
- * Producer teeth for `activities_event_check` (W1.3 / P0-3).
+ * Producer teeth for `activities_event_check`.
  *
  * The constraint admits exactly one dot
  * (`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`), and a producer literal that breaks it
@@ -50,7 +50,7 @@ const SOURCE_ROOTS = ['src', 'scripts'];
 const SKIP_DIRS = new Set(['node_modules']);
 
 /**
- * M6 P5/P6: `notification_deliveries` is a legitimately multi-dot namespace
+ * `notification_deliveries` is a legitimately multi-dot namespace
  * (`mail.probe.failed`), and the scripts that mention `activities` also write
  * that table (`scripts/verify-jobs-drain.ts` asserts the notification CHECK on
  * real PG). Those literals are notification events, not activity events, so the
@@ -84,7 +84,7 @@ describe('activities event name contract', () => {
 		expect(pattern.test('ai.usage.purge')).toBe(false);
 		expect(pattern.test('Job.Run')).toBe(false);
 		expect(pattern.test('ai.')).toBe(false);
-		// M6 P5: the multi-dot exclusion set in the scan below must be real - an
+		// The multi-dot exclusion set in the scan below must be real - an
 		// emptied roster would make the scan quietly weaker, not red.
 		expect(NOTIFICATION_EVENT_NAMES.has('mail.probe.failed')).toBe(true);
 		expect(NOTIFICATION_EVENT_NAMES.size).toBeGreaterThan(0);

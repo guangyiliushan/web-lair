@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 /**
- * The W1 security options are inert if auth.ts stops wiring them; the unit
+ * The security options are inert if auth.ts stops wiring them; the unit
  * specs for the policy module alone cannot see that. `betterAuth` is captured
  * as a plain options object (no adapter/context init), so this pins exactly the
  * config auth.ts hands to better-auth.

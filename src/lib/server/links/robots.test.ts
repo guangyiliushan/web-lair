@@ -140,7 +140,7 @@ describe('robots oracle (§4.7)', () => {
 	it('4xx (except 429) = no restrictions; 429/5xx = unreachable; network/redirect = no restrictions', async () => {
 		// The 404 body carries a disallow rule on purpose: RFC 9309 §2.3.1.3
 		// still means "no restrictions" - the empty body made this assertion
-		// mutation-blind (review round 4).
+		// mutation-blind.
 		const notFound = oracleWith({
 			outcome: 'text',
 			status: 404,

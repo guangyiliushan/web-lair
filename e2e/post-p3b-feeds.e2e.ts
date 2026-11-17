@@ -2,10 +2,10 @@ import { expect, test } from '@playwright/test';
 import { psql } from './support';
 
 /**
- * P3-b distribution-face acceptance (roadmap W2 #4) + the N1 seam: posts and
+ * Distribution-face acceptance: posts and
  * feedable notes share the per-language RSS, the sitemap carries notes and
- * topic pages, and password-gated notes stay out of BOTH (notes plan §3.3
- * exclusion face). Also covers the bare `/rss.xml` alias (302 to the default
+ * topic pages, and password-gated notes stay out of BOTH.
+ * Also covers the bare `/rss.xml` alias (302 to the default
  * language), dynamic robots.txt and the strong-validator cache contract.
  * Fixtures under `e2e-p3bf%`; cleaned in beforeAll/afterAll.
  */
@@ -96,7 +96,7 @@ test.describe('P3-b distribution face', () => {
 		expect(body).toContain(
 			`hreflang="zh-cn" href="http://localhost:4173/zh-cn/notes/topics/${T_SLUG}"`
 		);
-		// ...and hidden rows stay out: password gate (§3.3 exclusion face)
+		// ...and hidden rows stay out: password gate (exclusion face)
 		// plus private/trash that had been public before (gate item 5).
 		expect(body).not.toContain(N_LOCKED_SLUG);
 		expect(body).not.toContain(N_PRIVATE_SLUG);

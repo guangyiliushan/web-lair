@@ -76,7 +76,7 @@ export function isAiError(value: unknown): value is AiError {
 
 /**
  * Bridge the secret-store failure codes onto the AI runtime's vocabulary
- * (W2.4). `missing` stays a failover code; every other code is terminal, so a
+ * `missing` stays a failover code; every other code is terminal, so a
  * wrong master key or a missing version never sends the request to the next
  * provider (which would bill another account and hide the rotation bug).
  */

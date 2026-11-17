@@ -7,12 +7,12 @@ import { fileReferences, type FileRefType } from '../db/system/index.ts';
 import { I_KEY_PATTERN } from '../../media/keys.ts';
 
 /**
- * Reference maintenance (storage line §4.6; ST-3 3b1). The write side lives
- * in the SAME transaction as the content write (Q15): save / publish /
+ * Reference maintenance. The write side lives
+ * in the SAME transaction as the content write: save / publish /
  * discard (posts + notes + pages) and page hard-delete call
  * `syncFileReferences` with the content's bare `/i/<key>` set. Draft-phase
- * references are keyed by the draft's OWN identity (`{draft, draftId}`;
- * ST-3 3b2), so a save never touches the published target's set: publish
+ * references are keyed by the draft's OWN identity (`{draft, draftId}`),
+ * so a save never touches the published target's set: publish
  * re-keys the content to `{post|note|page, id}` first and then clears the
  * draft scope, and discard restores the target set and clears the draft
  * scope.
@@ -27,7 +27,7 @@ import { I_KEY_PATTERN } from '../../media/keys.ts';
  * id}, [])`, otherwise the draft's references become orphans that audit
  * check (4) reports and no cleaner can attribute.
  *
- * Concurrency contract (review round 1, 2026-10-13):
+ * Concurrency contract:
  * - the resolve SELECT takes `FOR KEY SHARE` on the registry rows, so a
  *   concurrent `deleteFile` (DELETE/FOR UPDATE) waits for this transaction and
  *   the FK INSERT can no longer raise 23503. An in-transaction `catch` would
@@ -37,7 +37,7 @@ import { I_KEY_PATTERN } from '../../media/keys.ts';
  *   it a zero-row no-op that took no lock) and the remove branch locks its
  *   candidates `FOR NO KEY UPDATE` before deciding the detach - together they
  *   serialize concurrent attach vs detach so `status` cannot drift against
- *   the Q6 matrix. The KEY SHARE -> NO KEY UPDATE upgrade inside one
+ *   the status machine. The KEY SHARE -> NO KEY UPDATE upgrade inside one
  *   transaction is exempt from self-conflict (heap-layer upgrade), so the
  *   attach update never waits on the resolve above.
  */
@@ -79,7 +79,7 @@ export function keysFromLocalizedContent(
 
 /**
  * Differential maintenance of `file_references` for one content target plus
- * the file status machine (Q6 ruling): refs > 0 -> `attached`; == 0 and the
+ * the file status machine: refs > 0 -> `attached`; == 0 and the
  * row WAS `attached` -> `detached` + a `now()` anchor; `pending` stays
  * `pending`. Desired keys with no registry row are skipped (the file was
  * removed before this save); the skip is warned so a dangling image URL in

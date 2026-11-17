@@ -1,5 +1,5 @@
 /**
- * Source segmentation for long translations (Task C1).
+ * Source segmentation for long translations.
  *
  * The chunker runs on **protected** markdown (`protectMarkdown` output), so
  * fences, inline code, URLs and mentions are already `[[WL…]]` tokens: those

@@ -11,14 +11,14 @@ import {
 } from 'drizzle-orm/pg-core';
 import { aiAgentConversations } from './ai-agent-conversation.schema.ts';
 
-/** Placeholder payload contract for one message; the full shape firms up in AI-2. */
+/** Placeholder payload contract for one message; the full shape is not settled yet. */
 export interface MessageContent {
 	text?: string;
 	[key: string]: unknown;
 }
 
 /**
- * Row-level conversation log (AI-1, ledger §14.3): messages replace the old
+ * Row-level conversation log: messages replace the old
  * jsonb array; `seq` orders them inside a conversation (unique). Long threads
  * are compressed into `ai_agent_conversations.summary`; message history is
  * kept in full until manually archived.

@@ -24,7 +24,7 @@ function localizedCheck(name: string, column: AnyPgColumn) {
 }
 
 /**
- * One-row homepage hero copy (M4 foundation, OP-3).
+ * One-row homepage hero copy.
  *
  * Only the homepage reads it; it is deliberately separate from `options`
  * (no timestamps, whole-object rewrites) and from messages (deploy-coupled).

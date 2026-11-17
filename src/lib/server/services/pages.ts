@@ -19,10 +19,9 @@ export type SitemapPageRow = Pick<PageRow, 'slug' | 'content' | 'updatedAt'>;
 const localeOrder = locales as readonly string[];
 
 /**
- * Display-field fallback chain (pages plan §2.4 / ledger §19.9, 2026-10-03):
- * current → en → any, in the fixed locale order. Titles and descriptions only
- * - body content is served strictly (see {@link resolvePageContent}). Blank
- * strings count as missing.
+ * Display-field fallback chain: current → en → any, in the fixed locale
+ * order. Titles and descriptions only - body content is served strictly
+ * (see {@link resolvePageContent}). Blank strings count as missing.
  */
 export function resolveLocalized(
 	value: LocalizedText | LocalizedMarkdown | null | undefined,
@@ -55,7 +54,7 @@ export function resolvePageContent(
 /**
  * Structural half of the "servable page" predicate - a non-external md row
  * carrying a content object. Single home shared by the universal route's
- * read-side guard and the comment write path (pre-release review 01-P2-2).
+ * read-side guard and the comment write path.
  */
 export function isServablePageRow(row: {
 	content: LocalizedMarkdown | null;
@@ -95,9 +94,9 @@ export function pageHref(row: Pick<PageRow, 'slug' | 'externalUrl'>): string {
 }
 
 /**
- * Chrome order (pages plan §3.1): every visible row, `is_default` first, then
- * `sort_order`, then `created_at`. Row-level visibility only (V1 ruling
- * 2026-10-03) - language availability is owned by the route, not this query.
+ * Chrome order: every visible row, `is_default` first, then `sort_order`,
+ * then `created_at`. Row-level visibility only - language availability is
+ * owned by the route, not this query.
  */
 export async function listVisiblePages(): Promise<ChromePageRow[]> {
 	return db
@@ -114,10 +113,10 @@ export async function listVisiblePages(): Promise<ChromePageRow[]> {
 }
 
 /**
- * Sitemap source (2026-10-03 ruling): visible ∧ site-internal ∧ carrying body
- * content - rows whose route provably serves a 200. Hidden rows stay out (the
- * menu-hidden semantics are not advertised); code rows join in their own
- * route batches. Slug order keeps the feed bytes stable (P3-b ETag contract).
+ * Sitemap source: visible ∧ site-internal ∧ carrying body content - rows
+ * whose route provably serves a 200. Hidden rows stay out (the menu-hidden
+ * semantics are not advertised); code rows join in their own route batches.
+ * Slug order keeps the feed bytes stable (the feed ETag contract).
  */
 export async function listSitemapPages(): Promise<SitemapPageRow[]> {
 	const rows = await db

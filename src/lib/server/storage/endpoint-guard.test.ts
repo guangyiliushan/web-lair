@@ -7,7 +7,7 @@ import {
 } from './endpoint-guard';
 
 /**
- * Endpoint SSRF policy (W7.3, decision Q19): https only, no URL credentials,
+ * Endpoint SSRF policy: https only, no URL credentials,
  * every resolved answer publicly routable, and metadata addresses rejected
  * even when the LAN opt-in is on.
  */

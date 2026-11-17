@@ -2,7 +2,7 @@ import { Tokenizer, TokenizerMode, type Token } from 'parse5';
 import { normalizeHost } from './normalize.ts';
 
 /**
- * Backlink detection (plan §4.8, 2026-10-06 ruling): the declared backlink
+ * Backlink detection: the declared backlink
  * page is scanned with parse5's WHATWG-compliant tokenizer - never a regex -
  * so links inside comments or `<script>` bodies are not false positives and
  * entity-encoded or oddly-cased markup is not a false negative. `<base href>`
@@ -21,7 +21,7 @@ export interface BacklinkFinding {
 }
 
 /**
- * Decode a scanned page body, WHATWG sniff order (plan §4.8):
+ * Decode a scanned page body, WHATWG sniff order:
  * BOM > transport charset (`Content-Type`) > 1024-byte prescan (`<meta
  * charset>`) > UTF-8. Unknown labels fall back to UTF-8; decoding is
  * non-fatal (replacement characters beat a thrown scan).

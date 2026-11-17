@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * W4.8/R-7: profile.update and home.update are local audit rows. They must
+ * profile.update and home.update are local audit rows. They must
  * carry no `refType`/`refId` (activities.ref_id is a uuid while auth user ids
  * are text) and must set `deliver: false` so they never fan out to webhook
  * endpoints. The events are outside WEBHOOK_EVENT_ROSTER by design.

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildNotificationMail, sendNotificationEmail } from './email';
 
 /**
- * Email adapter teeth (M6 P5, T5.4): the owner is the only recipient, the
+ * Email adapter teeth: the owner is the only recipient, the
  * subject is prefixed so it is recognizable in the inbox, an auth/envelope
  * rejection is permanent (retrying cannot fix it) while a transport error is
  * retryable, and a relay banner cannot leak the owner's address into the

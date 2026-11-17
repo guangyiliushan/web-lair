@@ -3,7 +3,7 @@ import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Reference maintenance unit teeth (ST-3 3b1; Q6 flip matrix + Q15 diff):
+ * Reference maintenance unit teeth (status flips + differential sync):
  * add -> attached (unconditional, lock-taking update), LAST-ref removal ->
  * detached with a `now()` anchor, a file still referenced by ANOTHER target
  * stays attached, pending rows are never dragged into detached, unknown keys
@@ -146,8 +146,8 @@ describe('syncFileReferences', () => {
 		expect(rendered.sql).toBe('"files"."id" in ($1)');
 		expect(rendered.params).toEqual(['file-1']);
 		// Scope snapshots for the two SELECTs the mutation matrix used to
-		// walk through (review round 2): existing refs are read for THIS
-		// target only, and the resolve is by object_key.
+		// walk through: existing refs are read for THIS target only, and the
+		// resolve is by object_key.
 		const existingWhere = render(state.selectWheres[0]);
 		expect(existingWhere.sql).toBe(
 			'("file_references"."ref_type" = $1 and "file_references"."ref_id" = $2)'
@@ -182,8 +182,8 @@ describe('syncFileReferences', () => {
 		const upd = render(state.updates[0].where);
 		expect(upd.sql).toBe('("files"."id" in ($1) and "files"."status" = $2)');
 		expect(upd.params).toEqual(['file-1', 'attached']);
-		// Query scopes (review round 2): both the candidate lock and the
-		// remaining-refs snapshot target the removed ids on the right tables.
+		// Query scopes: both the candidate lock and the remaining-refs
+		// snapshot target the removed ids on the right tables.
 		expect(state.lockTables[0]).toBe(filesTable);
 		expect(state.orderBys).toContainEqual([filesTable.id]);
 		const existingWhere = render(state.selectWheres[0]);
@@ -194,9 +194,9 @@ describe('syncFileReferences', () => {
 		const remainingWhere = render(state.selectWheres[2]);
 		expect(remainingWhere.sql).toBe('"file_references"."file_id" in ($1)');
 		expect(remainingWhere.params).toEqual(['file-1']);
-		// Ordering teeth (review round 2): the candidate lock runs BEFORE the
-		// DELETE and the remaining snapshot runs AFTER it. Moving the pre-lock
-		// used to keep the whole suite green.
+		// Ordering teeth: the candidate lock runs BEFORE the DELETE and the
+		// remaining snapshot runs AFTER it. Moving the pre-lock used to keep
+		// the whole suite green.
 		expect(selectMock.mock.invocationCallOrder[1]).toBeLessThan(
 			deleteMock.mock.invocationCallOrder[0]
 		);

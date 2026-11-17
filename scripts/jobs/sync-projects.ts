@@ -1,6 +1,6 @@
 // scripts/jobs/sync-projects.ts
 //
-// Manual projects-sync entry (projects line C batch, plan §3/§18.3):
+// Manual projects-sync entry:
 //
 //   pnpm jobs:sync-projects [--dry-run] [--provider <p>] [--account <a>] [--refresh-ids <id,id>]
 //

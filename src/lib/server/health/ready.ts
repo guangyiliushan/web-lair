@@ -1,5 +1,5 @@
 /**
- * Readiness probe (M6 P4, F-10): `/api/health` stays dependency-free
+ * Readiness probe: `/api/health` stays dependency-free
  * (liveness - a DB blip must not restart the container); `/api/ready` is the
  * readiness half - DB `select 1` and a Valkey PING, each bounded to 2s and the
  * combined answer cached for 10s.

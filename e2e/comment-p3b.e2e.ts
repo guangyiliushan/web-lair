@@ -82,7 +82,7 @@ test('resolved anchors render as server-side marks with deep-link ids', async ({
 	await expect(mark).toBeVisible();
 	await expect(mark).toHaveClass(/wl-cm/);
 	await expect(mark).toHaveText('第一段');
-	// The mark must actually look like a mark (spec §7/§12.4): a class alone was
+	// The mark must actually look like a mark: a class alone was
 	// green while the stylesheet had no `.wl-cm` rule at all.
 	await expect(mark).toHaveCSS('text-decoration-line', 'underline');
 	await expect(mark).toHaveCSS('text-decoration-style', 'wavy');

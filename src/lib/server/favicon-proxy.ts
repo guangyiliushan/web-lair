@@ -1,9 +1,9 @@
 import { error, isHttpError } from '@sveltejs/kit';
 import { promises as dns } from 'node:dns';
 import { canonicalHost, EMBED_PROVIDER_DOMAINS } from '$lib/components/markdown/embed/registry';
-// SSRF guard shared with the links checker (2026-10-06, links L2): the
-// blocklist and `isPrivateAddress` live in `security/ssrf-guard.ts` (the
-// single import point; review round 4 removed the test-only re-export).
+// SSRF guard shared with the links checker: the blocklist and
+// `isPrivateAddress` live in `security/ssrf-guard.ts` (the single import
+// point).
 import { isPrivateAddress, resolvesPublic } from './security/ssrf-guard.ts';
 
 /**
@@ -70,9 +70,9 @@ async function fetchFavicon(host: string, signal: AbortSignal): Promise<Response
 		if (next.protocol !== 'https:') throw error(403, 'redirected off https');
 		const nextHost = canonicalHost(next.hostname);
 		if (!EMBED_PROVIDER_DOMAINS.has(nextHost)) throw error(403, 'redirected outside the allowlist');
-		// The shared guard throws on DNS failure (links refinement): keep the
+		// The shared guard throws on DNS failure: keep the
 		// historical favicon semantics - a hop that cannot be validated is a
-		// blocked redirect (403), not a 502 fetch failure (review finding).
+		// blocked redirect (403), not a 502 fetch failure.
 		const publicHop = await resolvesPublic(nextHost).catch(() => false);
 		if (!publicHop) throw error(403, 'blocked redirect address');
 		target = next;

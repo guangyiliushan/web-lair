@@ -102,7 +102,7 @@
 					bind:this={triggerEl}
 					type="button"
 					class={cn(
-						'group/status relative flex h-8 max-w-[11rem] min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/50',
+						'group/status relative flex h-8 max-w-44 min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/50',
 						!canShowApp && 'w-6 justify-center px-0'
 					)}
 					aria-label={ariaLabel}
@@ -132,7 +132,7 @@
 			side="bottom"
 			align="start"
 			sideOffset={10}
-			class="z-[60] w-[19rem] max-w-[calc(100vw-2rem)] bg-transparent p-0 shadow-none ring-0"
+			class="z-60 w-76 max-w-[calc(100vw-2rem)] bg-transparent p-0 shadow-none ring-0"
 		>
 			<OwnerStatusCard {presence} {ownerName} />
 		</HoverCard.Content>

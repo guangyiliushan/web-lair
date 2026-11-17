@@ -14,7 +14,7 @@ import {
 import type { NotificationSink } from './notify.ts';
 
 /**
- * Notification outbox writer (M6 P5, T5.2; decision register §3E N8).
+ * Notification outbox writer.
  *
  * `enqueueNotification` turns one event into one `queued` row per enabled
  * channel. It is called from two places, and both use the SAVE POINT it
@@ -177,11 +177,10 @@ export async function enqueueNotification(
 }
 
 /**
- * The `notify()` sink the drain installs (T5.2): P4's probes call `notify()`,
+ * The `notify()` sink the drain installs: the builtin probes call `notify()`,
  * this adapter is what turns those calls into outbox rows. A failure is
  * rethrown so `notify()` reports `failed` and the producer drops its daily
- * latch (the P4 contract: a latched failure would silence the alert for the
- * rest of the day).
+ * latch - a latched failure would silence the alert for the rest of the day.
  */
 export function createNotificationSink(
 	db: NotificationOutboxDb,
@@ -202,8 +201,8 @@ export function createNotificationSink(
 		// `suppressed` is NOT a delivery: the hourly window dropped the row, so the
 		// producer must keep failing (and drop its daily latch) and retry once the
 		// window frees up. Reporting it as delivered would silence the alert for
-		// the rest of the day - the exact failure the P4 latch contract exists to
-		// prevent (review P1-2). `duplicate`, `skipped` and `enqueued` are final.
+		// the rest of the day - the exact failure this latch contract exists to
+		// prevent. `duplicate`, `skipped` and `enqueued` are final.
 		if (outcome === 'failed' || outcome === 'suppressed') {
 			throw new Error(`notification enqueue ${outcome} for ${event.eventType}`);
 		}

@@ -372,8 +372,8 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 		expect(summary.writes).toBe(2);
 		expect(updateCalls).toHaveLength(2);
 		// The UPDATE payload (ring wiring, plan -> columns, pinned
-		// updated_at) must be pinned (review round 4): deleting
-		// recentChecks or a counter would otherwise survive the suite.
+		// updated_at) must be pinned: deleting recentChecks or a counter
+		// would otherwise survive the suite.
 		expect(setArgs).toHaveLength(2);
 		for (const payload of setArgs) {
 			expect(payload.status).toBe('approved');
@@ -580,8 +580,8 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 			fetchDeps: { fetch: slowFetch as never, resolveHost: okResolve }
 		});
 		// Saturated batch, all rows processed: the follow-up select is
-		// empty, so the run must not claim a budget stop (the pre-select
-		// deadline gate was removed for exactly this, review round 3).
+		// empty, so the run must not claim a budget stop - the pre-select
+		// deadline gate was removed for exactly this case.
 		expect(summary.checked).toBe(1);
 		expect(summary.writes).toBe(1);
 		expect(summary.budgetExhausted).toBe(false);
@@ -626,7 +626,7 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 		});
 		// Exactly ONE select: nothing could start, so the loop must end. A
 		// spinning loop would keep selecting (and hang this test) - this is
-		// the 6892b25 regression (review round 4).
+		// the 6892b25 regression.
 		expect(db.select).toHaveBeenCalledTimes(1);
 		expect(summary.budgetExhausted).toBe(true);
 		expect(summary.checked).toBe(0);

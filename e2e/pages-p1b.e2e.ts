@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { psql } from './support';
 
 /**
- * pages-line P1b acceptance (roadmap W3 #6, T5): the default pages render
+ * pages-p1b acceptance: the default pages render
  * through the universal route (strict per-language bodies + canonical/
  * hreflang), the chrome wires them into the home card / mobile pages group /
  * footer from one SSR query, a missing language answers 404 with the

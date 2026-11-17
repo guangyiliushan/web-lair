@@ -3,7 +3,7 @@ import { db } from '$lib/server/db';
 import { links } from '$lib/server/db/content';
 
 /**
- * Public read face of the links registry (M3, plan §5.1). Deliberately
+ * Public read face of the links registry. Deliberately
  * separate from `links/admin.ts`: the admin selection carries `email`,
  * `recent_checks` and reviewer fields, none of which may ever reach an
  * anonymous page payload. Every list is capped (same 200-row public ceiling

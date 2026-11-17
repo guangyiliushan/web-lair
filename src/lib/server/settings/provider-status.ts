@@ -1,4 +1,4 @@
-// Provider status is a cross-page contract (W3.6c): test results and
+// Provider status is a cross-page contract: test results and
 // connection errors must never carry a token, an endpoint query string or a
 // stack. The caller owns the test action; this helper only makes the message
 // safe for the shared component.

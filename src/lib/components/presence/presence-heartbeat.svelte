@@ -11,7 +11,7 @@
 	 * reading surface. Mounted once in the (site) layout; renders nothing.
 	 * The effect keys on the TRACKED BOOLEAN, so client-side navigation
 	 * between tracked pages keeps the loop (and its cadence) alive instead of
-	 * restarting it; /account and the five auth pages never beat (R-6) and
+	 * restarting it; /account and the five auth pages never beat and
 	 * the admin shell has its own surface.
 	 */
 

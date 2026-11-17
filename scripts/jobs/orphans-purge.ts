@@ -1,6 +1,6 @@
 // scripts/jobs/orphans-purge.ts
 //
-// Manual orphan sweep (M5):
+// Manual orphan sweep:
 //
 //   pnpm jobs:orphans-purge [--dry-run] [--draft-grace-days N]
 //

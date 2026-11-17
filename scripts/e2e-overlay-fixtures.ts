@@ -4,7 +4,7 @@ import { storageConfigFromEnv } from '../src/lib/server/storage/config';
 import { S3Storage } from '../src/lib/server/storage/s3';
 
 /**
- * Fixture bytes for e2e/photos-viewer-overlay.e2e.ts (ST-3 3c-4). Those
+ * Fixture bytes for e2e/photos-viewer-overlay.e2e.ts. Those
  * registry rows are seeded by the spec itself; the object bytes cannot be
  * (the spec process has no storage client), so this idempotent script
  * publishes three small GIFs to RustFS. GIF = single object, no variant

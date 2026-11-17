@@ -1171,7 +1171,7 @@
 										? m.admin_friends_detail_override_note()
 										: m.admin_friends_reason()}
 								</dt>
-								<dd class="text-sm break-words whitespace-pre-wrap">{detailRow.reason}</dd>
+								<dd class="text-sm wrap-break-word whitespace-pre-wrap">{detailRow.reason}</dd>
 							</div>
 						{/if}
 					</dl>
@@ -1241,7 +1241,7 @@
 											<span class="ml-auto text-muted-foreground">{fmt(run.startedAt)}</span>
 										</div>
 										{#if run.note}
-											<p class="break-words text-muted-foreground">{run.note}</p>
+											<p class="wrap-break-word text-muted-foreground">{run.note}</p>
 										{/if}
 									</li>
 								{/each}
@@ -1276,7 +1276,7 @@
 										<span class="ml-auto text-muted-foreground">{fmt(entry.at)}</span>
 									</div>
 									{#if entry.note}
-										<p class="break-words text-muted-foreground">{entry.note}</p>
+										<p class="wrap-break-word text-muted-foreground">{entry.note}</p>
 									{/if}
 								</li>
 							{/each}

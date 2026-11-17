@@ -2,7 +2,7 @@ import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { apiPost, psql } from './support';
 
 /**
- * W8 account acceptance: real load, multi-session devices, password change,
+ * Account acceptance: real load, multi-session devices, password change,
  * passkey management and read-only OAuth. The owner is auto-signed-in by the
  * loopback Tailnet seam; the password fixture is a separate admin-capable
  * account so the owner's credential is never changed by the suite.

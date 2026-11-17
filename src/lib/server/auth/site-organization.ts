@@ -3,7 +3,7 @@ import { db } from '$lib/server/db';
 import { SITE_ORGANIZATION_SLUG } from './site-organization.shared';
 
 /**
- * The single site organization (ledger §4.22, B2). Every session is fixed to
+ * The single site organization. Every session is fixed to
  * it by the `session.create.before` hook in `auth.ts`, so this lookup sits on
  * the session-creation path: the id is read once and cached for the process
  * lifetime. `invalidateSiteOrganizationCache()` is called by

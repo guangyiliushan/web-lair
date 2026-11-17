@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { credentialBucketKey, requestAddress, requestIp } from './request-address';
 
 /**
- * W6.10 review P1: credentials buckets must separate accounts behind one
+ * Credentials buckets must separate accounts behind one
  * address, and the email must never appear in the key material.
  */
 describe('request address helpers', () => {

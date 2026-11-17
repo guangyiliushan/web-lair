@@ -5,7 +5,7 @@ import { purgeTrashedPosts, TRASH_GRACE_DAYS } from './trash.ts';
  * The sweep is a candidate query + one family-count query per candidate; these
  * tests pin the family guard (D3) and the dry-run zero-write contract with a
  * stub `execute`. The real delete path is `purgePostFamily`, covered by the
- * posts route tests and the M5-6 scratch integration run.
+ * posts route tests and a scratch integration run.
  */
 function fakeDb(
 	candidates: { id: string; translation_group: string }[],

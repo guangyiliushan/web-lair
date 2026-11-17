@@ -1,5 +1,5 @@
 /**
- * H1/H3 CI guard (W2.7 / W2.9).
+ * Auth-schema CI guard.
  *
  * 1. Regenerates the better-auth schema into a temp file and compares it with
  *    `src/lib/server/db/auth.schema.ts` (normalized: line endings and trailing

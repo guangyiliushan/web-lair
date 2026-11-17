@@ -7,11 +7,11 @@ import type { CompilerOptions, Node as TypeScriptNode, SourceFile } from 'typesc
 import type { ESLint } from 'eslint';
 
 /**
- * Save gate (J-2, plan §5.4; grill R2-1): every check a job script must pass
+ * Save gate: every check a job script must pass
  * before it may be written to the user layer. All checks are pure "parsing" -
- * user code is never executed here; the drain is the only executor (plan §5.1).
+ * user code is never executed here; the drain is the only executor.
  *
- * The checks and why (all probed 2026-10-07; hardened by the J-2 review):
+ * The checks and why:
  *   1. name       - module-file safety (Windows device names, traversal),
  *                   bounded length, and the canonical-name invariant: a name
  *                   must map to its own file (`my.job` would land in
@@ -53,12 +53,12 @@ export interface GateReport {
 const MAX_JOB_NAME_LENGTH = 64;
 
 /**
- * Name rules (plan §5.4): module-file safe, traversal safe, bounded length,
- * and canonical (J-2 review F1): a registered name always passes; a user-only
- * name must be dot-free and must not alias a builtin's module file. Without
- * this, saving `jobs-prune` would overwrite the `jobs.prune` builtin's user
- * file as a plain "user" job - no fork sidecar, no upgrade baseline - and
- * `my.job` would silently live in `my-job.ts` under a different identity.
+ * Name rules: module-file safe, traversal safe, bounded length, and
+ * canonical - a registered name always passes; a user-only name must be
+ * dot-free and must not alias a builtin's module file. Without this, saving
+ * `jobs-prune` would overwrite the `jobs.prune` builtin's user file as a
+ * plain "user" job - no fork sidecar, no upgrade baseline - and `my.job`
+ * would silently live in `my-job.ts` under a different identity.
  */
 export function checkJobName(name: string): GateError[] {
 	const errors: GateError[] = [];
@@ -230,18 +230,18 @@ function collectBoundNames(ts: TsModule, sourceFile: SourceFile): Set<string> {
 }
 
 /**
- * Skip identifiers that are names, not references (property keys etc.).
- * Expanded by the J-2 review round 2 (D4): destructuring renames, interface /
- * class member names, labels and `typeof X` type queries are names or type
- * positions - flagging them rejected legitimate scripts.
+ * Skip identifiers that are names, not references (property keys etc.):
+ * destructuring renames, interface / class member names, labels and
+ * `typeof X` type queries are names or type positions - flagging them
+ * rejected legitimate scripts.
  */
 function isResidueReference(ts: TsModule, node: import('typescript').Identifier): boolean {
 	const parent = node.parent;
 	if (!parent) return false;
 	// The call-expression arm owns `require(...)`; reporting its callee here
-	// again double-reported the same site (J-2 review round 2, D4). Only
-	// `require` is skipped - `exports('x')` in callee position is a real
-	// runtime reference and stays flagged (round 3, P3-1).
+	// again double-reported the same site. Only `require` is skipped -
+	// `exports('x')` in callee position is a real runtime reference and
+	// stays flagged.
 	if (ts.isCallExpression(parent) && parent.expression === node && node.text === 'require') {
 		return false;
 	}

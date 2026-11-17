@@ -1,6 +1,6 @@
 // scripts/jobs/links-prune.ts
 //
-// Manual outdated-link prune (M3 / links plan §5.1):
+// Manual outdated-link prune:
 //
 //   pnpm jobs:links-prune [--dry-run] [--grace-days N]
 //

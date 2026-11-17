@@ -3,7 +3,7 @@ import { check, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-
 import { user } from '../auth.schema.ts';
 
 /**
- * One-row pointer to the site owner (M4 foundation, O-C2/OP-7).
+ * One-row pointer to the site owner.
  *
  * `user_profiles` stays the single source for the public persona; this table
  * only answers "which user is the owner" for the hot header read, because the

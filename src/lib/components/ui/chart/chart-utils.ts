@@ -22,7 +22,7 @@ export function getPayloadConfigFromPayload(
 	config: ChartConfig,
 	payload: TooltipPayload,
 	key: string,
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw chart rows hold mixed types
 	data?: Record<string, any> | null
 ) {
 	if (typeof payload !== 'object' || payload === null) return undefined;

@@ -1,6 +1,5 @@
 /**
- * Notification retry policy (M6 P5; plan §3.2 "three retries (1m/5m/15m), terminal
- * state failed").
+ * Notification retry policy.
  *
  * One immediate attempt plus THREE retries, fixed backoff 1m / 5m / 15m; the
  * fourth failure is terminal. Fixed (not exponential-with-jitter) because the
@@ -15,9 +14,6 @@
  *
  * The delay list is indexed by the attempts ALREADY made: after attempt 1 the
  * row waits 1m, after 2 -> 5m, after 3 -> 15m, after 4 the budget is spent.
- * (An earlier revision stopped after three attempts and left the 15m entry
- * unused; the contract in the register and the RUNBOOK is 1m/5m/15m, and the
- * harness now proves the 15m step is real - review P1-3.)
  */
 export const NOTIFICATION_MAX_ATTEMPTS = 4;
 export const NOTIFICATION_RETRY_DELAYS_MS: readonly number[] = [60_000, 5 * 60_000, 15 * 60_000];

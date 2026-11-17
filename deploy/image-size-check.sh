@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Image size gate (P1 / T1.5).
+# Image size gate.
 #
 # One rule from `deploy/image-size-baseline.json`: the image must not grow more
 # than `regression_ratio` over the recorded baseline, so a new dependency that
@@ -7,8 +7,8 @@
 #
 # The plan's "<650 MB" figure was a pre-measurement placeholder aimed at the
 # app-tree number; the measured image is ~251 MB, so enforcing 650 MB against
-# `.Size` would be a rule that can never fire (review P1-1: one rule per
-# metric). The app-tree numbers stay in the baseline as documentation only.
+# `.Size` would be a rule that can never fire (one rule per metric). The
+# app-tree numbers stay in the baseline as documentation only.
 #
 # The measured number is `docker image inspect .Size` - the compressed image
 # size Docker reports for pulls. `du -sb /app` inside the container measures the

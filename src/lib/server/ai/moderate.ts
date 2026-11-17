@@ -33,7 +33,7 @@ function parseJson(raw: string): unknown {
 
 /**
  * AI triage for the middle band. The payload is the comment TEXT only - no
- * author, email, IP, user agent or target page (privacy, ai-line plan §6-2).
+ * author, email, IP, user agent or target page (privacy).
  * The model is treated as untrusted: its JSON is validated, and it can never
  * execute anything.
  */

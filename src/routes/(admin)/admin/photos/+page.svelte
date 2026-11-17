@@ -289,7 +289,7 @@
 									src={thumbUrl(row)}
 									alt={row.fileName}
 									loading="lazy"
-									class="aspect-[4/3] w-full object-cover"
+									class="aspect-4/3 w-full object-cover"
 								/>
 							</button>
 							<div class="flex flex-col gap-1 p-3">

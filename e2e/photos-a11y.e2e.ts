@@ -3,11 +3,11 @@ import { zhCnLocale } from './locale-fixture';
 import { expectNoCriticalAxe, psql } from './support';
 
 /**
- * WCAG 2.2 AA baseline for the public photo surfaces (T11's automated half,
- * plan §5.3): zero CRITICAL axe-core violations on the three public pages,
+ * WCAG 2.2 AA baseline for the public photo surfaces:
+ * zero CRITICAL axe-core violations on the three public pages,
  * plus the 2.5.8 target-size assertions (≥24×24 CSS px) for the viewer
  * controls and map markers. Lower-impact findings are printed for the
- * record (the line's bar is critical-only, per T11). One located fixture
+ * record (the line's bar is critical-only). One located fixture
  * gives the map a marker. Fixture dates stay below 2030: photos-public's
  * "no newer neighbour" assertion relies on its own 2030-01 rows being the
  * newest visible photos, and specs share the live database across workers.
@@ -83,7 +83,7 @@ test.describe('photos a11y baseline', () => {
 	test('2.5.8: map markers meet 24×24 (world-archive precondition)', async ({ page }) => {
 		// Mirrors maps-public.e2e.ts: the world archive is a manual publish
 		// step — absent means the map renders its fallback (no markers), so
-		// this assertion must SKIP, not burn a timeout (round-2 confirm P2).
+		// this assertion must SKIP, not burn a timeout.
 		const archiveProbe = await page.request.get('/maps/world-z0-6.pmtiles', {
 			headers: { Range: 'bytes=0-1' }
 		});

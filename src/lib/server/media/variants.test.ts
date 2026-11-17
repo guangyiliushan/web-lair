@@ -35,7 +35,7 @@ describe('processImage (ledger §21 pipeline)', { timeout: 30_000 }, () => {
 			expect(out.variants.preview).toBeNull();
 			const full = await sharp(out.variants.full).metadata();
 			expect([full.width, full.height]).toEqual([w, h]);
-			// Format is part of the frozen contract (plan §4.3): webp only.
+			// Format is part of the frozen contract: webp only.
 			expect(thumb.format).toBe('webp');
 			expect(full.format).toBe('webp');
 		}

@@ -1,5 +1,5 @@
 /**
- * Channel adapter contract (M6 P5, T5.4).
+ * Channel adapter contract.
  *
  * `ok` carries the channel's own accept signal (Bark HTTP status, nodemailer
  * resolve). A failure says whether retrying could ever help: `permanent`

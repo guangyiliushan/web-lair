@@ -3,11 +3,11 @@ import { psql, valkeyDel } from './support';
 import { zhCnLocale } from './locale-fixture';
 
 /**
- * Public friends page (M3 / links plan 5.1-5.2): the three zones against the
+ * Public friends page: the three zones against the
  * real database, the application form's soft pass (pending + precheck
  * evidence), the auditable hard gates, de-duplication, the honeypot and the
- * `friends.apply.enabled` switch. `/admin/friends` is covered by its own M1
- * spec and is not exercised here.
+ * `friends.apply.enabled` switch. `/admin/friends` is covered elsewhere
+ * and is not exercised here.
  *
  * Fixtures are namespaced `e2e-friends-`; option rows that the spec overrides
  * (`friends.apply`, `friends.policy`, `site.info`) are captured and restored
@@ -220,7 +220,7 @@ test('duplicate domain is refused while the first row is pending', async ({ page
 
 test('an approved application appears on the public wall', async ({ page }) => {
 	// The soft-pass test left `${PREFIX}applicant` pending with no verified
-	// backlink, so the admin approve path needs the override note (M1 guard).
+	// backlink, so the admin approve path needs the override note.
 	await page.goto('/admin/friends?state=pending');
 	const row = page.getByRole('row').filter({ hasText: `${PREFIX}applicant` });
 	await row.getByRole('button', { name: '通过' }).click();

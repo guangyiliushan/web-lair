@@ -4,7 +4,7 @@ import { asArray, asRecord, dateOrNull, num, requiredId, str } from './shared.ts
 import type { UserReposResult } from './github.ts';
 
 /**
- * Gitee adapter (plan §3.2): anonymous 60 req/min; `PROJECTS_GITEE_TOKEN`
+ * Gitee adapter: anonymous 60 req/min; `PROJECTS_GITEE_TOKEN`
  * travels as the `access_token` query parameter (the platform's documented
  * auth style). Pagination is `page`-based (increment until a short page);
  * `private === true` items are dropped at mapping time.

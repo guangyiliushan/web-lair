@@ -315,7 +315,7 @@
 					{#if root.isPending}{@render pendingBadge()}{/if}
 					{@render editedMark(root.editedAt)}
 				</div>
-				<div class="mt-1.5 text-sm leading-relaxed break-words">
+				<div class="mt-1.5 text-sm leading-relaxed wrap-break-word">
 					{@render commentBody(root.text)}
 				</div>
 				{#if root.anchor}
@@ -364,7 +364,7 @@
 								{#if reply.isPending}{@render pendingBadge()}{/if}
 								{@render editedMark(reply.editedAt)}
 							</div>
-							<div class="mt-1.5 text-sm leading-relaxed break-words">
+							<div class="mt-1.5 text-sm leading-relaxed wrap-break-word">
 								{@render commentBody(reply.text)}
 							</div>
 							{@render itemActions(

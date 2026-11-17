@@ -31,8 +31,8 @@ describe('isSafeJobName', () => {
 		expect(isSafeJobName('jobs.prune')).toBe(true);
 		expect(isSafeJobName('system.resources')).toBe(true);
 		expect(isSafeJobName('a-b.c')).toBe(true);
-		// Path escape attempts must never reach the filesystem (J-2 feeds this
-		// from files).
+		// Path escape attempts must never reach the filesystem: the user layer
+		// feeds job names from files.
 		expect(isSafeJobName('../evil')).toBe(false);
 		expect(isSafeJobName('%2e%2e/evil')).toBe(false);
 		expect(isSafeJobName('a/b')).toBe(false);

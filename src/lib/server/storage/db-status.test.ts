@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { maskDatabaseHost, parseDatabaseUrl, readDatabaseStatus, readJournal } from './db-status';
 
 /**
- * Read-only database status (W7.7/Q17): the page must never print a password,
+ * Read-only database status: the page must never print a password,
  * never print a full external host, and never claim "up to date" without
  * comparing the ledger with the journal.
  */

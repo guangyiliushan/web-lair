@@ -87,7 +87,7 @@
 			<!-- Taxonomy: its own full-width row on mobile, inline from md up. -->
 			<span
 				data-testid="post-detail-tags"
-				class="order-last flex min-w-0 basis-full items-center justify-center gap-x-2 md:order-none md:basis-auto"
+				class="order-last flex min-w-0 basis-full items-center justify-center gap-x-2 md:order-0 md:basis-auto"
 			>
 				<span aria-hidden="true" class="hidden shrink-0 md:inline">·</span>
 				<span class="min-w-0 truncate">

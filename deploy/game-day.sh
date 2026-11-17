@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M6 game day (T7.3): drive controlled faults at the alerting layer and record
+# Game day: drive controlled faults at the alerting layer and record
 # detection / recovery times.
 #
 # Why this exists: the runbook covers *what to do* when an alert fires; this
@@ -93,7 +93,7 @@ done
 case "$DRILL" in pg | container | drain | disk | all) : ;; *) die "--drill must be pg|container|drain|disk|all" ;; esac
 # $INTERVAL is interpolated into the Gatus YAML and $WAIT_TIMEOUT into `[ -ge ]`;
 # a non-numeric value would either corrupt the config or make the wait loop
-# never terminate (review P2).
+# never terminate.
 case "$INTERVAL" in '' | *[!0-9]*) die "--interval must be a whole number of seconds" ;; esac
 case "$WAIT_TIMEOUT" in '' | *[!0-9]*) die "--timeout must be a whole number of seconds" ;; esac
 [ "$INTERVAL" -ge 1 ] || die "--interval must be >= 1"

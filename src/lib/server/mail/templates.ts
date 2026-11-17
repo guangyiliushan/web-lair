@@ -1,5 +1,5 @@
 /**
- * Plain-text mail templates (deploy batch D-2, Q9: no HTML template engine).
+ * Plain-text mail templates (no HTML template engine).
  * Three site languages; unknown languages fall back to English.
  */
 

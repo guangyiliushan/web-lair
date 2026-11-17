@@ -3,7 +3,7 @@ import type { RawRepoMeta, RepoIdentity } from '../types.ts';
 import { asArray, asRecord, dateOrNull, num, requiredId, str } from './shared.ts';
 
 /**
- * GitHub adapter (plan §3.2/§3.3): anonymous 60 req/h, `PROJECTS_GITHUB_TOKEN`
+ * GitHub adapter: anonymous 60 req/h, `PROJECTS_GITHUB_TOKEN`
  * lifts to 5,000. Serial paging via the `Link: rel="next"` header; private
  * repositories are dropped at mapping time, forks are kept (the sync layer
  * applies the fork filter uniformly across platforms).

@@ -20,7 +20,7 @@ import type { LinkCheck } from '../../../utils/link-meta.ts';
 // LINK_STATUSES against the baseline CHECK literals.
 
 /**
- * Friend-link registry (links line §2): single table with health state,
+ * Friend-link registry: single table with health state,
  * backlink tracking, and a bounded evidence ring.
  */
 export const links = pgTable(

@@ -308,9 +308,9 @@ describe('createPhotoFromFile', () => {
 	});
 
 	it('absorbs a concurrent duplicate insert as already-in-gallery', async () => {
-		// T13 race: two directory entries with identical bytes reach the
-		// service at once; the loser's insert hits the unique file_id and
-		// must map to the winner's row instead of throwing.
+		// Two directory entries with identical bytes reach the service at once;
+		// the loser's insert hits the unique file_id and must map to the
+		// winner's row instead of throwing.
 		dbMock.select.mockReturnValueOnce(selectChain([FILE_ROW]));
 		dbMock.select.mockReturnValueOnce(selectChain([])); // no existing photo yet
 		dbMock.select.mockReturnValueOnce(selectChain([])); // slug check
@@ -696,8 +696,8 @@ describe('listPhotoNeighbors', () => {
 		};
 		expect(firstChain.innerJoin.mock.calls[0][0]).toBe(filesTable);
 		// Every statement filters visibility and the counts mirror the
-		// neighbour ranges (review 03 P1 / 05 P2: unasserted counts once let a
-		// dropped `is_visible` or a flipped range direction survive the gate).
+		// neighbour ranges (unasserted counts once let a dropped `is_visible`
+		// or a flipped range direction survive the gate).
 		const chains = dbMock.select.mock.results.map(
 			(result) =>
 				result.value as {

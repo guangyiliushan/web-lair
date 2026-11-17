@@ -1,7 +1,7 @@
 import type { ProjectSyncProvider } from '../../utils/project-meta.ts';
 
 /**
- * Projects-line sync vocabulary (projects plan §3.1): identities, raw
+ * Projects-line sync vocabulary: identities, raw
  * snapshots, the five failure kinds and the run summary. Dependency-free
  * apart from the meta module so the whole `projects/**` graph stays loadable
  * under plain Node type stripping (drain + CLI).
@@ -24,7 +24,7 @@ export interface RepoIdentity {
 	repo: string;
 }
 
-/** API snapshot mapped onto our columns (plan §3.2); user fields never here. */
+/** API snapshot mapped onto our columns; user fields never here. */
 export interface RawRepoMeta {
 	/** Platform-stable id, unified as string (Bitbucket braces stripped). */
 	externalId: string;
@@ -43,7 +43,7 @@ export interface RawRepoMeta {
 	fork: boolean;
 }
 
-/** The five failure kinds written to `projects.last_error_kind` (§3.3). */
+/** The five failure kinds written to `projects.last_error_kind`. */
 export type SyncFailureKind = 'not_found' | 'rate_limited' | 'auth' | 'network' | 'parse';
 
 export interface SyncFailure {

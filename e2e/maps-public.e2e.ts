@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
 
 /**
- * Storage ST-2d (T12) map acceptance: the public map renders tiles through
+ * Map acceptance: the public map renders tiles through
  * OUR /maps route (Range-capable, pmtiles protocol) and its markers link to
  * the photo pages. Fixtures use the `e2e-map` marker and are cleaned around
  * every test; marker assertions are scoped to the fixture slug so unrelated

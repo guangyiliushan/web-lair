@@ -331,10 +331,7 @@
 							<p class="mb-2 text-xs text-muted-foreground">
 								{m.admin_posts_edit_translation_preview_source()}
 							</p>
-							<MarkdownRenderer
-								source={source.content ?? ''}
-								class="prose prose-sm max-w-[38rem]"
-							/>
+							<MarkdownRenderer source={source.content ?? ''} class="prose prose-sm max-w-152" />
 						</div>
 						{#if candidateText}
 							<div class="min-h-0 overflow-y-auto p-6">
@@ -343,7 +340,7 @@
 										? m.admin_posts_edit_translation_generating()
 										: m.admin_posts_edit_translation_preview_candidate()}
 								</p>
-								<MarkdownRenderer source={candidateText} class="prose prose-sm max-w-[38rem]" />
+								<MarkdownRenderer source={candidateText} class="prose prose-sm max-w-152" />
 							</div>
 						{/if}
 					</div>

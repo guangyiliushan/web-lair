@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Static proof of the backup split (W2.10 / T3-A).
+ * Static proof of the backup split.
  *
  * The runbook and the shell script drift apart silently: a `-v $APP_DIR/.env`
  * added to the data run would put the master keyring in the same repository as

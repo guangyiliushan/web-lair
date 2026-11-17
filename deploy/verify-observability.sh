@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify Sentinel traffic analytics end to end (M6 / P6, T6.5).
+# Verify Sentinel traffic analytics end to end.
 #
 # Four probes, each with its own verdict:
 #   1. running   - compose service is healthy and /api/health answers "ok"

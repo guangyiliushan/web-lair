@@ -11,7 +11,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 /**
- * Glossary (AI-1, ledger §14.3): translation term pairs the pipeline injects
+ * Glossary: translation term pairs the pipeline injects
  * into prompts and verifies against afterwards. `captured` rows are
  * candidates captured from misses and start disabled; `manual` rows are
  * curated by the owner.

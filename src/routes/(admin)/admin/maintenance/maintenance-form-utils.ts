@@ -1,5 +1,5 @@
 /**
- * Shared form-ingress helpers for the maintenance pages (J-3): the editor
+ * Shared form-ingress helpers for the maintenance pages: the editor
  * forms submit multipart bodies, which normalize line endings to CRLF (HTML
  * spec; undici proves it in tests) while user files stay LF - fold back at
  * the ingress. `baseHash` rides as '' for "no user file yet" (null).

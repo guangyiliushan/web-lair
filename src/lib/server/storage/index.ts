@@ -9,11 +9,11 @@ import type { StorageActive, StorageProviderConfig } from './provider';
 import type { SigV4Credentials } from './signature';
 
 /**
- * Runtime storage handle (W7.1/W7.2/W7.6).
+ * Runtime storage handle.
  *
  * The adapter is built from the ACTIVE provider (`storage.active`), never from
  * the saved form — that is what makes "Save only saves, it does not switch"
- * true at the runtime boundary, not just in the UI (decision Q4). The bootstrap
+ * true at the runtime boundary, not just in the UI. The bootstrap
  * default is the bundled RustFS, so an install that never touched the page
  * behaves exactly as before. The read is strict (`active.ts`): a corrupt row
  * fails closed instead of silently serving the default bucket.
@@ -23,7 +23,7 @@ import type { SigV4Credentials } from './signature';
  * request in every replica. Hot routes resolve once and reuse the handle
  * inside the request.
  *
- * Credentials (W7.6): the local driver needs none; the external driver asks
+ * Credentials: the local driver needs none; the external driver asks
  * the secret store first and the environment second. A store failure becomes a
  * StorageError (status 0) so every caller's unreachable-provider path — 503,
  * no fallback — handles it the same way as a dead endpoint.

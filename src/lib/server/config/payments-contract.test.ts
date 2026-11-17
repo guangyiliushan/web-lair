@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { optionKeys, optionRegistry } from './options-registry';
 
 /**
- * W6.8 (C6/C7): paid membership ships as a design contract only. This suite
+ * Paid membership ships as a design contract only. This suite
  * pins the boundary so a future batch cannot half-land it: the flag is off by
  * default, there is no paid/member access option, no payment route, and the
  * Content settings page offers no paid switch.
  *
  * The full contract (access modes, preview, entitlement, SEO, leak surfaces,
- * provider/tax/refund trigger) lives in the decision register §3C.4.
+ * provider/tax/refund trigger) is not implemented anywhere yet.
  */
 describe('payments contract boundary', () => {
 	it('keeps payments.enabled off by default', () => {

@@ -84,7 +84,7 @@
 		<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
 			{#each details as row (row.label)}
 				<dt class="text-muted-foreground">{row.label}</dt>
-				<dd class="min-w-0 text-right break-words">{row.value}</dd>
+				<dd class="min-w-0 text-right wrap-break-word">{row.value}</dd>
 			{/each}
 		</dl>
 		{#if coordinates}

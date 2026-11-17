@@ -4,7 +4,7 @@ import { webhookDeliveries } from '../db/system/webhook-delivery.schema.ts';
 import { webhooks } from '../db/system/webhook.schema.ts';
 
 /**
- * Webhook delivery outbox (SY S1; ledger §26 / platform plan §D.3): turns an
+ * Webhook delivery outbox: turns an
  * audited event into one `queued` delivery row per subscribed endpoint. The
  * job drain's third segment (`jobs/drain.ts`) claims the rows, signs them
  * with Standard Webhooks headers and POSTs them.
@@ -22,7 +22,7 @@ import { webhooks } from '../db/system/webhook.schema.ts';
  * exact operator form the GIN `array_ops` opclass can index if this table
  * ever grows (threshold-based defer, registered).
  *
- * Contract (S1 grill ruling): same call path as the audit row - it rides the
+ * Contract: same call path as the audit row - it rides the
  * caller's transaction when one is in scope, and any failure propagates
  * (fail loud). A delivery is never silently dropped; the residual gap on
  * plain-`db` call sites (audit row committed, enqueue failing on a DB-level
@@ -33,8 +33,8 @@ import { webhooks } from '../db/system/webhook.schema.ts';
  * FK check raise 23503, which without a savepoint would abort the CALLER's
  * business write. A vanished endpoint has no delivery obligation, so ONLY
  * that code is swallowed by rolling back the savepoint; every other error
- * stays loud (nine-dimension Q4; PG SAVEPOINT semantics and the drizzle
- * nested-transaction/savepoint mapping verified in the grill).
+ * stays loud (PG SAVEPOINT semantics and the drizzle
+ * nested-transaction/savepoint mapping behave as assumed).
  */
 export interface DeliveryPayload {
 	type: string;

@@ -25,7 +25,7 @@ export const webhookDeliveries = pgTable(
 		payload: jsonb('payload').$type<Record<string, unknown>>(),
 		status: text('status').notNull().default('queued'),
 		/**
-		 * Retry state (W9.4 / T2b). A retryable failure leaves the row
+		 * Retry state. A retryable failure leaves the row
 		 * `queued` with `nextAttemptAt` in the future; the id (and therefore
 		 * the `webhook-id` header) never changes across attempts.
 		 */

@@ -1,6 +1,6 @@
 name: image
 
-# P1/T1.5 — build the deployment image and prove it works before it can merge.
+# Build the deployment image and prove it works before it can merge.
 # Three gates, in order (each is a real execution, not a lint):
 #   1. `deploy/verify-image.sh`  - drain entry reaches its config guard, every
 #      registered builtin module loads, server answers /api/health;
@@ -24,7 +24,7 @@ on:
     paths:
       # Everything that can change the image bytes. `messages/**` and
       # `project.inlang/**` are image inputs too: the Paraglide runtime is
-      # compiled into `build/` (review P1-2).
+      # compiled into `build/`.
       - Dockerfile
       - .dockerignore
       - .npmrc

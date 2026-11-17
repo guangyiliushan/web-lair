@@ -8,12 +8,12 @@ import type { JobTrigger } from '../db/system/job-run.schema.ts';
 
 export interface EnqueueResult {
 	id: string;
-	/** True when an active (queued or running) row already existed (plan T2). */
+	/** True when an active (queued or running) row already existed. */
 	deduplicated: boolean;
 }
 
 /**
- * Manual trigger path (plan §4.4): enqueue = insert `job_runs(status='queued')`;
+ * Manual trigger path: enqueue = insert `job_runs(status='queued')`;
  * the drain claims it within ~one tick. Double clicks collide with the partial
  * unique index `job_runs_job_queued_uniq(job) WHERE status='queued'` - that
  * 23505 is caught and the active row is reused and reported. Scope note: the
@@ -22,12 +22,12 @@ export interface EnqueueResult {
  * execution); the 23505 re-select also covers the race where the previous
  * blocker just became `running`. The watermark is never touched here.
  *
- * Merged-name note (J-2, grill R1-2): callers that see the user layer resolve
+ * Merged-name note: callers that see the user layer resolve
  * the definition first (`resolveJobDefinition`) and pass it in; without a
- * definition the registry is consulted, which keeps the pre-J-2 contract for
+ * definition the registry is consulted, which keeps the earlier contract for
  * builtin-only callers.
  *
- * Generic over the schema on purpose: the J-3 admin calls this with the web
+ * Generic over the schema on purpose: the admin surface calls this with the web
  * app's `drizzle(client, { schema })` handle, which is NOT assignable to the
  * schema-less type the drain uses (the `fullSchema` property makes the
  * generic invariant) - the schema flows in as a type parameter instead of

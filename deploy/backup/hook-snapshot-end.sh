@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Backrest CONDITION_SNAPSHOT_END command hook (M6 P2, T2.3/T2.4).
+# Backrest CONDITION_SNAPSHOT_END command hook.
 #
 # Usage (from the rendered config): [--config] [--failed] [<snapshot-id>]
 #

@@ -150,12 +150,12 @@ export async function renderMarkdownToHtml(markdown: string): Promise<string> {
 }
 
 /**
- * Tree-mode rendering for the segment-comment marking pass (comment P3b, spec
- * §7). The caller needs the transformed hast tree — block directory first, then
+ * Tree-mode rendering for the segment-comment marking pass. The caller needs
+ * the transformed hast tree — block directory first, then
  * `span.wl-cm` marks — and only then the HTML.
  *
  * Why not a plugin: a frozen unified processor rejects `.use()` ("Cannot call
- * `use` on a frozen processor", measured 2026-10-17), and rebuilding the whole
+ * `use` on a frozen processor"), and rebuilding the whole
  * chain per request would re-initialise Shiki. `run()` + `stringify()` on THIS
  * instance stay on the same compiler, so `stringifyMarkdownTree(renderMarkdownTree(md))`
  * is byte-identical to `renderMarkdownToHtml(md)` when no mark is applied — the

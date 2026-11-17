@@ -1,14 +1,14 @@
 import type { SyncFailureKind } from './types.ts';
 
 /**
- * Projects sync HTTP unit (plan §3.4): serial GETs against the four fixed
- * platform API hosts, 15 s timeout per request, one in-run retry for
- * timeouts / 5xx, rate-limit aware. Fixed upstream hosts are validated by
- * TLS (embed-meta precedent), so no SSRF guard applies here - the only
- * user-supplied URLs (import-url's OG fallback) go through the shared
- * security/ssrf-guard instead.
+ * Projects sync HTTP unit: serial GETs against the four fixed platform API
+ * hosts, 15 s timeout per request, one in-run retry for timeouts / 5xx,
+ * rate-limit aware. Fixed upstream hosts are validated by TLS (embed-meta
+ * precedent), so no SSRF guard applies here - the only user-supplied URLs
+ * (import-url's OG fallback) go through the shared security/ssrf-guard
+ * instead.
  *
- * Classification (§3.3): 404/410 -> not_found; 429 or a 403 carrying an
+ * Classification: 404/410 -> not_found; 429 or a 403 carrying an
  * exhausted rate-limit signal -> rate_limited; other 401/403 -> auth;
  * timeout / DNS / TLS / connect / persistent 5xx -> network; a body that is
  * not the expected JSON object -> parse.
@@ -18,7 +18,7 @@ import type { SyncFailureKind } from './types.ts';
 export const PROJECTS_SYNC_VERSION = '0.0.1';
 const PRODUCT_TOKEN = 'web-lair-projects-sync';
 
-/** UA per §3.4; the contact comment appears when ORIGIN is configured. */
+/** UA string; the contact comment appears when ORIGIN is configured. */
 export function syncUserAgent(): string {
 	const origin = process.env.ORIGIN;
 	return origin
@@ -56,7 +56,7 @@ export interface FetchJsonResponse {
 export type FetchJson = (url: string, init?: FetchJsonInit) => Promise<FetchJsonResponse>;
 
 /**
- * Rate-limit exhaustion probe per platform (plan §3.4). Bitbucket exposes
+ * Rate-limit exhaustion probe per platform. Bitbucket exposes
  * no remaining header on the probed endpoints - 429 is its only signal.
  */
 export function isRateLimitExhausted(provider: string, headers: Headers): boolean {
@@ -195,9 +195,8 @@ export async function fetchJson(
 		} catch (err) {
 			// Classified redirect failures pass straight through.
 			if (err instanceof ProjectsFetchError) throw err;
-			// Timeouts retry once within the run (plan §3.4: one in-run
-			// retry for timeouts / 5xx); other network-class failures
-			// (DNS / TLS / connect) do not.
+			// Timeouts retry once within the run; other network-class
+			// failures (DNS / TLS / connect) do not.
 			if (attempt === 1 && err instanceof Error && err.name === 'TimeoutError') {
 				await sleep(RETRY_DELAY_MS);
 				continue;
@@ -208,8 +207,8 @@ export async function fetchJson(
 		if (response.status === 429) {
 			const waitMs = rawRetryAfterMs(response.headers);
 			await response.body?.cancel().catch(() => {});
-			// Plan §3.4: honour Retry-After, but only within the run budget -
-			// a longer window means this account is done for this run
+			// Honour Retry-After, but only within the run budget - a
+			// longer window means this account is done for this run
 			// (give up the rest of its requests and record rate_limited).
 			if (waitMs !== null && waitMs <= MAX_RETRY_AFTER_MS && attempt === 1) {
 				await sleep(waitMs);
@@ -233,7 +232,7 @@ export async function fetchJson(
 				const resetWaitMs = resetAtMs !== null ? resetAtMs - Date.now() : null;
 				// Same run-budget rule as 429: wait out the nearest promised
 				// window once, otherwise give up this run's requests for the
-				// account (plan §3.4; review 2026-10-08).
+				// account .
 				let waitMs: number | null = null;
 				for (const candidate of [retryAfterWaitMs, resetWaitMs]) {
 					if (candidate !== null && candidate >= 0) {
@@ -256,7 +255,7 @@ export async function fetchJson(
 		if (response.status >= 500) {
 			await response.body?.cancel().catch(() => {});
 			if (attempt === 1) {
-				// Plan §3.4: timeout / 5xx retry once within the run.
+				// Timeout / 5xx retry once within the run.
 				await sleep(RETRY_DELAY_MS);
 				continue;
 			}

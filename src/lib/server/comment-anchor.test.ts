@@ -75,8 +75,8 @@ describe('collectAnchorBlocks (spec §2/§3)', () => {
 	it('folds whitespace globally across an inline void (E1 regression)', () => {
 		const tree = root(p(text('a '), span(['katex'], [text('x')]), text(' b')));
 		const blocks = collectAnchorBlocks(tree);
-		// Per-node folding would produce "a  b" here; the grill measured the
-		// two pipelines diverging on exactly this shape (inline math).
+		// Per-node folding would produce "a  b" here; the two pipelines
+		// diverge on exactly this shape (inline math).
 		expect(blocks[0].text).toBe('a b');
 	});
 
@@ -283,7 +283,7 @@ describe('resolveAnchorDraft (write side, spec §6)', () => {
 		expect(result.anchor.block.ord).toBe(1);
 		expect(result.anchor.quote.exact).toBe('quick brown');
 		expect(result.anchor.quote.prefix).toBe('The ');
-		// suffix is capped at 24 code points (spec §4)
+		// suffix is capped at 24 code points
 		expect(result.anchor.quote.suffix).toBe(' fox jumps over the lazy');
 		expect(result.anchor.lang).toBe('en');
 	});
@@ -301,7 +301,7 @@ describe('resolveAnchorDraft (write side, spec §6)', () => {
 		const { blocks } = fixture();
 		const draft = { ord: 1, start: 4, end: 15, exact: 'quick brown', blockLength: 999 };
 		// The slice at ord 1 still matches, but the reader saw a different block:
-		// the ordinal must not be trusted (B2 review, angle 7).
+		// the ordinal must not be trusted.
 		expect(resolveAnchorDraft(blocks, draft, 'en').kind).toBe('stale');
 	});
 
@@ -499,7 +499,7 @@ describe('applyAnchorMarks (spec §7/§12.6)', () => {
 		]);
 		// One span chain per contiguous segment: outer [0,3), outer+inner [3,6),
 		// outer [6,8) — the inner span is the deepest in the middle segment, so a
-		// click resolves to the innermost comment (spec §6).
+		// click resolves to the innermost comment.
 		const top = markId(blocks[0].element);
 		expect(top.map((spanEl) => spanEl.properties?.dataCid)).toEqual(['outer', 'outer', 'outer']);
 		const middle = top[1];
