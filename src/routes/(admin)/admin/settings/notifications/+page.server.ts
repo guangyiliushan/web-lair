@@ -38,28 +38,24 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Notification settings · Mail status/test + Webhooks.
- *
- * - Mail: read-only SMTP status from `.env` and a real test send to the signed-in
- *   admin. SMTP credentials never reach this module.
- * - Retry/replay: manual replay re-queues the SAME delivery row, so the `webhook-id`
- *   header is unchanged and receivers can deduplicate it against the automatic
- *   retries; automatic retries live in the drain.
- * - Endpoint CRUD: secrets are server-generated only (whsec_ + base64, the Standard
- *   Webhooks shape). The load renders a MASKED preview; the raw value is revealed
- *   exactly once in the create/rotate action result. Names are soft-rejected
- *   case-insensitively at the application layer (no DB constraint).
- * - URLs: HTTPS only, credentials refused, private/loopback/link-local/metadata
- *   targets refused (literal or resolved; LAN needs `WEBHOOK_ALLOW_PRIVATE_TARGETS`).
- *   Stored values are the WHATWG-normalized `href`; 23514 is still mapped to a 400 as
- *   defense in depth.
- * - Config audit: create/update/delete/toggle/key_set/key_rotate write local
- *   `activities` rows (`deliver:false`); payloads carry the host, never the path query
- *   or the secret.
- * - Registered hazard (round-2 N2): an admin delete racing an in-flight
- *   410 delivery can deadlock (40P01, ABBA on the webhook/delivery row
- *   locks) - rare, no corruption (one tx aborts; the drain side rolls
- *   back to queued); the delete surfaces it as an unhandled 500, accepted.
+ * Notification settings: mail status/test plus webhook endpoints.
+ * Mail: read-only SMTP status plus a real test send to the signed-in admin; SMTP
+ * credentials never reach this module.
+ * Retry/replay re-queues the SAME delivery row, so the `webhook-id` header is unchanged and
+ * receivers deduplicate manual replays against the automatic retries (which live in the
+ * drain).
+ * Endpoint CRUD: secrets are server-generated only (`whsec_` + base64, the Standard
+ * Webhooks shape), the load renders a MASKED preview and the raw value is revealed exactly
+ * once in the create/rotate result; names are soft-rejected case-insensitively (no DB
+ * constraint).
+ * URLs: HTTPS only, credentials refused, private/loopback/link-local/metadata targets
+ * refused (literal or resolved; LAN needs `WEBHOOK_ALLOW_PRIVATE_TARGETS`); stored values
+ * are the WHATWG-normalized `href`, and 23514 still maps to 400 as defense in depth.
+ * Config audit: create/update/delete/toggle/key_set/key_rotate write local `activities`
+ * rows (`deliver:false`) that carry the host, never the path query or the secret.
+ * Known hazard: an admin delete racing an in-flight 410 delivery can deadlock (40P01, ABBA
+ * on the webhook/delivery row locks) — rare and non-corrupting (one tx aborts, the drain
+ * rolls the delivery back to queued); the delete surfaces it as an unhandled 500, accepted.
  */
 
 const NAME_MAX_LENGTH = 120;

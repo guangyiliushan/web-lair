@@ -38,20 +38,14 @@ import { readDatabaseStatus, readJournal } from '$lib/server/storage/db-status';
 import { sql } from 'drizzle-orm';
 
 /**
- * Storage control plane.
- *
- * Six sections: the live provider (read-only), the saved candidate (owner),
- * credentials (env references today), migration/cutover (CLI, with the real `files`
+ * Storage control plane: six sections — the live provider (read-only), the saved candidate
+ * (owner), credentials (env references today), migration/cutover (CLI, with the real `files`
  * count), media purge TTLs (owner) and the read-only capability map.
- *
- * Two truths, deliberately:
- *   `storage.provider` — the form target. Saving writes ONLY this row.
- *   `storage.active`   — what the app actually reads. Written by an activation
- *                        path (empty files table, or `storage:migrate
- *                        --cutover`), never by a form submit.
- *
- * Secrets never reach this module: the page shows env VAR NAMES, and the config
- * schema has no credential field at all.
+ * Two truths, deliberately: `storage.provider` is the form target and saving writes ONLY
+ * this row, while `storage.active` is what the app actually reads — written by an activation
+ * path (empty files table, or `storage:migrate --cutover`), never by a form submit.
+ * Secrets never reach this module: the page shows env VAR NAMES and the config schema has no
+ * credential field at all.
  */
 export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();

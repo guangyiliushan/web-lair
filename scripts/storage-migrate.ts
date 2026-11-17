@@ -26,7 +26,8 @@ import {
 } from '../src/lib/server/storage/provider';
 
 /**
- * Provider migration CLI.
+ * Provider migration CLI: source is `storage.active`, target is the SAVED
+ * candidate (`storage.provider`).
  *
  *   pnpm storage:migrate --dry-run   enumerate + HEAD both buckets (default)
  *   pnpm storage:migrate --yes       freeze uploads, copy + verify, persist state
@@ -35,14 +36,12 @@ import {
  *   pnpm storage:migrate --status    print active/candidate/migration state
  *   pnpm storage:migrate --reset     clear a stuck state (no live run)
  *
- * The source is `storage.active`; the target is the SAVED candidate
- * (`storage.provider`), so the page flow is save → test → migrate → cutover.
- * Uploads are frozen and purge refuses while `state = copying`. Objects are
- * never deleted from the source: the old provider stays readable until it is
- * removed deliberately.
+ * Objects are never deleted from the source: the old provider stays
+ * readable until it is removed deliberately. Sequence, gates and the upload
+ * freeze: `deploy/RUNBOOK.md` -> "External media provider (W7) and the
+ * restore drill".
  *
- * Deliberately out of scope: `maps/*.pmtiles` are not `files` rows; re-run
- * `pnpm maps:publish` against the new provider after a cutover.
+ * Out of scope: `maps/*.pmtiles` are not `files` rows; re-run `pnpm maps:publish` after cutover.
  */
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {

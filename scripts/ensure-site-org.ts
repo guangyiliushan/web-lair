@@ -1,21 +1,17 @@
 // scripts/ensure-site-org.ts
 //
-// Repair + acceptance entry for the site organization:
-//   pnpm db:ensure-org
+// Repair + acceptance entry for the site organization: `pnpm db:ensure-org`
+// creates the `web-lair` organization and the owner's member row when they
+// are missing (idempotent) - the recovery path named by the /admin/setup
+// failure message. Acceptance: two runs must leave exactly one organization
+// row and exactly one owner membership (the trailing assertions enforce it).
 //
-// Creates the `web-lair` organization and the owner's member row when they are
-// missing (idempotent). This is the recovery path named by the /admin/setup
-// failure message. It writes the same two rows the organization plugin writes
-// (createOrganization + its creator member), holding the same advisory lock as
-// the app-side bootstrap (`site-organization.shared.ts`), so the two writers
-// cannot interleave into a duplicate membership (B2.1 review fix).
-//
-// Anchored to better-auth 1.7.5: it bypasses the official API on purpose (the
-// app's `$env`-dependent modules cannot load in a plain tsx process). If the
-// plugin's organization/member tables gain columns, revisit this script.
-//
-// Acceptance: running it twice must leave exactly one organization row
-// AND exactly one owner membership - the trailing assertions enforce both.
+// It writes the same two rows as the organization plugin (createOrganization
+// + its creator member) under the app-side advisory lock
+// (`site-organization.shared.ts`), so the two writers cannot interleave into
+// a duplicate membership. Anchored to better-auth 1.7.5: it bypasses the
+// official API on purpose (the app's `$env`-dependent modules cannot load in
+// a plain tsx process); revisit if the plugin's tables gain columns.
 
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';

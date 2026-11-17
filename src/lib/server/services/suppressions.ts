@@ -7,31 +7,11 @@ import { decodeHmacKey, hashEmail } from './email-hash';
 import { normalizeEmail } from './email-normalize';
 
 /**
- * Email suppression (E2-1, CAN-SPAM / RFC 8058 / ICO): a "do not contact"
- * record must survive the subscription row it came from.
- *
- * The table stores only a keyed hash. `SUPPRESSION_HMAC_KEY` (32B base64) is
- * independent of the auth secret and must be set before the first write and
- * kept in backups.
- *
- * Key versioning (F-14): `key_version` names the derivation that produced a
- * row's hash. Version 1 is the original scheme (`HMAC(master, email)`), so
- * hashes written before this column existed stay valid. Every later version
- * derives its key from the same master
- * (`HMAC(master, 'wl:suppression:key:v<N>')`): the environment keeps one
- * secret, and older rows remain verifiable forever — unlike storing a separate
- * long-lived secret per version in `.env` and in every backup.
- *
- * Rotation (`SUPPRESSION_HMAC_KEY_VERSION`) starts a new version for new
- * writes; a row is folded into the active version when that address is touched
- * again (a one-way hash cannot be batch-rewritten without the plaintext).
- * Reads cover versions 1..active, so a rotation never makes an existing opt-out
- * invisible. Rolling the version *back* below a stored `key_version` would,
- * which is why `scripts/verify-suppression-version.ts` gates deployment.
- *
- * If the key is missing or invalid we fail closed. Writing an unkeyed SHA-256
- * would create a second hash domain: once the key is added, those opt-outs
- * become invisible and a hard-bounced address becomes mailable again.
+ * Email suppression (CAN-SPAM / RFC 8058 / ICO): opt-outs outlive their subscription rows.
+ * The table stores only a keyed hash; a missing or invalid key fails closed, never an unkeyed hash
+ * - that would open a second hash domain where old opt-outs turn invisible.
+ * Key versions derive from that one master (rotation steps: `deploy/RUNBOOK.md` → "Email retention
+ * and suppression"); a rotation starts a version for new writes while reads cover 1..active.
  */
 export type SuppressionReason = 'unsubscribed' | 'bounced' | 'complained';
 

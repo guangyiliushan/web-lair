@@ -14,18 +14,16 @@ export type PurgePostFamilyResult = 'deleted' | 'not-found';
 
 /**
  * Permanently delete a post and — when it is the source of a translation
- * family — every sibling in that family.
- *
- * Extracted from the admin posts route so the manual purge and the maintenance
- * job (`trash.purge`) share one delete primitive. A hand-written DELETE here
- * would hit `posts_group_source_uniq`: the self-FK's `SET NULL` turns every
- * sibling into a second "source" while the original row still exists, which is
- * the old 500. Ordering is therefore deliberate:
- *
- *   1. lock the row (`FOR UPDATE`) and, for a source, its siblings;
- *   2. drafts first — `drafts.ref_id` is polymorphic, no FK can cascade;
- *   3. siblings, then the row (comments/revisions/tags cascade);
- *   4. file references last, in the same lock order publish/discard use.
+ * family — every sibling in that family. Extracted from the admin posts
+ * route so the manual purge and the maintenance job (`trash.purge`) share
+ * one delete primitive.
+ * A hand-written DELETE here would hit `posts_group_source_uniq`: the
+ * self-FK's `SET NULL` turns every sibling into a second "source" while the
+ * original row still exists (an HTTP 500). The ordering is therefore
+ * deliberate: lock the row (`FOR UPDATE`) and, for a source, its siblings;
+ * drafts first (`drafts.ref_id` is polymorphic, no FK can cascade); siblings,
+ * then the row (comments/revisions/tags cascade); file references last, in
+ * the same lock order publish/discard use.
  */
 export async function purgePostFamily(
 	database: PurgePostDb,

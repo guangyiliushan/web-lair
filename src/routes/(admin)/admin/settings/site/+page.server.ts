@@ -20,23 +20,17 @@ import { m } from '$lib/paraglide/messages';
 import type { PageServerLoad, Actions } from './$types';
 
 /**
- * Settings → Site. Four real forms with real consumers:
- *
- * - `saveInfo`     site.info      name/description/avatar (admin) -> friend
- *                                 cards, llms.txt, manifest, og:site_name
- * - `saveIcon`     site.icon      favicon URL (admin); version is bumped here
- *                                 so the root layout's `?v=` changes
- * - `saveTimezone` site.timezone  IANA zone (admin) -> dates, schedules, notes
- * - `saveLanguages`               the owner-only language pair, written in one
- *                                 transaction because default_lang ∈ enabled
- *
- * Deployment and search indexing are read-only facts on the same page - no form,
- * no Save, no TLS controls.
- *
- * Every action re-checks the tier itself (`assertSettingWrite`): the settings layout
- * guard does not run before a form action, and a role check in `load` only decides
- * what to render. The audit row (`site.update`) carries the changed field names, no
- * ref arc, and is not in `WEBHOOK_EVENT_ROSTER`, so it fans out to zero deliveries.
+ * Settings → Site: four real forms with real consumers — `saveInfo` (site.info: name /
+ * description / avatar → friend cards, llms.txt, manifest, og:site_name), `saveIcon`
+ * (site.icon: favicon URL, version bumped here so the root layout's `?v=` changes),
+ * `saveTimezone` (site.timezone: IANA zone → dates, schedules, notes) and `saveLanguages`
+ * (the owner-only language pair, written in one transaction because default_lang ∈ enabled).
+ * Deployment and search indexing are read-only facts on the same page: no form, no Save, no
+ * TLS controls.
+ * Every action re-checks the tier itself (`assertSettingWrite`): a settings layout guard
+ * does not run before a form action, and a role check in `load` only decides what to render.
+ * The audit row (`site.update`) carries the changed field names, no ref arc, and is not in
+ * `WEBHOOK_EVENT_ROSTER`, so it fans out to zero deliveries.
  */
 
 type SiteOp = 'info' | 'icon' | 'timezone' | 'languages';

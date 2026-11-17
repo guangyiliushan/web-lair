@@ -1,27 +1,23 @@
 // jobs/drain.ts
 //
-// One-shot drain entry: the platform timer runs
-//     node --env-file=.env jobs/drain.ts
-// once per minute. One tick = schedule segment -> queued segment -> webhook
-// delivery segment; the process exits after the tick, so every tick picks up
-// the latest code with no reload machinery.
+// One-shot drain entry (RUNBOOK "6. Background timers (drain)"): the platform
+// timer runs `node --env-file=.env jobs/drain.ts` once per minute. One tick =
+// schedule segment -> queued segment -> webhook delivery segment; the process
+// exits after the tick, so every tick picks up the latest code with no reload
+// machinery.
 //
 // Environment:
-//   DATABASE_URL        required - the drain builds its own postgres.js client
-//                       (the app's `$lib/server/db` reads `$env/dynamic/private`
-//                       and cannot load under plain Node).
+//   DATABASE_URL        required - this entry builds its own postgres.js
+//                       client; the app's `$lib/server/db` reads
+//                       `$env/dynamic/private` and cannot load under plain Node.
 //   DATA_DIR            optional - jobs data dir (default <repo>/data).
-//                       User job scripts and the generated SDK scaffold live
-//                       in `$DATA_DIR/jobs`; the scaffold is refreshed on
-//                       every tick (hash-guarded, a no-op when unchanged).
-//   JOBS_HEARTBEAT_URL  optional - one GET after each tick (Uptime Kuma push
-//                       style; the monitoring setup wires the actual probe).
+//   JOBS_HEARTBEAT_URL  optional - one GET after each tick (Kuma push shape).
 //
-// Exit codes: 0 = tick completed (individual job failures are recorded in
-// `job_runs`, not in the exit code); 1 = the tick itself broke (segment
-// errors, database unreachable); 2 = configuration error; 3 = the tick was
-// aborted by a job timeout - the process exits HARD so the stuck job dies
-// with it (the platform must alert on this too).
+// Exit codes: 0 = tick completed (job failures land in `job_runs`, not the
+// exit code); 1 = the tick itself broke (segment errors, database
+// unreachable); 2 = configuration error; 3 = a job timeout aborts the tick -
+// the process exits HARD so the stuck job dies with it (the platform must
+// alert on this too).
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';

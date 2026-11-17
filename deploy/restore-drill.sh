@@ -1,39 +1,17 @@
 #!/usr/bin/env bash
 #
-# Restore drill: prove that the newest snapshot actually restores.
-#
-# What it does, in order:
-#   1. lists the newest snapshot in the data repository and asserts the
-#      data/config split still holds: no `.env` may live in ANY data snapshot;
-#   2. restores that snapshot into a scratch directory (staging dump, DATA_DIR
-#      tree, media tree);
-#   3. restores the newest snapshot of the CONFIG repository and asserts the
-#      restored `.env` is complete (and reports whether it is still
-#      byte-identical to the live `.env`);
-#   4. starts a THROWAWAY PostgreSQL container (no published port, deleted on
-#      exit) and `pg_restore`s the staging dump into it;
-#   5. asserts row counts, runs the F-22 orphan sweep
-#      (deploy/backup/orphan-check.sql) on the restored database and compares a
-#      media sample byte-for-byte with the live volume;
-#   6. prints a receipt with RTO (wall clock) and RPO (age of the restored dump).
+# Restore drill: prove that the newest snapshot actually restores. It lists and
+# restores the newest data + config snapshots into a scratch tree, asserts the
+# data/config split and that the restored `.env` is complete, `pg_restore`s the
+# dump into a THROWAWAY PostgreSQL container (no published port, deleted on
+# exit), then checks row counts, the orphan sweep
+# (deploy/backup/orphan-check.sql) and a media sample byte-for-byte, and
+# prints a receipt with RTO/RPO. Usage, flags, local-repository mode and the
+# cadence: deploy/RUNBOOK.md "4.5 Restore drill script (quarterly, and after
+# any backup change)".
 #
 # The live database is only ever read: `select count(*)` and the volume is
 # mounted read-only. Nothing here writes to a production volume.
-#
-# Usage:
-#   set -a; . deploy/backup.env; set +a     # RESTIC_* / POSTGRES_* / AWS_*
-#   deploy/restore-drill.sh [--receipt FILE] [--sample N] [--compare-live] [--keep]
-#
-# Local-repository mode: set DRILL_LOCAL_REPO_DIR to
-# the host directory that holds the repositories and point RESTIC_REPOSITORY at
-# the in-container path, e.g.
-#   RESTIC_REPOSITORY=/repos/lair-data DRILL_LOCAL_REPO_DIR=/srv/drill/repos
-#
-# Options:
-#   --receipt FILE   also write the receipt lines to FILE
-#   --sample N       media objects to hash (default 5)
-#   --compare-live   make "restored < live" row counts a hard failure
-#   --keep           keep the scratch tree and the drill database for inspection
 set -euo pipefail
 umask 077
 

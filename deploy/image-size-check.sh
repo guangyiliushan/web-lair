@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
-# Image size gate.
-#
-# One rule from `deploy/image-size-baseline.json`: the image must not grow more
-# than `regression_ratio` over the recorded baseline, so a new dependency that
-# quietly ships a 400 MB CLI chain fails the PR instead of the deploy.
-#
-# The plan's "<650 MB" figure was a pre-measurement placeholder aimed at the
-# app-tree number; the measured image is ~251 MB, so enforcing 650 MB against
-# `.Size` would be a rule that can never fire (one rule per metric). The
-# app-tree numbers stay in the baseline as documentation only.
-#
-# The measured number is `docker image inspect .Size` - the compressed image
-# size Docker reports for pulls. `du -sb /app` inside the container measures the
-# uncompressed tree (~2.5x larger); never compare the two.
-#
+# Image size gate: the image must not grow more than `regression_ratio` over the
+# recorded baseline, so a dependency that quietly ships a 400 MB CLI chain fails
+# the PR instead of the deploy.
+# The metric is `docker image inspect .Size` (compressed). The baseline's
+# `app_tree` figures come from `du -sb /app` (uncompressed, ~2.5x larger) and
+# are documentation only — one rule per metric, never compare the two; see the
+# `calibration` note in `deploy/image-size-baseline.json`.
 # Usage: deploy/image-size-check.sh <image> [baseline.json]
 set -euo pipefail
 

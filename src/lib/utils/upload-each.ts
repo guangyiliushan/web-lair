@@ -3,22 +3,17 @@ import { invalidateAll } from '$app/navigation';
 import type { ActionResult } from '@sveltejs/kit';
 
 /**
- * Per-file upload submission.
- *
- * The admin upload actions keep their batch contract — one file per request is
- * a legal batch of one. The browser sends each selected file in its own
- * request, so a 10 x 25MB selection never becomes a single 250MB body under
- * adapter-node's BODY_SIZE_LIMIT (26M). Results are merged and applied once so
- * the pages keep rendering `form.uploadResults` exactly as before.
- *
- * Protocol note: SvelteKit serializes action data with devalue, so the JSON
- * body's `data` field is a STRING. `response.json()` would hand us a string and
- * silently lose every result — the client half of the protocol is
- * `deserialize()` (the same function `use:enhance` uses internally).
- *
- * Rate accounting: the admin upload bucket counts one unit per request
- * (60/10min per user), so ten files spend ten units. The CLI import
- * (`pnpm media:import`) stays the bulk path; the form is for small batches.
+ * Per-file upload submission: one file per request, so a 10 x 25MB selection never becomes
+ * a single 250MB body under adapter-node's BODY_SIZE_LIMIT (26M). The admin upload actions
+ * keep their batch contract — one file per request is a legal batch of one — and results are
+ * merged and applied once, so the pages keep rendering `form.uploadResults` as before.
+ * Protocol note: SvelteKit serializes action data with devalue, so the JSON body's `data`
+ * field is a STRING; `response.json()` would hand back that string and silently lose every
+ * result, which is why the client half of the protocol is `deserialize()` — the same
+ * function `use:enhance` uses internally.
+ * Rate accounting: the admin upload bucket counts one unit per request (60/10min per user),
+ * so ten files spend ten units; the CLI import (`pnpm media:import`) stays the bulk path and
+ * the form is for small batches.
  */
 export interface UploadOutcome {
 	fileName: string;

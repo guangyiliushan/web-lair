@@ -1,22 +1,18 @@
 /**
- * Host resource probe: multi-mount disk usage + cgroup v2 memory,
- * threshold evaluation with hysteresis, and the small state file that makes
- * "one alert per metric per day" survive the 15-minute schedule.
- *
- * Why both mounts and both memory readings are sampled:
- *  - `process.cwd()` in the container is `/app` (the overlay root), while the
- *    data that actually fills the disk lives on `$DATA_DIR` (`/data` in the
- *    production compose). Both mounts are measured now - the root filesystem
- *    still matters (logs, images) and `/data` is the one that fills silently.
- *  - `os.freemem()` reports the HOST's memory; the cgroup's `memory.current`
- *    vs `memory.max` is what the container is actually limited by. The host
- *    reading stays in the summary as a reference only.
- *
- * Thresholds: warn at >= 85%, clear at <= 75% (hysteresis - a metric that
- * hovers on one line must not flap). Between the two the previous state is
- * held. Alerts are deduped per metric per UTC day; the state file is the only
- * durable bit (no schema change, no new table).
- *
+ * Host resource probe: multi-mount disk usage + cgroup v2 memory, threshold
+ * evaluation with hysteresis, and the small state file that makes "one alert
+ * per metric per day" survive the 15-minute schedule.
+ * Both mounts and both memory readings are sampled on purpose: in the
+ * container `process.cwd()` is `/app` (the overlay root) while the data that
+ * fills the disk lives on `$DATA_DIR` (`/data` in the production compose) —
+ * root still matters (logs, images) and `/data` is the one that fills
+ * silently; and `os.freemem()` reports the HOST's memory, where the cgroup's
+ * `memory.current` vs `memory.max` is what the container is actually limited
+ * by (the host reading stays in the summary as a reference only).
+ * Thresholds: warn at >= 85%, clear at <= 75% (hysteresis — a metric
+ * hovering on one line must not flap; between the two the previous state is
+ * held). Alerts are deduped per metric per UTC day; the state file is the
+ * only durable bit (no schema change, no new table).
  * Node-loadable on purpose: the drain runs jobs under plain type stripping,
  * so this module imports only `node:*`.
  */

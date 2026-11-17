@@ -105,25 +105,12 @@ export interface MarkdownRendererProps {
 // ── rehype-sanitize schema ──
 
 /**
- * Builds the rehype-sanitize schema (spec 4.5, tightened).
- *
- * On top of defaultSchema:
- * - the global attribute surface is className/id only (class is pipeline
- *   output, never user input); style and data-* are narrowed to per-element
- *   allowlists
- * - style is kept for: span (KaTeX output) and code (Shiki output)
- * - data-* allowlist (derived from auditing the real pipeline output): Shiki
- *   (data-rehype-pretty-code-figure/-language/-theme/-line) and GFM
- *   footnotes (data-footnote-ref/-notes/-backref)
- * - the 4.5 whitelist elements carry their closed attribute key sets
- *   (kbd/mark/tag/details/video/audio/...)
- * - protocols: href allows the mention token schemes (@gh/@tw/@tg); src
- *   drops data: (the `!` syntax is the only image entry point)
- *
- * hast-util-sanitize's findDefinition takes only the first entry with a
- * given name, so the restricted tuple in defaultSchema must be removed before
- * appending a bare className (see the a element).
- *
+ * buildSanitizeSchema tightens hast-util-sanitize's defaultSchema for this pipeline:
+ * the global attribute surface is className/id only (class is pipeline output, never
+ * user input), while style and data-* move to per-element allowlists (style only for
+ * span/KaTeX and code/Shiki output; data-* only for Shiki and GFM footnote output),
+ * the raw-HTML whitelist elements carry closed attribute key sets, and protocols allow
+ * the @gh/@tw/@tg mention schemes in href while src and poster stay http(s).
  * The same schema serves both the server and the client light pipeline.
  */
 export function buildSanitizeSchema(): Schema {

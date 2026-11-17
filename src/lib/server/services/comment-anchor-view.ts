@@ -1,19 +1,11 @@
 import type { ThreadsPage } from '$lib/components/comments/types';
 
 /**
- * Fill the render-time deep-link target into the view model (comment P3b).
- *
- * A resolved anchor normally gets a placed span; `applyAnchorMarks` returns the
- * id it actually wrote. Three outcomes are possible and only two are states:
- *  - placed            -> chip + "jump to source" link
- *  - resolved, no span -> this is NOT a designed state (block coordinates and
- *    the node map disagree). The text did not change, so calling it "original
- *    text changed" would be a lie; rendering a chip would be a dead link.
- *    Degrade to article-level (`anchor = null`) and keep a warning so the
- *    mapping bug stays visible.
- *  - anchor.orphaned already true -> untouched (folded area).
- *
- * Pure on purpose (types only), so the rule is unit-testable without a database.
+ * `finalizeAnchorTargets` fills the render-time deep-link target into the view model.
+ * A resolved-but-unplaced anchor degrades to article-level with a warning: block coordinates and
+ * the node map disagree, so a chip would be a dead link.
+ * See `comment-anchor-view.test.ts › "degrades a resolved-but-unplaced anchor to article-level
+ * (never a dead chip)"`.
  */
 export interface AnchorViewContext {
 	targetType?: string;

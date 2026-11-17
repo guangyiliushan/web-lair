@@ -1,18 +1,13 @@
 /**
- * healthchecks.io pings: the external backstop for the two probes.
- *
- * The box can die with its own alert path (disk full blocks the outbox/DB;
- * a dead SMTP host is exactly what the mail probe reports), so each probe
- * pings an out-of-box check as a second, independent record:
- *
- *   GET <check-url>          -> check healthy (clears a previous failure)
- *   GET <check-url>/fail     -> check failed (healthchecks alerts)
- *
- * One check per probe, not one shared check: a failing disk must not mask a
- * dead mailer (single source per alarm). Env holds the *ping URL* of each
- * check (`https://hc-ping.com/<uuid>`); the UUID is a bearer-ish capability,
- * so it never reaches a log line - only the probe name and the outcome do.
- *
+ * healthchecks.io pings: the external backstop for the two probes — the box
+ * can die with its own alert path (disk full blocks the outbox/DB; a dead
+ * SMTP host is exactly what the mail probe reports). One check per probe, not
+ * one shared check: a failing disk must not mask a dead mailer (single source
+ * per alarm). `GET <check-url>` reports healthy (clears a previous failure),
+ * `GET <check-url>/fail` reports failed (healthchecks alerts).
+ * Env holds the ping URL of each check (`https://hc-ping.com/<uuid>`); the
+ * UUID is a bearer-ish capability, so it never reaches a log line — only the
+ * probe name and the outcome do.
  * Pings are best-effort: a missing URL (dev, or a probe without one) is
  * `skipped`, and any transport failure is logged and swallowed. The probe's
  * own run ledger stays the primary record.

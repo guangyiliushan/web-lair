@@ -1,20 +1,13 @@
 /**
- * Width budget for the admin list tables.
- *
- * Tailwind breakpoints look at the **viewport**, but the table is only as wide
- * as what the admin shell leaves over — and the shell subtracts a sidebar the
- * user can collapse (16rem expanded, 3rem collapsed, and out of flow entirely
- * on narrow screens). A column set that fits at 767px of viewport can be over
- * budget at 768px, where the sidebar suddenly takes 256px back.
- *
- * That mismatch is what crushed the title column to 6px and painted it over its
- * neighbour (the "标题g" overlap). The numbers below are measured against the
- * sidebar **expanded** — the worst case — and every page's tiers are checked
- * against them by `list-budget.test.ts`.
- *
- * Measured (2026-10-22, sidebar expanded): V=640 -> 592, V=768 -> 454,
- * V=800 -> 486, V=1440 -> 1110. The formula below is deliberately a little
- * conservative at every one of those points.
+ * tableBudget returns the worst-case width an admin list table gets at a given viewport.
+ * Reason: Tailwind breakpoints measure the viewport, but the table only gets what the
+ * admin shell leaves over, and the shell subtracts a collapsible sidebar (16rem
+ * expanded, 3rem collapsed, out of flow below 768px) — a set that fits at 767px is
+ * over budget at 768px, where the sidebar takes 256px back.
+ * Symptom: the title column was crushed to 6px and painted over its neighbour (the
+ * "标题g" overlap).
+ * The constants assume the sidebar expanded (the worst case); `list-budget.test.ts`
+ * checks every page's tiers against them.
  */
 
 /** Expanded sidebar + shell padding + scrollbar, at desktop widths. */

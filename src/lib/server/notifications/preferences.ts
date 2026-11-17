@@ -5,23 +5,18 @@ import { NOTIFICATION_EVENTS, type NotificationEventType } from './events.ts';
 import type { NotificationChannel } from '../db/system/notification-delivery.schema.ts';
 
 /**
- * Notification preferences.
- *
- * One options row (`notifications.preferences`) holds three per-group channel
- * switches. Defaults are the register's: comment and job alerts go out by
- * email, Bark is OFF for every group until the operator turns it on (a phone
- * push is a louder, costlier channel - opt-in, never the default), and the
- * ops group (resource and mail probes) is email-on because a disk at 85% is exactly
- * the alert nobody should have to poll for.
- *
+ * Notification preferences: one options row (`notifications.preferences`)
+ * holds three per-group channel switches. Defaults are the register's:
+ * comment and job alerts go out by email, Bark is OFF for every group until
+ * the operator turns it on (a phone push is louder and costlier — opt-in,
+ * never the default), and the ops group (resource and mail probes) is
+ * email-on because a disk at 85% is exactly the alert nobody should poll for.
  * This module is the SINGLE definition: the options registry reuses the zod
- * schema and the default object, and the drain reads the row through the same
- * parser. It is Node-strip-loadable on purpose (relative `.ts` imports, no
- * `$lib`, no SvelteKit virtual modules), because the drain evaluates the
- * preferences on every tick.
- *
- * A missing row yields the defaults; a row that fails validation logs once and
- * yields the defaults too - a hand-edited option must not stop deliveries.
+ * schema and defaults, and the drain reads the row through the same parser.
+ * It is Node-strip-loadable on purpose (relative `.ts` imports, no `$lib`),
+ * because the drain evaluates the preferences on every tick. A missing or
+ * invalid row yields the defaults (logged once) — a hand-edited option must
+ * not stop deliveries.
  */
 export const NOTIFICATION_PREFERENCES_OPTION = 'notifications.preferences';
 

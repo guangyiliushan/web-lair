@@ -1,25 +1,22 @@
 <script lang="ts">
 	/**
-	 * Embed card component (spec 3.4) — mounted over the placeholder anchors
-	 * produced by remark-image-embed. The static baseline renders from the URL
-	 * itself: no data fetch, no third-party script, no request until a facade
-	 * click (spec 6). Facades (youtube, bilibili, tweet) build their embed
-	 * source from the URL and mount a sandboxed iframe only after the explicit
-	 * click; every other provider stays a readable link card.
+	 * Embed card mounted over the placeholder anchors produced by remark-image-embed.
+	 * The static baseline renders from the URL itself — no data fetch, no third-party
+	 * script, no request until a facade click; facades (youtube, bilibili, tweet) mount
+	 * a sandboxed iframe only after that click, and every other provider stays a
+	 * readable link card.
 	 *
-	 * Progressive enrichment (batch 2c): the four core GitHub cards
-	 * (gh-repo / gh-commit / gh-pr / gh-issue) fetch metadata from our own
-	 * server proxy (/api/embed-meta, cached, rate-limit-safe) after mount and
-	 * upgrade to the rich layout below; on any failure they silently keep the
-	 * static form. All other providers remain zero-request forever.
+	 * Progressive enrichment: the four core GitHub cards (gh-repo / gh-commit /
+	 * gh-pr / gh-issue) fetch metadata from our own cached, rate-limit-safe server
+	 * proxy (/api/embed-meta) after mount and upgrade to the rich layout below; any
+	 * failure keeps the static form, and every other provider stays zero-request.
 	 *
-	 * The tweet facade loads platform.twitter.com/embed/Tweet.html directly -
-	 * the same document the official widgets.js renders into its frame, but
-	 * without injecting Twitter's script into this page (the script route
-	 * would run third-party JS in the main world; the iframe stays sandboxed
-	 * and dnt=true). The frame gets a fixed height: without widgets.js there
-	 * is no resize handshake, so short tweets leave some empty space - the
-	 * accepted trade for keeping the no-third-party-script contract.
+	 * The tweet facade loads platform.twitter.com/embed/Tweet.html directly — the same
+	 * document widgets.js renders into, without injecting Twitter's script into this
+	 * page (the iframe stays sandboxed, dnt=true).
+	 * Its frame is fixed-height because without widgets.js there is no resize
+	 * handshake: short tweets leave some empty space, the accepted trade for keeping
+	 * the no-third-party-script contract.
 	 */
 	import {
 		canonicalHost,

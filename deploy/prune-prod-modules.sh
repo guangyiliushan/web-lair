@@ -7,12 +7,11 @@
 #
 # Failure semantics:
 #   - a manifest pattern that matches nothing is REPORTED, not failed: the
-#     lockfile may already have dropped the package, and a hard failure there
-#     would block every rebuild for a stale line. (`prune: no match` in the log
-#     is the signal to delete the line.)
-#   - a REQUIRED runtime package that disappeared is a hard failure: that is a
-#     prune mistake or a dependency-tree drift, and it must stop the build
-#     before the image is tagged.
+#     lockfile may already have dropped the package, and a stale line would
+#     then block every rebuild (`prune: no match` in the log is the signal to
+#     delete the line).
+#   - a missing REQUIRED runtime package is a hard failure: a prune mistake or
+#     dependency-tree drift must stop the build before the image is tagged.
 set -euo pipefail
 
 MANIFEST="${1:?usage: prune-prod-modules.sh <manifest> [root]}"

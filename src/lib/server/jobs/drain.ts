@@ -29,23 +29,11 @@ import type { JobResult, JobTrigger } from '../db/system/job-run.schema.ts';
 import type { JobContext, JobLogger, JobsDb, LoadedJob } from './types.ts';
 
 /**
- * Drain core: one tick = FOUR segments run in order,
- * each processing to empty, each isolated - a failing segment never blocks
- * the segments after it.
- *
- *   1. schedules  - due points from `job_schedules`, session-lock single
- *                   flight, stale reclamation, CAS watermark, ledger row,
- *                   execute.
- *   2. queue      - `job_runs(status='queued')` claimed with
- *                   FOR UPDATE SKIP LOCKED, then the same lock -> reclaim ->
- *                   claim -> execute pipeline.
- *   3. deliveries - `webhook_deliveries(status='queued', next_attempt_at <=
- *                   now())` signed with Standard Webhooks headers and POSTed;
- *                   retryable failures stay queued with exponential backoff,
- *                   permanent ones turn terminal, 410 disables the endpoint.
- *   4. notifications - `notification_deliveries` claimed the same way
- *                   and handed to the email/Bark adapters; 1m/5m/15m retries
- *                   then terminal `failed`.
+ * Drain core: one tick runs FOUR segments in order - schedules
+ * (`job_schedules`), queue (`job_runs`), deliveries (`webhook_deliveries`),
+ * notifications (`notification_deliveries`) - each processing to empty and
+ * each isolated, so a failing segment never blocks the segments after it
+ * (see `drain.test.ts`, "segment isolation").
  *
  * All imports must stay Node-type-strippable (explicit `.ts` extensions, no
  * aliases, no SvelteKit virtual modules) because `jobs/drain.ts` runs under
@@ -705,17 +693,12 @@ type DeliveryOutcome = 'sent' | 'failed' | 'retried' | 'disabled';
  * Claim + send + finalize ONE delivery attempt inside a single transaction:
  * the row lock makes concurrent drains skip it, and a crash rolls the status
  * back to `queued` so the next tick retries with the SAME row id.
- *
- * Retryable outcomes (network/timeout, 408, 429, 5xx) put the row back
- * to `queued` with `attemptCount + 1` and `nextAttemptAt` in the future;
- * permanent outcomes (3xx, other 4xx, exhausted budget, blocked target) mark
- * it `failed`. The id never changes, so `webhook-id` is stable across every
- * attempt and manual replays.
- *
- * NB (registered): if the receiver answered 2xx but the COMMIT then fails,
- * the row falls back to queued and the next tick resends - stable
- * `webhook-id` lets receivers deduplicate (at-least-once window).
- *
+ * Retryable outcomes (network/timeout, 408, 429, 5xx) requeue with
+ * `attemptCount + 1` and a future `nextAttemptAt`; permanent outcomes (3xx,
+ * other 4xx, exhausted budget, blocked target) mark it `failed`.
+ * The id never changes, so `webhook-id` is stable across every attempt and
+ * manual replays; if the receiver answered 2xx but the COMMIT then fails, the
+ * resend carries the same id and receivers deduplicate (at-least-once window).
  * Returns null when there is nothing due to send.
  */
 async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {

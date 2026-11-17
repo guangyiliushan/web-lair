@@ -3,17 +3,16 @@ import { z } from 'zod';
 /**
  * Storage provider model.
  *
- * `storage.provider` is the SAVED candidate — a form target that never takes
+ * `storage.provider` is the SAVED candidate - a form target that never takes
  * effect by itself. The live target is `storage.active.config`, written only
  * by an activation path (first activation with an empty `files` table, or
  * `storage:migrate --cutover`). Saving therefore cannot switch a running site
  * onto a half-configured bucket: "Save must not switch immediately".
  *
  * The shape is deliberately small: driver + addressing + bucket, no `keyPrefix`
- * and no parallel "backup S3"/"comment prefix" fields. Credentials never
- * live here — they are env references today and envelopes in the secret store
- * later; an option row is loaded wholesale and
- * would leak a key into page data.
+ * and no parallel "backup S3"/"comment prefix" fields. Credentials never live
+ * here - they are env references today and envelopes in the secret store
+ * later; an option row is loaded wholesale and would leak a key into page data.
  */
 
 export const STORAGE_DRIVERS = ['local', 's3'] as const;

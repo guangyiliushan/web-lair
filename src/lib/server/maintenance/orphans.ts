@@ -9,24 +9,20 @@ import { fileReferences } from '../db/system/file-reference.schema.ts';
 import { syncFileReferences } from '../services/file-references.ts';
 
 /**
- * Orphan sweep: `file_references` and `drafts` have a
- * polymorphic `ref_id`, so no foreign key can cascade when the target row is
- * deleted out-of-band (a direct SQL delete, a failed publish, an old bug).
- *
- * Rules:
- *   - file references to a missing target go through `syncFileReferences` with
- *     an empty key list. A raw DELETE would bypass the lock order and leave
- *     `files.status` stale; the sync also detaches the file when it was the
- *     last reference. Reversible: `pnpm db:backfill-refs` rebuilds from content.
- *   - drafts are deleted only when the target is missing AND the draft is older
- *     than the grace window (default 30 days). The draft may be the last copy of
- *     the text, so the window is the safety net.
- *   - `moments.ref_type/ref_id` are deliberately out of scope: nothing writes
- *     them yet, so a delete predicate there would be guesswork.
- *   - `translations` / `summaries` are covered by FK CASCADE, not by this job.
- *
- * The db handle is injected (no `$lib/server/db` import) so the same module
- * loads under plain Node from `scripts/jobs/orphans-purge.ts`.
+ * Orphan sweep: `file_references` and `drafts` have a polymorphic `ref_id`,
+ * so no foreign key can cascade when the target row is deleted out-of-band
+ * (a direct SQL delete, a failed publish, an old bug).
+ * Rules: file references to a missing target go through `syncFileReferences`
+ * with an empty key list — a raw DELETE would bypass the lock order and
+ * leave `files.status` stale, and the sync also detaches the file when it
+ * was the last reference (`pnpm db:backfill-refs` rebuilds from content).
+ * Drafts are deleted only when the target is missing AND the draft is older
+ * than the grace window (default 30 days): the draft may be the last copy of
+ * the text, so the window is the safety net. `moments.ref_type/ref_id` are
+ * deliberately out of scope (nothing writes them yet), and `translations` /
+ * `summaries` are covered by FK CASCADE, not by this job. The db handle is
+ * injected (no `$lib/server/db` import) so the same module loads under
+ * plain Node from `scripts/jobs/orphans-purge.ts`.
  */
 export const DRAFT_ORPHAN_GRACE_DAYS = 30;
 

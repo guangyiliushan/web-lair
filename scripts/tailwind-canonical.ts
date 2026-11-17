@@ -6,23 +6,18 @@ import { parse } from 'svelte/compiler';
 
 /**
  * Project-wide equivalent of the Tailwind CSS IntelliSense rule
- * `tailwindCSS.lint.suggestCanonicalClasses`. The extension only publishes
- * diagnostics for documents that are open in the editor, so this walks `src/`
- * and asks the same design system (the one `@tailwindcss/vite` compiles from
- * `src/routes/layout.css`) whether a class could be written more canonically.
+ * `tailwindCSS.lint.suggestCanonicalClasses` (the extension only reports on
+ * documents open in the editor): this walks `src/` and asks the design system
+ * `@tailwindcss/vite` compiles from (`src/routes/layout.css`) whether a class
+ * could be written more canonically.
  *
- * The class lists come from the same places the extension looks at, using the
- * Svelte AST instead of its moo lexer:
- *   - `class` attributes (incl. their `{…}` expressions and template literals)
- *   - `class:list` directives
- *   - `@apply` in `.css` files and `<style>` blocks (comments are skipped)
- * and from the class-list helpers this repo actually uses (`cn`, `clsx`, `tv`,
- * `cva`, `twMerge`), which is what `tailwindCSS.classFunctions` would cover in
- * the editor. `className` / `ngClass` are left out: this is a Svelte-only
- * codebase and both names would only ever be component props here.
+ * Sources: `class` attributes (incl. `{…}` expressions and template
+ * literals), `class:list`, `@apply` in `.css` and `<style>` (comments
+ * skipped), plus the class-list helpers in `CLASS_HELPERS`; `className` /
+ * `ngClass` are left out (Svelte-only codebase, they would only be props).
  *
- * Run: pnpm lint:tw            report only, exit 1 when something is off
- *      pnpm lint:tw -- --fix   rewrite the offending class lists in place
+ * Run: `pnpm lint:tw` reports only (exit 1 when something is off);
+ * `pnpm lint:tw -- --fix` rewrites the offending class lists in place.
  */
 
 const root = fileURLToPath(new URL('..', import.meta.url));

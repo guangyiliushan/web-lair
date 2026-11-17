@@ -1,18 +1,16 @@
-# Sentinel traffic analytics overlay.
-#
-# Loaded by deploy/compose-prod.sh together with compose.yaml and
-# compose.prod.yaml. It is an overlay, not a standalone model: `internal`,
+# Sentinel traffic analytics overlay, loaded by deploy/compose-prod.sh with
+# compose.yaml and compose.prod.yaml — not a standalone model: `internal`,
 # `caddy_logs` and the `web-lair` project name come from those files.
 #
 # Traffic-only: no metrics collection, no Docker API, no push, no GeoIP, no
 # host port. The Caddy JSON access log is mounted read-only at the path the
 # service is configured to tail.
 #
-# Why the dummy socket: Sentinel 1.1.5 constructs its Docker client even with
-# COLLECTOR_ENABLED and STORAGE_ENABLED false, and exits when
-# /var/run/docker.sock is absent. The entrypoint creates a zero-byte file and
-# points DOCKER_HOST at it, so the constructor finds a path but the container
-# never has access to the host Docker socket.
+# Sentinel 1.1.5 constructs its Docker client even with COLLECTOR_ENABLED and
+# STORAGE_ENABLED false, and exits when /var/run/docker.sock is absent, so the
+# entrypoint feeds it a zero-byte dummy socket that DOCKER_HOST points at —
+# the host Docker socket is never mounted (RUNBOOK "5.2 Traffic analytics
+# (Sentinel)").
 services:
   sentinel:
     # pinned digest for ghcr.io/coollabsio/sentinel:1.1.5 (linux/amd64+arm64

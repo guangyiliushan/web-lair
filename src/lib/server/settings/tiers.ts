@@ -2,23 +2,18 @@ import { error } from '@sveltejs/kit';
 import type { AdminRole } from '$lib/server/auth/owner';
 
 /**
- * Settings permission matrix.
- *
- * Two levels:
- *   - section tier  - what the page itself is for (profile/storage are owner
- *     control planes; integrations is a read-only capability map)
- *   - field tier    - the narrower owner-only fields inside an admin section
- *     (languages, privacy, webhook secrets, storage credentials/purge)
- *
- * Loads use `settingAccess` to decide whether to render an edit affordance;
- * every action MUST re-check with `assertSettingWrite` (the layout guard does
- * not run before a form action). `read` never permits a write.
- */
-/**
- * The eight settings sections in navigation order. Shared with the layout via
- * `$lib/settings/sections.ts` (a browser-safe module); this file only owns the
- * server-side tier map, which is keyed by the same union so a new section
- * cannot miss its tier.
+ * Settings permission matrix, two levels: the section tier is what the page
+ * itself is for (profile/storage are owner control planes; integrations is a
+ * read-only capability map) and the field tier is the narrower owner-only
+ * fields inside an admin section (languages, privacy, webhook secrets,
+ * storage credentials/purge). Loads use `settingAccess` to decide whether to
+ * render an edit affordance; every action MUST re-check with
+ * `assertSettingWrite` (the layout guard does not run before a form action),
+ * and `read` never permits a write.
+ * The eight settings sections are shared with the layout via
+ * `$lib/settings/sections.ts` (a browser-safe module); this file only owns
+ * the server-side tier map, which is keyed by the same union so a new
+ * section cannot miss its tier.
  */
 export { SETTINGS_SECTIONS, type SettingSection } from '$lib/settings/sections';
 import type { SettingSection } from '$lib/settings/sections';

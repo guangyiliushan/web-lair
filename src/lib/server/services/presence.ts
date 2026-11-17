@@ -3,25 +3,11 @@ import type { CacheStore } from '$lib/server/cache/store';
 import { getOption } from '$lib/server/config/options-registry';
 
 /**
- * Presence service.
- *
- * Zero PG tables: the site online count, per-content reader count, position
- * histogram and admin dots, today's unique tabs and the daily peak all live
- * in the cache layer on four key families (listed in the register's README):
- *
- *   presence:site          ZSET token -> last_seen (epoch seconds)
- *   presence:c:<id>        ZSET "<bucket>:<token>" -> last_seen
- *   presence:day:<date>    SET of tokens seen today
- *   presence:max:<date>    ZSET sentinel, member = score = observed count
- *
- * Window READS use ZCOUNT/ZRANGEBYSCORE with an exclusive cutoff and never raw
- * cardinality — a member whose score aged past the window must not count (the
- * ghost-count class pinned with a live Valkey probe). Writes
- * are best-effort; reads degrade to `null` = "unavailable" (the UI renders
- * "—" / hides the badge). A dead cache must never break a page.
- *
- * Dates are bucketed in `site.timezone` (options registry), memoised
- * in-process for a minute so a heartbeat never pays a PG round trip.
+ * Presence service: zero PG tables; every counter lives in the cache on the four keys below.
+ * Window reads use ZCOUNT/ZRANGEBYSCORE with an exclusive cutoff, never raw cardinality, so a
+ * member whose score aged past the window does not count.
+ * Writes are best-effort and reads degrade to `null`; a dead cache must never break a page.
+ * Dates bucket in `site.timezone`, memoised for a minute so a heartbeat never pays a PG round trip.
  */
 
 export const PRESENCE_WINDOW_SECONDS = 60;

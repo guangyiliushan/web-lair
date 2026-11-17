@@ -1,25 +1,16 @@
-# Optional fragment: drain heartbeat deadman (rendered only when
-# DRAIN_HEARTBEAT_TOKEN is non-empty).
+# Optional fragment: drain heartbeat deadman, rendered only when
+# DRAIN_HEARTBEAT_TOKEN is non-empty. The push contract, the
+# do-not-enable-yet warning and the window rationale live in
+# deploy/monitoring/README.md "8. drain 心跳（接线未完成）".
 #
-# Semantics: after every successful round the drain timer pushes "I am still
-# running" to Gatus:
-#   POST http://<gatus>/api/v1/endpoints/web-lair_jobs-drain/external?success=true
-#   Authorization: Bearer ${DRAIN_HEARTBEAT_TOKEN}
-# Address by scenario:
-#   - inside the app container (drain runs via `compose run --rm app`)
-#     → http://gatus:8080
-#   - host curl (systemd fallback) → http://127.0.0.1:8080
-# 127.0.0.1 inside a container points at the container itself and would fail
-# forever.
+# Address by scenario: inside the app container (drain runs via
+# `compose run --rm app`) use http://gatus:8080; a host curl (systemd
+# fallback) uses http://127.0.0.1:8080 — 127.0.0.1 inside a container points
+# at the container itself and would fail forever.
 #
-# The interval must cover the longest tick: the drain unit has
+# The 30m interval must cover the longest tick: the drain unit has
 # TimeoutStartSec=960 and the job itself timeoutMs=900000 (15m); 5m would
-# false-alarm on a healthy slow tick, so 30m.
-#
-# The drain in this repo (jobs/drain.ts) still sends a plain GET to
-# JOBS_HEARTBEAT_URL (Kuma push shape); the cutover is described in README §8:
-# do not set DRAIN_HEARTBEAT_TOKEN before that wiring, or this endpoint stays
-# permanently red.
+# false-alarm on a healthy slow tick.
 external-endpoints:
   - name: jobs-drain
     group: web-lair

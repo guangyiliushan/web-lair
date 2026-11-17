@@ -1,27 +1,17 @@
 name: ci
 
-# The merge gate. One job, ordered so every gate sees the SAME
-# Paraglide artifact the app ships:
-#   install → build → check → lint → unit (server) → unit (client)
-#
-# Why `build` precedes `check`: `src/lib/paraglide` is generated and gitignored,
-# and the generator that matters is the **Vite plugin** (it owns urlPatterns and
-# the per-surface routeStrategies). A bare `paraglide-js compile` cannot express
-# those options, so a CLI-generated tree is a different runtime, not an
-# equivalent one — type-checking it would validate code that never ships
-# (Paraglide docs "Compiling Messages": bundler plugins are the
-# recommended path, the CLI is for projects without a bundler).
-#
-# Why one job: the four heavy steps share one warm `node_modules`; splitting
-# them into jobs would pay the install three times for ~2 minutes of saved wall
-# time, and the required status check stays a single name (`ci / verify`).
-# Splitting later is additive for branch protection (a new name must be added
-# to the required list at the same time).
-#
-# Two things deliberately NOT here:
-#   - e2e: `e2e/support.ts` shells `docker exec web-lair-db-1`, so the suite
-#     needs a database container the runner does not have (F-18 residual).
-#   - `auth:check`: `.github/workflows/auth-schema.yml` already owns it.
+# The merge gate runs as one job so every gate sees the same generated Paraglide
+# artifact. `build` precedes `check` because `src/lib/paraglide` is generated and
+# gitignored, and only the Vite plugin can express urlPatterns and the
+# per-surface routeStrategies: a CLI-compiled tree is a different runtime, so
+# type-checking it would validate code that never ships (Paraglide docs,
+# "Compiling Messages").
+# One job also shares one warm `node_modules` across the heavy steps and keeps
+# the required status check a single name (`ci / verify`); splitting later means
+# adding the new name to the required list at the same time.
+# Not here: e2e (`e2e/support.ts` shells `docker exec web-lair-db-1`, which needs
+# a database container the runner does not have) and `auth:check` (owned by
+# `.github/workflows/auth-schema.yml`).
 
 on:
   push:

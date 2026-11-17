@@ -3,26 +3,20 @@ import type { Root as HastRoot, Element, RootContent } from 'hast';
 import { visit, SKIP } from 'unist-util-visit';
 
 /**
- * Raw-HTML governance (spec 4.5) — two cooperating plugins around rehype-raw:
- *
- * 1. rehypeMarkPipelineNodes (before rehype-raw): stamps every element with a
- *    runtime provenance token. hast attributes survive rehype-raw's parse5
- *    round-trip on the same element (the img provenance shipped since batch 2
- *    relies on exactly this), so after the reparse the token still identifies
- *    the elements this pipeline produced.
- * 2. rehypeRawHtmlWhitelist (after rehype-raw): splits pipeline output from
- *    author-written raw HTML:
- *    - pipeline elements: kept; rehype-sanitize still runs last
- *    - raw elements: the 4.5 closed set applies — elements outside the set
- *      are unwrapped with their text kept (5), script/style/iframe/template
- *      and img are removed with their content, and attributes are reduced to
- *      the per-tag whitelist plus the global `id`.
- *
- * The token is random per module load and never reaches the output (both
- * passes here only read it; a final pass strips it, and it is not part of the
- * sanitize schema either). An author-written `data-md-x` cannot match it — a
- * constant marker can be forged byte-for-byte (probe evidence, batch 4),
- * which is exactly why this is random.
+ * Raw-HTML governance: two cooperating plugins around rehype-raw.
+ * rehypeMarkPipelineNodes runs before rehype-raw and stamps every element with a runtime
+ * provenance token — hast attributes survive rehype-raw's parse5 round-trip on the same
+ * element, so after the reparse the token still identifies the elements this pipeline
+ * produced.
+ * rehypeRawHtmlWhitelist runs after rehype-raw and splits pipeline output from
+ * author-written raw HTML: pipeline elements are kept (rehype-sanitize still runs last),
+ * while raw elements get the closed set applied — elements outside it are unwrapped with
+ * their text kept, script/style/iframe/template and img are removed with their content,
+ * and attributes are reduced to the per-tag whitelist plus the global `id`.
+ * Reason: the token is random per module load and never reaches the output (both passes
+ * only read it; a final pass strips it and it is not in the sanitize schema). An
+ * author-written `data-md-x` cannot match it — a constant marker can be forged
+ * byte-for-byte, which is exactly why it is random.
  */
 
 const PROVENANCE_KEY = 'dataMdX';

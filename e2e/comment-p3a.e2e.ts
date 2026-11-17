@@ -8,16 +8,14 @@ import { approveQueueRow, bootstrapReader, psql, valkeyAlive, valkeyDel } from '
  * auto-approve, the throttle window, the queue's post/note target display,
  * the no-JS submit path and keyboard reachability.
  *
- * Runs against the production preview, the live database and the Valkey
- * limiter; fixture rows are namespaced `e2e-cmt` and removed in teardown.
- * Preconditions: `web-lair-db-1` up (fixtures), `web-lair-valkey-1` up for
- * the throttle case (skipped otherwise - fail-open makes it moot), port 4173
- * free (do not run alongside another spec file's server).
+ * Runs against the production preview, live database and Valkey limiter;
+ * fixtures are namespaced `e2e-cmt` and removed in teardown. Preconditions:
+ * `web-lair-db-1` and `web-lair-valkey-1` (throttle case, skipped
+ * otherwise) up; port 4173 free - one preview server per run.
  *
- * The file is a serial chain (reader -> owner approve -> ...): running single
- * tests out of order will not see the earlier steps' data. Auth fixtures are
- * memoised per account to keep the shared better-auth path-bucket limiter
- * (3 per 10s per path) out of other spec files' way.
+ * Serial chain (reader -> owner approve -> ...): single tests run out of
+ * order miss the earlier steps' data. Auth fixtures are memoised per account
+ * so the shared better-auth path bucket (see support.ts) stays quiet.
  */
 const CATEGORY = '00000000-0000-7000-8000-0000000000c1';
 const POST = '00000000-0000-7000-8000-0000000000c2';

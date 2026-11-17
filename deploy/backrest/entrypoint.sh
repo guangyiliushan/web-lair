@@ -1,20 +1,13 @@
 #!/bin/sh
-#
-# Backrest entrypoint.
-#
-# Renders /config/config.json from the environment on first start, then hands
-# over to upstream's /docker-entrypoint (which only fills in BACKREST_* defaults
-# and execs /backrest).
-#
-# Why rendered instead of clicked once in the UI: the hook wiring and the
-# backup/forget/prune/check schedules must be reviewable in git, and a rebuilt
-# host has to come back with the same setup from one file. The rendered file
-# holds the two repository passwords, so it is written 0600 into the config
-# volume and never into the checkout.
-#
-# Render policy: only when the file is absent/empty, or BACKREST_RENDER_CONFIG
-# is "force" (credential rotation, schedule change). Anything else would
-# overwrite edits made in the UI without telling anyone.
+# Backrest entrypoint: renders /config/config.json from the environment, then
+# hands over to upstream's /docker-entrypoint (BACKREST_* defaults, exec /backrest).
+# Rendering instead of clicking in the UI keeps the hook wiring and the schedules
+# reviewable in git and lets a rebuilt host come back with the same setup from one
+# file (RUNBOOK, "Backrest: UI, schedules, failure semantics"). The rendered file
+# holds both repository passwords, so it is written 0600 into the config volume
+# and never into the checkout.
+# It renders only when the file is absent/empty, or on BACKREST_RENDER_CONFIG=force
+# (rotation, schedule change) — anything else would overwrite UI edits silently.
 set -eu
 umask 077
 

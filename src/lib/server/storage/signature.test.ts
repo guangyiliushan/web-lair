@@ -3,17 +3,16 @@ import { parseAmzDate, signRequest, type SigV4Request } from './signature';
 
 /**
  * Locked against the official aws-sig-v4 test suite (Apache-2.0; saibotsivad
- * mirror). Each case pins all three levels of the algorithm: canonical
- * request, string to sign, and the Authorization header.
+ * mirror): each case pins canonical request, string to sign and the
+ * Authorization header.
  *
  * Deliberately excluded / adjusted:
- * - normalize-path cases (`get-relative`, `get-slash*`): the generic SigV4
- *   rules normalize dot segments, while S3 signs the path exactly as sent.
- * - `post-x-www-form-urlencoded`: the suite's displayed creq includes
- *   `content-length`, but its sts/authz are computed WITHOUT it (clients do
- *   not sign a content-length they do not control). sts/authz are locked as
- *   published; the canonical request is reconstructed to match.
- * - `post-x-www-form-urlencoded-parameters`: excluded — its sts/authz match
+ * - normalize-path (`get-relative`, `get-slash*`): generic SigV4 normalizes
+ *   dot segments, S3 signs the path exactly as sent.
+ * - `post-x-www-form-urlencoded`: the suite's creq lists `content-length` but
+ *   its sts/authz omit it (clients do not sign a content-length they do not
+ *   control); sts/authz stay as published, the creq is reconstructed to match.
+ * - `post-x-www-form-urlencoded-parameters`: excluded - its sts/authz match
  *   no consistent canonicalization (verified by brute force).
  */
 

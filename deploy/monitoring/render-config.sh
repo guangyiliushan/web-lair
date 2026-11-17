@@ -1,30 +1,27 @@
 #!/usr/bin/env bash
 # Render the Gatus config directory: core gatus.yaml (with the always-on Bark
-# config) plus three optional fragments.
+# config) plus the optional zz-domain / zz-drain / zz-app-ready fragments.
+# The output directory is the one GATUS_CONFIG_PATH points at; only gatus.yaml
+# and zz-*.yaml are touched, never other files.
 #
-# Usage:
-#   bash deploy/monitoring/render-config.sh <out-dir>
+# Usage: bash deploy/monitoring/render-config.sh <out-dir>
 #
 # Inputs (all optional; empty = the matching fragment is not rendered):
-#   SITE_DOMAIN           site domain                     → zz-domain.yaml
-#   DRAIN_HEARTBEAT_TOKEN drain heartbeat Bearer token    → zz-drain.yaml
-#   READY_TOKEN           /api/ready Bearer token         → zz-app-ready.yaml
-#   BARK_URL              not rendered here (always-on ${BARK_URL} in gatus.yaml);
-#                         here it is only checked, then reported
-#
-# The output directory is the one GATUS_CONFIG_PATH points at; this script only
-# manages gatus.yaml and zz-*.yaml and never touches other files.
+#   SITE_DOMAIN           site domain                  → zz-domain.yaml
+#   DRAIN_HEARTBEAT_TOKEN drain heartbeat Bearer token → zz-drain.yaml
+#   READY_TOKEN           /api/ready Bearer token      → zz-app-ready.yaml
+#   BARK_URL              checked here, rendered in gatus.yaml (always on)
 #
 # **Content-idempotent**: write a file only when its content changed, keeping
 # the mtime stable. Gatus polls the config directory mtime every 30s; any
-# write triggers stop → store.Close → initializeStorage(memory) → start and
-# wipes the monitoring history plus the "alert already fired" state (repeated
-# alerts, no RESOLVED). This script runs on every up/create and possibly from
-# parallel sessions, so it must never touch the disk when nothing changed.
+# write wipes the monitoring history plus the "alert already fired" state
+# (repeated alerts, no RESOLVED). This script runs on every up/create and
+# possibly from parallel sessions, so it must never touch the disk when
+# nothing changed.
 #
-# The production entry point deploy/compose-prod.sh calls this script only
-# before up/create; local validation uses deploy/monitoring/verify-config.sh
-# (which renders into a temp directory itself).
+# deploy/compose-prod.sh calls this script only before up/create; local
+# validation uses deploy/monitoring/verify-config.sh (renders into a temp
+# directory itself).
 set -euo pipefail
 
 # Deterministic permissions: under `umask 000` (service managers, some CI) the

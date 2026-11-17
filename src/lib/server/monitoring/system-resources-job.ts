@@ -1,19 +1,15 @@
 /**
- * `system.resources` job core.
- *
- * The builtin stays a two-line shell (`#jobs-sdk` runner) and the logic lives
- * here so it can be unit-tested with injected readings and sinks. Three
- * outputs, each with a different reliability envelope:
- *
- *  1. `ctx.summary` - every mount, the cgroup memory reading and the host
- *     memory reference; the admin surface reads this from the run ledger.
- *  2. `notify()` - a threshold alert through the notification seam; deduped
- *     per metric per UTC day by the latched state file.
- *  3. healthchecks ping - fail while any metric is latched in warn (including
- *     the 75-85 band), a collection failed, or the daily latch could not be
- *     persisted; ok otherwise. This is the external backstop: when the disk is
- *     full the DB/outbox may be unwritable, but the ping is one GET, and it is
- *     sent BEFORE the in-app notify loop for exactly that reason.
+ * `system.resources` job core: the builtin stays a two-line shell
+ * (`#jobs-sdk` runner) and the logic lives here so it can be unit-tested
+ * with injected readings and sinks. Three outputs, each with its own
+ * reliability envelope: `ctx.summary` records every mount, the cgroup memory
+ * reading and the host memory reference for the run ledger; `notify()` raises
+ * a threshold alert, deduped per metric per UTC day by the latched state
+ * file; the healthchecks ping reports fail while any metric is latched in
+ * warn (including the 75-85 band), a collection failed, or the daily latch
+ * could not be persisted, and ok otherwise. The ping is the external
+ * backstop: when the disk is full the DB/outbox may be unwritable, but it is
+ * one GET, sent BEFORE the in-app notify loop for exactly that reason.
  */
 import os from 'node:os';
 import { resolveDataDir } from '../jobs/data-dir.ts';

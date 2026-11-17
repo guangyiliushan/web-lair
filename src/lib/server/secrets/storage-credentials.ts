@@ -5,20 +5,17 @@ import { SecretError } from './errors.ts';
 import { loadKeyring, providerKeyHint, type SecretDb, type ResolveDeps } from './resolver.ts';
 
 /**
- * External storage credentials.
- *
- * Read order, evaluated at call time (no cache — a cache needs invalidation,
- * and multi-replica invalidation is where the bugs live):
- *
- *     storage_secrets row  >  STORAGE_S3_ACCESS_KEY / STORAGE_S3_SECRET_KEY  >  missing
- *
- * Only "no row" may fall back to the environment. A row that exists but cannot
- * be decrypted is terminal: a wrong master key must be visible, not hidden
- * behind a stale env credential that still happens to work.
- *
+ * External storage credentials: read order evaluated at call time (no cache —
+ * a cache needs invalidation, and multi-replica invalidation is where the
+ * bugs live):
+ * `storage_secrets row > STORAGE_S3_ACCESS_KEY / STORAGE_S3_SECRET_KEY > missing`.
+ * Only "no row" may fall back to the environment. A row that exists but
+ * cannot be decrypted is terminal: a wrong master key must be visible, not
+ * hidden behind a stale env credential that still happens to work.
  * Writes are write-only by construction: the UI posts a value, this module
  * encrypts it, and nothing ever reads the plaintext back out except the
- * adapter that signs requests. The hint columns are the only display fragments.
+ * adapter that signs requests. The hint columns are the only display
+ * fragments.
  */
 
 export interface StorageCredentialStatus {

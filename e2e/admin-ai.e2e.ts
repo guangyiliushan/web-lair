@@ -10,14 +10,11 @@ test.use(zhCnLocale);
  * the memory-card round trip. The localhost origin auto-authenticates as the
  * site owner (see auth.e2e.ts / TAILSCALE_ALLOW_LOOPBACK).
  *
- * Two repo-proven hazards are handled here:
- * - The settings shell renders its children twice (mobile + desktop
- *   branches, one hidden by CSS). Role locators only see the accessibility
- *   tree (hidden copies are excluded), but text/CSS locators see both, so
- *   those are filtered to the visible one.
- * - Any click on a control that exists in the SSR HTML must retry until the
- *   state actually flips (SvelteKit attaches handlers after hydration; under
- *   load the first click is swallowed) - hence the toPass loops below.
+ * Two repo-proven hazards shape this spec: the settings shell renders its
+ * children twice (mobile + desktop, one hidden by CSS), so text/CSS locators
+ * are filtered to the visible one (role locators already exclude hidden
+ * copies); and a click on an SSR-rendered control must retry until the state
+ * actually flips, hence the toPass loops below.
  */
 const PROVIDER = 'E2E Provider';
 const MEMORY_TEXT = 'E2E memory card: keep the tone dry.';

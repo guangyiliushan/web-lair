@@ -1,17 +1,12 @@
 #!/bin/sh
-#
-# Backrest CONDITION_CHECK_SUCCESS / CONDITION_CHECK_ERROR hook.
-#
-# Replaces the ping that `web-lair-backup-check.service` used to send after the
-# weekly `restic check`: the timer is gone (Backrest's `checkPolicy` owns the
-# schedule), but the dead-man signal must survive — silence on a periodic check
-# is exactly the failure mode nobody notices until a restore is needed.
-#
+# Backrest `CONDITION_CHECK_SUCCESS` / `CONDITION_CHECK_ERROR` hook: it carries
+# the dead-man ping for the repository check, whose schedule Backrest's
+# `checkPolicy` owns — silence on a periodic check is exactly the failure mode
+# nobody notices until a restore is needed.
 # Usage: [--config] [--failed]
 #   --config  report on CHECK_PING_URL_CONFIG instead of CHECK_PING_URL, so a
 #             failing config-repo check cannot be masked by a green data check
 #   --failed  send <url>/fail instead of the success ping
-#
 # Unset URL ⇒ log and exit 0 (a fresh install has no UUID yet).
 set -eu
 

@@ -3,20 +3,18 @@ import { db } from '$lib/server/db';
 import { SITE_ORGANIZATION_SLUG } from './site-organization.shared';
 
 /**
- * The single site organization. Every session is fixed to
- * it by the `session.create.before` hook in `auth.ts`, so this lookup sits on
- * the session-creation path: the id is read once and cached for the process
- * lifetime. `invalidateSiteOrganizationCache()` is called by
- * `site-organization-bootstrap.ts` right after the organization is created,
- * so a long-lived dev server picks it up without a restart.
- *
- * Raw SQL on purpose: this module is imported by `auth.ts`, and a named import
- * of the generated `auth.schema.ts` would make the schema generator itself
+ * The single site organization: every session is fixed to it by the
+ * `session.create.before` hook in `auth.ts`, so this lookup sits on the
+ * session-creation path — the id is cached for the process lifetime and
+ * `site-organization-bootstrap.ts` calls `invalidateSiteOrganizationCache()`
+ * right after creation, so a long-lived dev server picks it up without a
+ * restart.
+ * Raw SQL on purpose: `auth.ts` imports this module, and a named import of
+ * the generated `auth.schema.ts` would make the schema generator itself
  * impossible to run (the plugin's tables do not exist until it has run).
- * Table name `organization` is the official plugin default (no modelName
- * override in `auth.ts`); column names are the generator's snake_case.
- * Slug/name constants live in `site-organization.shared.ts` (zero-dependency:
- * the repair script imports them from a plain tsx process).
+ * Table `organization` is the plugin default, columns are the generator's
+ * snake_case; slug/name constants live in `site-organization.shared.ts`
+ * (zero-dependency: the repair script imports them from a plain tsx process).
  */
 let cachedId: string | null = null;
 

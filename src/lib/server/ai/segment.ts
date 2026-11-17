@@ -1,21 +1,12 @@
 /**
- * Source segmentation for long translations.
- *
- * The chunker runs on **protected** markdown (`protectMarkdown` output), so
- * fences, inline code, URLs and mentions are already `[[WL…]]` tokens: those
- * atoms must never be cut. It splits on structure, never on a byte budget
- * alone:
- *
- *   - blank lines separate blocks (paragraphs, headings, lists, tables);
- *   - a block that fits is packed with its neighbours;
- *   - an oversized block splits on line boundaries, then sentence ends, and
- *     only then at a hard character cut;
- *   - a table repeats its header on every part (it cannot be rejoined
- *     byte-for-byte, but it stays valid markdown);
- *   - nothing inside a `[[WL…]]` placeholder is ever split.
- *
- * Each chunk carries the separator that precedes it, so the caller can
- * reassemble the source exactly (tables excepted) and, more importantly, can
+ * Source segmentation for long translations: the chunker runs on protected
+ * markdown (`protectMarkdown` output), so fences, inline code, URLs and
+ * mentions are `[[WL…]]` atoms that must never be cut.
+ * It splits on structure, never a byte budget alone: blank lines separate
+ * blocks, a fitting block is packed with its neighbours, an oversized block
+ * splits on line boundaries then sentence ends then a hard cut, a table
+ * repeats its header on every part, and each chunk carries its preceding
+ * separator so the caller can reassemble the source (tables excepted) and
  * translate chunk-by-chunk without losing the original whitespace.
  */
 

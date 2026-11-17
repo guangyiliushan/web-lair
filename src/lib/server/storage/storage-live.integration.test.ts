@@ -6,15 +6,13 @@ import type { S3StorageConfig } from './config';
 import { policyAllowsDelete } from '../services/files';
 
 /**
- * Live S3-dialect proof against the bundled RustFS, addressed exactly
- * the way an EXTERNAL provider is addressed (driver=s3 shape: path style,
- * explicit bucket, SigV4 credentials). Everything here is real HTTP against a
- * real S3 implementation — no fetch fakes.
+ * Live S3-dialect proof against the bundled RustFS, addressed exactly the way
+ * an EXTERNAL provider is addressed (driver=s3 shape: path style, explicit
+ * bucket, SigV4 credentials) - real HTTP against a real S3 implementation, no
+ * fetch fakes.
  *
- * Skipped unless STORAGE_LIVE=1 (and the RUSTFS_* variables are present), so
- * the default unit run stays offline. Run with:
- *
- *   STORAGE_LIVE=1 pnpm test:storage-live
+ * Skipped unless STORAGE_LIVE=1 and the RUSTFS_* variables are present, so the
+ * default unit run stays offline (`STORAGE_LIVE=1 pnpm test:storage-live`).
  *
  * Covers: the four verbs + HEAD/404 semantics, the capability reads the purge
  * guard depends on (off -> enabled), and a full migration from one bucket to

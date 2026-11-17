@@ -1,18 +1,14 @@
 // scripts/reset-2fa.ts
 //
-// Emergency recovery: when both the authenticator and
-// the backup codes are lost, disable two-step verification for one account and
-// clear every trace of the factor:
+// Emergency recovery: when both the authenticator and the backup codes are
+// lost, disable two-step verification for one account and clear every trace
+// of the factor:
 //   - flip `user.two_factor_enabled` to false and delete the `two_factor` row
 //   - revoke ALL sessions of the account (a stolen cookie must not survive a reset)
 //   - drop the pending `2fa-*` / `trust-device-*` verification rows
 // All writes run in one transaction; the state is read back before reporting.
 //
-// Usage:
-//   pnpm db:reset-2fa owner@example.com
-//   (omitting the argument falls back to .env OWNER_EMAIL)
-//
-// Env: DATABASE_URL (required), OWNER_EMAIL (optional fallback)
+// Usage: `pnpm db:reset-2fa <email>`; falls back to OWNER_EMAIL from .env.
 
 import postgres from 'postgres';
 import { eq, sql } from 'drizzle-orm';

@@ -6,15 +6,14 @@ import { StorageError } from './port.ts';
 /**
  * Strict read of the live provider row.
  *
- * `getOption('storage.active')` falls back to the registry DEFAULT whenever the
- * stored value fails its schema — right for an informational option, wrong for
- * the live storage target: it silently swaps the provider, which must not
- * happen here. This accessor distinguishes the three states the runtime cares about:
+ * `getOption('storage.active')` falls back to the registry DEFAULT whenever
+ * the stored value fails its schema - right for an informational option, wrong
+ * for the live storage target, which would silently swap provider:
  *
- *   no row        → the bootstrap default (bundled RustFS), legitimate;
- *   valid row     → that row;
- *   invalid row   → StorageError(status 0) so every storage caller's existing
- *                   503 path fails closed instead of serving the wrong bucket.
+ * no row      -> the bootstrap default (bundled RustFS), legitimate;
+ * valid row   -> that row;
+ * invalid row -> StorageError(status 0), so every storage caller's existing
+ *                503 path fails closed instead of serving the wrong bucket.
  *
  * The executor is injected for tests; the app db handle is imported lazily so
  * the module stays importable from plain tsx scripts.

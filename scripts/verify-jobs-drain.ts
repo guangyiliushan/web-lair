@@ -1,8 +1,6 @@
 // scripts/verify-jobs-drain.ts
 //
-// Acceptance harness for the jobs drain kernel.
-//
-//   pnpm db:verify-jobs
+// Acceptance harness for the jobs drain kernel: `pnpm db:verify-jobs`.
 //
 // Runs entirely against a THROWAWAY database: it creates `wl_jobs_verify_*`
 // on the server DATABASE_URL points at, applies the baseline migration, seeds
@@ -10,24 +8,11 @@
 // SIGKILLed mid-flight), and drops the database afterwards. The live database
 // is never written to.
 //
-// Covered: concurrent double drain -> CAS exactly-one; queued unique, 23505
-// idempotent; stale reclamation + its order contract, queue AND schedule
-// paths; catch-up runs the most recent due only; lock held -> no watermark
-// move, no reclaim, next tick catches up; kill a lock-holding process ->
-// reclaim + queued rows survive; kill a real drain mid-delivery -> the
-// delivery row stays queued; webhook signing/410 semantics, 3xx-is-failure
-// (redirect never followed), unreachable-endpoint network failures,
-// jobs.prune retention, source_hash records the executing file, bootstrap of
-// a NULL watermark, a microsecond-precision watermark written by SQL
-// (monotonic CAS), the executeRun failure branch (poisoned table), concurrent
-// delivery and queue claims, the entry exit-code contract (2 / 1), heartbeat
-// ping; SDK dual resolution, save gate negatives, user jobs end-to-end (hot
-// update, fork override, run-scoped SDK binding), delete lifecycle on a real
-// database, admin edit mid-tick -> config-snapshot CAS and toggle race on a
-// real DB, the scaffold-degradation guard; the audit-path outbox
-// (`recordActivity` fans out one `queued` delivery per subscribed endpoint -
-// single insert-select, `@>` matching, Standard Webhooks recommended payload
-// shape); Kuma push wiring (JOBS_HEARTBEAT_URL) lives in jobs/drain.ts.
+// Covers CAS/idempotency, stale reclamation and lock/crash recovery, the
+// delivery contract (retries, 410, 3xx, network failures), retention,
+// watermarks, entry exit codes, SDK/user jobs, admin edit races,
+// notifications and the audit outbox - the `section(...)` titles below are
+// the list. Kuma push wiring (JOBS_HEARTBEAT_URL) lives in jobs/drain.ts.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';

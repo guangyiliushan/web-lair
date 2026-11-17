@@ -1,21 +1,17 @@
 /**
- * IANA timezone validation for `site.timezone` (options registry) and note
- * `tz` values: `Intl.DateTimeFormat` throws a RangeError on an unknown zone,
- * so constructing a probe formatter is the validator. Two deliberate guards:
- *
- * - `Intl.supportedValuesOf('timeZone')` must NOT be used as the whitelist -
- *   the canonical list omits 'UTC' (and 'Etc/UTC' style links), which are
- *   valid zones.
- * - UTC-offset strings ('+08:00', '-0500') are REJECTED even though Intl
- *   accepts them: PostgreSQL's `AT TIME ZONE` reads them as POSIX zones
- *   (sign flipped) or rejects the format outright, so a value that passes
- *   Intl can silently shift the belongs-to date by hours - or 500 the query.
- * - Domain caveat (probed against real PostgreSQL): this check is NOT equal to
- *   PostgreSQL's zoneinfo set - each side accepts names the other rejects
- *   ('Japan'/'US/Pacific'/'Asia/Calcutta' pass Intl but 500 PG; ICU also
- *   canonicalises 'Asia/Kolkata' differently). Write paths must additionally
- *   verify against `pg_timezone_names`; the sign guard above still closes the
- *   silent-shift class.
+ * isValidIanaTimeZone validates `site.timezone` (options registry) and note `tz` values:
+ * `Intl.DateTimeFormat` throws a RangeError on an unknown zone, so constructing a probe
+ * formatter is the validator. Three deliberate caveats:
+ * - `Intl.supportedValuesOf('timeZone')` must NOT be the whitelist: the canonical list omits
+ *   'UTC' (and `Etc/UTC`-style links), which are valid zones.
+ * - UTC-offset strings ('+08:00', '-0500') are rejected though Intl accepts them:
+ *   PostgreSQL's `AT TIME ZONE` reads them as POSIX zones (sign flipped) or rejects them
+ *   outright, so a value that passes Intl can silently shift the belongs-to date by hours —
+ *   or 500 the query.
+ * - The check is not PostgreSQL's zoneinfo set (probed against a real database): 'Japan' /
+ *   'US/Pacific' / 'Asia/Calcutta' pass Intl but 500 PG. Write paths must additionally
+ *   verify against `pg_timezone_names`; the sign guard above still closes the silent-shift
+ *   class.
  */
 const ianaValidityCache = new Map<string, boolean>();
 

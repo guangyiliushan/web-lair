@@ -1,16 +1,13 @@
 /**
- * Framework-equivalent CSRF predicate.
- *
- * SvelteKit 2.70.3 performs this check in `respond.js` **before** `handle`,
- * so a hook cannot exempt a route. We therefore switch the framework check
- * off (`csrf.trustedOrigins: ['*']` in svelte.config.js) and run this
- * predicate as the first hook. Keep it byte-for-byte aligned with upstream:
- *
- * - `@sveltejs/kit/src/runtime/server/respond.js:74-93` (production only,
- *   form content types, mutating methods, missing Origin rejected)
- * - `@sveltejs/kit/src/utils/http.js:93-103` (content-type list)
- * - `@sveltejs/kit/src/runtime/form-utils.js:73` (binary enhanced forms)
- *
+ * Framework-equivalent CSRF predicate: SvelteKit 2.70.3 performs this check
+ * in `respond.js` **before** `handle`, so a hook cannot exempt a route. We
+ * therefore switch the framework check off (`csrf.trustedOrigins: ['*']` in
+ * svelte.config.js) and run this predicate as the first hook.
+ * Keep it byte-for-byte aligned with upstream:
+ * `@sveltejs/kit/src/runtime/server/respond.js:74-93` (production only,
+ * form content types, mutating methods, missing Origin rejected);
+ * `@sveltejs/kit/src/utils/http.js:93-103` (content-type list);
+ * `@sveltejs/kit/src/runtime/form-utils.js:73` (binary enhanced forms).
  * SvelteKit 3 additionally rejects mutating cross-origin requests that omit
  * Content-Type; add that clause when upgrading (`csrf.js` on `main`).
  */

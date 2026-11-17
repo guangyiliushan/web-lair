@@ -5,20 +5,17 @@ import { SecretError } from './errors.ts';
 import { KeyringConfigError, keyringFromEnv, type SecretKeyring } from './keyring.ts';
 
 /**
- * Call-time resolver for runtime AI provider keys.
- *
- * Read order, evaluated on EVERY call (no process cache: a cache would need
- * invalidation, and multi-replica invalidation is where the bugs live):
- *
- *     ai_provider_secrets.ciphertext  >  api_key_env  >  missing
- *
+ * Call-time resolver for runtime AI provider keys: read order evaluated on
+ * EVERY call (no process cache — a cache would need invalidation, and
+ * multi-replica invalidation is where the bugs live):
+ * `ai_provider_secrets.ciphertext > api_key_env > missing`.
  * Only `missing` may fall back to the environment. `decrypt_failed`,
- * `unknown_key_version` and `store_unavailable` are terminal - the resolver
- * never tries another key, another provider or another source, because a wrong
- * master key must be visible instead of quietly billing another account.
- *
- * No `$lib`/`$env` imports: the job drain loads this under plain Node. The env
- * lookup is injected; key material is never logged.
+ * `unknown_key_version` and `store_unavailable` are terminal — the resolver
+ * never tries another key, another provider or another source, because a
+ * wrong master key must be visible instead of quietly billing another
+ * account.
+ * No `$lib`/`$env` imports: the job drain loads this under plain Node. The
+ * env lookup is injected; key material is never logged.
  */
 
 /**

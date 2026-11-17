@@ -2,24 +2,19 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { SecretError } from './errors.ts';
 
 /**
- * Envelope encryption for DB-stored runtime credentials.
- *
- * AES-256-GCM from `node:crypto` - zero dependencies, FIPS-available on every
- * Node build this app deploys on. A fresh 12-byte IV is generated per write;
- * the 16-byte authentication tag and the ciphertext are stored alongside it.
- *
+ * Envelope encryption for DB-stored runtime credentials: AES-256-GCM from
+ * `node:crypto` — zero dependencies, FIPS-available on every Node build this
+ * app deploys on. A fresh 12-byte IV is generated per write; the 16-byte
+ * authentication tag and the ciphertext are stored alongside it.
  * Ciphertext format (self-describing, versioned):
- *
- *     v1:<keyVersion>:<ivBase64url>:<tagBase64url>:<ciphertextBase64url>
- *
- * `<keyVersion>` selects the master key from the keyring; the leading `v1` is
- * the *format* version and leaves room for an algorithm change without
- * reinterpreting old rows. AAD binds a value to its row (`<table>:<id>:<field>`),
- * so a ciphertext copied into another row fails the tag check instead of
- * decrypting someone else's secret.
- *
- * This module deliberately has no `$lib`/`$env` imports: the job drain loads it
- * under plain Node with type stripping (same rule as `src/lib/server/ai/*`).
+ * `v1:<keyVersion>:<ivBase64url>:<tagBase64url>:<ciphertextBase64url>`.
+ * `<keyVersion>` selects the master key from the keyring; the leading `v1`
+ * is the format version and leaves room for an algorithm change without
+ * reinterpreting old rows. AAD binds a value to its row
+ * (`<table>:<id>:<field>`), so a ciphertext copied into another row fails
+ * the tag check instead of decrypting someone else's secret.
+ * This module deliberately has no `$lib`/`$env` imports: the job drain loads
+ * it under plain Node with type stripping (same rule as `src/lib/server/ai/*`).
  */
 
 export const CIPHERTEXT_FORMAT_VERSION = 'v1';

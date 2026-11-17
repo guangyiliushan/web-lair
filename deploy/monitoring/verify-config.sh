@@ -6,25 +6,12 @@
 #   GATUS_VERIFY_PORT=18081 bash deploy/monitoring/verify-config.sh
 #   GATUS_IMAGE=ghcr.io/twin/gatus:<tag> bash ...   # defaults to compose.monitoring.yaml
 #
-# Assert five things (each one can really fail):
-#   1. core config (domain/drain/app-ready fragments all off): /health 200,
-#      `Validated 6 endpoints / 0 external endpoints`,
-#      `Ignoring provider=custom due to error=url not set` (empty BARK_URL =
-#      log only), and no `endpoint=app-ready` in the log (without READY_TOKEN
-#      that endpoint is not rendered - it must not sit in the core config as
-#      an `enabled: false` placeholder);
-#   2. full config (domain + drain + app-ready fragments + non-empty BARK_URL):
-#      /health 200, `Validated 9 endpoints / 1 external endpoints`,
-#      `configuredProviders=[custom]`, and `endpoint=app-ready;` present (the
-#      /api/ready probe must be monitored once READY_TOKEN is set);
-#   3. endpoint missing `url`: exit code 2 and `you must specify an url`;
-#   4. drain fragment with an empty token: exit code 2 and `must specify a token`;
-#   5. both positive startups run under the same hardened flags as production
-#      (--read-only --cap-drop ALL --tmpfs /tmp) and at INFO log level.
-#
+# Starts a temporary container (port 127.0.0.1:$GATUS_VERIFY_PORT) against five
+# scenarios — core config, full config, two negative cases, and the hardened
+# production flags — each of which can really fail; the five assertions are
+# listed in deploy/monitoring/README.md "6. 校验（T3.5，供 P1 的 CI 接入）".
 # On failure the container log is printed. Any failed assertion → exit 1.
-# Note: this script starts a temporary container (port 127.0.0.1:$GATUS_VERIFY_PORT)
-# and, under the heavy-task discipline, runs serially through
+# Under the heavy-task discipline it runs serially through
 # notes/coordination/m6/scripts/heavy.sh like build/check/vitest.
 set -uo pipefail
 

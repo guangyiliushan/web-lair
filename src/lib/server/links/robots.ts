@@ -1,27 +1,23 @@
 /**
  * robots.txt for the links checker. References: RFC 9309 (§2.2.1 user-agent
- * matching, §2.2.2
- * allow/disallow semantics + percent-encoding, §2.2.3 special characters
- * `#`/`$`/`*`, §2.3.1.x access results, §2.4 caching, §2.5 size) and
- * Google's interpretation page.
+ * matching, §2.2.2 allow/disallow + percent-encoding, §2.2.3 special characters
+ * `#`/`$`/`*`, §2.3.1.x access results, §2.4 caching, §2.5 size) and Google's
+ * interpretation page.
  *
- * Status semantics honored by the oracle: 2xx parse; 4xx (except 429) treat
- * as "no restrictions"; 429/5xx -> site skipped this round (kind `robots`,
- * not counted). RFC 9309 §2.3.1.4's "MUST assume complete disallow" text
- * covers "server or network errors" BOTH - the deliberate deviation for
- * transport-level failures (they fall through to the page fetch so a
- * network-dead site still counts as the hard failure it is; no extra
- * requests are made);
- * redirect overflow takes the §2.3.1.2/§2.3.1.3 "unavailable" -> no
- * restrictions path.
+ * Status semantics: 2xx parses; 4xx (except 429) = "no restrictions"; 429/5xx
+ * skips the site this round (kind `robots`, not counted). RFC 9309 §2.3.1.4's
+ * "MUST assume complete disallow" for "server or network errors" is
+ * deliberately NOT applied to transport failures: they fall through to the
+ * page fetch, so a network-dead site still counts as the hard failure it is
+ * and no extra requests are made. Redirect overflow takes the
+ * §2.3.1.2/§2.3.1.3 "unavailable" -> no restrictions path.
  *
- * Path evaluation uses a LINEAR wildcard matcher (segment scanning, no
- * regex): a hostile robots.txt pattern like `*a*a*a*a*a*b` must not trigger
- * catastrophic backtracking in the drain's single thread (CWE-1333). Both
- * the rule and the URI are canonicalized symmetrically (canonicalPath():
- * raw UTF-8 -> %XX, existing escape hex upper-cased, percent-encoded
- * unreserved characters decoded), per RFC §2.2.2 and Google's
- * canonicalization note.
+ * Path evaluation uses a LINEAR wildcard matcher (segment scanning, no regex):
+ * a hostile pattern like `*a*a*a*a*a*b` must not trigger catastrophic
+ * backtracking in the drain's single thread (CWE-1333). Rule and URI are
+ * canonicalized symmetrically (canonicalPath(): raw UTF-8 -> %XX, escape hex
+ * upper-cased, percent-encoded unreserved decoded), per RFC §2.2.2 and
+ * Google's canonicalization note.
  */
 
 export class RobotsDisallowedError extends Error {

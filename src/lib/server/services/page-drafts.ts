@@ -25,37 +25,17 @@ import { m } from '$lib/paraglide/messages';
 export { isPagePlaceholderSlug };
 
 /**
- * Draft-flow service for md pages: mirrors `note-drafts` - one `drafts` row per
- * target, autosave with hash / throttle / optimistic lock, and the publish
- * transaction copies the working copy onto `pages` and drops the draft. Five
- * deliberate differences from the notes mirror:
- *
- *   1. payload: the three-locale editing surface ({title, description,
- *      content}) travels in the `drafts.payload` jsonb column; the
- *      slug keeps the shared `drafts.slug` column, and the row-level
- *      `title`/`content` columns stay off the write set.
- *   2. the placeholder row is the `pages` row itself (slug `draft-…`,
- *      `status` hidden, content null = "never published").
- *   3. publish status is CONDITIONAL: the first publish of a placeholder
- *      flips `visible`; re-publishing an existing row keeps its status.
- *   4. NO slug tracker on rename: `slug_trackers` whitelists
- *      post|tag|note|photo, and pages answer the old URL with 404 by design.
- *      The default rows (`about` / `about-site`) are slug-locked instead -
- *      their slugs are seed anchors.
- *   5. reference diffs run over `keysFromLocalizedContent` (union of every
- *      locale's markdown), the draft identity carries them until publish.
- *
- * Pages have no publishedAt / status history: "never published" is read from
- * `content is null` only, and there are no note-style row-level settings
- * (pin / password / …) to keep outside the draft.
+ * Draft-flow service for md pages: one `drafts` row per target, autosave, publish onto `pages`.
+ * The placeholder row is the `pages` row itself (slug `draft-…`, hidden, `content` null), and
+ * publish is conditional: first publish flips `visible`, re-publish keeps it.
+ * Payload (`{title, description, content}`) travels in `drafts.payload`, not the row columns;
+ * rename has no slug tracker - pages 404 the old URL - and reference diffs union every locale.
  */
 /**
- * Rows the draft editor owns: md rows plus their
- * never-published placeholder form. THE single predicate source - the edit
- * route's load and `?/save`, this service's attach / publish guards all
- * consume it, so no consumer can drift. (The admin list only needs
- * `isPagePlaceholderSlug` for its delete-dialog copy; nothing else should
- * grow a parallel predicate.)
+ * `isPageEditorRow` is the single predicate for rows the draft editor owns: md rows plus their
+ * never-published placeholder form.
+ * The edit route's load, its `?/save` action and this service's attach / publish guards all consume
+ * it, so no consumer can drift.
  */
 export function isPageEditorRow(row: { content: unknown; slug: string }): boolean {
 	return row.content !== null || isPagePlaceholderSlug(row.slug);

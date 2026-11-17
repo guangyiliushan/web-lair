@@ -1,42 +1,28 @@
 /**
- * The mermaid execution side (spec 3.3 / 7): the pipeline emits
- * `<pre class="mermaid">` mount points on both sides; this upgrades them to
- * SVGs in the browser. Everything here runs client-side only.
+ * Mermaid execution side: the pipeline emits `<pre class="mermaid">` mount points on
+ * both sides and this module upgrades them to SVGs in the browser.
+ * Everything here runs client-side only, and the library is imported lazily, only when
+ * a diagram exists on the page, so pages without diagrams never pay for the chunk.
  *
- * Design notes:
- * - The library is imported lazily, only when a diagram exists on the page -
- *   pages without diagrams never pay for the chunk.
- * - Content is untrusted (spec 6). `securityLevel: 'strict'` is pinned, but
- *   on mermaid 12 the name overstates it: it strips event handlers and click
- *   callbacks while DOMPurify's default allowlist still keeps elements like
- *   `img` inside html labels - and a kept `img` issues a real request. Three
- *   layers close the surface instead:
- *   1. `htmlLabels: false` renders labels as SVG `text` - no foreignObject
- *      for ordinary diagrams;
- *   2. per-diagram config is stripped from the source before rendering.
- *      There are TWO channels - the `%%{init: ...}%%` directive (deprecated
- *      since v10.5) and the YAML frontmatter `config:` block - and both must
- *      go. The strip must run on the text mermaid itself will see: mermaid
- *      CR-normalises, dedents and trims before it extracts frontmatter, so a
- *      strip on the raw source (or a single pass) misses indented blocks,
- *      control-character line endings and directive-prefixed blocks.
- *      `stripConfigChannels` mirrors that normalisation and iterates both
- *      channels to a fixpoint; the six shapes an independent re-review
- *      measured as leaks are pinned in mermaid-exec.svelte.spec.ts;
- *   3. sources carrying `@{ img: ... }` node syntax are not rendered at all:
- *      that shape loads a remote image while rendering, which would bypass
- *      the spec's "images only through `!`" rule (4.5).
- * - The palette comes from the site's own CSS tokens through `theme: 'base'`
- *   plus an explicit variable map, so diagrams sit in the same colours as
- *   the surrounding content instead of mermaid's stock palette.
- * - mermaid replaces the element's content with the SVG, so the source is
- *   archived on `data-md-source` before the first render; a theme flip
- *   restores it and renders again.
- * - After a run every element is checked for the settled shape (exactly one
- *   svg child, no mermaid error svg); anything else rolls back to the raw
- *   source with a `data-md-error` mark instead of mermaid's scaffolding.
- * - Renders are serialised through one chain: a rebuild (content update) and
- *   a theme flip must not interleave inside mermaid.
+ * Content is untrusted. `securityLevel: 'strict'` is pinned, but on mermaid 12 the name
+ * overstates it: event handlers and click callbacks are stripped while DOMPurify's
+ * default allowlist still keeps elements like `img` inside html labels, and a kept
+ * `img` issues a real request.
+ * Three layers close the surface instead: `htmlLabels: false` renders labels as SVG
+ * `text` (no foreignObject for ordinary diagrams); both per-diagram config channels are
+ * stripped from the text mermaid will see, to a true fixpoint (details and the leak
+ * shapes pinned in `mermaid-exec.svelte.spec.ts` live in `stripConfigChannels`); and a
+ * source carrying `@{ img: ... }` node syntax is not rendered at all, because that
+ * shape loads a remote image while rendering.
+ *
+ * The palette comes from the site's own CSS tokens through `theme: 'base'` plus an
+ * explicit variable map, so diagrams sit in the surrounding colours.
+ * mermaid replaces the element's content with the SVG, so the source is archived on
+ * `data-md-source` before the first render and a theme flip restores it.
+ * After a run the settled shape (exactly one svg child, no error svg) is checked and
+ * anything else rolls back to the raw source with a `data-md-error` mark.
+ * Renders are serialised through one chain so a rebuild and a theme flip cannot
+ * interleave inside mermaid.
  */
 
 let renderChain: Promise<void> = Promise.resolve();

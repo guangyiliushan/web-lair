@@ -1,21 +1,14 @@
 #!/bin/sh
-#
-# Backrest CONDITION_SNAPSHOT_END command hook.
-#
-# Usage (from the rendered config): [--config] [--failed] [<snapshot-id>]
-#
+# Backrest `CONDITION_SNAPSHOT_END` hook. Usage (from the rendered config):
+# [--config] [--failed] [<snapshot-id>].
 # Green must mean "a snapshot exists", not "a dump was produced": the upload
-# phase can be cancelled, and a plan path can be wrong — both leave a fresh,
-# readable dump behind. Backrest therefore passes the snapshot id, and a success
-# branch without one withholds the ping.
-#
-# --failed is passed when the operation reported an error (the Go template
-# `{{ if .Error }}` decides): pinging success there would hide the failure until
-# the next missing period. A configured URL gets an explicit /fail instead.
-#
-# URL selection: the data plan pings BACKUP_PING_URL, the config plan
-# CONFIG_PING_URL (its own check — sharing one URL would let a green data run
-# mask a red config run). Unset URL ⇒ log and exit 0.
+# phase can be cancelled and a plan path can be wrong, and both leave a fresh,
+# readable dump behind — so a success branch without a snapshot id withholds the
+# ping.
+# `--failed` (the config's `{{ if .Error }}` passes it) reports `<url>/fail`
+# instead: pinging success there would hide the failure until the next missing
+# period. Data plan pings BACKUP_PING_URL, config plan CONFIG_PING_URL (rationale
+# in `deploy/backup.env.example`); an unset URL logs and exits 0.
 set -eu
 
 scope=data

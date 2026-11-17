@@ -1,18 +1,15 @@
 /**
  * Auth-schema CI guard.
  *
- * 1. Regenerates the better-auth schema into a temp file and compares it with
- *    `src/lib/server/db/auth.schema.ts` (normalized: line endings and trailing
- *    whitespace do not count, a missing/extra line does).
- * 2. Scans every migration for a structural change to a generated auth table.
- * 3. Scans production source for the H3 exclusions (custom token/backup-code
- *    hashing, custom 2FA challenge, hand-written adapter).
+ * 1. Regenerates the better-auth schema and diffs it against
+ *    `src/lib/server/db/auth.schema.ts` (whitespace normalized).
+ * 2. Scans migrations for structural changes to generated auth tables.
+ * 3. Scans production source for the H3 exclusions (custom hashing, custom
+ *    2FA challenge, hand-written adapter).
  *
- * Usage:
- *   node --env-file-if-exists=.env scripts/auth-schema-guard.ts
- *   node scripts/auth-schema-guard.ts --migrations-only   # no CLI, no network
- *
- * Exit codes: 0 = clean, 1 = drift/offender, 2 = the guard could not run.
+ * Run `pnpm auth:check` (`pnpm auth:check:migrations` = SQL scan only, no
+ * CLI or network). Exit codes: 0 clean, 1 drift/offender, 2 the guard could
+ * not run. Full contract: `src/lib/server/db/AUTH_SCHEMA.md`.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';

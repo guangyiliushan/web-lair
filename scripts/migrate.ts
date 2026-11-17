@@ -4,24 +4,20 @@
  * Why not `drizzle-kit migrate`: drizzle-kit is a devDependency and the
  * runtime image ships production dependencies only. `drizzle-orm`'s migrator
  * reads the same `drizzle/meta/_journal.json` and writes the same
- * `drizzle.__drizzle_migrations` rows — verified 2026-10-17 against a scratch
- * database (id/hash/created_at byte-identical, 49 public tables, re-run
- * idempotent at the time; the 49-table count was re-verified 2026-10-19).
+ * `drizzle.__drizzle_migrations` rows (verified byte-identical on a scratch
+ * database; re-runs idempotent).
  *
- * E2 regenerated the single baseline in place (49 tables). The journal keeps
- * the ORIGINAL `when`, so an existing DB is not re-run; but the CREATE-only
- * baseline cannot upgrade it either. After migrating, the schema preflight
- * below makes `migrate` exit 1 on a pre-E2 database and points at the rebuild
- * procedure in deploy/RUNBOOK.md §2.1. The provenance window regenerated the
- * same single baseline again; the second check below rejects a pre-provenance
- * database and points at §2.2. S1 (F-13/F-14) regenerated it a third time and
- * stamped a new journal `when`, so the migrator now attempts the new hash on an
- * old database and fails loudly; the third check rejects a pre-S1 database
- * (no `token_nonce` / `key_version`) and points at §2. None of these guard the
- * app process: deploy scripts must run `migrate` before `up -d`.
+ * The single CREATE-only baseline has been regenerated in place several times
+ * (E2, provenance, S1, taxonomy, default category, translation runtime), and
+ * the journal keeps the original `when`, so an existing database silently
+ * skips it. The schema preflights below exit 1 on a database predating a
+ * regenerated baseline and point at the matching rebuild section in
+ * `deploy/RUNBOOK.md` ("E2 baseline rebuild", "Provenance baseline rebuild",
+ * "Update"). None of these guards run in the app process: deploy scripts
+ * must run `migrate` before `up -d`.
  *
- * Usage (host):  node --env-file-if-exists=.env scripts/migrate.ts
- * Usage (container): node scripts/migrate.ts     # env from compose
+ * Usage (host): `node --env-file-if-exists=.env scripts/migrate.ts`
+ * Usage (container): `node scripts/migrate.ts`   # env from compose
  */
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';

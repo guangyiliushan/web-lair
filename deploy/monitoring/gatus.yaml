@@ -1,39 +1,31 @@
 # Gatus — in-box monitoring (the single source of truth for config-as-code).
 #
-# This file is always loaded; three optional monitors that **cannot be
-# expressed as an empty value** are appended by render-config.sh as sibling
-# fragments:
-#   gatus.yaml        this file (HTTP / TCP / Bark alerts)
-#   zz-domain.yaml    only when SITE_DOMAIN is set (TLS certificate + domain
-#                     expiry)
-#   zz-drain.yaml     only when DRAIN_HEARTBEAT_TOKEN is set (drain heartbeat
-#                     external endpoint)
-#   zz-app-ready.yaml only when READY_TOKEN is set (/api/ready probe)
-# Why only these three need fragments: an empty SITE_DOMAIN yields a
-# permanently red "https:///" endpoint; an external endpoint with an empty
-# token is rejected outright by Gatus (panic); without READY_TOKEN, /api/ready
-# answers 404 to everyone (permanently red). An empty alerting.custom url, by
-# contrast, only logs a Warn and skips the provider, so the Bark config
-# **always lives in this file** — that way the "render gate" and the
-# "container env" cannot diverge into "fragment not rendered but the container
-# has the value" silent loss.
+# Always loaded; three optional monitors that cannot be expressed as an empty
+# value are appended by render-config.sh as sibling fragments:
+#   zz-domain.yaml     only when SITE_DOMAIN is set (TLS certificate + domain
+#                      expiry)
+#   zz-drain.yaml      only when DRAIN_HEARTBEAT_TOKEN is set (drain heartbeat
+#                      external endpoint)
+#   zz-app-ready.yaml  only when READY_TOKEN is set (/api/ready probe)
+# An empty value would stay permanently red (or panic Gatus), so it is
+# expressed by whether the fragment renders at all; an empty alerting.custom
+# url only Warns and skips the provider, so Bark needs no gate and always
+# lives here — the render gate cannot diverge from the container env. Why
+# only these three: deploy/monitoring/README.md "1. 文件".
 #
-# When GATUS_CONFIG_PATH points at a directory, Gatus merges every *.yaml in
-# it (deep map merge, list append). Note it polls the mtime of **every file**
-# every 30s: rendering must be content-idempotent (compare before writing),
-# otherwise the hot reload wipes the memory store and the already-fired alerts
-# (state lost, duplicate alerts, no RESOLVED); deleting a fragment does not
-# trigger a reload, so the renderer touches the main file when it revokes one.
+# Gatus merges every *.yaml in GATUS_CONFIG_PATH and polls each file's mtime
+# every 30s, so rendering must be content-idempotent: any write hot-reloads
+# storage and wipes the history plus already-fired alerts (duplicate alerts,
+# no RESOLVED). Deleting a fragment does not trigger a reload, so the renderer
+# touches this file when it revokes one.
 #
-# All target addresses come from environment variables (production defaults
-# live in compose.monitoring.yaml). Gatus runs os.ExpandEnv over the whole
-# YAML before parsing: a missing variable expands to an empty string and makes
-# URL/token validation fail (panic, exit 2), so MONITOR_* must always hold a
-# value — the error path that config verification has to cover.
+# Gatus runs os.ExpandEnv over the whole YAML: a missing variable expands to
+# an empty string and fails URL/token validation (panic, exit 2), so MONITOR_*
+# must always hold a value — the error path verify-config.sh covers.
 #
-# Alerts: with BARK_URL unset the provider is ignored (one startup log line
-# "Ignoring provider=custom"); endpoints keep running and keep recording
-# status, they just never send (README §4).
+# With BARK_URL unset the provider is ignored (one startup log line
+# "Ignoring provider=custom"); endpoints keep running, they just never send
+# (deploy/monitoring/README.md "4. 告警：Bark").
 
 storage:
   # History does not matter (in-box observation + alerts); memory avoids

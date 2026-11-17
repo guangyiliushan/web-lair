@@ -2,24 +2,20 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 /**
- * Webhook URL guard.
- *
- * A webhook URL decides where the server sends data, so it is an SSRF sink:
- * without a guard, an admin (or a stolen admin session) could point an
- * endpoint at the loopback interface, the cloud metadata service or any
- * RFC1918 host. The guard runs in two places:
- *
- *   1. create/update - HTTPS only, credentials refused, literal private
- *      addresses refused, and every address the hostname resolves to must be
- *      public. A resolution failure fails closed (an attacker cannot park a
- *      name that stops resolving at validation time and turns private later
- *      without changing the stored URL).
- *   2. delivery - the same literal/hostname checks plus a best-effort DNS
- *      re-check before the POST. fetch() resolves again, so a hostile DNS
- *      that flips between the check and the request remains a registered
- *      TOCTOU residual; the config-time check is the boundary that matters
- *      for an existing endpoint.
- *
+ * Webhook URL guard: a webhook URL decides where the server sends data, so
+ * it is an SSRF sink — without a guard, an admin (or a stolen admin session)
+ * could point an endpoint at the loopback interface, the cloud metadata
+ * service or any RFC1918 host. The guard runs in two places.
+ * create/update: HTTPS only, credentials refused, literal private addresses
+ * refused, and every address the hostname resolves to must be public. A
+ * resolution failure fails closed — an attacker cannot park a name that
+ * stops resolving at validation time and turns private later without
+ * changing the stored URL.
+ * delivery: the same literal/hostname checks plus a best-effort DNS re-check
+ * before the POST. fetch() resolves again, so a hostile DNS that flips
+ * between the check and the request remains a registered TOCTOU residual;
+ * the config-time check is the boundary that matters for an existing
+ * endpoint.
  * Homelab deployments can opt into RFC1918/ULA targets with
  * `WEBHOOK_ALLOW_PRIVATE_TARGETS=true`. Loopback, link-local (including the
  * 169.254.169.254 metadata address), multicast and documentation ranges stay

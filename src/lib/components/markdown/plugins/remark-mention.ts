@@ -12,25 +12,16 @@ import type {
 } from 'micromark-util-types';
 
 /**
- * remark-mention: mention autolinks (spec 2 #4 / 3.5).
- *
- * Syntax: `@gh:user` / `@tw:user` / `@tg:user` from a closed platform
- * whitelist. The result is a standard mdast link node whose url is the
- * `@platform:user` token form, so any standard renderer yields
- * `<a href="@gh:x">@gh:x</a>` with the text intact; export tools are the
- * ones responsible for rewriting that token URL to a real address (3.5).
- *
- * Boundary rule (2 #4): the preceding character must be line start,
- * whitespace or punctuation. Unknown platforms and malformed mentions fall
- * back to literal text (5). Usernames are bounded at 40 characters — regex
- * semantics for the plan's `{1,40}`: the first 40 characters form the mention
- * and anything beyond stays literal text.
- *
- * Tokenizer discipline: micromark's `effects.consume` asserts that the last
- * event is an `enter` (a token is open) for any non-EOF code, so a sub token
- * is exited only *after* consuming the character that closes it. Every
- * `nok` return is rewound by micromark (events are restored), which is why
- * failed attempts leave no trace.
+ * remarkMention parses `@gh:user` / `@tw:user` / `@tg:user` from a closed platform
+ * whitelist into a standard mdast link node whose url is the token form, so any standard
+ * renderer yields `<a href="@gh:x">@gh:x</a>` with the text intact; export tools are the
+ * ones that rewrite the token URL to a real address.
+ * Boundary rule: the preceding character must be line start, whitespace or punctuation;
+ * unknown platforms and malformed mentions fall back to literal text. Usernames are bounded
+ * at 40 characters (`[A-Za-z0-9_]{1,40}`), so anything beyond stays literal text.
+ * Tokenizer discipline: a sub token is exited only *after* consuming the character that
+ * closes it — micromark asserts the last event is an `enter` — and every `nok` return is
+ * rewound by micromark, so failed attempts leave no trace.
  */
 
 const PLATFORMS = new Set(['gh', 'tw', 'tg']);

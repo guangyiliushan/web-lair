@@ -1,26 +1,20 @@
 /**
- * Notification seam: the single call site every ops probe
- * uses to raise an alert. The default sink writes one
- * structured warning line; the outbox writer (`notification_deliveries`) can be
- * installed instead, so a probe can be wired without inventing a
- * second delivery path.
- *
- * Contract:
- *  - `notify()` never throws: alerting must not fail the job that observed the
- *    condition (the run ledger and the external healthchecks ping are the
- *    other, independent records).
- *  - The sink is process-wide, set once at boot (`setNotificationSink`). The
- *    drain sets it per tick when the outbox is wired there; the web process may
- *    set its own.
- *  - Payloads carry metric names and numbers only - never addresses, URLs or
- *    credentials.
- *  - The return value distinguishes "no sink installed" (`skipped`) from "the
- *    sink rejected it" (`failed`). The caller keeps its daily latch only for
- *    `delivered`/`skipped`; on `failed` it must drop the latch so the next tick
- *    retries - a day-scoped dedupe key plus a latched failure would otherwise
- *    silence the alert for the rest of the day.
- *  - Delivery is at-least-once by design; the (event_type, event_key, channel)
- *    unique key absorbs the duplicate when a retry lands twice.
+ * Notification seam: the single call site every ops probe uses to raise an
+ * alert. The default sink writes one structured warning line; the outbox
+ * writer (`notification_deliveries`) can be installed instead, so a probe
+ * can be wired without inventing a second delivery path.
+ * Contract: `notify()` never throws — alerting must not fail the job that
+ * observed the condition (the run ledger and the external healthchecks ping
+ * are the other, independent records). The sink is process-wide, set once at
+ * boot (`setNotificationSink`); the drain sets it per tick when the outbox is
+ * wired there. Payloads carry metric names and numbers only — never
+ * addresses, URLs or credentials. The return value distinguishes "no sink
+ * installed" (`skipped`) from "the sink rejected it" (`failed`): the caller
+ * keeps its daily latch only for `delivered`/`skipped`, and on `failed` it
+ * must drop the latch so the next tick retries — a day-scoped dedupe key
+ * plus a latched failure would otherwise silence the alert for the rest of
+ * the day. Delivery is at-least-once by design; the (event_type, event_key,
+ * channel) unique key absorbs the duplicate when a retry lands twice.
  */
 
 import { sanitizeErrorText } from '../jobs/error-text.ts';

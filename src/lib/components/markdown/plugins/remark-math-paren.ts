@@ -12,35 +12,22 @@ import type {
 import { codes } from 'micromark-util-symbol';
 
 /**
- * `\(…\)` inline math (spec 2 #2): the unambiguous equivalent of `$…$`, the
+ * remarkMathParen adds `\(…\)` inline math — the unambiguous equivalent of `$…$`, the
  * escape hatch for the `$` ambiguity.
- *
- * The escapes are resolved while parsing — CommonMark's character escape
- * consumes `\(` before any post-parse plugin can see it — so this is a
- * micromark construct. It claims `\(` only when a matching `\)` exists on the
- * same line; a miss rewinds through the ordinary `nok` path (micromark stores
- * and restores the event stream itself) and the core escape handles the
- * backslash, so the author gets the literal parenthesis.
- *
- * It emits the SAME token names micromark-extension-math uses
- * (`mathText` / `mathTextSequence` / `mathTextData`), so remark-math's
- * already-registered from-markdown extension builds the mdast node: value,
- * `data.hChildren` (what rehype-katex reads) and a position covering the whole
- * `\(…\)`. Hand-rolling that node silently produced empty formulas before; the
- * lesson is that reusing the upstream token contract is the only way both
- * halves stay in sync.
- *
- * Performance: a failing `\(` must not rescan the rest of its line, or a line
- * full of `\(` goes quadratic (measured: 16 KB → ~49 s). The first failure on
- * a line proves there is no closer from its opening offset to that line's end,
- * which is a suffix of the line — so any later attempt inside it can fail in
- * O(1). That is a per-document memory (micromark gives tokenizers no way back
- * to the source text; a synthetic-token slice trips its buffer assertion).
- *
- * Not implemented: `\[…\]`. Spec 4.1 mentions it in passing, but a display
- * math node is block-level in mdast while the brackets sit inside a
- * paragraph, so the flow-token machinery would apply. Registered as a spec
- * question.
+ * It is a micromark construct because escapes are resolved while parsing: CommonMark's
+ * character escape consumes `\(` before any post-parse plugin can see it. The construct
+ * claims `\(` only when a matching `\)` exists on the same line; a miss rewinds through
+ * micromark's own `nok` path and the core escape handles the backslash, so the author gets
+ * the literal parenthesis.
+ * It emits the same token names micromark-extension-math uses (`mathText` /
+ * `mathTextSequence` / `mathTextData`), so remark-math's registered from-markdown extension
+ * builds the mdast node (value, `data.hChildren`, position); hand-rolling that node
+ * produced empty formulas, so only the upstream token contract keeps both halves in sync.
+ * Performance: a failing `\(` must not rescan the rest of its line — a line full of `\(`
+ * went quadratic (16 KB → ~49 s); the remembered no-closer region makes every later attempt
+ * inside it O(1) (see the region checks below).
+ * `\[…\]` is not implemented: a display-math node is block-level in mdast while the brackets
+ * sit inside a paragraph, so the flow-token machinery would have to apply.
  */
 declare module 'micromark-util-types' {
 	interface TokenTypeMap {

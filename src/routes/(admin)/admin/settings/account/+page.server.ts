@@ -69,22 +69,16 @@ async function recordAccountEvent(
 }
 
 /**
- * TOTP management for the signed-in owner/admin.
- *
- * Shape of the flow (verified against better-auth 1.7.5 dist):
- *   enable   -> stores an *unverified* secret, returns { totpURI, backupCodes[] }
- *   verify   -> the first code flips `verified` and `user.twoFactorEnabled`
- *   disable  -> requires the password, clears both
- *
- * Both verify and disable ROTATE the current session server-side (new row +
- * cookie, old row deleted), which is why the prunes below keep the *newest*
- * session instead of the request token. `enable` and
- * `regenerateBackupCodes` do not rotate, so they prune by token (and `enable`
- * only stages a pending secret - the state change happens on activate).
- *
- * Actions re-check the guard themselves: SvelteKit runs the action before the
- * layout load, so the layout guard cannot protect an action (same pattern as
- * the comment queue).
+ * TOTP management for the signed-in owner/admin (flow shape read from better-auth 1.7.5
+ * dist): enable stores an *unverified* secret and returns { totpURI, backupCodes[] }; verify
+ * flips `verified` and `user.twoFactorEnabled` on the first code; disable requires the
+ * password and clears both.
+ * Reason: verify and disable ROTATE the current session server-side (new row + cookie, old
+ * row deleted), which is why the prunes below keep the *newest* session instead of the
+ * request token; enable and regenerateBackupCodes do not rotate and prune by token, and
+ * enable only stages a pending secret — the state change happens on activate.
+ * The actions re-check the guard themselves: a layout load cannot protect an action, because
+ * kit runs the action first.
  */
 
 function errorStatus(caught: APIError): string {

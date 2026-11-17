@@ -7,39 +7,11 @@ import { fileReferences, type FileRefType } from '../db/system/index.ts';
 import { I_KEY_PATTERN } from '../../media/keys.ts';
 
 /**
- * Reference maintenance. The write side lives
- * in the SAME transaction as the content write: save / publish /
- * discard (posts + notes + pages) and page hard-delete call
- * `syncFileReferences` with the content's bare `/i/<key>` set. Draft-phase
- * references are keyed by the draft's OWN identity (`{draft, draftId}`),
- * so a save never touches the published target's set: publish
- * re-keys the content to `{post|note|page, id}` first and then clears the
- * draft scope, and discard restores the target set and clears the draft
- * scope.
- *
- * Empty-desired contract (3b2): passing `[]` clears the ENTIRE scope in one
- * call - the remove branch deletes every reference of `(type, id)` and
- * re-evaluates the status machine. Draft discard and page hard-delete use
- * this form directly; there is no separate "clear" helper.
- *
- * Deleting `drafts` rows (publish, discard, any future maintenance path)
- * MUST pair with a same-transaction `syncFileReferences(tx, {type: 'draft',
- * id}, [])`, otherwise the draft's references become orphans that audit
- * check (4) reports and no cleaner can attribute.
- *
- * Concurrency contract:
- * - the resolve SELECT takes `FOR KEY SHARE` on the registry rows, so a
- *   concurrent `deleteFile` (DELETE/FOR UPDATE) waits for this transaction and
- *   the FK INSERT can no longer raise 23503. An in-transaction `catch` would
- *   be a lie anyway: postgres.js aborts the whole transaction on ANY
- *   statement error even when the application caught it (file 3b1 review).
- * - the attach update is unconditional (an already-attached file used to make
- *   it a zero-row no-op that took no lock) and the remove branch locks its
- *   candidates `FOR NO KEY UPDATE` before deciding the detach - together they
- *   serialize concurrent attach vs detach so `status` cannot drift against
- *   the status machine. The KEY SHARE -> NO KEY UPDATE upgrade inside one
- *   transaction is exempt from self-conflict (heap-layer upgrade), so the
- *   attach update never waits on the resolve above.
+ * Reference maintenance: the write side runs in the SAME transaction as the content write.
+ * Passing `[]` clears the ENTIRE scope; a `drafts` delete MUST pair with a same-transaction call,
+ * or its references become orphans that audit check (4) reports.
+ * Concurrency: resolve takes `FOR KEY SHARE` and attach is unconditional; see
+ * `file-references.test.ts › "adds a reference: KEY SHARE resolve + unconditional attach update"`.
  */
 
 /**

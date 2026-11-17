@@ -1,21 +1,15 @@
 #!/usr/bin/env bash
-#
-# Count the rows in the `public."user"` COPY block of a `pg_restore -a -f -`
-# text dump read from stdin.
-#
-# Why a file: the same count guards the nightly backup (deploy/backup/backup.sh)
-# and the operator rebuild/rollback procedures in deploy/RUNBOOK.md §3. One
-# implementation means one place to be right.
-#
-# Why it never exits early: `awk ... {exit}` at the terminator closes the pipe,
-# the producer dies of SIGPIPE, and under `set -o pipefail` (backup.sh runs with
-# it) the whole assignment aborts — the nightly run would die at exit 141 once
-# the dump has more than a pipe buffer after the `user` block. So the block end
-# just flips `f` off and awk keeps draining stdin.
-#
-# The terminator is a line that is exactly `\.` (backslash, dot). A data row can
-# never look like that: COPY text format escapes a leading backslash, so a data
-# value beginning with a dot-backslash is written `\\.`.
+# Counts the rows of the `public."user"` COPY block in a `pg_restore -a -f -`
+# text dump on stdin. It lives in a file because the same count guards the
+# nightly backup and the rebuild/rollback procedures in `deploy/RUNBOOK.md`
+# "Rollback" — one implementation, one place to be right.
+# It never exits at the terminator: closing the pipe would SIGPIPE the
+# producer, and under `set -o pipefail` (backup.sh runs with it) the assignment
+# aborts with 141 as soon as the dump holds more than a pipe buffer past the
+# `user` block — the block end only flips `f` off, so awk keeps draining stdin.
+# The terminator is a line of exactly `\.` (backslash, dot); COPY text escapes a
+# leading backslash, so a data value that would look like it is written `\\.`
+# and can never match.
 set -euo pipefail
 
 awk '

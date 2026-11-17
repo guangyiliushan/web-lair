@@ -10,21 +10,11 @@ import type { SiteOwner } from '$lib/config/owner-status';
 import { SOCIAL_PRESETS, isSafeSocialHref, type SocialUserPlatform } from '$lib/config/social';
 
 /**
- * Owner profile + home hero service.
- *
- * `site_identity` is a one-row pointer; `user_profiles` remains the single
- * source for the public persona and `home_hero` is the one-row localized copy
- * store. Reads are public-safe; writes are owner-only and re-check the pointer
- * against the session actor inside the transaction:
- *
- *   - no pointer            -> 409 (`pnpm owner:rebuild`)
- *   - actor != pointer      -> 409 pointer mismatch
- *   - pointer user not owner-> 409 pointer mismatch
- *
- * GET never self-heals. Audit rows (`profile.update` / `home.update`) carry
- * before/after values but no `refType`/`refId` (activities.ref_id is a uuid
- * while auth user ids are text) and set `deliver: false` (settings events are
- * not in the webhook roster).
+ * Owner profile + home hero writes are owner-only: the `site_identity` pointer is re-checked
+ * against the session actor inside the transaction.
+ * No pointer, a mismatched actor or a non-owner pointer each fail 409; GET never self-heals.
+ * Audit rows (`profile.update` / `home.update`) carry before/after values but no refs
+ * (`activities.ref_id` is a uuid, auth ids are text) and set `deliver: false`.
  */
 export interface OwnerProfile {
 	userId: string;

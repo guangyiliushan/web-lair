@@ -1,17 +1,14 @@
 /**
- * Secret-failure alert timer.
+ * Secret-failure alert timer: reads the audit rows the app writes on key
+ * failures, applies the three rules in
+ * `src/lib/server/secrets/alert-rules.ts`, and POSTs one message per firing
+ * rule to `ALERT_WEBHOOK_URL` (the same target as the systemd `OnFailure`
+ * unit). Dedupe state lives in `$DATA_DIR/secret-alerts-state.json`, so the
+ * 5-minute timer does not repeat an alert every tick.
  *
- * Reads the audit rows the app writes on key failures, applies the three
- * decided rules, and POSTs one message per firing rule to `ALERT_WEBHOOK_URL`
- * (the same target the systemd `OnFailure` unit uses). Dedupe state lives in
- * `$DATA_DIR/secret-alerts-state.json` so a 5-minute timer does not repeat the
- * same alert every tick.
- *
- * Usage:
- *   node --env-file-if-exists=.env scripts/secret-alerts.ts [--dry-run]
- *
- * Exit codes: 0 = nothing to do / delivered; 1 = a POST failed; 2 = config.
- * The audit rows are the durable record; this script only notifies.
+ * Usage: `node --env-file-if-exists=.env scripts/secret-alerts.ts [--dry-run]`.
+ * Exit codes: 0 nothing to do / delivered, 1 a POST failed, 2 config; the
+ * audit rows are the durable record, this script only notifies.
  */
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

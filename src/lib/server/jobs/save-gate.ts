@@ -7,32 +7,28 @@ import type { CompilerOptions, Node as TypeScriptNode, SourceFile } from 'typesc
 import type { ESLint } from 'eslint';
 
 /**
- * Save gate: every check a job script must pass
- * before it may be written to the user layer. All checks are pure "parsing" -
- * user code is never executed here; the drain is the only executor.
+ * Save gate: every check a job script must pass before it may be written to
+ * the user layer. All checks are pure "parsing" - user code is never executed
+ * here; the drain is the only executor.
  *
  * The checks and why:
- *   1. name       - module-file safety (Windows device names, traversal),
- *                   bounded length, and the canonical-name invariant: a name
- *                   must map to its own file (`my.job` would land in
- *                   `my-job.ts`; `jobs-prune` would silently shadow the
- *                   `jobs.prune` builtin without a fork sidecar).
- *   2. typescript - parser + `erasableSyntaxOnly` diagnostics (TS 5.8+, the
- *                   option the TypeScript and Node docs pair for strip-only
- *                   mode). It is the only checker that reports line/column
- *                   for non-erasable syntax: node's `stripTypeScriptTypes`
- *                   throws WITHOUT a position.
- *   3. strip      - `module.stripTypeScriptTypes` is the runtime authority
- *                   (node's own amaro-based stripper). When it rejects and
- *                   the TS pass explained nothing, its message is the report.
- *   4. runtime    - constructs that pass stripping yet fail when node executes
- *                   the stripped ESM output: decorators, CJS globals
- *                   (`require` / `__dirname` / ...), and dynamic imports with
- *                   disallowed or non-literal specifiers.
- *   5. eslint     - static import allowlist (`no-restricted-imports`: only
- *                   `node:*` and `#jobs-sdk`; shared literal with the repo
- *                   eslint config via `import-policy.ts`), with an isolated
- *                   config - the repository config is never consulted.
+ * 1. name - module-file safety (Windows device names, traversal), bounded
+ *   length, canonical-name invariant: a name must map to its own file
+ *   (`my.job` lands in `my-job.ts`; `jobs-prune` would shadow the
+ *   `jobs.prune` builtin without a fork sidecar).
+ * 2. typescript - parser + `erasableSyntaxOnly` (TS 5.8+, the option the
+ *   TypeScript and Node docs pair for strip-only mode); the only checker
+ *   reporting line/column for non-erasable syntax, because node's
+ *   `stripTypeScriptTypes` throws WITHOUT a position.
+ * 3. strip - `module.stripTypeScriptTypes` is the runtime authority (node's
+ *   amaro stripper); when it rejects and the TS pass explained nothing, its
+ *   message is the report.
+ * 4. runtime - constructs that pass stripping yet fail in node: decorators,
+ *   CJS globals (`require` / `__dirname`), dynamic imports with disallowed or
+ *   non-literal specifiers.
+ * 5. eslint - static import allowlist (only `node:*` and `#jobs-sdk`, literal
+ *   shared with the repo eslint config via `import-policy.ts`) under an
+ *   isolated config - the repository config is never consulted.
  */
 
 export interface GateError {

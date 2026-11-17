@@ -1,17 +1,16 @@
 /**
- * Log-text sanitizer shared by the drain and the `links.check` builtin core
- * extracted from `drain.ts` so the strip-only builtin chain -
- * links-check.ts -> links/job.ts - does not have to load the whole drain
- * module graph; the drain re-exports for its existing consumers.
+ * sanitizeErrorText strips secrets from log text for the drain and the
+ * `links.check` builtin core; it lives in its own module so the strip-only
+ * chain (links-check.ts -> links/job.ts) does not load the whole drain graph
+ * (the drain re-exports it).
  *
  * Two hazards are stripped:
- *  - drizzle's DrizzleQueryError message embeds the full SQL AND its bound
- *    values ("params: ..." after the query line); bound values may carry
- *    content or secrets and may THEMSELVES contain newlines, so everything
- *    from the params marker to the end of the string is dropped (a line-wise
- *    filter would leave the tail of a multi-line value behind);
- *  - Node embeds raw URLs in parse errors ("Failed to parse URL from ..."),
- *    and webhook/heartbeat/database URLs carry tokens or credentials.
+ * - drizzle's DrizzleQueryError embeds the full SQL AND its bound values after
+ *   a "params:" marker; those values may carry secrets and may themselves
+ *   contain newlines, so everything from the marker to the end is dropped -
+ *   a line-wise filter would leave the tail of a multi-line value behind.
+ * - Node parse errors embed raw URLs, and webhook/heartbeat/database URLs
+ *   carry tokens or credentials.
  */
 export function sanitizeErrorText(raw: unknown): string {
 	const text = typeof raw === 'string' ? raw : String(raw ?? '');

@@ -1,18 +1,15 @@
 /**
- * `mail.probe` job core.
- *
- * Two checks with different questions:
- *  - daily `transporter().verify()`: does the SMTP handshake + AUTH still
- *    work with the configured credentials? A dead relay is otherwise silent
- *    until someone registers.
- *  - weekly (site-local Sunday) one REAL mail to the owner with a unique
- *    subject and the `messageId` recorded in the run ledger: verify() cannot
- *    see a spam foldered, DKIM-broken or From-mismatched message.
- *
+ * `mail.probe` job core: two checks with different questions — a daily
+ * `transporter().verify()` (does the SMTP handshake + AUTH still work with
+ * the configured credentials? A dead relay is otherwise silent until someone
+ * registers) and, on site-local Sundays, one REAL mail to the owner with a
+ * unique subject and the `messageId` recorded in the run ledger, because
+ * verify() cannot see a spam-foldered, DKIM-broken or From-mismatched
+ * message.
  * Failure routing: `notify()` (the outbox) plus a healthchecks `/fail` ping.
- * The job does not throw - the run ledger records the outcome and the
- * `job.failed` producer is out of scope here; alerting is explicit instead of
- * inferred from a red status.
+ * The job does not throw — the run ledger records the outcome and the
+ * `job.failed` producer is out of scope here, so alerting is explicit
+ * instead of inferred from a red status.
  */
 import { eq } from 'drizzle-orm';
 import { user } from '../db/auth.schema.ts';

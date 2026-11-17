@@ -3,23 +3,19 @@ import type { ActivityRefType } from './db/system/activity.schema.ts';
 import { enqueueWebhookDeliveries } from './webhooks/outbox.ts';
 
 /**
- * Admin action audit writer: one row per admin
- * mutation, written by the service that performs it - so an action can never
- * be authorized without its audit entry on the same call path (and, for
- * db-only flows, inside the same transaction). `refType`/`refId` follow the
- * schema's paired CHECK: supply both or neither. Job names are not uuids, so
- * job-family events carry the name in `payload` instead of the ref arc.
- *
- * The recorded event also fans out to subscribed webhook endpoints through
- * the delivery outbox: one `queued` row per endpoint, on the same
- * call path, riding the caller's transaction when one is in scope. Failures
- * propagate - outbound deliveries are never silently dropped.
- */
-/**
- * Structural executor contract: the fan-out needs the caller's transaction
- * channel, so `transaction` is typed as "runs a callback with something that
- * can execute" rather than the app db's full schema-parameterised signature -
- * the drain harness builds its own schema-less drizzle client, and both must
+ * Admin action audit writer: one row per admin mutation, written by the
+ * service that performs it, so an action can never be authorized without its
+ * audit entry on the same call path — for db-only flows, inside the same
+ * transaction. `refType`/`refId` follow the schema's paired CHECK: supply
+ * both or neither; job-family events carry the non-uuid job name in
+ * `payload` instead of the ref arc.
+ * Recorded events fan out to subscribed endpoints through the delivery
+ * outbox: one `queued` row per endpoint on the same call path, riding the
+ * caller's transaction. Failures propagate — outbound deliveries are never
+ * silently dropped.
+ * `AuditExecutor` types `transaction` as "runs a callback with something
+ * that can execute", not the app db's full schema-parameterised signature:
+ * the drain harness builds its own schema-less drizzle client and both must
  * satisfy this.
  */
 type AuditTx = Pick<typeof import('$lib/server/db').db, 'execute'>;

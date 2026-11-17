@@ -11,14 +11,12 @@ import { psql } from './support';
  *   /posts/X       -> 307 -> /en/posts/X (document requests canonicalise)
  *   /en            -> 404                (bare locale resolves to no route)
  *
- * plus the read-side minimum: list/detail on seeded rows (with language-leak,
- * pinned-card and excerpt teeth), the missing-language 404 hint (filtered to
- * visible languages only), scheduled-in-future invisibility, a language
- * switch on a content page (exactly one document navigation) and the
- * canonical chrome links (the SPA canonicalisation path now lives in the
- * post-p3b-pages spec, exercised through an in-content relative link).
- * Fixtures live on the shared dev database under the `e2e-p3a%` slug prefix
- * and are cleaned in beforeAll/afterAll.
+ * plus the read-side minimum: list/detail on seeded rows (language-leak,
+ * pinned-card and excerpt teeth), the missing-language 404 hint (visible
+ * languages only), scheduled-in-future invisibility, a language switch on a
+ * content page (exactly one document navigation) and the canonical chrome
+ * links; the SPA canonicalisation path lives in post-p3b-pages.
+ * Fixtures are `e2e-p3a%` slugs on the shared dev database, cleaned in beforeAll/afterAll.
  */
 
 const CATEGORY_ID = '00000000-0000-7000-8000-0000000003a1';

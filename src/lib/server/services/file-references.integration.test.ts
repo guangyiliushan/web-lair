@@ -5,24 +5,11 @@ import * as schema from '$lib/server/db/schema';
 import { syncFileReferences } from './file-references';
 
 /**
- * Service-level reference lifecycle on a REAL scratch database
- * (register: "two-connection integration teeth - run the window on a scratch
- * container"). Skipped unless REFS_SCRATCH_URL points at a migrated scratch
- * database (the single baseline applied; the ref_type check already includes
- * 'draft'), so the default suite stays offline. Run it explicitly with:
- *   REFS_SCRATCH_URL=... pnpm exec vitest run --project server \
- *     src/lib/server/services/file-references.integration.test.ts
- * (or `pnpm test:integration-refs` with the variable exported).
- *
- * Drives the real `syncFileReferences` wiring across separate connections:
- * draft-identity writes, publish re-keying plus the full-clear form that
- * replaced `dropDraftReferences`, the detach with a `now()` anchor, and the
- * attach-vs-detach interleavings the locking discipline exists for. The two
- * interleave cases are probabilistic by nature (Promise.all may serialize
- * either way and both orders end in the same state); each round re-clears
- * the survivor first so its attach arm really inserts again (a bare repeat
- * would degenerate into a no-op replay), and the end-state assertions are
- * the deterministic half of the contract.
+ * Service-level reference lifecycle on a REAL scratch database, skipped unless `REFS_SCRATCH_URL`
+ * points at a migrated one - the default suite stays offline; run `pnpm test:integration-refs`.
+ * It drives the real `syncFileReferences` wiring across two connections.
+ * The attach-vs-detach interleaves are probabilistic; each round re-clears the survivor so its
+ * attach arm really inserts, and the end-state assertions are the deterministic half.
  */
 const url = process.env.REFS_SCRATCH_URL;
 const K1 = `55/55${'a'.repeat(62)}.png`;

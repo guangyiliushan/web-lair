@@ -7,31 +7,21 @@ import {
 import type { AdapterResult } from './types.ts';
 
 /**
- * Bark push adapter.
- *
- * Bark is the phone channel: `POST <server>/push` with a JSON body carrying
+ * Bark push adapter: `POST <server>/push` with a JSON body carrying
  * `device_key`, `title`, `body` and an optional `url`, per the official
- * Bark API V2 (`device_key` in the BODY, not the path - a key in a URL ends
- * up in access logs, proxies and screenshots).
- *
- * Safety rails:
- *  - the server URL goes through the SAME SSRF guard as webhook endpoints
- *    (`webhooks/url-guard.ts`): https only, no credentials, no loopback /
- *    link-local / metadata / RFC1918 target unless the operator set
- *    `WEBHOOK_ALLOW_PRIVATE_TARGETS=true` for a self-hosted Bark;
- *  - the device key never enters an error string or a log line. Failures
- *    record `HTTP <status>`, a numeric Bark `code`, or a transport error
- *    class only;
- *  - the payload is re-shaped from the stored jsonb (`format.ts`): <= 120
- *    title / <= 200 body characters, one line, addresses redacted.
- *
- * Credentials: `BARK_SERVER_URL` + `BARK_DEVICE_KEY` come from the
- * environment. An encrypted at-rest store needs a `notification_secrets`
- * table, which was not approved with this migration; that item is
- * tracked elsewhere instead of being
- * silently widened into this migration.
- *
- * Node-strip-loadable.
+ * Bark API V2 — `device_key` goes in the BODY, not the path: a key in a URL
+ * ends up in access logs, proxies and screenshots.
+ * Safety rails: the server URL goes through the SAME SSRF guard as webhook
+ * endpoints (`webhooks/url-guard.ts`) — https only, no credentials, no
+ * loopback / link-local / metadata / RFC1918 target unless the operator set
+ * `WEBHOOK_ALLOW_PRIVATE_TARGETS=true` for a self-hosted Bark; the device
+ * key never enters an error string or a log line (failures record `HTTP
+ * <status>`, a numeric Bark `code`, or a transport error class only); and
+ * the payload is re-shaped from the stored jsonb (`format.ts`): <= 120
+ * title / <= 200 body characters, one line, addresses redacted.
+ * Credentials `BARK_SERVER_URL` + `BARK_DEVICE_KEY` come from the
+ * environment; an encrypted at-rest store would need a `notification_secrets`
+ * table, which is tracked separately. Node-strip-loadable.
  */
 export const BARK_DEFAULT_SERVER = 'https://api.day.app';
 export const BARK_GROUP = 'web-lair';

@@ -1,52 +1,27 @@
 #!/usr/bin/env bash
-#
 # Backup entry point: the data and config repositories stay separate, and the
-# nightly schedule itself lives in Backrest.
-#
-# Modes:
-#   backup.sh               full backup: dump → data repository → config
-#                           repository → retention → backup ping. This stays the
-#                           manual / fallback entry point; the systemd timer was
-#                           removed (deploy/systemd/web-lair-backup.timer,
-#                           RUNBOOK §4).
-#   backup.sh --dump-only   dump + gates only: no restic, no ping. Backrest's
-#                           CONDITION_SNAPSHOT_START hook runs this and then
-#                           snapshots $BACKUP_DIR, so a dump that fails a gate
-#                           cancels the operation instead of being backed up.
-#
-# Backup set (data repository):
-#   1. pg_dump -Fc           (logical dump; never file-copy a running PG dir)
-#   2. $DATA_DIR             (user job scripts + sidecars)
-#   3. RustFS volume         (media, read-only mount)
-#
-# `.env` is deliberately NOT in that set. It goes to a SECOND repository with a
-# DIFFERENT password, because it holds BETTER_AUTH_SECRET, SUPPRESSION_HMAC_KEY
-# and the DB password: a leaked data repository plus its password must not
-# decrypt the application secrets.
-# deploy/backup.env is backed up nowhere — it holds both repository passwords,
-# which live in the password manager with an offline copy (RUNBOOK §4).
-#
-# Both repositories are offsite targets (Cloudflare and Backblaze). There is
-# local repository on the same disk: that is a snapshot, not a backup.
-#
-# Env (systemd EnvironmentFile=/srv/web-lair/app/deploy/backup.env, or the
-# compose `env_file` of the backrest service — one file either way):
-#   POSTGRES_USER, POSTGRES_DB
-#   POSTGRES_PASSWORD   (only with BACKUP_PG_MODE=local)
-#   DATA_DIR            (full mode only)
-#   RESTIC_REPOSITORY, RESTIC_PASSWORD, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
-#   RESTIC_CONFIG_REPOSITORY, RESTIC_CONFIG_PASSWORD   (second repo, own key)
-#   BACKUP_PING_URL (optional, dedicated check — never the liveness one)
-#
-# DB access (BACKUP_PG_MODE):
-#   docker   (default, host/systemd) — `compose-prod.sh exec -T db <client>`, so
-#            neither a client nor the password is needed on the host.
-#   local    (inside the backrest container) — pg_dump/psql/pg_restore from
-#            $PATH against $PGHOST:$PGPORT using $POSTGRES_PASSWORD. The backup
-#            container deliberately has no Docker socket: a container that can
-#            drive Docker can delete the backups it is meant to protect.
-#
-# Failures are loud: set -e aborts before the backup ping, so a missing ping
+# nightly schedule lives in Backrest (RUNBOOK, "Backups (D-4)").
+# `backup.sh` = dump → data repository → config repository → retention → backup
+# ping, the manual/fallback path; `--dump-only` = dump and gates only, which is
+# what Backrest's CONDITION_SNAPSHOT_START hook runs before it snapshots
+# $BACKUP_DIR, so a dump that fails a gate cancels the operation.
+# Backup set (data repository), numbered as the step comments below: 1. pg_dump
+# -Fc (never file-copy a running PG dir), 2. $DATA_DIR, 3. RustFS volume.
+# Step 4, `.env`, is deliberately NOT in that set: it goes to a SECOND repository
+# with a DIFFERENT password, because it holds BETTER_AUTH_SECRET,
+# SUPPRESSION_HMAC_KEY and the DB password — a leaked data repository plus its
+# password must not decrypt the application secrets (pinned by
+# `src/lib/server/secrets/backup-split.test.ts › "backup repository split"`).
+# `deploy/backup.env` is backed up nowhere — it holds both repository passwords,
+# which live in the password manager with an offline copy. Both repositories are
+# offsite: a copy on the same disk is a snapshot, not a backup.
+# Env: every variable is documented in `deploy/backup.env.example` (systemd
+# EnvironmentFile or the backrest compose `env_file`).
+# DB access (BACKUP_PG_MODE): `docker` (default) runs the client through
+# `compose-prod.sh exec -T db`; `local` runs it inside the backrest container,
+# which deliberately has no Docker socket — a container that can drive Docker can
+# delete the backups it is meant to protect.
+# Failures are loud: `set -e` aborts before the backup ping, so a missing ping
 # raises the alarm.
 set -euo pipefail
 umask 077
@@ -230,21 +205,19 @@ if [ ! -f "$APP_DIR/.env" ]; then
 	exit 1
 fi
 
-# 2 + 3) One restic run mounts the dump dir, the data dir and the media volume
-# read-only. `.env` is not mounted: config is the second repository below.
-# --retry-lock survives an interrupted previous run instead of failing every
-# night until manual unlock.
-# `--host` is a snapshot label (the drill resolves `--host web-lair`); it is not
-# what keeps nightly runs in one forget group — `--group-by paths` does that.
-#
-# `docker --env-file` does not strip the quotes in `VAR="value"` (systemd does,
-# for this script's own environment), so a quoted backup.env would hand restic
-# a literal `"/repos"`. `-e VAR` (no value) forwards the value the script
-# validated instead; extra cloud/restic variables still come from the file.
-# The repository is a CLI flag, not an env var: a flag cannot be shadowed by
-# whatever the env file happens to contain, so the config run below can never
-# land in the data repository — a silent failure that would look like a green
-# night.
+# Data run: the dump dir, the data dir and the media volume are mounted
+# read-only; `.env` is not mounted (it belongs to the config repository below,
+# pinned by `src/lib/server/secrets/backup-split.test.ts › "backup repository
+# split"`). `--retry-lock` survives an interrupted run instead of failing every
+# night until a manual unlock. `--host web-lair` is only the snapshot label the
+# drill resolves; grouping the nightly runs is `--group-by paths` (see the
+# retention block below).
+# `docker --env-file` does not strip quotes from `VAR="value"` (systemd does), so
+# `-e VAR` (no value) forwards the value this script validated, while extra
+# cloud/restic variables still come from the file. The repository is a CLI flag,
+# not an env var: nothing in the env file can shadow it, so the config run below
+# can never land in the data repository — a silent failure that would look like
+# a green night.
 RESTIC_ENV=(-e RESTIC_PASSWORD -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
 
 docker run --rm --env-file "$APP_DIR/deploy/backup.env" "${RESTIC_ENV[@]}" \

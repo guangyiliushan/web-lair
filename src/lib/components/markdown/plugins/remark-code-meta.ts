@@ -4,20 +4,17 @@ import { visit } from 'unist-util-visit';
 import { warnOnce } from './plugin-warnings';
 
 /**
- * Code-fence info strings (spec 3.3): ```ts {collapsed=10 title="…" linenos=off}
+ * remarkCodeMeta parses the code-fence info string: ```ts {collapsed=10 title="…" linenos=off}
  *
- * Closed key set: `collapsed` (bare = fully collapsed, `=N` = collapse to line
- * N), `linenos=off` (line numbers render by default — spec 3.3 defines this
- * key as the opt-out) and `title="…"`; whitespace before a brace block is allowed
- * (the spec example uses it). Unknown keys warn once.
- *
- * EVERY brace block is consumed: parsing only the first one would leave a
- * second block in the node's meta, where rehype-pretty-code turns it into a
- * server-only caption — a double-pipeline drift.
- *
- * The parsed meta rides to hast as a JSON string in
- * `hProperties.dataMdCodeMeta` (mdast `data` payloads do not survive the
- * transform); the rehype side consumes it before rehype-raw runs.
+ * Closed key set — `collapsed` (bare = fully collapsed, `=N` = collapse to line N),
+ * `linenos=off` (lines are numbered by default, this key opts out) and `title="…"`;
+ * whitespace before a brace block is allowed. Unknown keys warn once.
+ * Every brace block is consumed: parsing only the first would leave a second in the node's
+ * meta, where rehype-pretty-code turns it into a server-only caption — a double-pipeline
+ * drift.
+ * The parsed meta rides to hast as a JSON string in `hProperties.dataMdCodeMeta` (mdast
+ * `data` payloads do not survive the transform) and the rehype side consumes it before
+ * rehype-raw runs.
  */
 
 /** Transport property carrying the parsed meta from mdast to hast (shared). */

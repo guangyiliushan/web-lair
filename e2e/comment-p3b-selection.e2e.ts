@@ -4,11 +4,10 @@ import { bootstrapReader, psql, valkeyDel } from './support';
 
 /**
  * Comment P3b — B2 acceptance (selection -> anchor -> mark, end to end).
- *
- * B1 inserted stored anchors straight into the database; this spec drives the
- * real interaction instead: select text in the article, use the floating
- * action, submit through the form action, and check what the reader sees.
- * It covers the four states that only a browser can produce:
+ * Unlike B1's direct database anchors, this spec drives the real
+ * interaction: select text, use the floating action, submit through the form
+ * action, then check what the reader sees. Four states only a browser can
+ * produce:
  *   1. guest: the action appears, the panel offers the login path,
  *   2. reader: a selection submits and waits for review (pending),
  *   3. owner: a selection is auto-approved and renders as a server-side mark,
@@ -17,8 +16,7 @@ import { bootstrapReader, psql, valkeyDel } from './support';
  *
  * Fixture namespace `e2e-cmts`; requires `web-lair-db-1` and port 4173 free.
  */
-// Unique per spec: presence.e2e.ts owns ...e1/...e2, and a shared id made the
-// category delete here fail on presence's FK.
+// Unique per spec: presence.e2e.ts owns ...e1/...e2 (a shared id broke its FK).
 const CATEGORY = '00000000-0000-7000-8000-0000000000fa';
 const POST = '00000000-0000-7000-8000-0000000000fb';
 const POST_PATH = '/zh-cn/posts/e2e-cmts-post';

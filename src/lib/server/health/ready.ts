@@ -1,16 +1,14 @@
 /**
- * Readiness probe: `/api/health` stays dependency-free
- * (liveness - a DB blip must not restart the container); `/api/ready` is the
- * readiness half - DB `select 1` and a Valkey PING, each bounded to 2s and the
- * combined answer cached for 10s.
- *
- * Why these numbers: Gatus polls on a minute scale, so 10s keeps a recovery
- * visible within one interval while collapsing a burst into one round trip;
- * 2s is shorter than any useful probe timeout, so a wedged connection is
- * reported as `timeout` (distinct from `fail`) instead of hanging the request.
- *
+ * Readiness probe: `/api/health` stays dependency-free (liveness — a DB
+ * blip must not restart the container); `/api/ready` is the readiness half —
+ * DB `select 1` and a Valkey PING, each bounded to 2s, the combined answer
+ * cached for 10s.
+ * Cause: Gatus polls on a minute scale, so 10s keeps a recovery visible
+ * within one interval while collapsing a burst into one round trip, and 2s
+ * beats any useful probe timeout so a wedged connection reports as `timeout`
+ * (distinct from `fail`) instead of hanging the request.
  * The module is dependency-injected on purpose: the route wires the real
- * drizzle/Valkey handles, the unit tests wire plain functions, and neither the
+ * drizzle/Valkey handles, unit tests wire plain functions, and neither the
  * timeout nor the cache behaviour needs a live database.
  */
 import { createHash, timingSafeEqual } from 'node:crypto';

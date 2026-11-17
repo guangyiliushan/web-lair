@@ -1,19 +1,13 @@
 /**
- * Default maintenance schedules (deploy audit L-5, 2026-10-18).
+ * Default maintenance schedules: a fresh install has no `job_schedules` rows,
+ * so the 1-min drain timer ticks with nothing due and maintenance never fires
+ * while the timer looks healthy. This seeds the listed defaults idempotently;
+ * everything else stays opt-in through the admin surface.
  *
- * `drain` runs every minute, but it only has work when `job_schedules` has a
- * due row. A fresh install had zero rows, so `jobs.prune` and
- * `system.resources` never ran while the timer looked healthy. This script
- * inserts the three safe defaults idempotently; everything else stays opt-in
- * through the admin surface.
- *
- * `subscriptions.sweep` (email hardening E1-2) deletes pending rows after 30
- * days. The pair `(job, cron_expr)` is unique
- * (`job_schedules_job_cron_expr_uniq`), so re-running is a no-op. The script
- * reads `options.site.timezone` and inserts it (fallback UTC), matching the
- * admin UI.
- *
- * Usage: node scripts/ensure-job-schedules.ts [--dry-run]
+ * One row per job (an operator may change the cron in admin), so re-running
+ * is a no-op; rows carry `options.site.timezone` (fallback UTC), matching the
+ * admin UI. Usage: `pnpm db:ensure-schedules [--dry-run]`.
+ * Details: `deploy/RUNBOOK.md` -> "Background timers (drain)".
  */
 import postgres from 'postgres';
 

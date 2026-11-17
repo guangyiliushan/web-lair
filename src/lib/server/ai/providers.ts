@@ -28,20 +28,14 @@ export interface PoolEntry {
 }
 
 /**
- * Resolve `ai.assignments[functionSlot]` -> the ordered chain of provider +
- * model pairs to try.
- *
- * Three shapes, because that is exactly what the settings page offers:
- *
- * - key absent  -> `no_assignment`, the slot is off.
- * - `{}`        -> follow the default pool from the top; every model in it is
- *                  tried in order, each on its cheapest provider first.
- * - `{model}` / `{provider, model}` -> that model leads, and the pool's other
- *                  models become the fallbacks. `provider` only moves one
- *                  gateway to the front of that model's candidates.
- *
- * A model that is not in the pool has no model-level fallback - naming one is a
- * deliberate pin.
+ * Resolve `ai.assignments[functionSlot]` to the ordered chain of provider +
+ * model pairs to try. Three shapes, exactly what the settings page offers:
+ * a missing key means `no_assignment` (the slot is off); `{}` follows the
+ * default pool from the top, each model on its cheapest provider first;
+ * `{model}` / `{provider, model}` puts that model first and the pool's other
+ * models behind it as fallbacks — `provider` only moves one gateway to the
+ * front of that model's candidates. A model outside the pool has no
+ * model-level fallback: naming one is a deliberate pin.
  */
 export async function resolveProviderChain(
 	db: AiDb,

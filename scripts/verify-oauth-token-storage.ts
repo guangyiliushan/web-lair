@@ -1,27 +1,24 @@
 /**
- * Deployment gate for OAuth token encryption.
+ * Deployment gate for OAuth token encryption: reports the encrypted/plain
+ * split per provider and never prints or hashes a token.
  *
- * `account.encryptOAuthTokens` stores OAuth access/refresh tokens as
- * `$ba$<key-version>$<hex>` envelopes (XChaCha20-Poly1305); with no keyring
- * configured they are bare hex. Rows written before the switch are plaintext
- * and keep working (better-auth only decrypts values that look encrypted), so a
- * rollout needs no backfill - they are rewritten on the next sign-in/refresh.
- * This script reports the split per provider and never prints or hashes a
- * token.
+ * `account.encryptOAuthTokens` stores tokens as `$ba$<key-version>$<hex>`
+ * envelopes (XChaCha20-Poly1305); with no keyring they are bare hex. Rows
+ * written before the switch stay plaintext and keep working, so a rollout
+ * needs no backfill - they are rewritten on the next sign-in/refresh.
  *
- * "Encrypted" mirrors better-auth's own test: a `$ba$<v>$...` envelope, or a
- * bare even-length hex string. A provider whose plaintext tokens are themselves
- * hex-shaped would therefore read as encrypted - today only GitHub
- * (`gho_`/`ghu_` prefixes) is configured, so the check is accurate for the
- * deployed providers.
+ * "Encrypted" mirrors better-auth's own test: a `$ba$<v>$...` envelope or a
+ * bare even-length hex string, so a provider whose plaintext is itself
+ * hex-shaped would read as encrypted - today only GitHub (`gho_`/`ghu_`) is
+ * configured, so the check is accurate for the deployed providers.
  *
- * Exit codes: 0 = every stored OAuth token is encrypted (or none exist),
- * 1 = plaintext rows remain (expected right after the switch, green once the
- * affected accounts sign in again) or the config is unusable.
+ * Exit codes: 0 all stored OAuth tokens encrypted (or none exist); 1
+ * plaintext rows remain (expected right after the switch) or the config is
+ * unusable.
  *
- * Run it from the app image so DATABASE_URL and the keyring are the deployed
- * ones:
+ * Run from the app image (deployed DATABASE_URL and keyring):
  *   deploy/compose-prod.sh run --rm app node scripts/verify-oauth-token-storage.ts
+ * Details: `deploy/RUNBOOK.md` -> "Auth keyring and OAuth token encryption".
  */
 import postgres from 'postgres';
 

@@ -1,21 +1,13 @@
 import type { AiPricing, AiPricingEntry } from './types.ts';
 
 /**
- * Model price catalog (models.dev), the same public table the `cc-switch`
- * desktop switcher reads.
- *
- * The app never guesses a cost: `ai.pricing` stays the single source, and this
- * module only *fills* it from a published catalog - the operator can still pin
- * any entry by hand. Matching is deliberately conservative:
- *
- *   1. the provider's base URL host, which is what actually identifies a
- *      vendor (`api.deepseek.com` vs a reseller that proxies it);
- *   2. the provider name as a catalog id (`DeepSeek` -> `deepseek`);
- *   3. a model id that exists in exactly ONE price shape across the whole
- *      catalog - two vendors charging differently means "unknown", never the
- *      cheaper one.
- *
- * Everything here is pure except `fetchPricingCatalog`, so the matching and
+ * Model price catalog (models.dev), filled into `ai.pricing`: the operator
+ * table stays the single source and can still pin any entry by hand.
+ * Matching is deliberately conservative — the base-URL host first (it
+ * identifies the vendor; a display name may be a reseller), then the catalog
+ * id, and a model id only when the whole catalog agrees on one price shape.
+ * Cause: two vendors charging differently means "unknown", never the cheaper
+ * one. Everything is pure except `fetchPricingCatalog`, so the matching and
  * merge rules are unit-tested without the network.
  */
 

@@ -1,23 +1,17 @@
 /**
- * Keyring coverage check.
- *
- * A key version that a row still references must exist in `SECRETS_KEYS`;
- * otherwise that row can never be read again. Run this before retiring an old
- * version (phase 3 of the rotation) and before restoring a dump.
+ * Keyring coverage check: a key version a row still references must exist in
+ * `SECRETS_KEYS`, or that row can never be read again. Run it before retiring
+ * an old version (phase 3) and before restoring a dump.
  *
  * `--retire <n>` answers the phase-3 question directly: every live row whose
- * envelope says v<n> is listed and the exit code is 1, so the gate can fail at
- * the moment it matters (while the version is still in SECRETS_KEYS).
+ * envelope says v<n> is listed and the exit code is 1, so the gate fails while
+ * the version is still in `SECRETS_KEYS`. Every live row is also decrypted
+ * with its real AAD, so a same-version/different-key restore fails here too.
  *
- * Every live row is also decrypted with its real AAD: a same-version/different-
- * key restore passes a presence check but fails here.
- *
- * Usage:
- *   node --env-file=.env scripts/verify-secret-key-versions.ts [--retire 1]
- *
- * Exit codes: 0 = every referenced version is present and readable, 1 = a
- * referenced version is missing / unreadable / still referenced by --retire,
- * 2 = configuration error.
+ * Usage: `pnpm secrets:verify-keys [--retire 1]`.
+ * Exit codes: 0 every referenced version present and readable, 1 missing /
+ * unreadable / still referenced by --retire, 2 configuration error.
+ * Rotation steps: `deploy/SECRETS.md` -> "Three-phase rotation".
  */
 import postgres from 'postgres';
 import { loadKeyring } from '../src/lib/server/secrets/resolver.ts';

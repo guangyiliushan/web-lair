@@ -9,24 +9,21 @@ import type { StorageActive, StorageProviderConfig } from './provider';
 import type { SigV4Credentials } from './signature';
 
 /**
- * Runtime storage handle.
- *
- * The adapter is built from the ACTIVE provider (`storage.active`), never from
- * the saved form — that is what makes "Save only saves, it does not switch"
- * true at the runtime boundary, not just in the UI. The bootstrap
- * default is the bundled RustFS, so an install that never touched the page
- * behaves exactly as before. The read is strict (`active.ts`): a corrupt row
- * fails closed instead of silently serving the default bucket.
+ * getStorage is the runtime storage handle: the adapter is built from the
+ * ACTIVE provider (`storage.active`), never from the saved form - that is what
+ * makes "Save only saves, it does not switch" true at the runtime boundary,
+ * not just in the UI. The bootstrap default is the bundled RustFS, so an
+ * untouched install behaves as before; the read is strict (`active.ts`), so a
+ * corrupt row fails closed instead of silently serving the default bucket.
  *
  * No process-wide instance cache: every call resolves the active row (one
  * primary-key read on a tiny table) so a cutover takes effect on the next
- * request in every replica. Hot routes resolve once and reuse the handle
- * inside the request.
+ * request in every replica; hot routes resolve once and reuse it per request.
  *
- * Credentials: the local driver needs none; the external driver asks
- * the secret store first and the environment second. A store failure becomes a
- * StorageError (status 0) so every caller's unreachable-provider path — 503,
- * no fallback — handles it the same way as a dead endpoint.
+ * Credentials: the local driver needs none; the external driver asks the
+ * secret store first, the environment second. A store failure becomes a
+ * StorageError (status 0), so callers' unreachable-provider path (503, no
+ * fallback) treats it like a dead endpoint.
  */
 export async function getStorage(): Promise<ObjectStoragePort> {
 	return buildStorageForActive(await readActiveProvider());

@@ -13,19 +13,16 @@
 	} from './viewer-load';
 
 	/**
-	 * Progressive full-image stage for the page viewer.
-	 * The streaming pump is the shared `viewer-load.streamImageBytes`;
-	 * this component owns the phase machine and the floater DOM.
-	 *
-	 * - Policy: ≤8MB and no metered signal → auto-load; over threshold or
-	 *   saveData/2G → an explicit "load full image" button.
-	 * - Measurement: fetch + ReadableStream accumulation against
-	 *   Content-Length (both pass through /i); the floater only appears when
-	 *   the load outlives 300ms, so cache hits never flash a spinner.
-	 * - Terminal states only reach the live region (`aria-live="polite"` —
-	 *   WCAG 4.1.3 status messages); the ring/copy updates stay visual.
-	 * - `prefers-reduced-motion` drops the fade; a failed load keeps the card
-	 *   visible with a Retry.
+	 * Progressive full-image stage for the page viewer: `viewer-load.streamImageBytes` is the
+	 * shared pump, this component owns the phase machine and the floater DOM.
+	 * Policy: ≤8MB with no metered signal auto-loads; over the threshold or saveData/2G gets
+	 * an explicit "load full image" button.
+	 * Measurement: fetch + ReadableStream accumulation against Content-Length (both through
+	 * /i); the floater appears only when the load outlives 300ms, so cache hits never flash a
+	 * spinner.
+	 * Only terminal states reach the live region (`aria-live="polite"` — WCAG 4.1.3 status
+	 * messages); reduced motion drops the fade, and a failed load keeps the card visible with
+	 * a Retry.
 	 */
 	let {
 		photo,

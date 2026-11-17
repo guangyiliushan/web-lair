@@ -13,25 +13,24 @@ export interface EnqueueResult {
 }
 
 /**
- * Manual trigger path: enqueue = insert `job_runs(status='queued')`;
- * the drain claims it within ~one tick. Double clicks collide with the partial
- * unique index `job_runs_job_queued_uniq(job) WHERE status='queued'` - that
- * 23505 is caught and the active row is reused and reported. Scope note: the
- * index only covers `queued` rows, so a click while the job is RUNNING
+ * enqueueJob is the manual trigger path: insert `job_runs(status='queued')`;
+ * the drain claims it within ~one tick.
+ * Double clicks collide with the partial unique index
+ * `job_runs_job_queued_uniq(job) WHERE status='queued'` - that 23505 is caught
+ * and the active row is reused and reported as `deduplicated`.
+ * The index only covers `queued` rows, so a click while the job is RUNNING
  * legitimately queues ONE follow-up run (single-flight still applies per
- * execution); the 23505 re-select also covers the race where the previous
- * blocker just became `running`. The watermark is never touched here.
+ * execution); the re-select also covers the previous blocker just becoming
+ * `running`. The watermark is never touched here.
  *
- * Merged-name note: callers that see the user layer resolve
- * the definition first (`resolveJobDefinition`) and pass it in; without a
- * definition the registry is consulted, which keeps the earlier contract for
- * builtin-only callers.
+ * Callers using the user layer resolve and pass the definition
+ * (`resolveJobDefinition`); without one the registry is consulted, keeping
+ * the contract for builtin-only callers.
  *
- * Generic over the schema on purpose: the admin surface calls this with the web
- * app's `drizzle(client, { schema })` handle, which is NOT assignable to the
- * schema-less type the drain uses (the `fullSchema` property makes the
- * generic invariant) - the schema flows in as a type parameter instead of
- * forcing a cast at the call site.
+ * Generic over the schema on purpose: the admin surface's
+ * `drizzle(client, { schema })` handle is not assignable to the schema-less
+ * type the drain uses (the `fullSchema` property makes the generic
+ * invariant), so the schema flows in as a type parameter, not a call-site cast.
  */
 export async function enqueueJob<TSchema extends Record<string, unknown>>(
 	db: PostgresJsDatabase<TSchema>,

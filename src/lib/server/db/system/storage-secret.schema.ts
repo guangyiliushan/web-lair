@@ -3,20 +3,11 @@ import { check, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { user } from '../auth.schema.ts';
 
 /**
- * External storage credentials, encrypted at rest.
- *
- * The site has exactly ONE external provider slot (`storage.provider.driver =
- * 's3'`), so this is a singleton row keyed `'s3'` — no id juggling, and a
- * stray second row is impossible. Both halves of the pair are envelopes from
- * `secrets/crypto.ts` (AES-256-GCM, row-bound AAD), and the `*_hint` columns
- * are the only fragments the admin UI ever renders.
- *
- * Read order at runtime: this row > env (`STORAGE_S3_*`). A row that cannot be
- * decrypted is terminal — there is NO env fallback, because a wrong master key
- * must be visible instead of silently using a stale credential.
- *
- * Why a table rather than an option: options are loaded wholesale and rendered
- * by several pages; ciphertext there would leak into page data and `select *`.
+ * External storage credentials, encrypted at rest: one singleton row keyed `'s3'` (the site has
+ * exactly one provider slot), both halves AES-256-GCM envelopes from `secrets/crypto.ts`, and
+ * `*_hint` is all the admin UI renders.
+ * Read order is row then env (`STORAGE_S3_*`), and an undecryptable row never falls back to env -
+ * see `storage-credentials.test.ts › "never falls back to env when the row cannot be decrypted"`.
  */
 export const STORAGE_SECRET_ID = 's3';
 

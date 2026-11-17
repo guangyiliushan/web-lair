@@ -1,19 +1,17 @@
 import { sql, type SQL } from 'drizzle-orm';
 
 /**
- * PostgreSQL zoneinfo membership - the write gate on timezone registration:
+ * PostgreSQL zoneinfo membership — the write gate on timezone registration:
  * names PostgreSQL rejects must not be stored.
- *
- * `isValidIanaTimeZone` probes ICU (Intl), and ICU and the PostgreSQL
- * zoneinfo set disagree in BOTH directions (real-PG probes): 'Japan' /
- * 'US/Pacific' / 'Asia/Calcutta' pass Intl but `AT TIME ZONE` rejects them;
+ * `isValidIanaTimeZone` probes ICU (Intl), and ICU and PostgreSQL's zoneinfo
+ * set disagree in BOTH directions (real-PG probes): 'Japan' / 'US/Pacific' /
+ * 'Asia/Calcutta' pass Intl but `AT TIME ZONE` rejects them, and
  * 'Asia/Kolkata' goes the other way. Values stored in `notes.tz` or the
- * `site.timezone` option are consumed in SQL
- * (`(published_at at time zone coalesce(tz, $site))::date`), so a
- * PG-rejected name makes every belongs-to query 500 with that row present.
- * Write paths therefore run BOTH gates: the Intl probe (sync, in the zod
- * schema / editor) plus this membership check.
- *
+ * `site.timezone` option are consumed in SQL (`(published_at at time zone
+ * coalesce(tz, $site))::date`), so a PG-rejected name makes every
+ * belongs-to query 500 with that row present. Write paths therefore run
+ * BOTH gates: the Intl probe (sync, in the zod schema / editor) plus this
+ * membership check.
  * Callers may inject an executor so the check can join an open transaction;
  * the default resolves the app db lazily (keeps the module importable from
  * plain scripts, mirroring options-registry).

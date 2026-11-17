@@ -1,14 +1,10 @@
 /**
- * Custom Markdown transformer set for the editor.
+ * The editor's Markdown transformer set.
  *
- * Lexical's markdown round-trip ($convertToMarkdownString / $convertFromMarkdownString)
- * only knows nodes with a registered transformer — a custom node without one is
- * dropped by the round-trip.
- *
- * This module covers TagNode (`<tag>x</tag>`) and AlertNode (`> [!NOTE] …`):
- * - export (Lexical tree → Markdown)
- * - import (Markdown → Lexical tree)
- * - helpers converting alert-nested content between editorState JSON and Markdown
+ * Lexical's round-trip ($convertToMarkdownString / $convertFromMarkdownString) only
+ * knows nodes with a registered transformer, so a custom node without one is dropped:
+ * EDITOR_TRANSFORMERS serves the main editor and NESTED_EDITOR_TRANSFORMERS the
+ * nested alert/detail editors.
  *
  * References:
  * - https://lexical.dev/docs/packages/lexical-markdown
@@ -331,20 +327,16 @@ function inlineMarkdownToSpecs(markdown: string): SpecNode[] {
 /**
  * GFM pipe table transformer.
  *
- * - Import: the 0.46 handleImportAfterStartMatch hook — starts at the header row
- *   and stops at the last consecutive `|` row; a `| --- |` divider row is required
- *   or the block falls back to plain text. Cell inline syntax (bold/italic/
- *   inline code/links) is parsed in full by the temp editor.
- * - Export: walk rows and columns into a pipe table, appending the divider after
- *   the first row; cells use exportChildren to keep inline formatting
- *   (bold/italic/inline code, …) and multiple paragraphs fold into one line.
- *
- * Known limitations: column alignment (`:---:`), rowspan/colspan merges take no
- * part in the markdown round-trip; the header state is not persisted either —
- * GFM pipe syntax needs a divider after the first row to be recognised, so export
- * always appends `| --- |` and import always treats the first row as the header;
- * TableCellMenu's "toggle header" reverts to a first-row header after
- * save/reload (the text itself is unaffected).
+ * Import: the 0.46 handleImportAfterStartMatch hook starts at the header row and stops
+ * at the last consecutive `|` row; the second line must be a `| --- |` divider or the
+ * block falls back to plain text, and cell inline syntax is parsed in full by the temp
+ * editor.
+ * Export: rows and columns walk into a pipe table; cells keep inline formatting through
+ * exportChildren, and multiple paragraphs fold into one line.
+ * Limitation: alignment (`:---:`) and rowspan/colspan take no part in the round-trip,
+ * and the header state is not persisted — GFM pipe syntax needs a divider after row one,
+ * so export appends `| --- |`, import reads row one as the header, and TableCellMenu's
+ * "toggle header" reverts after save/reload (the text itself is unaffected).
  */
 export const tableTransformer: MultilineElementTransformer = {
 	dependencies: [TableNode, TableRowNode, TableCellNode],
@@ -420,27 +412,22 @@ const ALERT_END_REGEX = /^(?!>)/;
 const QUOTE_PREFIX_REGEX = /^>\s?/;
 
 /**
- * Transformer subset used by nested editor content.
- *
- * Nested editors do not register TagNode/AlertNode (to prevent infinite nesting),
- * so markdown inside an alert is parsed with the standard transformers.
- * HR nodes are registered (see NESTED_EDITOR_NODES), so its transformer is
- * included to keep `---` round-tripping.
+ * Transformer subset used by nested editor content: nested editors skip
+ * TagNode/AlertNode (no infinite nesting), so alert content parses with the standard
+ * transformers; hrTransformer is registered (see NESTED_EDITOR_NODES) so `---`
+ * round-trips.
  */
 /**
- * Counterpart of the core markdown export's safety escaping: the exporter
- * escapes markdown-significant punctuation (`a_b` -> `a\_b`) but the core's
- * plain-text import path never unescapes it, so repeated save/load cycles
- * re-escape the accumulated backslashes (no fixpoint). This mirrors the core's
- * own unescapeText rule (MarkdownImport text path) and skips code so literal
- * backslashes inside code spans/blocks stay intact.
+ * Counterpart of the core markdown export's safety escaping: the exporter escapes
+ * markdown-significant punctuation (`a_b` -> `a\_b`) but the core's plain-text import
+ * path never unescapes it, so repeated save/load cycles re-escape the accumulated
+ * backslashes (no fixpoint). Mirrors the core's unescapeText rule, and skips code so
+ * literal backslashes inside code spans/blocks stay intact.
  */
 /**
- * The core's CHECK_LIST regex matches `[X]` case-insensitively
- * (CHECKLIST_REGEX has /i) but its checked-state comparison is
- * `match[3] === 'x'` — case-sensitive — so an uppercase box silently
- * imports as unchecked and the next export rewrites `- [X]` to
- * `- [ ]`. Lowercase the marker on list lines before importing.
+ * The core CHECK_LIST regex matches `[X]` case-insensitively but compares the state as
+ * `match[3] === 'x'`, so an uppercase box silently imports unchecked and the next
+ * export rewrites `- [X]` to `- [ ]`; lowercase it on list lines before importing.
  */
 /** Internal step of {@link normalizeMarkdownForImport}; not exported. */
 function normalizeChecklistMarkers(markdown: string): string {
@@ -467,24 +454,20 @@ function normalizeChecklistMarkers(markdown: string): string {
 }
 
 /**
- * Input normalization for every editor import boundary (main editor and the
- * nested temporary editors).
+ * normalizeMarkdownForImport normalizes input at every editor import boundary (main
+ * editor and the nested temporary editors).
  *
- * CRLF content comes from the FormData transport (HTML entry-list rules
- * normalize field values). Line-anchored element transformers fail on the
- * trailing `\r` - the image rule's `$` anchor degraded an image to "!" +
- * link text on reopen (caught by the refs-lifecycle e2e) - so normalize to
- * LF here.
- *
- * A `\r` also used to double as the whitespace some bare marker lines need
- * (`- [ ]`, `[ ]`, `-`, `#`, `>` - core CHECK_LIST/QUOTE regExps want a
- * trailing space): those lines get one space before the CRs go, so the
- * pre-fix and post-fix parses agree for content stored through the form.
- * Two guards keep that pass honest: lone CRs are promoted
- * to CRLF first (a lone `\r` hides its line end from the padding match),
- * and lines inside ``` / ~~~ fences are returned byte-identical (a fence
- * body line that happens to be a bare marker - diff fragments, `#` comment
- * lines in examples - must not be silently rewritten on open+save).
+ * Reason: CRLF content comes from the FormData transport (HTML entry-list rules normalize
+ * field values) and line-anchored element transformers fail on the trailing `\r` — the
+ * image rule's `$` anchor degraded an image to "!" + link text on reopen (refs-lifecycle
+ * e2e).
+ * Symptom without padding: a bare marker line (`- [ ]`, `-`, `#`, `>`) loses the trailing
+ * space the core CHECK_LIST/QUOTE regexps want, so the pre-fix and post-fix parses
+ * disagree for content stored through the form; those lines get one space before the CRs
+ * go.
+ * Two guards keep the pass honest: lone CRs are promoted to CRLF first, and lines inside
+ * ``` / ~~~ fences come back byte-identical, so a fence body that is itself a bare marker
+ * (diff fragments, `#` comment lines in examples) is never rewritten on open+save.
  */
 export function normalizeMarkdownForImport(markdown: string): string {
 	const withCrlfEnds = markdown.replace(/\r(?!\n)/g, '\r\n');
@@ -637,19 +620,15 @@ export function alertJsonToMarkdown(json: string): string {
 /**
  * Alert transformer (multiline block, the blockquote carrier).
  *
- * - Import uses handleImportAfterStartMatch: starts at the marker line and stops
- *   at the last consecutive `>` line; on stop the non-`>` line is **not
- *   consumed** and stays a separate block. Note the divergence from the renderer:
- *   CommonMark lazy continuation folds that line into the quote (as alert body)
- *   while the editor keeps it outside — neither side loses content, but the
- *   attribution differs.
- *   The body (with the `> ` prefix stripped) round-trips through nested editor
- *   JSON; the title lives in AlertNode.__title and returns to the marker line on
- *   export.
- * - Export: `> [!type] title` followed by `> `-prefixed lines.
- *
- * Known limitation: alerts do not nest (the nested editor does not register this
- * transformer), matching the editor's "no infinite nesting" rule.
+ * Import uses handleImportAfterStartMatch: it starts at the marker line and stops at the
+ * last consecutive `>` line; the stopping line is not consumed and stays a separate
+ * block. The renderer's CommonMark lazy continuation folds it into the quote instead —
+ * attribution differs, neither side loses content.
+ * The body (with the `> ` prefix stripped) round-trips through nested editor JSON; the
+ * title lives in AlertNode.__title and returns to the marker line on export, which
+ * writes `> [!type] title` followed by `> `-prefixed lines.
+ * Limitation: alerts do not nest — the nested editor does not register this
+ * transformer, matching the editor's "no infinite nesting" rule.
  */
 export const alertTransformer: MultilineElementTransformer = {
 	dependencies: [AlertNode],

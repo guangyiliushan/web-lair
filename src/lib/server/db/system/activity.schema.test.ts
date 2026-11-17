@@ -5,19 +5,11 @@ import { describe, expect, it } from 'vitest';
 import { NOTIFICATION_EVENT_TYPES } from '../../notifications/events';
 
 /**
- * Producer teeth for `activities_event_check`.
- *
- * The constraint admits exactly one dot
- * (`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`), and a producer literal that breaks it
- * only fails at INSERT time - i.e. after the business write it was supposed to
- * accompany. `ai.usage.purge` did exactly that: 23514 on a ledger it had just
- * wiped. Review cannot see every literal, so this scans the audit write path
- * against the predicate pinned in the baseline.
- *
- * Scope: quoted literals only (single or double). Ternaries and constants are
- * covered because any three-segment quoted string in an audit-path file is an
- * offender regardless of shape; template literals and imported constants are
- * NOT visible here - the durable fix for those is typing `ActivityInput.event`.
+ * Producer teeth for `activities_event_check`: the CHECK admits exactly one dot, so a violating
+ * producer literal only fails at INSERT time - after the business write it was meant to accompany.
+ * Review cannot see every literal, so this scans the audit write path against the predicate pinned
+ * in the baseline; scope is quoted literals only, and template literals or imported constants are
+ * NOT visible here - the durable fix is typing `ActivityInput.event`.
  */
 const BASELINE = readFileSync(
 	fileURLToPath(new URL('../../../../../drizzle/0000_baseline.sql', import.meta.url)),

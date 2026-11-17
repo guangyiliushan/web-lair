@@ -1,19 +1,15 @@
 /**
- * Pages-line shared constants (mirrors `$lib/utils/note-meta`): the reserved
- * top-level slugs — system segments, platform routes, root files and the
- * locale tags — in ONE place, consumed both by `scripts/verify-pages.ts`
- * (repository check) and by the admin editor (slug validation).
- * `about` / `about-site` are reserved for the protected default rows; the
- * verify script and the editor exempt the default rows by slug equality.
- *
- * The locale tags are reserved too: a page slug shaped like a
- * language segment would shadow the bare-language roots, which the
- * identity URL patterns deliberately keep as 404s. The (auth) segments are
- * listed because the verify script's route scan only reports same-named
- * `(site)` children (soft warnings); `page-meta.test.ts` keeps this set in
- * sync with `locales` and the first-level route tree, and the [slug] route
- * carries a second read-side guard for locale-shaped rows that predate the
- * entry.
+ * Pages-line shared constants, mirroring `$lib/utils/note-meta`: the reserved top-level
+ * slugs — system segments, platform routes, root files and locale tags — in ONE place,
+ * consumed both by `scripts/verify-pages.ts` (repository check) and by the admin editor
+ * (slug validation); `about` / `about-site` protect the default rows, which both consumers
+ * exempt by slug equality.
+ * Locale tags are reserved because a page slug shaped like a language segment would shadow
+ * the bare-language roots that the identity URL patterns deliberately keep as 404s; auth
+ * segments are listed because the verify script's route scan only reports same-named `(site)`
+ * children as soft warnings.
+ * `page-meta.test.ts` keeps the set in sync with `locales` and the first-level route tree,
+ * and the [slug] route carries a second read-side guard for locale-shaped legacy rows.
  */
 export const PAGE_RESERVED_SLUGS: ReadonlySet<string> = new Set([
 	'about',

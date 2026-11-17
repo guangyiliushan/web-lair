@@ -12,14 +12,10 @@ import { isTrustedNavigation } from '$lib/server/security/identity';
 import { resolveTailscaleIdentity } from '$lib/server/security/tailscale-auth';
 
 /**
- * Tailnet sign-in that produces a *real* better-auth session.
- *
- * The previous flow inserted a `session` row by hand on every request and never
- * issued a cookie. This endpoint uses the official API
- * surface instead — `internalAdapter.createSession` + `setSessionCookie`, the
- * exact pair the bundled `anonymous` plugin uses, and the redirect idiom from
- * the callback routes (`throw ctx.redirect(url)`).
- *
+ * Tailnet sign-in that produces a *real* better-auth session, through the
+ * official API surface — `internalAdapter.createSession` +
+ * `setSessionCookie`, the exact pair the bundled `anonymous` plugin uses,
+ * plus the redirect idiom from the callback routes (`throw ctx.redirect(url)`).
  * Three guards a custom endpoint must carry itself (the framework's own sign-in
  * routes get them from middleware / `session.create.before` hooks, neither of
  * which runs here):

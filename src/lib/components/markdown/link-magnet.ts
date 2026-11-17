@@ -1,23 +1,17 @@
 /**
- * Link magnet (batch 3a) — publish-side hover effect for inline links.
- *
- * One delegated listener per container: mousemove sets `--mx`/`--my` (%
- * coordinates relative to the hovered link) and stamps `data-magnet`, and
- * the stylesheet turns those variables into the translate + spotlight +
- * external-link arrow. Purely progressive: without JS the links keep their
- * plain underline; the effect never touches layout (transform/background
- * only), and prefers-reduced-motion disables the motion in CSS.
- *
- * Deliberately NOT attached inside the Lexical editor: editor-side text
- * geometry must stay stable (zero-offset rule) — link interactions there
- * go through LinkHoverEditor instead.
- *
- * Official references:
- * - requestAnimationFrame schedules "before the next repaint" and is
- *   one-shot (MDN: Web/API/Window/requestAnimationFrame) — the rAF gate
- *   coalesces mousemove bursts into one style write per frame.
- * - CSS custom properties in pseudo-element styles (MDN: CSS/--*) carry
- *   the pointer position from JS to CSS without inline transforms.
+ * attachMagnetLinks is the publish-side hover effect for inline links.
+ * One delegated listener per container: mousemove sets `--mx`/`--my` (px offsets within
+ * the hovered link) and stamps `data-magnet`; the stylesheet turns those into the
+ * translate + spotlight + external-link arrow (the `Inline link magnet` block in
+ * `src/routes/layout.css`).
+ * The rAF gate coalesces mousemove bursts into one style write per frame, and custom
+ * properties carry the pointer position from JS to CSS without inline transforms.
+ * Purely progressive: without JS the links keep their plain underline, the effect never
+ * touches layout (transform/background only), and prefers-reduced-motion disables the
+ * motion in CSS.
+ * Deliberately not attached inside the Lexical editor: editor-side text geometry must
+ * stay stable (zero-offset rule) — link interactions there go through LinkHoverEditor
+ * instead.
  */
 import { EMBED_MOUNT_CLASS } from '$lib/components/markdown/embed/mount-class';
 

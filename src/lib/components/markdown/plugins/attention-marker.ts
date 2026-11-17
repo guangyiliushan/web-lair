@@ -1,24 +1,19 @@
 /**
- * Shared implementation of the inline two-character delimiter extensions --
- * spoiler (`||`) and mark (`==`).
+ * Shared implementation of the inline two-character delimiter extensions: spoiler (`||`)
+ * and mark (`==`).
  *
- * The micromark attention pattern is a port of
- * micromark-extension-gfm-strikethrough; three differences from upstream /
- * plain CommonMark are worth recording:
- * - Delimiter runs are fixed at length 2 (spec 2 #5/#6): single or >=3
- *   delimiters never parse.
- * - The delimiter character is parameterized -- one implementation derives
- *   both spoiler (`||`) and mark (`==`). Flanking (4.3) is equivalent to
- *   upstream combination-wise; `a == b == c` does not pair.
- * - Delimiters register in `attentionMarkers` (as upstream does), which
- *   participates in adjacent-emphasis flanking: `a*==b==*` pairs into
- *   `<em>` (same as gfm-strikethrough's `a*~~b~~*`). That is the only extra
- *   observable effect versus a pipeline without this extension registered.
+ * The attention pattern is a port of micromark-extension-gfm-strikethrough with three
+ * deliberate differences from upstream / plain CommonMark:
+ * - delimiter runs are fixed at length 2 — single or >=3 delimiters never parse;
+ * - the delimiter character is parameterized, so one implementation derives both, with
+ *   upstream-equivalent flanking (4.3);
+ * - delimiters register in `attentionMarkers` (as upstream does) and so participate in
+ *   adjacent-emphasis flanking: `a*==b==*` pairs into `<em>` like `a*~~b~~*` — the only
+ *   extra observable effect versus a pipeline without this extension.
  *
- * Escaping (4.4) and "disabled inside inline code / math" (4.2) hold by
- * construction: delimiters consumed by characterEscape never reach this
- * tokenizer, and code/math consume their content without triggering inline
- * text extensions.
+ * Escaping (4.4) and disabling inside inline code / math (4.2) hold by construction; the
+ * conformance corpus pins them (`l2-mark-escape`,
+ * `l2-mark-inside-inline-code-disabled`, `l2-mark-flanking-space-separated`).
  */
 import { splice } from 'micromark-util-chunked';
 import { classifyCharacter } from 'micromark-util-classify-character';

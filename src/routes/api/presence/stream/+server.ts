@@ -9,19 +9,17 @@ import { clientAddressKey } from '$lib/utils/cidr';
 import { PRESENCE_KEEPALIVE_TICKS, PRESENCE_SNAPSHOT_MS, snapshotFor } from './snapshot';
 
 /**
- * Presence SSE stream: one `text/event-stream` per tab - a 5s snapshot plus a 15s
- * comment keepalive - feeding the reader badge / density strip and the admin
- * dashboard. Hand-rolled `ReadableStream`, which the SvelteKit routing docs name as
- * the canonical SSE use case.
- * Status discipline: while streaming the status is ALWAYS 200 - the Fetch standard
- * makes any other status (or a different content type) a permanent failure the
- * browser never retries, so a dead cache nulls fields inside the payload instead.
- * The only deliberate 204s are `presence.enabled === false` (the stop-reconnecting
- * signal) and HEAD, because kit 2.70 runs GET for HEAD unless a HEAD export exists.
- * Scoping: `?c=<uuid>` streams the content slice for readers; position dots go to
- * admins always and to readers only with `presence.readerDots` on - a connect-time
- * read, never per tick. Without `c` the stream is admin-only (400 for a reader, as
- * site-wide numbers are never public), and bodies never leave the server.
+ * Presence SSE stream: one `text/event-stream` per tab — a 5s snapshot plus a 15s comment
+ * keepalive — feeding the reader badge / density strip and the admin dashboard.
+ * Status discipline: while streaming the status is ALWAYS 200 — the Fetch standard makes any
+ * other status (or a different content type) a permanent failure the browser never retries,
+ * so a dead cache nulls fields inside the payload instead.
+ * The only deliberate 204s are `presence.enabled === false` (the stop-reconnecting signal)
+ * and HEAD, because kit 2.70 runs GET for HEAD unless a HEAD export exists.
+ * Scoping: `?c=<uuid>` streams the content slice for readers; position dots go to admins
+ * always and to readers only with `presence.readerDots` on — a connect-time read, never per
+ * tick. Without `c` the stream is admin-only (400 for a reader: site-wide numbers are never
+ * public), and bodies never leave the server.
  */
 
 export const prerender = false;

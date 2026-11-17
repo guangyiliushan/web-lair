@@ -8,27 +8,18 @@ import { requestIp } from '$lib/server/security/request-address';
 import type { RequestHandler } from './$types';
 
 /**
- * Readiness. `/api/health` answers liveness for the container supervisor and
- * deliberately never touches dependencies; this endpoint is the opposite and is
- * deliberately NOT public:
- *
- *  - `READY_TOKEN` configured: a valid `Authorization: Bearer` is required
- *    from EVERY caller (the collector must inject the token; a missing or
- *    wrong bearer answers 401). The private-address shortcut is disabled in
- *    this mode so a proxy peer address can never stand in for a credential.
- *  - no token in production: 404 to every caller. `getClientAddress()` reads
- *    the address from `ADDRESS_HEADER` (X-Forwarded-For) when adapter-node is
- *    configured that way, so a "private" peer is a header value that the
- *    caller can forge; refusing to serve is the only safe fallback.
- *  - no token outside production: only loopback/private peers (RFC 1918, ULA,
- *    link-local) pass - public callers get 404 so the route is not advertised.
- *
- * `deploy/Caddyfile` answers 404 for `/api/ready` at the edge, so the token
- * gate is the second fence, not the only one.
- *
- * Response: 200 `{status:'ready',db:'ok',valkey:'ok'}`; 503 with the same
- * per-check detail (`ok`/`fail`/`timeout`/`disabled`). Answers are cached for
- * 10s per process; `cached` says whether this body was just computed.
+ * Readiness: the opposite of `/api/health` (liveness for the container supervisor, which
+ * never touches dependencies), and deliberately NOT public.
+ * Modes, in order: `READY_TOKEN` configured → every caller needs that bearer (401 otherwise)
+ * and the private-address shortcut is disabled; no token in production → 404 for everyone
+ * (fail closed); no token elsewhere → loopback/private peers only (RFC 1918, ULA,
+ * link-local), public callers get the 404 a missing route would give. The reason for each
+ * mode sits with its branch below.
+ * `deploy/Caddyfile` answers 404 for `/api/ready` at the edge, so the token gate is the
+ * second fence, not the only one.
+ * Response: 200 `{status:'ready',db:'ok',valkey:'ok'}` or 503 with the same per-check detail
+ * (`ok`/`fail`/`timeout`/`disabled`); answers are cached for 10s per process and `cached`
+ * says whether this body was just computed.
  */
 export const prerender = false;
 

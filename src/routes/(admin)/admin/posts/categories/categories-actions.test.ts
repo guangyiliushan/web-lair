@@ -3,21 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 /**
  * Route-level tests for the admin categories actions.
  *
- * The actions live on three modules because a form can only post to the route
- * that renders it, and the list is shared by both routes:
- *   +layout.server.ts     — the list load
- *   +page.server.ts       — create (list route)
- *   [id]/+page.server.ts  — update / move / delete (record route, id from params)
- *
- * All of them put the admin guard FIRST (actions are not covered by layout
- * loads — Kit runs the action before its loads).
- *
- * Two guards are load-bearing:
- *   · `delete` refuses the fallback category and still counts posts,
- *     pointing placeholder-only categories at the drafts page, with the FK as
- *     the backstop for the count-then-delete race.
- *   · `move` re-files posts; a blank `to` means "to the fallback category",
- *     which is what "clear out this category" does before a delete.
+ * The actions live on three modules because a form can only post to the route that renders
+ * it and the list is shared by both: `+layout.server.ts` (list load), `+page.server.ts`
+ * (create) and `[id]/+page.server.ts` (update / move / delete, id from params).
+ * Every one of them puts the admin guard FIRST (kit runs the action before its layout
+ * loads, so the layout guard cannot cover one).
+ * Two guards are load-bearing: `delete` refuses the fallback category and still counts
+ * posts, pointing placeholder-only categories at the drafts page with the FK as the
+ * backstop for the count-then-delete race; `move` re-files posts, and a blank `to` means
+ * "to the fallback category" — what "clear out this category" does before a delete.
  */
 const { dbMock, state } = vi.hoisted(() => ({
 	dbMock: {} as Record<string, unknown>,

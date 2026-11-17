@@ -14,32 +14,23 @@ import {
 import type { NotificationSink } from './notify.ts';
 
 /**
- * Notification outbox writer.
- *
- * `enqueueNotification` turns one event into one `queued` row per enabled
- * channel. It is called from two places, and both use the SAVE POINT it
- * creates for itself:
- *
- *  - the comment service, INSIDE the comment insert's transaction - so a
- *    notification either commits with the comment or not at all, while a
- *    failed enqueue (DB error, bad key) rolls back only the savepoint and
- *    never the business write (the outbox is written in the comment transaction, so its
- *    failure cannot block business);
- *  - the `notify()` sink installed by the drain, where the executor is the
- *    drain's db handle and the savepoint is the same mechanism.
- *
+ * Notification outbox writer: `enqueueNotification` turns one event into one
+ * `queued` row per enabled channel, inside the SAVEPOINT it creates for
+ * itself — both callers use that mechanism. The comment service calls it
+ * INSIDE the comment insert's transaction, so a notification either commits
+ * with the comment or not at all, while a failed enqueue (DB error, bad key)
+ * rolls back only the savepoint and never the business write; the drain's
+ * `notify()` sink passes its own db handle with the same mechanism.
  * Idempotency is the table's unique key `(event_type, event_key, channel)`:
  * `on conflict do nothing` makes a duplicate enqueue a no-op (`duplicate`),
  * so a producer that runs twice (retried tick, replayed request) can never
  * double-notify.
- *
  * Storm suppression (limits.ts) is checked inside the same transaction: the
  * hourly window counts only committed rows, so sequential floods collapse
  * deterministically; concurrent producers can overshoot by the in-flight
  * count (registered: a bounded, non-alerting overshoot, never an unbounded
- * flood).
- *
- * Node-strip-loadable: relative `.ts` imports, no `$lib`, no virtual modules.
+ * flood). Node-strip-loadable: relative `.ts` imports, no `$lib`, no virtual
+ * modules.
  */
 export type NotificationOutboxDb = JobsDb;
 

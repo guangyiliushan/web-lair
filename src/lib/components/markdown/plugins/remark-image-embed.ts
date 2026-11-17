@@ -5,19 +5,16 @@ import type { ContainerDirective } from 'mdast-util-directive';
 import { decideImage } from '$lib/components/markdown/embed/resolve';
 
 /**
- * Embed decision (spec 3.4): every bare `!` image node runs through
- * decideImage; images stay images, everything else becomes a zero-request
- * placeholder card — an `<a class="embed-card" data-embed data-url>` carrying
- * the alt text (or the URL when the alt is empty) so the no-JS fallback is a
- * plain link, per the spec 7 degrade matrix. The card components mount over
- * these anchors in the client enhancement batch.
- *
- * Guards: bare URLs and normal links are never upgraded (only `!` nodes reach
- * the decision), and an image inside a link label stays an image — replacing
- * it would nest anchors, which parse5 resolves by emptying the outer link.
- *
- * Runs after remark-image-attr (whose mdTailAttrs payload feeds rule 1) and
- * after remark-directive (whose normalised grid attributes feed rule 2).
+ * remarkImageEmbed turns every bare `!` image node into the decideImage decision: images
+ * stay images, everything else becomes a zero-request placeholder card — an
+ * `<a class="embed-card" data-embed data-url>` carrying the alt text (or the URL when the
+ * alt is empty) so the no-JS fallback is a plain link; the card components mount over these
+ * anchors in the client.
+ * Guards: bare URLs and normal links are never upgraded (only `!` nodes reach the
+ * decision), and an image inside a link label stays an image — replacing it would nest
+ * anchors, which parse5 resolves by emptying the outer link.
+ * Runs after remark-image-attr (whose mdTailAttrs payload feeds rule 1) and after
+ * remark-directive (whose normalised grid attributes feed rule 2).
  */
 
 /** The payload remark-image-attr stores (mdast Data has no shared type). */

@@ -3,8 +3,7 @@ import type { GrammarState } from 'shiki/core';
 
 /**
  * Highlights `code` in `language`. `current` holds one entry per line: a plain
- * string until the highlighter loads, then the line's tokens. Pass each one to
- * the `code` prop of a `CodeBlock.Line`.
+ * string until the highlighter loads, then the line's tokens.
  *
  * ```svelte
  * <script lang="ts">

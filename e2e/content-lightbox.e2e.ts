@@ -4,20 +4,17 @@ import { OVERLAY_FIXTURE_KEYS } from './overlay-fixture-keys';
 import { expectNoCriticalAxe, ORIGIN, psql } from './support';
 
 /**
- * CONTENT LIGHTBOX: article images inside a rendered
- * markdown page become interactive controls - click opens the shared overlay
- * viewer, Esc closes it and focus returns to the image; an absolute-URL
- * (external) image opens WITHOUT any feed chrome; images inside links keep
- * their link behavior; broken images stay plain; SSR output carries no
- * enhancement markup; axe stays at zero critical violations with the
- * controls in place.
+ * CONTENT LIGHTBOX: article images inside a rendered markdown page become
+ * interactive controls - click opens the shared overlay viewer, Esc closes
+ * it and focus returns to the image; an absolute-URL (external) image opens
+ * without feed chrome; images inside links keep their link behavior; broken
+ * images stay plain; SSR output carries no enhancement markup; axe stays at
+ * zero critical violations with the controls in place.
  *
- * Fixtures: one `e2e-clbox` page whose zh-cn body references the three GIFs
- * published by `scripts/e2e-overlay-fixtures.ts` (one as a relative /i/ src,
- * one as an absolute http://localhost URL = the external branch, one inside
- * a markdown link) plus a well-formed but missing key (the broken case). No
- * new bytes are needed; a beforeAll probe skips with the fix command when
- * the bucket was wiped.
+ * Fixtures: one `e2e-clbox` page whose body references the three GIFs that
+ * `scripts/e2e-overlay-fixtures.ts` publishes (relative, absolute = external,
+ * inside a link) plus a well-formed but missing key (broken); a beforeAll
+ * probe skips with `pnpm e2e:overlay-fixtures` if the bucket was wiped.
  */
 const SLUG = 'e2e-clbox';
 

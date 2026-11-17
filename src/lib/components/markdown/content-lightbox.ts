@@ -1,24 +1,19 @@
 /**
- * Content lightbox: progressive enhancement of article images. Every rendered
- * `<img>` inside the article (except images inside links, embed-card internals and
- * broken images - `naturalWidth == 0`) becomes an interactive control whose
- * localised aria-label is "view larger: {alt}"; activating it (click / Enter /
- * Space) opens the shared overlay viewer with a plain-image source (the `@full`
- * frame derives from the displayed variant). SSR and no-JS are untouched: the
- * attributes only exist after the client enhancement runs.
+ * attachContentLightbox progressively enhances every rendered article image into a
+ * button-role control: images inside links, embed-card internals and broken images
+ * (`naturalWidth == 0`) are skipped, the rest get a localised aria-label and open the
+ * shared overlay viewer on click / Enter / Space with a plain-image source whose
+ * `@full` target derives from the displayed variant.
+ * SSR and no-JS are untouched — the attributes only exist after the client enhancement
+ * runs, and the pass walks the DOM the renderer produced instead of re-parsing the
+ * source.
  *
- * A `display:contents` wrapper cannot receive focus (no box => not in the tab order;
- * `focus()` is a no-op), which would break keyboard access and the focus-return
- * behaviour; an inline-box wrapper is focusable but perturbs layout (preflight makes
- * prose images `display:block`, and a block image inside an inline wrapper collapses
- * the line box). Carrying `role="button"` + `tabindex` on the image itself is the
- * only formulation that is BOTH layout-neutral and focusable.
- *
- * The enhancement sees exactly what the renderer produced instead of re-parsing the
- * source. An image that has not finished
- * loading gets a one-shot `{ once: true }` load listener (a broken image
- * never loads, so it is skipped by construction; the listener removes
- * itself, and a re-render discards the node along with it).
+ * Reason: a `display:contents` wrapper cannot receive focus (no box => not in the tab
+ * order, `focus()` is a no-op), while an inline-box wrapper is focusable but perturbs
+ * layout (preflight makes prose images `display:block`, so a block image inside an
+ * inline wrapper collapses the line box).
+ * Symptom: keyboard access and focus-return break, or the prose layout shifts.
+ * No other formulation is both layout-neutral and focusable.
  */
 import { m } from '$lib/paraglide/messages';
 import { plainImageItem, type PlainImageSource } from '$lib/components/photos/viewer-source';

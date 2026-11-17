@@ -3,24 +3,22 @@ import type { ObjectStoragePort } from './port.ts';
 import { VARIANT_NAMES, variantKeyFor } from '../../media/keys.ts';
 
 /**
- * Provider migration engine.
+ * Migration engine: the unit of work is the `files` registry, never a bucket
+ * listing. Every canonical object is content-addressed
+ * (`<sha[0:2]>/<sha256>.<ext>`) so its key states the hash it must have, and
+ * its variants are derived keys with no independent truth. A copy therefore
+ * proves itself:
  *
- * The unit of work is the `files` registry, never a bucket listing: every
- * canonical object is content-addressed (`<sha[0:2]>/<sha256>.<ext>`) so its
- * key states the hash it must have, and its variants are derived keys with no
- * independent truth. A copy therefore proves itself:
+ * source GET -> sha256 -> (canonical) compare with the key/DB hash
+ *             -> target PUT -> target GET -> sha256 -> compare
  *
- *   source GET → sha256 → (canonical) compare with the key/DB hash
- *               → target PUT → target GET → sha256 → compare
+ * Re-running is the resume mechanism: an object already on the target with
+ * the right bytes is verified, not copied again. Nothing here deletes from
+ * the source - the old provider stays readable until an operator removes it.
  *
- * Re-running is the resume mechanism: an object already on the target with the
- * right bytes is verified, not copied again. Nothing here deletes from the
- * source — the old provider stays readable until an operator removes it
- * explicitly.
- *
- * Not covered, deliberately (registered): `maps/*.pmtiles` objects are not in
- * `files` (published by `pnpm maps:publish`), so a provider switch needs that
- * script re-run against the new provider.
+ * Not covered, deliberately: `maps/*.pmtiles` objects are not in `files`
+ * (published by `pnpm maps:publish`), so a provider switch needs that script
+ * re-run against the new provider.
  */
 
 export interface MigrationSourceRow {

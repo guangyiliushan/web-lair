@@ -4,21 +4,17 @@ import { visit } from 'unist-util-visit';
 import { warnOnce } from './plugin-warnings';
 
 /**
- * Heading ids, slugs and anchor links (spec 3.6).
- *
- * Runs AFTER rehype-sanitize on purpose: the sanitizer clobbers `id`
- * attributes (DOM-clobbering defence) and cannot tell pipeline output from
- * raw HTML, so ids assigned before it would come out re-prefixed and every
- * in-page anchor would break. Everything produced here is derived from the
- * sanitized tree and validated locally, so running last does not reopen an
- * injection path.
- *
- * - `## Some heading {#custom-id}` (ATX tail, whitespace before `{`, valid id chars)
- *   sets the custom id and keeps the heading text clean
- * - otherwise the id is the auto slug: NFKC → strip punctuation (Unicode P,
- *   per spec wording) → whitespace runs to `-`; duplicates get `-2`, `-3`, …
- * - every heading gets an anchor link `#` (href percent-encoded) as its first
- *   child so the anchor is reachable without JavaScript
+ * rehypeHeadingAnchors assigns heading ids, slugs and anchor links.
+ * It runs AFTER rehype-sanitize on purpose: the sanitizer clobbers `id` attributes
+ * (DOM-clobbering defence) and cannot tell pipeline output from raw HTML, so ids assigned
+ * before it would come out re-prefixed and every in-page anchor would break; everything
+ * produced here derives from the sanitized tree and is validated locally, so running last
+ * does not reopen an injection path.
+ * `## Some heading {#custom-id}` (ATX tail, whitespace before `{`, valid id chars) sets the
+ * custom id and keeps the heading text clean; otherwise the id is the auto slug — NFKC →
+ * strip punctuation → whitespace runs to `-`, duplicates getting `-2`, `-3`, …
+ * Every heading gets an anchor link `#` (href percent-encoded) as its first child, so the
+ * anchor stays reachable without JavaScript.
  */
 
 const HEADING_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);

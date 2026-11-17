@@ -1,21 +1,15 @@
 name: image
 
-# Build the deployment image and prove it works before it can merge.
-# Three gates, in order (each is a real execution, not a lint):
-#   1. `deploy/verify-image.sh`  - drain entry reaches its config guard, every
-#      registered builtin module loads, server answers /api/health;
-#   2. `deploy/image-size-check.sh` - absolute target + +10% regression budget
-#      against `deploy/image-size-baseline.json`;
-#   3. (implicit) the build itself - a lockfile/pnpm-version drift fails here.
-#
-# Runs only when image inputs change. A documentation-only PR should not pay
-# eight minutes of build time.
-#
-# ADVISORY, not a required check: GitHub keeps a path-filtered workflow's check
-# in "Pending" forever, which blocks any PR that does not touch these paths
-# (official: "Handling skipped but required checks"). Required status checks are
-# `ci / verify` and `auth-schema / guard` only - see
-# notes/coordination/m6/p1/branch-protection.md.
+# Build the deployment image and prove it before merge: three real executions in
+# order — `deploy/verify-image.sh`, `deploy/image-size-check.sh` (absolute target
+# + 10% regression budget against `deploy/image-size-baseline.json`), and the
+# build itself (catches lockfile/pnpm-version drift).
+# Path-filtered on image inputs, so a documentation-only PR skips the eight-minute
+# build.
+# Advisory, not required: a path-filtered workflow's skipped check would stay
+# "Pending" forever and block PRs that never touch these paths (GitHub docs,
+# "Handling skipped but required checks"). Required checks are `ci / verify` and
+# `auth-schema / guard` only — see notes/coordination/m6/p1/branch-protection.md.
 
 on:
   push:

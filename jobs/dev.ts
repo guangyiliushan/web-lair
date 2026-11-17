@@ -1,15 +1,9 @@
 // jobs/dev.ts
 //
 // Development worker: the same drain tick as `jobs/drain.ts`, on a loop,
-// started by hand next to `vite dev`:
-//
-//     pnpm jobs:dev                 # one terminal beside `pnpm dev`
-//     pnpm jobs:dev --interval 1000 # poll faster while debugging
-//
-// Why it exists: production starts `node jobs/drain.ts` from a systemd timer
-// every minute. `vite dev` has no timer, so enqueue-only actions (generate a
-// translation, run a job from /admin/jobs) would sit at `queued` forever and
-// the UI would look stuck.
+// started by hand next to `vite dev`. Why it exists and the commands
+// (`pnpm jobs:dev [--interval 1000]`): README "Background jobs in
+// development".
 //
 // Environment:
 //   DATABASE_URL  required - loaded from `.env` by the npm script.

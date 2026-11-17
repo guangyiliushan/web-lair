@@ -1,21 +1,16 @@
 /**
  * owner:rebuild - repair the `site_identity` pointer and retire `site.owner`.
  *
- * Foundation: `user_profiles` is the single source for the
- * public owner persona and `site_identity` is the one-row pointer the header
- * joins through. This repair is idempotent and safe to run on every deploy:
- *
- *   - no user with role='owner'  -> leave the pointer unset, warn, and the
- *     header falls back to SITE_OWNER_DEFAULT (exit 0; one "warn" line)
- *   - pointer matches the owner  -> nothing to do
- *   - pointer missing/stale      -> point it at the owner (apply only)
- *   - `site.owner` option row    -> deleted (retired; no consumer reads it)
- *
- * Dry-run is the default. Pass `--apply` to write (one transaction).
- *
- * Usage:
- *   pnpm owner:rebuild            # dry-run
- *   pnpm owner:rebuild -- --apply # write
+ * Foundation: `user_profiles` is the single source for the public owner
+ * persona and `site_identity` is the one-row pointer the header joins
+ * through. Dry-run by default; `--apply` writes in one transaction.
+ * Idempotent and safe to run on every deploy:
+ *   - no user with role='owner' -> warn; header falls back to
+ *     SITE_OWNER_DEFAULT, and a stale pointer row is deleted (--apply)
+ *   - pointer matches the owner -> nothing to do
+ *   - pointer missing/stale     -> point it at the owner (apply only)
+ *   - `site.owner` option row   -> deleted (retired; no consumer reads it)
+ * Usage: `pnpm owner:rebuild` (dry-run); `pnpm owner:rebuild -- --apply` writes.
  */
 import postgres from 'postgres';
 

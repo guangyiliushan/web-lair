@@ -12,19 +12,15 @@ import { resetMailProbeCache, verifyMailbox } from './probe';
 import { sanitizeErrorText } from '../jobs/error-text.ts';
 
 /**
- * SMTP transport.
- *
- * The production endpoint is whatever SMTP host `.env` points at — a
- * self-hosted MTA on the box (default) or a relay if the 25/PBL/PTR probes
- * fail (deploy/RUNBOOK.md). DKIM is signed **in process** by nodemailer, so a
- * dumb relay/MTA needs no milter configuration.
- *
- * Failure semantics: `sendMail` throws when unconfigured. `sendMailOrDevLog`
- * keeps local development usable (verification links print to the console,
- * the `devLogMail` precedent) and throws in production so a misconfigured
+ * SMTP transport: the production endpoint is whatever SMTP host `.env`
+ * points at — a self-hosted MTA on the box (default) or a relay if the
+ * 25/PBL/PTR probes fail (deploy/RUNBOOK.md). DKIM is signed in process by
+ * nodemailer, so a dumb relay/MTA needs no milter configuration.
+ * Failure semantics: `sendMail` throws when unconfigured;
+ * `sendMailOrDevLog` keeps local development usable (verification links
+ * print to the console) and throws in production, so a misconfigured
  * deployment cannot silently swallow registration email.
- *
- * The settings derivation and the verify cache live in `smtp.ts` / `probe.ts`
+ * Settings derivation and the verify cache live in `smtp.ts` / `probe.ts`
  * so the plain-Node mail probe uses the exact same rules.
  */
 

@@ -4,22 +4,17 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 
 /**
- * A2 static guard: the admin surface (routes, admin components, auth pages)
- * and the markdown editor family must not carry hardcoded Chinese (or CJK
- * full-width punctuation) outside comments.
- *
- * The allowlist below stays EMPTY by design - test fixtures are exempted by
- * path (they assert catalog copy or carry fixture content), so any remaining
- * hit is a real violation. The mechanism is intentionally locked: enabling an
- * entry means editing the `ALLOWLIST.length === 0` assertion, and that diff
- * must carry a one-line rationale (see the plan's section A2 acceptance notes).
- *
- * Known blind spots (registered, currently zero instances): CJK escape
- * sequences (`\uXXXX` / HTML entities), a literal `//` inside a string
- * swallowing its line tail, and single-locale label maps (plain ASCII strings
- * that render Chinese - the guard cannot see those; treat label maps as
- * locale-resolved by construction). BMP extensions A, compatibility
- * ideographs, kana and the extension-B+ planes are covered by the detector.
+ * Static guard: the admin surface (routes, admin components, auth pages) and the markdown
+ * editor family must not carry hardcoded Chinese (or CJK full-width punctuation) outside
+ * comments.
+ * The allowlist below stays EMPTY by design — test fixtures are exempted by path (they
+ * assert catalog copy or carry fixture content), so any remaining hit is a real violation;
+ * enabling an entry means editing the `ALLOWLIST.length === 0` assertion, and that diff must
+ * carry a one-line rationale.
+ * Known blind spots (registered, currently zero instances): CJK escape sequences
+ * (`\uXXXX` / HTML entities), a literal `//` inside a string swallowing its line tail, and
+ * single-locale label maps (plain ASCII strings that render Chinese — treat label maps as
+ * locale-resolved by construction).
  */
 
 const ROOTS = [

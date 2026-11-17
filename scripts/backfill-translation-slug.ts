@@ -6,27 +6,20 @@ import { notes, posts } from '../src/lib/server/db/content';
 import { slugTrackers } from '../src/lib/server/db/system';
 
 /**
- * Translation-slug convergence : the translation family shares ONE
- * address - the source decides it, translations inherit it. Rows written before
- * that rule existed carry their own slugs (the old flow seeded a translation
- * draft with `slug: null` and let the author type one at publish), so this
- * walks every `translation_group` and brings each member back to the source
- * slug.
+ * Translation-slug convergence: a translation family shares ONE address -
+ * the source decides it, translations inherit it. Rows written before that
+ * rule carry their own slugs, so this walks every `translation_group` and
+ * brings each member back to the source slug.
  *
- * Dry-run by default - it prints the per-row plan and writes NOTHING;
- * `--apply` runs each row's change in its own transaction, writing a
- * `slug_trackers` row for every retired slug so the old URL still 301s.
- * Idempotent: a second run finds nothing to do.
+ * Dry-run by default (prints the plan, writes nothing); `--apply` commits
+ * each row in its own transaction and writes a `slug_trackers` row per
+ * retired slug so old URLs still 301. Idempotent. Run:
+ * `pnpm db:backfill-translation-slug [--apply]`.
  *
- * Safety rails:
- *  - a member is SKIPPED and reported as CONFLICT when another group already
- *    owns the target `(lang, slug)` (`notes_lang_slug_uniq` /
- *    `posts_lang_slug_uniq` would reject the write anyway)
- *  - a group with no source row is reported as ORPHAN and left alone
- *  - a source still carrying a `draft-` placeholder slug is reported as
- *    NEEDS-SLUG: there is no real address to converge onto
- *
- * Run: pnpm db:backfill-translation-slug  (add --apply to write)
+ * Safety rails: CONFLICT when another group already owns the target
+ * `(lang, slug)`, ORPHAN when a group has no source row, NEEDS-SLUG when the
+ * source still carries a `draft-` placeholder - all three are reported,
+ * never written.
  */
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {

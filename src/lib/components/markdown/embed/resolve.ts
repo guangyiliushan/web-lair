@@ -2,23 +2,15 @@ import { EMBED_PROVIDERS, type EmbedProviderId } from './registry';
 import { parseImageTail } from '$lib/components/markdown/image/tail-attrs';
 
 /**
- * The spec 3.4 embed decision — a pure function that never touches the
- * network, short-circuiting in the spec's order:
- *
- * 1) tail attributes say `type=image`            → image
- * 2) an enclosing grid in image mode             → image
- * 3) the extension (query/hash stripped) is a
- *    known image extension                       → image
- * 4) a provider registry match                   → provider card
- * 5) otherwise                                   → generic card
- *
- * Non-web protocols (data:, javascript:, …) are never cards: the node stays
- * an image and the sanitizer strips the src, so the URL cannot leak into
- * card text or attributes either (a spec registration item).
- *
- * Callers must also keep the spec's other half: bare URLs and normal links
- * are never upgraded to cards, and an image inside a link label stays an
- * image — only bare `!` nodes reach this function.
+ * decideImage is the embed decision for bare `!` image nodes — a pure function that
+ * never touches the network.
+ * It short-circuits: tail attributes saying `type=image`, then an enclosing grid in image
+ * mode, then a known image extension, then a provider registry match, otherwise a generic
+ * card.
+ * Reason: non-web protocols (data:, javascript:, …) are never cards — the node stays an
+ * image and the sanitizer strips the src, so the URL cannot leak into card text or
+ * attributes either.
+ * Callers enforce the other half of the contract — see `remarkImageEmbed`.
  */
 
 export interface ImageDecisionContext {

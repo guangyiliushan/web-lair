@@ -1,24 +1,20 @@
 import { SECRET_KEY_BYTES } from './crypto.ts';
 
 /**
- * Master-key keyring.
- *
- *     SECRETS_KEYS="2:<base64 32B>,1:<base64 32B>"   # any order; ACTIVE decides
- *     SECRETS_KEY_ACTIVE="2"                          # must name a listed version
- *     SECRETS_KEY="<base64 32B>"                      # legacy single key -> version 1
- *
+ * Master-key keyring:
+ * `SECRETS_KEYS="2:<base64 32B>,1:<base64 32B>"` (any order; ACTIVE
+ * decides), `SECRETS_KEY_ACTIVE="2"` (must name a listed version),
+ * `SECRETS_KEY="<base64 32B>"` (legacy single key -> version 1).
  * A `current + previous` pair is not enough: during a rolling deploy a new
  * replica writes the new version while an old replica cannot read it, and a
  * dump from two rotations ago references a version a two-slot scheme already
  * dropped. The keyring keeps every version that a retained backup or an
  * un-migrated row may still need, and `ACTIVE` decides which one new writes
  * use.
- *
  * Parsing is deliberately strict and never echoes key material in an error:
  * a typo must fail at configuration time, not silently create an unreadable
- * row or fall back to a different key.
- *
- * No `$lib`/`$env` imports - the job drain loads this under plain Node.
+ * row or fall back to a different key. No `$lib`/`$env` imports — the job
+ * drain loads this under plain Node.
  */
 
 export class KeyringConfigError extends Error {

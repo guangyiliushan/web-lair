@@ -3,21 +3,16 @@ import { zhCnLocale } from './locale-fixture';
 import { psql, valkey, valkeyAlive, valkeyDel } from './support';
 
 /**
- * Realtime presence acceptance: the
- * heartbeat -> window -> SSE chain on a fixture post — the stream header
- * contract, the window-vs-cardinality probe over a live ghost member (no
- * page-mount interference: a load-bearing rewrite after the review found
- * the old badge-based pin could not fail), the two-tabs fan-in, the
- * refreshing-TTL probe, and the site-key mount pin (a public page's beat
- * lands in wl:presence:site with the tab token — closing the "deleting the
- * layout mount line stays green" review finding). Fixtures are namespaced
- * `e2e-rt` and removed in teardown; the spec runs serial against the
- * production preview and the live Valkey.
+ * Realtime presence acceptance: the heartbeat -> window -> SSE chain on a
+ * fixture post - the stream header contract, the aged-out window probe over
+ * a live ghost member, the two-tabs fan-in, the beat-refreshed TTL, and the
+ * site-key mount pin (a public page's beat lands in wl:presence:site with
+ * the tab token). Fixtures are namespaced `e2e-rt` and removed in teardown;
+ * the spec runs serial against the production preview and the live Valkey.
  *
- * Isolation (review note): every assertion reads the fixture CONTENT key,
- * which only this spec writes — parallel workers cannot pollute it;
- * `-w1` is the house gate convention, not a requirement of this file. The
- * only shared-key write is the best-effort site-key DEL in teardown.
+ * Isolation: assertions read the fixture CONTENT key that only this spec
+ * writes, so parallel workers cannot pollute it (`-w1` is gate convention,
+ * not a requirement here); the only shared-key write is the teardown DEL.
  */
 const CATEGORY = '00000000-0000-7000-8000-0000000000e1';
 const POST = '00000000-0000-7000-8000-0000000000e2';

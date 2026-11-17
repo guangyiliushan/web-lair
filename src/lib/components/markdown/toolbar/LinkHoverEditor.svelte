@@ -1,24 +1,14 @@
 <script lang="ts">
 	/**
-	 * LinkHoverEditor (batch 3b) — in-place link editing for the rich editor.
-	 *
-	 * Replaces every `window.prompt` link flow with a floating editor that
-	 * appears when the caret lands inside a link (view mode: open / edit /
-	 * remove) or when a toolbar button requests a new link (edit mode over
-	 * the current selection). The pane follows the project's floating-toolbar
-	 * pattern (FloatingFormatToolbar): fixed positioning above the target
-	 * rect with an editor-top flip guard, and `onmousedown preventDefault`
-	 * so the editor selection never blurs into the pane.
-	 *
-	 * Zero-offset rule: the pane is `position: fixed` — it never adds
-	 * inline content, so text geometry in the editor is untouched.
-	 *
-	 * Official references (verified in this repo's node_modules):
-	 * - LinkNode.getURL/setURL — @lexical/link LexicalLinkNode.d.ts:44-45
-	 * - unwrap = splice children into parent then remove the link node,
-	 *   exactly the $toggleLink(null) collapsed path (LexicalLink.dev.mjs:592-601)
-	 * - insertLink — existing project helper (lexical-helpers.ts:133) for the
-	 *   create-over-selection flow
+	 * LinkHoverEditor is the in-place link editing pane for the rich editor: it replaces
+	 * every `window.prompt` flow with a floating editor that appears when the caret lands
+	 * inside a link (view mode: open / edit / remove) or when a toolbar button requests a
+	 * new link (edit mode over the current selection).
+	 * The pane follows the FloatingFormatToolbar pattern — fixed positioning above the
+	 * target rect with an editor-top flip guard, and `onmousedown preventDefault` so the
+	 * editor selection never blurs into the pane.
+	 * Zero-offset rule: the pane is `position: fixed` and never adds inline content, so text
+	 * geometry in the editor is untouched.
 	 */
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';

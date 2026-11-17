@@ -1,21 +1,16 @@
 /**
  * Print the confirmation token currently mailed for a pending subscription.
  *
- * F-13 dropped the plaintext `token` column: only `token_nonce` and
- * `token_hash` remain, so the link is re-derived from the nonce with
- * `SUBSCRIBE_TOKEN_SECRET`. This script is the supported way to exercise the
- * confirm / one-click links on a box, replacing the old
- * `select token from subscriptions` RUNBOOK step.
- *
- * The runtime image ships `scripts/` without `src/`, so the derivation lives
- * here as well; `subscription-token.test.ts` pins this copy byte-for-byte
- * against `deriveSubscriptionToken`, so the two cannot drift silently.
- *
- * Usage:
+ * Only `token_nonce` and `token_hash` remain (the plaintext `token` column
+ * is gone), so the link is re-derived from the nonce with
+ * `SUBSCRIBE_TOKEN_SECRET`. Usage:
  *   node scripts/print-subscribe-token.ts <email>
  *   node scripts/print-subscribe-token.ts --nonce <43-char nonce>
  *
- * The token is a bearer credential: it goes to stdout only.
+ * The runtime image ships `scripts/` without `src/`, so the derivation is
+ * duplicated here; `subscription-token.test.ts` pins this copy byte-for-byte
+ * against `deriveSubscriptionToken` so the two cannot drift. The token is a
+ * bearer credential: it goes to stdout only.
  */
 import { createHmac } from 'node:crypto';
 import { pathToFileURL } from 'node:url';

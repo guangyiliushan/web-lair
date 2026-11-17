@@ -5,24 +5,21 @@ import { isPrivateAddress, type ResolvedAddress } from '../security/ssrf-guard.t
 /**
  * Endpoint policy for the external storage driver.
  *
- * The rule set:
- *   - https only, and never a URL carrying credentials;
- *   - a hostname is resolved and EVERY answer must be globally routable;
- *   - cloud metadata addresses are rejected even when the operator opted into
- *     private endpoints (a "LAN MinIO" exemption must not become an IMDS read);
- *   - `ALLOW_PRIVATE_STORAGE_ENDPOINT=true` is the only way to allow RFC1918 /
- *     loopback / link-local answers (a private MinIO on the LAN), and it is
- *     owner-scoped at the action layer.
+ * The rule set: https only, never a URL carrying credentials; a hostname is
+ * resolved and EVERY answer must be globally routable; cloud metadata
+ * addresses are rejected even when the operator opted into private endpoints
+ * (a "LAN MinIO" exemption must not become an IMDS read);
+ * `ALLOW_PRIVATE_STORAGE_ENDPOINT=true` is the only way to allow RFC1918 /
+ * loopback / link-local answers, and it is owner-scoped at the action layer.
  *
  * The local driver never comes through here: RustFS is loopback by design and
  * its endpoint is fixed by env, not by a form.
  *
- * Residual window, registered: this validates the DNS answer, then the adapter
- * dials the hostname again (no connection pinning — the storage adapter is
- * shared with the local driver and uses plain fetch). A rebind between the two
- * lookups is out of scope for v1; the bucket credentials still have to be valid
- * for any read to succeed. The links checker closes the same window with
- * `pinnedLookup`; the storage path gets it if the threat model demands it.
+ * Known gap: this validates the DNS answer, then the adapter dials the
+ * hostname again (no connection pinning - the adapter is shared with the
+ * local driver and uses plain fetch). A rebind between the two lookups is out
+ * of scope for v1; the bucket credentials still have to be valid for any read
+ * to succeed. The links checker closes the same window with `pinnedLookup`.
  */
 
 export type StorageEndpointErrorCode =

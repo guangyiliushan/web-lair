@@ -1,18 +1,12 @@
 // scripts/seed-owner.ts
-// Usage:
-//   1. pnpm dev  (start the dev server)
-//   2. pnpm db:seed-owner
+// Usage: `pnpm dev` first (the seed signs up through the running server),
+// then `pnpm db:seed-owner`.
+// Env: OWNER_EMAIL (required), OWNER_PASSWORD (min 8 chars), OWNER_NAME
+// (default "Admin"), ORIGIN (default http://localhost:5173), DATABASE_URL.
 //
-// Environment variables:
-//   OWNER_EMAIL     — site owner email, required
-//   OWNER_PASSWORD  — password (at least 8 characters)
-//   OWNER_NAME      — display name (default "Admin")
-//   ORIGIN          — SvelteKit server address (default http://localhost:5173)
-//   DATABASE_URL    — PostgreSQL connection string
-//
-// The role comes from better-auth's admin plugin; owner uniqueness is guaranteed by the
-// application layer (the conditional update in step 5), so the script is idempotent:
-// running it again never creates a second owner.
+// The role comes from better-auth's admin plugin; owner uniqueness is
+// guaranteed by the application layer (the conditional update in step 5), so
+// the script is idempotent: running it again never creates a second owner.
 
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';

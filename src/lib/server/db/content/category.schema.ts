@@ -14,22 +14,11 @@ import {
 import type { LocalizedText } from './localized.ts';
 
 /**
- * Taxonomy labels are per language (SKOS prefLabel model): `name` is the
- * source label (the one slug is derived
- * from), `name_i18n` holds the other locales. `source_lang` records which
- * language `name` is written in - it is locked after creation.
- *
- * The jsonb constraints keep the column honest without a second table:
- * closed key set, no blank values, and the source locale never duplicated
- * inside `name_i18n` (function form: `?` would collide with the driver's
- * placeholder syntax).
- *
- * `is_default` marks the fallback bucket. `posts.category_id`
- * is NOT NULL with `on delete restrict`, so every post is filed somewhere and
- * a category with posts can never be dropped out from under them — the default
- * is where "clear out this category" moves them. Like `pages.is_default` it is
- * an ordinary, renameable row that is simply not deletable; the partial unique
- * index keeps it to one.
+ * `categories` labels are per language (SKOS prefLabel): `name` is the source label the slug
+ * derives from, `source_lang` records `name`'s language - locked after creation - and `name_i18n`
+ * holds the other locales.
+ * `is_default` is the fallback bucket that takes posts on clear-out: `posts.category_id` is NOT
+ * NULL with `on delete restrict`, so it is not deletable; a partial unique index keeps it to one.
  */
 export const categories = pgTable(
 	'categories',

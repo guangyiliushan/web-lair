@@ -20,29 +20,24 @@ import { requestAddress } from '$lib/server/security/request-address';
 import { clientAddressKey } from '$lib/utils/cidr';
 
 /**
- * Editor image uploads: one file per request - the Lexical client uploads 1-3
- * pasted/dropped images concurrently and inserts each result as it lands, so
- * per-file retry stays trivial.
- *
- * A JSON endpoint rather than a form action: kit's docs route non-form interactions
- * to `+server` (form-actions "Alternatives"); multipart bodies are covered by the
- * app's `handleCsrf` hook (the framework check is disabled for the one-click
- * exemption), and the client must send `Accept: application/json` to receive the
- * JSON wrapper on a CSRF rejection.
- *
- * Auth is a boolean surface (never redirect()): a fetch client needs a decidable
- * 401/403 JSON answer, not a 303 it would follow into HTML. The upload reuses the
- * shared pipeline - sniff whitelist, 25MB cap, content-addressed dedupe - gated to
- * images only (this endpoint's contract is body images, so attachments answer 415
- * before anything is stored), and the shared fail-open rate bucket with the admin
- * pages (`limits:upload:<uid>`, 60/10min - single source in files.ts).
- *
- * Codes: unauthorized(401) / forbidden(403) / throttled(429) / empty(400) /
- * too-large(413) / unsupported-type(415) / server-error(500). URLs follow object
- * existence: GIFs take the bare key (the original IS the public tier) and images
- * take `@preview` only when the pipeline produced one (source long edge > 2560),
- * else `@full` - every body insertion must carry a variant suffix, since anonymous
- * reads of bare non-GIF keys are 404s.
+ * Editor image uploads: one file per request — the Lexical client uploads 1-3 pasted or
+ * dropped images concurrently and inserts each result as it lands, so per-file retry stays
+ * trivial.
+ * A JSON endpoint rather than a form action: kit routes non-form interactions to `+server`
+ * (form-actions "Alternatives"); multipart bodies are covered by the app's `handleCsrf` hook,
+ * and the client must send `Accept: application/json` to get the JSON wrapper on a CSRF
+ * rejection.
+ * Auth is a boolean surface, never `redirect()`: a fetch client needs a decidable 401/403
+ * JSON answer, not a 303 it would follow into HTML.
+ * The upload reuses the shared pipeline — sniff whitelist, 25MB cap, content-addressed dedupe
+ * — images only (gate below), on the shared fail-open rate bucket with the admin pages
+ * (`limits:upload:<uid>`, 60/10min, single source in files.ts).
+ * Codes: unauthorized(401) / forbidden(403) / throttled(429) / empty(400) / too-large(413) /
+ * unsupported-type(415) / server-error(500).
+ * URLs follow object existence: GIFs take the bare key (the original IS the public tier);
+ * images take `@preview` only when the pipeline produced one (source long edge > 2560), else
+ * `@full` — every insertion must carry a variant suffix, since anonymous reads of bare
+ * non-GIF keys are 404s.
  */
 
 /** Admin JSON responses are never cacheable (multi-admin browsers/proxies). */

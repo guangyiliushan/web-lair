@@ -2,22 +2,18 @@ import { m } from '$lib/paraglide/messages';
 import type { ListColumn } from '$lib/components/admin/list-table';
 
 /**
- * Column set for the AI activity ledger. Lives beside the page but outside it
- * so `list-budget.test.ts` can check the width arithmetic without rendering.
- *
- * The tiers below are not taste, they are the answer to that test: fixed widths
- * plus the flexible column's minimum must fit `tableBudget(v)` at all twelve
- * sample viewports. 768px is the tightest tier by far (121px spare) because the
- * sidebar comes into flow there and the budget drops from 719 to 433 - a set
- * that fits at 767px can overflow at 768px.
- *
- * Order is display order, not tier order: narrowing drops columns, it never
- * reorders them. Filters live in their own column's `<th>` (see `control`),
- * which is why the most-filtered columns survive to the widest tiers.
- *
- * The time column carries the date as well as the clock, like every audit
- * table people already read (Stripe, Datadog, GitHub Actions). Splitting the
- * date into a day-group rule would save width but fight the shared row height.
+ * Column set for the AI activity ledger. It lives beside the page but outside it so
+ * `list-budget.test.ts` can check the width arithmetic without rendering.
+ * The tiers below are the answer to that test: fixed widths plus the flexible column's
+ * minimum must fit `tableBudget(v)` at all twelve sample viewports. 768px is the tightest
+ * tier by far (121px spare), where the sidebar comes into flow and the budget drops from 719
+ * to 433 — the cliff `list-budget.ts` documents.
+ * Order is display order, not tier order: narrowing drops columns, it never reorders them.
+ * Filters live in their own column's `<th>` (see `control`), so the most-filtered columns
+ * survive to the widest tiers.
+ * The time column carries the date as well as the clock, like every audit table people
+ * already read (Stripe, Datadog, GitHub Actions); a day-group rule would save width but fight
+ * the shared row height.
  */
 export const cols: Record<
 	'time' | 'task' | 'model' | 'status' | 'related' | 'tokens' | 'duration' | 'cost',

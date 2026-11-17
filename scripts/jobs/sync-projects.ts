@@ -1,18 +1,16 @@
 // scripts/jobs/sync-projects.ts
 //
 // Manual projects-sync entry:
-//
 //   pnpm jobs:sync-projects [--dry-run] [--provider <p>] [--account <a>] [--refresh-ids <id,id>]
 //
-// Direct run, sharing the same session advisory lock as the drain job
-// (`web_lair.job.projects.sync`) - a manual run can never overlap a queued
-// one. `--dry-run` performs the full run but writes nothing. `--provider` /
-// `--account` narrow the configured targets; a named pair that is not
-// configured yet runs as an ad-hoc target (operator convenience for a first
-// sync). `--refresh-ids` re-GETs selected rows and skips target listing.
+// Direct run sharing the drain job's session advisory lock
+// (`web_lair.job.projects.sync`), so a manual run never overlaps a queued
+// one. `--dry-run` runs fully but writes nothing; `--provider` / `--account`
+// narrow configured targets (an unconfigured pair runs ad-hoc on first
+// sync); `--refresh-ids` re-GETs rows and skips target listing.
 //
-// Exit codes: 0 = run finished (per-repo failures live in the summary);
-// 1 = the run broke; 2 = configuration / argument error; 3 = lock busy.
+// Exit codes: 0 finished (per-repo failures live in the summary), 1 the run
+// broke, 2 configuration/argument error, 3 lock busy.
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';

@@ -2,19 +2,15 @@ import { promises as dns } from 'node:dns';
 import { BlockList, isIP } from 'node:net';
 
 /**
- * Shared SSRF guard for server-side fetches (links line, 2026-10-06; moved
- * from `favicon-proxy.ts` so the link checker and the favicon proxy share one
- * blocklist and one resolution policy).
- *
- * Two layers, mirroring the OWASP SSRF Cheat Sheet:
- * 1. resolution-time validation: every DNS answer is checked against the
- *    non-global blocklist (fail closed) BEFORE the request is issued;
- * 2. connection-time pinning: `pinnedLookup` overrides the socket's own DNS
- *    lookup so the connection can only reach the addresses validated in
- *    step 1 - a second, unchecked lookup between validation and connection
- *    (DNS rebinding) cannot redirect it.
- *
- * `favicon-proxy.ts` still performs step 1 only and keeps its registered
+ * Shared SSRF guard for server-side fetches, used by the links checker and
+ * the favicon proxy (one blocklist, one resolution policy).
+ * Two layers, mirroring the OWASP SSRF Cheat Sheet: resolution-time
+ * validation — every DNS answer is checked against the non-global blocklist
+ * (fail closed) BEFORE the request is issued; and connection-time pinning —
+ * `pinnedLookup` overrides the socket's own DNS lookup so the connection can
+ * only reach the addresses validated in step 1, so a second, unchecked
+ * lookup between validation and connection (DNS rebinding) cannot redirect
+ * it. `favicon-proxy.ts` still performs step 1 only and keeps its registered
  * TOCTOU residual; the links checker performs both.
  */
 const BLOCKED_RANGES = new BlockList();

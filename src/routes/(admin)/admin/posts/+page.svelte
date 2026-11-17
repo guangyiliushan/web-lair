@@ -49,22 +49,18 @@
 	};
 
 	/**
-	 * Column descriptors are the single source of truth: `listColumnClass`
-	 * derives both the `<th>` and the `<td>` classes from the same entry, so a
-	 * column can never be half-visible (the old list's overlap bug).
-	 */
-	/**
-	 * Row layout. The title owns line 1 and wraps in full - it is the record's
-	 * identity, and truncating it costs more than the width it saves. Everything
-	 * else is deferred under it, one related group per line:
+	 * Column descriptors are the single source of truth: `listColumnClass` derives both the
+	 * `<th>` and the `<td>` classes from the same entry, so a column can never be
+	 * half-visible (the old list's overlap bug).
 	 *
-	 *   line 2 attribution   category / status - only once their column has dropped
-	 *
-	 * Narrowing costs columns, never information: a dropped column value shows on
-	 * line 2 at exactly the widths where its `<th>` is hidden, and its filter moves
-	 * in beside the search box so it stays usable. Dropping order when narrowing is
-	 *   line 3 metrics / time  views / likes / updated - never columns at all
-	 * search never moves.
+	 * Row layout: the title owns line 1 and wraps in full — it is the record's identity, and
+	 * truncating it costs more than the width it saves. Everything else defers under it, one
+	 * related group per line:
+	 *   line 2 attribution    category / status — only once their column has dropped
+	 *   line 3 metrics / time views / likes / updated — never columns at all
+	 * Narrowing costs columns, never information: a dropped column value shows on line 2 at
+	 * exactly the widths where its `<th>` is hidden, and its filter moves in beside the
+	 * search box so it stays usable; the search box itself never moves.
 	 */
 
 	const currentCategory = $derived(

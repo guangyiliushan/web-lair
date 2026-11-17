@@ -1,26 +1,24 @@
 /**
- * Job import policy - the single source shared by the save gate (web path,
- * `save-gate.ts`) and the repository eslint config (builtin jobs block). Both call sites used to
- * carry their own copy of the literals; this module ends the drift.
+ * Job import policy is the single source shared by the save gate (web path,
+ * `save-gate.ts`) and the repository eslint config (builtin jobs block).
  *
- * Why the two node negations: minimatch never crosses "/" with a single `*`,
- * so one-slash builtins such as node:fs/promises need a second one-slash
- * pattern on top of the bare `node:*` negation (probed matrix, 2026-10-07).
+ * Why two node negations: minimatch never crosses "/" with a single `*`, so
+ * one-slash builtins such as `node:fs/promises` need a second one-slash pattern
+ * on top of the bare `node:*` negation.
  *
- * Why `!#jobs-sdk` is exact: a glob without
- * wildcards matches that string alone, so lookalikes (`evil#jobs-sdk`,
- * `#jobs-sdk-x`, `x#jobs-sdk`) stay restricted - the earlier `!*#jobs-sdk*`
- * negation admitted those forms (probed) while the runtime gate kept
- * rejecting them. (`#jobs-sdk/x` was already restricted then and now.)
+ * Why `!#jobs-sdk` is exact: a wildcard-free glob matches that string alone, so
+ * lookalikes (`evil#jobs-sdk`, `#jobs-sdk-x`, `x#jobs-sdk`) stay restricted; a
+ * trailing-wildcard negation admitted those forms while the runtime gate kept
+ * rejecting them (`#jobs-sdk/x` was restricted both ways).
  *
  * Why the dynamic selectors: `no-restricted-imports` only sees STATIC import
- * statements; `await import('lodash')` slips through it. The
- * selectors below reject dynamic imports whose specifier is a disallowed
- * string literal, and any dynamic import whose specifier is not a literal at
- * all (a computed specifier cannot be verified against the allowlist).
+ * statements, so `await import('lodash')` slips through. The selectors reject
+ * dynamic imports with a disallowed string-literal specifier, and any dynamic
+ * import whose specifier is not a literal (a computed specifier cannot be
+ * verified against the allowlist).
  * Known asymmetry (registered nit): the runtime gate accepts no-substitution
- * template literals (compile-time constants), while the selector above stays
- * stricter for builtins; computed templates are rejected on both sides.
+ * template literals while the selectors stay stricter for builtins; computed
+ * templates are rejected on both sides.
  */
 export const JOB_IMPORT_PATTERNS = [
 	{

@@ -5,14 +5,13 @@ import { readFileSync } from 'node:fs';
  *
  * The page is READ-ONLY here on purpose: an external database is an
  * install/deploy decision (`DATABASE_URL` + `pg_dump`/`pg_restore`), not a
- * settings form. What an operator needs from this page is the three facts that
- * make a quiet misconfiguration visible:
+ * settings form. The three facts that make a quiet misconfiguration visible:
  *
- *   mode      - is the app talking to the bundled Postgres or an external one?
- *   host      - WHICH host, masked (the page is admin-only but a host name is
- *               still infrastructure detail; the password never appears);
- *   migrations- how many ledger rows are applied and whether the newest
- *               migration in `drizzle/` is among them.
+ * mode       - bundled Postgres or an external one?
+ * host       - WHICH host, masked (admin-only page, but a host name is still
+ *              infrastructure detail; the password never appears);
+ * migrations - how many ledger rows are applied and whether the newest
+ *              migration in `drizzle/` is among them.
  *
  * Nothing here writes, and nothing here runs a migration.
  */

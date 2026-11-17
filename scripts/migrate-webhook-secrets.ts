@@ -1,19 +1,12 @@
 /**
- * Webhook secret backfill.
- *
- * Encrypts every legacy plaintext `webhooks.secret` into `webhook_secrets`.
- * Default is a dry run: it prints what would move and writes nothing. With
- * `--apply` it inserts the encrypted rows and NULLs the legacy column, so no
- * plaintext signing secret remains in the database.
- *
- * Idempotent: a row that already has a `webhook_secrets` entry is skipped, and
- * a second run finds nothing left to do.
- *
- * Usage:
- *   node --env-file=.env scripts/migrate-webhook-secrets.ts [--apply]
- *
- * Exit codes: 0 = done (including "nothing to do"), 1 = a row failed,
- * 2 = configuration error.
+ * Webhook secret backfill: encrypts every legacy plaintext `webhooks.secret`
+ * into `webhook_secrets` and NULLs the legacy column, so no plaintext
+ * signing secret stays in the database. Dry-run by default; `--apply`
+ * writes. Idempotent - rows that already have an entry are skipped.
+ * Usage: `pnpm db:migrate-webhook-secrets [--apply]`.
+ * Exit codes: 0 done (including "nothing to do"), 1 a row failed, 2 config
+ * error. Container form and rollback: `deploy/RUNBOOK.md` -> "Retire the
+ * legacy webhook secret".
  */
 import postgres from 'postgres';
 import { loadKeyring } from '../src/lib/server/secrets/resolver.ts';

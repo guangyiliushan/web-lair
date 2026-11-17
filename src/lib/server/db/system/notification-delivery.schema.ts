@@ -12,36 +12,11 @@ import {
 } from 'drizzle-orm/pg-core';
 
 /**
- * Notification delivery outbox.
- *
- * One row per (event, dedupe key, channel). Business transactions insert the
- * row (`comment.pending` rides the comment insert's transaction; job/ops
- * producers go through the notification sink), and the drain's notification
- * segment claims it with `FOR UPDATE SKIP LOCKED` and hands it to the email /
- * Bark adapter.
- *
- * The unique key `(event_type, event_key, channel)` is the idempotency
- * contract: the same comment / the same job run / the same day's disk alert
- * can only ever produce ONE row per channel, so a retried producer, a drain
- * crash after the send, and a manual resend all converge on the same row
- * (same semantics as the webhook `webhook-id`). A resend re-queues that row
- * instead of copying it.
- *
- * Status is deliberately three-valued (`queued | sent | failed`): a retry
- * stays `queued` with `attempts` incremented and `next_attempt_at` pushed
- * forward, exactly like `webhook_deliveries`, so "is this
- * row still going to be tried?" is readable from status alone.
- *
- * `payload` carries only what the adapters render - `{ title, body, url? }`,
- * bounded (title <= 120, body <= 200 characters) and free of addresses, IPs,
- * stack traces and credentials. The producers sanitize before insert; the
- * adapters re-truncate so a hand-written row cannot turn into a PII leak in
- * Bark/email.
- *
- * No FK to `comment`/`job_runs`: the row must outlive a deleted comment or a
- * pruned run (the delivery log is the record, and `jobs.prune` owns its
- * retention). `event_key` is the textual reference (`comment:<uuid>`,
- * `job_run:<uuid>`, `disk:/data:<day>`).
+ * Notification outbox: one row per `(event_type, event_key, channel)` is the idempotency contract.
+ * Retries stay `queued` with `attempts` / `next_attempt_at` advanced; `payload` is bounded and free
+ * of addresses, IPs, stack traces and credentials.
+ * No FK to `comment`/`job_runs`: the log must outlive them; `jobs.prune` owns retention.
+ * Flow and re-send semantics: `deploy/RUNBOOK.md`, "Notification delivery".
  */
 export type NotificationChannel = 'email' | 'bark';
 export type NotificationStatus = 'queued' | 'sent' | 'failed';

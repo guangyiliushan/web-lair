@@ -5,27 +5,18 @@ import type { Blockquote, Paragraph, PhrasingContent } from 'mdast';
 import { parseAlertMarker } from '$lib/components/markdown/alert/alert-types';
 
 /**
- * remark-alert: GitHub-style alerts (spec 3.1) — the only alert syntax.
- *
- * A blockquote whose first paragraph starts with `[!NOTE]` / `[!TIP]` /
- * `[!IMPORTANT]` / `[!WARNING]` / `[!CAUTION]` (case-insensitive, plus the
- * fixed migration aliases) becomes `<div class="alert alert-{type}">`. The
- * text after the marker on the same line becomes an optional
- * `<p class="alert-title">`; the rest of the blockquote stays the alert body.
- *
- * The first paragraph is split line-wise (a soft break is a `\n` inside a
- * text node): every child of the first line — text and inline formatting
- * alike — stays in the title, children from the second line on move into a
- * new body paragraph, so inline markdown survives on both sides.
- *
- * Unknown markers and plain blockquotes are left untouched (5). The legacy
- * `:::info`-style callout branch was retired with this batch; old content
- * degrades to a plain container and its content is never swallowed.
- *
- * Divergence note: CommonMark lazy continuation merges an un-prefixed line
- * into the surrounding blockquote, so the render side treats such a line as
- * alert body text; the editor's import stops at the first non-`>` line and
- * leaves it outside the alert (no content is lost on either side).
+ * remarkAlert implements the only alert syntax — GitHub-style alerts: a blockquote whose
+ * first paragraph starts with `[!NOTE]` / `[!TIP]` / `[!IMPORTANT]` / `[!WARNING]` /
+ * `[!CAUTION]` (case-insensitive, plus the fixed migration aliases) becomes
+ * `<div class="alert alert-{type}">`.
+ * The text after the marker on the same line becomes an optional `<p class="alert-title">`;
+ * the rest of the blockquote stays the alert body.
+ * The first paragraph is split line-wise (a soft break is a `\n` inside a text node): every
+ * child of the first line — text and inline formatting alike — stays in the title, and
+ * children from the second line on move into a new body paragraph, so inline markdown
+ * survives on both sides.
+ * Unknown markers and plain blockquotes are left untouched; legacy `:::info`-style callouts
+ * degrade to a plain container and their content is never swallowed.
  */
 export const remarkAlert: Plugin<[], Root> = () => {
 	return (tree) => {

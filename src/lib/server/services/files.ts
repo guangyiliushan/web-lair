@@ -550,22 +550,11 @@ export interface DeleteFileOptions {
 }
 
 /**
- * Reference-guarded delete: a file referenced by content or linked
- * to a photo is never removed silently. The re-check and the delete run in a
- * single transaction that locks the registry row first (`FOR UPDATE`): an FK
- * check on a concurrent `file_references`/`photos` INSERT takes an implicit
- * `FOR KEY SHARE` lock on the same row, so the two serialize — either the
- * re-check sees the committed reference (delete blocked), or the racing
- * INSERT waits for this transaction and then fails (23503, row already gone),
- * which the writer contract reads as "file removed". Read Committed
- * gives every statement a fresh snapshot, so a reference committed while we
- * waited for the lock is visible to the re-check.
- *
- * Objects go first and the registry row last. The DB half is transactional
- * (a failure after the row delete rolls back), but object deletes are NOT:
- * a crash between the object sweep and the row delete leaves a row whose
- * objects are gone — audit check ③ surfaces that state and a re-run stays
- * retryable. The row lock is held across those storage DELETEs by design.
+ * Reference-guarded delete: the re-check and the delete lock the registry row first, so a racing
+ * reference INSERT either shows up in the re-check or fails 23503.
+ * Objects go first and the registry row last; object deletes are not transactional, so a crash
+ * leaves a row whose objects are gone - audit check ③ surfaces it and a re-run stays retryable.
+ * See `files.test.ts › "blocks deletion while content or the gallery still references the file"`.
  */
 export async function deleteFile(
 	id: string,

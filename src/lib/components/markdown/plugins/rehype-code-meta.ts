@@ -6,21 +6,17 @@ import { addClass } from './hast-class';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Code-fence info-string rendering (spec 3.3) — runs BEFORE rehype-pretty-code
- * and rehype-mermaid, and before the provenance stamping, on purpose: at this
- * point the block is the plain pre/code pair, the only shape that is stable
- * across both pipelines. Shiki afterwards rebuilds the block (it renames the
- * pre to the figure and builds a fresh pre inside), so anything placed after
+ * rehypeCodeMeta renders the code-fence info string. It runs BEFORE rehype-pretty-code,
+ * rehype-mermaid and the provenance stamping on purpose: at this point the block is the
+ * plain pre/code pair, the only shape stable across both pipelines — Shiki afterwards
+ * renames the pre to the figure and builds a fresh pre inside, so anything placed after
  * that pass would land on a different element per pipeline.
- *
- * - `title` without `collapsed`: a small caption line above the block
- * - `collapsed` / `collapsed=N`: the block is wrapped in a native
- *   `<details class="md-code-collapsed">` whose summary carries the title
- *   (`Code` when absent); `=N` rides as `data-md-collapse`, which the
- *   stylesheet keys the partial preview on
- * - the transport attribute is consumed here and deleted; it is read before
- *   rehype-raw runs (raw content can never smuggle it) and it is not in the
- *   sanitize schema either
+ * `title` without `collapsed` renders a small caption line above the block; `collapsed` /
+ * `collapsed=N` wraps the block in a native `<details class="md-code-collapsed">` whose
+ * summary carries the title (`Code` when absent), with `=N` riding as `data-md-collapse`
+ * for the stylesheet's partial preview.
+ * The transport attribute is consumed here and deleted: it is read before rehype-raw runs
+ * (raw content can never smuggle it) and it is not in the sanitize schema either.
  */
 
 function readMeta(pre: Element): CodeMeta | null {

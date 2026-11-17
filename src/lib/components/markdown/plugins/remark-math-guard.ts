@@ -3,23 +3,16 @@ import type { Root, Text } from 'mdast';
 import { visit } from 'unist-util-visit';
 
 /**
- * remark-math-guard: inline math guardrails (spec 2 #2).
- *
- * micromark-extension-math puts no word-boundary constraint on the single
- * `$` delimiter, so `Price $5, cost $3` would be misparsed as one inline
- * formula. This plugin enforces the spec:
- * - the char before the opening `$` must not be a letter/digit/underscore
- *   (Unicode `\p{L}`/`\p{N}` plus `_`)
- * - the char after the closing `$` must not be a digit (Unicode `\p{N}`;
- *   full-width and Arabic-Indic digits count)
- * Violating inlineMath nodes are restored to the literal source text per 5
- * (sliced from the original via position offsets, preserving escaping).
- *
- * `\(…\)` (spec 2 #2) is exempt: it is the unambiguous spelling the guard's
- * heuristics exist to avoid, so its nodes are left alone.
- *
- * Block `$$` formulas are bounded by line boundaries -- the guard holds
- * trivially and is not applied.
+ * remarkMathGuard restores the word-boundary rules micromark-extension-math does not
+ * provide: it puts no constraint on the single `$` delimiter, so `Price $5, cost $3` would
+ * be misparsed as one inline formula.
+ * The char before the opening `$` must not be a letter/digit/underscore (`\p{L}`/`\p{N}`
+ * plus `_`), and the char after the closing `$` must not be a digit (`\p{N}` — full-width
+ * and Arabic-Indic digits count).
+ * Violating inlineMath nodes are restored to the literal source text, sliced from the
+ * original via position offsets so escaping is preserved.
+ * Block `$$` formulas are bounded by line boundaries — the guard holds trivially and is not
+ * applied.
  */
 /** shape of mdast-util-math's inlineMath node (the mdast package does not export this type) */
 interface InlineMathLike {

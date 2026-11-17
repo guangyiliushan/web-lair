@@ -32,25 +32,19 @@ export interface CommentPoint {
 }
 
 /**
- * Admin dashboard: the load is admin-guarded. The quick-action counters
- * and the data-statistics block read real rows; the realtime cards carry SSR
- * initial values from the presence service (site window / today's unique tabs
- * / daily peak sentinel) and the page upgrades them over the admin SSE
- * stream. When presence is disabled or the cache is unavailable the values
- * stay null and the cards render "—" (register E1/F3).
- *
- * Data-statistics scope (2026-10-21):
- *   - characters: every publicly visible body — posts + notes (visible),
- *     pages (visible, every locale), quotes, thoughts and moments; drafts,
- *     trash, private and future-scheduled rows are excluded;
- *   - reads / likes: posts + notes only — those are the only content tables
- *     with read_count / like_count. Quotes, thoughts, pages and moments have
- *     no equivalent counters (moments has up/down votes, not likes). Note:
- *     no write path currently increments these columns, so both cards read 0
- *     until read/like instrumentation lands;
- *   - friends: approved links; friend requests: pending links;
- *   - API calls, IP visits and site likes have no source in this app and were
- *     removed from the dashboard rather than rendered as fabricated values.
+ * Admin dashboard load: admin-guarded; the quick-action counters and the data-statistics
+ * block read real rows, while the realtime cards carry SSR initial values from the presence
+ * service (site window / today's unique tabs / daily peak) and the page upgrades them over
+ * the admin SSE stream. When presence is disabled or the cache is unavailable the values
+ * stay null and the cards render "—".
+ * Data-statistics scope: characters count every publicly visible body — posts + notes
+ * (visible), pages (visible, every locale), quotes, thoughts and moments; drafts, trash,
+ * private and future-scheduled rows are excluded.
+ * Reads and likes cover posts + notes only, the tables with read_count / like_count — no
+ * write path increments them today, so both cards read 0 until that instrumentation lands.
+ * Friends counts approved links and friend requests pending ones; API calls, IP visits and
+ * site likes have no source in this app and stay off the dashboard rather than being
+ * fabricated.
  */
 export const load: PageServerLoad = async ({ locals }) => {
 	await requireAdminRole();

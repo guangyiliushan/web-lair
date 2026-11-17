@@ -6,22 +6,15 @@ import { unsubscribe } from '$lib/server/services/subscriptions';
 import type { RequestHandler } from './$types';
 
 /**
- * RFC 8058 one-click unsubscribe.
- *
- * Mail receivers POST the `List-Unsubscribe-Post` key/value pair to the HTTPS
- * URI from `List-Unsubscribe` with **no cookies, no authorization and no
- * prior context. The token in the query string is the credential.
- *
- * Contract:
- * - `200` empty for a valid token (processed or already terminal) and for an
- *   unknown but well-formed token (no token oracle);
- * - `429 + Retry-After` when the per-IP seatbelt trips (a silent 200 would make
- *   the receiver drop a valid opt-out);
- * - `503` when the database write fails (retryable; 200 would lose the opt-out);
- * - no redirect (RFC 8058 §3.1 forbids it).
- *
- * A malformed token never reaches this handler in production: the CSRF hook
- * rejects it before routing (403).
+ * RFC 8058 one-click unsubscribe: mail receivers POST the `List-Unsubscribe-Post` key/value
+ * pair to the HTTPS URI from `List-Unsubscribe` with no cookies, no authorization and no
+ * prior context — the token in the query string is the credential.
+ * Contract: `200` empty for a valid token (processed or already terminal) and for an unknown
+ * but well-formed token (no token oracle); `429 + Retry-After` when the per-IP seatbelt trips
+ * (a silent 200 would make the receiver drop a valid opt-out); `503` when the database write
+ * fails (retryable); no redirect (RFC 8058 §3.1 forbids it).
+ * A malformed token never reaches this handler in production: the CSRF hook rejects it
+ * before routing (403).
  */
 const ONE_CLICK_RATE_LIMIT = { limit: 30, windowSeconds: 60 } as const;
 let warnedUnknownAddress = false;

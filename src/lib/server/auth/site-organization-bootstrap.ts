@@ -10,16 +10,14 @@ import {
 } from './site-organization.shared';
 
 /**
- * Idempotently bootstrap the single site organization.
- *
- * Runs inside /admin/setup right after the owner is claimed. Uses the official
- * system path of `POST /organization/create`: called without a session but with
- * `body.userId`, the endpoint skips `allowUserToCreateOrganization: false` by
- * design (`isSystemAction`, verified against better-auth 1.7.5 crud-org.mjs).
- * That system path is server-only - an HTTP caller always has a request, which
- * the endpoint rejects when no session is present. `creatorRole: 'owner'`
+ * Idempotently bootstrap the single site organization, right after the owner
+ * is claimed in /admin/setup. It uses the official system path of
+ * `POST /organization/create`: called with `body.userId` and no session, the
+ * endpoint skips `allowUserToCreateOrganization: false` by design
+ * (`isSystemAction`, verified against better-auth 1.7.5 crud-org.mjs); that
+ * path is server-only, because an HTTP caller always has a request, which the
+ * endpoint rejects when no session is present. `creatorRole: 'owner'`
  * (auth.ts) makes the creator a member with `member.role = 'owner'`.
- *
  * Failure is thrown to the caller: without the organization every
  * `hasPermission()` call would deny the owner, so the wizard must show an
  * explicit error instead of silently continuing.

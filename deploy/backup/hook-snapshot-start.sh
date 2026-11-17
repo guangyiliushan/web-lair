@@ -1,18 +1,12 @@
 #!/bin/sh
-#
-# Backrest CONDITION_SNAPSHOT_START command hook.
-#
-# Data plan (no argument): runs `backup.sh --dump-only`, which keeps every gate
-# of the nightly path (.tmp → `pg_restore -l` → live user-row comparison →
-# atomic mv, umask 077) and stops before restic. Backrest then snapshots
-# $BACKUP_DIR, so the snapshot can only ever contain a dump that passed.
-# Wired with ON_ERROR_CANCEL: a non-zero exit cancels the operation and no
-# snapshot is written.
-#
-# Config plan (--config): the data repository's `.env` copy lives in the SECOND
-# repository; an empty or incomplete .env there is worthless, so refuse the
-# operation instead of writing a config snapshot that restores to nothing.
-# Wired with ON_ERROR_FATAL: this one *is* an error, not a quiet cancel.
+# Backrest `CONDITION_SNAPSHOT_START` hook: it runs `backup.sh --dump-only`, so
+# the snapshot can only ever contain a dump that passed every gate (RUNBOOK,
+# "Backups (D-4)").
+# Data plan (no argument): wired ON_ERROR_CANCEL — a non-zero exit cancels the
+# operation and no snapshot is written.
+# Config plan (--config): the `.env` copy lives in the SECOND repository, and an
+# empty or incomplete one restores to nothing, so refuse the operation instead;
+# wired ON_ERROR_FATAL — this one *is* an error, not a quiet cancel.
 set -eu
 
 export BACKUP_PG_MODE="${BACKUP_PG_MODE:-local}"

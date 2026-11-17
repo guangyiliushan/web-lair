@@ -10,20 +10,17 @@ import { assessDeletion, type BucketCapabilities } from './port.ts';
 /**
  * Provider activation + rollback.
  *
- * Activation is deliberately NOT reachable from a form: `storage.provider` is
- * the candidate, and this module is the only writer of `storage.active` (the
- * cutover CLI calls it). Three guards stand in front of a switch:
+ * Activation is NOT reachable from a form: `storage.provider` is the
+ * candidate and this module the only writer of `storage.active` (cutover CLI).
+ * Three guards stand in front of a switch:
  *
- *   1. a NEW addressing target needs a complete copy of exactly that
- *      fingerprint when media exists (`files > 0`); a change that only flips
- *      the delete mode needs no copy — the objects are already in the bucket.
- *   2. the target bucket must answer HEAD, and its versioning/object-lock
- *      verdict must be PROVABLE (unknown is not "off" — fail closed).
- *   3. a versioned / object-locked bucket only activates in logical-delete
- *      mode, which is an explicit operator choice.
- *
- * Rollback refuses when files were uploaded after the cutover: those objects
- * live only on the current provider, so switching back would 404 them.
+ * 1. a NEW addressing target needs a complete copy of that fingerprint when
+ *    media exists (`files > 0`); a delete-mode-only change needs no copy -
+ *    the objects are already in the bucket.
+ * 2. the target bucket must answer HEAD and its versioning/object-lock
+ *    verdict must be PROVABLE (unknown is not "off" - fail closed).
+ * 3. a versioned / object-locked bucket only activates in logical-delete
+ *    mode, an explicit operator choice.
  */
 
 export type ActivationErrorCode =

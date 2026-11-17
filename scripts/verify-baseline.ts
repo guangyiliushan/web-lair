@@ -1,21 +1,18 @@
 // scripts/verify-baseline.ts
 //
-// Unified baseline gate (feat/schema-integration): asserts BOTH
-//   (a) drizzle/0000_baseline.sql against the hard contract - table set, counts,
-//       naming rules, junction composite PKs, batch constraint pins, predicate
-//       pins, and the absence of retired tables; and
-//   (b) the target database against the parsed baseline - table/column/index/
-//       check/FK inventories, FK leading indexes, and the migration ledger
-//       hash vs the baseline file (only when DATABASE_URL is present).
+// Unified baseline gate: (a) `drizzle/0000_baseline.sql` against the hard
+// contract (table set, counts, naming rules, junction composite PKs,
+// constraint/predicate pins, retired tables); (b) the target database
+// against the parsed baseline (table/column/index/check/FK inventories, FK
+// leading indexes, migration ledger hash) - only when DATABASE_URL is set.
 //
-// Phase A (default) is read-only and degrades to file checks without a database.
-// Phase B (--write-probes) additionally drives the constraint teeth from a
-// single rolled-back transaction; run it on throwaway databases only, because
-// it consumes identity numbers that transaction rollback does not restore.
+// Phase A (default) is read-only and degrades to file checks without a
+// database. Phase B (--write-probes) drives the constraint teeth from a
+// single rolled-back transaction: run it on throwaway databases only, since
+// it consumes identity numbers that rollback does not restore.
 //
-// Usage:
-//   pnpm db:verify-baseline                     (phase A; DATABASE_URL optional)
-//   pnpm db:verify-baseline -- --write-probes   (phase A + probes, throwaway DB)
+// Usage: `pnpm db:verify-baseline` (phase A, DATABASE_URL optional);
+// `pnpm db:verify-baseline -- --write-probes` (A + probes, throwaway DB).
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';

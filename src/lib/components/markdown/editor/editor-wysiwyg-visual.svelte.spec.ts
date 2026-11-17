@@ -9,20 +9,17 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 /**
- * Visual test: WYSIWYG rendering of the v0.3 syntax set in the editor, plus full-size
- * screenshots.
+ * Visual test: WYSIWYG rendering of the full v0.3 syntax set, plus full-size screenshots.
  *
- * Seam (complementary to editor-viewport-matrix.svelte.spec.ts — that one covers the
- * layout invariants of empty content, this one a real syntax document):
- *  1. the public MarkdownEditor component (mounted through ToolbarTestHost, mirroring
- *     the h-screen flex chain of posts/edit), real Chromium + the real layout.css;
- *  2. the initialMarkdown prop: markdown source → editor DOM (WYSIWYG import);
- *  3. the code-mode toggle button: markdown source ↔ rich text (round-trip fidelity).
+ * Complements editor-viewport-matrix.svelte.spec.ts (layout invariants on empty
+ * content): the public MarkdownEditor mounted through ToolbarTestHost in real Chromium
+ * with the real layout.css, driven through the initialMarkdown prop (markdown ->
+ * editor DOM) and the code-mode toggle (round-trip fidelity).
  *
  * Screenshots land outside the repo at ../../../../../../editor-visual-shots/
- * (convention: screenshots never enter git). Known scoping: light theme only; mentions
- * keep their token source text in the editor by design (`@gh:user`) and the renderer
- * rewrites them to real addresses, so they sit outside the "no literal markdown" scan.
+ * (screenshots never enter git); light theme only.
+ * Mention tokens are exempt from the no-literal-markdown scan (asserted in the first
+ * case).
  */
 
 /** Sample document covering every v0.3 syntax in EDITOR_TRANSFORMERS plus the ordinary

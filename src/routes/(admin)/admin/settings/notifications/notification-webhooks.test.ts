@@ -3,22 +3,18 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 
 /**
- * Route-level tests for the notification Webhooks actions. The retry action
- * is covered here: guard first, uuid guard, only failed deliveries retry,
- * disabled endpoints refused, a successful retry inserts a NEW queued row
- * copying webhookId/event/payload - the failed row stays for the record.
- *
- * SY S2 adds endpoint CRUD: every action runs `requireAdminRole` first, form
- * validation happens before any DB access, names are soft-rejected
- * case-insensitively (no DB constraint - the G3 ruling), secrets are
- * server-generated `whsec_` values revealed exactly once, and the update
- * write set is asserted EXACTLY (secret/isEnabled must stay untouched).
- *
- * Review round-1 teeth: the mock now records the TARGET TABLE of every
- * write and the WHERE conditions of every select, so a write moved to the
- * wrong table or a lost `lower(...)`/`<>` predicate turns a test red; the
- * stored URL must be the normalized `href`, the load must never ship the
- * raw secret, and the empty selection is pinned as intentional.
+ * Route-level tests for the notification webhooks actions.
+ * Retry: guard first, uuid guard, only failed deliveries retry, disabled endpoints refused,
+ * and a successful retry inserts a NEW queued row copying webhookId/event/payload while the
+ * failed row stays for the record.
+ * Endpoint CRUD: every action runs `requireAdminRole` first, form validation happens before
+ * any DB access, names are soft-rejected case-insensitively (no DB constraint), secrets are
+ * server-generated `whsec_` values revealed exactly once, and the update write set is
+ * asserted EXACTLY (secret/isEnabled must stay untouched).
+ * The mock records the TARGET TABLE of every write and the WHERE conditions of every select,
+ * so a write moved to the wrong table or a lost `lower(...)`/`<>` predicate turns a test
+ * red; the stored URL must be the normalized `href`, the load must never ship the raw
+ * secret, and the empty selection is pinned as intentional.
  */
 
 const { mocks, state } = vi.hoisted(() => {

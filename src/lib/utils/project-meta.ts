@@ -1,17 +1,12 @@
 /**
- * Projects-line shared metadata: the
- * UI-facing copy of the provider / status enumerations plus the i18n label
- * key maps. Batches P / A add the messages; the key names are pinned by
- * `project-meta.test.ts` so the admin surface and the public grid cannot
- * diverge on them.
- *
- * The DB copy lives in `$lib/server/db/content/project.schema.ts`;
- * `enum-drift.test.ts` pins BOTH copies against the baseline CHECK literals,
- * so neither can drift from the single baseline.
- *
- * Dependency-free and Node-loadable by design (links-line precedent): the
- * jobs side imports it with a relative `.ts` specifier - `$lib` aliases do
- * not resolve under plain Node type stripping.
+ * Projects-line shared metadata: the UI-facing copy of the provider/status enumerations and
+ * the i18n label key maps. The key names are pinned by `project-meta.test.ts` so the admin
+ * surface and the public grid cannot diverge on them.
+ * The DB copy lives in `$lib/server/db/content/project.schema.ts`; `enum-drift.test.ts` pins
+ * BOTH copies against the baseline CHECK literals, so neither can drift from the baseline.
+ * Dependency-free and Node-loadable by design (links-line precedent): the jobs side imports
+ * it with a relative `.ts` specifier — `$lib` aliases do not resolve under plain Node type
+ * stripping.
  */
 export const PROJECT_PROVIDERS = [
 	'github',

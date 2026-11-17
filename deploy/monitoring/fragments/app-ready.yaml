@@ -1,23 +1,13 @@
-# Optional fragment: dependency health /api/ready (rendered only when
-# READY_TOKEN is non-empty).
-#
-# Why a fragment and not core config: /api/ready did not exist yet when the
-# Gatus work landed, so the core gatus.yaml could only carry that endpoint as
-# `enabled: false`. Once the route existed it only answers callers that carry
-# READY_TOKEN (in production, no token → 404 for everyone; Gatus is not on
-# loopback inside the compose private network). Enabling it in the core config
-# would leave token-less deployments permanently red — the same reason as the
-# domain fragment: an endpoint that cannot be expressed safely as an empty
-# value is expressed by whether it gets rendered at all.
+# Optional fragment: dependency health /api/ready, rendered only when
+# READY_TOKEN is non-empty. It lives in a fragment because without a token the
+# route answers 404 to everyone (Gatus is not on loopback inside the compose
+# private network), so a core endpoint would be permanently red — the same
+# rule as the domain and drain fragments (deploy/monitoring/README.md "1. 文件").
 #
 # Semantics: /api/ready only proves DB `select 1` + Valkey PING (2s timeout,
 # 10s cache); it complements /api/health (liveness, no dependency checks).
 #
-# Acceptance:
-#   - READY_TOKEN set → zz-app-ready.yaml is rendered and the Gatus log shows
-#     `endpoint=app-ready;`
-#   - READY_TOKEN empty → the fragment is not rendered and the core config
-#     carries no such endpoint (verify-config.sh asserts both directions)
+# Both render directions are asserted by deploy/monitoring/verify-config.sh.
 endpoints:
   - name: app-ready
     group: web-lair

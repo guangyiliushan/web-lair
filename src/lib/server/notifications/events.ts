@@ -1,28 +1,15 @@
 import type { NotificationChannel } from '../db/system/notification-delivery.schema.ts';
 
 /**
- * Notification event roster.
- *
- * The roster is the single place an event type, its preference group and the
- * channels it may ever use are declared. Producers (`comment.pending` in the
- * comment service, `job.failed` in the drain, the builtin probes through the
- * `notify()` seam) name an event; `notifications/outbox.ts` refuses a type
- * that is not registered here, so a typo cannot create a row nothing will
- * ever deliver.
- *
+ * Notification event roster: the single place an event type, its preference
+ * group and the channels it may ever use are declared. Producers name an
+ * event; `notifications/outbox.ts` refuses a type that is not registered
+ * here, so a typo cannot create a row nothing will ever deliver.
  * Groups, not per-event switches, drive preferences: the settings page edits
  * `notifications.preferences` per group (`comment`, `job`, `ops`), and a new
- * event in an existing group inherits the operator's choice. Adding an event
- * is therefore additive - no schema change, no migration.
- *
- * Registered events:
- *  - `comment.pending`   - a reader's comment entered the moderation queue.
- *  - `job.failed`        - a job run reached the terminal `failed` state and
- *                          its name is on `JOB_FAILURE_ALERT_WHITELIST`.
- *  - `system.disk_high` / `system.memory_high` - threshold alerts from the
- *    resource-monitoring job.
- *  - `mail.probe.failed` - the SMTP probe failed.
- *
+ * event in an existing group inherits the operator's choice — adding an
+ * event is additive, no schema change, no migration. The registered events
+ * and their channels are the `NOTIFICATION_EVENTS` table below.
  * Node-strip-loadable (type-only import), because the drain imports this.
  */
 export type NotificationGroup = 'comment' | 'job' | 'ops';
