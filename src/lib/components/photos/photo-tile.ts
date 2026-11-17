@@ -2,7 +2,7 @@ import { thumbHashToDataURL } from 'thumbhash';
 import { variantKeyFor } from '$lib/media/keys';
 
 /**
- * Client-facing shapes + helpers for the public gallery (§5.1). Deliberately
+ * Client-facing shapes + helpers for the public gallery. Deliberately
  * free of `$lib/server` imports so grid/viewer components render in the
  * browser.
  */
@@ -65,7 +65,7 @@ export function photoTitle(tile: Pick<PhotoTile, 'title' | 'slug'>, locale: stri
 	return photoText(tile.title, locale) ?? tile.slug;
 }
 
-/** Alt text chain (§5.3): title → description → file name. */
+/** Alt text chain: title → description → file name. */
 export function photoAlt(
 	tile: Pick<PhotoTile, 'title' | 'description' | 'fileName'>,
 	locale: string
@@ -159,13 +159,13 @@ export function photoDimensions(tile: Pick<PhotoTile, 'width' | 'height'>): stri
 export const EMBED_PREVIEW_LONG_EDGE = 2560;
 
 /**
- * The body-image URL (Q11, refined by the 3a review round): GIFs and other
+ * The body-image URL: GIFs and other
  * pass-through formats travel as their bare key; images embed as `@preview`
  * when the pipeline produced one (source long edge above the preview box)
  * and as `@full` otherwise. Below that box `@preview` does not exist, so
  * this choice IS the object-existence rule - an unconditional `@preview`
  * 404s for every reader on nearly every screenshot. Embed URLs always carry
- * a variant suffix; bare non-GIF keys stay admin-only (Q11 constraint).
+ * a variant suffix; bare non-GIF keys stay admin-only.
  */
 export function photoEmbedSrc(
 	tile: Pick<PhotoTile, 'mimeType' | 'objectKey' | 'width' | 'height'>
@@ -177,7 +177,7 @@ export function photoEmbedSrc(
 	return `/i/${variantKeyFor(tile.objectKey, longEdge > EMBED_PREVIEW_LONG_EDGE ? 'preview' : 'full')}`;
 }
 
-/** Slim shape for the public map markers (ST-2d). */
+/** Slim shape for the public map markers. */
 export interface MapPhoto {
 	slug: string;
 	title: PhotoTileText;
@@ -186,7 +186,7 @@ export interface MapPhoto {
 }
 
 const THUMBHASH_CACHE = new Map<string, string | null>();
-/** Bound the session cache (review round 1): browsing N photos used to
+/** Bound the session cache: browsing N photos used to
  * accumulate N data-URL strings for the whole session. */
 const THUMBHASH_CACHE_MAX = 512;
 

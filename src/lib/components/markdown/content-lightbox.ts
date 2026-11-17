@@ -1,36 +1,24 @@
 /**
- * Content lightbox (ST-3 3d, Q4/Q14): progressive enhancement of article
- * images. Every rendered `<img>` inside the article (except images inside
- * links, embed-card internals and broken images - `naturalWidth == 0`)
- * becomes an interactive control whose localised aria-label is
- * "view larger: {alt}"; activating it (click / Enter / Space) opens the
- * shared overlay viewer with a plain-image source (Q11: the `@full` frame
- * derives from the displayed variant). SSR and no-JS are untouched: the
- * attributes only exist after the client enhancement runs, so the static
- * output stays a plain image.
+ * Content lightbox: progressive enhancement of article images. Every rendered
+ * `<img>` inside the article (except images inside links, embed-card internals and
+ * broken images - `naturalWidth == 0`) becomes an interactive control whose
+ * localised aria-label is "view larger: {alt}"; activating it (click / Enter /
+ * Space) opens the shared overlay viewer with a plain-image source (the `@full`
+ * frame derives from the displayed variant). SSR and no-JS are untouched: the
+ * attributes only exist after the client enhancement runs.
  *
- * Technique deviation (probed, 2026-10-13): the Q14 sketch said "wrap in a
- * `display:contents` button". A probe showed `display:contents` elements
- * cannot receive focus (no box => not in the tab order; `focus()` is a
- * no-op), which would break keyboard access AND the ruling's own
- * focus-return tooth; an inline-box wrapper is focusable but perturbs
- * layout (tailwind preflight makes prose images `display:block`, and a
- * block image inside an inline wrapper collapses the line box: 78px -> 37px
- * in the probe). Carrying `role="button"` + `tabindex` on the image itself
- * is the only formulation that is BOTH layout-neutral and focusable; the
- * aria-label, keyboard activation and skip rules follow Q14 unchanged. (An
- * independent review re-verified the probe from the specs: box-less
- * elements are not focusable in any current engine, and even once CSSWG
- * lands focusability, a box-less element still cannot draw its own focus
- * ring.)
+ * A `display:contents` wrapper cannot receive focus (no box => not in the tab order;
+ * `focus()` is a no-op), which would break keyboard access and the focus-return
+ * behaviour; an inline-box wrapper is focusable but perturbs layout (preflight makes
+ * prose images `display:block`, and a block image inside an inline wrapper collapses
+ * the line box). Carrying `role="button"` + `tabindex` on the image itself is the
+ * only formulation that is BOTH layout-neutral and focusable.
  *
- * DOM scraping instead of re-parsing the source (Q4 ruling): the enhancement
- * sees exactly what the renderer produced. An image that has not finished
+ * The enhancement sees exactly what the renderer produced instead of re-parsing the
+ * source. An image that has not finished
  * loading gets a one-shot `{ once: true }` load listener (a broken image
  * never loads, so it is skipped by construction; the listener removes
- * itself, and a re-render discards the node along with it - the node-level
- * listener precedent from the tabs enhancement, so attach returns nothing,
- * review 3d).
+ * itself, and a re-render discards the node along with it).
  */
 import { m } from '$lib/paraglide/messages';
 import { plainImageItem, type PlainImageSource } from '$lib/components/photos/viewer-source';
@@ -56,7 +44,8 @@ export function attachContentLightbox(
 			// The ring's offset band follows the page background (the dark
 			// theme otherwise shows a hard white band); the corner radius
 			// comes from the article's own `[&_img]:rounded-lg` - no
-			// duplicate class here (review 3d).
+			// comes the corner radius from the article's own `[&_img]:rounded-lg`
+			// - no duplicate class here.
 			'focus-visible:ring-offset-background',
 			// Transparent outline: invisible normally, but forced-colors mode
 			// substitutes a system colour, so Windows high-contrast users
@@ -88,7 +77,7 @@ export function attachContentLightbox(
 			img.addEventListener('load', () => consider(img), { once: true });
 			return;
 		}
-		if (img.naturalWidth === 0) return; // broken: skip (Q14)
+		if (img.naturalWidth === 0) return; // broken: skip
 		enhance(img);
 	}
 

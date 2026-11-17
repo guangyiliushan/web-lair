@@ -18,11 +18,10 @@
 	import { javascript } from '@codemirror/lang-javascript';
 
 	/**
-	 * Thin CodeMirror 6 wrapper for the jobs script editor (J-2, plan §5.6):
-	 * official fine-grained packages only (no community wrapper), themed
-	 * through the app's CSS variables. Consumers must import this component
-	 * lazily at the route level (`await import(...)`) so the editor weight is
-	 * paid only on pages that actually mount it.
+	 * Thin CodeMirror 6 wrapper for the jobs script editor: official fine-grained
+	 * packages only (no community wrapper), themed through the app's CSS variables.
+	 * Consumers must import this component lazily at the route level
+	 * (`await import(...)`) so the editor weight is paid only on pages that mount it.
 	 */
 	interface Props {
 		value: string;
@@ -31,7 +30,7 @@
 		/** Mod-s inside the editor; the component never renders its own button. */
 		onSave?: () => void;
 		/**
-		 * Mount-time flags (J-2 review round 2, dimension 7): the read-only
+		 * Mount-time flags: the read-only
 		 * facets AND the content attributes (aria-label/aria-readonly) are set
 		 * once at editor creation. Changing either at runtime requires a
 		 * remount - key the host on the task AND the mode, e.g.
@@ -83,7 +82,7 @@
 							// readOnly facets do not gate commands: without this arm a
 							// read-only view would still fire onSave. preventDefault
 							// stays true so the browser's own save dialog never opens
-							// while the editor has focus (J-2 review round 2/3).
+							// while the editor has focus.
 							key: 'Mod-s',
 							preventDefault: true,
 							run: () => {

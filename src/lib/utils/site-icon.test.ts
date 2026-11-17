@@ -3,7 +3,7 @@ import { siteIconHref } from './site-icon';
 
 const FALLBACK = '/_app/immutable/assets/favicon.hash.svg';
 
-describe('siteIconHref (W5.3)', () => {
+describe('siteIconHref', () => {
 	it('falls back to the bundled asset when the icon is unset or empty', () => {
 		expect(siteIconHref(null, FALLBACK)).toBe(FALLBACK);
 		expect(siteIconHref(undefined, FALLBACK)).toBe(FALLBACK);

@@ -1,6 +1,5 @@
 /**
- * Fallback excerpt for cards and lists when a post has no `summary` set
- * (ledger §8 open item: truncate the body). Strips the common Markdown
+ * Fallback excerpt for cards and lists when a post has no `summary` set. Strips the common Markdown
  * markers — fenced/inline code, images, links, block prefixes, emphasis —
  * so the card shows readable prose, then truncates on a word-ish boundary.
  */
@@ -19,11 +18,11 @@ export function plainTextExcerpt(markdown: string, maxLength = 160): string {
 }
 
 /**
- * First image URL in Markdown content - notes list cards derive their cover
- * from the body (notes plan §3.1; diary entries have no cover column, by
- * design). Fenced code blocks are stripped first so a code sample cannot
- * steal the cover; Markdown images and raw `<img>` tags are both recognised
- * and the earliest match wins. Returns null when there is no image.
+ * First image URL in Markdown content - notes list cards derive their cover from
+ * the body (diary entries have no cover column, by design). Fenced code blocks
+ * are stripped first so a code sample cannot steal the cover; Markdown images and
+ * raw `<img>` tags are both recognised and the earliest match wins. Returns null
+ * when there is no image.
  */
 export function firstImageFromMarkdown(markdown: string): string | null {
 	const source = markdown.replace(/```[\s\S]*?```/g, ' ');
@@ -48,7 +47,7 @@ export function firstImageFromMarkdown(markdown: string): string | null {
  */
 export function isSafeCoverUrl(url: string): boolean {
 	// WHATWG URL folds '\' to '/' for special schemes, so '/\host' parses as
-	// protocol-relative and would leak a third-party request (review round 2).
+	// protocol-relative and would leak a third-party request.
 	if (url.startsWith('//') || url.startsWith('/\\')) return false;
 	if (url.startsWith('/')) return true;
 	return /^https:\/\//i.test(url);

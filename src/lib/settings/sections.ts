@@ -1,5 +1,5 @@
 /**
- * The eight settings sections in navigation order (decision register §3K).
+ * The eight settings sections in navigation order.
  *
  * Lives outside `$lib/server` on purpose: the settings layout is a component
  * that also runs in the browser, and SvelteKit refuses to import a server

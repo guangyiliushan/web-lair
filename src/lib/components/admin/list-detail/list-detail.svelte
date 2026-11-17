@@ -13,7 +13,7 @@
 	 * available to this shell is not the window width.
 	 *
 	 * Under 840px only one pane shows at a time: the list when nothing is
-	 * selected, the detail when something is (M3 Compact: "Only one view is
+	 * selected, the detail when something is ("Only one view is
 	 * visible at a time, either list or detail"). `detailOpen` drives that.
 	 */
 	let {

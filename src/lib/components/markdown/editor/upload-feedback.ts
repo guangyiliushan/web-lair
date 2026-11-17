@@ -1,9 +1,9 @@
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Closed failure-code set -> localized copy for editor image uploads (Q10
- * asks for readable copy, including 429). Unknown codes fall back to the raw
- * code. Shared by the insert dialog and the paste/drop status strip.
+ * Closed failure-code set -> localized copy for editor image uploads (readable copy
+ * for every code, including 429). Unknown codes fall back to the raw code. Shared by
+ * the insert dialog and the paste/drop status strip.
  */
 export function uploadErrorCopy(code: string | null): string {
 	switch (code) {

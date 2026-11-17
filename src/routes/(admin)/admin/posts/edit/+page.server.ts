@@ -55,10 +55,10 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * P2 editor (ledger §9.2/§9.10): the post row is the published version and is
- * only written by the publish transaction; all editing goes through a single
- * `drafts` row per target. Autosave and the manual save share one action -
- * the client only differs in the throttle flag.
+ * Editor: the post row is the published version and is only written by the publish
+ * transaction; all editing goes through a single `drafts` row per target. Autosave
+ * and the manual save share one action - the client only differs in the throttle
+ * flag.
  */
 
 type SwitchLangOutcome =
@@ -133,9 +133,9 @@ type DraftFormRead =
 
 /**
  * Shared reader for `save` and `publish`. Both carry the same payload because
- * publish is save→publish inside ONE request (UX-1020-04): the old flow did a
- * client-side save and then `requestSubmit()` of a hidden form, so a first-time
- * publish (no draft row yet) raced the two requests and only ever saved.
+ * publish is save→publish inside ONE request: a client-side save followed by a
+ * `requestSubmit()` of a hidden form races the two requests, so a first-time
+ * publish (no draft row yet) only ever saved.
  */
 function readDraftForm(form: FormData): DraftFormRead {
 	const rawId = str(form, 'id').trim();
@@ -144,8 +144,7 @@ function readDraftForm(form: FormData): DraftFormRead {
 	const langRaw = str(form, 'lang').trim();
 	if (rawId && !isUuid(rawId)) return { error: m.admin_posts_edit_err_bad_post_id() };
 	if (draftId && !isUuid(draftId)) return { error: m.admin_posts_edit_err_bad_draft_id() };
-	// Malformed category ids must never reach the uuid column (22P02 -> 500;
-	// the P1.1 guard this rewrite had dropped - review finding).
+	// Malformed category ids must never reach the uuid column (22P02 -> 500).
 	const categoryIdRaw = str(form, 'categoryId').trim();
 	if (categoryIdRaw && !isUuid(categoryIdRaw))
 		return { error: m.admin_posts_edit_err_bad_category_id() };
@@ -367,7 +366,7 @@ export const actions: Actions = {
 	/**
 	 * Autosave (`autosave=1`) and the manual "Save draft" share this action.
 	 * Returns `{ saved }` payloads; conflicts answer 409 so the client can
-	 * refuse to overwrite (§9.10).
+	 * refuse to overwrite.
 	 */
 	save: async ({ request, locals }) => {
 		await requireAdminRole();
@@ -432,7 +431,7 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Publish in ONE request (UX-1020-04): persist the working copy and publish
+	 * Publish in ONE request: persist the working copy and publish
 	 * it in the same action. The save is manual, so it bypasses the autosave
 	 * throttle and the publish always sees exactly what was posted.
 	 */
@@ -504,7 +503,7 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Explicit discard (§9.14.3): drop the working copy; a never-published
+	 * Explicit discard: drop the working copy; a never-published
 	 * placeholder posts row goes with it.
 	 */
 	discard: async ({ request }) => {
@@ -523,7 +522,7 @@ export const actions: Actions = {
 		throw redirect(303, '/admin/posts?discarded=1');
 	},
 
-	/** Manual copy-prefill path for translations (§9.20.4). */
+	/** Manual copy-prefill path for translations. */
 	createTranslation: async ({ request, locals }) => {
 		await requireAdminRole();
 		const form = await request.formData();
@@ -894,7 +893,7 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Inline category creation for the editor (UX-1020-03). Same validation as
+	 * Inline category creation for the editor. Same validation as
 	 * the categories route's create action, but it ANSWERS with the new row
 	 * instead of redirecting: the client appends it to its local option list and
 	 * selects it at once. Never invalidates from here - that would re-run load

@@ -110,7 +110,7 @@ describe('firstImageFromMarkdown', () => {
 		expect(firstImageFromMarkdown('![x](javascript:alert(1))')).toBeNull();
 		expect(firstImageFromMarkdown('![x](//evil.example/p.png)')).toBeNull();
 		// '\' folds to '/' for special schemes: '/\host' parses as
-		// protocol-relative (review round 2).
+		// protocol-relative.
 		expect(firstImageFromMarkdown('![x](/\\evil.example/a.png)')).toBeNull();
 		expect(firstImageFromMarkdown('![x](/\\/evil.example/a.png)')).toBeNull();
 		expect(firstImageFromMarkdown('![x](data:image/png;base64,AAA)')).toBeNull();

@@ -150,7 +150,7 @@ export interface NavMenuData {
 	stats?: Partial<NavMenuStats>;
 }
 
-/** Chrome payload for the pages surface (P1b): menu items + footer defaults. */
+/** Chrome payload for the pages surface: menu items + footer defaults. */
 export interface PagesMegaData extends NavMenuData {
 	/** `is_default` rows (footer About group); same single query as the items. */
 	footerDefaults: { label: string; href: string; key?: string }[];

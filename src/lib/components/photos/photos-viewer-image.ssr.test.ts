@@ -4,7 +4,7 @@ import type { ViewerImageSource } from './viewer-load';
 import PhotosViewerImage from './photos-viewer-image.svelte';
 
 /**
- * Round-3 review, P2: SSR cannot see `navigator.connection`, so a GIF must
+ * SSR cannot see `navigator.connection`, so a GIF must
  * never render an <img> server-side — otherwise a metered client preloads
  * the original before hydration and the two renders disagree on the branch.
  */

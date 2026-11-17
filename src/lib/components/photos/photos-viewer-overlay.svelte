@@ -40,18 +40,17 @@
 	} from './viewer-transform';
 
 	/**
-	 * Overlay viewer v1.1 (plan §5.3; Q13 table). Shell = bits-ui Dialog (focus
-	 * trap / Esc / scroll lock / focus return - all official defaults); layer 2
-	 * = `viewer-transform` (pure); this component owns the DOM and the state
-	 * that must live per instance (Q5: policy helpers are shared, DOM/state are
-	 * not). Cycling: ±1 neighbours arrive with the SSR payload; past that
-	 * window the component fetches `/api/photo-neighbors` and shallow-syncs the
-	 * URL (kit `replaceState`, raw history before the router starts; Q13). The
-	 * parent decides what closing does with a navigated URL (`onClosed`).
+	 * Overlay viewer. Shell = bits-ui Dialog (focus trap / Esc / scroll lock / focus
+	 * return - all official defaults); layer 2 = `viewer-transform` (pure); this
+	 * component owns the DOM and the state that must live per instance (policy helpers
+	 * are shared, DOM/state are not). Cycling: ±1 neighbours arrive with the SSR
+	 * payload; past that window the component fetches `/api/photo-neighbors` and
+	 * shallow-syncs the URL (kit `replaceState`, raw history before the router
+	 * starts). The parent decides what closing does with a navigated URL (`onClosed`).
 	 *
-	 * Source adaptation (3d): the same shell serves the article lightbox via
-	 * `plain` - a single content image with no neighbours, no counter and no
-	 * URL sync (the feed-only machinery simply sees `current === null`).
+	 * Source adaptation: the same shell serves the article lightbox via `plain` - a
+	 * single content image with no neighbours, no counter and no URL sync (the
+	 * feed-only machinery simply sees `current === null`).
 	 */
 	interface Props {
 		open: boolean;
@@ -108,7 +107,7 @@
 			? null
 			: ((navigator as Navigator & { connection?: ConnectionLike }).connection ?? null);
 
-	// ── Loading (per photo; shared policy, instance DOM - Q5) ──
+	// ── Loading (per photo; shared policy, instance DOM) ──
 	type Phase = 'loading' | 'ready' | 'error' | 'waiting';
 	let phase = $state<Phase>('loading');
 	let objectUrl = $state<string | null>(null);
@@ -265,8 +264,7 @@
 	async function startLoad(force = false): Promise<void> {
 		// Invalidate any in-flight load FIRST: the on-demand early return must
 		// not leave the previous photo's stream alive with a still-valid token
-		// (it would land as THIS photo's blob and hide the load button -
-		// review 01 P1).
+		// (it would land as THIS photo's blob and hide the load button).
 		const token = ++loadToken;
 		controller?.abort();
 		controller = null;
@@ -336,7 +334,7 @@
 		}, 350);
 	}
 
-	// ── Navigation (Q13: ←→ neighbours; URL via history.replaceState) ──
+	// ── Navigation (←→ neighbours; URL via history.replaceState) ──
 	let navToken = 0;
 	let windowController: AbortController | null = null;
 	async function navigate(direction: 'newer' | 'older'): Promise<void> {
@@ -405,7 +403,7 @@
 	function historySync(slug: string): void {
 		// Defence in depth: slugs are DB-generated and already validated, and a
 		// malformed value must never reach the address bar (siteHref passes
-		// non-root paths through verbatim - review 02 P3-3).
+		// non-root paths through verbatim).
 		if (!isPhotoSlug(slug)) return;
 		const href = siteHref(`/photos/${slug}`);
 		try {
@@ -418,7 +416,7 @@
 		}
 	}
 
-	// ── Prefetch ±1 (Q13: thumb + preview only) ──
+	// ── Prefetch ±1 (thumb + preview only) ──
 	const prefetched = new SvelteSet<string>();
 	function preloadOnce(src: string): void {
 		// The cache is bookkeeping, not signal: untrack its reads/writes so the
@@ -446,7 +444,7 @@
 		prefetchAround();
 	});
 
-	// ── Announcements (terminal load states + settled position, W3C 4.1.3) ──
+	// ── Announcements (terminal load states + settled position, WCAG 4.1.3) ──
 	function scheduleAnnounce(): void {
 		if (!current) return; // plain mode has no feed position to announce
 		if (announceTimer) clearTimeout(announceTimer);
@@ -535,7 +533,7 @@
 		) {
 			event.preventDefault();
 			if (event.shiftKey) {
-				// WCAG 2.5.7 (plan §5.3): a non-drag path for panning, effective
+				// WCAG 2.5.7: a non-drag path for panning, effective
 				// while zoomed; plain arrows keep navigating neighbours.
 				const dx = key === 'ArrowLeft' ? PAN_KEY_STEP : key === 'ArrowRight' ? -PAN_KEY_STEP : 0;
 				const dy = key === 'ArrowUp' ? PAN_KEY_STEP : key === 'ArrowDown' ? -PAN_KEY_STEP : 0;
@@ -635,7 +633,7 @@
 		pinchBase = null;
 	}
 
-	// ── Backdrop click close (Q13: Esc / background / close button) ──
+	// ── Backdrop click close (Esc / background / close button) ──
 	function onStageClick(event: MouseEvent): void {
 		if (event.target !== stageEl) return; // clicks on the image do not close
 		if (panMoved) return; // the click that ends a drag is not a backdrop tap
@@ -645,7 +643,7 @@
 
 	function handleOpenAutoFocus(event: Event): void {
 		// Focus the close button instead of the content box: predictable exit,
-		// and bits-ui still restores focus to the trigger on close (Q13/T11).
+		// and bits-ui still restores focus to the trigger on close.
 		event.preventDefault();
 		closeButton?.focus();
 	}
@@ -732,7 +730,7 @@
 			<IconX class="size-5" aria-hidden="true" />
 		</Dialog.Close>
 
-		<!-- Bottom bar: prev / caption (= alt, Q13) / next -->
+		<!-- Bottom bar: prev / caption (= alt) / next -->
 		<div
 			class="absolute inset-x-0 bottom-0 z-20 flex items-center gap-2 bg-linear-to-t from-black/85 via-black/40 to-transparent px-3 pt-10 pb-3"
 		>

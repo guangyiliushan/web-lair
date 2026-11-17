@@ -14,7 +14,7 @@
 	 * Home panel: identity + live stats on the left, the page grid on the right.
 	 *
 	 * The right side renders dynamic pages only — the social rail (owner links
-	 * + fixed RSS) is the left column, so nothing is listed twice (P1b split).
+	 * + fixed RSS) is the left column, so nothing is listed twice.
 	 */
 	let {
 		owner,

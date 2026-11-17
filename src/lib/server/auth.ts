@@ -88,7 +88,7 @@ export const auth = betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg' }),
 
-	// W1.5 (settings-truth plan, P0-5/H2): official option, data format only.
+	// Official option, data format only.
 	// New OAuth access/refresh tokens are written as `$ba$<key-version>$<hex>`
 	// (XChaCha20-Poly1305) and decrypted on read; the account table is not
 	// touched structurally. Legacy plaintext rows keep working - better-auth
@@ -99,14 +99,14 @@ export const auth = betterAuth({
 		encryptOAuthTokens: true
 	},
 
-	// W1.6 (settings-truth plan, S3-B): GitHub is a reader-only method. The
+	// GitHub is a reader-only method. The
 	// official `validateUserInfo` gate runs before the OAuth account/session
 	// write (and before linking a provider to an existing row), so GitHub can
 	// never mint an admin/owner session. Email + TOTP, passkey and the
 	// registered tailnet owner hand-off are separate paths.
 	user: {
 		validateUserInfo: validateUserProvisioning,
-		// W2.7/H1: `default_lang` is an application field on the user model,
+		// `default_lang` is an application field on the user model,
 		// not a hand edit. Declaring it here is what lets `pnpm auth:schema`
 		// reproduce the column the writer-language feature reads; the value is
 		// managed by the app, so clients cannot set it through better-auth.
@@ -124,14 +124,14 @@ export const auth = betterAuth({
 	emailAndPassword: {
 		enabled: true,
 		requireEmailVerification: true,
-		// W8.8 / S1-D: official hash/verify hooks only; the account table keeps
+		// Official hash/verify hooks only; the account table keeps
 		// storing one opaque hash string, so `pnpm auth:schema` stays the sole
 		// schema source. Verify accepts legacy scrypt rows for a safe rollout.
 		password: {
 			hash: hashAccountPassword,
 			verify: verifyAccountPassword
 		},
-		// W1.4: a completed reset invalidates every existing session of the
+		// A completed reset invalidates every existing session of the
 		// account (better-auth's official option), so a stolen cookie cannot
 		// outlive the password it was minted under. The reset flow has no
 		// session of its own to keep.
@@ -170,7 +170,7 @@ export const auth = betterAuth({
 	},
 
 	session: {
-		// AC8 (W8.7): keep the sliding 30-day lifetime with a 24-hour refresh
+		// Keep the sliding 30-day lifetime with a 24-hour refresh
 		// and do NOT claim AAL2. AAL1 allows 30 days; AAL2 would require an
 		// absolute 24-hour cutoff (or the registered admin-only 7-day check),
 		// which is a future compliance-triggered change, not today's policy.
@@ -180,7 +180,7 @@ export const auth = betterAuth({
 
 	hooks: {
 		after: createAuthMiddleware(async (ctx) => {
-			// AC4/W8.7: passkey registration is the one credential change that
+			// Passkey registration is the one credential change that
 			// happens on the client (WebAuthn), so its audit row is written here
 			// instead of a form action. The returned row is already persisted;
 			// an audit failure must not turn a successful registration into an
@@ -229,11 +229,11 @@ export const auth = betterAuth({
 		},
 		session: {
 			create: {
-				// B2 (ledger §4.22): pin every session to the site organization so
+				// Pin every session to the site organization so
 				// org-scoped checks (comment review) need no separate activate step.
 				// Auth is the critical path: a lookup failure must degrade to an
 				// unpinned session (permission checks stay fail-closed) instead of
-				// taking every sign-in down with it (B2.1 review fix).
+				// taking every sign-in down with it.
 				before: async (session) => {
 					try {
 						const siteOrganizationId = await getSiteOrganizationId();
@@ -250,7 +250,7 @@ export const auth = betterAuth({
 						return;
 					}
 				},
-				// W8.8: cap concurrent sessions per account. A cleanup failure
+				// Cap concurrent sessions per account. A cleanup failure
 				// must never break sign-in; the oldest row simply survives until
 				// the next attempt (logged).
 				after: async (session) => {
@@ -295,9 +295,9 @@ export const auth = betterAuth({
 			requireEmailVerificationOnInvitation: true,
 			// The site owns exactly one organization and nothing can recreate it:
 			// keep the destructive endpoint closed (the matching statements are
-			// also stripped from the org roles in permissions.ts) - B2.1 review fix.
+			// also stripped from the org roles in permissions.ts).
 			disableOrganizationDeletion: true,
-			// No mailer yet (ledger §4.27): invitations are bypassed with
+			// No mailer yet: invitations are bypassed with
 			// auth.api.addMember; if the plugin's invite endpoint is ever hit the
 			// invitation row still lands in the DB, so log enough to trace it.
 			sendInvitationEmail: async ({ email, id, organization }) => {
@@ -311,7 +311,7 @@ export const auth = betterAuth({
 			rpName: 'Web Lair',
 			origin: env.ORIGIN
 		}),
-		// TOTP second factor for owner/admin accounts (B3, ledger §4.24).
+		// TOTP second factor for owner/admin accounts.
 		// The plugin's challenge hook only covers /sign-in/email|username|phone-number,
 		// so GitHub OAuth, passkey and the Tailnet endpoint stay outside the gate;
 		// that is the registered bypass set, not an accident (verified in 1.7.5 dist).

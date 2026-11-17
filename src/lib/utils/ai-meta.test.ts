@@ -38,7 +38,7 @@ describe('ai-meta label maps', () => {
 	});
 });
 
-describe('AI model entries (v3 Q6)', () => {
+describe('AI model entries', () => {
 	it('normalizes the legacy string[] shape as enabled manual entries', () => {
 		expect(normalizeModelEntries(['gpt-a', ' gpt-b ', ''])).toEqual([
 			{ id: 'gpt-a', enabled: true, source: 'manual' },

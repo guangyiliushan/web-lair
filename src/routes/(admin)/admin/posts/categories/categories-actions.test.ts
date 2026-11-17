@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the admin categories actions (P2 review fixes).
+ * Route-level tests for the admin categories actions.
  *
  * The actions live on three modules because a form can only post to the route
  * that renders it, and the list is shared by both routes:

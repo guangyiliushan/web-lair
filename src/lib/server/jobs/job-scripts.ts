@@ -22,9 +22,9 @@ import type { UserJobMeta } from './user-layer.ts';
 import type { GateError } from './save-gate.ts';
 
 /**
- * User script store (J-2, plan §5.3/§5.4): the admin-side CRUD around the
+ * User script store: the admin-side CRUD around the
  * user layer - read, save (save gate + optimistic-lock conflict + fork
- * sidecar), revert, delete (with the R1-2 schedule/queue cleanup) and
+ * sidecar), revert, delete (with the schedule/queue cleanup) and
  * builtin-update dismissal. File writes are atomic (tmp + rename); every
  * mutation writes its audit row on the same call path.
  *
@@ -204,11 +204,11 @@ export type SaveScriptResult =
 /**
  * Save a script. `baseHash` is the hash of the exact bytes the editor loaded
  * (null = "new file"); it is checked before and after the gate so a stale
- * editor can never overwrite a newer version silently (grill R2-4; the
+ * editor can never overwrite a newer version silently (the
  * reload/overwrite choice belongs to the UI). Feed it `bundle.user?.hash ??
  * null` from `getScript` - never `info.sourceHash`, which falls back to the
  * builtin hash for an unforked builtin and would turn every first save into
- * a conflict (J-2 review round 2, dimension 7).
+ * a conflict.
  */
 export function saveScript(input: {
 	dataDir: string;
@@ -254,7 +254,7 @@ async function saveScriptLocked(input: {
 	const hasBuiltin = Object.hasOwn(JOBS, name);
 	const created = before === null;
 	if (created && hasBuiltin) {
-		// First write of a builtin-backed name = the fork (plan §5.3): record
+		// First write of a builtin-backed name = the fork: record
 		// the baseline hash upgrade notices compare against. Later writes keep
 		// the existing sidecar untouched.
 		const existing = await readUserJobMeta(dir, name);
@@ -299,11 +299,11 @@ async function revertToBuiltinLocked(input: {
 	if ((await fileInfo(target)) === null) {
 		// A crashed earlier revert can leave the file gone with its sidecar
 		// orphaned; finish that cleanup so the retry converges instead of
-		// stranding the sidecar forever (J-2 review round 2, F-1). Probe by
+		// stranding the sidecar forever. Probe by
 		// stat, not by parse: a malformed sidecar is still an orphan that
-		// must be cleaned (round 3, P3-7). Only a genuinely missing sidecar
+		// must be cleaned. Only a genuinely missing sidecar
 		// reads as no-orphan - other stat failures are surfaced in the log
-		// (round 4, P4-1, same policy as `fileInfo`).
+		// (same policy as `fileInfo`).
 		const sidecar = sidecarPath(dir, name);
 		const orphaned = await stat(sidecar).then(
 			() => true,
@@ -315,8 +315,8 @@ async function revertToBuiltinLocked(input: {
 			}
 		);
 		if (!orphaned) return { kind: 'not-forked' };
-		// Audit + `reverted` only when the cleanup actually landed (round 4,
-		// P4-2): a still-failing rm (directory, persistent EPERM) left the
+		// Audit + `reverted` only when the cleanup actually landed: a
+		// still-failing rm (directory, persistent EPERM) left the
 		// state untouched, so the call did NOT finish the earlier attempt.
 		const cleaned = await rm(sidecar, { force: true }).then(
 			() => true,
@@ -346,7 +346,7 @@ export type DeleteScriptResult =
 	| { kind: 'not-user-job' };
 
 /**
- * Hard-delete a user-only job (R1-2 lifecycle): once the file is gone the
+ * Hard-delete a user-only job: once the file is gone the
  * name stops resolving, so its schedule rows and any queued run are cleaned
  * in one transaction with the audit row; run history stays (jobs.prune owns
  * retention). Forked builtins are refused - that action is `revertToBuiltin`.
@@ -367,7 +367,7 @@ async function deleteUserJobLocked(input: {
 	db: ScriptDb;
 }): Promise<DeleteScriptResult> {
 	const { dataDir, name, actorId, db } = input;
-	// Canonical-name invariant (J-2 review round 2, D1): a registry name is a
+	// Canonical-name invariant: a registry name is a
 	// fork (`revertToBuiltin` owns it), and an alias such as `my.job` maps to
 	// `my-job.ts` - deleting through it once removed a DIFFERENT job's file.
 	if (Object.hasOwn(JOBS, name) || !isCanonicalJobName(name)) {
@@ -379,8 +379,7 @@ async function deleteUserJobLocked(input: {
 	if ((await fileInfo(target)) === null) {
 		// A crash between the two rm calls of an earlier attempt leaves a
 		// sidecar with no file - clean it so the retry converges instead of
-		// reporting not-user-job forever (J-2 review round 2, D7/DB-01;
-		// logging added round 3, P3-6/N3).
+		// reporting not-user-job forever.
 		await rm(sidecar, { force: true }).catch((error: unknown) => {
 			console.error(
 				`[jobs] deleteUserJob: orphan sidecar cleanup failed (${name}): ${String(error)}`
@@ -388,7 +387,7 @@ async function deleteUserJobLocked(input: {
 		});
 		return { kind: 'not-user-job' };
 	}
-	// DB side first, files after (J-2 review R06): with the file removed
+	// DB side first, files after: with the file removed
 	// first, a failed transaction left a state that could never be retried -
 	// the guard above refuses a missing file and the schedules/queued rows
 	// were stranded. This order converges on retry: an rm failure after a
@@ -405,7 +404,7 @@ async function deleteUserJobLocked(input: {
 			.returning({ id: jobRuns.id });
 		// A crashed run of a deleted name can never be reclaimed through the
 		// usual lock path (no definition -> no execution -> no reclaim), so
-		// unfinished rows are finalized here (J-2 review R07). A LIVE run is
+		// unfinished rows are finalized here. A LIVE run is
 		// unaffected long-term: it finalizes by id when it ends, overwriting
 		// this marker with its real outcome.
 		const abandoned = await tx
@@ -433,7 +432,7 @@ async function deleteUserJobLocked(input: {
 	await rm(target, { force: true });
 	// The transaction has committed: a sidecar orphan (Windows EPERM/EBUSY)
 	// must not surface as a failed delete - the next attempt or a revert
-	// cleans it (J-2 review round 2, DB-01).
+	// cleans it.
 	await rm(sidecar, { force: true }).catch((error: unknown) => {
 		console.error(`[jobs] deleteUserJob: sidecar cleanup failed (${name}): ${String(error)}`);
 	});

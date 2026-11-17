@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 
 /**
- * Client-side tests for the SEO head (P3-b review findings): the canonical
+ * Client-side tests for the SEO head: the canonical
  * is self-referencing and absolute, alternates default to the same path in
  * every locale, and the origin comes from the (site) layout's ORIGIN when
  * configured — falling back to the request origin otherwise.

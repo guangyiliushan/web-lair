@@ -1,9 +1,9 @@
 /**
- * IP / CIDR helpers for request-time privacy and anti-abuse decisions (W6.2,
- * W6.10). Pure string/BigInt code: no Node APIs, so the admin form can
- * validate CIDRs on the client with the exact same parser the service uses.
+ * IP / CIDR helpers for request-time privacy and anti-abuse decisions. Pure
+ * string/BigInt code: no Node APIs, so the admin form can validate CIDRs on the
+ * client with the exact same parser the service uses.
  *
- * Policy (decision register C2/C4, 3B.4):
+ * Policy:
  *   - the raw commenter IP is never stored; it is matched here and dropped;
  *   - blocked CIDRs live in options and are matched per request;
  *   - IPv6 rate-limit buckets aggregate the /64 a client actually controls.

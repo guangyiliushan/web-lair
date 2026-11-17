@@ -25,24 +25,23 @@ import { m } from '$lib/paraglide/messages';
 export { isPagePlaceholderSlug };
 
 /**
- * Draft-flow service for md pages (pages line P5-1; ledger §19.10, plan v0.8
- * §7): mirrors `note-drafts` - one `drafts` row per target, autosave with
- * hash / throttle / optimistic lock, and the publish transaction copies the
- * working copy onto `pages` and drops the draft. The five deliberate
- * differences from the notes mirror (W1 ruling, 2026-10-14):
+ * Draft-flow service for md pages: mirrors `note-drafts` - one `drafts` row per
+ * target, autosave with hash / throttle / optimistic lock, and the publish
+ * transaction copies the working copy onto `pages` and drops the draft. Five
+ * deliberate differences from the notes mirror:
  *
  *   1. payload: the three-locale editing surface ({title, description,
- *      content}) travels in the `drafts.payload` jsonb column (P5-0); the
+ *      content}) travels in the `drafts.payload` jsonb column; the
  *      slug keeps the shared `drafts.slug` column, and the row-level
  *      `title`/`content` columns stay off the write set.
  *   2. the placeholder row is the `pages` row itself (slug `draft-…`,
  *      `status` hidden, content null = "never published").
- *   3. publish status is CONDITIONAL (W1): the first publish of a placeholder
+ *   3. publish status is CONDITIONAL: the first publish of a placeholder
  *      flips `visible`; re-publishing an existing row keeps its status.
  *   4. NO slug tracker on rename: `slug_trackers` whitelists
- *      post|tag|note|photo, and pages answer the old URL with 404 by design
- *      (P3-a). The default rows (`about` / `about-site`) are slug-locked
- *      instead - their slugs are seed anchors.
+ *      post|tag|note|photo, and pages answer the old URL with 404 by design.
+ *      The default rows (`about` / `about-site`) are slug-locked instead -
+ *      their slugs are seed anchors.
  *   5. reference diffs run over `keysFromLocalizedContent` (union of every
  *      locale's markdown), the draft identity carries them until publish.
  *
@@ -51,7 +50,7 @@ export { isPagePlaceholderSlug };
  * (pin / password / …) to keep outside the draft.
  */
 /**
- * Rows the draft editor owns (B1/R2-5 review): md rows plus their
+ * Rows the draft editor owns: md rows plus their
  * never-published placeholder form. THE single predicate source - the edit
  * route's load and `?/save`, this service's attach / publish guards all
  * consume it, so no consumer can drift. (The admin list only needs
@@ -83,7 +82,7 @@ interface NormalizedPageDraft {
  * are additionally LF-canonicalized). BOTH the stored payload and the hash
  * basis are REBUILT through this function (fixed PAGE_LOCALES order) on
  * every read and write, so the comparison never depends on jsonb's own key
- * order - jsonb does NOT preserve insertion order (T8 review).
+ * order - jsonb does NOT preserve insertion order.
  */
 function localeMap(
 	value: LocalizedText | LocalizedMarkdown | null | undefined,
@@ -136,12 +135,12 @@ function pageDraftUpdateSet(value: NormalizedPageDraft) {
 	};
 }
 
-/** ''-and-absent are the same edit: fold an empty locale map to null (T15). */
+/** ''-and-absent are the same edit: fold an empty locale map to null. */
 function foldLocalized(value: Record<string, string>): Record<string, string> | null {
 	return Object.keys(value).length === 0 ? null : value;
 }
 
-/** The "don't write when the hash is unchanged" comparison basis (§9.10) - payload + slug
+/** The "don't write when the hash is unchanged" comparison basis - payload + slug
  * vs stored row. The slug rides the shared drafts column, hence the explicit argument. */
 export function pageDraftHash(slug: string | null | undefined, payload: PageDraftPayload): string {
 	return hashNormalized(normalizePageDraft(slug, payload));
@@ -199,9 +198,9 @@ export interface SavePageDraftInput {
 	draftId?: string | null;
 	/** Pages id (existing md page, or absent for a brand-new page). */
 	pageId?: string | null;
-	/** Draft version the client last saw (optimistic lock, §9.10). */
+	/** Draft version the client last saw (optimistic lock). */
 	expectedVersion?: number | null;
-	/** Candidate slug - the shared drafts.slug column (W1: slug stays off
+	/** Candidate slug - the shared drafts.slug column (slug stays off
 	 * the payload). */
 	slug?: string | null;
 	payload: PageDraftPayload;
@@ -230,11 +229,11 @@ export async function savePageDraftWork(input: SavePageDraftInput): Promise<Save
 		const targetPageId = input.pageId;
 		try {
 			// Attaching the first draft is a save path too: the content write
-			// and the reference diff share one transaction (Q15), the
+			// and the reference diff share one transaction, the
 			// submitted locales being the desired set. The page row is locked
 			// FIRST (the pages → drafts → files order every writer follows)
 			// so a concurrent hard-delete cannot slip its cascade between the
-			// row check and the insert (R2-2 review).
+			// row check and the insert.
 			const created = await db.transaction(async (tx) => {
 				const [page] = await tx
 					.select({ id: pages.id, content: pages.content, slug: pages.slug })
@@ -243,7 +242,7 @@ export async function savePageDraftWork(input: SavePageDraftInput): Promise<Save
 					.limit(1)
 					.for('update');
 				if (!page) return null;
-				// Only editor rows accept drafts (M3 review): blindly
+				// Only editor rows accept drafts: blindly
 				// attaching to a code / external row would let the publish
 				// transaction flip it into an md page with no editor path
 				// ever having shown that face.
@@ -257,16 +256,16 @@ export async function savePageDraftWork(input: SavePageDraftInput): Promise<Save
 						version: 1,
 						// Pages have no row version counter: the draft's own
 						// optimistic version plus the one-draft-per-page unique
-						// cover every documented conflict scenario (N1 decision,
-						// carried over from notes).
+						// cover every documented conflict scenario (carried over
+						// from notes).
 						baseVersion: null,
 						author: input.author ?? null,
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
-				// Draft-phase references key on the DRAFT's own identity
-				// (3b2): the published row's ref set keeps describing the
-				// published body until a publish re-keys it (Q6/Q15).
+				// Draft-phase references key on the DRAFT's own identity:
+				// the published row's ref set keeps describing the
+				// published body until a publish re-keys it.
 				await syncFileReferences(
 					tx,
 					{ type: 'draft', id: row.id },
@@ -300,7 +299,7 @@ export async function savePageDraftWork(input: SavePageDraftInput): Promise<Save
 	}
 
 	// Brand-new page: NO precondition - the first save materializes the
-	// placeholder pages row (§9.10 auto-draft style, mirroring notes; the
+	// placeholder pages row (auto-draft style, mirroring notes; the
 	// rows stay hidden until a publish flips them).
 	for (let attempt = 0; attempt < 3; attempt += 1) {
 		try {
@@ -330,8 +329,8 @@ export async function savePageDraftWork(input: SavePageDraftInput): Promise<Save
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
-				// References ride the materialization transaction (Q15) under
-				// the DRAFT identity (3b2).
+				// References ride the materialization transaction under the DRAFT
+				// identity.
 				await syncFileReferences(
 					tx,
 					{ type: 'draft', id: createdDraft.id },
@@ -367,7 +366,7 @@ async function updateExistingPageDraft(
 		return { kind: 'unchanged', draftId: draft.id, version: draft.version, pageId };
 	}
 
-	// Autosave throttle: at most one write per draft per 30s (§9.10). Manual
+	// Autosave throttle: at most one write per draft per 30s. Manual
 	// saves bypass it; the client retries from the `retryAfterMs` hint.
 	const lastWrite = draft.updatedAt?.getTime() ?? 0;
 	const elapsed = Date.now() - lastWrite;
@@ -389,8 +388,8 @@ async function updateExistingPageDraft(
 		};
 	}
 
-	// The target row must still exist before a write may claim success (M1
-	// review): the list delete cascades drafts, so a surviving draft with a
+	// The target row must still exist before a write may claim success:
+	// the list delete cascades drafts, so a surviving draft with a
 	// missing page is a legacy orphan - answer not-found instead of the
 	// false `saved` the old path returned. Sits AFTER the hash/version gates
 	// so no-op autosaves never pay the lookup.
@@ -404,8 +403,8 @@ async function updateExistingPageDraft(
 	}
 
 	const expected = input.expectedVersion ?? draft.version;
-	// Content write + reference diff share one transaction (Q15); the hash
-	// gate above keeps no-op autosaves from re-scanning (Q6). Page updates
+	// Content write + reference diff share one transaction; the hash
+	// gate above keeps no-op autosaves from re-scanning. Page updates
 	// carry no FK fields of their own, so only the conditional-update miss
 	// needs handling below.
 	const updated = await db.transaction(async (tx) => {
@@ -452,7 +451,7 @@ async function updateExistingPageDraft(
 	};
 }
 
-/* ── Publish transaction (§19.10 analogue of §9.10) ──────────────────── */
+/* ── Publish transaction ─────────────────────────────────────────────── */
 
 export type PublishPageResult =
 	| { kind: 'published'; pageId: string }
@@ -461,14 +460,14 @@ export type PublishPageResult =
 	| { kind: 'slug-taken' }
 	| { kind: 'busy' };
 
-/** Pages slugs: lowercase ASCII, digits and single hyphens (P2 route rule;
+/** Pages slugs: lowercase ASCII, digits and single hyphens (route rule;
  * the regex itself rejects the dots in robots.txt / sitemap.xml shapes). */
 const PAGE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
- * The slug gate shared by the outer validation and the locked re-check
- * (T10 review): one implementation, so the two passes cannot drift. The
- * order mirrors the P2 editor - required -> shape -> default-locked ->
+ * The slug gate shared by the outer validation and the locked re-check:
+ * one implementation, so the two passes cannot drift. The
+ * order mirrors the editor - required -> shape -> default-locked ->
  * reserved (own-slug equality exempt) -> placeholder prefix.
  */
 function slugErrorFor(slug: string, page: { slug: string; isDefault: boolean }): string | null {
@@ -487,7 +486,7 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 	const [page] = await db.select().from(pages).where(eq(pages.id, draft.refId)).limit(1);
 	if (!page) return { kind: 'not-found' };
 	// Publishing is what actually flips a row's face: refuse rows the editor
-	// never owned (R2-4 review) - a legacy / hand-written draft must not turn
+	// never owned - a legacy / hand-written draft must not turn
 	// a code / external row into an md page.
 	if (!isPageEditorRow(page)) return { kind: 'not-found' };
 
@@ -513,7 +512,7 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 				.limit(1)
 				.for('update');
 			if (!locked) return { kind: 'not-found' as const };
-			// Belt to the snapshot guard above (R2-4 / third review F2): the locked
+			// Belt to the snapshot guard above: the locked
 			// row is the authoritative face check.
 			if (!isPageEditorRow(locked)) return { kind: 'not-found' as const };
 
@@ -533,7 +532,7 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 					errors: { form: m.admin_editor_err_stale_draft() } as Record<string, string>
 				};
 			}
-			// The same gate as the outer pass (T10): everything it rejects
+			// The same gate as the outer pass: everything it rejects
 			// answers the generic stale-draft slug error, because the row
 			// moved between the two passes.
 			if (slugErrorFor(finalSlug, locked) !== null) {
@@ -548,9 +547,9 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 			// slug, and placeholder-prefixed finals are rejected above), so
 			// it doubles as the first-publish marker for the status flip.
 			const firstPublish = isPagePlaceholderSlug(locked.slug);
-			// No slug_trackers insert on rename (W1 divergence 4): the table
+			// No slug_trackers insert on rename: the table
 			// whitelists post|tag|note|photo and pages 404 the old slug by
-			// design (P3-a); the default rows cannot reach here with a
+			// design; the default rows cannot reach here with a
 			// changed slug - slug-locked above.
 			await tx
 				.update(pages)
@@ -561,7 +560,7 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 					content: final.content,
 					contentFormat: lockedDraft.contentFormat,
 					updatedAt: new Date(),
-					// W1 divergence 3: first publish flips visible, anything
+					// First publish flips visible, anything
 					// already public (or deliberately hidden) keeps its status.
 					...(firstPublish ? { status: 'visible' } : {})
 				})
@@ -570,13 +569,13 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 			await tx.delete(drafts).where(eq(drafts.id, lockedDraft.id));
 
 			// The published body's key set is the durable reference set
-			// (Q15: same transaction as the content write).
+			// (same transaction as the content write).
 			await syncFileReferences(
 				tx,
 				{ type: 'page', id: locked.id },
 				keysFromLocalizedContent(final.content)
 			);
-			// The draft's own refs leave with the draft row (3b2: full clear).
+			// The draft's own refs leave with the draft row (a full clear).
 			await syncFileReferences(tx, { type: 'draft', id: lockedDraft.id }, []);
 
 			return { kind: 'published' as const, pageId: locked.id };
@@ -591,7 +590,7 @@ export async function publishPageDraft(draftId: string): Promise<PublishPageResu
 	}
 }
 
-/* ── Discard (§9.14.3 analogue) ──────────────────────────────────────── */
+/* ── Discard ─────────────────────────────────────────────────────────── */
 
 export type DiscardPageResult =
 	| { kind: 'discarded'; pageId: string | null; removedPlaceholder: boolean }
@@ -627,20 +626,20 @@ export async function discardPageDraft(draftId: string): Promise<DiscardPageResu
 					.returning({ id: drafts.id });
 				// The draft vanished under us (published concurrently).
 				if (deleted.length === 0) return { kind: 'not-found' as const };
-				// A never-published placeholder goes with its draft (W1:
-				// content null is the ruling's marker; the draft- slug adds
+				// A never-published placeholder goes with its draft:
+				// content null is the marker; the draft- slug adds
 				// the "created by the 新增 flow" belt - a publish rewrites
 				// the slug, so a published row never carries it, and any
-				// mismatch keeps the row on the safe side). NOTE: this is
+				// mismatch keeps the row on the safe side. NOTE: this is
 				// NOT !isPageEditorRow - that negation is the code row; the
 				// removal gate needs content null AND the prefix together.
 				const placeholder = Boolean(
 					page && !page.isDefault && page.content == null && isPagePlaceholderSlug(page.slug)
 				);
 				// Revert references to the published body; a placeholder row
-				// is deleted right below, so its references must go with it
-				// (Q15 deletion hooks). The restore-sync also heals legacy
-				// interim rows written under the target identity before 3b2.
+				// is deleted right below, so its references must go with it.
+				// The restore-sync also heals legacy
+				// interim rows written under the target identity before the flip.
 				await syncFileReferences(
 					tx,
 					{ type: 'page', id: draft.refId },

@@ -260,7 +260,7 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Publish in ONE request (UX-1020-04): persist the working copy and publish
+	 * Publish in ONE request: persist the working copy and publish
 	 * it in the same action. The save is manual, so it bypasses the autosave
 	 * throttle and the publish always sees exactly what was posted - the old
 	 * two-request flow needed a draft to already exist and left one behind

@@ -20,17 +20,16 @@ import {
 } from '$lib/server/media/sniff';
 
 /**
- * Content assets service (storage line §4.2 / §4.6, ST-1): the synchronous
+ * Content assets service: the synchronous
  * upload pipeline (validate → sha256 → dedupe → media variants → PUT objects
  * → registry row, zero orphans), reference-guarded deletion, the admin list,
- * the three-check audit and the TTL purge. The editor wiring that scans saved
- * content for `/i/<key>` keys lands with ST-3; the status machine values
- * (`pending` → `attached` → `detached`) are already respected here.
+ * the three-check audit and the TTL purge. The status machine values
+ * (`pending` → `attached` → `detached`) are respected here.
  *
  * The db handle and the storage port are injectable (defaults resolved
  * lazily). Besides testability this keeps the module importable from plain
  * tsx scripts — the app `db` reads `$env/dynamic/private`, which exists only
- * inside the SvelteKit runtime (the same constraint the jobs line documents).
+ * inside the SvelteKit runtime.
  */
 
 /** Structural handle over the app db, mirroring the jobs-line pattern. */
@@ -43,14 +42,14 @@ export interface FilesDeps {
 	storage?: ObjectStoragePort;
 	db?: FilesDb;
 	/**
-	 * Deletion policy (W7.5). Resolved live when omitted; purge resolves it
+	 * Deletion policy. Resolved live when omitted; purge resolves it
 	 * once and threads it through, so a run does not probe per object.
 	 */
 	policy?: StoragePolicy | null;
 }
 
 /**
- * What the ACTIVE provider allows (W7.5, decisions Q8/Q16). `hard` frees the
+ * What the ACTIVE provider allows. `hard` frees the
  * bytes; `logical` hides the object behind a delete marker (versioned bucket /
  * object lock) and reclaims nothing. `null` from the resolver means "cannot be
  * proven" — every caller fails closed on it.
@@ -144,11 +143,11 @@ const ROW_FIELDS = {
 } as const;
 
 /**
- * True while the maintenance window is open (W7.4): a provider copy is running
+ * True while the maintenance window is open: a provider copy is running
  * OR has completed and is waiting for `--cutover`. The window spans both states
  * on purpose — an upload that lands after the copy but before the cutover would
  * be written to the OLD bucket and 404 after the switch, and the recorded
- * counters cannot see it (review P1). `--reset` or a completed cutover/rollback
+ * counters cannot see it. `--reset` or a completed cutover/rollback
  * closes the window.
  */
 export async function migrationFreezeActive(database: FilesDb): Promise<boolean> {
@@ -189,7 +188,7 @@ async function deleteObjectAndVariants(
 }
 
 /**
- * Synchronous upload (plan §4.2). Zero orphans by construction:
+ * Synchronous upload. Zero orphans by construction:
  * - an object-store failure aborts before any registry write;
  * - a registry failure compensates by deleting everything this attempt put;
  * - a concurrent duplicate (unique `content_hash` race) reuses the winner's
@@ -209,7 +208,7 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 
 	const { storage, database } = await resolveDeps(deps);
 
-	// Maintenance window (W7.4/Q13): a provider copy enumerates the registry,
+	// Maintenance window: a provider copy enumerates the registry,
 	// so a new write would either miss the copy or land in the wrong bucket.
 	// Freezing uploads is the cheap, honest half of "no online dual-write".
 	if (await migrationFreezeActive(database)) {
@@ -223,11 +222,10 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 	if (existing) {
 		// A dedupe hit is a USE: refresh the TTL anchor before anything can
 		// delete content that was handed out moments ago. The anchor is
-		// per-status (review round 2): pending rows anchor on `updated_at`
-		// (round-3 ruling), but detached rows anchor on `detached_at` -
-		// touching only `updated_at` left the purge window open for a
-		// detached row that was just re-delivered and not yet referenced.
-		// The touch must be CONFIRMED (review round 1): if a purge deleted
+		// per-status: pending rows anchor on `updated_at`, but detached rows anchor on
+		// `detached_at` - touching only `updated_at` leaves the purge window open for
+		// a detached row that was just re-delivered and not yet referenced.
+		// The touch must be CONFIRMED: if a purge deleted
 		// the row between the lookup and the touch, the update hits 0 rows
 		// and we fall through to a fresh insert — reporting a deleted row
 		// as a dedupe hit would hand callers a file whose bytes are gone.
@@ -243,7 +241,7 @@ export async function uploadFile(input: UploadInput, deps: FilesDeps = {}): Prom
 	}
 
 	const objectKey = objectKeyFor(contentHash, sniffed.ext);
-	// Plan §4.3: GIF is a pass-through format — no transcode; the original IS
+	// GIF is a pass-through format — no transcode; the original IS
 	// the public tier (GIF carries no EXIF, so there is nothing to strip).
 	// Only its header is read for dimensions; no variants are derived.
 	const isGif = sniffed.kind === 'image' && sniffed.ext === 'gif';
@@ -348,7 +346,7 @@ export interface BatchUploadResult {
 	message?: string;
 }
 
-/** Batch wrapper (plan §4.2): per-item report, at most MAX_BATCH_COUNT items. */
+/** Batch wrapper: per-item report, at most MAX_BATCH_COUNT items. */
 export async function uploadFiles(
 	inputs: UploadInput[],
 	deps: FilesDeps = {}
@@ -396,9 +394,8 @@ export async function uploadFiles(
 export const FILE_LIST_LIMIT = 200;
 
 /**
- * Shared upload bucket (plan §7): the admin files page, the gallery page and
- * the editor uploads endpoint used to carry three hand-synced copies of the
- * same limit/key - a review-round drift finding.
+ * Shared upload bucket: the admin files page, the gallery page and the editor
+ * uploads endpoint used to carry three hand-synced copies of the same limit/key.
  */
 // Single source: see media/upload-limits.ts (kept out of this module so
 // read-only pages do not import the media service).
@@ -410,7 +407,7 @@ export function uploadRateLimitKey(userId: string | null | undefined): string {
 }
 
 /**
- * Per-IP companion bucket (W6.10): uploads are a security endpoint, so the
+ * Per-IP companion bucket: uploads are a security endpoint, so the
  * account bucket alone is not enough - a compromised session should not be
  * able to flood from one address, and an address should not fan out across
  * accounts. Same fail-CLOSED contract as the account bucket.
@@ -420,14 +417,14 @@ export const UPLOAD_IP_RATE_LIMIT = { limit: 30, windowSeconds: 10 * 60 };
 export function uploadIpRateLimitKey(addressKey: string): string {
 	return `limits:upload-ip:${addressKey}`;
 }
-/** Guard for the text-scanning audit phases (§11: paginate as content grows). */
+/** Guard for the text-scanning audit phases (paginate as content grows). */
 const SCAN_LIMIT = 2000;
 
 export interface FileListFilters {
 	kind?: UploadKind;
 	status?: FileStatus;
 	keyword?: string;
-	/** Only rows created at/after this instant (§6.1 time filter). */
+	/** Only rows created at/after this instant (time filter). */
 	since?: Date;
 	/** Only purgeable orphans: no refs, not a photo, past the media.purge TTL. */
 	orphan?: boolean;
@@ -482,7 +479,7 @@ export async function listFiles(
 	}
 	let orphanOrder: ReturnType<typeof purgeExpiresAt> | null = null;
 	if (filters.orphan) {
-		// §6.1 "orphaned" filter — the same criteria as listPurgeCandidates; keep
+		// The "orphaned" filter — the same criteria as listPurgeCandidates; keep
 		// the two in sync when the TTL semantics change.
 		const { pendingDays, detachedDays } = await getOption('media.purge', database);
 		conditions.push(
@@ -531,7 +528,7 @@ export type DeleteFileResult =
 	/** Purge only: the row was USED (anchor refreshed) after the snapshot. */
 	| { kind: 'reused' }
 	/**
-	 * W7.5: deletion is not provable/reclaimable — `capability` (the bucket's
+	 * deletion is not provable/reclaimable — `capability` (the bucket's
 	 * versioning/object lock could not be read) or `versioning` (they are on and
 	 * the provider was not switched to logical delete).
 	 */
@@ -539,7 +536,7 @@ export type DeleteFileResult =
 
 export interface DeleteFileOptions {
 	/**
-	 * Purge-only anchor re-verify (review round 1): candidates are selected
+	 * Purge-only anchor re-verify: candidates are selected
 	 * from a snapshot, then a mention scan runs before the delete loop — a
 	 * dedupe USE landing in that window refreshes `updated_at` and must
 	 * abort this deletion. Pass the TTL cutoff the candidate was judged by.
@@ -553,14 +550,14 @@ export interface DeleteFileOptions {
 }
 
 /**
- * Reference-guarded delete (§6.3, T15): a file referenced by content or linked
+ * Reference-guarded delete: a file referenced by content or linked
  * to a photo is never removed silently. The re-check and the delete run in a
  * single transaction that locks the registry row first (`FOR UPDATE`): an FK
  * check on a concurrent `file_references`/`photos` INSERT takes an implicit
  * `FOR KEY SHARE` lock on the same row, so the two serialize — either the
  * re-check sees the committed reference (delete blocked), or the racing
  * INSERT waits for this transaction and then fails (23503, row already gone),
- * which the ST-3 writer contract reads as "file removed". Read Committed
+ * which the writer contract reads as "file removed". Read Committed
  * gives every statement a fresh snapshot, so a reference committed while we
  * waited for the lock is visible to the re-check.
  *
@@ -568,8 +565,7 @@ export interface DeleteFileOptions {
  * (a failure after the row delete rolls back), but object deletes are NOT:
  * a crash between the object sweep and the row delete leaves a row whose
  * objects are gone — audit check ③ surfaces that state and a re-run stays
- * retryable. The row lock is held across those storage DELETEs by design
- * (round-3 review: the old comment overclaimed).
+ * retryable. The row lock is held across those storage DELETEs by design.
  */
 export async function deleteFile(
 	id: string,
@@ -578,23 +574,22 @@ export async function deleteFile(
 ): Promise<DeleteFileResult> {
 	const { storage, database } = await resolveDeps(deps);
 
-	// Deletion contract first (W7.5): never start a delete that cannot free the
+	// Deletion contract first: never start a delete that cannot free the
 	// bytes, and never guess the bucket's capabilities.
 	const policy =
 		deps.policy === undefined ? await resolveStoragePolicy(storage, database) : deps.policy;
 	if (!policy) return { kind: 'blocked', reason: 'capability' };
 	if (!policyAllowsDelete(policy)) return { kind: 'blocked', reason: 'versioning' };
 
-	// Transition guard (§6.3 "no silent deletion", review round 1): until the ST-3
+	// Transition guard ("no silent deletion"): until the
 	// reference backfill lands, an `/i/<key>` mention in stored content is
 	// the only in-use signal. The admin delete path used to skip this guard
 	// entirely (only purgeMedia had it), so a file referenced by a post body
 	// could be deleted silently. Scans are shared with the audit.
 	//
-	// Residual window (round-3 review, registered): the scan runs BEFORE the
+	// Residual window: the scan runs BEFORE the
 	// transaction, so a mention committed between the scan and the row lock
-	// is not seen — best-effort until the ST-3 reference backfill closes it
-	// (plan §11).
+	// is not seen — best-effort until the reference backfill closes it.
 	if (!options.skipMentionScan) {
 		const { mentions, truncated } = await scanMentions(database);
 		const [row] = await database
@@ -603,7 +598,7 @@ export async function deleteFile(
 			.where(eq(files.id, id))
 			.limit(1);
 		const hit = Boolean(row && mentions.some((mention) => mention.key === row.objectKey));
-		// Fail closed on a truncated scan (round-2 review, §6.3): once content
+		// Fail closed on a truncated scan: once content
 		// outgrows the scan cap a clean sweep no longer proves the key unused.
 		if (hit || truncated) {
 			return truncated ? { kind: 'mentioned', scanTruncated: true } : { kind: 'mentioned' };
@@ -658,7 +653,7 @@ export interface PurgeCandidate {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Purge candidates (§4.6): never-referenced `pending`/`detached` rows past
+ * Purge candidates: never-referenced `pending`/`detached` rows past
  * their TTL (`media.purge` option: 7 / 30 days). Photos-linked files and rows
  * with any content reference are excluded outright.
  */

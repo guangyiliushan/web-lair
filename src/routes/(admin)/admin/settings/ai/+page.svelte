@@ -104,7 +104,7 @@
 	/**
 	 * Provider dialog element. The kind Select lives inside this dialog and
 	 * must portal its layer INTO the dialog DOM, or the dialog's dismiss layer
-	 * reads the dropdown as an outside click (UX-1020-02).
+	 * reads the dropdown as an outside click.
 	 */
 	let providerDialogEl = $state<HTMLElement | null>(null);
 	let editing = $state<ProviderRow | null>(null);
@@ -125,7 +125,7 @@
 	let manualModelOpen = $state(false);
 	let manualModelId = $state('');
 	let deleteTarget = $state<ProviderRow | null>(null);
-	/** Write-only key dialog target (W2.5); the value never enters page state. */
+	/** Write-only key dialog target; the value never enters page state. */
 	let keyTarget = $state<ProviderRow | null>(null);
 
 	const enabledInDialog = $derived(
@@ -1239,7 +1239,7 @@
 	</Dialog.Content>
 </Dialog.Root>
 
-<!-- ── Provider key (write-only, W2.5) ─────────────────────────────── -->
+<!-- ── Provider key (write-only) ────────────────────────────────────── -->
 <Dialog.Root
 	open={keyTarget !== null}
 	onOpenChange={(open) => {

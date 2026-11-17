@@ -44,7 +44,7 @@ async function hasPasswordCredential(userId: string): Promise<boolean> {
 }
 
 /**
- * Account security audit (AC6/W8.7). Events are two-segment
+ * Account security audit. Events are two-segment
  * `account.<action>` names, local-only (`deliver: false`) so credential
  * metadata never fans out to webhook subscribers, and payloads carry ids or
  * booleans only - never passwords, tokens, TOTP secrets or backup codes.
@@ -69,7 +69,7 @@ async function recordAccountEvent(
 }
 
 /**
- * B3 (ledger §4.24): TOTP management for the signed-in owner/admin.
+ * TOTP management for the signed-in owner/admin.
  *
  * Shape of the flow (verified against better-auth 1.7.5 dist):
  *   enable   -> stores an *unverified* secret, returns { totpURI, backupCodes[] }

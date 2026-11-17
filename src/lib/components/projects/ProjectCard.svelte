@@ -7,7 +7,7 @@
 	import IconStar from '@tabler/icons-svelte-runes/icons/star';
 
 	/**
-	 * Public project card (plan §5.1): icon/avatar + name + one-line
+	 * Public project card: icon/avatar + name + one-line
 	 * description + status row (provider badge, language, stars, last push)
 	 * + secondary exits shown only when filled. The whole card is a single
 	 * stretched link to the project URL (`noopener noreferrer`); the corner

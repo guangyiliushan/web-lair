@@ -24,11 +24,11 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * /admin/maintenance (J-3, plan §5.7): the jobs platform surface. Loads the
+ * /admin/maintenance: the jobs platform surface. Loads the
  * three regions - scripts (registry ∪ user layer), the run ledger, and the
  * job/schedule audit trail - plus the latest jobs.typecheck summary. Actions
  * cover manual runs ("Run now" / "Run type check") and the schedule CRUD; the
- * editor/fork/revert/save actions live on the [name] route (§5.6 lazy import).
+ * editor/fork/revert/save actions live on the [name] route (lazy import).
  */
 
 const RUN_PAGE_SIZE = 100;
@@ -102,7 +102,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			.limit(AUDIT_PAGE_SIZE + 1)
 	]);
 
-	// N+1 probe surfaces truncation without a count query (J-3 review P2-2).
+	// N+1 probe surfaces truncation without a count query.
 	const runsTruncated = runs.length > RUN_PAGE_SIZE;
 	const auditTruncated = activityRows.length > AUDIT_PAGE_SIZE;
 	const visibleRuns = runsTruncated ? runs.slice(0, RUN_PAGE_SIZE) : runs;
@@ -143,7 +143,7 @@ export const load: PageServerLoad = async ({ url }) => {
 };
 
 export const actions: Actions = {
-	/** Queue one manual run (plan §4.4; a try-a-run uses the same path; unique index dedupes). */
+	/** Queue one manual run (a try-a-run uses the same path; unique index dedupes). */
 	run: async ({ request, locals }) => {
 		await requireAdminRole();
 		const form = await request.formData();
@@ -157,14 +157,14 @@ export const actions: Actions = {
 		try {
 			queued = await enqueueJob(db, name, 'manual', definition);
 		} catch (error) {
-			// manual=false and 23505 storms throw - answer 400 with a
-			// sanitized message and keep the platform log entry (J-3 review
-			// R4-2: an unlogged echo left failures invisible everywhere).
+			// manual=false and 23505 storms throw - answer 400 with a sanitized
+			// message and keep the platform log entry: an unlogged echo left
+			// failures invisible everywhere.
 			console.error('[jobs] manual enqueue failed', error);
 			return fail(400, { error: sanitizeErrorText(error) });
 		}
-		// Audit after the enqueue (same call path, not same transaction - the
-		// F-4 window the J-2 review registered; a retry dedupes via 23505).
+		// Audit after the enqueue (same call path, not same transaction - a
+		// gap a retry closes via 23505).
 		await recordActivity(db, {
 			event: 'job.run',
 			actorId: locals.user?.id ?? null,
@@ -180,9 +180,8 @@ export const actions: Actions = {
 		try {
 			queued = await enqueueJob(db, 'jobs.typecheck', 'manual');
 		} catch (error) {
-			// manual=false throws and a 23505 storm throws lastError - both
-			// must answer 400, not a 500 form page (J-3 review J3-3);
-			// sanitized + logged (J-3 review R4-2).
+			// manual=false throws and a 23505 storm throws lastError - both must
+			// answer 400, not a 500 form page; sanitized + logged.
 			console.error('[jobs] manual enqueue failed', error);
 			return fail(400, { error: sanitizeErrorText(error) });
 		}

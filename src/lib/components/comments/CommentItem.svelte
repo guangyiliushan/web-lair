@@ -20,7 +20,7 @@
 	let { root, canComment }: Props = $props();
 
 	// One inline surface at a time, keyed by the comment it belongs to:
-	// reply composer, edit composer, delete confirmation (P4 self-service).
+	// reply composer, edit composer, delete confirmation.
 	let openReplyId = $state<string | null>(null);
 	let editingId = $state<string | null>(null);
 	let confirmingDeleteId = $state<string | null>(null);
@@ -35,8 +35,7 @@
 
 	async function startEdit(id: string) {
 		if (editingId === id) {
-			// Same toggle shape as the delete trigger (pre-release review
-			// 07-P3-4).
+			// Same toggle shape as the delete trigger.
 			await cancelEdit(id);
 			return;
 		}
@@ -55,7 +54,7 @@
 		editingId = null;
 		openReplyId = null;
 		// Announce the confirmation: focus its question text (tabindex -1)
-		// so SR users hear it without hunting (review P2-1).
+		// so SR users hear it without hunting.
 		await tick();
 		document.querySelector<HTMLElement>(`[data-delete-confirm-text="${id}"]`)?.focus();
 	}
@@ -218,8 +217,7 @@
 	{/if}
 	{#if confirmingDeleteId === id}
 		<!-- Neutral fill: the former destructive tint stacked under the button's
-		     own /10 fill and measured 3.67:1 in light mode - below AA (pre-release
-		     review 07-P2-3; the token-level fix is tracked separately). -->
+		     own /10 fill and measured 3.67:1 in light mode - below AA. -->
 		<form
 			method="POST"
 			action="?/delete"
@@ -246,8 +244,8 @@
 						// Park focus on the section title so keyboard users keep
 						// their place. Guarded to THIS surface: a user who moved
 						// to another composer while the request flew must not have
-						// that surface closed or its focus stolen (pre-release
-						// review 07-P2-1, the admin/delete-confirm shape).
+						// that surface closed or its focus stolen (the admin
+						// delete-confirm shape).
 						confirmingDeleteId = null;
 						document.getElementById('comments-title')?.focus();
 					}
@@ -321,7 +319,7 @@
 					{@render commentBody(root.text)}
 				</div>
 				{#if root.anchor}
-					<!-- Segment-anchor chip (P3b): the quoted text plus the deep link
+					<!-- Segment-anchor chip: the quoted text plus the deep link
 					     back to the marked passage. Orphaned anchors have no target. -->
 					<div
 						class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"

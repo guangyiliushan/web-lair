@@ -5,7 +5,7 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 import ContentPresence from './content-presence.svelte';
 
 /**
- * Browser specs for the reader presence widget (realtime R3): one stream per
+ * Browser specs for the reader presence widget: one stream per
  * widget keyed to the content id, badge/strip rendering from snapshots (with
  * en copy pinned), the 0/unavailable hiding rules, readerDots gating, the
  * readerView-off contract (no stream, heartbeats still flow) and the

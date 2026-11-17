@@ -3,10 +3,9 @@ import { render } from 'vitest-browser-svelte';
 import PresenceHeartbeat from './presence-heartbeat.svelte';
 
 /**
- * Browser specs for the site heartbeat mount (realtime R3 wiring; review
- * finding P1): the component previously had NO test surface at all — its
- * mount line in the (site) layout could be deleted, or the R-6 exclusion
- * filter dropped, with every gate still green. $app/state is mocked (the
+ * Browser specs for the site heartbeat mount: the component previously had NO test
+ * surface at all - its mount line in the (site) layout could be deleted, or the
+ * exclusion filter dropped, with every gate still green. $app/state is mocked (the
  * projects-grid precedent) with a mutable pathname.
  */
 const { pageState } = vi.hoisted(() => ({

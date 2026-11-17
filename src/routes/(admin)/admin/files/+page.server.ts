@@ -136,7 +136,7 @@ export const actions: Actions = {
 		} catch (error) {
 			if (error instanceof UploadRejected) {
 				// The migration freeze is temporary and retryable: 503, not 400
-				// (same contract as editor-uploads, review P2).
+				// (same contract as editor-uploads).
 				return fail(error.code === 'migration' ? 503 : 400, { message: error.message });
 			}
 			throw error;

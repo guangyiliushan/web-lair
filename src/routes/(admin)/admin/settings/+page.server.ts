@@ -10,7 +10,7 @@ import { formatDateTime } from '$lib/utils/i18n';
 
 /**
  * Settings index: the 8-page list lives in the layout; this page adds the
- * cross-cutting change history (W3.6d). Event families are a closed set, so
+ * cross-cutting change history. Event families are a closed set, so
  * the query parameter cannot widen the read.
  */
 export const load: PageServerLoad = async ({ url }) => {

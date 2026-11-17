@@ -38,25 +38,24 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Notification settings · Mail status/test + Webhooks (M4 W9).
+ * Notification settings · Mail status/test + Webhooks.
  *
- * - Mail (W9.1): read-only SMTP status from `.env` and a real test send to
- *   the signed-in admin. SMTP credentials never reach this module.
- * - Retry/replay (W9.4): manual replay re-queues the SAME delivery row, so
- *   the `webhook-id` header is unchanged and receivers can deduplicate it
- *   against the automatic retries; automatic retries live in the drain.
- * - Endpoint CRUD: secrets are server-generated only (whsec_ + base64, the
- *   Standard Webhooks shape). The load renders a MASKED preview; the raw
- *   value is revealed exactly once in the create/rotate action result.
- *   Names are soft-rejected case-insensitively at the application layer
- *   (no DB constraint - the 10-13 grill G3 ruling).
- * - URLs (W9.3): HTTPS only, credentials refused, private/loopback/link-local/
- *   metadata targets refused (literal or resolved; LAN needs
- *   `WEBHOOK_ALLOW_PRIVATE_TARGETS=true`). Stored values are the WHATWG-
- *   normalized `href`; 23514 is still mapped to a 400 as defense in depth.
- * - Config audit (W9.3): create/update/delete/toggle/key_set/key_rotate write
- *   local `activities` rows (`deliver:false`); payloads carry the host, never
- *   the path query or the secret.
+ * - Mail: read-only SMTP status from `.env` and a real test send to the signed-in
+ *   admin. SMTP credentials never reach this module.
+ * - Retry/replay: manual replay re-queues the SAME delivery row, so the `webhook-id`
+ *   header is unchanged and receivers can deduplicate it against the automatic
+ *   retries; automatic retries live in the drain.
+ * - Endpoint CRUD: secrets are server-generated only (whsec_ + base64, the Standard
+ *   Webhooks shape). The load renders a MASKED preview; the raw value is revealed
+ *   exactly once in the create/rotate action result. Names are soft-rejected
+ *   case-insensitively at the application layer (no DB constraint).
+ * - URLs: HTTPS only, credentials refused, private/loopback/link-local/metadata
+ *   targets refused (literal or resolved; LAN needs `WEBHOOK_ALLOW_PRIVATE_TARGETS`).
+ *   Stored values are the WHATWG-normalized `href`; 23514 is still mapped to a 400 as
+ *   defense in depth.
+ * - Config audit: create/update/delete/toggle/key_set/key_rotate write local
+ *   `activities` rows (`deliver:false`); payloads carry the host, never the path query
+ *   or the secret.
  * - Registered hazard (round-2 N2): an admin delete racing an in-flight
  *   410 delivery can deadlock (40P01, ABBA on the webhook/delivery row
  *   locks) - rare, no corruption (one tx aborts; the drain side rolls
@@ -69,7 +68,7 @@ const PAYLOAD_URL_MAX_LENGTH = 2048;
 type ParsedEndpointForm =
 	{ ok: true; name: string; payloadUrl: string; events: string[] } | { ok: false; message: string };
 
-/** Map a URL-guard rejection to its localized message (W9.3). */
+/** Map a URL-guard rejection to its localized message. */
 function webhookUrlErrorMessage(error: unknown): string {
 	if (!(error instanceof WebhookUrlError)) return m.admin_settings_notification_err_url();
 	switch (error.reason) {
@@ -97,7 +96,7 @@ async function parseEndpointForm(
 	if (!payloadUrl || payloadUrl.length > PAYLOAD_URL_MAX_LENGTH) {
 		return { ok: false, message: m.admin_settings_notification_err_url() };
 	}
-	// W9.3 (T2a): HTTPS only, no embedded credentials, no private/loopback/
+	// HTTPS only, no embedded credentials, no private/loopback/
 	// link-local/metadata targets (literal or resolved). The guard returns
 	// the WHATWG-normalized href, which the DB CHECK requires.
 	let normalizedUrl: string;
@@ -216,15 +215,15 @@ export const load: PageServerLoad = async (event) => {
 		};
 	});
 	const byId = new Map(webhookEndpoints.map((row) => [row.id, row]));
-	// M6 P5: preferences, delivery log and the Bark channel status. The device
+	// Preferences, delivery log and the Bark channel status. The device
 	// key never leaves the server - `readBarkConfig` returns the origin only.
 	const notificationPreferences = await getOption('notifications.preferences', db);
 	const bark = readBarkConfig((name) => env[name]);
 	// Delivery log DTO: only the columns the page renders. `payload` never leaves
 	// the server - it carries the notification body (a comment excerpt is reader
-	// content, not log material), which is why the log shows the title alone
-	// (review P1: the previous `...row` spread shipped the whole payload to
-	// `__data.json` while the copy promised "bodies are never logged").
+	// content, not log material), which is why the log shows the title alone - a
+	// `...row` spread once shipped the whole payload to `__data.json` while the copy
+	// promised "bodies are never logged".
 	const notificationRows = await db
 		.select({
 			id: notificationDeliveries.id,
@@ -249,8 +248,8 @@ export const load: PageServerLoad = async (event) => {
 		mailEditable: settingAccess(event.locals.admin?.role, 'notifications', 'notifications.mail')
 			.editable,
 		mail: readMailStatus((name) => env[name]),
-		// M6 P5: preferences and the alert log are owner-only (decision N8);
-		// Bark credentials stay env-only for now (P5-WAITING).
+		// Preferences and the alert log are owner-only; Bark credentials stay
+		// env-only for now.
 		notificationPreferences,
 		notificationPreferencesEditable: settingAccess(
 			event.locals.admin?.role,
@@ -292,7 +291,7 @@ export const load: PageServerLoad = async (event) => {
 
 export const actions: Actions = {
 	/**
-	 * Real SMTP test (W9.1 / decision N2). The recipient is the signed-in
+	 * Real SMTP test. The recipient is the signed-in
 	 * admin's own address - never a form field, so the page cannot be used to
 	 * send mail to third parties. SMTP stays env-only; there is no editable
 	 * host/user/password here.
@@ -401,7 +400,7 @@ export const actions: Actions = {
 		if (!endpoint) return fail(404, { message: m.admin_settings_notification_err_endpoint_gone() });
 		if (!endpoint.isEnabled)
 			return fail(400, { message: m.admin_settings_notification_err_disabled() });
-		// W9.4: replay the SAME row. The delivery id is the `webhook-id`, so
+		// Replay the SAME row. The delivery id is the `webhook-id`, so
 		// receivers deduplicate a manual replay exactly like an automatic
 		// retry; a copied row would mint a new id and look like a new event.
 		// The status predicate makes the write idempotent under two admins
@@ -439,7 +438,7 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * M6 P5: per-group channel switches (owner-only, decision N8). Form fields
+	 * Per-group channel switches (owner-only). Form fields
 	 * are checkboxes, so absence means "off" - the handler derives the object
 	 * from the form instead of trusting a hidden JSON blob.
 	 */
@@ -469,8 +468,7 @@ export const actions: Actions = {
 		} catch (error) {
 			// Only an invalid payload is a 400. A database/audit failure is an
 			// infrastructure error: rethrowing lets SvelteKit answer 500 (and the
-			// logs see the cause) instead of telling the operator "bad request"
-			// (review P2).
+			// logs see the cause) instead of telling the operator "bad request".
 			if (error instanceof ZodError) {
 				return fail(400, {
 					op: 'saveNotificationPreferences',
@@ -487,7 +485,7 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * M6 P5: manual resend re-queues the SAME row (never a copy), so the
+	 * Manual resend re-queues the SAME row (never a copy), so the
 	 * unique key `(event_type, event_key, channel)` still describes exactly
 	 * one notification and the delivery log keeps one history. Only a row
 	 * that already reached a terminal state can be requeued; the status
@@ -582,7 +580,7 @@ export const actions: Actions = {
 		const secret = generateWebhookSecret();
 		// The AAD binds the ciphertext to the row id, so the id is minted here
 		// rather than by the column default: encryption must happen before the
-		// insert (W2.6).
+		// insert.
 		const id = randomUUID();
 		const encrypted = encryptWebhookSecretValue(id, secret, keyring);
 		try {

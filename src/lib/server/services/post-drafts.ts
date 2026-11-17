@@ -24,7 +24,7 @@ import { parseTags, SLUG_RE } from './posts';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Draft-flow service (P2, ledger §9.10 / §9.14.2-3): the editor never writes
+ * Draft-flow service: the editor never writes
  * posts content directly - it upserts a single `drafts` row per target and the
  * publish transaction copies it onto `posts`. Everything that both the editor
  * routes and tests need lives here.
@@ -43,7 +43,7 @@ export function tempSlug(): string {
 	return `${PLACEHOLDER_SLUG_PREFIX}${randomBytes(5).toString('hex')}`;
 }
 
-/** Server-side minimum interval between autosave writes for one draft (§9.10). */
+/** Server-side minimum interval between autosave writes for one draft. */
 export const DRAFT_THROTTLE_MS = 30_000;
 
 export interface DraftPayload {
@@ -78,7 +78,7 @@ function normalizePayload(payload: DraftPayload): NormalizedDraft {
 		categoryId: payload.categoryId ?? '',
 		summary: payload.summary ?? '',
 		tags: parseTags(payload.tags),
-		// Canonical LF at the service entry (3b1 review 05-P3-6): FormData
+		// Canonical LF at the service entry: FormData
 		// submits CRLF-normalized text and the hash basis below hashes this
 		// exact value - normalizing here keeps hash and stored row in sync
 		// and makes the stored content the canonical shape for imports.
@@ -87,7 +87,7 @@ function normalizePayload(payload: DraftPayload): NormalizedDraft {
 	};
 }
 
-/** The "don't write when the hash is unchanged" comparison basis (§9.10) - payload vs
+/** The "don't write when the hash is unchanged" comparison basis - payload vs
  * stored row. */
 export function draftHash(payload: DraftPayload): string {
 	return hashNormalized(normalizePayload(payload));
@@ -118,7 +118,7 @@ function hashRow(row: DraftRow): string {
 	});
 }
 
-/** Replace a post's tags inside the caller's transaction (moved from the editor in P2). */
+/** Replace a post's tags inside the caller's transaction (moved from the editor). */
 export async function syncPostTags(executor: DbExecutor, postId: string, names: string[]) {
 	await executor.delete(postTags).where(eq(postTags.postId, postId));
 	for (const name of names) {
@@ -179,7 +179,7 @@ export interface SaveDraftInput {
 	draftId?: string | null;
 	/** Posts id (existing article, or absent for a brand-new article). */
 	postId?: string | null;
-	/** Draft version the client last saw (optimistic lock, §9.10). */
+	/** Draft version the client last saw (optimistic lock). */
 	expectedVersion?: number | null;
 	/** Language for a brand-new article (picker; the placeholder row stores it). */
 	lang?: string | null;
@@ -228,7 +228,7 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 		try {
 			// Attaching the first draft to published content is a save path
 			// too: the content write and the reference diff share one
-			// transaction (Q15), the submitted body being the desired set.
+			// transaction, the submitted body being the desired set.
 			const created = await db.transaction(async (tx) => {
 				const [row] = await tx
 					.insert(drafts)
@@ -239,12 +239,12 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 						version: 1,
 						baseVersion: post.version,
 						author: input.author ?? null,
-						// Application-level updated_at (§9.7): the column has no
+						// Application-level updated_at: the column has no
 						// DB default and $onUpdate only runs on updates.
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
-				// Draft identity (3b2): the published post's ref set keeps
+				// Draft identity: the published post's ref set keeps
 				// describing the published body until publish re-keys it.
 				await syncFileReferences(
 					tx,
@@ -278,7 +278,7 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 	}
 
 	// Brand-new article: the first save materializes the placeholder posts row
-	// (§9.10 - WP auto-draft style). The posts row requires a category, so an
+	// (WP auto-draft style). The posts row requires a category, so an
 	// absent choice falls back to the server-side default bucket - never to a
 	// client-supplied stand-in.
 	const categoryId = payload.categoryId || (await defaultCategoryId());
@@ -297,7 +297,7 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 						categoryId,
 						status: 'draft',
 						version: 0,
-						// posts.updated_at has no DB default either (see §9.7 note above).
+						// posts.updated_at has no DB default either.
 						updatedAt: new Date()
 					})
 					.returning({ id: posts.id });
@@ -316,8 +316,8 @@ export async function saveDraftWork(input: SaveDraftInput): Promise<SaveDraftRes
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
-				// References ride the materialization transaction (Q15), keyed
-				// on the draft's own identity (3b2).
+				// References ride the materialization transaction, keyed
+				// on the draft's own identity.
 				await syncFileReferences(
 					tx,
 					{ type: 'draft', id: createdDraft.id },
@@ -362,7 +362,7 @@ async function updateExistingDraft(
 		return { kind: 'unchanged', draftId: draft.id, version: draft.version, postId };
 	}
 
-	// Autosave throttle: at most one write per draft per 30s (§9.10). Manual
+	// Autosave throttle: at most one write per draft per 30s. Manual
 	// saves bypass it; the client retries while still dirty using the
 	// `retryAfterMs` hint we return here (never guess the window length).
 	const lastWrite = draft.updatedAt?.getTime() ?? 0;
@@ -386,8 +386,8 @@ async function updateExistingDraft(
 	}
 
 	const expected = input.expectedVersion ?? draft.version;
-	// Content write + reference diff share one transaction (Q15); the
-	// hash/unchanged gate above is the autosave short-circuit (Q6) - a no-op
+	// Content write + reference diff share one transaction; the
+	// hash/unchanged gate above is the autosave short-circuit - a no-op
 	// autosave never re-scans the content.
 	const updated = await db.transaction(async (tx) => {
 		const rows = await tx
@@ -428,7 +428,7 @@ async function updateExistingDraft(
 	};
 }
 
-/* ── Publish transaction (§9.2 / §9.8 / §9.12 / §9.14.2) ─────────────── */
+/* ── Publish transaction ─────────────────────────────────────────────── */
 
 export type PublishResult =
 	| { kind: 'published'; postId: string; version: number }
@@ -521,7 +521,7 @@ export async function publishDraft(
 			}
 
 			// Optimistic base check: fail when the article moved on meanwhile
-			// (another tab published), never silently overwrite (§9.10, scenario 16).
+			// (another tab published), never silently overwrite.
 			if (locked.version !== lockedDraft.baseVersion) {
 				return { kind: 'conflict' as const, server: { version: locked.version } };
 			}
@@ -674,7 +674,7 @@ export async function publishDraft(
 			await tx.delete(drafts).where(eq(drafts.id, lockedDraft.id));
 
 			// The published body's key set is the durable reference set
-			// (Q15: same transaction as the content write).
+			// (same transaction as the content write).
 			await syncFileReferences(
 				tx,
 				{ type: 'post', id: locked.id },
@@ -701,7 +701,7 @@ export async function publishDraft(
 	}
 }
 
-/* ── Discard (§9.14.3) ───────────────────────────────────────────────── */
+/* ── Discard ─────────────────────────────────────────────────────────── */
 
 export type DiscardResult =
 	| { kind: 'discarded'; postId: string | null; removedPlaceholder: boolean }
@@ -741,11 +741,10 @@ export async function discardDraft(draftId: string): Promise<DiscardResult> {
 				// The draft vanished under us (published concurrently).
 				if (deleted.length === 0) return { kind: 'not-found' as const };
 				// Revert references to the published body; a placeholder row is
-				// deleted right below, so its references must go with it (Q15
-				// deletion hooks: pages hard-delete + placeholder delete).
+				// deleted right below, so its references must go with it.
 				const placeholder = Boolean(post && post.version === 0 && post.status === 'draft');
 				// The restore-sync heals legacy interim rows written under the
-				// target identity before 3b2; the full clear then removes this
+				// target identity before the flip; the full clear then removes this
 				// draft's own refs (a draft-only image flips detached inside it).
 				await syncFileReferences(
 					tx,
@@ -754,7 +753,7 @@ export async function discardDraft(draftId: string): Promise<DiscardResult> {
 				);
 				await syncFileReferences(tx, { type: 'draft', id: draft.id }, []);
 				let removedPlaceholder = false;
-				// A never-published placeholder goes with its draft (§9.14.3).
+				// A never-published placeholder goes with its draft.
 				if (post && placeholder) {
 					await tx.delete(posts).where(eq(posts.id, post.id));
 					removedPlaceholder = true;
@@ -777,14 +776,14 @@ export async function discardDraft(draftId: string): Promise<DiscardResult> {
 	}
 }
 
-/* ── Create translation (§9.20.4) ────────────────────────────────────── */
+/* ── Create translation ──────────────────────────────────────────────── */
 
 export type CreateTranslationResult =
 	| { kind: 'created'; postId: string }
 	| { kind: 'not-found' }
 	| { kind: 'same-lang' }
 	| { kind: 'lang-exists' }
-	/** R7 no chaining: only a group source can spawn a translation. */
+	/** No chaining: only a group source can spawn a translation. */
 	| { kind: 'not-source' };
 
 export async function createTranslationDraft(
@@ -795,7 +794,7 @@ export async function createTranslationDraft(
 	const [source] = await db.select().from(posts).where(eq(posts.id, sourceId)).limit(1);
 	if (!source) return { kind: 'not-found' };
 	if (source.lang === lang) return { kind: 'same-lang' };
-	// R7 (ledger §14.4): translations always point at the group source; the
+	// Translations always point at the group source; the
 	// partial unique index cannot see this, it is an application-level rule.
 	if (source.translatedFromPostId) return { kind: 'not-source' };
 
@@ -819,7 +818,7 @@ export async function createTranslationDraft(
 			const [created] = await tx
 				.insert(posts)
 				.values({
-					// Copy prefill (§9.20.4): title/content/summary ride in the draft
+					// Copy prefill: title/content/summary ride in the draft
 					// row; the placeholder keeps the identity columns only.
 					title: source.title,
 					slug: inheritedSlug ?? tempSlug(),

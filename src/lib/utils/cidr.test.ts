@@ -9,9 +9,9 @@ import {
 } from './cidr';
 
 /**
- * W6.2 / W6.10 teeth: the parser decides CIDR blocking and the per-IP bucket
- * key, so malformed input must be rejected (never "guess a host route") and
- * IPv6 must aggregate on /64.
+ * Parser teeth: the parser decides CIDR blocking and the per-IP bucket key, so
+ * malformed input must be rejected (never "guess a host route") and IPv6 must
+ * aggregate on /64.
  */
 describe('parseIp', () => {
 	it('parses dotted IPv4 and rejects out-of-range octets', () => {
@@ -58,7 +58,7 @@ describe('parseCidr / ipInCidr', () => {
 });
 
 describe('clientAddressKey', () => {
-	it('unwraps IPv4-mapped IPv6 to the IPv4 address (W6 review P0)', () => {
+	it('unwraps IPv4-mapped IPv6 to the IPv4 address', () => {
 		expect(parseIp('::ffff:192.0.2.1')).toEqual(parseIp('192.0.2.1'));
 		expect(parseIp('::ffff:c000:201')).toEqual(parseIp('192.0.2.1'));
 		expect(clientAddressKey('::ffff:192.0.2.1')).toBe('4:c0000201');

@@ -1,28 +1,28 @@
 /**
- * Content-addressed object keys (storage line §3.1) — the single source for
+ * Content-addressed object keys — the single source for
  * both BUILDERS (upload pipeline, scripts) and the PARSER grammar (/i proxy,
  * admin URL rendering). The extension is part of the key identity and the
  * variant suffix is appended to the canonical key; both live here so a
- * convention change lands everywhere at once (the round-2 review flagged the
- * previous five hand-written copies).
+ * convention change lands everywhere at once (five hand-written copies had
+ * already drifted before).
  */
 
-/** Derived variant suffixes (plan §4.3). */
+/** Derived variant suffixes. */
 export const VARIANT_NAMES = ['thumb', 'grid', 'preview', 'full'] as const;
 export type VariantName = (typeof VARIANT_NAMES)[number];
 
-/** Canonical key: `<sha[0:2]>/<sha256>.<ext>` (plan §3.1). */
+/** Canonical key: `<sha[0:2]>/<sha256>.<ext>`. */
 export function objectKeyFor(contentHash: string, ext: string): string {
 	return `${contentHash.slice(0, 2)}/${contentHash}.${ext}`;
 }
 
-/** Variant keys append the suffix to the canonical key (plan §3.1). */
+/** Variant keys append the suffix to the canonical key. */
 export function variantKeyFor(objectKey: string, variant: VariantName): string {
 	return `${objectKey}@${variant}`;
 }
 
 /**
- * `/i` key grammar (T9). Literal pattern rather than generated — but it
+ * `/i` key grammar. Literal pattern rather than generated — but it
  * lives HERE so builders and parser are edited together; the positive and
  * negative cases are pinned by i-route tests. Groups: 1 = digest dir,
  * 2 = extension, 3 = variant name.
@@ -32,7 +32,7 @@ export const KEY_PATTERN =
 
 /**
  * In-content mention pattern (`/i/<key>` inside markdown; used by the media
- * mention scan and the reference sync - single source per the Q15 ruling).
+ * mention scan and the reference sync - single source).
  * Group 1 = the bare key; an `@variant` suffix is tolerated and stripped by
  * capture. Global flag: take matches via `String.prototype.matchAll`.
  *

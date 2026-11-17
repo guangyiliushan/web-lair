@@ -1,5 +1,5 @@
 /**
- * Shared link metadata for the links line (plan §2.7): the single source for
+ * Shared link metadata for the links line: the single source for
  * the `links.status` values and the checker's error-kind vocabulary.
  *
  * Dependency-free and Node-loadable by design: the SvelteKit app imports it
@@ -11,7 +11,7 @@ export const LINK_STATUSES = ['pending', 'approved', 'outdated', 'rejected', 'ba
 export type LinkStatus = (typeof LINK_STATUSES)[number];
 
 /**
- * Checker error vocabulary (plan §4.3): `redirect` joined 2026-10-06 - a
+ * Checker error vocabulary: `redirect` is a transient state, not a failure - a
  * redirect chain longer than the 5-hop limit is a hard failure for a crawler
  * by definition (the 3-strike model then decides on `outdated`).
  */
@@ -33,12 +33,12 @@ export const LINK_ERROR_KINDS = [
 ] as const;
 export type LinkErrorKind = (typeof LINK_ERROR_KINDS)[number];
 
-/** One evidence entry of the `links.recent_checks` ring (plan §2.4). */
+/** One evidence entry of the `links.recent_checks` ring. */
 export interface LinkCheck {
 	at: string;
 	kind: 'precheck' | 'reachability' | 'backlink';
 	ok: boolean;
-	/** The page actually checked (post-redirect); review round 4. */
+	/** The page actually checked (post-redirect). */
 	url?: string;
 	http?: number;
 	err?: LinkErrorKind;

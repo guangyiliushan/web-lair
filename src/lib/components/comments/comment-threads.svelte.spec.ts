@@ -239,8 +239,7 @@ describe('CommentsSection', () => {
 		});
 		const alert = document.querySelector('[role="alert"]');
 		expect(alert?.textContent).toContain('提交失败');
-		// The section pulls focus to the alert so the failure is not missed
-		// (pre-release review 03-P3-5).
+		// The section pulls focus to the alert so the failure is not missed.
 		await expect.poll(() => document.activeElement === alert).toBe(true);
 	});
 
@@ -266,7 +265,7 @@ describe('CommentsSection', () => {
 		expect(document.querySelector('[data-edit-target="root-2"]')).toBeNull();
 		expect(document.querySelector('[data-delete-target="root-2"]')).toBeNull();
 		// Row-scoped accessible names: N threads must not surface N identically
-		// named edit/delete buttons (pre-release review 07-P2-2).
+		// named edit/delete buttons.
 		expect(
 			document.querySelector('[data-edit-target="root-1"]')?.getAttribute('aria-label')
 		).toContain('Alice');
@@ -291,8 +290,7 @@ describe('CommentsSection', () => {
 		);
 		expect(marker).toBeTruthy();
 		expect(marker?.getAttribute('datetime')).toBe('2026-10-09T12:00:00.000Z');
-		// The tooltip pins the human-readable stamp itself (pre-release
-		// review 03-P3-5), not just its presence.
+		// The tooltip pins the human-readable stamp itself, not just its presence.
 		expect(marker?.getAttribute('title')).toBe(formatDateTime(new Date('2026-10-09T12:00:00Z')));
 		// A never-edited row carries no marker at all.
 		expect(
@@ -319,11 +317,10 @@ describe('CommentsSection', () => {
 		expect(form?.textContent).toContain('修改后需重新审核。');
 		expect(form?.textContent).toContain('保存');
 		// The open path focuses the textarea through an explicit ref.focus()
-		// (review P1-1: the native autofocus attribute is a no-op here).
+		// (the native autofocus attribute is a no-op here).
 		await expect.poll(() => document.activeElement === textarea).toBe(true);
 
-		// The edit trigger toggles like reply/delete (pre-release review
-		// 07-P3-4).
+		// The edit trigger toggles like reply/delete.
 		const again = document.querySelector('[data-edit-target="root-1"]');
 		if (!again) throw new Error('edit button lost');
 		await page.elementLocator(again).click();
@@ -345,16 +342,14 @@ describe('CommentsSection', () => {
 		expect(confirm?.getAttribute('action')).toBe('?/delete');
 		expect(confirm?.querySelector('input[name="id"]')?.getAttribute('value')).toBe('root-1');
 		expect(confirm?.textContent).toContain('确定删除这条评论吗？');
-		// The action label is distinct from the trigger's (SR disambiguation,
-		// review P2-1).
+		// The action label is distinct from the trigger's (SR disambiguation).
 		expect(confirm?.textContent).toContain('确认删除');
 		expect(
 			document.querySelector('[data-delete-target="root-1"]')?.getAttribute('aria-expanded')
 		).toBe('true');
 		const question = confirm?.querySelector('[data-delete-confirm-text]');
 		expect(question?.id).toBeTruthy();
-		// The action button points at the question (pre-release review 07-P3-3)
-		// and the question no longer carries a dead aria-live (07-P3-2).
+		// The action button points at the question, which carries no live region.
 		expect(confirm?.querySelector('button[type="submit"]')?.getAttribute('aria-describedby')).toBe(
 			question?.id
 		);
@@ -382,7 +377,7 @@ describe('CommentsSection', () => {
 		await expect.poll(() => document.querySelector('form[action="?/edit"]') !== null).toBe(true);
 		expect(confirmVisible()).toBe(false);
 
-		// The delete trigger is a real toggle (review P2-1).
+		// The delete trigger is a real toggle.
 		await clickBySelector('[data-delete-target="root-1"]');
 		await expect.poll(confirmVisible).toBe(true);
 		expect(document.querySelector('form[action="?/edit"]')).toBeNull();
@@ -404,7 +399,7 @@ describe('CommentsSection', () => {
 	});
 });
 
-describe('CommentsSection segment anchors (P3b)', () => {
+describe('CommentsSection segment anchors', () => {
 	it('renders the quote chip and the jump link for a resolved anchor', async () => {
 		await render(CommentsSection, {
 			...BASE,

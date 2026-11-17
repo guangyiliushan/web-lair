@@ -539,9 +539,9 @@
 	}
 
 	/**
-	 * Publish in ONE request (UX-1020-04): the action saves the working copy
-	 * and publishes it together, so a first-time publish (no draft row yet) can
-	 * no longer lose the race between the old two client-side requests.
+	 * Publish in ONE request: the action saves the working copy and publishes it
+	 * together, so a first-time publish (no draft row yet) can no longer lose the
+	 * race between two client-side requests.
 	 */
 	async function runPublish(): Promise<void> {
 		if (inFlight) {
@@ -626,9 +626,9 @@
 	}
 
 	/**
-	 * Inline category creation (UX-1020-03): the result is appended to the
-	 * LOCAL option list and selected at once - never `invalidateAll()`, which
-	 * would re-run load and replay the server copy over unsaved edits.
+	 * Inline category creation: the result is appended to the LOCAL option list and
+	 * selected at once - never `invalidateAll()`, which would re-run load and replay
+	 * the server copy over unsaved edits.
 	 */
 	async function onCreateCategory() {
 		const name = newCategoryName.trim();
@@ -964,7 +964,7 @@
 		replaceState(url.pathname + url.search, {});
 	});
 
-	// ── Leave guard (UX-1020-03): `beforeunload` alone never sees in-app nav ──
+	// ── Leave guard: `beforeunload` alone never sees in-app nav ─────────────
 	beforeNavigate(({ cancel }) => {
 		if (leavingIntentionally) return;
 		if (saveState === 'conflict') return;

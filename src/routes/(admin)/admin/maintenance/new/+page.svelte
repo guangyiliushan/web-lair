@@ -52,7 +52,7 @@
 	let name = $state('');
 	let code = $state(untrack(() => data.template));
 	// The optimistic-lock token advances once a save landed, so a failed
-	// save-and-run can still be retried without a fake 409 (J-3 review P3-R2-2).
+	// save-and-run can still be retried without a fake 409.
 	let baseHash = $state('');
 	let saveForm: HTMLFormElement | undefined = $state();
 	// Cold first saves run the gate's module init (~10s); pending state.

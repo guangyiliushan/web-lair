@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the W4.1 profile form: the owner/pointer gate decides
+ * Route-level tests for the profile form: the owner/pointer gate decides
  * whether the page renders inputs, the action re-checks the role before it
  * touches the service, social rows are parsed into the service shape and
  * typed validation failures surface as 400/409 form errors (never a crash).

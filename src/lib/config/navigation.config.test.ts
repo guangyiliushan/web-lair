@@ -7,11 +7,11 @@ vi.mock('$lib/paraglide/messages', () => ({
 import { navigationConfig } from './navigation.config';
 
 /**
- * C2 (micro-content line): the retired 思考 slot in the top nav now carries
+ * The retired 思考 slot in the top nav now carries
  * 微记, and the "more" menu hosts 摘录 / 思考 on the renamed routes; the
  * mobile `children` array mirrors the mega items.
  */
-describe('micro-content navigation config (C2)', () => {
+describe('micro-content navigation config', () => {
 	it('retires nav_thinking and slots nav_moments before nav_timeline', () => {
 		expect(navigationConfig.map((item) => item.key)).toEqual([
 			'nav_home',

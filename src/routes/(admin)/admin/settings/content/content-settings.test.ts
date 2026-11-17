@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * W6.9 / W6.12: the Content actions re-check their tier (comments/friends/
+ * The Content actions re-check their tier (comments/friends/
  * presence/notes = admin, privacy = owner), write through setOption, and
  * record exactly one audit row with `deliver: false` (register R-7: settings
  * events never fan out to webhooks).

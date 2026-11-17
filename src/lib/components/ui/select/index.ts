@@ -34,5 +34,5 @@ export {
 };
 
 // `Portal` is deliberately not exported: `Select.Content` already portals its
-// layer, and a caller-side `<Select.Portal>` nests a second one (UX-1020-02).
+// layer, and a caller-side `<Select.Portal>` nests a second one.
 // To move the layer inside a Sheet/Dialog, pass `portalProps` to Content.

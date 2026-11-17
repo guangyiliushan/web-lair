@@ -8,11 +8,10 @@ import type { ThreadsPage } from './types';
 overwriteGetLocale(() => 'zh-cn');
 
 /**
- * The layer owns the browser-only half of segment comments (comment P3b,
- * spec §5/§8): floating action on a legal selection, composer panel, login
- * path for guests, and the in-place thread opened from a mark. The page mounts
- * it next to the article; these cases mount it against a container directly so
- * the page wiring cannot hide a regression here.
+ * The layer owns the browser-only half of segment comments: floating action on a
+ * legal selection, composer panel, login path for guests, and the in-place thread
+ * opened from a mark. The page mounts it next to the article; these cases mount it
+ * against a container directly so the page wiring cannot hide a regression here.
  */
 const threads: ThreadsPage = { roots: [], visibleCount: 0, truncated: false };
 

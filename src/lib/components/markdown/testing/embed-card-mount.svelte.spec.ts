@@ -118,7 +118,7 @@ describe('embed card mounting (spec 3.4/7)', () => {
 		);
 		try {
 			const badges = [...host.querySelectorAll('.embed-badge')].map((b) => b.textContent);
-			// brand names only (Q13), no functional suffixes
+			// brand names only, no functional suffixes
 			expect(badges).toContain('GitHub');
 			expect(badges).toContain('X');
 			expect(badges.join(' ')).not.toContain('仓库');

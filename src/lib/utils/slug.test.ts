@@ -16,7 +16,7 @@ describe('normalizeSlug', () => {
 });
 
 // The tag slug rule is the storage identity of a tag. Since 2026-10-23 tags
-// are English-only (ledger §9.18.4 amendment), so CJK is stripped rather than
+// are English-only, so CJK is stripped rather than
 // kept: a Chinese tag slug used to be routable, and `UI/UX` used to produce
 // `ui/ux`, which splits the `/posts/tags/[slug]` route.
 describe('tagSlug', () => {
@@ -71,7 +71,7 @@ describe('isValidTagName', () => {
 	});
 });
 
-// Note title slugs keep CJK on purpose (notes plan v0.4 §8.3) - the three
+// Note title slugs keep CJK on purpose - the three
 // slug rules coexist and must not be conflated.
 describe('titleSlug', () => {
 	it('lowercases, collapses separators and trims the edges', () => {

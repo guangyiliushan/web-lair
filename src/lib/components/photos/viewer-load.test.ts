@@ -6,7 +6,7 @@ import {
 	streamImageBytes
 } from './viewer-load';
 
-/** T16 policy branches (plan §4.5): threshold / saveData / 2G-class / unknown. */
+/** Policy branches: threshold / saveData / 2G-class / unknown. */
 describe('viewer-load policy', () => {
 	it('locks the 8 MB threshold', () => {
 		expect(FULL_AUTO_LIMIT_BYTES).toBe(8 * 1024 * 1024);
@@ -126,7 +126,7 @@ describe('streamImageBytes (3c)', () => {
 	});
 });
 
-describe('streamImageBytes edge branches (3c review 03 P3-7)', () => {
+describe('streamImageBytes edge branches', () => {
 	it('falls back to response.blob() when the body is not streamable', async () => {
 		vi.stubGlobal(
 			'fetch',

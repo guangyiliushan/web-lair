@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { SETTINGS_SECTIONS } from '$lib/server/settings/tiers';
 
 /**
- * W10.4 acceptance: the final eight-page IA (decision register §3K) is
- * complete in code and copy. The settings shell is the single source of the
- * list, so its ids, labels and descriptions are what every surface shows.
+ * The final eight-page IA is complete in code and copy. The settings shell is the
+ * single source of the list, so its ids, labels and descriptions are what every
+ * surface shows.
  * This pins:
  *   - exactly eight sections, in the agreed order;
  *   - a label and a description per section in all three locales;
@@ -34,7 +34,7 @@ const MESSAGES = LOCALES.map((locale) => ({
 	) as Record<string, string>
 }));
 
-describe('final eight-page IA (W10.4)', () => {
+describe('final eight-page IA', () => {
 	it('declares exactly the eight sections in order', () => {
 		// The ordered list lives in `tiers.ts` (single source); the literal
 		// expectation below stays in the test so a reordering is still a
@@ -67,7 +67,7 @@ describe('final eight-page IA (W10.4)', () => {
 		const [en] = MESSAGES;
 		expect(en.messages.admin_settings_site_desc).toMatch(/SEO/i);
 		expect(en.messages.admin_settings_site_desc).toMatch(/deployment/i);
-		// M6 P5 shipped the outbox: the notifications page is no longer "planned".
+		// The outbox shipped: the notifications page is no longer "planned".
 		expect(en.messages.admin_settings_notification_desc).toMatch(/webhooks/i);
 		expect(en.messages.admin_settings_notification_desc).toMatch(/Bark/i);
 		expect(en.messages.admin_settings_storage_desc).toMatch(/backup/i);

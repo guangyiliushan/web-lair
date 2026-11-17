@@ -15,7 +15,7 @@ overwriteGetLocale(() => 'zh-cn');
  */
 
 function assertCase(html: string, input: string, contains: string[], notContains?: string[]) {
-	// M2 adds `translate="no"` to every code/pre element as defence in depth;
+	// `translate="no"` on every code/pre element is defence in depth;
 	// the conformance corpus predates that attribute and asserts structural
 	// fragments, so normalise it away here. `markdown.test.ts` pins the
 	// attribute itself.

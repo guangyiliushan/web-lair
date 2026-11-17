@@ -15,12 +15,12 @@ import type { PhotoViewerSource } from '$lib/components/photos/photo-tile';
 import type { ObjectStoragePort } from '$lib/server/storage/port';
 
 /**
- * Photos domain service (storage line §5/§6.2): gallery CRUD, slug handling
+ * Photos domain service: gallery CRUD, slug handling
  * with the single-hop 301 tracker contract, the content-reference guard of
  * the files boundary, and the public read surface. The reference-guarded
  * `deleteFile` counterpart lives in `./files` — photo removal never deletes
- * the underlying blob unless the file itself is unreferenced (§6.3:
- * "no silent deletion").
+ * the underlying blob unless the file itself is unreferenced
+ * ("no silent deletion").
  */
 
 export type PhotosDb = Pick<
@@ -48,7 +48,7 @@ export const PHOTO_PAGE_MAX = 200;
 const REF_COUNT_SQL = sql<number>`(select count(*)::int from ${fileReferences} where ${fileReferences.fileId} = ${photos.fileId})`;
 const SORT_EXPR = sql`coalesce(${photos.takenAt}, ${photos.createdAt})`;
 /**
- * Keyset ORDER/comparison key at MILLISECOND precision (review round 1):
+ * Keyset ORDER/comparison key at MILLISECOND precision:
  * `taken_at`/`created_at` cross into JS as ms-truncated Dates, so row-derived
  * cursors are ms-exact. Comparing a ms cursor against the raw microsecond
  * value used to drop every row whose sort value sat in `(floor_ms, value]`
@@ -110,7 +110,7 @@ async function attachTags(database: PhotosDb, photoId: string, names: string[]):
 	const cleaned = [
 		...new Set(names.map((name) => name.trim()).filter((name) => name !== ''))
 	].slice(0, 30);
-	// Tags are ASCII-only since 2026-10-23 (ledger §9.18.4 amendment); the DB
+	// Tags are ASCII-only; the DB
 	// CHECK is the final gate, this keeps a photo import from failing whole.
 	const accepted = cleaned.filter((name) => isValidTagName(name));
 	const rejected = cleaned.filter((name) => !isValidTagName(name));
@@ -157,7 +157,7 @@ export type CreatePhotoResult =
 /**
  * A loser (or a re-run) must still land its INTENT on the winner's row:
  * missing tags are merged, an absent title is filled — never overwritten
- * (review round 1: the CLI's directory→tag guarantee used to silently die
+ * (the CLI's directory→tag guarantee used to silently die
  * whenever the photo already existed).
  */
 async function backfillWinner(
@@ -233,7 +233,7 @@ export async function createPhotoFromFile(
 		// Attempt 1 uses the computed unique slug; a slug-only collision
 		// (concurrent same-base files — the check-then-insert has no lock)
 		// retries ONCE with an entropy suffix instead of surfacing a raw
-		// 23505 to callers that never classified it (review round 1).
+		// 23505 to callers that never classified it.
 		const attemptSlug = attempt === 0 ? slug : `${base}-${Date.now().toString(36)}`;
 		try {
 			row = await database.transaction(async (tx) => {
@@ -267,10 +267,10 @@ export async function createPhotoFromFile(
 			const code = pgErrorCode(caught);
 			// The file row can vanish between the lookup above and the insert
 			// (concurrent deleteFile); the FK answers 23503 — the same caller
-			// outcome as a missing file (ST-3 writer contract, symmetric).
+			// outcome as a missing file (the writer contract, symmetric).
 			if (code === '23503') return { kind: 'not-found' };
 			if (code === '23505') {
-				// Idempotency under concurrency (T13 live import): the same
+				// Idempotency under concurrency: the same
 				// file handed to this service twice at once — `photos.file_id`
 				// is unique, one side loses and re-reads the winner's row
 				// (with the loser's tags/title intent backfilled).
@@ -308,7 +308,7 @@ export interface PhotoPatch {
 class PhotoGoneError extends Error {}
 
 /**
- * Metadata edit (§6.2 drawer). Slug changes write a `slug_trackers` row
+ * Metadata edit. Slug changes write a `slug_trackers` row
  * (type `photo`) inside the same transaction — photos are language
  * agnostic, so trackers use the default lang ('en') on both the write side
  * here and the read side in the route resolver.
@@ -329,7 +329,7 @@ export async function updatePhoto(
 
 	try {
 		await database.transaction(async (tx) => {
-			// Lock the row for the whole edit (review round 1): concurrent
+			// Lock the row for the whole edit: concurrent
 			// renames used to read the OLD slug from parallel snapshots and
 			// write trackers from both, losing a hop (/old → 404 instead of
 			// a single 301). The lock serializes slug accounting; a missing
@@ -384,7 +384,7 @@ export type RemovePhotoResult =
 	| { kind: 'not-found' };
 
 /**
- * Gallery removal (§6.3): the photo row always goes; the blob only when the
+ * Gallery removal: the photo row always goes; the blob only when the
  * caller asks AND the file passes its own reference guard (photos-linked
  * files are never auto-deleted — the guard is re-run, not assumed).
  */
@@ -421,7 +421,7 @@ export async function removePhoto(
 			const result = await deleteFile(current.fileId, {}, { storage, db: database });
 			fileDeleted = result.kind === 'ok';
 			// `mentioned` = the transition guard (content still references it);
-			// `blocked` = the bucket cannot hard-delete in this mode (W7.5).
+			// `blocked` = the bucket cannot hard-delete in this mode.
 			fileBlocked =
 				result.kind === 'referenced' || result.kind === 'mentioned' || result.kind === 'blocked';
 		} catch (error) {
@@ -579,7 +579,7 @@ export async function listTagOptions(deps: PhotosDeps = {}): Promise<TagChip[]> 
 }
 
 // ---------------------------------------------------------------------------
-// Public read surface (§5) — visibility is `is_visible` only; hidden rows
+// Public read surface — visibility is `is_visible` only; hidden rows
 // 404 on the public face, and the tracker redirect never bypasses this.
 // ---------------------------------------------------------------------------
 
@@ -639,9 +639,9 @@ const DETAIL_FIELDS = {
 } as const;
 
 /**
- * Public coordinate hygiene (plan §5.1). ONE rounding rule for every public
+ * Public coordinate hygiene. ONE rounding rule for every public
  * consumer — the detail service, the feed route and the map route used to
- * re-implement it (round-3 review); new consumers must call these.
+ * re-implement it; new consumers must call these.
  */
 export function fuzzCoordinate(value: string | number | null): string | null {
 	if (value === null) return null;
@@ -674,7 +674,7 @@ async function loadVisibleDetail(
 		.innerJoin(tags, eq(photoTags.tagId, tags.id))
 		.where(eq(photoTags.photoId, row.id))
 		.orderBy(tags.name);
-	// Public payload hygiene (round-2 review, plan §5.1): full-precision
+	// Public payload hygiene: full-precision
 	// coordinates and the whole `exif` blob (which carries GPS keys) used to
 	// ride the SSR/hydration payload of the detail page. Coordinates fuzz to
 	// 2dp (~1km, same rule as list/map); altitude rounds to whole metres;
@@ -704,7 +704,7 @@ export function getVisiblePhotoById(
 
 /**
  * Fields the overlay viewer needs to render a photo without a second page
- * load (3c): the tile surface plus the registry byte size for the T16/T10
+ * load: the tile surface plus the registry byte size for the
  * loading policy. Deliberately a subset of the detail payload - the overlay
  * never reads EXIF.
  */
@@ -869,7 +869,7 @@ export interface PublicPhotoFilters {
 	tagMode?: 'any' | 'all';
 	/** Free-text search over localized title/description and file/camera names. */
 	query?: string;
-	/** Map view (ST-2d): only rows carrying both coordinates. */
+	/** Map view: only rows carrying both coordinates. */
 	hasLocation?: boolean;
 }
 
@@ -1030,7 +1030,7 @@ export interface PhotoFacets {
 	counts: PhotoFacetCounts;
 }
 
-/** Filter axes for the public grid (§5.1: time / camera / lens / tags). */
+/** Filter axes for the public grid (time / camera / lens / tags). */
 export async function listPhotoFacets(deps: PhotosDeps = {}): Promise<PhotoFacets> {
 	const { database } = await resolveDeps(deps);
 	const [yearRows, cameraRows, lensRows, tagRows] = await Promise.all([

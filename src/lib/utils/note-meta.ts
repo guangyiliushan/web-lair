@@ -4,8 +4,7 @@
  * emotion vocabulary and the WMO weather-code subset, each with three-locale
  * labels. The DB side (CHECK literals) is pinned separately by
  * `note.schema.ts` + `enum-drift.test.ts`; this module is the rendering and
- * editor side, and `note-meta.test.ts` keeps the two in sync. Decisions:
- * notes plan v0.4 §8 / ledger §13.9.
+ * editor side, and `note-meta.test.ts` keeps the two in sync.
  */
 
 /**

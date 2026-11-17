@@ -188,10 +188,10 @@ export const actions: Actions = {
 		if (!target) return fail(404, { error: m.admin_categories_select() });
 		if (target.isDefault) return fail(409, { error: m.admin_categories_err_default_undeletable() });
 
-		// P2 (§9.8): deleting a category that still owns posts answers 409 with
-		// a readable message instead of hitting the RESTRICT FK as a 500. The
-		// placeholder rows of abandoned new articles are counted separately so
-		// the message can point at the drafts page (review finding).
+		// Deleting a category that still owns posts answers 409 with a readable
+		// message instead of hitting the RESTRICT FK as a 500. The placeholder rows of
+		// abandoned new articles are counted separately so the message can point at
+		// the drafts page.
 		const [counts] = await db
 			.select({
 				total: sql<number>`count(*)`.mapWith(Number),

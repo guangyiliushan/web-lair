@@ -636,7 +636,7 @@ describe('AI settings actions', () => {
 		});
 	});
 
-	// ---- W2.5 provider key write path -------------------------------------
+	// ---- provider key write path ------------------------------------------
 
 	it('encrypts a provider key, audits ai.key_set and never stores or returns the value', async () => {
 		state.selects = [[{ id: ROW_ID, name: 'OpenAI' }], []];

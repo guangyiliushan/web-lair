@@ -11,14 +11,14 @@ import { DRAFT_THROTTLE_MS } from './post-drafts';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Draft-flow service for notes (N1 admin; ledger §9.10 / §13.4, notes plan
- * v0.4 §2.3): mirrors post-drafts - the editor writes one `drafts` row per
+ * Draft-flow service for notes: mirrors post-drafts - the editor writes one
+ * `drafts` row per
  * target and the publish transaction copies it onto `notes`. Publish
  * parameters (`status` / `published_at` / `pin_at` / `password_hash` /
  * `allow_comment`) never travel through drafts; they are row-level actions
- * below (§2.3 contract). Notes have no row version counter, so the publish
+ * below. Notes have no row version counter, so the publish
  * base check relies on the one-draft-per-note unique + row locks + the
- * draft's own optimistic version (documented N1 decision).
+ * draft's own optimistic version.
  */
 /** Marker for the auto-generated slug of never-published placeholder rows. */
 const PLACEHOLDER_SLUG_PREFIX = 'draft-';
@@ -118,14 +118,14 @@ function normalizeNotePayload(payload: NoteDraftPayload): NormalizedNoteDraft {
 		title: payload.title ?? '',
 		slug: (payload.slug ?? '').trim(),
 		topicId: (payload.topicId ?? '').trim(),
-		// Closed vocabulary (notes plan §8.1): values outside the five
+		// Closed vocabulary: values outside the five
 		// DB-backed levels are dropped to null (the route answers 400 first).
 		mood: (NOTE_MOODS as readonly string[]).includes(mood) ? mood : '',
 		weatherCode: normalizeWeatherCode(payload.weatherCode ?? null),
 		temperatureC: normalizeTemperature(payload.temperatureC ?? null),
 		coordinates: normalizeCoordinates(payload.latitude ?? '', payload.longitude ?? ''),
 		location: (payload.location ?? '').trim(),
-		// Canonical LF at the service entry (3b1 review 05-P3-6): FormData
+		// Canonical LF at the service entry: FormData
 		// submits CRLF-normalized text and the hash basis below hashes this
 		// exact value - normalizing here keeps hash and stored row in sync.
 		content: (payload.content ?? '').replace(/\r\n?/g, '\n')
@@ -151,7 +151,7 @@ function noteDraftUpdateSet(payload: NormalizedNoteDraft) {
 	};
 }
 
-/** The "don't write when the hash is unchanged" comparison basis (§9.10) - payload vs
+/** The "don't write when the hash is unchanged" comparison basis - payload vs
  * stored row. */
 export function noteDraftHash(payload: NoteDraftPayload): string {
 	return hashNormalized(normalizeNotePayload(payload));
@@ -215,7 +215,7 @@ export interface SaveNoteDraftInput {
 	draftId?: string | null;
 	/** Notes id (existing note, or absent for a brand-new note). */
 	noteId?: string | null;
-	/** Draft version the client last saw (optimistic lock, §9.10). */
+	/** Draft version the client last saw (optimistic lock). */
 	expectedVersion?: number | null;
 	/** Language for a brand-new note (picker; the placeholder row stores it). */
 	lang?: string | null;
@@ -251,7 +251,7 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 		try {
 			// Attaching the first draft to published content is a save path
 			// too: the content write and the reference diff share one
-			// transaction (Q15), the submitted body being the desired set.
+			// transaction, the submitted body being the desired set.
 			const created = await db.transaction(async (tx) => {
 				const [row] = await tx
 					.insert(drafts)
@@ -262,15 +262,15 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 						version: 1,
 						// Notes have no row version counter: the draft's own
 						// optimistic version plus the one-draft-per-note unique
-						// cover every documented conflict scenario (N1 decision).
+						// cover every documented conflict scenario.
 						baseVersion: null,
 						author: input.author ?? null,
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
-				// Draft-phase references key on the DRAFT's own identity (3b2):
+				// Draft-phase references key on the DRAFT's own identity:
 				// the published note's ref set keeps describing the published
-				// body until a publish re-keys it (Q6/Q15).
+				// body until a publish re-keys it.
 				await syncFileReferences(
 					tx,
 					{ type: 'draft', id: row.id },
@@ -309,7 +309,7 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 	}
 
 	// Brand-new note: NO precondition (unlike posts' needs-category) - the
-	// first save materializes the placeholder notes row (§9.10 auto-draft
+	// first save materializes the placeholder notes row (auto-draft
 	// style; the topic stays optional until publish validation).
 	const lang = input.lang ?? 'en';
 	for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -324,7 +324,7 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 						status: 'draft',
 						contentFormat: 'markdown',
 						// notes.updated_at has no DB default (same application-level
-						// pattern as posts, ledger §9.7).
+						// pattern as posts).
 						updatedAt: new Date()
 					})
 					.returning({ id: notes.id });
@@ -340,8 +340,8 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 						updatedAt: new Date()
 					})
 					.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
-				// References ride the materialization transaction (Q15) under
-				// the DRAFT identity (3b2).
+				// References ride the materialization transaction under the DRAFT
+				// identity.
 				await syncFileReferences(
 					tx,
 					{ type: 'draft', id: createdDraft.id },
@@ -380,7 +380,7 @@ async function updateExistingNoteDraft(
 		return { kind: 'unchanged', draftId: draft.id, version: draft.version, noteId };
 	}
 
-	// Autosave throttle: at most one write per draft per 30s (§9.10). Manual
+	// Autosave throttle: at most one write per draft per 30s. Manual
 	// saves bypass it; the client retries from the `retryAfterMs` hint.
 	const lastWrite = draft.updatedAt?.getTime() ?? 0;
 	const elapsed = Date.now() - lastWrite;
@@ -405,8 +405,8 @@ async function updateExistingNoteDraft(
 	const expected = input.expectedVersion ?? draft.version;
 	let updated: { id: string; version: number; updatedAt: Date | null }[];
 	try {
-		// Content write + reference diff share one transaction (Q15); the
-		// hash gate above keeps no-op autosaves from re-scanning (Q6).
+		// Content write + reference diff share one transaction; the
+		// hash gate above keeps no-op autosaves from re-scanning.
 		updated = await db.transaction(async (tx) => {
 			const rows = await tx
 				.update(drafts)
@@ -457,7 +457,7 @@ async function updateExistingNoteDraft(
 	};
 }
 
-/* ── Publish transaction (§9.2 / §9.12 / §9.10) ──────────────────────── */
+/* ── Publish transaction ─────────────────────────────────────────────── */
 
 export type PublishNoteResult =
 	| { kind: 'published'; noteId: string }
@@ -466,7 +466,7 @@ export type PublishNoteResult =
 	| { kind: 'slug-taken' }
 	| { kind: 'busy' };
 
-/** Note slugs keep CJK on purpose (titleSlug rule, notes plan §8.3). */
+/** Note slugs keep CJK on purpose (the titleSlug rule). */
 const NOTE_SLUG_RE = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u;
 
 export async function publishNoteDraft(draftId: string): Promise<PublishNoteResult> {
@@ -548,7 +548,7 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 			}
 
 			// Slug change: keep the old slug resolvable (single-hop 301 via
-			// slug_trackers, P3-b resolver contract).
+			// slug_trackers).
 			if (locked.slug !== finalSlug && !isNotePlaceholderSlug(locked.slug)) {
 				await tx.insert(slugTrackers).values({
 					slug: locked.slug,
@@ -580,7 +580,7 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 			await tx.delete(drafts).where(eq(drafts.id, lockedDraft.id));
 
 			// The published body's key set is the durable reference set
-			// (Q15: same transaction as the content write).
+			// (same transaction as the content write).
 			await syncFileReferences(
 				tx,
 				{ type: 'note', id: locked.id },
@@ -602,7 +602,7 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 	}
 }
 
-/* ── Discard (§9.14.3 analogue) ──────────────────────────────────────── */
+/* ── Discard ─────────────────────────────────────────────────────────── */
 
 export type DiscardNoteResult =
 	| { kind: 'discarded'; noteId: string | null; removedPlaceholder: boolean }
@@ -639,11 +639,10 @@ export async function discardNoteDraft(draftId: string): Promise<DiscardNoteResu
 				// The draft vanished under us (published concurrently).
 				if (deleted.length === 0) return { kind: 'not-found' as const };
 				// Revert references to the published body; a placeholder row is
-				// deleted right below, so its references must go with it (Q15
-				// deletion hooks).
+				// deleted right below, so its references must go with it.
 				const placeholder = Boolean(note && note.publishedAt == null && note.status === 'draft');
 				// The restore-sync heals legacy interim rows written under the
-				// target identity before 3b2; the full clear then removes this
+				// target identity before the flip; the full clear then removes this
 				// draft's own refs (a draft-only image flips detached inside it).
 				await syncFileReferences(
 					tx,
@@ -677,7 +676,7 @@ export async function discardNoteDraft(draftId: string): Promise<DiscardNoteResu
 	}
 }
 
-/* ── Row-level settings (§2.3: never staged in drafts) ───────────────── */
+/* ── Row-level settings (never staged in drafts) ─────────────────────── */
 
 export type NoteRowActionResult =
 	{ kind: 'ok' } | { kind: 'not-found' } | { kind: 'invalid'; message: string };
@@ -797,8 +796,8 @@ export async function setNotePassword(
 	return rows.length > 0 ? { kind: 'ok' } : { kind: 'not-found' };
 }
 
-/** Emotions live in `meta.emotions` (ledger §13.4); write is fail-closed
- * against the closed 38-token Apple vocabulary (§8.1). */
+/** Emotions live in `meta.emotions`; write is fail-closed
+ * against the closed 38-token Apple vocabulary. */
 export async function setNoteEmotions(
 	noteId: string,
 	tokens: string[]

@@ -2,7 +2,7 @@ import { localizeHref, locales } from '$lib/paraglide/runtime';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * Admin comment-queue target display (comment P3a, spec §9): resolve the
+ * Admin comment-queue target display: resolve the
  * exclusive-arc target of a queue row into a type label, a human title and a
  * best-effort front link. Admin-only: the type labels come from the message
  * catalog (A2) - it lives next to the admin components so

@@ -10,7 +10,7 @@
 	import 'maplibre-gl/dist/maplibre-gl.css';
 
 	/**
-	 * Public map (ST-2d, plan §8): the world basemap is OUR PMTiles archive in
+	 * Public map: the world basemap is OUR PMTiles archive in
 	 * RustFS, served by `/maps/world-z0-6.pmtiles` (Range-capable route);
 	 * one marker per located photo, each a real anchor so keyboard, new-tab
 	 * and middle-click all behave like links.
@@ -29,7 +29,7 @@
 
 	const pmProtocol = new PmProtocol();
 	const locale = $derived(getLocale());
-	/** Label language follows the site locale (review round 1: hardcoded zh). */
+	/** Label language follows the site locale (a hardcoded zh was the bug). */
 	const mapLang = $derived(locale === 'zh-cn' ? 'zh' : locale === 'ja' ? 'ja' : 'en');
 
 	let mapFailed = $state(false);

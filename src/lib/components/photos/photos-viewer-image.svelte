@@ -13,8 +13,8 @@
 	} from './viewer-load';
 
 	/**
-	 * Progressive full-image stage for the page viewer (plan §4.5, T10/T16).
-	 * The streaming pump is the shared `viewer-load.streamImageBytes` (Q5);
+	 * Progressive full-image stage for the page viewer.
+	 * The streaming pump is the shared `viewer-load.streamImageBytes`;
 	 * this component owns the phase machine and the floater DOM.
 	 *
 	 * - Policy: ≤8MB and no metered signal → auto-load; over threshold or
@@ -23,7 +23,7 @@
 	 *   Content-Length (both pass through /i); the floater only appears when
 	 *   the load outlives 300ms, so cache hits never flash a spinner.
 	 * - Terminal states only reach the live region (`aria-live="polite"` —
-	 *   W3C 4.1.3 status messages); the ring/copy updates stay visual.
+	 *   WCAG 4.1.3 status messages); the ring/copy updates stay visual.
 	 * - `prefers-reduced-motion` drops the fade; a failed load keeps the card
 	 *   visible with a Retry.
 	 */
@@ -49,11 +49,11 @@
 
 	// GIFs have no variant tiers: photoTileSrc returns the ORIGINAL for every
 	// tier, so rendering the interim image would download the whole file even
-	// under an on-demand decision (round-2 confirm, P2). On-demand GIFs hold
+	// under an on-demand decision. On-demand GIFs hold
 	// the layout box instead and load on the explicit click. SSR cannot see
 	// `navigator.connection`, so GIFs render NO <img> until mount — otherwise
 	// a metered client would preload the original before hydration and the
-	// two sides would disagree on the element type (round-3 review, P2).
+	// two sides would disagree on the element type.
 	/** Flips after hydration; GIF interim images wait for it (SSR-true). */
 	let mounted = $state(false);
 	const isGif = $derived(photo.mimeType === 'image/gif');
@@ -257,7 +257,7 @@
 			{/if}
 		{:else if phase === 'done'}
 			<!-- The completed state stays visible while the card fades out
-			     (round-2 confirm P3: the fade used to animate an empty pill). -->
+			     (the fade used to animate an empty pill). -->
 			<span class="whitespace-nowrap">{m.photos_viewer_loaded()}</span>
 		{:else if phase === 'error'}
 			<span class="whitespace-nowrap">{m.photos_viewer_load_failed()}</span>

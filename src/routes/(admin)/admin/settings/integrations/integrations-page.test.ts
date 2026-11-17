@@ -2,11 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 
 /**
- * W10.1 acceptance: Integrations is a planned/read-only capability map
- * (decision register §3G). The page groups GitHub rich cards, planned rich
- * cards (TMDB/Bangumi/NeoDB) and static embeds (arXiv/LeetCode/NetEase/QQ),
- * reports the one real status fact, and ships no control that could pretend to
- * write: no action, no form, no token field, no Save.
+ * Integrations is a planned/read-only capability map. The page groups GitHub rich
+ * cards, planned rich cards (TMDB/Bangumi/NeoDB) and static embeds
+ * (arXiv/LeetCode/NetEase/QQ), reports the one real status fact, and ships no control
+ * that could pretend to write: no action, no form, no token field, no Save.
  *
  * The load is executed for real (only authz and the env module are faked) so a
  * regression that returns the token alongside the boolean fails here.
@@ -34,7 +33,7 @@ async function runLoad(): Promise<Record<string, unknown>> {
 	);
 }
 
-describe('Integrations page (W10.1)', () => {
+describe('Integrations page', () => {
 	it('renders the three capability groups', () => {
 		expect(PAGE).toContain('admin_settings_integrations_rich_group');
 		expect(PAGE).toContain('admin_settings_integrations_planned_group');
@@ -74,7 +73,7 @@ describe('Integrations page (W10.1)', () => {
 		envState.env = {};
 		expect(await runLoad()).toEqual({ githubConfigured: false });
 
-		// §3G.2: the page must not read the settings option store.
+		// The page must not read the settings option store.
 		expect(SERVER).not.toContain('getOption');
 	});
 

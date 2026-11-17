@@ -1,5 +1,5 @@
 /**
- * Shared conformance fixtures for the two block pipelines (comment P3b, spec §3).
+ * Shared conformance fixtures for the two block pipelines.
  *
  * The server derives blocks from the rendered hast tree, the reader from the
  * live DOM. They are separate implementations by construction, so both are
@@ -13,7 +13,7 @@
 export interface SegmentFixture {
 	name: string;
 	markdown: string;
-	/** Normalized block texts, in document order (spec §3). */
+	/** Normalized block texts, in document order. */
 	blocks: string[];
 }
 

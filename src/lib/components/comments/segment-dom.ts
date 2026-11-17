@@ -1,5 +1,5 @@
 /**
- * DOM half of the segment anchor (comment P3b, spec §3/§5).
+ * DOM half of the segment anchor.
  *
  * The server derives its block directory from the rendered hast tree; the
  * reader selects text in the DOM. Both sides must agree on what a block is and
@@ -38,7 +38,7 @@ export interface DomTextPoint {
 
 export interface DomBlock {
 	ord: number;
-	/** Normalized block text (spec §3). */
+	/** Normalized block text. */
 	text: string;
 	points: DomTextPoint[];
 	element: HTMLElement;
@@ -219,7 +219,7 @@ export function selectionToAnchor(
 
 	const startBlock = blockOf(blocks, range.startContainer);
 	const endBlock = blockOf(blocks, range.endContainer);
-	// Cross-block selections are a registered v1 rejection (spec §2).
+	// Cross-block selections are a registered v1 rejection.
 	if (!startBlock || startBlock !== endBlock) return null;
 	if (
 		insideSkipped(range.startContainer, startBlock.element) ||
@@ -231,8 +231,8 @@ export function selectionToAnchor(
 	const start = boundaryIndex(startBlock, range.startContainer, range.startOffset);
 	const end = boundaryIndex(startBlock, range.endContainer, range.endOffset);
 	if (start === null || end === null) return null;
-	// Endpoints must not cut a grapheme cluster (spec §3 / W3C §4.2.4). The
-	// writer would reject it later; refusing here keeps the action honest.
+	// Endpoints must not cut a grapheme cluster (the W3C Web Annotation Model).
+	// The writer would reject it later; refusing here keeps the action honest.
 	if (!isGraphemeBoundary(startBlock.text, start) || !isGraphemeBoundary(startBlock.text, end)) {
 		return null;
 	}

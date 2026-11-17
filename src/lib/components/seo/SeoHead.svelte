@@ -3,7 +3,7 @@
 	import { localizeHref, locales } from '$lib/paraglide/runtime';
 
 	/**
-	 * hreflang set (P3-b R1-Q5): detail pages pass their translation group's
+	 * hreflang set: detail pages pass their translation group's
 	 * per-language paths (slugs may differ), aggregate pages default to the
 	 * same path in every locale. x-default stays deferred until a second
 	 * language has published content. Canonical is always self-referencing.

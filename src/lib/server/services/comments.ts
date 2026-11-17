@@ -42,12 +42,11 @@ import { getPageBySlug, servablePageBody } from './pages';
 import { visiblePostCondition } from './post-visibility';
 
 /**
- * Public comment threads (comment P3a, ledger §27 / spec §10; pages P4 adds
- * the reader self-service - edit / soft-delete - and admits the pages arc):
- * article-level comments on posts / notes / pages - anchored (segment)
- * comments are P3b. The read side is target-shaped across the three arcs.
+ * Public comment threads: article-level comments on posts / notes / pages - the
+ * anchored (segment) variant is documented below. The read side is target-shaped
+ * across the three arcs.
  *
- * Visibility (flipped §19.6): approved rows are public, a signed-in reader
+ * Visibility: approved rows are public, a signed-in reader
  * additionally sees their own pending rows ("审核中"), rejected rows never
  * render. Deleted rows stay in the row set - the assembly turns an approved
  * root with visible replies into a floor-keeping placeholder and drops
@@ -55,15 +54,15 @@ import { visiblePostCondition } from './post-visibility';
  * them unconditionally, so the row budget is not spent on invisible rows).
  */
 
-/** Read caps (grill Q6): the root page doubles as the future "load more" unit. */
+/** Read caps: the root page doubles as the future "load more" unit. */
 export const THREAD_ROOT_LIMIT = 200;
 export const THREAD_REPLY_LIMIT = 500;
 
-/** Per-reader submission window (spec §1: 60s <= 2; grill Q1/Q2). */
+/** Per-reader submission window (60s, at most 2). */
 export const COMMENT_RATE_LIMIT = { limit: 2, windowSeconds: 60 } as const;
 
 /**
- * Per-IP submission window (W6.10 / register 3B.1): the per-reader window
+ * Per-IP submission window: the per-reader window
  * cannot stop one client cycling accounts. Fail-CLOSED (a dead cache answers
  * 503) and keyed on the /64 for IPv6; this is request-time only - the raw
  * address is never stored. 30/10min stays well above a busy shared household
@@ -96,7 +95,7 @@ function warnAnchorRejected(targetType: string, targetId: string, reason: string
 	console.warn('[comments] anchor draft rejected', { targetType, targetId, reason });
 }
 
-/** Text bounds (spec §1): normalise first, then count code points. */
+/** Text bounds: normalise first, then count code points. */
 export const COMMENT_MIN_LENGTH = 1;
 
 function targetColumn(targetType: CommentTargetType): PgColumn {
@@ -125,11 +124,11 @@ const commentColumns = {
 	rootCommentId: comments.rootCommentId,
 	editedAt: comments.editedAt,
 	// Authoring identity stays server-side: the assembly converts it into the
-	// boolean `isMine` so the client never receives reader ids (P4).
+	// boolean `isMine` so the client never receives reader ids.
 	readerId: comments.readerId,
-	// Stored segment anchor (P3b): resolved in the assembly, never serialized raw.
+	// Stored segment anchor: resolved in the assembly, never serialized raw.
 	anchor: comments.anchor,
-	// W6.2: privacy fields surface only through the `showCountry` opt-in gate.
+	// Privacy fields surface only through the `showCountry` opt-in gate.
 	// `region_code` is written for retention/audit only; the view model carries
 	// the country label, so it is not selected on every thread read.
 	countryCode: comments.countryCode,
@@ -152,7 +151,7 @@ export interface CommentRow {
 	readerId: string | null;
 	/** Stored jsonb anchor; `unknown` on purpose (Zod decides, not the row type). */
 	anchor?: unknown;
-	/** W6.2 privacy snapshot (never rendered without the per-comment opt-in). */
+	/** Privacy snapshot (never rendered without the per-comment opt-in). */
 	countryCode?: string | null;
 	meta?: Record<string, unknown> | null;
 }
@@ -182,12 +181,12 @@ export interface LoadThreadsInput {
 	targetId: string;
 	/** Signed-in reader id; null for guests. */
 	viewerId: string | null;
-	/** Offer the per-comment country label (W6.2); default off. */
+	/** Offer the per-comment country label; default off. */
 	showCountry?: boolean;
 }
 
 /**
- * Two-phase read (grill Q6): roots first - they are the list/pagination unit -
+ * Two-phase read: roots first - they are the list/pagination unit -
  * then the replies that belong to the fetched roots, so replies can never be
  * orphaned by a row budget shared with the roots list. Each phase fetches one
  * extra row as a truncation probe (a full page without an extra row means the
@@ -205,12 +204,12 @@ export async function loadThreads(input: LoadThreadsInput): Promise<ThreadsPage>
 }
 
 export interface LoadDiscussionInput extends LoadThreadsInput {
-	/** Block directory of the body being rendered (comment P3b). */
+	/** Block directory of the body being rendered. */
 	blocks: AnchorBlock[];
 }
 
 /**
- * Segment-aware read (spec §7): same query, plus anchor resolution against the
+ * Segment-aware read: same query, plus anchor resolution against the
  * rendered block directory. The marks are applied to the tree by the caller
  * (`renderDiscussion`); `threads.orphans` holds the roots whose anchor no
  * longer resolves. Anchors never reach the page payload — the view model only
@@ -269,7 +268,7 @@ export interface AssemblyOptions {
 	/** When present, segment anchors are resolved and marks are produced. */
 	blocks?: AnchorBlock[];
 	/**
-	 * Render the per-comment country label (W6.2). The row must ALSO carry the
+	 * Render the per-comment country label. The row must ALSO carry the
 	 * commenter's own opt-in in `meta.showCountry`; region/city never render.
 	 */
 	showCountry?: boolean;
@@ -283,7 +282,7 @@ export interface DiscussionRead {
 
 /**
  * Pure assembly (exported for tests): keeps the query order (roots already
- * pinned-first) and applies the deletion rules of spec §7.
+ * pinned-first) and applies the deletion rules.
  */
 export function assembleThreads(
 	rootRows: CommentRow[],
@@ -294,7 +293,7 @@ export function assembleThreads(
 }
 
 /**
- * Assembly + anchor resolution (comment P3b, spec §7): a root whose stored
+ * Assembly + anchor resolution: a root whose stored
  * anchor resolves keeps its main-list slot and gets a quote chip; one whose
  * anchor no longer resolves moves to `orphans` (the folded "original text
  * changed" area with its own count). Marks are emitted for surviving anchored
@@ -309,7 +308,7 @@ export function assembleDiscussion(
 ): DiscussionRead {
 	const viewerId = options.viewerId ?? null;
 	const isMine = (row: CommentRow) => viewerId !== null && row.readerId === viewerId;
-	// Country is a two-key decision (W6.2): the site must opt in AND the
+	// Country is a two-key decision: the site must opt in AND the
 	// commenter must have opted in on their own row. Region/city never render.
 	const publicCountry = (row: CommentRow): string | null =>
 		options.showCountry && row.meta?.showCountry === true ? (row.countryCode ?? null) : null;
@@ -354,7 +353,7 @@ export function assembleDiscussion(
 	for (const row of rootRows) {
 		const visibleReplies = repliesByRoot.get(row.id) ?? [];
 		// A deleted root keeps the floor only while visible replies remain;
-		// the author and text are withheld entirely (spec §7).
+		// the author and text are withheld entirely.
 		const keepAsPlaceholder =
 			row.isDeleted && row.state === 'approved' && visibleReplies.length > 0;
 		if (row.isDeleted && !keepAsPlaceholder) continue;
@@ -389,7 +388,7 @@ export function assembleDiscussion(
 			isOwner: row.isDeleted ? false : row.isOwnerReply,
 			isPending: row.isDeleted ? false : row.state === 'pending',
 			// A floor placeholder withholds the edit stamp and the authorship
-			// flag too: nothing about the removed text leaks through (P4).
+			// flag too: nothing about the removed text leaks through.
 			isMine: row.isDeleted ? false : isMine(row),
 			editedAt: row.isDeleted ? null : row.editedAt,
 			createdAt: row.createdAt,
@@ -492,14 +491,13 @@ export async function resolveCommentPostTarget(
  * Resolve a commentable page id from a slug - the pages counterpart of
  * `resolveCommentPostTarget`. Mirrors the universal route's contract:
  * non-external md rows whose current-locale body exists (strict language
- * serving, P1b ruling); the servability predicate itself is the shared
- * `servablePageBody` the route and the submit re-check also use
- * (pre-release review 01-P2-2).
+ * serving); the servability predicate itself is the shared
+ * `servablePageBody` the route and the submit re-check also use.
  */
 export async function resolveCommentPageTarget(lang: string, slug: string): Promise<string | null> {
 	// Locale tags are never page slugs (the universal route's read-side belt,
 	// mirrored here so a legacy locale-shaped row cannot collect comments its
-	// page can never display - review P3-1).
+	// page can never display).
 	if ((locales as readonly string[]).includes(slug)) return null;
 	const row = await getPageBySlug(slug);
 	if (!row || servablePageBody(row, lang) === null) return null;
@@ -516,12 +514,12 @@ export interface SubmitCommentInput {
 	 * The caller verified this request's unlock cookie for the target row
 	 * (note detail only). Gated rows stay fail-closed unless this explicit
 	 * signal is present - comment text must not attach to a diary whose body
-	 * sits behind a gate without the unlock (comment-line spec §7).
+	 * sits behind a gate without the unlock.
 	 */
 	unlockVerified?: boolean;
 	/** Root comment id when this submission is a reply. */
 	parentId?: string | null;
-	/** Segment anchor draft (P3b); null/absent = article-level comment. */
+	/** Segment anchor draft; null/absent = article-level comment. */
 	anchor?: CommentAnchorDraft | null;
 	text: string;
 	/** Signed-in reader; the route resolves the display snapshot. */
@@ -529,13 +527,13 @@ export interface SubmitCommentInput {
 	author: string;
 	avatar: string | null;
 	/**
-	 * Request address (W6.2 / W6.10). Used in-request only: CIDR block,
+	 * Request address. Used in-request only: CIDR block,
 	 * per-IP bucket, optional GeoIP handoff. NEVER written to the row.
 	 */
 	ip?: string | null;
 	/** Edge GeoIP hints; consulted only with comments.privacy.collectCountry. */
 	geo?: { country: string | null; region: string | null } | null;
-	/** Commenter's own opt-in for the public country label (W6.2 / C3). */
+	/** Commenter's own opt-in for the public country label. */
 	showCountry?: boolean;
 	/** Test seam: cache store override (defaults to the process-wide store). */
 	cache?: CacheStore;
@@ -546,35 +544,35 @@ export interface SubmitCommentInput {
 export type SubmitCommentResult =
 	| { kind: 'created'; id: string; state: 'pending' | 'approved' | 'rejected' }
 	| { kind: 'throttled'; windowSeconds: number }
-	/** The strict limiter store is down: answer 503, never fail open (W6.10). */
+	/** The strict limiter store is down: answer 503, never fail open. */
 	| { kind: 'unavailable' }
 	| { kind: 'unverified' }
-	/** Site-wide `comments.enabled` is off (W6.1): new comments are closed. */
+	/** Site-wide `comments.enabled` is off: new comments are closed. */
 	| { kind: 'disabled' }
-	/** The request address matched a configured blocked CIDR (W6.2). */
+	/** The request address matched a configured blocked CIDR. */
 	| { kind: 'blocked' }
 	| { kind: 'empty' }
 	| { kind: 'too-long'; max: number }
 	| { kind: 'target-unavailable' }
 	| { kind: 'parent-unavailable' }
-	/** The selected text no longer matches the current body (spec §6). */
+	/** The selected text no longer matches the current body. */
 	| { kind: 'stale-anchor' };
 
 export async function submitComment(input: SubmitCommentInput): Promise<SubmitCommentResult> {
 	const now = input.now ?? new Date();
 
-	// Defense in depth (spec §1 "verified reader"): the route checks too, but this
+	// Defense in depth ("verified reader"): the route checks too, but this
 	// service is the authoritative layer every future mount will call - it
 	// fails closed when the caller forgets the gate.
 	if (input.user.emailVerified !== true) return { kind: 'unverified' };
 
-	// W6.1 (C1): the site-wide switch gates NEW comments only - edit/delete of
+	// The site-wide switch gates NEW comments only - edit/delete of
 	// existing rows stay live, and the read path keeps rendering approved rows.
 	// A missing/corrupt option row yields the registry default (true) so a bad
 	// settings row can never silently close every thread.
 	if (!(await getOption('comments.enabled'))) return { kind: 'disabled' };
 
-	// W6.2 (C2/C4): request-time IP policy. Blocked CIDRs are matched before
+	// Request-time IP policy. Blocked CIDRs are matched before
 	// any target lookup; the address is not recorded anywhere. Privacy off =
 	// no CIDR matching and no GeoIP at all, by construction.
 	const privacy = await getOption('comments.privacy');
@@ -582,7 +580,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		return { kind: 'blocked' };
 	}
 
-	// W6.10: per-IP strict bucket, independent of the privacy switch (an IP is
+	// Per-IP strict bucket, independent of the privacy switch (an IP is
 	// needed for the limit, not stored). Fail-closed on a dead cache; IPv6 is
 	// aggregated on the /64 so a rotating client cannot multiply its budget.
 	const addressGuard = await rateLimitStrict(
@@ -602,11 +600,11 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	if (length < COMMENT_MIN_LENGTH || !hasVisibleText(text)) return { kind: 'empty' };
 	if (length > COMMENT_MAX_LENGTH) return { kind: 'too-long', max: COMMENT_MAX_LENGTH };
 
-	// Anchors belong to roots only (spec §2). A reply carrying one is either a
+	// Anchors belong to roots only. A reply carrying one is either a
 	// stale client or a crafted form; reject before any target or render work.
 	if (input.parentId && input.anchor) return { kind: 'stale-anchor' };
 
-	// All three arcs are served since the P4 pages mount (notes since N1);
+	// All three arcs are served since the pages mount (notes since N1);
 	// each branch below keeps its own authoritative re-check.
 	if (!isUuid(input.targetId)) return { kind: 'target-unavailable' };
 	if (input.targetType === 'post') {
@@ -637,11 +635,10 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 			.limit(1);
 		if (!target || !target.allowComment) return { kind: 'target-unavailable' };
 	} else {
-		// Pages (P4 mount): every md row the universal route can serve is
-		// commentable - pages carry no per-row switch (plan §0 #46). The
-		// servability predicate is shared with the resolver and the route
-		// (pre-release review 01-P2-2); the current language must carry a
-		// body (strict language serving, P1b ruling 2026-10-03).
+		// Pages: every md row the universal route can serve is
+		// commentable - pages carry no per-row switch. The
+		// servability predicate is shared with the resolver and the route;
+		// the current language must carry a body (strict language serving).
 		const [target] = await db
 			.select({
 				id: pages.id,
@@ -673,7 +670,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 			.where(eq(comments.id, input.parentId))
 			.limit(1);
 		// A reply needs an approved, undeleted parent on the same target - the
-		// same rows the public list shows (spec §6/§8).
+		// same rows the public list shows.
 		const parentTargetId =
 			input.targetType === 'post'
 				? (parent?.postId ?? null)
@@ -692,7 +689,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		rootCommentId = parent.rootCommentId ?? parent.id;
 	}
 
-	// Segment anchor (spec §6): authoritative re-derivation against the CURRENT
+	// Segment anchor: authoritative re-derivation against the CURRENT
 	// body. The client supplies only ord/range/exact; hash, occurrence and the
 	// quote context are recomputed here, so a stale or forged payload cannot
 	// define them. Pages stay deferred (their single row carries all locales).
@@ -745,11 +742,11 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 	}
 
 	// Owner/admin posts skip the window (WordPress core exempts moderators);
-	// everyone else shares one cross-target window per reader (grill Q1/Q2).
+	// everyone else shares one cross-target window per reader.
 	// The window is charged only AFTER validation succeeded, so validation
 	// failures never eat the reader's budget; a race loser (CAS 0 rows / FK
 	// 23503) keeps its charge - Valkey and PG share no transaction, so there
-	// is no cross-store rollback (pre-release review 05-P3-4).
+	// is no cross-store rollback.
 	const autoApprove = isAdminRole(input.user.role);
 	if (!autoApprove) {
 		const rate = await rateLimit(
@@ -763,13 +760,13 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		}
 		if (rate.count === 0) {
 			// count === 0 with allowed=true is the rateLimit() fail-open
-			// signature (the store threw): deliberate per T14, but it must
+			// signature (the store threw): deliberate, but it must
 			// never happen silently (security review).
 			console.warn('[comments] rate limiter store unavailable; failing open');
 		}
 	}
 
-	// Policy: ip/agent/location/country_code are never collected (spec §1);
+	// Policy: ip/agent/location/country_code are never collected;
 	// the display snapshot is sanitised and frozen at write time. The arc
 	// column is picked per target type; the values are otherwise identical.
 	const arc =
@@ -784,7 +781,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		autoApprove
 	});
 	const state = autoApprove ? 'approved' : (moderation?.state ?? 'pending');
-	// W6.2: country/region are stored only with the privacy switch and the
+	// Country/region are stored only with the privacy switch and the
 	// collectCountry sub-switch; the public label additionally needs the site's
 	// showCountry and the commenter's own opt-in. The raw IP/agent/location
 	// columns stay null - they are never written by this path.
@@ -795,7 +792,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		countryCode && privacy.showCountry && input.showCountry ? { showCountry: true } : null;
 	const authorName = normalizeCommentAuthor(input.author);
 	try {
-		// M6 P5 (T5.6): the comment insert and the `comment.pending` outbox row
+		// The comment insert and the `comment.pending` outbox row
 		// share ONE transaction. The enqueue creates its own savepoint and
 		// swallows its failures, so a broken notification path can never roll
 		// back the reader's comment - the alert is best-effort, the comment is
@@ -859,7 +856,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		// of an unhandled 500 (database review).
 		if (pgErrorCode(caught) === '23503') {
 			// The likelier loser in a reply race is the parent row; a root
-			// submission can only lose its target (review P3-5).
+			// submission can only lose its target.
 			return { kind: input.parentId ? 'parent-unavailable' : 'target-unavailable' };
 		}
 		throw caught;
@@ -907,11 +904,11 @@ async function loadTargetBody(input: SubmitCommentInput, now: Date): Promise<str
 			.limit(1);
 		return row?.content ?? null;
 	}
-	// Pages: segment comments deferred (spec §1) - never validated here.
+	// Pages: segment comments deferred - never validated here.
 	return null;
 }
 
-/* ── Reader self-service: edit / soft-delete (P4, ledger §19.10) ────────── */
+/* ── Reader self-service: edit / soft-delete ────────────────────────────── */
 
 export interface EditCommentInput {
 	commentId: string;
@@ -933,14 +930,14 @@ export type EditCommentResult =
 	| { kind: 'unavailable' };
 
 /**
- * Author-only edit (spec §6): the new text always re-enters review - an
+ * Author-only edit: the new text always re-enters review - an
  * approved comment drops back to `pending`, so a post-approval rewrite can
  * never ride the old approval ("inject after approval" guard) - and gets the public
  * `edited_at` stamp. Owner/admin edits auto-approve like their submissions
  * and skip the window. A missing row, a foreign author, a deleted row and a
  * rejected row are one indistinguishable `unavailable` (fail-closed).
  * `pin` intentionally stays on an edit (a moderator signal on the row,
- * restored with the re-approval); delete clears it instead (review P3-7).
+ * restored with the re-approval); delete clears it instead.
  * Concurrent same-reader edits are last-write-wins - no OCC token, accepted
  * and registered (pre-release review 08-F2).
  */
@@ -948,8 +945,7 @@ export async function editComment(input: EditCommentInput): Promise<EditCommentR
 	const now = input.now ?? new Date();
 
 	// Defense in depth (mirrors submitComment): the route checks too, but the
-	// service stays fail-closed when a future mount forgets the gate
-	// (review P3-2).
+	// service stays fail-closed when a future mount forgets the gate.
 	if (input.user.emailVerified !== true) return { kind: 'unverified' };
 
 	if (!isUuid(input.commentId)) return { kind: 'unavailable' };
@@ -1025,8 +1021,8 @@ export async function editComment(input: EditCommentInput): Promise<EditCommentR
 				eq(comments.id, row.id),
 				eq(comments.readerId, input.user.id),
 				eq(comments.isDeleted, false),
-				// A concurrent rejection must not be revived by this write
-				// (review P2-1). `approved` deliberately stays allowed: the
+				// A concurrent rejection must not be revived by this write.
+				// `approved` deliberately stays allowed: the
 				// edit pulls it back to pending - the "inject after approval" guard.
 				inArray(comments.state, ['pending', 'approved'])
 			)
@@ -1048,13 +1044,13 @@ export type DeleteCommentResult =
 	{ kind: 'deleted' } | { kind: 'unverified' } | { kind: 'unavailable' };
 
 /**
- * Author-only soft delete (spec §6): the moderation axis stays untouched so
+ * Author-only soft delete: the moderation axis stays untouched so
  * an approved root with replies keeps its floor placeholder; `pin` drops -
- * a removed comment must not stay highlighted (ledger §19.10). Not
+ * a removed comment must not stay highlighted. Not
  * throttled: retraction is not a spam vector. One single-statement CAS:
  * the former pre-read was fully redundant with the UPDATE's predicate
  * (pre-release review 04-F1). A replay answers 404 - state-idempotent, the
- * response is not (registered, ledger §27).
+ * response is not.
  */
 export async function deleteComment(input: DeleteCommentInput): Promise<DeleteCommentResult> {
 	const now = input.now ?? new Date();
@@ -1070,7 +1066,7 @@ export async function deleteComment(input: DeleteCommentInput): Promise<DeleteCo
 			isDeleted: true,
 			deletedAt: now,
 			pin: false,
-			// W6.2 erasure: a retracted comment keeps no location snapshot and
+			// Erasure: a retracted comment keeps no location snapshot and
 			// no country opt-in flag (the approved floor placeholder never
 			// renders them either, but the row itself is minimised).
 			countryCode: null,
@@ -1083,7 +1079,7 @@ export async function deleteComment(input: DeleteCommentInput): Promise<DeleteCo
 				eq(comments.readerId, input.user.id),
 				eq(comments.isDeleted, false),
 				// Aligned with editComment: a concurrently rejected row must
-				// not pass through this window either (review P3-8).
+				// not pass through this window either.
 				inArray(comments.state, ['pending', 'approved'])
 			)
 		)

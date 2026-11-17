@@ -10,7 +10,7 @@ import { isGeoipConfigured } from '$lib/server/security/geoip';
 import { settingAccess, assertSettingWrite } from '$lib/server/settings/tiers';
 
 /**
- * Content settings (W6): comments, privacy, friends, reading presence and the
+ * Content settings: comments, privacy, friends, reading presence and the
  * notes gate. `comments.moderation` stays owned by the AI page (single
  * writer), which is why this page links to it instead of duplicating it.
  */
@@ -43,7 +43,7 @@ export const load: PageServerLoad = async (event) => {
 	return {
 		commentsEnabled,
 		commentsPrivacy,
-		/** collectCountry needs a deployment header provider (C2). */
+		/** collectCountry needs a deployment header provider. */
 		geoipConfigured: isGeoipConfigured(),
 		moderation: moderation.enabled,
 		presence: { enabled: presenceEnabled, readerView, readerDots },
@@ -68,7 +68,7 @@ function firstIssue(caught: z.ZodError, fallback: string): string {
 }
 
 export const actions: Actions = {
-	/** W6.1 (C1): the site-wide switch for NEW comments. */
+	/** The site-wide switch for NEW comments. */
 	saveComments: async ({ locals, request }) => {
 		await requireAdminRole();
 		assertSettingWrite(locals.admin?.role, 'content', 'comments.enabled');
@@ -84,7 +84,7 @@ export const actions: Actions = {
 		return { message: m.admin_settings_content_flash_comments_saved() };
 	},
 
-	/** W6.2 (C2/C4/C5): request-time IP policy for comments; owner-only. */
+	/** Request-time IP policy for comments; owner-only. */
 	savePrivacy: async ({ locals, request }) => {
 		await requireAdminRole();
 		assertSettingWrite(locals.admin?.role, 'content', 'comments.privacy');
@@ -138,7 +138,7 @@ export const actions: Actions = {
 		return { message: m.admin_settings_content_flash_privacy_saved() };
 	},
 
-	/** W6.4 (C8): friend-link application switches. */
+	/** Friend-link application switches. */
 	saveFriendsApply: async ({ locals, request }) => {
 		await requireAdminRole();
 		assertSettingWrite(locals.admin?.role, 'content', 'friends.apply');
@@ -157,7 +157,7 @@ export const actions: Actions = {
 		return { message: m.admin_settings_content_flash_friends_saved() };
 	},
 
-	/** W6.4 (C8): the checker cadence and strike policy. */
+	/** The checker cadence and strike policy. */
 	saveFriendsChecks: async ({ locals, request }) => {
 		await requireAdminRole();
 		assertSettingWrite(locals.admin?.role, 'content', 'friends.checks');
@@ -200,7 +200,7 @@ export const actions: Actions = {
 		return { message: m.admin_settings_content_flash_friends_saved() };
 	},
 
-	/** W6.4 (C8): the link policy lists. */
+	/** The link policy lists. */
 	saveFriendsPolicy: async ({ locals, request }) => {
 		await requireAdminRole();
 		assertSettingWrite(locals.admin?.role, 'content', 'friends.policy');
@@ -237,7 +237,7 @@ export const actions: Actions = {
 		return { message: m.admin_settings_content_flash_friends_saved() };
 	},
 
-	/** W6.5 (C8/IA8): reading-experience presence stays on Content. */
+	/** Reading-experience presence stays on Content. */
 	savePresence: async ({ locals, request }) => {
 		await requireAdminRole();
 		assertSettingWrite(locals.admin?.role, 'content', 'presence.enabled');
@@ -262,7 +262,7 @@ export const actions: Actions = {
 		return { message: m.admin_settings_content_flash_presence_saved() };
 	},
 
-	/** W6.6 (C8): the password-gate unlock TTL (notes.gate.ttlDays). */
+	/** The password-gate unlock TTL (notes.gate.ttlDays). */
 	saveNotesGate: async ({ locals, request }) => {
 		await requireAdminRole();
 		assertSettingWrite(locals.admin?.role, 'content', 'notes.gate');

@@ -3,7 +3,7 @@ import { invalidateAll } from '$app/navigation';
 import type { ActionResult } from '@sveltejs/kit';
 
 /**
- * Per-file upload submission (deploy batch D-1, Q4 ruling).
+ * Per-file upload submission.
  *
  * The admin upload actions keep their batch contract — one file per request is
  * a legal batch of one. The browser sends each selected file in its own

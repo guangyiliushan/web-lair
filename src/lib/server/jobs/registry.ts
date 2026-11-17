@@ -1,31 +1,31 @@
 /**
- * Job registry (jobs-line plan §5.1): code constants only - metadata lives in
+ * Job registry: code constants only - metadata lives in
  * git, never in the database. Intentionally import-free so the drain can load
  * it inside a plain Node process (type stripping) and so any layer may depend
  * on it without cycles.
  *
  * Name -> module mapping: `jobs.prune` -> `builtin/jobs-prune.ts` (dots become
- * dashes; module files match /^[a-z0-9-]+\.ts$/, plan §5.1). The advisory-lock
+ * dashes; module files match /^[a-z0-9-]+\.ts$/). The advisory-lock
  * key is derived from the name via `jobLockKey` - one source, no stored copy.
  */
 export interface JobDefinition {
 	/** Registry name, also the `job_runs.job` value (code constant, not an FK). */
 	name: string;
 	description: string;
-	/** Manual (queued) runs allowed (plan §4.4). */
+	/** Manual (queued) runs allowed. */
 	manual: boolean;
 	/** Suggested cron for the admin surface (J-3); informational only. */
 	scheduleHint: string | null;
-	/** Cooperative in-process timeout; the job promise is raced (plan §5.1). */
+	/** Cooperative in-process timeout; the job promise is raced. */
 	timeoutMs: number;
 }
 
-/** `web_lair.job.<name>` namespace (plan §4.3, mirrors the links-line decision). */
+/** `web_lair.job.<name>` namespace (mirrors the links-line decision). */
 export function jobLockKey(name: string): string {
 	return `web_lair.job.${name}`;
 }
 
-/** Module file name for a registry name: dots become dashes (plan §5.1). */
+/** Module file name for a registry name: dots become dashes. */
 export function builtinModuleFile(name: string): string {
 	return `${name.replaceAll('.', '-')}.ts`;
 }
@@ -33,7 +33,7 @@ export function builtinModuleFile(name: string): string {
 /**
  * J-1 roster. The full planned roster (links.check / projects.sync /
  * revisions.prune / media.* / search.rebuild / ai.* / jobs.typecheck /
- * webhooks.deliver, plan §5.1) is registered line by line as each
+ * webhooks.deliver) is registered line by line as each
  * implementation lands - never ahead of it, so a schedule or manual trigger
  * can never point at code that does not exist.
  *
@@ -78,7 +78,7 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 	'links.check': {
 		name: 'links.check',
 		description:
-			'Run the friend-link checker: due selection, reachability + backlink checks, evidence-ring and streak updates (links line plan §4).',
+			'Run the friend-link checker: due selection, reachability + backlink checks, evidence-ring and streak updates.',
 		manual: true,
 		scheduleHint: '0 5 * * *',
 		timeoutMs: 900_000
@@ -94,7 +94,7 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 	'revisions.prune': {
 		name: 'revisions.prune',
 		description:
-			'Delete publish-time post revisions beyond the newest 20 per post (ledger §9.3); the cap is a code constant.',
+			'Delete publish-time post revisions beyond the newest 20 per post; the cap is a code constant.',
 		manual: true,
 		scheduleHint: '10 3 * * *',
 		timeoutMs: 300_000
@@ -102,7 +102,7 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 	'orphans.purge': {
 		name: 'orphans.purge',
 		description:
-			'Clear file references whose polymorphic target is gone (through syncFileReferences) and delete orphan drafts past 30 days; moments excluded (M5).',
+			'Clear file references whose polymorphic target is gone (through syncFileReferences) and delete orphan drafts past 30 days; moments excluded.',
 		manual: true,
 		scheduleHint: '40 3 * * 0',
 		timeoutMs: 600_000
@@ -110,7 +110,7 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 	'trash.purge': {
 		name: 'trash.purge',
 		description:
-			'Delete trashed post families past the grace window when every member is trashed; manual only, no default schedule (single-operator ruling Q5).',
+			'Delete trashed post families past the grace window when every member is trashed; manual only, no default schedule.',
 		manual: true,
 		scheduleHint: null,
 		timeoutMs: 600_000
@@ -118,7 +118,7 @@ export const JOBS: Record<string, JobDefinition> = Object.freeze({
 	'projects.sync': {
 		name: 'projects.sync',
 		description:
-			'Run the four-platform project sync: fetch public repo lists for the configured accounts and upsert snapshot rows (projects line plan §3).',
+			'Run the four-platform project sync: fetch public repo lists for the configured accounts and upsert snapshot rows.',
 		manual: true,
 		scheduleHint: null,
 		timeoutMs: 900_000

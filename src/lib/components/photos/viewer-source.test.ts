@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fullSrcFromDisplay, mimeFromSrc, plainLabel } from './viewer-source';
 
-/** 3d source adaptation: the @full derivation rule (Q11) and label fallback. */
-describe('fullSrcFromDisplay (Q11 lightbox derivation)', () => {
+/** Source adaptation: the @full derivation rule and label fallback. */
+describe('fullSrcFromDisplay (lightbox derivation)', () => {
 	const key = `ab/ab${'1'.repeat(62)}`;
 	const origin = 'https://lair.example';
 
@@ -27,7 +27,7 @@ describe('fullSrcFromDisplay (Q11 lightbox derivation)', () => {
 	});
 
 	// DOM reads (`img.src` / `currentSrc`) hand back absolute URLs; the seam
-	// that once made the derivation dead on the live path (review 3d P1).
+	// that once made the derivation dead on the live path.
 	it('collapses same-origin absolute URLs before deriving', () => {
 		expect(fullSrcFromDisplay(`${origin}/i/${key}.png@preview`, origin)).toBe(`/i/${key}.png@full`);
 		expect(fullSrcFromDisplay(`${origin}/i/${key}.png@thumb?x=1`, origin)).toBe(

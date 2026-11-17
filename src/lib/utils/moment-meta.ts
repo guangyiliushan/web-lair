@@ -1,5 +1,5 @@
 /**
- * Moments kind axis (micro-content plan §0.4): `life | tech | media | other`.
+ * Moments kind axis: `life | tech | media | other`.
  * Single source for the CHECK whitelist consumers (public list filter, admin
  * parsing) so the app-side whitelist and the DB CHECK cannot drift.
  */
@@ -11,7 +11,7 @@ export function isMomentKind(value: string): value is MomentKind {
 	return (MOMENT_KINDS as readonly string[]).includes(value);
 }
 
-/** Parse a raw value into a kind, or null - shared by the admin actions and the public list filter. */
+/** Parse a raw value into a kind, or null - shared by the admin actions and list filters. */
 export function parseMomentKind(raw: string): MomentKind | null {
 	return isMomentKind(raw) ? raw : null;
 }

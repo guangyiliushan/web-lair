@@ -38,11 +38,11 @@ import { readDatabaseStatus, readJournal } from '$lib/server/storage/db-status';
 import { sql } from 'drizzle-orm';
 
 /**
- * Storage control plane (W7.2, decisions ST1/ST3/ST4/ST8/Q4).
+ * Storage control plane.
  *
  * Six sections: the live provider (read-only), the saved candidate (owner),
- * credentials (env references today), migration/cutover (CLI, with the real
- * `files` count), media purge TTLs (owner) and the read-only capability map.
+ * credentials (env references today), migration/cutover (CLI, with the real `files`
+ * count), media purge TTLs (owner) and the read-only capability map.
  *
  * Two truths, deliberately:
  *   `storage.provider` — the form target. Saving writes ONLY this row.
@@ -50,8 +50,8 @@ import { sql } from 'drizzle-orm';
  *                        path (empty files table, or `storage:migrate
  *                        --cutover`), never by a form submit.
  *
- * Secrets never reach this module: the page shows env VAR NAMES, and the
- * config schema has no credential field at all (decision Q3/Q15).
+ * Secrets never reach this module: the page shows env VAR NAMES, and the config
+ * schema has no credential field at all.
  */
 export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();
@@ -78,7 +78,7 @@ export const load: PageServerLoad = async (event) => {
 		getEnv: (name) => env[name]
 	});
 
-	// Read-only database facts (W7.7/Q17): mode, masked host, migration ledger.
+	// Read-only database facts: mode, masked host, migration ledger.
 	// `db.execute` on the app handle is the same connection the page just used,
 	// so a failure here means the ledger table is missing, not that the DB is
 	// down — readDatabaseStatus degrades instead of throwing.
@@ -118,12 +118,12 @@ export const load: PageServerLoad = async (event) => {
 		},
 		purge,
 		fileCount,
-		// "Migration required" means the candidate is a DIFFERENT target than
-		// the live one; a site that never switched still has files and must not
-		// be told to migrate (review P2).
+		// "Migration required" means the candidate is a DIFFERENT target than the live
+		// one; a site that never switched still has files and must not be told to
+		// migrate.
 		migrationRequired:
 			fileCount > 0 && providerFingerprint(provider) !== providerFingerprint(active.config),
-		// The maintenance window spans copy AND the wait for cutover (W7.4).
+		// The maintenance window spans copy AND the wait for cutover.
 		migrationRunning: migration.state === 'copying' || migration.state === 'copied',
 		limits: {
 			maxBytes: MAX_UPLOAD_BYTES,
@@ -260,9 +260,9 @@ function probeMessage(result: StorageProbeResult): string {
 
 export const actions: Actions = {
 	/**
-	 * Save the CANDIDATE only (decision Q4). `storage.active` is untouched on
-	 * purpose: with media on disk the switch needs a migration, and even on an
-	 * empty install it must be an explicit activation, not a form submit.
+	 * Save the CANDIDATE only. `storage.active` is untouched on purpose: with media
+	 * on disk the switch needs a migration, and even on an empty install it must be an
+	 * explicit activation, not a form submit.
 	 */
 	saveProvider: async (event) => {
 		await requireAdminRole();
@@ -284,9 +284,9 @@ export const actions: Actions = {
 		}
 		const parsed = providerConfigSchema.parse(candidate);
 
-		// SSRF policy (W7.3/Q19): the saved endpoint is what the runtime will
-		// use, so it is validated here (https, no credentials, public DNS unless
-		// the operator opted into a LAN endpoint, never a metadata address).
+		// SSRF policy: the saved endpoint is what the runtime will use, so it is
+		// validated here (https, no credentials, public DNS unless the operator opted
+		// into a LAN endpoint, never a metadata address).
 		if (parsed.driver === 's3') {
 			try {
 				await assertStorageEndpointAllowed(parsed.endpoint!, {
@@ -332,10 +332,10 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Connection probe (W7.3, decision Q19). Probes the SAVED candidate with the
-	 * configured credentials: HeadBucket, bucket capabilities, then a
-	 * Put/Get/Delete roundtrip under `probe/`. The result is stored sanitized
-	 * and audited; a successful probe is NOT an activation (Q4).
+	 * Connection probe. Probes the SAVED candidate with the configured credentials:
+	 * HeadBucket, bucket capabilities, then a Put/Get/Delete roundtrip under `probe/`.
+	 * The result is stored sanitized and audited; a successful probe is NOT an
+	 * activation.
 	 */
 	testProvider: async (event) => {
 		await requireAdminRole();
@@ -413,7 +413,7 @@ export const actions: Actions = {
 		return { step: 'test' as const, ok: true, message: m.admin_settings_storage_test_ok() };
 	},
 
-	/** Purge TTLs (W7.2/ST10): floor 1 day, unit days, saving deletes nothing. */
+	/** Purge TTLs: floor 1 day, unit days, saving deletes nothing. */
 	savePurge: async (event) => {
 		await requireAdminRole();
 		assertSettingWrite(event.locals.admin?.role, 'storage', 'storage.purge');
@@ -455,9 +455,9 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Write-only credential replacement (W7.6/Q3). The posted values are
-	 * encrypted immediately; the response, the audit row and the reloaded page
-	 * carry hints only. Owner-only (storage.credentials tier).
+	 * Write-only credential replacement. The posted values are encrypted
+	 * immediately; the response, the audit row and the reloaded page carry hints
+	 * only. Owner-only (storage.credentials tier).
 	 */
 	saveCredentials: async (event) => {
 		await requireAdminRole();

@@ -2,7 +2,7 @@ import { m } from '$lib/paraglide/messages';
 
 /**
  * Social links: one preset table for validation, rendering and the settings
- * form (R-1/R-2, W4.3). `user_profiles.links` is the single source for the
+ * form. `user_profiles.links` is the single source for the
  * owner's social accounts; the RSS feed is a fixed rail item supplied by code,
  * never stored in `links`, never deletable and never re-ordered by the owner.
  */
@@ -62,7 +62,7 @@ export function socialHostMatches(host: string, allowed: readonly string[]): boo
 /**
  * Read-path guard: rows are validated on write, but an old/corrupt row must
  * not become a `javascript:` link or an unknown platform icon. Unknown
- * platforms are skipped with a warning (decision Q7); user order is preserved.
+ * platforms are skipped with a warning; user order is preserved.
  */
 export function socialRailItems(
 	links: readonly SocialLinkLike[] | null | undefined

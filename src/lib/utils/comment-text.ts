@@ -1,5 +1,5 @@
 /**
- * Comment text one step before rendering (comment P3a, grill Q4): split plain
+ * Comment text one step before rendering: split plain
  * text into text / link segments so the component can render them with native
  * Svelte templates - no raw-HTML escape hatch anywhere in the render path.
  * Only `http(s)` targets become links; everything else stays literal text.

@@ -6,7 +6,7 @@ import type { PhotoTile } from './photo-tile';
 import { masonryStore } from './testing/masonry-store.svelte';
 
 /**
- * Masonry POC gate (§5.1): DOM order == feed order, appends never move
+ * Masonry POC gate: DOM order == feed order, appends never move
  * earlier tiles, resize re-lays out, subsets render, keyboard reaches links
  * in order, and the disabled fallback drops the transforms entirely.
  */

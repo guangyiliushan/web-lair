@@ -1,5 +1,5 @@
 /**
- * Favicon href for the root layout (decision register §3A, S3).
+ * Favicon href for the root layout.
  *
  * `site.icon` stores `{ url, version }`. An empty URL (or a value that is
  * neither https nor the same-origin `/i/` proxy) falls back to the bundled

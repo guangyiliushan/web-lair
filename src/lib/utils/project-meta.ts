@@ -1,5 +1,5 @@
 /**
- * Projects-line shared metadata (projects line plan §2.7 / §18): the
+ * Projects-line shared metadata: the
  * UI-facing copy of the provider / status enumerations plus the i18n label
  * key maps. Batches P / A add the messages; the key names are pinned by
  * `project-meta.test.ts` so the admin surface and the public grid cannot
@@ -23,11 +23,11 @@ export const PROJECT_PROVIDERS = [
 ] as const;
 export type ProjectProvider = (typeof PROJECT_PROVIDERS)[number];
 
-/** The four platforms the sync job can pull public repositories from (§18.3). */
+/** The four platforms the sync job can pull public repositories from. */
 export const PROJECT_SYNC_PROVIDERS = ['github', 'gitlab', 'gitee', 'bitbucket'] as const;
 export type ProjectSyncProvider = (typeof PROJECT_SYNC_PROVIDERS)[number];
 
-/** Four-value review state machine (§2.4): `pending` is the sync default. */
+/** Four-value review state machine: `pending` is the sync default. */
 export const PROJECT_STATUSES = ['pending', 'published', 'hidden', 'rejected'] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 

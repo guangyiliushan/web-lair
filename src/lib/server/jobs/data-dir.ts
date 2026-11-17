@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Repository root, discovered rather than assumed (J-2 review F4/R16): walk
+ * Repository root, discovered rather than assumed: walk
  * up from this module's location to the nearest directory that carries both
  * a package.json and `src/lib/server/jobs/sdk-facade.d.ts`. Inside the repo
  * that is always the repo root - from source (dev, `node jobs/drain.ts`) and
@@ -33,10 +33,10 @@ function discoverRepoRoot(): string {
 export const repoRoot = discoverRepoRoot();
 
 /**
- * The jobs data directory (jobs-line plan §5.2): an explicit `DATA_DIR` wins -
+ * The jobs data directory: an explicit `DATA_DIR` wins -
  * absolute values are used as-is, relative values resolve against cwd; the
  * default is `<repo root>/data` (gitignored in dev; an absolute host-mounted
- * volume in production, ledger §25 backup set).
+ * volume in production, part of the backup set).
  */
 export function resolveDataDir(env: NodeJS.ProcessEnv = process.env): string {
 	const raw = env.DATA_DIR?.trim();

@@ -1,8 +1,7 @@
 /**
- * Shared contract for the admin editor image uploads (ST-3 3a): the endpoint
- * path, the picker payload shape and the one-file upload call are consumed by
- * the insert dialog, the paste/drop plugin and the route tests - single
- * source instead of mirrored copies (review round 2, Q16).
+ * Shared contract for the admin editor image uploads: the endpoint path, the picker
+ * payload shape and the one-file upload call are consumed by the insert dialog, the
+ * paste/drop plugin and the route tests - single source instead of mirrored copies.
  */
 
 /** Same-origin admin endpoint (single-file multipart POST / picker GET). */
@@ -21,7 +20,7 @@ export interface PickerItem {
 	height: number | null;
 }
 
-/** POST response (Q10: one result per uploaded file). */
+/** POST response (one result per uploaded file). */
 export interface EditorUploadResult {
 	id: string;
 	objectKey: string;
@@ -52,7 +51,7 @@ export function altFromName(name: string): string {
 		.slice(0, 128);
 }
 
-/** Inner `{width=W height=H}` text when both dimensions are known (Q11). */
+/** Inner `{width=W height=H}` text when both dimensions are known. */
 export function tailAttrsOf(dims: { width?: number | null; height?: number | null }): string {
 	return dims.width != null && dims.height != null
 		? `width=${dims.width} height=${dims.height}`
@@ -60,7 +59,7 @@ export function tailAttrsOf(dims: { width?: number | null; height?: number | nul
 }
 
 /** One-file upload (the endpoint takes a single `file` field per request).
- *  The client must send `Accept: application/json` (Q2/Q10): it is what turns
+ *  The client must send `Accept: application/json`: it is what turns
  *  a CSRF rejection into the {code} envelope instead of a plain-text 403. */
 export async function uploadEditorImage(file: File): Promise<EditorUploadResult> {
 	const form = new FormData();

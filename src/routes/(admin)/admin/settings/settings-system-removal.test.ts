@@ -2,10 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * W10.3 acceptance: the System section is deleted, not parked (decision
- * register §3J). Its four fields had zero consumers, so nothing should bring
- * the route, the nav entry, the mock labels or the option names back. The
- * real system surfaces live in /admin/maintenance, /admin/files and
+ * The System section is deleted, not parked. Its four fields had zero consumers, so
+ * nothing should bring the route, the nav entry, the mock labels or the option names
+ * back. The real system surfaces live in /admin/maintenance, /admin/files and
  * /api/health.
  */
 const LAYOUT = readFileSync(new URL('./+layout.svelte', import.meta.url), 'utf8');
@@ -35,7 +34,7 @@ const PAGES_SOURCE = [
 	.map((url) => readFileSync(url, 'utf8'))
 	.join('\n');
 
-describe('System section removal (W10.3)', () => {
+describe('System section removal', () => {
 	it('has no system route', () => {
 		expect(existsSync(new URL('./system/', import.meta.url))).toBe(false);
 	});

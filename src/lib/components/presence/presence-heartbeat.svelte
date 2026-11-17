@@ -7,7 +7,7 @@
 	} from './presence-client';
 
 	/**
-	 * Site heartbeat (realtime R3): one POST per tab per 15s on every public
+	 * Site heartbeat: one POST per tab per 15s on every public
 	 * reading surface. Mounted once in the (site) layout; renders nothing.
 	 * The effect keys on the TRACKED BOOLEAN, so client-side navigation
 	 * between tracked pages keeps the loop (and its cadence) alive instead of

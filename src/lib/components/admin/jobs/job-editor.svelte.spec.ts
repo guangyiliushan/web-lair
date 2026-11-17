@@ -4,10 +4,10 @@ import { render } from 'vitest-browser-svelte';
 import JobEditorTestHost from './job-editor-test-host.svelte';
 
 /**
- * Browser teeth for the CodeMirror wrapper (J-2, plan §5.6): mount, typing ->
- * onChange, Mod-s -> onSave, external value adoption without echo, read-only
- * surface. Assertions poll the live DOM (house style) because CodeMirror
- * builds its surface asynchronously after mount.
+ * Browser teeth for the CodeMirror wrapper: mount, typing -> onChange, Mod-s ->
+ * onSave, external value adoption without echo, read-only surface. Assertions poll
+ * the live DOM (house style) because CodeMirror builds its surface asynchronously
+ * after mount.
  */
 
 describe('job editor (CodeMirror thin wrapper)', () => {
@@ -69,7 +69,7 @@ describe('job editor (CodeMirror thin wrapper)', () => {
 		// Mod-s must not reach onSave in read-only mode, and the keymap must
 		// still swallow the browser save shortcut. The content is not
 		// focusable in read-only mode, so dispatch straight onto the surface
-		// (round 3, P3-4; discriminating recipe from round 4, P4-3):
+		// (the discriminating recipe pins each side).
 		// defaultPrevented pins the `preventDefault: true` side, save-count
 		// pins the `if (readonly) return false` side.
 		const saveEvent = new KeyboardEvent('keydown', {

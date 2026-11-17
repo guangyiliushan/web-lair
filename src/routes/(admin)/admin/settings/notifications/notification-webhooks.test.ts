@@ -71,7 +71,7 @@ vi.mock('$lib/server/db', () => {
 					orderBy: () => ({ limit: async () => rows })
 				});
 			},
-			// W2.6: the ids-only select (`select({ id }).from(webhooks)`) has no
+			// The ids-only select (`select({ id }).from(webhooks)`) has no
 			// orderBy/where and is awaited directly.
 			then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
 				const rows = state.selectQueue.shift() ?? [];
@@ -81,7 +81,7 @@ vi.mock('$lib/server/db', () => {
 	});
 	const db = {
 		// selectCount makes the "no db work before the guard" assertions real
-		// (review round-2 SYT-5: selectQueue-only assertions were tautological).
+		// (selectQueue-only assertions were tautological).
 		select: () => {
 			state.selectCount += 1;
 			return makeSelect();
@@ -103,7 +103,7 @@ vi.mock('$lib/server/db', () => {
 							await settle();
 							return state.insertRows;
 						},
-						// W2.6 awaits `insert(...).values(...)` directly (no
+						// The route awaits `insert(...).values(...)` directly (no
 						// `.returning()`), so the fake has to be thenable.
 						then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
 							settle().then(() => resolve(undefined), reject)
@@ -111,7 +111,7 @@ vi.mock('$lib/server/db', () => {
 				}
 			};
 		},
-		// W2.6: create/rotate write the endpoint and its encrypted secret in one
+		// create/rotate write the endpoint and its encrypted secret in one
 		// transaction; the fake runs the callback against the same recorder.
 		transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(db),
 		update: (table: unknown) => {
@@ -158,7 +158,7 @@ vi.mock('$lib/server/mail/transport', () => ({
 	isMailConfigured: mocks.isMailConfigured,
 	sendMail: mocks.sendMail
 }));
-// W2.6: the secret is encrypted before it is stored, so the route needs a
+// The secret is encrypted before it is stored, so the route needs a
 // usable keyring. One fixed 32-byte test key, version 1.
 vi.mock('$env/dynamic/private', () => ({
 	env: {
@@ -167,7 +167,7 @@ vi.mock('$env/dynamic/private', () => ({
 	}
 }));
 vi.mock('$lib/server/config/options-registry', () => ({ getOption: vi.fn(async () => 'Etc/UTC') }));
-// W9.3: the URL guard resolves hostnames; tests pin a public address so the
+// The URL guard resolves hostnames; tests pin a public address so the
 // suite is deterministic and offline. Literal-IP cases never hit this mock.
 vi.mock('node:dns/promises', () => ({
 	lookup: vi.fn(async (hostname: string) =>
@@ -268,7 +268,7 @@ function resetState() {
 	state.whereConds = [];
 }
 
-describe('notification mail test (W9.1)', () => {
+describe('notification mail test', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		resetState();
@@ -564,7 +564,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(state.insertValues).toHaveLength(0);
 	});
 
-	it('create refuses http, credentials and private/metadata targets (W9.3 T2a)', async () => {
+	it('create refuses http, credentials and private/metadata targets', async () => {
 		const cases = [
 			'http://example.com/hook',
 			'https://user:pass@example.com/hook',
@@ -601,7 +601,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(endpointRow.name).toBe('ops');
 		expect(endpointRow.payloadUrl).toBe('https://example.com/hook');
 		expect(endpointRow.events).toEqual(['job.run', 'schedule.toggle']);
-		// The plaintext column is not written by the new path (W2.6).
+		// The plaintext column is not written by the new path.
 		expect(endpointRow).not.toHaveProperty('secret');
 		const secretRow = state.insertValues[1] as Record<string, unknown>;
 		// 32 random bytes -> exactly 44 base64 chars incl. the padding `=`.
@@ -622,7 +622,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(audit.deliver).toBe(false);
 		expect(audit.payload?.hint).toBe(secretRow.hint);
 		expect(JSON.stringify(audit)).not.toContain(String(result?.secret));
-		// W9.3 config audit: host + subscription, local only, never the secret.
+		// Config audit: host + subscription, local only, never the secret.
 		const createAudit = recordCalls.find(
 			(call) => (call[1] as { event?: string }).event === 'webhook.create'
 		);
@@ -637,7 +637,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(JSON.stringify(config)).not.toContain(String(result?.secret));
 	});
 
-	it('create stores the normalized href for odd-but-valid urls (review round-1)', async () => {
+	it('create stores the normalized href for odd-but-valid urls', async () => {
 		await callAction('create', { ...validForm, payloadUrl: 'https:example.com' });
 		await callAction('create', { ...validForm, payloadUrl: 'HTTPS://Example.com' });
 		// Each create writes two rows (endpoint + encrypted secret).
@@ -733,9 +733,9 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		const ok = await callAction('delete', { id: WEBHOOK_ID });
 		expect(ok.result).toMatchObject({ op: 'delete', deleted: true });
 		expect(state.deleteTables[0]).toBe(webhooksMock);
-		// The delete predicate must target the row id (round-2 SYT-1).
+		// The delete predicate must target the row id.
 		expect(sqlOf(state.deleteWheres[0])).toContain('"webhooks"."id"');
-		// W9.3: deleting an endpoint is a config change and leaves an audit row.
+		// Deleting an endpoint is a config change and leaves an audit row.
 		const deleteAudit = vi
 			.mocked(mocks.recordActivity)
 			.mock.calls.find((call) => (call[1] as { event?: string }).event === 'webhook.delete');

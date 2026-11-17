@@ -530,8 +530,8 @@ export { $isAlertNode as isAlertNode };
 // ── Insert surface (footnote / mention / details / embed card / containers) ─────
 //
 // These nodes, their `$create*` factories and round-trip transformers already
-// existed; only the toolbar entry points were missing (UX-1020 "restore the
-// removed insert capabilities"). Every factory builds nodes from the exported
+// existed; only the toolbar entry points were missing. Every factory builds nodes
+// from the exported
 // source literals, so insert → export markdown → import is an identity.
 
 /** Walks every text node under the root (for the next free footnote label). */

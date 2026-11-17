@@ -16,7 +16,7 @@ export function normalizeSlug(value: string): string {
 }
 
 /**
- * Tag slug rule (2026-10-23: tags are ASCII-only — ledger §9.18.4 amendment).
+ * Tag slug rule (tags are ASCII-only).
  * URL-safe punctuation (`. _ + ~`) survives; every other run becomes one
  * hyphen. The `/` case was the bug: `UI/UX` used to yield `ui/ux`, which
  * splits the `/posts/tags/[slug]` route into two segments.
@@ -52,7 +52,7 @@ export function isValidTagName(name: string): boolean {
 }
 
 /**
- * Note title slug (notes plan v0.4 §8.3): unlike post slugs, Unicode letters
+ * Note title slug: unlike post slugs, Unicode letters
  * and digits are KEPT (diary titles are usually Chinese) so note URLs stay
  * readable. Lowercases Latin, collapses every run of whitespace/punctuation
  * into one hyphen, caps the length and trims the edges; a pure-punctuation

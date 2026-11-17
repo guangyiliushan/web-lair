@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the P2 editor actions: uuid entry guards, argument
+ * Route-level tests for the editor actions: uuid entry guards, argument
  * mapping into the draft service and the result → response translation
  * (saved/unchanged/throttled payloads, 409 conflicts, redirects). The draft
  * service and the db module are mocked; the service's own behaviour is
@@ -91,7 +91,7 @@ async function callAction(name: string, fields: Record<string, string>) {
 	}
 }
 
-describe('editor actions (P2)', () => {
+describe('editor actions', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});
@@ -115,7 +115,7 @@ describe('editor actions (P2)', () => {
 		expect(badId.result).toMatchObject({ status: 400 });
 		const badDraft = await callAction('save', { draftId: 'nope' });
 		expect(badDraft.result).toMatchObject({ status: 400 });
-		// The P1.1 category guard the rewrite had dropped (P2 review finding).
+		// The category guard a rewrite once dropped.
 		const badCategory = await callAction('save', { categoryId: 'not-a-uuid' });
 		expect(badCategory.result).toMatchObject({
 			status: 400,
@@ -308,8 +308,8 @@ describe('editor actions (P2)', () => {
 	});
 
 	it('never publishes when the one-request save fails first', async () => {
-		// UX-1020-04: the two-request flow published a stale draft whenever the
-		// save half lost the race. The combined action must stop instead.
+		// The two-request flow published a stale draft whenever the save half lost
+		// the race. The combined action must stop instead.
 		saveMock.mockResolvedValue({ kind: 'needs-category' });
 		const gate = await callAction('publish', { draftId: DRAFT_ID, title: 'x' });
 		expect(gate.result).toMatchObject({
@@ -350,7 +350,7 @@ describe('editor actions (P2)', () => {
 		const exists = await callAction('createTranslation', { id: POST_ID, lang: 'zh-cn' });
 		expect(exists.result).toMatchObject({ status: 400 });
 
-		// R7 no chaining: only a group source may spawn a translation (P2 review fix).
+		// No chaining: only a group source may spawn a translation.
 		translateMock.mockResolvedValue({ kind: 'not-source' });
 		const chained = await callAction('createTranslation', { id: POST_ID, lang: 'zh-cn' });
 		expect(chained.result).toMatchObject({ status: 400 });

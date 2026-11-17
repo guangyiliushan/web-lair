@@ -184,9 +184,8 @@ function providedInputKeys(args: string | undefined): string[] | undefined {
 // The walker-family tests scan every source file (and every compiled locale
 // module); on a loaded full-suite day the transform phase can stretch the
 // same scan past the 5s default. One shared, deliberately generous budget
-// for the whole family - the earlier single-test bump left siblings at 15s
-// (review 3d, 06 P2-1). If this ever needs raising again, split the walk by
-// directory first instead.
+// for the whole family - a single-test bump leaves siblings at the old budget.
+// If this ever needs raising again, split the walk by directory first instead.
 const WALK_TIMEOUT_MS = 30_000;
 
 describe('paraglide message contract', () => {
@@ -251,8 +250,7 @@ describe('paraglide message contract', () => {
 	);
 
 	// Same walker family as the budget constant above; the shared
-	// WALK_TIMEOUT_MS covers this compiled-output scan too (review 3d
-	// round 2, 01 P3-7).
+	// WALK_TIMEOUT_MS covers this compiled-output scan too.
 	it(
 		'exports every used key from the compiled output, so m.key() cannot be undefined at runtime',
 		() => {
@@ -269,7 +267,7 @@ describe('paraglide message contract', () => {
 				for (const key of usedKeys) {
 					if (!compiled.includes(`export const ${key} `)) {
 						stale.push(
-							`${key} missing from ${file} — run any vite process (dev / build / vitest) to regenerate; the bare paraglide-js CLI is banned since P3-a (it drops urlPatterns/routeStrategies)`
+							`${key} missing from ${file} — run any vite process (dev / build / vitest) to regenerate; the bare paraglide-js CLI is banned (it drops urlPatterns/routeStrategies)`
 						);
 					}
 				}

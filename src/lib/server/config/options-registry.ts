@@ -23,11 +23,11 @@ import {
 	storageStatusSchema
 } from '../storage/provider.ts';
 
-/** Site languages (same set as the posts `lang` CHECK, ledger §9.16). */
+/** Site languages (same set as the posts `lang` CHECK). */
 export const OPTION_LANGS = ['en', 'zh-cn', 'ja'] as const;
 
 /**
- * Public site asset URLs (decision register §3A, S3/S5): empty means "unset".
+ * Public site asset URLs: empty means "unset".
  * `site.info.avatar` is https-only - the friend card renderer runs the same
  * URL through `safeHttpsUrl`, which drops everything else. The favicon may
  * additionally point at the same-origin `/i/` media proxy.
@@ -71,22 +71,22 @@ async function defaultExecutor(): Promise<RegistryExecutor> {
 }
 
 /**
- * Options registry (AI-1.1, ai-line plan §5.1): the single source of truth
+ * Options registry: the single source of truth
  * for behaviour settings stored in the `options` KV table. `getOption` /
  * `setOption` are the only entry points - writes validate, unknown keys are
  * rejected, and every key ships a schema plus its default value. Defaults
- * mirror the ai-line plan §3.3 ledger; the AI-2.1 review batch moved the
- * numeric bounds here so route handlers cannot drift from the contract.
+ * mirror the product defaults; the numeric bounds live here so route handlers
+ * cannot drift from the contract.
  *
- * All static imports use relative `.ts` specifiers (links line, 2026-10-06):
- * the same module must load under plain Node for the jobs side
+ * All static imports use relative `.ts` specifiers: the same module must load
+ * under plain Node for the jobs side
  * (`jobs/builtin/links-check.ts`), which has no `$lib` alias resolution -
  * pass an executor there; the lazy `$lib/server/db` fallback stays
  * SvelteKit-only.
  */
 export const optionRegistry = {
 	'site.languages': {
-		// S7 (decision register §3A): at least one language, no duplicates and
+		// At least one language, no duplicates and
 		// a canonical order. `default_lang ∈ enabled` is a cross-field
 		// invariant the Site page's paired write enforces - a single-key
 		// schema cannot see both options.
@@ -106,18 +106,17 @@ export const optionRegistry = {
 		default: 'en'
 	},
 	'site.timezone': {
-		// Ledger §13.9 / notes plan v0.4: IANA zone name. Validated by
+		// IANA zone name. Validated by
 		// probing Intl (never supportedValuesOf - it omits 'UTC'). Notes
 		// fall back to this zone for the belongs-to date when their own
-		// `tz` is null; jobs reuse it as the `job_schedules.tz` default
-		// (ledger §24).
+		// `tz` is null; jobs reuse it as the `job_schedules.tz` default.
 		schema: z
 			.string()
 			.refine(isValidIanaTimeZone, { error: () => m.admin_option_err_tz_invalid_iana() }),
 		default: 'UTC'
 	},
 	'notes.gate': {
-		// Notes plan v0.4 §2.5 / ledger §13.9: TTL of the per-row unlock
+		// TTL of the per-row unlock
 		// cookie (token crypto lives in services/note-gate.ts). Days only.
 		// The editor never writes this yet - TTL currently changes only
 		// through code or a deliberate `setOption` (no runtime writer).
@@ -149,7 +148,7 @@ export const optionRegistry = {
 			alertRatios: z.array(z.number().positive()),
 			pauseAutoOnExceed: z.boolean()
 		}),
-		// Per §3.3: no budget by default; 80/90/100% alerts once set; overrun
+		// No budget by default; 80/90/100% alerts once set; overrun
 		// pauses automatic tasks only (manual stays available).
 		default: { monthly: 0, currency: 'USD', alertRatios: [0.8, 0.9, 1], pauseAutoOnExceed: true }
 	},
@@ -172,7 +171,7 @@ export const optionRegistry = {
 			// override this in its `meta.translate.mode`.
 			defaultMode: z.enum(['auto', 'review', 'manual'])
 		}),
-		// Micro-content line (ledger §17.5 / plan §1.6, C2): auto-enqueue
+		// Auto-enqueue
 		// posts + notes - content below `minChars` produces no translation
 		// candidate, manual translation is never gated. `notesAuto` opts
 		// the notes surface into automatic enqueue (site default stays

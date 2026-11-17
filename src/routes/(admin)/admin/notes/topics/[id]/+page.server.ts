@@ -103,7 +103,7 @@ export const actions: Actions = {
 		}
 		const sortOrder = /^-?\d+$/.test(sortRaw) ? Number(sortRaw) : 0;
 
-		// Source language is locked after creation (ledger §9.18.4 amendment).
+		// Source language is locked after creation.
 		const [current] = await db
 			.select({ sourceLang: topics.sourceLang })
 			.from(topics)

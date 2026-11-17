@@ -164,7 +164,7 @@
 		if (!next && uploading) cancelUpload();
 	}
 
-	/** Q4 (deploy note): one request per file keeps every body under BODY_SIZE_LIMIT. */
+	/** One request per file keeps every body under BODY_SIZE_LIMIT. */
 	async function submit(): Promise<void> {
 		if (!canSubmit) return;
 		// Snapshot first: patching the chips to `uploading` empties `pending`.

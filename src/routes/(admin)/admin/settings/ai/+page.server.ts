@@ -81,7 +81,7 @@ type PoolFailPayload = {
 /** Application rule for memory cards (AI-2): one owner, one small set of notes. */
 const MEMORY_LIMIT = 50;
 
-/** Provider key bounds (W2.5): a pasted credential, never a short PIN. */
+/** Provider key bounds: a pasted credential, never a short PIN. */
 const PROVIDER_KEY_MIN = 8;
 const PROVIDER_KEY_MAX = 4096;
 
@@ -173,7 +173,7 @@ async function keyLookupForProvider(provider: {
 }
 
 /**
- * AI settings (ai-line plan §5.2): providers CRUD, feature assignments and
+ * AI settings: providers CRUD, feature assignments and
  * the switches/thresholds block. All three sections persist through the
  * options registry (validated writes) except providers, which live in
  * `ai_providers`; keys are only ever shown by NAME (env var, AI_*-namespaced),
@@ -209,7 +209,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const envSet = Object.fromEntries(
 		providers.map((p) => [p.id, p.apiKeyEnv ? Boolean(env[p.apiKeyEnv]) : null])
 	);
-	// Encrypted rows (W2.5): status + hint only. The UI never receives the
+	// Encrypted rows: status + hint only. The UI never receives the
 	// ciphertext, let alone the key.
 	const providerKeyStatuses = await readProviderKeyStatuses(
 		db as unknown as SecretDb,
@@ -354,7 +354,7 @@ async function resolveSyncPricing(): Promise<
 
 export const actions: Actions = {
 	/**
-	 * Write-only provider key (W2.5): paste a value, encrypt it with the active
+	 * Write-only provider key: paste a value, encrypt it with the active
 	 * keyring version, upsert the row, audit set/rotate. The response never
 	 * contains the value (or the ciphertext); the page reload shows a hint and
 	 * the source badge.
@@ -484,7 +484,7 @@ export const actions: Actions = {
 		await requireOwnerRole();
 		const form = await request.formData();
 		const id = (form.get('id') ?? '').toString().trim();
-		// Malformed ids never reach the uuid column (P1.1 review lesson).
+		// Malformed ids never reach the uuid column.
 		if (id && !isUuid(id)) {
 			return fail(400, { message: m.admin_settings_ai_err_bad_id() } satisfies ProviderFailPayload);
 		}
@@ -623,7 +623,7 @@ export const actions: Actions = {
 		if (!isUuid(id)) return fail(400, { message: m.admin_settings_ai_err_bad_id() });
 		const [provider] = await db.select().from(aiProviders).where(eq(aiProviders.id, id)).limit(1);
 		if (!provider) return fail(404, { message: m.admin_settings_ai_err_not_found() });
-		// Probe with the same key a real call would use (W2.4/W2.5): the
+		// Probe with the same key a real call would use: the
 		// encrypted row first, the env name as fallback.
 		const lookup = await keyLookupForProvider(provider);
 		if (lookup.failure) {

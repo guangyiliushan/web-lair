@@ -2,7 +2,7 @@ import { localizeHref, locales } from '$lib/paraglide/runtime';
 import { isLocaleFreePath } from '$lib/config/locale-surfaces';
 
 /**
- * Strategy-aware href for internal links (P3-b). Content paths receive the
+ * Strategy-aware href for internal links. Content paths receive the
  * current locale prefix; language-free surfaces (home, auth, account,
  * admin, api/demo/i, root files — see `$lib/config/locale-surfaces`) stay
  * bare; external URLs, protocol-relative URLs and bare anchors pass through

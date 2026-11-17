@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * (uuid / mood vocabulary / version parsing) run BEFORE any service call,
  * publish/discard/status answer redirects exactly as the plan specifies,
  * and row-level actions (pin / comments / emotions / password) pass
- * normalized parameters through the §2.3 contract.
+ * normalized parameters through the action-parameter contract.
  */
 const { dbMock, state, service } = vi.hoisted(() => {
 	const dbMock: Record<string, unknown> = {};
@@ -206,7 +206,7 @@ describe('notes editor · publish / discard / status', () => {
 	it('translates publish outcomes', async () => {
 		expect((await run('publish', { draftId: 'nope' })).status).toBe(400);
 
-		// publish is save→publish in one request (UX-1020-04): the working copy
+		// publish is save→publish in one request: the working copy
 		// is persisted first, so a first-time publish can no longer ship a
 		// placeholder-slug draft.
 		service.saveNoteDraftWork.mockResolvedValue({

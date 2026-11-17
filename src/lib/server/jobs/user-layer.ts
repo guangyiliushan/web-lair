@@ -9,21 +9,21 @@ import type { JobDefinition } from './registry.ts';
 import type { JobRunFn, LoadedJob } from './types.ts';
 
 /**
- * User jobs layer (J-2, plan §5.3/§5.5): `$DATA_DIR/jobs` holds the
+ * User jobs layer: `$DATA_DIR/jobs` holds the
  * admin-writable job scripts; load order is user > builtin (systemd unit
  * search path precedent). The merged name set is `registry ∪ on-disk user
- * files` (grill R1-2), so user-only jobs (no code constant) run, enqueue and
+ * files`, so user-only jobs (no code constant) run, enqueue and
  * list like builtins. A forked builtin keeps its registry name - its
  * user-layer file is exactly `builtinModuleFile(name)` again.
  */
 
-/** Manual-run default timeout for user-only jobs (grill R1-2; bounds tick stalls). */
+/** Manual-run default timeout for user-only jobs (bounds tick stalls). */
 export const DEFAULT_USER_JOB_TIMEOUT_MS = 300_000;
-/** Sidecar `timeout_ms` bounds (grill R1-2; out-of-range values are ignored). */
+/** Sidecar `timeout_ms` bounds (out-of-range values are ignored). */
 export const USER_JOB_TIMEOUT_MIN_MS = 5_000;
 export const USER_JOB_TIMEOUT_MAX_MS = 3_600_000;
 
-/** Fork/upgrade sidecar (plan §5.3) plus the R1-2 timeout override. */
+/** Fork/upgrade sidecar plus the timeout override. */
 export interface UserJobMeta {
 	/** sha256 of the builtin source at fork time. */
 	builtin_hash?: string;
@@ -33,7 +33,7 @@ export interface UserJobMeta {
 	timeout_ms?: number;
 }
 
-/** A user-layer job file: lowercase stem + hyphen, `.ts` only (plan §5.1). */
+/** A user-layer job file: lowercase stem + hyphen, `.ts` only. */
 const USER_JOB_FILE_RE = /^[a-z0-9][a-z0-9-]*\.ts$/;
 
 /** ENOENT/ENOTDIR = genuinely missing; anything else is a real IO failure. */
@@ -47,7 +47,7 @@ export function userJobFileName(name: string): string {
 	return builtinModuleFile(name);
 }
 
-/** Sidecar path for a job: `.meta/<stem>.json` (plan §5.3). */
+/** Sidecar path for a job: `.meta/<stem>.json`. */
 export function sidecarPath(dir: string, name: string): string {
 	const stem = builtinModuleFile(name).slice(0, -'.ts'.length);
 	return join(dir, '.meta', `${stem}.json`);
@@ -56,12 +56,12 @@ export function sidecarPath(dir: string, name: string): string {
 /**
  * Map a user-layer file name back to its job name: a file matching a
  * registered builtin's module name is that builtin's fork; anything else is
- * a user-only job named after its stem (grill R1-2). Returns null for files
+ * a user-only job named after its stem. Returns null for files
  * the layer must ignore (`_sdk.*`, `package.json`, bad names, device names).
  */
 export function jobNameForUserFile(fileName: string): string | null {
 	if (!USER_JOB_FILE_RE.test(fileName)) return null;
-	// `new` is reserved by the admin create route (J-3 review J3-1): a
+	// `new` is reserved by the admin create route: a
 	// hand-placed new.ts must be ignored everywhere rather than surface a
 	// card whose edit link opens the create page (and whose delete path does
 	// not exist). `checkJobName` blocks creating the name through the UI.
@@ -171,7 +171,7 @@ export async function listJobs(dataDir: string): Promise<ResolvedJobInfo[]> {
 }
 
 /**
- * Merged definition (grill R1-2): registry metadata when the name is a code
+ * Merged definition: registry metadata when the name is a code
  * constant; a user-only default otherwise; `null` when neither a registry
  * entry nor a user file exists. A sidecar `timeout_ms` overrides either.
  */
@@ -179,7 +179,7 @@ export async function resolveJobDefinition(
 	name: string,
 	dataDir: string
 ): Promise<JobDefinition | null> {
-	// Aliases have no identity of their own (J-2 review round 2, D2):
+	// Aliases have no identity of their own:
 	// resolving one would run another job's file under a phantom name and
 	// split the single-flight lock (locks key on the name).
 	if (!isCanonicalJobName(name)) return null;
@@ -200,12 +200,11 @@ export async function resolveJobDefinition(
 }
 
 /**
- * Job loader with the user > builtin order (plan §2): a user-layer file for
+ * Job loader with the user > builtin order: a user-layer file for
  * the name wins; otherwise the registry-backed builtin loader runs. The
- * executing source hash always comes from the file that actually ran
- * (plan §3.1 `source_hash`).
+ * executing source hash always comes from the file that actually ran.
  *
- * Per-process memoization (J-2 review R10): plan §2 accepts that a tick
+ * Per-process memoization: a tick
  * reuses the first loaded version. Caching the whole LoadedJob - not just
  * relying on the module cache - is what keeps `source_hash` truthful when a
  * same-tick second execution happens after the file changed: without it the

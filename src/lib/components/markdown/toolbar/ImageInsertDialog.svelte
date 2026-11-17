@@ -23,7 +23,7 @@
 
 	type Props = {
 		open: boolean;
-		/** tailAttrs = inner `{...}` text for `![...](...) {...}` (Q11); '' when unknown. */
+		/** tailAttrs = inner `{...}` text for `![...](...) {...}`; '' when unknown. */
 		onInsert: (url: string, alt: string, tailAttrs: string) => void;
 	};
 
@@ -154,7 +154,7 @@
 				uploadState = 'error';
 				uploadError = error instanceof EditorUploadError ? error.code : 'network';
 				// Files after the failure are skipped; say so instead of
-				// dropping them silently (review round 2).
+				// dropping them silently.
 				uploadSkipped = files.length - processed;
 				break;
 			}
@@ -203,7 +203,7 @@
 			</p>
 		{:else if listState === 'ready' && items.length === 0}
 			<!-- Plain paragraphs rather than ui/empty: the Empty box is
-			     oversized inside this dialog (3a review round 1). -->
+			     oversized inside this dialog. -->
 			<p class="py-8 text-center text-sm text-muted-foreground">
 				{query.trim() !== ''
 					? m.image_search_empty()

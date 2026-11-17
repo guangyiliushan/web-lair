@@ -28,7 +28,7 @@ export interface OwnerPresence {
 
 export const OWNER_NAME_LONG_MIN = 10;
 /**
- * R-5: 6 keeps `mikoto` (the Q6 six-grapheme example) in the short tier.
+ * 6 keeps `mikoto` (the six-grapheme example) in the short tier.
  * The final inline-app-name guard is still `appNameFits`' ResizeObserver.
  */
 export const OWNER_NAME_SHORT_MAX = 6;

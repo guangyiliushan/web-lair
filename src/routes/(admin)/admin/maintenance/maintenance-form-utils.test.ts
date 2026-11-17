@@ -15,10 +15,9 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 /**
- * Pure-function pins for the maintenance list page (J-3 reviews): the flash
- * wording/action dispatch (F11), the payload-key failure signal (R4-1), the
- * ledger filter suffix (P3-20 / mutation M8) and the typecheck badge mapping
- * (P2-1: a queued check must not render as a red failure).
+ * Pure-function pins for the maintenance list page: the flash wording/action
+ * dispatch, the payload-key failure signal, the ledger filter suffix and the
+ * typecheck badge mapping (a queued check must not render as a red failure).
  */
 
 describe('buildFilterQuery', () => {
@@ -45,7 +44,7 @@ describe('maintenanceFlash', () => {
 		expect(maintenanceFlash({})).toBeNull();
 	});
 
-	it('renders an error from the payload key, not a status field (R4-1)', () => {
+	it('renders an error from the payload key, not a status field', () => {
 		expect(maintenanceFlash({ error: '该任务已有一条相同 cron 的调度' })).toEqual({
 			kind: 'error',
 			text: '该任务已有一条相同 cron 的调度'
@@ -98,7 +97,7 @@ describe('maintenanceFlash', () => {
 	});
 });
 
-describe('typecheck badge mapping (review P2-1)', () => {
+describe('typecheck badge mapping', () => {
 	it('queued/running are not failures', () => {
 		expect(typecheckVariant({ status: 'queued', summary: null })).toBe('outline');
 		expect(typecheckLabel({ status: 'queued', summary: null })).toBe('排队中');

@@ -1,26 +1,24 @@
 /**
- * Segment-comment anchor contract v1 (comment P3b; spec v0.1.3 §2–§4, ledger
- * §27). Deliberately isomorphic and **zod-free**: the client (selection
- * capture) and the server (hast walker / validation / marking) must share one
- * set of rules, and that rules module must not drag the validator into the
+ * Segment-comment anchor contract v1. Deliberately isomorphic and **zod-free**: the
+ * client (selection capture) and the server (hast walker / validation / marking) must
+ * share one set of rules, and that rules module must not drag the validator into the
  * browser bundle. The zod schema + the hash live in
  * `$lib/server/comment-anchor.ts`.
  *
- * Coordinate contract (2026-10-17 grill, M5): every offset is a **Unicode
- * code point** index into the block's normalized text — never a UTF-16 code
- * unit index (W3C Web Annotation Model §4.2.4: "MUST be in terms of unicode
- * code points … not in terms of code units"). The same module therefore owns
- * the code-point/UTF-16 bridge the server marking pass needs.
+ * Coordinate contract: every offset is a **Unicode code point** index into the
+ * block's normalized text - never a UTF-16 code unit index (the W3C Web Annotation
+ * Model requires code points, not code units). The same module therefore owns the
+ * code-point/UTF-16 bridge the server marking pass needs.
  */
 
 /** Anchor payload version. A rule change means a new version (old anchors degrade). */
 export const ANCHOR_VERSION = 1;
 
-/** Selected span bounds, in code points (spec §4). */
+/** Selected span bounds, in code points. */
 export const ANCHOR_MIN_LENGTH = 2;
 export const ANCHOR_MAX_LENGTH = 500;
 
-/** Context snippets, in code points (spec §4; reference impl uses 32, we keep 24). */
+/** Context snippets, in code points (the reference implementation uses 32, we keep 24). */
 export const ANCHOR_PREFIX_MAX = 24;
 export const ANCHOR_SUFFIX_MAX = 24;
 
@@ -38,7 +36,7 @@ export interface AnchorBlockRef {
 	 * Diagnostic today: the resolver ranks same-hash candidates by `|ord -
 	 * stored.ord|`, which is the same order, so `occ` is not consulted. Kept in
 	 * the v1 contract as the disambiguator if a large ord shift ever misranks
-	 * duplicate blocks (see ledger §27 registers).
+	 * duplicate blocks.
 	 */
 	occ: number;
 	/** Anchorable-block ordinal; a diagnostic / search-window hint, never authority. */
@@ -53,7 +51,7 @@ export interface AnchorRange {
 }
 
 export interface AnchorQuote {
-	/** The selected text, after normalization (W3C TextQuoteSelector#exact). */
+	/** The selected text, after normalization (the W3C TextQuoteSelector `exact`). */
 	exact: string;
 	/** Up to ANCHOR_PREFIX_MAX code points immediately before the range. */
 	prefix: string;
@@ -98,7 +96,7 @@ export interface CommentAnchorDraft {
 	/**
 	 * Code points of the block the reader selected. Optional because older
 	 * clients omit it; when present the server refuses to trust `ord` against a
-	 * block of a different length (stale-ord fingerprint, spec §5 M11).
+	 * block of a different length (stale-ord fingerprint).
 	 */
 	blockLength?: number;
 	/** Fingerprint of the block text the reader saw (see `blockFingerprint`). */
@@ -107,7 +105,7 @@ export interface CommentAnchorDraft {
 
 /* ── Block model (single source for both walkers) ───────────────────────── */
 
-/** Leaf text blocks that may carry a segment anchor (spec §2). */
+/** Leaf text blocks that may carry a segment anchor. */
 export const ANCHOR_BLOCK_TAGS: ReadonlySet<string> = new Set([
 	'p',
 	'h2',
@@ -208,7 +206,7 @@ export interface FoldPoint<T> {
 }
 
 /**
- * Fold a block's raw segments into its normalized text (spec §3) while keeping
+ * Fold a block's raw segments into its normalized text while keeping
  * a code-point -> raw-offset map. This is the one place the two pipelines can
  * disagree if reimplemented, so both call it with their own node handle.
  *
@@ -285,7 +283,7 @@ export function codePointToUtf16(value: string, codePointOffset: number): number
 
 /**
  * True when a UTF-16 offset splits a surrogate pair (i.e. it is not a valid
- * code point boundary). Selections ending there are rejected (spec §3).
+ * code point boundary). Selections ending there are rejected.
  */
 export function splitsSurrogatePair(value: string, utf16Offset: number): boolean {
 	if (utf16Offset <= 0 || utf16Offset >= value.length) return false;

@@ -95,7 +95,7 @@
 	}
 
 	// The action succeeded: drop the plaintext from memory and let the reloaded
-	// hints speak (review P1 — the state used to stay dirty forever).
+	// hints speak - the state used to stay dirty forever.
 	$effect(() => {
 		if (credentialsForm?.ok) {
 			accessKeyId = '';
@@ -413,7 +413,7 @@
 		{/if}
 	</section>
 
-	<!-- 3. Credentials (W7.6: write-only, encrypted at rest) -->
+	<!-- 3. Credentials (write-only, encrypted at rest) -->
 	<section class="space-y-3">
 		<header class="min-w-0">
 			<h2 class="text-sm font-medium">{m.admin_settings_storage_credentials()}</h2>

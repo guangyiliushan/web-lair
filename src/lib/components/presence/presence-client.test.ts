@@ -13,7 +13,7 @@ import {
 } from './presence-client';
 
 /**
- * Unit tests for the presence client engine (realtime R3): token tiers
+ * Unit tests for the presence client engine: token tiers
  * (randomUUID → getRandomValues → Math.random, all v4-shaped), the mount
  * filter (R-6), the heartbeat loop (immediate beat / cadence / hidden pause /
  * catch-up), the SSE watchdog (backoff, CONNECTING is the browser's job, the

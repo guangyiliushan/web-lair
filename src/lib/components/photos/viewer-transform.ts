@@ -1,5 +1,5 @@
 /**
- * Overlay viewer transform state machine (plan §5.3 layer 2; Q13 table).
+ * Overlay viewer transform state machine.
  * Pure and DOM-free: the component owns the elements, this module owns the
  * numbers. Scale is fit=1 (the image always starts fitted); pan bounds are
  * derived from the scaled content size against the viewport.
@@ -20,19 +20,19 @@ export interface Size {
 	height: number;
 }
 
-/** Scale range (Q13). */
+/** Scale range. */
 export const MIN_SCALE = 1;
 export const MAX_SCALE = 8;
-/** Wheel step per notch and keyboard +/- step (Q13). */
+/** Wheel step per notch and keyboard +/- step. */
 export const WHEEL_FACTOR = 1.15;
 export const KEY_FACTOR = 1.5;
-/** Double-click target scale (Q13: 1x <-> 2x). */
+/** Double-click target scale (1x <-> 2x). */
 export const DOUBLE_TAP_SCALE = 2;
-/** Swipe-down closes only at fit scale and past this distance (Q13). */
+/** Swipe-down closes only at fit scale and past this distance. */
 const SWIPE_CLOSE_MAX_SCALE = 1.05;
-// Q13 wording is strictly past 80px: exactly 80 must NOT close.
+// Strictly past 80px: exactly 80 must NOT close.
 const SWIPE_CLOSE_MIN_PX = 80;
-/** "Is it zoomed" threshold deciding navigate-vs-pan (Q13). */
+/** "Is it zoomed" threshold deciding navigate-vs-pan. */
 const ZOOM_EPSILON = 0.01;
 
 export function identity(): ViewerTransform {
@@ -43,13 +43,13 @@ export function clampScale(scale: number): number {
 	return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
 }
 
-/** Unzoomed (≈fit) gestures navigate; zoomed gestures pan (Q13). */
+/** Unzoomed (≈fit) gestures navigate; zoomed gestures pan. */
 export function isZoomed(transform: ViewerTransform): boolean {
 	return transform.scale > MIN_SCALE + ZOOM_EPSILON;
 }
 
 /**
- * Hard pan clamp (Q13): the scaled content may never leave the viewport
+ * Hard pan clamp: the scaled content may never leave the viewport
  * centre-frame bounds; when the scaled content is smaller than the viewport
  * on an axis, that axis locks to 0.
  */
@@ -72,13 +72,13 @@ export function clampPan(
 	};
 }
 
-/** Reset to fit (Q13: `0` key and the double-click way back). */
+/** Reset to fit (`0` key and the double-click way back). */
 export function reset(): ViewerTransform {
 	return identity();
 }
 
 /**
- * Zoom by `factor` keeping the point under the pointer fixed (Q13: wheel
+ * Zoom by `factor` keeping the point under the pointer fixed (wheel
  * at pointer / double-click at pointer). Pointer coords are viewport-relative
  * centre coords - the same frame as x/y. Result is pan-clamped.
  */
@@ -103,7 +103,7 @@ export function zoomAt(
 	);
 }
 
-/** One wheel notch: up zooms in, down zooms out (Q13 ×1.15 per notch). */
+/** One wheel notch: up zooms in, down zooms out (×1.15 per notch). */
 export function wheelZoom(
 	transform: ViewerTransform,
 	deltaY: number,
@@ -120,7 +120,7 @@ export function wheelZoom(
 	);
 }
 
-/** +/- keys zoom around the viewport centre (Q13 ×1.5). */
+/** +/- keys zoom around the viewport centre (×1.5). */
 export function keyZoom(
 	transform: ViewerTransform,
 	direction: 1 | -1,
@@ -131,7 +131,7 @@ export function keyZoom(
 	return zoomAt(transform, factor, { x: 0, y: 0 }, viewport, content);
 }
 
-/** Double click: fit -> 2x at the pointer; any zoom -> reset (Q13 1x <-> 2x). */
+/** Double click: fit -> 2x at the pointer; any zoom -> reset (1x <-> 2x). */
 export function toggleDoubleClick(
 	transform: ViewerTransform,
 	pointer: { x: number; y: number },
@@ -142,7 +142,7 @@ export function toggleDoubleClick(
 	return zoomAt(identity(), DOUBLE_TAP_SCALE, pointer, viewport, content);
 }
 
-/** Drag delta while zoomed; unzoomed drags are navigation gestures (Q13). */
+/** Drag delta while zoomed; unzoomed drags are navigation gestures. */
 export function panBy(
 	transform: ViewerTransform,
 	dx: number,
@@ -158,7 +158,7 @@ export function panBy(
 	);
 }
 
-/** Swipe-down close predicate: fit scale (≤1.05) and downward ≥80px (Q13). */
+/** Swipe-down close predicate: fit scale (≤1.05) and downward ≥80px. */
 export function shouldCloseOnSwipe(transform: ViewerTransform, deltaYDown: number): boolean {
 	return transform.scale <= SWIPE_CLOSE_MAX_SCALE && deltaYDown > SWIPE_CLOSE_MIN_PX;
 }

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { SETTINGS_SECTIONS } from '$lib/server/settings/tiers';
 
 /**
- * W5.6 acceptance: Search indexing lives in Site, shows the two real routes,
+ * Search indexing lives in Site, shows the two real routes,
  * marks IndexNow/Baidu/Bing as planned, and has no key/token input. The
  * standalone `/admin/settings/search` route is gone (merged into Site by
  * IA3); a regression here would resurrect a second place to configure SEO.
@@ -11,7 +11,7 @@ import { SETTINGS_SECTIONS } from '$lib/server/settings/tiers';
 const PAGE = readFileSync(new URL('./+page.svelte', import.meta.url), 'utf8');
 const SEARCH_ROUTE = new URL('../search/', import.meta.url);
 
-/** Parsed locale files, for the W10.2 dead-key and copy audit. */
+/** Parsed locale files, for the dead-key and copy audit. */
 const LOCALES = ['en', 'ja', 'zh-cn'];
 const MESSAGES = LOCALES.map((locale) => ({
 	locale,
@@ -30,9 +30,9 @@ const SCHEMA_SOURCE = [
 		)
 ].join('\n');
 
-describe('Site search indexing (W5.6)', () => {
-	// Bound the slice to the next comment so a later section cannot inherit
-	// these negatives (W10 review: the old slice ran to EOF).
+describe('Site search indexing', () => {
+	// Bound the slice to the next comment so a later section cannot inherit these
+	// negatives (the old slice ran to EOF).
 	const start = PAGE.indexOf('<!-- Search indexing');
 	const nextComment = start === -1 ? -1 : PAGE.indexOf('<!--', start + 1);
 	const section = PAGE.slice(start, nextComment === -1 ? undefined : nextComment).replace(
@@ -80,7 +80,7 @@ describe('Site search indexing (W5.6)', () => {
 		expect(section).toContain('admin_settings_site_not_implemented');
 	});
 
-	it('spells out that site search is a separate project (W10.2)', () => {
+	it('spells out that site search is a separate project', () => {
 		expect(section).toContain('admin_settings_site_site_search_hint');
 		for (const { locale, messages } of MESSAGES) {
 			expect(messages.admin_settings_site_site_search_hint, locale).toMatch(

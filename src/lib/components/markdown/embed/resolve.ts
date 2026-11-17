@@ -48,8 +48,8 @@ const IMAGE_EXTENSIONS = new Set([
 const SITE_EMBED_PATH_REGEX = /^\/(posts|notes|thoughts)\//;
 
 /** Storage-line variant suffix (`/i/<key>@thumb|grid|preview|full`): it trails
- * the extension, so it comes off before the extension match (review round
- * 1: variant URLs were falling through to generic embed cards). */
+ * the extension, so it comes off before the extension match (otherwise variant
+ * URLs fall through to generic embed cards). */
 const STORAGE_VARIANT_SUFFIX = /@(thumb|grid|preview|full)$/;
 
 export function imageExtension(url: string): string | null {

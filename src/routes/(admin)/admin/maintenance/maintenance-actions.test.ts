@@ -299,13 +299,13 @@ describe('admin maintenance actions', () => {
 		});
 	});
 
-	it('typecheck: an enqueue failure answers 400, not a 500 (J-3 review J3-3)', async () => {
+	it('typecheck: an enqueue failure answers 400, not a 500', async () => {
 		mocks.enqueueJob.mockRejectedValueOnce(new Error('job does not allow manual runs'));
 		const { result } = await callAction('typecheck');
 		expect(result).toMatchObject({ status: 400 });
 	});
 
-	it('run: an enqueue failure answers 400 with no audit row (J-3 review R4-2)', async () => {
+	it('run: an enqueue failure answers 400 with no audit row', async () => {
 		state.resolveResult = { name: 'my-task', manual: true };
 		mocks.enqueueJob.mockRejectedValueOnce(new Error('dedupe storm'));
 		const { result } = await callAction('run', { name: 'my-task' });

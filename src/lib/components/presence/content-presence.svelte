@@ -12,7 +12,7 @@
 	} from './presence-client';
 
 	/**
-	 * Reader presence widget (realtime R3/R4, ledger §23): the "N reading
+	 * Reader presence widget: the "N reading
 	 * now" badge (meta row) and the 20-segment position density strip
 	 * (absolutely anchored under the header, so appearing/disappearing never
 	 * shifts layout; the page header is `relative`). Counts include the

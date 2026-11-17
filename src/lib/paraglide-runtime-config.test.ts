@@ -8,7 +8,7 @@ import {
 import { cookieSurfaceMatches, excludedSurfaceMatches } from '$lib/config/locale-surfaces';
 
 /**
- * Config-drift canary for the generated paraglide runtime (P3-a). The vite
+ * Config-drift canary for the generated paraglide runtime. The vite
  * plugin bakes `strategy` / `urlPatterns` / `routeStrategies` into
  * runtime.js and recompiles the artifact on every vite/vitest run, so this
  * locks the *configured* routing: a future edit to vite.config.ts — or a
@@ -16,7 +16,7 @@ import { cookieSurfaceMatches, excludedSurfaceMatches } from '$lib/config/locale
  * carry urlPatterns/routeStrategies — must not silently drop the url-first
  * chain, the prefix-all patterns or the route strategies.
  *
- * P3-b: the middleware overrides are derived from
+ * The middleware overrides are derived from
  * `$lib/config/locale-surfaces` (shared with the runtime link helper), so
  * the generated runtime must match that module exactly — both directions.
  */

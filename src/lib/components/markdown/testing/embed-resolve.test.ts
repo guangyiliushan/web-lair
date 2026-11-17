@@ -126,7 +126,7 @@ describe('spec 3.4 embed decision', () => {
 	});
 });
 
-describe('storage-line variant URLs (review round 1)', () => {
+describe('storage-line variant URLs', () => {
 	const key = '/i/ab/' + 'a'.repeat(62) + '.jpg';
 
 	it('reads the extension through the variant suffix', () => {

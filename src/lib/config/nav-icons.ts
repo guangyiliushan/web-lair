@@ -25,7 +25,7 @@ import IconStar from '@tabler/icons-svelte-runes/icons/star';
 import IconSun from '@tabler/icons-svelte-runes/icons/sun';
 
 /**
- * Nav icon whitelist (notes plan §8.6 / pages line "icon whitelist"): topic
+ * Nav icon whitelist: topic
  * and page rows store a tabler icon NAME (kebab), but dynamic menu data
  * crosses the load serialisation boundary where components cannot travel -
  * so the name is resolved here, client-side, against a curated set.

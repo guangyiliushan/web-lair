@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * Route-level tests for /admin/maintenance/new (J-3): guard first, the name
  * requirement, gate-error passthrough, the conflict passthrough, and the
  * redirect contracts - plain save lands on the [name] page, save-and-run
- * queues and lands on the list (ledger visible; plan §4.4).
+ * queues and lands on the list (ledger visible).
  */
 
 const { mocks, state } = vi.hoisted(() => {

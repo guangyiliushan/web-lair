@@ -16,7 +16,7 @@
 	let { children }: { children: Snippet } = $props();
 
 	/**
-	 * Final 8-page IA (decision register §3K): Profile & Preferences / Site /
+	 * Final 8-page IA: Profile & Preferences / Site /
 	 * Content / Notifications / Integrations / Storage / AI / Account.
 	 * `system` is deleted and `search` is merged into Site, so neither appears
 	 * here; the old `/user` and `/notification` routes redirect.

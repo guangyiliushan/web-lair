@@ -1,8 +1,8 @@
 /**
- * Notification seam (M6 P4, F-7/F-10): the single call site every ops probe
- * uses to raise an alert. P5 replaces the default sink with the outbox writer
- * (`notification_deliveries`); until then the default sink writes one
- * structured warning line, so a probe can be wired today without inventing a
+ * Notification seam: the single call site every ops probe
+ * uses to raise an alert. The default sink writes one
+ * structured warning line; the outbox writer (`notification_deliveries`) can be
+ * installed instead, so a probe can be wired without inventing a
  * second delivery path.
  *
  * Contract:
@@ -10,16 +10,16 @@
  *    condition (the run ledger and the external healthchecks ping are the
  *    other, independent records).
  *  - The sink is process-wide, set once at boot (`setNotificationSink`). The
- *    drain sets it per tick if P5 wires the outbox there; the web process may
+ *    drain sets it per tick when the outbox is wired there; the web process may
  *    set its own.
  *  - Payloads carry metric names and numbers only - never addresses, URLs or
- *    credentials (the seam is logged before P5 lands).
+ *    credentials.
  *  - The return value distinguishes "no sink installed" (`skipped`) from "the
  *    sink rejected it" (`failed`). The caller keeps its daily latch only for
  *    `delivered`/`skipped`; on `failed` it must drop the latch so the next tick
  *    retries - a day-scoped dedupe key plus a latched failure would otherwise
- *    silence the alert for the rest of the day (review P1-1).
- *  - Delivery is at-least-once by design; P5's (event_type, event_key, channel)
+ *    silence the alert for the rest of the day.
+ *  - Delivery is at-least-once by design; the (event_type, event_key, channel)
  *    unique key absorbs the duplicate when a retry lands twice.
  */
 
@@ -27,7 +27,7 @@ import { sanitizeErrorText } from '../jobs/error-text.ts';
 
 /** One alert handed to the delivery layer. */
 export interface NotificationEvent {
-	/** Event name, e.g. `system.disk_high` (P5 registers these in the roster). */
+	/** Event name, e.g. `system.disk_high` (registered in the roster). */
 	eventType: string;
 	/** Dedupe key inside the event type, e.g. `disk:/data`. */
 	eventKey: string;
@@ -36,8 +36,8 @@ export interface NotificationEvent {
 	/** Human-readable detail; bounded, no secrets. */
 	body: string;
 	/**
-	 * Optional absolute link (admin page, run detail). P5's outbox stores it in
-	 * the payload; the pre-P5 default sink ignores it. Never a token carrier -
+	 * Optional absolute link (admin page, run detail). The outbox stores it in
+	 * the payload; the log-only default sink ignores it. Never a token carrier -
 	 * `notifications/format.ts` strips credentials, query and fragment.
 	 */
 	url?: string | null;
@@ -49,13 +49,13 @@ export interface NotificationEvent {
  */
 export type NotificationOutcome = 'delivered' | 'skipped' | 'failed';
 
-/** Delivery backend. P5's outbox writer implements this shape. */
+/** Delivery backend; the outbox writer implements this shape. */
 export type NotificationSink = (event: NotificationEvent) => void | Promise<void>;
 
 let sink: NotificationSink | null = null;
 
 /**
- * Install the delivery backend (P5). `null` restores the log-only default;
+ * Install the delivery backend. `null` restores the log-only default;
  * tests use that to avoid leaking a sink into later cases.
  */
 export function setNotificationSink(next: NotificationSink | null): void {

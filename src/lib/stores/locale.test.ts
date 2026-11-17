@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Hoisted mocks so the module under test can be imported statically: the old
 // TDZ-driven dynamic import also paid the Svelte compile cost inside a hook,
-// which then needed a growing timeout under load (P1.1 review).
+// which then needed a growing timeout under load.
 const { mockSetLocale, lsGetItem, lsSetItem } = vi.hoisted(() => ({
 	mockSetLocale: vi.fn(),
 	lsGetItem: vi.fn(),

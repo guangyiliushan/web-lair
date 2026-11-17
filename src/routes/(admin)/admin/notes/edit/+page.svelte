@@ -84,7 +84,7 @@
 	/**
 	 * Settings sheet element. `Select.Content` already portals its layer; when a
 	 * select lives inside this sheet the layer must land INSIDE the sheet DOM,
-	 * or the dialog's dismiss layer treats it as an outside click (UX-1020-02).
+	 * or the dialog's dismiss layer treats it as an outside click.
 	 * `to` must not be passed before the element exists (bits-ui throws in DEV).
 	 */
 	let settingsSheetEl = $state<HTMLElement | null>(null);
@@ -279,7 +279,7 @@
 	}
 
 	/**
-	 * Publish in ONE request (UX-1020-04). The action persists the working copy
+	 * Publish in ONE request. The action persists the working copy
 	 * and publishes it together, so a first-time publish (no draft row yet) can
 	 * no longer lose the race between the old two client-side requests - which
 	 * is how a placeholder-slug draft ended up in the database.
@@ -574,7 +574,7 @@
 
 <div class="flex h-full min-h-0 min-w-0 flex-col">
 	<!-- Discard/status live in their own forms; publish is a single fetch
-	     (save→publish in one request, UX-1020-04). -->
+	     (save→publish in one request). -->
 	<form
 		id="discard-form"
 		method="POST"

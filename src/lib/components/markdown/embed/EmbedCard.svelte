@@ -154,7 +154,7 @@
 	});
 
 	/**
-	 * Badges carry the brand name only (Q13: the type suffix lives nowhere
+	 * Badges carry the brand name only (the type suffix lives nowhere
 	 * visible); functional text - the generic and own-site labels, the load
 	 * button - goes through paraglide.
 	 */

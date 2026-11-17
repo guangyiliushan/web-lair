@@ -3,7 +3,7 @@ import { deLocalizeUrl } from '$lib/paraglide/runtime';
 import { isUuid } from '$lib/utils/uuid';
 
 /**
- * Presence client engine (realtime R3, ledger §23): token, heartbeat loop,
+ * Presence client engine: token, heartbeat loop,
  * visibility pause, position math and the SSE watchdog. All capture rules
  * and timing/recovery logic live here (unit-tested in node); the Svelte
  * components stay thin renderers.
@@ -200,8 +200,8 @@ export const STREAM_COLD_RETRY_LIMIT = 5;
 export const STREAM_SETTLE_PROBE_MS = 10 * 60_000;
 
 /**
- * One EventSource per tab (register C2/C3) with the fatal-failure watchdog
- * (C3): non-200 failures are permanent per the spec, so we rebuild with
+ * One EventSource per tab with the fatal-failure watchdog: non-200 failures are
+ * permanent per the spec, so we rebuild with
  * exponential backoff capped at 60s; after the cold cap the stream settles to
  * a single probe every 10 minutes, and a visibilitychange back to visible
  * suspends/resumes with reset counters (a hidden tab also stops holding a

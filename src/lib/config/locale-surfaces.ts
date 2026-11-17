@@ -1,6 +1,6 @@
 /**
  * Locale surface map — the single source of truth for which internal paths
- * stay outside the `/{lang}` segment (ledger §9.18.2). Two consumers:
+ * stay outside the `/{lang}` segment. Two consumers:
  *
  * - `vite.config.ts` derives the paraglide `routeStrategies` middleware
  *   overrides from the `*Matches()` helpers below.
@@ -8,7 +8,7 @@
  *   at render time whether an internal link receives a locale prefix.
  *
  * Keeping both on one module means the middleware configuration and the
- * runtime link helper can never drift apart (P3-b grill Q7).
+ * runtime link helper can never drift apart.
  */
 
 /** Paths that resolve their locale from the cookie chain (never prefixed). */
@@ -32,13 +32,13 @@ export const EXCLUDED_SURFACE_TREES = ['/api', '/demo', '/i'] as const;
  * Root-level files outside the language segment: links stay bare and the
  * middleware skips them. `/rss.xml` is deliberately absent — feeds live in
  * the language segment (`/{lang}/rss.xml`); only requests to the bare root
- * alias are excluded from the middleware (P3-b R2-Q2).
+ * alias are excluded from the middleware.
  */
 export const ROOT_FILES = ['/sitemap.xml', '/robots.txt'] as const;
 
 /**
  * `routeStrategies` match patterns for the cookie surfaces. The wildcard
- * form covers the `__data.json` requests as well (P3-a review R1-P2-1);
+ * form covers the `__data.json` requests as well;
  * ordering matters — specific patterns must precede any later wildcard.
  */
 export function cookieSurfaceMatches(): string[] {
@@ -51,7 +51,7 @@ export function cookieSurfaceMatches(): string[] {
 
 /**
  * Root endpoints whose requests skip the i18n middleware exactly (no
- * wildcard form): the two root files plus the feed alias (P3-b R2-Q2).
+ * wildcard form): the two root files plus the feed alias.
  *
  * Caveat (review finding, verified against the generated runtime): the
  * middleware matches these patterns against the de-localised path, so

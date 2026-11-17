@@ -6,9 +6,9 @@ const MAX_CATCHUP_SCAN = 500;
 export class CronExprError extends Error {}
 
 /**
- * Cron gate (plan §4.9): exactly five fields, no seconds field. cron-parser
+ * Cron gate: exactly five fields, no seconds field. cron-parser
  * itself accepts 6-field expressions, so the field count is enforced here
- * before parsing. The save gate (J-2) will run this too; drain runs it per
+ * before parsing. The save gate runs this too; drain runs it per
  * row so a hand-inserted row fails loudly instead of firing every second.
  */
 export function assertCronExpr(expr: string): void {
@@ -28,7 +28,7 @@ export interface DueSnapshot {
 }
 
 /**
- * Catch-up snapshot (plan §4.1, scenario 85): when at least one due point
+ * Catch-up snapshot: when at least one due point
  * falls in `(lastDueAt, now]`, the caller executes exactly ONE run - for the
  * most recent due - and advances the watermark straight to `latestDue`
  * (earlier missed points are skipped, never executed one by one).

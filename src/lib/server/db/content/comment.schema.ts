@@ -18,17 +18,17 @@ import { posts } from './post.schema.ts';
 import type { CommentAnchor } from '$lib/utils/comment-anchor';
 
 /**
- * Comment threads with an exclusive-arc target (ledger §9.5/§11-A2): exactly
+ * Comment threads with an exclusive-arc target: exactly
  * one of post_id / note_id / page_id is set, enforced by CHECK
  * (num_nonnulls(...) = 1) instead of the old ref_type/ref_id pair.
  *
- * Two axes are kept separate on purpose (ledger §4.16): `state` is the
+ * Two axes are kept separate on purpose: `state` is the
  * moderation decision (pending/approved/rejected) while `is_deleted` /
  * `deleted_at` express removal.
  *
- * Types (P1): the arc columns are uuid like their targets; `reader_id` /
+ * Types: the arc columns are uuid like their targets; `reader_id` /
  * `reviewed_by` point at the auth tables and therefore remain text
- * permanently (§9.6 exception).
+ * permanently.
  */
 export const comments = pgTable(
 	'comments',
@@ -68,12 +68,12 @@ export const comments = pgTable(
 		meta: jsonb('meta').$type<Record<string, unknown> | null>(),
 		readerId: text('reader_id').references(() => user.id, { onDelete: 'set null' }),
 		editedAt: timestamp('edited_at', { withTimezone: true }),
-		// Type-only narrowing (comment P3b): `$type` is a TS-level annotation and
+		// Type-only narrowing: `$type` is a TS-level annotation and
 		// produces no DDL, so the anchor contract lives in the application layer.
 		anchor: jsonb('anchor').$type<CommentAnchor | null>(),
 		isOwnerReply: boolean('is_owner_reply').notNull().default(false),
 		countryCode: text('country_code'),
-		// W6.2 (C2/C4): the region the deployment's edge resolved at request
+		// The region the deployment's edge resolved at request
 		// time. Only set when `comments.privacy.collectCountry` is on; cleared
 		// by the retention job. The raw IP is never stored (`ip` stays null).
 		regionCode: text('region_code')
@@ -94,30 +94,30 @@ export const comments = pgTable(
 			.where(sql`${table.postId} is not null`),
 		index('comments_root_idx').on(table.rootCommentId, table.createdAt),
 		index('comments_reader_idx').on(table.readerId),
-		// Self-referential FK cascade needs a leading index on the child column (§11-A2).
+		// Self-referential FK cascade needs a leading index on the child column.
 		index('comments_parent_idx')
 			.on(table.parentCommentId)
 			.where(sql`${table.parentCommentId} is not null`),
-		// Every CASCADE / SET NULL FK on this table gets a partial leading index
-		// (§11-A2): deleting a note/page or a user must not scan the table.
+		// Every CASCADE / SET NULL FK on this table gets a partial leading index:
+		// deleting a note/page or a user must not scan the table.
 		index('comments_note_idx')
 			.on(table.noteId)
 			.where(sql`${table.noteId} is not null`),
-		// Notes-line v0.3 §7.3: note thread query shape (mirrors the post thread index).
+		// Note thread query shape (mirrors the post thread index).
 		index('comments_note_thread_idx')
 			.on(table.noteId, table.parentCommentId, table.pin, table.createdAt)
 			.where(sql`${table.noteId} is not null`),
 		index('comments_page_idx')
 			.on(table.pageId)
 			.where(sql`${table.pageId} is not null`),
-		// W1 P5 (2026-10-14): pages thread query shape (mirrors the note/post thread index).
+		// Pages thread query shape (mirrors the note/post thread index).
 		index('comments_page_thread_idx')
 			.on(table.pageId, table.parentCommentId, table.pin, table.createdAt)
 			.where(sql`${table.pageId} is not null`),
 		index('comments_reviewed_by_idx')
 			.on(table.reviewedBy)
 			.where(sql`${table.reviewedBy} is not null`),
-		// Review queue lists only the pending state - partial index (§9.5).
+		// Review queue lists only the pending state - partial index.
 		index('comments_review_idx')
 			.on(table.state, table.createdAt)
 			.where(sql`${table.state} = 'pending'`)

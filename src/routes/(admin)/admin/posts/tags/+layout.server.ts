@@ -11,7 +11,7 @@ import { m } from '$lib/paraglide/messages';
  * not refetch the list.
  *
  * Usage counts come from `post_tags` — tags are M:N with posts, unlike
- * categories which own their posts outright (§9.4 live-aggregate rule).
+ * categories which own their posts outright (a live aggregate, no counter column).
  */
 export const load: LayoutServerLoad = async () => {
 	await requireAdminRole();

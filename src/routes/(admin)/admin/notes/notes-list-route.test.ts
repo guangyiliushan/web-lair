@@ -180,7 +180,7 @@ describe('admin notes list route', () => {
 		};
 		expect(result.notes.find((n) => n.id === NOTE_ID)?.hasDraft).toBe(true);
 		expect(result.notes[1].hasDraft).toBe(false);
-		// Every family row carries its language chain (UX-1020).
+		// Every family row carries its language chain.
 		expect(result.notes[0].langs).toEqual([
 			{ lang: 'en', id: NOTE_ID, status: 'published', hasDraft: true, isSource: true }
 		]);

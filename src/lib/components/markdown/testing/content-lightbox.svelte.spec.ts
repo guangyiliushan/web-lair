@@ -48,9 +48,9 @@ async function mount(): Promise<void> {
 	await expect.poll(() => enhanced().length).toBe(2);
 }
 
-/** Self-built DOM nodes, removed after each test (review 3d round 2,
- * 03-P3-5: a mid-test assertion failure must not leak nodes into the next
- * case - the library's cleanup only covers render() containers). */
+/** Self-built DOM nodes, removed after each test: a mid-test assertion failure must
+ * not leak nodes into the next case - the library's cleanup only covers render()
+ * containers. */
 const hosts: HTMLElement[] = [];
 function track<T extends HTMLElement>(el: T): T {
 	hosts.push(el);
@@ -145,21 +145,21 @@ describe('content lightbox (3d)', () => {
 		expect(image.hasAttribute('data-content-lightbox')).toBe(true);
 		expect(image.parentElement).toBe(paragraph);
 		expect(image.getBoundingClientRect().toJSON()).toEqual(before);
-		// Natural size and alt map through the adapter (round 2, 03-P3-1).
+		// Natural size and alt map through the adapter.
 		const mapped = plainImageItem(image);
 		expect(mapped.width).toBe(40);
 		expect(mapped.height).toBe(30);
 		expect(mapped.alt).toBe('几何');
 	});
 
-	it('derives @full from a live DOM img (absolute-URL seam, review 3d P1)', () => {
+	it('derives @full from a live DOM img (absolute-URL seam)', () => {
 		const key = `ab/ab${'1'.repeat(62)}`;
 		const img = track(document.createElement('img'));
 		img.setAttribute('src', `/i/${key}.png@preview`);
 		// IDL reads are absolute - the seam the derivation must survive.
 		expect(img.src.startsWith('http')).toBe(true);
 		expect(plainImageItem(img).fullSrc).toBe(`/i/${key}.png@full`);
-		// The read-order contract (round 2, 03-P3-1): a real srcset cannot
+		// The read-order contract: a real srcset cannot
 		// discriminate here - at DPR 1 the default /i/ candidate wins the
 		// selection and a pending resource never settles in the vitest server
 		// (probed: complete stays false and currentSrc stays empty). The
@@ -244,8 +244,8 @@ describe('content lightbox (3d)', () => {
 		oldImg.click();
 		await expect.element(page.getByRole('dialog')).toBeVisible();
 		// A prop update is the real-world trigger (SPA navigation hands the
-		// renderer fresh html); the library primitive replaces the harness
-		// fixture that used to toggle it (review 3d round 2, 04 P3-1).
+		// renderer fresh html); the library primitive replaces the local harness
+		// fixture that used to toggle it.
 		await rendered.rerender({ html: htmlB });
 		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 		await expect.poll(() => document.querySelectorAll('img[data-content-lightbox]').length).toBe(1);

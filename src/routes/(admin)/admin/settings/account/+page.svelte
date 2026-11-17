@@ -57,7 +57,7 @@
 		}
 	});
 
-	// Content language moved to Profile & Preferences (IA2/W4.7); the account
+	// Content language moved to Profile & Preferences; the account
 	// page is security-only.
 	const deviceForm = $derived(
 		form as {

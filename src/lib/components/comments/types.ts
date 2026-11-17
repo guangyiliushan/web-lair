@@ -1,14 +1,14 @@
 /**
- * Shared view contract for the comment thread components (comment P3a, spec
- * §10): the shape `services/comments.ts#loadThreads` assembles and the mount
- * (posts today; notes/pages with their batches) passes down. Deliberately
- * outside `$lib/server` so client components can import it directly.
+ * Shared view contract for the comment thread components: the shape
+ * `services/comments.ts#loadThreads` assembles and the mount (posts today; notes and
+ * pages with their batches) passes down. Deliberately outside `$lib/server` so client
+ * components can import it directly.
  */
 export type CommentTargetType = 'post' | 'note' | 'page';
 
 /**
- * Comment text bound (spec §1), shared so the server-side validation and the
- * composer's `maxlength` cannot drift apart.
+ * Comment text bound, shared so the server-side validation and the composer's
+ * `maxlength` cannot drift apart.
  */
 export const COMMENT_MAX_LENGTH = 2000;
 
@@ -25,7 +25,7 @@ export interface CommentView {
 	/** The signed-in viewer authored this comment (edit/delete entries). */
 	isMine: boolean;
 	/**
-	 * Public country label (W6.2). Present only when the site enabled
+	 * Public country label. Present only when the site enabled
 	 * `showCountry`, the row was stored with a country, and the commenter
 	 * opted in at submit time; region/city detail never reaches the client.
 	 */
@@ -38,12 +38,12 @@ export interface ThreadReply extends CommentView {
 }
 
 /**
- * Segment-anchor view data (comment P3b). Display-only: the stored payload
+ * Segment-anchor view data. Display-only: the stored payload
  * (hash/occ/ord/range/exact/prefix/suffix) never leaves the server — the page
  * carries just what the list and the deep link need.
  */
 export interface CommentAnchorView {
-	/** Quote chip text, already capped in code points (spec §8). */
+	/** Quote chip text, already capped in code points. */
 	quote: string;
 	/** False when resolution failed -> the root moves to the folded orphan area. */
 	orphaned: boolean;
@@ -54,7 +54,7 @@ export interface CommentAnchorView {
 export interface ThreadRoot extends CommentView {
 	pin: boolean;
 	isDeleted: boolean;
-	/** Segment anchor, or null for an article-level comment (spec §2). */
+	/** Segment anchor, or null for an article-level comment. */
 	anchor: CommentAnchorView | null;
 	/** Visible replies only, in display order. */
 	replies: ThreadReply[];
@@ -65,8 +65,8 @@ export interface ThreadsPage {
 	roots: ThreadRoot[];
 	/**
 	 * Roots whose anchor no longer resolves (folded "original text changed"
-	 * area). Optional so a producer that predates P3b still renders: the
-	 * section derives 0 / [] instead of crashing on `undefined.length`.
+	 * area). Optional so a producer that predates the anchor contract still renders:
+	 * the section derives 0 / [] instead of crashing on `undefined.length`.
 	 */
 	orphans?: ThreadRoot[];
 	visibleCount: number;
@@ -78,6 +78,6 @@ export interface ThreadsPage {
 export interface CommentFormState {
 	submitted?: 'pending' | 'approved';
 	message?: string;
-	/** Soft-delete success flash (P4). */
+	/** Soft-delete success flash. */
 	deleted?: boolean;
 }

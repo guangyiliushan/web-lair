@@ -24,10 +24,10 @@ import {
 } from '$lib/config/home-hero';
 
 /**
- * Profile & Preferences (W4.1): the owner's public persona. Only the pointer
- * owner may edit; an admin sees the same values read-only. `email` is read
- * from the auth user and never written here; `bio` has no public surface yet
- * and is deliberately absent.
+ * Profile & Preferences: the owner's public persona. Only the pointer owner may
+ * edit; an admin sees the same values read-only. `email` is read from the auth user
+ * and never written here; `bio` has no public surface yet and is deliberately
+ * absent.
  */
 export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();
@@ -151,9 +151,9 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Home hero copy (W4.2). Every field is a per-locale map; an empty input
-	 * removes that locale's override, so the field falls back to the site
-	 * default language and then to the built-in copy.
+	 * Home hero copy. Every field is a per-locale map; an empty input removes that
+	 * locale's override, so the field falls back to the site default language and then
+	 * to the built-in copy.
 	 */
 	saveHero: async (event) => {
 		await requireAdminRole();
@@ -201,9 +201,9 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Content language (W4.7/IA2): the language new content starts in. Stored on
-	 * the signed-in user only; empty means "follow site.default_lang" and is
-	 * stored as NULL, so a later site-default change still reaches this author.
+	 * Content language: the language new content starts in. Stored on the signed-in
+	 * user only; empty means "follow site.default_lang" and is stored as NULL, so a
+	 * later site-default change still reaches this author.
 	 */
 	contentLang: async (event) => {
 		await requireAdminRole();

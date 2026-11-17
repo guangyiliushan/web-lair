@@ -24,7 +24,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	const rawPage = Number(url.searchParams.get('page') ?? '1');
 	const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? Math.min(rawPage, 10_000) : 1;
 
-	// P2: the list reads the real table; a post with a pending drafts row
+	// The list reads the real table; a post with a pending drafts row
 	// carries the "Unpublished changes" badge.
 	const conditions = [];
 	if ((STATUSES as readonly string[]).includes(statusRaw)) {
@@ -34,7 +34,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	if (keyword) conditions.push(ilike(posts.title, `%${keyword}%`));
 	const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-	// Translations merge into one row with their source (UX-1020): paginate by
+	// Translations merge into one row with their source: paginate by
 	// translation_group and show each language's state inline. Page to groups first,
 	// then fetch the members, so a family is never split across a page boundary.
 	const [groups, totals, allCategories] = await Promise.all([

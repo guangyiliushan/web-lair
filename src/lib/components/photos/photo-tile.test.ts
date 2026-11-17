@@ -4,12 +4,12 @@ import { PREVIEW_BOX } from '$lib/server/media/variants';
 
 /**
  * The embed tier must track the pipeline's object-existence rule: `@preview`
- * exists only above the preview box (review round 1 welded the two sides).
+ * exists only above the preview box (the two sides are welded).
  */
 const KEY = 'ab/ab' + 'a'.repeat(62) + '.png';
 const GIF_KEY = 'ab/ab' + 'a'.repeat(62) + '.gif';
 
-describe('photoEmbedSrc - the body-image tier (Q11, review round 1)', () => {
+describe('photoEmbedSrc - the body-image tier', () => {
 	it('welds the mirrored preview box to the pipeline constant', () => {
 		expect(EMBED_PREVIEW_LONG_EDGE).toBe(PREVIEW_BOX);
 	});

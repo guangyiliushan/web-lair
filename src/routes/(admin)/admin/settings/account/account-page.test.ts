@@ -5,7 +5,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 
 /**
- * Account security route tests (W8.9). The load must expose only database
+ * Account security route tests. The load must expose only database
  * truth (no tokens, no public keys), and every mutation must call the
  * official better-auth endpoint, keep the session/audit invariants and never
  * echo a secret back to the page.

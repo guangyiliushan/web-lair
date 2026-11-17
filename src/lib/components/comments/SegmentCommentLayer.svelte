@@ -12,7 +12,7 @@
 	import type { CommentFormState, ThreadRoot, ThreadsPage } from './types';
 
 	/**
-	 * Segment-comment interaction layer (comment P3b, spec §5/§8).
+	 * Segment-comment interaction layer.
 	 *
 	 * Owns what only the browser can know: mapping the current DOM selection to
 	 * an anchor draft, the floating action, the composer panel and the in-place
@@ -46,9 +46,9 @@
 	/** Focus targets for the two overlays; one slot was clobbered by the other. */
 	let composerReturnFocus: HTMLElement | null = null;
 	let threadReturnFocus: HTMLElement | null = null;
-	/** Narrow viewport: composer and thread become bottom sheets (spec §5). */
+	/** Narrow viewport: composer and thread become bottom sheets. */
 	let narrow = $state(false);
-	/** Desktop hover summary card (spec §7); decorative, never interactive. */
+	/** Desktop hover summary card; decorative, never interactive. */
 	let hovered = $state<{ root: ThreadRoot; left: number; top: number; above: boolean } | null>(
 		null
 	);
@@ -248,7 +248,7 @@
 			const mark = target?.closest?.('.wl-cm');
 			if (!mark || !host.contains(mark)) return;
 			// Link-hosted marks are presentation-only: the link owns the click,
-			// and its thread stays reachable from the list (B2 review round 4).
+			// and its thread stays reachable from the list.
 			if (mark.closest('a')) return;
 			void openThread(mark);
 		};
@@ -317,7 +317,7 @@
 		};
 	});
 
-	// Desktop popover / mobile bottom sheet (spec §5). CSS cannot switch the
+	// Desktop popover / mobile bottom sheet. CSS cannot switch the
 	// inline position, so the shape is a state decision.
 	$effect(() => {
 		const query = window.matchMedia('(max-width: 40rem)');

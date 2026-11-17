@@ -1,5 +1,5 @@
 /**
- * Home hero copy resolution (W4.2/W4.5, decision D2/Q9).
+ * Home hero copy resolution.
  *
  * Each field is a per-locale override map. Resolution order:
  *   requested locale -> site default language -> built-in messages -> ''.

@@ -5,7 +5,7 @@ import PhotosViewerImage from './photos-viewer-image.svelte';
 import type { ViewerImageSource } from './viewer-load';
 
 /**
- * T10/T16 stage gate (plan §4.5): streaming progress → blob swap, the
+ * Stage gate: streaming progress → blob swap, the
  * 300ms-delayed floater (appears on the long path, never on a fast one),
  * terminal-only live-region announcements, retry on failure, and the
  * on-demand branch (over-threshold / saveData) waiting for an explicit

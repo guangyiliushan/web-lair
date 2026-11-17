@@ -20,25 +20,23 @@ import { m } from '$lib/paraglide/messages';
 import type { PageServerLoad, Actions } from './$types';
 
 /**
- * Settings → Site (W5, decision register §3A). Four real forms with real
- * consumers:
+ * Settings → Site. Four real forms with real consumers:
  *
  * - `saveInfo`     site.info      name/description/avatar (admin) -> friend
  *                                 cards, llms.txt, manifest, og:site_name
  * - `saveIcon`     site.icon      favicon URL (admin); version is bumped here
  *                                 so the root layout's `?v=` changes
  * - `saveTimezone` site.timezone  IANA zone (admin) -> dates, schedules, notes
- * - `saveLanguages` (W5.4)        the owner-only language pair, written in one
+ * - `saveLanguages`               the owner-only language pair, written in one
  *                                 transaction because default_lang ∈ enabled
  *
- * Deployment and search indexing are read-only facts on the same page - no
- * form, no Save, no TLS controls (S2/S8/SE1-SE4).
+ * Deployment and search indexing are read-only facts on the same page - no form,
+ * no Save, no TLS controls.
  *
- * Every action re-checks the tier itself (`assertSettingWrite`): the settings
- * layout guard does not run before a form action, and a role check in `load`
- * only decides what to render. The audit row (`site.update`) carries the
- * changed field names, no ref arc, and is not in `WEBHOOK_EVENT_ROSTER`, so it
- * fans out to zero deliveries (R-7 / §3A.4).
+ * Every action re-checks the tier itself (`assertSettingWrite`): the settings layout
+ * guard does not run before a form action, and a role check in `load` only decides
+ * what to render. The audit row (`site.update`) carries the changed field names, no
+ * ref arc, and is not in `WEBHOOK_EVENT_ROSTER`, so it fans out to zero deliveries.
  */
 
 type SiteOp = 'info' | 'icon' | 'timezone' | 'languages';
@@ -198,13 +196,12 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Owner-only language pair (S7, W5.4): `site.languages` and
-	 * `site.default_lang` are validated as a pair and written in ONE
-	 * transaction - `setOption` deliberately does no cross-key validation, so
-	 * a crash between two separate writes must not leave `default_lang`
-	 * outside the enabled set. Disabling a language only changes the
-	 * translation/llms candidate set; existing content and translations stay
-	 * (the page copy says so).
+	 * Owner-only language pair: `site.languages` and `site.default_lang` are
+	 * validated as a pair and written in ONE transaction - `setOption` deliberately
+	 * does no cross-key validation, so a crash between two separate writes must not
+	 * leave `default_lang` outside the enabled set. Disabling a language only changes
+	 * the translation/llms candidate set; existing content and translations stay (the
+	 * page copy says so).
 	 */
 	saveLanguages: async ({ request, locals }) => {
 		await requireAdminRole();

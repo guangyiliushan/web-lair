@@ -18,7 +18,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 /**
- * /admin/maintenance/[name] (J-3, plan §5.6): the script editor page -
+ * /admin/maintenance/[name]: the script editor page -
  * CodeMirror mounts client-side behind a route-level dynamic import, saves
  * ride the J-2 optimistic lock (`baseHash` = the hash the editor loaded,
  * `bundle.user?.hash ?? null` - see the saveScript JSDoc), and the fork
@@ -69,7 +69,7 @@ export const actions: Actions = {
 		return { saved: true, hash: result.hash, created: result.created, forked: result.forked };
 	},
 
-	/** Save & try a run (plan §4.4): save, then queue one manual run. */
+	/** Save & try a run: save, then queue one manual run. */
 	saveRun: async ({ request, params, locals }) => {
 		await requireAdminRole();
 		const dataDir = resolveDataDir();
@@ -95,7 +95,7 @@ export const actions: Actions = {
 		// definition for enqueueJob (J-2 review D2 note).
 		// The manifest already landed: every failure below carries the fresh
 		// hash so the editor can advance its optimistic-lock token instead of
-		// re-saving against a stale one (J-3 review P3-R2-2).
+		// re-saving against a stale one.
 		const definition = await resolveJobDefinition(params.name, dataDir);
 		if (!definition) {
 			return fail(404, {
@@ -123,7 +123,7 @@ export const actions: Actions = {
 				via: 'save-and-run'
 			}
 		});
-		// Jump to the ledger (plan §4.4): the fresh queued row in the ledger is the feedback.
+		// Jump to the ledger: the fresh queued row is the feedback.
 		redirect(303, '/admin/maintenance');
 	},
 

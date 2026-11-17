@@ -187,11 +187,11 @@ describe('admin maintenance [name] actions', () => {
 			event: 'job.run',
 			payload: { name: 'my-task', via: 'save-and-run' }
 		});
-		// Jump to the ledger (plan §4.4) - a redirect, not a stay-on-page result.
+		// Jump to the ledger - a redirect, not a stay-on-page result.
 		expect(thrown).toMatchObject({ status: 303, location: '/admin/maintenance' });
 	});
 
-	it('saveRun: refuses non-manual definitions and enqueue failures with 400 (J-3 review J3-3)', async () => {
+	it('saveRun: refuses non-manual definitions and enqueue failures with 400', async () => {
 		state.resolveResult = { name: 'my-task', manual: false };
 		const nonManual = await callAction('saveRun', { code: 'x', baseHash: '' });
 		expect(nonManual.result).toMatchObject({ status: 400 });
@@ -203,7 +203,7 @@ describe('admin maintenance [name] actions', () => {
 		expect(state.auditCalls).toHaveLength(0);
 	});
 
-	it('saveRun: gate-invalid passes errors through; unresolvable answers 404 with the fresh hash (J-3 review R2 additions)', async () => {
+	it('saveRun: gate-invalid passes errors through; unresolvable answers 404 with the fresh hash', async () => {
 		state.saveResult = { kind: 'invalid', errors: [{ source: 'typescript', line: 1 }] };
 		const invalid = await callAction('saveRun', { code: 'enum E {}', baseHash: '' });
 		expect(invalid.result).toMatchObject({ status: 400 });

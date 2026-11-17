@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * W5.5 acceptance: the Site page shows deployment facts and nothing else.
+ * The Site page shows deployment facts and nothing else.
  * `site-deployment.test.ts` covers the load payload; this pins the rendered
  * surface - the four read-only rows and NO TLS/ACME/certificate/domain input.
  * The page is source-inspected because the defect class is "a control quietly
@@ -17,7 +17,7 @@ function section(from: string, to: string): string {
 	return PAGE.slice(start, end === -1 ? undefined : end);
 }
 
-describe('Site deployment surface (W5.5)', () => {
+describe('Site deployment surface', () => {
 	const deployment = section('<!-- Deployment', '<!-- Search indexing').replace(
 		/<!--[\s\S]*?-->/g,
 		''

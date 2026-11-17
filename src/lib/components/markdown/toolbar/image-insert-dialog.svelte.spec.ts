@@ -45,7 +45,7 @@ beforeEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe('ImageInsertDialog - three-source picker (ST-3 3a2, review rounds 1-2)', () => {
+describe('ImageInsertDialog - three-source picker', () => {
 	it('keeps the URL tab as the entry: insert fires with url, alt and no tail', async () => {
 		const onInsert = vi.fn();
 		await render(ImageInsertDialog, { open: true, onInsert });

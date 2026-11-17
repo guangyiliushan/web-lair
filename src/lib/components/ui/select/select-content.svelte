@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Content already wraps `SelectPrimitive.Content` in `SelectPortal`, so a
 	// caller-side `<Select.Portal>` would nest a second portal and break the
-	// layer (the dropdown never opens - UX-1020-02). Never wrap this component
+	// layer (the dropdown never opens). Never wrap this component
 	// in a portal; to relocate the layer inside a Sheet/Dialog use `portalProps`.
 	import { Select as SelectPrimitive } from 'bits-ui';
 	import SelectPortal from './select-portal.svelte';

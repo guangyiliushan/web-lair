@@ -3,7 +3,7 @@ import { render } from 'svelte/server';
 import PhotoWall from './PhotoWall.svelte';
 import type { PhotoTile } from './photo-tile';
 
-/** SSR first paint (§5.1 POC item): every tile link is in the server HTML. */
+/** SSR first paint: every tile link is in the server HTML. */
 const tile = (index: number): PhotoTile => ({
 	id: `ssr-${index}`,
 	slug: `ssr-${index}`,

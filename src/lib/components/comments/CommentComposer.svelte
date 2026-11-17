@@ -23,13 +23,13 @@
 		compact?: boolean;
 		/** Focus the textarea on mount through an explicit ref.focus(): the
 		 * native `autofocus` attribute is a no-op while the trigger keeps focus
-		 * (three-engine probes, review P1-1). */
+		 * (probed in three engines). */
 		autofocus?: boolean;
 		/** Present when the composer can be dismissed (inline reply/edit). */
 		onCancel?: () => void;
-		/** Extra hidden fields (segment-anchor payload, comment P3b). */
+		/** Extra hidden fields (segment-anchor payload). */
 		hiddenValues?: Record<string, string>;
-		/** Offer the public-country opt-in (W6.2; root composer only). */
+		/** Offer the public-country opt-in (root composer only). */
 		showCountryOptIn?: boolean;
 	}
 
@@ -106,7 +106,7 @@
 		<p class="text-xs text-muted-foreground">{hint}</p>
 	{/if}
 	{#if showCountryOptIn}
-		<!-- W6.2/C3: public country display is a per-comment opt-in, never
+		<!-- Public country display is a per-comment opt-in, never
 		     pre-checked (GDPR Art 13 informed consent shape). -->
 		<label class="flex items-center gap-2 text-xs text-muted-foreground">
 			<input type="checkbox" name="showCountry" class="size-3.5 accent-primary" />

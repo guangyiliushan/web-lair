@@ -19,7 +19,7 @@
 	import * as Empty from '$lib/components/ui/empty';
 
 	/**
-	 * /admin/maintenance (J-3, plan §5.7): scripts (registry ∪ user layer)
+	 * /admin/maintenance: scripts (registry ∪ user layer)
 	 * with inline schedule management, the run ledger with filters, and the
 	 * job/schedule audit trail. Copy resolves from the message catalog.
 	 */
@@ -42,7 +42,7 @@
 	const flash = $derived(maintenanceFlash(form));
 
 	/** Query suffix so schedule/run actions keep the active ledger filters
-	 * (a bare `?/action` POST would otherwise reset them, review P3-20). */
+	 * (a bare `?/action` POST would otherwise reset them). */
 	const filterQuery = $derived(buildFilterQuery(data.filters));
 
 	const schedulesByJob = $derived.by(() => {

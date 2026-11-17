@@ -1,7 +1,7 @@
 import type { PhotoTile } from './photo-tile';
 
 /**
- * Progressive full-image loading policy (plan §4.5, T16/T10) and the pure
+ * Progressive full-image loading policy and the pure
  * helpers the viewer shares with its tests. Client-safe (no `$lib/server`).
  *
  * Decision inputs: the source byte size from the registry row (already in
@@ -16,10 +16,10 @@ export interface ViewerImageSource extends PhotoTile {
 	byteSize: number | null;
 }
 
-/** Sources up to this size auto-load the full variant (plan §4.5, 8 MB). */
+/** Sources up to this size auto-load the full variant (8 MB). */
 export const FULL_AUTO_LIMIT_BYTES = 8 * 1024 * 1024;
 
-/** The floater only appears when a load outlives this (plan §4.5: >300ms). */
+/** The floater only appears when a load outlives this (>300ms). */
 export const FLOATER_DELAY_MS = 300;
 
 export interface ConnectionLike {
@@ -34,7 +34,7 @@ interface StreamProgress {
 
 /**
  * Fetch an image URL and drain its body with byte progress - the streaming
- * pump both viewer stages share (3c; Q5: only the DOM/state stay per
+ * pump both viewer stages share (only the DOM/state stay per
  * instance). `fallbackTotal` (the registry byte size) covers the
  * pre-headers window and responses that omit Content-Length. Throws on a
  * non-2xx response so callers keep the error state.
@@ -72,7 +72,7 @@ export async function streamImageBytes(
 	return new Blob(chunks, { type: response.headers.get('content-type') ?? '' });
 }
 
-/** Data-saver on, or a 2G-class link → metered (plan §4.5 saveData / weak
+/** Data-saver on, or a 2G-class link → metered (saveData / weak
  * network). */
 export function isMeteredConnection(connection: ConnectionLike | null | undefined): boolean {
 	if (!connection) return false;

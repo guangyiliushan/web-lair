@@ -894,7 +894,7 @@ describe('alert json <-> markdown helpers', () => {
 		);
 		// listType (not the node type) separates CHECK_LIST from
 		// UNORDERED_LIST - both are 'list' nodes, so a bare type assertion
-		// could never fail (review round 2).
+		// could never fail.
 		const json = JSON.stringify(editor.getEditorState().toJSON());
 		expect(json).toContain('"listType":"check"');
 		expect(json).toContain('"listType":"bullet"');

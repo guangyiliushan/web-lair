@@ -2,12 +2,12 @@
  * Pages-line shared constants (mirrors `$lib/utils/note-meta`): the reserved
  * top-level slugs — system segments, platform routes, root files and the
  * locale tags — in ONE place, consumed both by `scripts/verify-pages.ts`
- * (repository check) and by the admin editor (slug validation, 2026-10-03 P2).
+ * (repository check) and by the admin editor (slug validation).
  * `about` / `about-site` are reserved for the protected default rows; the
  * verify script and the editor exempt the default rows by slug equality.
  *
- * The locale tags are reserved too (P1b review): a page slug shaped like a
- * language segment would shadow the bare-language roots, which the P3-a
+ * The locale tags are reserved too: a page slug shaped like a
+ * language segment would shadow the bare-language roots, which the
  * identity URL patterns deliberately keep as 404s. The (auth) segments are
  * listed because the verify script's route scan only reports same-named
  * `(site)` children (soft warnings); `page-meta.test.ts` keeps this set in
@@ -28,11 +28,11 @@ export const PAGE_RESERVED_SLUGS: ReadonlySet<string> = new Set([
 	'i',
 	'ja',
 	'login',
-	'llms.txt', // M2: root llms file; SLUG_RE already rejects dots
-	'manifest.webmanifest', // W5.3: web manifest route; SLUG_RE rejects dots
+	'llms.txt', // root llms file; SLUG_RE already rejects dots
+	'manifest.webmanifest', // web manifest route; SLUG_RE rejects dots
 	'maps', // platform-reserved (storage line keeps the map surface)
 	'photos', // platform-reserved (storage line public pages)
-	'privacy', // W6.3: the public privacy notice
+	'privacy', // the public privacy notice
 	'register',
 	'reset-password',
 	'robots.txt', // defensive: SLUG_RE already rejects dots

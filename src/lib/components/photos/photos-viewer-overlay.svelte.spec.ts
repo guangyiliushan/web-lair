@@ -10,14 +10,14 @@ import type { PhotoViewerSource } from './photo-tile';
 import { plainImageItem } from './viewer-source';
 
 /**
- * Overlay viewer v1.1 (3c): shell open/close, counter/caption, keyboard
+ * Overlay viewer: shell open/close, counter/caption, keyboard
  * transform drive, arrow navigation with the lazy neighbourhood fetch
  * (payload adoption pinned by DISTINCT numbers), backdrop vs image clicks,
  * anchored wheel zoom, pointer-gesture wiring (swipe navigate / swipe-down
- * close / drag-click suppression - the review-01 P2-1 delay tooth), the
- * in-flight load invalidation on the on-demand branch (review-01 P1) and the
- * thumb-only neighbour prefetch tiers. The transform maths lives in
- * viewer-transform.test.ts; the T10/T16 branches have e2e coverage.
+ * close / drag-click suppression - including the delay tooth), the in-flight load
+ * invalidation on the on-demand branch and the thumb-only neighbour prefetch
+ * tiers. The transform maths lives in viewer-transform.test.ts; the stage-gate
+ * branches have e2e coverage.
  */
 const KEY_A = `ab/aa${'a'.repeat(62)}.png`;
 const KEY_NEW = `ab/aa${'1'.repeat(62)}.png`;
@@ -371,7 +371,7 @@ describe('overlay viewer shell (3c)', () => {
 		await expect.poll(() => recorded.length).toBeGreaterThan(0);
 		await new Promise((resolve) => setTimeout(resolve, 60));
 		expect(recorded.some((src) => src === `/i/${KEY_NEW}@thumb`)).toBe(true);
-		// Q13: full is never prefetched; 800x600 has no preview tier.
+		// full is never prefetched; 800x600 has no preview tier.
 		expect(recorded.some((src) => src.includes('@full'))).toBe(false);
 		expect(recorded.some((src) => src.includes('@preview'))).toBe(false);
 	});
@@ -419,8 +419,8 @@ describe('overlay viewer plain mode (3d article lightbox)', () => {
 	});
 
 	it('adapter to overlay combo: a live DOM img derives and pumps @full', async () => {
-		// The composition point neither side's unit tests covered (review 3d
-		// round 2, 01 P2-1): real <img> -> plainImageItem -> shared pump.
+		// The composition point neither side's unit tests covered: real <img> ->
+		// plainImageItem -> shared pump.
 		const img = document.createElement('img');
 		img.setAttribute('src', `/i/${PLAIN_KEY}.png@preview`);
 		document.body.appendChild(img);

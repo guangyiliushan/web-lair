@@ -18,9 +18,9 @@
 		loginUrl: string | null;
 		/** Latest form action result (page form), when present. */
 		form?: CommentFormState | null;
-		/** Show the privacy notice under the composer (W6.2 / C3). */
+		/** Show the privacy notice under the composer. */
 		privacyNotice?: boolean;
-		/** Offer the public-country opt-in checkbox (W6.2). */
+		/** Offer the public-country opt-in checkbox. */
 		countryOptIn?: boolean;
 		/** New comments are closed (site or per-post switch). */
 		commentsClosed?: boolean;
@@ -38,13 +38,13 @@
 		commentsClosed = false
 	}: Props = $props();
 
-	// P3b view-model compat: `orphans`/`orphanCount` are optional so producers
+	// View-model compat: `orphans`/`orphanCount` are optional so producers
 	// from before segment anchors keep rendering (derive instead of crashing).
 	const orphans = $derived(threads.orphans ?? []);
 	const orphanCount = $derived(threads.orphanCount ?? orphans.length);
 
 	// A failed submission/action renders one section-level alert; pull focus
-	// to it so a reader deep in the thread is not left guessing (review P2-3).
+	// to it so a reader deep in the thread is not left guessing.
 	let messageEl = $state<HTMLElement | null>(null);
 	$effect(() => {
 		// The segment panel renders the same message and owns focus while open;
@@ -66,7 +66,7 @@
 		{m.comment_title()}
 		<span class="text-muted-foreground">({threads.visibleCount})</span>
 		{#if orphanCount > 0}
-			<!-- Orphaned threads are visible, never silently hidden (spec §8):
+			<!-- Orphaned threads are visible, never silently hidden:
 			     the count sits next to the main one, the threads in the fold below. -->
 			<span class="ml-2 text-xs text-muted-foreground" data-slot="comment-orphan-count">
 				{m.comment_orphan_count({ count: orphanCount })}
@@ -137,7 +137,7 @@
 	{/if}
 
 	{#if orphans.length > 0}
-		<!-- Folded "original text changed" area (spec §7): quote-first, own count,
+		<!-- Folded "original text changed" area: quote-first, own count,
 		     never part of the main list numbering. -->
 		<details class="mt-6 rounded-md border border-border/50 px-3 py-2" data-slot="comment-orphans">
 			<summary

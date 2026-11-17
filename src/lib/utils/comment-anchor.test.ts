@@ -24,7 +24,7 @@ const el = (
 	hasAttr: (name) => attrs.includes(name)
 });
 
-describe('code point offsets (spec §3 / W3C §4.2.4)', () => {
+describe('code point offsets (the W3C Web Annotation Model)', () => {
 	const family = '👨‍👩‍👧‍👦';
 	const text = `a${family}b`;
 
@@ -91,7 +91,7 @@ describe('quoteDisplay', () => {
 
 	it('counts code points, so an emoji costs its true length, not its UTF-16 units', () => {
 		// One family emoji = 7 code points (4 emoji + 3 ZWJ) and 11 UTF-16 units:
-		// the cap must be measured in code points (spec §3), and the cut is marked.
+		// the cap must be measured in code points, and the cut is marked.
 		const exact = '👨‍👩‍👧‍👦'.repeat(30);
 		expect(codePointLength(exact)).toBe(210);
 		const shown = quoteDisplay(exact);

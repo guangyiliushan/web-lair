@@ -18,7 +18,7 @@ function brandLink(): HTMLAnchorElement | null {
 	return document.querySelector('a[title]');
 }
 
-describe('SiteBrand (Q6)', () => {
+describe('SiteBrand', () => {
 	afterEach(() => {
 		document.body.innerHTML = '';
 	});

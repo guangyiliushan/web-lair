@@ -5,7 +5,7 @@ import {
 	readSaved
 } from '$lib/components/markdown/testing/editor-spec-helpers';
 
-// Paste/drop uploads (ST-3 3a3): the pipeline rides the DRAG_DROP_PASTE
+// Pastes/drops ride the DRAG_DROP_PASTE
 // command that @lexical/rich-text dispatches for local pasted/dropped files.
 
 const KEY = 'ab/ab' + 'a'.repeat(62) + '.png';
@@ -84,7 +84,7 @@ beforeEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe('editor paste/drop uploads (ST-3 3a3)', () => {
+describe('editor paste/drop uploads', () => {
 	it('pastes local images: one POST each, inserted with dims as they land', async () => {
 		const fetchMock = vi.fn(async () => okJson(uploadBody()));
 		vi.stubGlobal('fetch', fetchMock);

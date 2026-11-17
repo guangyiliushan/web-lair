@@ -9,14 +9,13 @@
  * - UTC-offset strings ('+08:00', '-0500') are REJECTED even though Intl
  *   accepts them: PostgreSQL's `AT TIME ZONE` reads them as POSIX zones
  *   (sign flipped) or rejects the format outright, so a value that passes
- *   Intl can silently shift the belongs-to date by hours - or 500 the query
- *   (review round 1 finding).
- * - Domain caveat (review round 2, real-PG probe): this check is NOT equal
- *   to PostgreSQL's zoneinfo set - each side accepts names the other rejects
+ *   Intl can silently shift the belongs-to date by hours - or 500 the query.
+ * - Domain caveat (probed against real PostgreSQL): this check is NOT equal to
+ *   PostgreSQL's zoneinfo set - each side accepts names the other rejects
  *   ('Japan'/'US/Pacific'/'Asia/Calcutta' pass Intl but 500 PG; ICU also
  *   canonicalises 'Asia/Kolkata' differently). Write paths must additionally
- *   verify against `pg_timezone_names` when they land (batch 5); the sign
- *   guard above still closes the silent-shift class.
+ *   verify against `pg_timezone_names`; the sign guard above still closes the
+ *   silent-shift class.
  */
 const ianaValidityCache = new Map<string, boolean>();
 

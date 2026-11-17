@@ -17,7 +17,7 @@ import { m } from '$lib/paraglide/messages';
  * file, so saving here is exactly the `baseHash: null` creation path). The
  * save gate validates the name (alias/device/length rules); on success both
  * actions redirect - plain save lands on the [name] page, save-and-run lands
- * on the list so the fresh queued row is visible in the ledger (plan §4.4).
+ * on the list so the fresh queued row is visible in the ledger.
  */
 
 const TEMPLATE = `import { getOption, type JobContext } from '#jobs-sdk';
@@ -93,7 +93,7 @@ export const actions: Actions = {
 			});
 		}
 		// The save already landed: failures carry the fresh hash so the
-		// editor can advance its optimistic-lock token (J-3 review P3-R2-2).
+		// editor can advance its optimistic-lock token.
 		const definition = await resolveJobDefinition(name, dataDir);
 		if (!definition) {
 			return fail(404, {

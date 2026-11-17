@@ -3,7 +3,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 
 /**
- * W4.7/IA2: content language moved from Account to Profile & Preferences.
+ * Content language moved from Account to Profile & Preferences.
  * The load exposes the stored preference next to the site default; the
  * `contentLang` action validates against the site languages, writes ONLY
  * `user.default_lang` for the signed-in row, and stores `null` for "follow

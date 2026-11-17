@@ -17,7 +17,7 @@ import { providerForImport, resolveImportMetadata } from './import-url.ts';
 import type { RawRepoMeta, RepoIdentity, SyncTarget } from './types.ts';
 
 /**
- * Admin-side projects service (plan §4): list + counts, the four-value state
+ * Admin-side projects service: list + counts, the four-value state
  * machine, field edits with the write-side URL scheme guard, transactional
  * reordering, URL import prefill (adapter first, OG fallback) and the sync
  * enqueue/status pair. Route handlers stay thin; every rule lives here so it
@@ -34,7 +34,7 @@ export class ProjectsServiceError extends Error {
 	}
 }
 
-/** §4.2 transition table; anything not listed is refused. */
+/** Transition table; anything not listed is refused. */
 const ALLOWED_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
 	pending: ['published', 'rejected'],
 	published: ['hidden', 'rejected'],
@@ -126,7 +126,7 @@ export function listProjects(filter: ProjectStatus | 'all'): Promise<AdminProjec
 		.orderBy(asc(projects.sortOrder), desc(projects.createdAt), desc(projects.id));
 }
 
-/** Bulk status transition (§4.2): one atomic conditional UPDATE - rows whose
+/** Bulk status transition: one atomic conditional UPDATE - rows whose
  * current status does not allow the edge are skipped, concurrently-changed
  * rows are refused by the `status in (allowedFrom)` predicate (review: the
  * previous read-then-blind-write could commit a forbidden edge), and the
@@ -154,7 +154,7 @@ export interface ProjectEditFields {
 }
 
 /**
- * Edit the user-owned fields (§2.8): name is required; every URL must be
+ * Edit the user-owned fields: name is required; every URL must be
  * empty/null or http(s) - the write-side half of the P render guard
  * (`$lib/utils/url-safety` is the single table for both sides).
  */
@@ -209,20 +209,20 @@ export function requireHttpUrl(value: string | null): string | null {
 	return clean;
 }
 
-/** site/other links normalize (§2.8-4); four-platform rows keep the API URL. */
+/** site/other links normalize; four-platform rows keep the API URL. */
 function normalizeUrlForWrite(provider: string, url: string): string {
 	return provider === 'site' || provider === 'other' ? normalizeSiteUrl(url) : url;
 }
 
 export interface ProjectCreateFields extends ProjectEditFields {
 	provider: ProjectProvider;
-	/** Platform id / full name - present for rows created through a repo import (§4.4). */
+	/** Platform id / full name - present for rows created through a repo import. */
 	externalId?: string | null;
 	fullName?: string | null;
 }
 
 /**
- * Manual create (§4.4): rows land `published` (hand-entered means intended). Plain
+ * Manual create: rows land `published` (hand-entered means intended). Plain
  * "new" is site/other; a four-platform row only arrives through the URL
  * import, which supplies the platform id (the dedup identity).
  */
@@ -266,7 +266,7 @@ export async function createProject(fields: ProjectCreateFields): Promise<{ id: 
 	}
 }
 
-/** Transactional reorder (§4.1): the full list is locked (`FOR UPDATE`, one
+/** Transactional reorder: the full list is locked (`FOR UPDATE`, one
  * consistent acquisition order - review: unlocked renumbering lost updates
  * and could deadlock) and renumbered 1..N; deadlock/serialization failures
  * surface as `busy`. */
@@ -326,10 +326,10 @@ export interface ImportPrefill {
 }
 
 /**
- * URL import prefill (§4.4): four platform URLs resolve through their
+ * URL import prefill: four platform URLs resolve through their
  * adapter, everything else through the OG scrape; both paths hand back form
  * prefill plus the "already exists (status X)" probe (identity for repos,
- * normalized URL for site/other rows, §2.8-4).
+ * normalized URL for site/other rows).
  */
 export async function importPrefill(rawUrl: string): Promise<
 	| { ok: true; prefill: ImportPrefill }
@@ -404,7 +404,7 @@ async function findExistingSite(url: string): Promise<{ id: string; status: stri
 }
 
 /**
- * Site/other main links normalize by host case + trailing slash (§2.8-4);
+ * Site/other main links normalize by host case + trailing slash;
  * the fragment (hash) and any userinfo are dropped, queries are preserved
  * as-is (closing review: documented behavior).
  */
@@ -448,7 +448,7 @@ export interface SyncRunView {
 	error: string | null;
 }
 
-/** Latest `projects.sync` run for the "recent run" card (§4.1): newest
+/** Latest `projects.sync` run for the "recent run" card: newest
  * `createdAt` first (queued runs included - the card doubles as the enqueue
  * acknowledgement), `id` as the deterministic tiebreaker. */
 export async function latestSyncRun(): Promise<SyncRunView | null> {

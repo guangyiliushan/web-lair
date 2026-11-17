@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the editor upload endpoint (ST-3 3a / Q2 + Q10
- * rulings; review rounds 1-2): the boolean auth surface (401/403 JSON, never a
- * redirect), the shared fail-open rate bucket asserted with its exact
- * arguments, the image-only gate, the `{code}` error envelope (both verbs)
- * and the URL shaping contract - body embeds follow object existence (GIFs
- * take the bare key, `@preview` only above the preview box, `@full`
- * otherwise).
+ * Route-level tests for the editor upload endpoint: the boolean auth surface
+ * (401/403 JSON, never a redirect), the shared fail-open rate bucket asserted with
+ * its exact arguments, the image-only gate, the `{code}` error envelope (both verbs)
+ * and the URL shaping contract - body embeds follow object existence (GIFs take the
+ * bare key, `@preview` only above the preview box, `@full` otherwise).
  */
 const { state, uploadMock, listFilesMock, photosMock, sniffMock } = vi.hoisted(() => {
 	const state = {
@@ -170,7 +168,7 @@ describe('POST /admin/editor-uploads', () => {
 		expect(uploadMock).not.toHaveBeenCalled();
 	});
 
-	it('fails closed with 503 + Retry-After when the limiter is offline (W6.10)', async () => {
+	it('fails closed with 503 + Retry-After when the limiter is offline', async () => {
 		state.rate = { allowed: false, count: 0, unavailable: true };
 		const response = await POST(makeEvent(fileForm(new File(['x'], 'x.png'))));
 		expect(response.status).toBe(503);
@@ -182,7 +180,7 @@ describe('POST /admin/editor-uploads', () => {
 	it('throttles through the shared upload bucket with its exact arguments', async () => {
 		await POST(makeEvent(fileForm(new File(['x'], 'x.png'))));
 		expect(state.rateCalls[0]).toEqual([{}, 'limits:upload:u1', 60, 600]);
-		// W6.10: the per-IP companion bucket (unknown address -> shared key).
+		// The per-IP companion bucket (unknown address -> shared key).
 		expect(state.rateCalls[1]).toEqual([{}, 'limits:upload-ip:unknown', 30, 600]);
 		// Weld the mirrors to the real module (single source in files.ts).
 		const actual = await vi.importActual<typeof import('$lib/server/services/files')>(
@@ -245,7 +243,7 @@ describe('POST /admin/editor-uploads', () => {
 			['too-large', 413],
 			['unsupported-type', 415],
 			['empty', 400],
-			// W7.4: the migration freeze is temporary — 503, not 400.
+			// The migration freeze is temporary - 503, not 400.
 			['migration', 503]
 		] as const) {
 			state.throwWith = new UploadRejected(code, code);

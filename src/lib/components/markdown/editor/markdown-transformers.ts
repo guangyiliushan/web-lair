@@ -410,7 +410,7 @@ export const tableTransformer: MultilineElementTransformer = {
 	type: 'multiline-element'
 };
 
-// ── Alert: `> [!NOTE] title …` → AlertNode(spec §3.1)──
+// ── Alert: `> [!NOTE] title …` → AlertNode ──
 
 /** A line opening a blockquote alert; the marker itself is parsed in the handler. */
 const ALERT_START_REGEX = /^>\s?\[!/;
@@ -480,7 +480,7 @@ function normalizeChecklistMarkers(markdown: string): string {
  * (`- [ ]`, `[ ]`, `-`, `#`, `>` - core CHECK_LIST/QUOTE regExps want a
  * trailing space): those lines get one space before the CRs go, so the
  * pre-fix and post-fix parses agree for content stored through the form.
- * Two guards keep that pass honest (review round 2): lone CRs are promoted
+ * Two guards keep that pass honest: lone CRs are promoted
  * to CRLF first (a lone `\r` hides its line end from the padding match),
  * and lines inside ``` / ~~~ fences are returned byte-identical (a fence
  * body line that happens to be a bare marker - diff fragments, `#` comment
@@ -560,7 +560,7 @@ export const NESTED_EDITOR_TRANSFORMERS: Transformer[] = [
 
 // Reused temporary nested editor (headless, no DOM).
 // Creating one per export is too expensive, so the module caches a single
-// instance (see design doc §8 upgrade note).
+// instance.
 let nestedTempEditor: LexicalEditor | null = null;
 
 function getNestedTempEditor(): LexicalEditor {
@@ -635,7 +635,7 @@ export function alertJsonToMarkdown(json: string): string {
 }
 
 /**
- * Alert transformer (multiline block, the blockquote carrier of spec §3.1).
+ * Alert transformer (multiline block, the blockquote carrier).
  *
  * - Import uses handleImportAfterStartMatch: starts at the marker line and stops
  *   at the last consecutive `>` line; on stop the non-`>` line is **not
@@ -765,7 +765,7 @@ export const subscriptTransformer: TextMatchTransformer = {
 	type: 'text-match'
 };
 
-// ── Mark: `==x==` ↔ highlight format (spec §2 #5) ──
+// ── Mark: `==x==` ↔ highlight format ──
 // No custom transformer needed: the core TRANSFORMERS in @lexical/markdown 0.46
 // already ship the HIGHLIGHT text format (`==` ↔ highlight) — import, export and
 // flanking included; the render side uses remark-mark (micromark attention).

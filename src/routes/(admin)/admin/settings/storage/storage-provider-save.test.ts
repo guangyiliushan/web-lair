@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Storage control plane, route level (W7.2): the tier gate decides who may
- * write, Save persists ONLY the candidate row (never `storage.active`), the
- * schema rejects a half-configured external provider before anything is
- * written, and the purge form keeps the 1-day floor.
+ * Storage control plane, route level: the tier gate decides who may write, Save
+ * persists ONLY the candidate row (never `storage.active`), the schema rejects a
+ * half-configured external provider before anything is written, and the purge form
+ * keeps the 1-day floor.
  */
 const state = vi.hoisted(() => ({
 	// Widths are explicit: tests overwrite this with an external provider.
@@ -243,7 +243,7 @@ const S3_FIELDS = {
 	publicBaseUrl: ''
 };
 
-describe('storage settings route (W7.2)', () => {
+describe('storage settings route', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		state.provider = {
@@ -429,7 +429,7 @@ describe('storage settings route (W7.2)', () => {
 	});
 });
 
-describe('storage connection test (W7.3)', () => {
+describe('storage connection test', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		state.provider = {
@@ -543,7 +543,7 @@ describe('storage connection test (W7.3)', () => {
 	});
 });
 
-describe('storage credentials (W7.6)', () => {
+describe('storage credentials', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		state.credentialStatus = {

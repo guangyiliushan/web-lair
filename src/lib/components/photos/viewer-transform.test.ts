@@ -23,7 +23,7 @@ import {
 const VIEWPORT = { width: 1600, height: 900 };
 const CONTENT = { width: 800, height: 600 };
 
-describe('viewer transform state machine (Q13)', () => {
+describe('viewer transform state machine', () => {
 	it('clamps scale into [1, 8]', () => {
 		expect(clampScale(0.2)).toBe(MIN_SCALE);
 		expect(clampScale(3)).toBe(3);
@@ -111,11 +111,11 @@ describe('viewer transform state machine (Q13)', () => {
 		expect(toggleDoubleClick(identity(), { x: 0, y: 0 }, VIEWPORT, CONTENT).scale).toBe(2);
 	});
 
-	it('swipe-down closes only at fit scale and strictly past 80px (Q13 wording)', () => {
+	it('swipe-down closes only at fit scale and strictly past 80px', () => {
 		expect(shouldCloseOnSwipe(identity(), 81)).toBe(true);
 		expect(shouldCloseOnSwipe(identity(), 80)).toBe(false);
 		expect(shouldCloseOnSwipe(identity(), 79)).toBe(false);
-		// Scale 1.05 still closes; 1.06 does not (Q13 threshold).
+		// Scale 1.05 still closes; 1.06 does not.
 		expect(shouldCloseOnSwipe({ scale: 1.05, x: 0, y: 0 }, 100)).toBe(true);
 		expect(shouldCloseOnSwipe({ scale: 1.06, x: 0, y: 0 }, 100)).toBe(false);
 	});

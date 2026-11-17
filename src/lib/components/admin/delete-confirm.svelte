@@ -38,7 +38,7 @@
 		onclose
 	}: Props = $props();
 
-	// Double-submit guard (C3 review): kit does not merge submissions, so a
+	// Double-submit guard: kit does not merge submissions, so a
 	// replayed delete would answer 404 and surface a misleading error.
 	let submitting = $state(false);
 </script>

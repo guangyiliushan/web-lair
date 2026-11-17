@@ -59,14 +59,12 @@
 			return { kind: 'ok' as const, text: m.admin_settings_notification_endpoint_deleted_ok() };
 		if (form.rotated)
 			return { kind: 'ok' as const, text: m.admin_settings_notification_secret_rotated() };
-		// Success flashes: create/update/delete/rotate/retry; the toggle relies
-		// on the badge flip instead. Dialog-scoped failures render inside their
-		// dialog; row-level failures (toggle) and legacy retry failures land
-		// here. `form.status` is never set by kit (J-3 review R4-1): the payload
-		// keys carry the signal.
-		// A toggle success now carries a message (nine-dimension NOTIF-SY-04:
-		// the badge flip alone announced nothing to AT users) and must render
-		// as an OK flash, not through the error branch below.
+		// Success flashes: create/update/delete/rotate/retry; the toggle relies on
+		// the badge flip instead. Dialog-scoped failures render inside their dialog;
+		// row-level failures (toggle) and legacy retry failures land here.
+		// `form.status` is never set by kit: the payload keys carry the signal.
+		// A toggle success carries a message (the badge flip alone announced nothing
+		// to AT users) and must render as an OK flash, not through the error branch.
 		if (form.toggled && form.message) {
 			return { kind: 'ok' as const, text: String(form.message) };
 		}
@@ -89,17 +87,16 @@
 	let formPayloadUrl = $state('');
 	let formEvents = $state<string[]>([]);
 	let endpointPending = $state(false);
-	// Dialog-local failure text (review round-1 SY-UI-01): rendering straight
-	// from page.form leaked the previous attempt's error into a freshly
-	// reopened dialog; each surface now captures its own failure.
+	// Dialog-local failure text: rendering straight from page.form leaked the
+	// previous attempt's error into a freshly reopened dialog; each surface now
+	// captures its own failure.
 	let editorError = $state<string | null>(null);
 	let deleteError = $state<string | null>(null);
 	let rotateError = $state<string | null>(null);
-	// Submission epochs (review round-1 SY-UI-02): a late response must not
-	// close or write into a dialog the user has since closed / re-opened.
-	// Non-reactive on purpose: these counters are only compared inside the
-	// enhance callbacks - never read from the template or a $derived/$effect
-	// (nine-dimension SY8-6: adding a template read would silently pin them).
+	// Submission epochs: a late response must not close or write into a dialog the
+	// user has since closed / re-opened. Non-reactive on purpose: these counters are
+	// only compared inside the enhance callbacks - never read from the template or a
+	// $derived/$effect (a template read would silently pin them).
 	let editorToken = 0;
 	let deleteToken = 0;
 	let rotateToken = 0;
@@ -110,17 +107,17 @@
 	let rotatePending = $state(false);
 	let retryPendingId = $state<string | null>(null);
 	let togglePendingId = $state<string | null>(null);
-	// Mail test (W9.1): the send result stays local to the Mail section; the
-	// page-wide `form` slot belongs to the webhook actions.
+	// Mail test: the send result stays local to the Mail section; the page-wide
+	// `form` slot belongs to the webhook actions.
 	let mailPending = $state(false);
 	let mailNotice = $state<{ kind: 'ok' | 'error'; text: string } | null>(null);
-	// One-time plaintext reveal in DEDICATED state (review round-2 SY-UI-03):
-	// deriving it from the page-wide form slot meant any unrelated submission
-	// (a toggle, a retry) replaced page.form and silently wiped it mid-copy.
+	// One-time plaintext reveal in DEDICATED state: deriving it from the page-wide
+	// form slot meant any unrelated submission (a toggle, a retry) replaced page.form
+	// and silently wiped it mid-copy.
 	let revealedSecret = $state<string | null>(null);
-	// M6 P5: channel preferences, Bark status and the notification log are
-	// independent surfaces with their own pending/notice state, so a resend
-	// cannot overwrite a preferences message.
+	// Channel preferences, Bark status and the notification log are independent
+	// surfaces with their own pending/notice state, so a resend cannot overwrite a
+	// preferences message.
 	let prefsPending = $state(false);
 	let prefsNotice = $state<{ kind: 'ok' | 'error'; text: string } | null>(null);
 	let resendPendingId = $state<string | null>(null);
@@ -132,8 +129,8 @@
 		{ key: 'ops' as const, label: m.admin_settings_notification_group_ops() }
 	];
 	let copyState = $state<'idle' | 'ok' | 'failed'>('idle');
-	// A failure whose dialog session moved on is surfaced here instead of
-	// being dropped silently (review round-2 SY-UI-06).
+	// A failure whose dialog session moved on is surfaced here instead of being
+	// dropped silently.
 	let pageNotice = $state<string | null>(null);
 
 	function openEndpointDialog(endpoint: EndpointRow | null) {
@@ -216,8 +213,8 @@
 	async function copySecret() {
 		if (!revealedSecret) return;
 		try {
-			// Absent outside secure contexts (review round-2 SY-UI-01): guard
-			// and report instead of an unhandled rejection with no feedback.
+			// Absent outside secure contexts: guard and report instead of an
+			// unhandled rejection with no feedback.
 			if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
 			await navigator.clipboard.writeText(revealedSecret);
 			copyState = 'ok';
@@ -241,7 +238,7 @@
 
 	<div class="min-h-0 flex-1 overflow-auto">
 		<div class="space-y-8 p-6">
-			<!-- Mail status (read-only; SMTP stays env-only, W9.1 adds the real test) -->
+			<!-- Mail status (read-only; SMTP stays env-only) -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">{m.admin_settings_notifications_mail()}</h3>
 				<div class="rounded-lg border">
@@ -360,10 +357,9 @@
 							? m.admin_settings_notification_no_endpoints()
 							: undefined}
 					/>
-					<!-- Persistent status region (review round-2 SY-UI-04: a live
-					     region must exist before its content arrives). The one-time
-					     reveal lives in dedicated state (SY-UI-03) so unrelated
-					     submissions cannot wipe it. -->
+					<!-- Persistent status region: a live region must exist before its
+					     content arrives. The one-time reveal lives in dedicated state so
+					     unrelated submissions cannot wipe it. -->
 					<!-- The status region stays text-only: the interactive reveal
 					     moved out of it (nine-dimension NOTIF-SY-05: aria-atomic
 					     re-announced the credential and the button on every copy
@@ -586,8 +582,8 @@
 				</div>
 			</section>
 
-			<!-- M6 P5: human channels. Preferences are owner-only (decision N8);
-			     Bark credentials stay env-only in this release (P5-WAITING). -->
+			<!-- Human channels. Preferences are owner-only; Bark credentials stay
+			     env-only in this release. -->
 			<section>
 				<h3 class="mb-4 text-sm font-semibold">
 					{m.admin_settings_notification_prefs_title()}
@@ -807,10 +803,9 @@
 				endpointPending = true;
 				return async ({ result, update }) => {
 					await update();
-					// The reveal lives in the page region, not the dialog: capture
-					// the one-time secret even when the submitted dialog has moved
-					// on (a stale-epoch success would otherwise lose the only
-					// plaintext copy; review round-3 F1/SY3-1).
+					// The reveal lives in the page region, not the dialog: capture the
+					// one-time secret even when the submitted dialog has moved on (a
+					// stale-epoch success would otherwise lose the only plaintext copy).
 					if (result.type === 'success') captureSecret(result.data);
 					if (token !== editorToken) {
 						// The surface moved on: keep this dialog clean, but do

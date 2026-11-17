@@ -192,7 +192,7 @@
 		</fieldset>
 	</SettingsForm>
 
-	<!-- Languages · owner-only paired write (S7, W5.4) -->
+	<!-- Languages · owner-only paired write -->
 	{#if data.canEditLanguages}
 		<SettingsForm
 			action="?/saveLanguages"

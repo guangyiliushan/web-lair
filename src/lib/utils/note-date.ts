@@ -2,7 +2,7 @@ import { formatDate } from './i18n';
 import { isValidIanaTimeZone } from './timezone';
 
 /**
- * Belongs-to date helpers (notes plan §8.2): a note is filed under its own
+ * Belongs-to date helpers: a note is filed under its own
  * `tz` calendar day, falling back to `site.timezone`. Single point for every
  * surface (list, topic page, mega menu, timeline) so the same note cannot
  * show different dates per entry point (review finding). Invalid stored

@@ -1,9 +1,9 @@
 /**
- * Source adaptation layer (ST-3 3d, Q4): the overlay viewer consumes one
+ * Source adaptation layer: the overlay viewer consumes one
  * normalized set of per-item questions. The photo-feed side keeps its
  * `PhotoViewerSource` records (the overlay walks them via neighbours); the
  * content side adapts a plain article `<img>` - displayed frame, derived
- * `@full` target (Q11: `/i/<key>@preview|@thumb` -> same key `@full`; GIF
+ * `@full` target (`/i/<key>@preview|@thumb` -> same key `@full`; GIF
  * bare keys and external URLs pass through), alt label and natural size.
  */
 
@@ -18,9 +18,9 @@ export interface PlainImageSource {
 }
 
 /**
- * `/i/<key>@thumb` / `/i/<key>@preview` -> `/i/<key>@full` (Q11). DOM reads
+ * `/i/<key>@thumb` / `/i/<key>@preview` -> `/i/<key>@full`. DOM reads
  * (`img.src` / `currentSrc`) always hand back absolute URLs, so same-origin
- * absolute forms are collapsed to their path first (3d review P1: the
+ * absolute forms are collapsed to their path first (the
  * literal-prefix guard alone never matched real DOM input, and the upgrade
  * silently never fired). Everything else passes through unchanged: `@full`
  * itself, GIF bare keys, attachment keys and external URLs. `origin` is

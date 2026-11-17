@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Per-file upload client (D-1 Q4): the SvelteKit action JSON protocol, not
- * plain JSON. `response.json()` would yield a devalue string and lose every
- * result — the P0 this test exists to prevent.
+ * Per-file upload client: the SvelteKit action JSON protocol, not plain JSON.
+ * `response.json()` would yield a devalue string and lose every result.
  */
 const { applyActionMock, deserializeMock, invalidateAllMock, fetchMock } = vi.hoisted(() => ({
 	applyActionMock: vi.fn(async () => {}),

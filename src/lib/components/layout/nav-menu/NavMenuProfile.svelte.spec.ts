@@ -44,7 +44,7 @@ describe('NavMenuProfile identity row', () => {
 		expect(document.body.textContent).toContain(SITE_OWNER_DEFAULT.name);
 		expect(onlineLight()).toBeNull();
 		// The header owns the avatar and the activity ticket; the panel must not
-		// echo either of them (P1b review round).
+		// echo either of them.
 		expect(document.body.querySelector('img')).toBeNull();
 		expect(document.body.querySelector('[data-slot="owner-status"]')).toBeNull();
 	});

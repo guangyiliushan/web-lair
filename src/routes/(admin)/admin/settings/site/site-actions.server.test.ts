@@ -5,11 +5,10 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 /**
- * Route-level tests for the Site page actions (W5.2/W5.4). The registry is
- * imported for real so `validateOption` / `OptionWriteError` keep their
- * production behaviour; only the two database-touching entry points are
- * swapped. The db transaction is a fake so the paired-write invariant and the
- * audit call path are observable without PostgreSQL.
+ * Route-level tests for the Site page actions. The registry is imported for real so
+ * `validateOption` / `OptionWriteError` keep their production behaviour; only the two
+ * database-touching entry points are swapped. The db transaction is a fake so the
+ * paired-write invariant and the audit call path are observable without PostgreSQL.
  */
 const { optionState, writes, auditCalls, txState, authzMock, setBehaviour } = vi.hoisted(() => {
 	const state = {
@@ -83,7 +82,7 @@ async function run(
 	} as never)) as ActionResult;
 }
 
-describe('Site actions (W5.2)', () => {
+describe('Site actions', () => {
 	beforeEach(() => {
 		optionState['site.info'] = { name: 'Web Lair', description: '', avatar: '' };
 		optionState['site.icon'] = { url: '', version: 4 };
@@ -245,7 +244,7 @@ describe('Site actions (W5.2)', () => {
 		expect(writes.map((write) => write.key)).toEqual(['site.info', 'site.icon', 'site.timezone']);
 	});
 
-	it('writes the language pair in ONE transaction, in canonical order (S7/W5.4)', async () => {
+	it('writes the language pair in ONE transaction, in canonical order', async () => {
 		const result = await run('saveLanguages', {
 			enabled: ['ja', 'en'],
 			default: 'ja'

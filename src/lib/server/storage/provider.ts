@@ -1,18 +1,18 @@
 import { z } from 'zod';
 
 /**
- * Storage provider model (W7.2, decisions ST4/ST8/Q1/Q4/Q19).
+ * Storage provider model.
  *
  * `storage.provider` is the SAVED candidate — a form target that never takes
  * effect by itself. The live target is `storage.active.config`, written only
  * by an activation path (first activation with an empty `files` table, or
  * `storage:migrate --cutover`). Saving therefore cannot switch a running site
- * onto a half-configured bucket (decision Q4: "Save must not switch immediately").
+ * onto a half-configured bucket: "Save must not switch immediately".
  *
  * The shape is deliberately small: driver + addressing + bucket, no `keyPrefix`
- * and no parallel "backup S3"/"comment prefix" fields (ST8). Credentials never
+ * and no parallel "backup S3"/"comment prefix" fields. Credentials never
  * live here — they are env references today and envelopes in the secret store
- * once W7.6 lands (decision Q3/Q15); an option row is loaded wholesale and
+ * later; an option row is loaded wholesale and
  * would leak a key into page data.
  */
 
@@ -50,7 +50,7 @@ export function isBucketName(value: string): boolean {
 	return !value.startsWith('xn--');
 }
 
-/** An https URL with no embedded credentials (Q19: no URL credentials). */
+/** An https URL with no embedded credentials. */
 export function isPublicHttpsUrl(value: string): boolean {
 	let url: URL;
 	try {
@@ -81,10 +81,10 @@ export const providerConfigSchema = z
 		/** External bucket name. The local driver reads RUSTFS_BUCKET. */
 		bucket: z.string().trim().max(63).nullable(),
 		forcePathStyle: z.boolean(),
-		/** Optional CDN alias; the default stays the private `/i` proxy (Q9/Q12). */
+		/** Optional CDN alias; the default stays the private `/i` proxy. */
 		publicBaseUrl: optionalHttpsUrl,
 		/**
-		 * Deletion contract (W7.5, decision Q8/Q16): `hard` is the normal mode
+		 * Deletion contract: `hard` is the normal mode
 		 * and is only allowed on a bucket whose versioning and object lock are
 		 * off. `logical` is the explicit opt-in for a versioned / locked bucket:
 		 * deletes still issue DELETE (a delete marker appears), the media stops
@@ -160,14 +160,14 @@ export const DEFAULT_PROVIDER_CONFIG: StorageProviderConfig = {
 /**
  * The live target plus its rollback slot. `previous` is written on cutover so
  * `storage:migrate --rollback` has a target even after the candidate form was
- * edited again (decision Q13).
+ * edited again.
  */
 export const storageActiveSchema = z.object({
 	config: providerConfigSchema,
 	previous: providerConfigSchema.nullable(),
 	// The audit trail lives in `activities` (storage.activate); the CLI has no
 	// interactive actor, so a never-populated `activatedBy` column would only
-	// look like one (review P2).
+	// look like one.
 	activatedAt: z.string().nullable()
 });
 
@@ -180,14 +180,14 @@ export const DEFAULT_STORAGE_ACTIVE: StorageActive = {
 };
 
 /**
- * Last probe result (W7.3/W7.5). Never carries a URL, a key or a driver
+ * Last probe result. Never carries a URL, a key or a driver
  * message: `lastError` is sanitized before it is stored.
  */
 export const storageStatusSchema = z.object({
 	lastTestAt: z.string().nullable(),
 	lastTestOk: z.boolean().nullable(),
 	lastError: z.string().max(300).nullable(),
-	/** Closed status code of the last probe (W7.3); the page localizes it. */
+	/** Closed status code of the last probe; the page localizes it. */
 	lastStatus: z
 		.enum(['ok', 'auth', 'not-found', 'timeout', 'network', 'write', 'capability', 'unknown'])
 		.nullable()
@@ -212,7 +212,7 @@ export const DEFAULT_STORAGE_STATUS: StorageStatusState = {
 };
 
 /**
- * Migration bookkeeping (W7.4, decision Q13): a CLI-only copy with a
+ * Migration bookkeeping: a CLI-only copy with a
  * maintenance window, persisted so the app can freeze uploads / refuse purge
  * while it runs and so a crashed run is visible instead of silent.
  */

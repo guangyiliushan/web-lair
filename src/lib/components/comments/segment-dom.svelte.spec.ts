@@ -5,10 +5,10 @@ import { collectDomBlocks, selectionToAnchor } from './segment-dom';
 import { SEGMENT_FIXTURES } from './segment-fixtures';
 
 /**
- * Browser half of the two-pipeline conformance check (comment P3b, spec §3/§5).
+ * Browser half of the two-pipeline conformance check.
  * `comment-anchor.conformance.test.ts` asserts the same expected texts on the
  * server walker; these cases pin the DOM walker plus selection -> (ord, range,
- * exact), including the code-point boundary rule (W3C §4.2.4).
+ * exact), including the code-point boundary rule (W3C Web Annotation Model).
  */
 const hosts: HTMLElement[] = [];
 

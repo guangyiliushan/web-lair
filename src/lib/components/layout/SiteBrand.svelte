@@ -13,7 +13,7 @@
 		presence: OwnerPresence;
 	} = $props();
 
-	// Q6: the compact label never replaces the full name in aria/title/hover.
+	// The compact label never replaces the full name in aria/title/hover.
 	const visibleName = $derived(owner.headerLabel?.trim() || owner.name);
 	const avatarFallback = $derived(firstGrapheme(owner.name));
 </script>

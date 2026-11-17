@@ -12,7 +12,7 @@
 	import IconArrowLeft from '@tabler/icons-svelte-runes/icons/arrow-left';
 
 	/**
-	 * Script editor page (J-3, plan §5.6): CodeMirror behind a route-level
+	 * Script editor page: CodeMirror behind a route-level
 	 * dynamic import; the local `code`/`baseHash` pair is the optimistic-lock
 	 * state and is NEVER auto-adopted from load data - after a 409 the user
 	 * explicitly chooses "Load latest from server" (drafts precedent). Mod-S submits the
@@ -56,7 +56,7 @@
 
 	let code = $state(untrack(() => data.saveCode));
 	let baseHash = $state<string | null>(untrack(() => data.saveBaseHash));
-	// Unsaved-changes baseline (J-3 review P3-18, drafts/edit precedent).
+	// Unsaved-changes baseline (drafts/edit precedent).
 	let pristine = $state(untrack(() => data.saveCode));
 	const dirty = $derived(code !== pristine);
 	let saveForm: HTMLFormElement | undefined = $state();
@@ -66,11 +66,11 @@
 	// module init, so the first POST can take ~10s - show a pending state
 	// (J-2 review suggestion) instead of a seemingly dead button.
 	let saving = $state(false);
-	// Conflict freeze (J-3 review P2-6, drafts precedent): after a 409 the
+	// Conflict freeze (drafts precedent): after a 409 the
 	// editor keeps the buffer but saving is paused until the server state is
 	// loaded explicitly - otherwise the next save just produces another 409.
 	// LOCAL state is the single source for the banner; `page.form` may or may
-	// not survive invalidateAll (sveltejs/kit#13825 - J-3 reviews F1/R2-1),
+	// not survive invalidateAll (sveltejs/kit#13825),
 	// so the hash is snapshotted alongside.
 	let conflicted = $state(false);
 	let conflictHash = $state<string | null>(null);
@@ -102,7 +102,7 @@
 
 	// The server hash becomes our new base whenever a save landed - including
 	// a save-and-run whose enqueue half failed (`hash` rides the fail payload;
-	// retrying against a stale token would fake a 409, J-3 review P3-R2-2).
+	// retrying against a stale token would fake a 409).
 	// `pristine` advances in the submit callback from the SUBMITTED snapshot
 	// (review v2 #2); `reverted` rewrites both the buffer and the token: after
 	// a restore to built-in, the user file is gone, so the old hash can never match again
@@ -135,11 +135,9 @@
 		}
 	});
 
-	// Dialog error text: an action failure the user must see inside the
-	// overlay (a page banner hides behind it - DeleteConfirm contract).
-	// `form.status` is never set by kit, so the payload keys are the signal
-	// (J-3 review R4-1); the old generic fallback went stale across actions
-	// (review P3-R2-4) - no message, no dialog text.
+	// Dialog error text: an action failure the user must see inside the overlay (a
+	// page banner hides behind it - DeleteConfirm contract). `form.status` is never
+	// set by kit, so the payload keys are the signal - no message, no dialog text.
 	const dialogError = $derived(
 		form && !form.conflict && (typeof form.message === 'string' || typeof form.error === 'string')
 			? String(form.message ?? form.error)
@@ -181,7 +179,7 @@
 		conflictHash = null;
 	}
 
-	// Unsaved-changes guard (J-3 review P3-18, drafts/edit precedent).
+	// Unsaved-changes guard (drafts/edit precedent).
 	// `saving` exempts the editor's own submit navigation - that navigation
 	// IS the save; anything else with an unpristine buffer asks first.
 	$effect(() => {
@@ -195,7 +193,7 @@
 	});
 
 	function submitSave(): void {
-		// Re-entry guard for the Mod-S path too (J-3 review J3-7): a second
+		// Re-entry guard for the Mod-S path too: a second
 		// requestSubmit carries the stale baseHash and would surface a fake
 		// conflict for a save that already landed.
 		if (saving || conflicted) return;

@@ -1,6 +1,6 @@
 /**
- * robots.txt for the links checker (plan §4.7, implementable clauses decided
- * 2026-10-06). References: RFC 9309 (§2.2.1 user-agent matching, §2.2.2
+ * robots.txt for the links checker. References: RFC 9309 (§2.2.1 user-agent
+ * matching, §2.2.2
  * allow/disallow semantics + percent-encoding, §2.2.3 special characters
  * `#`/`$`/`*`, §2.3.1.x access results, §2.4 caching, §2.5 size) and
  * Google's interpretation page.
@@ -10,8 +10,8 @@
  * not counted). RFC 9309 §2.3.1.4's "MUST assume complete disallow" text
  * covers "server or network errors" BOTH - the deliberate deviation for
  * transport-level failures (they fall through to the page fetch so a
- * network-dead site still counts as the hard failure it is, §4.3; no extra
- * requests are made) is ruled in plan §4.7 and recorded in §9 v1.2.1;
+ * network-dead site still counts as the hard failure it is; no extra
+ * requests are made);
  * redirect overflow takes the §2.3.1.2/§2.3.1.3 "unavailable" -> no
  * restrictions path.
  *
@@ -148,7 +148,7 @@ const RULE_CANONICAL = new WeakMap<RobotsRule, { pattern: string; length: number
 const TEXT_ENCODER = new TextEncoder();
 
 /**
- * Per-rule canonicalization cache (review round 4): the oracle memoizes
+ * Per-rule canonicalization cache: the oracle memoizes
  * rules per origin, so each rule is canonicalized exactly once instead of
  * on every URL decision.
  */
@@ -289,7 +289,7 @@ type RobotsBase =
 	| { kind: 'unreachable'; reason: string };
 
 /**
- * Per-run memo (plan §4.7): one robots.txt fetch per (scheme, host, port);
+ * Per-run memo: one robots.txt fetch per (scheme, host, port);
  * no persistence - the 24 h run cadence already equals the practical cache
  * lifetime (RFC §2.4 / Google: "up to 24 hours").
  */
@@ -314,17 +314,16 @@ export function createRobotsOracle(options: RobotsOracleOptions): RobotsOracle {
 			// site forever - fall through to the page fetch instead.
 			return { kind: 'allow-all' };
 		}
-		// Transport failures are NOT a skip (2026-10-06 refinement, plan
-		// §9 v1.2.1): a network-dead site is the hard failure the checker
-		// exists to detect, so fall through to the normal page fetch (which
-		// classifies it; no extra requests). Redirect overflow is the
+		// Transport failures are NOT a skip: a network-dead site is the hard
+		// failure the checker exists to detect, so fall through to the normal page
+		// fetch (which classifies it; no extra requests). Redirect overflow is the
 		// §2.3.1.2/§2.3.1.3 "unavailable" -> no restrictions path.
 		if (outcome.outcome === 'redirect-loop') {
 			return { kind: 'allow-all', reason: 'redirect overflow (treated as unavailable)' };
 		}
 		if (outcome.outcome === 'network-error') {
 			// The transport message is surfaced so the run log can explain
-			// why robots was skipped (review round 4; redacted at source).
+			// why robots was skipped (redacted at source).
 			return { kind: 'allow-all', reason: `transport failure: ${outcome.message}` };
 		}
 		const { status, body } = outcome;

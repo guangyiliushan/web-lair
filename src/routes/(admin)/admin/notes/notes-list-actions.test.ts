@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * its result kinds onto HTTP answers.
  *
  * `?/purge` is the permanent delete that only appears in the overflow menu of
- * an already-trashed row. It mirrors the pages hard-delete (M1 / R2-3): drafts
+ * an already-trashed row. It mirrors the pages hard-delete: drafts
  * first because `drafts.ref_id` is polymorphic, then the row, then the
  * file-reference cleanup.
  */

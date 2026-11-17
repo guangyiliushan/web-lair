@@ -1,5 +1,5 @@
 /**
- * Presence components (realtime R3/R4, ledger §23): `PresenceHeartbeat`
+ * Presence components: `PresenceHeartbeat`
  * mounts once in the (site) layout and renders nothing; `ContentPresence` is
  * the reader widget on posts/notes detail pages (badge + density strip);
  * `openPresenceStream` backs the admin dashboard's live cards.

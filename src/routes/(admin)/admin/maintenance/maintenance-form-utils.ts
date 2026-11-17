@@ -17,8 +17,8 @@ export function parseCode(form: FormData): string {
 	return raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
 }
 
-/** Ledger status whitelist - shared by the server load and the page (J-3
- * review P3-21: the two copies had already drifted risk). */
+/** Ledger status whitelist - shared by the server load and the page, so the two
+ * copies cannot drift. */
 export const RUN_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'skipped'] as const;
 
 /** Shared run/typecheck status labels (lazy: resolved per call, never frozen). */
@@ -31,7 +31,7 @@ export const RUN_LABELS: Record<string, () => string> = {
 };
 
 /** Typecheck badge variant: a failed RUN is not a failed CHECK, and a
- * queued check must not render as a red failure (J-3 review P2-1). */
+ * queued check must not render as a red failure. */
 export function typecheckVariant(check: {
 	status: string;
 	summary: { ok?: boolean } | null;
@@ -66,9 +66,9 @@ export interface MaintenanceFlashForm {
 	scheduleSameJob?: number;
 }
 
-/** Flash copy for the maintenance list page. Pure, so the wording and the
- * action dispatch are pinned by tests (J-3 review F11/R4-1: `form.status`
- * never exists - the payload keys are the only signal). */
+/** Flash copy for the maintenance list page. Pure, so the wording and the action
+ * dispatch are pinned by tests: `form.status` never exists, the payload keys are
+ * the only signal. */
 export function maintenanceFlash(
 	form: MaintenanceFlashForm | null | undefined
 ): { kind: 'ok' | 'error'; text: string } | null {
@@ -104,7 +104,7 @@ export function maintenanceFlash(
 }
 
 /** Query suffix so schedule/run actions keep the active ledger filters
- * (a bare `?/action` POST would otherwise reset them, review P3-20). */
+ * (a bare `?/action` POST would otherwise reset them). */
 export function buildFilterQuery(filters: { job: string; status: string }): string {
 	const parts: string[] = [];
 	if (filters.job) parts.push(`job=${encodeURIComponent(filters.job)}`);

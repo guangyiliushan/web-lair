@@ -29,7 +29,7 @@ import type { JobResult, JobTrigger } from '../db/system/job-run.schema.ts';
 import type { JobContext, JobLogger, JobsDb, LoadedJob } from './types.ts';
 
 /**
- * Drain core (jobs-line plan §2/§4): one tick = FOUR segments run in order,
+ * Drain core: one tick = FOUR segments run in order,
  * each processing to empty, each isolated - a failing segment never blocks
  * the segments after it.
  *
@@ -43,7 +43,7 @@ import type { JobContext, JobLogger, JobsDb, LoadedJob } from './types.ts';
  *                   now())` signed with Standard Webhooks headers and POSTed;
  *                   retryable failures stay queued with exponential backoff,
  *                   permanent ones turn terminal, 410 disables the endpoint.
- *   4. notifications - `notification_deliveries` (M6 P5) claimed the same way
+ *   4. notifications - `notification_deliveries` claimed the same way
  *                   and handed to the email/Bark adapters; 1m/5m/15m retries
  *                   then terminal `failed`.
  *
@@ -55,7 +55,7 @@ import type { JobContext, JobLogger, JobsDb, LoadedJob } from './types.ts';
 /** Standard Webhooks recommends 15-30s; each delivery holds its row while sending. */
 const DELIVERY_TIMEOUT_MS = 15_000;
 
-/** `error` marker for dangling rows reclaimed by a later tick (plan §4.3, T3). */
+/** `error` marker for dangling rows reclaimed by a later tick. */
 const STALE_ERROR = 'stale';
 
 /** Thrown by the cooperative timeout wrapper; see `withTimeout`. */
@@ -72,7 +72,7 @@ class DrainAbortedError extends Error {}
 /** Queued rows inspected per claim round; rounded pages loop until empty. */
 const QUEUE_BATCH = 20;
 
-/** Wall-clock budget for one delivery segment (nine-dimension Q2). */
+/** Wall-clock budget for one delivery segment. */
 const DELIVERY_SEGMENT_BUDGET_MS = 45_000;
 
 export interface DrainDeps {
@@ -109,7 +109,7 @@ export interface DrainSummary {
 		skippedDisabled: number;
 		errors: number;
 	};
-	/** M6 P5: notification outbox segment (email / Bark). */
+	/** Notification outbox segment (email / Bark). */
 	notifications: {
 		sent: number;
 		failed: number;
@@ -180,7 +180,7 @@ export async function runDrain(deps: DrainDeps): Promise<DrainSummary> {
 				resolved.log(`[drain] ${name} segment aborted: ${errorText(err)}`);
 				break;
 			}
-			// Segment isolation (plan §2): a failing segment never blocks the
+			// Segment isolation: a failing segment never blocks the
 			// segments after it.
 			resolved.log(`[drain] ${name} segment failed: ${errorText(err)}`);
 		}
@@ -283,8 +283,8 @@ async function runOneSchedule(
 	if (schedule.lastDueAt === null) {
 		// Bootstrap only: rows that arrive without a watermark (direct SQL,
 		// future imports) start counting from now - never fire for the past
-		// (plan §4 "enabling resets the watermark"; the J-3 enable action
-		// resets it too). `updatedAt` is pinned so a routine watermark move
+		// (an enable action resets the watermark too). `updatedAt` is pinned so a
+		// routine watermark move
 		// does not count as a config edit.
 		const bootstrapped = await deps.db
 			.update(jobSchedules)
@@ -304,14 +304,14 @@ async function runOneSchedule(
 		// Watermark advance + ledger row commit in ONE transaction - a crash
 		// can never leave the watermark moved with no run recorded for it.
 		// The CAS predicate is MONOTONIC (`watermark < new due`) PLUS a CONFIG
-		// SNAPSHOT (cron/tz/enabled exactly as read at segment start; J-3
-		// review F1). Monotonic-only was the hole: `schedule` can be minutes
+		// SNAPSHOT (cron/tz/enabled exactly as read at segment start).
+		// Monotonic-only was the hole: `schedule` can be minutes
 		// old here (rows run inline), so an admin edit mid-tick would still
 		// match - clobbering the admin's watermark reset and firing once under
 		// the old expression. Equality alone is not an option either:
 		// watermarks written outside drizzle carry microseconds and would
 		// silently stop the schedule from ever firing - monotonicity stays as
-		// the concurrency half (plan §4.1 / T1). Two drains racing the same
+		// the concurrency half. Two drains racing the same
 		// due: the second sees `latestDue < latestDue` false; an admin edit:
 		// the snapshot columns mismatch. `updatedAt` is pinned: a watermark
 		// move is not a config edit.
@@ -354,7 +354,7 @@ async function runOneSchedule(
 	});
 	if (!ran) {
 		// Lock held (a long run is in flight): no watermark move, no row -
-		// retry next tick (plan §4.2 / T5).
+		// retry next tick.
 		stats.schedules.busy += 1;
 		deps.log(`[drain] ${schedule.job}: busy (lock held), due point left for the next tick`);
 	}
@@ -444,7 +444,7 @@ async function claimQueuedRun(deps: ResolvedDeps, runId: string, now: Date): Pro
 // ---------------------------------------------------------------------------
 
 /**
- * Shared execution shell for both entry paths (plan §4.3 order contract):
+ * Shared execution shell for both entry paths (order contract):
  * try-lock -> reclaim -> body -> release. Returns false when the lock is
  * busy. On a tick abort the lock is deliberately kept: the hard exit takes
  * the whole session (and its locks) down with the stuck job, so no other
@@ -474,7 +474,7 @@ async function runWithJobLock(
 }
 
 /**
- * Reclaim dangling `running` rows (plan §4.3, order contract): MUST only run
+ * Reclaim dangling `running` rows (order contract): MUST only run
  * while holding the job's session lock - with the lock in hand every
  * `running` row for the job belongs to a dead or already-finished owner, and
  * never to a live execution, because live executions hold the lock.
@@ -535,7 +535,7 @@ async function executeRun(deps: ResolvedDeps, target: RunTarget): Promise<void> 
 			summary: (data) => Object.assign(summaryData, data)
 		};
 		// Bind the client for the duration of the run so bare SDK calls
-		// (`getOption`, `db`) resolve without threading ctx.db (J-2, R2-3).
+		// (`getOption`, `db`) resolve without threading ctx.db.
 		bindJobDb(deps.db);
 		try {
 			await withTimeout(Promise.resolve(loaded.run(ctx)), definition.timeoutMs, target.job);
@@ -592,7 +592,7 @@ async function finalizeRun(
 }
 
 /**
- * `job.failed` producer (M6 P5 T5.6; decision register §3E N7).
+ * `job.failed` producer.
  *
  * Fires ONCE per terminal run (the outbox key `job_run:<id>` absorbs retries
  * and a re-finalized row), and only for the whitelist: a nightly maintenance
@@ -670,7 +670,7 @@ async function runDeliverySegment(deps: ResolvedDeps, stats: DrainSummary): Prom
 	// Bounded like the runs segment (QUEUE_BATCH) PLUS a wall-clock budget: a
 	// black-holed receiver costs up to DELIVERY_TIMEOUT_MS per row, so the
 	// count cap alone could still run QUEUE_BATCH x 15s; the deadline keeps a
-	// tick near one interval (nine-dimension Q2). Leftovers are picked up by
+	// tick near one interval. Leftovers are picked up by
 	// the next tick (FOR UPDATE SKIP LOCKED keeps concurrent ticks safe).
 	const deadline = deps.now().getTime() + DELIVERY_SEGMENT_BUDGET_MS;
 	let processed = 0;
@@ -704,9 +704,9 @@ type DeliveryOutcome = 'sent' | 'failed' | 'retried' | 'disabled';
 /**
  * Claim + send + finalize ONE delivery attempt inside a single transaction:
  * the row lock makes concurrent drains skip it, and a crash rolls the status
- * back to `queued` so the next tick retries with the SAME row id (plan §4.5).
+ * back to `queued` so the next tick retries with the SAME row id.
  *
- * W9.4: retryable outcomes (network/timeout, 408, 429, 5xx) put the row back
+ * Retryable outcomes (network/timeout, 408, 429, 5xx) put the row back
  * to `queued` with `attemptCount + 1` and `nextAttemptAt` in the future;
  * permanent outcomes (3xx, other 4xx, exhausted budget, blocked target) mark
  * it `failed`. The id never changes, so `webhook-id` is stable across every
@@ -764,8 +764,7 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 		if (delivery.payload === null) {
 			// Unreachable by construction (the outbox always writes the shaped
 			// {type,timestamp,data} body); a NULL row must not degrade into a
-			// silently unshaped `{}` POST - record it loudly instead (review
-			// round-1 C3).
+			// silently unshaped `{}` POST - record it loudly instead.
 			await tx
 				.update(webhookDeliveries)
 				.set({
@@ -779,7 +778,7 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 		}
 
 		const body = JSON.stringify(delivery.payload);
-		// W9.3: refuse a stored target that is (or now resolves) private. Rows
+		// Refuse a stored target that is (or now resolves) private. Rows
 		// created before the guard existed would otherwise keep posting to the
 		// metadata service. A blocked target is permanent - retrying cannot fix
 		// the URL, so there is no retry schedule for it.
@@ -840,7 +839,7 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 				.where(eq(webhookDeliveries.id, delivery.id));
 			return 'failed';
 		};
-		// Signing secrets are encrypted at rest (W2.6). A typed failure here is
+		// Signing secrets are encrypted at rest. A typed failure here is
 		// a per-delivery outcome, not a segment crash: the row records why it
 		// could not be signed and the next tick follows the normal retry rule.
 		let signing;
@@ -990,7 +989,7 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 }
 
 // ---------------------------------------------------------------------------
-// Segment 4: notification deliveries (M6 P5)
+// Segment 4: notification deliveries
 // ---------------------------------------------------------------------------
 
 /**

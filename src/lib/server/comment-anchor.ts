@@ -1,5 +1,5 @@
 /**
- * Server half of the segment-comment anchor (comment P3b; spec v0.1.3 §2–§7).
+ * Server half of the segment-comment anchor.
  *
  * Three jobs, in pipeline order:
  *  1. `collectAnchorBlocks` — walk the rendered hast tree into an ordered block
@@ -7,10 +7,10 @@
  *     rules live in `$lib/utils/comment-anchor` so the client DOM walker cannot
  *     drift.
  *  2. resolution — read side (hash + quote + ord hint) and write side
- *     (`ord` -> `ord±2` neighbour window -> quote search), per spec §6/§7.
+ *     (`ord` -> `ord±2` neighbour window -> quote search).
  *  3. `applyAnchorMarks` — wrap resolved ranges in `span.wl-cm` inside the tree,
  *     splitting text nodes and nesting spans per node, then let the caller
- *     stringify. Text must survive byte-for-byte (spec §12.6).
+ *     stringify. Text must survive byte-for-byte.
  *
  * The hash lives here (node:crypto) — never in the isomorphic module, so the
  * browser bundle stays free of a second hash implementation.
@@ -60,7 +60,7 @@ const rangeSchema = z
 		{ message: `range must be [${ANCHOR_MIN_LENGTH}, ${ANCHOR_MAX_LENGTH}] code points` }
 	);
 
-/** Stored anchor shape (comments.anchor::jsonb, spec §4). */
+/** Stored anchor shape (comments.anchor::jsonb). */
 export const commentAnchorSchema = z
 	.object({
 		v: z.literal(ANCHOR_VERSION),
@@ -154,7 +154,7 @@ export interface AnchorBlock {
 	ord: number;
 	hash: string;
 	occ: number;
-	/** Normalized block text (spec §3). */
+	/** Normalized block text. */
 	text: string;
 	/** One entry per normalized code point, in document order. */
 	points: AnchorTextPoint[];
@@ -196,7 +196,7 @@ interface RawSegment {
 /**
  * Walk the tree in document order and return the block directory.
  *
- * Text belongs to its **nearest** block ancestor (spec §2): a block opens a
+ * Text belongs to its **nearest** block ancestor: a block opens a
  * collector, nested blocks get their own, and skipped subtrees contribute
  * nothing. Blocks whose normalized text is empty (e.g. a `li` that only wraps
  * a `p`) are not numbered.
@@ -284,7 +284,7 @@ export function collectAnchorBlocks(tree: HastRoot): AnchorBlock[] {
 function buildBlock(element: Element, segments: RawSegment[]): AnchorBlock | null {
 	if (segments.length === 0) return null;
 	// One folding implementation for both pipelines: the DOM walker feeds its own
-	// node handles through the same `foldSegments` (spec §3).
+	// node handles through the same `foldSegments`.
 	const folded = foldSegments(
 		segments.map((segment) => ({
 			value: segment.value,
@@ -329,7 +329,7 @@ function inRange(block: AnchorBlock, start: number, end: number): boolean {
 }
 
 /**
- * Read-side resolution (spec §7), in order:
+ * Read-side resolution, in order:
  *
  * 1. blocks that still carry the stored content hash (identity outranks
  *    position: an inserted paragraph at the old ordinal must not steal the
@@ -501,7 +501,7 @@ function nearest(occurrences: Occurrence[], hint: number): Occurrence {
 }
 
 /**
- * Write-side resolution (spec §6): the client sends ord + range + exact.
+ * Write-side resolution: the client sends ord + range + exact.
  * defined. Order: exact block at ord (gated by the block-length/fingerprint
  * hint) -> quote search inside that block -> the ±2 neighbour window. Anything
  * else is stale (400). No merging: the same range becomes another root.
@@ -511,7 +511,7 @@ export function resolveAnchorDraft(
 	draft: CommentAnchorDraft,
 	lang: string
 ): { kind: 'ok'; anchor: CommentAnchor } | { kind: 'stale' } {
-	// Endpoints must be grapheme-cluster boundaries (spec §3): a selection that
+	// Endpoints must be grapheme-cluster boundaries: a selection that
 	// splits an emoji/ZWJ cluster is rejected rather than stored as a broken span.
 	const accept = (
 		block: AnchorBlock,
@@ -526,7 +526,7 @@ export function resolveAnchorDraft(
 	// The ordinal alone is only trusted when the block is the one the reader
 	// saw: an insertion above shifts ordinals, and a repeated quote in the
 	// shifted block would otherwise bind to the wrong passage. Length is a
-	// cheap fingerprint, not a hash (spec §5 M11).
+	// cheap fingerprint, not a hash.
 	const fingerprintMatches = (block: AnchorBlock) =>
 		draft.blockFingerprint === undefined || blockFingerprint(block.text) === draft.blockFingerprint;
 	// Length alone cannot separate uniform list rows (same length, same quote);
@@ -616,7 +616,7 @@ export interface AnchorMark {
 }
 
 /**
- * Wrap resolved ranges in `span.wl-cm` (spec §7). Ranges are stated in the
+ * Wrap resolved ranges in `span.wl-cm`. Ranges are stated in the
  * *original* block coordinates, so all marks are applied in one pass per text
  * node — never sequentially — otherwise a split would invalidate the next
  * mark's node reference.

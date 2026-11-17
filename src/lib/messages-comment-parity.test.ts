@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Copy-parity canary for the comment_* message keys (comment P3a): the three
+ * Copy-parity canary for the comment_* message keys: the three
  * locales must stay in lock-step and sorted, so a partial translation or a
  * merge cannot silently drop or duplicate a message (test review finding).
  * Runs from the repo root, where vitest's cwd lives.

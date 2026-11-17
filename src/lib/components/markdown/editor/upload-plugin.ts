@@ -16,11 +16,11 @@ export interface EditorUploadStatus {
 	lastErrorCode: string | null;
 }
 
-/** Q3 cap: at most three uploads in flight. */
+/** At most three uploads in flight. */
 const MAX_CONCURRENT_UPLOADS = 3;
 
 /**
- * Paste/drop image uploads (ST-3 3a3): @lexical/rich-text already routes
+ * Paste/drop image uploads: @lexical/rich-text already routes
  * pasted and dropped local files into the DRAG_DROP_PASTE command (drop
  * caret placement included), so this plugin only has to consume the File[]
  * payload: local files only, at most three uploads in flight, each result
@@ -64,7 +64,7 @@ export function registerEditorUploads(
 		DRAG_DROP_PASTE,
 		(files) => {
 			// Local images only; anything else falls through to the default
-			// paste/drop behaviour (Q3: HTML-only pastes keep the text path).
+			// paste/drop behaviour (HTML-only pastes keep the text path).
 			const images = files.filter((file) => file.type === '' || file.type.startsWith('image/'));
 			if (images.length === 0) return false;
 			startUploads(images);
