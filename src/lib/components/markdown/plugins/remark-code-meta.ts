@@ -3,20 +3,6 @@ import type { Root, Code } from 'mdast';
 import { visit } from 'unist-util-visit';
 import { warnOnce } from './plugin-warnings';
 
-/**
- * remarkCodeMeta parses the code-fence info string: ```ts {collapsed=10 title="…" linenos=off}
- *
- * Closed key set — `collapsed` (bare = fully collapsed, `=N` = collapse to line N),
- * `linenos=off` (lines are numbered by default, this key opts out) and `title="…"`;
- * whitespace before a brace block is allowed. Unknown keys warn once.
- * Every brace block is consumed: parsing only the first would leave a second in the node's
- * meta, where rehype-pretty-code turns it into a server-only caption — a double-pipeline
- * drift.
- * The parsed meta rides to hast as a JSON string in `hProperties.dataMdCodeMeta` (mdast
- * `data` payloads do not survive the transform) and the rehype side consumes it before
- * rehype-raw runs.
- */
-
 /** Transport property carrying the parsed meta from mdast to hast (shared). */
 export const META_ATTR = 'dataMdCodeMeta';
 
@@ -33,6 +19,19 @@ const BRACE_REGEX = /\s*\{([^}]*)\}/g;
 const MAX_COLLAPSE_LINES = 9999;
 const TITLE_REGEX = /title="([^"]*)"/;
 
+/**
+ * remarkCodeMeta parses the code-fence info string: ```ts {collapsed=10 title="…" linenos=off}
+ *
+ * Closed key set — `collapsed` (bare = fully collapsed, `=N` = collapse to line N),
+ * `linenos=off` (lines are numbered by default, this key opts out) and `title="…"`;
+ * whitespace before a brace block is allowed. Unknown keys warn once.
+ * Every brace block is consumed: parsing only the first would leave a second in the node's
+ * meta, where rehype-pretty-code turns it into a server-only caption — a double-pipeline
+ * drift.
+ * The parsed meta rides to hast as a JSON string in `hProperties.dataMdCodeMeta` (mdast
+ * `data` payloads do not survive the transform) and the rehype side consumes it before
+ * rehype-raw runs.
+ */
 export const remarkCodeMeta: Plugin<[], Root> = () => {
 	return (tree) => {
 		visit(tree, 'code', (node: Code) => {

@@ -1,13 +1,10 @@
 // scripts/verify-jobs-drain.ts
-//
 // Acceptance harness for the jobs drain kernel: `pnpm db:verify-jobs`.
-//
 // Runs entirely against a THROWAWAY database: it creates `wl_jobs_verify_*`
 // on the server DATABASE_URL points at, applies the baseline migration, seeds
 // fixtures, spawns real `node jobs/drain.ts` processes (including one that is
-// SIGKILLed mid-flight), and drops the database afterwards. The live database
+// SIGKILLed mid-flight), and drops the database afterwards; the live database
 // is never written to.
-//
 // Covers CAS/idempotency, stale reclamation and lock/crash recovery, the
 // delivery contract (retries, 410, 3xx, network failures), retention,
 // watermarks, entry exit codes, SDK/user jobs, admin edit races,
@@ -55,9 +52,7 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
  */
 const fixtureDataDir = await mkdtemp(join(tmpdir(), 'wl-jobs-verify-data-'));
 
-// ---------------------------------------------------------------------------
 // Harness
-// ---------------------------------------------------------------------------
 
 let checks = 0;
 let failures = 0;
@@ -134,9 +129,7 @@ async function resetLedger(): Promise<void> {
 	);
 }
 
-// ---------------------------------------------------------------------------
 // Drain process + fixture helpers
-// ---------------------------------------------------------------------------
 
 interface DrainResult {
 	code: number | null;
@@ -290,9 +283,7 @@ async function waitUntilLockFree(job: string, timeoutMs = 10_000): Promise<boole
 	return false;
 }
 
-// ---------------------------------------------------------------------------
 // Webhook fixture server
-// ---------------------------------------------------------------------------
 
 interface CapturedRequest {
 	path: string;
@@ -344,9 +335,7 @@ await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
 const httpPort = (httpServer.address() as { port: number }).port;
 const httpBase = `http://127.0.0.1:${httpPort}`;
 
-// ---------------------------------------------------------------------------
 // Fixture builders
-// ---------------------------------------------------------------------------
 
 function latestDailyDueUtc(hour: number, minute: number, now: Date): Date {
 	const candidate = new Date(
@@ -423,9 +412,7 @@ function signatureOf(capturedRequest: CapturedRequest, secret: string): boolean 
 	return expected === signature;
 }
 
-// ---------------------------------------------------------------------------
 // Scenarios
-// ---------------------------------------------------------------------------
 
 async function t4CatchUpAndSourceHash(): Promise<void> {
 	section('T4 + source_hash: water level 3 days back -> one catch-up run');
@@ -1332,9 +1319,7 @@ async function heartbeatPing(): Promise<void> {
 	);
 }
 
-// ---------------------------------------------------------------------------
 // Scenarios: SDK resolution, save gate, user jobs end-to-end
-// ---------------------------------------------------------------------------
 
 function sha256Of(bytes: Buffer): string {
 	return createHash('sha256').update(bytes).digest('hex');
@@ -1745,9 +1730,7 @@ async function scaffoldFailureDegrades(): Promise<void> {
 	);
 }
 
-// ---------------------------------------------------------------------------
 // Notification outbox (unique key, storm window, mock Bark, terminal)
-// ---------------------------------------------------------------------------
 
 async function notificationOutcomes(): Promise<void> {
 	section('notifications (M6 P5): unique key, storm window, mock Bark, terminal failure');
@@ -2071,9 +2054,7 @@ async function notificationOutcomes(): Promise<void> {
 	check('malformed event name is rejected by the CHECK', malformedRejected);
 }
 
-// ---------------------------------------------------------------------------
 // Main
-// ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
 	console.log(`creating scratch database ${scratchName} ...`);

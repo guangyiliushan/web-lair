@@ -118,7 +118,8 @@ export function orderedPoolByPrice<T extends { model: string; position: number }
 	return [...rows].sort((a, b) => priceOf(a.model) - priceOf(b.model) || a.position - b.position);
 }
 
-/** What one provider can still contribute to the pool, and what it already owns. */ export interface ProviderBulk {
+/** What one provider can still contribute to the pool, and what it already owns. */
+export interface ProviderBulk {
 	name: string;
 	/** Enabled models of this provider that are not pooled yet. */
 	addable: string[];

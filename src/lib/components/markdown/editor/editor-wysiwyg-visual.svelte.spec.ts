@@ -8,20 +8,6 @@ import ToolbarTestHost from '../toolbar/ToolbarTestHost.svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
-/**
- * Visual test: WYSIWYG rendering of the full v0.3 syntax set, plus full-size screenshots.
- *
- * Complements editor-viewport-matrix.svelte.spec.ts (layout invariants on empty
- * content): the public MarkdownEditor mounted through ToolbarTestHost in real Chromium
- * with the real layout.css, driven through the initialMarkdown prop (markdown ->
- * editor DOM) and the code-mode toggle (round-trip fidelity).
- *
- * Screenshots land outside the repo at ../../../../../../editor-visual-shots/
- * (screenshots never enter git); light theme only.
- * Mention tokens are exempt from the no-literal-markdown scan (asserted in the first
- * case).
- */
-
 /** Sample document covering every v0.3 syntax in EDITOR_TRANSFORMERS plus the ordinary
  * blocks */
 const SYNTAX_DOC = [
@@ -109,6 +95,19 @@ const SHOT_MATRIX: Array<{ w: number; h: number; label: string }> = [
 	{ w: 320, h: 568, label: 'phone-se-smallest' }
 ];
 
+/**
+ * Visual test: WYSIWYG rendering of the full v0.3 syntax set, plus full-size screenshots.
+ *
+ * Complements editor-viewport-matrix.svelte.spec.ts (layout invariants on empty
+ * content): the public MarkdownEditor mounted through ToolbarTestHost in real Chromium
+ * with the real layout.css, driven through the initialMarkdown prop (markdown ->
+ * editor DOM) and the code-mode toggle (round-trip fidelity).
+ *
+ * Screenshots land outside the repo at ../../../../../../editor-visual-shots/
+ * (screenshots never enter git); light theme only.
+ * Mention tokens are exempt from the no-literal-markdown scan (asserted in the first
+ * case).
+ */
 describe('editor WYSIWYG visual (v0.3 syntax set)', () => {
 	it('imports every v0.3 syntax as styled nodes, no literal markdown left', async () => {
 		await page.viewport(1280, 800);
@@ -192,7 +191,7 @@ describe('editor WYSIWYG visual (v0.3 syntax set)', () => {
 		const textarea = (await page
 			.getByRole('textbox', { name: '输入正文...' })
 			.findElement({ timeout: 15_000 })) as HTMLTextAreaElement;
-		expect(textarea).toBeInstanceOf(HTMLTextAreaElement); // 把 as 断言坐实
+		expect(textarea).toBeInstanceOf(HTMLTextAreaElement); // pins the `as` assertion
 		const src = textarea.value;
 		for (const expected of [
 			'||这里是被隐藏的剧透内容||',

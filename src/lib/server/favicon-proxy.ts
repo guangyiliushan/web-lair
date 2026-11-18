@@ -8,23 +8,17 @@ import { isPrivateAddress, resolvesPublic } from './security/ssrf-guard.ts';
 
 /**
  * Favicon proxy (spec 6) — the only server-side fetch the renderer performs.
- * - allowlist: registry domains only, derived from the registry so the two
- *   cannot drift (a leading `www.` canonicalised away); https only.
- * - SSRF: the hostname is resolved first and every non-global range is
- *   rejected (node:net BlockList covers private, loopback, link-local,
- *   CGNAT, TEST-NET, multicast, reserved, IPv6 ULA and v4-mapped forms).
- *   Redirects are followed manually (up to three hops) and every hop is
- *   re-validated — https, allowlist, non-private DNS — because allowlisted
- *   hosts legitimately redirect their /favicon.ico (bilibili, themoviedb).
- *   Residual DNS-rebinding (resolve-then-connect TOCTOU) is a registered
- *   hardening item: HTTPS with certificate validation keeps it unexploitable
- *   for allowlisted hosts; `pinnedLookup` in `security/ssrf-guard.ts` closes
- *   the gap for the links checker and is the registered adoption follow-up.
- * - limits: 5 s timeout, a streaming 512 KiB body cap (the reader is the
- *   memory bound), a raster image content-type allowlist (SVG excluded: it
- *   would render same-origin if navigated to) and
- *   `X-Content-Type-Options: nosniff`; the response is cached for a day and
- *   marked no-referrer.
+ * - allowlist: registry domains only, derived from the registry so the two cannot drift
+ *   (a leading `www.` canonicalised away); https only.
+ * - SSRF: hostname resolved first, every non-global range rejected (node:net BlockList:
+ *   private, loopback, link-local, CGNAT, TEST-NET, multicast, reserved, IPv6 ULA,
+ *   v4-mapped). Redirects followed manually (max 3 hops), each hop re-validated — https,
+ *   allowlist, non-private DNS. Residual resolve-then-connect rebinding is blocked by
+ *   HTTPS certificate validation for these hosts; `pinnedLookup` in
+ *   `security/ssrf-guard.ts` closes the same gap for the links checker.
+ * - limits: 5 s timeout, streaming 512 KiB body cap (the reader is the memory bound),
+ *   raster image content-type allowlist (SVG excluded: same-origin if navigated to),
+ *   `X-Content-Type-Options: nosniff`; response cached a day, no-referrer.
  */
 const MAX_BYTES = 512 * 1024;
 const TIMEOUT_MS = 5000;

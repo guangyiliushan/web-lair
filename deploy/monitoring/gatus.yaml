@@ -1,31 +1,22 @@
 # Gatus — in-box monitoring (the single source of truth for config-as-code).
-#
-# Always loaded; three optional monitors that cannot be expressed as an empty
-# value are appended by render-config.sh as sibling fragments:
-#   zz-domain.yaml     only when SITE_DOMAIN is set (TLS certificate + domain
-#                      expiry)
-#   zz-drain.yaml      only when DRAIN_HEARTBEAT_TOKEN is set (drain heartbeat
-#                      external endpoint)
-#   zz-app-ready.yaml  only when READY_TOKEN is set (/api/ready probe)
-# An empty value would stay permanently red (or panic Gatus), so it is
-# expressed by whether the fragment renders at all; an empty alerting.custom
-# url only Warns and skips the provider, so Bark needs no gate and always
-# lives here — the render gate cannot diverge from the container env. Why
-# only these three: deploy/monitoring/README.md "1. 文件".
-#
+# Always loaded; three optional monitors are appended by render-config.sh as
+# sibling fragments — an empty value would stay permanently red (or panic
+# Gatus), so the fragment's presence IS the gate: zz-domain.yaml when
+# SITE_DOMAIN (TLS cert + domain expiry), zz-drain.yaml when
+# DRAIN_HEARTBEAT_TOKEN (drain heartbeat), zz-app-ready.yaml when READY_TOKEN
+# (/api/ready probe). Bark needs no gate (an empty alerting.custom url only
+# Warns) and always lives here. Why only these three:
+# deploy/monitoring/README.md "1. 文件".
 # Gatus merges every *.yaml in GATUS_CONFIG_PATH and polls each file's mtime
-# every 30s, so rendering must be content-idempotent: any write hot-reloads
+# every 30s: rendering must be content-idempotent — any write hot-reloads
 # storage and wipes the history plus already-fired alerts (duplicate alerts,
 # no RESOLVED). Deleting a fragment does not trigger a reload, so the renderer
 # touches this file when it revokes one.
-#
 # Gatus runs os.ExpandEnv over the whole YAML: a missing variable expands to
-# an empty string and fails URL/token validation (panic, exit 2), so MONITOR_*
-# must always hold a value — the error path verify-config.sh covers.
-#
-# With BARK_URL unset the provider is ignored (one startup log line
-# "Ignoring provider=custom"); endpoints keep running, they just never send
-# (deploy/monitoring/README.md "4. 告警：Bark").
+# "" and fails URL/token validation (panic, exit 2) — MONITOR_* must always
+# hold a value (verify-config.sh covers the error path). With BARK_URL unset
+# the provider is ignored (one startup log line); endpoints keep running but
+# never send (deploy/monitoring/README.md "4. 告警：Bark").
 
 storage:
   # History does not matter (in-box observation + alerts); memory avoids

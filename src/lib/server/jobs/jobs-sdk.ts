@@ -6,18 +6,16 @@ import { requireBoundDb } from './sdk-binding.ts';
 import type { OptionKey, OptionValue } from '../config/options-registry.ts';
 import type { JobsDb, JobContext } from './types.ts';
 
-/**
- * Repository jobs SDK: the single non-`node:*` module builtin
- * and user job files may import. On the repository side `#jobs-sdk` maps to
- * this file (root package.json `imports`); inside `$DATA_DIR/jobs` the
- * scaffold-generated `_sdk.runtime.ts` re-exports it, so forked jobs keep
- * running from the user layer. A unit test pins this module's export names
- * against the hand-written facade (`sdk-facade.d.ts`) in both directions.
- *
- * Bare `getOption` / `setOption` / `db` calls resolve against the client the
- * drain binds for the current run (`sdk-binding.ts`); they throw a clear
- * error outside a run instead of reaching for the web-only `$lib/server/db`.
- */
+// Repository jobs SDK: the single non-`node:*` module builtin
+// and user job files may import. On the repository side `#jobs-sdk` maps to
+// this file (root package.json `imports`); inside `$DATA_DIR/jobs` the
+// scaffold-generated `_sdk.runtime.ts` re-exports it, so forked jobs keep
+// running from the user layer. A unit test pins this module's export names
+// against the hand-written facade (`sdk-facade.d.ts`) in both directions.
+//
+// Bare `getOption` / `setOption` / `db` calls resolve against the client the
+// drain binds for the current run (`sdk-binding.ts`); they throw a clear
+// error outside a run instead of reaching for the web-only `$lib/server/db`.
 
 /** Executor accepted by the option helpers (registry handle or transaction). */
 type RegistryExecutor = NonNullable<Parameters<typeof registryGetOption>[1]>;
@@ -59,9 +57,7 @@ export const db: JobsDb = new Proxy({} as unknown as JobsDb, {
 	}
 });
 
-// ---------------------------------------------------------------------------
 // Re-exports (curated surface - widen deliberately, one line each)
-// ---------------------------------------------------------------------------
 
 export {
 	sql,

@@ -2,20 +2,17 @@ import { readNotificationPayload, redactNotificationError } from '../format.ts';
 import type { AdapterResult } from './types.ts';
 
 /**
- * Email adapter: owner-facing notification mail over the SAME SMTP
- * derivation the rest of the app uses (`mail/smtp.ts` — one source for
- * host/port/TLS/AUTH/DKIM, so the notification path cannot disagree with
- * registration mail).
- * Recipient: the owner row (`user.role = 'owner'`), resolved by the caller
- * at delivery time. Notifications are transactional admin mail: no
- * unsubscribe headers, no bulk classification.
+ * Email adapter: owner-facing notification mail over the SAME SMTP derivation
+ * the rest of the app uses (`mail/smtp.ts` - one source for host/port/TLS/
+ * AUTH/DKIM, so the notification path cannot disagree with registration
+ * mail). Recipient: the owner row (`user.role = 'owner'`), resolved by the
+ * caller at delivery time; transactional admin mail: no unsubscribe headers,
+ * no bulk classification.
  * Failure classification: missing configuration, auth rejection or envelope
- * refusal (`EAUTH`, `EENVELOPE`, `MailNotConfiguredError`) is permanent —
- * retrying cannot fix it and the operator must act; transport errors
- * (timeout, connection reset, 4xx greeting) are retryable.
- * Node-strip-loadable: the SMTP module (and nodemailer with it) is imported
- * lazily, so the drain's static graph stays lean and a tick with no email
- * due pays nothing for it.
+ * refusal (`EAUTH`, `EENVELOPE`, `MailNotConfiguredError`) is permanent -
+ * retrying cannot fix it; transport errors (timeout, connection reset, 4xx
+ * greeting) are retryable. The SMTP module (and nodemailer) is imported
+ * lazily (Node-strip-loadable), so a tick with no email due pays nothing.
  */
 export interface EmailAdapterDeps {
 	getEnv?: (name: string) => string | undefined;

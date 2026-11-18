@@ -1,13 +1,11 @@
-/**
- * Batch D transformers: the `::::tabs` (+ `:::tab{…}`) and `:::grid{…}`
- * containers (spec 3.2; v0.3.2 delta #4: brace attributes with zero
- * whitespace, and an outer fence one colon deeper than its children).
- *
- * Grid keys mirror the render registry (`cols` 1..6, `gap` in {0,4,8,12,16},
- * `rows` passthrough, `layout`, `type`); only the keys written in the source
- * are re-emitted, so untouched documents round-trip byte-stable. Bodies are
- * nested-editor JSON through the alert helpers.
- */
+// Batch D transformers: the `::::tabs` (+ `:::tab{…}`) and `:::grid{…}`
+// containers (spec 3.2; v0.3.2 delta #4: brace attributes with zero
+// whitespace, and an outer fence one colon deeper than its children).
+//
+// Grid keys mirror the render registry (`cols` 1..6, `gap` in {0,4,8,12,16},
+// `rows` passthrough, `layout`, `type`); only the keys written in the source
+// are re-emitted, so untouched documents round-trip byte-stable. Bodies are
+// nested-editor JSON through the alert helpers.
 import type { MultilineElementTransformer } from '@lexical/markdown';
 import { TabsNode, $createTabsNode, $isTabsNode } from '$lib/components/markdown/tabs/tabs-node';
 import type { SerializedTabEntry } from '$lib/components/markdown/tabs/tabs-node';

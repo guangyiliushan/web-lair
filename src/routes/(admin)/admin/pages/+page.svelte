@@ -32,7 +32,7 @@
 	/** Locale rows for the external-entry dialog (same shape as the editor). */
 	const LOCALES = locales.map((code) => ({ code, label: localeLabels[code] }));
 
-	/** 「新增」双类型: the md type starts in the draft editor; the external entry
+	/** 「新增」 dual types: the md type starts in the draft editor; the external entry
 	 * inserts directly from the dialog below (no draft). */
 	let createExternalOpen = $state(false);
 	let creating = $state(false);

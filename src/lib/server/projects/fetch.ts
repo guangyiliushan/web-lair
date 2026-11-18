@@ -1,18 +1,16 @@
 import type { SyncFailureKind } from './types.ts';
 
-/**
- * Projects sync HTTP unit: serial GETs against the four fixed platform API
- * hosts, 15 s timeout per request, one in-run retry for timeouts / 5xx,
- * rate-limit aware. Fixed upstream hosts are validated by TLS (embed-meta
- * precedent), so no SSRF guard applies here - the only user-supplied URLs
- * (import-url's OG fallback) go through the shared security/ssrf-guard
- * instead.
- *
- * Classification: 404/410 -> not_found; 429 or a 403 carrying an
- * exhausted rate-limit signal -> rate_limited; other 401/403 -> auth;
- * timeout / DNS / TLS / connect / persistent 5xx -> network; a body that is
- * not the expected JSON object -> parse.
- */
+// Projects sync HTTP unit: serial GETs against the four fixed platform API
+// hosts, 15 s timeout per request, one in-run retry for timeouts / 5xx,
+// rate-limit aware. Fixed upstream hosts are validated by TLS (embed-meta
+// precedent), so no SSRF guard applies here - the only user-supplied URLs
+// (import-url's OG fallback) go through the shared security/ssrf-guard
+// instead.
+//
+// Classification: 404/410 -> not_found; 429 or a 403 carrying an
+// exhausted rate-limit signal -> rate_limited; other 401/403 -> auth;
+// timeout / DNS / TLS / connect / persistent 5xx -> network; a body that is
+// not the expected JSON object -> parse.
 
 /** Keep in sync with package.json (links-check precedent). */
 export const PROJECTS_SYNC_VERSION = '0.0.1';

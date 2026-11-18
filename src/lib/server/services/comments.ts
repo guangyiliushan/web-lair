@@ -41,18 +41,16 @@ import { visibleNoteCondition } from './note-visibility';
 import { getPageBySlug, servablePageBody } from './pages';
 import { visiblePostCondition } from './post-visibility';
 
-/**
- * Public comment threads: article-level comments on posts / notes / pages - the
- * anchored (segment) variant is documented below. The read side is target-shaped
- * across the three arcs.
- *
- * Visibility: approved rows are public, a signed-in reader
- * additionally sees their own pending rows ("审核中"), rejected rows never
- * render. Deleted rows stay in the row set - the assembly turns an approved
- * root with visible replies into a floor-keeping placeholder and drops
- * everything else. Deleted REPLIES are excluded in SQL (the assembly drops
- * them unconditionally, so the row budget is not spent on invisible rows).
- */
+// Public comment threads: article-level comments on posts / notes / pages - the
+// anchored (segment) variant is documented below. The read side is target-shaped
+// across the three arcs.
+//
+// Visibility: approved rows are public, a signed-in reader
+// additionally sees their own pending rows ("审核中"), rejected rows never
+// render. Deleted rows stay in the row set - the assembly turns an approved
+// root with visible replies into a floor-keeping placeholder and drops
+// everything else. Deleted REPLIES are excluded in SQL (the assembly drops
+// them unconditionally, so the row budget is not spent on invisible rows).
 
 /** Read caps: the root page doubles as the future "load more" unit. */
 export const THREAD_ROOT_LIMIT = 200;

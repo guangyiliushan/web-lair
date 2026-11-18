@@ -10,19 +10,6 @@ import { columns as notes } from '../../../../routes/(admin)/admin/notes/columns
 import { columns as pages } from '../../../../routes/(admin)/admin/pages/columns';
 import { columns as posts } from '../../../../routes/(admin)/admin/posts/columns';
 
-/**
- * The overlap guard, as arithmetic.
- *
- * A column set is only legal if, at every viewport where its columns are on,
- * the fixed widths still leave room for the flexible column. Tailwind's
- * breakpoints measure the viewport while the sidebar eats 256px of it, so a
- * set can be fine at 767px and over budget at 768px — which is exactly how
- * the title column got crushed to 6px and painted over its neighbour.
- *
- * These assertions are pure: no browser, no layout, just the numbers the
- * pages declare.
- */
-
 /** Viewport tier at which a column with this `hideBelow` appears. */
 const TIER_START: Record<string, number> = {
 	sm: 640,
@@ -61,6 +48,18 @@ function visibleAt(cols: ListColumn[], viewport: number): ListColumn[] {
 	return cols.filter((col) => !col.hideBelow || TIER_START[col.hideBelow] <= viewport);
 }
 
+/**
+ * The overlap guard, as arithmetic.
+ *
+ * A column set is only legal if, at every viewport where its columns are on,
+ * the fixed widths still leave room for the flexible column. Tailwind's
+ * breakpoints measure the viewport while the sidebar eats 256px of it, so a
+ * set can be fine at 767px and over budget at 768px — which is exactly how
+ * the title column got crushed to 6px and painted over its neighbour.
+ *
+ * These assertions are pure: no browser, no layout, just the numbers the
+ * pages declare.
+ */
 describe('admin list width budget', () => {
 	for (const [name, cols] of LISTS) {
 		it(`${name}: exactly one flexible column`, () => {

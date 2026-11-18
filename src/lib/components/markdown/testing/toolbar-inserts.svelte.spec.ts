@@ -48,7 +48,7 @@ describe('toolbar insert buttons', () => {
 	it('inserts the chosen alert type through the callout menu', async () => {
 		const { screen } = await mountEditorFixture('前文');
 		// the Callout button is a dropdown trigger: open it, then pick a type.
-		// The 警告 (warning) type is deliberately NOT the default, so a mutation
+		// The `警告` (warning) type is deliberately NOT the default, so a mutation
 		// that always inserts the default would fail this assertion.
 		await editorToolbar().getByRole('button', { name: 'Callout' }).click();
 		await page.getByRole('menuitem', { name: '警告' }).click();

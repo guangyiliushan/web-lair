@@ -1,13 +1,11 @@
-/**
- * Shared panel geometry for the dense nav panels (home / posts / notes).
- *
- * All three sit on `w-[520px]` and must agree on the split: the eye tracks the
- * divider while the pointer moves between nav items, so a per-panel column
- * width reads as the whole panel jumping. These are inlined rather than written
- * as Tailwind arbitrary values so the components and the e2e width assertions
- * cannot drift apart — that drift is exactly how the right column collapsed to
- * `0px` in the first place.
- */
+// Shared panel geometry for the dense nav panels (home / posts / notes).
+//
+// All three sit on `w-[520px]` and must agree on the split: the eye tracks the
+// divider while the pointer moves between nav items, so a per-panel column
+// width reads as the whole panel jumping. These are inlined rather than written
+// as Tailwind arbitrary values so the components and the e2e width assertions
+// cannot drift apart — that drift is exactly how the right column collapsed to
+// `0px` in the first place.
 
 /** 520 panel − 2px border − 8px `p-1`. */
 export const NAV_PANEL_CONTENT_W = 510;

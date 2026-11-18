@@ -1,17 +1,15 @@
 /**
- * isValidIanaTimeZone validates `site.timezone` (options registry) and note `tz` values:
- * `Intl.DateTimeFormat` throws a RangeError on an unknown zone, so constructing a probe
- * formatter is the validator. Three deliberate caveats:
- * - `Intl.supportedValuesOf('timeZone')` must NOT be the whitelist: the canonical list omits
- *   'UTC' (and `Etc/UTC`-style links), which are valid zones.
- * - UTC-offset strings ('+08:00', '-0500') are rejected though Intl accepts them:
- *   PostgreSQL's `AT TIME ZONE` reads them as POSIX zones (sign flipped) or rejects them
- *   outright, so a value that passes Intl can silently shift the belongs-to date by hours —
- *   or 500 the query.
- * - The check is not PostgreSQL's zoneinfo set (probed against a real database): 'Japan' /
- *   'US/Pacific' / 'Asia/Calcutta' pass Intl but 500 PG. Write paths must additionally
- *   verify against `pg_timezone_names`; the sign guard above still closes the silent-shift
- *   class.
+ * isValidIanaTimeZone validates `site.timezone` (options registry) and note `tz`
+ * values; a probe `Intl.DateTimeFormat` throws RangeError on an unknown zone.
+ * Caveats: `Intl.supportedValuesOf('timeZone')` must NOT be the whitelist - it
+ * omits 'UTC' and `Etc/UTC`-style links, which are valid zones. UTC-offset
+ * strings ('+08:00', '-0500') are rejected though Intl accepts them:
+ * PostgreSQL's `AT TIME ZONE` reads them as POSIX zones (sign flipped) or
+ * rejects them outright, so a value passing Intl can shift the belongs-to date
+ * by hours - or 500 the query. The check is not PostgreSQL's zoneinfo set
+ * (probed on a real database): 'Japan' / 'US/Pacific' / 'Asia/Calcutta' pass
+ * Intl but 500 PG, so write paths must additionally verify against
+ * `pg_timezone_names`; the sign guard above still closes the silent-shift class.
  */
 const ianaValidityCache = new Map<string, boolean>();
 

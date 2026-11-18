@@ -26,9 +26,8 @@ import {
 } from '../src/lib/server/storage/provider';
 
 /**
- * Provider migration CLI: source is `storage.active`, target is the SAVED
+ * Provider migration CLI: source is `storage.active`, target is the saved
  * candidate (`storage.provider`).
- *
  *   pnpm storage:migrate --dry-run   enumerate + HEAD both buckets (default)
  *   pnpm storage:migrate --yes       freeze uploads, copy + verify, persist state
  *   pnpm storage:migrate --cutover   activate the saved candidate (guarded)
@@ -36,12 +35,9 @@ import {
  *   pnpm storage:migrate --status    print active/candidate/migration state
  *   pnpm storage:migrate --reset     clear a stuck state (no live run)
  *
- * Objects are never deleted from the source: the old provider stays
- * readable until it is removed deliberately. Sequence, gates and the upload
- * freeze: `deploy/RUNBOOK.md` -> "External media provider (W7) and the
- * restore drill".
- *
- * Out of scope: `maps/*.pmtiles` are not `files` rows; re-run `pnpm maps:publish` after cutover.
+ * Objects are never deleted from the source. Sequence, gates and upload
+ * freeze: `deploy/RUNBOOK.md` §4.6. Out of scope: `maps/*.pmtiles` are not
+ * `files` rows; re-run `pnpm maps:publish` after cutover.
  */
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {

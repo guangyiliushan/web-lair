@@ -5,19 +5,15 @@ import { join } from 'node:path';
 import { ExifTool } from 'exiftool-vendored';
 
 /**
- * Brand maker-note extraction: every brand's family-1 group from the bundled
- * ExifTool lands in `exif.makerNotes.<brand>` — ONE decoder stack (the
- * fuji-recipes stack was retired: its 15 recipe fields are a strict subset
- * of the FujiFilm group's 65 keys). Non-maker groups (system, standard
- * EXIF/MPF containers, ICC/Photoshop/JFIF, container metadata) are excluded;
- * unknown brand groups are kept as a data asset. Values stay ExifTool's
- * PrintConv (human-readable) form; numeric `-n` sidecars are registered for
- * future filter axes.
- * Security posture: ExifTool only ever receives a temp file with an
- * OURS-OWNED safe name — user-controlled names never reach argv
- * (argument-injection face closed by construction); readArgs are constants,
- * never user strings. Values are NUL-stripped before they can reach a jsonb
- * write (PostgreSQL cannot carry U+0000).
+ * Brand maker-note extraction: every brand's family-1 group from the bundled ExifTool lands in
+ * `exif.makerNotes.<brand>` — ONE decoder stack (the fuji-recipes fields are a strict subset of the
+ * FujiFilm group). Non-maker groups (system, standard EXIF/MPF containers, ICC/Photoshop/JFIF, container
+ * metadata) are excluded; unknown brand groups are kept as a data asset. Values stay ExifTool's PrintConv
+ * (human-readable) form; numeric `-n` sidecars are registered for future filter axes.
+ * Security posture: ExifTool only ever receives a temp file with an OURS-OWNED safe name — user-controlled
+ * names never reach argv (argument-injection face closed by construction); readArgs are constants, never
+ * user strings. Values are NUL-stripped before they can reach a jsonb write (PostgreSQL cannot carry
+ * U+0000).
  */
 
 export const MAKER_NOTES_SIZE_LIMIT = 256 * 1024;

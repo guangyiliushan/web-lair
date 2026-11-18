@@ -13,23 +13,16 @@ export interface EnqueueResult {
 }
 
 /**
- * enqueueJob is the manual trigger path: insert `job_runs(status='queued')`;
- * the drain claims it within ~one tick.
- * Double clicks collide with the partial unique index
- * `job_runs_job_queued_uniq(job) WHERE status='queued'` - that 23505 is caught
- * and the active row is reused and reported as `deduplicated`.
- * The index only covers `queued` rows, so a click while the job is RUNNING
- * legitimately queues ONE follow-up run (single-flight still applies per
- * execution); the re-select also covers the previous blocker just becoming
- * `running`. The watermark is never touched here.
- *
- * Callers using the user layer resolve and pass the definition
- * (`resolveJobDefinition`); without one the registry is consulted, keeping
- * the contract for builtin-only callers.
- *
- * Generic over the schema on purpose: the admin surface's
- * `drizzle(client, { schema })` handle is not assignable to the schema-less
- * type the drain uses (the `fullSchema` property makes the generic
+ * enqueueJob is the manual trigger path: insert `job_runs(status='queued')`; the drain claims it within
+ * ~one tick. Double clicks collide with the partial unique index
+ * `job_runs_job_queued_uniq(job) WHERE status='queued'` - that 23505 is caught and the active row is
+ * reused and reported as `deduplicated`. The index only covers `queued` rows, so a click while the job is
+ * RUNNING legitimately queues ONE follow-up run (single-flight still applies per execution); the re-select
+ * also covers a blocker that just became `running`. The watermark is never touched here.
+ * Callers using the user layer resolve and pass the definition (`resolveJobDefinition`); without one the
+ * registry is consulted, keeping the contract for builtin-only callers.
+ * Generic over the schema on purpose: the admin surface's `drizzle(client, { schema })` handle is not
+ * assignable to the schema-less type the drain uses (the `fullSchema` property makes the generic
  * invariant), so the schema flows in as a type parameter, not a call-site cast.
  */
 export async function enqueueJob<TSchema extends Record<string, unknown>>(

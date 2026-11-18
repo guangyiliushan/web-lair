@@ -1,22 +1,17 @@
 <script lang="ts">
 	/**
-	 * Embed card mounted over the placeholder anchors produced by remark-image-embed.
-	 * The static baseline renders from the URL itself — no data fetch, no third-party
-	 * script, no request until a facade click; facades (youtube, bilibili, tweet) mount
-	 * a sandboxed iframe only after that click, and every other provider stays a
-	 * readable link card.
-	 *
-	 * Progressive enrichment: the four core GitHub cards (gh-repo / gh-commit /
-	 * gh-pr / gh-issue) fetch metadata from our own cached, rate-limit-safe server
-	 * proxy (/api/embed-meta) after mount and upgrade to the rich layout below; any
-	 * failure keeps the static form, and every other provider stays zero-request.
-	 *
-	 * The tweet facade loads platform.twitter.com/embed/Tweet.html directly — the same
-	 * document widgets.js renders into, without injecting Twitter's script into this
-	 * page (the iframe stays sandboxed, dnt=true).
-	 * Its frame is fixed-height because without widgets.js there is no resize
-	 * handshake: short tweets leave some empty space, the accepted trade for keeping
-	 * the no-third-party-script contract.
+	 * Embed card mounted over the remark-image-embed placeholder anchors: the static
+	 * baseline renders from the URL alone (no fetch, no third-party script) until a
+	 * facade click; facades (youtube, bilibili, tweet) mount a sandboxed iframe then,
+	 * and every other provider stays a readable link card.
+	 * Progressive enrichment: the four GitHub cards (gh-repo / gh-commit / gh-pr /
+	 * gh-issue) fetch metadata after mount from our cached, rate-limit-safe proxy
+	 * (/api/embed-meta) and upgrade to the rich layout; failure keeps the static form.
+	 * The tweet facade loads platform.twitter.com/embed/Tweet.html directly — the
+	 * document widgets.js renders into — without injecting Twitter's script into this
+	 * page (sandboxed iframe, dnt=true). Its frame is fixed-height: no widgets.js
+	 * means no resize handshake, so short tweets leave some empty space — the
+	 * accepted trade for the no-third-party-script contract.
 	 */
 	import {
 		canonicalHost,

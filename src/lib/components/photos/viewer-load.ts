@@ -1,15 +1,13 @@
 import type { PhotoTile } from './photo-tile';
 
-/**
- * Progressive full-image loading policy and the pure
- * helpers the viewer shares with its tests. Client-safe (no `$lib/server`).
- *
- * Decision inputs: the source byte size from the registry row (already in
- * the public detail payload) and the Network Information API surface
- * (`navigator.connection`). The latter is a progressive enhancement — MDN
- * marks it "limited availability" (Safari/Firefox never shipped it; caniuse
- * ~77%), so "no signal" always takes the threshold path.
- */
+// Progressive full-image loading policy and the pure
+// helpers the viewer shares with its tests. Client-safe (no `$lib/server`).
+//
+// Decision inputs: the source byte size from the registry row (already in
+// the public detail payload) and the Network Information API surface
+// (`navigator.connection`). The latter is a progressive enhancement — MDN
+// marks it "limited availability" (Safari/Firefox never shipped it; caniuse
+// ~77%), so "no signal" always takes the threshold path.
 
 /** The shape the viewer stage needs: a tile plus the registry byte size. */
 export interface ViewerImageSource extends PhotoTile {

@@ -6,20 +6,18 @@ import { notes, posts } from '../src/lib/server/db/content';
 import { slugTrackers } from '../src/lib/server/db/system';
 
 /**
- * Translation-slug convergence: a translation family shares ONE address -
- * the source decides it, translations inherit it. Rows written before that
- * rule carry their own slugs, so this walks every `translation_group` and
- * brings each member back to the source slug.
- *
+ * Translation-slug convergence: a translation family shares ONE address —
+ * the source decides it, translations inherit it. This walks every
+ * `translation_group` and converges rows written before that rule to the
+ * source slug.
  * Dry-run by default (prints the plan, writes nothing); `--apply` commits
  * each row in its own transaction and writes a `slug_trackers` row per
  * retired slug so old URLs still 301. Idempotent. Run:
  * `pnpm db:backfill-translation-slug [--apply]`.
- *
  * Safety rails: CONFLICT when another group already owns the target
- * `(lang, slug)`, ORPHAN when a group has no source row, NEEDS-SLUG when the
- * source still carries a `draft-` placeholder - all three are reported,
- * never written.
+ * `(lang, slug)`, ORPHAN when a group has no source row, NEEDS-SLUG when
+ * the source still carries a `draft-` placeholder — all three are
+ * reported, never written.
  */
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {

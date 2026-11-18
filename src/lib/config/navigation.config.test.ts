@@ -7,8 +7,8 @@ vi.mock('$lib/paraglide/messages', () => ({
 import { navigationConfig } from './navigation.config';
 
 /**
- * The retired 思考 slot in the top nav now carries
- * 微记, and the "more" menu hosts 摘录 / 思考 on the renamed routes; the
+ * The retired `思考` slot in the top nav now carries
+ * `微记`, and the "more" menu hosts `摘录` / `思考` on the renamed routes; the
  * mobile `children` array mirrors the mega items.
  */
 describe('micro-content navigation config', () => {

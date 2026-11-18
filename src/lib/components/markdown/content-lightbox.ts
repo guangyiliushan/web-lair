@@ -1,20 +1,14 @@
-/**
- * attachContentLightbox progressively enhances every rendered article image into a
- * button-role control: images inside links, embed-card internals and broken images
- * (`naturalWidth == 0`) are skipped, the rest get a localised aria-label and open the
- * shared overlay viewer on click / Enter / Space with a plain-image source whose
- * `@full` target derives from the displayed variant.
- * SSR and no-JS are untouched — the attributes only exist after the client enhancement
- * runs, and the pass walks the DOM the renderer produced instead of re-parsing the
- * source.
- *
- * Reason: a `display:contents` wrapper cannot receive focus (no box => not in the tab
- * order, `focus()` is a no-op), while an inline-box wrapper is focusable but perturbs
- * layout (preflight makes prose images `display:block`, so a block image inside an
- * inline wrapper collapses the line box).
- * Symptom: keyboard access and focus-return break, or the prose layout shifts.
- * No other formulation is both layout-neutral and focusable.
- */
+// attachContentLightbox progressively enhances every rendered article image into a
+// button-role control: images inside links, embed-card internals and broken images
+// (`naturalWidth == 0`) are skipped, the rest get a localised aria-label and open the
+// shared overlay viewer on click / Enter / Space with a plain-image source whose
+// `@full` target derives from the displayed variant.
+// SSR and no-JS are untouched — the attributes only exist after the client enhancement
+// runs, and the pass walks the DOM the renderer produced instead of re-parsing the
+// source.
+// The image itself carries the control: a `display:contents` wrapper cannot receive
+// focus and an inline wrapper collapses the block image's line box, so no wrapper is
+// both layout-neutral and focusable.
 import { m } from '$lib/paraglide/messages';
 import { plainImageItem, type PlainImageSource } from '$lib/components/photos/viewer-source';
 import { EMBED_MOUNT_CLASS } from '$lib/components/markdown/embed/mount-class';

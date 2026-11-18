@@ -6,13 +6,11 @@ import { files } from '../db/content/index.ts';
 import { fileReferences, type FileRefType } from '../db/system/index.ts';
 import { I_KEY_PATTERN } from '../../media/keys.ts';
 
-/**
- * Reference maintenance: the write side runs in the SAME transaction as the content write.
- * Passing `[]` clears the ENTIRE scope; a `drafts` delete MUST pair with a same-transaction call,
- * or its references become orphans that audit check (4) reports.
- * Concurrency: resolve takes `FOR KEY SHARE` and attach is unconditional; see
- * `file-references.test.ts › "adds a reference: KEY SHARE resolve + unconditional attach update"`.
- */
+// Reference maintenance: the write side runs in the SAME transaction as the content write.
+// Passing `[]` clears the ENTIRE scope; a `drafts` delete MUST pair with a same-transaction call,
+// or its references become orphans that audit check (4) reports.
+// Concurrency: resolve takes `FOR KEY SHARE` and attach is unconditional; see
+// `file-references.test.ts › "adds a reference: KEY SHARE resolve + unconditional attach update"`.
 
 /**
  * Transaction-or-db executor (same structural shape as post-drafts).

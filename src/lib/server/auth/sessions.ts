@@ -2,16 +2,14 @@ import { and, eq, ne, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { session as authSession } from '$lib/server/db/auth.schema';
 
-/**
- * Session revocation helpers.
- *
- * Email sign-in no longer prunes other sessions: admins get a real device list
- * on /admin/settings/account and revoke sessions explicitly. Pruning remains
- * where a credential change must invalidate other devices:
- *   - change password (`revokeOtherSessions: true` in better-auth)
- *   - 2FA enable/disable (the plugin rotates the current session)
- *   - backup-code regeneration (password-gated; keep the request token)
- */
+// Session revocation helpers.
+//
+// Email sign-in no longer prunes other sessions: admins get a real device list
+// on /admin/settings/account and revoke sessions explicitly. Pruning remains
+// where a credential change must invalidate other devices:
+//   - change password (`revokeOtherSessions: true` in better-auth)
+//   - 2FA enable/disable (the plugin rotates the current session)
+//   - backup-code regeneration (password-gated; keep the request token)
 
 /** Deletes every session of `userId` except the one carrying `keepToken`. */
 export async function pruneOtherSessions(userId: string, keepToken: string) {

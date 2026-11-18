@@ -19,17 +19,15 @@ import {
 import { normalizeLinkUrl } from './normalize';
 import { PrecheckError, executePrecheck, type PrecheckDeps } from './precheck';
 
-/**
- * Admin surface for the links line (L3): the read side that feeds
- * the tabs/counts/drawer and the write side for the review matrix. The only
- * automatic transitions live in `deriveRowUpdate` (checker); manual ones are
- * declared here as `MANUAL_TRANSITIONS` so a route can never invent an edge.
- *
- * Error model: every user-fixable failure is a `LinkAdminError` code; the
- * route maps codes to Paraglide keys. Postgres constraint violations are
- * translated, never leaked (CHECK 3/5 and the two unique indexes are the
- * authority - the service only produces messages).
- */
+// Admin surface for the links line (L3): the read side that feeds
+// the tabs/counts/drawer and the write side for the review matrix. The only
+// automatic transitions live in `deriveRowUpdate` (checker); manual ones are
+// declared here as `MANUAL_TRANSITIONS` so a route can never invent an edge.
+//
+// Error model: every user-fixable failure is a `LinkAdminError` code; the
+// route maps codes to Paraglide keys. Postgres constraint violations are
+// translated, never leaked (CHECK 3/5 and the two unique indexes are the
+// authority - the service only produces messages).
 
 /** One page of rows is enough at this scale; counts carry the total. */
 export const LIST_LIMIT = 200;

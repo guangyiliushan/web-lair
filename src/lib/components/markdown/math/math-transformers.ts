@@ -1,13 +1,11 @@
-/**
- * Math transformers for the editor (spec 2 #2): inline `$x$` / `\(x\)` and
- * the one-line block `$$x$$`.
- *
- * Opener/closer rules mirror remark-math-guard (render side): the opener may
- * not be preceded by a Unicode letter/digit/underscore or a backslash; the
- * closer may not be followed by a Unicode digit. Content padding is accepted
- * like micromark's math text and stored as written, so `$ x $` round-trips
- * byte-stable; a literal `$` inside the content refuses conversion.
- */
+// Math transformers for the editor (spec 2 #2): inline `$x$` / `\(x\)` and
+// the one-line block `$$x$$`.
+//
+// Opener/closer rules mirror remark-math-guard (render side): the opener may
+// not be preceded by a Unicode letter/digit/underscore or a backslash; the
+// closer may not be followed by a Unicode digit. Content padding is accepted
+// like micromark's math text and stored as written, so `$ x $` round-trips
+// byte-stable; a literal `$` inside the content refuses conversion.
 import { $createParagraphNode } from 'lexical';
 import type { ElementTransformer, TextMatchTransformer } from '@lexical/markdown';
 import { InlineMathNode, $createInlineMathNode, $isInlineMathNode } from './inline-math-node';

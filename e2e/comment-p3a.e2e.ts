@@ -3,19 +3,18 @@ import { zhCnLocale } from './locale-fixture';
 import { approveQueueRow, bootstrapReader, psql, valkeyAlive, valkeyDel } from './support';
 
 /**
- * Comment P3a acceptance: guest guidance, submit -> pending,
- * approved-only reading surface, two-level render, pin/owner badges, owner
- * auto-approve, the throttle window, the queue's post/note target display,
- * the no-JS submit path and keyboard reachability.
- *
+ * Comment P3a acceptance: guest guidance, submit -> pending, approved-only
+ * reading surface, two-level render, pin/owner badges, owner auto-approve,
+ * the throttle window, the queue's post/note target display, the no-JS
+ * submit path and keyboard reachability.
  * Runs against the production preview, live database and Valkey limiter;
- * fixtures are namespaced `e2e-cmt` and removed in teardown. Preconditions:
- * `web-lair-db-1` and `web-lair-valkey-1` (throttle case, skipped
- * otherwise) up; port 4173 free - one preview server per run.
- *
+ * fixtures are namespaced `e2e-cmt` and removed in teardown.
+ * Preconditions: `web-lair-db-1` and `web-lair-valkey-1` (throttle case,
+ * skipped otherwise) up; port 4173 free - one preview server per run.
  * Serial chain (reader -> owner approve -> ...): single tests run out of
- * order miss the earlier steps' data. Auth fixtures are memoised per account
- * so the shared better-auth path bucket (see support.ts) stays quiet.
+ * order miss the earlier steps' data. Auth fixtures are memoised per
+ * account so the shared better-auth path bucket (see support.ts) stays
+ * quiet.
  */
 const CATEGORY = '00000000-0000-7000-8000-0000000000c1';
 const POST = '00000000-0000-7000-8000-0000000000c2';

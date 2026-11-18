@@ -32,19 +32,18 @@ export interface CommentPoint {
 }
 
 /**
- * Admin dashboard load: admin-guarded; the quick-action counters and the data-statistics
- * block read real rows, while the realtime cards carry SSR initial values from the presence
- * service (site window / today's unique tabs / daily peak) and the page upgrades them over
- * the admin SSE stream. When presence is disabled or the cache is unavailable the values
- * stay null and the cards render "—".
- * Data-statistics scope: characters count every publicly visible body — posts + notes
- * (visible), pages (visible, every locale), quotes, thoughts and moments; drafts, trash,
- * private and future-scheduled rows are excluded.
- * Reads and likes cover posts + notes only, the tables with read_count / like_count — no
- * write path increments them today, so both cards read 0 until that instrumentation lands.
- * Friends counts approved links and friend requests pending ones; API calls, IP visits and
- * site likes have no source in this app and stay off the dashboard rather than being
- * fabricated.
+ * Admin dashboard load: admin-guarded; the quick-action counters and the
+ * data-statistics block read real rows, while the realtime cards carry SSR
+ * initial values from the presence service (site window / today's unique
+ * tabs / daily peak) and the page upgrades them over the admin SSE stream.
+ * Presence disabled or cache unavailable -> values stay null, cards render "—".
+ * Data-statistics scope: characters count every publicly visible body — posts
+ * + notes (visible), pages (visible, every locale), quotes, thoughts and
+ * moments; drafts, trash, private and future-scheduled rows are excluded.
+ * Reads and likes cover posts + notes only — no write path increments them
+ * today, so both cards read 0 until that instrumentation lands. Friends
+ * counts approved links, friend requests pending ones; API calls, IP visits
+ * and site likes have no source in this app and stay off the dashboard.
  */
 export const load: PageServerLoad = async ({ locals }) => {
 	await requireAdminRole();

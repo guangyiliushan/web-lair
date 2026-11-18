@@ -1,18 +1,15 @@
 /**
- * Webhook retry policy: classification follows the Standard Webhooks
- * delivery contract and the Stripe/GitHub behaviour — 2xx success; 3xx
- * permanent (a delivery must never follow a redirect); 408/429/5xx and
- * transport errors retryable; every other 4xx permanent; 410 Gone disables
- * the endpoint (the receiver said "stop sending").
- * Backoff is exponential with ±20% jitter so a receiver that comes back
- * after an outage does not get a synchronized retry stampede from every
- * endpoint at once. `Retry-After` (seconds or HTTP date) wins when it is
- * longer than the computed delay; it is clamped to the same cap.
- * The retry count is per DELIVERY ROW, and the row keeps its id — the
- * `webhook-id` header is therefore stable across retries and manual replays,
- * which is what lets receivers deduplicate.
- * Retry budget: up to three days of exponential backoff — fourteen attempts
- * with a 12-hour cap cover that window (1m · 2m · … · 12h ≈ 65h) without
+ * Webhook retry policy, per the Standard Webhooks delivery contract and
+ * Stripe/GitHub behaviour: 2xx success; 3xx permanent (a delivery never
+ * follows a redirect); 408/429/5xx and transport errors retryable; every
+ * other 4xx permanent; 410 Gone disables the endpoint. Backoff is
+ * exponential with ±20% jitter so receivers coming back from an outage do
+ * not get a synchronized stampede; `Retry-After` (seconds or HTTP date) wins
+ * when it is longer than the computed delay, clamped to the same cap. The
+ * count is per DELIVERY ROW and the row keeps its id, so `webhook-id` stays
+ * stable across retries and manual replays — what lets receivers
+ * deduplicate. Budget: up to three days of exponential backoff — fourteen
+ * attempts with a 12-hour cap cover it (1m · 2m · … · 12h ≈ 65h) without
  * keeping a poison row alive forever.
  */
 export const WEBHOOK_MAX_ATTEMPTS = 14;

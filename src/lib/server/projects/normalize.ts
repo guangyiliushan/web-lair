@@ -1,11 +1,9 @@
 import type { RepoIdentity } from './types.ts';
 
-/**
- * URL -> repository identity for the four synced platforms:
- * `.git` suffixes, trailing slashes, case, sub-paths and query strings all
- * resolve to the same identity; unknown domains resolve to null. Pure and
- * standalone - no fetch, no throw.
- */
+// URL -> repository identity for the four synced platforms:
+// `.git` suffixes, trailing slashes, case, sub-paths and query strings all
+// resolve to the same identity; unknown domains resolve to null. Pure and
+// standalone - no fetch, no throw.
 
 /** Path segments under known hosts that are site surfaces, not repositories. */
 const RESERVED_FIRST_SEGMENTS = new Set([

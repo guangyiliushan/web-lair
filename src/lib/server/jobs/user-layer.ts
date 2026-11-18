@@ -8,14 +8,12 @@ import { JOBS, builtinModuleFile } from './registry.ts';
 import type { JobDefinition } from './registry.ts';
 import type { JobRunFn, LoadedJob } from './types.ts';
 
-/**
- * User jobs layer: `$DATA_DIR/jobs` holds the
- * admin-writable job scripts; load order is user > builtin (systemd unit
- * search path precedent). The merged name set is `registry ∪ on-disk user
- * files`, so user-only jobs (no code constant) run, enqueue and
- * list like builtins. A forked builtin keeps its registry name - its
- * user-layer file is exactly `builtinModuleFile(name)` again.
- */
+// User jobs layer: `$DATA_DIR/jobs` holds the
+// admin-writable job scripts; load order is user > builtin (systemd unit
+// search path precedent). The merged name set is `registry ∪ on-disk user
+// files`, so user-only jobs (no code constant) run, enqueue and
+// list like builtins. A forked builtin keeps its registry name - its
+// user-layer file is exactly `builtinModuleFile(name)` again.
 
 /** Manual-run default timeout for user-only jobs (bounds tick stalls). */
 export const DEFAULT_USER_JOB_TIMEOUT_MS = 300_000;

@@ -8,7 +8,7 @@ import { activeStorage } from './lib/active-storage';
 /**
  * Publish a local PMTiles archive into the `maps/` prefix: the
  * serve route `/maps/<file>.pmtiles` reads exactly this key space and the
- * extract is built with the pinned go-pmtiles CLI (v1.31.2), never the
+ * extract is built with the go-pmtiles CLI, never the
  * rotating public builds. Usage: `pnpm maps:publish <local-file>
  * [<remote-name>]`.
  */

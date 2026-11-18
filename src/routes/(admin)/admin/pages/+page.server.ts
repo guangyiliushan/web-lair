@@ -95,7 +95,7 @@ function localizedFrom(form: FormData, prefix: string): Record<string, string> {
 
 export const actions: Actions = {
 	/**
-	 * 「新增」外链条目: direct insert, no draft - the row IS the content registry
+	 * 「新增」 external-link entries: direct insert, no draft - the row IS the content registry
 	 * entry (external_url + optionally a code-route registration on the site side).
 	 * The md type never reaches this action: it starts in the draft editor instead.
 	 */

@@ -26,14 +26,12 @@ export interface AiPricingEntry {
 /** Key format: `<provider name>/<model>`; written through the options UI. */
 export type AiPricing = Record<string, AiPricingEntry>;
 
-/**
- * Row model for the pricing editor.
- *
- * The stored option is keyed by `<provider>/<model>`; the UI edits one row per
- * key because that is the object an operator actually reasons about ("what does
- * this model cost me"). Everything here is pure so the form round-trip is
- * testable without a browser: `rowsFromPricing` -> inputs -> `parsePricingForm`.
- */
+// Row model for the pricing editor.
+//
+// The stored option is keyed by `<provider>/<model>`; the UI edits one row per
+// key because that is the object an operator actually reasons about ("what does
+// this model cost me"). Everything here is pure so the form round-trip is
+// testable without a browser: `rowsFromPricing` -> inputs -> `parsePricingForm`.
 
 /** The three prices a row can carry, in display order. */
 export const PRICE_FIELDS = ['inputPer1M', 'outputPer1M', 'per1MChars'] as const;

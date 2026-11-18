@@ -118,7 +118,8 @@
 
 	let { editor, class: className, codeMode = false, onToggleCodeMode }: Props = $props();
 
-	// ── Breakpoint thresholds based on the toolbar wrapper's actual width (ensures zero internal overflow) ──
+	// ── Breakpoint thresholds based on the toolbar wrapper's actual width (ensures zero internal
+	// overflow) ──
 	const BP_THRESHOLDS = { xl: 950, lg: 900, md: 650, sm: 420 } as const;
 
 	// SSR fallback: use the viewport width for the initial estimate to avoid hydration flicker
@@ -137,7 +138,8 @@
 		return () => ro.disconnect();
 	});
 
-	// wrapperWidth > 0 means the first real measurement is done; until then use the viewportWidth fallback
+	// wrapperWidth > 0 means the first real measurement is done; until then use the viewportWidth
+	// fallback
 	const effectiveWidth = $derived(wrapperWidth > 0 ? wrapperWidth : viewportWidth);
 
 	let bp: BpLevel = $derived.by(() => {
@@ -240,8 +242,10 @@
 
 	function handleInsertLink() {
 		if (!editor) return;
-		// The in-place editing overlay takes over (window.prompt is unavailable in embedded browsers/automation environments,
-		// and it interrupts the editing context); selection semantics are handled inside LinkHoverEditor.
+		// The in-place editing overlay takes over (window.prompt is unavailable in embedded
+		// browsers/automation environments,
+		// and it interrupts the editing context); selection semantics are handled inside
+		// LinkHoverEditor.
 		openLinkEditor();
 	}
 
@@ -327,7 +331,10 @@
 		label: string;
 		icon: typeof IconArticle;
 		action: () => void;
-		/** Lowest breakpoint at which the toolbar shows this item; enters the overflow collector when bp < minBp */
+		/**
+		 * Lowest breakpoint at which the toolbar shows this item; enters the overflow collector when
+		 * bp < minBp
+		 */
 		minBp: BpLevel;
 		disabled?: () => boolean;
 	}

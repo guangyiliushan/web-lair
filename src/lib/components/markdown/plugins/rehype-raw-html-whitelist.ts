@@ -6,17 +6,15 @@ import { visit, SKIP } from 'unist-util-visit';
  * Raw-HTML governance: two cooperating plugins around rehype-raw.
  * rehypeMarkPipelineNodes runs before rehype-raw and stamps every element with a runtime
  * provenance token — hast attributes survive rehype-raw's parse5 round-trip on the same
- * element, so after the reparse the token still identifies the elements this pipeline
- * produced.
+ * element, so the token still identifies pipeline output after the reparse.
  * rehypeRawHtmlWhitelist runs after rehype-raw and splits pipeline output from
  * author-written raw HTML: pipeline elements are kept (rehype-sanitize still runs last),
- * while raw elements get the closed set applied — elements outside it are unwrapped with
- * their text kept, script/style/iframe/template and img are removed with their content,
- * and attributes are reduced to the per-tag whitelist plus the global `id`.
- * Reason: the token is random per module load and never reaches the output (both passes
- * only read it; a final pass strips it and it is not in the sanitize schema). An
- * author-written `data-md-x` cannot match it — a constant marker can be forged
- * byte-for-byte, which is exactly why it is random.
+ * while raw elements get the closed set — elements outside it are unwrapped with their
+ * text kept, script/style/iframe/template and img are removed with their content, and
+ * attributes reduced to the per-tag whitelist plus the global `id`.
+ * The token is random per module load and never reaches the output (both passes only
+ * read it; a final pass strips it, absent from the sanitize schema), so an author-written
+ * `data-md-x` cannot match it — a constant marker could be forged byte-for-byte.
  */
 
 const PROVENANCE_KEY = 'dataMdX';

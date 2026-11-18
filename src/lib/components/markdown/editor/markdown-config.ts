@@ -70,7 +70,7 @@ export interface MarkdownEditorProps {
 	placeholder?: string;
 	theme?: 'default' | 'compact';
 	autofocus?: boolean;
-	showToolbar?: boolean; // 默认 true
+	showToolbar?: boolean; // defaults to true
 	class?: string;
 }
 
@@ -251,7 +251,8 @@ export function buildSanitizeSchema(): Schema {
 			// poster is an image context on video/audio: keep it http(s)-only too,
 			// otherwise `data:`/`javascript:` would flow back in after src was closed
 			poster: ['http', 'https'],
-			// 3.5: mention token schemes must be explicitly allowed, otherwise the sanitizer drops href="@gh:x"
+			// 3.5: mention token schemes must be explicitly allowed, otherwise the sanitizer drops
+			// href="@gh:x"
 			href: ['http', 'https', 'mailto', '@gh', '@tw', '@tg']
 		}
 	};
@@ -317,7 +318,6 @@ function getLightProcessor(): MarkdownProcessor {
  * Used by:
  * - MarkdownRenderer's client rendering mode (no html prop passed)
  *
- * @param markdown raw Markdown string
  * @returns sanitized, safe HTML string
  */
 export function renderMarkdownToHtmlSync(markdown: string): string {

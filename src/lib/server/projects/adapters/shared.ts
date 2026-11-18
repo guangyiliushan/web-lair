@@ -1,8 +1,6 @@
-/**
- * Small mapping helpers shared by the four adapters: raw API
- * payloads are untrusted - every field is narrowed here so a platform-side
- * shape change surfaces as a `parse` failure instead of silent nulls.
- */
+// Small mapping helpers shared by the four adapters: raw API
+// payloads are untrusted - every field is narrowed here so a platform-side
+// shape change surfaces as a `parse` failure instead of silent nulls.
 import { ProjectsFetchError } from '../fetch.ts';
 
 export function asRecord(value: unknown, what: string): Record<string, unknown> {

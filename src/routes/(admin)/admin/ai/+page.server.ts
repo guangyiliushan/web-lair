@@ -177,7 +177,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		headerTitle: m.admin_ai_title(),
 		headerActions: [
 			{
-				// The header action bar holds one-word verbs like 对话 / 设置; the page
+				// The header action bar holds one-word verbs like `对话` / `设置`; the page
 				// title keeps the longer "管理对话" it needs as a document title.
 				label: m.admin_ai_chat_action(),
 				iconName: 'brain',

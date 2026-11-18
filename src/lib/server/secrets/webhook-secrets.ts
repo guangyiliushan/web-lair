@@ -6,20 +6,18 @@ import { SecretError, isSecretError } from './errors.ts';
 import { loadKeyring, type SecretDb, type ResolveDeps } from './resolver.ts';
 import { maskWebhookSecret } from '../webhooks/secret.ts';
 
-/**
- * Webhook signing-secret resolver and write helpers.
- *
- * Read order: `webhook_secrets` -> legacy `webhooks.secret` -> missing. The
- * legacy column is only a migration/rollback bridge: an un-migrated endpoint
- * must keep verifying after the code deploy, and a rollback must be symmetric
- * until `scripts/migrate-webhook-secrets.ts --apply` has run.
- *
- * The delivery path needs the CURRENT secret and, inside a rotation grace
- * window, the PREVIOUS one so Standard Webhooks can carry two signatures.
- * Neither value ever reaches page data, logs or audit payloads.
- *
- * No `$lib`/`$env` imports (the drain loads this under plain Node).
- */
+// Webhook signing-secret resolver and write helpers.
+//
+// Read order: `webhook_secrets` -> legacy `webhooks.secret` -> missing. The
+// legacy column is only a migration/rollback bridge: an un-migrated endpoint
+// must keep verifying after the code deploy, and a rollback must be symmetric
+// until `scripts/migrate-webhook-secrets.ts --apply` has run.
+//
+// The delivery path needs the CURRENT secret and, inside a rotation grace
+// window, the PREVIOUS one so Standard Webhooks can carry two signatures.
+// Neither value ever reaches page data, logs or audit payloads.
+//
+// No `$lib`/`$env` imports (the drain loads this under plain Node).
 
 /** Grace window: covers every in-flight retry plus one release cycle. */
 export const WEBHOOK_SECRET_GRACE_MS = 24 * 60 * 60 * 1000;

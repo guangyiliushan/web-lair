@@ -38,7 +38,7 @@ vi.mock('$lib/server/authz', () => ({ requireAdminRole: service.requireAdminRole
 // The reference cleanup runs inside the delete transaction; its own teeth
 // live in file-references.test.ts - here we pin that a hard delete calls it.
 vi.mock('$lib/server/services/file-references', () => ({ syncFileReferences: syncCheck }));
-// The draft- prefix guard for「新增」外链 lives in the draft service;
+// The draft- prefix guard for the 「新增」 external-link flow lives in the draft service;
 // its own teeth live in page-drafts.test.ts.
 vi.mock('$lib/server/services/page-drafts', () => ({
 	isPagePlaceholderSlug: (slug: string) => slug.startsWith('draft-'),

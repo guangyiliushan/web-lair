@@ -61,12 +61,10 @@
 
 	const LIST_PATH = '/admin/files';
 
-	/**
-	 * Same column descriptor as every other admin list: head and cells share it.
-	 * Each of the five filters sits in the head cell of the column it drives —
-	 * the head is two rows here because five bare controls in one line is too
-	 * tight to read.
-	 */
+	// Same column descriptor as every other admin list: head and cells share it.
+	// Each of the five filters sits in the head cell of the column it drives —
+	// the head is two rows here because five bare controls in one line is too
+	// tight to read.
 	/** Query string for a filter change; `''` when it clears every filter. */
 	function querySearch(patch: Record<string, string | undefined>): string {
 		const params = new SvelteURLSearchParams();

@@ -1,26 +1,23 @@
 #!/usr/bin/env bash
-# Backup entry point: the data and config repositories stay separate, and the
-# nightly schedule lives in Backrest (RUNBOOK, "Backups (D-4)").
-# `backup.sh` = dump → data repository → config repository → retention → backup
-# ping, the manual/fallback path; `--dump-only` = dump and gates only, which is
-# what Backrest's CONDITION_SNAPSHOT_START hook runs before it snapshots
-# $BACKUP_DIR, so a dump that fails a gate cancels the operation.
-# Backup set (data repository), numbered as the step comments below: 1. pg_dump
-# -Fc (never file-copy a running PG dir), 2. $DATA_DIR, 3. RustFS volume.
-# Step 4, `.env`, is deliberately NOT in that set: it goes to a SECOND repository
-# with a DIFFERENT password, because it holds BETTER_AUTH_SECRET,
-# SUPPRESSION_HMAC_KEY and the DB password — a leaked data repository plus its
-# password must not decrypt the application secrets (pinned by
-# `src/lib/server/secrets/backup-split.test.ts › "backup repository split"`).
-# `deploy/backup.env` is backed up nowhere — it holds both repository passwords,
-# which live in the password manager with an offline copy. Both repositories are
-# offsite: a copy on the same disk is a snapshot, not a backup.
-# Env: every variable is documented in `deploy/backup.env.example` (systemd
-# EnvironmentFile or the backrest compose `env_file`).
+# Backup entry point: data and config repositories stay separate; the nightly
+# schedule lives in Backrest (RUNBOOK, "Backups (D-4)").
+# `backup.sh` = dump → data repo → config repo → retention → backup ping (the
+# manual/fallback path); `--dump-only` = dump and gates only, what Backrest's
+# CONDITION_SNAPSHOT_START hook runs before snapshotting $BACKUP_DIR (a dump
+# failing a gate cancels the operation).
+# Backup set (data repository): 1. pg_dump -Fc (never file-copy a running PG
+# dir), 2. $DATA_DIR, 3. RustFS volume. Step 4 `.env` is NOT in that set: it
+# goes to a SECOND repository with a DIFFERENT password (it holds
+# BETTER_AUTH_SECRET, SUPPRESSION_HMAC_KEY and the DB password — a leaked data
+# repository must not decrypt the app secrets; pinned by
+# `secrets/backup-split.test.ts › "backup repository split"`).
+# `deploy/backup.env` holds both repository passwords and is backed up nowhere
+# (password manager + offline copy); both repositories are offsite. Env vars:
+# see `deploy/backup.env.example`.
 # DB access (BACKUP_PG_MODE): `docker` (default) runs the client through
-# `compose-prod.sh exec -T db`; `local` runs it inside the backrest container,
-# which deliberately has no Docker socket — a container that can drive Docker can
-# delete the backups it is meant to protect.
+# `compose-prod.sh exec -T db`; `local` runs inside the backrest container,
+# which deliberately has no Docker socket (a container that can drive Docker
+# can delete the backups it protects).
 # Failures are loud: `set -e` aborts before the backup ping, so a missing ping
 # raises the alarm.
 set -euo pipefail

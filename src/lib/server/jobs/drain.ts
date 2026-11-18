@@ -28,17 +28,15 @@ import type { SecretDb } from '../secrets/resolver.ts';
 import type { JobResult, JobTrigger } from '../db/system/job-run.schema.ts';
 import type { JobContext, JobLogger, JobsDb, LoadedJob } from './types.ts';
 
-/**
- * Drain core: one tick runs FOUR segments in order - schedules
- * (`job_schedules`), queue (`job_runs`), deliveries (`webhook_deliveries`),
- * notifications (`notification_deliveries`) - each processing to empty and
- * each isolated, so a failing segment never blocks the segments after it
- * (see `drain.test.ts`, "segment isolation").
- *
- * All imports must stay Node-type-strippable (explicit `.ts` extensions, no
- * aliases, no SvelteKit virtual modules) because `jobs/drain.ts` runs under
- * plain `node`.
- */
+// Drain core: one tick runs FOUR segments in order - schedules
+// (`job_schedules`), queue (`job_runs`), deliveries (`webhook_deliveries`),
+// notifications (`notification_deliveries`) - each processing to empty and
+// each isolated, so a failing segment never blocks the segments after it
+// (see `drain.test.ts`, "segment isolation").
+//
+// All imports must stay Node-type-strippable (explicit `.ts` extensions, no
+// aliases, no SvelteKit virtual modules) because `jobs/drain.ts` runs under
+// plain `node`.
 
 /** Standard Webhooks recommends 15-30s; each delivery holds its row while sending. */
 const DELIVERY_TIMEOUT_MS = 15_000;
@@ -230,9 +228,7 @@ function tickDegraded(stats: DrainSummary): boolean {
 	);
 }
 
-// ---------------------------------------------------------------------------
 // Segment 1: schedules
-// ---------------------------------------------------------------------------
 
 async function runScheduleSegment(deps: ResolvedDeps, stats: DrainSummary): Promise<void> {
 	const schedules = await deps.db
@@ -348,9 +344,7 @@ async function runOneSchedule(
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Segment 2: queued runs
-// ---------------------------------------------------------------------------
 
 async function runQueueSegment(deps: ResolvedDeps, stats: DrainSummary): Promise<void> {
 	// Every round either claims rows (they leave `queued`) or adds them to
@@ -427,9 +421,7 @@ async function claimQueuedRun(deps: ResolvedDeps, runId: string, now: Date): Pro
 	});
 }
 
-// ---------------------------------------------------------------------------
 // Shared execution pipeline
-// ---------------------------------------------------------------------------
 
 /**
  * Shared execution shell for both entry paths (order contract):
@@ -650,9 +642,7 @@ function createLogger(log: (line: string) => void, job: string): JobLogger {
 	};
 }
 
-// ---------------------------------------------------------------------------
 // Segment 3: webhook deliveries
-// ---------------------------------------------------------------------------
 
 async function runDeliverySegment(deps: ResolvedDeps, stats: DrainSummary): Promise<void> {
 	// Bounded like the runs segment (QUEUE_BATCH) PLUS a wall-clock budget: a
@@ -971,9 +961,7 @@ async function deliverOne(deps: ResolvedDeps): Promise<DeliveryOutcome | null> {
 	});
 }
 
-// ---------------------------------------------------------------------------
 // Segment 4: notification deliveries
-// ---------------------------------------------------------------------------
 
 /**
  * Wall-clock budget for the notification segment. Same shape as the webhook
@@ -1015,9 +1003,7 @@ async function runNotificationSegment(deps: ResolvedDeps, stats: DrainSummary): 
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Error text hygiene
-// ---------------------------------------------------------------------------
 
 // sanitizeErrorText moved to ./error-text.ts (keeps the strip-only builtin
 // chain lean); re-exported for the existing drain consumers and tests.

@@ -1,18 +1,15 @@
-/**
- * attachMagnetLinks is the publish-side hover effect for inline links.
- * One delegated listener per container: mousemove sets `--mx`/`--my` (px offsets within
- * the hovered link) and stamps `data-magnet`; the stylesheet turns those into the
- * translate + spotlight + external-link arrow (the `Inline link magnet` block in
- * `src/routes/layout.css`).
- * The rAF gate coalesces mousemove bursts into one style write per frame, and custom
- * properties carry the pointer position from JS to CSS without inline transforms.
- * Purely progressive: without JS the links keep their plain underline, the effect never
- * touches layout (transform/background only), and prefers-reduced-motion disables the
- * motion in CSS.
- * Deliberately not attached inside the Lexical editor: editor-side text geometry must
- * stay stable (zero-offset rule) — link interactions there go through LinkHoverEditor
- * instead.
- */
+// attachMagnetLinks is the publish-side hover effect for inline links.
+// One delegated listener per container: mousemove sets `--mx`/`--my` (px
+// offsets within the hovered link) and stamps `data-magnet`; the
+// stylesheet turns those into translate + spotlight + external-arrow (the
+// `Inline link magnet` block in `src/routes/layout.css`). A rAF gate
+// coalesces mousemove bursts into one style write per frame; custom
+// properties carry the pointer position from JS to CSS. Purely
+// progressive: without JS the links keep their plain underline, the effect
+// never touches layout (transform/background only), and
+// prefers-reduced-motion disables the motion in CSS. Deliberately not
+// attached inside the Lexical editor: editor-side text geometry must stay
+// stable (zero-offset rule) — link interactions there use LinkHoverEditor.
 import { EMBED_MOUNT_CLASS } from '$lib/components/markdown/embed/mount-class';
 
 const MAGNET_SELECTOR = 'a[href^="http"]';

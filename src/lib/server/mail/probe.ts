@@ -1,17 +1,15 @@
-/**
- * Mail probe primitives: the SMTP handshake check and the
- * weekly real delivery, both runnable under plain Node (the drain's
- * `node jobs/drain.ts` process cannot load `$env/dynamic/private`).
- *
- * Same derivation as the web transport (`smtp.ts`) - a probe that passes must
- * mean the app's own send path would pass too. The 60s verify cache matches
- * the sign-up gate's window: within one tick and one sign-up burst the server
- * is asked once, not once per caller.
- *
- * Failure text is sanitized: nodemailer errors can embed the endpoint URL
- * (which may carry credentials in a DSN-shaped host), and this string reaches
- * the run ledger.
- */
+// Mail probe primitives: the SMTP handshake check and the
+// weekly real delivery, both runnable under plain Node (the drain's
+// `node jobs/drain.ts` process cannot load `$env/dynamic/private`).
+//
+// Same derivation as the web transport (`smtp.ts`) - a probe that passes must
+// mean the app's own send path would pass too. The 60s verify cache matches
+// the sign-up gate's window: within one tick and one sign-up burst the server
+// is asked once, not once per caller.
+//
+// Failure text is sanitized: nodemailer errors can embed the endpoint URL
+// (which may carry credentials in a DSN-shaped host), and this string reaches
+// the run ledger.
 import type { Transporter } from 'nodemailer';
 import { sanitizeErrorText } from '../jobs/error-text.ts';
 import {

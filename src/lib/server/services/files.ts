@@ -19,18 +19,16 @@ import {
 	type UploadKind
 } from '$lib/server/media/sniff';
 
-/**
- * Content assets service: the synchronous
- * upload pipeline (validate → sha256 → dedupe → media variants → PUT objects
- * → registry row, zero orphans), reference-guarded deletion, the admin list,
- * the three-check audit and the TTL purge. The status machine values
- * (`pending` → `attached` → `detached`) are respected here.
- *
- * The db handle and the storage port are injectable (defaults resolved
- * lazily). Besides testability this keeps the module importable from plain
- * tsx scripts — the app `db` reads `$env/dynamic/private`, which exists only
- * inside the SvelteKit runtime.
- */
+// Content assets service: the synchronous
+// upload pipeline (validate → sha256 → dedupe → media variants → PUT objects
+// → registry row, zero orphans), reference-guarded deletion, the admin list,
+// the three-check audit and the TTL purge. The status machine values
+// (`pending` → `attached` → `detached`) are respected here.
+//
+// The db handle and the storage port are injectable (defaults resolved
+// lazily). Besides testability this keeps the module importable from plain
+// tsx scripts — the app `db` reads `$env/dynamic/private`, which exists only
+// inside the SvelteKit runtime.
 
 /** Structural handle over the app db, mirroring the jobs-line pattern. */
 export type FilesDb = Pick<
@@ -387,9 +385,7 @@ export async function uploadFiles(
 	return results;
 }
 
-// ---------------------------------------------------------------------------
 // Registry queries (admin list / audit / purge)
-// ---------------------------------------------------------------------------
 
 export const FILE_LIST_LIMIT = 200;
 
@@ -850,9 +846,7 @@ export async function purgeMedia(
 	};
 }
 
-// ---------------------------------------------------------------------------
 // Three-check audit (orphan / broken link / missing object)
-// ---------------------------------------------------------------------------
 
 export interface BrokenLink {
 	refType: string;

@@ -1,13 +1,11 @@
 /**
  * Keyring coverage check: a key version a row still references must exist in
- * `SECRETS_KEYS`, or that row can never be read again. Run it before retiring
- * an old version (phase 3) and before restoring a dump.
- *
+ * `SECRETS_KEYS`, or that row can never be read again. Run before retiring an
+ * old version (phase 3) and before restoring a dump.
  * `--retire <n>` answers the phase-3 question directly: every live row whose
- * envelope says v<n> is listed and the exit code is 1, so the gate fails while
- * the version is still in `SECRETS_KEYS`. Every live row is also decrypted
- * with its real AAD, so a same-version/different-key restore fails here too.
- *
+ * envelope says v<n> is listed and the exit code is 1 while the version is
+ * still in `SECRETS_KEYS`. Every live row is also decrypted with its real
+ * AAD, so a same-version/different-key restore fails here too.
  * Usage: `pnpm secrets:verify-keys [--retire 1]`.
  * Exit codes: 0 every referenced version present and readable, 1 missing /
  * unreadable / still referenced by --retire, 2 configuration error.

@@ -8,12 +8,10 @@ import { NOTE_PAGE_SIZE } from '$lib/utils/note-meta';
 import { visibleNoteCondition } from './note-visibility';
 import { resolveTaxonomyName } from './taxonomy';
 
-/**
- * Public notes read side. Notes are diary entries: list cards derive
- * their summary and cover from the body, gated rows only ever expose the
- * title + lock, and the belongs-to date is derived per note (`tz`, falling
- * back to `site.timezone`).
- */
+// Public notes read side. Notes are diary entries: list cards derive
+// their summary and cover from the body, gated rows only ever expose the
+// title + lock, and the belongs-to date is derived per note (`tz`, falling
+// back to `site.timezone`).
 
 /** Belongs-to date: `(published_at at time zone coalesce(tz, $site))::date`. */
 function belongsToExpr(siteTz: string): SQL<unknown> {

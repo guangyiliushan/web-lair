@@ -1,13 +1,13 @@
 import { sql } from 'drizzle-orm';
 import { check, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
+/** Tracker type whitelist (storage line writes `photo`). */
+export const SLUG_TRACKER_TYPES = ['post', 'tag', 'note', 'photo'] as const;
+
 /**
  * Slug history for 301 fallbacks: resolves an old (type, lang, slug) to
  * its current target.
  */
-/** Tracker type whitelist (storage line writes `photo`). */
-export const SLUG_TRACKER_TYPES = ['post', 'tag', 'note', 'photo'] as const;
-
 export const slugTrackers = pgTable(
 	'slug_trackers',
 	{

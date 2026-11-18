@@ -1,23 +1,16 @@
 /**
- * robots.txt for the links checker. References: RFC 9309 (§2.2.1 user-agent
- * matching, §2.2.2 allow/disallow + percent-encoding, §2.2.3 special characters
- * `#`/`$`/`*`, §2.3.1.x access results, §2.4 caching, §2.5 size) and Google's
- * interpretation page.
- *
- * Status semantics: 2xx parses; 4xx (except 429) = "no restrictions"; 429/5xx
- * skips the site this round (kind `robots`, not counted). RFC 9309 §2.3.1.4's
- * "MUST assume complete disallow" for "server or network errors" is
- * deliberately NOT applied to transport failures: they fall through to the
- * page fetch, so a network-dead site still counts as the hard failure it is
- * and no extra requests are made. Redirect overflow takes the
- * §2.3.1.2/§2.3.1.3 "unavailable" -> no restrictions path.
- *
- * Path evaluation uses a LINEAR wildcard matcher (segment scanning, no regex):
- * a hostile pattern like `*a*a*a*a*a*b` must not trigger catastrophic
- * backtracking in the drain's single thread (CWE-1333). Rule and URI are
- * canonicalized symmetrically (canonicalPath(): raw UTF-8 -> %XX, escape hex
- * upper-cased, percent-encoded unreserved decoded), per RFC §2.2.2 and
- * Google's canonicalization note.
+ * robots.txt for the links checker, per RFC 9309 (§2.2 matcher/path rules,
+ * §2.3.1 access results, §2.4 caching) and Google's interpretation.
+ * Status: 2xx parses; 4xx (except 429) = no restrictions; 429/5xx skip the
+ * site this round (kind `robots`, not counted). Transport failures do NOT take
+ * §2.3.1.4 "complete disallow": they fall through to the page fetch, so a
+ * network-dead site still counts as the hard failure and no extra request is
+ * made; redirect overflow takes the §2.3.1.2/§2.3.1.3 unavailable -> no restrictions path.
+ * Path evaluation is a LINEAR wildcard matcher (segment scan, no regex): a
+ * hostile pattern like `*a*a*a*a*a*b` must not catastrophically backtrack in
+ * the drain's single thread (CWE-1333). Rule and URI canonicalize
+ * symmetrically (raw UTF-8 -> %XX, escape hex upper-cased, percent-encoded
+ * unreserved decoded), per RFC §2.2.2.
  */
 
 export class RobotsDisallowedError extends Error {

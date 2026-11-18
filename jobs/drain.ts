@@ -1,23 +1,17 @@
-// jobs/drain.ts
-//
-// One-shot drain entry (RUNBOOK "6. Background timers (drain)"): the platform
-// timer runs `node --env-file=.env jobs/drain.ts` once per minute. One tick =
-// schedule segment -> queued segment -> webhook delivery segment; the process
-// exits after the tick, so every tick picks up the latest code with no reload
-// machinery.
-//
-// Environment:
-//   DATABASE_URL        required - this entry builds its own postgres.js
-//                       client; the app's `$lib/server/db` reads
-//                       `$env/dynamic/private` and cannot load under plain Node.
-//   DATA_DIR            optional - jobs data dir (default <repo>/data).
-//   JOBS_HEARTBEAT_URL  optional - one GET after each tick (Kuma push shape).
-//
-// Exit codes: 0 = tick completed (job failures land in `job_runs`, not the
-// exit code); 1 = the tick itself broke (segment errors, database
-// unreachable); 2 = configuration error; 3 = a job timeout aborts the tick -
-// the process exits HARD so the stuck job dies with it (the platform must
-// alert on this too).
+// jobs/drain.ts — one-shot drain entry (RUNBOOK "6. Background timers
+// (drain)"): the platform timer runs `node --env-file=.env jobs/drain.ts`
+// once per minute. A tick = schedule -> queued -> webhook delivery segments,
+// then the process exits, so every tick picks up the latest code with no
+// reload machinery.
+// Environment: DATABASE_URL required (the app's `$lib/server/db` reads
+// `$env/dynamic/private` and cannot load under plain Node, so this entry
+// builds its own postgres.js client); DATA_DIR optional (jobs data dir,
+// default <repo>/data); JOBS_HEARTBEAT_URL optional (one GET after each tick,
+// Kuma push shape).
+// Exit codes: 0 = tick completed (job failures land in `job_runs`); 1 = the
+// tick itself broke (segment errors, database unreachable); 2 = configuration
+// error; 3 = a job timeout aborts the tick — the process exits HARD so the
+// stuck job dies with it (the platform must alert on this too).
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';

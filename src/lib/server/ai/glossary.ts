@@ -2,15 +2,13 @@ import { and, eq } from 'drizzle-orm';
 import { glossaryTerms } from '../db/content/glossary-term.schema.ts';
 import type { AiDb } from './types.ts';
 
-/**
- * Glossary wiring for the translation prompt: only terms that occur in the
- * source are injected, under a hard budget (`MAX_TERMS`, `MAX_CHARS`) that
- * drops overflow from the tail of the ranking — a term is never half-injected.
- * Cause: a 200-row glossary for a 300-word note would spend more tokens on
- * the glossary than on the text and bury the instruction.
- * Failure mode: the model receives a partial translation for a term it was
- * told to use. Hits rank by occurrence count, then term length.
- */
+// Glossary wiring for the translation prompt: only terms that occur in the
+// source are injected, under a hard budget (`MAX_TERMS`, `MAX_CHARS`) that
+// drops overflow from the tail of the ranking — a term is never half-injected.
+// Cause: a 200-row glossary for a 300-word note would spend more tokens on
+// the glossary than on the text and bury the instruction.
+// Failure mode: the model receives a partial translation for a term it was
+// told to use. Hits rank by occurrence count, then term length.
 
 /** One glossary row as far as translation is concerned. */
 export interface GlossaryEntry {

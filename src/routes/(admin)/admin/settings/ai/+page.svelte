@@ -215,8 +215,8 @@
 	 * One mode select per slot, plus a model select that only matters when a
 	 * gateway is pinned:
 	 *
-	 *  - 关闭          -> nothing stored, the slot is off;
-	 *  - 使用默认聚合  -> stored as `{}`: the slot runs the pool from the top;
+	 *  - `关闭`          -> nothing stored, the slot is off;
+	 *  - `使用默认聚合`  -> stored as `{}`: the slot runs the pool from the top;
 	 *  - <provider>    -> stored as `{ provider, model }`: that exact pair runs
 	 *                     first, and the pool is still the fallback.
 	 *

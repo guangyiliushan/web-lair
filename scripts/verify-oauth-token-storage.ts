@@ -1,21 +1,13 @@
 /**
- * Deployment gate for OAuth token encryption: reports the encrypted/plain
- * split per provider and never prints or hashes a token.
- *
- * `account.encryptOAuthTokens` stores tokens as `$ba$<key-version>$<hex>`
- * envelopes (XChaCha20-Poly1305); with no keyring they are bare hex. Rows
- * written before the switch stay plaintext and keep working, so a rollout
- * needs no backfill - they are rewritten on the next sign-in/refresh.
- *
- * "Encrypted" mirrors better-auth's own test: a `$ba$<v>$...` envelope or a
- * bare even-length hex string, so a provider whose plaintext is itself
- * hex-shaped would read as encrypted - today only GitHub (`gho_`/`ghu_`) is
- * configured, so the check is accurate for the deployed providers.
- *
- * Exit codes: 0 all stored OAuth tokens encrypted (or none exist); 1
- * plaintext rows remain (expected right after the switch) or the config is
- * unusable.
- *
+ * Deployment gate for OAuth token encryption: reports the encrypted/plain split per
+ * provider; never prints or hashes a token. `account.encryptOAuthTokens` stores
+ * `$ba$<key-version>$<hex>` (XChaCha20-Poly1305); with no keyring tokens are bare hex.
+ * Pre-switch plaintext rows keep working and are rewritten on next sign-in/refresh.
+ * "Encrypted" mirrors better-auth's own test: a `$ba$<v>$...` envelope or a bare
+ * even-length hex string, so hex-shaped plaintext counts as encrypted; only
+ * GitHub (`gho_`/`ghu_`) is configured today, so the check is accurate.
+ * Exit codes: 0 = every stored OAuth token encrypted (or none exist); 1 =
+ * plaintext rows remain (expected right after the switch) or config unusable.
  * Run from the app image (deployed DATABASE_URL and keyring):
  *   deploy/compose-prod.sh run --rm app node scripts/verify-oauth-token-storage.ts
  * Details: `deploy/RUNBOOK.md` -> "Auth keyring and OAuth token encryption".

@@ -1,17 +1,15 @@
-/**
- * DOM half of the segment anchor.
- *
- * The server derives its block directory from the rendered hast tree; the
- * reader selects text in the DOM. Both sides must agree on what a block is and
- * what its normalized text is, so this walker feeds its nodes through the same
- * `foldSegments` / `isAnchorSkipped` / `isAnchorBlock` rules — the only
- * difference is the node handle (`{node, parent}` here, `{node, parent}` when
- * the server maps hast text nodes).
- *
- * Selection mapping uses Range.comparePoint against a collapsed probe range at
- * each endpoint, which keeps element-container endpoints (triple click, whole
- * paragraph) working without a second, subtly different offset model.
- */
+// DOM half of the segment anchor.
+//
+// The server derives its block directory from the rendered hast tree; the
+// reader selects text in the DOM. Both sides must agree on what a block is and
+// what its normalized text is, so this walker feeds its nodes through the same
+// `foldSegments` / `isAnchorSkipped` / `isAnchorBlock` rules — the only
+// difference is the node handle (`{node, parent}` here, `{node, parent}` when
+// the server maps hast text nodes).
+//
+// Selection mapping uses Range.comparePoint against a collapsed probe range at
+// each endpoint, which keeps element-container endpoints (triple click, whole
+// paragraph) working without a second, subtly different offset model.
 import {
 	ANCHOR_MAX_LENGTH,
 	ANCHOR_MIN_LENGTH,

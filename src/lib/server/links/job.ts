@@ -15,17 +15,15 @@ import { normalizeHost, redactCredentials } from './normalize.ts';
 import { jobLockKey } from '../jobs/registry.ts';
 import { sanitizeErrorText } from '../jobs/error-text.ts';
 
-/**
- * The links check job core: due selection with the derived "self-healing"
- * cadence (outdated runs at 3x the cadence), an 8-minute soft budget per run
- * with batched passes, global concurrency from `friends.checks` with
- * per-host serialisation, one evidence-ring + streak UPDATE per site, and a
- * structured log line per site. Shared by the `links.check` builtin (drain)
- * and `scripts/jobs/check-links.ts` (manual / dry-run).
- *
- * The single-flight lock lives with the callers (`web_lair.job.links.check`,
- * same key the drain job lock derives); this module assumes it is held.
- */
+// The links check job core: due selection with the derived "self-healing"
+// cadence (outdated runs at 3x the cadence), an 8-minute soft budget per run
+// with batched passes, global concurrency from `friends.checks` with
+// per-host serialisation, one evidence-ring + streak UPDATE per site, and a
+// structured log line per site. Shared by the `links.check` builtin (drain)
+// and `scripts/jobs/check-links.ts` (manual / dry-run).
+//
+// The single-flight lock lives with the callers (`web_lair.job.links.check`,
+// same key the drain job lock derives); this module assumes it is held.
 
 /**
  * Session advisory-lock key shared by drain, CLI and any manual trigger -

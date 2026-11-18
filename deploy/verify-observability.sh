@@ -1,26 +1,18 @@
 #!/usr/bin/env bash
-# Verify Sentinel traffic analytics end to end.
-#
-# Four probes, each with its own verdict:
-#   1. running   - compose service is healthy and /api/health answers "ok"
-#   2. parsing   - a request to the site appears in Sentinel's top paths
-#   3. retention - analytics DB exists, tier retention is pinned, 30d series
-#                  returns the expected 30 buckets
-#   4. reconcile - one closed minute: Sentinel's request count vs Caddy access
-#                  log line count, within OBS_RECON_DEVIATION_PCT
-#
-# The script reads SENTINEL_TOKEN from the environment or APP_DIR/.env and
-# never prints it. It needs curl + docker compose on the host; it does not
-# publish Sentinel's port and reaches it through `compose exec` instead.
-#
+# Verify Sentinel traffic analytics end to end. Four probes, each with its own
+# verdict: 1. running - compose service healthy and /api/health answers "ok";
+# 2. parsing - a site request appears in Sentinel's top paths; 3. retention -
+# analytics DB exists, tier retention pinned, 30d series returns 30 buckets;
+# 4. reconcile - one closed minute: Sentinel's request count vs Caddy access
+# log line count, within OBS_RECON_DEVIATION_PCT.
+# Reads SENTINEL_TOKEN from the environment or APP_DIR/.env and never prints
+# it; needs curl + docker compose, reaches Sentinel through `compose exec`
+# (the port is never published).
 # usage:
 #   bash deploy/verify-observability.sh [--receipt <path>]
 #   SITE_URL=https://example.com bash deploy/verify-observability.sh
-#
-# `bash` (not `./`) on purpose: this checkout has core.filemode=false, so the
-# script's 100755 mode does not survive a commit unless the index is updated
-# explicitly.
-#
+# `bash` (not `./`) on purpose: core.filemode=false means the 100755 mode does
+# not survive a commit unless the index is updated explicitly.
 # exit: 0 = all four probes pass, 1 = at least one failed, 2 = usage/setup.
 set -uo pipefail
 

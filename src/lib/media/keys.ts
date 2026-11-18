@@ -1,11 +1,9 @@
-/**
- * Content-addressed object keys — the single source for
- * both BUILDERS (upload pipeline, scripts) and the PARSER grammar (/i proxy,
- * admin URL rendering). The extension is part of the key identity and the
- * variant suffix is appended to the canonical key; both live here so a
- * convention change lands everywhere at once (five hand-written copies had
- * already drifted before).
- */
+// Content-addressed object keys — the single source for
+// both BUILDERS (upload pipeline, scripts) and the PARSER grammar (/i proxy,
+// admin URL rendering). The extension is part of the key identity and the
+// variant suffix is appended to the canonical key; both live here so a
+// convention change lands everywhere at once (five hand-written copies had
+// already drifted before).
 
 /** Derived variant suffixes. */
 export const VARIANT_NAMES = ['thumb', 'grid', 'preview', 'full'] as const;

@@ -1,8 +1,6 @@
-/**
- * Shared contract for the admin editor image uploads: the endpoint path, the picker
- * payload shape and the one-file upload call are consumed by the insert dialog, the
- * paste/drop plugin and the route tests - single source instead of mirrored copies.
- */
+// Shared contract for the admin editor image uploads: the endpoint path, the picker
+// payload shape and the one-file upload call are consumed by the insert dialog, the
+// paste/drop plugin and the route tests - single source instead of mirrored copies.
 
 /** Same-origin admin endpoint (single-file multipart POST / picker GET). */
 export const EDITOR_UPLOADS_ENDPOINT = '/admin/editor-uploads';

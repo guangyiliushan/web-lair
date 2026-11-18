@@ -5,14 +5,6 @@ import { decodeHtmlBody, findBacklink } from './parse-backlink.ts';
 import { isSameSite, normalizeHost, redactCredentials, urlKey } from './normalize.ts';
 import { RobotsDisallowedError, RobotsUnreachableError, type RobotsOracle } from './robots.ts';
 
-/**
- * One-site check orchestration: reachability +/- backlink axes, both in the
- * same round; robots gated per request URL; in-run retry (x1, 30 s gap) for
- * timeout/5xx; the declared backlink page falls back to the homepage when it
- * fails hard; inconclusive scans never touch streaks. All verdicts come back
- * as ring entries + axis flags; the job maps them to rows and counters.
- */
-
 /** Body cap for scanned pages: 256 KiB. */
 export const SCAN_BODY_BYTES = 256 * 1024;
 
@@ -60,6 +52,13 @@ const RETRY_GAP_MS = 30_000;
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/**
+ * One-site check orchestration: reachability +/- backlink axes, both in the
+ * same round; robots gated per request URL; in-run retry (x1, 30 s gap) for
+ * timeout/5xx; the declared backlink page falls back to the homepage when it
+ * fails hard; inconclusive scans never touch streaks. All verdicts come back
+ * as ring entries + axis flags; the job maps them to rows and counters.
+ */
 export async function checkSite(
 	row: SiteCheckRow,
 	config: SiteCheckConfig,

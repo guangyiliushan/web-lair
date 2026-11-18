@@ -4,18 +4,16 @@ import { psql } from './support';
 
 /**
  * Comment P3b — B1 acceptance (segment anchors on the public read path).
- *
- * Anchors are inserted straight into the live database: this spec pins the
- * resolution + marking contract without the selection UI (B2 covers that):
- *   1. a resolved anchor renders `span.wl-cm` with `id="c-<comment>"` on the
- *      server (works without JavaScript),
+ * Anchors are inserted straight into the live database: this spec pins the resolution +
+ * marking contract without the selection UI (B2 covers that):
+ *   1. a resolved anchor renders `span.wl-cm` with `id="c-<comment>"` on the server
+ *      (works without JavaScript),
  *   2. the list shows the quote chip and a "jump to source" link,
- *   3. an anchor whose quote no longer exists lands in the folded
- *      "original text changed" area with its own count, never the main list,
+ *   3. an anchor whose quote no longer exists lands in the folded "original text changed"
+ *      area with its own count, never the main list,
  *   4. the moderation queue shows the quote plus its context window.
- *
- * Fixture namespace `e2e-cmtb`; the body is deliberately multi-block
- * (heading, paragraphs, inline formats, math, duplicate paragraph).
+ * Fixture namespace `e2e-cmtb`; the body is deliberately multi-block (heading, paragraphs,
+ * inline formats, math, duplicate paragraph).
  */
 const CATEGORY = '00000000-0000-7000-8000-0000000000b1';
 const POST = '00000000-0000-7000-8000-0000000000b2';

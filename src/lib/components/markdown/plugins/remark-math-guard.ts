@@ -2,6 +2,17 @@ import type { Plugin } from 'unified';
 import type { Root, Text } from 'mdast';
 import { visit } from 'unist-util-visit';
 
+/** shape of mdast-util-math's inlineMath node (the mdast package does not export this type) */
+interface InlineMathLike {
+	position?: {
+		start?: { offset?: number };
+		end?: { offset?: number };
+	};
+}
+
+const LETTER_DIGIT_UNDERSCORE = /[\p{L}\p{N}_]/u;
+const DIGIT = /[\p{N}]/u;
+
 /**
  * remarkMathGuard restores the word-boundary rules micromark-extension-math does not
  * provide: it puts no constraint on the single `$` delimiter, so `Price $5, cost $3` would
@@ -14,17 +25,6 @@ import { visit } from 'unist-util-visit';
  * Block `$$` formulas are bounded by line boundaries — the guard holds trivially and is not
  * applied.
  */
-/** shape of mdast-util-math's inlineMath node (the mdast package does not export this type) */
-interface InlineMathLike {
-	position?: {
-		start?: { offset?: number };
-		end?: { offset?: number };
-	};
-}
-
-const LETTER_DIGIT_UNDERSCORE = /[\p{L}\p{N}_]/u;
-const DIGIT = /[\p{N}]/u;
-
 export const remarkMathGuard: Plugin<[], Root> = () => {
 	return (tree, file) => {
 		const source = String(file.value ?? '');

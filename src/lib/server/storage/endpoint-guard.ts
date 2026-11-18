@@ -3,23 +3,18 @@ import { isIP } from 'node:net';
 import { isPrivateAddress, type ResolvedAddress } from '../security/ssrf-guard.ts';
 
 /**
- * Endpoint policy for the external storage driver.
+ * Endpoint policy for the external storage driver: https only, no URL-borne
+ * credentials; a hostname resolves and EVERY answer must be globally routable;
+ * metadata addresses stay rejected even with the private-endpoint opt-in (a
+ * LAN MinIO exemption must not become an IMDS read).
+ * `ALLOW_PRIVATE_STORAGE_ENDPOINT=true` is the only way to accept RFC1918 /
+ * loopback / link-local answers (owner-scoped at the action layer). The local
+ * driver never comes through here (RustFS is loopback by design).
  *
- * The rule set: https only, never a URL carrying credentials; a hostname is
- * resolved and EVERY answer must be globally routable; cloud metadata
- * addresses are rejected even when the operator opted into private endpoints
- * (a "LAN MinIO" exemption must not become an IMDS read);
- * `ALLOW_PRIVATE_STORAGE_ENDPOINT=true` is the only way to allow RFC1918 /
- * loopback / link-local answers, and it is owner-scoped at the action layer.
- *
- * The local driver never comes through here: RustFS is loopback by design and
- * its endpoint is fixed by env, not by a form.
- *
- * Known gap: this validates the DNS answer, then the adapter dials the
- * hostname again (no connection pinning - the adapter is shared with the
- * local driver and uses plain fetch). A rebind between the two lookups is out
- * of scope for v1; the bucket credentials still have to be valid for any read
- * to succeed. The links checker closes the same window with `pinnedLookup`.
+ * Known gap: the DNS answer is validated, then the adapter dials the hostname
+ * again - no connection pinning, so a rebind between the two lookups is out of
+ * scope for v1 (bucket credentials must still be valid for any read; the links
+ * checker closes the same window with `pinnedLookup`).
  */
 
 export type StorageEndpointErrorCode =

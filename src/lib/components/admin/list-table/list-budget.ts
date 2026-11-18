@@ -1,5 +1,12 @@
+/** Expanded sidebar + shell padding + scrollbar, at desktop widths. */
+const CHROME_DESKTOP = 335;
+/** Shell padding + scrollbar while the sidebar is out of flow. */
+const CHROME_NARROW = 48;
+/** Below this the sidebar no longer sits beside the content. */
+const SIDEBAR_IN_FLOW = 768;
+
 /**
- * tableBudget returns the worst-case width an admin list table gets at a given viewport.
+ * Worst-case width the table actually gets at a given viewport.
  * Reason: Tailwind breakpoints measure the viewport, but the table only gets what the
  * admin shell leaves over, and the shell subtracts a collapsible sidebar (16rem
  * expanded, 3rem collapsed, out of flow below 768px) — a set that fits at 767px is
@@ -9,15 +16,6 @@
  * The constants assume the sidebar expanded (the worst case); `list-budget.test.ts`
  * checks every page's tiers against them.
  */
-
-/** Expanded sidebar + shell padding + scrollbar, at desktop widths. */
-const CHROME_DESKTOP = 335;
-/** Shell padding + scrollbar while the sidebar is out of flow. */
-const CHROME_NARROW = 48;
-/** Below this the sidebar no longer sits beside the content. */
-const SIDEBAR_IN_FLOW = 768;
-
-/** Worst-case width the table actually gets at a given viewport. */
 export function tableBudget(viewport: number): number {
 	return viewport - (viewport >= SIDEBAR_IN_FLOW ? CHROME_DESKTOP : CHROME_NARROW);
 }

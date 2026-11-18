@@ -9,20 +9,18 @@ import { sendNotificationEmail, type EmailAdapterDeps } from './adapters/email.t
 import type { AdapterResult } from './adapters/types.ts';
 
 /**
- * One notification delivery attempt.
- * Claim: `select ... where status='queued' and next_attempt_at <= now()
- * order by created_at for update skip locked` — the same claim discipline as
- * the webhook segment, so two drains (web tick + a manual run) can never send
- * the same notification twice. The send happens INSIDE the transaction and
- * the row lock is held for its duration; a crash rolls the status back to
- * `queued` and the next tick retries with the same row id (at-least-once,
- * absorbed by the unique key on the producer side and readable in the log).
- * Outcome mapping: adapter ok → `sent` (sent_at set, attempts+1); permanent
- * failure → `failed` (terminal, no retry); retryable with budget left →
- * `queued` (1m/5m/15m); retryable with budget spent → `failed` (terminal).
- * The drain counts these four outcomes per tick; any `failed` keeps the tick
- * heartbeat quiet (a dropped notification is not a healthy tick), exactly
- * like the webhook segment. Node-strip-loadable.
+ * One notification delivery attempt. Claim: `select ... where
+ * status='queued' and next_attempt_at <= now() order by created_at for
+ * update skip locked` — the webhook segment's discipline, so two drains (web
+ * tick + a manual run) never send the same notification twice. The send runs
+ * INSIDE the transaction with the row lock held; a crash rolls the status
+ * back to `queued` and the next tick retries the same row id (at-least-once,
+ * absorbed by the producer's unique key and readable in the log).
+ * Outcomes: adapter ok → `sent` (sent_at set, attempts+1); permanent →
+ * `failed` (terminal); retryable with budget left → `queued` (1m/5m/15m);
+ * budget spent → `failed`. The drain counts these four per tick and any
+ * `failed` keeps the tick heartbeat quiet (a dropped notification is not a
+ * healthy tick), exactly like the webhook segment. Node-strip-loadable.
  */
 export type NotificationDeliveryOutcome = 'sent' | 'failed' | 'retried' | 'skipped';
 

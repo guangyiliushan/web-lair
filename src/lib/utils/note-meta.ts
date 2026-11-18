@@ -1,11 +1,9 @@
-/**
- * Note-domain metadata, UI-safe (single source for server and client, in the
- * spirit of `ai-meta.ts`): statuses, the five-level mood, the closed Apple
- * emotion vocabulary and the WMO weather-code subset, each with three-locale
- * labels. The DB side (CHECK literals) is pinned separately by
- * `note.schema.ts` + `enum-drift.test.ts`; this module is the rendering and
- * editor side, and `note-meta.test.ts` keeps the two in sync.
- */
+// Note-domain metadata, UI-safe (single source for server and client, in the
+// spirit of `ai-meta.ts`): statuses, the five-level mood, the closed Apple
+// emotion vocabulary and the WMO weather-code subset, each with three-locale
+// labels. The DB side (CHECK literals) is pinned separately by
+// `note.schema.ts` + `enum-drift.test.ts`; this module is the rendering and
+// editor side, and `note-meta.test.ts` keeps the two in sync.
 
 /**
  * Locale tags shared with the paraglide runtime. Kept dependency-free so

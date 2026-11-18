@@ -1,11 +1,9 @@
 import type { ProjectSyncProvider } from '../../utils/project-meta.ts';
 
-/**
- * Projects-line sync vocabulary: identities, raw
- * snapshots, the five failure kinds and the run summary. Dependency-free
- * apart from the meta module so the whole `projects/**` graph stays loadable
- * under plain Node type stripping (drain + CLI).
- */
+// Projects-line sync vocabulary: identities, raw
+// snapshots, the five failure kinds and the run summary. Dependency-free
+// apart from the meta module so the whole `projects/**` graph stays loadable
+// under plain Node type stripping (drain + CLI).
 
 /** One configured sync target (`projects.sync_targets` element). */
 export interface SyncTarget {

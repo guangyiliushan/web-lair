@@ -6,18 +6,16 @@ import { parseCommentAnchorDraft } from '$lib/server/comment-anchor';
 import type { CommentAnchorDraft } from '$lib/utils/comment-anchor';
 import { deleteComment, editComment, type SubmitCommentResult } from './comments';
 
-/**
- * Shared reader-action handlers: the posts / notes / pages routes wire their
- * `edit` / `delete` actions straight onto these so the three hosts cannot
- * drift apart, and every host maps submit/reply results through
- * `commentSubmitResponse` below for the same reason. Per-host page gates (the
- * note unlock session) stay in the hosts as a page-level UX layer; the
- * authoritative gate is the ownership CAS in the service.
- *
- * A route adapter, not a service: it lives beside comments.ts because it
- * wraps exactly that service's write entry points - RequestEvent in,
- * ActionResult out.
- */
+// Shared reader-action handlers: the posts / notes / pages routes wire their
+// `edit` / `delete` actions straight onto these so the three hosts cannot
+// drift apart, and every host maps submit/reply results through
+// `commentSubmitResponse` below for the same reason. Per-host page gates (the
+// note unlock session) stay in the hosts as a page-level UX layer; the
+// authoritative gate is the ownership CAS in the service.
+//
+// A route adapter, not a service: it lives beside comments.ts because it
+// wraps exactly that service's write entry points - RequestEvent in,
+// ActionResult out.
 
 /** Form fields shared by both actions; null when the id is malformed. */
 async function readCommentActionForm(

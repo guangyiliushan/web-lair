@@ -19,16 +19,14 @@ import type {
 	SyncTarget
 } from './types.ts';
 
-/**
- * The sync orchestrator: target listing -> filter -> per-provider upsert
- * with the four write rules - new rows land `pending` with the snapshot +
- * prefill; existing rows get the snapshot ONLY (`status` and every user
- * field are never touched; rename refreshes `project_url`/`full_name`
- * because the API response is the source of truth); `rejected` rows are
- * skipped forever; refresh failures stamp `last_error_kind` without changing
- * status. Single-flight is the caller's job (drain per-job lock /
- * `PROJECT_SYNC_LOCK_KEY` for the CLI) - links-line precedent.
- */
+// The sync orchestrator: target listing -> filter -> per-provider upsert
+// with the four write rules - new rows land `pending` with the snapshot +
+// prefill; existing rows get the snapshot ONLY (`status` and every user
+// field are never touched; rename refreshes `project_url`/`full_name`
+// because the API response is the source of truth); `rejected` rows are
+// skipped forever; refresh failures stamp `last_error_kind` without changing
+// status. Single-flight is the caller's job (drain per-job lock /
+// `PROJECT_SYNC_LOCK_KEY` for the CLI) - links-line precedent.
 
 /** Session advisory-lock key shared by drain, CLI and manual triggers. */
 export const PROJECT_SYNC_LOCK_KEY = jobLockKey('projects.sync');

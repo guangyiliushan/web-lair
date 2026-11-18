@@ -1,23 +1,17 @@
 #!/usr/bin/env bash
 #
-# Bootstrap the installer-owned secrets.
-#
-# Contract: deploy/secret-inventory.json. This script keeps the same list in
-# bash (a unit test asserts every inventory name appears here). It writes env
-# files ONLY - never the application database, never a value in argv, never a
-# value in the receipt.
+# Bootstrap the installer-owned secrets. Contract: deploy/secret-inventory.json
+# - the same list kept in bash (a unit test asserts every inventory name
+# appears here). Writes env files ONLY: never the application database, never
+# a value in argv, never a value in the receipt.
 #
 #   ./deploy/bootstrap-secrets.sh --dry-run
 #   ./deploy/bootstrap-secrets.sh
 #   ./deploy/bootstrap-secrets.sh --rotate SUBSCRIBE_HMAC_KEY
-#
-# Properties:
-#   - idempotent: a non-empty existing value is kept unless --rotate names it
-#   - atomic: temp file + mv, previous file backed up as <file>.bak.<epoch>
-#   - umask 077, no `set -x`, no echo of values
-#   - receipt: install-receipt.json with names, targets and a sha256 prefix
-#
-# Exit codes: 0 = ok, 1 = a write/validation failed, 2 = usage/config error.
+# Properties: idempotent (non-empty kept unless --rotate names it); atomic
+# (temp + mv, backup <file>.bak.<epoch>); umask 077, no `set -x`, no echo
+# of values; receipt install-receipt.json with names, targets, sha256
+# prefix. Exit codes: 0 = ok, 1 = write/validation failed, 2 = usage/config error.
 
 set -euo pipefail
 umask 077

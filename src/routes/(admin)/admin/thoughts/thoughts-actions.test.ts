@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the admin 思考 (thoughts) actions: guard first, uuid entry
+ * Route-level tests for the admin `思考` (thoughts) actions: guard first, uuid entry
  * guard, 404 via the `returning` probe, trimmed content. The db module is
  * mocked.
  */

@@ -1,19 +1,15 @@
 import { readFileSync } from 'node:fs';
 
 /**
- * Database status for the Storage page.
- *
- * The page is READ-ONLY here on purpose: an external database is an
- * install/deploy decision (`DATABASE_URL` + `pg_dump`/`pg_restore`), not a
- * settings form. The three facts that make a quiet misconfiguration visible:
- *
+ * Database status for the Storage page. READ-ONLY on purpose: an external database is an
+ * install/deploy decision (`DATABASE_URL` + `pg_dump`/`pg_restore`), not a settings form;
+ * nothing here writes, and nothing here runs a migration.
+ * The three facts that make a quiet misconfiguration visible:
  * mode       - bundled Postgres or an external one?
  * host       - WHICH host, masked (admin-only page, but a host name is still
  *              infrastructure detail; the password never appears);
- * migrations - how many ledger rows are applied and whether the newest
- *              migration in `drizzle/` is among them.
- *
- * Nothing here writes, and nothing here runs a migration.
+ * migrations - how many ledger rows are applied and whether the newest migration in
+ *              `drizzle/` is among them.
  */
 
 export interface ParsedDatabaseUrl {

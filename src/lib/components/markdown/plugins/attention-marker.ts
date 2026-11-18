@@ -1,20 +1,15 @@
-/**
- * Shared implementation of the inline two-character delimiter extensions: spoiler (`||`)
- * and mark (`==`).
- *
- * The attention pattern is a port of micromark-extension-gfm-strikethrough with three
- * deliberate differences from upstream / plain CommonMark:
- * - delimiter runs are fixed at length 2 — single or >=3 delimiters never parse;
- * - the delimiter character is parameterized, so one implementation derives both, with
- *   upstream-equivalent flanking (4.3);
- * - delimiters register in `attentionMarkers` (as upstream does) and so participate in
- *   adjacent-emphasis flanking: `a*==b==*` pairs into `<em>` like `a*~~b~~*` — the only
- *   extra observable effect versus a pipeline without this extension.
- *
- * Escaping (4.4) and disabling inside inline code / math (4.2) hold by construction; the
- * conformance corpus pins them (`l2-mark-escape`,
- * `l2-mark-inside-inline-code-disabled`, `l2-mark-flanking-space-separated`).
- */
+// Shared implementation of the inline two-character delimiter extensions: spoiler (`||`)
+// and mark (`==`). Port of micromark-extension-gfm-strikethrough with three deliberate
+// differences from upstream / plain CommonMark:
+// - delimiter runs are fixed at length 2 — single or >=3 delimiters never parse;
+// - the delimiter character is parameterized, so one implementation derives both, with
+//   upstream-equivalent flanking (4.3);
+// - delimiters register in `attentionMarkers` (as upstream does) and so participate in
+//   adjacent-emphasis flanking: `a*==b==*` pairs into `<em>` like `a*~~b~~*` — the only
+//   extra observable effect versus a pipeline without this extension.
+// Escaping (4.4) and disabling inside inline code / math (4.2) hold by construction; the
+// conformance corpus pins them (`l2-mark-escape`, `l2-mark-inside-inline-code-disabled`,
+// `l2-mark-flanking-space-separated`).
 import { splice } from 'micromark-util-chunked';
 import { classifyCharacter } from 'micromark-util-classify-character';
 import { resolveAll } from 'micromark-util-resolve-all';
@@ -77,7 +72,10 @@ export interface AttentionMarkerSpec {
 	markerCode: number;
 }
 
-/** classifyCharacter's whitespace group value (micromark-util-symbol constants.characterGroupWhitespace) */
+/**
+ * classifyCharacter's whitespace group value (micromark-util-symbol
+ * constants.characterGroupWhitespace)
+ */
 const WHITESPACE = 1;
 
 /** micromark syntax extension factory */
@@ -123,7 +121,8 @@ export function createAttentionSyntax(spec: AttentionMarkerSpec): Extension {
 						events[index][1].end.offset - events[index][1].start.offset ===
 							events[open][1].end.offset - events[open][1].start.offset
 					) {
-						// dynamic token type (template literal) cannot be statically proven to be in TokenTypeMap
+						// dynamic token type (template literal) cannot be statically proven to be in
+						// TokenTypeMap
 						events[index][1].type = `${name}Sequence` as Token['type'];
 						events[open][1].type = `${name}Sequence` as Token['type'];
 
@@ -190,9 +189,11 @@ export function createAttentionSyntax(spec: AttentionMarkerSpec): Extension {
 		const previous = this.previous;
 		const events = this.events;
 		let size = 0;
-		// classification of the char before the run's first char: undefined = other, 1 = whitespace/boundary, 2 = Unicode punctuation
+		// classification of the char before the run's first char: undefined = other, 1 =
+		// whitespace/boundary, 2 = Unicode punctuation
 		let before: number | undefined;
-		// self-referential type for the internal state functions (structural equivalent of micromark's State)
+		// self-referential type for the internal state functions (structural equivalent of micromark's
+		// State)
 		type Step = (code: Code) => Step | undefined;
 
 		return start;
@@ -221,7 +222,8 @@ export function createAttentionSyntax(spec: AttentionMarkerSpec): Extension {
 			const after = classifyCharacter(code);
 			// classifyCharacter returns: 1 = whitespace/boundary, 2 = Unicode punctuation,
 			// undefined = other. CommonMark emphasis flanking (4.3):
-			// left-flanking = next is not whitespace && (next is not punctuation || prev is whitespace/punctuation)
+			// left-flanking = next is not whitespace && (next is not punctuation || prev is
+			// whitespace/punctuation)
 			token._open = after !== WHITESPACE && (after === undefined || before !== undefined);
 			token._close = before !== WHITESPACE && (before === undefined || after !== undefined);
 			return ok(code);

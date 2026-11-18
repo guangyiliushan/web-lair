@@ -1,28 +1,23 @@
 /**
- * Mermaid execution side: the pipeline emits `<pre class="mermaid">` mount points on
- * both sides and this module upgrades them to SVGs in the browser.
- * Everything here runs client-side only, and the library is imported lazily, only when
- * a diagram exists on the page, so pages without diagrams never pay for the chunk.
+ * Mermaid execution side: the pipeline emits `<pre class="mermaid">` mount
+ * points on both sides; this module upgrades them to SVGs in the browser.
+ * Client-side only, library imported lazily — pages without diagrams never
+ * pay for the chunk.
  *
- * Content is untrusted. `securityLevel: 'strict'` is pinned, but on mermaid 12 the name
- * overstates it: event handlers and click callbacks are stripped while DOMPurify's
- * default allowlist still keeps elements like `img` inside html labels, and a kept
- * `img` issues a real request.
- * Three layers close the surface instead: `htmlLabels: false` renders labels as SVG
- * `text` (no foreignObject for ordinary diagrams); both per-diagram config channels are
- * stripped from the text mermaid will see, to a true fixpoint (details and the leak
- * shapes pinned in `mermaid-exec.svelte.spec.ts` live in `stripConfigChannels`); and a
- * source carrying `@{ img: ... }` node syntax is not rendered at all, because that
- * shape loads a remote image while rendering.
- *
- * The palette comes from the site's own CSS tokens through `theme: 'base'` plus an
- * explicit variable map, so diagrams sit in the surrounding colours.
- * mermaid replaces the element's content with the SVG, so the source is archived on
- * `data-md-source` before the first render and a theme flip restores it.
- * After a run the settled shape (exactly one svg child, no error svg) is checked and
- * anything else rolls back to the raw source with a `data-md-error` mark.
- * Renders are serialised through one chain so a rebuild and a theme flip cannot
- * interleave inside mermaid.
+ * Content is untrusted. `securityLevel: 'strict'` is pinned but overstates
+ * itself on mermaid 12 (DOMPurify's allowlist keeps `img` inside html labels
+ * → a real request). Three layers close it: `htmlLabels: false` (labels render
+ * as SVG text, no foreignObject); both per-diagram config channels stripped to
+ * a true fixpoint (`stripConfigChannels`, leak shapes pinned in
+ * `mermaid-exec.svelte.spec.ts`); a source carrying `@{ img: ... }` node
+ * syntax is not rendered at all (it would load a remote image).
+ * Theme comes from the site's CSS tokens (`theme: 'base'` + variable map).
+ * Mermaid replaces the element's content with the SVG, so the source is
+ * archived on `data-md-source` before the first render (a theme flip restores
+ * it); after a run the settled shape (exactly one svg child, no error svg) is
+ * verified or the raw source is restored with a `data-md-error` mark.
+ * Renders are serialised through one chain so a rebuild and a theme flip
+ * cannot interleave inside mermaid.
  */
 
 let renderChain: Promise<void> = Promise.resolve();

@@ -1,11 +1,9 @@
-/**
- * Pure identity helpers for the Tailscale sign-in path.
- *
- * Deliberately dependency-free: the same module is used by the SvelteKit
- * runtime and by the unit tests that exercise the *untrusted* branches, which
- * the e2e suite can no longer reach (a spoofed `x-real-ip` header no longer
- * resolves to a trusted identity).
- */
+// Pure identity helpers for the Tailscale sign-in path.
+//
+// Deliberately dependency-free: the same module is used by the SvelteKit
+// runtime and by the unit tests that exercise the *untrusted* branches, which
+// the e2e suite can no longer reach (a spoofed `x-real-ip` header no longer
+// resolves to a trusted identity).
 
 /** Tailscale hands out addresses from the CGNAT range 100.64.0.0/10. */
 const TAILSCALE_CIDR_START = ip4ToInt('100.64.0.0');

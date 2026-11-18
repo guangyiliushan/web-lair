@@ -1,15 +1,13 @@
-/**
- * Locale surface map — the single source of truth for which internal paths
- * stay outside the `/{lang}` segment. Two consumers:
- *
- * - `vite.config.ts` derives the paraglide `routeStrategies` middleware
- *   overrides from the `*Matches()` helpers below.
- * - `src/lib/utils/href.ts` (`siteHref`) uses `isLocaleFreePath` to decide
- *   at render time whether an internal link receives a locale prefix.
- *
- * Keeping both on one module means the middleware configuration and the
- * runtime link helper can never drift apart.
- */
+// Locale surface map — the single source of truth for which internal paths
+// stay outside the `/{lang}` segment. Two consumers:
+//
+// - `vite.config.ts` derives the paraglide `routeStrategies` middleware
+//   overrides from the `*Matches()` helpers below.
+// - `src/lib/utils/href.ts` (`siteHref`) uses `isLocaleFreePath` to decide
+//   at render time whether an internal link receives a locale prefix.
+//
+// Keeping both on one module means the middleware configuration and the
+// runtime link helper can never drift apart.
 
 /** Paths that resolve their locale from the cookie chain (never prefixed). */
 export const COOKIE_SURFACES = [

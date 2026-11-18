@@ -3,14 +3,6 @@ import { runDrain, sanitizeErrorText } from './drain';
 import type { JobsDb } from './types';
 
 /**
- * Tick-level guarantees that need no database: the drain resolves
- * even when whole segments blow up (segment isolation - the later segments
- * still run), a tick with nothing to do reports zeros, heartbeat failures
- * never fail the tick, and a job timeout aborts the tick (the stuck job dies
- * with the hard-exiting process).
- */
-
-/**
  * Chain mock with a scripted result queue: every awaited link pops the next
  * entry, which pins the exact statement order of one schedule firing (select
  * schedules -> reclaim -> [tx: CAS, insert] -> source hash -> finalize).
@@ -47,6 +39,13 @@ const unusedLoader = async () => {
 	throw new Error('loadJob must not be called in these scenarios');
 };
 
+/**
+ * Tick-level guarantees that need no database: the drain resolves
+ * even when whole segments blow up (segment isolation - the later segments
+ * still run), a tick with nothing to do reports zeros, heartbeat failures
+ * never fail the tick, and a job timeout aborts the tick (the stuck job dies
+ * with the hard-exiting process).
+ */
 describe('runDrain', () => {
 	it('an empty tick reports zeros and no errors', async () => {
 		const summary = await runDrain({

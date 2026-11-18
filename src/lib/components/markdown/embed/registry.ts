@@ -222,7 +222,6 @@ export const EMBED_PROVIDER_DOMAINS: ReadonlySet<string> = new Set(
 	EMBED_PROVIDERS.flatMap((provider) => provider.domains)
 );
 
-/** Shared canonicalisation: lowercase host with a leading `www.` removed. */
 /** Maps a URL to its provider id via the registry matchers — the same
  * source of truth the render side (decideImage consumers) uses. */
 export function resolveProviderId(url: string): EmbedProviderId | 'generic' {
@@ -239,6 +238,7 @@ export function resolveProviderId(url: string): EmbedProviderId | 'generic' {
 	return 'generic';
 }
 
+/** Shared canonicalisation: lowercase host with a leading `www.` removed. */
 export function canonicalHost(hostname: string): string {
 	return hostname.toLowerCase().replace(/^www\./, '');
 }

@@ -1,21 +1,18 @@
 import { sanitizeErrorText } from '../jobs/error-text.ts';
 
 /**
- * Notification payload shaping (payload <=200 chars, no PII): one shape
- * serves both adapters — `{ title, body, url? }`, built by the producers,
- * stored verbatim by the outbox, re-shaped by the adapters (Bark: title/body;
- * email: subject/text). Bounding and redaction live HERE, once, so a
- * producer cannot widen what leaves the box.
- * Rules: one line (every whitespace run collapses to one space — Bark
- * renders a newline as a line break and a stack trace as a wall of noise);
- * no control characters (they survive `trim()` and break JSON parsing in
- * some Bark servers); email addresses are redacted (a comment excerpt or an
- * SMTP error routinely contains one, and the payload is stored in a table
- * plus pushed to a phone); hard caps title <= 120 / body <= 200 with an
- * ellipsis on truncation (the cap is the promise, not an aspiration); `url`
- * must be absolute http(s) and loses credentials, the query string and the
- * fragment (a link is for navigation, not a token carrier).
- * Node-strip-loadable: relative `.ts` imports only.
+ * Notification payload shaping (payload <=200 chars, no PII): one shape serves
+ * both adapters — `{ title, body, url? }`, built by the producers, stored verbatim
+ * by the outbox, re-shaped by the adapters (Bark: title/body; email: subject/text).
+ * Bounding and redaction live HERE, once, so a producer cannot widen what leaves the box.
+ * Rules: one line (whitespace runs collapse — Bark renders a newline as a
+ * line break, a stack trace as a wall of noise); no control characters
+ * (they survive `trim()` and break JSON parsing in some Bark servers);
+ * email addresses redacted (comment excerpts and SMTP errors carry one; the
+ * payload is stored in a table plus pushed to a phone); hard caps title
+ * <= 120 / body <= 200 with an ellipsis on truncation; `url` must be
+ * absolute http(s), losing credentials, query and fragment (navigation, not
+ * a token carrier). Node-strip-loadable: relative `.ts` imports only.
  */
 export const NOTIFICATION_TITLE_MAX = 120;
 export const NOTIFICATION_BODY_MAX = 200;

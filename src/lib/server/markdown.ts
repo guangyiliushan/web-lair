@@ -139,7 +139,6 @@ async function getProcessor(): Promise<MarkdownProcessor> {
  * Callable only in a server context (+page.server.ts / +server.ts).
  * SvelteKit's $lib/server path convention keeps this module out of the client bundle.
  *
- * @param markdown raw Markdown string
  * @returns sanitized, safe HTML string
  */
 export async function renderMarkdownToHtml(markdown: string): Promise<string> {

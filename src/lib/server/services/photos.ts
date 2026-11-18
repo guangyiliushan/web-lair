@@ -578,10 +578,8 @@ export async function listTagOptions(deps: PhotosDeps = {}): Promise<TagChip[]> 
 		.limit(300);
 }
 
-// ---------------------------------------------------------------------------
 // Public read surface — visibility is `is_visible` only; hidden rows
 // 404 on the public face, and the tracker redirect never bypasses this.
-// ---------------------------------------------------------------------------
 
 export interface PublicPhotoDetail {
 	id: string;

@@ -22,21 +22,18 @@ import type { UserJobMeta } from './user-layer.ts';
 import type { GateError } from './save-gate.ts';
 
 /**
- * User script store: the admin-side CRUD around the user layer - read, save
- * (save gate + optimistic-lock conflict + fork sidecar), revert, delete (with
- * the schedule/queue cleanup) and builtin-update dismissal. File writes are
- * atomic (tmp + rename); every mutation writes its audit row on the same call
- * path.
+ * User script store: admin-side CRUD around the user layer - read, save (save
+ * gate + optimistic-lock conflict + fork sidecar), revert, delete (schedule/
+ * queue cleanup), builtin-update dismissal. Writes are atomic (tmp + rename)
+ * and every mutation writes its audit row on the same path. Web-side module
+ * (not part of the drain chain): takes the web app's db handle as an argument.
  *
- * All user-file mutations run through one in-process queue: the web process is
- * the only writer of user job files in `$DATA_DIR/jobs` (the drain only
- * refreshes the generated scaffold), so each check-then-act sequence (save's
- * read-gate-write, delete's tx+rm) is atomic per process and the save×save
- * overwrite and save×delete "resurrection" windows close at the root; the
+ * All user-file mutations run through one in-process queue (the web process is
+ * the only writer of `$DATA_DIR/jobs` files; the drain only refreshes the
+ * generated scaffold), so each check-then-act sequence - save's
+ * read-gate-write, delete's tx+rm - is atomic per process: the save×save
+ * overwrite and save×delete "resurrection" windows close at the root. The
  * optimistic lock remains the cross-request contract.
- *
- * Web-side module (not part of the drain chain): takes the web app's db handle
- * as an argument, like every other server service.
  */
 
 type ScriptDb = Pick<typeof import('$lib/server/db').db, 'insert' | 'transaction' | 'execute'>;

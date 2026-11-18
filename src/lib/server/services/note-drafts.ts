@@ -10,16 +10,14 @@ import { hashNotePassword, verifyNotePassword } from './note-gate';
 import { DRAFT_THROTTLE_MS } from './post-drafts';
 import { m } from '$lib/paraglide/messages';
 
-/**
- * Draft-flow service for notes: mirrors post-drafts - the editor writes one
- * `drafts` row per
- * target and the publish transaction copies it onto `notes`. Publish
- * parameters (`status` / `published_at` / `pin_at` / `password_hash` /
- * `allow_comment`) never travel through drafts; they are row-level actions
- * below. Notes have no row version counter, so the publish
- * base check relies on the one-draft-per-note unique + row locks + the
- * draft's own optimistic version.
- */
+// Draft-flow service for notes: mirrors post-drafts - the editor writes one
+// `drafts` row per
+// target and the publish transaction copies it onto `notes`. Publish
+// parameters (`status` / `published_at` / `pin_at` / `password_hash` /
+// `allow_comment`) never travel through drafts; they are row-level actions
+// below. Notes have no row version counter, so the publish
+// base check relies on the one-draft-per-note unique + row locks + the
+// draft's own optimistic version.
 /** Marker for the auto-generated slug of never-published placeholder rows. */
 const PLACEHOLDER_SLUG_PREFIX = 'draft-';
 

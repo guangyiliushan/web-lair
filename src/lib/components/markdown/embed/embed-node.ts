@@ -19,8 +19,10 @@ import { m } from '$lib/paraglide/messages';
 // and Lexical's selection-rebuild path ($internalCreateRangeSelection) during a normal
 // update overwrites a non-Range selection with the DOM selection (empty DOM selection → null,
 // the useDOMSelection branch of `$internalCreateRangeSelection` in Lexical.dev.mjs)
-// ——NodeSelection is inherently unstable in this scenario. The component-level flag (`data-selected`)
-// does not enter Lexical's selection system, so behavior is controllable and testable; the arrow-key isKeyboardSelectable
+// ——NodeSelection is inherently unstable in this scenario. The component-level flag
+// (`data-selected`)
+// does not enter Lexical's selection system, so behavior is controllable and testable; the
+// arrow-key isKeyboardSelectable
 // path is reserved for Lexical itself (it does not interfere with the click path).
 
 let selectedHost: HTMLElement | null = null;
@@ -60,7 +62,8 @@ function attachEmbedSelection(editor: LexicalEditor, hostEl: HTMLElement, key: N
 		editor.update(() => {
 			const node = $getNodeByKey(key);
 			node?.remove();
-			// If the delete empties the root, append an editable paragraph so the cursor has a landing spot
+			// If the delete empties the root, append an editable paragraph so the cursor has a landing
+			// spot
 			const root = $getRoot();
 			if (root.getChildrenSize() === 0) root.append($createParagraphNode());
 		});
@@ -201,7 +204,8 @@ export class EmbedNode extends DecoratorNode<HTMLElement> {
 				title: this.__title,
 				editable: true,
 				onUrlChange: (url: string, title: string) => {
-					// Do not touch the frozen instance: look the node up by key inside update to get the latest writable node (the official pattern)
+					// Do not touch the frozen instance: look the node up by key inside update to get the
+					// latest writable node (the official pattern)
 					editor.update(() => {
 						const node = $getNodeByKey(key);
 						if ($isEmbedNode(node)) {

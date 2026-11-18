@@ -8,19 +8,14 @@ import type { ObjectStoragePort } from './port.ts';
 import { DEFAULT_STORAGE_MIGRATION, type StorageMigrationState } from './provider.ts';
 
 /**
- * Copy phase orchestration, extracted from the CLI so it can be tested with
- * fake ports (the CLI runs `main()` at import time, which vitest cannot
- * import).
- *
- * Heartbeat invariant: the running counters live OUTSIDE the copyObjects
- * call, because `onBefore` fires before the promise resolves - reading them
- * from the call's own result is a temporal-dead-zone error on the first
- * object and froze uploads with `state='copying'` and nothing copied.
- *
- * Variants the source never had are not failures (only some files have
- * variants), so a missing VARIANT counts as `missingVariants`; a missing
- * CANONICAL object stays fatal. The persisted `total` counts only objects
- * that must exist, so `verified === total` is reachable for a healthy install.
+ * Copy phase orchestration, extracted from the CLI so it can be tested with fake ports (the CLI runs
+ * `main()` at import time, which vitest cannot import).
+ * Heartbeat invariant: the running counters live OUTSIDE the copyObjects call, because `onBefore` fires
+ * before the promise resolves - reading them from the call's own result is a temporal-dead-zone error on
+ * the first object and froze uploads with `state='copying'` and nothing copied.
+ * Variants the source never had are not failures (only some files have variants), so a missing VARIANT
+ * counts as `missingVariants`; a missing CANONICAL object stays fatal. The persisted `total` counts only
+ * objects that must exist, so `verified === total` is reachable for a healthy install.
  */
 
 export interface CopyPhaseDeps {

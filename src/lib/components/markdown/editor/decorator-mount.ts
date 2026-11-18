@@ -1,11 +1,9 @@
-/**
- * Batch D: shared mount bookkeeping for decorator nodes.
- *
- * Lexical DEV deep-freezes nodes after each reconciliation, so a Svelte
- * component handle must never live on the node instance (writing it once
- * more throws `Cannot assign to read only property` and aborts the
- * reconcile, e.g. on undo). Keep the handles in a WeakMap instead.
- */
+// Batch D: shared mount bookkeeping for decorator nodes.
+//
+// Lexical DEV deep-freezes nodes after each reconciliation, so a Svelte
+// component handle must never live on the node instance (writing it once
+// more throws `Cannot assign to read only property` and aborts the
+// reconcile, e.g. on undo). Keep the handles in a WeakMap instead.
 import type { LexicalNode } from 'lexical';
 import { mount, unmount } from 'svelte';
 

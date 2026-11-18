@@ -1,15 +1,13 @@
-/**
- * The editor's Markdown transformer set.
- *
- * Lexical's round-trip ($convertToMarkdownString / $convertFromMarkdownString) only
- * knows nodes with a registered transformer, so a custom node without one is dropped:
- * EDITOR_TRANSFORMERS serves the main editor and NESTED_EDITOR_TRANSFORMERS the
- * nested alert/detail editors.
- *
- * References:
- * - https://lexical.dev/docs/packages/lexical-markdown
- * - @lexical/markdown@0.46.0 MultilineElementTransformer（regExpStart/regExpEnd/linesInBetween）
- */
+// The editor's Markdown transformer set.
+//
+// Lexical's round-trip ($convertToMarkdownString / $convertFromMarkdownString) only
+// knows nodes with a registered transformer, so a custom node without one is dropped:
+// EDITOR_TRANSFORMERS serves the main editor and NESTED_EDITOR_TRANSFORMERS the
+// nested alert/detail editors.
+//
+// References:
+// - https://lexical.dev/docs/packages/lexical-markdown
+// - @lexical/markdown@0.46.0 MultilineElementTransformer（regExpStart/regExpEnd/linesInBetween）
 import {
 	createEditor,
 	$createParagraphNode,
@@ -412,24 +410,12 @@ const ALERT_END_REGEX = /^(?!>)/;
 const QUOTE_PREFIX_REGEX = /^>\s?/;
 
 /**
- * Transformer subset used by nested editor content: nested editors skip
- * TagNode/AlertNode (no infinite nesting), so alert content parses with the standard
- * transformers; hrTransformer is registered (see NESTED_EDITOR_NODES) so `---`
- * round-trips.
- */
-/**
- * Counterpart of the core markdown export's safety escaping: the exporter escapes
- * markdown-significant punctuation (`a_b` -> `a\_b`) but the core's plain-text import
- * path never unescapes it, so repeated save/load cycles re-escape the accumulated
- * backslashes (no fixpoint). Mirrors the core's unescapeText rule, and skips code so
- * literal backslashes inside code spans/blocks stay intact.
- */
-/**
+ * Internal step of {@link normalizeMarkdownForImport}; not exported.
+ *
  * The core CHECK_LIST regex matches `[X]` case-insensitively but compares the state as
  * `match[3] === 'x'`, so an uppercase box silently imports unchecked and the next
  * export rewrites `- [X]` to `- [ ]`; lowercase it on list lines before importing.
  */
-/** Internal step of {@link normalizeMarkdownForImport}; not exported. */
 function normalizeChecklistMarkers(markdown: string): string {
 	// No regex here on purpose: the core's CHECK_LIST shape needs a
 	// whitespace class that is awkward to spell in a literal and easy to
@@ -456,18 +442,14 @@ function normalizeChecklistMarkers(markdown: string): string {
 /**
  * normalizeMarkdownForImport normalizes input at every editor import boundary (main
  * editor and the nested temporary editors).
- *
- * Reason: CRLF content comes from the FormData transport (HTML entry-list rules normalize
- * field values) and line-anchored element transformers fail on the trailing `\r` — the
- * image rule's `$` anchor degraded an image to "!" + link text on reopen (refs-lifecycle
- * e2e).
- * Symptom without padding: a bare marker line (`- [ ]`, `-`, `#`, `>`) loses the trailing
- * space the core CHECK_LIST/QUOTE regexps want, so the pre-fix and post-fix parses
- * disagree for content stored through the form; those lines get one space before the CRs
- * go.
- * Two guards keep the pass honest: lone CRs are promoted to CRLF first, and lines inside
- * ``` / ~~~ fences come back byte-identical, so a fence body that is itself a bare marker
- * (diff fragments, `#` comment lines in examples) is never rewritten on open+save.
+ * CRLF content comes from the FormData transport and line-anchored transformers fail on
+ * the trailing `\r` (the image rule's `$` anchor degraded an image to "!"+ link text on
+ * reopen — refs-lifecycle e2e). A bare marker line (`- [ ]`, `-`, `#`, `>`) additionally
+ * gets one trailing space, which the core CHECK_LIST/QUOTE regexps require, so the parses
+ * agree before and after the fix; the space goes before the CRs do.
+ * Two guards: lone CRs are promoted to CRLF first, and lines inside ``` / ~~~ fences come
+ * back byte-identical, so a fence body that is itself a bare marker (diff fragments, `#`
+ * example comments) is never rewritten on open+save.
  */
 export function normalizeMarkdownForImport(markdown: string): string {
 	const withCrlfEnds = markdown.replace(/\r(?!\n)/g, '\r\n');
@@ -499,6 +481,13 @@ export function normalizeMarkdownForImport(markdown: string): string {
 	return normalizeChecklistMarkers(padded.replace(/\r\n?/g, '\n'));
 }
 
+/**
+ * Counterpart of the core markdown export's safety escaping: the exporter escapes
+ * markdown-significant punctuation (`a_b` -> `a\_b`) but the core's plain-text import
+ * path never unescapes it, so repeated save/load cycles re-escape the accumulated
+ * backslashes (no fixpoint). Mirrors the core's unescapeText rule, and skips code so
+ * literal backslashes inside code spans/blocks stay intact.
+ */
 export function $unescapeImportedText(): void {
 	const unescape = (text: string) => text.replace(/\\([!-/:-@[-`{-~])/g, '$1');
 	for (const node of $getRoot().getAllTextNodes()) {
@@ -518,6 +507,12 @@ export function $unescapeImportedText(): void {
 	}
 }
 
+/**
+ * Transformer subset used by nested editor content: nested editors skip
+ * TagNode/AlertNode (no infinite nesting), so alert content parses with the standard
+ * transformers; hrTransformer is registered (see NESTED_EDITOR_NODES) so `---`
+ * round-trips.
+ */
 export const NESTED_EDITOR_TRANSFORMERS: Transformer[] = [
 	// Custom transformers must come before the core TRANSFORMERS (import tries them in
 	// order and the earlier one wins): CHECK_LIST placed after ...TRANSFORMERS gets
@@ -558,12 +553,12 @@ function getNestedTempEditor(): LexicalEditor {
 	return nestedTempEditor;
 }
 
-/** Markdown → alert nested-editor editorState JSON (falls back to a plain-text
- * paragraph when parsing fails) */
 /** Guards reentrancy: a container transformer runs this while the shared
  * temp editor is mid-update, which would swallow nested fences. */
 let nestedTempDepth = 0;
 
+/** Markdown → alert nested-editor editorState JSON (falls back to a plain-text
+ * paragraph when parsing fails) */
 export function markdownToAlertJson(markdown: string): string {
 	const editor =
 		nestedTempDepth > 0

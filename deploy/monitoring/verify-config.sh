@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
-# Gatus config startup validation (can be called directly from CI).
-#
+# Gatus config startup validation (callable directly from CI).
 # Usage:
 #   bash deploy/monitoring/verify-config.sh
 #   GATUS_VERIFY_PORT=18081 bash deploy/monitoring/verify-config.sh
 #   GATUS_IMAGE=ghcr.io/twin/gatus:<tag> bash ...   # defaults to compose.monitoring.yaml
-#
 # Starts a temporary container (port 127.0.0.1:$GATUS_VERIFY_PORT) against five
-# scenarios — core config, full config, two negative cases, and the hardened
-# production flags — each of which can really fail; the five assertions are
-# listed in deploy/monitoring/README.md "6. 校验（T3.5，供 P1 的 CI 接入）".
-# On failure the container log is printed. Any failed assertion → exit 1.
-# Under the heavy-task discipline it runs serially through
-# notes/coordination/m6/scripts/heavy.sh like build/check/vitest.
+# scenarios — core config, full config, two negative cases, hardened production
+# flags — each can really fail; the five assertions are listed in
+# deploy/monitoring/README.md §6 (validation, the CI entry point). On failure
+# the container log is printed. Any failed assertion → exit 1. It runs under
+# the heavy-task discipline: serial with build/check/vitest, behind a global
+# lock so heavy jobs never overlap.
 set -uo pipefail
 
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)

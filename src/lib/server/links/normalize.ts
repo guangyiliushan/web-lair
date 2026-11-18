@@ -1,10 +1,8 @@
-/**
- * URL / host normalization for the links line: the stored `url` and `host`
- * are canonical; matching happens on `host`.
- *
- * Pure functions, no dependencies: shared by the checker (plain-Node side)
- * and, later, the apply/admin surfaces.
- */
+// URL / host normalization for the links line: the stored `url` and `host`
+// are canonical; matching happens on `host`.
+//
+// Pure functions, no dependencies: shared by the checker (plain-Node side)
+// and, later, the apply/admin surfaces.
 
 /** Strip a single leading `www.` (the canonical host used for matching). */
 export function stripWww(host: string): string {

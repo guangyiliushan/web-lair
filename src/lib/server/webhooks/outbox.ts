@@ -5,29 +5,22 @@ import { webhooks } from '../db/system/webhook.schema.ts';
 
 /**
  * Webhook delivery outbox: turns an audited event into one `queued` delivery
- * row per subscribed endpoint; the job drain's third segment
- * (`jobs/drain.ts`) claims the rows, signs them with Standard Webhooks
- * headers and POSTs them.
- * Payload body: the Standard Webhooks RECOMMENDED shape — the spec
- * `does not dictate` a structure — so this is `{ type, timestamp, data }`
- * (the spec example's field names verbatim), deliberately a subset of the
- * CNCF CloudEvents core attributes (type/time/data); a full-envelope mode is
- * additive and registered as the interop upgrade path.
- * Enqueue is a SINGLE statement (`insert ... select`): endpoint matching and
- * row creation share one snapshot, so a concurrent endpoint delete can never
- * leave a half-matched fan-out. Matching is `events @> array[event]`, the
- * operator form the GIN `array_ops` opclass can index if this table ever
- * grows (threshold defer, registered).
- * Contract: same call path as the audit row — it rides the caller's
- * transaction when in scope and any failure propagates (fail loud); a
- * delivery is never silently dropped. The residual gap on plain-`db` call
- * sites (audit row committed, enqueue failing on a DB error) is a registered
- * observation item, not a silent path.
- * The statement runs inside `executor.transaction()` (a SAVEPOINT when the
- * caller holds a transaction): a concurrent endpoint delete raises FK 23503,
- * which without a savepoint would abort the CALLER's business write. A
- * vanished endpoint has no delivery obligation, so ONLY that code is
- * swallowed by rolling back the savepoint; every other error stays loud.
+ * row per subscribed endpoint; the job drain's third segment (`jobs/drain.ts`)
+ * claims the rows, signs them with Standard Webhooks headers and POSTs them.
+ * Payload: the spec's RECOMMENDED `{ type, timestamp, data }` (field names
+ * from the spec example verbatim; the spec does not dictate a structure) — a
+ * deliberate subset of CNCF CloudEvents core attributes; a full-envelope mode
+ * is the registered additive interop path.
+ * Enqueue is ONE `insert ... select`: endpoint matching and row creation share
+ * one snapshot, so a concurrent endpoint delete can never leave a half-matched
+ * fan-out; matching is `events @> array[event]` (GIN `array_ops`-indexable if
+ * this table grows).
+ * Contract: rides the caller's transaction when in scope and any failure
+ * propagates (fail loud; a delivery is never silently dropped). The statement
+ * runs in `executor.transaction()` (a SAVEPOINT under a caller transaction):
+ * a concurrent endpoint delete raises FK 23503, so ONLY that code rolls the
+ * savepoint back (a vanished endpoint has no delivery obligation); every
+ * other error stays loud.
  */
 export interface DeliveryPayload {
 	type: string;

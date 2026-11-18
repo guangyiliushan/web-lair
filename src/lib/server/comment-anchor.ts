@@ -1,14 +1,12 @@
-/**
- * Server half of the segment-comment anchor, in pipeline order:
- * `collectAnchorBlocks` walks the rendered hast tree into an ordered block
- * directory — the same rules live in `$lib/utils/comment-anchor`, so the
- * client DOM walker cannot drift. Resolution reads (hash + quote + ord hint)
- * and writes (`ord` → `ord±2` neighbour window → quote search).
- * `applyAnchorMarks` wraps resolved ranges in `span.wl-cm` inside the tree;
- * the text must survive byte-for-byte. The hash lives here (node:crypto),
- * never in the isomorphic module, so the browser bundle stays free of a
- * second hash implementation.
- */
+// Server half of the segment-comment anchor, in pipeline order:
+// `collectAnchorBlocks` walks the rendered hast tree into an ordered block
+// directory — the same rules live in `$lib/utils/comment-anchor`, so the
+// client DOM walker cannot drift. Resolution reads (hash + quote + ord hint)
+// and writes (`ord` → `ord±2` neighbour window → quote search).
+// `applyAnchorMarks` wraps resolved ranges in `span.wl-cm` inside the tree;
+// the text must survive byte-for-byte. The hash lives here (node:crypto),
+// never in the isomorphic module, so the browser bundle stays free of a
+// second hash implementation.
 import { createHash } from 'node:crypto';
 import type { Element, ElementContent, Root as HastRoot, Text } from 'hast';
 import { z } from 'zod';

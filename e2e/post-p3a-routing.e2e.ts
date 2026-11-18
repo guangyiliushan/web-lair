@@ -4,19 +4,17 @@ import { psql } from './support';
 
 /**
  * Routing nails against the built site:
- *
  *   /              -> 200                (cookie-driven homepage, exempt)
  *   /account       -> 200                (tool page, exempt)
  *   /en/posts/X    -> 200                (canonical content URL)
  *   /posts/X       -> 307 -> /en/posts/X (document requests canonicalise)
  *   /en            -> 404                (bare locale resolves to no route)
- *
  * plus the read-side minimum: list/detail on seeded rows (language-leak,
- * pinned-card and excerpt teeth), the missing-language 404 hint (visible
- * languages only), scheduled-in-future invisibility, a language switch on a
- * content page (exactly one document navigation) and the canonical chrome
- * links; the SPA canonicalisation path lives in post-p3b-pages.
- * Fixtures are `e2e-p3a%` slugs on the shared dev database, cleaned in beforeAll/afterAll.
+ * pinned-card, excerpt teeth), the missing-language 404 hint (visible
+ * languages only), scheduled-in-future invisibility, a content-page language
+ * switch with exactly one document navigation, and the canonical chrome
+ * links; the SPA canonicalisation path lives in post-p3b-pages. Fixtures are
+ * `e2e-p3a%` slugs on the shared dev database, cleaned in beforeAll/afterAll.
  */
 
 const CATEGORY_ID = '00000000-0000-7000-8000-0000000003a1';

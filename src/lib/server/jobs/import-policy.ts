@@ -1,24 +1,16 @@
 /**
- * Job import policy is the single source shared by the save gate (web path,
- * `save-gate.ts`) and the repository eslint config (builtin jobs block).
- *
- * Why two node negations: minimatch never crosses "/" with a single `*`, so
- * one-slash builtins such as `node:fs/promises` need a second one-slash pattern
- * on top of the bare `node:*` negation.
- *
- * Why `!#jobs-sdk` is exact: a wildcard-free glob matches that string alone, so
- * lookalikes (`evil#jobs-sdk`, `#jobs-sdk-x`, `x#jobs-sdk`) stay restricted; a
- * trailing-wildcard negation admitted those forms while the runtime gate kept
- * rejecting them (`#jobs-sdk/x` was restricted both ways).
- *
- * Why the dynamic selectors: `no-restricted-imports` only sees STATIC import
- * statements, so `await import('lodash')` slips through. The selectors reject
- * dynamic imports with a disallowed string-literal specifier, and any dynamic
- * import whose specifier is not a literal (a computed specifier cannot be
- * verified against the allowlist).
- * Known asymmetry (registered nit): the runtime gate accepts no-substitution
- * template literals while the selectors stay stricter for builtins; computed
- * templates are rejected on both sides.
+ * Job import policy: the single source shared by the save gate
+ * (`save-gate.ts`) and the repo eslint config (builtin jobs block).
+ * Two negations: minimatch `*` never crosses "/", so bare `node:*` needs a
+ * second negation covering one-slash builtins like `node:fs/promises`;
+ * `!#jobs-sdk` is wildcard-free so lookalikes (`evil#jobs-sdk`,
+ * `#jobs-sdk-x`, `x#jobs-sdk`) stay restricted.
+ * `no-restricted-imports` only sees STATIC imports, so the selectors
+ * reject dynamic imports with a disallowed string-literal specifier and
+ * any dynamic import with a non-literal specifier (computed specifiers
+ * cannot be verified against the allowlist). Asymmetry: the runtime gate
+ * accepts no-substitution template literals while the selectors stay
+ * stricter for builtins; computed templates are rejected on both sides.
  */
 export const JOB_IMPORT_PATTERNS = [
 	{

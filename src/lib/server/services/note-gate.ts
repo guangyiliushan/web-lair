@@ -3,14 +3,12 @@ import { env } from '$env/dynamic/private';
 import { getOption } from '$lib/server/config/options-registry';
 import { hashArgon2id, verifyArgon2id } from '$lib/server/security/argon2';
 
-/**
- * Password gate for notes. The KDF is the shared Argon2id implementation in
- * `$lib/server/security/argon2` (OWASP minimum profile, async on the libuv
- * thread pool). Unlock tokens are HMAC-signed with a key derived from
- * BETTER_AUTH_SECRET via HKDF (zero new env vars) and bind the CURRENT note
- * password hash — changing or removing the note password invalidates every
- * outstanding unlock automatically.
- */
+// Password gate for notes. The KDF is the shared Argon2id implementation in
+// `$lib/server/security/argon2` (OWASP minimum profile, async on the libuv
+// thread pool). Unlock tokens are HMAC-signed with a key derived from
+// BETTER_AUTH_SECRET via HKDF (zero new env vars) and bind the CURRENT note
+// password hash — changing or removing the note password invalidates every
+// outstanding unlock automatically.
 
 /** Re-exported for existing callers/tests that pin the KDF profile. */
 export {

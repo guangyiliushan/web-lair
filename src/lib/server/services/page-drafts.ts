@@ -24,13 +24,11 @@ import { m } from '$lib/paraglide/messages';
 // keeps working while the script layer shares the same single source.
 export { isPagePlaceholderSlug };
 
-/**
- * Draft-flow service for md pages: one `drafts` row per target, autosave, publish onto `pages`.
- * The placeholder row is the `pages` row itself (slug `draft-…`, hidden, `content` null), and
- * publish is conditional: first publish flips `visible`, re-publish keeps it.
- * Payload (`{title, description, content}`) travels in `drafts.payload`, not the row columns;
- * rename has no slug tracker - pages 404 the old URL - and reference diffs union every locale.
- */
+// Draft-flow service for md pages: one `drafts` row per target, autosave, publish onto `pages`.
+// The placeholder row is the `pages` row itself (slug `draft-…`, hidden, `content` null), and
+// publish is conditional: first publish flips `visible`, re-publish keeps it.
+// Payload (`{title, description, content}`) travels in `drafts.payload`, not the row columns;
+// rename has no slug tracker - pages 404 the old URL - and reference diffs union every locale.
 /**
  * `isPageEditorRow` is the single predicate for rows the draft editor owns: md rows plus their
  * never-published placeholder form.

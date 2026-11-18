@@ -1,16 +1,13 @@
 # Production overlay: Gatus (the in-box monitor), loaded only by
 # deploy/compose-prod.sh as the third -f file; compose.prod.yaml never includes
 # it, so dev stacks and image builds never pull it.
-#
 # No depends_on: monitoring must not fail to start because its target is
 # unhealthy. The UI binds 127.0.0.1 only (no auth; tailnet/SSH tunnel).
 # `edge` is the outbound path (Bark, RDAP/WHOIS, DNS); `internal` links
 # app/db/rustfs directly.
-#
 # The config directory comes from render-config.sh (compose-prod.sh runs it
-# only before up/create); rules: deploy/monitoring/README.md "1. 文件" and
-# "3. 部署".
-#
+# only before up/create); rules: deploy/monitoring/README.md §1 (files) and
+# §3 (deployment).
 # YAML anchors do not cross files: x-logging is copied from compose.prod.yaml
 # and must be kept in sync by hand.
 

@@ -1,10 +1,8 @@
-/**
- * Batch D transformers: the `:::details{…}` / `:::spoiler{…}` containers
- * (spec 3.2; v0.3.2 delta #4: the opening line is the name directly followed
- * by the brace block, zero whitespace). Attribute keys are variant-strict
- * (`summary`/`open` for details, `label` for spoiler); unknown keys are
- * ignored like the render registry does.
- */
+// Batch D transformers: the `:::details{…}` / `:::spoiler{…}` containers
+// (spec 3.2; v0.3.2 delta #4: the opening line is the name directly followed
+// by the brace block, zero whitespace). Attribute keys are variant-strict
+// (`summary`/`open` for details, `label` for spoiler); unknown keys are
+// ignored like the render registry does.
 import type { MultilineElementTransformer } from '@lexical/markdown';
 import { DetailsNode, $createDetailsNode, $isDetailsNode } from './details-node';
 import type { DetailsVariant } from './details-node';

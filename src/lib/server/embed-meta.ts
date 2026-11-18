@@ -5,18 +5,16 @@ import { cached, type CacheStore } from '$lib/server/cache/store';
 
 /**
  * GitHub embed metadata proxy — the metadata side of the rich link cards.
- * The upstream is a fixed host (api.github.com, validated by TLS), so only
- * the user-supplied URL is validated, not the connect target: https only,
- * canonical host github.com, and a path matching one of the four enriched
- * card shapes (aligned with the registry matchers) — everything else 404s
- * before any request is made.
- * Rate limits: unauthenticated GitHub allows 60 req/h per IP, so responses
- * are cached for an hour (Valkey when VALKEY_URL is set, otherwise in the
- * process) with `cache-control: max-age=3600`; an optional GITHUB_TOKEN
- * lifts the ceiling to 5000/h.
- * Failure contract: every upstream failure (404, rate limit, timeout,
- * network) answers 204 No Content — the client keeps the static card and
- * never surfaces an error. Only whitelist fields below leave this module.
+ * The upstream is a fixed host (api.github.com, validated by TLS), so only the
+ * user-supplied URL is validated, not the connect target: https only, canonical
+ * host github.com, and a path matching one of the four enriched card shapes
+ * (aligned with the registry matchers) — everything else 404s before any request is made.
+ * Rate limits: unauthenticated GitHub allows 60 req/h per IP, so responses are
+ * cached for an hour (Valkey when VALKEY_URL is set, otherwise in-process) with
+ * `cache-control: max-age=3600`; an optional GITHUB_TOKEN lifts the ceiling to 5000/h.
+ * Failure contract: every upstream failure (404, rate limit, timeout, network)
+ * answers 204 No Content — the client keeps the static card and never surfaces
+ * an error. Only whitelist fields below leave this module.
  */
 const TIMEOUT_MS = 5000;
 const CACHE_TTL_SECONDS = 60 * 60;

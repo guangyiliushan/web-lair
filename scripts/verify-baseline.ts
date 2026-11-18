@@ -2,14 +2,13 @@
 //
 // Unified baseline gate: (a) `drizzle/0000_baseline.sql` against the hard
 // contract (table set, counts, naming rules, junction composite PKs,
-// constraint/predicate pins, retired tables); (b) the target database
-// against the parsed baseline (table/column/index/check/FK inventories, FK
-// leading indexes, migration ledger hash) - only when DATABASE_URL is set.
-//
+// constraint/predicate pins, retired tables); (b) the target database against
+// the parsed baseline (table/column/index/check/FK inventories, FK leading
+// indexes, migration ledger hash) - only when DATABASE_URL is set.
 // Phase A (default) is read-only and degrades to file checks without a
-// database. Phase B (--write-probes) drives the constraint teeth from a
-// single rolled-back transaction: run it on throwaway databases only, since
-// it consumes identity numbers that rollback does not restore.
+// database. Phase B (--write-probes) drives the constraint teeth from a single
+// rolled-back transaction: run it on throwaway databases only (it consumes
+// identity numbers that rollback does not restore).
 //
 // Usage: `pnpm db:verify-baseline` (phase A, DATABASE_URL optional);
 // `pnpm db:verify-baseline -- --write-probes` (A + probes, throwaway DB).
@@ -91,11 +90,9 @@ const EXPECTED_TABLE_NAMES: string[] = [
 	'webhooks'
 ];
 
-// ---------------------------------------------------------------------------
 // Migration deltas (0001+): the live schema is the baseline plus these. The
 // FILE checks above keep pinning the generated baseline itself; the DB checks
 // below union both sets.
-// ---------------------------------------------------------------------------
 const MIGRATION_TABLE_NAMES = [
 	'ai_provider_secrets',
 	'webhook_secrets',
@@ -583,9 +580,7 @@ function sameSets(actual: string[], expected: string[], label: string): void {
 	);
 }
 
-// ---------------------------------------------------------------------------
 // Parse the baseline file (single source of truth for shape).
-// ---------------------------------------------------------------------------
 
 const baseline = readFileSync(BASELINE_PATH);
 const sha = createHash('sha256').update(baseline).digest('hex');
@@ -649,9 +644,7 @@ const fks = [
 const uuidv7Count = (text.match(/DEFAULT uuidv7\(\)/g) ?? []).length;
 const inlineUniques = [...text.matchAll(/CONSTRAINT "([a-z_0-9]+)" UNIQUE/g)].map((m) => m[1]);
 
-// ---------------------------------------------------------------------------
 // File-level checks (no database required).
-// ---------------------------------------------------------------------------
 
 async function fileChecks(): Promise<void> {
 	sameSets([...tableColumns.keys()], EXPECTED_TABLE_NAMES, 'table set');
@@ -755,9 +748,7 @@ async function fileChecks(): Promise<void> {
 	);
 }
 
-// ---------------------------------------------------------------------------
 // Database checks (phase A) + constraint probes (phase B).
-// ---------------------------------------------------------------------------
 
 async function dbChecks(): Promise<void> {
 	if (!DB_URL) {

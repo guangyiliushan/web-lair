@@ -1,41 +1,20 @@
 #!/usr/bin/env bash
-# Game day: drive controlled faults at the alerting layer and record
-# detection / recovery times.
-#
-# Why this exists: the runbook covers *what to do* when an alert fires; this
-# script answers the other question — *would we even be told, and how long
-# would it take*. Every drill asserts three things:
-#   1. the fault is DETECTED by the monitor (TRIGGERED),
-#   2. recovery is OBSERVED (RESOLVED),
-#   3. both are recorded as wall-clock deltas in the receipt.
-#
-# Drill classes:
-#   pg / container   self-contained: a throwaway target container + a Gatus
-#                    monitor on a scratch network. Safe on any host, no data
-#                    touched, cleaned up on exit. This is the runnable default.
-#   drain / disk     dry-run only: they need the box (systemd timers) or write
-#                    to a real mount. The script prints the exact recipe and the
-#                    assertions to check; run it during the production window.
-#
+# Game day: drive controlled faults at the alerting layer; every drill asserts
+# DETECTION (TRIGGERED), OBSERVED recovery (RESOLVED), and both as wall-clock
+# deltas in the JSON receipt. pg / container drills are self-contained
+# (throwaway target container + a Gatus monitor on a scratch network, cleaned
+# up on exit) — the runnable default; drain / disk are dry-run only and print
+# the recipe and assertions to run in the production window.
 # usage:
 #   bash deploy/game-day.sh                         # dry-run: print every drill
 #   bash deploy/game-day.sh --drill pg              # run the PG drill (safe, disposable)
-#   bash deploy/game-day.sh --drill container       # run the container drill
 #   bash deploy/game-day.sh --drill all --receipt /tmp/gd.json
 #   ALLOW_GAME_DAY=1 bash deploy/game-day.sh --drill pg   # required to actually run
-#
-# flags:
-#   --drill <pg|container|drain|disk|all>   default: all
-#   --receipt <path>                        write the JSON receipt here
-#   --interval <seconds>                    monitor interval (default 5)
-#   --timeout <seconds>                     per-phase wait budget (default 120)
-#   --keep                                  keep the scratch containers for inspection
-#   -h | --help
-#
-# guarantees:
-#   - no secret is read or printed (the drill config carries no BARK_URL);
-#   - the target is ALWAYS a container this script created (never `db`/`app`);
-#   - a trap removes containers/network even when the drill fails.
+#   flags: --drill <pg|container|drain|disk|all> (all) · --receipt <path> ·
+#   --interval <seconds> (5) · --timeout <seconds> (120) · --keep · -h|--help
+# guarantees: no secret is read or printed (the drill config carries no
+# BARK_URL); the target is ALWAYS a container this script created (never
+# `db`/`app`); a trap removes containers/network even when the drill fails.
 set -uo pipefail
 
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)

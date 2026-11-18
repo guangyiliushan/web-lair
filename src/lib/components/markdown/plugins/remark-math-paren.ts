@@ -12,22 +12,18 @@ import type {
 import { codes } from 'micromark-util-symbol';
 
 /**
- * remarkMathParen adds `\(…\)` inline math — the unambiguous equivalent of `$…$`, the
- * escape hatch for the `$` ambiguity.
- * It is a micromark construct because escapes are resolved while parsing: CommonMark's
- * character escape consumes `\(` before any post-parse plugin can see it. The construct
- * claims `\(` only when a matching `\)` exists on the same line; a miss rewinds through
- * micromark's own `nok` path and the core escape handles the backslash, so the author gets
- * the literal parenthesis.
- * It emits the same token names micromark-extension-math uses (`mathText` /
- * `mathTextSequence` / `mathTextData`), so remark-math's registered from-markdown extension
- * builds the mdast node (value, `data.hChildren`, position); hand-rolling that node
- * produced empty formulas, so only the upstream token contract keeps both halves in sync.
- * Performance: a failing `\(` must not rescan the rest of its line — a line full of `\(`
- * went quadratic (16 KB → ~49 s); the remembered no-closer region makes every later attempt
- * inside it O(1) (see the region checks below).
- * `\[…\]` is not implemented: a display-math node is block-level in mdast while the brackets
- * sit inside a paragraph, so the flow-token machinery would have to apply.
+ * remarkMathParen adds `\(…\)` inline math — the unambiguous equivalent of
+ * `$…$`, the escape hatch for the `$` ambiguity. It is a micromark construct
+ * because escapes resolve while parsing: CommonMark's escape consumes `\(`
+ * before any post-parse plugin sees it, so `\(` is claimed only when a
+ * matching `\)` is on the same line; a miss rewinds through `nok` and yields
+ * a literal parenthesis. The tokens mirror micromark-extension-math
+ * (`mathText` / `mathTextSequence` / `mathTextData`), so remark-math's
+ * from-markdown builds the mdast node (value, `data.hChildren`, position);
+ * hand-rolled nodes come out empty.
+ * Perf: a failing `\(` must not rescan its line; the no-closer region keeps later attempts O(1).
+ * `\[…\]` is not implemented: display math is block-level in mdast while the
+ * brackets sit inside a paragraph (flow-token machinery would have to apply).
  */
 declare module 'micromark-util-types' {
 	interface TokenTypeMap {

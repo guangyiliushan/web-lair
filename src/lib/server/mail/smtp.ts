@@ -1,14 +1,12 @@
-/**
- * SMTP settings shared by the web transport and the mail probe.
- *
- * The web path reads `$env/dynamic/private` (a SvelteKit virtual module); the
- * drain path runs under plain Node and can only read `process.env`. Both feed
- * the SAME derivation here, so a probe can never disagree with the transport
- * about host/port/TLS/DKIM - the failure mode this seam exists to prevent
- * ("configured" but not deliverable).
- *
- * Node-loadable: imports only `nodemailer` (no `$env`, no `$lib`).
- */
+// SMTP settings shared by the web transport and the mail probe.
+//
+// The web path reads `$env/dynamic/private` (a SvelteKit virtual module); the
+// drain path runs under plain Node and can only read `process.env`. Both feed
+// the SAME derivation here, so a probe can never disagree with the transport
+// about host/port/TLS/DKIM - the failure mode this seam exists to prevent
+// ("configured" but not deliverable).
+//
+// Node-loadable: imports only `nodemailer` (no `$env`, no `$lib`).
 import nodemailer, { type Transporter } from 'nodemailer';
 
 /** Reads one env value; both call sites wrap their own env source. */

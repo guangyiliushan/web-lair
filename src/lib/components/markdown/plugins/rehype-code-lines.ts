@@ -4,21 +4,18 @@ import { visit } from 'unist-util-visit';
 import { addClass, classList } from './hast-class';
 
 /**
- * rehypeCodeLines gives code blocks their line structure and numbering. It runs after
- * rehype-pretty-code on the server and after the mermaid pass on both pipelines, so it
- * sees each pipeline's final block shape: pretty-code output already has `<span
- * data-line>` children of `<code>` (a literal `data-line` key — programmatic nodes are not
- * camelised), while the light pipeline has plain text and is split into line spans here.
- * Every line gets `md-code-line`, the block gets `md-code-linenos` (numbers render through
- * a CSS counter) unless the info string said `linenos=off` — the only info-string switch
- * for numbering, which is on by default.
- * `linenos=off` is carried by the `md-linenos-off` marker written by the code-meta pass.
- * Reason: the marker is kept in the output — it is the off-state evidence and keeps this
- * pass idempotent; after pretty-code renames the pre it lives on the figure, so both the
- * pre and its parent are checked.
- * A `collapsed=N` block previews its first N lines: lines beyond N get
- * `md-code-line-hidden`, which the stylesheet hides while the details is closed (keyed on
- * `data-md-collapse`, so a bare `collapsed` — full collapse — is unaffected).
+ * rehypeCodeLines gives code blocks their line structure and numbering. It runs after rehype-pretty-code
+ * on the server and after the mermaid pass on both pipelines, so it sees each pipeline's final block
+ * shape: pretty-code output already has `<span data-line>` children of `<code>` (a literal `data-line`
+ * key — programmatic nodes are not camelised), while the light pipeline has plain text and is split into line spans here.
+ * Every line gets `md-code-line`, the block gets `md-code-linenos` (numbers render through a CSS
+ * counter) unless the info string said `linenos=off` — the only info-string switch for numbering, on by
+ * default. `linenos=off` is carried by the `md-linenos-off` marker written by the code-meta pass and kept
+ * in the output (off-state evidence; keeps this pass idempotent); after pretty-code renames the pre it
+ * lives on the figure, so both the pre and its parent are checked.
+ * A `collapsed=N` block previews its first N lines: lines beyond N get `md-code-line-hidden`, which the
+ * stylesheet hides while the details is closed (keyed on `data-md-collapse`, so a bare `collapsed` — full
+ * collapse — is unaffected).
  */
 export const rehypeCodeLines: Plugin<[], HastRoot> = () => {
 	const ensureLines = (pre: Element): Element[] | null => {

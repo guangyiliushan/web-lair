@@ -39,7 +39,7 @@ test.describe('Language switcher', () => {
 
 	test('renders the language button with its localized label', async ({ page }) => {
 		await page.goto('/');
-		// pinned zh-cn, so the switcher's label is 语言
+		// pinned zh-cn, so the switcher's label is `语言`
 		await expect(page.getByRole('banner').getByRole('button', { name: '语言' })).toBeVisible({
 			timeout: 10000
 		});

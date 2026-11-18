@@ -1,13 +1,11 @@
-/**
- * Batch C transformers: the export side of embed cards and mermaid blocks
- * plus the mermaid fence import.
- *
- * - `embedTransformer` is export-only (its regExp never matches): the import
- *   side lives in the image transformer, which branches through `decideImage`.
- * - `mermaidTransformer` mirrors the core code-fence transformer for the
- *   `mermaid` language only; other languages fall through to the core. An
- *   unterminated fence returns null and also falls through.
- */
+// Batch C transformers: the export side of embed cards and mermaid blocks
+// plus the mermaid fence import.
+//
+// - `embedTransformer` is export-only (its regExp never matches): the import
+//   side lives in the image transformer, which branches through `decideImage`.
+// - `mermaidTransformer` mirrors the core code-fence transformer for the
+//   `mermaid` language only; other languages fall through to the core. An
+//   unterminated fence returns null and also falls through.
 import type { ElementTransformer, MultilineElementTransformer } from '@lexical/markdown';
 import { EmbedNode, $isEmbedNode } from '$lib/components/markdown/embed/embed-node';
 import { MermaidNode, $createMermaidNode, $isMermaidNode } from './mermaid-block-node';

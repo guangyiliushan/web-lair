@@ -1,20 +1,13 @@
 /**
- * Production migration entry point.
+ * Production migration entry point: `drizzle-orm`'s migrator (drizzle-kit is
+ * a devDependency and absent from the runtime image).
  *
- * Why not `drizzle-kit migrate`: drizzle-kit is a devDependency and the
- * runtime image ships production dependencies only. `drizzle-orm`'s migrator
- * reads the same `drizzle/meta/_journal.json` and writes the same
- * `drizzle.__drizzle_migrations` rows (verified byte-identical on a scratch
- * database; re-runs idempotent).
- *
- * The single CREATE-only baseline has been regenerated in place several times
- * (E2, provenance, S1, taxonomy, default category, translation runtime), and
- * the journal keeps the original `when`, so an existing database silently
- * skips it. The schema preflights below exit 1 on a database predating a
- * regenerated baseline and point at the matching rebuild section in
- * `deploy/RUNBOOK.md` ("E2 baseline rebuild", "Provenance baseline rebuild",
- * "Update"). None of these guards run in the app process: deploy scripts
- * must run `migrate` before `up -d`.
+ * Contract: the CREATE-only baseline was regenerated in place, so the journal
+ * keeps its original `when` and an existing database silently skips it. The
+ * schema preflights below exit 1 on a database predating a regenerated
+ * baseline and name the rebuild section in `deploy/RUNBOOK.md`. None of these
+ * guards run in the app process: deploy scripts must run `migrate` before
+ * `up -d`.
  *
  * Usage (host): `node --env-file-if-exists=.env scripts/migrate.ts`
  * Usage (container): `node scripts/migrate.ts`   # env from compose

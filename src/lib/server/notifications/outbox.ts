@@ -14,23 +14,18 @@ import {
 import type { NotificationSink } from './notify.ts';
 
 /**
- * Notification outbox writer: `enqueueNotification` turns one event into one
- * `queued` row per enabled channel, inside the SAVEPOINT it creates for
- * itself — both callers use that mechanism. The comment service calls it
- * INSIDE the comment insert's transaction, so a notification either commits
- * with the comment or not at all, while a failed enqueue (DB error, bad key)
- * rolls back only the savepoint and never the business write; the drain's
- * `notify()` sink passes its own db handle with the same mechanism.
- * Idempotency is the table's unique key `(event_type, event_key, channel)`:
- * `on conflict do nothing` makes a duplicate enqueue a no-op (`duplicate`),
- * so a producer that runs twice (retried tick, replayed request) can never
- * double-notify.
- * Storm suppression (limits.ts) is checked inside the same transaction: the
- * hourly window counts only committed rows, so sequential floods collapse
- * deterministically; concurrent producers can overshoot by the in-flight
- * count (registered: a bounded, non-alerting overshoot, never an unbounded
- * flood). Node-strip-loadable: relative `.ts` imports, no `$lib`, no virtual
- * modules.
+ * Notification outbox writer: one `queued` row per enabled channel inside
+ * its own SAVEPOINT. The comment service calls it inside the comment
+ * insert's transaction (the notification commits with the comment or not
+ * at all), and a failed enqueue rolls back only the savepoint, never the
+ * business write; the drain's `notify()` sink passes its own db handle.
+ * Idempotency: unique key `(event_type, event_key, channel)` + `on conflict
+ * do nothing` makes a duplicate enqueue a no-op (`duplicate`), so a
+ * retried or replayed producer never double-notifies. Storm limits
+ * (limits.ts) are checked in the same transaction against committed rows
+ * only: sequential floods collapse, concurrent producers overshoot by at
+ * most the in-flight count (bounded, non-alerting). Node-strip-loadable:
+ * relative `.ts` imports, no `$lib`, no virtual modules.
  */
 export type NotificationOutboxDb = JobsDb;
 

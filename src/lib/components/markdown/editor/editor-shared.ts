@@ -16,15 +16,13 @@ import { DetailsNode } from '$lib/components/markdown/details/details-node';
 import { TabsNode } from '$lib/components/markdown/tabs/tabs-node';
 import { GridNode } from '$lib/components/markdown/grid/grid-node';
 
-/**
- * Nested editor node subset and Theme configuration.
- *
- * A standalone module that never imports the custom TagNode/AlertNode: the
- * dependency chain alert-node → alert-decorator → this module must terminate here,
- * otherwise, in an import order where alert-node initialises before editor-nodes,
- * the custom node classes are still in the TDZ and the arrays/dependencies get
- * undefined.
- */
+// Nested editor node subset and Theme configuration.
+//
+// A standalone module that never imports the custom TagNode/AlertNode: the
+// dependency chain alert-node → alert-decorator → this module must terminate here,
+// otherwise, in an import order where alert-node initialises before editor-nodes,
+// the custom node classes are still in the TDZ and the arrays/dependencies get
+// undefined.
 
 /** Nested editor node subset (AlertNode and TagNode excluded to prevent infinite nesting) */
 export const NESTED_EDITOR_NODES = [

@@ -1,8 +1,6 @@
-/**
- * Minimal XML serialisation helpers for the feed endpoints: the feeds
- * are hand-rolled on purpose — correctness is proven by unit tests and the
- * W3C Feed Validator gate, not by a runtime dependency.
- */
+// Minimal XML serialisation helpers for the feed endpoints: the feeds
+// are hand-rolled on purpose — correctness is proven by unit tests and the
+// W3C Feed Validator gate, not by a runtime dependency.
 
 /**
  * Characters XML 1.0 cannot represent (the Char production): control

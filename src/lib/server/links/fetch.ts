@@ -8,17 +8,16 @@ import {
 /**
  * Link fetch unit contract for the links checker:
  * - GET only, https only, no cookies, no JS.
- * - Manual redirects: max 5 hops; every hop re-validated (https + public DNS)
- *   and re-gated by the caller's `beforeHop` hook (robots).
- * - Connection pinning: each hop dials the addresses validated in this very
- *   unit via `pinnedLookup` - never a second, unchecked lookup (the OWASP
- *   DNS-rebinding closure; TLS servername stays the hostname).
- * - One total deadline per unit: `timeoutMs` covers the whole redirect chain
- *   AND the DNS resolution and `beforeHop` gate of every hop (non-abortable
- *   steps race the same signal), plus a streaming body cap (`maxBytes`).
- * - Resolver failures propagate unchanged: the caller classifies them as the
- *   site's own state (ENOTFOUND -> `dns`, counted - death detection depends
- *   on it).
+ * - Manual redirects: max 5 hops; every hop re-validated (https + public DNS) and
+ *   re-gated by the caller's `beforeHop` hook (robots).
+ * - Connection pinning: each hop dials the addresses validated in this very unit via
+ *   `pinnedLookup` - never a second, unchecked lookup (the OWASP DNS-rebinding closure;
+ *   TLS servername stays the hostname).
+ * - One total deadline per unit: `timeoutMs` covers the whole redirect chain AND the
+ *   DNS resolution and `beforeHop` gate of every hop (non-abortable steps race the same
+ *   signal), plus a streaming body cap (`maxBytes`).
+ * - Resolver failures propagate unchanged: the caller classifies them as the site's own
+ *   state (ENOTFOUND -> `dns`, counted - death detection depends on it).
  */
 const MAX_REDIRECTS = 5;
 

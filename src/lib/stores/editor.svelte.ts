@@ -1,6 +1,4 @@
-/**
- * Editor store — manages draft state, dirty detection, auto-save.
- */
+// Editor store — manages draft state, dirty detection, auto-save.
 import { writable } from 'svelte/store';
 
 // Use svelte stores for compatibility; migrate to $state() when ready

@@ -4,6 +4,11 @@ import { visit, SKIP } from 'unist-util-visit';
 import type { ContainerDirective } from 'mdast-util-directive';
 import { decideImage } from '$lib/components/markdown/embed/resolve';
 
+/** The payload remark-image-attr stores (mdast Data has no shared type). */
+interface ImageDataPayload {
+	mdTailAttrs?: string;
+}
+
 /**
  * remarkImageEmbed turns every bare `!` image node into the decideImage decision: images
  * stay images, everything else becomes a zero-request placeholder card — an
@@ -16,12 +21,6 @@ import { decideImage } from '$lib/components/markdown/embed/resolve';
  * Runs after remark-image-attr (whose mdTailAttrs payload feeds rule 1) and after
  * remark-directive (whose normalised grid attributes feed rule 2).
  */
-
-/** The payload remark-image-attr stores (mdast Data has no shared type). */
-interface ImageDataPayload {
-	mdTailAttrs?: string;
-}
-
 export const remarkImageEmbed: Plugin<[], Root> = () => {
 	return (tree) => {
 		// Pass 1 — marks for rule 2 (image-mode grids) and the link guard.

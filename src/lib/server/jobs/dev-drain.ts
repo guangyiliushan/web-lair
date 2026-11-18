@@ -1,17 +1,15 @@
-/**
- * Dev-only background drain: this module holds the tick and the loop behind
- * `pnpm jobs:dev`, so the entry (`jobs/dev.ts`) stays a thin wrapper around the
- * same `runDrain` the production timer uses.
- *
- * Production runs `jobs/drain.ts` from `deploy/systemd/web-lair-drain.timer`
- * once a minute; `vite dev` has no such timer, so an enqueue-only action waits
- * at `queued` forever until someone runs the drain by hand (README, "Background
- * jobs in development").
- *
- * Node-type-strippable on purpose (explicit `.ts` extensions, no aliases, no
- * SvelteKit virtual modules) so it loads under `node jobs/dev.ts`, exactly like
- * `jobs/drain.ts`.
- */
+// Dev-only background drain: this module holds the tick and the loop behind
+// `pnpm jobs:dev`, so the entry (`jobs/dev.ts`) stays a thin wrapper around the
+// same `runDrain` the production timer uses.
+//
+// Production runs `jobs/drain.ts` from `deploy/systemd/web-lair-drain.timer`
+// once a minute; `vite dev` has no such timer, so an enqueue-only action waits
+// at `queued` forever until someone runs the drain by hand (README, "Background
+// jobs in development").
+//
+// Node-type-strippable on purpose (explicit `.ts` extensions, no aliases, no
+// SvelteKit virtual modules) so it loads under `node jobs/dev.ts`, exactly like
+// `jobs/drain.ts`.
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { runDrain } from './drain.ts';

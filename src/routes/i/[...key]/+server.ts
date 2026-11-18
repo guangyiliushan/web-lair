@@ -7,13 +7,11 @@ import { rateLimit } from '$lib/server/cache/store';
 import { KEY_PATTERN } from '$lib/media/keys';
 import type { RequestHandler } from './$types';
 
-/**
- * Content media proxy: storage is loopback-only, so every public asset flows
- * through `/i/<key>`. The key grammar lives in `$lib/media/keys` (shared with the
- * upload pipeline); anything that does not parse is a 404 before storage is
- * touched. Variants are public and immutable (one-year max-age); GIFs and
- * registered attachments are public; photo originals stay admin-only (404).
- */
+// Content media proxy: storage is loopback-only, so every public asset flows
+// through `/i/<key>`. The key grammar lives in `$lib/media/keys` (shared with the
+// upload pipeline); anything that does not parse is a 404 before storage is
+// touched. Variants are public and immutable (one-year max-age); GIFs and
+// registered attachments are public; photo originals stay admin-only (404).
 
 /** Public once registered: the registry, not the extension pattern, grants access. */
 const ATTACHMENT_EXTS = new Set(['pdf', 'zip', 'txt', 'md']);

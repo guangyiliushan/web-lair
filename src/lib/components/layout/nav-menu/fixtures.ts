@@ -1,12 +1,10 @@
-/**
- * Storybook fixtures for the nav mega panels.
- *
- * These mock the *data contract* (`MegaMenu` config + `NavMenuData`),
- * not the render layer, so they survive the shell swap untouched.
- *
- * Rows use `iconName`, never `icon: Component`: dynamic menu data crosses the
- * load serialisation boundary where components cannot travel (see `NavChild`).
- */
+// Storybook fixtures for the nav mega panels.
+//
+// These mock the *data contract* (`MegaMenu` config + `NavMenuData`),
+// not the render layer, so they survive the shell swap untouched.
+//
+// Rows use `iconName`, never `icon: Component`: dynamic menu data crosses the
+// load serialisation boundary where components cannot travel (see `NavChild`).
 import type { NavChild, NavMenuConfig, NavMenuData } from '$lib/config/navigation.config';
 
 // ── Home ──

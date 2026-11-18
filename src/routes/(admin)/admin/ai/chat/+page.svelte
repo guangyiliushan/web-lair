@@ -148,7 +148,7 @@
 					</Button>
 				</form>
 			{/if}
-			<!-- Submit target for the header's 新建 button (see the action registry). -->
+			<!-- Submit target for the header's `新建` button (see the action registry). -->
 			<form method="post" action="?/new" bind:this={newSessionForm} class="hidden"></form>
 		</header>
 

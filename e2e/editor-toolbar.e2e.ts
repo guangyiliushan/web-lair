@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
 
-// The toolbar's aria-labels come from the zh-cn message set (编辑器工具栏 /
-// 粗体 / 插入链接 ...), so this file pins zh-cn explicitly: the app default is
+// The toolbar's aria-labels come from the zh-cn message set (`编辑器工具栏` /
+// `粗体` / `插入链接` ...), so this file pins zh-cn explicitly: the app default is
 // the project base locale (en) since the client-side locale pin was removed.
 test.use(zhCnLocale);
 

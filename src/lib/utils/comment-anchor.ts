@@ -1,15 +1,13 @@
-/**
- * Segment-comment anchor contract v1. Deliberately isomorphic and **zod-free**: the
- * client (selection capture) and the server (hast walker / validation / marking) must
- * share one set of rules, and that rules module must not drag the validator into the
- * browser bundle. The zod schema + the hash live in
- * `$lib/server/comment-anchor.ts`.
- *
- * Coordinate contract: every offset is a **Unicode code point** index into the
- * block's normalized text - never a UTF-16 code unit index (the W3C Web Annotation
- * Model requires code points, not code units). The same module therefore owns the
- * code-point/UTF-16 bridge the server marking pass needs.
- */
+// Segment-comment anchor contract v1. Deliberately isomorphic and **zod-free**: the
+// client (selection capture) and the server (hast walker / validation / marking) must
+// share one set of rules, and that rules module must not drag the validator into the
+// browser bundle. The zod schema + the hash live in
+// `$lib/server/comment-anchor.ts`.
+//
+// Coordinate contract: every offset is a **Unicode code point** index into the
+// block's normalized text - never a UTF-16 code unit index (the W3C Web Annotation
+// Model requires code points, not code units). The same module therefore owns the
+// code-point/UTF-16 bridge the server marking pass needs.
 
 /** Anchor payload version. A rule change means a new version (old anchors degrade). */
 export const ANCHOR_VERSION = 1;
@@ -69,11 +67,6 @@ export interface CommentAnchor {
 }
 
 /**
- * What the client submits: the ordinal it resolved the selection against plus
- * the range and quote. Hash/occurrence are recomputed server-side, so a stale
- * or forged client payload can never define them.
- */
-/**
  * Cheap synchronous fingerprint of a block's normalized text (FNV-1a 32-bit).
  * The client sends it with the draft so a shifted ordinal cannot bind to a
  * same-length neighbour with the same quote; the server recomputes it from its
@@ -88,6 +81,11 @@ export function blockFingerprint(text: string): string {
 	return hash.toString(16).padStart(8, '0');
 }
 
+/**
+ * What the client submits: the ordinal it resolved the selection against plus
+ * the range and quote. Hash/occurrence are recomputed server-side, so a stale
+ * or forged client payload can never define them.
+ */
 export interface CommentAnchorDraft {
 	ord: number;
 	start: number;

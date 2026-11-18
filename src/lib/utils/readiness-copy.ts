@@ -1,15 +1,13 @@
 import { m } from '$lib/paraglide/messages';
 import { readinessMessageKeys, type AiReadinessStatus } from './ai-meta';
 
-/**
- * Renders the readiness copy that `ai-meta.ts` names.
- *
- * It lives beside `ai-meta.ts` rather than inside it because `ai-meta.ts` is
- * reachable from the plain-Node job drain (via `ai/providers.ts`) and must not
- * import `$lib`; the job drain loads that graph with no bundler. Only the
- * surfaces - console, settings, editors - ever render copy, so only they need
- * this module.
- */
+// Renders the readiness copy that `ai-meta.ts` names.
+//
+// It lives beside `ai-meta.ts` rather than inside it because `ai-meta.ts` is
+// reachable from the plain-Node job drain (via `ai/providers.ts`) and must not
+// import `$lib`; the job drain loads that graph with no bundler. Only the
+// surfaces - console, settings, editors - ever render copy, so only they need
+// this module.
 
 /**
  * Paraglide's `m` only exposes statically known keys, while the readiness map

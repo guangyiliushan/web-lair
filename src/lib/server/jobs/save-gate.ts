@@ -8,27 +8,23 @@ import type { ESLint } from 'eslint';
 
 /**
  * Save gate: every check a job script must pass before it may be written to
- * the user layer. All checks are pure "parsing" - user code is never executed
+ * the user layer. All checks are pure "parsing" — user code is never executed
  * here; the drain is the only executor.
- *
- * The checks and why:
  * 1. name - module-file safety (Windows device names, traversal), bounded
- *   length, canonical-name invariant: a name must map to its own file
- *   (`my.job` lands in `my-job.ts`; `jobs-prune` would shadow the
- *   `jobs.prune` builtin without a fork sidecar).
- * 2. typescript - parser + `erasableSyntaxOnly` (TS 5.8+, the option the
- *   TypeScript and Node docs pair for strip-only mode); the only checker
- *   reporting line/column for non-erasable syntax, because node's
- *   `stripTypeScriptTypes` throws WITHOUT a position.
+ *   length, canonical-name invariant: `my.job` lands in `my-job.ts`
+ *   (`jobs-prune` would shadow the `jobs.prune` builtin without a fork sidecar).
+ * 2. typescript - parser + `erasableSyntaxOnly` (the option the TS and Node
+ *   docs pair for strip-only mode); the only checker reporting line/column,
+ *   because node's `stripTypeScriptTypes` throws WITHOUT a position.
  * 3. strip - `module.stripTypeScriptTypes` is the runtime authority (node's
  *   amaro stripper); when it rejects and the TS pass explained nothing, its
  *   message is the report.
  * 4. runtime - constructs that pass stripping yet fail in node: decorators,
- *   CJS globals (`require` / `__dirname`), dynamic imports with disallowed or
- *   non-literal specifiers.
+ *   CJS globals (`require` / `__dirname`), dynamic imports with non-literal
+ *   specifiers.
  * 5. eslint - static import allowlist (only `node:*` and `#jobs-sdk`, literal
  *   shared with the repo eslint config via `import-policy.ts`) under an
- *   isolated config - the repository config is never consulted.
+ *   isolated config — the repository config is never consulted.
  */
 
 export interface GateError {
@@ -95,9 +91,7 @@ export function checkJobName(name: string): GateError[] {
 	return errors;
 }
 
-// ---------------------------------------------------------------------------
 // TypeScript diagnostics (positions for everything strip-only rejects)
-// ---------------------------------------------------------------------------
 
 type TsModule = typeof import('typescript');
 let tsModulePromise: Promise<TsModule> | null = null;
@@ -154,9 +148,7 @@ async function checkTypeScript(code: string): Promise<GateError[]> {
 	});
 }
 
-// ---------------------------------------------------------------------------
 // Type stripping (runtime authority; no positions - probed)
-// ---------------------------------------------------------------------------
 
 /**
  * Reported only when TypeScript explained nothing (see `runSaveGate`). The TS
@@ -183,9 +175,7 @@ function checkStrip(code: string): GateError[] {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Runtime residue: passes stripping, fails on execution
-// ---------------------------------------------------------------------------
 
 /**
  * CJS globals that `@types/node` declares globally but that do not exist in
@@ -341,9 +331,7 @@ async function checkRuntimeResidue(code: string): Promise<GateError[]> {
 	return errors;
 }
 
-// ---------------------------------------------------------------------------
 // Import policy (isolated eslint config - repo config never consulted)
-// ---------------------------------------------------------------------------
 
 let eslintPromise: Promise<ESLint> | null = null;
 
@@ -380,9 +368,7 @@ async function checkEslintImports(code: string): Promise<GateError[]> {
 		}));
 }
 
-// ---------------------------------------------------------------------------
 // Gate
-// ---------------------------------------------------------------------------
 
 /**
  * Run every check over a candidate script. The name is checked independently

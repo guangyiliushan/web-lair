@@ -1,12 +1,10 @@
-/**
- * Footnote transformers for the editor (L1 GFM footnotes; pandoc-style inline
- * footnotes). Refs and inline notes become atomic chips; definition lines
- * (`[^label]: ...`) stay literal source text (registered follow-up: a
- * definitions panel).
- *
- * Guards: a backslash before the opener keeps the text literal (spec 4.4);
- * the ref form blocks a trailing colon so the definition line never converts.
- */
+// Footnote transformers for the editor (L1 GFM footnotes; pandoc-style inline
+// footnotes). Refs and inline notes become atomic chips; definition lines
+// (`[^label]: ...`) stay literal source text (registered follow-up: a
+// definitions panel).
+//
+// Guards: a backslash before the opener keeps the text literal (spec 4.4);
+// the ref form blocks a trailing colon so the definition line never converts.
 import type { TextMatchTransformer } from '@lexical/markdown';
 import { FootnoteRefNode, $createFootnoteRefNode, $isFootnoteRefNode } from './footnote-ref-node';
 import {

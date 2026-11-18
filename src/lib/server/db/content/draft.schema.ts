@@ -18,13 +18,6 @@ import type { LocalizedMarkdown, LocalizedText } from './localized.ts';
 import type { PostDraftPayload } from './post-provenance.ts';
 import { topics } from './topic.schema.ts';
 
-/**
- * Drafts are the unpublished working copy of a post (edit isolation): one
- * row per target (`unique(ref_type, ref_id)` partial), upserted by
- * autosave/save, published by the publish transaction, discarded explicitly.
- * `ref_id` stays polymorphic (posts/notes/pages); `author` points at the
- * auth table and remains text.
- */
 /** Draft ref_type whitelist. */
 export const DRAFT_REF_TYPES = ['post', 'page', 'note'] as const;
 
@@ -37,6 +30,13 @@ export interface PageDraftPayload {
 	content: LocalizedMarkdown;
 }
 
+/**
+ * Drafts are the unpublished working copy of a post (edit isolation): one
+ * row per target (`unique(ref_type, ref_id)` partial), upserted by
+ * autosave/save, published by the publish transaction, discarded explicitly.
+ * `ref_id` stays polymorphic (posts/notes/pages); `author` points at the
+ * auth table and remains text.
+ */
 export const drafts = pgTable(
 	'drafts',
 	{

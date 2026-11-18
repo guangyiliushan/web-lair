@@ -3,17 +3,15 @@ import { zhCnLocale } from './locale-fixture';
 import { bootstrapReader, psql, valkeyDel } from './support';
 
 /**
- * Comment P3b — B2 acceptance (selection -> anchor -> mark, end to end).
- * Unlike B1's direct database anchors, this spec drives the real
- * interaction: select text, use the floating action, submit through the form
- * action, then check what the reader sees. Four states only a browser can
- * produce:
+ * Selection -> anchor -> mark, end to end: this spec drives the real
+ * interaction (select text, use the floating action, submit through the form
+ * action) instead of seeding database anchors, then checks what the reader
+ * sees. Four states only a browser can produce:
  *   1. guest: the action appears, the panel offers the login path,
  *   2. reader: a selection submits and waits for review (pending),
  *   3. owner: a selection is auto-approved and renders as a server-side mark,
- *   4. cross-block selections are rejected (registered v1 limit), and
- *      clicking a mark opens the in-place thread.
- *
+ *   4. cross-block selections are rejected (v1 limit), and clicking a mark
+ *      opens the in-place thread.
  * Fixture namespace `e2e-cmts`; requires `web-lair-db-1` and port 4173 free.
  */
 // Unique per spec: presence.e2e.ts owns ...e1/...e2 (a shared id broke its FK).

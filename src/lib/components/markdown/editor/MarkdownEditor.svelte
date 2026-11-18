@@ -113,7 +113,8 @@
 	// Code mode → rich text: sync the edited markdown back into Lexical
 	function toggleCodeMode() {
 		if (!codeMode) {
-			// Entering code mode: export the markdown from Lexical (preserves heading/list/Tag/Alert formatting)
+			// Entering code mode: export the markdown from Lexical (preserves heading/list/Tag/Alert
+			// formatting)
 			editor?.getEditorState().read(() => {
 				codeModeText = convertToMarkdown(EDITOR_TRANSFORMERS);
 			});
@@ -192,7 +193,8 @@
 	<!-- Editor area -->
 	<div class="min-h-0 flex-1">
 		{#if codeMode}
-			<!-- Code mode: plain-text editing (borderless look + line-number gutter, auto-grows with content, the page is the only scroll container) -->
+			<!-- Code mode: plain-text editing (borderless look + line-number gutter, auto-grows with
+			  content, the page is the only scroll container) -->
 			<div
 				class={cn(
 					'flex min-h-48 w-full overflow-hidden',

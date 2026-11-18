@@ -9,11 +9,9 @@ import { assessDeletion, type BucketCapabilities } from './port.ts';
 
 /**
  * Provider activation + rollback.
- *
  * Activation is NOT reachable from a form: `storage.provider` is the
  * candidate and this module the only writer of `storage.active` (cutover CLI).
  * Three guards stand in front of a switch:
- *
  * 1. a NEW addressing target needs a complete copy of that fingerprint when
  *    media exists (`files > 0`); a delete-mode-only change needs no copy -
  *    the objects are already in the bucket.

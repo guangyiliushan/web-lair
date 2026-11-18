@@ -207,7 +207,8 @@ export default defineConfig({
 				extends: true,
 				plugins: [
 					// The plugin will run tests for the stories defined in your Storybook config
-					// See options at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon#storybooktest
+					// See options at:
+					// https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 					storybookTest({
 						// Pin to this file's dir: the default resolves `.storybook` from the CWD.
 						configDir: path.join(dirname, '.storybook')

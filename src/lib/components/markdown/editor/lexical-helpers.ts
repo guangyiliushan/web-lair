@@ -140,10 +140,6 @@ export function insertHorizontalRule(editor: LexicalEditor) {
 // ── Insert helpers: link / image / table / checklist (markdown syntax plus Lexical nodes) ──
 
 /**
- * Insert a link. A text selection is wrapped into a LinkNode (WYSIWYG); with no
- * selection the URL itself becomes the link text.
- */
-/**
  * Link shapes accepted by the editor's insert/display paths, aligned with
  * the render side: absolute http(s)/mailto/tel, site-rooted relative paths
  * (single slash: `/posts/...`) and `#` anchors all survive sanitize, so the
@@ -156,6 +152,10 @@ export function isSafeLinkUrl(url: string): boolean {
 	return SAFE_LINK_SCHEME.test(url.trim());
 }
 
+/**
+ * Insert a link. A text selection is wrapped into a LinkNode (WYSIWYG); with no
+ * selection the URL itself becomes the link text.
+ */
 export function insertLink(editor: LexicalEditor, url: string) {
 	if (!isSafeLinkUrl(url)) return;
 	editor.update(() => {

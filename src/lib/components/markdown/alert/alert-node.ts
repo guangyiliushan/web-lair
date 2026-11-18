@@ -69,7 +69,8 @@ export class AlertNode extends DecoratorNode<HTMLElement> {
 		return div;
 	}
 
-	// Signature: updateDOM(prevNode: DecoratorNode<HTMLElement>, dom: HTMLElement, config: EditorConfig): boolean
+	// Signature: updateDOM(prevNode: DecoratorNode<HTMLElement>, dom: HTMLElement, config:
+	// EditorConfig): boolean
 	updateDOM(): boolean {
 		return false;
 	}

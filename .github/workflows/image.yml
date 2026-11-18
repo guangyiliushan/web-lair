@@ -9,7 +9,7 @@ name: image
 # Advisory, not required: a path-filtered workflow's skipped check would stay
 # "Pending" forever and block PRs that never touch these paths (GitHub docs,
 # "Handling skipped but required checks"). Required checks are `ci / verify` and
-# `auth-schema / guard` only — see notes/coordination/m6/p1/branch-protection.md.
+# `auth-schema / guard` only.
 
 on:
   push:
