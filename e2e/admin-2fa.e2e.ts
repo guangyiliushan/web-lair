@@ -10,7 +10,7 @@ import { apiPost, psql } from './support';
  * The fixture account is created and armed through the HTTP API: a two_factor
  * secret is stored encrypted, so it cannot be seeded with SQL. TOTP codes are
  * computed locally (RFC 6238, SHA-1, 30s step). Fixture rows are namespaced and
- * removed in teardown; `pnpm db:reset-2fa` is exercised as the documented
+ * removed in teardown; `pnpm ops site reset-2fa` is exercised as the documented
  * emergency recovery path.
  */
 const FIXTURE_EMAIL = 'e2e-2fa@example.com';
@@ -38,7 +38,7 @@ const isAdminDestination = (url: URL) =>
 	url.pathname.startsWith('/admin') && !url.pathname.includes('/two-factor');
 
 function runResetScript(): string {
-	return execFileSync('pnpm', ['db:reset-2fa', FIXTURE_EMAIL], {
+	return execFileSync('pnpm', ['ops', 'site', 'reset-2fa', FIXTURE_EMAIL], {
 		encoding: 'utf8',
 		shell: true,
 		timeout: 150_000
@@ -236,7 +236,9 @@ test('the challenge page never auto-signs-in through the Tailnet hand-off', asyn
 	await expect(page).toHaveURL(new RegExp(`${TWO_FACTOR_PATH.replaceAll('/', '\\/')}$`));
 });
 
-test('db:reset-2fa disables the factor, revokes sessions, and is idempotent', async ({ page }) => {
+test('site reset-2fa disables the factor, revokes sessions, and is idempotent', async ({
+	page
+}) => {
 	// Two pnpm invocations (tsx cold start each) blow past the 30s default.
 	test.setTimeout(180_000);
 

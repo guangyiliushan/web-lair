@@ -422,7 +422,7 @@
 	<section class="mx-4 rounded-xl border bg-background p-4 sm:mx-6 lg:mx-8">
 		<h2 class="mb-1 text-sm font-medium">{m.admin_files_audit_title()}</h2>
 		<p class="mb-3 text-xs text-muted-foreground">
-			{m.admin_files_audit_desc_before()}<code>pnpm media:purge</code
+			{m.admin_files_audit_desc_before()}<code>pnpm ops media purge</code
 			>{m.admin_files_audit_desc_after()}
 		</p>
 		<div class="flex flex-wrap gap-3">

@@ -13,9 +13,9 @@ import { processImage } from '../src/lib/server/media/variants';
  * want the grid box. Idempotent: files that already carry `@grid` are skipped.
  *
  * Usage:
- *   pnpm db:backfill-grid -- --dry-run
- *   pnpm db:backfill-grid -- --limit=50
- *   pnpm db:backfill-grid
+ *   pnpm ops db backfill-grid --dry-run
+ *   pnpm ops db backfill-grid --limit=50
+ *   pnpm ops db backfill-grid
  */
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {

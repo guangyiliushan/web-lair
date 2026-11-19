@@ -320,7 +320,7 @@ export const optionRegistry = {
 	},
 	'storage.provider': {
 		// The SAVED candidate. Saving never changes the live
-		// target - activation runs through `storage:migrate --cutover`.
+		// target - activation runs through `storage migrate --cutover`.
 		schema: providerConfigSchema,
 		default: DEFAULT_PROVIDER_CONFIG
 	},
@@ -338,7 +338,7 @@ export const optionRegistry = {
 	},
 	'storage.migration': {
 		// CLI migration bookkeeping. `copying` freezes uploads and makes
-		// purge refuse; a stuck state needs `storage:migrate --reset`.
+		// purge refuse; a stuck state needs `storage migrate --reset`.
 		schema: storageMigrationSchema,
 		default: DEFAULT_STORAGE_MIGRATION
 	},

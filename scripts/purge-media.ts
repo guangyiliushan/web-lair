@@ -30,7 +30,7 @@ if (outcome.blocked) {
 	const reasons: Record<string, string> = {
 		migration:
 			'a storage provider migration is running (storage.migration = copying). Purge stays\n' +
-			'disabled until the copy finishes and `storage:migrate --cutover` runs (or `--reset`\n' +
+			'disabled until the copy finishes and `storage migrate --cutover` runs (or `--reset`\n' +
 			'clears a stuck run).',
 		capability:
 			'the active bucket versioning/object lock could not be read, so "frees space" cannot\n' +

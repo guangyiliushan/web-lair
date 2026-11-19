@@ -20,7 +20,7 @@ import {
  * flip matrix and the locking discipline are exactly the write-side ones.
  * Idempotent: a second run finds nothing. Requires the schema already
  * migrated (the ref_type check must include 'draft' before any draft entity
- * can be written). Run: pnpm db:backfill-refs  (add --apply to write)
+ * can be written). Run: pnpm ops db backfill-refs  (add --apply to write)
  */
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {

@@ -439,7 +439,7 @@
 </div>
 
 {#snippet cliHint()}
-	{m.admin_photos_upload_cli_hint()}<code>pnpm media:import &lt;dir&gt;</code>
+	{m.admin_photos_upload_cli_hint()}<code>pnpm ops media import &lt;dir&gt;</code>
 {/snippet}
 
 <MediaUploadDialog

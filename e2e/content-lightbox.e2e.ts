@@ -14,7 +14,7 @@ import { expectNoCriticalAxe, ORIGIN, psql } from './support';
  * Fixtures: one `e2e-clbox` page whose body references the three GIFs that
  * `scripts/e2e-overlay-fixtures.ts` publishes (relative, absolute = external,
  * inside a link) plus a well-formed but missing key (broken); a beforeAll
- * probe skips with `pnpm e2e:overlay-fixtures` if the bucket was wiped.
+ * probe skips with `pnpm ops dev e2e-fixtures` if the bucket was wiped.
  */
 const SLUG = 'e2e-clbox';
 
@@ -59,7 +59,7 @@ test.beforeAll(async () => {
 		await context.dispose();
 	}
 	if (!fixtureBytesReady) {
-		console.warn('fixture bytes missing - run `pnpm e2e:overlay-fixtures`');
+		console.warn('fixture bytes missing - run `pnpm ops dev e2e-fixtures`');
 	}
 });
 
@@ -68,7 +68,7 @@ test.afterAll(() => {
 });
 
 function requireBytes(): void {
-	test.skip(!fixtureBytesReady, 'fixture bytes missing - run `pnpm e2e:overlay-fixtures`');
+	test.skip(!fixtureBytesReady, 'fixture bytes missing - run `pnpm ops dev e2e-fixtures`');
 }
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 });

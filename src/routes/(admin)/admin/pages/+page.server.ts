@@ -23,7 +23,7 @@ const LOCALES = ['en', 'zh-cn', 'ja'] as const;
  * (`/admin/pages/edit` without an id - the editor materializes the placeholder row
  * on its first save), the external entry inserts DIRECTLY from the list dialog.
  * `is_default` rows stay protected (no delete) and keep a read-only slug in the
- * editor, because `db:ensure-pages` anchors on the slug.
+ * editor, because `site ensure-pages` anchors on the slug.
  */
 export const load: PageServerLoad = async () => {
 	await requireAdminRole();

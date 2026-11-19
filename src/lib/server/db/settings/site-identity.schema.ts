@@ -9,7 +9,7 @@ import { user } from '../auth.schema.ts';
  * only answers "which user is the owner" for the hot header read, because the
  * generated better-auth `user` table must not carry a custom `role` index.
  * The application layer keeps the row at `id = 1` and re-checks `role='owner'`
- * on every read/write; `owner:rebuild` repairs the pointer.
+ * on every read/write; `site rebuild-owner` repairs the pointer.
  */
 export const siteIdentity = pgTable(
 	'site_identity',

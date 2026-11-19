@@ -1,5 +1,5 @@
 // Shared constants for the protected default pages.
-// Single source of truth for `db:ensure-pages` and `db:verify-pages`.
+// Single source of truth for `site ensure-pages` and `site verify-pages`.
 
 export const DEFAULT_PAGE_SLUGS = ['about', 'about-site'] as const;
 

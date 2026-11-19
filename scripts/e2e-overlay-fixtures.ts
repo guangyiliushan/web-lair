@@ -12,7 +12,7 @@ import { S3Storage } from '../src/lib/server/storage/s3';
  * the keys satisfy KEY_PATTERN's directory backreference. Re-run after a
  * bucket wipe:
  *
- *   pnpm e2e:overlay-fixtures
+ *   pnpm ops dev e2e-fixtures
  * (or: pnpm exec tsx --env-file=.env scripts/e2e-overlay-fixtures.ts)
  */
 const TARGETS = Object.values(OVERLAY_FIXTURE_KEYS);

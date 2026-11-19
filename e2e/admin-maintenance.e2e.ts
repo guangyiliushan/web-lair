@@ -10,7 +10,7 @@ import { psql } from './support';
  * user-only job, the save gate's line-numbered rejection, schedule CRUD, the
  * save-and-run enqueue, and the webhook retry button. No drain process runs
  * here: a queued row staying queued IS the observable evidence (tick
- * semantics live in db:verify-jobs). Everything is marker-prefixed
+ * semantics live in jobs verify). Everything is marker-prefixed
  * (`e2e-jobs-*`): DB rows are deleted by prefix and the job file lives in
  * <worktree>/data/jobs (the dev DATA_DIR default) and is removed around the
  * run.

@@ -8,7 +8,7 @@
 //   - drop the pending `2fa-*` / `trust-device-*` verification rows
 // All writes run in one transaction; the state is read back before reporting.
 //
-// Usage: `pnpm db:reset-2fa <email>`; falls back to OWNER_EMAIL from .env.
+// Usage: `pnpm ops site reset-2fa <email>`; falls back to OWNER_EMAIL from .env.
 
 import postgres from 'postgres';
 import { eq, sql } from 'drizzle-orm';
@@ -23,7 +23,7 @@ if (!DB_URL) {
 
 const email = (process.argv[2] ?? process.env.OWNER_EMAIL ?? '').trim().toLowerCase();
 if (!email) {
-	console.error('✗ Usage: pnpm db:reset-2fa <email>  (or set OWNER_EMAIL)');
+	console.error('✗ Usage: pnpm ops site reset-2fa <email>  (or set OWNER_EMAIL)');
 	process.exit(1);
 }
 

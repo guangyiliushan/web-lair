@@ -24,7 +24,7 @@ describe('parseLinksCliArgs (dry-run safety gate, review batch 2026-10-06)', () 
 	it('rejects typos, bad limits and dangling values (exit-2 contract)', () => {
 		expect(parseLinksCliArgs(['--dryrun'])).toEqual({
 			ok: false,
-			error: 'unknown argument: --dryrun (usage: pnpm jobs:check-links [--dry-run] [--limit N])'
+			error: 'unknown argument: --dryrun (usage: pnpm ops jobs check-links [--dry-run] [--limit N])'
 		});
 		expect(parseLinksCliArgs(['--limit', '0'])).toEqual({
 			ok: false,

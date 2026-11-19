@@ -12,7 +12,7 @@ import { parse } from 'svelte/compiler';
  * Sources: `class` attributes (incl. `{…}` expressions and template literals), `class:list`, `@apply` in
  * `.css` and `<style>` (comments skipped), plus the class-list helpers in `CLASS_HELPERS`; `className` /
  * `ngClass` are left out (Svelte-only codebase, they would only be props).
- * Run: `pnpm lint:tw` reports only (exit 1 when something is off); `pnpm lint:tw -- --fix` rewrites the
+ * Run: `pnpm ops dev lint-tw` reports only (exit 1 when something is off); `pnpm ops dev lint-tw --fix` rewrites the
  * offending class lists in place.
  */
 
@@ -351,7 +351,7 @@ if (findings.length === 0) {
 		);
 	}
 	console.log(
-		`\n✗ ${findings.length} non-canonical class names in ${new Set(findings.map((f) => f.file)).size} of ${files.length} files — run \`pnpm lint:tw -- --fix\` to rewrite them`
+		`\n✗ ${findings.length} non-canonical class names in ${new Set(findings.map((f) => f.file)).size} of ${files.length} files — run \`pnpm ops dev lint-tw --fix\` to rewrite them`
 	);
 	process.exitCode = 1;
 }

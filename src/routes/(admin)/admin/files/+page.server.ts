@@ -26,7 +26,7 @@ import { m } from '$lib/paraglide/messages';
 /**
  * Content assets admin: registry list with filters, batch upload, reference-guarded
  * delete, plus the three-check audit and the purge dry-run - both read-only; the
- * actual purge stays on the CLI (`media:purge --yes`). Uploads keep the whitelist +
+ * actual purge stays on the CLI (`media purge --yes`). Uploads keep the whitelist +
  * magic sniffing + size caps in the service, never in the form.
  */
 

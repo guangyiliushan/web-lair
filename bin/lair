@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+// The single shell entry for ops commands. Extensionless + ESM on purpose:
+// `node bin/lair ...` in the container and `pnpm ops ...` on the host share
+// this implementation.
+import '../scripts/cli.ts';

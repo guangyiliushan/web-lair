@@ -386,7 +386,7 @@ async function assertOwnerPointer(tx: OwnerTx, actorId: string): Promise<string>
 	if (!pointerId) {
 		throw new OwnerProfileError(
 			'owner_pointer_missing',
-			'The site owner pointer is not set. Run `pnpm owner:rebuild`.',
+			'The site owner pointer is not set. Run `pnpm ops site rebuild-owner`.',
 			409
 		);
 	}
@@ -400,7 +400,7 @@ async function assertOwnerPointer(tx: OwnerTx, actorId: string): Promise<string>
 		console.warn('[owner] pointer mismatch', { actorId, pointerId });
 		throw new OwnerProfileError(
 			'owner_pointer_mismatch',
-			'This profile belongs to a different owner. Run `pnpm owner:rebuild`.',
+			'This profile belongs to a different owner. Run `pnpm ops site rebuild-owner`.',
 			409
 		);
 	}
@@ -443,7 +443,7 @@ export async function saveOwnerProfile(
 		if (!before) {
 			throw new OwnerProfileError(
 				'owner_profile_missing',
-				'The owner has no user_profiles row. Run `pnpm db:seed-owner`.',
+				'The owner has no user_profiles row. Run `pnpm ops site seed-owner`.',
 				409
 			);
 		}

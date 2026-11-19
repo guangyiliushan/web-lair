@@ -7,7 +7,7 @@
  * 3. Scans production source for the exclusions (custom hashing, custom
  *    2FA challenge, hand-written adapter).
  *
- * Run `pnpm auth:check` (`pnpm auth:check:migrations` = SQL scan only, no
+ * Run `pnpm ops dev auth-check` (`pnpm ops dev auth-check --migrations-only` = SQL scan only, no
  * CLI or network). Exit codes: 0 clean, 1 drift/offender, 2 the guard could
  * not run. Full contract: `src/lib/server/db/AUTH_SCHEMA.md`.
  */

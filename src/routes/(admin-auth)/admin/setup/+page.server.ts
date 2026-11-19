@@ -136,7 +136,7 @@ export const actions: Actions = {
 			console.error('[setup] site organization bootstrap failed:', caught);
 			return fail(500, {
 				message:
-					'Owner created, but the site organization could not be initialized. Check the server logs, then repair with `pnpm db:ensure-org`.'
+					'Owner created, but the site organization could not be initialized. Check the server logs, then repair with `pnpm ops site ensure-org`.'
 			});
 		}
 

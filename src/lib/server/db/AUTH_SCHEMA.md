@@ -20,7 +20,7 @@ schema it generates. Hand edits silently break those assumptions.
 3. `pnpm format`, then review the diff like any other code change.
 4. `pnpm db:generate --name <change>` for the migration, and review the SQL.
 5. Commit the generated schema **and** the migration together.
-6. `pnpm auth:check` must be green.
+6. `pnpm ops dev auth-check` must be green.
 
 ## Application fields on an auth table
 
@@ -61,7 +61,7 @@ enabled. Everything else that changes storage semantics is out of bounds.
 - Hand-edit this file or a generated auth table (columns, indexes, constraints,
   triggers).
 
-`pnpm auth:check` fails on the first two structural cases (migration SQL and
+`pnpm ops dev auth-check` fails on the first two structural cases (migration SQL and
 source customization). The last two are reviewed by the drift check and by the
 migration scan; a hand edit to this file is reported as drift.
 
@@ -70,8 +70,8 @@ migration scan; a hand edit to this file is reported as drift.
 `.github/workflows/auth-schema.yml` runs both guards:
 
 ```bash
-pnpm auth:check:migrations   # SQL scan + H3 source scan (no network, no CLI)
-pnpm auth:check              # regenerates to a temp file and diffs
+pnpm ops dev auth-check --migrations-only   # SQL scan + H3 source scan (no network, no CLI)
+pnpm ops dev auth-check              # regenerates to a temp file and diffs
 ```
 
 A failed run means: regenerate with `pnpm auth:schema`, or revert the migration

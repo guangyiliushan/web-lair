@@ -3,7 +3,7 @@ import { getOption, runSync, type JobContext } from '#jobs-sdk';
 /**
  * projects.sync: one run of the four-platform sync over the configured
  * `projects.sync_targets`. Manual by default (enqueued from the admin surface
- * or `pnpm jobs:enqueue projects.sync`); scheduling stays an opt-in.
+ * or `pnpm ops jobs enqueue projects.sync`); scheduling stays an opt-in.
  * Single-flight = the drain's per-job advisory lock
  * (`web_lair.job.projects.sync`); the CLI shares the key. Imports only
  * `#jobs-sdk` so the file stays fork-runnable from the user layer.

@@ -2,7 +2,7 @@
 //
 // Manual outdated-link prune:
 //
-//   pnpm jobs:links-prune [--dry-run] [--grace-days N]
+//   pnpm ops jobs links-prune [--dry-run] [--grace-days N]
 //
 // Deletes `outdated` rows whose `lost_since` is older than
 // `friends.checks.graceDays` (or the `--grace-days` override). `--dry-run`
@@ -18,7 +18,7 @@ import { parsePruneArgs, pruneOutdated } from '../../src/lib/server/links/prune.
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-	console.error('[links-prune] DATABASE_URL is required (run via `pnpm jobs:links-prune`).');
+	console.error('[links-prune] DATABASE_URL is required (run via `pnpm ops jobs links-prune`).');
 	process.exit(2);
 }
 

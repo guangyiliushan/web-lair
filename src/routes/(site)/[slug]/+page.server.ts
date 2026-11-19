@@ -36,7 +36,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const lang = getLocale();
 
 	// Locale tags are never page slugs: a row claiming `en` would turn `/en` into a
-	// 200 with collapsed localised links. The editor and `db:verify-pages` reject
+	// 200 with collapsed localised links. The editor and `site verify-pages` reject
 	// such slugs via the shared reserved list; this is the read-side belt for rows
 	// that predate that entry.
 	if ((locales as readonly string[]).includes(params.slug)) {

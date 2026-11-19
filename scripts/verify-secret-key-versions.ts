@@ -6,7 +6,7 @@
  * envelope says v<n> is listed and the exit code is 1 while the version is
  * still in `SECRETS_KEYS`. Every live row is also decrypted with its real
  * AAD, so a same-version/different-key restore fails here too.
- * Usage: `pnpm secrets:verify-keys [--retire 1]`.
+ * Usage: `pnpm ops secrets verify-keys [--retire 1]`.
  * Exit codes: 0 every referenced version present and readable, 1 missing /
  * unreadable / still referenced by --retire, 2 configuration error.
  * Rotation steps: `deploy/SECRETS.md` -> "Three-phase rotation".

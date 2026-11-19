@@ -1,7 +1,7 @@
 // scripts/jobs/sync-projects.ts
 //
 // Manual projects-sync entry:
-//   pnpm jobs:sync-projects [--dry-run] [--provider <p>] [--account <a>] [--refresh-ids <id,id>]
+//   pnpm ops jobs sync-projects [--dry-run] [--provider <p>] [--account <a>] [--refresh-ids <id,id>]
 //
 // Direct run sharing the drain job's session advisory lock
 // (`web_lair.job.projects.sync`), so a manual run never overlaps a queued
@@ -22,7 +22,7 @@ import type { SyncTarget } from '../../src/lib/server/projects/types.ts';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-	console.error('[projects] DATABASE_URL is required (run via `pnpm jobs:sync-projects`).');
+	console.error('[projects] DATABASE_URL is required (run via `pnpm ops jobs sync-projects`).');
 	process.exit(2);
 }
 

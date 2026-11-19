@@ -35,7 +35,7 @@ import { extractMakerNotes } from '../src/lib/server/media/exif-makernotes';
  * dedupe, reference guards and the dry-run contract, then removes every probe
  * again. Exit code 0 = all checks passed; 1 = failures (details above).
  *
- * Run: pnpm db:verify-media   (requires `docker compose up` for db + rustfs)
+ * Run: pnpm ops media verify   (requires `docker compose up` for db + rustfs)
  */
 
 const DATABASE_URL = process.env.DATABASE_URL;

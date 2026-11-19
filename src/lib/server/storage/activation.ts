@@ -84,7 +84,7 @@ function assertMigrationComplete(
 	if (migration.state !== 'copied') {
 		throw new ActivationError(
 			'migration-required',
-			'Run `pnpm storage:migrate --yes` before cutting over: the saved provider has no completed copy'
+			'Run `pnpm ops storage migrate --yes` before cutting over: the saved provider has no completed copy'
 		);
 	}
 	if (migration.targetFingerprint !== fingerprint) {

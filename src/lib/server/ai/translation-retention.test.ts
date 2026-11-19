@@ -73,7 +73,7 @@ describe('pruneDiscardedTranslations', () => {
 		expect(sqlText).toContain('updated_at');
 		// ...and it is bound as an ISO string cast to timestamptz. A JS Date
 		// against the raw coalesce() expression makes postgres.js throw
-		// ERR_INVALID_ARG_TYPE (db:verify-jobs caught it).
+		// ERR_INVALID_ARG_TYPE (jobs verify caught it).
 		expect(sqlText).toContain('timestamptz');
 		expect(sqlText).not.toContain('cutoff-date');
 	});

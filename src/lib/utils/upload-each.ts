@@ -12,7 +12,7 @@ import type { ActionResult } from '@sveltejs/kit';
  * result, which is why the client half of the protocol is `deserialize()` — the same
  * function `use:enhance` uses internally.
  * Rate accounting: the admin upload bucket counts one unit per request (60/10min per user),
- * so ten files spend ten units; the CLI import (`pnpm media:import`) stays the bulk path and
+ * so ten files spend ten units; the CLI import (`pnpm ops media import`) stays the bulk path and
  * the form is for small batches.
  */
 export interface UploadOutcome {

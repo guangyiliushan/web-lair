@@ -2,8 +2,8 @@
 // Usage:
 //   pnpm db:start          (first run: start the database container)
 //   pnpm db:migrate        (first run: create the tables)
-//   pnpm db:seed-demo      — idempotent: existing rows are skipped (deleted posts stay deleted)
-//   pnpm db:seed-demo --force — rewrite the demo post's body, title and summary
+//   pnpm ops dev seed-demo      — idempotent: existing rows are skipped (deleted posts stay deleted)
+//   pnpm ops dev seed-demo --force — rewrite the demo post's body, title and summary
 //
 // Environment variables:
 //   DATABASE_URL — PostgreSQL connection string (the .env file is injected via --env-file)

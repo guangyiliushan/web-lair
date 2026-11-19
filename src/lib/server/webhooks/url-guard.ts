@@ -308,7 +308,7 @@ export function webhookAllowPrivateTargets(getEnv: (name: string) => string | un
 
 /**
  * Guard options for the delivery path. The loopback/HTTP escape hatch is for
- * the `db:verify-jobs` fixture server only: it is ignored in production and
+ * the `jobs verify` fixture server only: it is ignored in production and
  * never passed by the settings page (which only allows the LAN switch).
  */
 export function webhookGuardOptionsFromEnv(

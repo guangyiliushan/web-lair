@@ -3,7 +3,7 @@
  * into `webhook_secrets` and NULLs the legacy column, so no plaintext
  * signing secret stays in the database. Dry-run by default; `--apply`
  * writes. Idempotent - rows that already have an entry are skipped.
- * Usage: `pnpm db:migrate-webhook-secrets [--apply]`.
+ * Usage: `pnpm ops db migrate-webhook-secrets [--apply]`.
  * Exit codes: 0 done (including "nothing to do"), 1 a row failed, 2 config
  * error. Container form and rollback: `deploy/RUNBOOK.md` -> "Retire the
  * legacy webhook secret".

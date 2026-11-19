@@ -7,7 +7,7 @@
 // The name set is registry ∪ user layer, so user job scripts can be
 // queued the same way.
 //
-//   pnpm jobs:enqueue <job-name>
+//   pnpm ops jobs enqueue <job-name>
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -18,14 +18,14 @@ import { resolveJobDefinition } from '../src/lib/server/jobs/user-layer.ts';
 
 const name = process.argv[2];
 if (!name) {
-	console.error('usage: pnpm jobs:enqueue <job-name>');
+	console.error('usage: pnpm ops jobs enqueue <job-name>');
 	console.error(`registered jobs: ${Object.keys(JOBS).join(', ')}`);
 	process.exit(2);
 }
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
-	console.error('✗ DATABASE_URL is required (run via `pnpm jobs:enqueue`).');
+	console.error('✗ DATABASE_URL is required (run via `pnpm ops jobs enqueue`).');
 	process.exit(1);
 }
 

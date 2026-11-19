@@ -13,7 +13,7 @@ import { syncFileReferences } from '../services/file-references.ts';
  * no foreign key can cascade when the target row is deleted out-of-band.
  * Rules: refs to a missing target go through `syncFileReferences` with an empty
  * key list (a raw DELETE would bypass the lock order and leave `files.status`
- * stale; the sync also detaches a last-reference file - `pnpm db:backfill-refs`
+ * stale; the sync also detaches a last-reference file - `pnpm ops db backfill-refs`
  * rebuilds from content). Drafts are deleted only when the target is missing
  * AND the draft is past the grace window (default 30 days): the draft may be
  * the last copy of the text. Out of scope: `moments.ref_type/ref_id` (nothing

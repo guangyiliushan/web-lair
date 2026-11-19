@@ -28,16 +28,16 @@ import {
 /**
  * Provider migration CLI: source is `storage.active`, target is the saved
  * candidate (`storage.provider`).
- *   pnpm storage:migrate --dry-run   enumerate + HEAD both buckets (default)
- *   pnpm storage:migrate --yes       freeze uploads, copy + verify, persist state
- *   pnpm storage:migrate --cutover   activate the saved candidate (guarded)
- *   pnpm storage:migrate --rollback  switch back to the previous provider
- *   pnpm storage:migrate --status    print active/candidate/migration state
- *   pnpm storage:migrate --reset     clear a stuck state (no live run)
+ *   pnpm ops storage migrate --dry-run   enumerate + HEAD both buckets (default)
+ *   pnpm ops storage migrate --yes       freeze uploads, copy + verify, persist state
+ *   pnpm ops storage migrate --cutover   activate the saved candidate (guarded)
+ *   pnpm ops storage migrate --rollback  switch back to the previous provider
+ *   pnpm ops storage migrate --status    print active/candidate/migration state
+ *   pnpm ops storage migrate --reset     clear a stuck state (no live run)
  *
  * Objects are never deleted from the source. Sequence, gates and upload
  * freeze: `deploy/RUNBOOK.md` §4.6. Out of scope: `maps/*.pmtiles` are not
- * `files` rows; re-run `pnpm maps:publish` after cutover.
+ * `files` rows; re-run `pnpm ops maps publish` after cutover.
  */
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -133,7 +133,7 @@ async function main(): Promise<void> {
 			select pg_try_advisory_lock(hashtext('web-lair:storage:migrate')) as locked
 		`;
 		if (!lock?.locked) {
-			console.error('Another storage:migrate run holds the lock. Wait for it or inspect it first.');
+			console.error('Another storage migrate run holds the lock. Wait for it or inspect it first.');
 			process.exitCode = 1;
 			return;
 		}
@@ -230,7 +230,7 @@ async function main(): Promise<void> {
 		);
 		for (const key of plan.missingOnSource.slice(0, 20)) console.error(`  - ${key}`);
 		console.error(
-			'Refusing to copy: the registry and the bucket disagree. Run pnpm media:audit first.'
+			'Refusing to copy: the registry and the bucket disagree. Run pnpm ops media audit first.'
 		);
 		process.exitCode = 1;
 		return;
@@ -302,7 +302,9 @@ copied ${outcome.copied}, already present ${outcome.skipped}, verified ${outcome
 		process.exitCode = 1;
 		return;
 	}
-	console.log('Copy complete. Run `pnpm storage:migrate --cutover` inside the maintenance window.');
+	console.log(
+		'Copy complete. Run `pnpm ops storage migrate --cutover` inside the maintenance window.'
+	);
 }
 
 await main().finally(async () => {

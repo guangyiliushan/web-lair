@@ -56,17 +56,15 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/.drizzle ./.drizzle
-COPY --from=build /app/scripts/migrate.ts ./scripts/migrate.ts
-COPY --from=build /app/scripts/verify-baseline.ts ./scripts/verify-baseline.ts
-COPY --from=build /app/scripts/ensure-job-schedules.ts ./scripts/ensure-job-schedules.ts
-COPY --from=build /app/scripts/backfill-email-consent.ts ./scripts/backfill-email-consent.ts
-COPY --from=build /app/scripts/backfill-suppressions.ts ./scripts/backfill-suppressions.ts
-COPY --from=build /app/scripts/verify-suppression-version.ts ./scripts/verify-suppression-version.ts
-COPY --from=build /app/scripts/verify-oauth-token-storage.ts ./scripts/verify-oauth-token-storage.ts
-COPY --from=build /app/scripts/print-subscribe-token.ts ./scripts/print-subscribe-token.ts
-COPY --from=build /app/scripts/secret-alerts.ts ./scripts/secret-alerts.ts
-COPY --from=build /app/scripts/migrate-webhook-secrets.ts ./scripts/migrate-webhook-secrets.ts
-COPY --from=build /app/scripts/verify-secret-key-versions.ts ./scripts/verify-secret-key-versions.ts
+# Ops surface: ship the whole scripts tree + the `lair` shim instead of a
+# hand-maintained file list. A missed COPY used to surface only when the
+# RUNBOOK ran a script the image did not contain. The manifest
+# (scripts/manifest.ts) + scripts/deploy-hooks.ts make that class checkable:
+# scripts/check-entries.ts asserts every entry exists and every hook resolves,
+# and verify-image.sh asserts `bin/lair --list` works inside the image.
+# The tree is ~250 KB of text; tsx-only entries are inert in this stage.
+COPY --from=build /app/scripts ./scripts
+COPY --from=build /app/bin ./bin
 # Drain executes `node jobs/drain.ts`; that graph uses only relative .ts imports,
 # so ship the jobs tree and the server modules it pulls in.
 COPY --from=build /app/jobs ./jobs

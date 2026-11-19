@@ -43,7 +43,7 @@ import { sql } from 'drizzle-orm';
  * count), media purge TTLs (owner) and the read-only capability map.
  * Two truths, deliberately: `storage.provider` is the form target and saving writes ONLY
  * this row, while `storage.active` is what the app actually reads — written by an activation
- * path (empty files table, or `storage:migrate --cutover`), never by a form submit.
+ * path (empty files table, or `storage migrate --cutover`), never by a form submit.
  * Secrets never reach this module: the page shows env VAR NAMES and the config schema has no
  * credential field at all.
  */

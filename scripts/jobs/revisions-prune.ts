@@ -2,7 +2,7 @@
 //
 // Manual publish-revision prune:
 //
-//   pnpm jobs:revisions-prune [--dry-run] [--keep N]
+//   pnpm ops jobs revisions-prune [--dry-run] [--keep N]
 //
 // Deletes `post_revisions` rows beyond the newest N per post (default 20)
 // `--dry-run` only counts. Unknown flags exit 2 so a typo can
@@ -20,7 +20,7 @@ import {
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
 	console.error(
-		'[revisions-prune] DATABASE_URL is required (run via `pnpm jobs:revisions-prune`).'
+		'[revisions-prune] DATABASE_URL is required (run via `pnpm ops jobs revisions-prune`).'
 	);
 	process.exit(2);
 }

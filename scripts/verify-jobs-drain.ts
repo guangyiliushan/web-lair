@@ -1,5 +1,5 @@
 // scripts/verify-jobs-drain.ts
-// Acceptance harness for the jobs drain kernel: `pnpm db:verify-jobs`.
+// Acceptance harness for the jobs drain kernel: `pnpm ops jobs verify`.
 // Runs entirely against a THROWAWAY database: it creates `wl_jobs_verify_*`
 // on the server DATABASE_URL points at, applies the baseline migration, seeds
 // fixtures, spawns real `node jobs/drain.ts` processes (including one that is
@@ -79,7 +79,7 @@ function section(title: string): void {
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
-	console.error('DATABASE_URL is required (run via `pnpm db:verify-jobs`).');
+	console.error('DATABASE_URL is required (run via `pnpm ops jobs verify`).');
 	process.exit(1);
 }
 const scratchName = `wl_jobs_verify_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`;

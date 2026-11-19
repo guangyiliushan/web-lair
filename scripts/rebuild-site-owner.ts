@@ -1,5 +1,5 @@
 /**
- * owner:rebuild - repair the `site_identity` pointer and retire `site.owner`.
+ * site rebuild-owner - repair the `site_identity` pointer and retire `site.owner`.
  *
  * Foundation: `user_profiles` is the single source for the public owner
  * persona and `site_identity` is the one-row pointer the header joins
@@ -10,13 +10,13 @@
  *   - pointer matches the owner -> nothing to do
  *   - pointer missing/stale     -> point it at the owner (apply only)
  *   - `site.owner` option row   -> deleted (retired; no consumer reads it)
- * Usage: `pnpm owner:rebuild` (dry-run); `pnpm owner:rebuild -- --apply` writes.
+ * Usage: `pnpm ops site rebuild-owner` (dry-run); `pnpm ops site rebuild-owner --apply` writes.
  */
 import postgres from 'postgres';
 
 const url = process.env.DATABASE_URL;
 if (!url) {
-	console.error('[owner:rebuild] DATABASE_URL is not set');
+	console.error('[site rebuild-owner] DATABASE_URL is not set');
 	process.exit(2);
 }
 
@@ -27,7 +27,7 @@ try {
 	const [table] = await sql`select to_regclass('public.site_identity') as rel`;
 	if (!table?.rel) {
 		console.error(
-			'[owner:rebuild] site_identity is missing. Run `pnpm db:migrate` first (append 0003_m4_foundation).'
+			'[site rebuild-owner] site_identity is missing. Run `pnpm db:migrate` first (append 0003_m4_foundation).'
 		);
 		process.exitCode = 1;
 	} else {
@@ -39,21 +39,21 @@ try {
 		const pointerId: string | null = pointerRows[0]?.owner_user_id ?? null;
 		const owner = owners[0] ?? null;
 
-		console.log(`[owner:rebuild] mode=${apply ? 'APPLY' : 'dry-run'}`);
-		console.log(`[owner:rebuild] owner rows=${owners.length}${owner ? ` (${owner.id})` : ''}`);
-		console.log(`[owner:rebuild] pointer=${pointerId ?? 'none'}`);
-		console.log(`[owner:rebuild] site.owner option rows=${optionRow?.count ?? 0}`);
+		console.log(`[site rebuild-owner] mode=${apply ? 'APPLY' : 'dry-run'}`);
+		console.log(`[site rebuild-owner] owner rows=${owners.length}${owner ? ` (${owner.id})` : ''}`);
+		console.log(`[site rebuild-owner] pointer=${pointerId ?? 'none'}`);
+		console.log(`[site rebuild-owner] site.owner option rows=${optionRow?.count ?? 0}`);
 
 		if (owners.length > 1) {
 			console.warn(
-				`[owner:rebuild] warn: ${owners.length} users have role='owner'; using the oldest (${owner?.id})`
+				`[site rebuild-owner] warn: ${owners.length} users have role='owner'; using the oldest (${owner?.id})`
 			);
 		}
 
 		const actions: string[] = [];
 		if (!owner) {
 			console.warn(
-				'[owner:rebuild] warn: 0 owner rows; site_identity stays unset and the header falls back to SITE_OWNER_DEFAULT'
+				'[site rebuild-owner] warn: 0 owner rows; site_identity stays unset and the header falls back to SITE_OWNER_DEFAULT'
 			);
 			if (pointerId) actions.push('delete the stale site_identity row');
 		} else if (pointerId !== owner.id) {
@@ -62,9 +62,9 @@ try {
 		if ((optionRow?.count ?? 0) > 0) actions.push('delete options.site.owner rows');
 
 		if (actions.length === 0) {
-			console.log('[owner:rebuild] nothing to do');
+			console.log('[site rebuild-owner] nothing to do');
 		} else {
-			console.log(`[owner:rebuild] plan: ${actions.join('; ')}`);
+			console.log(`[site rebuild-owner] plan: ${actions.join('; ')}`);
 			if (apply) {
 				await sql.begin(async (tx) => {
 					if (!owner) {
@@ -81,14 +81,14 @@ try {
 					}
 					await tx`delete from options where name = 'site.owner'`;
 				});
-				console.log('[owner:rebuild] applied');
+				console.log('[site rebuild-owner] applied');
 			} else {
-				console.log('[owner:rebuild] dry-run; pass --apply to write');
+				console.log('[site rebuild-owner] dry-run; pass --apply to write');
 			}
 		}
 	}
 } catch (error) {
-	console.error('[owner:rebuild] failed:', error);
+	console.error('[site rebuild-owner] failed:', error);
 	process.exitCode = 1;
 } finally {
 	await sql.end();

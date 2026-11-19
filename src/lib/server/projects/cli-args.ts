@@ -21,7 +21,7 @@ export type ProjectsCliArgsResult =
 	{ ok: true; args: ProjectsCliArgs } | { ok: false; error: string };
 
 const USAGE =
-	'usage: pnpm jobs:sync-projects [--dry-run] [--provider <p>] [--account <a>] [--refresh-ids <id,id>]';
+	'usage: pnpm ops jobs sync-projects [--dry-run] [--provider <p>] [--account <a>] [--refresh-ids <id,id>]';
 
 export function parseProjectsCliArgs(argv: readonly string[]): ProjectsCliArgsResult {
 	let dryRun = false;

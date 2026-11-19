@@ -10,7 +10,7 @@ name: ci
 # the required status check a single name (`ci / verify`); splitting later means
 # adding the new name to the required list at the same time.
 # Not here: e2e (`e2e/support.ts` shells `docker exec web-lair-db-1`, which needs
-# a database container the runner does not have) and `auth:check` (owned by
+# a database container the runner does not have) and `dev auth-check` (owned by
 # `.github/workflows/auth-schema.yml`).
 
 on:
@@ -66,6 +66,14 @@ jobs:
 
       - name: install
         run: pnpm install --frozen-lockfile
+
+      # Entry contract: manifest ↔ files ↔ deploy hooks ↔ docs ↔ package.json.
+      # Cheap and independent of the build, so it fails before the heavy gates.
+      # Also proves every runtime=node entry's import closure is node-pure:
+      # the runtime image has no tsx, so a `$lib` import here would only fail
+      # at deploy time otherwise.
+      - name: entry contract
+        run: node scripts/check-entries.ts
 
       # Comment standards gate: plan/ledger/review markers and unquoted
       # Chinese prose must stay at zero; comment blocks >=15 lines stay at or

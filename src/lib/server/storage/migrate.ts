@@ -13,7 +13,7 @@ import { VARIANT_NAMES, variantKeyFor } from '../../media/keys.ts';
  * provider stays readable until an operator removes it.
  *
  * Not covered, deliberately: `maps/*.pmtiles` objects are not in `files`
- * (published by `pnpm maps:publish`); a provider switch re-runs that script
+ * (published by `pnpm ops maps publish`); a provider switch re-runs that script
  * against the new provider.
  */
 

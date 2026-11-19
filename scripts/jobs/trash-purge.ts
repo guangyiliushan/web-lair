@@ -2,7 +2,7 @@
 //
 // Manual trash purge:
 //
-//   pnpm jobs:trash-purge [--dry-run] [--grace-days N]
+//   pnpm ops jobs trash-purge [--dry-run] [--grace-days N]
 //
 // Deletes trashed post families whose source row has been in the trash longer
 // than the grace window (default 30 days), and only when every family member is
@@ -19,7 +19,7 @@ import { purgeTrashedPosts, TRASH_GRACE_DAYS } from '../../src/lib/server/mainte
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-	console.error('[trash-purge] DATABASE_URL is required (run via `pnpm jobs:trash-purge`).');
+	console.error('[trash-purge] DATABASE_URL is required (run via `pnpm ops jobs trash-purge`).');
 	process.exit(2);
 }
 

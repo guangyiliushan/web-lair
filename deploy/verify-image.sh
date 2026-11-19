@@ -34,6 +34,25 @@ esac
 
 echo "OK: drain graph loads and stops on configuration"
 
+# The operator entry is what the RUNBOOK calls; prove the manifest + shim +
+# scripts tree are all present in the image before shipping it.
+echo "-> lair entry"
+set +e
+out="$(docker run --rm --entrypoint node "$IMAGE" bin/lair --list 2>&1)"
+status=$?
+set -e
+if [ "$status" -ne 0 ]; then
+	echo "FAIL: bin/lair --list exited $status" >&2
+	printf '%s\n' "$out" >&2
+	exit 1
+fi
+if ! printf '%s\n' "$out" | grep -q 'verify-baseline'; then
+	echo "FAIL: bin/lair --list does not expose db verify-baseline:" >&2
+	printf '%s\n' "$out" >&2
+	exit 1
+fi
+echo "OK: lair manifest resolves inside the image"
+
 # The entry only loads its static imports; builtin jobs are imported lazily by
 # the loader on the first tick. Load every registered builtin here so an
 # unsupported-syntax regression fails at release time, not at 03:00.

@@ -11,7 +11,7 @@ import { createPhotoFromFile } from '../src/lib/server/services/photos';
 import { tagSlug } from '../src/lib/utils/slug';
 
 /**
- * Bulk media import: `pnpm media:import <dir…>`.
+ * Bulk media import: `pnpm ops media import <dir…>`.
  *
  * Whitelist scan → content-hash dedupe (files already in the library are
  * SKIPPED, so a second run is safe; changed bytes land as new rows — the
@@ -84,7 +84,7 @@ function parseArgs(argv: string[]): Options {
 		}
 	}
 	if (dirs.length === 0) {
-		throw new Error('Usage: pnpm media:import <dir…> [--assets-only] [--concurrency 1-4]');
+		throw new Error('Usage: pnpm ops media import <dir…> [--assets-only] [--concurrency 1-4]');
 	}
 	return { dirs, assetsOnly, concurrency };
 }

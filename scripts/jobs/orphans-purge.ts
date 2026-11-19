@@ -2,7 +2,7 @@
 //
 // Manual orphan sweep:
 //
-//   pnpm jobs:orphans-purge [--dry-run] [--draft-grace-days N]
+//   pnpm ops jobs orphans-purge [--dry-run] [--draft-grace-days N]
 //
 // Clears `file_references` whose polymorphic target no longer exists (through
 // `syncFileReferences`, so `files.status` stays correct) and deletes orphan
@@ -17,7 +17,9 @@ import { DRAFT_ORPHAN_GRACE_DAYS, purgeOrphans } from '../../src/lib/server/main
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-	console.error('[orphans-purge] DATABASE_URL is required (run via `pnpm jobs:orphans-purge`).');
+	console.error(
+		'[orphans-purge] DATABASE_URL is required (run via `pnpm ops jobs orphans-purge`).'
+	);
 	process.exit(2);
 }
 

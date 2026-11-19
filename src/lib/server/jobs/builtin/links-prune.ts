@@ -16,7 +16,7 @@ import {
  * promise. Two independent jobs in one pass:
  *
  * - outdated rows past `friends.checks.graceDays` (the CLI's predicate, so the
- *   manual `jobs:links-prune` and the schedule cannot disagree);
+ *   manual `jobs links-prune` and the schedule cannot disagree);
  * - contact addresses on rejected/banned rows past `EMAIL_RETENTION_DAYS`.
  *   Approved rows keep theirs (they are the only way to reach a live partner);
  *   the public policy states this asymmetry.

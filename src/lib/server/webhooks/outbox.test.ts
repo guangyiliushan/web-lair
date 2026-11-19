@@ -8,7 +8,7 @@ import { buildDeliveryPayload, enqueueWebhookDeliveries } from './outbox';
  * the enqueue must compile to ONE `insert ... select` statement whose WHERE
  * carries the `@>` subscription test (the exact SQL shape was verified
  * against a real PostgreSQL in the scratch probe; the live-PG
- * teeth live in `pnpm db:verify-jobs`).
+ * teeth live in `pnpm ops jobs verify`).
  */
 
 describe('buildDeliveryPayload', () => {

@@ -6,7 +6,7 @@ import { z } from 'zod';
  * `storage.provider` is the SAVED candidate - a form target that never takes
  * effect by itself. The live target is `storage.active.config`, written only
  * by an activation path (first activation with an empty `files` table, or
- * `storage:migrate --cutover`). Saving therefore cannot switch a running site
+ * `storage migrate --cutover`). Saving therefore cannot switch a running site
  * onto a half-configured bucket: "Save must not switch immediately".
  *
  * The shape is deliberately small: driver + addressing + bucket, no `keyPrefix`
@@ -158,7 +158,7 @@ export const DEFAULT_PROVIDER_CONFIG: StorageProviderConfig = {
 
 /**
  * The live target plus its rollback slot. `previous` is written on cutover so
- * `storage:migrate --rollback` has a target even after the candidate form was
+ * `storage migrate --rollback` has a target even after the candidate form was
  * edited again.
  */
 export const storageActiveSchema = z.object({

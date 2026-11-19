@@ -2,7 +2,7 @@
 //
 // Development worker: the same drain tick as `jobs/drain.ts`, on a loop,
 // started by hand next to `vite dev`. Why it exists and the commands
-// (`pnpm jobs:dev [--interval 1000]`): README "Background jobs in
+// (`pnpm ops jobs dev [--interval 1000]`): README "Background jobs in
 // development".
 //
 // Environment:

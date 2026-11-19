@@ -31,7 +31,7 @@ import { m } from '$lib/paraglide/messages';
 /**
  * Admin gallery: grid + filters, batch ops (visibility / tags / delete), the edit
  * drawer and the upload entry (upload -> registry -> gallery; the bulk importer
- * stays on the CLI: `pnpm media:import`).
+ * stays on the CLI: `pnpm ops media import`).
  */
 
 const SINCE_DAYS = { '7d': 7, '30d': 30, '90d': 90 } as const;

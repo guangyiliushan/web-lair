@@ -10,8 +10,8 @@
 // rolled-back transaction: run it on throwaway databases only (it consumes
 // identity numbers that rollback does not restore).
 //
-// Usage: `pnpm db:verify-baseline` (phase A, DATABASE_URL optional);
-// `pnpm db:verify-baseline -- --write-probes` (A + probes, throwaway DB).
+// Usage: `pnpm ops db verify-baseline` (phase A, DATABASE_URL optional);
+// `pnpm ops db verify-baseline --write-probes` (A + probes, throwaway DB).
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';

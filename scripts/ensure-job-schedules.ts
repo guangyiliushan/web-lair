@@ -6,7 +6,7 @@
  *
  * One row per job (an operator may change the cron in admin), so re-running
  * is a no-op; rows carry `options.site.timezone` (fallback UTC), matching the
- * admin UI. Usage: `pnpm db:ensure-schedules [--dry-run]`.
+ * admin UI. Usage: `pnpm ops site ensure-schedules [--dry-run]`.
  * Details: `deploy/RUNBOOK.md` -> "Background timers (drain)".
  */
 import postgres from 'postgres';

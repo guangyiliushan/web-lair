@@ -39,7 +39,7 @@ export function parseLinksCliArgs(argv: readonly string[]): LinksCliArgsResult {
 		}
 		return {
 			ok: false,
-			error: `unknown argument: ${arg} (usage: pnpm jobs:check-links [--dry-run] [--limit N])`
+			error: `unknown argument: ${arg} (usage: pnpm ops jobs check-links [--dry-run] [--limit N])`
 		};
 	}
 	return { ok: true, args: { dryRun, limitPerPass } };

@@ -6,7 +6,7 @@ import { decryptedWebhookSecret, psql } from './support';
  * SY acceptance: the Webhooks endpoint CRUD on the real database plus the
  * event-to-queue smoke. No drain process runs here (a row
  * staying queued IS the observable evidence; tick delivery semantics live in
- * `pnpm db:verify-jobs`). Everything is marker-prefixed - endpoints are
+ * `pnpm ops jobs verify`). Everything is marker-prefixed - endpoints are
  * removed by name (their deliveries cascade via the FK), the schedule
  * fixture by its (job, cron) pair.
  */

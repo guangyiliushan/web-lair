@@ -2,7 +2,7 @@
 //
 // Manual links-check entry:
 //
-//   pnpm jobs:check-links [--dry-run] [--limit N]
+//   pnpm ops jobs check-links [--dry-run] [--limit N]
 //
 // `--dry-run` performs the full network checks but writes nothing (one pass
 // of up to `--limit`, default 50); the real run loops within the budget.
@@ -27,7 +27,7 @@ import {
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-	console.error('[links] DATABASE_URL is required (run via `pnpm jobs:check-links`).');
+	console.error('[links] DATABASE_URL is required (run via `pnpm ops jobs check-links`).');
 	process.exit(2);
 }
 

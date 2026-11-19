@@ -140,7 +140,7 @@ try {
 			'[migrate] this database predates the default-category baseline (missing categories.is_default).'
 		);
 		console.error(
-			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> db:ensure-categories -> verify).'
+			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> site ensure-categories -> verify).'
 		);
 		process.exitCode = 1;
 	}

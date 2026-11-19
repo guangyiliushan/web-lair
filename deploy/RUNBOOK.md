@@ -77,8 +77,8 @@ the app refuses a second use through its `admin.setup_complete` marker.
 | `SUBSCRIBE_TOKEN_TTL_DAYS` / `SUBSCRIBE_HMAC_KEY`      | see §1.2 (confirmation-link lifetime + per-address cap key)                                                                                                               |
 | `SUBSCRIBE_TOKEN_SECRET`                               | see §1.2 (derives the mailed confirmation token; required before the first start)                                                                                         |
 | `SUPPRESSION_HMAC_KEY` / `MAIL_EVENTS_HMAC_KEY`        | see §8 (suppression list hash master key + bounce/complaint webhook key)                                                                                                  |
-| `SUPPRESSION_HMAC_KEY_VERSION`                         | see §8 (active suppression key version; default 1, gated by `db:verify-suppression-version`)                                                                              |
-| `OWNER_EMAIL` / `OWNER_PASSWORD`                       | first owner seed (`pnpm db:seed-owner` from the host, dev only)                                                                                                           |
+| `SUPPRESSION_HMAC_KEY_VERSION`                         | see §8 (active suppression key version; default 1, gated by `db verify-suppression-version`)                                                                              |
+| `OWNER_EMAIL` / `OWNER_PASSWORD`                       | first owner seed (`pnpm ops site seed-owner` from the host, dev only)                                                                                                     |
 | `DEADMAN_PING_URL` / `HC_DEADMAN_URL`                  | healthchecks.io **liveness** check (5 min); the timer prefers `HC_DEADMAN_URL` and falls back to `DEADMAN_PING_URL`; both unset ⇒ skip (no alarm)                         |
 | `READY_TOKEN`                                          | Bearer for `GET /api/ready` (bootstrap generates it). Production answers 404 to everyone without it; Gatus must send the same value.                                      |
 | `HEALTHCHECKS_RESOURCES_URL` / `HEALTHCHECKS_MAIL_URL` | healthchecks.io checks for the two probes (one check each; base ping URL). Empty ⇒ ping skipped.                                                                          |
@@ -222,16 +222,19 @@ dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M%S).dump
 deploy/compose-prod.sh exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
 mv "$dump.tmp" "$dump"
 deploy/compose-prod.sh exec -T db pg_restore -l < "$dump" > /dev/null
-deploy/compose-prod.sh run --rm app node scripts/migrate.ts
-deploy/compose-prod.sh run --rm app node scripts/ensure-default-category.ts
-deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
+deploy/compose-prod.sh run --rm app node bin/lair db migrate-prod
+deploy/compose-prod.sh run --rm app node bin/lair site ensure-categories
+deploy/compose-prod.sh run --rm app node bin/lair db verify-baseline
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
 # Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
 # are not critical for maintenance, and admin-created schedules use the same tz.
-deploy/compose-prod.sh run --rm app node scripts/ensure-job-schedules.ts
+deploy/compose-prod.sh run --rm app node bin/lair site ensure-schedules
 deploy/compose-prod.sh up -d
 deploy/compose-prod.sh ps          # all healthy
 ```
+
+这四步与 `deploy/compose-prod.sh run --rm app node bin/lair deploy post` 等价
+（顺序定义在 `scripts/deploy-hooks.ts`）；手工逐条执行便于在失败处停下来。
 
 ### 1.5 Smoke
 
@@ -292,13 +295,13 @@ dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M%S).dump
 deploy/compose-prod.sh exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
 mv "$dump.tmp" "$dump"
 deploy/compose-prod.sh exec -T db pg_restore -l < "$dump" > /dev/null
-deploy/compose-prod.sh run --rm app node scripts/migrate.ts
-deploy/compose-prod.sh run --rm app node scripts/ensure-default-category.ts
-deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
+deploy/compose-prod.sh run --rm app node bin/lair db migrate-prod
+deploy/compose-prod.sh run --rm app node bin/lair site ensure-categories
+deploy/compose-prod.sh run --rm app node bin/lair db verify-baseline
 # Default maintenance schedules (idempotent; adjust in admin afterwards).
 # Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
 # are not critical for maintenance, and admin-created schedules use the same tz.
-deploy/compose-prod.sh run --rm app node scripts/ensure-job-schedules.ts
+deploy/compose-prod.sh run --rm app node bin/lair site ensure-schedules
 deploy/compose-prod.sh up -d
 ```
 
@@ -368,7 +371,7 @@ deploy/compose-prod.sh run --rm app node -e \
 # so $POSTGRES_USER/$POSTGRES_DB are expanded there, never on the host.
 deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema if exists drizzle cascade;" -c "drop schema if exists public cascade;" -c "create schema public;"'
-deploy/compose-prod.sh run --rm app node scripts/migrate.ts
+deploy/compose-prod.sh run --rm app node bin/lair db migrate-prod
 deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
   < "$BK/pre-e2-data-$STAMP.sql"
@@ -378,14 +381,14 @@ RESTORED=$(deploy/compose-prod.sh exec -T db sh -c \
 
 # Seed the fallback category only after the restore: running it before would
 # insert a row the dumped categories data may already carry.
-deploy/compose-prod.sh run --rm app node scripts/ensure-default-category.ts
+deploy/compose-prod.sh run --rm app node bin/lair site ensure-categories
 
 # Backfills + verification run inside the image (host has no pnpm/tsx).
-deploy/compose-prod.sh run --rm app node scripts/backfill-email-consent.ts --apply
-deploy/compose-prod.sh run --rm app node scripts/backfill-suppressions.ts --apply
-deploy/compose-prod.sh run --rm app node scripts/verify-suppression-version.ts
-deploy/compose-prod.sh run --rm app node scripts/ensure-job-schedules.ts
-deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
+deploy/compose-prod.sh run --rm app node bin/lair db backfill-consent --apply
+deploy/compose-prod.sh run --rm app node bin/lair db backfill-suppressions --apply
+deploy/compose-prod.sh run --rm app node bin/lair db verify-suppression-version
+deploy/compose-prod.sh run --rm app node bin/lair site ensure-schedules
+deploy/compose-prod.sh run --rm app node bin/lair db verify-baseline
 deploy/compose-prod.sh up -d
 sudo systemctl start web-lair-drain.timer
 deploy/compose-prod.sh start backrest || true
@@ -440,7 +443,7 @@ psql ... -v ON_ERROR_STOP=1 -c "
     where slug='real-data-ui' and writing_origin is distinct from 'mostly_ai';"
 
 # 3. The post-provenance gate.
-node scripts/verify-baseline.ts   # 49 / 119 / 93 / 47
+node bin/lair db verify-baseline   # 49 / 119 / 93 / 47
 ```
 
 A pre-provenance full dump is a **different generation**: §3 detects it by the
@@ -505,9 +508,9 @@ HAS_SECRETS=$(deploy/compose-prod.sh exec -T db sh -c \
 # -> 55 ...). A provenance-era schema is verified against the image's own
 # journal by verify-baseline; older generations are pinned to a matching image.
 if [ "$HAS_SECRETS" = "t" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
-  deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
+  deploy/compose-prod.sh run --rm app node bin/lair db verify-baseline
 elif [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
-  deploy/compose-prod.sh run --rm app node scripts/verify-baseline.ts
+  deploy/compose-prod.sh run --rm app node bin/lair db verify-baseline
 elif [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "f" ]; then
   echo "restored pre-provenance schema (49 tables, E2, no writing_origin); verify-baseline skipped — use the matching pre-provenance image"
 elif [ "$TABLES" = "48" ] && [ "$HAS_E2" = "f" ]; then
@@ -576,7 +579,7 @@ Verification (prints counts only, never a token; the script ships in the
 runtime image, `Dockerfile`):
 
 ```bash
-deploy/compose-prod.sh run --rm app node scripts/verify-oauth-token-storage.ts
+deploy/compose-prod.sh run --rm app node bin/lair secrets verify-oauth-tokens
 ```
 
 Exit 0 means every stored OAuth token is encrypted (or none exist). Exit 1
@@ -835,21 +838,21 @@ sudo -u deploy docker compose -f compose.prod.yaml exec -T db \
   > "/srv/web-lair/pre-webhook-backfill-$STAMP.dump"
 
 # 2) Dry run: prints every endpoint that would move, writes nothing.
-deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts
+deploy/compose-prod.sh run --rm app node bin/lair db migrate-webhook-secrets
 
 # 3) Apply. All rows move in ONE transaction; on any conflict/round-trip
 #    failure it rolls back and no plaintext is retired.
-deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts --apply
+deploy/compose-prod.sh run --rm app node bin/lair db migrate-webhook-secrets --apply
 
 # 4) Prove idempotence and no plaintext left for a migrated endpoint.
-deploy/compose-prod.sh run --rm app node scripts/migrate-webhook-secrets.ts   # "nothing to migrate"
+deploy/compose-prod.sh run --rm app node bin/lair db migrate-webhook-secrets   # "nothing to migrate"
 deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from webhooks where secret is not null"'
 ```
 
 Record the dump name next to the rollback table above. The script is run with
-`node` (the container image has no `tsx`); the `pnpm db:migrate-webhook-secrets`
-alias is for a dev checkout only. A non-zero exit now means "rolled back, still
+`node` (the container image has no `tsx`); the `pnpm ops db migrate-webhook-secrets`
+form is for a dev checkout only. A non-zero exit now means "rolled back, still
 safe" — there is no partial state.
 
 ### 4.4 Backrest: UI, schedules, failure semantics
@@ -1007,14 +1010,14 @@ frozen and purge refuses while the copy runs, so pick a quiet window:
 ```bash
 # 1) Save the target on the page and run Test (HeadBucket + capability probe).
 # 2) Plan: HEADs both buckets, refuses if a registered object is missing.
-pnpm storage:migrate --dry-run
+pnpm ops storage migrate --dry-run
 # 3) Copy with a two-ended hash proof (resumes by verifying, never rewriting).
-pnpm storage:migrate --yes
+pnpm ops storage migrate --yes
 # 4) Cut over, then remove the old bucket when the evidence is in hand.
-pnpm storage:migrate --cutover
-pnpm storage:migrate --status
+pnpm ops storage migrate --cutover
+pnpm ops storage migrate --status
 # Rollback is symmetric and leaves the new objects in place:
-pnpm storage:migrate --rollback
+pnpm ops storage migrate --rollback
 ```
 
 A cutover is refused unless: a complete copy of exactly this target exists
@@ -1032,13 +1035,13 @@ After a cutover, re-publish the map tiles — `maps/*.pmtiles` are not `files`
 rows, so the migration does not carry them:
 
 ```bash
-pnpm maps:publish           # against the now-active provider
+pnpm ops maps publish           # against the now-active provider
 ```
 
 **Restore drill** (quarterly, and before trusting a new repository). Record the
 result in the evidence folder; an untested backup is a guess. Steps 1–3 below are
 automated by `deploy/restore-drill.sh` (§4.5) — run it first — and the manual
-pass stays for steps 4–5 (credential decryption, `media:audit`), which need the
+pass stays for steps 4–5 (credential decryption, `media audit`), which need the
 app running against the scratch copy.
 
 ```bash
@@ -1052,11 +1055,11 @@ sudo -u deploy diff <(grep -o '^[A-Z_]*=' /srv/web-lair/app/.env | sort) \
 createdb -h 127.0.0.1 -U "$POSTGRES_USER" drill
 pg_restore -h 127.0.0.1 -U "$POSTGRES_USER" -d drill --no-owner \
   /srv/web-lair/restore-drill/pg.dump
-DATABASE_URL="postgres://…/drill" pnpm db:verify-baseline
+DATABASE_URL="postgres://…/drill" pnpm ops db verify-baseline
 # 4) Prove the credentials still decrypt (the keyring must come with the
 #    encrypted rows): start the app against the scratch DB with .env restored,
 #    open /admin/settings/storage and check the credential source + key version.
-# 5) Prove media: `pnpm media:audit` against the active provider lists missing
+# 5) Prove media: `pnpm ops media audit` against the active provider lists missing
 #    objects; a known `/i/<key>` must answer 200, a deleted one 404.
 ```
 
@@ -1320,7 +1323,7 @@ network; use `deploy/compose-prod.sh exec app` or an equivalent local URL):
 ```bash
 # F-13: the token is derived from the stored nonce, so print it instead of
 # reading a (no longer existing) plaintext column.
-TOKEN=$(deploy/compose-prod.sh run --rm app node scripts/print-subscribe-token.ts reader@example.com)
+TOKEN=$(deploy/compose-prod.sh run --rm app node bin/lair site print-subscribe-token reader@example.com)
 curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   --data 'List-Unsubscribe=One-Click' \
@@ -1394,15 +1397,15 @@ are **not recoverable** by the backfill; suppression coverage starts at E2.
 **Consent backfill (once, after restoring pre-E2 data):**
 
 ```bash
-deploy/compose-prod.sh run --rm app node scripts/backfill-email-consent.ts            # dry-run
-deploy/compose-prod.sh run --rm app node scripts/backfill-email-consent.ts --apply
+deploy/compose-prod.sh run --rm app node bin/lair db backfill-consent            # dry-run
+deploy/compose-prod.sh run --rm app node bin/lair db backfill-consent --apply
 ```
 
 **Suppression backfill (once, after restoring pre-E2 opt-outs):**
 
 ```bash
-deploy/compose-prod.sh run --rm app node scripts/backfill-suppressions.ts             # dry-run
-deploy/compose-prod.sh run --rm app node scripts/backfill-suppressions.ts --apply
+deploy/compose-prod.sh run --rm app node bin/lair db backfill-suppressions             # dry-run
+deploy/compose-prod.sh run --rm app node bin/lair db backfill-suppressions --apply
 ```
 
 **Subscription tokens (F-13).** Rows store `token_nonce` (random 32B, 43 chars)
@@ -1416,7 +1419,7 @@ path is a hash lookup.
 To exercise a confirmation/unsubscribe link on a box:
 
 ```bash
-deploy/compose-prod.sh run --rm app node scripts/print-subscribe-token.ts <email>
+deploy/compose-prod.sh run --rm app node bin/lair site print-subscribe-token <email>
 ```
 
 Rotating `SUBSCRIBE_TOKEN_SECRET` invalidates every outstanding confirmation
@@ -1434,7 +1437,7 @@ Rotate (no downtime, no rehash — a hash cannot be rewritten without the addres
 
 ```bash
 # 1. confirm the database is not already ahead of the env
-deploy/compose-prod.sh run --rm app node scripts/verify-suppression-version.ts
+deploy/compose-prod.sh run --rm app node bin/lair db verify-suppression-version
 # 2. bump the version (e.g. 1 -> 2) and restart
 sed -i 's/^SUPPRESSION_HMAC_KEY_VERSION=.*/SUPPRESSION_HMAC_KEY_VERSION="2"/' .env
 deploy/compose-prod.sh up -d app

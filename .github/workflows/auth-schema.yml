@@ -20,6 +20,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # No network and no auth CLI: catches a hand-written ALTER/DROP/index on
       # a generated table and the H3 customizations.
-      - run: pnpm auth:check:migrations
+      - run: pnpm ops dev auth-check --migrations-only
       # Regenerates the schema into a temp file and diffs the committed one.
-      - run: pnpm auth:check
+      - run: pnpm ops dev auth-check

@@ -38,7 +38,7 @@ describe('page reserved slugs', () => {
 });
 
 /**
- * Segments whose code route already triggers the `db:verify-pages` shadow
+ * Segments whose code route already triggers the `site verify-pages` shadow
  * warning, so the hard list leaves them alone (v1.44 design). A new
  * first-level route must join the hard list or this set - the drift test
  * above fails otherwise.

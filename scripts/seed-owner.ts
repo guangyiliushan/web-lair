@@ -1,6 +1,6 @@
 // scripts/seed-owner.ts
 // Usage: `pnpm dev` first (the seed signs up through the running server),
-// then `pnpm db:seed-owner`.
+// then `pnpm ops site seed-owner`.
 // Env: OWNER_EMAIL (required), OWNER_PASSWORD (min 8 chars), OWNER_NAME
 // (default "Admin"), ORIGIN (default http://localhost:5173), DATABASE_URL.
 //

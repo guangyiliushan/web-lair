@@ -544,10 +544,10 @@
 			</p>
 		{/if}
 		<pre class="overflow-x-auto rounded-lg border bg-muted/30 p-3 text-xs"><code
-				>{`pnpm storage:migrate --dry-run
-pnpm storage:migrate --yes
-pnpm storage:migrate --cutover
-pnpm storage:migrate --rollback`}</code
+				>{`pnpm ops storage migrate --dry-run
+pnpm ops storage migrate --yes
+pnpm ops storage migrate --cutover
+pnpm ops storage migrate --rollback`}</code
 			></pre>
 		<p class="text-xs text-muted-foreground">{m.admin_settings_storage_migration_cli()}</p>
 	</section>

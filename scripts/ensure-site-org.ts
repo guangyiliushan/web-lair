@@ -1,6 +1,6 @@
 // scripts/ensure-site-org.ts
 //
-// Repair + acceptance entry for the site organization: `pnpm db:ensure-org`
+// Repair + acceptance entry for the site organization: `pnpm ops site ensure-org`
 // creates the `web-lair` organization and the owner's member row when they
 // are missing (idempotent) - the recovery path named by the /admin/setup
 // failure message. Acceptance: two runs must leave exactly one organization
@@ -26,7 +26,7 @@ import {
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
-	console.error('✗ DATABASE_URL is required (run via `pnpm db:ensure-org`).');
+	console.error('✗ DATABASE_URL is required (run via `pnpm ops site ensure-org`).');
 	process.exit(1);
 }
 

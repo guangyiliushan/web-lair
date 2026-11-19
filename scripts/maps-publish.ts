@@ -9,12 +9,12 @@ import { activeStorage } from './lib/active-storage';
  * Publish a local PMTiles archive into the `maps/` prefix: the
  * serve route `/maps/<file>.pmtiles` reads exactly this key space and the
  * extract is built with the go-pmtiles CLI, never the
- * rotating public builds. Usage: `pnpm maps:publish <local-file>
+ * rotating public builds. Usage: `pnpm ops maps publish <local-file>
  * [<remote-name>]`.
  */
 const [file, remoteArg] = process.argv.slice(2);
 if (!file) {
-	console.error('Usage: pnpm maps:publish <local-file> [<remote-name>]');
+	console.error('Usage: pnpm ops maps publish <local-file> [<remote-name>]');
 	process.exit(1);
 }
 const name = remoteArg ?? basename(file);

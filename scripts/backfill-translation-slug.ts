@@ -13,7 +13,7 @@ import { slugTrackers } from '../src/lib/server/db/system';
  * Dry-run by default (prints the plan, writes nothing); `--apply` commits
  * each row in its own transaction and writes a `slug_trackers` row per
  * retired slug so old URLs still 301. Idempotent. Run:
- * `pnpm db:backfill-translation-slug [--apply]`.
+ * `pnpm ops db backfill-translation-slugs [--apply]`.
  * Safety rails: CONFLICT when another group already owns the target
  * `(lang, slug)`, ORPHAN when a group has no source row, NEEDS-SLUG when
  * the source still carries a `draft-` placeholder — all three are
