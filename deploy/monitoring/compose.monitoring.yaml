@@ -19,7 +19,7 @@ x-logging: &default-logging
 
 services:
   gatus:
-    # pinned: Gatus v5.38.0 (2026-10-28) — the config format matching the README table.
+    # pinned: Gatus v5.38.0 — the config format matching the README table.
     image: ghcr.io/twin/gatus:v5.38.0
     restart: always
     security_opt:

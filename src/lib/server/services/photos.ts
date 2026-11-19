@@ -394,7 +394,7 @@ export async function removePhoto(
 	deps: PhotosDeps = {}
 ): Promise<RemovePhotoResult> {
 	const { storage, database } = await resolveDeps(deps);
-	// The row lock comes FIRST (round-2 review): a concurrent rename locks
+	// The row lock comes FIRST: a concurrent rename locks
 	// the same photo row, so the rename/delete interleaving can no longer
 	// slip a fresh tracker in after this transaction's tracker sweep.
 	const current = await database.transaction(async (tx) => {
@@ -426,9 +426,8 @@ export async function removePhoto(
 				result.kind === 'referenced' || result.kind === 'mentioned' || result.kind === 'blocked';
 		} catch (error) {
 			// The photo is already gone; a storage outage must not look like a
-			// full failure (round-2 review: the old 500 hid the partial state).
+			// full failure (the old 500 hid the partial state).
 			// The cause is logged so the swallowed failure stays observable
-			// (round-3 review).
 			console.warn('[photos] file delete failed after the row removal', {
 				fileId: current.fileId,
 				error: error instanceof Error ? error.name : typeof error
@@ -732,7 +731,7 @@ interface PhotoFeedPosition {
 
 /**
  * Adjacent visible rows around the cursor plus the feed position. The
- * neighbours now carry the viewer field set (3c) so the overlay can open and
+ * neighbours now carry the viewer field set so the overlay can open and
  * cycle with zero round-trips for ±1; the API endpoint composes the same
  * call for the lazy fetches past ±1.
  */

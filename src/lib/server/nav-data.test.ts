@@ -165,8 +165,8 @@ describe('nav-data loaders', () => {
 
 		const data = await loadNotesMegaData();
 
-		// Cap is 4 per column so both sides of the panel end at the same height
-		// (H3); six seeded rows must come back truncated to four.
+		// Cap is 4 per column so both sides of the panel end at the same height;
+		// six seeded rows must come back truncated to four.
 		expect(data.leftItems).toHaveLength(4);
 		expect(data.leftItems?.[0]).toEqual({
 			label: 'Topic 0',

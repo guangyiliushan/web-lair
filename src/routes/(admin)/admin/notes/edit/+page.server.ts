@@ -70,7 +70,7 @@ function readNoteDraftForm(form: FormData): NoteDraftFormRead {
 		noteId: rawId || null,
 		draftId: draftId || null,
 		// A non-numeric version is treated as "not provided" (mirrors the
-		// posts editor's permanent-409 review finding).
+		// posts editor).
 		expectedVersion: /^\d+$/.test(versionRaw) ? Number(versionRaw) : null,
 		lang: (OPTION_LANGS as readonly string[]).includes(langRaw) ? langRaw : null,
 		payload: {

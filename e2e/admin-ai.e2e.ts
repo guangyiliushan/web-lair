@@ -143,7 +143,7 @@ test('saves the moderation switches and thresholds', async ({ page }) => {
 	await page.goto('/admin/settings/ai');
 
 	const toggle = page.getByRole('switch', { name: '启用 AI 分诊' });
-	// Hydration gate (round-4 flake): force two real flips - a pre-hydration
+	// Hydration gate (flake): force two real flips - a pre-hydration
 	// click never changes aria-checked, so observing both flips proves the JS
 	// is live before we fill and save (also guarantees the hidden notes-style
 	// inputs exist, so a stray native POST cannot drop them).
@@ -161,7 +161,7 @@ test('saves the moderation switches and thresholds', async ({ page }) => {
 	}).toPass({ timeout: 20000 });
 
 	// Converge on the persisted value: a pre-hydration fill only writes the
-	// DOM, so re-fill + re-save until the option row matches (round-4 flake).
+	// DOM, so re-fill + re-save until the option row matches.
 	await expect(async () => {
 		await vis(page.locator('#mod-link-threshold')).fill('3');
 		await page.getByRole('button', { name: '保存审核设置' }).click();

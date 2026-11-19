@@ -15,7 +15,7 @@ describe('normalizeSlug', () => {
 	});
 });
 
-// The tag slug rule is the storage identity of a tag. Since 2026-10-23 tags
+// The tag slug rule is the storage identity of a tag. Tags
 // are English-only, so CJK is stripped rather than
 // kept: a Chinese tag slug used to be routable, and `UI/UX` used to produce
 // `ui/ux`, which splits the `/posts/tags/[slug]` route.
@@ -86,7 +86,7 @@ describe('titleSlug', () => {
 	});
 
 	it('caps the length and leaves no trailing hyphen after the cut', () => {
-		// Hardcode the reviewed cap (review finding): importing the constant
+		// Hardcode the reviewed cap: importing the constant
 		// would keep this green even if the value silently changed.
 		expect(titleSlug('a'.repeat(200)).length).toBe(120);
 		const cut = titleSlug(`${'a'.repeat(119)} b`);

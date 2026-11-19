@@ -26,7 +26,7 @@ export type ProjectSyncProvider = (typeof PROJECT_SYNC_PROVIDERS)[number];
 export const PROJECT_STATUSES = ['pending', 'published', 'hidden', 'rejected'] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
-/** Admin status labels (messages `admin_projects_status_*`, added with batch A). */
+/** Admin status labels (messages `admin_projects_status_*`). */
 export const PROJECT_STATUS_LABEL_KEYS: Record<ProjectStatus, string> = {
 	pending: 'admin_projects_status_pending',
 	published: 'admin_projects_status_published',

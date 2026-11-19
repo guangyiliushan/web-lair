@@ -340,7 +340,7 @@ describe('saveDraftWork', () => {
 		expect(state.inserts[0].table).toBe(drafts);
 		expect(state.inserts[0].values).toMatchObject({ refId: 'post-1', baseVersion: 5 });
 		// Attaching to published content syncs the submitted body's refs too
-		// (draft identity, 3b2: the post's own set is untouched here).
+		// (draft identity: the post's own set is untouched here).
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: 'draft-1' }, []);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
@@ -674,7 +674,7 @@ describe('publishDraft', () => {
 			[]
 		);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
-		// ...and the draft's own refs leave with the draft row (3b2) as a
+		// ...and the draft's own refs leave with the draft row as a
 		// full clear, after the durable set so no file can transiently lose
 		// every reference.
 		expect(syncMock).toHaveBeenNthCalledWith(
@@ -741,7 +741,7 @@ describe('publishDraft', () => {
 		expect(call[0]).toBe(state.txExecutors);
 		expect(call[1]).toEqual({ type: 'post', id: 'post-1' });
 		expect(call[2]).toEqual([KEY]);
-		// The draft scope is cleared right after (3b2 full clear).
+		// The draft scope is cleared right after (full clear).
 		expect(syncMock).toHaveBeenNthCalledWith(
 			2,
 			state.txExecutors,
@@ -870,7 +870,7 @@ describe('discardDraft', () => {
 			KEY
 		]);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
-		// The draft's own refs leave with its row (3b2) as a full clear.
+		// The draft's own refs leave with its row as a full clear.
 		expect(syncMock).toHaveBeenNthCalledWith(
 			2,
 			state.txExecutors,
@@ -996,8 +996,8 @@ describe('createTranslationDraft', () => {
 			summary: 'Source summary',
 			slug: 'source-slug'
 		});
-		// The copied body's keys become the translation draft's own refs
-		// (3b2) inside the same transaction.
+		// The copied body's keys become the translation draft's own refs inside
+		// the same transaction.
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: 'draft-9' }, [
 			KEY
 		]);

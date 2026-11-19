@@ -92,9 +92,9 @@ test.afterAll(async () => {
 
 /* ── auth fixtures ──────────────────────────────────────────────────────── */
 
-// bootstrapReader lives in support.ts: the p3a/p4 copies were verbatim
-// (pre-release review 04-F4) and the support plumbing is already the shared
-// home (psql / apiPost / approveQueueRow).
+// bootstrapReader lives in support.ts: the p3a/p4 copies were verbatim and
+// the support plumbing is already the shared home (psql / apiPost /
+// approveQueueRow).
 
 /** Memoised signed-in contexts: one auth round per account per file. */
 let readerContext: BrowserContext | null = null;
@@ -382,7 +382,7 @@ test('the owners edit auto-approves: public immediately with the edited marker',
 });
 
 test('an edit inside the approval window voids the stale queue click', async ({ browser }) => {
-	// TOCTOU guard (pre-release review 08-F1): the queue form snapshots the
+	// TOCTOU guard: the queue form snapshots the
 	// edited_at the reviewer saw; an author who edits after load must not
 	// ride a stale approve onto the public surface.
 	const seeded = await readerPage(browser);

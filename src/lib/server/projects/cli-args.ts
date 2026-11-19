@@ -83,7 +83,7 @@ export function parseProjectsCliArgs(argv: readonly string[]): ProjectsCliArgsRe
 				.filter((id) => id.length > 0);
 			if (ids.length === 0) return { ok: false, error: '--refresh-ids expects at least one id' };
 			// Bounded so one invocation cannot overflow the SQL parameter
-			// list or run an unbounded serial refresh (review 2026-10-08).
+			// list or run an unbounded serial refresh.
 			if (ids.length > 500) {
 				return { ok: false, error: '--refresh-ids accepts at most 500 ids' };
 			}

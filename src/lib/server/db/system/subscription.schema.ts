@@ -19,12 +19,12 @@ export const subscriptions = pgTable(
 		lang: text('lang').notNull().default('en'),
 		source: text('source'),
 		/**
-		 * Consent text version (E2-2). Written from a code constant; nullable so
+		 * Consent text version. Written from a code constant; nullable so
 		 * rows created before the column existed can be marked `legacy`.
 		 */
 		consentVersion: text('consent_version'),
 		/**
-		 * Random 32-byte nonce (base64url, 43 chars) for the current token (F-13).
+		 * Random 32-byte nonce (base64url, 43 chars) for the current token.
 		 * The mailed token is `HMAC-SHA256(SUBSCRIBE_TOKEN_SECRET, nonce)`, so the
 		 * service can re-derive the link without storing a usable credential:
 		 * a database dump holds only the nonce (useless without the env secret)
@@ -32,7 +32,7 @@ export const subscriptions = pgTable(
 		 */
 		tokenNonce: text('token_nonce').notNull(),
 		/**
-		 * SHA-256 of the current derived token (E2-3, F-13). This is the only
+		 * SHA-256 of the current derived token. This is the only
 		 * lookup column for confirm/unsubscribe links; the plaintext `token`
 		 * column was dropped once the derived-token path landed.
 		 */

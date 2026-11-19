@@ -1,5 +1,5 @@
 /**
- * Deployment gate for the suppression key version (F-14).
+ * Deployment gate for the suppression key version.
  *
  * Reads are bounded to versions 1..`SUPPRESSION_HMAC_KEY_VERSION`, so a row
  * written under a *newer* version than the environment advertises would become

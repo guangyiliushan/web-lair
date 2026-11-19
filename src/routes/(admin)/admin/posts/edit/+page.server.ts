@@ -152,7 +152,7 @@ function readDraftForm(form: FormData): DraftFormRead {
 		postId: rawId || null,
 		draftId: draftId || null,
 		// A non-numeric version is treated as "not provided" (Number('abc') is
-		// NaN, which used to make every save a permanent 409; review finding).
+		// NaN, which used to make every save a permanent 409).
 		expectedVersion: /^\d+$/.test(versionRaw) ? Number(versionRaw) : null,
 		lang: (OPTION_LANGS as readonly string[]).includes(langRaw) ? langRaw : null,
 		payload: {

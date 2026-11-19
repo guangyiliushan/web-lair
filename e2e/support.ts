@@ -88,7 +88,7 @@ export function valkey(...args: string[]): string {
 /**
  * Throttle keys live in Valkey; drop them best-effort (container may be down).
  * Routes through valkey() so the docker exec wiring has exactly ONE home
- * (review finding: the three helpers each carried their own copy).
+ * (the three helpers each carried their own copy).
  */
 export function valkeyDel(key: string) {
 	try {

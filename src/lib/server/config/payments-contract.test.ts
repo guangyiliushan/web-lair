@@ -4,7 +4,7 @@ import { optionKeys, optionRegistry } from './options-registry';
 
 /**
  * Paid membership ships as a design contract only. This suite
- * pins the boundary so a future batch cannot half-land it: the flag is off by
+ * pins the boundary so paid features cannot half-land: the flag is off by
  * default, there is no paid/member access option, no payment route, and the
  * Content settings page offers no paid switch.
  *

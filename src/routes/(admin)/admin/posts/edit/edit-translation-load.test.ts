@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the drawer's data riding on the editor load (Task B5).
+ * Route-level tests for the drawer's data riding on the editor load.
  *
  * Opening the drawer must not cost a request, so the load has to ship the
  * group's candidates, its presence map and the group source id. The group is

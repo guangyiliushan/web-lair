@@ -165,7 +165,6 @@ export async function runSync(options: RunSyncOptions): Promise<SyncSummary> {
 		}
 		if (listed.truncated) {
 			// Page-cap stop with more pages pending: loud, not silent
-			// (review 2026-10-08).
 			logger.warn(
 				`[projects] ${target.provider}/${target.account}: repo list truncated at the pagination cap`
 			);
@@ -270,7 +269,7 @@ async function refreshByIds(
 	addFailure: (failure: SyncFailure) => void
 ): Promise<void> {
 	const { db, dryRun, now } = options;
-	// Duplicate ids collapse: one fetch per row (review 2026-10-08).
+	// Duplicate ids collapse: one fetch per row.
 	const ids = [...new Set(options.refreshIds ?? [])];
 	/** Accounts that hit a rate limit this run - remaining rows skip. */
 	const rateLimitedAccounts = new Set<string>();
@@ -300,7 +299,7 @@ async function refreshByIds(
 		if (!identity || identity.provider !== row.provider) {
 			// site / other rows are not syncable, and a URL whose provider
 			// no longer matches the row would refresh the wrong repository
-			// (review 2026-10-08) - skip both.
+			// - skip both.
 			summary.skipped += 1;
 			continue;
 		}

@@ -3,7 +3,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 
 /**
- * Route-level tests for the N1 admin notes list (batch 5): filter guards
+ * Route-level tests for the admin notes list: filter guards
  * (status whitelist, uuid topic guard, keyword ilike), page clamping, the
  * "有未发布改动" badge merge and the admin guard. The db module is mocked
  * with a recording chain so a dropped WHERE / wrong clamp turns red.

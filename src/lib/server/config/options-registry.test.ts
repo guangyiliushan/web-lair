@@ -22,7 +22,7 @@ const { dbMock, state, pgTz } = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/server/db', () => ({ db: dbMock }));
-// Batch-5 closure: the site.timezone write consults pg_timezone_names.
+// The site.timezone write consults pg_timezone_names.
 vi.mock('$lib/server/pg-timezone', () => ({
 	isPgAcceptableTimeZone: pgTz.isPgAcceptableTimeZone
 }));
@@ -264,7 +264,7 @@ describe('options registry (AI-1.1)', () => {
 			name: 'site.timezone',
 			value: 'Asia/Taipei'
 		});
-		// The write also consults the PostgreSQL zone set (batch-5 closure).
+		// The write also consults the PostgreSQL zone set.
 		expect(pgTz.isPgAcceptableTimeZone).toHaveBeenCalledWith('Asia/Taipei', undefined);
 		await expect(setOption('site.timezone', 'Not/AZone' as never)).rejects.toThrow(
 			/无效的 IANA 时区名/

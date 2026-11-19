@@ -61,7 +61,7 @@
 	let codeModeText = $state('');
 	/** Code-mode edits handed to the rebuilt editor after leaving code mode. */
 	let pendingMarkdown = $state<string | null>(null);
-	/** Paste/drop upload status from the editor pipeline (3a3). */
+	/** Paste/drop upload status from the editor pipeline. */
 	let uploadStatus = $state<EditorUploadStatus>({ uploading: 0, lastErrorCode: null });
 
 	// ── Code-mode line-number gutter ──
@@ -139,7 +139,7 @@
 		});
 	}
 
-	// ── Math editing (batch B): clicking a formula opens the edit dialog ──
+	// ── Math editing: clicking a formula opens the edit dialog ──
 	let mathDialogOpen = $state(false);
 	let mathNodeKey = $state<string | null>(null);
 	let mathLatex = $state('');

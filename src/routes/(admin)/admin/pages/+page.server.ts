@@ -225,7 +225,7 @@ export const actions: Actions = {
 		if (!id || !isUuid(id)) return fail(400, { error: m.admin_pages_err_missing_id() });
 		const pageId = id.toLowerCase();
 
-		// Lock + guard + delete share one transaction (topics round-7 pattern).
+		// Lock + guard + delete share one transaction (topics pattern).
 		const result = await db
 			.transaction(async (tx) => {
 				const [row] = await tx

@@ -74,7 +74,7 @@ function normalizeWeatherCode(raw: string | number | null): number | null {
  * '2.5.5' / '21,5' / '1e3' into the column and 22P02 into a 500), then
  * canonicalise to the column scale so the stored text round-trips
  * byte-identically ('7' -> '7.0') and the hash-unchanged guard keeps
- * working (round-7 review finding).
+ * working.
  */
 function normalizeTemperature(raw: string | null): string | null {
 	if (raw === null) return null;
@@ -84,10 +84,10 @@ function normalizeTemperature(raw: string | null): string | null {
 	const value = Number.parseFloat(trimmed);
 	if (!Number.isFinite(value)) return null;
 	// Round FIRST, then range-check the rounded value: 99.94 fits the column
-	// as 99.9 (dropping it silently was a verify-round finding) while 99.96
+	// as 99.9 while 99.96
 	// rounds past the bound and must drop. The negative-zero family
 	// ((-0.05, 0) -> '-0.0') is normalised too: PG reads it back as '0.0'
-	// and the hash round-trip would break (verify-round finding).
+	// and the hash round-trip would break.
 	const rounded = Number(value.toFixed(1));
 	if (!Number.isFinite(rounded) || rounded < -99.9 || rounded > 99.9) return null;
 	// `rounded === 0` is true for both +0 and -0, so '-0.0' becomes '0.0'.
@@ -298,7 +298,6 @@ export async function saveNoteDraftWork(input: SaveNoteDraftInput): Promise<Save
 			}
 			// The picked topic vanished between pick and write (FK 23503):
 			// a graded form error, not a 500 with an autosave retry loop
-			// (round-7 review finding).
 			if (pgErrorCode(caught) === '23503') {
 				return { kind: 'invalid', errors: { topicId: m.admin_notes_edit_err_topic_missing() } };
 			}
@@ -416,7 +415,7 @@ async function updateExistingNoteDraft(
 				.where(and(eq(drafts.id, draft.id), eq(drafts.version, expected)))
 				.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
 			if (rows.length > 0) {
-				// Draft identity (3b2): the working copy's refs never touch the
+				// Draft identity: the working copy's refs never touch the
 				// published note's ref set.
 				await syncFileReferences(
 					tx,
@@ -584,7 +583,7 @@ export async function publishNoteDraft(draftId: string): Promise<PublishNoteResu
 				{ type: 'note', id: locked.id },
 				keysFromContent(lockedDraft.content)
 			);
-			// The draft's own refs leave with the draft row (3b2: full clear).
+			// The draft's own refs leave with the draft row (full clear).
 			await syncFileReferences(tx, { type: 'draft', id: lockedDraft.id }, []);
 
 			return { kind: 'published' as const, noteId: locked.id };
@@ -651,7 +650,7 @@ export async function discardNoteDraft(draftId: string): Promise<DiscardNoteResu
 				let removedPlaceholder = false;
 				// A never-published note goes with its draft: notes have no
 				// version counter, so "never published" = no publishedAt AND
-				// still in the draft status (N1 decision).
+				// still in the draft status.
 				if (note && placeholder) {
 					await tx.delete(notes).where(eq(notes.id, note.id));
 					removedPlaceholder = true;
@@ -684,7 +683,7 @@ export type NoteRowActionResult =
  * the
  * row to `published` when it had been public before (publishedAt is the only
  * durable trace of "was public"), otherwise to `draft` - notes keep no
- * status history (N1 decision).
+ * status history.
  */
 export async function setNoteStatus(
 	noteId: string,
@@ -700,7 +699,7 @@ export async function setNoteStatus(
 	if (note.status === target) return { kind: 'ok' };
 
 	// CAS on the status we read: a concurrent publish/restore must not be
-	// overwritten blind (round-7 review finding).
+	// overwritten blind.
 	const rows = await db
 		.update(notes)
 		.set({ status: target, updatedAt: new Date() })
@@ -726,7 +725,7 @@ export async function setNotePin(noteId: string, pinned: boolean): Promise<NoteR
 		.update(notes)
 		.set({
 			// Re-pinning keeps the original instant: pin ordering must not
-			// drift on double-clicks (round-7 review finding).
+			// drift on double-clicks.
 			pinAt: pinned ? sql`coalesce(${notes.pinAt}, now())` : null,
 			updatedAt: new Date()
 		})
@@ -740,7 +739,7 @@ export async function setNoteAllowComment(
 	allow: boolean
 ): Promise<NoteRowActionResult> {
 	// Conditional on the current value: a repeated toggle is a no-op instead
-	// of bumping updated_at (round-7 review finding).
+	// of bumping updated_at.
 	const rows = await db
 		.update(notes)
 		.set({ allowComment: allow, updatedAt: new Date() })
@@ -761,7 +760,7 @@ export async function setNotePassword(
 	noteId: string,
 	password: string
 ): Promise<NoteRowActionResult> {
-	// Owner decision (2026-10-03): new passwords are at least 6 characters.
+	// Owner decision: new passwords are at least 6 characters.
 	// '' still clears; existing shorter hashes keep verifying (this gate is
 	// write-side only - the unlock path never rejects a stored password).
 	if (password !== '' && password.length < 6) {
@@ -782,7 +781,6 @@ export async function setNotePassword(
 	) {
 		// Same password: keep the existing hash. Re-salting would revoke every
 		// outstanding unlock cookie and burn an argon2 run for nothing
-		// (round-7 review finding).
 		return { kind: 'ok' };
 	}
 	const passwordHash = password === '' ? null : await hashNotePassword(password);
@@ -806,7 +804,7 @@ export async function setNoteEmotions(
 	}
 	// Dedupe (a repeated checkbox submit may repeat a token) and merge with a
 	// single jsonb_set statement: the old read-modify-write could drop a
-	// concurrent meta writer (round-7 review finding).
+	// concurrent meta writer.
 	const unique = [...new Set(tokens)];
 	const rows = await db
 		.update(notes)

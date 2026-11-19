@@ -29,7 +29,7 @@ export default defineConfig({
 		// ORIGIN pins better-auth's baseURL: with it empty AND NODE_ENV=production,
 		// better-auth marks every cookie Secure (`__Secure-` prefix), and those
 		// set by form actions never reached the browser on this plain-http origin
-		// (B3.1 bootstrapping finding - the challenge/page flows lost their
+		// (the challenge/page flows lost their
 		// session cookie). Pinning the http origin makes the preview behave like
 		// a real deployment on its own scheme.
 		env: {

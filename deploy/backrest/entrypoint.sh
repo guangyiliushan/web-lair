@@ -223,7 +223,7 @@ elif [ "${BACKREST_RENDER_CONFIG:-}" = force ]; then
 else
 	# Keeping the file must not mean ignoring a vanished credential file: a
 	# container that comes up healthy and then silently fails every hook is the
-	# exact failure mode this batch removes.
+	# exact failure mode these guards remove.
 	: "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is not set (deploy/backup.env, RUNBOOK §4)}"
 	: "${RESTIC_PASSWORD:?RESTIC_PASSWORD is not set (deploy/backup.env, RUNBOOK §4)}"
 	: "${RESTIC_CONFIG_REPOSITORY:?RESTIC_CONFIG_REPOSITORY is not set (deploy/backup.env, RUNBOOK §4)}"

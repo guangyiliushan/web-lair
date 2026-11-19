@@ -67,7 +67,7 @@ export interface LexicalActionOptions {
 	}) => void;
 	/** Exposes the editor instance to a Svelte $state */
 	onEditorReady?: (editor: LexicalEditor) => void;
-	/** Paste/drop image uploads (3a3): status for the editor chrome. */
+	/** Paste/drop image uploads: status for the editor chrome. */
 	onUploadStatus?: (status: EditorUploadStatus) => void;
 }
 
@@ -165,7 +165,7 @@ export function lexicalEditor(node: HTMLElement, initialOptions: LexicalActionOp
 		}
 	});
 
-	// Paste/drop image uploads (3a3): @lexical/rich-text routes local
+	// Paste/drop image uploads: @lexical/rich-text routes local
 	// pasted/dropped files into the DRAG_DROP_PASTE command; the plugin
 	// consumes them (local images only, up to three in flight, each result
 	// inserted as it lands).

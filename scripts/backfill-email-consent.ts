@@ -1,5 +1,5 @@
 /**
- * Backfill the consent version (E2-2).
+ * Backfill the consent version.
  *
  * Rows collected before `subscriptions.consent_version` existed cannot be
  * attributed to a specific text; mark them `legacy` so an export can answer

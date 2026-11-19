@@ -82,7 +82,7 @@ export const load: PageServerLoad = async (event) => {
 		} = row;
 		const anchor = parseCommentAnchor(rawAnchor);
 		// Reviewers may lack access to password-gated notes *and* to unpublished
-		// targets; the queue must not become a reader for either (round-4 review).
+		// targets; the queue must not become a reader for either.
 		const targetPublic =
 			(row.postId !== null && postStatus === 'published') ||
 			(row.noteId !== null && noteStatus === 'published') ||
@@ -157,7 +157,7 @@ export const actions: Actions = {
 		if (decision !== 'approve' && decision !== 'reject') {
 			return fail(400, { message: m.admin_comments_err_unknown_decision() });
 		}
-		// Snapshot guard (pre-release review 08-F1): the queue form carries,
+		// Snapshot guard: the queue form carries,
 		// per row, the `edited_at` the reviewer actually saw. Editing a
 		// pending row made its text mutable, so approving without this axis
 		// could put text the reviewer never read onto the public surface
@@ -192,8 +192,7 @@ export const actions: Actions = {
 		// snapshot the reviewer saw still matches: the conditional update
 		// keeps a repeated submit (double click, replay) from overwriting a
 		// decision, keeps the writable set identical to the visible one, and
-		// cannot approve text the reviewer never read (pre-release review
-		// 08-F1).
+		// cannot approve text the reviewer never read.
 		const state = decision === 'approve' ? 'approved' : 'rejected';
 		const conditions: SQL<unknown>[] = ids.map((id) => {
 			const ts = snapshots.get(id) ?? 0;

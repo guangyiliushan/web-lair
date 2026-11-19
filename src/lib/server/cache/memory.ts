@@ -15,8 +15,8 @@ const NO_EXPIRY = Number.POSITIVE_INFINITY;
  * In-memory store: used when VALKEY_URL is absent (tests, scripts, bare dev)
  * and as the semantic reference for the Valkey implementation. Sorted sets
  * order by (score asc, member lexicographic) and abandon a key when its last
- * member is trimmed — both mirror observed Valkey behaviour (live probe,
- * 2026-10-16). Deliberate divergence (review note): values are stored and
+ * member is trimmed — both mirror observed Valkey behaviour (live probe).
+ * Deliberate divergence: values are stored and
  * returned BY REFERENCE here, while Valkey round-trips JSON — callers must
  * not mutate a cached value in place.
  */
@@ -59,8 +59,8 @@ export class MemoryCacheStore implements CacheStore {
 	async incr(key: string, windowSeconds: number): Promise<number> {
 		// Fully synchronous read-modify-write: there must be NO await between
 		// the read and the write, otherwise concurrent submissions all read
-		// the same initial value and the window counter collapses (security
-		// review finding: 20 concurrent calls, limit=2 -> 20/20 allowed).
+		// the same initial value and the window counter collapses (20 concurrent
+		// calls, limit=2 -> 20/20 allowed).
 		const now = this.#clock();
 		const entry = this.#live(key);
 		if (entry?.kind !== 'kv') {

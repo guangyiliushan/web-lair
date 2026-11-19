@@ -6,7 +6,7 @@ import type { UploadOutcome } from '$lib/utils/upload-each';
 import MediaUploadDialog from './media-upload-dialog.svelte';
 
 /**
- * F-1: the batch must report progress as one polite announcement, and it must
+ * The batch must report progress as one polite announcement, and it must
  * never be left on "uploading" — not by a cancel, not by a session redirect.
  *
  * `uploadEachFile` runs for real here (it owns the AbortSignal merge and the

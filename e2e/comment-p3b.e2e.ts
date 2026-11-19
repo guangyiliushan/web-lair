@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
 
 /**
- * Comment P3b — B1 acceptance (segment anchors on the public read path).
+ * Comment acceptance (segment anchors on the public read path).
  * Anchors are inserted straight into the live database: this spec pins the resolution +
  * marking contract without the selection UI (B2 covers that):
  *   1. a resolved anchor renders `span.wl-cm` with `id="c-<comment>"` on the server

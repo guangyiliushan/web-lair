@@ -49,11 +49,10 @@
 		void renderedHtml;
 		// A re-rendered article (SPA navigation) while the lightbox is open
 		// would keep showing the previous content with its modal trap still
-		// armed - close it before re-enhancing (review 3d, the plain-face
-		// mirror of the 3c Back guard). Runs before the article guard so a
-		// swap-to-empty also closes (review 3d round 2, 08 F1). The restore
+		// armed - close it before re-enhancing. Runs before the article guard so a
+		// swap-to-empty also closes. The restore
 		// target is gone with the old tree, so focus lands on body - the same
-		// outcome as a full page load, accepted (review 3d round 2, 08 F3).
+		// outcome as a full page load, accepted.
 		// untrack: the effect must not re-run because of its own state write.
 		if (untrack(() => lightboxOpen)) lightboxOpen = false;
 		const article = articleEl;
@@ -82,7 +81,7 @@
 		// cleanup runs both on the next {@html} swap and on destroy.
 		detachMagnet = attachMagnetLinks(article);
 		// Article images open the shared overlay viewer (3d content lightbox).
-		// Node-level listeners only; nothing to detach (review 3d).
+		// Node-level listeners only; nothing to detach.
 		attachContentLightbox(article, (source) => {
 			lightboxSource = source;
 			lightboxOpen = true;

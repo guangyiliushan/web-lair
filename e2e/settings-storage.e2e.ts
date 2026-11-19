@@ -4,7 +4,7 @@ import { expectNoCriticalAxe, psql } from './support';
 /**
  * Acceptance arc for the Storage control plane, against the isolated
  * `local_e2e` database only (it writes `options` rows). The spec proves the
- * four behaviours the batch promises and a route test cannot fully show:
+ * four behaviours a route test cannot fully show:
  *
  *   1. six real sections exist and the page is an owner control plane;
  *   2. Save writes the CANDIDATE — the live provider section does not change;

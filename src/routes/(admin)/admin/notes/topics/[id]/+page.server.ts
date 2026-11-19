@@ -132,7 +132,7 @@ export const actions: Actions = {
 			}
 			throw caught;
 		}
-		// A vanished row must not answer success (round-7 review finding).
+		// A vanished row must not answer success.
 		if (updated.length === 0) return fail(404, { error: m.admin_notes_topics_err_not_found() });
 		return { success: true };
 	},
@@ -202,7 +202,7 @@ export const actions: Actions = {
 		// The notes FK is SET NULL, so the "still owns notes" refusal must be
 		// explicit here (categories mirror the same intent with a RESTRICT FK).
 		// Lock + count + delete share ONE transaction: the old count-then-delete
-		// pair raced with concurrent writes (round-7 review finding).
+		// pair raced with concurrent writes.
 		const result = await db.transaction(async (tx) => {
 			const [topic] = await tx
 				.select({ id: topics.id })

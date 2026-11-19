@@ -3,7 +3,7 @@ import { mount, unmount } from 'svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime';
 
 /**
- * Client-side coverage for the public projects grid (P review follow-up):
+ * Client-side coverage for the public projects grid:
  * the empty copy, the list/listitem semantics and the card contract are
  * pinned here at the component level, so the e2e empty-state case (which
  * needs a globally empty live database) can retire gracefully once real

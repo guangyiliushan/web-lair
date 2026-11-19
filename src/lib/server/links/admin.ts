@@ -32,7 +32,7 @@ import { PrecheckError, executePrecheck, type PrecheckDeps } from './precheck';
 /** One page of rows is enough at this scale; counts carry the total. */
 export const LIST_LIMIT = 200;
 
-/** G4: a second manual check on the same row inside a minute is a double-click. */
+/** A second manual check on the same row inside a minute is a double-click. */
 export const MANUAL_CHECK_COOLDOWN_MS = 60_000;
 
 export type LinkAdminErrorCode =
@@ -606,7 +606,7 @@ export interface CheckOneResult {
 }
 
 /**
- * G4: single-site check inside the request, bounded. `retryOnce: false` keeps
+ * Single-site check inside the request, bounded. `retryOnce: false` keeps
  * the worst case at one fetch unit per axis (the job keeps its 30 s retry);
  * the write reuses the checker's CAS so a concurrent run/edit is `stale`, not
  * lost. The cooldown is DB-backed (`last_checked_at`), so it survives
@@ -696,7 +696,7 @@ export async function checkOneLink(id: string, deps: CheckOneDeps = {}): Promise
 }
 
 /**
- * G8: batch checks are the scheduler's job (`links.check`, manual runs
+ * Batch checks are the scheduler's job (`links.check`, manual runs
  * allowed). Enqueue dedupes on the queued/running unique index; a CLI run
  * holding the lock leaves the row queued for the next drain tick.
  */

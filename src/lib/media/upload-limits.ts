@@ -1,5 +1,5 @@
 /**
- * Upload limits that are CODE-OWNED (ST5/ST10): they do not follow the storage
+ * Upload limits that are CODE-OWNED: they do not follow the storage
  * provider and are not editable from settings. They live outside
  * `services/files.ts` so read-only admin pages can render them without pulling
  * the media service (and its db imports) into their module graph.

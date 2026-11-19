@@ -15,7 +15,7 @@ export type SerializedBlockMathNode = SerializedLexicalNode & {
 /**
  * BlockMathNode - a standalone `$$x$$` paragraph (spec 2 #2) rendered with
  * KaTeX in display mode. One-line source only: the multiline `$$ ... $$`
- * form is not imported as a node (registered follow-up); note the core
+ * form is not imported as a node; note the core
  * exporter still rewrites such blocks on save, so they are not byte-stable.
  */
 export class BlockMathNode extends DecoratorNode<HTMLElement> {

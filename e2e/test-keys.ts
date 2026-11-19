@@ -8,7 +8,7 @@
  */
 export const TEST_SUBSCRIBE_HMAC_KEY = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=';
 /**
- * F-13 token derivation secret. The preview is a production build, so the boot
+ * Token derivation secret. The preview is a production build, so the boot
  * guard requires it; specs re-derive the mailed token from `token_nonce`
  * instead of reading a plaintext column (which no longer exists).
  */

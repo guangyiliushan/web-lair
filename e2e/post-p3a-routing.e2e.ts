@@ -250,9 +250,8 @@ test.describe('P3-a routing nails', () => {
 		await expect(trigger).toBeVisible();
 		await trigger.hover();
 		await expect(page.getByTestId('post-ai-card')).toContainText('Mostly AI');
-		// The visual axis was removed: the card shows the writing
-		// claim and the help detail only — asserting a visuals row would pin a
-		// retired field.
+		// The card shows the writing claim and the help detail only — do not
+		// assert a visuals row; that field is retired.
 		await expect(page.getByTestId('post-ai-card')).not.toContainText('visuals');
 		await expect(page.getByTestId('post-ai-card')).toContainText('ideas, wording');
 	});
@@ -392,7 +391,7 @@ test.describe('P3-a read side', () => {
 		// remaining canonicalisation trigger (relative links inside article
 		// markdown) is covered by the post-p3b-pages spec.
 		await page.goto(`/en/posts/${SLUG_MAIN}`);
-		// Hydration probe (review finding: a fixed sleep raced hydration under
+		// Hydration probe (a fixed sleep raced hydration under
 		// load): the language switcher only opens once handlers are live, so a
 		// successful open-and-close means the next click is router-intercepted.
 		await openSwitcher(page, 'Language');

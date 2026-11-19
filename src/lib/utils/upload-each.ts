@@ -45,7 +45,7 @@ export async function uploadEachFile(options: {
 	/** Drives the caller's per-file queue chip; optional so queue-less callers stay simple. */
 	onProgress?: (index: number, state: UploadProgressState) => void;
 	/**
-	 * Caller-owned cancel switch (F-1). Aborting it cancels the in-flight
+	 * Caller-owned cancel switch. Aborting it cancels the in-flight
 	 * request AND stops the batch: the remaining files are reported `cancelled`
 	 * and never sent. Merged with the per-request timeout below, so a hung
 	 * request still settles on its own.

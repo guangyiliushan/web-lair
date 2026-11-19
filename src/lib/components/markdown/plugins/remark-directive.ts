@@ -9,7 +9,7 @@ import { m } from '$lib/paraglide/messages';
  * Directive containers (spec 3.2) — the closed registry is
  * `grid | tabs | tab | details`, plus the `spoiler` block-spoiler sugar that
  * renders as `<details>`. Unregistered names keep their content and warn once
- * (spec 5). Retired with batch 4: gallery, banner (4a) and the alignment
+ * (spec 5). Retired: gallery, banner and the alignment
  * directives left/center/right/justify (4b) — the latter now take the
  * unregistered path.
  *

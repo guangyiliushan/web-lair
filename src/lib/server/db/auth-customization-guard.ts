@@ -1,5 +1,5 @@
 /**
- * H3 exclusions: customizations that change better-auth's own storage or
+ * Exclusions: customizations that change better-auth's own storage or
  * challenge semantics. They are rejected because the library's upgrade,
  * migration and recovery flows assume its own behaviour.
  *

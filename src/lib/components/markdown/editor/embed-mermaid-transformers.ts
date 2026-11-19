@@ -1,4 +1,4 @@
-// Batch C transformers: the export side of embed cards and mermaid blocks
+// Transformers: the export side of embed cards and mermaid blocks
 // plus the mermaid fence import.
 //
 // - `embedTransformer` is export-only (its regExp never matches): the import

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Subscribe action (D-2, §F #9): honeypot first, validation before the
+ * Subscribe action: honeypot first, validation before the
  * service, fail-open rate limiting, an indistinguishable success for
  * pending/already-subscribed, and a visible 503 when the confirmation mail
  * cannot be sent.

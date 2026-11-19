@@ -34,7 +34,7 @@ if (!DATABASE_URL) {
 const parsedArgs = parseLinksCliArgs(process.argv.slice(2));
 if (!parsedArgs.ok) {
 	// Unknown flags / bad values: a typo must not silently run in WRITE
-	// mode (the --dry-run gate is load-bearing; review batch 2026-10-06).
+	// mode (the --dry-run gate is load-bearing).
 	console.error(`[links] ${parsedArgs.error}`);
 	process.exit(2);
 }

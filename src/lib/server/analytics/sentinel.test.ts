@@ -267,7 +267,7 @@ describe('readTrafficSnapshot', () => {
 
 	it('does not pin the settled config-null promise in the in-flight map', async () => {
 		// The async body returns before its first await on this path; cleanup must
-		// still run after the synchronous inflight.set (review finding).
+		// still run after the synchronous inflight.set.
 		await readTrafficSnapshot({
 			deps: { config: null, fetch: vi.fn() as unknown as SentinelDeps['fetch'] }
 		});

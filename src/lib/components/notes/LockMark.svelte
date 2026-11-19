@@ -4,7 +4,7 @@
 
 	/**
 	 * Shared lock marker for password-gated notes (list rows, timeline,
-	 * mega menu): one markup, one screen-reader label (review finding).
+	 * mega menu): one markup, one screen-reader label.
 	 * `class` carries the call-site size and tone.
 	 */
 	let { class: klass = 'size-3.5 text-muted-foreground/70' }: { class?: string } = $props();

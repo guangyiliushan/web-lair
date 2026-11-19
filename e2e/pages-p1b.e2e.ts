@@ -123,7 +123,7 @@ test.describe('pages P1b', () => {
 			});
 		}).toPass({ timeout: 45_000 });
 
-		// The trigger advertises the open state (closeout finding: the props
+		// The trigger advertises the open state (the props
 		// object used to be a frozen snapshot, pinning this to false).
 		await expect(home).toHaveAttribute('aria-expanded', 'true');
 

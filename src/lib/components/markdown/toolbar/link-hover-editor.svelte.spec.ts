@@ -6,7 +6,7 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 /**
- * LinkHoverEditor (batch 3b): in-place link editing in the rich editor —
+ * LinkHoverEditor: in-place link editing in the rich editor —
  * caret-in-link opens the view pane, the pane edits/removes without losing
  * the editor selection, and the toolbar link button opens the create flow
  * (the retired window.prompt path).

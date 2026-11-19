@@ -166,7 +166,7 @@ describe('cached()', () => {
 
 	it('does not cache null results (failures stay failures)', async () => {
 		// A recording set() gives this teeth: MemoryCacheStore alone cannot
-		// distinguish "stored null" from "miss" (round-2 mutation m10).
+		// distinguish "stored null" from "miss".
 		const inner = new MemoryCacheStore();
 		const setSpy = vi.fn((key: string, value: unknown, ttl: number) => inner.set(key, value, ttl));
 		const store: CacheStore = {
@@ -218,8 +218,8 @@ describe('rateLimit()', () => {
 
 describe('ValkeyCacheStore (fail-open against a dead endpoint)', () => {
 	it('degrades: KV/presence writes no-op, incr and presence reads rethrow', async () => {
-		// Reserved-range port nothing listens on in dev/CI (review finding:
-		// 6399 sat close to real services).
+		// Reserved-range port nothing listens on in dev/CI (6399 sat
+		// close to real services).
 		const store = new ValkeyCacheStore('redis://127.0.0.1:63990');
 		expect(await store.get('k')).toBeNull();
 		await expect(store.set('k', 1, 60)).resolves.toBeUndefined();

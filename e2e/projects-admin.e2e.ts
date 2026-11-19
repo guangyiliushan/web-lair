@@ -146,7 +146,7 @@ test.describe('projects admin', () => {
 		const row = rowByName(page, ROW_A);
 		await expect(row).toBeVisible({ timeout: 20_000 });
 
-		// Filter negative (review): a pending row must not render under the
+		// Filter negative: a pending row must not render under the
 		// published tab.
 		await page.goto('/admin/projects?status=published');
 		await expect(rowByName(page, ROW_A)).toHaveCount(0, { timeout: 20_000 });

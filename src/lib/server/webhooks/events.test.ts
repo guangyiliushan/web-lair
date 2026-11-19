@@ -45,9 +45,9 @@ describe('WEBHOOK_EVENT_ROSTER', () => {
 	it('producer call sites stay inside the roster (source scan, review round-1)', async () => {
 		// The literal-string emitters under these roots must all be roster
 		// members; a new producer event that forgets the roster turns red.
-		// (Single- and double-quoted literals; round-2 SYT-8 widened quotes.
+		// (Single- and double-quoted literals; widened quotes.
 		//  Anchored on a non-quote boundary so a JSON `"event":"x.y"`
-		//  substring is not mistaken for a producer (round-3 SY3-7).
+		//  substring is not mistaken for a producer.
 		//  Template literals and other roots are outside this guard's scope.)
 		// (The `job.save`/`job.fork` ternary in job-scripts.ts is not a literal
 		// match - it is pinned by the roster literals and the jobs tests.)

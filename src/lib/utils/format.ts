@@ -1,6 +1,6 @@
 /**
  * Byte-size formatting shared across the viewer and both admin surfaces
- * (round-3 review: three private copies had already started to diverge).
+ * (three private copies had already started to diverge).
  */
 export function formatBytes(bytes: number): string {
 	if (!Number.isFinite(bytes) || bytes < 0) return '—';

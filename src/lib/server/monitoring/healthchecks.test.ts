@@ -110,8 +110,8 @@ describe('pingHealthcheck', () => {
 				}) as unknown as typeof fetch
 			})
 		).resolves.toBe('fail');
-		// The check URL carries the UUID: never in the log.
 		expect(warn).toHaveBeenCalledWith(expect.stringContaining('mail'));
+		// The check URL carries the UUID: never in the log.
 		expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('hc-ping.com'));
 		warn.mockRestore();
 	});

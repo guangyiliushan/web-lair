@@ -35,7 +35,7 @@ function cleanup() {
 
 // Long serial chain: keep the per-test budget above the sum of the inner
 // waits with headroom for a loaded machine (the old 180s was ~15s short of the
-// worst case; review finding). NOTE: this spec owns fixed fixture ids on the
+// worst case). NOTE: this spec owns fixed fixture ids on the
 // shared dev database - never run it twice concurrently (each run would see
 // the other's rows and both would fail).
 test.describe.configure({ mode: 'serial', timeout: 300_000 });
@@ -172,7 +172,7 @@ test('publishes the draft: posts gets content, revision and the draft is gone', 
 	});
 
 	// One request, one click. A retry loop here would happily accept a first
-	// click that only ever saved and publish on the second.
+	// click that only ever saved, and publish on the second.
 	await page.getByRole('button', { name: '发布', exact: true }).click();
 	await page.waitForURL(/published=1/, { timeout: 25000 });
 
@@ -209,7 +209,7 @@ test('edits a published article in isolation, then publishes v2 with a slug trac
 	expect(psql(`select content from drafts where ref_id = '${id}'`)).toContain('v2 change');
 
 	// One request, one click. A retry loop here would happily accept a first
-	// click that only ever saved and publish on the second.
+	// click that only ever saved, and publish on the second.
 	await page.getByRole('button', { name: '发布', exact: true }).click();
 	await page.waitForURL(/published=1/, { timeout: 25000 });
 
@@ -322,8 +322,7 @@ test('creates a translation draft with the copy prefill (§9.20.4)', async ({ pa
 	).toBe('t');
 	expect(psql(`select status from posts where id = '${translatedId}'`)).toBe('draft');
 	// The translation family shares ONE slug - the source decides it
-	// and the translation inherits it (this used to be `slug is null`, i.e. the
-	// translation forked its own address the moment it was published).
+	// and the translation inherits it.
 	expect(
 		psql(
 			`select slug || '/' || (content like '%v2 change%')::text from drafts where ref_id = '${translatedId}'`

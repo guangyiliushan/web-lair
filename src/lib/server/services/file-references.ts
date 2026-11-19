@@ -32,7 +32,7 @@ export function keysFromContent(content: string | null | undefined): string[] {
 
 /**
  * `keysFromContent` over a per-locale jsonb body map (pages): every locale's
- * markdown is scanned and the key sets union (3b2 backfill; the mention scan
+ * markdown is scanned and the key sets union (the mention scan
  * flattens the same way).
  */
 export function keysFromLocalizedContent(

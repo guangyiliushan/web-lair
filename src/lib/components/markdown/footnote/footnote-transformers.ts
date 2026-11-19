@@ -1,7 +1,6 @@
 // Footnote transformers for the editor (L1 GFM footnotes; pandoc-style inline
 // footnotes). Refs and inline notes become atomic chips; definition lines
-// (`[^label]: ...`) stay literal source text (registered follow-up: a
-// definitions panel).
+// (`[^label]: ...`) stay literal source text.
 //
 // Guards: a backslash before the opener keeps the text literal (spec 4.4);
 // the ref form blocks a trailing colon so the definition line never converts.

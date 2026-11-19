@@ -59,7 +59,7 @@ const ADAPTERS: Record<
  * classified with the same five kinds as the sync plus
  * blocked for SSRF refusals; callers surface the "already exists (status X)"
  * check themselves
- * (that check needs the db - the A batch service owns it).
+ * (that check needs the db - the projects service owns it).
  */
 export async function resolveImportMetadata(
 	rawUrl: string,
@@ -142,7 +142,7 @@ async function fetchPageHtml(
 			addresses = await resolveHost(target.hostname);
 		} catch (err) {
 			// DNS failures are the target site's own state - classified as
-			// network, never leaked as raw resolver errors (review 2026-10-08).
+			// network, never leaked as raw resolver errors.
 			throw new ProjectsFetchError('network', err instanceof Error ? err.message : String(err));
 		}
 		if (!addresses || addresses.length === 0) {
@@ -222,7 +222,7 @@ async function fetchPageHtml(
 		} catch (err) {
 			// Mid-body failures (socket reset, deadline abort) must stay
 			// inside the classification contract instead of leaking raw
-			// DOMExceptions to the caller (review 2026-10-08).
+			// DOMExceptions to the caller.
 			await reader?.cancel().catch(() => {});
 			throw new ProjectsFetchError('network', err instanceof Error ? err.message : String(err));
 		} finally {

@@ -106,7 +106,7 @@ describe('photos viewer image stage', () => {
 		expect(host.querySelector('.photos-viewer-progress')!.textContent).toContain('Loading');
 		await until(() => img().src.startsWith('blob:'));
 		expect(img().dataset.phase).toBe('done');
-		// The completion copy is visible during the fade (round-2 confirm).
+		// The completion copy is visible during the fade.
 		await until(
 			() =>
 				host.querySelector('.photos-viewer-progress')?.textContent?.includes('Full image loaded') ??

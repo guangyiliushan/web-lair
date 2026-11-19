@@ -30,9 +30,10 @@ const LOCALES = ['en', 'zh-cn', 'ja'] as const;
  * Pages editor. Two shapes share the route:
  *
  * - md rows (`content` not null): the md editor is the SINGLE SOURCE - the title /
- *   description / content / slug editing surface lives in one `drafts.payload` and
- *   only the publish transaction writes the row. `?/save` is narrowed there to the
- *   row properties (icon / external_url), which are never staged in drafts.
+ *   description / content surface lives in one `drafts.payload` (the slug rides its
+ *   own `drafts.slug` field) and only the publish transaction writes the row.
+ *   `?/save` is narrowed there to the row properties (icon / external_url), which
+ *   are never staged in drafts.
  * - code / external rows (`content` null): the metadata form, unchanged.
  *
  * Draft actions mirror the notes editor (`?/saveDraft` / `?/publish` / `?/discard`);
@@ -107,7 +108,7 @@ export const load: PageServerLoad = async ({ url }) => {
 					placeholder: true,
 					newPage: true,
 					editorMode: true,
-					// Shape symmetry with the row branch (four-review #6): the
+					// Shape symmetry with the row branch: the
 					// client seeds through `?? {}` anyway, but an explicit {}
 					// keeps the load contract identical on both branches.
 					content: {},
@@ -256,7 +257,7 @@ export const actions: Actions = {
 			draftId: draftId || null,
 			pageId: rawId || null,
 			// A non-numeric version is treated as "not provided" (mirrors the
-			// notes editor's permanent-409 review finding).
+			// notes editor).
 			expectedVersion: /^\d+$/.test(versionRaw) ? Number(versionRaw) : null,
 			slug: str(form, 'slug').trim().toLowerCase(),
 			payload: {

@@ -1,5 +1,5 @@
 /**
- * Decorator focus memory (batch D fix): writing the nested-editor JSON back
+ * Decorator focus memory: writing the nested-editor JSON back
  * dirties the node, Lexical re-runs decorate() and the decorator remounts.
  * Remembering which decorator owned the focus lets the remounted instance
  * take it back instead of dropping every following keystroke.

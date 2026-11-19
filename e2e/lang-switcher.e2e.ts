@@ -6,7 +6,7 @@ import { openAdminSidebarMenu, pickLocaleMenuItem } from './support';
 // renders every page from it and setLocale() writes it and reloads, so a
 // switch is observable in <html lang>, the message set and the cookie.
 //
-// These cases are the regression for the reload loop (2026-09-23): a
+// These cases are the regression for the reload loop: a
 // client-side getLocale() pin plus localeStore.init() re-applying a stored
 // preference on every load meant a non-pinned preference could never converge
 // - each load fired another reload. "Settles" below is measured in document

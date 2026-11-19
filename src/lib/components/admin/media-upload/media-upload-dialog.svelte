@@ -67,7 +67,7 @@
 	// dragenter/dragleave fire per child crossed; only the net count is real.
 	let dragDepth = 0;
 
-	/** F-1 cancel switch: one batch, one controller. */
+	/** Cancel switch: one batch, one controller. */
 	let aborter: AbortController | null = null;
 	/** Batch-scoped counters: the queue can outlive a batch (files added mid-flight). */
 	let batchTotal = $state(0);
@@ -154,7 +154,7 @@
 		queue = queue.map((item) => (item.id === id ? { ...item, ...next } : item));
 	}
 
-	/** F-1: stop the batch. Already-finished files stay finished. */
+	/** Stop the batch. Already-finished files stay finished. */
 	function cancelUpload(): void {
 		aborter?.abort();
 	}

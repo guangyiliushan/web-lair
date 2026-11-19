@@ -19,7 +19,7 @@ describe('cdata', () => {
 describe('sanitizeXmlText', () => {
 	it('strips characters XML 1.0 cannot represent, in text and CDATA alike', () => {
 		// A form-feed pasted from a PDF used to make the whole feed
-		// non-well-formed (review finding).
+		// non-well-formed.
 		expect(sanitizeXmlText('a\u0001b\u000Cc')).toBe('abc');
 		expect(escapeXml('a\u0000b & c')).toBe('ab &amp; c');
 		expect(cdata('<p>a\u000Bb</p>')).toBe('<![CDATA[<p>ab</p>]]>');

@@ -43,7 +43,7 @@ function trimUrlTail(raw: string): string {
 }
 
 /**
- * Reserved / private hosts are downgraded to text (security review): a
+ * Reserved / private hosts are downgraded to text: a
  * comment must not hand readers a one-click probe into their own LAN or a
  * loopback service. Kept to the unambiguous namespaces - a full allowlist or
  * a server-side link proxy is registered as future work.
@@ -69,7 +69,7 @@ function isReservedHost(hostname: string): boolean {
  * Candidates whose display string could be read differently from the actual
  * target are downgraded: backslashes and userinfo
  * (`https://evil.com\@trusted.com`, `https://trusted.com@evil.com`) are the
- * classic confusion vectors (security review).
+ * classic confusion vectors.
  */
 function isConfusableCandidate(value: string): boolean {
 	if (value.includes('\\')) return true;

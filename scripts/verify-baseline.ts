@@ -338,7 +338,7 @@ const RETIRED_INDEX_NAMES = [
 	'notes_published_public_created_idx',
 	'notes_topic_id_idx',
 	'projects_name_uniq',
-	// F-13: the plaintext token column and its index were dropped.
+	// The plaintext token column and its index were dropped.
 	'subscriptions_token_uniq'
 ];
 
@@ -350,7 +350,7 @@ const JUNCTION_PKS: Record<string, string> = {
 	file_references: 'file_references_file_id_ref_type_ref_id_pk'
 };
 
-/** Constraint names that must be present (batch pins; curated). */
+/** Constraint names that must be present (curated). */
 const REQUIRED_CONSTRAINT_NAMES: string[] = [
 	'notes_status_check',
 	'notes_content_format_check',
@@ -703,8 +703,7 @@ async function fileChecks(): Promise<void> {
 	expect(/"slug" text NOT NULL/.test(notesBlock![2]), 'notes.slug must be NOT NULL');
 
 	// projects reshape pins: retired columns and
-	// the column count - closes the negative faces flagged in the S-batch
-	// review (images/text gone; 21 columns total).
+	// the column count - closes the negative faces (images/text gone; 21 columns total).
 	const projectsCols = tableColumns.get('projects') ?? [];
 	expect(projectsCols.length === 21, `projects column count = ${projectsCols.length}`);
 	for (const gone of ['images', 'text'])
@@ -1118,7 +1117,7 @@ begin
 		if c <> 'projects_external_id_check' then raise exception 'FAIL projects extid check: wrong constraint %', c; end if;
 	end;
 
-	-- Projects S-batch teeth (2026-10-07): the provider / status whitelists,
+	-- Projects baseline teeth (2026-10-07): the provider / status whitelists,
 	-- the site row carrying an external_id (the false->true arm of the
 	-- biconditional), plus a cross-provider positive control proving
 	-- projects_extid_uniq is not over-broad.
@@ -1249,7 +1248,7 @@ begin
 		if c <> 'links_ring_check' then raise exception 'FAIL links ring: wrong constraint %', c; end if;
 	end;
 
-	-- Acceptance teeth (2026-10-06): the remaining seven
+	-- Acceptance teeth: the remaining seven
 	-- negatives - banned without reason, lost_since both directions, plain
 	-- http, approved without backlink, an 11-element ring, duplicate url.
 	begin
@@ -1469,7 +1468,7 @@ begin
 		get stacked diagnostics c = constraint_name;
 		if c <> 'notes_group_source_uniq' then raise exception 'FAIL delete-source: wrong constraint %', c; end if;
 	end;
-	-- Taxonomy i18n teeth (2026-10-23): the source locale must never appear in
+	-- Taxonomy i18n teeth: the source locale must never appear in
 	-- name_i18n, and tag names/slugs are ASCII/URL-safe only.
 	begin
 		insert into categories (name, slug, source_lang, name_i18n) values ('c1v-tax', 'c1v-tax', 'zh-cn', '{"zh-cn":"c1v"}');

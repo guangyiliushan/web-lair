@@ -25,7 +25,7 @@ function hasDateComponents(options?: Intl.DateTimeFormatOptions): boolean {
 	return options !== undefined && DATE_COMPONENT_KEYS.some((key) => options[key] !== undefined);
 }
 
-/** …and `timeStyle` with individual time components (review finding). */
+/** …and `timeStyle` with individual time components. */
 const TIME_COMPONENT_KEYS = [
 	'hour',
 	'minute',

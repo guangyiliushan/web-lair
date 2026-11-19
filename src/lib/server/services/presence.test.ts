@@ -18,7 +18,7 @@ vi.mock('$lib/server/config/options-registry', () => ({
 }));
 // The process-wide cache resolves lazily; every test below passes an explicit
 // store, so this factory only fires in the getCache-failure describe (the
-// service must swallow a malformed VALKEY_URL there, review finding).
+// service must swallow a malformed VALKEY_URL there).
 vi.mock('$lib/server/cache', () => ({
 	getCache: () => {
 		throw new Error('malformed VALKEY_URL');
@@ -205,7 +205,7 @@ describe('presence service (site / content / day / peak)', () => {
 		// latest-activity order is f,c,d,e,a,b and the cap keeps buckets
 		// [4,5,6,7,8] ascending. A Map WITHOUT the delete+reinsert would
 		// keep first-occurrence insertion order (f,a,b,c,d,e) and answer
-		// [7,8,4,5,6] here (review-corrected arithmetic).
+		// [7,8,4,5,6] here.
 		await store.zadd('presence:c:doc', '1:tok-a', sec - 50);
 		await store.zadd('presence:c:doc', '7:tok-a', sec - 30);
 		await store.zadd('presence:c:doc', '2:tok-b', sec - 48);

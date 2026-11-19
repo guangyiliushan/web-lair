@@ -170,7 +170,7 @@
 	}
 
 	/**
-	 * One-shot flash (round-2 review): `?deleted=1` is consumed from the URL
+	 * One-shot flash: `?deleted=1` is consumed from the URL
 	 * via replaceState, so a refresh / back-nav cannot replay a stale banner;
 	 * the delete dialog also closes on success. Same-route redirects keep
 	 * this component mounted, so the param is WATCHED rather than read once.

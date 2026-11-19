@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the drawer's actions (Task B6). The drawer must
+ * Route-level tests for the drawer's actions. The drawer must
  * generate, accept, retry, discard and resync without leaving the editor, so
  * every action answers with data instead of redirecting, and every failure
  * speaks the workbench's copy. Services and db are mocked; the mapping from

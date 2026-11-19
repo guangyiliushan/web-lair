@@ -45,8 +45,10 @@
 		ownerLinks?: readonly SocialLinkLike[] | null;
 		ownerStatus: OwnerStatus;
 		/**
-		 * Live pipeline view. Until the ActivityWatch bridge lands, the header
-		 * falls back to the static ownerStatus setting for visual preview only.
+		 * Live pipeline view. When absent, `ownerPresenceFromStatus` still runs
+		 * but ignores the static ownerStatus argument and returns `unknown`,
+		 * which the header renders as nothing - the visual-preview fallback
+		 * is inert.
 		 */
 		ownerPresence?: OwnerPresence | null;
 		postsData?: NavMenuData | null;

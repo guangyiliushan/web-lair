@@ -151,7 +151,7 @@ export class S3Storage implements ObjectStoragePort {
 
 	/**
 	 * Object URL: bucket + key, encoded segment-wise. Exact `.` / `..`
-	 * segments are rejected outright (round-2 review): unvetted callers must
+	 * segments are rejected outright: unvetted callers must
 	 * not rely on the encoder to neutralise path dot-segments — this check
 	 * makes "no traversal reaches the wire" an adapter property.
 	 */

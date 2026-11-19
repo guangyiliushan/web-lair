@@ -44,7 +44,7 @@ const T_RL2 = 'e2e-cmt 节流二';
 const T_RL3 = 'e2e-cmt 节流三';
 
 /** Root-composer submit, scoped to the ?/comment form: with an inline reply
- *  composer open, a page-level role locator would be ambiguous (UI review). */
+ *  composer open, a page-level role locator would be ambiguous. */
 function rootSubmit(page: Page) {
 	return page.locator('form[action="?/comment"]').getByRole('button', { name: '发表' });
 }
@@ -114,8 +114,7 @@ test.afterAll(async ({}, testInfo) => {
 
 /* ── auth fixtures ──────────────────────────────────────────────────────── */
 
-// bootstrapReader lives in support.ts (shared with comment-p4 - pre-release
-// review 04-F4).
+// bootstrapReader lives in support.ts (shared with comment-p4).
 
 /**
  * Memoised signed-in contexts: one auth round per account for the whole file

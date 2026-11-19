@@ -499,7 +499,7 @@ export const conformanceCases: ConformanceCase[] = [
 		input: '```nosuchlang\nplain text\n```',
 		contains: ['<pre', 'plain text']
 	},
-	// ── Code fence info string (§3.3, batch 5) ──
+	// ── Code fence info string (§3.3) ──
 	{
 		id: 'l2-code-meta-collapsed',
 		spec: '§3.3',
@@ -571,7 +571,7 @@ export const conformanceCases: ConformanceCase[] = [
 		input: ':::info\n孤儿容器内容',
 		contains: ['孤儿容器内容']
 	},
-	// ── Embed detection (§3.4 ①-⑤, batch 6) ──
+	// ── Embed detection (§3.4 ①-⑤) ──
 	{
 		id: 'l2-embed-extension-image',
 		spec: '§3.4 ③',
@@ -613,7 +613,7 @@ export const conformanceCases: ConformanceCase[] = [
 	},
 	{
 		// an image inside a link stays an image: replacing it would nest
-		// anchors and parse5 empties the outer link (batch 2 precedent)
+		// anchors and parse5 empties the outer link
 		id: 'l2-embed-image-inside-link-stays-image',
 		spec: '§3.4',
 		input: '[![x](https://github.com/foo/bar)](https://example.com)',
@@ -826,7 +826,7 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['()'],
 		notContains: ['katex']
 	},
-	// ── L2 containers (§3.2, batch 4a: grid/tabs/tab/details; gallery/banner retired) ──
+	// ── L2 containers (§3.2, grid/tabs/tab/details; gallery/banner retired) ──
 	{
 		id: 'l2-grid-basic',
 		spec: '§3.2',
@@ -906,7 +906,7 @@ export const conformanceCases: ConformanceCase[] = [
 		input: ':::whatever\n内容保留\n:::',
 		contains: ['内容保留']
 	},
-	// ── 4.5 raw/pipeline origin split (batch 4a) ──
+	// ── 4.5 raw/pipeline origin split ──
 	{
 		// the forged token value cannot match the runtime random token
 		id: 'l45-raw-class-style-stripped',
@@ -1025,7 +1025,7 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['居中内容'],
 		notContains: ['style=']
 	},
-	// ── Image tail attributes (spec 2 #7, batch 4b) ──
+	// ── Image tail attributes (spec 2 #7) ──
 	{
 		// spec 2 #7: `{` must be preceded by whitespace — the glued form stays literal
 		id: 'l2-image-tail-whitespace-required',
@@ -1055,7 +1055,7 @@ export const conformanceCases: ConformanceCase[] = [
 		contains: ['width="480"'],
 		notContains: ['bogus']
 	},
-	// ── Heading id / slug / anchors (spec 3.6, batch 4b) ──
+	// ── Heading id / slug / anchors (spec 3.6) ──
 	{
 		id: 'l2-heading-custom-id',
 		spec: '§3.6',

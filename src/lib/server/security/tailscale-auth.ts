@@ -71,9 +71,9 @@ let warnedAboutLoopback = false;
 
 /**
  * One-off warning: with the flag on, *any* request reaching this process over
- * plain loopback signs in as the site owner - so the app must stay bound to
- * 127.0.0.1 and must never be exposed through `tailscale serve` / Funnel
- * (Funnel traffic carries no identity header and would count as local).
+ * plain loopback signs in as the site owner - Funnel traffic carries no
+ * identity header and would count as local. The bind/exposure rule is stated
+ * in the message below.
  */
 function warnLoopbackOnce() {
 	if (warnedAboutLoopback) return;

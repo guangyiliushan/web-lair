@@ -33,12 +33,11 @@ export function attachContentLightbox(
 			// The ring's offset band follows the page background (the dark
 			// theme otherwise shows a hard white band); the corner radius
 			// comes from the article's own `[&_img]:rounded-lg` - no
-			// comes the corner radius from the article's own `[&_img]:rounded-lg`
-			// - no duplicate class here.
+			// duplicate class here.
 			'focus-visible:ring-offset-background',
 			// Transparent outline: invisible normally, but forced-colors mode
 			// substitutes a system colour, so Windows high-contrast users
-			// keep a visible focus indicator (review 3d, a11y).
+			// keep a visible focus indicator.
 			'focus-visible:outline-2',
 			'focus-visible:outline-offset-2',
 			'focus-visible:outline-transparent'

@@ -1019,7 +1019,7 @@ describe('round-2 anti-regression: fail-closed guards, purge reasons, dedupe fal
 			'drafts',
 			'comments'
 		]);
-		// Arm predicates (ring-2): the recorded filters are rendered and
+		// Arm predicates: the recorded filters are rendered and
 		// pinned, so swapping the status arms or dropping an arm's ref_type
 		// (or the constraint-less belt) turns red instead of staying green.
 		const render = (filter: unknown) => new PgDialect().sqlToQuery(filter as SQL);

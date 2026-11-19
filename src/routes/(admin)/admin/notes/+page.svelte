@@ -50,8 +50,7 @@
 	const EDIT_PATH = '/admin/notes/edit';
 
 	// Transient banner for ?trashed=1 / ?discarded=1 (the edit page consumes
-	// its own variants; without this the redirects landed silently -
-	// review finding).
+	// its own variants; without this the redirects landed silently).
 	let flash = $state<string | null>(null);
 	let flashTimer: ReturnType<typeof setTimeout> | null = null;
 	afterNavigate(() => {
@@ -83,7 +82,7 @@
 	/**
 	 * Filterable statuses = the server whitelist. `scheduled` stays out until a
 	 * scheduling UI writes such rows; offering it used to answer an unfiltered
-	 * list while claiming a filter was active (round-7 review finding).
+	 * list while claiming a filter was active.
 	 */
 	const FILTERABLE_STATUSES = ['published', 'draft', 'private', 'trash'] as const;
 

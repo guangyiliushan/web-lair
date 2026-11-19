@@ -396,7 +396,7 @@ async function updateExistingDraft(
 			.where(and(eq(drafts.id, draft.id), eq(drafts.version, expected)))
 			.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
 		if (rows.length > 0) {
-			// Draft identity (3b2): the working copy's refs never touch the
+			// Draft identity: the working copy's refs never touch the
 			// published set.
 			await syncFileReferences(
 				tx,
@@ -680,7 +680,7 @@ export async function publishDraft(
 				{ type: 'post', id: locked.id },
 				keysFromContent(lockedDraft.content)
 			);
-			// The draft's own refs leave with the draft row (3b2: full clear).
+			// The draft's own refs leave with the draft row (full clear).
 			await syncFileReferences(tx, { type: 'draft', id: lockedDraft.id }, []);
 
 			return { kind: 'published' as const, postId: locked.id, version: nextVersion };
@@ -850,7 +850,7 @@ export async function createTranslationDraft(
 					updatedAt: new Date()
 				})
 				.returning({ id: drafts.id });
-			// The copied body's keys become this draft's own refs (3b2): a
+			// The copied body's keys become this draft's own refs: a
 			// later source edit must not orphan an image the draft carries.
 			await syncFileReferences(
 				tx,

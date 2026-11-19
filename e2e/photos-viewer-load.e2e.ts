@@ -3,7 +3,7 @@ import { zhCnLocale } from './locale-fixture';
 import { psql } from './support';
 
 /**
- * C batch acceptance: the loading-strategy branches on
+ * This spec covers the loading-strategy branches on
  * the page viewer — ≤8MB auto-loads the full variant without a click,
  * over-threshold sources show a load button and stay idle until clicked,
  * and a saveData signal forces the same on-demand path for small files.

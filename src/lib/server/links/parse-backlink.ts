@@ -97,9 +97,9 @@ export function findBacklink(
 				}
 				if (token.tagName === 'plaintext') {
 					// WHATWG PLAINTEXT never exits on an end tag; parse5 has
-					// a dedicated mode for it (review batch 2026-10-06 -
-					// RAWTEXT emulation reopened at the first literal
-					// `</plaintext>` and reported phantom links).
+					// a dedicated mode for it (RAWTEXT emulation reopened
+					// at the first literal `</plaintext>` and reported
+					// phantom links).
 					tokenizer.state = TokenizerMode.PLAINTEXT;
 					return;
 				}
@@ -120,9 +120,7 @@ export function findBacklink(
 				} catch {
 					return;
 				}
-				// Only http(s) links count as evidence of a link placement
-				// (review finding 2026-10-06; the plan only defines http(s)
-				// hits).
+				// Only http(s) links count as evidence of a link placement.
 				if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return;
 				const host = normalizeHost(resolved.hostname);
 				if (!host || !accepted.has(host)) return;

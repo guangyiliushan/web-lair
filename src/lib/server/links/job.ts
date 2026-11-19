@@ -28,7 +28,7 @@ import { sanitizeErrorText } from '../jobs/error-text.ts';
 /**
  * Session advisory-lock key shared by drain, CLI and any manual trigger -
  * derived from the registry namespace (`web_lair.job.links.check`): one
- * source, mirrors the drain's per-job lock (review finding 2026-10-06).
+ * source, mirrors the drain's per-job lock.
  */
 export const LINK_LOCK_KEY = jobLockKey('links.check');
 
@@ -95,7 +95,7 @@ export interface LinkRunSummary {
 	 * True when the run stopped with rows left (soft budget hit): set by
 	 * the per-lane gate only when a due row could not be STARTED, so a
 	 * fully processed run stays false even if the clock crossed the
-	 * deadline meanwhile (review batches 2026-10-06, rounds 2-4).
+	 * deadline meanwhile.
 	 */
 	budgetExhausted: boolean;
 	backlinkSkippedReason: 'origin-missing' | null;
@@ -385,8 +385,7 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 				// boundary: a row that would START after the deadline is
 				// left for the next run (in-flight rows finish). The flag
 				// means "rows were left" - checked after the bounds test,
-				// so a fully drained lane reports nothing (review batches
-				// 2026-10-06, rounds 2-4).
+				// so a fully drained lane reports nothing.
 				if (Date.now() >= deadline) {
 					summary.budgetExhausted = true;
 					return;
@@ -460,10 +459,10 @@ export async function runLinkCheck(options: LinkRunOptions): Promise<LinkRunSumm
 				updatedAt: row.updatedAt
 			})
 			.where(
-				// CAS (review batches 2026-10-06): never clobber state the
+				// CAS: never clobber state the
 				// snapshot did not see (L3 admin edits run lock-free); a
 				// mismatch skips + warns. Shared with the admin surface via
-				// `linkWritePredicate` (2026-10-26) so both writers pin the
+				// `linkWritePredicate` so both writers pin the
 				// same columns.
 				linkWritePredicate(row)
 			)

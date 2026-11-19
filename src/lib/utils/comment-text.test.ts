@@ -86,7 +86,7 @@ describe('parseCommentText', () => {
 	});
 
 	it('downgrades confusable candidates (backslash / userinfo) to text', () => {
-		// Display-vs-target confusion vectors (security review).
+		// Display-vs-target confusion vectors.
 		const inputs = ['https://evil.com\\@trusted.com/x', 'https://trusted.com@evil.com/x'];
 		for (const input of inputs) {
 			const segments = parseCommentText(input);

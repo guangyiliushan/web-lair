@@ -39,9 +39,9 @@ describe('LocaleStore', () => {
 	});
 
 	// Teeth for the single source of truth: the cookie (written by paraglide)
-	// is the preference. A second copy in localStorage is what used to disagree
-	// with the resolved locale and reload forever - so both the write side and
-	// the (removed) read side must stay untouched.
+	// is the preference - a second copy in localStorage must not be added, or it
+	// would disagree with the resolved locale and reload forever - so both the
+	// write side and the read side must stay untouched.
 	it('keeps no second copy of the preference', () => {
 		localeStore.switchTo('ja');
 		expect(lsSetItem).not.toHaveBeenCalled();

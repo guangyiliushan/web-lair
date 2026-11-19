@@ -340,7 +340,7 @@ done
 	echo "[drill] WARN: every sampled table is empty in the snapshot; row counts prove nothing" >&2
 receipt "rows.sampled_total=$restored_total"
 
-# --- 5b. F-22 orphan sweep --------------------------------------------------
+# --- 5b. orphan sweep -------------------------------------------------------
 
 echo "[drill] orphan sweep (F-22)"
 docker exec -i "$PG_CTR" psql -U drill -d drill -q -v ON_ERROR_STOP=1 -tA \

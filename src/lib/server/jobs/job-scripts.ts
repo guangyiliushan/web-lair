@@ -327,7 +327,7 @@ async function revertToBuiltinLocked(input: {
 	}
 	await rm(target, { force: true });
 	// The sidecar is metadata: an EPERM here must not fail the revert itself -
-	// the next attempt cleans the orphan through the branch above (DB-01/F-1).
+	// the next attempt cleans the orphan through the branch above.
 	await rm(sidecarPath(dir, name), { force: true }).catch((error: unknown) => {
 		console.error(`[jobs] revertToBuiltin: sidecar cleanup failed (${name}): ${String(error)}`);
 	});

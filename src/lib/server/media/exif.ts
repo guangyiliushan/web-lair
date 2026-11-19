@@ -224,7 +224,7 @@ export async function extractPhotoMetadata(
 ): Promise<PhotoExif> {
 	let parsed: ParsedExif | null = null;
 	try {
-		// `makerNote: true` was removed: exifr parsed the
+		// `makerNote: true` is not set: exifr parses the
 		// maker-note block only for `toJsonSafe` to drop it (DROP_KEYS),
 		// while the real maker-note source is exiftool (./exif-makernotes).
 		// Standard fields are unaffected.

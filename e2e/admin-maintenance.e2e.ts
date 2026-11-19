@@ -291,8 +291,7 @@ test.describe('J-3 maintenance (admin)', () => {
 		});
 		// The freeze disables both save buttons.
 		await expect(page.getByRole('button', { name: '保存', exact: true })).toBeDisabled();
-		// The buffer must NOT adopt the disk file - that retention is the F1
-		// delta versus the old native POST (which reloaded and showed v2).
+		// The buffer must NOT adopt the disk file.
 		await expect(page.locator('.cm-content')).toContainText('server-v1');
 		// The rejected save wrote nothing - the external v2 survives.
 		expect(readFileSync(jobFilePath(), 'utf8')).toContain('server-v2');

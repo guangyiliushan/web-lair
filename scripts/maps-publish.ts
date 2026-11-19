@@ -18,7 +18,7 @@ if (!file) {
 	process.exit(1);
 }
 const name = remoteArg ?? basename(file);
-// Case-SENSITIVE on purpose (round-3 review): the serve route's name check
+// Case-SENSITIVE on purpose: the serve route's name check
 // has no /i, so a mixed-case name would publish but never serve.
 if (!/^[a-z0-9][a-z0-9._-]*\.pmtiles$/.test(name)) {
 	console.error(`Invalid remote name: ${name} (expect <safe>.pmtiles)`);

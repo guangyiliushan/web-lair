@@ -245,7 +245,7 @@ describe('content lightbox (3d)', () => {
 		await expect.element(page.getByRole('dialog')).toBeVisible();
 		// A prop update is the real-world trigger (SPA navigation hands the
 		// renderer fresh html); the library primitive replaces the local harness
-		// fixture that used to toggle it.
+		// fixture.
 		await rendered.rerender({ html: htmlB });
 		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 		await expect.poll(() => document.querySelectorAll('img[data-content-lightbox]').length).toBe(1);
@@ -263,8 +263,8 @@ describe('content lightbox (3d)', () => {
 		oldImg.focus();
 		oldImg.click();
 		await expect.element(page.getByRole('dialog')).toBeVisible();
-		// The article-unmounting branch must close too (review 3d round 2,
-		// 08 F1: the close write now runs before the article guard).
+		// The article-unmounting branch must close too (the close write now runs
+		// before the article guard).
 		await rendered.rerender({ html: '' });
 		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 		expect(document.querySelector('article')).toBeNull();

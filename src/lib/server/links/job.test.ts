@@ -473,7 +473,7 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 		expect(returning).toHaveBeenCalledTimes(1);
 		expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('skipped write'));
 		// The CAS predicate itself must carry the guard conjuncts
-		// (mutation teeth, review batch 2026-10-06).
+		// (mutation teeth).
 		expect(whereArgs).toHaveLength(1);
 		const cas = new PgDialect().sqlToQuery(whereArgs[0] as SQL);
 		expect(cas.sql).toContain('"status"');
@@ -580,8 +580,7 @@ describe('runLinkCheck (stubbed db, review batch 2026-10-06)', () => {
 			fetchDeps: { fetch: slowFetch as never, resolveHost: okResolve }
 		});
 		// Saturated batch, all rows processed: the follow-up select is
-		// empty, so the run must not claim a budget stop - the pre-select
-		// deadline gate was removed for exactly this case.
+		// empty, so the run must not claim a budget stop.
 		expect(summary.checked).toBe(1);
 		expect(summary.writes).toBe(1);
 		expect(summary.budgetExhausted).toBe(false);

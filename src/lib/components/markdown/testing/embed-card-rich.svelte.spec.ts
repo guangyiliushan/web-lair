@@ -6,7 +6,7 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 /**
- * Rich-link enrichment (batch 2c): the four core GitHub cards progressively
+ * Rich-link enrichment: the four core GitHub cards progressively
  * upgrade from metadata served by /api/embed-meta; every failure mode keeps
  * the static card, and every non-GitHub provider stays zero-request.
  */

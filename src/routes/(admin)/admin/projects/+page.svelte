@@ -350,7 +350,7 @@
 	);
 
 	/** Selection must not survive a tab switch: the bulk bar would act on rows
-	 * that are no longer visible (review). */
+	 * that are no longer visible. */
 	let lastFilter: string = untrack(() => data.filter);
 	$effect(() => {
 		if (data.filter !== lastFilter) {

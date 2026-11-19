@@ -65,7 +65,7 @@ services:
     logging: *default-logging
 
   valkey:
-    # pinned: Valkey 9.1.2 (2026-09-01) — fail-open cache layer
+    # pinned: Valkey 9.1.2 — fail-open cache layer
     # (embed-meta + rate-limit counters). No persistence on purpose: a restart may
     # reset counters — acceptable for a fail-open cache.
     image: valkey/valkey:9.1.2

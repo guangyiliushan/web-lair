@@ -141,7 +141,7 @@ vi.mock('$lib/server/db', () => {
 	};
 	return { db };
 });
-// The whole barrel passes through (round-3 SY3-4): the real tables keep
+// The whole barrel passes through: the real tables keep
 // their column names for the write-predicate teeth; only the db CLIENT is
 // faked (separate mock).
 vi.mock('$lib/server/db/system', async (importOriginal) => {
@@ -583,7 +583,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(result).toMatchObject({ status: 400, data: { op: 'create' } });
 		expect(state.insertValues).toHaveLength(0);
 		// The dup lookup is case-insensitive at the SQL layer: the name COLUMN
-		// must sit inside lower(...) (round-2 SYT-3: a bare 'lower(' match also
+		// must sit inside lower(...) (a bare 'lower(' match also
 		// passed a one-sided lower($1) regression).
 		expect(sqlOf(state.whereConds[0])).toMatch(/lower\([^)]*name[^)]*\)/);
 	});
@@ -675,7 +675,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(dup.result).toMatchObject({ status: 400, data: { op: 'update' } });
 		expect(state.updateSets).toHaveLength(0);
 		// The self-exclusion rides on the recorded predicate: the name column
-		// inside lower(...) AND <> (round-2 SYT-3).
+		// inside lower(...) AND <>.
 		const dupSql = sqlOf(state.whereConds[0]);
 		expect(dupSql).toMatch(/lower\([^)]*name[^)]*\)/);
 		expect(dupSql).toContain('<>');
@@ -696,7 +696,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 			payloadUrl: 'https://example.com/hook',
 			events: ['job.run', 'schedule.toggle']
 		});
-		// The write predicate must target the row id (round-2 SYT-1: write
+		// The write predicate must target the row id (write
 		// WHEREs are recorded so a dropped/mis-aimed predicate turns red).
 		expect(sqlOf(state.updateWheres[0])).toContain('"webhooks"."id"');
 		const updateAudit = vi
@@ -753,7 +753,7 @@ describe('notification webhook endpoint CRUD (SY S2)', () => {
 		expect(off.result).toMatchObject({ op: 'toggle', toggled: true });
 		expect(state.updateTables[0]).toBe(webhooksMock);
 		expect(state.updateSets[0]).toEqual({ isEnabled: false });
-		// The toggle predicate must target the row id (round-2 SYT-1).
+		// The toggle predicate must target the row id.
 		expect(sqlOf(state.updateWheres[0])).toContain('"webhooks"."id"');
 		const toggleAudit = vi
 			.mocked(mocks.recordActivity)

@@ -18,7 +18,7 @@ const SLUG = 'e2e-p3bf-post';
 const SLUG_ZH = 'e2e-p3bf-post-zh';
 const TITLE = 'E2E P3BF feed post';
 
-// N1 seam fixtures: one feedable note, one password-gated note, one topic.
+// Fixtures: one feedable note, one password-gated note, one topic.
 const N_ID = '00000000-0000-7000-8000-00000000c3e5';
 const N_LOCKED_ID = '00000000-0000-7000-8000-00000000c3e6';
 const N_SLUG = 'e2e-p3bf-note';
@@ -90,7 +90,7 @@ test.describe('P3-b distribution face', () => {
 		expect(body).toContain(`hreflang="zh-cn" href="http://localhost:4173/zh-cn/posts/${SLUG_ZH}"`);
 		// Deterministic updated_at from the fixture.
 		expect(body).toContain('<lastmod>2026-09-20T09:00:00.000Z</lastmod>');
-		// N1 seam: the feedable note and the topic page are included...
+		// The feedable note and the topic page are included...
 		expect(body).toContain(`<loc>http://localhost:4173/en/notes/${N_SLUG}</loc>`);
 		expect(body).toContain(`<loc>http://localhost:4173/en/notes/topics/${T_SLUG}</loc>`);
 		expect(body).toContain(
@@ -139,7 +139,7 @@ test.describe('P3-b distribution face', () => {
 		expect(body).toContain('<content:encoded><![CDATA[');
 		expect(body).toContain('href="http://localhost:4173/en/rss.xml" rel="self"');
 		expect(body).toContain('<language>en</language>');
-		// N1 seam: notes share the feed (guid + link), gated notes never do.
+		// Notes share the feed (guid + link), gated notes never do.
 		expect(body).toContain(`<guid isPermaLink="false">urn:uuid:${N_ID}</guid>`);
 		expect(body).toContain(`<link>http://localhost:4173/en/notes/${N_SLUG}</link>`);
 		expect(body).not.toContain(N_LOCKED_ID);
@@ -184,7 +184,7 @@ test.describe('P3-b distribution face', () => {
 
 	test('a language without visible posts serves a valid empty feed', async ({ request }) => {
 		// Dynamic assertion: count what the database says is visible right now
-		// (N1 seam: the merged feed counts feedable notes alongside posts).
+		// (the merged feed counts feedable notes alongside posts).
 		const visible = Number(
 			psql(
 				`select (select count(*) from posts where lang = 'ja' and status in ('published','scheduled') and published_at <= now()) + (select count(*) from notes where lang = 'ja' and status in ('published','scheduled') and published_at <= now() and password_hash is null)`

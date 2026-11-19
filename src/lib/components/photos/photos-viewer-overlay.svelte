@@ -157,7 +157,6 @@
 	}
 
 	// `byteSizeOf()` is null for plain items, so one call covers both modes
-	// (review 3d: the previous ternary was per-case identical).
 	const onDemand = $derived(shouldLoadFullOnDemand(byteSizeOf(), connection));
 	const interimSrc = $derived(interimOf());
 	const placeholder = $derived(thumbhashDataUrl(plainItem ? null : (current?.thumbhash ?? null)));
@@ -197,7 +196,7 @@
 	// The page can re-load underneath an open overlay (browser Back/Forward
 	// on the same route re-runs the load without remounting this component):
 	// the walked position no longer matches the page payload, so close
-	// silently and let the navigation stand (review 08 F1).
+	// silently and let the navigation stand.
 	$effect(() => {
 		if (!open) return;
 		if (openedSnapshotId !== null && (photo?.id ?? null) !== openedSnapshotId) {
@@ -215,7 +214,7 @@
 		// passes plain - and `plain` wins if both were ever supplied.
 		plainItem = plain ?? null;
 		current = plainItem ? null : (photo ?? null);
-		// Full zeroing for plain (review 3d round 2, 08 F2): structural
+		// Full zeroing for plain: structural
 		// enforcement, not just the host contract - a hypothetical future
 		// host passing both must not trigger neighbour prefetch.
 		currentNeighbors = plainItem ? { newer: null, older: null } : neighbors;

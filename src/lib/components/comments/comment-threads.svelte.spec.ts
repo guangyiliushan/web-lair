@@ -163,7 +163,7 @@ describe('CommentsSection', () => {
 	it('autolinks http(s) URLs with the hardened rel set and keeps exact text', async () => {
 		// Typed without the trailing slash: display keeps the typed text while
 		// the href carries the normalised form - a discriminator so swapping
-		// `segment.href` for `segment.text` cannot stay green (test review).
+		// `segment.href` for `segment.text` cannot stay green.
 		const text = '看这个 https://example.com 吧';
 		await render(CommentsSection, {
 			...BASE,

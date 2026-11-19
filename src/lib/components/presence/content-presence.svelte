@@ -18,7 +18,7 @@
 	 * shifts layout; the page header is `relative`). Counts include the
 	 * current reader; the badge hides for 0 and for degraded snapshots.
 	 *
-	 * Display gates are per-layer (review finding): `readerView` owns the
+	 * Display gates are per-layer: `readerView` owns the
 	 * badge + histogram (reader-facing), `readerDots` owns the anonymous
 	 * dots layer (the site option OR an admin viewer, register E2). The
 	 * stream opens while EITHER layer is wanted, so admin dots survive
@@ -72,7 +72,7 @@
 			return elementProgress({ top: rect.top, height: rect.height }, window.innerHeight);
 		};
 
-		// Early position reports (register D2): a ≥2% move AND the 5s client
+		// Early position reports: a ≥2% move AND the 5s client
 		// floor while scrolling — the 15s loop carries the latest bucket and
 		// keeps counting while idle. Rides one rAF per frame at most.
 		let raf = 0;

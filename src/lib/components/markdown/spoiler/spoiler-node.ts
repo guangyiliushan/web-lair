@@ -39,7 +39,7 @@ export class SpoilerNode extends TextNode {
 
 	updateDOM(prev: this, dom: HTMLElement, config: EditorConfig): boolean {
 		// super owns the text/format DOM sync; skipping it froze the DOM on
-		// in-place edits (batch A review, F2). Only the class is re-asserted.
+		// in-place edits. Only the class is re-asserted.
 		const updated = super.updateDOM(prev, dom, config);
 		addClassNamesToElement(dom, 'spoiler');
 		if (dom.title !== this.__text) dom.title = this.__text;

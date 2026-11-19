@@ -6,12 +6,12 @@ import { zhCnLocale } from './locale-fixture';
  * Reference lifecycle, live teeth: draft save, publish, discard and
  * page hard-delete maintain
  * `file_references` and the file status machine against the real database.
- * Since 3b2 the draft-phase refs are keyed `{draft, draftId}`: a save never
+ * Draft-phase refs are keyed `{draft, draftId}`: a save never
  * touches the published identity's set; publish re-keys the durable set and
  * drops the draft refs; discarding a working copy that merely dropped a
- * PUBLISHED image keeps the file attached (the interim 3b1 behavior detached
- * it - the flip to `detached` now needs the file to lose every reference,
- * which the scratch-database harness drives at the service level).
+ * PUBLISHED image keeps the file attached - the flip to `detached` now needs
+ * the file to lose every reference, which the scratch-database harness drives
+ * at the service level.
  */
 test.use(zhCnLocale);
 
@@ -40,7 +40,7 @@ function cleanup() {
 	psql(
 		`delete from file_references fr using files f where fr.file_id = f.id and fr.ref_type = 'draft' and f.file_name like 'e2e-refs%'`
 	);
-	// Draft-identity refs go with their draft rows (3b2); clean them first so
+	// Draft-identity refs go with their draft rows; clean them first so
 	// a crashed run cannot leave orphan reference rows behind.
 	psql(
 		`delete from file_references where ref_type = 'draft' and ref_id in (select id from drafts where title ilike 'e2e refs%' or ref_id in (select id from posts where slug like 'e2e-refs%') or ref_id in (select id from notes where slug like 'e2e-refs%') or ref_id in (select id from pages where slug = '${PAGE_SLUG}'))`
@@ -196,7 +196,7 @@ test('note draft autosave attaches the uploaded file under the DRAFT reference i
 	const match = payload.match(/\/i\/([0-9a-f]{2}\/[0-9a-f]{64}(?:\.[a-z0-9]{1,10})?)/);
 	expect(match).not.toBeNull();
 	KEY = match![1];
-	// Draft identity (3b2): the working copy's refs key on the DRAFT row; the
+	// Draft identity: the working copy's refs key on the DRAFT row; the
 	// note's own identity stays untouched until publish.
 	const noteDraftId = psql(`select id from drafts where title = '${NOTE_TITLE}'`);
 	expect(refCount('draft', noteDraftId)).toBe('1');
@@ -215,7 +215,7 @@ test('a second target shares the image (dedupe): both references live', async ({
 	const postId = psql(`select ref_id from drafts where slug = '${POST_SLUG}'`);
 	const postDraftId = psql(`select id from drafts where slug = '${POST_SLUG}'`);
 	// Both saves wrote under their DRAFT identities; the target identities
-	// have not been touched (3b2).
+	// have not been touched.
 	expect(refCount('draft', postDraftId)).toBe('1');
 	expect(refCount('post', postId)).toBe('0');
 	expect(refCount('draft', psql(`select id from drafts where title = '${NOTE_TITLE}'`))).toBe('1');
@@ -239,7 +239,7 @@ test('discarding a working copy drops its references; the other target keeps the
 	await expect(byText(page, '草稿已丢弃。')).toBeVisible({ timeout: 15000 });
 
 	// The never-published placeholder goes with its draft AND the draft's
-	// own refs leave with the row (3b2); the note draft's reference keeps
+	// own refs leave with the row; the note draft's reference keeps
 	// the shared file attached (the two-targets edge).
 	expect(psql(`select count(*) from drafts where ref_id = '${postId}'`)).toBe('0');
 	expect(psql(`select count(*) from posts where id = '${postId}'`)).toBe('0');
@@ -291,9 +291,9 @@ test('publish keeps the reference set of the published body', async ({ page }) =
 	const noteDraftId = psql(`select id from drafts where title = '${NOTE_TITLE}'`);
 	await page.goto(`/admin/notes/edit?id=${noteId}`);
 	await expect(page.locator('input[name="title"]')).toHaveValue(NOTE_TITLE, { timeout: 15000 });
-	// Empty-tooth guard (review): clear the note-identity set so only the
+	// Empty-tooth guard: clear the note-identity set so only the
 	// publish sync can fill it - deleting the publish sync leaves this red.
-	// (3b2: draft saves write the DRAFT identity, so this delete only bites
+	// (draft saves write the DRAFT identity, so this delete only bites
 	// legacy note-identity rows; the refCount below reads on the result.)
 	psql(`delete from file_references where ref_type = 'note' and ref_id = '${noteId}'`);
 	expect(refCount('note', noteId)).toBe('0');
@@ -304,7 +304,7 @@ test('publish keeps the reference set of the published body', async ({ page }) =
 
 	expect(psql(`select count(*) from drafts where ref_id = '${noteId}'`)).toBe('0');
 	expect(refCount('note', noteId)).toBe('1');
-	// The draft's own refs left with the row (3b2).
+	// The draft's own refs left with the row.
 	expect(
 		psql(
 			`select count(*) from file_references where ref_type = 'draft' and ref_id = '${noteDraftId}'`
@@ -343,10 +343,9 @@ test('dropping the image from the working copy keeps the published reference att
 	});
 	await manualSave(page);
 
-	// 3b2 flip: the working copy's refs are its own - dropping the image from
-	// the DRAFT no longer detaches a file the PUBLISHED body still references
-	// (the interim 3b1 behavior did, protected only by the mention scan). The
-	// published identity keeps the key; the fresh working copy wrote nothing.
+	// The working copy's refs are its own - dropping the image from
+	// the DRAFT no longer detaches a file the PUBLISHED body still references.
+	// The published identity keeps the key; the fresh working copy wrote nothing.
 	const workingDraftId = psql(`select id from drafts where ref_id = '${noteId}'`);
 	expect(refCount('draft', workingDraftId)).toBe('0');
 	expect(refCount('note', noteId)).toBe('1');
@@ -373,7 +372,7 @@ test('a page draft keys the upload under its draft identity; publish re-keys it 
 	await uploadViaPicker(page);
 	await manualSave(page);
 
-	// Draft identity (3b2): the editor's working copy keys the ref on its
+	// Draft identity: the editor's working copy keys the ref on its
 	// draft row; the page identity stays untouched until publish.
 	const draftId = psql(`select id from drafts where ref_type = 'page' and ref_id = '${pageId}'`);
 	expect(draftId).not.toBe('');

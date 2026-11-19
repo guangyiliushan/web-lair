@@ -73,7 +73,7 @@ function masterKey(): Buffer {
 	return key;
 }
 
-/** Per-version key. Version 1 is the master itself (pre-F-14 hashes). */
+/** Per-version key. Version 1 is the master itself. */
 function suppressionKey(version: number, master: Buffer): Buffer {
 	if (version === 1) return master;
 	return createHmac('sha256', master).update(`wl:suppression:key:v${version}`).digest();

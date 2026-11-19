@@ -21,7 +21,7 @@ interface FakeState {
 	inserts: Record<string, unknown>[];
 	updates: Record<string, unknown>[];
 	insertError: unknown;
-	/** Captured where-conditions (predicate teeth, review 2026-10-08). */
+	/** Captured where-conditions (predicate teeth). */
 	selectWhere: unknown[];
 	updateWhere: unknown[];
 }

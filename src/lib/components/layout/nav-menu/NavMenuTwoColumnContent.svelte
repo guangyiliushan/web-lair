@@ -44,7 +44,7 @@
 	}
 
 	const emptyText = $derived(tLabel('nav_menu_empty'));
-	/** 4/4 is what makes the two columns the same height (H3). */
+	/** 4/4 is what makes the two columns the same height. */
 	const visibleLeft = $derived(leftItems.slice(0, NAV_ROWS_PER_COL));
 	const visibleRight = $derived(rightItems.slice(0, NAV_ROWS_PER_COL));
 </script>

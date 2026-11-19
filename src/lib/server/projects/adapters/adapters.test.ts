@@ -94,7 +94,7 @@ describe('github adapter', () => {
 		};
 		const { repos } = await github.fetchUserRepos('a', { fetchJson });
 		expect(repos.map((repo) => repo.externalId)).toEqual(['1', '2']);
-		// The second request must be the page-2 URL (review 2026-10-08).
+		// The second request must be the page-2 URL.
 		expect(urls[1]).toContain('page=2');
 	});
 

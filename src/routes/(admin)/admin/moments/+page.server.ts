@@ -31,9 +31,8 @@ export const load: PageServerLoad = async (event) => {
 	await requireAdminRole();
 	const url = event.url;
 
-	// Dashboard "Write" deep link (`/admin/moments?add=1`) used to open the
-	// dialog; the editor is a route now, so forward the flag instead of
-	// rendering a page that ignores it.
+	// Dashboard "Write" deep link (`/admin/moments?add=1`): the editor is a
+	// route, so forward the flag instead of rendering a page that ignores it.
 	if (url.searchParams.get('add') === '1') throw redirect(303, '/admin/moments/edit');
 
 	const kindRaw = url.searchParams.get('type') ?? '';

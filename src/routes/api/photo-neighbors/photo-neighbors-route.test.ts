@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * (api)/photo-neighbors - the overlay viewer's lazy cycling source (3c).
+ * (api)/photo-neighbors - the overlay viewer's lazy cycling source.
  * The service loaders keep the visibility contract; this test pins the
  * endpoint surface: input guard, 404 pass-through and the JSON shape.
  */

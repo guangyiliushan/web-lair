@@ -169,7 +169,7 @@ test('the site heartbeat mounts on public pages (site key gains the tab token)',
 	browser
 }) => {
 	// Pins the (site)/+layout.svelte mount line and the enabled pass-through
-	// (review finding: deleting them used to leave every gate green) — the
+	// (deleting them used to leave every gate green) — the
 	// page's immediate beat must land in the site window with its own token.
 	const context = await browser.newContext({ storageState: zhCnLocale.storageState });
 	const page = await context.newPage();

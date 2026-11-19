@@ -29,7 +29,7 @@
 	// Action results are echoed back via page.form. `op` routes dialog-scoped
 	// failures into their dialog; the top flash carries success + row-level
 	// outcomes. The ONE-TIME secret reveal lives in `revealedSecret` -
-	// dedicated state captured from the enhance results (round-2 SY-UI-03;
+	// dedicated state captured from the enhance results (
 	// the flash slot deliberately does NOT carry the secret any more).
 	const form = $derived(
 		page.form as
@@ -164,8 +164,7 @@
 		deleteToken += 1;
 		deleteError = null;
 		deletePending = false;
-		// Stale-failure notices belong to the surface that raised them
-		// (round-3 SY3-3).
+		// Stale-failure notices belong to the surface that raised them.
 		pageNotice = null;
 		deleteTarget = endpoint;
 	}
@@ -181,8 +180,6 @@
 		rotateToken += 1;
 		rotateError = null;
 		rotatePending = false;
-		// Stale-failure notices belong to the surface that raised them
-		// (round-3 SY3-3).
 		pageNotice = null;
 		rotateTarget = endpoint;
 	}
@@ -199,8 +196,7 @@
 		return typeof message === 'string' ? message : null;
 	}
 
-	// One-time secret capture shared by the editor and rotate callbacks
-	// (nine-dimension SY9-1: the round-3 fix had landed twice by hand).
+	// One-time secret capture shared by the editor and rotate callbacks.
 	function captureSecret(data: unknown): void {
 		const secret = (data as { secret?: unknown } | null)?.secret;
 		if (typeof secret === 'string') {
@@ -450,7 +446,7 @@
 														togglePendingId = endpoint.id;
 														return async ({ update }) => {
 															await update();
-															// Conditional clear (round-2 N3/SY-UI-05): only the
+															// Conditional clear: only the
 															// submitter clears its own marker, so a response for
 															// one row cannot re-enable another row mid-flight.
 															if (togglePendingId === endpoint.id) togglePendingId = null;
@@ -559,7 +555,7 @@
 													retryPendingId = delivery.id;
 													return async ({ update }) => {
 														await update();
-														// Conditional clear (round-2 N3/SY-UI-05).
+														// Conditional clear.
 														if (retryPendingId === delivery.id) retryPendingId = null;
 													};
 												}}
@@ -809,7 +805,7 @@
 					if (result.type === 'success') captureSecret(result.data);
 					if (token !== editorToken) {
 						// The surface moved on: keep this dialog clean, but do
-						// not drop the failure silently (round-2 SY-UI-06).
+						// not drop the failure silently.
 						if (result.type === 'failure') pageNotice = failureMessage(result.data);
 						return;
 					}
@@ -951,8 +947,7 @@
 					rotatePending = true;
 					return async ({ result, update }) => {
 						await update();
-						// Capture the fresh secret even on a moved-on epoch (round-3
-						// F1/SY3-1).
+						// Capture the fresh secret even on a moved-on epoch.
 						if (result.type === 'success') captureSecret(result.data);
 						if (token !== rotateToken) {
 							if (result.type === 'failure') pageNotice = failureMessage(result.data);

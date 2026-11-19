@@ -62,7 +62,7 @@ describe('paraglide runtime configuration', () => {
 	it('pins the runtime exclusion verdict for root files and per-language feeds', () => {
 		// Exact patterns also match the de-localised path, so the language
 		// feeds are excluded too — handlers there must take the locale from
-		// the path (getLocale() is unavailable; review finding).
+		// the path (getLocale() is unavailable).
 		for (const url of [
 			'http://localhost/sitemap.xml',
 			'http://localhost/robots.txt',

@@ -1,5 +1,5 @@
 /**
- * Static linguist language colours (batch 2b).
+ * Static linguist language colours.
  *
  * GitHub's language dots/borders come from the github-linguist colour map —
  * a static dataset, not per-repo API data. Vendoring the common subset here

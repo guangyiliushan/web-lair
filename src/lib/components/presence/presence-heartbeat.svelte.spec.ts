@@ -42,7 +42,7 @@ describe('presence heartbeat mount', () => {
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
 		expect(url).toBe('/api/presence/heartbeat');
 		const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-		// Site beats carry no content fields (register D2): token only.
+		// Site beats carry no content fields: token only.
 		expect(Object.keys(body)).toEqual(['token']);
 		expect(body.token).toBe(sessionStorage.getItem('wl.presence.token'));
 	});

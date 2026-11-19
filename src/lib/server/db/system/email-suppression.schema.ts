@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { check, pgTable, smallint, text, timestamp } from 'drizzle-orm/pg-core';
 
 /**
- * Email suppression list (email hardening E2-1, key versioning F-14).
+ * Email suppression list.
  *
  * Orthogonal to `subscriptions`: an opt-out or a hard bounce must be remembered
  * even when the subscription row itself is gone (pending rows are deleted on

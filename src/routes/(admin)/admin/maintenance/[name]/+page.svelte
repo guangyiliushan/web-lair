@@ -105,8 +105,7 @@
 	// retrying against a stale token would fake a 409).
 	// `pristine` advances in the submit callback from the SUBMITTED snapshot
 	// (review v2 #2); `reverted` rewrites both the buffer and the token: after
-	// a restore to built-in, the user file is gone, so the old hash can never match again
-	// (review F1).
+	// a restore to built-in, the user file is gone, so the old hash can never match again.
 	$effect(() => {
 		if (typeof form?.hash === 'string') {
 			baseHash = form.hash;

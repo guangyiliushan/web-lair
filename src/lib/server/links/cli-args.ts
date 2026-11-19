@@ -1,6 +1,6 @@
 /**
  * CLI argument parsing for `scripts/jobs/check-links.ts`, extracted so the
- * dry-run safety gate has unit teeth (review batch 2026-10-06): unknown
+ * dry-run safety gate has unit teeth : unknown
  * flags are rejected - a typo like `--dryrun` must never silently run the
  * checker in WRITE mode.
  */

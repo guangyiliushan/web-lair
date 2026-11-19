@@ -4,7 +4,7 @@ import { options } from '$lib/server/db/config';
 import { activities } from '$lib/server/db/system';
 
 /**
- * Route-level tests for the AI settings actions (AI-2, repaired in AI-2.1):
+ * Route-level tests for the AI settings actions:
  * validation, the duplicate-name translation built with PRODUCTION error
  * shape (drizzle wraps driver errors - the 23505 code lives on the cause),
  * uuid entry guards, the transactional assignment cascades on provider
@@ -298,7 +298,7 @@ describe('AI settings actions', () => {
 
 	it('translates a duplicate name into a field error (cause-shaped 23505)', async () => {
 		// Production shape: drizzle's DrizzleQueryError carries the PG code on
-		// `cause`, not on the top-level error object (AI-2.1 review).
+		// `cause`, not on the top-level error object.
 		state.insertError = Object.assign(new Error('dup'), { cause: { code: '23505' } });
 		const { result } = await callAction('saveProvider', {
 			name: 'E2E Provider',

@@ -5,8 +5,8 @@ import { SETTINGS_SECTIONS } from '$lib/server/settings/tiers';
 /**
  * Search indexing lives in Site, shows the two real routes,
  * marks IndexNow/Baidu/Bing as planned, and has no key/token input. The
- * standalone `/admin/settings/search` route is gone (merged into Site by
- * IA3); a regression here would resurrect a second place to configure SEO.
+ * standalone `/admin/settings/search` route is gone.
+ * A regression here would resurrect a second place to configure SEO.
  */
 const PAGE = readFileSync(new URL('./+page.svelte', import.meta.url), 'utf8');
 const SEARCH_ROUTE = new URL('../search/', import.meta.url);

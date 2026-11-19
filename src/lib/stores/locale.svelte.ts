@@ -25,10 +25,9 @@ export const localeOptionLabels: Record<string, string> = Object.fromEntries(
  *
  * The preference lives in paraglide's cookie (`PARAGLIDE_LOCALE`): `setLocale`
  * writes it and reloads, so the server renders the next page in the new locale
- * and `<html lang>` follows. A second copy in localStorage used to live here
- * and was re-applied on every boot; once `getLocale()` was pinned client-side
- * the two could never agree, so that re-application reloaded forever. The
- * cookie is the single source of truth now.
+ * and `<html lang>` follows. A second copy in localStorage must not be added:
+ * with `getLocale()` pinned client-side the two sources could never agree, so
+ * the page reloaded forever. The cookie is the single source of truth now.
  */
 class LocaleStore {
 	get available(): readonly string[] {

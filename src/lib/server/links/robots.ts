@@ -186,8 +186,7 @@ function wildcardMatch(pattern: string, target: string): boolean {
 	}
 	// A bare `$` (empty anchored body) can only match the empty path, which
 	// never occurs; without this guard matchSegments(['']) would wave every
-	// URI through (review batch 2026-10-06 - regression vs the pre-refactor
-	// /^$/ behavior).
+	// URI through (regression vs the pre-refactor /^$/ behavior).
 	if (anchorEnd && body === '') return target === '';
 	const segments = body.split('*');
 	const last = segments[segments.length - 1];
@@ -231,8 +230,8 @@ function encodeNonAscii(pattern: string): string {
 }
 
 /**
- * Percent-encoding canonicalization for one comparison side (review batch
- * 2026-10-06): raw non-ASCII -> %XX, existing escape hex upper-cased (URL
+ * Percent-encoding canonicalization for one comparison side: raw non-ASCII ->
+ * %XX, existing escape hex upper-cased (URL
  * serialization preserves the author's case; Google treats raw and encoded
  * rule paths as identical) and percent-encoded unreserved characters
  * decoded. Applied to BOTH the rule and the URI so the comparison is

@@ -5,7 +5,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { apiPost, psql } from './support';
 
 /**
- * B3.1 acceptance for the admin 2FA challenge (TOTP + backup codes + reset).
+ * Acceptance for the admin 2FA challenge (TOTP + backup codes + reset).
  *
  * The fixture account is created and armed through the HTTP API: a two_factor
  * secret is stored encrypted, so it cannot be seeded with SQL. TOTP codes are
@@ -31,7 +31,7 @@ const TWO_FACTOR_PATH = `/admin/${LOGIN_SLUG}/two-factor`;
 /**
  * The two-factor page URL itself starts with /admin, so a bare /\/admin/
  * matches it instantly - waits must use this predicate so the follow-up
- * assertions cannot race the verify round-trip (B3.1 regression: the probe
+ * assertions cannot race the verify round-trip (the probe
  * showed "no session cookie" only because it ran before the 302 arrived).
  */
 const isAdminDestination = (url: URL) =>

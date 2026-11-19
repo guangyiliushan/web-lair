@@ -7,8 +7,8 @@ import { zhCnLocale } from './locale-fixture';
  * the real build, the real upload pipeline (sniff -> sharp -> RustFS) and the
  * real database - picker inserts, paste/drop uploads, and the tooth that
  * matters: the URLs the editor writes are fetchable by an ANONYMOUS reader
- * (this batch fixed exactly "the inserted link 404s for every
- * reader on a source under the preview box").
+ * - the failure mode was "the inserted link 404s for every
+ * reader on a source under the preview box".
  */
 test.use(zhCnLocale);
 
@@ -36,7 +36,7 @@ function cleanup() {
 	psql(
 		`delete from file_references fr using files f where fr.file_id = f.id and fr.ref_type = 'draft' and (f.file_name like 'e2e-upload%' or f.file_name like 'e2e-drop%')`
 	);
-	// 3b2: saving a draft writes file_references under the DRAFT's own
+	// Saving a draft writes file_references under the DRAFT's own
 	// identity; ref_id has no FK, so the rows must be deleted BEFORE their
 	// draft rows (or as orphans they feed audit check 4 on the dev DB).
 	// Mirrors the refs-lifecycle cleanup - keep the two in sync.
@@ -47,7 +47,7 @@ function cleanup() {
 	psql(
 		`delete from drafts where ref_id in (select id from posts where slug like 'e2e-editor-uploads%')`
 	);
-	// Historical post-identity rows (3b1 era / crashed runs): this spec
+	// Post-identity rows left over from crashed runs: this spec
 	// never publishes, so its placeholder posts keep the `draft-` slug -
 	// match by title too (the slug-only predicate matched
 	// zero rows).

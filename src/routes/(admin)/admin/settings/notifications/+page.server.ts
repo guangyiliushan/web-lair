@@ -98,8 +98,8 @@ async function parseEndpointForm(
 	const events = [...new Set(form.getAll('events').map((value) => value.toString()))];
 	if (events.length === 0) {
 		// An empty subscription matches nothing (`events @> array[event]`) and
-		// would deliver forever-nothing - a silent black hole (nine-dimension
-		// DB-01 / NOTIF-SY-11). This deliberately reverses the S2 "empty
+		// would deliver forever-nothing - a silent black hole. This deliberately
+		// reverses the S2 "empty
 		// mirrors the schema" intent; a cardinality CHECK is registered for
 		// the next schema window.
 		return { ok: false, message: m.admin_settings_notification_err_events_empty() };
@@ -121,7 +121,7 @@ function webhookHostOf(payloadUrl: string): string {
 	}
 }
 
-/** Case-insensitive name soft-reject (G3); `exceptId` excludes self on edit. */
+/** Case-insensitive name soft-reject; `exceptId` excludes self on edit. */
 async function endpointNameTaken(name: string, exceptId?: string): Promise<boolean> {
 	const [row] = await db
 		.select({ id: webhooks.id })
@@ -231,7 +231,7 @@ export const load: PageServerLoad = async (event) => {
 	return {
 		webhookEndpoints,
 		webhookEventRoster: [...WEBHOOK_EVENT_ROSTER],
-		// N3: config is owner-only; admins get a read-only list + manual replay.
+		// Config is owner-only; admins get a read-only list + manual replay.
 		// The section tier ('notifications' = admin) is NOT the field tier.
 		editable: settingAccess(event.locals.admin?.role, 'notifications', 'notifications.webhooks')
 			.editable,
@@ -612,7 +612,7 @@ export const actions: Actions = {
 			// The only reveal of the raw secret - exactly once, right here.
 			return { op: 'create', created: true, id, secret };
 		} catch (error) {
-			// Defense in depth behind the normalized-href guard (round-2 N1).
+			// Defense in depth behind the normalized-href guard.
 			if (pgErrorCode(error) === '23514') {
 				return fail(400, { op: 'create', message: m.admin_settings_notification_err_url() });
 			}
@@ -668,7 +668,7 @@ export const actions: Actions = {
 				return true;
 			});
 		} catch (error) {
-			// Defense in depth behind the normalized-href guard (round-2 N1).
+			// Defense in depth behind the normalized-href guard.
 			if (pgErrorCode(error) === '23514') {
 				return fail(400, { op: 'update', message: m.admin_settings_notification_err_url() });
 			}

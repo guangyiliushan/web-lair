@@ -9,7 +9,7 @@ import { psql } from './support';
  * unsafe-URL rendering rule. Fixtures share the `e2e-p` marker prefix
  * (owned by this spec) and are cleaned around the run. The empty-state case
  * additionally requires a live DB without other published rows (it skips
- * itself otherwise - batch A rows will legitimately appear later); the
+ * itself otherwise - other published rows will legitimately appear); the
  * deterministic empty-copy coverage lives in projects-grid.svelte.spec.ts.
  */
 

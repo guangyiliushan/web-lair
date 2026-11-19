@@ -23,7 +23,7 @@ export const PRESENCE_TOKEN_KEY = 'wl.presence.token';
  * is canonicalised first (deLocalizeUrl, the official Paraglide reroute
  * recipe): SvelteKit's reroute keeps the address bar — and `page.url` — on
  * the language-prefixed form, so a raw match would let /zh-cn/account and
- * friends beat (review finding).
+ * friends beat.
  */
 export function shouldTrackPath(pathname: string): boolean {
 	const canonical = deLocalizeUrl(new URL(pathname, 'https://placeholder.invalid')).pathname;
@@ -130,7 +130,7 @@ export interface HeartbeatLoopOptions extends HeartbeatDeps {
 }
 
 /**
- * The tab's heartbeat loop (register D2): one immediate beat, then every
+ * The tab's heartbeat loop: one immediate beat, then every
  * `intervalMs`; a hidden tab pauses outright (browsers throttle timers to
  * ~1/min in the background anyway) and returns with a single catch-up beat.
  */
@@ -193,7 +193,7 @@ export const STREAM_RETRY_MAX_MS = 60_000;
 export const STREAM_COLD_RETRY_LIMIT = 5;
 /**
  * After the cold-retry cap the stream degrades to ONE probe per 10 minutes
- * instead of going silent forever (review finding): a deploy-window 502 left
+ * instead of going silent forever: a deploy-window 502 left
  * the tab dark until a reload, and a re-enabled feature never revived it.
  * One attempt per interval is not a loop — the disabled-204 guarantee holds.
  */

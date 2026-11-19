@@ -67,6 +67,14 @@ jobs:
       - name: install
         run: pnpm install --frozen-lockfile
 
+      # Comment standards gate: plan/ledger/review markers and unquoted
+      # Chinese prose must stay at zero; comment blocks >=15 lines stay at or
+      # under the established 300-line baseline. Cheap, so it fails before the
+      # heavy gates. Scanner source lives in-repo so CI and the repo-external
+      # sweep tooling share one copy (notes/.../scan.py forwards here).
+      - name: comment scan
+        run: python3 .github/scripts/comment-scan.py --repo . --ci
+
       # Generates `src/lib/paraglide` with the Vite plugin's real options. Every
       # later gate (check, vitest, and the production build already on disk)
       # then reads one consistent artifact.

@@ -17,7 +17,7 @@
 
 	interface Props {
 		/**
-		 * Required on purpose (review finding): the (site) layout must pass
+		 * Required on purpose: the (site) layout must pass
 		 * `data.presence.enabled` explicitly — omitting the prop now fails
 		 * svelte-check instead of silently defaulting to on.
 		 */

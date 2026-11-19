@@ -408,7 +408,7 @@ async function main(): Promise<void> {
 		pathJoin(process.cwd(), '..', 'notes', 'backups', 'storage-st2-evidence-20261009');
 	if (process.env.WL_EVIDENCE_DIR && !existsSync(evidenceDir)) {
 		// An EXPLICIT evidence dir that is missing is an operator error,
-		// not an optional skip (round-2 review) — fail loudly.
+		// not an optional skip — fail loudly.
 		console.error(`FAIL: WL_EVIDENCE_DIR is set but missing: ${evidenceDir}`);
 		process.exit(1);
 	}
@@ -549,7 +549,7 @@ async function main(): Promise<void> {
 		byteSize: 12,
 		status: 'pending',
 		createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
-		// pending anchors on the LAST event (round-3): keep the probe stale.
+		// pending anchors on the LAST event: keep the probe stale.
 		updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
 	});
 	await db.insert(schema.drafts).values({

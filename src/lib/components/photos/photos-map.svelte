@@ -15,7 +15,7 @@
 	 * one marker per located photo, each a real anchor so keyboard, new-tab
 	 * and middle-click all behave like links.
 	 *
-	 * Failure handling (round-2 review): MapLibre's vector source is lazy, so
+	 * Failure handling: MapLibre's vector source is lazy, so
 	 * a 404 archive used to mean a silently blank canvas. Now (a) a 2-byte
 	 * Range probe hits the archive BEFORE mounting, (b) WebGL/context errors
 	 * and a 12s never-loaded timer still flip the fallback, and (c) the
@@ -107,7 +107,7 @@
 	});
 
 	// `bounds` needs ≥2 points; a single photo gets an explicit center+zoom
-	// (round-2 review: a degenerate bounds box relied on maxZoom clamping).
+	// (a degenerate bounds box relied on maxZoom clamping).
 	// Antimeridian-crossing bounds remain registered as a known limit.
 	const single = $derived(photos.length === 1 ? photos[0]! : null);
 	const bounds = $derived.by(() => {

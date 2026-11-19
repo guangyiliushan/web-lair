@@ -102,7 +102,7 @@ describe('shouldTrackPath', () => {
 			expect(shouldTrackPath(excluded), excluded).toBe(false);
 		}
 		// Language-prefixed forms (reroute keeps page.url prefixed): the
-		// canonicalisation closes the /zh-cn/account bypass (review finding).
+		// canonicalisation closes the /zh-cn/account bypass.
 		for (const prefixed of [
 			'/en/account',
 			'/zh-cn/account/security',

@@ -10,7 +10,7 @@ import {
 import { deriveSubscriptionToken } from '../src/lib/server/services/subscription-token';
 
 /**
- * Deploy batch D-2 acceptance: the double opt-in subscription chain on the
+ * This spec covers the double opt-in subscription chain on the
  * real schema. Mail itself is not asserted here (the transport is a unit
  * concern); the DB row is the observable evidence — and the GET confirm page
  * must NOT mutate state (mail scanners prefetch links).
@@ -34,7 +34,7 @@ function trackSuppression(email: string): string {
 }
 
 /**
- * Re-derive the mailed token from the stored nonce (F-13). The plaintext
+ * Re-derive the mailed token from the stored nonce. The plaintext
  * column is gone; this is the same derivation the service uses, so the spec
  * exercises the real link instead of a test-only side channel.
  */
@@ -284,7 +284,7 @@ test.describe('subscription double opt-in', () => {
 			'unsubscribed'
 		);
 
-		// D-1: the reader may submit the form again; the soft suppression does
+		// The reader may submit the form again; the soft suppression does
 		// not block the confirmation mail. Confirming then lifts the record.
 		await page.goto('/zh-cn/subscribe');
 		await page.getByLabel('邮箱').fill(email);

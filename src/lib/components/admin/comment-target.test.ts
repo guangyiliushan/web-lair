@@ -49,7 +49,7 @@ describe('commentTargetDisplay', () => {
 
 	it('keeps an id hint and a null href when the target row is gone', () => {
 		// The old queue showed an id fragment for dangling rows; it is the only
-		// manual-location clue left, so the fallback keeps it (code review).
+		// manual-location clue left, so the fallback keeps it.
 		expect(commentTargetDisplay(row({ postId: '12345678-aaaa-bbbb-cccc-dddddddddddd' }))).toEqual({
 			label: '文章',
 			title: '（未知 · 12345678…）',

@@ -16,7 +16,7 @@ if command -v cygpath >/dev/null 2>&1; then
 	APP_DIR=$(cygpath -m "$APP_DIR")
 fi
 
-# F-12 / RUNBOOK §8: the app fails closed at boot when this key is missing or
+# The app fails closed at boot when this key is missing or
 # malformed (suppression hashes must never be written unkeyed). Fail here with
 # an actionable message instead of letting the container crash-loop.
 require_env_file() {

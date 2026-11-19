@@ -3,7 +3,7 @@ import { argon2 } from 'node:crypto';
 import { promisify } from 'node:util';
 
 /**
- * Password-gate crypto tests (N1): argon2id hashing/verification (the
+ * Password-gate crypto tests: argon2id hashing/verification (the
  * OWASP minimum profile, PHC storage, weak-parameter rejection, the PHC
  * `p` parameter being read and used) and the unlock-token lifecycle
  * (sign/verify, expiry, tampering, note-id binding, password-change

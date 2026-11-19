@@ -17,7 +17,7 @@ overwriteGetLocale(() => 'zh-cn');
  *
  * Standard-markdown checks mount inside the app's typography wrapper
  * (`prose`, the class MarkdownRenderer applies when its prose prop is on).
- * Batch-2-in-flight syntax (mention) is intentionally covered — a red there
+ * in-flight syntax (mention) is intentionally covered — a red there
  * documents current state.
  */
 

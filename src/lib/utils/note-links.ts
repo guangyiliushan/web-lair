@@ -1,7 +1,7 @@
 /**
- * Notes filter links (N1): single builder for the `/notes` list chips and
+ * Notes filter links: single builder for the `/notes` list chips and
  * pagination so a chip click can never silently drop the other filter
- * dimension (review finding). Pure and client-safe.
+ * dimension. Pure and client-safe.
  */
 export interface NotesFilterState {
 	topic: string | null;

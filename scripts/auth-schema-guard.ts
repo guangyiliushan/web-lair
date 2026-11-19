@@ -4,7 +4,7 @@
  * 1. Regenerates the better-auth schema and diffs it against
  *    `src/lib/server/db/auth.schema.ts` (whitespace normalized).
  * 2. Scans migrations for structural changes to generated auth tables.
- * 3. Scans production source for the H3 exclusions (custom hashing, custom
+ * 3. Scans production source for the exclusions (custom hashing, custom
  *    2FA challenge, hand-written adapter).
  *
  * Run `pnpm auth:check` (`pnpm auth:check:migrations` = SQL scan only, no
@@ -46,7 +46,7 @@ try {
 	process.exit(2);
 }
 
-// ---- 3) H3 source scan (always runs) --------------------------------------
+// ---- 3) source scan (always runs) --------------------------------------
 try {
 	const files: Array<{ path: string; text: string }> = [];
 	const walk = (dir: string) => {

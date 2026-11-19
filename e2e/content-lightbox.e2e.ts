@@ -117,7 +117,7 @@ test.describe('content lightbox (3d)', () => {
 		await page.keyboard.press('Enter');
 		await expect(page.getByRole('dialog')).toBeVisible();
 		// The plain dialog DOM (sr-only title/description, hidden caption) is
-		// new real estate - scan it open, not only closed (review 3d, 07).
+		// new real estate - scan it open, not only closed.
 		await expectNoCriticalAxe(page, 'content-lightbox-open');
 		await page.keyboard.press('Escape');
 		await expect(page.getByRole('dialog')).toBeHidden();

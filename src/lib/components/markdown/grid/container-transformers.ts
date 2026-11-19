@@ -1,4 +1,4 @@
-// Batch D transformers: the `::::tabs` (+ `:::tab{…}`) and `:::grid{…}`
+// Transformers: the `::::tabs` (+ `:::tab{…}`) and `:::grid{…}`
 // containers (spec 3.2; v0.3.2 delta #4: brace attributes with zero
 // whitespace, and an outer fence one colon deeper than its children).
 //

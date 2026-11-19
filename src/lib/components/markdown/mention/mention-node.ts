@@ -38,7 +38,7 @@ export class MentionNode extends TextNode {
 	}
 
 	updateDOM(prev: this, dom: HTMLElement, config: EditorConfig): boolean {
-		// super owns the text/format DOM sync (batch A review, F2).
+		// super owns the text/format DOM sync.
 		const updated = super.updateDOM(prev, dom, config);
 		addClassNamesToElement(dom, 'mention');
 		return updated;

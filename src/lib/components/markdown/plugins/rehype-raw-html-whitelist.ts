@@ -90,8 +90,7 @@ export const rehypeRawHtmlWhitelist: Plugin<[], HastRoot> = () => {
 		// token is only ever READ here: unwrapping relocates children, and the
 		// walker can then reach a node again with a stale position. A decision
 		// that deleted its own evidence would not be idempotent — the second
-		// visit would re-classify pipeline output as raw and drop it (the
-		// batch-4a review's data-loss reproducer).
+		// visit would re-classify pipeline output as raw and drop it.
 		visit(tree, 'element', (node, index, parent) => {
 			if (node.properties?.[PROVENANCE_KEY] === PROVENANCE_TOKEN) return;
 

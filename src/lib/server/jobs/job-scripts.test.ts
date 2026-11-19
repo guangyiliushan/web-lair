@@ -282,7 +282,7 @@ describe('saveScript', { timeout: 30_000 }, () => {
 	it('serializes concurrent saves: exactly one wins, the other conflicts (review R01)', async () => {
 		const dataDir = await tempDataDir();
 		// Pre-create the scaffold so a mutant fingerprint cannot land on the
-		// scaffold's pid-named tmp rename before the save race (round 2).
+		// scaffold's pid-named tmp rename before the save race.
 		await ensureJobsScaffold(dataDir);
 		const { db } = makeDb();
 		const [a, b] = await Promise.all([

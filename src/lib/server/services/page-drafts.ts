@@ -19,7 +19,7 @@ import {
 import { DRAFT_THROTTLE_MS } from './post-drafts';
 import { m } from '$lib/paraglide/messages';
 
-// The placeholder predicate lives in $lib/utils/page-meta (F6b review):
+// The placeholder predicate lives in $lib/utils/page-meta:
 // re-exported so the existing service-level import surface (routes, tests)
 // keeps working while the script layer shares the same single source.
 export { isPagePlaceholderSlug };
@@ -396,7 +396,7 @@ async function updateExistingPageDraft(
 			.where(and(eq(drafts.id, draft.id), eq(drafts.version, expected)))
 			.returning({ id: drafts.id, version: drafts.version, updatedAt: drafts.updatedAt });
 		if (rows.length > 0) {
-			// Draft identity (3b2): the working copy's refs never touch the
+			// Draft identity: the working copy's refs never touch the
 			// published page's ref set.
 			await syncFileReferences(
 				tx,

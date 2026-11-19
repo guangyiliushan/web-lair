@@ -1,4 +1,4 @@
-// Batch D: shared mount bookkeeping for decorator nodes.
+// Shared mount bookkeeping for decorator nodes.
 //
 // Lexical DEV deep-freezes nodes after each reconciliation, so a Svelte
 // component handle must never live on the node instance (writing it once

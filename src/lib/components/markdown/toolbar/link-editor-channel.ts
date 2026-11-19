@@ -1,5 +1,5 @@
 /**
- * Toolbar → LinkHoverEditor channel (batch 3b).
+ * Toolbar → LinkHoverEditor channel.
  *
  * The link buttons live in EditorToolbar / FloatingFormatToolbar; the hover
  * editor is mounted once per MarkdownEditor. A window CustomEvent keeps the

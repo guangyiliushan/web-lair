@@ -267,7 +267,7 @@
 
 	/** One scheduler for both the debounce and the throttle/error retry. */
 	function scheduleSave(delayMs: number) {
-		// A destroyed component must not re-arm (four-review #2: a runSave
+		// A destroyed component must not re-arm (a runSave
 		// continuation can land after teardown, when the cleanup inside the
 		// teardown effect can no longer reach it).
 		if (disposed) return;
@@ -525,7 +525,7 @@
 		window.addEventListener('beforeunload', beforeUnloadHandler);
 		return () => {
 			// A destroyed component must not re-arm timers from in-flight
-			// continuations (four-review #2/#6).
+			// continuations.
 			disposed = true;
 			if (beforeUnloadHandler) window.removeEventListener('beforeunload', beforeUnloadHandler);
 			if (autosaveTimer) clearTimeout(autosaveTimer);

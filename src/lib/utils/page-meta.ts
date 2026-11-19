@@ -46,7 +46,7 @@ export function isReservedPageSlug(slug: string): boolean {
 
 /**
  * Marker for the auto-generated slug of never-published placeholder rows.
- * One literal for the whole pages line (F6b review): the service (re-exported
+ * One literal for the whole pages line: the service (re-exported
  * for the admin routes and tests) and scripts/verify-pages.ts read it here,
  * so the verify-pages exemption and the editor's ownership predicate share
  * the exact same prefix. (scripts/verify-baseline.ts does not consume it.)

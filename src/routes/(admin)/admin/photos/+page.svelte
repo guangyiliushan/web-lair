@@ -70,7 +70,7 @@
 		editingId ? (data.photos.find((row) => row.id === editingId) ?? null) : null
 	);
 
-	// Close the delete dialog once the action lands (round-2 review: it used
+	// Close the delete dialog once the action lands (it used
 	// to stay open above the success flash).
 	$effect(() => {
 		if (actionData.deleted) deleteTarget = null;
@@ -84,7 +84,7 @@
 		return title['zh-cn'] ?? title.en ?? title.ja ?? row.slug;
 	}
 
-	// Shared tier rule (round-3 review: the local copies had drifted from
+	// Shared tier rule (the local copies had drifted from
 	// photoTileSrc, the single source for GIF-is-its-own-tier).
 	function thumbUrl(row: PhotoRow): string {
 		return photoTileSrc(row, 'thumb');

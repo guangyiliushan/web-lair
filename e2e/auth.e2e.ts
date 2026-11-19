@@ -1,8 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { zhCnLocale } from './locale-fixture';
 
-// The app default is the project base locale (en): the client-side pin that
-// used to force zh-cn was removed with the locale-switch fix. These assertions
+// The app default is the project base locale (en). These assertions
 // read the zh-cn message set, so this file pins it explicitly. Titles live in
 // shadcn Card.Title - a div with data-slot="card-title", not an h2.
 test.use(zhCnLocale);

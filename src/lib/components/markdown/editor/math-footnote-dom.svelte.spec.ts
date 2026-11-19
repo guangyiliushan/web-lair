@@ -66,7 +66,7 @@ describe('math and footnote editing (batch B)', () => {
 		await expect
 			.poll(() => document.querySelectorAll('.rich-editor-footnote-inline').length)
 			.toBeGreaterThan(0);
-		// the definition line stays literal source text (registered follow-up)
+		// the definition line stays literal source text
 		const body = document.querySelector('[role="textbox"]')?.textContent ?? '';
 		expect(body).toContain('[^note]: 定义文本');
 	});

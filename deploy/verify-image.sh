@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runtime-image smoke gate (F-2).
+# Runtime-image smoke gate.
 #
 # The image ships `jobs/` + `src/` and runs drain with Node's type stripping.
 # A syntax feature Vite accepts but the stripper rejects would only fail in
@@ -83,7 +83,7 @@ echo "OK: sharp + exiftool-vendored load"
 # (a build-server import missing from dependencies only fails here).
 #
 # The two boot guards in `src/hooks.server.ts` run in production builds:
-# `SUPPRESSION_HMAC_KEY` and `SUBSCRIBE_TOKEN_SECRET` (F-13). Both are throwaway
+# `SUPPRESSION_HMAC_KEY` and `SUBSCRIBE_TOKEN_SECRET`. Both are throwaway
 # values generated per run - never deployment credentials. They go through a
 # 0600 env-file instead of `-e`: `docker run -e` leaves the value in the host
 # argv (visible to `ps`) and in the container's Config.Env (`docker inspect`).

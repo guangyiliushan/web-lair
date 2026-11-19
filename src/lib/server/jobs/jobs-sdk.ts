@@ -116,8 +116,8 @@ export async function runCommentReviewJob(ctx: JobContext): Promise<void> {
 }
 
 /**
- * Ops probe cores: `system.resources` (F-7 thresholds/mounts) and
- * `mail.probe` (F-10 verify + weekly real send). Lazy for the same reason as
+ * Ops probe cores: `system.resources` (thresholds/mounts) and
+ * `mail.probe` (verify + weekly real send). Lazy for the same reason as
  * the AI cores - the mail probe pulls nodemailer and both cores are only
  * needed when their job actually runs.
  */

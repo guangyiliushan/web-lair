@@ -26,7 +26,7 @@ export interface SiteCheckConfig {
 	retryOnce?: boolean;
 	/**
 	 * Budget gate for the in-run retry: consulted before the 30 s sleep; a
-	 * false return skips the retry (review finding 2026-10-06 - the run
+	 * false return skips the retry (the run
 	 * budget must bound a single pass too, not just the pass boundary).
 	 */
 	retryAllowed?: () => boolean;
@@ -163,8 +163,8 @@ export async function checkSite(
 			} else {
 				const failure = cls.failure!;
 				reach = failure.countsFailure ? 'fail' : 'skipped';
-				// Same Retry-After evidence as the backlink axis (review
-				// batch 2026-10-06): a 429 records the server's ask.
+				// Same Retry-After evidence as the backlink axis: a 429 records
+				// the server's ask.
 				entries.push({
 					at,
 					kind: 'reachability',

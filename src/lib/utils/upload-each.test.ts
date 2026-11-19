@@ -283,7 +283,7 @@ describe('uploadEachFile', () => {
 		expect(seen).toEqual(['uploading', 'error']);
 	});
 
-	// F-1: the queue must never be left on `uploading` when a batch ends early.
+	// The queue must never be left on `uploading` when a batch ends early.
 
 	it('reports cancelled (not error) for the rest of the batch on a session redirect', async () => {
 		deserializeMock.mockReturnValue({ type: 'redirect', status: 303, location: '/login' });

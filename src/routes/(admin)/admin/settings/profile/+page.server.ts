@@ -63,7 +63,7 @@ export const load: PageServerLoad = async (event) => {
 			locales: [...OPTION_LANGS],
 			updatedAt: home.updatedAt?.toISOString() ?? null
 		},
-		// Content language (IA2): a per-user preference lives here, not in the
+		// Content language: a per-user preference lives here, not in the
 		// security-only Account page. Empty = follow the site default.
 		defaultLang: langRow?.defaultLang ?? null,
 		siteDefaultLang,

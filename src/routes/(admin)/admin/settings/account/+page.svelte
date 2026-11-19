@@ -35,7 +35,7 @@
 	// the one-time codes arrive with the first response and must survive a failed
 	// activation, so they live in local state instead of being re-read from the
 	// current payload - the old template dropped the secret on the first wrong
-	// code and never rendered regenerated codes at all (B3.1 review). A
+	// code and never rendered regenerated codes at all. A
 	// `step: 'done'` payload ends the flow and clears them.
 	let pendingTotpURI = $state<string | null>(null);
 	let pendingBackupCodes = $state<string[]>([]);

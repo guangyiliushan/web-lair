@@ -58,7 +58,7 @@ function missingTitle(id: string): string {
 
 /**
  * Content pages resolve (lang, slug): link with the row's own language so the
- * admin cookie locale cannot hijack the target (code review / UI review).
+ * admin cookie locale cannot hijack the target.
  */
 function frontHref(path: string, lang: string | null): string {
 	if (lang && (locales as readonly string[]).includes(lang)) {

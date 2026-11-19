@@ -111,7 +111,7 @@ async function pruneToNewestSession(userId: string | undefined): Promise<void> {
 /**
  * `step` rides along on every failure so the page can keep the user inside the
  * activation flow: without it a failed activation used to drop the rendered
- * secret and force a full re-enable (B3.1 review).
+ * secret and force a full re-enable.
  */
 function formError(caught: unknown, fallback: string, step: string, action: string) {
 	if (caught instanceof APIError) {
@@ -692,7 +692,7 @@ export const actions: Actions = {
 
 			// This endpoint does NOT rotate the session, so the request token is
 			// still alive and can be kept precisely. Rotating recovery codes should
-			// not leave older sessions behind (B3.1 review).
+			// not leave older sessions behind.
 			const userId = event.locals.user?.id;
 			const currentToken = (event.locals.session as { token?: string } | null)?.token;
 			if (userId && currentToken) {

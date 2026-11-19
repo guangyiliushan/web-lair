@@ -387,7 +387,7 @@ describe('page draft flow', () => {
 		expect(rendered.sql).toContain('"drafts"."ref_type"');
 		expect(rendered.params).toContain('page');
 		// Attaching to published content syncs the submitted body's refs too
-		// (draft identity, 3b2: the page's own set is untouched here).
+		// (draft identity: the page's own set is untouched here).
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: DRAFT_ID }, []);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
@@ -434,7 +434,7 @@ describe('page draft flow', () => {
 			slug: 'fresh-slug'
 		});
 		// References ride the materialization transaction under the draft's
-		// own identity (3b2).
+		// own identity.
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: DRAFT_ID }, []);
 	});
 
@@ -484,7 +484,7 @@ describe('page draft flow', () => {
 			KEY
 		]);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
-		// The draft's own refs leave with the draft row (3b2) as a full
+		// The draft's own refs leave with the draft row as a full
 		// clear, after the durable page set (sync-then-clear order).
 		expect(syncMock).toHaveBeenNthCalledWith(
 			2,
@@ -670,7 +670,7 @@ describe('page draft flow', () => {
 		expect(syncMock).toHaveBeenNthCalledWith(1, state.txExecutors, { type: 'page', id: PAGE_ID }, [
 			KEY
 		]);
-		// The draft's own refs leave with its row (3b2) as a full clear.
+		// The draft's own refs leave with its row as a full clear.
 		expect(syncMock).toHaveBeenNthCalledWith(
 			2,
 			state.txExecutors,

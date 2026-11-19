@@ -105,7 +105,7 @@ describe('firstImageFromMarkdown', () => {
 	});
 
 	it('rejects covers outside the site-internal / https policy', () => {
-		// Policy (review finding): visitor page loads must not turn into
+		// Policy: visitor page loads must not turn into
 		// third-party requests, data: payloads or script-ish schemes.
 		expect(firstImageFromMarkdown('![x](javascript:alert(1))')).toBeNull();
 		expect(firstImageFromMarkdown('![x](//evil.example/p.png)')).toBeNull();

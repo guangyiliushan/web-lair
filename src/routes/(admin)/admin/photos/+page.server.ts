@@ -182,7 +182,7 @@ export const actions: Actions = {
 									: null
 					});
 				} catch (error) {
-					// Per-file isolation (round-2 review): one gallery hiccup
+					// Per-file isolation: one gallery hiccup
 					// must not 500 the whole batch — the upload above is
 					// already registered, report the file and move on.
 					console.warn('[admin/photos] gallery entry failed', {

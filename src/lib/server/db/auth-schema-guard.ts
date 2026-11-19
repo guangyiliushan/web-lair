@@ -1,9 +1,9 @@
-// H1 guard logic for the generated better-auth schema.
+// Guard logic for the generated better-auth schema.
 //
 // Pure functions so the CI script and the unit tests share one definition of
 // "drift" and "auth-table mutation". The script
 // (`scripts/auth-schema-guard.ts`) owns the CLI invocation and file walking;
-// the H3 source scan lives in `auth-customization-guard.ts`.
+// the source scan lives in `auth-customization-guard.ts`.
 
 /** Tables better-auth generates and upgrades itself (SQL identifiers). */
 export const AUTH_TABLES = [

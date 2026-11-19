@@ -1,8 +1,8 @@
 // jobs/drain.ts — one-shot drain entry (RUNBOOK "6. Background timers
 // (drain)"): the platform timer runs `node --env-file=.env jobs/drain.ts`
-// once per minute. A tick = schedule -> queued -> webhook delivery segments,
-// then the process exits, so every tick picks up the latest code with no
-// reload machinery.
+// once per minute. A tick = schedule -> queue -> delivery -> notification
+// segments, then the process exits, so every tick picks up the latest code with
+// no reload machinery.
 // Environment: DATABASE_URL required (the app's `$lib/server/db` reads
 // `$env/dynamic/private` and cannot load under plain Node, so this entry
 // builds its own postgres.js client); DATA_DIR optional (jobs data dir,

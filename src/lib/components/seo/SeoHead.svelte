@@ -20,7 +20,7 @@
 		path: string;
 		/** Published alternates, self included. Defaults to `path` per locale. */
 		alternates?: Alternate[];
-		/** Optional Open Graph title (round-3 review: the text half of #62). */
+		/** Optional Open Graph title (the text half of #62). */
 		ogTitle?: string;
 		/** Optional Open Graph description. */
 		ogDescription?: string | null;
@@ -31,7 +31,7 @@
 	/**
 	 * Absolute-URL origin: the (site) layout provides ORIGIN when configured
 	 * (single source shared with feeds/robots), otherwise the request origin
-	 * is the fallback. Review finding: page.url.origin alone can advertise an
+	 * is the fallback. page.url.origin alone can advertise an
 	 * internal host behind a proxy while the sitemap uses ORIGIN.
 	 */
 	const publicOrigin = $derived(page.data.siteOrigin ?? page.url.origin);

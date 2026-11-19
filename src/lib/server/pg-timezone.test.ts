@@ -3,7 +3,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 
 /**
- * The batch-5 tz closure helper: membership must come from
+ * The timezone closure helper: membership must come from
  * `pg_timezone_names` (bound parameter, verified at the RENDER level with
  * the real dialect), and the injected executor path must be used as-is so
  * the check can join an open transaction.

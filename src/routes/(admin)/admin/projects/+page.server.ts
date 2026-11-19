@@ -270,7 +270,7 @@ export const actions: Actions = {
 			return { success: true, flash: 'targets-saved' };
 		} catch (err) {
 			// Only registry validation failures are user-fixable; anything else
-			// (db down, ...) must surface honestly (review).
+			// (db down, ...) must surface honestly.
 			if (err instanceof ZodError) {
 				return fail(400, {
 					error: m.admin_projects_err_targets_validation()

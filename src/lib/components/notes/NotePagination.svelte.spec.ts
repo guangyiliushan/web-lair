@@ -10,7 +10,7 @@ import NotePagination from './NotePagination.svelte';
 overwriteGetLocale(() => 'zh-cn');
 
 // perPage flows through to Pagination.Root (context only - nothing
-// page-count-related is rendered yet; the review-round-2 mutation probe
+// page-count-related is rendered yet; the mutation probe
 // showed a hardcoded perPage is DOM-invisible until Page items land).
 const href = (target: number) => `/notes?page=${target}`;
 

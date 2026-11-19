@@ -391,7 +391,7 @@ export const FILE_LIST_LIMIT = 200;
 
 /**
  * Shared upload bucket: the admin files page, the gallery page and the editor
- * uploads endpoint used to carry three hand-synced copies of the same limit/key.
+ * uploads endpoint share one limit/key.
  */
 // Single source: see media/upload-limits.ts (kept out of this module so
 // read-only pages do not import the media service).
@@ -868,7 +868,7 @@ export interface MediaAuditReport {
 	brokenLinks: BrokenLink[];
 	/** ③ registry row exists but the object is absent from storage. */
 	missingObjects: MissingObject[];
-	/** ④ reference-table drift + orphan rows (3b2 backfill reconciliation). */
+	/** ④ reference-table drift + orphan rows. */
 	referenceDrift: ReferenceDrift;
 	scannedSources: { posts: number; drafts: number; notes: number; pages: number };
 	/** True when any scan hit its row cap — results may be incomplete. */
@@ -896,9 +896,9 @@ interface MentionScan {
 
 /**
  * Content mention scan shared by the read-only audit (check ②) and the purge
- * guard. Covers posts / drafts / notes / pages - the 3b₁ first-aid
- * (2026-10-13): page bodies were the production gap, so a page-body image
- * stayed purge-eligible until its TTL ran out.
+ * guard. Covers posts / drafts / notes / pages - the 3b₁ first-aid: page bodies
+ * were the production gap, so a page-body image stayed purge-eligible until its
+ * TTL ran out.
  */
 async function scanMentions(database: FilesDb): Promise<MentionScan> {
 	const postRows = await database
@@ -1012,7 +1012,7 @@ export async function runMediaAudit(deps: FilesDeps = {}): Promise<MediaAuditRep
 		if (!head) missingObjects.push(row);
 	}
 
-	// ④ Reference-table drift (3b2). Orphans are checked per ref_type: a row
+	// ④ Reference-table drift. Orphans are checked per ref_type: a row
 	// pointing at a deleted target means a deletion hook was missed; the two
 	// status counters flag flip-matrix violations the write side cannot
 	// produce (crash/legacy intermediate states). Expressed through the same

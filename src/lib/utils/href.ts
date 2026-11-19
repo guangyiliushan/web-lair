@@ -28,7 +28,7 @@ export function siteHref(href: string): string {
 }
 
 /**
- * Active-state comparison for nav items (review finding): both sides are
+ * Active-state comparison for nav items: both sides are
  * neutral paths (`deLocalizeHref` output) — `neutralPath` is the current
  * location, `target` the nav item's path. `/` matches exactly; everything
  * else matches itself or a descendant (`/posts` → `/posts/x`), never a mere

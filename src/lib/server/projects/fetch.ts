@@ -68,7 +68,6 @@ export function isRateLimitExhausted(provider: string, headers: Headers): boolea
  * Reset moment from the epoch-seconds headers (GitHub `x-ratelimit-reset`,
  * GitLab `ratelimit-reset`). Digit-capped and range-checked so a malformed
  * header can never reach `new Date(...).toISOString()` as an invalid value
- * (review 2026-10-08).
  */
 export function rateLimitResetAtMs(headers: Headers): number | null {
 	const raw = headers.get('x-ratelimit-reset') ?? headers.get('ratelimit-reset');
@@ -120,7 +119,7 @@ const MAX_API_REDIRECTS = 3;
  * intact, and a same-host downgrade/port change still resends them.
  * Fail closed instead. `signal` is the per-attempt deadline: every hop of
  * this attempt shares it, so a redirect chain cannot outlive the nominal
- * timeout (review 2026-10-08).
+ * timeout.
  */
 async function doFetchWithRedirects(
 	doFetch: typeof fetch,
@@ -152,14 +151,14 @@ async function doFetchWithRedirects(
 		} catch {
 			throw new ProjectsFetchError('parse', 'invalid redirect location', response.status);
 		}
-		// Embedded credentials in a redirect target are never followed
-		// (review 2026-10-08): undici would refuse the request anyway, but
+		// Embedded credentials in a redirect target are never followed:
+		// undici would refuse the request anyway, but
 		// classify it as a malformed redirect instead of a network error.
 		if (next.username !== '' || next.password !== '') {
 			throw new ProjectsFetchError('parse', 'redirect with embedded credentials rejected');
 		}
 		// Origin-level (scheme + host + port): a same-host scheme downgrade
-		// or port change would still resend credentials (review 2026-10-08).
+		// or port change would still resend credentials.
 		if (next.origin !== new URL(target).origin || next.protocol !== 'https:') {
 			throw new ProjectsFetchError('parse', `cross-origin redirect rejected: ${next.origin}`);
 		}
@@ -187,7 +186,7 @@ export async function fetchJson(
 		let response: Response;
 		try {
 			// One deadline per attempt, covering every redirect hop of that
-			// attempt (review 2026-10-08: per-hop signals let a chain exceed
+			// attempt (per-hop signals let a chain exceed
 			// the nominal timeout).
 			response = await doFetchWithRedirects(doFetch, url, init, AbortSignal.timeout(timeoutMs));
 		} catch (err) {
@@ -277,7 +276,7 @@ export async function fetchJson(
 			json = await response.json();
 		} catch (err) {
 			// A body-phase timeout is still a timeout (retry once, then
-			// network) - never a platform shape signal (review 2026-10-08).
+			// network) - never a platform shape signal.
 			if (err instanceof Error && err.name === 'TimeoutError') {
 				if (attempt === 1) {
 					await sleep(RETRY_DELAY_MS);
@@ -287,7 +286,7 @@ export async function fetchJson(
 			}
 			// A body cut mid-read (socket reset / premature close) is a
 			// network failure; SyntaxError means the platform answered with
-			// non-JSON - a shape signal (review 2026-10-08).
+			// non-JSON - a shape signal.
 			if (err instanceof SyntaxError) {
 				throw new ProjectsFetchError('parse', 'response body is not JSON', response.status);
 			}

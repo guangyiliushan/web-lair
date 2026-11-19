@@ -206,7 +206,7 @@ function concat(chunks: Uint8Array[], total: number): Uint8Array {
 /**
  * Bound a non-abortable step (DNS resolution, the robots gate) by the unit's
  * deadline: the wall clock of `timeoutMs` must cover the WHOLE unit,
- * not just the fetch calls (review finding, 2026-10-06). The rejection
+ * not just the fetch calls. The rejection
  * carries the signal's reason (a TimeoutError DOMException), so the caller's
  * classification stays `timeout`.
  */

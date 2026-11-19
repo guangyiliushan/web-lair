@@ -27,7 +27,7 @@ const ID_VALID_REGEX = /^[\p{L}\p{N}_-]+$/u;
  * Symbols and control/format characters are stripped as well: the spec wording
  * says punctuation, but symbols (`+`, `^`, `$`, `<`) and invisible format
  * characters (U+200B, U+202E) would produce ids that are hostile to CSS
- * selectors and misleading in the UI (spec revision note, batch 8).
+ * selectors and misleading in the UI.
  */
 function slugifyHeading(text: string): string {
 	return text
@@ -63,7 +63,6 @@ function textContent(node: Element): string {
  * `{#id}` that sits inside an inline element (link, code, emphasis) is not a
  * heading tail (spec 3.6) and must keep rendering verbatim. Setext headings
  * are indistinguishable from ATX at this layer, so they take the same path
- * (documented deviation; see the batch record).
  */
 function trailingText(node: Element): { value: string } | null {
 	const last = node.children[node.children.length - 1];

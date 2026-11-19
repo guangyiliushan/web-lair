@@ -51,7 +51,7 @@ export function cookieSurfaceMatches(): string[] {
  * Root endpoints whose requests skip the i18n middleware exactly (no
  * wildcard form): the two root files plus the feed alias.
  *
- * Caveat (review finding, verified against the generated runtime): the
+ * Caveat (verified against the generated runtime): the
  * middleware matches these patterns against the de-localised path, so
  * `/{lang}/rss.xml` is skipped as well and the ambient locale stays at the
  * base locale there. Feed handlers must read the locale from the request

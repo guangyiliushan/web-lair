@@ -1770,8 +1770,8 @@ async function notificationOutcomes(): Promise<void> {
 
 	// 2) Storm windows on the real table. Comment events get a 10/h
 	//    per-event window and a global 30/h ceiling; `job.failed` has NO
-	//    per-event window (only the per-run unique key) - the extra 10/h cap
-	//    was removed because it could drop legitimate incident alerts.
+	//    per-event window (only the per-run unique key) and no 10/h cap, so
+	//    rate limiting cannot drop legitimate incident alerts.
 	//    Both windows are asserted below, so neither can silently regress.
 	// Clear the table first: earlier scenarios leave rows inside the same hour,
 	// and the global window counts every type.
@@ -2231,7 +2231,7 @@ async function s1ProducerOutbox(): Promise<void> {
 	await db
 		.transaction(async (tx) => {
 			await recordActivity(tx, { event: 'probe.rollback', actorId: null, payload: {} });
-			// Read back INSIDE the tx (round-2 SYT-2): the probe must prove it
+			// Read back INSIDE the tx: the probe must prove it
 			// wrote before rolling back, else a tx path that never wrote would
 			// pass vacuously.
 			txSaw = {

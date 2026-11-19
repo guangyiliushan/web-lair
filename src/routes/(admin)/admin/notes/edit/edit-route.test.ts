@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Route-level tests for the N1 notes editor (batch 5): form-value guards
+ * Route-level tests for the notes editor: form-value guards
  * (uuid / mood vocabulary / version parsing) run BEFORE any service call,
  * publish/discard/status answer redirects exactly as the plan specifies,
  * and row-level actions (pin / comments / emotions / password) pass

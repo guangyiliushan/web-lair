@@ -3,7 +3,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 
 /**
- * Route-level tests for topics CRUD (batch 5): validation guards, unique-
+ * Route-level tests for topics CRUD: validation guards, unique-
  * violation discrimination (23505 → 409, everything else rethrows), the
  * deterministic renumber transaction behind ▲/▼, and the delete attribution
  * check (the FK is SET NULL, so the refusal must be application-level).

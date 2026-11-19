@@ -144,7 +144,7 @@ test.describe('micro C2 navigation', () => {
 		expect(box, 'panel box').not.toBeNull();
 		expect(Math.round(box!.height), 'panel height').toBe(NAV_PANEL_HEIGHT);
 
-		// H3: fixed slot count. Unbounded, a registry with many pages would push
+		// Fixed slot count. Unbounded, a registry with many pages would push
 		// the grid past the shared height and get clipped by `overflow-hidden`.
 		const links = panel.locator('[data-slot="nav-menu-pages"] a');
 		expect(await links.count(), 'page grid cap').toBeLessThanOrEqual(NAV_HOME_GRID_MAX);

@@ -263,8 +263,7 @@ describe('review round 2: canonical names and IO error classes', () => {
 		const dataDir = await tempDataDir();
 		// A directory on the job path: the loader must reject with the IO
 		// error, not fall back to the builtin loader (a mask-all
-		// isNotFoundError would answer `unknown job` instead - the round-2
-		// mutation survivor).
+		// isNotFoundError would answer `unknown job` instead).
 		await mkdir(join(dataDir, 'jobs', 'dir-task.ts'), { recursive: true });
 		await expect(createJobLoader({ dataDir })('dir-task')).rejects.toThrow(/EISDIR/i);
 		// Same for the sidecar read.

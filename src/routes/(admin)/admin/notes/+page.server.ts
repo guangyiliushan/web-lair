@@ -11,7 +11,7 @@ import type { PageServerLoad } from './$types';
 import { m } from '$lib/paraglide/messages';
 
 const PAGE_SIZE = 20;
-// `scheduled` stays out of the N1 UI (registered) - it is still reachable
+// `scheduled` stays out of the UI (registered) - it is still reachable
 // through All but has no filter chip of its own.
 const STATUSES = ['published', 'draft', 'private', 'trash'] as const;
 

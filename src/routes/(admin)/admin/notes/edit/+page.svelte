@@ -211,7 +211,7 @@
 	// Background refreshes (row-level actions, the first-save URL anchor) must
 	// never replay the server copy over unsaved edits: draft.version stays OUT
 	// of the key - it advances on every autosave, which used to make any
-	// row-level click wipe the editor working copy (round-7 review finding).
+	// row-level click wipe the editor working copy.
 	// reloadFromServer() remounts the editor explicitly via editorEpoch.
 	const dataKey = $derived(`${data.note?.id ?? 'new'}@${data.draft?.id ?? ''}`);
 	let loadedKey = $state(untrack(() => dataKey));
@@ -222,8 +222,7 @@
 		loadedKey = dataKey;
 		// The draft vanished server-side (published or discarded from this or
 		// another tab): drop the stale address so the dirty working copy can
-		// re-save as a FRESH draft instead of 409ing against a deleted row
-		// (verify-round finding).
+		// re-save as a FRESH draft instead of 409ing against a deleted row.
 		if (!data.draft && draftId !== null) {
 			draftId = null;
 			draftVersion = null;
@@ -351,7 +350,7 @@
 			}
 			// Manual saves (and the publish flush) must not be dropped by a race
 			// with the autosave flight: wait it out, then save the latest state
-			// below (round-7 review finding).
+			// below.
 			for (let waited = 0; waited < 100 && inFlight; waited += 1) {
 				await new Promise((resolve) => setTimeout(resolve, 100));
 			}
@@ -467,8 +466,7 @@
 	}
 
 	// The shared titleSlug rule (CJK kept, separators collapsed) lives in
-	// $lib/utils/slug - the local copy had drifted without its 120-char cap
-	// (review finding).
+	// $lib/utils/slug - the local copy had drifted without its 120-char cap.
 	function onTitleInput(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		title = input.value;
@@ -483,7 +481,7 @@
 
 	// Transient banners for ?published=1 / ?discarded=1 / ?private=1 / ?restored=1.
 	// afterNavigate (not $effect) - replaceState throws before the router is
-	// initialized, which a hard load of such a URL used to hit (dev probe).
+	// initialized, which a hard load of such a URL used to hit.
 	afterNavigate(() => {
 		const params = page.url.searchParams;
 		let message: string | null = null;

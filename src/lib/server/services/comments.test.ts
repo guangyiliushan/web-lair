@@ -284,7 +284,7 @@ describe('assembleThreads', () => {
 		const shown = assembleThreads([root], [reply], { showCountry: true });
 		expect(shown.roots[0].country).toBe('US');
 		// Replies never collect a country (no per-reply opt-in), so the view
-		// model must not carry one either; the dead data path was removed.
+		// model must not carry one either.
 		expect(shown.roots[0].replies[0].country).toBeUndefined();
 		// Site switch off: stored country never reaches the view.
 		expect(assembleThreads([root], [reply]).roots[0].country).toBeNull();

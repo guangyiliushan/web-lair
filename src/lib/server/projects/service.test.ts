@@ -38,7 +38,7 @@ const dbMock = vi.hoisted(() => {
 vi.mock('$lib/server/db', () => ({ db: dbMock.db }));
 
 /**
- * A-batch service pins: the pure rules behind the admin surface.
+ * Projects service pins: the pure rules behind the admin surface.
  * DB paths (transitions applied, reorder, enqueue) are exercised end to end
  * by e2e/projects-admin.e2e.ts against the real database; what is pinned
  * here is the invariants table itself.

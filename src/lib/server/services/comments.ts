@@ -425,7 +425,7 @@ export function assembleDiscussion(
 
 /**
  * Format / zero-width / line-separator characters stripped before validation
- * and storage (security review): an "invisible-only" comment must not pass the
+ * and storage: an "invisible-only" comment must not pass the
  * empty gate, and bidi controls must not survive into snapshots. ZWJ/ZWNJ are
  * deliberately kept - they are load-bearing inside emoji sequences and some
  * scripts. ALM (U+061C) and the invisible operators (U+2061-U+2064) join the
@@ -460,7 +460,7 @@ export function normalizeCommentAuthor(raw: string): string {
 
 export const COMMENT_AVATAR_MAX = 512;
 
-/** Snapshot avatar whitelist: http(s) only, capped (security review). */
+/** Snapshot avatar whitelist: http(s) only, capped. */
 export function normalizeCommentAvatar(raw: string | null | undefined): string | null {
 	const value = raw?.trim() ?? '';
 	if (value.length === 0 || value.length > COMMENT_AVATAR_MAX) return null;
@@ -759,7 +759,7 @@ export async function submitComment(input: SubmitCommentInput): Promise<SubmitCo
 		if (rate.count === 0) {
 			// count === 0 with allowed=true is the rateLimit() fail-open
 			// signature (the store threw): deliberate, but it must
-			// never happen silently (security review).
+			// never happen silently.
 			console.warn('[comments] rate limiter store unavailable; failing open');
 		}
 	}
@@ -990,13 +990,13 @@ export async function editComment(input: EditCommentInput): Promise<EditCommentR
 		}
 		if (rate.count === 0) {
 			// rateLimit() fail-open signature (the store threw): deliberate,
-			// but never silent (security review; mirrors submitComment).
+			// but never silent (mirrors submitComment).
 			console.warn('[comments] rate limiter store unavailable; failing open');
 		}
 	}
 
 	// Clearing reviewed_by/at keeps the queue honest: the previous decision
-	// no longer covers the new text (the review batch re-stamps an approval).
+	// no longer covers the new text.
 	const moderation = await evaluateCommentModeration({
 		text,
 		readerId: input.user.id,

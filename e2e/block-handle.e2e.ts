@@ -3,8 +3,8 @@ import { zhCnLocale } from './locale-fixture';
 
 // The toolbar's own aria-labels come from the zh-cn message set (`块操作` /
 // `添加块`) and the menu labels are hard-coded Chinese, so this file pins zh-cn
-// explicitly: the app default is the project base locale (en) since the
-// client-side locale pin was removed. Menu labels: `转换为` / `操作` / `复制块` ...
+// explicitly: the app default is the project base locale (en). Menu labels:
+// `转换为` / `操作` / `复制块` ...
 test.use(zhCnLocale);
 
 test.describe('BlockHandleToolbar', () => {

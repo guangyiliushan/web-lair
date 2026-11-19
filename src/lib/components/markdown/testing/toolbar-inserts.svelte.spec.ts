@@ -20,7 +20,7 @@ describe('toolbar insert buttons', () => {
 		await user.keyboard('{Shift>}{Home}{/Shift}');
 		await editorToolbar().getByRole('button', { name: '链接' }).click();
 
-		// The in-place editor pane takes over (batch 3b: window.prompt retired)
+		// The in-place editor pane takes over (window.prompt retired)
 		const pane = () => document.querySelector('[aria-label="链接"]') as HTMLElement | null;
 		await expect.poll(() => pane()?.querySelector('input') !== null, { timeout: 5000 }).toBe(true);
 		const input = pane()!.querySelector('input') as HTMLInputElement;

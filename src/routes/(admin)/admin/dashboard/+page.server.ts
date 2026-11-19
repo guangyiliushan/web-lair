@@ -84,7 +84,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 					   from pages, jsonb_each_text(pages.content)
 					  where pages.status = 'visible' and pages.content is not null) as pages_chars,
 
-					/* Chart series (2026-10-21): three aggregates ride the same round
+					/* Chart series: three aggregates ride the same round
 					   trip as the counters. Each is a JSON array so a sparse window is a
 					   short list rather than a hole the client has to fill. Publish
 					   visibility reuses the shared predicates, so the charts cannot drift

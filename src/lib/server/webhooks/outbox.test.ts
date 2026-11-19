@@ -7,7 +7,7 @@ import { buildDeliveryPayload, enqueueWebhookDeliveries } from './outbox';
  * S1 producer unit teeth: the delivery body builder is a pure function, and
  * the enqueue must compile to ONE `insert ... select` statement whose WHERE
  * carries the `@>` subscription test (the exact SQL shape was verified
- * against a real PostgreSQL in the S1 grill scratch probe; the live-PG
+ * against a real PostgreSQL in the scratch probe; the live-PG
  * teeth live in `pnpm db:verify-jobs`).
  */
 

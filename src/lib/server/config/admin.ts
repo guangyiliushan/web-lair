@@ -46,7 +46,7 @@ export function getAdminConfig(): AdminConfig {
 
 /**
  * 404 for any admin-auth slug other than the configured one (the login and
- * two-factor pages share this; it used to be copy-pasted into both).
+ * two-factor pages share this).
  */
 export function assertAdminSlug(slug: string): AdminConfig {
 	const config = getAdminConfig();

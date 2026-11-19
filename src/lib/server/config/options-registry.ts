@@ -363,7 +363,6 @@ export const optionRegistry = {
 	},
 	'friends.apply': {
 		// Applications open; home-page URLs only (no sub paths).
-		// `internalizeAvatars` was removed - it had zero consumers.
 		schema: z.object({
 			enabled: z.boolean(),
 			allowSubPath: z.boolean()

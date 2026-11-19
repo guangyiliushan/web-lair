@@ -61,7 +61,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			}
 		],
 		files,
-		// The list is capped at FILE_LIST_LIMIT rows — surface it (round-2).
+		// The list is capped at FILE_LIST_LIMIT rows — surface it.
 		listTruncated: files.length >= FILE_LIST_LIMIT,
 		filters: {
 			kind: kind ?? '',

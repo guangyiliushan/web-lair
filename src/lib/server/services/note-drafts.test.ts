@@ -436,7 +436,7 @@ describe('note draft flow', () => {
 		expect(rendered.sql).toContain('"drafts"."ref_type"');
 		expect(rendered.params).toContain('note');
 		// Attaching to published content syncs the submitted body's refs too
-		// (draft identity, 3b2: the note's own set is untouched here).
+		// (draft identity: the note's own set is untouched here).
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: DRAFT_ID }, []);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
 	});
@@ -503,7 +503,7 @@ describe('note draft flow', () => {
 		expect(noteInsert?.values).toMatchObject({ title: 'First', lang: 'zh-cn', status: 'draft' });
 		expect(isNotePlaceholderSlug(String(noteInsert?.values.slug))).toBe(true);
 		// References ride the materialization transaction under the draft's
-		// own identity (3b2).
+		// own identity.
 		expect(syncMock).toHaveBeenCalledWith(state.txExecutors, { type: 'draft', id: DRAFT_ID }, []);
 	});
 
@@ -549,7 +549,7 @@ describe('note draft flow', () => {
 			[]
 		);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
-		// The draft's own refs leave with the draft row (3b2) as a full
+		// The draft's own refs leave with the draft row as a full
 		// clear, after the durable note set (sync-then-clear order).
 		expect(syncMock).toHaveBeenNthCalledWith(
 			2,
@@ -697,7 +697,7 @@ describe('note draft flow', () => {
 			KEY
 		]);
 		expect((syncMock.mock.calls[0] as unknown[])[0]).toBe(state.txExecutors);
-		// The draft's own refs leave with its row (3b2) as a full clear.
+		// The draft's own refs leave with its row as a full clear.
 		expect(syncMock).toHaveBeenNthCalledWith(
 			2,
 			state.txExecutors,

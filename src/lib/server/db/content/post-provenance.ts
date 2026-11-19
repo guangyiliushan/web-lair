@@ -2,7 +2,7 @@
  * Closed sets for the public AI-provenance axes (mirror the DB CHECKs).
  *
  * Only the *writing* axis lives on a post. The old `visual_origin` axis was
- * removed (2026-10-21): a post is text, and an AI-generated image is a property
+ * removed: a post is text, and an AI-generated image is a property
  * of the **asset**, not of the article — it belongs to the media pipeline
  * (EXIF/C2PA at ingest), where each file can be judged on its own. Keeping a
  * post-level "some/all images are AI" claim duplicated that fact and went

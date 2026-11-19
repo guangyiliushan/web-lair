@@ -195,8 +195,7 @@ describe('syncFileReferences', () => {
 		expect(remainingWhere.sql).toBe('"file_references"."file_id" in ($1)');
 		expect(remainingWhere.params).toEqual(['file-1']);
 		// Ordering teeth: the candidate lock runs BEFORE the DELETE and the
-		// remaining snapshot runs AFTER it. Moving the pre-lock used to keep
-		// the whole suite green.
+		// remaining snapshot runs AFTER it.
 		expect(selectMock.mock.invocationCallOrder[1]).toBeLessThan(
 			deleteMock.mock.invocationCallOrder[0]
 		);

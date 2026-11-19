@@ -6,7 +6,7 @@ import { overwriteGetLocale } from '$lib/paraglide/runtime';
 overwriteGetLocale(() => 'zh-cn');
 
 /**
- * Link magnet (batch 3a): publish-side inline links get a data-magnet stamp
+ * Link magnet: publish-side inline links get a data-magnet stamp
  * and --mx/--my coordinates on hover; embed-card links are excluded; the
  * effect never mutates text layout (the stamp only feeds absolute
  * pseudo-elements).

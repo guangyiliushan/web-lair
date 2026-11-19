@@ -290,7 +290,7 @@ import {
 import { $isInlineMathNode } from '$lib/components/markdown/math/inline-math-node';
 
 /**
- * Toggle the spoiler node over the current selection (batch A).
+ * Toggle the spoiler node over the current selection.
  * - caret inside a spoiler: unwrap that node;
  * - a selection covering only spoilers: unwrap them all;
  * - a mixed selection: tokens (mention/tag) stay untouched and each text
@@ -379,7 +379,7 @@ export function insertAlert(editor: LexicalEditor, type: AlertType = DEFAULT_ALE
 	});
 }
 
-/** Reads an inline/block math node for the click-to-edit dialog (batch B). */
+/** Reads an inline/block math node for the click-to-edit dialog. */
 export function getMathNodeInfo(
 	editor: LexicalEditor,
 	key: string
@@ -392,7 +392,7 @@ export function getMathNodeInfo(
 	});
 }
 
-/** Applies the dialog's LaTeX back onto the math node (batch B). */
+/** Applies the dialog's LaTeX back onto the math node. */
 export function updateMathNode(editor: LexicalEditor, key: string, latex: string): void {
 	editor.update(() => {
 		const node = $getNodeByKey(key);

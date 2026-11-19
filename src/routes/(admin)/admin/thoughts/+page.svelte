@@ -77,7 +77,7 @@
 		deleteTarget = row;
 	}
 
-	// Round-4 review: a page-form error belongs to the action that produced
+	// A page-form error belongs to the action that produced
 	// it; any older failure is dismissed when a dialog opens (a fresh result
 	// is a new `form` object and re-enables the message).
 	let errorDismissedFor: unknown = null;

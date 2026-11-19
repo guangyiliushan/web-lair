@@ -39,7 +39,7 @@ export function firstImageFromMarkdown(markdown: string): string | null {
 }
 
 /**
- * Cover URL policy (review finding): site-internal paths ('/...', never
+ * Cover URL policy: site-internal paths ('/...', never
  * protocol-relative '//...') or https links. Keeps list page loads from
  * becoming third-party requests (tracking pixels), `data:` payloads out of
  * the response, and script-ish schemes away from an `img` src that later

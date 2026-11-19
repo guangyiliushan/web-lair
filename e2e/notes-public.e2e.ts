@@ -210,7 +210,7 @@ test.describe('N1 password gate', () => {
 		await page.goto(`/en/notes/${SLUG_GATED}`);
 		await unlock(page, GATE_PASSWORD);
 		await expect(page.getByText(GATED_SECRET)).toBeVisible();
-		// The diary metadata returns with the unlock (review finding: only the
+		// The diary metadata returns with the unlock (only the
 		// body used to be re-read, so mood/weather/location stayed missing).
 		await expect(page.getByText(GATED_LOCATION)).toBeVisible();
 		await expect(page.getByText('Bad')).toBeVisible();

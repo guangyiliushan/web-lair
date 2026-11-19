@@ -68,7 +68,7 @@ describe('auth config security wiring', () => {
 			defaultLang: { type: 'string', required: false, input: false }
 		});
 		// The adapter stays the official drizzle adapter (mocked by id): no
-		// wrapper that would change better-auth's own storage semantics (H3).
+		// wrapper that would change better-auth's own storage semantics.
 		expect(options.database).toEqual({ id: 'test-adapter' });
 	});
 

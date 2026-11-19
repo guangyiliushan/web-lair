@@ -5,7 +5,7 @@ import { zhCnLocale } from './locale-fixture';
 test.use(zhCnLocale);
 
 /**
- * N1 admin chain (batch 5) - owner flow against the real notes editor, the
+ * Admin notes chain - owner flow against the real notes editor, the
  * real database and the real publish transaction:
  *
  *   autosave -> reload restore -> publish -> front page renders -> list row

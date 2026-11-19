@@ -947,7 +947,7 @@
 
 	// Transient banners for ?published=1 / ?discarded=1 / ?translation=1.
 	// afterNavigate (not $effect) - replaceState throws before the router is
-	// initialized, which a hard load of such a URL used to hit (dev probe).
+	// initialized, which a hard load of such a URL used to hit.
 	afterNavigate(() => {
 		const params = page.url.searchParams;
 		let message: string | null = null;

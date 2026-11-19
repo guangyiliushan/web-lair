@@ -1,5 +1,5 @@
 /**
- * Backfill the suppression list from existing opt-outs (E2-1, one-off).
+ * Backfill the suppression list from existing opt-outs.
  *
  * Rows with `status='unsubscribed'` predate `email_suppressions`; a future bulk
  * sender filters that table, so they must be materialised once. Uses the same

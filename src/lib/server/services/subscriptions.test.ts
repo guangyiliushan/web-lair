@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Pure helpers of the subscription service (D-2). The DB state machine is
+ * Pure helpers of the subscription service. The DB state machine is
  * exercised end-to-end by `e2e/subscribe.e2e.ts` against the real schema; here
  * we pin the input contract so a loosened regex cannot slip through.
  */
@@ -52,7 +52,7 @@ import {
 	newSubscriptionNonce
 } from './subscription-token';
 
-/** F-13: derivation secret used by the service under test. */
+/** Derivation secret used by the service under test. */
 const TOKEN_SECRET = Buffer.alloc(32, 5).toString('base64');
 
 /** A distinct object so a suppression write outside the transaction fails. */
@@ -276,7 +276,6 @@ describe('subscription transitions (stubbed db)', () => {
 		});
 
 		// The CAS compares the token hash — the only credential column left;
-		// F-13 removed the plaintext column this used to also match.
 		const guard = capture.wheres[0] as { op: string; parts: unknown[] };
 		expect(guard.op).toBe('and');
 		expect(guard.parts).toEqual(

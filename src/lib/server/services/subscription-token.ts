@@ -11,7 +11,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 
 /**
- * Domain separation for the token derivation (F-13). Only the nonce is stored;
+ * Domain separation for the token derivation. Only the nonce is stored;
  * the token is `HMAC-SHA256(SUBSCRIBE_TOKEN_SECRET, label || nonce)`. A dump
  * therefore holds no usable credential, while the service can re-derive the
  * exact link it mailed (resend cooldown, failed-send rollback).
@@ -35,7 +35,7 @@ export function isSubscriptionToken(value: string): boolean {
 }
 
 /**
- * DB lookup hash (E2-3). A plain SHA-256 is enough here: the input is 256 bits
+ * DB lookup hash. A plain SHA-256 is enough here: the input is 256 bits
  * of CSPRNG output, so there is no dictionary to attack; the point is to stop
  * storing a reusable credential in plaintext.
  */

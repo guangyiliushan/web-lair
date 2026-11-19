@@ -178,7 +178,7 @@ async function keyLookupForProvider(provider: {
  * options registry (validated writes) except providers, which live in
  * `ai_providers`; keys are only ever shown by NAME (env var, AI_*-namespaced),
  * never stored. Provider mutations that also touch `ai.assignments` run in a
- * single transaction so the two never drift (AI-2.1 review).
+ * single transaction so the two never drift.
  */
 export const load: PageServerLoad = async ({ locals }) => {
 	await requireAdminRole();
@@ -514,7 +514,7 @@ export const actions: Actions = {
 					if (existing.name === parsed.data.name) return { found: true as const, renamed: 0 };
 					// Rename cascade: assignments reference providers by name, so
 					// they must follow the rename or they turn into ghost entries
-					// that block the whole assignments form (AI-2.1 review).
+					// that block the whole assignments form.
 					const assignments = await getOption('ai.assignments', tx);
 					let renamed = 0;
 					const next: Record<string, { provider?: string; model?: string }> = {};
@@ -568,7 +568,7 @@ export const actions: Actions = {
 			}
 			// Drop the provider from assignments so nothing points at a ghost.
 			// Same transaction as the delete: a crash between the two used to
-			// leave ghost entries behind (AI-2.1 review).
+			// leave ghost entries behind.
 			const assignments = await getOption('ai.assignments', tx);
 			const next = Object.fromEntries(
 				Object.entries(assignments).filter(([, value]) => value?.provider !== deleted[0].name)
@@ -997,7 +997,7 @@ export const actions: Actions = {
 		}
 		try {
 			// Bounds and the allow < block ordering live in the registry schema
-			// (single source of truth - AI-2.1 review).
+			// (single source of truth).
 			await setOption('comments.moderation', {
 				enabled: form.get('enabled') !== null,
 				shadowMode: form.get('shadowMode') !== null,
@@ -1024,7 +1024,7 @@ export const actions: Actions = {
 			return fail(400, { message: m.admin_settings_ai_err_budget() });
 		}
 		// Empty ratios mean "keep the defaults"; garbage is an explicit error
-		// (the old code inverted these - AI-2.1 review).
+		// (the old code inverted these).
 		const ratiosRaw = (form.get('alertRatios') ?? '').toString().trim();
 		let alertRatios = [0.8, 0.9, 1];
 		if (ratiosRaw !== '') {

@@ -67,7 +67,7 @@ function parseArgs(argv: string[]): Options {
 			const value = argv[index + 1];
 			// A flag missing its value used to swallow the NEXT flag as the
 			// number (NaN → silent default) — reject loudly instead
-			// (round-2 review: non-integers must not fall back silently).
+			// (non-integers must not fall back silently).
 			if (value === undefined || value.startsWith('--')) {
 				throw new Error('--concurrency requires a value (1-4)');
 			}
@@ -94,7 +94,7 @@ interface WalkResult {
 	videos: string[];
 	/** Directories that could not be read (reported; counted as failures). */
 	unreadable: string[];
-	/** Symlinks skipped (round-2 review: never dropped silently). */
+	/** Symlinks skipped (never dropped silently). */
 	symlinks: number;
 	/** Files outside both whitelists, by extension. */
 	ignored: Map<string, number>;
@@ -196,7 +196,7 @@ let symlinkSkipped = 0;
 for (const dir of options.dirs) {
 	const root = resolve(dir);
 	// Distinguish "missing / not a directory" from "cannot read it"
-	// (round-2 review: EACCES used to masquerade as not-a-directory).
+	// (EACCES used to masquerade as not-a-directory).
 	const rootInfo = await stat(root).catch((error: NodeJS.ErrnoException) => error);
 	if (rootInfo instanceof Error) {
 		console.error(`! cannot read ${root}: ${rootInfo.code ?? rootInfo.name}`);
@@ -250,8 +250,8 @@ for (const dir of options.dirs) {
 	}
 
 	/**
-	 * One counting rule for both upload branches (round-3 review: the switch
-	 * had been duplicated once and its copy had already drifted).
+	 * One counting rule for both upload branches (the switch had been
+	 * duplicated once and its copy had already drifted).
 	 */
 	const enterGallery = async (
 		path: string,

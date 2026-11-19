@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 /**
  * Copy-parity canary for the comment_* message keys: the three
  * locales must stay in lock-step and sorted, so a partial translation or a
- * merge cannot silently drop or duplicate a message (test review finding).
+ * merge cannot silently drop or duplicate a message.
  * Runs from the repo root, where vitest's cwd lives.
  */
 const LOCALES = ['en', 'zh-cn', 'ja'] as const;

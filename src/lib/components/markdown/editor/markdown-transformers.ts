@@ -142,8 +142,8 @@ export const spoilerTransformer: TextMatchTransformer = {
 		if (!$isSpoilerNode(node)) return null;
 		// Canonical serialization: exportFormat applies the core's escaping,
 		// code-span delimiters and nest order, matching what the render side
-		// expects (batch A review, F3). Formatted spoilers still re-import
-		// without their formats — registered, see batch-A review register.
+		// expects. Formatted spoilers still re-import
+		// without their formats.
 		return '||' + exportFormat(node, node.getTextContent()) + '||';
 	},
 	type: 'text-match'

@@ -186,7 +186,7 @@ describe('editor toolbar character formats', () => {
 				await userEvent.click(moreBtn);
 				const menu = page.getByRole('menu');
 				await expect.element(menu).toBeInTheDocument();
-				// the spoiler row must exist in the narrow-viewport overflow path (batch A review)
+				// the spoiler row must exist in the narrow-viewport overflow path
 				await expect.element(menu.getByRole('menuitem', { name: '剧透' })).toBeInTheDocument();
 
 				const menuEl = await menu.element();
