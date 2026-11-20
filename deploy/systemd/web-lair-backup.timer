@@ -8,7 +8,7 @@
 #
 # `web-lair-backup.service` is still valid and is the manual/fallback entry
 # point: `sudo systemctl start web-lair-backup.service`, or run
-# deploy/backup/backup.sh directly. See RUNBOOK §4 (switch) and §6 (install).
+# deploy/backup/backup.sh directly.
 #
 # Previous contents, for reference:
 #   OnCalendar=*-*-* 03:30

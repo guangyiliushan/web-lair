@@ -1,0 +1,146 @@
+name: e2e
+
+# Full end-to-end suite (53 specs) against a scratch `local_e2e` database.
+# Deliberately NOT a PR gate: 17+ min local,
+# estimated 25-40 min on runners — pushing merge feedback past the 10-minute
+# budget (Felidré ESEM 2019) while 80% of "unrelated failures" are environment
+# flakes, not test defects (Huang EMSE 2026). Two-tier evidence (BMW ICST 2025):
+# pre-merge = fast ci.yml gate; post-merge/nightly = full suites.
+# Promotion trigger: 2 weeks of nightly flake rate < 2% and total
+# time < 20 min → required on push to dev; 2 more weeks → PR required.
+#
+# Service map (audited over all 53 specs): db (42 specs psql),
+# valkey (8 specs), rustfs (overlay fixture bytes via `pnpm ops dev e2e-fixtures`);
+# whisper specs self-skip without WHISPER_E2E; archive-probe specs self-skip
+# offline. Container names `web-lair-db-1`/`web-lair-valkey-1` are pinned by
+# `name: web-lair` in compose.yaml — e2e/support.ts asserts them.
+
+on:
+  push:
+    branches: [main, dev, 'dev/**']
+  schedule:
+    # Nightly drift backstop for whatever the PR path skips. UTC; off the hour
+    # to dodge top-of-hour scheduler congestion (GitHub docs, troubleshoot).
+    - cron: '43 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  POSTGRES_USER: root
+  POSTGRES_PASSWORD: root
+  POSTGRES_DB: local
+  DATABASE_URL: postgres://root:root@localhost:5432/local_e2e
+  ORIGIN: http://localhost:4173
+  RUSTFS_ENDPOINT: http://127.0.0.1:9000
+  RUSTFS_ACCESS_KEY: ci-e2e-access
+  RUSTFS_SECRET_KEY: ci-e2e-secret
+  RUSTFS_BUCKET: web-lair
+
+jobs:
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    # Local full run is 17.2 min at workers=1; the cap catches hangs well past
+    # the nightly budget without burning the 6-hour default.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # Version omitted on purpose: reads `packageManager` from package.json.
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      # compose.yaml services read `.env` (env_file). Values must match the
+      # workflow env above: the fixtures script loads `.env` explicitly
+      # (`--env-file=.env`), so blank .env.example placeholders would give it
+      # empty RustFS credentials and the publish would fail.
+      - name: write .env for compose + fixtures
+        run: |
+          cp .env.example .env
+          sed -i 's|^RUSTFS_ACCESS_KEY=.*|RUSTFS_ACCESS_KEY="ci-e2e-access"|' .env
+          sed -i 's|^RUSTFS_SECRET_KEY=.*|RUSTFS_SECRET_KEY="ci-e2e-secret"|' .env
+          sed -i 's|^DATABASE_URL=.*|DATABASE_URL="postgres://root:root@localhost:5432/local_e2e"|' .env
+
+      - name: start data services (db, valkey, rustfs)
+        run: docker compose up -d db valkey rustfs
+
+      - name: wait for db health
+        run: |
+          for i in $(seq 1 30); do
+            docker compose ps db | grep -q healthy && exit 0
+            sleep 2
+          done
+          echo "db never became healthy" >&2; exit 1
+
+      - name: create scratch database
+        run: docker exec web-lair-db-1 psql -U root -d local -c 'create database local_e2e'
+
+      - name: migrate scratch database
+        run: pnpm db:migrate
+
+      # Site bootstrap in dependency order: categories (posts.category_id NOT
+      # NULL), organization + owner membership, default pages, job schedules.
+      # Idempotent ops entries; the e2e specs self-bootstrap their own accounts
+      # (sign-up + SQL verify) on top of this.
+      - name: site bootstrap
+        run: |
+          pnpm ops site ensure-categories
+          pnpm ops site ensure-org
+          pnpm ops site ensure-pages
+          pnpm ops site ensure-schedules
+
+      # Production build + preview first, then seed against the live server
+      # (seed-owner signs up through the running API). playwright.config has
+      # reuseExistingServer: true, so the test run below reuses this preview
+      # and keeps one DATABASE_URL for server and psql shim alike.
+      - name: build + preview
+        run: |
+          npm run build
+          npm run preview &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:4173/ >/dev/null && exit 0
+            sleep 2
+          done
+          echo "preview never became ready" >&2; exit 1
+
+      - name: seed owner
+        run: pnpm ops site seed-owner
+        env:
+          OWNER_EMAIL: ci-owner@example.com
+          OWNER_PASSWORD: ci-e2e-owner-pass
+
+      - name: overlay fixture bytes (rustfs)
+        run: pnpm ops dev e2e-fixtures
+
+      - name: playwright (chromium)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: e2e
+        run: pnpm exec playwright test --workers=1
+
+      # Failure evidence for attribution (C4): traces land in test-results/,
+      # report in playwright-report/. JUnit XML backs the flaky registry.
+      - name: upload e2e evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-evidence
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7

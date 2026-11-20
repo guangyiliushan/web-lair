@@ -8,7 +8,7 @@ import {
 
 /**
  * The runtime image has no `src/`, so `scripts/print-subscribe-token.ts` keeps
- * its own copy of the derivation (used by the RUNBOOK one-click smoke). These
+ * its own copy of the derivation (used by the one-click smoke check). These
  * pins are the contract that keeps the copy honest: any change to the label or
  * the HMAC scheme on one side turns the other side red.
  */

@@ -1,22 +1,22 @@
 # Deployment runbook (web-lair)
 
-> Target: one self-hosted Ubuntu 24.04 box behind Caddy (platform plan §C).
-> Branches are deployed by commit; the image is built on the box and tagged
-> with the commit SHA. Every step below is idempotent unless marked otherwise.
+> Target: one self-hosted Ubuntu 24.04 box behind Caddy. Branches deploy by
+> commit; the image builds on the box and is tagged with the commit SHA. Every
+> step is idempotent unless marked otherwise.
+
+> Scope: operational procedures only (deploy, update, rollback, backup,
+> monitoring, email ops). The security model lives in `deploy/SECRETS.md`,
+> privacy/DSR in `deploy/PRIVACY.md`, edge configuration in `deploy/EDGE.md`.
 
 > [!IMPORTANT]
-> **Production commands go through `deploy/compose-prod.sh`.**
-> A bare `docker compose` auto-loads `compose.override.yaml`, which publishes the
-> dev loopback ports and attaches the `devhost` network. The wrapper loads
-> `compose.yaml` + `compose.prod.yaml` + `deploy/monitoring/compose.monitoring.yaml`
->
-> - `deploy/monitoring/compose.sentinel.yaml` and never the dev overlay.
->   `deploy/compose-prod.sh <args>` is equivalent to
->   `docker compose --project-directory . -f compose.yaml -f compose.prod.yaml -f deploy/monitoring/compose.monitoring.yaml -f deploy/monitoring/compose.sentinel.yaml <args>`,
->   plus the guards (`.env` / suppression key / Postgres password / Bark URL scheme /
->   `SENTINEL_TOKEN` for a whole-stack `up`) and, for `up`/`create` only, a render of
->   `deploy/monitoring/conf.d` (see `deploy/monitoring/README.md`).
->   Run every block from `/srv/web-lair/app` unless the block changes directory.
+> Production commands go through `deploy/compose-prod.sh`: a bare
+> `docker compose` auto-loads `compose.override.yaml` (dev loopback ports +
+> `devhost` network). The wrapper runs
+> `docker compose --project-directory . -f compose.yaml -f compose.prod.yaml -f deploy/monitoring/compose.monitoring.yaml -f deploy/monitoring/compose.sentinel.yaml`
+> plus the guards (`.env` / suppression key / Postgres password / Bark URL scheme /
+> `SENTINEL_TOKEN` for a whole-stack `up`) and renders `deploy/monitoring/conf.d`
+> on `up`/`create` (`deploy/monitoring/README.md`). Run every block from
+> `/srv/web-lair/app` unless it changes directory.
 
 ## 0. Host prerequisites
 
@@ -30,8 +30,8 @@
 
 ## 1. First deploy
 
-Monitoring needs one extra image. Pull it before `up` (a failed pull would abort
-the whole deploy); if the registry is unreachable, deploy without Gatus first
+Pull the monitoring image before `up` (a failed pull aborts the deploy); if the
+registry is unreachable, deploy without Gatus first
 (`deploy/compose-prod.sh up -d app db caddy`) and add it later:
 
 ```bash
@@ -47,19 +47,19 @@ chmod 600 .env
 $EDITOR .env      # see §1.1 for the required keys
 ```
 
-Or generate the secrets instead of editing them by hand (W2.12):
+Or generate the secrets instead of editing them by hand:
 
 ```bash
 ./deploy/bootstrap-secrets.sh --dry-run   # names and targets, no values
 ./deploy/bootstrap-secrets.sh             # writes .env + deploy/backup.env
 ```
 
-The script keeps existing non-empty values, rotates only with
-`--rotate NAME`, writes no database rows and prints no secret. Its receipt
-(`install-receipt.json`) contains names and SHA-256 prefixes only. Copy
+The script keeps existing non-empty values, rotates only with `--rotate NAME`,
+writes no database rows and prints no secret; its receipt
+(`install-receipt.json`) carries names and SHA-256 prefixes only. Copy
 `SECRETS_KEYS`, `RESTIC_PASSWORD` and `RESTIC_CONFIG_PASSWORD` to the offline
-password manager, then remove `ADMIN_SETUP_TOKEN` after `/admin/setup` succeeds;
-the app refuses a second use through its `admin.setup_complete` marker.
+password manager, then remove `ADMIN_SETUP_TOKEN` after `/admin/setup` succeeds
+— the `admin.setup_complete` marker refuses a second use.
 
 ### 1.1 Required `.env` keys
 
@@ -88,20 +88,18 @@ the app refuses a second use through its `admin.setup_complete` marker.
 | `ALERT_WEBHOOK_URL`                                    | systemd `OnFailure` target; leave empty to disable the alert unit                                                                                                         |
 | `MAIL_DEV_LOG` / `MAIL_DEV_LOG_OK`                     | dev/e2e only; production ignores dev logging unless BOTH are set                                                                                                          |
 
-`POSTGRES_PASSWORD` is required too: `compose.prod.yaml` builds the app's
-`DATABASE_URL` from it at parse time, and `deploy/compose-prod.sh` refuses to
-start when it is missing or not URL-safe.
+`deploy/compose-prod.sh` refuses to start when `POSTGRES_PASSWORD` is
+missing or not URL-safe (the table row covers the DSN mechanics). `SUPPRESSION_HMAC_KEY` is mandatory
+before the first start (production boot refuses; dev needs it for
+subscribe/unsubscribe) — `openssl rand -base64 32`, back it up.
+`SUBSCRIBE_TOKEN_SECRET` is mandatory too (F-13): the mailed token derives from
+the stored nonce, so a missing secret leaves the app unable to mint a link.
+`MAIL_EVENTS_HMAC_KEY` is only needed when a bounce/complaint relay is
+configured.
 
-`SUPPRESSION_HMAC_KEY` is mandatory before the first start (production boot
-refuses to start without it; dev needs it for subscribe/unsubscribe). Generate
-with `openssl rand -base64 32` and back it up. `SUBSCRIBE_TOKEN_SECRET` is
-mandatory too (F-13): the mailed token is derived from the stored nonce, so a
-missing secret would leave the app unable to mint a link. `MAIL_EVENTS_HMAC_KEY`
-is only needed when a bounce/complaint relay is configured.
-
-Create the data directory with the image's uid **before** the first start —
-Docker would otherwise create it as root and the `node` user (uid 1000) could
-not write the job scaffold:
+Create the data directory with the image's uid before the first start — Docker
+would otherwise create it as root and the `node` user (uid 1000) could not
+write the job scaffold:
 
 ```bash
 sudo install -d -m 0750 -o 1000 -g 1000 /srv/web-lair/data
@@ -111,11 +109,11 @@ Backup credentials go in their own file (not `.env`), so the app container
 never sees the credential that can delete the offsite repository:
 
 ```bash
-# `deploy/bootstrap-secrets.sh` (above) already creates this file and writes
-# RESTIC_PASSWORD / RESTIC_CONFIG_PASSWORD into it. `cp -n` keeps those; a plain
-# `cp` would overwrite the only copy of a key that is already bound to an
-# offsite repository. Fill in the rest by hand (or re-run bootstrap with
-# --rotate NAME for a key you have NOT used yet).
+# `deploy/bootstrap-secrets.sh` (above) already created this file with
+# RESTIC_PASSWORD / RESTIC_CONFIG_PASSWORD. `cp -n` keeps those; a plain `cp`
+# would overwrite the only copy of a key already bound to an offsite repository.
+# Fill in the rest by hand (or re-run bootstrap with --rotate NAME for a key you
+# have NOT used yet).
 cp -n deploy/backup.env.example deploy/backup.env
 chmod 600 deploy/backup.env
 $EDITOR deploy/backup.env      # + POSTGRES_USER / POSTGRES_DB / DATA_DIR (same values as .env),
@@ -138,17 +136,16 @@ curl -s https://api.ipify.org; dig +short -x "$(curl -s https://api.ipify.org)"
 #    https://check.spamhaus.org/  → paste the public IP
 ```
 
-- 25 open **and** PTR matches the sending subdomain **and** not PBL-listed → set
-  `MAIL_ENABLED=true`, `MAIL_SMTP_HOST=host.docker.internal`, `MAIL_FROM=...` (a host MTA) and skip
-  the relay. The app runs in its own network namespace: `127.0.0.1` there is the
-  container, not the box — compose maps the host gateway for this reason.
-- Any red → point `MAIL_SMTP_HOST/PORT/USER/PASS` at the relay; the app code is
-  unchanged (one env switch).
-
-DKIM is signed by the app: set `MAIL_DKIM_DOMAIN=mail.<domain>`,
-`MAIL_DKIM_SELECTOR` and the PEM key (`\n` escapes accepted). The signature
-covers the RFC 4871 default header set **plus `List-Unsubscribe-Post`**
-(RFC 8058 §4); `List-Unsubscribe` was already in nodemailer's default set.
+- 25 open **and** PTR matches the sending subdomain **and** not PBL-listed →
+  `MAIL_ENABLED=true`, `MAIL_SMTP_HOST=host.docker.internal`, `MAIL_FROM=...`
+  (a host MTA; the app runs in its own network namespace, so `127.0.0.1` there
+  is the container — compose maps the host gateway). Any red → point
+  `MAIL_SMTP_HOST/PORT/USER/PASS` at the relay; the app code is unchanged (one
+  env switch).
+- DKIM is signed by the app: `MAIL_DKIM_DOMAIN=mail.<domain>`,
+  `MAIL_DKIM_SELECTOR` and the PEM key (`\n` escapes accepted). The signature
+  covers the RFC 4871 default header set **plus `List-Unsubscribe-Post`**
+  (RFC 8058 §4).
 
 **DNS records (D-3 checklist):**
 
@@ -164,22 +161,19 @@ Send from the **subdomain** so a reputation problem never touches the apex.
 Subscription tokens (email hardening E1):
 
 - `SUBSCRIBE_TOKEN_TTL_DAYS` (default `1` = 24h; ceiling `3` = 72h, larger
-  values are clamped and logged) bounds the confirmation link. The 24h default
-  borrows the NIST SP 800-63B-4 §4.2.1.2 bound for emailed recovery codes
-  (that section governs account recovery, not list subscriptions); expired
-  links render "link expired" and never confirm. Unsubscribe links are not
-  TTL-bound, but a pending/unsubscribed resubmit outside the 15-minute resend
-  cooldown rotates the token, so older mails' links stop working — the newest
-  mail always carries a valid opt-out. A stable, never-rotating unsubscribe
-  token is registered as a follow-up (F-15).
+  values are clamped and logged) bounds the confirmation link; expired links
+  render "link expired" and never confirm. Unsubscribe links are not TTL-bound,
+  but a pending/unsubscribed resubmit outside the 15-minute resend cooldown
+  rotates the token, so older mails' links stop working — the newest mail always
+  carries a valid opt-out. A stable, never-rotating unsubscribe token is a
+  registered follow-up (F-15).
 - `SUBSCRIBE_HMAC_KEY` (`openssl rand -base64 32`) keys the per-address
   **5 / 24 h** cap. Empty/invalid degrades to IP-only limiting (`10 / h`) and
   logs `[email-hash] SUBSCRIBE_HMAC_KEY is missing...`; set it in production.
-- The confirmation mail is transactional: it carries **no**
-  `List-Unsubscribe` headers. Bulk mail (not implemented yet) must send both
-  headers, and the one-click URI is
-  `POST /api/unsubscribe/one-click?token=<token>` (`List-Unsubscribe-Post:
-List-Unsubscribe=One-Click`, no cookies, no redirect).
+- The confirmation mail is transactional: it carries **no** `List-Unsubscribe`
+  headers. Bulk mail (not implemented yet) must send both headers, and the
+  one-click URI is `POST /api/unsubscribe/one-click?token=<token>`
+  (`List-Unsubscribe-Post: List-Unsubscribe=One-Click`, no cookies, no redirect).
 
 ### 1.3 Build (gate: ≤ 8 min, ≤ 4 GB peak)
 
@@ -233,8 +227,9 @@ deploy/compose-prod.sh up -d
 deploy/compose-prod.sh ps          # all healthy
 ```
 
-这四步与 `deploy/compose-prod.sh run --rm app node bin/lair deploy post` 等价
-（顺序定义在 `scripts/deploy-hooks.ts`）；手工逐条执行便于在失败处停下来。
+These four steps equal `deploy/compose-prod.sh run --rm app node bin/lair deploy post`
+(ordered in `scripts/deploy-hooks.ts`); the manual form lets you stop at the
+failed step.
 
 ### 1.5 Smoke
 
@@ -256,16 +251,14 @@ curl -s -o /dev/null -w '%{http_code}\n' https://$DOMAIN/admin/analytics # 303 (
 Readiness must answer `{"status":"ready","db":"ok","valkey":"ok"}`; a `404`
 means `READY_TOKEN` is missing (fail closed) and a `503` prints the failing
 dependency. `ps` showing `(healthy)` for `gatus`/`sentinel`/`backrest` proves
-the three new services loaded their config; run
-`bash deploy/monitoring/verify-config.sh` for the full Gatus assertion set.
+the three services loaded their config; `bash deploy/monitoring/verify-config.sh`
+runs the full Gatus assertion set.
 
 Then: register a test account (verification mail must arrive), subscribe a test
 address (confirmation link must land on `/subscribe/confirm`), upload one photo
-(EXIF must parse — this proves `perl` + exiftool in the image).
-
-Setup does not require mail: the owner claim marks the first account verified,
-so `/admin/setup` still works before `MAIL_*` exists. Configure mail before
-relying on verification or password-reset emails.
+(EXIF must parse — this proves `perl` + exiftool in the image). Setup does not
+require mail (the owner claim marks the first account verified), but configure
+mail before relying on verification or password-reset emails.
 
 ## 2. Update
 
@@ -276,45 +269,20 @@ git fetch && git checkout <new-sha>
 export APP_IMAGE="web-lair-app:$(git rev-parse --short HEAD)"
 deploy/compose-prod.sh build app
 deploy/verify-image.sh "$APP_IMAGE"
-mkdir -p /srv/web-lair/pre-migrate
-# tmpfiles prunes dumps older than 30 days (install once; see §4).
-sudo tee /etc/tmpfiles.d/web-lair.conf >/dev/null <<'EOF'
-d /srv/web-lair/pre-migrate 0750 1000 1000 30d
-EOF
-sudo systemd-tmpfiles --create
-# The first deploy reaches this block before `up -d`; the db must be up first.
-deploy/compose-prod.sh up -d db
-# The entrypoint's temporary server only listens on the unix socket; probe TCP.
-for i in $(seq 1 30); do
-  deploy/compose-prod.sh exec -T db pg_isready -h 127.0.0.1 -q && break
-  [ "$i" = 30 ] && { echo "db did not become ready" >&2; exit 1; }
-  sleep 2
-done
-dump=/srv/web-lair/pre-migrate/pre-migrate-$(date +%F_%H%M%S).dump
-# The container has POSTGRES_USER/POSTGRES_DB; the host shell does not.
-deploy/compose-prod.sh exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$dump.tmp"
-mv "$dump.tmp" "$dump"
-deploy/compose-prod.sh exec -T db pg_restore -l < "$dump" > /dev/null
-deploy/compose-prod.sh run --rm app node bin/lair db migrate-prod
-deploy/compose-prod.sh run --rm app node bin/lair site ensure-categories
-deploy/compose-prod.sh run --rm app node bin/lair db verify-baseline
-# Default maintenance schedules (idempotent; adjust in admin afterwards).
-# Seed rows are one-per-job and use options.site.timezone (fallback UTC); times
-# are not critical for maintenance, and admin-created schedules use the same tz.
-deploy/compose-prod.sh run --rm app node bin/lair site ensure-schedules
-deploy/compose-prod.sh up -d
 ```
 
-Pin the image: `APP_IMAGE=web-lair-app:<sha>` in `.env` so a rollback is a tag
-change. Never roll back a migration without restoring the pre-migration dump.
+Then run the §1.4 migrate block unchanged (it is idempotent) and finish with
+`deploy/compose-prod.sh up -d`. Pin the image: `APP_IMAGE=web-lair-app:<sha>` in
+`.env` so a rollback is a tag change. Never roll back a migration without
+restoring the pre-migration dump.
 
 ### 2.1 E2 baseline rebuild (one-off, 2026-10-18)
 
 E2 regenerated the single `0000_baseline.sql` in place (49 tables) instead of
-appending a migration. `scripts/migrate.ts` therefore **refuses to start** on a
-pre-E2 database (`[migrate] this database predates the E2 baseline`). Upgrade
-such a box by rebuilding the schema and restoring data. Run this from the app
-directory with the target image already pinned in `.env` (`APP_IMAGE=web-lair-app:<sha>`):
+appending a migration, so `scripts/migrate.ts` **refuses to start** on a pre-E2
+database (`[migrate] this database predates the E2 baseline`). Upgrade such a
+box by rebuilding the schema and restoring data. Run from the app directory
+with the target image pinned in `.env` (`APP_IMAGE=web-lair-app:<sha>`):
 
 ```bash
 set -euo pipefail
@@ -330,8 +298,7 @@ BK=/srv/web-lair/pre-migrate
 mkdir -p "$BK"
 sudo systemctl stop web-lair-drain.timer || true
 sudo systemctl stop web-lair-drain.service || true
-# M6 P2: the backup schedule lives in Backrest (RUNBOOK §4); pause it around the
-# rebuild so a snapshot cannot capture a dropped or half-restored database.
+# Pause Backrest (§4): no snapshot may capture a dropped/half-restored database.
 deploy/compose-prod.sh stop backrest || true
 docker rm -f web-lair-drain >/dev/null 2>&1 || true
 deploy/compose-prod.sh stop app
@@ -397,24 +364,22 @@ deploy/compose-prod.sh start backrest || true
 Requirements/notes:
 
 - The backrest image must exist locally: `deploy/compose-prod.sh up` builds it
-  implicitly when missing (registry + Alpine repo access), which is a new
-  dependency for an outage-window rebuild. Keep it present — build it after every
-  deploy and after any `docker image prune`: `deploy/compose-prod.sh build backrest`.
-- `SUPPRESSION_HMAC_KEY` must be present in `.env` before the backfills (the
-  suppression script refuses to write unkeyed hashes; production boot also
-  checks it). Generate it with `openssl rand -base64 32` once, back it up.
+  when missing (registry + Alpine repo access), so build it explicitly after
+  every deploy and after any `docker image prune`: `deploy/compose-prod.sh build backrest`.
+- `SUPPRESSION_HMAC_KEY` must be present in `.env` before the backfills (they
+  refuse unkeyed hashes; production boot checks it too).
 - `SET LOCAL session_replication_role = replica` requires the compose Postgres
   superuser (the default `POSTGRES_USER` here). It disables FK triggers for the
   restore only; `--column-inserts` makes the dump immune to the two E2 columns.
 - The data-only restore never touches `drizzle.__drizzle_migrations`: the fresh
   ledger written by `migrate.ts` must remain the only row.
-- **tags are ASCII-only since 2026-10-23.** Before restoring a pre-taxonomy dump, audit
-  the old rows (`select name, slug from tags where name !~ '^[A-Za-z0-9 .,+#&''()/_-]+$' or slug !~ '^[a-z0-9][a-z0-9._+~-]*$'`);
-  a legacy CJK tag name aborts the data restore _after_ the schema drop (CHECKs are not
-  disabled by `session_replication_role = replica`). Rename/drop those rows in the source
-  dump first, or the restore will fail with `23514`.
-- Verify output must show **49 tables / 119 indexes / 93 checks / 47 FKs**. If anything
-  fails after the drop, **do not re-run §2.1**; restore the full
+- **tags are ASCII-only since 2026-10-23.** Before restoring a pre-taxonomy
+  dump, audit the old rows (`select name, slug from tags where name !~ '^[A-Za-z0-9 .,+#&''()/_-]+$' or slug !~ '^[a-z0-9][a-z0-9._+~-]*$'`);
+  a legacy CJK tag name aborts the data restore _after_ the schema drop (CHECKs
+  are not disabled by `session_replication_role = replica`). Rename/drop those
+  rows in the source dump first, or the restore will fail with `23514`.
+- Verify output must show **49 tables / 119 indexes / 93 checks / 47 FKs**. If
+  anything fails after the drop, **do not re-run §2.1**; restore the full
   `pre-e2-<stamp>.dump` per §3 and ask for review.
 
 ### 2.2 Provenance baseline rebuild (one-off, 2026-10-20)
@@ -457,10 +422,10 @@ the image tag that matches that dump.
 deploy/compose-prod.sh up -d --no-build   # after APP_IMAGE points at the previous tag
 ```
 
-If a migration ran (or the rebuild above was performed): stop `app`, restore the
+If a migration ran (or a rebuild was performed): stop `app`, restore the
 matching full dump, then start the previous image. Migration-before-backup is
-forbidden (see §4). Treat a dump and the image generation that wrote it as a
-pair: a post-E2 dump is schema-compatible with the old image (the new table and
+forbidden (§4). Treat a dump and the image generation that wrote it as a pair:
+a post-E2 dump is schema-compatible with the old image (the new table and
 columns are additive), but the old code neither writes `email_suppressions`
 nor `consent_version`, so running it over E2 data silently violates the E2
 invariants. Do not mix generations.
@@ -480,10 +445,9 @@ USERS=$(deploy/compose-prod.sh exec -T db sh -c \
 DUMP_USERS=$(deploy/compose-prod.sh exec -T db pg_restore -a -f - < "$DUMP" 2>/dev/null | \
   bash deploy/backup/count-user-rows.sh)
 [ "$DUMP_USERS" = "$USERS" ] || { echo "dump has $DUMP_USERS user rows, expected $USERS; aborting" >&2; exit 1; }
-# IMAGE must point at the tag that matches the dump.
 sudo systemctl stop web-lair-drain.timer || true
 sudo systemctl stop web-lair-drain.service || true
-# M6 P2: pause Backrest for the whole restore window (RUNBOOK §4).
+# Pause Backrest for the whole restore window (§4).
 deploy/compose-prod.sh stop backrest || true
 docker rm -f web-lair-drain >/dev/null 2>&1 || true
 deploy/compose-prod.sh stop app
@@ -494,8 +458,8 @@ deploy/compose-prod.sh exec -T db sh -c \
   'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges -1 -e' \
   < "$DUMP"
 # The dump may be pre-E2 (48 tables), pre-provenance (49 tables, E2, no
-# writing_origin) or current. Verify-baseline only knows the current baseline,
-# so probe both generation and provenance shape; anything else must stop.
+# writing_origin) or current. Probe both generation shapes and stop on
+# anything else.
 TABLES=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from information_schema.tables where table_schema = '\''public'\'' and table_type = '\''BASE TABLE'\''"')
 HAS_E2=$(deploy/compose-prod.sh exec -T db sh -c \
@@ -504,9 +468,9 @@ HAS_PROV=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select exists (select 1 from information_schema.columns where table_schema='\''public'\'' and table_name='\''posts'\'' and column_name='\''writing_origin'\'')"')
 HAS_SECRETS=$(deploy/compose-prod.sh exec -T db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('\''public.ai_provider_secrets'\'') is not null and to_regclass('\''public.webhook_secrets'\'') is not null"')
-# Do not key this gate on a table count: every migration changes it (49 -> 53
-# -> 55 ...). A provenance-era schema is verified against the image's own
-# journal by verify-baseline; older generations are pinned to a matching image.
+# Never key this gate on a table count (every migration changes it): the
+# provenance-era schema is checked against the image journal by verify-baseline;
+# older generations must run their matching image.
 if [ "$HAS_SECRETS" = "t" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
   deploy/compose-prod.sh run --rm app node bin/lair db verify-baseline
 elif [ "$TABLES" = "49" ] && [ "$HAS_E2" = "t" ] && [ "$HAS_PROV" = "t" ]; then
@@ -542,13 +506,13 @@ opt-outs can become mailable and new rows keep a NULL consent version.
 `account.encryptOAuthTokens`. New OAuth access/refresh tokens are stored as
 `$ba$<key-version>$<hex>` envelopes (XChaCha20-Poly1305 keyed by the auth
 secret) when the keyring is set, and as bare hex otherwise; the `account` table
-layout is unchanged. Legacy plaintext rows keep working - better-auth only
+layout is unchanged. Legacy plaintext rows keep working — better-auth only
 decrypts values that look encrypted (`$ba$...` or a bare even-length hex
-string) - so no backfill is needed: a token is rewritten the next time that
+string) — so no backfill is needed: a token is rewritten the next time that
 account signs in or refreshes. (GitHub tokens are `gho_`/`ghu_`-prefixed, so
 they are never mistaken for ciphertext.)
 
-`BETTER_AUTH_SECRETS` is optional. It is the keyring:
+`BETTER_AUTH_SECRETS` is the optional keyring:
 
 | Value               | Meaning                                                                                                                                                        |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -559,13 +523,13 @@ they are never mistaken for ciphertext.)
 
 - The first entry is also the **session cookie / JWT signing secret**
   (`create-context.mjs`: `secret = secrets[0].value`). Adding or rotating a
-  version signs every current user out on restart - this is not a
-  zero-downtime operation.
+  version signs every current user out on restart — not a zero-downtime
+  operation.
 - It wraps **2FA/TOTP secrets** as well as OAuth tokens. TOTP secrets are
   written once and never rewritten, so a version that wrote one must stay in
   the list for that account's lifetime (or the owner re-enrolls 2FA first).
   Dropping it makes decryption fail closed and locks that account out of
-  email + TOTP - the remaining admin path.
+  email + TOTP — the remaining admin path.
 - Keep `BETTER_AUTH_SECRET` **set** while any bare-hex values exist: it is the
   `legacySecret` that decrypts them when no envelope is present.
 
@@ -584,7 +548,7 @@ deploy/compose-prod.sh run --rm app node bin/lair secrets verify-oauth-tokens
 
 Exit 0 means every stored OAuth token is encrypted (or none exist). Exit 1
 means plaintext rows remain (expected right after the switch, green after the
-affected accounts sign in again) **or the script itself failed** - its
+affected accounts sign in again) **or the script itself failed** — its
 `query failed` line distinguishes the two; do not read every exit 1 as
 "plaintext remains".
 
@@ -595,7 +559,7 @@ Rollback:
 - **Image rollback after tokens were encrypted is not symmetric.** The older
   image has `encryptOAuthTokens` off, so it hands `$ba$...` strings to the
   GitHub API and those accounts fail until they sign in again (a fresh OAuth
-  callback writes a new token) - or until the pre-deploy dump is restored.
+  callback writes a new token) — or until the pre-deploy dump is restored.
   Budget one re-sign-in per affected account, and do not restore a
   pre-encryption dump unless every row written after it can be lost.
 
@@ -1038,30 +1002,15 @@ rows, so the migration does not carry them:
 pnpm ops maps publish           # against the now-active provider
 ```
 
-**Restore drill** (quarterly, and before trusting a new repository). Record the
-result in the evidence folder; an untested backup is a guess. Steps 1–3 below are
-automated by `deploy/restore-drill.sh` (§4.5) — run it first — and the manual
-pass stays for steps 4–5 (credential decryption, `media audit`), which need the
-app running against the scratch copy.
+**Restore drill** (quarterly, and before trusting a new repository). Run
+`deploy/restore-drill.sh` (§4.5) first — it automates the data/config restore
+and the scratch-DB load — then complete the app-level checks by hand:
 
-```bash
-# 1) Restore the newest data snapshot into a scratch directory.
-restic -r "$RESTIC_REPOSITORY" restore latest --target /srv/web-lair/restore-drill
-# 2) Restore the config repository separately and diff the keys (never print values).
-restic -r "$RESTIC_CONFIG_REPOSITORY" restore latest --target /srv/web-lair/restore-drill-config
-sudo -u deploy diff <(grep -o '^[A-Z_]*=' /srv/web-lair/app/.env | sort) \
-                    <(grep -o '^[A-Z_]*=' /srv/web-lair/restore-drill-config/.env | sort)
-# 3) Load the dump into a scratch database and run the baseline gate against it.
-createdb -h 127.0.0.1 -U "$POSTGRES_USER" drill
-pg_restore -h 127.0.0.1 -U "$POSTGRES_USER" -d drill --no-owner \
-  /srv/web-lair/restore-drill/pg.dump
-DATABASE_URL="postgres://…/drill" pnpm ops db verify-baseline
-# 4) Prove the credentials still decrypt (the keyring must come with the
-#    encrypted rows): start the app against the scratch DB with .env restored,
-#    open /admin/settings/storage and check the credential source + key version.
-# 5) Prove media: `pnpm ops media audit` against the active provider lists missing
-#    objects; a known `/i/<key>` must answer 200, a deleted one 404.
-```
+4. Prove the credentials still decrypt (the keyring must come with the
+   encrypted rows): start the app against the scratch DB with `.env` restored,
+   open `/admin/settings/storage` and check the credential source + key version.
+5. Prove media: `pnpm ops media audit` against the active provider lists
+   missing objects; a known `/i/<key>` must answer 200, a deleted one 404.
 
 Evidence per drill: dump name + timestamp, baseline gate output, credential
 source/key version from the page, `/i` status for one live and one deleted key,
@@ -1080,18 +1029,18 @@ the mode, masked host and applied-migration count after the restore.
 | Disk / memory thresholds                   | `system.resources` job: 85% warn / 75% clear per mount + cgroup memory, one alert per metric per day via `notify()`; pings `HEALTHCHECKS_RESOURCES_URL` (`/fail` while latched, on a collection error, or when the latch file is unwritable) |
 | SMTP transport                             | `mail.probe` job: daily `verify()`, one real Sunday mail to the owner; pings `HEALTHCHECKS_MAIL_URL` on failure                                                                                                                              |
 
-M6 P3 moved in-box monitoring to Gatus (config-as-code). Setup and the full env
-list live in `deploy/monitoring/README.md`; Bark alerts are off until `BARK_URL`
-is set, and `SITE_DOMAIN` gates the TLS/domain checks. Gatus UI is
-`127.0.0.1:8080` (SSH tunnel only; loopback-bound). **Uptime Kuma is still defined
-in `compose.prod.yaml`** (plus its `kuma_data` volume) until the cutover window.
-Cutover order — do not reverse it: (1) with Kuma notifications still ON, set
-`BARK_URL` and make one real failure happen; confirm the device receives
-`TRIGGERED` and `RESOLVED` (duplicates are expected); (2) disable every Kuma
-notification in its UI; (3) stop Kuma and soak 24h; (4) delete the service and
-volume. The old Kuma recipe below is kept for that transition:
+In-box monitoring is Gatus (config-as-code, M6 P3); setup and the full env
+list live in `deploy/monitoring/README.md`. Bark alerts stay off until
+`BARK_URL` is set; `SITE_DOMAIN` gates the TLS/domain checks. Gatus UI is
+`127.0.0.1:8080` (SSH tunnel only; loopback-bound). **Uptime Kuma is still
+defined in `compose.prod.yaml`** (plus its `kuma_data` volume) until the
+cutover window. Cutover order — do not reverse it: (1) with Kuma notifications
+still ON, set `BARK_URL` and make one real failure happen; confirm the device
+receives `TRIGGERED` and `RESOLVED` (duplicates are expected); (2) disable
+every Kuma notification in its UI; (3) stop Kuma and soak 24h; (4) delete the
+service and volume.
 
-**What is _not_ monitored yet (read this before trusting a green dashboard):**
+**What is _not_ monitored yet:**
 the drain heartbeat endpoint (`jobs-drain`) exists in Gatus but is only rendered
 when `DRAIN_HEARTBEAT_TOKEN` is set, and the drain still sends a plain GET to
 `JOBS_HEARTBEAT_URL` (Kuma shape) — see `deploy/monitoring/README.md` §8. Until
@@ -1277,20 +1226,12 @@ Local receipt (2026-11-16, `notes/coordination/m6/p7/logs/game-day-20261116.json
 ## 6. Background timers (drain)
 
 ```bash
-# Services are all still installed; only these two timers carry a schedule.
-# `web-lair-backup*.timer` are kept for history: their [Timer] section survives
-# but has no OnCalendar and there is no [Install], so neither `start` nor
-# `enable` can arm them (`enable` fails with "no installation config"). Copying
-# them would only put a dead unit in /etc/systemd/system — that is why the cp
-# below names the two live timers instead of using the `*.timer` glob.
+# Only these two timers carry a schedule; web-lair-backup*.timer are history:
+# no OnCalendar, no [Install], they cannot be armed (§4.4).
 sudo cp deploy/systemd/*.service /etc/systemd/system/
 sudo cp deploy/systemd/web-lair-drain.timer deploy/systemd/web-lair-deadman.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now web-lair-drain.timer web-lair-deadman.timer
-# M6 P2: no backup timers. Backrest owns that schedule (RUNBOOK §4.4); the
-# web-lair-backup*.timer files are kept for history with an empty [Timer] (no
-# OnCalendar) and no [Install] — do not start or enable them. The matching
-# .service units still work as manual entries (`systemctl start`).
 systemctl list-timers --all | grep web-lair      # verification
 ```
 
@@ -1298,7 +1239,7 @@ systemctl list-timers --all | grep web-lair      # verification
 | ----------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `web-lair-drain.timer`        | 1 min                      | `deploy/compose-prod.sh run --rm --no-deps --name web-lair-drain app node jobs/drain.ts`                                                               |
 | `web-lair-deadman.timer`      | 5 min                      | liveness ping (`HC_DEADMAN_URL`, falls back to `DEADMAN_PING_URL`), skipped when both are unset; reports `/fail` when Gatus' `/health` is down (M6 P3) |
-| `web-lair-backup.timer`       | **none — removed (M6 P2)** | schedule moved to the `backrest` service (RUNBOOK §4.4)                                                                                                |
+| `web-lair-backup.timer`       | **none — removed (M6 P2)** | schedule moved to the `backrest` service (RUNBOOK)                                                                                                     |
 | `web-lair-backup-check.timer` | **none — removed (M6 P2)** | `checkPolicy` in the rendered Backrest config (§4.4)                                                                                                   |
 
 `run --rm` (not `exec`) so each tick is an independent container and a dead app
@@ -1365,10 +1306,9 @@ the independent `SUPPRESSION_HMAC_KEY` (`openssl rand -base64 32`), a reason
 (`unsubscribed` / `bounced` / `complained`) and a source. Writes are idempotent
 and **monotonic** on the reason: a complaint upgrades a bounce, a bounce
 upgrades an unsubscribe; a weaker signal never overwrites a stronger one.
-`source` follows the event whose reason won. The key is required: a
-missing/invalid key fails the production boot (and any suppression operation,
-reads included) instead of storing unkeyed hashes. Development also needs it —
-set it in `.env` before using `/subscribe` or `/unsubscribe`.
+`source` follows the event whose reason won. A missing/invalid key fails
+every suppression operation, reads included — never an unkeyed hash
+(production boot refuses too; §1.1 has setup).
 
 - A pending or confirmed opt-out records the row in the same transaction as
   the subscription change.
@@ -1473,3 +1413,15 @@ curl -sS -X POST https://<domain>/api/mail/events \
 Missing `MAIL_EVENTS_HMAC_KEY` makes the endpoint answer `503` (fail-closed);
 signatures older/newer than five minutes are rejected. Relay webhooks are the
 supported intake; self-hosted DSN parsing remains a later second entry point.
+
+## 9. Flaky test policy
+
+Red does not get "rerun to green" as a fix: every rerun is flake evidence, not
+a pass. When a run shows failures, rerun the whole job if several tests failed
+together (shared-root-cause clusters dominate — network/external services), and
+record each incident in the flaky registry (project `notes/`): test name, run
+id/URL, suspected class (test / environment / infrastructure), disposition.
+A red stays red at most 4 days, then exactly one of: fixed, or the test is
+isolated/quarantined with the reason written down. Retries in CI are capped at
+1 (`playwright.config.ts`); Playwright's own "flaky" label (passed on retry)
+marks the entries to log.

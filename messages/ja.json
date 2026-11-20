@@ -1887,7 +1887,7 @@
 	"admin_settings_storage_activated_at": "有効化日時",
 	"admin_settings_storage_backup": "バックアップ",
 	"admin_settings_storage_backup_db": "データベース + 設定",
-	"admin_settings_storage_backup_hint": "restic はデータベースと設定ファイルを対象にし、メディアはプロバイダー側で扱います。手順書: deploy/RUNBOOK.md §4。",
+	"admin_settings_storage_backup_hint": "restic はデータベースと設定ファイルを対象にし、メディアはプロバイダー側で扱います。手順書: deploy/RUNBOOK.md。",
 	"admin_settings_storage_backup_media": "メディア",
 	"admin_settings_storage_backup_media_hint": "手順書に従いプロバイダーのバージョニング/レプリケーションまたは rclone",
 	"admin_settings_storage_backup_versioning": "バージョニングはバックアップではない",

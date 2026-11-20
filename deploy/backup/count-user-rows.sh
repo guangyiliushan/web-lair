@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Counts the rows of the `public."user"` COPY block in a `pg_restore -a -f -`
 # text dump on stdin. It lives in a file because the same count guards the
-# nightly backup and the rebuild/rollback procedures in `deploy/RUNBOOK.md`
-# "Rollback" — one implementation, one place to be right.
+# nightly backup and the rebuild/rollback procedures — one implementation,
+# one place to be right.
 # It never exits at the terminator: closing the pipe would SIGPIPE the
 # producer, and under `set -o pipefail` (backup.sh runs with it) the assignment
 # aborts with 141 as soon as the dump holds more than a pipe buffer past the

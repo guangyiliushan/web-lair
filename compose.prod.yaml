@@ -38,7 +38,7 @@ services:
       # literal. A viewer that masks URL userinfo prints the password segment
       # as `user:<masked>@host`, so the secrets audit read this line as a
       # masked placeholder; the file has always interpolated
-      # ${POSTGRES_PASSWORD}. The password must be URL-safe (RUNBOOK §1.1) and
+      # ${POSTGRES_PASSWORD}. The password must be URL-safe and
       # deploy/compose-prod.sh refuses to start otherwise.
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       RUSTFS_ENDPOINT: http://rustfs:9000
@@ -118,7 +118,7 @@ services:
 
   backrest:
     # Backrest owns the backup schedule; `deploy/backup/backup.sh`
-    # stays the manual/fallback entry point (RUNBOOK §4). The image is derived
+    # stays the manual/fallback entry point. The image is derived
     # from upstream Backrest (pinned by tag+digest in deploy/backrest/Dockerfile)
     # plus postgresql18-client, because the CONDITION_SNAPSHOT_START hook runs
     # pg_dump inside this container.
@@ -144,7 +144,7 @@ services:
     init: true
     mem_limit: 2g
     env_file:
-      # Backup credentials live outside .env (RUNBOOK §4): the app container must
+      # Backup credentials live outside .env: the app container must
       # not be able to read the keys that delete or encrypt the repositories.
       # `required: false` keeps `config` usable on a host that has not filled the
       # file in yet; deploy/compose-prod.sh refuses `up` without it.
@@ -169,7 +169,7 @@ services:
       TMPDIR: /tmp
       XDG_CACHE_HOME: /cache
     ports:
-      # Loopback only: the UI is reached through an SSH tunnel (RUNBOOK §4.3).
+      # Loopback only: the UI is reached through an SSH tunnel.
       - '127.0.0.1:9898:9898'
     volumes:
       - backrest_config:/config
@@ -177,7 +177,7 @@ services:
       - backrest_cache:/cache
       - backrest_tmp:/tmp
       # Staging = the same directory backup.sh writes pg.dump into. It serves the
-      # DRILL and same-generation recovery only: RUNBOOK §2/§4 restore from
+      # DRILL and same-generation recovery only: restore from
       # /srv/web-lair/pre-migrate dumps that match APP_IMAGE, and the nightly
       # staging dump carries no generation marker — never mix the two.
       # Keep BACKUP_DIR identical in .env (this mount) and deploy/backup.env.

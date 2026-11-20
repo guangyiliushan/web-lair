@@ -1,7 +1,6 @@
 #!/bin/sh
 # Backrest `CONDITION_SNAPSHOT_START` hook: it runs `backup.sh --dump-only`, so
-# the snapshot can only ever contain a dump that passed every gate (RUNBOOK,
-# "Backups (D-4)").
+# the snapshot can only ever contain a dump that passed every gate.
 # Data plan (no argument): wired ON_ERROR_CANCEL — a non-zero exit cancels the
 # operation and no snapshot is written.
 # Config plan (--config): the `.env` copy lives in the SECOND repository, and an

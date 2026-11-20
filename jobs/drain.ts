@@ -1,5 +1,5 @@
-// jobs/drain.ts — one-shot drain entry (RUNBOOK "6. Background timers
-// (drain)"): the platform timer runs `node --env-file=.env jobs/drain.ts`
+// jobs/drain.ts — one-shot drain entry: the platform timer runs
+// `node --env-file=.env jobs/drain.ts`
 // once per minute. A tick = schedule -> queue -> delivery -> notification
 // segments, then the process exits, so every tick picks up the latest code with
 // no reload machinery.

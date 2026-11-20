@@ -94,7 +94,7 @@ export const auth = betterAuth({
 	// touched structurally. Legacy plaintext rows keep working - better-auth
 	// only decrypts values that look encrypted - and are rewritten on the next
 	// sign-in/refresh. Key versions come from `BETTER_AUTH_SECRETS`; rollback
-	// and rotation steps live in deploy/RUNBOOK.md §3.1.
+	// Rotate forward: prepend a version, wait, then retire the old one.
 	account: {
 		encryptOAuthTokens: true
 	},
@@ -163,10 +163,17 @@ export const auth = betterAuth({
 	},
 
 	socialProviders: {
-		github: {
-			clientId: env.GITHUB_CLIENT_ID,
-			clientSecret: env.GITHUB_CLIENT_SECRET
-		}
+		// Both values come from `$env/dynamic/private` (string | undefined).
+		// GitHub sign-in only exists when both are configured; a half-configured
+		// provider would fail at callback time with no useful signal.
+		...(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
+			? {
+					github: {
+						clientId: env.GITHUB_CLIENT_ID,
+						clientSecret: env.GITHUB_CLIENT_SECRET
+					}
+				}
+			: {})
 	},
 
 	session: {

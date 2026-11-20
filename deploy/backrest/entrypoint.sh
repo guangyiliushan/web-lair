@@ -3,7 +3,7 @@
 # hands over to upstream's /docker-entrypoint (BACKREST_* defaults, exec /backrest).
 # Rendering instead of clicking in the UI keeps the hook wiring and the schedules
 # reviewable in git and lets a rebuilt host come back with the same setup from one
-# file (RUNBOOK, "Backrest: UI, schedules, failure semantics"). The rendered file
+# file. The rendered file
 # holds both repository passwords, so it is written 0600 into the config volume
 # and never into the checkout.
 # It renders only when the file is absent/empty, or on BACKREST_RENDER_CONFIG=force
@@ -89,14 +89,14 @@ add_repo_env() {
 }
 
 render() {
-	: "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is not set (deploy/backup.env, RUNBOOK §4)}"
-	: "${RESTIC_PASSWORD:?RESTIC_PASSWORD is not set (deploy/backup.env, RUNBOOK §4)}"
-	: "${RESTIC_CONFIG_REPOSITORY:?RESTIC_CONFIG_REPOSITORY is not set (deploy/backup.env, RUNBOOK §4)}"
-	: "${RESTIC_CONFIG_PASSWORD:?RESTIC_CONFIG_PASSWORD is not set (deploy/backup.env, RUNBOOK §4)}"
+	: "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is not set (deploy/backup.env, RUNBOOK)}"
+	: "${RESTIC_PASSWORD:?RESTIC_PASSWORD is not set (deploy/backup.env, RUNBOOK)}"
+	: "${RESTIC_CONFIG_REPOSITORY:?RESTIC_CONFIG_REPOSITORY is not set (deploy/backup.env, RUNBOOK)}"
+	: "${RESTIC_CONFIG_PASSWORD:?RESTIC_CONFIG_PASSWORD is not set (deploy/backup.env, RUNBOOK)}"
 	# Same guard as the keep branch: the hook runs pg_dump with BACKUP_PG_MODE=local,
 	# so a first start without this would come up healthy and then fail every
 	# night (and ON_ERROR_CANCEL skips the END hook, so no /fail either).
-	: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set (deploy/backup.env, RUNBOOK §4)}"
+	: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set (deploy/backup.env, RUNBOOK)}"
 
 	json_safe RESTIC_REPOSITORY "$RESTIC_REPOSITORY"
 	json_safe RESTIC_PASSWORD "$RESTIC_PASSWORD"
@@ -224,11 +224,11 @@ else
 	# Keeping the file must not mean ignoring a vanished credential file: a
 	# container that comes up healthy and then silently fails every hook is the
 	# exact failure mode these guards remove.
-	: "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is not set (deploy/backup.env, RUNBOOK §4)}"
-	: "${RESTIC_PASSWORD:?RESTIC_PASSWORD is not set (deploy/backup.env, RUNBOOK §4)}"
-	: "${RESTIC_CONFIG_REPOSITORY:?RESTIC_CONFIG_REPOSITORY is not set (deploy/backup.env, RUNBOOK §4)}"
-	: "${RESTIC_CONFIG_PASSWORD:?RESTIC_CONFIG_PASSWORD is not set (deploy/backup.env, RUNBOOK §4)}"
-	: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set (deploy/backup.env, RUNBOOK §4)}"
+	: "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is not set (deploy/backup.env, RUNBOOK)}"
+	: "${RESTIC_PASSWORD:?RESTIC_PASSWORD is not set (deploy/backup.env, RUNBOOK)}"
+	: "${RESTIC_CONFIG_REPOSITORY:?RESTIC_CONFIG_REPOSITORY is not set (deploy/backup.env, RUNBOOK)}"
+	: "${RESTIC_CONFIG_PASSWORD:?RESTIC_CONFIG_PASSWORD is not set (deploy/backup.env, RUNBOOK)}"
+	: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set (deploy/backup.env, RUNBOOK)}"
 	log "keeping the existing $CONFIG (set BACKREST_RENDER_CONFIG=force to re-render)"
 fi
 

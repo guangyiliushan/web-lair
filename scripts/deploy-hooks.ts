@@ -3,7 +3,7 @@
  * the image.
  *
  * Lives under scripts/ rather than deploy/ because the runtime image only
- * copies `scripts/` and `bin/` (deploy/ holds the RUNBOOK and backup env files
+ * copies `scripts/` and `bin/` (deploy/ holds ops docs and backup env files
  * and must not ship), and `bin/lair deploy ...` has to work in the container.
  *
  * Only manifest entries with runtime=node may be referenced here: the image has

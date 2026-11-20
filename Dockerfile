@@ -1,8 +1,8 @@
 # Deployment image (platform plan §C / D-1): one Node process behind Caddy.
 # Node 24: the password gate imports `argon2` from `node:crypto`, which Node 22
 # does not export (the postbuild analyse fails with "no export named argon2").
-# Build runs inside the deployment host (see deploy/RUNBOOK.md); the gate is
-# < 4 GB peak and < 8 minutes (deploy opening note, Q2).
+# Build runs inside the deployment host; the gate is
+# < 4 GB peak and < 8 minutes.
 
 # --- build: full dependency tree + SvelteKit build ---------------------------
 FROM node:24-bookworm-slim AS build
@@ -58,7 +58,7 @@ COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/.drizzle ./.drizzle
 # Ops surface: ship the whole scripts tree + the `lair` shim instead of a
 # hand-maintained file list. A missed COPY used to surface only when the
-# RUNBOOK ran a script the image did not contain. The manifest
+# A deploy ran a script the image did not contain. The manifest
 # (scripts/manifest.ts) + scripts/deploy-hooks.ts make that class checkable:
 # scripts/check-entries.ts asserts every entry exists and every hook resolves,
 # and verify-image.sh asserts `bin/lair --list` works inside the image.
@@ -71,7 +71,7 @@ COPY --from=build /app/jobs ./jobs
 COPY --from=build /app/src ./src
 COPY package.json ./
 # uid/gid 1000 matches a standard Ubuntu deploy user so bind-mounted DATA_DIR
-# works without chown gymnastics (deploy/RUNBOOK.md).
+# works without chown gymnastics.
 USER node
 EXPOSE 3000
 CMD ["node", "build"]

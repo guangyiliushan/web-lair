@@ -14,7 +14,7 @@ import { sanitizeErrorText } from '../jobs/error-text.ts';
 /**
  * SMTP transport: the production endpoint is whatever SMTP host `.env`
  * points at — a self-hosted MTA on the box (default) or a relay if the
- * 25/PBL/PTR probes fail (deploy/RUNBOOK.md). DKIM is signed in process by
+ * 25/PBL/PTR probes fail. DKIM is signed in process by
  * nodemailer, so a dumb relay/MTA needs no milter configuration.
  * Failure semantics: `sendMail` throws when unconfigured;
  * `sendMailOrDevLog` keeps local development usable (verification links

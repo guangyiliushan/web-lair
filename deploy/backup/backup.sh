@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Backup entry point: data and config repositories stay separate; the nightly
-# schedule lives in Backrest (RUNBOOK, "Backups (D-4)").
+# schedule lives in Backrest.
 # `backup.sh` = dump → data repo → config repo → retention → backup ping (the
 # manual/fallback path); `--dump-only` = dump and gates only, what Backrest's
 # CONDITION_SNAPSHOT_START hook runs before snapshotting $BACKUP_DIR (a dump
@@ -76,7 +76,7 @@ require_pg_env() {
 		local)
 			# Only this mode needs the password: in docker mode the client runs in
 			# the db container and authenticates over the container network.
-			: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required when BACKUP_PG_MODE=local (RUNBOOK §4)}"
+			: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required when BACKUP_PG_MODE=local (RUNBOOK)}"
 			export PGPASSWORD="$POSTGRES_PASSWORD"
 			export PGHOST="${PGHOST:-db}" PGPORT="${PGPORT:-5432}"
 			;;

@@ -4,7 +4,7 @@
 #
 # Why a wrapper: compose.override.yaml is auto-loaded by any bare
 # `docker compose` call, so production commands must pass an explicit -f list.
-# Keeping that list here means the RUNBOOK, systemd and backup script cannot
+# Keeping that list here means the systemd units and the backup script cannot
 # drift apart.
 set -euo pipefail
 
@@ -21,7 +21,7 @@ fi
 # an actionable message instead of letting the container crash-loop.
 require_env_file() {
 	if [ ! -f "$APP_DIR/.env" ]; then
-		echo "[compose-prod] $APP_DIR/.env is missing; create it from .env.example (RUNBOOK §1)" >&2
+		echo "[compose-prod] $APP_DIR/.env is missing; create it from .env.example (RUNBOOK)" >&2
 		exit 1
 	fi
 }
@@ -43,16 +43,16 @@ require_suppression_key() {
 	local value
 	value=$(env_value SUPPRESSION_HMAC_KEY)
 	if [ -z "$value" ]; then
-		echo "[compose-prod] SUPPRESSION_HMAC_KEY is missing in $APP_DIR/.env; generate one with 'openssl rand -base64 32' (RUNBOOK §8)" >&2
+		echo "[compose-prod] SUPPRESSION_HMAC_KEY is missing in $APP_DIR/.env; generate one with 'openssl rand -base64 32' (RUNBOOK)" >&2
 		exit 1
 	fi
 	if [ "$(printf '%s' "$value" | base64 -d 2>/dev/null | wc -c | tr -d ' ')" != "32" ]; then
-		echo "[compose-prod] SUPPRESSION_HMAC_KEY is not 32 base64-encoded bytes (RUNBOOK §8)" >&2
+		echo "[compose-prod] SUPPRESSION_HMAC_KEY is not 32 base64-encoded bytes (RUNBOOK)" >&2
 		exit 1
 	fi
 }
 
-# RUNBOOK §1.1: compose.prod.yaml builds DATABASE_URL from
+# compose.prod.yaml builds DATABASE_URL from
 # ${POSTGRES_PASSWORD} at parse time. A missing or non-URL-safe value produces
 # an unparseable DSN and an opaque auth failure inside the app, so refuse to
 # start instead of shipping the mistake to the container.
@@ -64,12 +64,12 @@ require_postgres_password() {
 	local value
 	value=$(env_value POSTGRES_PASSWORD)
 	if [ -z "$value" ]; then
-		echo "[compose-prod] POSTGRES_PASSWORD is missing in $APP_DIR/.env; the app DSN is built from it (RUNBOOK §1.1)" >&2
+		echo "[compose-prod] POSTGRES_PASSWORD is missing in $APP_DIR/.env; the app DSN is built from it (RUNBOOK)" >&2
 		exit 1
 	fi
 	case "$value" in
 	*[!A-Za-z0-9._~+=-]*)
-		echo "[compose-prod] POSTGRES_PASSWORD contains characters that are not URL-safe (allowed: A-Z a-z 0-9 . _ ~ + = -); generate one with 'openssl rand -hex 32' (RUNBOOK §1.1)" >&2
+		echo "[compose-prod] POSTGRES_PASSWORD contains characters that are not URL-safe (allowed: A-Z a-z 0-9 . _ ~ + = -); generate one with 'openssl rand -hex 32' (RUNBOOK)" >&2
 		exit 1
 		;;
 	esac
@@ -83,12 +83,12 @@ require_postgres_password() {
 require_backup_env() {
 	local file="$APP_DIR/deploy/backup.env" key
 	if [ ! -f "$file" ]; then
-		echo "[compose-prod] $file is missing; copy deploy/backup.env.example, fill it in and chmod 600 (RUNBOOK §4)" >&2
+		echo "[compose-prod] $file is missing; copy deploy/backup.env.example, fill it in and chmod 600 (RUNBOOK)" >&2
 		exit 1
 	fi
 	for key in POSTGRES_PASSWORD RESTIC_REPOSITORY RESTIC_PASSWORD RESTIC_CONFIG_REPOSITORY RESTIC_CONFIG_PASSWORD DATA_DIR BACKUP_DIR; do
 		if [ -z "$(env_value "$key" "$file")" ]; then
-			echo "[compose-prod] $key is empty in $file; the scheduled backup would fail every night (RUNBOOK §4)" >&2
+			echo "[compose-prod] $key is empty in $file; the scheduled backup would fail every night (RUNBOOK)" >&2
 			exit 1
 		fi
 	done
@@ -97,7 +97,7 @@ require_backup_env() {
 	# .env makes every night fail the dump gate — and ON_ERROR_CANCEL skips the
 	# END hook, so there is no /fail, only a check that goes late.
 	if [ "$(env_value POSTGRES_PASSWORD "$file")" != "$(env_value POSTGRES_PASSWORD)" ]; then
-		echo "[compose-prod] POSTGRES_PASSWORD differs between $file and $APP_DIR/.env; rotate both together (RUNBOOK §1.1/§4)" >&2
+		echo "[compose-prod] POSTGRES_PASSWORD differs between $file and $APP_DIR/.env; rotate both together (RUNBOOK)" >&2
 		exit 1
 	fi
 	# The container bind-mounts .env's DATA_DIR; a relative or empty value would be
@@ -107,14 +107,14 @@ require_backup_env() {
 	case "$(env_value DATA_DIR)" in
 	/*) ;;
 	*)
-		echo "[compose-prod] DATA_DIR must be an absolute path in $APP_DIR/.env; the backrest mount uses it (RUNBOOK §4.4)" >&2
+		echo "[compose-prod] DATA_DIR must be an absolute path in $APP_DIR/.env; the backrest mount uses it (RUNBOOK)" >&2
 		exit 1
 		;;
 	esac
 	case "$(env_value DATA_DIR "$file")" in
 	/*) ;;
 	*)
-		echo "[compose-prod] DATA_DIR must be an absolute path in $file; the manual fallback uses it (RUNBOOK §4)" >&2
+		echo "[compose-prod] DATA_DIR must be an absolute path in $file; the manual fallback uses it (RUNBOOK)" >&2
 		exit 1
 		;;
 	esac
@@ -122,7 +122,7 @@ require_backup_env() {
 	# fallback reads this file); a mismatch silently splits the staging directory.
 	if [ -n "$(env_value BACKUP_DIR "$file")" ] && [ -n "$(env_value BACKUP_DIR)" ] &&
 		[ "$(env_value BACKUP_DIR "$file")" != "$(env_value BACKUP_DIR)" ]; then
-		echo "[compose-prod] BACKUP_DIR differs between $file and $APP_DIR/.env; keep one value (RUNBOOK §4.4)" >&2
+		echo "[compose-prod] BACKUP_DIR differs between $file and $APP_DIR/.env; keep one value (RUNBOOK)" >&2
 		exit 1
 	fi
 }

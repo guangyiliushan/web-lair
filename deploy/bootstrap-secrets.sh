@@ -137,10 +137,10 @@ is_rotate_requested() {
 }
 
 # A rotation of the master keyring through this script would orphan existing
-# ciphertext; the three-phase ceremony lives in deploy/RUNBOOK.md §4.2.
+# ciphertext; rotate through the three-phase keyring ceremony instead.
 for name in "${ROTATE[@]:-}"; do
 	if [ "$name" = "SECRETS_KEYS" ] || [ "$name" = "SECRETS_KEY" ]; then
-		echo "[secrets] refusing to rotate $name here: use the three-phase keyring rotation (RUNBOOK §4.2)" >&2
+		echo "[secrets] refusing to rotate $name here: use the three-phase keyring rotation (RUNBOOK)" >&2
 		exit 2
 	fi
 done

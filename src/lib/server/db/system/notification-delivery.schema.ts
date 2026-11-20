@@ -16,7 +16,6 @@ import {
  * Retries stay `queued` with `attempts` / `next_attempt_at` advanced; `payload` is bounded and free
  * of addresses, IPs, stack traces and credentials.
  * No FK to `comment`/`job_runs`: the log must outlive them; `jobs.prune` owns retention.
- * Flow and re-send semantics: `deploy/RUNBOOK.md`, "Notification delivery".
  */
 export type NotificationChannel = 'email' | 'bark';
 export type NotificationStatus = 'queued' | 'sent' | 'failed';

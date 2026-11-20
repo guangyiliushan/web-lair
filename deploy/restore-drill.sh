@@ -7,8 +7,7 @@
 # exit), then checks row counts, the orphan sweep
 # (deploy/backup/orphan-check.sql) and a media sample byte-for-byte, and
 # prints a receipt with RTO/RPO. Usage, flags, local-repository mode and the
-# cadence: deploy/RUNBOOK.md "4.5 Restore drill script (quarterly, and after
-# any backup change)".
+# cadence: quarterly, and after any backup change.
 #
 # The live database is only ever read: `select count(*)` and the volume is
 # mounted read-only. Nothing here writes to a production volume.
@@ -127,10 +126,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-: "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is not set (deploy/backup.env, RUNBOOK §4)}"
-: "${RESTIC_PASSWORD:?RESTIC_PASSWORD is not set (deploy/backup.env, RUNBOOK §4)}"
-: "${RESTIC_CONFIG_REPOSITORY:?RESTIC_CONFIG_REPOSITORY is not set (deploy/backup.env, RUNBOOK §4)}"
-: "${RESTIC_CONFIG_PASSWORD:?RESTIC_CONFIG_PASSWORD is not set (deploy/backup.env, RUNBOOK §4)}"
+: "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is not set (deploy/backup.env, RUNBOOK)}"
+: "${RESTIC_PASSWORD:?RESTIC_PASSWORD is not set (deploy/backup.env, RUNBOOK)}"
+: "${RESTIC_CONFIG_REPOSITORY:?RESTIC_CONFIG_REPOSITORY is not set (deploy/backup.env, RUNBOOK)}"
+: "${RESTIC_CONFIG_PASSWORD:?RESTIC_CONFIG_PASSWORD is not set (deploy/backup.env, RUNBOOK)}"
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/web-lair-drill.XXXXXX")
 RECEIPT="$WORK/receipt.txt"
@@ -184,7 +183,7 @@ receipt "snapshot.data.time=$DATA_TIME"
 
 # Every snapshot, not just the newest: `--latest 1` returns one row per
 # host+paths group, so pre-split snapshots (whose path set includes /config)
-# would never be listed — and those are exactly the ones RUNBOOK §4.1 says this
+# would never be listed — and those are exactly the ones this
 # check finds.
 restic_data snapshots > "$WORK/data-all.txt" ||
 	die "cannot list the data repository"
@@ -203,7 +202,7 @@ for id in "${DATA_IDS[@]}"; do
 	fi
 done
 [ "$ENV_HITS" = 0 ] ||
-	die "$ENV_HITS .env entries inside data snapshots; the repositories are not split (RUNBOOK §4.1)"
+	die "$ENV_HITS .env entries inside data snapshots; the repositories are not split (RUNBOOK)"
 receipt "snapshot.data.scanned=${#DATA_IDS[@]}"
 receipt "snapshot.data.env_entries=0"
 

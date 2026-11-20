@@ -10,7 +10,7 @@ const config = {
 	},
 	kit: {
 		// Single self-hosted Node process behind Caddy: adapter-node emits `build/`,
-		// which the Dockerfile runs (`node build`). See deploy/RUNBOOK.md.
+		// which the Dockerfile runs (`node build`).
 		adapter: adapter(),
 
 		// `'*'` trusts every origin, switching SvelteKit's CSRF check off. That check runs

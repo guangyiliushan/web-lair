@@ -1,8 +1,8 @@
 # Privacy operations and DSR runbook (W6.11)
 
-This is the operator-side companion to `/privacy`. Every claim on the public
-page maps to an implementation fact here; if a change makes one of them false,
-both files change in the same batch.
+Operator-side companion to `/privacy`: every claim on the public page maps to an implementation fact here; if one becomes false, change both files in the same batch.
+
+Scope: data inventory, retention, DSR handling and audit queries only. Log/edge configuration lives in `deploy/EDGE.md`; operations in `deploy/RUNBOOK.md`.
 
 ## 1. Data inventory and retention
 
@@ -17,33 +17,17 @@ both files change in the same batch.
 | Audit trail                                                       | `activities`                                    | 24 months (`jobs.prune`)                            | settings events carry `deliver:false` (no webhook fan-out)                                                                     |
 | AI usage / chat                                                   | `ai_usage`, `ai_agent_conversations`            | 24 months / `ai.chat.retentionDays` (archived only) |                                                                                                                                |
 | Uploaded media                                                    | storage provider + `files` rows                 | until purge / delete                                |                                                                                                                                |
-| HTTP access log                                                   | Caddy `caddy_logs` volume                       | 30 days (`roll_keep_for 720h`)                      | the only place an IP appears; token paths excluded                                                                             |
+| HTTP access log                                                   | Caddy `caddy_logs` volume                       | 30 days                                             | the only place an IP appears; token paths excluded; config in deploy/EDGE.md                                                   |
 | Traffic analytics aggregates                                      | `sentinel_data` volume (Sentinel SQLite)        | 48 h (1m) / 30 d (1h) / 395 d (1d) tiers            | derived from the access log; `TRAFFIC_IP_MODE=off` stores no IP; referer/UA/device/status breakdowns; rebuildable              |
 
-The raw commenter IP is **never** written to a business table. It is read from
-the adapter, used in-request for the per-IP rate bucket and optional CIDR
-check, and dropped.
+The raw commenter IP is **never** written to a business table: read from the adapter, used in-request for the per-IP rate bucket and optional CIDR check, then dropped.
 
 ## 2. Access-log handling
 
-- Container volume `caddy_logs`; readable only by operators with host access
-  to the Docker daemon. Do not copy logs off-host; if a provider needs them,
-  export a redacted slice.
-- Files rotate at 100 MB, keep 10 files, and expire after 720 h (30 days).
-  Both limits apply: the shorter wins.
-- `/subscribe/confirm*`, `/unsubscribe*`, `/reset-password*` and `/api/auth/*`
-  are never logged (bearer tokens live in those URLs).
-- On-demand deletion: remove the volume contents or the whole volume; nothing
-  else references the files.
-- Sentinel tails this file read-only (no copy leaves the box) and writes
-  aggregate rows to `sentinel_data`: hourly/daily request counts, status
-  classes, latency quantiles, and referer/browser/OS/device breakdowns. With
-  `TRAFFIC_IP_MODE=off` the analytics DB stores no IP addresses; unique-visitor
-  counts are HyperLogLog sketches over fixed-key SipHash hashes of the client
-  IP (the sketch stores counts, not addresses). Query paths are capped at
-  `TRAFFIC_TOPN`, with the remainder folded into `__other__`. To erase the
-  aggregates, stop `sentinel` and delete the `sentinel_data` volume; the data
-  is derived and rebuilds from future log lines.
+- Container volume `caddy_logs`, readable only by operators with host access to the Docker daemon. Never copy logs off-host; if a provider needs data, export a redacted slice.
+- Privacy facts: the access log is the **only** place an IP appears, it is retained 30 days, and token paths never reach it. Rotation, exclusion-path and Sentinel tail configuration lives in deploy/EDGE.md.
+- On-demand deletion: remove the volume contents or the whole volume; nothing else references the files.
+- Analytics privacy: with `TRAFFIC_IP_MODE=off` the `sentinel_data` SQLite stores no IP addresses — unique-visitor counts are HyperLogLog sketches over fixed-key SipHash hashes of the client IP (counts, not addresses), and query paths are capped at `TRAFFIC_TOPN` with the remainder in `__other__`. To erase the aggregates, stop `sentinel` and delete the `sentinel_data` volume; the data is derived and rebuilds from future log lines.
 
 ## 3. Data-subject requests (DSR)
 
@@ -60,13 +44,8 @@ select email, lang, state, created_at from subscriptions where email = $1;
 
 **Deletion**:
 
-1. Comments: the reader can delete each comment from the UI (soft delete
-   clears `country_code`, `region_code`, `meta`). For an erasure request,
-   additionally anonymise `author`/`avatar` and hard-delete after the audit
-   window if required by the jurisdiction.
-2. Account: the account-deletion flow (W8) must (a) delete `session`, `user`
-   rows and (b) clear comment country/region/meta for that reader. Until the
-   flow ships, run:
+1. Comments: the reader can delete each comment from the UI (soft delete clears `country_code`, `region_code`, `meta`). For an erasure request, additionally anonymise `author`/`avatar` and hard-delete after the audit window if required by the jurisdiction.
+2. Account: the account-deletion flow (W8) must (a) delete `session`, `user` rows and (b) clear comment country/region/meta for that reader. Until the flow ships, run:
 
    ```sql
    update comments set country_code = null, region_code = null, meta = null
@@ -77,14 +56,11 @@ select email, lang, state, created_at from subscriptions where email = $1;
 
    (Check FKs first; `comments.reader_id` is `ON DELETE SET NULL`.)
 
-3. Subscriptions: unsubscribe from the email link, or move the address to the
-   suppression list.
+3. Subscriptions: unsubscribe from the email link, or move the address to the suppression list.
 
-**Objection**: turn off `comments.privacy` (owner) — country/region collection
-stops immediately; existing values are cleared by the next prune.
+**Objection**: turn off `comments.privacy` (owner) — country/region collection stops immediately; existing values are cleared by the next prune.
 
-Answer within the period required by law; record the request and the actions
-in the audit trail (`activities`) without storing extra PII.
+Answer within the period required by law; record the request and the actions in the audit trail (`activities`) without storing extra PII.
 
 ## 4. Audit queries
 
@@ -107,6 +83,4 @@ Run these after a retention change and before a release that touches comments.
 
 ## 5. Registered deferrals
 
-Consent records, raw-IP evidence storage, `/terms`, provider DPAs and GeoIP
-library selection are registered in the decision register §3C.7 with their
-triggers; none of them is silently assumed here.
+Consent records, raw-IP evidence storage, `/terms`, provider DPAs and GeoIP library selection are registered in the decision register §3C.7 with their triggers; none of them is silently assumed here.

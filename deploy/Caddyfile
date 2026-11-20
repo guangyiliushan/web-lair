@@ -2,7 +2,7 @@
 	# ACME account email (Let's Encrypt expiry notices). Env: ACME_EMAIL.
 	email {$ACME_EMAIL}
 
-	# Origin lockdown (W6.10, deploy/EDGE.md): when Cloudflare proxies the
+	# Origin lockdown (W6.10): when Cloudflare proxies the
 	# site, uncomment the CF ranges so the app sees the real client IP
 	# (adapter `ADDRESS_HEADER` stays on X-Forwarded-For: Caddy still emits
 	# exactly one hop). Keep grey-cloud DNS otherwise.

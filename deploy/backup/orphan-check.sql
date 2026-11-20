@@ -1,6 +1,6 @@
 -- F-22 orphan review for a restored database (M6 P2, T2.5).
 --
--- Why: the manual restore path (RUNBOOK §2.1) applies a dump with
+-- Why: the manual restore path applies a dump with
 -- `SET session_replication_role = replica`, which disables FK triggers, so a
 -- restore that exits 0 does not prove referential integrity. This script asks
 -- PostgreSQL for every foreign key that exists in the restored database and

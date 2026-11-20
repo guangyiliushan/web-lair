@@ -2085,7 +2085,7 @@
 	"admin_settings_storage_activated_at": "Activated at",
 	"admin_settings_storage_backup": "Backups",
 	"admin_settings_storage_backup_db": "Database + config",
-	"admin_settings_storage_backup_hint": "restic covers the database and the config file; media follows the provider. Runbook: deploy/RUNBOOK.md §4.",
+	"admin_settings_storage_backup_hint": "restic covers the database and the config file; media follows the provider. Runbook: deploy/RUNBOOK.md.",
 	"admin_settings_storage_backup_media": "Media",
 	"admin_settings_storage_backup_media_hint": "Provider versioning/replication or rclone, per the runbook",
 	"admin_settings_storage_backup_versioning": "Versioning is not a backup",

@@ -78,23 +78,28 @@ describe('Integrations page', () => {
 	});
 
 	it('documents GITHUB_TOKEN apart from the other two GitHub credentials', () => {
-		const start = ENV_EXAMPLE.indexOf('GitHub credentials come in three scopes');
+		const start = ENV_EXAMPLE.indexOf('Three scopes');
 		const end = ENV_EXAMPLE.indexOf('# Google OAuth');
 		expect(start).toBeGreaterThan(-1);
 		expect(end).toBeGreaterThan(start);
-		const block = ENV_EXAMPLE.slice(start, end);
+		// Phrases are matched on comment-prefix-stripped, whitespace-collapsed
+		// text: the prose wraps at the comment width budget and a phrase split
+		// across lines is still the same documentation contract.
+		const block = ENV_EXAMPLE.slice(start, end).replace(/^#\s?/gm, '').replace(/\s+/g, ' ');
 		expect(block).toContain('GITHUB_CLIENT_ID/SECRET');
 		expect(block).toContain('GITHUB_TOKEN=""');
 		expect(block).toContain('PROJECTS_GITHUB_TOKEN');
 		expect(block).toContain('/api/embed-meta');
 		expect(block).toContain('only reports whether it is set');
 		expect(block).toContain('60 req/h');
-		expect(block).toContain('5,000 req/h');
+		expect(block).toContain('5,000/h');
 
 		// The projects section points back at the embed token, so the three
 		// scopes cannot be confused in either direction.
-		const projects = ENV_EXAMPLE.slice(ENV_EXAMPLE.indexOf('PROJECTS_GITHUB_TOKEN here'));
-		expect(projects).toContain('GITHUB_TOKEN (above)');
-		expect(projects).toContain('GITHUB_CLIENT_ID/SECRET');
+		const projects = ENV_EXAMPLE.slice(ENV_EXAMPLE.indexOf('Projects sync (projects line'))
+			.replace(/^#\s?/gm, '')
+			.replace(/\s+/g, ' ');
+		expect(projects).toContain('PROJECTS_GITHUB_TOKEN');
+		expect(projects).toContain('embed uses GITHUB_TOKEN');
 	});
 });

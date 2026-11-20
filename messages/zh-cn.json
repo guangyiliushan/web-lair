@@ -1887,7 +1887,7 @@
 	"admin_settings_storage_activated_at": "激活时间",
 	"admin_settings_storage_backup": "备份",
 	"admin_settings_storage_backup_db": "数据库 + 配置",
-	"admin_settings_storage_backup_hint": "restic 覆盖数据库与配置文件；媒体跟随提供商。运维手册：deploy/RUNBOOK.md §4。",
+	"admin_settings_storage_backup_hint": "restic 覆盖数据库与配置文件；媒体跟随提供商。运维手册：deploy/RUNBOOK.md。",
 	"admin_settings_storage_backup_media": "媒体",
 	"admin_settings_storage_backup_media_hint": "按手册使用提供商版本控制/复制或 rclone",
 	"admin_settings_storage_backup_versioning": "版本控制不是备份",

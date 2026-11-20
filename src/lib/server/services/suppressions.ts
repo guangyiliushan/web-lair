@@ -10,8 +10,8 @@ import { normalizeEmail } from './email-normalize';
  * Email suppression (CAN-SPAM / RFC 8058 / ICO): opt-outs outlive their subscription rows.
  * The table stores only a keyed hash; a missing or invalid key fails closed, never an unkeyed hash
  * - that would open a second hash domain where old opt-outs turn invisible.
- * Key versions derive from that one master (rotation steps: `deploy/RUNBOOK.md` → "Email retention
- * and suppression"); a rotation starts a version for new writes while reads cover 1..active.
+ * Key versions derive from that one master: a rotation starts a version for new
+ * writes while reads cover 1..active.
  */
 export type SuppressionReason = 'unsubscribed' | 'bounced' | 'complained';
 

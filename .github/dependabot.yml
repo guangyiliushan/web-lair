@@ -1,0 +1,14 @@
+# Keeps the SHA-pinned actions from rotting: pinned refs get no update
+# notifications on their own, and Dependabot does not file vulnerability alerts
+# for SHA-pinned actions (GitHub docs, secure-use), so the weekly update PRs are
+# the maintenance channel. Cooldowns: 7 days for routine bumps, 14 for majors —
+# an update PR that breaks CI gets a window to be seen before the next one lands.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 14

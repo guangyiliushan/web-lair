@@ -8,7 +8,7 @@
  *   3. deploy hooks only reference existing runtime=node entries;
  *   4. package.json scripts keep only official/third-party passthroughs + `ops`;
  *   5. removed aliases leave no residue in docs or sources;
- *   6. the RUNBOOK no longer calls `node scripts/...` directly (it must go through lair).
+ *   6. docs no longer call `node scripts/...` directly (it must go through lair).
  *
  * This file must stay node-pure (CI and the container execute it directly).
  */

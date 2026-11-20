@@ -8,11 +8,23 @@ import {
 } from './e2e/test-keys';
 
 export default defineConfig({
+	// Flaky policy: one retry in CI only — Playwright
+	// labels tests that pass on retry as "flaky" in the report, which feeds the
+	// registry (rerun-to-green is evidence, not a fix). Trace on first retry
+	// keeps the artifact budget small while every retried test carries a
+	// timeline. `globalTimeout` catches hangs before the runner kills the job
+	// mid-run without a report (Playwright CI docs).
+	retries: process.env.CI ? 1 : 0,
+	globalTimeout: 50 * 60_000,
+	reporter: process.env.CI
+		? [['list'], ['junit', { outputFile: 'test-results/e2e-junit-results.xml' }]]
+		: 'list',
 	use: {
 		baseURL: 'http://localhost:4173',
 		// MapLibre needs a WebGL context: headless chromium falls back to
 		// SwiftShader, which recent versions gate behind this flag.
-		launchOptions: { args: ['--enable-unsafe-swiftshader'] }
+		launchOptions: { args: ['--enable-unsafe-swiftshader'] },
+		trace: 'on-first-retry'
 	},
 	webServer: {
 		command: 'npm run build && npm run preview',

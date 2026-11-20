@@ -10,7 +10,6 @@
  * plaintext rows remain (expected right after the switch) or config unusable.
  * Run from the app image (deployed DATABASE_URL and keyring):
  *   deploy/compose-prod.sh run --rm app node scripts/verify-oauth-token-storage.ts
- * Details: `deploy/RUNBOOK.md` -> "Auth keyring and OAuth token encryption".
  */
 import postgres from 'postgres';
 

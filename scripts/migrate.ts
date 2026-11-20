@@ -5,7 +5,7 @@
  * Contract: the CREATE-only baseline was regenerated in place, so the journal
  * keeps its original `when` and an existing database silently skips it. The
  * schema preflights below exit 1 on a database predating a regenerated
- * baseline and name the rebuild section in `deploy/RUNBOOK.md`. None of these
+ * baseline and name the rebuild procedure. None of these
  * guards run in the app process: deploy scripts must run `migrate` before
  * `up -d`.
  *
@@ -104,7 +104,7 @@ try {
 			'[migrate] this database predates the E2 baseline (missing email_suppressions / consent_version / token_hash / token_hash index).'
 		);
 		console.error(
-			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md §2.1 (backup -> empty schema -> migrate -> data-only restore -> backfills).'
+			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md (backup -> empty schema -> migrate -> data-only restore -> backfills).'
 		);
 		process.exitCode = 1;
 	}
@@ -113,7 +113,7 @@ try {
 			'[migrate] this database predates the provenance baseline (posts is missing one of writing_origin / ai_help / provenance_source / provenance_updated_at / provenance_updated_by).'
 		);
 		console.error(
-			'[migrate] the journal timestamp is unchanged, so the migrator skips the regenerated baseline; rebuild per deploy/RUNBOOK.md §2.2 (backup -> empty schema -> migrate -> data restore -> provenance backfill).'
+			'[migrate] the journal timestamp is unchanged, so the migrator skips the regenerated baseline; rebuild per deploy/RUNBOOK.md (backup -> empty schema -> migrate -> data restore -> provenance backfill).'
 		);
 		process.exitCode = 1;
 	}
@@ -122,7 +122,7 @@ try {
 			'[migrate] this database predates the S1 baseline (missing subscriptions.token_nonce / email_suppressions.key_version).'
 		);
 		console.error(
-			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> verify).'
+			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md (backup -> empty schema -> migrate -> data-only restore -> verify).'
 		);
 		process.exitCode = 1;
 	}
@@ -131,7 +131,7 @@ try {
 			'[migrate] this database predates the taxonomy i18n baseline (missing categories.source_lang / topics.description_i18n).'
 		);
 		console.error(
-			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> verify).'
+			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md (backup -> empty schema -> migrate -> data-only restore -> verify).'
 		);
 		process.exitCode = 1;
 	}
@@ -140,7 +140,7 @@ try {
 			'[migrate] this database predates the default-category baseline (missing categories.is_default).'
 		);
 		console.error(
-			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> site ensure-categories -> verify).'
+			'[migrate] the baseline was regenerated rather than appended; rebuild per deploy/RUNBOOK.md (backup -> empty schema -> migrate -> data-only restore -> site ensure-categories -> verify).'
 		);
 		process.exitCode = 1;
 	}
@@ -149,7 +149,7 @@ try {
 			'[migrate] this database predates the translation runtime baseline (translations is missing one of runs / attempt / started_at / heartbeat_at / stage / waiting_reason / cancel_requested / progress / overwrite_target).'
 		);
 		console.error(
-			'[migrate] the journal timestamp is unchanged, so the migrator skips the regenerated baseline; rebuild per deploy/RUNBOOK.md §2 (backup -> empty schema -> migrate -> data-only restore -> verify).'
+			'[migrate] the journal timestamp is unchanged, so the migrator skips the regenerated baseline; rebuild per deploy/RUNBOOK.md (backup -> empty schema -> migrate -> data-only restore -> verify).'
 		);
 		process.exitCode = 1;
 	}
@@ -166,7 +166,7 @@ try {
 	console.error('[migrate] failed:', error);
 	console.error('[migrate] ABORT — do not start the app.');
 	console.error(
-		'[migrate] a failure here may mean the database predates the E2 or provenance baseline; rebuild per deploy/RUNBOOK.md §2.1/§2.2 (a dump restore cannot add the missing ledger row).'
+		'[migrate] a failure here may mean the database predates the E2 or provenance baseline; rebuild per deploy/RUNBOOK.md (a dump restore cannot add the missing ledger row).'
 	);
 	process.exitCode = 1;
 } finally {

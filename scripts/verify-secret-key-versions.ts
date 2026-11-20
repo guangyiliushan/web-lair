@@ -9,7 +9,7 @@
  * Usage: `pnpm ops secrets verify-keys [--retire 1]`.
  * Exit codes: 0 every referenced version present and readable, 1 missing /
  * unreadable / still referenced by --retire, 2 configuration error.
- * Rotation steps: `deploy/SECRETS.md` -> "Three-phase rotation".
+ * Rotation is three-phase: distribute -> activate -> retire.
  */
 import postgres from 'postgres';
 import { loadKeyring } from '../src/lib/server/secrets/resolver.ts';

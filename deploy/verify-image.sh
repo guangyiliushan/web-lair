@@ -34,7 +34,7 @@ esac
 
 echo "OK: drain graph loads and stops on configuration"
 
-# The operator entry is what the RUNBOOK calls; prove the manifest + shim +
+# The operator entry is what the deploy calls; prove the manifest + shim +
 # scripts tree are all present in the image before shipping it.
 echo "-> lair entry"
 set +e

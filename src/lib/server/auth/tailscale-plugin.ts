@@ -1,6 +1,6 @@
 import { createAuthEndpoint, getSessionFromCtx } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
-import type { BetterAuthPlugin, User } from 'better-auth';
+import type { User } from 'better-auth';
 import { getRequestEvent } from '$app/server';
 import { env } from '$env/dynamic/private';
 import { eq } from 'drizzle-orm';
@@ -25,7 +25,11 @@ import { resolveTailscaleIdentity } from '$lib/server/security/tailscale-auth';
  *     request has to prove it is same-origin itself (Fetch Metadata, fail closed);
  *  3. account state — banned / soft-deleted accounts are refused.
  */
-export function tailscaleSignIn(): BetterAuthPlugin {
+// Return type stays inferred on purpose: better-auth's InferAPI extracts each
+// plugin's endpoint map from its literal type, and annotating this as
+// BetterAuthPlugin widens the array element and collapses `auth.api` to the
+// base endpoint set (svelte-check loses hasPermission/createOrganization/...).
+export function tailscaleSignIn() {
 	return {
 		id: 'tailscale-sign-in',
 		endpoints: {

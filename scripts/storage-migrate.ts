@@ -36,7 +36,8 @@ import {
  *   pnpm ops storage migrate --reset     clear a stuck state (no live run)
  *
  * Objects are never deleted from the source. Sequence, gates and upload
- * freeze: `deploy/RUNBOOK.md` §4.6. Out of scope: `maps/*.pmtiles` are not
+ * freeze: uploads stop and purge refuses while the copy runs. Out of scope:
+ * `maps/*.pmtiles` are not
  * `files` rows; re-run `pnpm ops maps publish` after cutover.
  */
 const DATABASE_URL = process.env.DATABASE_URL;
